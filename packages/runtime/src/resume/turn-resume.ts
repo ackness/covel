@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_TOOL_STEPS } from "../agent-loop/agent-loop-policy.js";
 import type {
   ExecutionContext,
   LLMTargetIdentity,
@@ -55,7 +56,7 @@ export async function resumeSuspendedRuntime(
   options?: ResumeSuspendedRuntimeOptions,
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
-  const maxSteps = options?.maxSteps ?? 10;
+  const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
   const timeoutMs = options?.timeoutMs ?? manifest.timeoutMs ?? 60000;
   const runId = crypto.randomUUID();
   const hookPipeline = deps.hookPipeline;

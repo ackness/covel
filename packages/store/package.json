@@ -15,6 +15,14 @@
     "./idb-schema": {
       "types": "./src/indexeddb/idb-schema.ts",
       "import": "./src/indexeddb/idb-schema.ts"
+    },
+    "./contracts": {
+      "types": "./src/contracts.ts",
+      "import": "./src/contracts.ts"
+    },
+    "./vector": {
+      "types": "./src/vector-store.ts",
+      "import": "./src/vector-store.ts"
     }
   },
   "scripts": {

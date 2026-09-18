@@ -11,12 +11,14 @@
  * `maybeCompact`, not this package.
  */
 
+import type { MemoryStore } from "./store-contracts.js";
+
 import type {
   I18nText,
   MemoryBlockSchema,
   SimpleCompletionAdapter,
 } from "@covel/shared";
-import type { DataStore, WorkingMemoryRecord } from "@covel/store";
+import type { WorkingMemoryRecord } from "@covel/store/contracts";
 
 // ── Core Memory Blocks ──────────────────────────────────────────
 
@@ -350,7 +352,7 @@ export interface ArchivalSearcher {
 export type { EmbedFn } from "./vector-common.js";
 
 export interface MemorySystemDeps {
-  readonly store: DataStore;
+  readonly store: MemoryStore;
   readonly llm: MemoryLLMAdapter;
   /** Resolve a slot name to a model identifier. */
   readonly resolveSlot?: (slot: string) => string | undefined;

@@ -18,11 +18,13 @@
  * so a process restart does not re-embed everything.
  */
 
-import type { DataStore, VectorStoreCapability } from "@covel/store";
-import { supportsVector } from "@covel/store";
+import type { VectorIngestStore } from "./store-contracts.js";
+
+import type { VectorStoreCapability } from "@covel/store/vector";
+import { supportsVector } from "@covel/store/vector";
 
 /** Store narrowed to one that can persist vectors. */
-type VectorStore = DataStore & VectorStoreCapability;
+type VectorStore = VectorIngestStore & VectorStoreCapability;
 import {
   ARCHIVAL_NAMESPACE,
   contentHash,
@@ -80,7 +82,7 @@ export function createNoopIngestor(): VectorIngestor {
 }
 
 export function createVectorIngestor(deps: {
-  readonly store: DataStore;
+  readonly store: VectorIngestStore;
   readonly embed: EmbedFn;
   readonly runIngestExclusive?: RunIngestExclusive;
 }): VectorIngestor {
@@ -374,7 +376,7 @@ async function ingestArchival(
 }
 
 async function collectArchivalItems(
-  store: DataStore,
+  store: VectorIngestStore,
   sessionId: string,
 ): Promise<ArchivalItem[]> {
   const items: ArchivalItem[] = [];
@@ -425,7 +427,7 @@ async function collectArchivalItems(
 // ── plugin_data cursor helpers ───────────────────────────────────
 
 async function readPluginJson<T>(
-  store: DataStore,
+  store: VectorIngestStore,
   sessionId: string,
   namespace: string,
   key: string,
@@ -440,7 +442,7 @@ async function readPluginJson<T>(
 }
 
 async function writePluginJson<T>(
-  store: DataStore,
+  store: VectorIngestStore,
   sessionId: string,
   namespace: string,
   key: string,

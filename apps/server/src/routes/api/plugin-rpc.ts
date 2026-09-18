@@ -72,7 +72,7 @@ import {
   parseSessionCommandInvocation,
   resolveSessionCommand,
 } from "./session/commands.js";
-import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
+import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
 
@@ -345,7 +345,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           sessionApprovalScope(session, runtime.pluginId),
         ]),
       ),
-      deps: buildManualTurnExecutorDeps(c, capabilityPluginIds),
+      deps: buildTurnExecutorDeps(c, capabilityPluginIds),
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 

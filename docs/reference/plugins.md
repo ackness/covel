@@ -202,7 +202,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 | capabilities  | `[world-data-provider]`                                                                                                                 |
 | tools.plugin  | `initialize-world`                                                                                                                      |
 | tools.builtin | 无（setup 期只写世界 schema，不回读自身 plugin-data）                                                                                   |
-| 调用边界      | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools: [initialize-world]`                  |
+| 调用边界      | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools: [initialize-world]`            |
 | ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`                                                                                    |
 
 无论 guard 复用已存在 schema、采用世界声明、从 dimensions 派生，还是 agent 生成，成功/完成输出都会携带结构化 `worldSchema`。下游 setup runtime 可在同一 execution 中通过 runtime inject 消费它；持久 `world.schema` 仍在 proposal commit 后成为后续 execution 的 store 真值。
@@ -311,7 +311,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 | input.inject | `plugin-data[nodes]` → `<existing-npcs>`、`plugin-data[edges]` → `<existing-relations>`（`format: summary`，现有图在构建 prompt 时注入，免去每轮 `list-npc-graph` 往返；工具 name-first，LLM 只需看见图，不需携带 id） |
 | model slot   | `plugin`                                                                                                                                                                                                               |
 | tools.plugin | `upsert-npc-graph`（批量写节点+边）；`list-npc-graph` 仍注册作兼容读取，但不向本 runtime 声明                                                                                                                          |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools: [upsert-npc-graph]`                                                                                                                    |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools: [upsert-npc-graph]`                                                                                                              |
 | ui.right     | `./ui/npc-graph-panel.json`                                                                                                                                                                                            |
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
@@ -405,17 +405,17 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/world-ir/`
 
-| 字段         | 值                                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------------------ |
-| displayName  | `世界事实提取` / `World Fact Extraction`                                                               |
-| stage        | `post-turn`                                                                                            |
-| trigger      | `auto`                                                                                                 |
-| inputs       | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`，本地字符串 schema，`required: true` |
-| output       | `schema: covel://world/ir/v1`，`recordAs: world-ir-v1`                                                 |
-| capabilities | `[world-ir-provider]`                                                                                  |
-| relations    | `provides: [world-ir-provider]`                                                                        |
-| tools.plugin | `submit-world-facts`                                                                                   |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools`     |
+| 字段         | 值                                                                                                       |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| displayName  | `世界事实提取` / `World Fact Extraction`                                                                 |
+| stage        | `post-turn`                                                                                              |
+| trigger      | `auto`                                                                                                   |
+| inputs       | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`，本地字符串 schema，`required: true`   |
+| output       | `schema: covel://world/ir/v1`，`recordAs: world-ir-v1`                                                   |
+| capabilities | `[world-ir-provider]`                                                                                    |
+| relations    | `provides: [world-ir-provider]`                                                                          |
+| tools.plugin | `submit-world-facts`                                                                                     |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools` |
 
 `world-ir` 只抽取本轮明确事实，通过一次 `submit-world-facts` 工具调用提交 `summary`、`entities`、`relations`、`events`、`statements`。工具参数 schema 直接复用 `worldIRV1Schema`，同时执行全局 id 唯一、entity 引用完整、深度和节点预算等语义校验；校验错误带参数路径返回给模型，可在第二个 step 修正。工具成功后其结果直接成为 runtime output 并再次通过 `covel://world/ir/v1` schema gate，不再让模型另外生成容易截断或夹带 Markdown 的 JSON 文本。非法输出使本 runtime 失败，下游必需输入随即 skip，但本轮 story 与无关插件仍可提交。
 
@@ -444,7 +444,7 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 | inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true` |
 | model        | `plugin`                                                                                     |
 | tools.plugin | `sync-codex-entries`                                                                         |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools`              |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools`        |
 | ui.right     | `./ui/codex-panel.json`                                                                      |
 | ui.message   | `./ui/codex-message.json`                                                                    |
 | input.inject | `plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`）        |
@@ -602,7 +602,7 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 | model              | `plugin`                                                                                                                                                                                                                                                                                     |
 | tools.builtin      | `sync-characters`、`get-character` 均直接可见；`get-character` 在一次读取后移除（不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                                                                                                                           |
 | completeAfterTools | `[sync-characters]` — 整批写入成功后直接结束，不额外请求 `runtime-done`                                                                                                                                                                                                                      |
-| 调用边界           | `maxSteps: 3` · `maxRetries: 0` · `callTimeoutMs: 60000`                                                                                                                                                                                                                                     |
+| 调用边界           | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000`                                                                                                                                                                                                                               |
 | input.inject       | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[characters]` → `<existing-characters>`（`format: summary`，现有角色名册在构建 prompt 时注入，免去每轮 `list-characters` 往返 —— 同 codex `<existing-entries>` 模式） |
 | needs              | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                                                                                                                                                                                                       |
 
@@ -1023,19 +1023,19 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 
 ### dashscope-image-gen/prompt-generator
 
-| 字段         | 值                                                                                                                    |
-| ------------ | --------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                                                              |
-| runtimeType  | `agent`                                                                                                               |
-| model        | `default`                                                                                                             |
-| trigger      | `manual`（右侧 `ui/generate-button.json`，`expectsBackgroundFollower`）                                               |
-| execution    | `background`（prompt LLM 与后续出图均不阻塞玩家继续操作）                                                             |
-| tools.plugin | `submit-dashscope-text-prompt`、`submit-dashscope-structured-prompt`，按 `promptMode` 二选一                          |
-| output       | `schema: ./output.schema.json` — 工具返回规范化 `{ prompt, promptMode, composition }`，固定事件由工具发射             |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 50000` · `requireToolUse` · 两个提交工具均列入 `completeAfterTools` |
-| capabilities | `[image-prompt, manual-invoke]`                                                                                       |
-| input.inject | `plugin-data[prompts]` → `<previous-image-prompts>`（`ids-only`，避免复述旧图）                                       |
-| userSettings | `composition`（single-scene / comic-strip）· `comicPanels` 等构图选项                                                 |
+| 字段         | 值                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                                                    |
+| runtimeType  | `agent`                                                                                                                     |
+| model        | `default`                                                                                                                   |
+| trigger      | `manual`（右侧 `ui/generate-button.json`，`expectsBackgroundFollower`）                                                     |
+| execution    | `background`（prompt LLM 与后续出图均不阻塞玩家继续操作）                                                                   |
+| tools.plugin | `submit-dashscope-text-prompt`、`submit-dashscope-structured-prompt`，按 `promptMode` 二选一                                |
+| output       | `schema: ./output.schema.json` — 工具返回规范化 `{ prompt, promptMode, composition }`，固定事件由工具发射                   |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 50000` · `requireToolUse` · 两个提交工具均列入 `completeAfterTools` |
+| capabilities | `[image-prompt, manual-invoke]`                                                                                             |
+| input.inject | `plugin-data[prompts]` → `<previous-image-prompts>`（`ids-only`，避免复述旧图）                                             |
+| userSettings | `composition`（single-scene / comic-strip）· `comicPanels` 等构图选项                                                       |
 
 Prompt agent 不再直接拼 `{ topic, data }` JSON 信封：文本模式把字符串交给 text tool，精细模式把对象交给 structured tool，工具负责规范化、写 `plugin_data[prompts]` 并通过 `withEmittedEvents` 发射固定的 `image.generate.requested`。模型无法再漏写/写空 topic；一次提交成功后后台 follower 链继续运行。
 
@@ -1463,7 +1463,7 @@ interface FunctionHandlerContext {
 **执行身份由框架持有，插件不可覆盖**：
 
 - `RecursiveCallDelta = Omit<Partial<TurnInput>, "sessionId" | "turnId" | "origin" | "parentTurnId">`。这四个字段即使在运行时被传入也会被剥离——嵌套调用必须留在父 session 内（否则已批准的 handler 可读取并写入其他 session，绕过 hosted 的 session-owner 边界），并保留框架签发的子 `turnId`（否则其 execution artifact 无法随父回合结算）。
-- `NestedTurnResult = Omit<TurnResult, "completeTurn">`。completion barrier 只保留在顶层框架控制面；嵌套调用方若能触发它，就会在父回合 proposal 提交之前发出权威的 `turn.completed` 并启动 memory ingestion。
+- `NestedTurnResult = TurnResult`，两者均为纯执行数据，不再携带 `completeTurn` 回调。宿主在会话锁内统一调用 `commitExecution`，由它在 proposal 提交成功后生成快照、通知完成并调度记忆提取；嵌套结果随父执行一起提交。
   嵌套调用默认深度上限为 `10`，manifest 可用 `maxRecursionDepth` 覆盖：
 
 ```yaml
@@ -1743,6 +1743,7 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 | 字段                     | 类型       | 默认                                              | 含义                                                                                                                                                                                                                                 |
 | ------------------------ | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `timeoutMs`              | `number`   | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                                           |
+| `maxSteps`               | `number`   | `20`                                              | 单次执行的模型响应轮数上限；一个响应可含多个工具调用。manifest 覆盖调用方选项，最后使用框架默认；普通、递归和恢复执行沿用同一规则。                                                                                                  |
 | `maxRetries`             | `number`   | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                                           |
 | `callTimeoutMs`          | `number`   | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                                  |
 | `firstTokenTimeoutMs`    | `number`   | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                                                                                                                                                                      |
@@ -1762,7 +1763,7 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **`completeAfterTools` 适用边界**：适合“某个工具成功就是最终产物”的单步或单批 agent runtime。框架仍会执行同一响应中的全部工具调用；只把终结工具列入，不要把需要读取结果后继续决策的查询工具列入。通常 runtime 输出由调用记录组成；当非 story runtime 同时声明 `output.schema`、`requireToolUse: true` 和 `completeAfterTools` 时，框架改用函数调用作为唯一结构化输出通道，不再发送 `responseFormat`，并将成功终结工具返回的对象作为 runtime 输出再次执行 `output.schema` 校验。`output.schema` 必须描述工具的实际对象结果；最简单的做法是原样返回参数，也可以像 `initialize-world` 一样在工具内做确定性组合和补充。
 
-**捆绑结构化 agent 的边界**：单步/单批工具型 runtime 统一把 `maxSteps` 收紧为 2、`maxRetries` 设为 0，并设置 50–60 秒 `callTimeoutMs`；成功写入工具列入 `completeAfterTools`。这让一次无响应的 provider 调用不会通过外层重试占满 120 秒以上预算，同时保留一个 step 给工具参数 schema 修正。主叙事 runtime 不套用这一工具完成配置；两个内置叙事插件通过输出审查 Hook 缓冲正文，检查通过后整段展示，框架的其他 runtime 仍可选择流式输出。
+**捆绑结构化 agent 的边界**：内置 agent runtime 继承框架默认的 20 步工具循环预算，允许小模型多次读取、修正参数后再提交；成功写入工具列入 `completeAfterTools`，成功后立即结束。`maxRetries: 0`、50–60 秒 `callTimeoutMs`、运行总超时和重复调用检测继续生效，增加步数不会增加这些时间上限。主叙事 runtime 不套用这一工具完成配置；两个内置叙事插件通过输出审查 Hook 缓冲正文，检查通过后整段展示，框架的其他 runtime 仍可选择流式输出。
 
 **四类重试触发条件：**
 
@@ -2047,3 +2048,16 @@ tools:
 ```
 
 框架在 commit 链上看到该字段为 `true` 时，会把该 `runtimeId` 标为 `session.setupRuntimes` 的 `done` 状态；后续轮次的调度器会跳过已完成的 `setup` stage runtime。这是 runtime 粒度的闸门；顶层 `session.phase`（`setup` / `playing`）只是粗粒度的 stage-band 选择器，不下放到单插件的触发条件里，两者互不冲突。
+
+### Host execution commit lifecycle
+
+`executeTurn` / `resumeSuspendedRuntime` 仅执行并返回结果，宿主负责会话锁、权限、执行认领和重试身份，然后调用 `@covel/runtime` 的 `commitExecution`。它在一个事务中提交顶层与嵌套结果、消息、暂停状态、会话计数与 `recordAs` 导出，随后负责通知与快照，并从已提交的会话状态准备记忆。`loadOutputSchema` 与 `mediaStore` 在普通、manual 和 resume 入口都由宿主提供。
+
+- `completion.kind: "turn"`：快照后发出 `turn.completed`，调度当前成功故事结果的记忆提取。
+- `completion.kind: "resume"`：提交后发出 `turn.resumed`、强制快照并提取记忆，不额外发出 `turn.completed`。
+- `completion.kind: "detached"`：保留提交与快照，不完成父回合或重复提取故事。
+- 含暂停结果时保存快照，暂不发出完成通知或提取记忆。事务失败则不执行这些提交后步骤。
+
+通知、快照或记忆准备失败不会把已持久化结果改为失败；`snapshotFailed` 独立报告检查点问题。核心记忆提取仍为异步派生任务，检查点包含提交前已完成的记忆及本次事务写入，不保证包含本次尚未完成的提取。此 API 每次认领执行调用一次，不提供跨进程执行去重；低层 `finalizeExecution` 保留给事务本身的测试和组合。旧宿主应将 `finalizeExecution`、快照和 `result.completeTurn()` 的组合迁移到此入口。
+
+执行契约（`LoadedRuntime`、`FunctionHandlerContext`、gateway/media 接口）从 `@covel/shared/plugin-runtime` 导入。该入口仅导出类型；`plugin-loader` 保留兼容类型导出，负责文件发现、加载和注册，不是 runtime 的生产依赖。

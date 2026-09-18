@@ -111,7 +111,7 @@ pnpm validate:plugin ~/.covel/plugins/my-narrator
 | `input`                  | 否   | object                        | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)）                                                                              |
 | `userSettings`           | 否   | array                         | 玩家可调设置数组（见第 7 节）                                                                                                          |
 | `timeoutMs`              | 否   | number                        | Runtime 总时长硬上限，默认 60000                                                                                                       |
-| `maxSteps`               | 否   | number                        | 单次 attempt 内的 tool-call 步数上限，默认 10                                                                                          |
+| `maxSteps`               | 否   | number                        | 单次 attempt 内的 tool-call 步数上限，默认 20                                                                                          |
 | `maxRetries`             | 否   | number                        | LLM 调用失败/超时/工具循环时的重试次数，默认 1                                                                                         |
 | `callTimeoutMs`          | 否   | number                        | 单次 LLM 调用时长（ms），默认从 `timeoutMs` + `maxRetries` 推算                                                                        |
 | `firstTokenTimeoutMs`    | 否   | number                        | 流式首 token 超时（ms），默认 30000                                                                                                    |

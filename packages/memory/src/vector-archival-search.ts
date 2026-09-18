@@ -9,8 +9,7 @@
  * embedding model, embed failure, or empty index).
  */
 
-import type { DataStore } from "@covel/store";
-import { supportsVector } from "@covel/store";
+import { supportsVector } from "@covel/store/vector";
 import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
 import {
   ARCHIVAL_NAMESPACE,
@@ -27,7 +26,7 @@ interface ArchivalPayload {
 }
 
 export function createVectorArchivalSearcher(deps: {
-  readonly store: DataStore;
+  readonly store: object;
   readonly embed: EmbedFn;
   readonly fallback: ArchivalSearcher;
 }): ArchivalSearcher {

@@ -13,16 +13,12 @@ import { createHash } from "node:crypto";
 import type { MediaRef } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
 import type {
-  FunctionHandlerContext,
+  MediaContext,
   ImageGenerateInput,
   ImageGenerateOutput,
   ImagesContext,
   PluginRuntimeGateway,
-} from "@covel/plugin-loader";
-
-// `MediaContext` itself isn't re-exported from the plugin-loader barrel
-// (same workaround as runtime-media-context.ts) — derive it structurally.
-type MediaContext = NonNullable<FunctionHandlerContext["media"]>;
+} from "@covel/shared/plugin-runtime";
 
 const INGEST_ALLOWED_MIMES = ["image/png", "image/jpeg", "image/webp"];
 

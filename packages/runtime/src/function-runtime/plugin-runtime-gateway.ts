@@ -17,7 +17,7 @@
 import type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
-} from "@covel/plugin-loader";
+} from "@covel/shared/plugin-runtime";
 import type { LLMUsageSummary } from "@covel/shared";
 import type { ZodType } from "zod";
 import type {

@@ -18,7 +18,10 @@ import type { DataStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { JobStatusRecord, JobStatusState, JsonValue } from "@covel/shared";
 import { assertJsonValue } from "@covel/shared";
-import type { ProgressEffect, ProgressReporter } from "@covel/plugin-loader";
+import type {
+  ProgressEffect,
+  ProgressReporter,
+} from "@covel/shared/plugin-runtime";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import {
   canonicalizeMediaRefs,

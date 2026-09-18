@@ -7,13 +7,13 @@ import {
 } from "./turn-capabilities.js";
 
 /**
- * Dependencies shared by manual runtime execution and detached followers.
+ * Dependencies shared by player, manual, detached and resumed execution.
  *
  * Keep this composition in one place so action, plugin invocation, and job
  * routes cannot silently drift when a new runtime service is introduced.
  * Request-specific observability and commit ownership stay with the caller.
  */
-export function buildManualTurnExecutorDeps(
+export function buildTurnExecutorDeps(
   c: Context,
   capabilityPluginIds: TurnCapabilityPluginIds,
 ): Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter"> {
@@ -49,28 +49,16 @@ export function buildResumeTurnExecutorDeps(
   c: Context,
   emitter: NonNullable<TurnExecutorDeps["emitter"]>,
 ): TurnExecutorDeps {
-  const gateway = c.get("pluginGateway");
-  const utils = c.get("pluginUtils");
-  const hookPipeline = c.get("hookPipeline");
-  const eventBus = c.get("eventBus");
-  const contextBudget = c.get("turnContextBudget");
-
   return {
-    loadRuntime: c.get("loadRuntimeFn"),
-    llm: c.get("llmAdapter"),
-    ...(gateway ? { gateway } : {}),
-    ...(utils ? { utils } : {}),
-    store: c.get("store"),
-    toolExecutor: c.get("toolExecutor"),
-    resolveModel: c.get("resolveModel"),
-    ...(contextBudget ? { estimator: estimateTokens, contextBudget } : {}),
-    ...(hookPipeline ? { hookPipeline } : {}),
-    ...(eventBus ? { eventBus } : {}),
-    capabilityPluginIds: resolveTurnCapabilityPluginIds(
-      c.get("pluginRegistry"),
-      emitter.sessionId,
+    ...buildTurnExecutorDeps(
+      c,
+      resolveTurnCapabilityPluginIds(
+        c.get("pluginRegistry"),
+        emitter.sessionId,
+      ),
     ),
-    ...(c.get("memorySystem") ? { memorySystem: c.get("memorySystem") } : {}),
+    store: c.get("store"),
+    ...(c.get("eventBus") ? { eventBus: c.get("eventBus") } : {}),
     emitter,
   };
 }

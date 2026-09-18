@@ -14,7 +14,6 @@ llm:
   toolChoice: { name: generate-scene-prompts }
 outputKind: system
 timeoutMs: 120000
-maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 60000
 # This runtime's only job is to call generate-scene-prompts. Some models drift

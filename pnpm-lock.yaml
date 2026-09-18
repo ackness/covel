@@ -484,9 +484,6 @@ importers:
       '@covel/events':
         specifier: workspace:*
         version: link:../events
-      '@covel/plugin-loader':
-        specifier: workspace:*
-        version: link:../plugin-loader
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
@@ -500,6 +497,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../plugin-loader
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

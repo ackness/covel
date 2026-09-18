@@ -23,7 +23,7 @@ import { createMemoryUpdater } from "./updater.js";
 import { createKeywordRecallSearcher } from "./recall-search.js";
 import { createKeywordArchivalSearcher } from "./archival-search.js";
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
-import { supportsVector } from "@covel/store";
+import { supportsVector } from "@covel/store/vector";
 import { createVectorRecallSearcher } from "./vector-recall-search.js";
 import { createVectorArchivalSearcher } from "./vector-archival-search.js";
 import {

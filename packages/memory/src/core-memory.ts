@@ -13,8 +13,10 @@
  * a block vocabulary, so any plugin/world can define its own blocks.
  */
 
+import type { CoreMemoryStore } from "./store-contracts.js";
+
 import type { I18nText } from "@covel/shared";
-import type { DataStore, WorkingMemoryRecord } from "@covel/store";
+import type { WorkingMemoryRecord } from "@covel/store/contracts";
 import type {
   CoreMemoryBlock,
   CoreMemoryBlockSchema,
@@ -30,7 +32,7 @@ import {
 const SCOPE = "story" as const;
 
 export function createMemoryManager(
-  store: DataStore,
+  store: CoreMemoryStore,
   config?: CoreMemoryConfig,
 ): MemoryManager {
   const staticSchema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
@@ -254,7 +256,7 @@ const PLUGIN_DATA_NS = "blocks";
  * memory package never hardcodes a specific plugin name or block vocabulary.
  */
 async function mirrorToPluginData(
-  store: DataStore,
+  store: CoreMemoryStore,
   sessionId: string,
   pluginId: string,
   label: string,

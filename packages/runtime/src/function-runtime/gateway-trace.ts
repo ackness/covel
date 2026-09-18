@@ -12,7 +12,7 @@
  * never the raw prompt or response text.
  */
 
-import type { PluginRuntimeGateway } from "@covel/plugin-loader";
+import type { PluginRuntimeGateway } from "@covel/shared/plugin-runtime";
 import type { LLMUsageSummary } from "@covel/shared";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { summarizeTraceError } from "./trace-error.js";

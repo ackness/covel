@@ -50,3 +50,11 @@ export type {
 // ── Memory system facade ─────────────────────────────────────────
 export { createMemorySystem } from "./memory-system.js";
 export type { CreateMemorySystemOptions } from "./memory-system.js";
+
+export type {
+  MemoryStore,
+  CoreMemoryStore,
+  RecallStore,
+  ArchivalStore,
+  VectorIngestStore,
+} from "./store-contracts.js";

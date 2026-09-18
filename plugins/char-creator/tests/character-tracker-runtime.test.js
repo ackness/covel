@@ -173,7 +173,7 @@ async function run(secondResponse, ...corrections) {
     (item) => item.runtimeId === runtimeId,
   );
   expect(llm.calls.length).toBeGreaterThanOrEqual(2);
-  expect(llm.calls.length).toBeLessThanOrEqual(3);
+  expect(llm.calls.length).toBeLessThanOrEqual(20);
   expect(llm.calls[0].toolNames).toContain("get-character");
   expect(llm.calls[1].toolNames).not.toContain("get-character");
   expect(llm.calls[1].toolNames).toContain("sync-characters");
@@ -187,6 +187,29 @@ async function run(secondResponse, ...corrections) {
 }
 
 describe("character tracker correction budget", () => {
+  it("allows repeated parameter corrections through step 20 without committing failed attempts", async () => {
+    const corrections = Array.from({ length: 18 }, (_, index) =>
+      response("sync-characters", {
+        updates: [{ id: characterId, fields: { systems: -index - 1 } }],
+      }),
+    );
+    const { store, tracker, toolResults, llm } = await run(
+      ...corrections,
+      response("sync-characters", {
+        updates: [{ id: characterId, fields: { systems: 3 } }],
+      }),
+    );
+    expect(llm.calls).toHaveLength(20);
+    expect(toolResults.slice(1, 19).every((result) => !result.success)).toBe(
+      true,
+    );
+    expect(tracker.status).toBe("success");
+    expect((await store.listCharacters(sessionId))[0]).toMatchObject({
+      fields: { systems: 3 },
+      version: 2,
+    });
+  });
+
   it("corrects an out-of-range write after reading details and commits once", async () => {
     const { store, tracker, toolResults, llm } = await run(
       response("sync-characters", {

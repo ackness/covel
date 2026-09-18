@@ -19,7 +19,6 @@ llm:
   toolChoice: { name: generate-guide }
 outputKind: system
 timeoutMs: 120000
-maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 60000
 requireToolUse: true

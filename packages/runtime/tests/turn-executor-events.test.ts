@@ -14,6 +14,7 @@ import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
+import { commitExecution } from "../src/commit/commit-execution.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
@@ -88,7 +89,7 @@ describe("TurnExecutor EventBus Bridge", () => {
     };
   });
 
-  it("emits turn.started during execution but turn.completed only via completeTurn() (commit barrier)", async () => {
+  it("emits turn.started during execution but turn.completed only after commit", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
 
@@ -109,11 +110,23 @@ describe("TurnExecutor EventBus Bridge", () => {
       "turn-1",
     );
 
-    // R-09: turn.completed must NOT fire inside executeTurn — the commit
-    // owner invokes result.completeTurn() only after proposals + snapshot.
+    // Execution only returns data; the host commits before publishing completion.
     expect(events.find((e) => e.type === "turn.completed")).toBeUndefined();
 
-    result.completeTurn?.();
+    await commitExecution({
+      store: deps.store!,
+      sessionId: result.sessionId,
+      executionContext: result.executionContext,
+      runtimes: [narratorManifest],
+      results: result.runtimeResults,
+      turnIds: [result.turnId],
+      eventBus,
+      completion: {
+        kind: "turn",
+        turnId: result.turnId,
+        durationMs: result.durationMs,
+      },
+    });
     const turnCompleted = events.find((e) => e.type === "turn.completed");
     expect(turnCompleted).toBeDefined();
     expect(turnCompleted!.topic).toBe("game");
@@ -121,12 +134,10 @@ describe("TurnExecutor EventBus Bridge", () => {
       (turnCompleted!.payload as Record<string, unknown>).durationMs,
     ).toBeGreaterThanOrEqual(0);
 
-    // Idempotent: a second invocation emits nothing new.
-    result.completeTurn?.();
     expect(events.filter((e) => e.type === "turn.completed")).toHaveLength(1);
   });
 
-  it("defers post-turn memory ingestion behind completeTurn() and skips it when never invoked (commit barrier)", async () => {
+  it("refreshes memory from committed state, never during execution", async () => {
     let blockContent = "seed";
     const updateAfterTurn = vi.fn().mockResolvedValue({
       updated: true,
@@ -172,7 +183,7 @@ describe("TurnExecutor EventBus Bridge", () => {
       memorySystem,
     };
 
-    // Simulates a failed commit: completeTurn is never invoked → no ingestion.
+    // Executing without a commit must not ingest memory.
     const failed = await executeTurn(makeTurnInput(), [narratorManifest], deps);
     await new Promise((resolve) => setImmediate(resolve));
     expect(updateAfterTurn).not.toHaveBeenCalled();
@@ -202,8 +213,21 @@ describe("TurnExecutor EventBus Bridge", () => {
     // Successful commit path: the barrier refreshes committed context and
     // fires exactly one ingestion.
     blockContent = "memory tool committed this turn";
-    failed.completeTurn?.();
-    failed.completeTurn?.();
+    await commitExecution({
+      store,
+      sessionId: failed.sessionId,
+      executionContext: failed.executionContext,
+      runtimes: [narratorManifest],
+      results: failed.runtimeResults,
+      turnIds: [failed.turnId],
+      eventBus,
+      memorySystem,
+      completion: {
+        kind: "turn",
+        turnId: failed.turnId,
+        durationMs: failed.durationMs,
+      },
+    });
     await new Promise((resolve) => setImmediate(resolve));
     expect(updateAfterTurn).toHaveBeenCalledTimes(1);
     expect(updateAfterTurn.mock.calls[0][0].sessionId).toBe("sess-1");

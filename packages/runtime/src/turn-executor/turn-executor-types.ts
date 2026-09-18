@@ -4,7 +4,7 @@ import type {
   PluginRuntimeGateway,
   PluginRuntimeUtils,
   PluginSource,
-} from "@covel/plugin-loader";
+} from "@covel/shared/plugin-runtime";
 import type { DataStore, WorkingMemoryRecord } from "@covel/store";
 import type {
   BudgetOptions,
@@ -236,7 +236,7 @@ export interface CapabilityPluginIds {
 }
 
 export interface TurnExecutorOptions {
-  /** Max LLM tool-calling loop steps per runtime. Default: 10. */
+  /** Max LLM tool-calling loop steps per runtime. Default: 20. */
   readonly maxSteps?: number;
   /** Timeout per runtime in ms. Default: 60000. */
   readonly timeoutMs?: number;

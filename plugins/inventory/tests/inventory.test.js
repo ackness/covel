@@ -583,7 +583,7 @@ describe("inventory plugin manifest", () => {
   it("declares the update-inventory plugin tool", () => {
     expect(manifest.tools?.plugin).toEqual(["update-inventory"]);
     expect(manifest.completeAfterTools).toEqual(["update-inventory"]);
-    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(0);
   });
 

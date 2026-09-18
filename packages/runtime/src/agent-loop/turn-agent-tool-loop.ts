@@ -10,7 +10,7 @@ import type {
   LLMTargetIdentity,
 } from "@covel/shared";
 import { isDefaultLocale, toJsonValueOrDiagnostic } from "@covel/shared";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   isSuspendSentinel,
   isRuntimeDoneSentinel,

@@ -16,7 +16,8 @@
  * callers are agnostic to which is wired. See memory-system.ts.
  */
 
-import type { DataStore } from "@covel/store";
+import type { RecallStore } from "./store-contracts.js";
+
 import type { RecallSearchResult, RecallSearcher } from "./types.js";
 
 /** Max messages to scan for keyword search. */
@@ -27,7 +28,9 @@ const MAX_SCAN_MESSAGES = 500;
  * Scores by term overlap: split query into terms, count matches in each
  * message, normalize by message length.
  */
-export function createKeywordRecallSearcher(store: DataStore): RecallSearcher {
+export function createKeywordRecallSearcher(
+  store: RecallStore,
+): RecallSearcher {
   return {
     async search(
       sessionId,

@@ -34,12 +34,11 @@ import type { DataStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
-  finalizeExecution,
+  commitExecution,
   resumeSuspendedRuntime,
   buildHookSettings,
   createTurnEmitter,
   runWithHookScope,
-  saveAutoSnapshot,
 } from "@covel/runtime";
 import type {
   ExecutionContext,
@@ -64,7 +63,6 @@ import {
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
 import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
-import { refreshResumedMemory } from "./post-resume-memory.js";
 
 type Env = {
   Variables: {
@@ -451,7 +449,28 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 
           // finalize owns the transaction, the commit barrier (buffered fan-out
           // flushed only after commit, dropped on rollback), and the hook scope.
-          const outcome = await finalizeExecution({
+          const outcome = await commitExecution({
+            completion: {
+              kind: "resume",
+              turnId: suspension.turnId,
+              suspensionId: suspension.id,
+              pluginId: effectiveManifest.pluginId,
+              runtimeId: effectiveManifest.name,
+            },
+            memorySystem: resumeDeps.memorySystem,
+            capabilityPluginIds: resumeDeps.capabilityPluginIds,
+            loadOutputSchema: async () =>
+              (
+                await resumeDeps.loadRuntime(
+                  effectiveManifest,
+                  liveSession.locale,
+                  sessionId,
+                )
+              )?.outputSchema,
+            mediaStore: resumeDeps.mediaStore,
+            onFinalized: (outcome) => {
+              if (outcome.status === "committed") claimAcquired = false;
+            },
             store,
             sessionId,
             executionContext: resumeExecutionContext,
@@ -483,55 +502,8 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
               500,
             );
           }
-          claimAcquired = false;
           const events = outcome.events;
 
-          // Announce the resume only after the transaction landed — an event
-          // for a rolled-back resume would desync clients.
-          eventBus?.emit({
-            id: crypto.randomUUID(),
-            type: "event",
-            topic: "game",
-            sessionId,
-            timestamp: new Date().toISOString(),
-            payload: {
-              _subTopic: "game",
-              _subType: "turn.resumed",
-              sessionId,
-              turnId: suspension.turnId,
-              suspensionId: suspension.id,
-              pluginId: effectiveManifest!.pluginId,
-              runtimeId: effectiveManifest!.name,
-            },
-          });
-
-          // Resume commits proposals like any other turn path, so it must leave
-          // an auto snapshot behind — without this, a fork taken after a resume
-          // silently misses the resumed runtime's writes. Same turnId as the
-          // originating suspension so the snapshot lines up with its turn.
-          // `force` bypasses the checkpoint-cadence throttle: resumes are rare
-          // and this snapshot is load-bearing regardless of turn number.
-          try {
-            await saveAutoSnapshot({
-              store,
-              sessionId,
-              turnId: suspension.turnId,
-              force: true,
-              ...(eventBus ? { eventBus } : {}),
-            });
-          } catch (err) {
-            console.warn(
-              `[resume] auto snapshot failed for session ${sessionId} turn ${suspension.turnId}:`,
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-
-          await refreshResumedMemory(
-            liveSession,
-            result,
-            effectiveManifest,
-            resumeDeps,
-          );
           return c.json({ result, events });
         });
       },

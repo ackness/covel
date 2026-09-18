@@ -298,11 +298,7 @@ export async function executeOneRuntime(
           resultCount: nestedResult.runtimeResults.length,
           durationMs: nestedResult.durationMs,
         });
-        // Hand back a de-capabilitised DTO: `completeTurn` would let plugin
-        // code emit the authoritative `turn.completed` (and kick memory
-        // ingestion) before the parent's proposals ever commit.
-        const { completeTurn: _drop, ...nestedView } = nestedResult;
-        return nestedView;
+        return nestedResult;
       } catch (err) {
         await deps.emitter?.emit("recursive.failed", {
           ...tracePayload,

@@ -17,7 +17,8 @@
  * implement the {@link ArchivalSearcher} swap seam. See memory-system.ts.
  */
 
-import type { DataStore } from "@covel/store";
+import type { ArchivalStore } from "./store-contracts.js";
+
 import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
 
 /**
@@ -25,7 +26,7 @@ import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
  * Searches lorebook content and character descriptions.
  */
 export function createKeywordArchivalSearcher(
-  store: DataStore,
+  store: ArchivalStore,
 ): ArchivalSearcher {
   return {
     async search(

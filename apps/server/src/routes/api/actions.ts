@@ -22,8 +22,7 @@ import {
   createTurnEmitter,
   collectExecutionJournal,
   collectExecutionSuspensions,
-  finalizeExecution,
-  saveAutoSnapshot,
+  commitExecution,
 } from "@covel/runtime";
 import type {
   CovelEventType,
@@ -73,7 +72,7 @@ import {
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
-import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
+import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import {
   prepareRuntimeRetry,
   settleRuntimeRetry,
@@ -625,7 +624,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // transport does not cancel this turn; a refreshed client observes
           // it through the read-only execution endpoint until finalization.
           const result = await executeTurn(turnInput, activeRuntimes, {
-            ...buildManualTurnExecutorDeps(c, capabilityPluginIds),
+            ...buildTurnExecutorDeps(c, capabilityPluginIds),
             // The main turn path never passed the eventBus, so every
             // `emitSubEvent` inside the executor — including the
             // completion barrier's `turn.completed` — silently no-opped on
@@ -709,7 +708,37 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly job: RuntimeJobRecord;
             readonly status: JobStatusRecord;
           }> = [];
-          const outcome = await finalizeExecution({
+          const outcome = await commitExecution({
+            completion: {
+              kind: "turn",
+              turnId: result.turnId,
+              durationMs: result.durationMs,
+            },
+            memorySystem,
+            capabilityPluginIds,
+            onFinalized: async (outcome) => {
+              commitStatusSettled = true;
+              for (const evt of outcome.events) {
+                // Emit using CovelEventType directly.
+                await writeEvent(evt.type, {
+                  ...evt.payload,
+                  runtimeId: evt.source.runtimeId,
+                  pluginId: evt.source.pluginId,
+                });
+              }
+              // Commit failures are surfaced as `proposal.failed` SSE events; any
+              // failure withholds the completion barrier below (turn.completed,
+              // memory ingestion, auto-snapshot success signal).
+              for (const fp of outcome.failedProposals) {
+                await writeEvent("proposal.failed", {
+                  proposalId: fp.proposal.id,
+                  proposalType: fp.proposal.type,
+                  runtimeId: fp.proposal.source.runtimeId,
+                  pluginId: fp.proposal.source.pluginId,
+                  error: fp.error,
+                });
+              }
+            },
             signal: registeredTurn.turnControl.signal,
             store,
             sessionId,
@@ -825,29 +854,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // MediaRef canonicalization / ownership for published export values.
             ...(mediaStore ? { mediaStore } : {}),
           });
-          // finalize owns the commit_status settle (committed or failed).
-          commitStatusSettled = true;
-
-          for (const evt of outcome.events) {
-            // Emit using CovelEventType directly.
-            await writeEvent(evt.type, {
-              ...evt.payload,
-              runtimeId: evt.source.runtimeId,
-              pluginId: evt.source.pluginId,
-            });
-          }
-          // Commit failures are surfaced as `proposal.failed` SSE events; any
-          // failure withholds the completion barrier below (turn.completed,
-          // memory ingestion, auto-snapshot success signal).
-          for (const fp of outcome.failedProposals) {
-            await writeEvent("proposal.failed", {
-              proposalId: fp.proposal.id,
-              proposalType: fp.proposal.type,
-              runtimeId: fp.proposal.source.runtimeId,
-              pluginId: fp.proposal.source.pluginId,
-              error: fp.error,
-            });
-          }
           const committed = outcome.status === "committed";
           currentRetryScope = settleRuntimeRetry(
             retryPlan,
@@ -861,43 +867,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const commitError = committed
             ? undefined
             : outcome.error || proposalErrors || "Execution commit failed";
-
-          // Turn accounting happens inside the finalize transaction. The
-          // automatic snapshot stays outside, captured last so it contains
-          // every committed proposal and the authoritative session clock.
-          if (committed) {
-            try {
-              await saveAutoSnapshot({
-                store,
-                sessionId,
-                turnId: turnArgs.turnId,
-                eventBus,
-              });
-            } catch (err) {
-              // Best-effort checkpoint: a failed snapshot is logged but does
-              // not fail the turn — the proposals are already durable.
-              console.warn(
-                `[actions] auto snapshot failed for session ${sessionId} turn ${turnArgs.turnId}:`,
-                err instanceof Error ? err.message : String(err),
-              );
-            }
-          } else {
-            console.error(
-              `[actions] proposal commit failed for session ${sessionId} turn ${turnArgs.turnId} — ` +
-                "withholding auto-snapshot and turn completion",
-            );
-          }
-
-          // Commit barrier: the authoritative turn.completed event and
-          // post-turn memory ingestion fire once every proposal committed.
-          // A failed auto-snapshot does NOT hold them back — the business
-          // state is already durable (the session clock advanced on the same
-          // proposal-only condition), only the best-effort checkpoint is
-          // missing and the next turn snapshots again. Gating completion on
-          // the snapshot would strand a fully-committed turn as "incomplete".
-          if (committed && !hasSuspendedRuntime) {
-            await result.completeTurn?.();
-          }
 
           return {
             result:
@@ -979,7 +948,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           session: { ...followerSession, locale: effectiveLocale },
           activeRuntimes,
           approvalScopes,
-          deps: buildManualTurnExecutorDeps(c, capabilityPluginIds),
+          deps: buildTurnExecutorDeps(c, capabilityPluginIds),
           ...(hookPipeline ? { hookPipeline } : {}),
         });
         const jobRunner = createPluginRpcJobRunner({

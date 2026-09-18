@@ -11,7 +11,6 @@ fallbackFor: character-creation
 outputKind: system
 model: plugin
 timeoutMs: 180000
-maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 60000
 requireToolUse: true

@@ -14,7 +14,7 @@
  * full URL, query string, headers, or API keys.
  */
 
-import type { PluginRuntimeUtils } from "@covel/plugin-loader";
+import type { PluginRuntimeUtils } from "@covel/shared/plugin-runtime";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import type { GatewayTraceContext } from "./gateway-trace.js";
 import { summarizeTraceError } from "./trace-error.js";

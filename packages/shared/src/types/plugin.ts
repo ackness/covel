@@ -792,9 +792,9 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
   readonly timeoutMs?: number;
   /**
    * Per-runtime cap on the agent tool-call loop. Overrides the framework
-   * default (10). Lower values prevent runaway LLMs that keep calling the
-   * same tool after a successful result. Set to 1 or 2 for single-shot
-   * plugins that should call one tool and stop.
+   * default (20). Each step is one model response, potentially containing
+   * multiple tool calls. Use completeAfterTools for early success; explicit
+   * lower budgets remain available for constrained runtimes.
    */
   readonly maxSteps?: number;
   /**

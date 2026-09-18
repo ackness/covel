@@ -13,16 +13,13 @@ import { createHash } from "node:crypto";
 import type { MediaRef } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
 import type {
-  FunctionHandlerContext,
+  MediaContext,
   PluginRuntimeGateway,
   SpeechContext,
   SpeechGenerateInput,
   SpeechGenerateOutput,
   SpeechTranscribeInput,
-} from "@covel/plugin-loader";
-
-// Same structural workaround as runtime-images-context.ts.
-type MediaContext = NonNullable<FunctionHandlerContext["media"]>;
+} from "@covel/shared/plugin-runtime";
 
 /** Deterministic key over synthesis params — identical calls dedupe. */
 function promptHashOf(input: SpeechGenerateInput): string {

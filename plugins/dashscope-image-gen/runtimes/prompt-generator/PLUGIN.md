@@ -12,7 +12,6 @@ capabilities: [image-prompt, manual-invoke]
 # emitted image.generate.requested event keeps chaining to image-generator.
 execution: background
 timeoutMs: 300000
-maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 50000
 firstTokenTimeoutMs: 30000

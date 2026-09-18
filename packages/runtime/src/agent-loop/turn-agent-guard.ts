@@ -7,7 +7,7 @@ import type {
 } from "@covel/shared";
 import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import { withPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {

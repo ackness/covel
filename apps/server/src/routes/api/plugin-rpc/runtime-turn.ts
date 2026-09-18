@@ -4,8 +4,7 @@ import {
   collectExecutionSuspensions,
   createDetachedProposalGuard,
   executeTurn,
-  finalizeExecution,
-  saveAutoSnapshot,
+  commitExecution,
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
@@ -170,9 +169,9 @@ export function createPluginRpcRuntimeTurnRunner(
     emitter: ReturnType<typeof createTurnEmitter>,
     opts: {
       readonly proposalGuard?: Parameters<
-        typeof finalizeExecution
+        typeof commitExecution
       >[0]["proposalGuard"];
-      readonly completeTurn?: boolean;
+      readonly completionKind?: "turn" | "detached";
     } = {},
   ): Promise<TurnCommitOutcome> {
     // Commit the whole execution (top-level + nested recursiveCall results) in
@@ -180,7 +179,31 @@ export function createPluginRpcRuntimeTurnRunner(
     // rolls the turn back (committed siblings included) and settles the
     // turn_results row to `failed`; a clean run settles it `committed`, both
     // inside that transaction.
-    const outcome = await finalizeExecution({
+    const outcome = await commitExecution({
+      completion:
+        opts.completionKind === "detached"
+          ? { kind: "detached", turnId: turnResult.turnId }
+          : {
+              kind: "turn",
+              turnId: turnResult.turnId,
+              durationMs: turnResult.durationMs,
+            },
+      memorySystem: ctx.deps.memorySystem,
+      capabilityPluginIds: ctx.deps.capabilityPluginIds,
+      onFinalized: async (outcome) => {
+        // Commit failures must not report success. Surface each one as a
+        // `proposal.failed` trace event (manual/background turns have no live
+        // action stream; the /debug timeline and subscription channel carry it).
+        for (const fp of outcome.failedProposals) {
+          await emitter.emit("proposal.failed", {
+            proposalId: fp.proposal.id,
+            proposalType: fp.proposal.type,
+            runtimeId: fp.proposal.source.runtimeId,
+            pluginId: fp.proposal.source.pluginId,
+            error: fp.error,
+          });
+        }
+      },
       store: ctx.store,
       sessionId: ctx.sessionId,
       executionContext: turnResult.executionContext,
@@ -211,62 +234,11 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
     });
 
-    // Commit failures must not report success. Surface each one as a
-    // `proposal.failed` trace event (manual/background turns have no live
-    // action stream; the /debug timeline and subscription channel carry it).
-    for (const fp of outcome.failedProposals) {
-      await emitter.emit("proposal.failed", {
-        proposalId: fp.proposal.id,
-        proposalType: fp.proposal.type,
-        runtimeId: fp.proposal.source.runtimeId,
-        pluginId: fp.proposal.source.pluginId,
-        error: fp.error,
-      });
-    }
-
     const committed = outcome.status === "committed";
-    let snapshotFailed = false;
-    if (committed) {
-      try {
-        await saveAutoSnapshot({
-          store: ctx.store,
-          sessionId: ctx.sessionId,
-          turnId: turnResult.turnId,
-          eventBus: ctx.eventBus,
-        });
-      } catch (err) {
-        snapshotFailed = true;
-        console.warn(
-          `[plugin-rpc] auto snapshot failed for session ${ctx.sessionId} turn ${turnResult.turnId}:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    } else {
-      console.error(
-        `[plugin-rpc] proposal commit failed for session ${ctx.sessionId} turn ${turnResult.turnId} — ` +
-          "withholding auto-snapshot and turn completion",
-      );
-    }
-
-    // Commit barrier: fire the authoritative turn.completed event and memory
-    // ingestion only when every proposal committed. A failed auto-snapshot does
-    // NOT withhold completion — the proposals already committed (commit_status
-    // was settled inside finalize), so business state is consistent and only
-    // the best-effort checkpoint is missing; counting it as a failure made the
-    // sync RPC return 500 and the client retry, replaying committed proposals.
-    // So `committed` tracks proposal commit alone, matching commit_status;
-    // `snapshotFailed` stays on the outcome for observability.
-    const hasSuspendedRuntime = [
-      ...turnResult.runtimeResults,
-      ...(turnResult.nestedRuntimeResults ?? []),
-    ].some((result) => result.status === "suspended");
-    if (committed && !hasSuspendedRuntime && opts.completeTurn !== false) {
-      await turnResult.completeTurn?.();
-    }
     return {
       committed,
       failedProposalCount: outcome.failedProposals.length,
-      snapshotFailed,
+      snapshotFailed: outcome.snapshotFailed,
     };
   }
 
@@ -304,9 +276,9 @@ export function createPluginRpcRuntimeTurnRunner(
       readonly executionSignal?: AbortSignal;
       readonly rejectSuspension?: boolean;
       readonly proposalGuard?: Parameters<
-        typeof finalizeExecution
+        typeof commitExecution
       >[0]["proposalGuard"];
-      readonly completeTurn?: boolean;
+      readonly completionKind?: "turn" | "detached";
     } = {},
   ): Promise<{
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
@@ -387,8 +359,8 @@ export function createPluginRpcRuntimeTurnRunner(
             ...(opts.proposalGuard
               ? { proposalGuard: opts.proposalGuard }
               : {}),
-            ...(opts.completeTurn !== undefined
-              ? { completeTurn: opts.completeTurn }
+            ...(opts.completionKind !== undefined
+              ? { completionKind: opts.completionKind }
               : {}),
           });
         },
@@ -555,7 +527,7 @@ export function createPluginRpcRuntimeTurnRunner(
         ? { executionSignal: args.executionSignal }
         : {}),
       proposalGuard: createDetachedProposalGuard(target),
-      completeTurn: false,
+      completionKind: "detached",
       rejectSuspension: true,
     });
   }

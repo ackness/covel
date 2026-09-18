@@ -9,6 +9,20 @@ import { createMemoryStore } from "../src/memory/memory-store.js";
 import { createSqliteStore } from "../src/sqlite/sqlite-store.js";
 import { supportsVector } from "../src/vector-store.js";
 
+it("rejects a partial vector adapter before callers access model metadata", () => {
+  const partial = {
+    upsertVector: async () => {},
+    searchVectors: async () => [],
+    deleteVectors: async () => {},
+    ensureVectorModel: async () => {},
+    resolveSessionVectorTarget: async () => null,
+  };
+  expect(supportsVector(partial)).toBe(false);
+  expect(supportsVector({ ...partial, listVectorModels: async () => [] })).toBe(
+    true,
+  );
+});
+
 // ── MemoryStore: always supports VectorStoreCapability ────────
 
 runVectorStoreContractTests("MemoryStore", () => {

@@ -48,7 +48,6 @@ export {
   isTurnAbortedError,
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
-export { schedulePostTurnMemoryUpdate } from "./turn-executor/post-turn-memory.js";
 export { collectExecutionJournal } from "./execution-journal.js";
 export { collectExecutionSuspensions } from "./suspension-artifact.js";
 export type { SuspensionArtifact } from "./suspension-artifact.js";
@@ -164,6 +163,12 @@ export type {
   TraceRecorder,
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
+export { commitExecution } from "./commit/commit-execution.js";
+export type {
+  CommitExecutionArgs,
+  CommitExecutionOutcome,
+  ExecutionCompletion,
+} from "./commit/commit-execution.js";
 export { finalizeExecution } from "./commit/finalize-execution.js";
 export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
 export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";

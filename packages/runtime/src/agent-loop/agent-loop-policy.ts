@@ -11,7 +11,7 @@
  */
 
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type {
   LLMResponseFormat,
   LLMToolDefinition,
@@ -20,6 +20,8 @@ import { buildToolDefinitions } from "../turn-executor/turn-executor-helpers.js"
 import { declaredToolNames, resolveDeferredToolNames } from "./tool-search.js";
 import { buildRetryPolicy, type RetryPolicy } from "../retry/llm-retry.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
+
+export const DEFAULT_MAX_TOOL_STEPS = 20;
 
 export interface AgentLoopPolicy {
   /**
@@ -57,8 +59,8 @@ export interface AgentLoopPolicy {
    */
   readonly useStreaming: boolean;
   /**
-   * Per-runtime maxSteps override. Plugins that should call a tool once and
-   * stop (e.g. guide) set `maxSteps: 2` in their frontmatter.
+   * Per-runtime maxSteps override, then caller budget, then the shared default.
+   * Successful completing tools stop early regardless of this ceiling.
    */
   readonly effectiveMaxSteps: number;
   /**

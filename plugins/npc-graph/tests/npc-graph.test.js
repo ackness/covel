@@ -124,7 +124,7 @@ describe("npc-graph manifests", () => {
     // codex, and character-tracker.
     expect(extractor.stage).toBe("post-turn");
     expect(extractor.completeAfterTools).toEqual(["upsert-npc-graph"]);
-    expect(extractor.maxSteps).toBe(2);
+    expect(extractor.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(extractor.maxRetries).toBe(0);
     expect(extractor.capabilities).toContain("npc-graph");
     expect(extractor.tools?.plugin).toEqual(["upsert-npc-graph"]);

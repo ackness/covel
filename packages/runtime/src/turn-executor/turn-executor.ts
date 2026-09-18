@@ -7,6 +7,8 @@
  * arbitrary output shapes. The session kernel normalizes them into typed Proposals.
  */
 
+import { DEFAULT_MAX_TOOL_STEPS } from "../agent-loop/agent-loop-policy.js";
+
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   DeferredRuntimeJob,
@@ -67,7 +69,6 @@ import {
 import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
 import { planTurnDetachment } from "../schedule/turn-completion.js";
 import { markPreGameCompletion } from "./pre-game-completion.js";
-import { schedulePostTurnMemoryUpdate } from "./post-turn-memory.js";
 import {
   loadCoreMemoryBlocks,
   loadSessionSummaries,
@@ -205,7 +206,7 @@ async function executeTurnImpl(
   // producer publishes a new revision while the turn is still running (02 §3.4.2).
   const executionStartedAt =
     input.detachedStage?.sourceExecutionStartedAt ?? new Date().toISOString();
-  const maxSteps = options?.maxSteps ?? 10;
+  const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
   const recursionDepth = options?.recursionDepth ?? 0;
   const targetedRuntimeId =
@@ -947,18 +948,6 @@ async function executeTurnImpl(
     nestedRuntimeResults,
   });
 
-  // ── Turn-completion barrier ─────────────────
-  // The authoritative `turn.completed` event and post-turn memory ingestion
-  // must not fire before the caller commits this turn's proposals — a failed
-  // commit would otherwise leave clients with a "completed" turn and memory
-  // built from state that never landed. `completeTurn` packages both; the
-  // commit-owning caller (actions.ts / plugin-rpc runtime-turn.ts) invokes it
-  // once proposals commit. A failed auto-snapshot does NOT withhold it — the
-  // snapshot is a best-effort checkpoint, tracked separately on the outcome.
-  // Idempotent via the `fired` guard.
-  // Memory stays fire-and-forget inside; per-session single-flight lives in
-  // the memory updater's pending map.
-  let completionFired = false;
   const turnResult: TurnResult = {
     ...baseResult,
     // Surface the setup delta so the commit-owning caller folds it into the
@@ -976,28 +965,6 @@ async function executeTurnImpl(
     // outside the commit transaction. The commit-owning caller forwards this to
     // finalizeExecution.
     ...(setupRan.length > 0 ? { setupRan } : {}),
-    completeTurn: async () => {
-      if (completionFired) return;
-      completionFired = true;
-      emitSubEvent(deps.eventBus, "game", "turn.completed", input.sessionId, {
-        turnId: input.turnId,
-        sessionId: input.sessionId,
-        durationMs: baseResult.durationMs,
-      });
-      // The commit owner invokes this callback only after the transaction
-      // lands. Refresh here so authoritative character/form facts include
-      // writes produced by this turn instead of the pre-execution snapshot.
-      const committedSessionContext = await refreshSessionContext();
-      schedulePostTurnMemoryUpdate({
-        input,
-        turnResult: baseResult,
-        runtimes: activeRuntimes,
-        deps,
-        // A committed memory tool may have changed a block during this turn.
-        coreMemoryBlocks: await loadCoreMemoryBlocks({ input, deps }),
-        sessionContext: committedSessionContext,
-      });
-    },
   };
   attachExecutionJournal(turnResult, journalMessages);
 

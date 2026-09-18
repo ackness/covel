@@ -710,7 +710,7 @@ describe("codex plugin manifest", () => {
   it("should expose one atomic sync tool but NOT plugin-data-list", () => {
     expect(manifest.tools?.plugin).toEqual(["sync-codex-entries"]);
     expect(manifest.completeAfterTools).toEqual(["sync-codex-entries"]);
-    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(0);
     // plugin-data-list was removed — existing entries now arrive via input.inject
     expect(manifest.tools?.builtin ?? []).not.toContain("plugin-data-list");

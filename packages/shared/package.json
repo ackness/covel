@@ -23,6 +23,10 @@
     "./plugin-user-settings-header": {
       "types": "./src/plugin-user-settings-header.ts",
       "import": "./src/plugin-user-settings-header.ts"
+    },
+    "./plugin-runtime": {
+      "types": "./src/plugin-runtime/index.ts",
+      "import": "./src/plugin-runtime/index.ts"
     }
   },
   "scripts": {

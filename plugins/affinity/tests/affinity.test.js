@@ -522,7 +522,7 @@ describe("affinity plugin manifest", () => {
     expect(manifest.tools?.plugin).toEqual(["update-affinity"]);
     expect(manifest.entry).toBe("./server/index.js");
     expect(manifest.completeAfterTools).toEqual(["update-affinity"]);
-    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(0);
   });
 

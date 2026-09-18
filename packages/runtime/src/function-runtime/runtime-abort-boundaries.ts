@@ -1,7 +1,7 @@
 import type {
   PluginRuntimeGateway,
   PluginRuntimeUtils,
-} from "@covel/plugin-loader";
+} from "@covel/shared/plugin-runtime";
 import { combineAbortSignals } from "../turn-executor/turn-control.js";
 
 function signalFor(

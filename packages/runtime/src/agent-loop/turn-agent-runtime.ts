@@ -9,7 +9,7 @@ import type {
 } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { DEFAULT_LOCALE, getRuntimeSpec } from "@covel/shared";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   buildContext,
   buildContextAsync,

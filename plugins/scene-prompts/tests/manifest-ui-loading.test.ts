@@ -32,7 +32,6 @@ describe("scene-prompts manifest and UI loading", () => {
       outputKind: "system",
       requireToolUse: true,
       completeAfterTools: ["generate-scene-prompts"],
-      maxSteps: 2,
       maxRetries: 0,
       trigger: {
         type: "scheduled",

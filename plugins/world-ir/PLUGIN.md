@@ -15,7 +15,6 @@ llm:
   reasoningEffort: disabled
   toolChoice: { name: submit-world-facts }
 timeoutMs: 120000
-maxSteps: 2
 # A provider-level timeout retry previously consumed the full 120-second runtime
 # budget before the model could correct invalid tool arguments. One 60-second
 # provider attempt leaves the second agent step available for schema repair.

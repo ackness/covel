@@ -609,7 +609,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 **使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
 
-该 tracker 的 `maxSteps` 为 3：保留至多一次角色读取，并允许一次失败批次的修正提交；上限仍为 5 个新角色和 10 个已有角色更新。
+该 tracker 继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。
 
 ---
 

@@ -11,7 +11,7 @@ import type {
 import { validateWorldIRV1, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { getRuntimeSpec } from "@covel/shared";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type { SuspensionRecord } from "@covel/store";
 import {
   getPendingProposals,

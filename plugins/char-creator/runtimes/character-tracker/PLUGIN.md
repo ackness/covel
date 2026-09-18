@@ -13,7 +13,6 @@ stage: post-turn
 model: plugin
 outputKind: system
 timeoutMs: 120000
-maxSteps: 3
 maxRetries: 0
 callTimeoutMs: 60000
 tags:

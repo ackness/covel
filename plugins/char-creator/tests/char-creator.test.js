@@ -70,7 +70,7 @@ describe("char-creator plugin", () => {
     it("requires one create-character-form call and stops immediately after success", () => {
       expect(manifest.requireToolUse).toBe(true);
       expect(manifest.completeAfterTools).toEqual(["create-character-form"]);
-      expect(manifest.maxSteps).toBe(2);
+      expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
       expect(manifest.maxRetries).toBe(0);
     });
 
@@ -146,7 +146,7 @@ describe("char-creator plugin", () => {
       ]);
       expect(manifest.completeAfterTools).toEqual(["sync-characters"]);
       expect(manifest.tools?.defer).toBeUndefined();
-      expect(manifest.maxSteps).toBe(3);
+      expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
       expect(manifest.maxRetries).toBe(0);
     });
 

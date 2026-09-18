@@ -4,7 +4,10 @@
  */
 
 import type { EventBus } from "@covel/events";
-import type { AssetProgressInput, PluginSource } from "@covel/plugin-loader";
+import type {
+  AssetProgressInput,
+  PluginSource,
+} from "@covel/shared/plugin-runtime";
 import type {
   RuntimeManifest,
   RuntimeResult,

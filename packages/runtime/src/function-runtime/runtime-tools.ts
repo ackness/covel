@@ -1,4 +1,4 @@
-import type { FunctionHandlerContext } from "@covel/plugin-loader";
+import type { FunctionHandlerContext } from "@covel/shared/plugin-runtime";
 import {
   toJsonValueOrDiagnostic,
   type InputSlot,

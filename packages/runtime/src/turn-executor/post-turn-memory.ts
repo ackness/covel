@@ -10,7 +10,7 @@ import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { CoreMemoryBlock } from "./session-state.js";
 
 export function schedulePostTurnMemoryUpdate(args: {
-  readonly input: TurnInput;
+  readonly input: Pick<TurnInput, "sessionId" | "turnId" | "locale">;
   readonly turnResult: Pick<TurnResult, "runtimeResults">;
   readonly runtimes: readonly Pick<RuntimeManifest, "name" | "outputKind">[];
   readonly deps: Pick<TurnExecutorDeps, "memorySystem" | "emitter">;

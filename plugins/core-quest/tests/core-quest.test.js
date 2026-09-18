@@ -752,7 +752,7 @@ describe("core-quest plugin manifest", () => {
     expect(manifest.entry).toBe("./server/index.js");
     expect(manifest.tools?.plugin).toEqual(["upsert-quests"]);
     expect(manifest.completeAfterTools).toEqual(["upsert-quests"]);
-    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(0);
   });
 

@@ -12,7 +12,7 @@ import type {
   PluginDataWriter,
   PluginLogger,
   FunctionStoreView,
-} from "@covel/plugin-loader";
+} from "@covel/shared/plugin-runtime";
 import {
   reservedPluginDataNamespaceError,
   type RpcHandlerStore,

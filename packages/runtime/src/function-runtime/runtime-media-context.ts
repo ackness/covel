@@ -1,12 +1,10 @@
 import type { MediaRef } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
 import type {
-  FunctionHandlerContext,
+  MediaContext,
+  IngestUrlOptions,
   PluginRuntimeUtils,
-} from "@covel/plugin-loader";
-
-type MediaContext = NonNullable<FunctionHandlerContext["media"]>;
-type IngestUrlOptions = Parameters<MediaContext["ingestUrl"]>[1];
+} from "@covel/shared/plugin-runtime";
 
 /**
  * Narrowed view of `MediaStore` that the plugin-facing media context is

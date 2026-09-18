@@ -215,13 +215,8 @@ export type RecursiveCallDelta = Omit<
   "sessionId" | "turnId" | "origin" | "parentTurnId"
 >;
 
-/**
- * Nested-turn view handed back to plugin code. Strips `completeTurn`: the
- * completion barrier belongs to the top-level framework control plane, and a
- * nested caller invoking it would emit an authoritative `turn.completed`
- * before the parent's proposals commit.
- */
-export type NestedTurnResult = Omit<TurnResult, "completeTurn">;
+/** Pure execution data returned to a nested caller; commit stays with the host. */
+export type NestedTurnResult = TurnResult;
 
 export interface TurnResult {
   readonly turnId: string;
@@ -294,17 +289,6 @@ export interface TurnResult {
   }[];
   /** Scheduler-driven runtimes durably queued beyond this turn's barrier. */
   readonly deferredRuntimeJobs?: readonly DeferredRuntimeJob[];
-  /**
-   * Turn-completion barrier (commit consistency, audit). Present on
-   * results returned by `executeTurn`. The caller that owns the commit
-   * boundary invokes it AFTER this turn's proposals have committed (and the
-   * auto-snapshot is captured); it then emits the authoritative
-   * `turn.completed` event and kicks off post-turn memory ingestion.
-   * Idempotent — safe to call at most once per path. Never invoked when the
-   * commit fails or the process crashes: no ghost completion event, no memory
-   * derived from uncommitted state.
-   */
-  readonly completeTurn?: () => void | Promise<void>;
 }
 
 // ── Interaction protocol ────────────────────────────────────────
