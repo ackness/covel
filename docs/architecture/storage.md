@@ -41,6 +41,13 @@ checkpoint contracts; `apps/web` owns the browser persistence mechanism.
 backend; explicit browser IDB is a media/cache implementation, not a business
 `DataStore`.
 
+PostgreSQL coordinates database writes, session locks and EventBus fan-out across
+processes. Active-turn steering and cancellation still use process-local execution
+handles; requests must reach the instance executing that turn. Legacy background
+jobs and durable staged jobs also have different restart guarantees. The
+[API deployment capability matrix](../reference/api.md#多实例能力边界) records
+these limits; selecting PostgreSQL does not provide transparent execution failover.
+
 ## Browser-Private Protocol
 
 The browser is authoritative in local mode. The server may read API keys from
