@@ -30,11 +30,15 @@ export type {
 export { executeParallel } from "./schedule/parallel-executor.js";
 export type { RuntimeExecuteFn } from "./schedule/parallel-executor.js";
 
+export {
+  buildHookSettings,
+  snapshotUserSettings,
+} from "./hooks/hook-settings.js";
+
 // ── Turn Executor ────────────────────────────────────────────────
 export {
   executeTurn,
   resumeSuspendedRuntime,
-  buildHookSettings,
 } from "./turn-executor/turn-executor.js";
 export type {
   AgentLoopDeps,
@@ -202,7 +206,11 @@ export {
   runSessionEndHook,
   runWithHookScope,
 } from "./hooks/index.js";
-export type { SessionStartPayload, SessionEndPayload } from "./hooks/index.js";
+export type {
+  HookScope,
+  SessionStartPayload,
+  SessionEndPayload,
+} from "./hooks/index.js";
 export { HOOK_SEMANTICS } from "./hooks/index.js";
 export type {
   HookEvent,

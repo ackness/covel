@@ -37,6 +37,7 @@ import {
   commitExecution,
   resumeSuspendedRuntime,
   buildHookSettings,
+  snapshotUserSettings,
   createTurnEmitter,
   runWithHookScope,
 } from "@covel/runtime";
@@ -244,113 +245,102 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   // Resume + commit fire hooks outside executeTurn — establish the session
   // hook scope so a plugin's hooks only run for sessions where it is active
   // (see hooks/hook-scope.ts).
-  const activePluginIds = new Set<string>();
-
-  let hookSettings: ReturnType<typeof buildHookSettings> | undefined;
-
   try {
-    return await runWithHookScope(
-      {
-        activePluginIds,
-        get settings() {
-          return hookSettings;
-        },
-      },
-      async () => {
-        return sessionLock.withLock(sessionId, async () => {
-          // Active gate under the lock — a paused/ended session must
-          // not accept a resume (it would commit state and write history).
-          const liveSession = await store.getSession(sessionId);
-          if (!liveSession) {
-            return c.json(
-              errorBody(`Session not found: ${sessionId}`, {
-                code: "session_not_found",
-              }),
-              404,
-            );
-          }
-          const ownerDenied = checkSessionOwner(c, liveSession);
-          if (ownerDenied) return ownerDenied;
-          if (
-            sessionIncarnationIdentity(liveSession) !==
-            sessionIncarnationIdentity(guard.session)
-          ) {
-            return c.json(
-              errorBody("Session was replaced while resume was waiting", {
-                code: "session_incarnation_changed",
-              }),
-              409,
-            );
-          }
-          if (liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]) {
-            return c.json(
-              errorBody("Session deletion is in progress; retry DELETE", {
-                code: "session_deleting",
-              }),
-              409,
-            );
-          }
-          if (liveSession.status !== "active") {
-            return c.json(
-              errorBody(
-                `session is ${liveSession.status}; it must be active to resume`,
-                { code: "session_not_active" },
-              ),
-              409,
-            );
-          }
+    return await sessionLock.withLock(sessionId, async () => {
+      // Active gate under the lock — a paused/ended session must
+      // not accept a resume (it would commit state and write history).
+      const liveSession = await store.getSession(sessionId);
+      if (!liveSession) {
+        return c.json(
+          errorBody(`Session not found: ${sessionId}`, {
+            code: "session_not_found",
+          }),
+          404,
+        );
+      }
+      const ownerDenied = checkSessionOwner(c, liveSession);
+      if (ownerDenied) return ownerDenied;
+      if (
+        sessionIncarnationIdentity(liveSession) !==
+        sessionIncarnationIdentity(guard.session)
+      ) {
+        return c.json(
+          errorBody("Session was replaced while resume was waiting", {
+            code: "session_incarnation_changed",
+          }),
+          409,
+        );
+      }
+      if (liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]) {
+        return c.json(
+          errorBody("Session deletion is in progress; retry DELETE", {
+            code: "session_deleting",
+          }),
+          409,
+        );
+      }
+      if (liveSession.status !== "active") {
+        return c.json(
+          errorBody(
+            `session is ${liveSession.status}; it must be active to resume`,
+            { code: "session_not_active" },
+          ),
+          409,
+        );
+      }
 
-          const liveSuspension = await store.getSuspension(suspensionId);
-          if (!liveSuspension || liveSuspension.sessionId !== sessionId) {
-            return c.json(errorBody("Suspension not found"), 404);
-          }
-          if (liveSuspension.resolvedAt) {
-            return c.json(errorBody("Suspension already resolved"), 409);
-          }
-          const liveValidationError = validateAgainstJsonSchema(
-            data,
-            liveSuspension.resumeSchema,
-          );
-          if (liveValidationError !== null) {
-            return c.json(
-              errorBody(
-                `Resume data validation failed: ${liveValidationError}`,
-              ),
-              400,
-            );
-          }
+      const liveSuspension = await store.getSuspension(suspensionId);
+      if (!liveSuspension || liveSuspension.sessionId !== sessionId) {
+        return c.json(errorBody("Suspension not found"), 404);
+      }
+      if (liveSuspension.resolvedAt) {
+        return c.json(errorBody("Suspension already resolved"), 409);
+      }
+      const liveValidationError = validateAgainstJsonSchema(
+        data,
+        liveSuspension.resumeSchema,
+      );
+      if (liveValidationError !== null) {
+        return c.json(
+          errorBody(`Resume data validation failed: ${liveValidationError}`),
+          400,
+        );
+      }
 
-          // Rebuild the process-local activation view from persisted truth only
-          // after the lifecycle checks above. A disabled runtime cannot be
-          // resumed from a stale registry snapshot.
-          pluginRegistry.syncSessionActivations(
-            sessionId,
-            liveSession.activePlugins,
-          );
-          const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
-          const effectiveManifest: RuntimeManifest | undefined =
-            activeRuntimes.find((rt) => rt.name === liveSuspension.runtimeId);
-          if (!effectiveManifest) {
-            return c.json(
-              errorBody(
-                `Runtime "${liveSuspension.runtimeId}" not found in registry`,
-              ),
-              404,
-            );
-          }
-          activePluginIds.clear();
-          for (const runtime of activeRuntimes) {
-            activePluginIds.add(runtime.pluginId);
-          }
-          const world = liveSession.worldId
-            ? await getCachedWorld(store, liveSession.worldId)
-            : null;
-          const userSettings = mergePluginUserSettings(
-            readWorldPluginSettings(world?.metadata),
-            decodedUserSettings.settings,
-          );
-          hookSettings = buildHookSettings(activeRuntimes, userSettings);
-
+      // Rebuild the process-local activation view from persisted truth only
+      // after the lifecycle checks above. A disabled runtime cannot be
+      // resumed from a stale registry snapshot.
+      pluginRegistry.syncSessionActivations(
+        sessionId,
+        liveSession.activePlugins,
+      );
+      const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+      const effectiveManifest: RuntimeManifest | undefined =
+        activeRuntimes.find((rt) => rt.name === liveSuspension.runtimeId);
+      if (!effectiveManifest) {
+        return c.json(
+          errorBody(
+            `Runtime "${liveSuspension.runtimeId}" not found in registry`,
+          ),
+          404,
+        );
+      }
+      const activePluginIds = new Set(
+        activeRuntimes.map((runtime) => runtime.pluginId),
+      );
+      const world = liveSession.worldId
+        ? await getCachedWorld(store, liveSession.worldId)
+        : null;
+      const userSettings = snapshotUserSettings(
+        mergePluginUserSettings(
+          readWorldPluginSettings(world?.metadata),
+          decodedUserSettings.settings,
+        ),
+      );
+      const hookSettings = buildHookSettings(activeRuntimes, userSettings);
+      return runWithHookScope(
+        { activePluginIds, settings: hookSettings },
+        async () => {
           // Claim while holding the same lifecycle lock as resume execution and
           // suspension abandonment. This closes the delete/claim race.
           const claimed = await store.claimSuspension(suspensionId);
@@ -482,6 +472,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             results: [result],
             turnIds: [],
             activePluginIds,
+            hookSettings,
             ...(hookPipeline ? { hookPipeline } : {}),
             ...(eventBus ? { eventBus } : {}),
             emitter,
@@ -505,9 +496,9 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           const events = outcome.events;
 
           return c.json({ result, events });
-        });
-      },
-    );
+        },
+      );
+    });
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The
     // runtime error propagates to the caller; the suspension is back to

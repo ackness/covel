@@ -7,6 +7,7 @@ import type {
   RuntimeResult,
 } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
+import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createPluginRpcRuntimeTurnRunner } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
@@ -40,6 +41,9 @@ function manifest(): RuntimeManifest {
     needs: [PRODUCER_ID],
     effects: { writes: ["plugin-data:self:tracks"] },
     turnCompletion: { mode: "detached" },
+    userSettings: [
+      { key: "tone", type: "text", default: "manifest", label: "Tone" },
+    ],
   };
 }
 
@@ -84,7 +88,11 @@ function descriptor(): DeferredRuntimeJob {
 }
 
 describe("plugin RPC detached-stage runner", () => {
-  async function setup(handler: FunctionHandler) {
+  async function setup(
+    handler: FunctionHandler,
+    hookPipeline?: HookPipeline,
+    runtimeManifest = manifest(),
+  ) {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
@@ -103,7 +111,6 @@ describe("plugin RPC detached-stage runner", () => {
       updatedAt: now,
     });
     const session = (await store.getSession(SESSION_ID))!;
-    const runtimeManifest = manifest();
     const loaded: LoadedRuntime = {
       manifest: runtimeManifest,
       promptTemplate: "",
@@ -119,6 +126,7 @@ describe("plugin RPC detached-stage runner", () => {
       sessionId: SESSION_ID,
       session,
       activeRuntimes: [producerManifest(), runtimeManifest],
+      hookPipeline,
       approvalScopes: new Map([
         [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
       ]),
@@ -131,6 +139,82 @@ describe("plugin RPC detached-stage runner", () => {
     });
     return { store, session, runner, observed };
   }
+
+  it.each(["manual", "background", "detached-stage"] as const)(
+    "keeps operation settings during %s commit",
+    async (mode) => {
+      const pipeline = createHookPipeline();
+      const seen: Array<{ event: string; settings: unknown }> = [];
+      for (const event of [
+        "TurnStart",
+        "PreStateCommit",
+        "PostStateCommit",
+      ] as const) {
+        pipeline.register({
+          id: `settings:${event}`,
+          event,
+          pluginId: PLUGIN_ID,
+          handler: async (ctx) => {
+            seen.push({ event, settings: ctx.getOwnSettings?.() });
+            return { action: "continue" };
+          },
+        });
+      }
+      const values = { tone: "captured" };
+      const handlerSettings: unknown[] = [];
+      const { runner, session } = await setup(
+        async (ctx) => {
+          handlerSettings.push(ctx.userSettings);
+          values.tone = "changed-during-execution";
+          return {
+            outcome: "success",
+            value: {},
+            effects: {
+              pluginData: [{ namespace: "tracks", key: "settings", value: {} }],
+            },
+          };
+        },
+        pipeline,
+        mode === "detached-stage"
+          ? manifest()
+          : {
+              ...manifest(),
+              stage: undefined,
+              trigger: { type: "manual" },
+              inputs: undefined,
+              needs: undefined,
+              turnCompletion: undefined,
+            },
+      );
+      const userSettings = { [PLUGIN_ID]: values };
+      const outcome =
+        mode === "detached-stage"
+          ? await runner.runDetachedStage({
+              descriptor: descriptor(),
+              backgroundTurnId: "settings-turn",
+              userSettings,
+              expectedSessionIncarnation: sessionIncarnationIdentity(session),
+              beforeCommit: async () => {},
+            })
+          : await runner.runManualTurn({
+              turnId: "settings-turn",
+              runtimeId: RUNTIME_ID,
+              userSettings,
+              detached: mode === "background",
+              retrySeedResults: [sourceResult()],
+            });
+      expect(outcome.commit.committed).toBe(true);
+      expect(handlerSettings).toEqual([{ tone: "captured" }]);
+      expect(seen.map((entry) => entry.event)).toEqual([
+        "TurnStart",
+        "PreStateCommit",
+        "PostStateCommit",
+      ]);
+      expect(seen.map((entry) => entry.settings)).toEqual(
+        Array.from({ length: 3 }, () => ({ tone: "captured" })),
+      );
+    },
+  );
 
   it("rehydrates frozen inputs, commits output, and does not complete a player turn", async () => {
     const handler: FunctionHandler = async (ctx) => {

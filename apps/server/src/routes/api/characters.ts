@@ -3,6 +3,8 @@
  */
 
 import { Hono } from "hono";
+import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
+import { loadSessionHookScope } from "./session/hook-scope.js";
 import { createCommitPipeline, runWithHookScope } from "@covel/runtime";
 import type { DataStore, CharacterRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
@@ -42,6 +44,16 @@ characterRoutes.post("/:id/characters", async (c) => {
   if (!guard.ok) return guard.response;
   const store = c.get("store");
   const sessionId = guard.session.id;
+
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
+      decodedUserSettings.status,
+    );
+  }
 
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
@@ -111,9 +123,14 @@ characterRoutes.post("/:id/characters", async (c) => {
     sessionId,
     expectedSession: guard.session,
     allowedStatuses: ["active"],
-    mutate: (liveSession) =>
+    mutate: async (liveSession) =>
       runWithHookScope(
-        { activePluginIds: new Set(liveSession.activePlugins) },
+        await loadSessionHookScope({
+          store,
+          pluginRegistry: c.get("pluginRegistry"),
+          session: liveSession,
+          userSettings: decodedUserSettings.settings,
+        }),
         () => pipeline.commit(proposal),
       ),
   });

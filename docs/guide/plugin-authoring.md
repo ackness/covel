@@ -243,8 +243,9 @@ export default async function validateTool(ctx, payload) {
 约定与边界：
 
 - **只读**：返回的是冻结快照（`Object.freeze`），不能写；hook 仍然只能 guard / rewrite / audit，没有任何写库或 eventBus 通道。
-- **只看自己**：仅暴露 handler 所属插件的 `userSettings`（manifest 默认值与玩家保存值合并后的结果，回合起始拍一次），读不到其它插件的设置。
-- **安全降级**：框架 / 全局 hook（无 `pluginId`）返回 `{}`；非回合作用域（session / resume / commit / characters 等只带 `activePluginIds`、不带 settings 的 scope）也返回 `{}`；在完全无作用域（例如单测直接调 `pipeline.run`）时 `ctx.getOwnSettings` 可能为 `undefined`——务必写成 `ctx.getOwnSettings?.() ?? {}`。
+- **只看自己**：仅暴露 handler 所属插件的 `userSettings`（请求覆盖、世界配置与 manifest 默认值合并后的结果），读不到其它插件的设置。
+- **操作快照**：执行与提交共享本次操作的配置值；恢复、会话创建/结束/删除和角色编辑也提供配置，按各自请求开始时的值解析。快照不保留调用方的可变引用。后台任务沿用入队配置。具体时点见 [Hook 配置契约](../reference/plugins.md)。
+- **安全降级**：框架 / 全局 hook（无 `pluginId`）或没有声明配置的插件返回 `{}`；自定义宿主省略 scope 配置时也返回 `{}`。完全无作用域（例如单测直接调 `pipeline.run`）时 `ctx.getOwnSettings` 可能为 `undefined`——务必写成 `ctx.getOwnSettings?.() ?? {}`。
 
 `SessionStart`、`SessionEnd`、`PostCompaction`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 

@@ -23,6 +23,8 @@ import {
   collectExecutionJournal,
   collectExecutionSuspensions,
   commitExecution,
+  buildHookSettings,
+  snapshotUserSettings,
 } from "@covel/runtime";
 import type {
   CovelEventType,
@@ -579,10 +581,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const world = session.worldId
             ? await getCachedWorld(store, session.worldId)
             : null;
-          const userSettings = mergePluginUserSettings(
-            readWorldPluginSettings(world?.metadata),
-            decodedUserSettings.settings,
+          const userSettings = snapshotUserSettings(
+            mergePluginUserSettings(
+              readWorldPluginSettings(world?.metadata),
+              decodedUserSettings.settings,
+            ),
           );
+
+          const hookSettings = buildHookSettings(activeRuntimes, userSettings);
 
           const turnInput = {
             sessionId,
@@ -594,7 +600,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ...(turnOrigin === "player" && !isRuntimeRetry
               ? { logicalTurnId: crypto.randomUUID() }
               : {}),
-            ...(userSettings ? { userSettings } : {}),
+            userSettings,
             // Snapshot session-level per-runtime slot overrides so the
             // turn executor can consult them when resolving each runtime's
             // model. The session record was loaded above (line ~67).
@@ -748,6 +754,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ? { ...result.executionContext, countPolicy: "none" }
               : result.executionContext,
             runtimes: activeRuntimes,
+            hookSettings,
             results: finalizableResults,
             journalMessages: collectExecutionJournal(result),
             suspensions: collectExecutionSuspensions(result),
@@ -956,7 +963,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           sessionId,
           sessionLock,
           approvalScopes,
-          ...(userSettings ? { userSettings } : {}),
+          userSettings,
           // The main turn path has no manual-trigger concept —
           // `scheduleDeferredFollowers` is the only method this route calls.
           runManualTurn: () => {

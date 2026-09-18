@@ -218,8 +218,17 @@ export class HookPipeline {
     // Only attached when a scope is active — mirrors the run()-level ctxScoped
     // gate. Scope-less calls still receive the per-handler cancellation signal.
     // Framework hooks (no pluginId) get a getter returning `{}`.
+    const ownSettings = currentOwnSettings(reg.pluginId);
     const ctxForHandler: HookContext = isHookScopeActive()
-      ? { ...ctx, getOwnSettings: () => currentOwnSettings(reg.pluginId) }
+      ? {
+          ...ctx,
+          // JS handlers can mutate a ReadonlySet at runtime. Never lend them
+          // the activation set used to authorize later hooks or other handlers.
+          ...(ctx.activePluginIds
+            ? { activePluginIds: new Set(ctx.activePluginIds) }
+            : {}),
+          getOwnSettings: () => ownSettings,
+        }
       : ctx;
 
     try {

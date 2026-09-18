@@ -1,5 +1,5 @@
 import type { EventBus } from "@covel/events";
-import type { HookPipeline } from "@covel/runtime";
+import type { HookPipeline, HookScope } from "@covel/runtime";
 import { runSessionEndHook, runWithHookScope } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
 import { backgroundRuntimeLockId } from "../plugin-rpc/runtime-turn.js";
@@ -115,11 +115,11 @@ export async function fireSessionEnd(
   pipeline: HookPipeline | undefined,
   eventBus: EventBus | undefined,
   sessionId: string,
-  activePlugins: readonly string[],
+  scope: HookScope,
   reason: "ended" | "deleted",
 ): Promise<void> {
   try {
-    await runWithHookScope({ activePluginIds: new Set(activePlugins) }, () =>
+    await runWithHookScope(scope, () =>
       runSessionEndHook(
         { pipeline, sessionId, turnId: "", eventBus },
         { sessionId, reason },

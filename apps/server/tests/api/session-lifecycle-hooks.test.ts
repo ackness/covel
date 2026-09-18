@@ -13,6 +13,7 @@ import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
 import { createHookPipeline } from "@covel/runtime";
 import { sessionRoutes } from "../../src/routes/api/session.js";
+import { characterRoutes } from "../../src/routes/api/characters.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { backgroundRuntimeLockId } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
 
@@ -114,6 +115,167 @@ function grantSessionApproval(
 }
 
 describe("Session lifecycle hooks", () => {
+  it.each(["PATCH", "DELETE"])(
+    "keeps a session active if %s cannot read its hook configuration",
+    async (method) => {
+      const { app, store } = build();
+      const id = await createSession(app);
+      await store.updateSession(id, {
+        worldId: `unreadable-${crypto.randomUUID()}`,
+      });
+      vi.spyOn(store, "getWorld").mockRejectedValueOnce(
+        new Error("Synthetic settings read failure"),
+      );
+      app.onError((_error, c) => c.json({ error: "read failed" }, 500));
+      const response = await app.request(`/api/sessions/${id}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        ...(method === "PATCH"
+          ? { body: JSON.stringify({ status: "ended" }) }
+          : {}),
+      });
+      expect(response.status).toBe(500);
+      const session = await store.getSession(id);
+      expect(session?.status).toBe("active");
+      expect(session?.metadata?.sessionDeletionPending).toBeUndefined();
+      expect(session?.metadata?.sessionLifecyclePending).toBeUndefined();
+    },
+  );
+
+  it.each(["ended", "deleted"] as const)(
+    "provides request/world/default settings to lifecycle and character hooks (%s)",
+    async (reason) => {
+      const { app, store, pluginRegistry, hookPipeline } = build();
+      app.route("/api/sessions", characterRoutes);
+      const pluginId = "configured";
+      pluginRegistry.register({
+        id: pluginId,
+        source: "builtin",
+        status: "registered",
+        loadedRuntimes: new Map(),
+        summary: {
+          id: pluginId,
+          name: "Configured",
+          description: "",
+          pluginType: "plugin",
+          runtimeCount: 1,
+        },
+        manifest: {
+          manifest: {
+            name: pluginId,
+            pluginId,
+            description: "",
+            runtimeType: "function",
+            userSettings: [
+              { key: "tone", type: "text", default: "manifest", label: "Tone" },
+              { key: "detail", type: "number", default: 1, label: "Detail" },
+              {
+                key: "fallback",
+                type: "toggle",
+                default: true,
+                label: "Fallback",
+              },
+            ],
+          },
+          promptTemplate: "",
+          rawFrontmatter: {},
+        },
+      });
+      const worldId = `settings-${crypto.randomUUID()}`;
+      await store.upsertWorld({
+        id: worldId,
+        name: "Settings world",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          pluginSettings: { [pluginId]: { tone: "world", detail: 2 } },
+        },
+      });
+      const seen: Array<{ event: string; settings: unknown }> = [];
+      for (const event of [
+        "SessionStart",
+        "PreStateCommit",
+        "PostStateCommit",
+        "SessionEnd",
+      ] as const) {
+        hookPipeline.register({
+          id: `configured:${event}`,
+          event,
+          pluginId,
+          handler: async (ctx) => {
+            seen.push({ event, settings: ctx.getOwnSettings?.() });
+            return { action: "continue" };
+          },
+        });
+      }
+      const headers = {
+        "content-type": "application/json",
+        "X-Plugin-User-Settings": Buffer.from(
+          JSON.stringify({ [pluginId]: { tone: "player" } }),
+        ).toString("base64"),
+      };
+      const created = await app.request("/api/sessions", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ worldId, plugins: [pluginId] }),
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const character = await app.request(`/api/sessions/${id}/characters`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ id: "character", name: "Synthetic" }),
+      });
+      expect(character.status).toBe(200);
+      // Without request overrides the new lifecycle operation resolves world defaults.
+      const ended = await app.request(
+        `/api/sessions/${id}`,
+        reason === "ended"
+          ? {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ status: "ended" }),
+            }
+          : { method: "DELETE" },
+      );
+      expect(ended.status).toBe(200);
+      expect(seen.map((entry) => entry.event)).toEqual([
+        "SessionStart",
+        "PreStateCommit",
+        "PostStateCommit",
+        "SessionEnd",
+      ]);
+      expect(seen.map((entry) => entry.settings)).toEqual([
+        ...Array.from({ length: 3 }, () => ({
+          tone: "player",
+          detail: 2,
+          fallback: true,
+        })),
+        { tone: "world", detail: 2, fallback: true },
+      ]);
+      expect(seen.every((entry) => Object.isFrozen(entry.settings))).toBe(true);
+    },
+  );
+
+  it.each(["PATCH", "DELETE"])(
+    "rejects an oversized settings header before a %s mutation",
+    async (method) => {
+      const { app, store } = build();
+      const id = await createSession(app);
+      const response = await app.request(`/api/sessions/${id}`, {
+        method,
+        headers: {
+          "content-type": "application/json",
+          "X-Plugin-User-Settings": "x".repeat(9_000),
+        },
+        ...(method === "PATCH"
+          ? { body: JSON.stringify({ status: "ended" }) }
+          : {}),
+      });
+      expect(response.status).toBe(431);
+      expect((await store.getSession(id))?.status).toBe("active");
+    },
+  );
+
   it("fires SessionStart on session creation with sessionId + worldId", async () => {
     const { app, hookPipeline } = build();
     const handler = vi.fn().mockResolvedValue({ action: "continue" });

@@ -44,7 +44,6 @@ import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import {
   makeSkippedResult,
   retainPreGameRuntimes,
-  resolveUserSettings,
 } from "./turn-executor-helpers.js";
 import {
   classifySetupResult,
@@ -53,6 +52,10 @@ import {
   initialDoneSetup,
   makePluginSetupReady,
 } from "./setup-run.js";
+import {
+  buildHookSettings,
+  snapshotUserSettings,
+} from "../hooks/hook-settings.js";
 import { runWithHookScope } from "../hooks/hook-scope.js";
 import { runEventChain } from "../trigger/turn-event-chain.js";
 import {
@@ -149,50 +152,11 @@ export async function executeTurn(
   // active set, so hooks can read their own plugin's `userSettings` via
   // `HookContext.getOwnSettings`. Purely additive: when no plugin declares
   // settings the snapshot is empty and behaviour is unchanged.
-  const settings = buildHookSettings(activeRuntimes, input.userSettings);
+  const userSettings = snapshotUserSettings(input.userSettings);
+  const settings = buildHookSettings(activeRuntimes, userSettings);
   return runWithHookScope({ activePluginIds, settings }, () =>
-    executeTurnImpl(input, activeRuntimes, deps, options),
+    executeTurnImpl({ ...input, userSettings }, activeRuntimes, deps, options),
   );
-}
-
-/**
- * Build the turn-level per-plugin settings snapshot consumed by hooks.
- *
- * For each active runtime, resolves its `userSettings` (manifest defaults
- * merged with the player's saved values) and merges the result into the
- * owning plugin's bucket. Plugins without declared settings are omitted.
- * Buckets and the top-level map are deep-frozen so hooks can never mutate the
- * snapshot — including nested values. (Current `PluginUserSettingSpec` types
- * only yield scalars, but `spec.default` is typed `unknown`, so a plugin could
- * declare an object default; deep-freezing keeps the read-only contract honest
- * regardless.)
- */
-function deepFreeze<T>(value: T): T {
-  if (value && typeof value === "object") {
-    for (const inner of Object.values(value as Record<string, unknown>)) {
-      deepFreeze(inner);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
-
-export function buildHookSettings(
-  activeRuntimes: readonly RuntimeManifest[],
-  allUserSettings: TurnInput["userSettings"],
-): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
-  const snapshot: Record<string, Record<string, unknown>> = {};
-  for (const manifest of activeRuntimes) {
-    const resolved = resolveUserSettings(manifest, allUserSettings);
-    if (!resolved) continue;
-    const bucket = snapshot[manifest.pluginId] ?? {};
-    Object.assign(bucket, resolved);
-    snapshot[manifest.pluginId] = bucket;
-  }
-  for (const pluginId of Object.keys(snapshot)) {
-    deepFreeze(snapshot[pluginId]);
-  }
-  return Object.freeze(snapshot);
 }
 
 async function executeTurnImpl(

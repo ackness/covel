@@ -1263,6 +1263,17 @@ Hook 的 `match` 谓词与 handler 使用相同的异常隔离规则：过滤器
 
 Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。`PreStateCommit` 继承传入 `finalizeExecution` 的取消信号，取消会停止后续提案并回滚事务。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、`PostStateCommit` 和会话生命周期的收尾 Hook 使用自己的超时界限。
 
+`ctx.getOwnSettings()` 返回本插件在**本次操作开始时**解析的只读配置：请求的 `X-Plugin-User-Settings` 覆盖世界 `metadata.pluginSettings`，未提供的声明字段使用 manifest 默认值；非法覆盖值仍按字段约束回退。快照复制后深度冻结，不冻结调用方的默认值或配置对象。运行中修改玩家配置不会改变当前操作，下一次操作才读取新值。
+
+| 入口                         | 配置读取与提交时点                                                                                                                                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 玩家回合、手动执行、后台执行 | 执行前解析；执行阶段与 `PreStateCommit` / `PostStateCommit` 使用同一组配置值。排队的后台任务携带入队时的请求/世界覆盖，在执行开始时解析 manifest 默认值；不在提交时重读玩家设置。 |
+| 恢复 suspension              | 使用本次恢复请求与当前世界配置；恢复执行和提交共享快照，不沿用暂停前的请求配置。                                                                                                  |
+| 创建、结束、删除会话         | 在写入会话状态前解析；锁外的 `SessionStart` / `SessionEnd` 使用已捕获快照。无请求覆盖时使用世界与 manifest 默认值。                                                               |
+| 角色 REST 编辑               | 在会话锁内、提案提交前解析，供两个提交 Hook 使用。                                                                                                                                |
+
+Hook 仍只读取其注册插件的配置；framework Hook 返回空对象。直接调用 `pipeline.run` 的嵌入宿主需要通过 `runWithHookScope` 显式提供作用域；嵌套作用域不自动继承另一操作的配置。宿主直接调用 `commitExecution` / `finalizeExecution` 时，可通过 `hookSettings` 传递 `buildHookSettings` 生成的操作快照；省略时仅解析所传 runtime 的 manifest 默认值。
+
 #### 模型响应校验
 
 需要先验证再展示输出的插件，可在 `PreLLMCall` 返回 `replace: { stream: false }`，缓冲本次响应。`PostLLMResponse` 提供 `response` 和实际发送的 `messages`（包含工具结果），可继续用 `replace.response` 改写响应，也可返回 `replace: { correction: "具体的不合格原因与修正要求" }` 拒绝草稿。框架把草稿和反馈交回模型，最多纠正两次，仍受原有步数、超时和取消约束；拒绝的响应不会执行工具或成为最终故事。再次不合格则 runtime 失败，下游依赖按失败门控处理。`abort` 仍不表示重试，请显式返回 `correction`。

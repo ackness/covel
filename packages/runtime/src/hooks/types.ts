@@ -85,7 +85,7 @@ export interface HookContext {
    */
   readonly activePluginIds?: ReadonlySet<string>;
   /**
-   * Read-only accessor for the handler's *own* plugin settings this turn.
+   * Read-only accessor for the handler's *own* plugin settings for this operation.
    *
    * The pipeline injects this (from the same session hook scope that carries
    * `activePluginIds`) just before invoking each handler, bound to that

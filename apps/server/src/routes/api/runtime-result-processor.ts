@@ -1,7 +1,8 @@
 import type { EventBus } from "@covel/events";
-import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import {
   processRuntimeResult,
+  buildHookSettings,
   runWithHookScope,
   type HookPipeline,
   type KernelStore,
@@ -11,7 +12,7 @@ import {
 
 type RuntimeResultManifest = Pick<
   RuntimeManifest,
-  "name" | "pluginId" | "outputKind" | "capabilities"
+  "name" | "pluginId" | "outputKind" | "capabilities" | "userSettings"
 >;
 
 export interface RuntimeResultProcessorOptions {
@@ -21,6 +22,7 @@ export interface RuntimeResultProcessorOptions {
   readonly hookPipeline?: HookPipeline;
   readonly eventBus?: EventBus;
   readonly emitter?: TurnEmitter;
+  readonly userSettings?: TurnInput["userSettings"];
 }
 
 export interface RuntimeResultProcessor {
@@ -54,10 +56,12 @@ export function createRuntimeResultProcessor(
   // session-scoped too (see hooks/hook-scope.ts).
   const activePluginIds = new Set(options.runtimes.map((rt) => rt.pluginId));
 
+  const settings = buildHookSettings(options.runtimes, options.userSettings);
+
   const process = (
     result: RuntimeResult,
   ): Promise<ProcessRuntimeResultOutput> =>
-    runWithHookScope({ activePluginIds }, () =>
+    runWithHookScope({ activePluginIds, settings }, () =>
       processRuntimeResult(
         result,
         options.store,

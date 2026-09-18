@@ -21,6 +21,8 @@ import type { SessionRecord } from "@covel/store";
 import { SessionAlreadyExistsError } from "@covel/store/errors";
 import { runSessionStartHook, runWithHookScope } from "@covel/runtime";
 import { errorBody, readJsonBody } from "../../api-error.js";
+import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
+import { loadSessionHookScope } from "./session/hook-scope.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import {
   cleanupWorldDataMediaRefs,
@@ -182,6 +184,16 @@ sessionRoutes.post("/", async (c) => {
   const pluginRegistry = c.get("pluginRegistry");
   const worldsDirs = c.get("worldsDirs");
   const covelHome = c.get("covelHome");
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
+      decodedUserSettings.status,
+    );
+  }
+
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
@@ -267,6 +279,13 @@ sessionRoutes.post("/", async (c) => {
       [SESSION_LIFECYCLE_PENDING_KEY]: startLifecycle,
     },
   };
+
+  const startScope = await loadSessionHookScope({
+    store,
+    pluginRegistry,
+    session,
+    userSettings: decodedUserSettings.settings,
+  });
 
   // Planning reads world files and may run approved/builtin projection code.
   // Do that before taking the session lock or opening the DB transaction; the
@@ -384,11 +403,6 @@ sessionRoutes.post("/", async (c) => {
   if (created instanceof Response) return created;
 
   const expectedIncarnation = sessionIncarnationIdentity(session);
-  const startScope = {
-    activePluginIds: new Set(
-      plugins.filter((p): p is string => typeof p === "string"),
-    ),
-  };
   if (created.runStartHook) {
     try {
       await runWithHookScope(startScope, () =>
@@ -497,6 +511,16 @@ sessionRoutes.patch("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const expectedIncarnation = sessionIncarnationIdentity(guard.session);
 
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
+      decodedUserSettings.status,
+    );
+  }
+
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
@@ -574,6 +598,15 @@ sessionRoutes.patch("/:id", async (c) => {
         }
       : updates;
 
+    const hookScope = fireEnd
+      ? await loadSessionHookScope({
+          store,
+          pluginRegistry: c.get("pluginRegistry"),
+          session,
+          userSettings: decodedUserSettings.settings,
+        })
+      : undefined;
+
     await store.updateSession(id, persistedUpdates);
 
     return {
@@ -581,17 +614,18 @@ sessionRoutes.patch("/:id", async (c) => {
       merged: { ...session, ...persistedUpdates },
       fireEnd,
       endLifecycle,
+      hookScope,
     };
   });
   if (updated instanceof Response) return updated;
 
-  if (updated.fireEnd) {
+  if (updated.hookScope) {
     c.get("clearSessionToolOverrides")?.(id);
     await fireSessionEnd(
       c.get("hookPipeline"),
       c.get("eventBus"),
       id,
-      updated.session.activePlugins,
+      updated.hookScope,
       "ended",
     );
   }

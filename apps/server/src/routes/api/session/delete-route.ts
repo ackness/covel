@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { decodePluginUserSettingsHeader } from "../plugin-user-settings.js";
+import { loadSessionHookScope } from "./hook-scope.js";
 import type { Hono } from "hono";
 import { errorBody, okBody } from "../../../api-error.js";
 import {
@@ -29,6 +31,17 @@ export function registerSessionDeleteRoute(
     const id = c.req.param("id");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
+    const decodedUserSettings = decodePluginUserSettingsHeader(
+      c.req.header("X-Plugin-User-Settings"),
+    );
+    if (!decodedUserSettings.ok) {
+      return c.json(
+        errorBody(decodedUserSettings.error, {
+          code: decodedUserSettings.code,
+        }),
+        decodedUserSettings.status,
+      );
+    }
     const expectedIncarnation = sessionIncarnationIdentity(guard.session);
     const sessionLock = c.get("sessionLock");
     const pluginRegistry = c.get("pluginRegistry");
@@ -98,6 +111,15 @@ export function registerSessionDeleteRoute(
             : session.metadata,
         ),
       };
+      const hookScope =
+        session.status !== "ended" && !skipEndHook
+          ? await loadSessionHookScope({
+              store,
+              pluginRegistry,
+              session,
+              userSettings: decodedUserSettings.settings,
+            })
+          : undefined;
       await store.updateSession(id, {
         ...(session.status !== "ended" ? { status: "paused" as const } : {}),
         metadata: {
@@ -110,7 +132,7 @@ export function registerSessionDeleteRoute(
         },
         updatedAt: new Date().toISOString(),
       });
-      return { session, runtimeLockIds, deletionNonce, skipEndHook };
+      return { session, runtimeLockIds, deletionNonce, skipEndHook, hookScope };
     });
     if (prepared instanceof Response) return prepared;
 
@@ -175,12 +197,12 @@ export function registerSessionDeleteRoute(
       );
       if (draining instanceof Response) return draining;
 
-      if (prepared.session.status !== "ended" && !prepared.skipEndHook) {
+      if (prepared.hookScope) {
         await fireSessionEnd(
           c.get("hookPipeline"),
           c.get("eventBus"),
           id,
-          prepared.session.activePlugins,
+          prepared.hookScope,
           "deleted",
         );
       }

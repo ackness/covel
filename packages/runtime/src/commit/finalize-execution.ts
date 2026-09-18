@@ -34,7 +34,8 @@ import type {
   SessionEvent,
 } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { runWithHookScope } from "../hooks/hook-scope.js";
+import { buildHookSettings } from "../hooks/hook-settings.js";
+import { runWithHookScope, type HookScope } from "../hooks/hook-scope.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { processRuntimeResult } from "../session/session-runtime-result.js";
 import {
@@ -67,7 +68,13 @@ import { storyOutputError } from "../agent-loop/story-output.js";
  */
 type FinalizeManifest = Pick<
   RuntimeManifest,
-  "name" | "pluginId" | "outputKind" | "capabilities" | "version" | "output"
+  | "name"
+  | "pluginId"
+  | "outputKind"
+  | "capabilities"
+  | "version"
+  | "output"
+  | "userSettings"
 >;
 
 /** The loose runtime-result shape `processRuntimeResult` accepts (top-level or nested). */
@@ -118,6 +125,8 @@ export interface FinalizeExecutionArgs {
    * runtime's plugin) so cross-plugin commit hooks stay in scope.
    */
   readonly activePluginIds?: ReadonlySet<string>;
+  /** Frozen operation-start settings shared with execution; otherwise manifest defaults apply. */
+  readonly hookSettings?: HookScope["settings"];
   /**
    * Caller-specific writes folded into the same transaction, run after every
    * result commits and before `commit_status` settles. Resume uses it for the
@@ -420,7 +429,11 @@ export async function finalizeExecution(
 
   // Commit (Pre/PostStateCommit) fires outside executeTurn's own hook scope, so
   // re-establish it here — session-scoped like every other commit site.
-  return runWithHookScope({ activePluginIds }, async () => {
+  const scope: HookScope = {
+    activePluginIds,
+    settings: args.hookSettings ?? buildHookSettings(runtimes, undefined),
+  };
+  return runWithHookScope(scope, async () => {
     // Externally-visible fan-out is buffered while the transaction is open and
     // flushed only after it commits. A rollback discards the buffer.
     const postCommit: Array<() => Promise<void>> = [];

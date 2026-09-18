@@ -5,6 +5,8 @@ import {
   createDetachedProposalGuard,
   executeTurn,
   commitExecution,
+  buildHookSettings,
+  snapshotUserSettings,
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
@@ -167,6 +169,7 @@ export function createPluginRpcRuntimeTurnRunner(
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
+    hookSettings: ReturnType<typeof buildHookSettings>,
     opts: {
       readonly proposalGuard?: Parameters<
         typeof commitExecution
@@ -208,6 +211,7 @@ export function createPluginRpcRuntimeTurnRunner(
       sessionId: ctx.sessionId,
       executionContext: turnResult.executionContext,
       runtimes: ctx.activeRuntimes,
+      hookSettings,
       results: [
         ...turnResult.runtimeResults,
         ...(turnResult.nestedRuntimeResults ?? []),
@@ -284,6 +288,9 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
     readonly commit: TurnCommitOutcome;
   }> {
+    const userSettings = snapshotUserSettings(turnInput.userSettings);
+    const hookSettings = buildHookSettings(ctx.activeRuntimes, userSettings);
+    const executionInput = { ...turnInput, userSettings };
     const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
     return ctx.sessionLock.withLock(jobLockId, async () => {
       // Detached work does not hold the main session lock during provider
@@ -309,7 +316,7 @@ export function createPluginRpcRuntimeTurnRunner(
           await opts.beforeExecute?.();
         }),
       );
-      const result = await executeTurn(turnInput, ctx.activeRuntimes, {
+      const result = await executeTurn(executionInput, ctx.activeRuntimes, {
         ...ctx.deps,
         store: ctx.store,
         eventBus: ctx.eventBus,
@@ -355,7 +362,7 @@ export function createPluginRpcRuntimeTurnRunner(
               backgroundExecutionId: result.executionContext.executionId,
             });
           }
-          return processTurnResults(result, emitter, {
+          return processTurnResults(result, emitter, hookSettings, {
             ...(opts.proposalGuard
               ? { proposalGuard: opts.proposalGuard }
               : {}),
@@ -402,26 +409,40 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
+    const userSettings = snapshotUserSettings(turnInput.userSettings);
+    const hookSettings = buildHookSettings(ctx.activeRuntimes, userSettings);
+    const executionInput = { ...turnInput, userSettings };
+
     // Background mode has already returned 202 to the client and detached from
     // the request, and the only manual runtime that uses it is a media
     // generation (mimo-tts/manual-narrate) — exactly the shape that must not
     // hold the session lock. Sync mode is request-bound, short, and its caller
     // awaits the HTTP response, so it keeps the whole run serialised.
     const { result, commit } = args.detached
-      ? await runDetached(args.runtimeId, turnInput, emitter).then((r) => ({
-          result: r.turnResult,
-          commit: r.commit,
-        }))
+      ? await runDetached(args.runtimeId, executionInput, emitter).then(
+          (r) => ({
+            result: r.turnResult,
+            commit: r.commit,
+          }),
+        )
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
           await requireLiveApprovedSession(args.runtimeId);
-          const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
-            ...ctx.deps,
-            store: ctx.store,
-            eventBus: ctx.eventBus,
+          const turnResult = await executeTurn(
+            executionInput,
+            ctx.activeRuntimes,
+            {
+              ...ctx.deps,
+              store: ctx.store,
+              eventBus: ctx.eventBus,
+              emitter,
+              ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+            },
+          );
+          const outcome = await processTurnResults(
+            turnResult,
             emitter,
-            ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-          });
-          const outcome = await processTurnResults(turnResult, emitter);
+            hookSettings,
+          );
           return { result: turnResult, commit: outcome };
         });
 

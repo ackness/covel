@@ -286,6 +286,18 @@ describe("Resume Routes", () => {
       const hookPipeline = createHookPipeline();
       let runtimeInputSettings: unknown;
       let hookSettings: unknown;
+      const commitSettings: unknown[] = [];
+      for (const event of ["PreStateCommit", "PostStateCommit"] as const) {
+        hookPipeline.register({
+          id: `test-plugin:${event}:settings`,
+          event,
+          pluginId: "test-plugin",
+          handler: async (ctx) => {
+            commitSettings.push(ctx.getOwnSettings?.());
+            return { action: "continue" };
+          },
+        });
+      }
       hookPipeline.register({
         id: "test-plugin:PreRuntime:settings",
         event: "PreRuntime",
@@ -325,6 +337,10 @@ describe("Resume Routes", () => {
         detail: 2,
         fallback: "manifest-only",
       });
+      expect(commitSettings.length).toBeGreaterThanOrEqual(2);
+      expect(commitSettings.every((value) => value === hookSettings)).toBe(
+        true,
+      );
     });
 
     it("restores persisted plugin activations before scoping resume hooks", async () => {
