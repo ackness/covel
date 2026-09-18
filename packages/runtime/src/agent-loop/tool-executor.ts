@@ -21,6 +21,7 @@ import {
 import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
 import type { ApprovalStatus, InputSlot, Proposal } from "@covel/shared";
+import { createToolExecutionContext } from "./tool-execution-context.js";
 
 // ── Structured tool error shape (returned to LLM) ────────────────
 
@@ -30,6 +31,7 @@ type ToolErrorCode =
   | "UNAUTHORIZED"
   | "INVALID_ARGS"
   | "VALIDATION_ERROR"
+  | "CANCELLED"
   | "EXECUTION_ERROR";
 
 function toolError(
@@ -55,6 +57,7 @@ export interface ToolCall {
 }
 
 export interface ToolCallContext {
+  readonly signal?: AbortSignal;
   readonly sessionId: string;
   readonly turnId: string;
   readonly pluginId: string;
@@ -116,7 +119,7 @@ export interface ToolExecutorConfig {
     name: string,
     context: ToolCallContext,
   ) => ToolModule | undefined;
-  /** Optional DataStore for recording tool calls. */
+  /** Optional DataStore for scoped tool reads and recording tool calls. */
   readonly store?: DataStore;
   /** Optional approval pipeline for permission checking. */
   readonly approval?: ApprovalPipeline;
@@ -229,6 +232,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       context: ToolCallContext,
     ): Promise<ToolCallResult> {
       const startTime = Date.now();
+      context.signal?.throwIfAborted();
 
       // 0. Runtime-level authorization. Enforced at the execution
       // boundary — after session overrides and PreToolUse replacement have
@@ -394,27 +398,29 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         };
       }
 
-      // Emit calling AFTER arg-parse so the trace carries the real arguments
-      await emitToolCalling(context, call, toolSource, approvalStatus);
-
       // 4. Execute
+      let invocation: ReturnType<typeof createToolExecutionContext> | undefined;
       try {
-        const execContext = {
-          sessionId: context.sessionId,
-          turnId: context.turnId,
-          pluginId: context.pluginId,
-          runtimeId: context.runtimeId,
-          inputSlots: context.inputSlots,
-          pendingProposals: context.pendingProposals,
-          emittedEventTopics: context.emittedEventTopics,
-          ...(context.turnNumber !== undefined
-            ? { turnNumber: context.turnNumber }
-            : {}),
-        };
-        const rawResult = await tool.execute(params, execContext);
-        const parsedResult = getToolContent(rawResult);
-        const pendingProposals = getPendingProposals(rawResult);
-        const emittedEvents = getEmittedEvents(rawResult);
+        invocation = createToolExecutionContext(context, config.store);
+        // Capture authority before any asynchronous trace work.
+        await emitToolCalling(context, call, toolSource, approvalStatus);
+        invocation.assertLive();
+        let rawResult: unknown;
+        try {
+          rawResult = await tool.execute(params, invocation.context);
+          invocation.assertLive();
+        } finally {
+          invocation.close();
+        }
+        // Extract symbol-backed envelopes before cloning. No plugin-owned
+        // object may change the eventual commit while trace persistence waits.
+        const parsedResult = structuredClone(getToolContent(rawResult));
+        const pendingProposals = structuredClone(
+          getPendingProposals(rawResult),
+        );
+        const emittedEvents = structuredClone(getEmittedEvents(rawResult));
+        await invocation.drain();
+        context.signal?.throwIfAborted();
 
         // Text-first convention: if the tool result is an object with a
         // `_text` string field, send ONLY the text as the LLM-facing payload
@@ -439,6 +445,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           true,
           approvalStatus,
         );
+        context.signal?.throwIfAborted();
         await emitToolCompleted(
           context,
           call,
@@ -447,6 +454,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           durationMs,
           approvalStatus,
         );
+        context.signal?.throwIfAborted();
         if (context.emitter && emittedEvents && emittedEvents.length > 0) {
           for (const event of emittedEvents) {
             await context.emitter.emit("domain-event.previewed", {
@@ -456,6 +464,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
               topic: event.topic,
               data: event.data,
             });
+            context.signal?.throwIfAborted();
           }
         }
         return {
@@ -469,11 +478,17 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           approvalStatus,
         };
       } catch (error: unknown) {
+        invocation?.close();
+        await invocation?.drain();
         let errorResult: string;
         let code: ToolErrorCode;
         let details: string[] | undefined;
         let message: string;
-        if (error instanceof ToolValidationError) {
+        if (context.signal?.aborted) {
+          code = "CANCELLED";
+          message = "Tool execution was cancelled";
+          errorResult = toolError(code, message);
+        } else if (error instanceof ToolValidationError) {
           // Dedupe Zod issues by path so only the FIRST issue on any given
           // field is reported. Zod v4 has a quirk where `z.array(...).max(N)`
           // will emit a bogus `too_big: expected string to have <=N characters`
@@ -533,6 +548,8 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           success: false,
           approvalStatus,
         };
+      } finally {
+        invocation?.close();
       }
     },
   };

@@ -1223,7 +1223,7 @@ entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一�
 ```js
 // server/index.js
 export default function (covel) {
-  // 本地工具（toolkit 提供 { tool, z, shortId, shortIdBatch, withPendingProposals, store }）
+  // 本地工具（toolkit 提供 { tool, z, shortId, shortIdBatch, withPendingProposals }）
   covel.registerTool(
     covel.toolkit.tool({
       name: "my-tool",

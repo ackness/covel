@@ -14,6 +14,7 @@ import {
   executeTurn,
   finalizeExecution,
   createToolExecutor,
+  createFunctionStoreView,
 } from "@covel/runtime";
 import { tool, getPendingProposals } from "@covel/tools";
 import createAdvance from "../tools/advance-world-time.js";
@@ -75,7 +76,7 @@ async function fixture() {
     handler: storyHandler,
     promptTemplate: "",
   });
-  const advance = createAdvance({ tool, store });
+  const advance = createAdvance({ tool });
   const generate = vi.fn(async () => ({
     content: null,
     toolCalls: [
@@ -228,12 +229,17 @@ describe("world-time pipeline", () => {
       },
       narrative: { cardinality: "one", value: "A short conversation." },
     };
+    ctx.store = createFunctionStoreView(store, ctx);
     const first = await advance.execute({ reason: "conversation" }, ctx);
     const pendingProposals = getPendingProposals(first);
     expect(pendingProposals).toHaveLength(1);
     const second = await advance.execute(
       { reason: "duplicate" },
-      { ...ctx, pendingProposals },
+      {
+        ...ctx,
+        pendingProposals,
+        store: createFunctionStoreView(store, ctx, [...pendingProposals]),
+      },
     );
     expect(getPendingProposals(second)).toHaveLength(0);
     expect(second.tick).toBe(initialTick(DEFAULT_TIME) + 10);

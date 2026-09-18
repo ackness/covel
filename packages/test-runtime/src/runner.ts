@@ -123,7 +123,6 @@ export async function runRuntimeDebug(
       runtimeId,
       locale,
       ignoreUpstreams: options.ignoreUpstreams,
-      store,
     });
 
   const now = new Date().toISOString();

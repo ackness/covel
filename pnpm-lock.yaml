@@ -471,6 +471,12 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../store
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../tools
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -650,6 +656,9 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -749,6 +758,9 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -768,6 +780,9 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -836,6 +851,9 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -889,6 +907,9 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/plugin-test-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-test-utils
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))

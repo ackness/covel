@@ -15,7 +15,8 @@ const layers = {
   memory: ["shared", "store"],
   "plugin-handlers-utils": ["shared"],
   "plugin-loader": ["events", "shared"],
-  "plugin-test-utils": ["plugin-loader", "runtime", "shared"],
+  // Tool fixtures use runtime's scoped-read implementation and store/tool types.
+  "plugin-test-utils": ["plugin-loader", "runtime", "shared", "store", "tools"],
   runtime: [
     "ai-provider",
     "approval",

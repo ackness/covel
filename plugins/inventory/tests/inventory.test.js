@@ -1,3 +1,4 @@
+import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * inventory plugin tests.
  *
@@ -124,12 +125,14 @@ describe("update-inventory", () => {
 
   beforeEach(() => {
     mockStore = createMockPluginDataStore();
-    updateInventoryTool = createUpdateInventory({
-      tool,
-      z,
-      shortIdBatch,
-      store: mockStore,
-    });
+    updateInventoryTool = bindToolStore(
+      createUpdateInventory({
+        tool,
+        z,
+        shortIdBatch,
+      }),
+      mockStore,
+    );
   });
 
   it("creates a new item on add and writes the per-turn message summary", async () => {

@@ -948,7 +948,7 @@ Bootstrap 时自动分类：
 
 - 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
 - 审批激活后，entry 模块会 JIT 执行并完成注册；未授权 session 无法触发 community runtime/hook。
-- community entry factory 的 `toolkit.store` 不开放任何方法，因为该全局 factory 没有可绑定的 request session；RPC/function runtime 使用各自的 session/plugin-scoped store。
+- 所有 entry factory 的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前 session/plugin 状态；RPC/function runtime 使用各自的 scoped store。
 - community agent guard 仅获得只读 store 与纯输入；`pluginData`、logger、gateway、utils、media、assetProgress 等副作用能力不注入，`recursiveCall` 会拒绝。写入放在 runtime handler 返回的 proposal/`pluginData[]` 中。
 - 进程内 ESM 本身不是沙箱。self 层级以本机用户为信任边界；hosted 层级把 community server-code 定义为 operator 级全局信任。真正的多租户第三方代码需要独立 worker/process 隔离。
 
@@ -1052,7 +1052,7 @@ POST /api/sessions/:id/plugin-rpc
 
 ### 方式一：工厂函数（推荐）
 
-插件本地工具使用工厂函数模式，工厂参数就是 `covel.toolkit`——框架注入 `tool`, `z`, `shortId`, `shortIdBatch`, `withPendingProposals`, `store`：
+插件本地工具使用工厂函数模式，工厂参数就是 `covel.toolkit`——框架注入 `tool`, `z`, `shortId`, `shortIdBatch`, `withPendingProposals`：
 
 ```javascript
 // tools/my-tool.js
@@ -1074,14 +1074,24 @@ export default function ({ tool, z, shortId }) {
 
 **注入对象**:
 
-| 字段                   | 类型      | 描述                                                           |
-| ---------------------- | --------- | -------------------------------------------------------------- |
-| `tool`                 | function  | `tool()` 包装函数，定义工具参数和执行逻辑                      |
-| `z`                    | object    | Zod schema 库，用于参数验证                                    |
-| `shortId`              | function  | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID        |
-| `shortIdBatch`         | function  | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID      |
-| `withPendingProposals` | function  | 把工具返回值和待提交 proposal 绑定，交给 commit chain 统一落盘 |
-| `store`                | DataStore | DataStore 实例，用于直接读写持久化数据（如批量操作）           |
+| 字段                   | 类型     | 描述                                                           |
+| ---------------------- | -------- | -------------------------------------------------------------- |
+| `tool`                 | function | `tool()` 包装函数，定义工具参数和执行逻辑                      |
+| `z`                    | object   | Zod schema 库，用于参数验证                                    |
+| `shortId`              | function | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID        |
+| `shortIdBatch`         | function | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID      |
+| `withPendingProposals` | function | 把工具返回值和待提交 proposal 绑定，交给 commit chain 统一落盘 |
+
+**执行期读取与取消**：生产宿主和 `test-runtime` 在每次工具调用中注入 `context.store`，接口复用 `FunctionStoreView`：
+
+- `getPluginData(namespace, key)` / `listPluginData(namespace)` 绑定当前 session/plugin，按顺序合并同次执行中已有的 set、batch 和 delete 提案。
+- `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` 只读取当前会话；有 limit 时读取最近消息。
+- 读取值、输入 slots、已有提案和事件主题是独立副本。修改它们不会修改数据库或调用方缓冲。返回的内容、提案和事件也会在异步记录前复制。
+- 读取句柄在工具返回、抛错或调用取消后失效；取消期间已经开始的读取不会再向工具交付结果。工具应等待自身读取完成再返回；宿主仍会等待已发起读取结束后才完成该工具调用。
+- `context.signal` 传递调用方的取消信号；外部请求应使用该信号。取消后的迟到结果不会被作为成功提案返回。框架不能强制终止同进程 JavaScript，也不能撤销已发出的外部副作用。
+- 不配置 DataStore 的独立无状态 executor 不提供 `context.store`。直接调用 `tool.execute()` 的宿主或单元测试需自行提供上下文；插件测试可用 `bindToolStore`（`@covel/plugin-test-utils`）。
+
+这是一项不兼容的 API 修正：移除 `PluginToolkit.store` 和 `PluginStoreView`。旧工具应把工厂闭包中的 `store.getPluginData(sessionId, pluginId, namespace, key)` 改成 `context.store.getPluginData(namespace, key)`，并移除对执行器已有提案的重复合并。组合工具内部直接调用子工具时，新产生的局部提案尚未进入执行器读取快照；这类子调用仍需显式使用 `overlayPluginDataValue` 等纯辅助函数合并局部提案（例如 codex 的同步工具）。写入仍返回 `withPendingProposals(...)`，不可在工具执行中直接提交领域状态。
 
 ### 方式二：直接导出（TypeScript）
 

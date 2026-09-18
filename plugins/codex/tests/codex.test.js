@@ -1,3 +1,4 @@
+import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * codex plugin tests.
  *
@@ -140,23 +141,29 @@ describe("codex tools", () => {
 
   beforeEach(() => {
     mockStore = createMockPluginDataStore();
-    unlockCodexEntriesTool = createUnlockCodexEntries({
-      tool,
-      z,
-      shortIdBatch,
-      store: mockStore,
-    });
-    updateCodexEntryTool = createUpdateCodexEntry({
-      tool,
-      z,
-      store: mockStore,
-    });
-    syncCodexEntriesTool = createSyncCodexEntries({
-      tool,
-      z,
-      shortIdBatch,
-      store: mockStore,
-    });
+    unlockCodexEntriesTool = bindToolStore(
+      createUnlockCodexEntries({
+        tool,
+        z,
+        shortIdBatch,
+      }),
+      mockStore,
+    );
+    updateCodexEntryTool = bindToolStore(
+      createUpdateCodexEntry({
+        tool,
+        z,
+      }),
+      mockStore,
+    );
+    syncCodexEntriesTool = bindToolStore(
+      createSyncCodexEntries({
+        tool,
+        z,
+        shortIdBatch,
+      }),
+      mockStore,
+    );
   });
 
   describe("unlock-codex-entries", () => {

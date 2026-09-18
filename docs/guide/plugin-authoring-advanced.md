@@ -69,7 +69,7 @@ import type {
 ```typescript
 import type {
   PluginAPI, // entry 工厂接收的 facade（registerTool / on / registerRpc / registerWires）
-  PluginToolkit, // covel.toolkit 注入包 { tool, z, shortId, shortIdBatch, withPendingProposals, store }
+  PluginToolkit, // covel.toolkit 注入包 { tool, z, shortId, shortIdBatch, withPendingProposals }
   PluginEntryFactory, // entry 模块 default export 的签名
   PluginHookOptions, // covel.on 的 options
   PluginRpcOptions, // covel.registerRpc 的 options

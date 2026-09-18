@@ -5,9 +5,9 @@
  * current session, so the LLM can avoid creating duplicates and instead
  * extend existing nodes / relationships.
  *
- * @param {{ tool: Function, z: import('zod'), store: any }} injection
+ * @param {{ tool: Function, z: import('zod') }} injection
  */
-export default function ({ tool, z, store }) {
+export default function ({ tool, z }) {
   return tool({
     name: "list-npc-graph",
     description:
@@ -26,18 +26,8 @@ export default function ({ tool, z, store }) {
     execute: async (params, context) => {
       const limit = Math.min(params.limit ?? 120, 200);
 
-      const nodeRows =
-        (await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "nodes",
-        )) ?? [];
-      const edgeRows =
-        (await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "edges",
-        )) ?? [];
+      const nodeRows = (await context.store.listPluginData("nodes")) ?? [];
+      const edgeRows = (await context.store.listPluginData("edges")) ?? [];
 
       const nodes = nodeRows.slice(0, limit).map((row) => {
         const value = /** @type {import('@covel/shared').NpcNode} */ (

@@ -15,8 +15,8 @@
  *   }
  *
  * These types are the stable contract between the framework and plugin
- * authors. The server's implementation (apps/server plugin-entry bootstrap)
- * is compile-time checked against them, so the two cannot drift silently.
+ * authors. The server bootstrap implements this facade; capability behavior
+ * is also checked by integration tests at activation and invocation.
  */
 
 import type {
@@ -25,7 +25,6 @@ import type {
   WireModuleShape,
 } from "@covel/ai-provider";
 import type { HookEnforce, HookEventName, RpcTrustLevel } from "@covel/shared";
-import type { DataStore } from "@covel/store";
 import type {
   shortId,
   shortIdBatch,
@@ -39,42 +38,8 @@ import type { FormValidator } from "./rpc/form-validator.js";
 import type { RpcHandler } from "./rpc/rpc-registry.js";
 
 /**
- * The store surface the Public Plugin API guarantees to an entry factory:
- * read-only.
- *
- * - `getPluginData` / `listPluginData` — for community plugins these are
- *   clamped to the plugin's OWN `pluginId` at runtime (any caller-supplied
- *   id is ignored).
- * - `getSession` / `listTurnMessages` / `listRecentTurnMessages` — read-only
- *   lookups, typically driven by the `sessionId` a hook/RPC context hands in.
- *
- * There are deliberately NO write methods here. Entry factories run at
- * activation time with no request session to scope a write to, so all writes
- * must flow through governed, session-bound surfaces instead: proposals
- * (`withPendingProposals`) from tools/runtimes, or the session-scoped store
- * an RPC handler receives per dispatch.
- *
- * Builtin plugins receive the full `DataStore` at runtime because they
- * implement framework
- * primitives — but the published contract is this view, so third-party code
- * cannot depend on methods the community proxy denies.
- */
-export type PluginStoreView = Pick<
-  DataStore,
-  | "getPluginData"
-  | "listPluginData"
-  | "getSession"
-  | "listTurnMessages"
-  | "listRecentTurnMessages"
->;
-
-/**
- * Helper bag handed to entry factories — the same surface the legacy
- * `tools.local` factory injection provided, so migrated tool files keep
- * their `({ tool, z, store, ... })` signature unchanged.
- *
- * `store` is the read-only {@link PluginStoreView}; writes go through
- * proposals or request-time scoped stores (see the view's docs).
+ * Pure helpers for entry factories. State reads belong to a tool's invocation
+ * context; writes are proposals or request-scoped RPC operations.
  */
 export interface PluginToolkit {
   readonly tool: typeof tool;
@@ -82,7 +47,6 @@ export interface PluginToolkit {
   readonly shortId: typeof shortId;
   readonly shortIdBatch: typeof shortIdBatch;
   readonly withPendingProposals: typeof withPendingProposals;
-  readonly store: PluginStoreView;
 }
 
 export interface PluginHookOptions {

@@ -30,7 +30,7 @@ const HISTORY_LIMIT = 10;
 const MAX_CHANGES_PER_TURN = 5;
 const MAX_DELTA = 20;
 
-export default function ({ tool, z, shortIdBatch, store }) {
+export default function ({ tool, z, shortIdBatch }) {
   const changeSchema = z.object({
     name: z
       .string()
@@ -71,13 +71,8 @@ export default function ({ tool, z, shortIdBatch, store }) {
       // for callers outside a turn (same convention as npc-graph).
       const turn = context.turnNumber ?? -1;
 
-      // ── 1. Load committed records, overlay same-turn pending writes ──
-      const committedRows =
-        (await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "affinity",
-        )) ?? [];
+      // ── 1. Read records including earlier pending writes ──
+      const rows = (await context.store.listPluginData("affinity")) ?? [];
       /** @type {Map<string, { key: string, value: any }>} */
       const recordByName = new Map();
       const indexRow = (row) => {
@@ -85,15 +80,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
         if (typeof v.name !== "string" || v.name.length === 0) return;
         recordByName.set(v.name.toLowerCase(), { key: row.key, value: v });
       };
-      for (const row of committedRows) indexRow(row);
-      // Pending rows are in proposal order — later writes win in the index.
-      for (const row of collectPendingAffinityRows(
-        context.pendingProposals,
-        context,
-      )) {
-        indexRow(row);
-      }
-
+      for (const row of rows) indexRow(row);
       // ── 2. Assign stable short IDs to names not seen before ──
       const newNames = [];
       const seenNewNames = new Set();
@@ -211,41 +198,6 @@ export default function ({ tool, z, shortIdBatch, store }) {
       );
     },
   });
-}
-
-/**
- * Collect pending same-turn affinity writes so a second tool call in one
- * turn builds on the first instead of the stale pre-turn store (writes do
- * not commit between tool calls — same pattern codex's update tool uses).
- *
- * @returns {Array<{ key: string, value: any }>} rows in proposal order
- */
-function collectPendingAffinityRows(pendingProposals, context) {
-  if (!Array.isArray(pendingProposals) || pendingProposals.length === 0) {
-    return [];
-  }
-
-  const rows = [];
-  for (const proposal of pendingProposals) {
-    if (!proposal || proposal.sessionId !== context.sessionId) continue;
-    if (proposal.source?.pluginId !== context.pluginId) continue;
-
-    if (proposal.type === "plugin.data") {
-      if (proposal.payload?.namespace === "affinity") {
-        rows.push({ key: proposal.payload.key, value: proposal.payload.value });
-      }
-      continue;
-    }
-
-    if (proposal.type === "plugin.data.batch") {
-      for (const item of proposal.payload?.items ?? []) {
-        if (item.namespace === "affinity") {
-          rows.push({ key: item.key, value: item.value });
-        }
-      }
-    }
-  }
-  return rows;
 }
 
 /**

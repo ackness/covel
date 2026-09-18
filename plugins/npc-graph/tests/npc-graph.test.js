@@ -1,3 +1,4 @@
+import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * npc-graph plugin tests.
  *
@@ -182,8 +183,11 @@ describe("upsert-npc-graph", () => {
 
   beforeEach(() => {
     store = createMockStore();
-    upsertTool = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
-    listTool = createListNpcGraph({ tool, z, store });
+    upsertTool = bindToolStore(
+      createUpsertNpcGraph({ tool, z, shortIdBatch }),
+      store,
+    );
+    listTool = bindToolStore(createListNpcGraph({ tool, z }), store);
   });
 
   it("publishes the node and name-based edge schema to the model", () => {

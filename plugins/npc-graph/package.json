@@ -13,6 +13,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@covel/plugin-test-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "vitest": "^4.1.11"
   }

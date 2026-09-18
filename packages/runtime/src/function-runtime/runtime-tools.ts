@@ -72,6 +72,7 @@ export function createRuntimeTools(options: {
           { toolCallId: call.id, name: call.name, arguments: call.arguments },
           {
             ...context,
+            signal,
             authorizedToolNames,
             pendingProposals: buffer,
             inputSlots: options.inputs,

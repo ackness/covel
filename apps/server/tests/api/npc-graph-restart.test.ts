@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createSqliteStore } from "@covel/store";
-import { createCommitPipeline } from "@covel/runtime";
+import { createCommitPipeline, createFunctionStoreView } from "@covel/runtime";
 import createGraphTool from "../../../../plugins/npc-graph/tools/upsert-npc-graph.js";
 
 const context = {
@@ -58,7 +58,7 @@ describe("graph identity across SQLite and allocator restarts", () => {
         });
       }
       const toolkit = await import("@covel/tools");
-      const before = createGraphTool({ ...toolkit, store });
+      const before = createGraphTool(toolkit);
       const first = await before.execute(
         {
           nodes: [node("新闻部")],
@@ -72,7 +72,7 @@ describe("graph identity across SQLite and allocator restarts", () => {
             },
           ],
         },
-        context,
+        { ...context, store: createFunctionStoreView(store, context) },
       );
       const firstCommit = await createCommitPipeline(store).commitAll(
         toolkit.getPendingProposals(first),
@@ -92,7 +92,7 @@ describe("graph identity across SQLite and allocator restarts", () => {
       vi.resetModules();
       store = createSqliteStore(path.join(root, "session.sqlite"));
       const freshToolkit = await import("@covel/tools");
-      const after = createGraphTool({ ...freshToolkit, store });
+      const after = createGraphTool(freshToolkit);
       const second = await after.execute(
         {
           nodes: [
@@ -100,7 +100,12 @@ describe("graph identity across SQLite and allocator restarts", () => {
             { ...node("轻音部"), summary: "Updated club summary" },
           ],
         },
-        { ...context, turnId: "after", turnNumber: 2 },
+        {
+          ...context,
+          turnId: "after",
+          turnNumber: 2,
+          store: createFunctionStoreView(store, context),
+        },
       );
       const committed = await createCommitPipeline(store).commitAll(
         freshToolkit.getPendingProposals(second),
@@ -133,11 +138,13 @@ describe("graph identity across SQLite and allocator restarts", () => {
 
       const colliding = createGraphTool({
         ...freshToolkit,
-        store,
         shortIdBatch: () => ["npc-1"],
       });
       await expect(
-        colliding.execute({ nodes: [node("新角色")] }, context),
+        colliding.execute(
+          { nodes: [node("新角色")] },
+          { ...context, store: createFunctionStoreView(store, context) },
+        ),
       ).rejects.toThrow("ID collision");
       expect(
         await store.listPluginData(

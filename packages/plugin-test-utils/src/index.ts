@@ -6,6 +6,7 @@ export {
   makeRuntimeResult,
 } from "./factories.js";
 export { makeManualFunctionContext } from "./manual-context.js";
+export { bindToolStore } from "./tool-store.js";
 export type { ManualFunctionContextOptions } from "./manual-context.js";
 export { expectAssetGenerated } from "./contract.js";
 export type { ExpectAssetGeneratedOptions } from "./contract.js";

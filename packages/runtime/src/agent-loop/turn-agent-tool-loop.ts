@@ -432,6 +432,7 @@ export async function runAgentToolLoop({
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               pendingProposals: pendingProposals,
+              signal: hookOpts.signal,
               inputSlots,
               emittedEventTopics: emittedEvents.map((e) => e.topic),
               emitter: deps.emitter,

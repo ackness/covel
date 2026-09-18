@@ -54,3 +54,11 @@ memory 包保留进程内提取队列；server 为生产链路增加与故事同
 - `runtime` 仍是 Covel 的集成内核，调度、递归与提交语义高度关联。本次不按行数机械拆分执行器；是否继续提取阶段模块由实际职责和测试成本决定。
 - `shared` 仍承担领域 DTO/schema；世界时间只把声明校验放在 shared，计算、prompt、工具与 UI 放在 core-plugin。没有把时间历法加入内核的逻辑回合计数器。
 - `create`、`approval`、`events`、`tools`、`plugin-loader`、`plugin-test-utils` 和 `test-runtime` 都有明确调用方，没有发现应仅因单一消费者或开发用途而删除的依据。
+
+### 插件工具单元测试的状态注入
+
+`plugin-test-utils.bindToolStore` 在每次直接工具调用时复用 runtime 的
+`createFunctionStoreView`，绑定当前 session/plugin 并合并已有提案；工具工厂只接收
+纯 toolkit。该测试适配器依赖 runtime 实现以及 store/tools 的公开类型，不创建
+数据库、不执行提交、不模拟生产审批或取消。包依赖检查明确允许这些开发辅助依赖；
+生产 tools/store 仍不反向依赖测试包。

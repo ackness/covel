@@ -112,7 +112,6 @@ export type {
   PluginEntryFactory,
   PluginHookOptions,
   PluginRpcOptions,
-  PluginStoreView,
   PluginToolkit,
 } from "./plugin-api.js";
 

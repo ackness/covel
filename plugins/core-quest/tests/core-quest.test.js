@@ -1,3 +1,4 @@
+import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * core-quest plugin tests.
  *
@@ -112,12 +113,14 @@ describe("upsert-quests", () => {
 
   beforeEach(() => {
     mockStore = createMockPluginDataStore();
-    upsertQuestsTool = createUpsertQuests({
-      tool,
-      z,
-      shortIdBatch,
-      store: mockStore,
-    });
+    upsertQuestsTool = bindToolStore(
+      createUpsertQuests({
+        tool,
+        z,
+        shortIdBatch,
+      }),
+      mockStore,
+    );
   });
 
   async function findQuestByName(name) {

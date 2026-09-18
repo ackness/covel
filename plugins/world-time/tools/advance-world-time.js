@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { worldTimeSchema } from "@covel/shared";
 import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals, overlayPluginDataRows } from "@covel/tools";
+import { withPendingProposals } from "@covel/tools";
 import { advanceTime, describeTime } from "../clock.js";
 
-export default function ({ tool, store }) {
+export default function ({ tool }) {
   return tool({
     name: "advance-world-time",
     description:
@@ -36,18 +36,7 @@ export default function ({ tool, store }) {
       const definition = worldTimeSchema.parse(base.definition);
       if (!Number.isSafeInteger(base.tick))
         throw new Error("Invalid current time tick");
-      const pending = overlayPluginDataRows(
-        context.pendingProposals ?? [],
-        context.pluginId,
-      );
-      const previous =
-        pending.get(JSON.stringify(["clock", "current"])) ??
-        (await store.getPluginData(
-          context.sessionId,
-          context.pluginId,
-          "clock",
-          "current",
-        ));
+      const previous = await context.store.getPluginData("clock", "current");
       if (previous?.value?.lastTurnId === context.turnId)
         return { ...previous.value };
       if (previous && previous.value.tick !== base.tick)

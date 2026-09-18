@@ -86,6 +86,41 @@ async function commit(
 }
 
 describe("governed function tools", () => {
+  it("passes handler cancellation into tools and drops late buffered writes", async () => {
+    const controller = new AbortController();
+    const buffer = [];
+    const command = tool({
+      name: "list-characters",
+      description: "Fixture",
+      parameters: z.object({}),
+      async execute(_args, context) {
+        expect(context.signal).toBe(controller.signal);
+        controller.abort(new Error("handler cancelled"));
+        return { late: true };
+      },
+    });
+    const bound = createRuntimeTools({
+      manifest,
+      context: { ...input, pluginId: "community", runtimeId: manifest.name },
+      buffer,
+      signal: controller.signal,
+      assertLive: () => controller.signal.throwIfAborted(),
+      deps: {
+        loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+        llm: {
+          generate: async () => {
+            throw new Error("unused");
+          },
+        },
+        toolExecutor: createToolExecutor({ findTool: () => command }),
+      },
+    });
+    await expect(bound.tools.call("list-characters", {})).rejects.toThrow(
+      "handler cancelled",
+    );
+    await expect(bound.drain()).rejects.toThrow("handler cancelled");
+    expect(buffer).toEqual([]);
+  });
   it("shares buffered plugin data with the community store view without early persistence", async () => {
     let observed: unknown;
     const f = await fixture(async (ctx) => {

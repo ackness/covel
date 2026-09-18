@@ -88,6 +88,8 @@ describe("test-runtime runtime loading helpers", () => {
         path.join(rootPath, "server/index.js"),
         [
           "export default function (covel) {",
+          '  if ("store" in covel.toolkit) throw new Error("Unexpected activation store");',
+          '  covel.registerFormValidator("check", async () => undefined);',
           "  covel.registerTool(covel.toolkit.tool({",
           '    name: "root-tool",',
           '    description: "Root tool",',

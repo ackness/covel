@@ -42,7 +42,7 @@ const OP_BADGES = {
   unequip: { label: { zh: "卸下", en: "Unequipped" }, color: "amber" },
 };
 
-export default function ({ tool, z, shortIdBatch, store }) {
+export default function ({ tool, z, shortIdBatch }) {
   const changeSchema = z.object({
     op: z
       .enum(["add", "remove", "set", "equip", "unequip"])
@@ -90,13 +90,8 @@ export default function ({ tool, z, shortIdBatch, store }) {
     execute: async (params, context) => {
       const now = new Date().toISOString();
 
-      // ── 1. Load committed items and overlay same-turn pending writes ──
-      const rows =
-        (await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "items",
-        )) ?? [];
+      // ── 1. Read items including earlier pending writes ──
+      const rows = (await context.store.listPluginData("items")) ?? [];
       /** @type {Map<string, any>} */
       const itemByKey = new Map();
       for (const row of rows) {
@@ -104,7 +99,15 @@ export default function ({ tool, z, shortIdBatch, store }) {
           itemByKey.set(row.key, row.value);
         }
       }
-      const previousMessageChanges = overlayPendingWrites(itemByKey, context);
+      const previousMessage = await context.store.getPluginData(
+        "message",
+        context.turnId,
+      );
+      const previousMessageChanges = Array.isArray(
+        previousMessage?.value?.changes,
+      )
+        ? previousMessage.value.changes
+        : [];
 
       /** @type {Map<string, string>} name (lowercased) → item key */
       const keyByName = new Map();
@@ -370,49 +373,6 @@ export default function ({ tool, z, shortIdBatch, store }) {
       ]);
     },
   });
-}
-
-/**
- * Overlay this turn's not-yet-committed writes onto the item map, so a
- * second tool call in the same turn sees the first call's items. Also
- * returns the pending message-summary changes for this turn (merged into
- * the new summary instead of being overwritten).
- *
- * @param {Map<string, any>} itemByKey
- * @param {{ sessionId: string; pluginId: string; turnId: string; pendingProposals?: any[] }} context
- * @returns {any[]} previously staged message changes for this turn
- */
-function overlayPendingWrites(itemByKey, context) {
-  const pending = Array.isArray(context.pendingProposals)
-    ? context.pendingProposals
-    : [];
-  let previousMessageChanges = [];
-
-  const apply = (item) => {
-    if (!item || typeof item.key !== "string") return;
-    if (item.namespace === "items") {
-      if (item.value && typeof item.value === "object") {
-        itemByKey.set(item.key, item.value);
-      }
-      return;
-    }
-    if (item.namespace === "message" && item.key === context.turnId) {
-      const changes = item.value?.changes;
-      if (Array.isArray(changes)) previousMessageChanges = changes;
-    }
-  };
-
-  for (const proposal of pending) {
-    if (!proposal || proposal.sessionId !== context.sessionId) continue;
-    if (proposal.source?.pluginId !== context.pluginId) continue;
-    if (proposal.type === "plugin.data") {
-      apply(proposal.payload ?? {});
-    } else if (proposal.type === "plugin.data.batch") {
-      for (const item of proposal.payload?.items ?? []) apply(item);
-    }
-  }
-
-  return previousMessageChanges;
 }
 
 function mergeTags(existing, newTags) {

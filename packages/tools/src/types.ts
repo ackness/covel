@@ -4,6 +4,7 @@
 
 import type { z, ZodType } from "zod";
 import type { InputSlot, Proposal } from "@covel/shared";
+import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import type { ToolExecutionEnvelope } from "./result.js";
 
 // ── Tool execution context ───────────────────────────────────────
@@ -13,6 +14,10 @@ export interface ToolExecutionContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /** Scoped, owned reads including earlier proposals; absent in stateless hosts. */
+  readonly store?: FunctionStoreView;
+  /** Cooperative cancellation; pass to external requests and check before effects. */
+  readonly signal?: AbortSignal;
   /** Authoritative values of inputs explicitly declared by this runtime. */
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   /**

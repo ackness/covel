@@ -1,3 +1,4 @@
+import { createFunctionStoreView } from "../src/function-runtime/plugin-handler-helpers.js";
 import { describe, expect, it } from "vitest";
 import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
@@ -109,6 +110,12 @@ async function seedNpcGraph(
       turnId: "turn-seed",
       pluginId: "npc-graph",
       runtimeId: "npc-graph/extractor",
+      store: createFunctionStoreView(store, {
+        sessionId,
+        turnId: "turn-seed",
+        pluginId: "npc-graph",
+        runtimeId: "npc-graph/extractor",
+      }),
     },
   );
 
@@ -131,6 +138,10 @@ describe("npc-graph core plugin write-read-inject path", () => {
         turnNumber: 0,
         pendingProposals: pending,
       };
+      const scopedContext = {
+        ...context,
+        store: createFunctionStoreView(store, context, pending),
+      };
       const relation = (targetName: string, fact: string) => ({
         sourceName: "Alice",
         targetName,
@@ -149,7 +160,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
           })),
           edges: [relation("Bob", "Alice initially trusts Bob.")],
         },
-        context,
+        scopedContext,
       );
       const firstProposals = getPendingProposals(first);
       if (committedSeed)
@@ -168,12 +179,12 @@ describe("npc-graph core plugin write-read-inject path", () => {
           ],
           edges: [relation("Carol", "Alice also trusts Carol.")],
         },
-        context,
+        scopedContext,
       );
       pending.push(...getPendingProposals(second));
       const third = await upsert.execute(
         { edges: [relation("Bob", "Alice now trusts Bob with her plans.")] },
-        context,
+        scopedContext,
       );
       pending.push(...getPendingProposals(third));
 
