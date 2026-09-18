@@ -452,6 +452,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         description: record.description ?? null,
         fields: json.writeNullableJson(record.fields),
         version: record.version,
+        createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       };
     },

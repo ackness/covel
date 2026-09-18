@@ -623,6 +623,40 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(list[0].version).toBe(2);
     });
 
+    it("replaces a complete character snapshot including creation time and omitted attributes", async () => {
+      const initial = makeCharacter({
+        sessionId: "sess-1",
+        description: "old",
+        fields: { hp: 10 },
+      });
+      await store.upsertCharacter(initial);
+      const replacement: CharacterRecord = {
+        id: initial.id,
+        sessionId: initial.sessionId,
+        name: "Replacement",
+        type: "npc",
+        version: 1,
+        createdAt: "2026-02-02T00:00:00.000Z",
+        updatedAt: "2026-02-02T00:00:00.000Z",
+      };
+      await store.upsertCharacter(replacement);
+      expect(await store.listCharacters(initial.sessionId)).toEqual([
+        replacement,
+      ]);
+    });
+
+    it("normalizes null character fields to absence on every backend", async () => {
+      const initial = makeCharacter({
+        sessionId: "sess-1",
+        fields: { hp: 10 },
+      });
+      await store.upsertCharacter(initial);
+      await store.upsertCharacter({ ...initial, fields: null, version: 2 });
+      const [saved] = await store.listCharacters(initial.sessionId);
+      expect(saved?.fields).toBeUndefined();
+      expect(saved?.version).toBe(2);
+    });
+
     it("isolates the same character id across sessions", async () => {
       await store.upsertCharacter(
         makeCharacter({

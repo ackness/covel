@@ -366,11 +366,20 @@ describe("builtin world dimension tools", () => {
     expect(result._text).toContain("not found");
   });
 
-  it("reports invalid path syntax as a query error", async () => {
+  it.each([
+    "genres[abc]",
+    "regions.[0].name",
+    "regions[0]name",
+    "regions[0]..name",
+    "regions[]",
+    "regions[-1]",
+    "regions[1.5]",
+    "regions[9007199254740993]",
+  ])("reports invalid path syntax %s as a query error", async (path) => {
     const tool = findByName(tools, "world-dimension-get");
     const result = (await tool.execute(
       {
-        queries: [{ dimension: "tone", path: "genres[abc]" }],
+        queries: [{ dimension: "geography", path }],
       },
       ctx(),
     )) as {
@@ -380,9 +389,78 @@ describe("builtin world dimension tools", () => {
     expect(result.results[0]).toEqual(
       expect.objectContaining({
         found: false,
-        error: "Invalid path syntax: genres[abc]",
+        error: `Invalid path syntax: ${path}`,
       }),
     );
+  });
+
+  it("does not read inherited object properties as world fields", async () => {
+    const result = await findByName(tools, "world-dimension-get").execute(
+      {
+        queries: ["constructor", "__proto__", "toString"].map((path) => ({
+          dimension: "geography",
+          path,
+        })),
+      },
+      ctx(),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      results: [
+        { found: false, error: "Field path not found" },
+        { found: false, error: "Field path not found" },
+        { found: false, error: "Field path not found" },
+      ],
+    });
+  });
+
+  it("preserves own JSON keys that happen to use prototype property names", async () => {
+    seedPluginData(store, {
+      sessionId: "sess-1",
+      pluginId: "world-init",
+      namespace: "entries",
+      key: "geography",
+      value: JSON.parse(
+        '{"constructor":{"label":"own constructor"},"__proto__":{"label":"own proto"}}',
+      ),
+      updatedAt: "stored-time",
+    });
+    const result = await findByName(tools, "world-dimension-get").execute(
+      {
+        queries: ["constructor.label", "__proto__.label"].map((path) => ({
+          dimension: "geography",
+          path,
+        })),
+        resolveI18n: false,
+      },
+      ctx(),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      results: [
+        { found: true, value: "own constructor" },
+        { found: true, value: "own proto" },
+      ],
+    });
+  });
+
+  it("supports root arrays and adjacent array indices", async () => {
+    seedPluginData(store, {
+      sessionId: "sess-1",
+      pluginId: "world-init",
+      namespace: "entries",
+      key: "geography",
+      value: [{ roads: [["Bridge"]] }],
+      updatedAt: "stored-time",
+    });
+    expect(
+      await findByName(tools, "world-dimension-get").execute(
+        {
+          queries: [{ dimension: "geography", path: "[0].roads[0][0]" }],
+        },
+        ctx(),
+      ),
+    ).toMatchObject({ results: [{ found: true, value: "Bridge" }] });
   });
 
   it("still works when no world-data-provider plugin is active", async () => {

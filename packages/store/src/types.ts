@@ -300,6 +300,7 @@ export interface MessageStore {
 
 /** Character records. Part of `sql-session-content-records`. */
 export interface CharacterStore {
+  /** Replace the complete snapshot, including timestamps. Null fields clear attributes. */
   upsertCharacter(record: CharacterRecord): Promise<void>;
   listCharacters(sessionId: string): Promise<CharacterRecord[]>;
   deleteCharacter(sessionId: string, id: string): Promise<void>;

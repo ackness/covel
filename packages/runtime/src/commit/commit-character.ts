@@ -4,6 +4,7 @@
  */
 
 import type { CommitResult, ProposalFor } from "@covel/shared";
+import { materializeCharacterUpsert } from "@covel/shared";
 import { makeEvent } from "../session/session-kernel-helpers.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
@@ -97,28 +98,12 @@ export function createCharacterCommitHandlers(
       );
     }
 
-    const liveFields = asFieldsRecord(live?.fields);
-    const fieldPatch = asFieldsRecord(payload.fields);
-    const rebasedFields = live
-      ? payload.fields === undefined
-        ? live.fields
-        : liveFields && fieldPatch
-          ? { ...liveFields, ...fieldPatch }
-          : payload.fields
-      : payload.fields;
-    const record = {
-      id: payload.id,
-      sessionId: proposal.sessionId,
-      name: live?.name ?? payload.name,
-      type: live?.type ?? payload.type ?? "npc",
-      ...(payload.description !== undefined || live?.description !== undefined
-        ? { description: payload.description ?? live?.description }
-        : {}),
-      ...(rebasedFields !== undefined ? { fields: rebasedFields } : {}),
-      version: live ? live.version + 1 : (payload.version ?? 1),
-      createdAt: live?.createdAt ?? payload.createdAt ?? now,
-      updatedAt: now,
-    };
+    const record = materializeCharacterUpsert(
+      payload,
+      live,
+      proposal.sessionId,
+      now,
+    );
 
     await upsertCharacter(record);
 
@@ -163,12 +148,4 @@ export function createCharacterCommitHandlers(
   }
 
   return { "character.upsert": commitCharacterUpsert };
-}
-
-function asFieldsRecord(
-  value: unknown,
-): Readonly<Record<string, unknown>> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Readonly<Record<string, unknown>>)
-    : undefined;
 }

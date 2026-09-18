@@ -487,6 +487,55 @@ describe("builtin character tools", () => {
   });
 
   describe("create-character", () => {
+    it.each([false, true])(
+      "preserves chained partial updates before commit (stored: %s)",
+      async (stored) => {
+        const created = await loop.call("create-character", {
+          name: "Probe",
+          type: "npc",
+          description: "original",
+          fields: { hp: 10, mp: 5 },
+        });
+        if (stored) loop.commit();
+        await loop.call("update-character", {
+          id: created.characterId,
+          fields: { hp: 8 },
+        });
+        await loop.call("update-character", {
+          id: created.characterId,
+          fields: { mp: 4 },
+        });
+        await loop.call("update-character", {
+          id: created.characterId,
+          description: "",
+        });
+        const read = await loop.call("get-character", {
+          id: created.characterId,
+        });
+        expect(read).toMatchObject({
+          found: true,
+          character: {
+            name: "Probe",
+            type: "npc",
+            description: "",
+            fields: { hp: 8, mp: 4 },
+            version: 4,
+          },
+        });
+        const snapshot = read.character as { fields: Record<string, unknown> };
+        snapshot.fields.hp = -1;
+        expect(
+          await loop.call("get-character", { id: created.characterId }),
+        ).toMatchObject({ character: { fields: { hp: 8, mp: 4 } } });
+        loop.commit();
+        expect(
+          await loop.call("get-character", { id: created.characterId }),
+        ).toMatchObject({
+          character: { fields: { hp: 8, mp: 4 }, version: 4, description: "" },
+        });
+      },
+    );
+
     it("emits a character.upsert proposal that persists on commit", async () => {
       const result = await loop.call("create-character", {
         name: "柳无痕",

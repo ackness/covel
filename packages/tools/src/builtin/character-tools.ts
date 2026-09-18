@@ -25,6 +25,7 @@
 
 import type {
   CharacterAttributeSchema,
+  CharacterRecord,
   CharacterUpsertPayload,
   Proposal,
 } from "@covel/shared";
@@ -66,19 +67,6 @@ export type {
 
 // ── Buffered write plumbing ──────────────────────────────────────
 
-/** Store-record view of a character, merging committed rows with buffered writes. */
-interface CharacterView {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly name: string;
-  readonly type: string;
-  readonly description?: string;
-  readonly fields?: unknown;
-  readonly version: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
 /**
  * Session characters as seen by THIS execution: committed rows overlaid with
  * `character.upsert` proposals buffered earlier in the same tool loop. Writes
@@ -91,33 +79,15 @@ interface CharacterView {
 async function mergeCharacterViews(
   store: CharacterStore,
   context: ToolExecutionContext,
-): Promise<CharacterView[]> {
+): Promise<CharacterRecord[]> {
   const stored = await store.listCharacters(context.sessionId);
-  const overlay = overlayCharacters(
-    (context.pendingProposals ?? []).filter(
-      (proposal) => proposal.sessionId === context.sessionId,
-    ),
-  );
-  if (overlay.size === 0) return stored.map((c) => ({ ...c }));
-
-  const now = new Date().toISOString();
-  const byId = new Map<string, CharacterView>();
-  for (const c of stored) byId.set(c.id, { ...c });
-  for (const [id, payload] of overlay) {
-    const base = byId.get(id);
-    byId.set(id, {
-      id,
-      sessionId: context.sessionId,
-      name: payload.name,
-      type: payload.type ?? base?.type ?? "npc",
-      description: payload.description ?? base?.description,
-      fields: payload.fields ?? base?.fields,
-      version: payload.version ?? base?.version ?? 1,
-      createdAt: base?.createdAt ?? payload.createdAt ?? now,
-      updatedAt: now,
-    });
-  }
-  return [...byId.values()];
+  return [
+    ...overlayCharacters(
+      context.pendingProposals ?? [],
+      stored,
+      context.sessionId,
+    ).values(),
+  ];
 }
 
 /**

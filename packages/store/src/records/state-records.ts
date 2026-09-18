@@ -53,14 +53,4 @@ export interface MessageRecord {
   readonly createdAt: string;
 }
 
-export interface CharacterRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly name: string;
-  readonly type: string;
-  readonly description?: string;
-  readonly fields?: unknown; // JSON
-  readonly version: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+export type { CharacterRecord } from "@covel/shared";

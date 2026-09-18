@@ -1,5 +1,7 @@
 // ── Types ─────────────────────────────────────────────────────────
 export * from "./types/index.js";
+export type { CharacterRecord } from "./types/character-record.js";
+export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";

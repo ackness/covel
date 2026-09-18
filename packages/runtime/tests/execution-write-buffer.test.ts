@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { createMemoryStore } from "@covel/store";
 import { withPendingProposals } from "@covel/tools";
-import type { Proposal } from "@covel/shared";
+import type { Proposal, CharacterUpsertPayload } from "@covel/shared";
 import {
   createPluginDataWriter,
   createTrustedHandlerStore,
@@ -41,6 +41,131 @@ function pluginDataProposal(): Proposal {
 }
 
 describe("createTrustedHandlerStore with a write buffer", () => {
+  it.each(["patch", "replace", "null", "array"] as const)(
+    "materializes pending character %s with the same semantics as the real commit",
+    async (operation) => {
+      const store = createMemoryStore();
+      const initial = {
+        id: "char-patch",
+        sessionId: CTX.sessionId,
+        name: "Probe",
+        type: "player",
+        description: "old",
+        fields: { hp: 10, mp: 5 },
+        version: 3,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      };
+      await store.upsertCharacter(initial);
+      const buffer = createExecutionWriteBuffer();
+      const append = (payload: CharacterUpsertPayload) =>
+        buffer.push({
+          id: crypto.randomUUID(),
+          type: "character.upsert",
+          sessionId: CTX.sessionId,
+          turnId: CTX.turnId,
+          source: { pluginId: CTX.pluginId, runtimeId: CTX.runtimeId },
+          timestamp: initial.updatedAt,
+          payload,
+        });
+      if (operation === "patch") {
+        append({
+          id: initial.id,
+          name: "ignored for patches",
+          type: "npc",
+          expectedVersion: 3,
+          fields: { hp: 8 },
+        });
+        append({
+          id: initial.id,
+          name: "ignored again",
+          expectedVersion: 3,
+          fields: { mp: 4 },
+        });
+        append({
+          id: initial.id,
+          name: "ignored",
+          expectedVersion: 4,
+          description: "",
+        });
+      } else if (operation === "replace") {
+        append({
+          id: initial.id,
+          name: "Replacement",
+          type: "npc",
+          version: 1,
+          createdAt: initial.createdAt,
+          fields: { luck: 2 },
+        });
+        append({
+          id: initial.id,
+          name: "ignored",
+          expectedVersion: 1,
+          fields: { hp: 9 },
+        });
+      } else {
+        append({
+          id: initial.id,
+          name: initial.name,
+          expectedVersion: 3,
+          fields: operation === "null" ? null : ["marker"],
+        });
+        append({
+          id: initial.id,
+          name: initial.name,
+          expectedVersion: 4,
+          description: "",
+        });
+      }
+      const trusted = createTrustedHandlerStore(store, CTX, buffer);
+      const before = (await trusted.listCharacters(CTX.sessionId))[0]!;
+      expect(await store.listCharacters(CTX.sessionId)).toEqual([initial]);
+      const result = await processRuntimeResult(
+        {
+          pluginId: CTX.pluginId,
+          runtimeId: CTX.runtimeId,
+          turnId: CTX.turnId,
+          status: "success",
+          output: withPendingProposals({}, buffer),
+        },
+        store,
+        CTX.sessionId,
+        "system",
+      );
+      expect(result.failedProposals).toEqual([]);
+      const after = (await store.listCharacters(CTX.sessionId))[0]!;
+      const { updatedAt: _beforeTime, ...beforeState } = before;
+      const { updatedAt: _afterTime, ...afterState } = after;
+      expect(beforeState).toEqual(afterState);
+      expect(before).toMatchObject(
+        operation === "patch"
+          ? {
+              name: "Probe",
+              type: "player",
+              fields: { hp: 8, mp: 4 },
+              version: 6,
+              description: "",
+            }
+          : operation === "replace"
+            ? {
+                name: "Replacement",
+                type: "npc",
+                fields: { luck: 2, hp: 9 },
+                version: 2,
+              }
+            : {
+                ...(operation === "null" ? {} : { fields: ["marker"] }),
+                version: 5,
+                description: "",
+              },
+      );
+      if (operation === "null") {
+        expect(before.fields).toBeUndefined();
+        expect(after.fields).toBeUndefined();
+      }
+    },
+  );
+
   it("buffers plugin-data writes, deletes, and character upserts", async () => {
     const store = createMemoryStore();
     const buffer = createExecutionWriteBuffer();

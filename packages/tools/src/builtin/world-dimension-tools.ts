@@ -77,17 +77,20 @@ function parsePath(path: string): Array<string | number> | null {
     }
 
     if (path[index] === "[") {
-      if (!expectSegment && path[index - 1] === ".") return null;
+      if (expectSegment && index !== 0) return null;
       const close = path.indexOf("]", index);
       if (close < 0) return null;
       const raw = path.slice(index + 1, close);
       if (!/^\d+$/.test(raw)) return null;
-      tokens.push(Number(raw));
+      const arrayIndex = Number(raw);
+      if (!Number.isSafeInteger(arrayIndex)) return null;
+      tokens.push(arrayIndex);
       index = close + 1;
       expectSegment = false;
       continue;
     }
 
+    if (!expectSegment) return null;
     let end = index;
     while (
       end < path.length &&
@@ -119,14 +122,14 @@ function getByPath(
   let current: unknown = value;
   for (const token of tokens) {
     if (typeof token === "number") {
-      if (!Array.isArray(current) || token < 0 || token >= current.length) {
+      if (!Array.isArray(current) || !Object.hasOwn(current, token)) {
         return { found: false };
       }
       current = current[token];
       continue;
     }
 
-    if (!isPlainObject(current) || !(token in current)) {
+    if (!isPlainObject(current) || !Object.hasOwn(current, token)) {
       return { found: false };
     }
     current = current[token];
@@ -253,7 +256,7 @@ function createWorldDimensionGetTool(
         const dimensions = isPlainObject(metadata?.dimensions)
           ? metadata.dimensions
           : undefined;
-        if (dimensions && dimension in dimensions) {
+        if (dimensions && Object.hasOwn(dimensions, dimension)) {
           const loaded = {
             source: "world-metadata" as const,
             value: dimensions[dimension],

@@ -420,6 +420,8 @@ interface UIRenderPart {
 - `tiers[2].description`
 - `startingResources.硬币`
 
+路径只读取对象自身的字段和数组元素，不读取原型链属性。JSON 自身声明的同名键仍可读取。数组下标必须是非负安全整数；`regions.[0]`、`regions[0]name`、小数或缺失分隔符等非法语法返回该查询的 `error`。根数组可使用 `[0].name`，嵌套数组可使用连续下标。
+
 **输出 (parsedResult)**:
 
 ```json
@@ -548,6 +550,10 @@ interface UIRenderPart {
 已声明属性的类型、范围、enum 与嵌套结构在产生写入 proposal **之前**强制校验；非法字符串、null 或非有限数值不能替代数值属性。`create-character` 合并缺省值后校验；`update-character` 校验本次 patch，允许逐字段修复既有旧数据。未声明键仍保留并返回 warning。`mergeSchemaDefaults` 与 `assertCharacterFields` 向插件提供相同边界，失败抛出 `CharacterFieldValidationError`。
 
 `get-character-schema`、创建时填充默认值和创建/更新时校验均先读取本次执行中当前会话、当前 world-data provider 的 pending schema 操作。删除 schema 后不再使用存储中的旧规则。底层 schema 读取异常会使工具失败，不会静默跳过校验；未配置 provider 或 schema 尚不存在时仍允许无 schema 的角色。角色列表、读取和去重只合并当前会话的 pending 角色。
+
+角色读取按提案顺序应用更新，与提交复用 `materializeCharacterUpsert`：带 `expectedVersion` 的更新浅合并对象字段，保留未修改字段，每次递增当前版本；空字符串描述可清空旧描述，非对象字段值整体替换。整个 `fields` 为 `null` 表示清空属性，读取时统一为 `undefined`；对象内的 `null` 值保持不变。不带 `expectedVersion` 的 upsert 是完整替换，不继承被省略的旧字段。底层 `CharacterStore.upsertCharacter` 保存完整快照（包括传入的创建时间），Memory、SQLite、PostgreSQL 使用相同语义。提交时仍执行版本和参数校验，pending 视图不代表已经提交成功。
+
+**辅助 API 迁移**：`overlayCharacters(proposals, stored, sessionId)` 现在必须接收已存储角色和会话 ID，返回该会话完整角色视图的 `Map<string, CharacterRecord>`，不再返回最后一条原始 payload。结果与输入引用隔离。`CharacterRecord` 由 `@covel/shared` 定义，`@covel/store` 保留同名类型导出。
 
 `char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
 

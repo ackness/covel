@@ -176,28 +176,5 @@ export function mergeCharacterRecords(
   buffer: ExecutionWriteBuffer,
   sessionId: string,
 ): CharacterRecord[] {
-  const overlay = overlayCharacters(buffer);
-  if (overlay.size === 0) return structuredClone([...stored]);
-  const now = new Date().toISOString();
-  const byId = new Map<string, CharacterRecord>();
-  for (const row of stored) byId.set(row.id, row);
-  for (const [id, payload] of overlay) {
-    const base = byId.get(id);
-    byId.set(id, {
-      id,
-      sessionId,
-      name: payload.name,
-      type: payload.type ?? base?.type ?? "npc",
-      ...((payload.description ?? base?.description)
-        ? { description: payload.description ?? base?.description }
-        : {}),
-      ...((payload.fields ?? base?.fields)
-        ? { fields: payload.fields ?? base?.fields }
-        : {}),
-      version: payload.version ?? base?.version ?? 1,
-      createdAt: base?.createdAt ?? payload.createdAt ?? now,
-      updatedAt: now,
-    });
-  }
-  return structuredClone([...byId.values()]);
+  return [...overlayCharacters(buffer, stored, sessionId).values()];
 }

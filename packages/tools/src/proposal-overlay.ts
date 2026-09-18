@@ -14,7 +14,11 @@
  * merged here (different runtimes carry different buffers).
  */
 
-import type { CharacterUpsertPayload, Proposal } from "@covel/shared";
+import {
+  materializeCharacterUpsert,
+  type CharacterRecord,
+  type Proposal,
+} from "@covel/shared";
 
 // Encode the tuple so arbitrary namespace/key strings cannot collide.
 const pluginDataKey = (namespace: string, key: string): string =>
@@ -109,18 +113,37 @@ export function overlayPluginDataRows(
 }
 
 /**
- * Latest buffered `character.upsert` payload per character id (last write
- * wins). Characters are session-scoped shared kernel data, so no plugin filter
- * is applied — a buffer only ever holds one execution's own writes anyway.
+ * Materialize a session's committed characters and ordered buffered writes.
+ * Versioned field patches compose over earlier patches; full upserts replace
+ * the record. Return owned snapshots, never references into the store/buffer.
+ * Characters are shared within a session, so no source-plugin filter applies.
  */
 export function overlayCharacters(
   proposals: readonly Proposal[],
-): Map<string, CharacterUpsertPayload> {
-  const overlay = new Map<string, CharacterUpsertPayload>();
+  stored: readonly CharacterRecord[],
+  sessionId: string,
+): Map<string, CharacterRecord> {
+  const overlay = new Map(
+    stored
+      .filter((row) => row.sessionId === sessionId)
+      .map((row) => [row.id, row]),
+  );
+  const now = new Date().toISOString();
   for (const proposal of proposals) {
-    if (proposal.type === "character.upsert") {
-      overlay.set(proposal.payload.id, proposal.payload);
+    if (
+      proposal.type === "character.upsert" &&
+      proposal.sessionId === sessionId
+    ) {
+      overlay.set(
+        proposal.payload.id,
+        materializeCharacterUpsert(
+          proposal.payload,
+          overlay.get(proposal.payload.id),
+          sessionId,
+          now,
+        ),
+      );
     }
   }
-  return overlay;
+  return structuredClone(overlay);
 }
