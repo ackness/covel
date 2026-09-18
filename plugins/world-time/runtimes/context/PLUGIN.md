@@ -10,6 +10,12 @@ handler: ./handler.js
 stage: pre-turn
 outputKind: system
 capabilities: [world-time-context]
+commands:
+  - name: time
+    description:
+      zh: 查看当前已记录的世界时间，不推进回合。
+      en: Show recorded world time without advancing the turn.
+    action: time
 trigger: { type: scheduled, interval: 1 }
 ui:
   right:
