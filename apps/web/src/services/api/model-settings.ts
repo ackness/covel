@@ -202,14 +202,17 @@ export function buildSlotConfigHeaderInternal(
   }
   const customPresetDefs = customPresets
     .filter((p) => referencedCustomIds.has(p.id))
-    .map(({ id, name, provider, baseUrl, model, protocol }) => ({
-      id,
-      name,
-      provider,
-      baseUrl,
-      model,
-      protocol,
-    }));
+    .map(
+      ({ id, name, provider, baseUrl, model, protocol, reasoningEffort }) => ({
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+        id,
+        name,
+        provider,
+        baseUrl,
+        model,
+        protocol,
+      }),
+    );
 
   const hasSlotPresetOverrides = Object.keys(slotPresetOverrides).length > 0;
   const hasParamOverrides = Object.keys(paramOverrides).length > 0;
@@ -300,6 +303,7 @@ export function slotBindingId(
 }
 
 export interface CustomPreset {
+  reasoningEffort?: import("./llm.js").ReasoningEffort;
   id: string;
   name: string;
   provider: string;

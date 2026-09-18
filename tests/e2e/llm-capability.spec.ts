@@ -11,6 +11,94 @@ async function openModelRoles(page: Page) {
   return page.getByRole("dialog");
 }
 
+test("model reasoning defaults and role overrides persist independently", async ({
+  page,
+}) => {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": ONBOARDING_VERSION,
+    "ui.locale": "en-US",
+    "llm.providers": [
+      {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://fixture.invalid",
+        protocol: "openai-chat-v1",
+        models: [
+          {
+            ref: "custom-qwen",
+            modelId: "qwen3.8-flash",
+            reasoningEffort: "disabled",
+          },
+        ],
+      },
+    ],
+    "llm.slotConfig": { plugin: { modelRef: "custom-qwen" } },
+  });
+  await page.route("**/api/llm-config", (route) =>
+    route.fulfill({ json: { configured: false, providers: [], slots: {} } }),
+  );
+  await page.route("**/api/model-db/lookup**", (route) =>
+    route.fulfill({
+      json: {
+        found: true,
+        source: "known",
+        pricingKind: "unknown",
+        candidates: [],
+        reasoning: {
+          family: "qwen",
+          options: [{ value: "disabled" }, { value: "automatic" }],
+        },
+        capability: {
+          input: ["text"],
+          output: ["text"],
+          contextWindow: 128_000,
+        },
+      },
+    }),
+  );
+  await page.goto("/session");
+  let dialog = await openModelRoles(page);
+  let role = dialog.getByRole("group", { name: "plugin", exact: true });
+  await role.getByRole("button", { name: /Generation parameters/ }).click();
+  await expect(
+    role.getByRole("combobox", { name: "Reasoning effort" }),
+  ).toHaveValue("");
+  await expect(role.getByText("Thinking off", { exact: true })).toHaveCount(2);
+  await role
+    .getByRole("combobox", { name: "Reasoning effort" })
+    .selectOption("provider-default");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("covel:settings")!).entries[
+            "llm.paramOverrides"
+          ]?.plugin?.reasoningEffort,
+      ),
+    )
+    .toBe("provider-default");
+  await page.keyboard.press("Escape");
+  await page.reload();
+  dialog = await openModelRoles(page);
+  role = dialog.getByRole("group", { name: "plugin", exact: true });
+  await role.getByRole("button", { name: /Generation parameters/ }).click();
+  await expect(
+    role.getByRole("combobox", { name: "Reasoning effort" }),
+  ).toHaveValue("provider-default");
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("covel:settings")!).entries[
+          "llm.providers"
+        ][0].models[0].reasoningEffort,
+    ),
+  ).toBe("disabled");
+  await role
+    .getByRole("combobox", { name: "Reasoning effort" })
+    .selectOption("");
+  await expect(role.getByText("Thinking off", { exact: true })).toHaveCount(2);
+});
+
 test("frontend plugin models expose persistent generation settings independently of catalog limits", async ({
   page,
 }) => {

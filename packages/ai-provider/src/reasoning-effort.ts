@@ -4,19 +4,9 @@ import type {
   ProviderProtocol,
 } from "./types.js";
 
-export const REASONING_EFFORT_VALUES = [
-  "disabled",
-  "automatic",
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] as const;
-
-export type ReasoningEffort = (typeof REASONING_EFFORT_VALUES)[number];
+import { REASONING_EFFORT_VALUES, type ReasoningEffort } from "@covel/shared";
+export { REASONING_EFFORT_VALUES };
+export type { ReasoningEffort };
 
 export type ReasoningProviderFamily =
   | "openai"
@@ -191,7 +181,7 @@ export function extractReasoningRequestFields(
   requestModel: string,
 ): Record<string, unknown> {
   const selection = readReasoningEffort(metadata);
-  if (!selection) return {};
+  if (!selection || selection === "provider-default") return {};
 
   const provider = context?.preset?.provider ?? context?.profile?.provider;
   const model =
@@ -262,7 +252,7 @@ export function extractReasoningRequestFields(
   };
 }
 
-function readReasoningEffort(
+export function readReasoningEffort(
   metadata: Record<string, unknown> | undefined,
 ): ReasoningEffort | undefined {
   const parameterOverrides = asRecord(metadata?.parameterOverrides);

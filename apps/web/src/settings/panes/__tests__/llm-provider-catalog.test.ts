@@ -12,6 +12,33 @@ import {
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
+  it("preserves per-model reasoning defaults and drops invalid imported values", () => {
+    const imported = sanitizeImportedProfile({
+      id: "fixture",
+      name: "Fixture",
+      baseUrl: "https://provider.example/v1",
+      models: [
+        { ref: "a", modelId: "qwen3.8-flash", reasoningEffort: "disabled" },
+        { ref: "b", modelId: "deepseek-v4-flash", reasoningEffort: "high" },
+        {
+          ref: "c",
+          modelId: "custom-model",
+          reasoningEffort: "provider-default",
+        },
+        {
+          ref: "d",
+          modelId: "custom-model-2",
+          reasoningEffort: { injected: true },
+        },
+      ],
+    });
+    expect(imported?.models.map((model) => model.reasoningEffort)).toEqual([
+      "disabled",
+      "high",
+      "provider-default",
+      undefined,
+    ]);
+  });
   it.each([{ baseUrl: 42 }, { protocol: {} }])(
     "isolates malformed legacy connection fields %j during import",
     (invalidFields) => {

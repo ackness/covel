@@ -10,29 +10,40 @@ export function ReasoningEffortCard({
   override,
   defaultOverride,
   onChange,
+  scope = "slot",
 }: {
+  scope?: "model" | "slot";
   profile: ReasoningEffortProfile | null | undefined;
   override: ReasoningEffort | undefined;
   defaultOverride?: ReasoningEffort;
   onChange: (value: ReasoningEffort | undefined) => void;
 }) {
   const { t } = useTranslation();
-  const defaultValue = defaultOverride ?? profile?.defaultValue;
+  const defaultValue = defaultOverride;
   const validOverride = isReasoningEffortOverrideValid(profile, override)
     ? override
     : undefined;
   const effective = validOverride ?? defaultValue;
+  const unsupported = override !== undefined && validOverride === undefined;
+  const missingOption =
+    override !== undefined &&
+    override !== "provider-default" &&
+    !profile?.options.some((option) => option.value === override);
   const displayValue = (value: ReasoningEffort | undefined) =>
     value
       ? t(`settings.reasoningLevel.${value}`)
-      : t("settings.providerDefault");
+      : t("settings.reasoningTaskDefault");
 
   return (
     <div className="space-y-3 border border-border p-3 md:col-span-2">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-medium">
-            {t("settings.reasoningEffort")}
+            {t(
+              scope === "model"
+                ? "settings.modelReasoningDefault"
+                : "settings.reasoningEffort",
+            )}
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
             {profile
@@ -42,7 +53,7 @@ export function ReasoningEffortCard({
               : t("settings.reasoningUnavailable")}
           </p>
         </div>
-        {validOverride !== undefined && (
+        {override !== undefined && (
           <button
             type="button"
             onClick={() => onChange(undefined)}
@@ -52,21 +63,26 @@ export function ReasoningEffortCard({
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-[10px]">
-        <ReasoningValueCell
-          label={t("settings.defaultValue")}
-          value={displayValue(defaultValue)}
-        />
-        <ReasoningValueCell
-          label={t("settings.currentValue")}
-          value={displayValue(effective)}
-          active={validOverride !== undefined}
-        />
-      </div>
+      {scope === "slot" && (
+        <div className="grid grid-cols-2 gap-2 text-[10px]">
+          <ReasoningValueCell
+            label={t("settings.reasoningInheritedValue")}
+            value={displayValue(defaultValue)}
+          />
+          <ReasoningValueCell
+            label={t(
+              validOverride !== undefined
+                ? "settings.reasoningExplicitValue"
+                : "settings.reasoningCurrentValue",
+            )}
+            value={displayValue(effective)}
+            active={validOverride !== undefined}
+          />
+        </div>
+      )}
       <select
         aria-label={t("settings.reasoningEffort")}
-        value={validOverride ?? ""}
-        disabled={!profile}
+        value={override ?? ""}
         onChange={(event) =>
           onChange(
             (event.target.value || undefined) as ReasoningEffort | undefined,
@@ -74,13 +90,35 @@ export function ReasoningEffortCard({
         }
         className="w-full border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <option value="">{t("settings.providerDefault")}</option>
+        <option value="">
+          {t(
+            scope === "model"
+              ? "settings.reasoningTaskDefault"
+              : "settings.reasoningInherit",
+          )}
+        </option>
+        <option value="provider-default">
+          {t("settings.providerDefault")}
+        </option>
+        {missingOption && (
+          <option value={override} disabled>
+            {displayValue(override)}
+          </option>
+        )}
         {profile?.options.map((option) => (
           <option key={option.value} value={option.value}>
             {t(`settings.reasoningLevel.${option.value}`)} ({option.value})
           </option>
         ))}
       </select>
+      {unsupported && (
+        <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">
+          {t("settings.reasoningUnsupported")}
+        </p>
+      )}
+      <p className="text-[10px] leading-relaxed text-muted-foreground">
+        {t("settings.reasoningPrecedenceHint")}
+      </p>
       {profile?.family === "deepseek" && effective !== "disabled" && (
         <p className="border-l-2 border-amber-500/60 pl-2 text-[10px] leading-relaxed text-muted-foreground">
           {t("settings.deepseekReasoningSamplingHint")}

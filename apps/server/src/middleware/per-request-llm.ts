@@ -41,7 +41,7 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import { decodeBase64Json } from "../lib/base64-json.js";
-import { readRuntimeEnv } from "@covel/shared";
+import { isReasoningEffort, readRuntimeEnv } from "@covel/shared";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
@@ -240,6 +240,9 @@ export function parseSlotOverrides(
             name: typeof r.name === "string" ? r.name : r.id,
             provider: r.provider,
             model: r.model,
+            ...(isReasoningEffort(r.reasoningEffort)
+              ? { reasoningEffort: r.reasoningEffort }
+              : {}),
             ...(typeof r.baseUrl === "string" ? { baseUrl: r.baseUrl } : {}),
             ...(typeof r.protocol === "string" &&
             (PROVIDER_PROTOCOLS as readonly string[]).includes(r.protocol)

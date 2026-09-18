@@ -1,6 +1,7 @@
-import { providerKeyToId } from "@covel/shared";
+import { providerKeyToId, type ReasoningEffort } from "@covel/shared";
 
 export interface ProviderModelEntry {
+  reasoningEffort?: ReasoningEffort;
   /** Stable internal reference used by slot bindings and request overlays. */
   ref: string;
   /** Opaque ID sent to the provider API without normalization. */
@@ -20,6 +21,7 @@ export interface ProviderModelProfile {
 }
 
 export interface LegacyCustomPresetShape {
+  reasoningEffort?: ReasoningEffort;
   id: string;
   name: string;
   provider: string;
@@ -109,6 +111,9 @@ export function profilesFromLegacyPresets(
     }
     if (profile.models.some((model) => model.ref === preset.id)) continue;
     profile.models.push({
+      ...(preset.reasoningEffort
+        ? { reasoningEffort: preset.reasoningEffort }
+        : {}),
       ref: preset.id,
       modelId,
       ...(preset.name ? { name: preset.name } : {}),
@@ -125,6 +130,9 @@ export function flattenProviderProfiles(
     profile.models
       .filter((model) => model.ref.trim() && model.modelId.trim())
       .map((model) => ({
+        ...(model.reasoningEffort
+          ? { reasoningEffort: model.reasoningEffort }
+          : {}),
         id: model.ref,
         name: model.name?.trim() || model.modelId.trim(),
         provider: profile.id,
@@ -136,6 +144,7 @@ export function flattenProviderProfiles(
 }
 
 export interface UpsertProviderModelInput {
+  reasoningEffort?: ReasoningEffort;
   providerId: string;
   providerName?: string;
   baseUrl: string;
@@ -178,6 +187,9 @@ export function upsertProviderModel(
 
   const modelRef = createRef();
   const model: ProviderModelEntry = {
+    ...(input.reasoningEffort
+      ? { reasoningEffort: input.reasoningEffort }
+      : {}),
     ref: modelRef,
     modelId,
     ...(input.modelName?.trim() ? { name: input.modelName.trim() } : {}),

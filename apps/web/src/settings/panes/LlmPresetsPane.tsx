@@ -9,6 +9,7 @@ import {
   setSlotConfig,
   upsertProviderModel,
   type ProviderModelProfile,
+  type ReasoningEffort,
 } from "@/services/api.js";
 import { getBuiltinProviderConnection } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
@@ -48,6 +49,9 @@ export function LlmPresetsPane() {
   const [providerDraft, setProviderDraft] =
     useState<ProviderDraft>(EMPTY_PROVIDER_DRAFT);
   const [modelIdsDraft, setModelIdsDraft] = useState("");
+  const [modelReasoningDraft, setModelReasoningDraft] = useState<
+    Record<string, ReasoningEffort | undefined>
+  >({});
   const revision = useSettingsRevision(["llm.providers"]);
   useEffect(() => {
     setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
@@ -90,6 +94,7 @@ export function LlmPresetsPane() {
   const addModels = (
     provider: Pick<ProviderCatalogEntry, "id" | "baseUrl" | "protocol">,
     rawIds: string,
+    reasoningDefaults: Record<string, ReasoningEffort | undefined> = {},
   ): string | undefined => {
     const providerId = normalizeProviderId(provider.id);
     if (!providerId) return undefined;
@@ -103,6 +108,7 @@ export function LlmPresetsPane() {
         baseUrl: provider.baseUrl,
         protocol: provider.protocol,
         modelId,
+        reasoningEffort: reasoningDefaults[modelId],
       });
       nextProfiles = result.profiles;
       firstModelRef ??= result.modelRef;
@@ -130,6 +136,7 @@ export function LlmPresetsPane() {
         protocol,
       },
       providerDraft.modelIds,
+      providerDraft.reasoningDefaults,
     );
     const currentSlots = getSlotConfig();
     const nextSlots = bindFirstProviderModel(
@@ -148,7 +155,8 @@ export function LlmPresetsPane() {
 
   const handleAddModels = () => {
     if (!selectedProvider) return;
-    addModels(selectedProvider, modelIdsDraft);
+    addModels(selectedProvider, modelIdsDraft, modelReasoningDraft);
+    setModelReasoningDraft({});
     setModelIdsDraft("");
     setModelDialogOpen(false);
   };
@@ -341,6 +349,9 @@ export function LlmPresetsPane() {
         <ModelDialog
           open={modelDialogOpen}
           providerId={selectedProvider.id}
+          protocol={selectedProvider.protocol}
+          reasoningDefaults={modelReasoningDraft}
+          onReasoningChange={setModelReasoningDraft}
           value={modelIdsDraft}
           onOpenChange={setModelDialogOpen}
           onChange={setModelIdsDraft}

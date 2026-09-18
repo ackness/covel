@@ -10,7 +10,12 @@ export function isReasoningEffortOverrideValid(
   profile: ReasoningEffortProfile | null | undefined,
   override: ReasoningEffort | undefined,
 ): boolean {
-  if (override === undefined || profile === undefined) return true;
+  if (
+    override === undefined ||
+    override === "provider-default" ||
+    profile === undefined
+  )
+    return true;
   return profile?.options.some((option) => option.value === override) ?? false;
 }
 

@@ -938,7 +938,7 @@
     "capabilityEstimatedShort": "使用协议基础能力",
     "reasoningEffort": "思考强度",
     "reasoningEffortHint": "已按 {{family}} 的接口规则列出当前模型支持的档位。",
-    "reasoningUnavailable": "当前模型未识别到可配置的思考强度，将沿用服务商默认行为。",
+    "reasoningUnavailable": "尚未识别到可调节的思考档位，可以继承设置或选择服务商默认。",
     "deepseekReasoningSamplingHint": "DeepSeek 开启思考时会忽略温度、Top P、频率惩罚和存在惩罚。",
     "reasoningFamily": {
       "openai": "OpenAI",
@@ -958,7 +958,8 @@
       "medium": "中等",
       "high": "较高",
       "xhigh": "很高",
-      "max": "最高"
+      "max": "最高",
+      "provider-default": "服务商默认"
     },
     "modelLimitsUnknown": "模型上限未知",
     "capabilityUnknownHint": "未找到对应模型记录。协议支持为估计值；token 上限以模型配置和手动覆盖为准。",
@@ -980,7 +981,15 @@
     "effectiveOutputBudget": "有效输出预算",
     "remainingInputBudget": "剩余输入预算",
     "outputBudgetConflict": "输出预算需要在上下文窗口中为输入留出空间。请降低输出上限，或修正模型的上下文窗口。",
-    "tokenBudgetPreviewHint": "预算按当前配置计算。输入包含系统指令、历史和工具；未知上下文窗口按 32,768 计算，服务端限制可能进一步缩小预算。"
+    "tokenBudgetPreviewHint": "预算按当前配置计算。输入包含系统指令、历史和工具；未知上下文窗口按 32,768 计算，服务端限制可能进一步缩小预算。",
+    "modelReasoningDefault": "模型默认思考",
+    "reasoningTaskDefault": "按任务决定",
+    "reasoningInherit": "继承模型 / 任务设置",
+    "reasoningInheritedValue": "继承设置",
+    "reasoningExplicitValue": "显式覆盖",
+    "reasoningPrecedenceHint": "用途覆盖优先于模型默认；未设置时按任务决定。选择服务商默认会跳过任务的思考建议。",
+    "reasoningCurrentValue": "当前设置",
+    "reasoningUnsupported": "当前模型不支持已保存的档位，请选择可用档位或恢复默认。"
   },
   "appearance": {
     "previewTitle": "阅读预览",

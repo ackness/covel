@@ -92,6 +92,46 @@ afterEach(() => {
 });
 
 describe("custom preset secret channel", () => {
+  it("carries per-model reasoning defaults separately from role overrides", async () => {
+    setProviderProfiles([
+      {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://provider.example",
+        models: [
+          { ref: "a", modelId: "qwen3.8-flash", reasoningEffort: "disabled" },
+          { ref: "b", modelId: "deepseek-v4-flash", reasoningEffort: "high" },
+        ],
+      },
+    ]);
+    setSlotConfig({ story: { modelRef: "a" }, memory: { modelRef: "b" } });
+    setParamOverrides({ story: { reasoningEffort: "provider-default" } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const header = JSON.parse(
+      atob(buildSlotConfigHeaderInternal()["X-Slot-Config"]!),
+    );
+    expect(header.customPresets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "a", reasoningEffort: "disabled" }),
+        expect.objectContaining({ id: "b", reasoningEffort: "high" }),
+      ]),
+    );
+    expect(header.parameterOverrides.story).toEqual({
+      reasoningEffort: "provider-default",
+    });
+    expect(readSettingsBlob()).toMatchObject({
+      entries: {
+        "llm.providers": [
+          expect.objectContaining({
+            models: [
+              expect.objectContaining({ reasoningEffort: "disabled" }),
+              expect.objectContaining({ reasoningEffort: "high" }),
+            ],
+          }),
+        ],
+      },
+    });
+  });
   it("never sends the REST server-managed marker as an API key", async () => {
     await getSettings().set("keys.server-only", SERVER_MANAGED_SECRET);
 

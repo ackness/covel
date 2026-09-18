@@ -3,6 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   type ModelCapabilityInfo,
   type ProviderModelProfile,
+  type ReasoningEffort,
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -12,6 +13,7 @@ import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 import { ProtocolSelect } from "./llm-provider-dialogs.js";
 import { useModelCapability } from "./use-model-capability.js";
 import { resolveDisplayCapability } from "./llm-effective-capability.js";
+import { ModelReasoningSettings } from "./model-reasoning-settings.js";
 import {
   SettingsDraftConflict,
   useSettingDraft,
@@ -151,6 +153,16 @@ export function ProviderDetails({
               modelId={model.modelId}
               presetId={model.ref}
               source="local"
+              reasoningEffort={model.reasoningEffort}
+              onReasoningChange={(reasoningEffort) =>
+                onPatchLocalProfile({
+                  models: localProfile.models.map((entry) =>
+                    entry.ref === model.ref
+                      ? { ...entry, reasoningEffort }
+                      : entry,
+                  ),
+                })
+              }
               onDelete={() => onDeleteLocalModel(model.ref)}
             />
           ))}
@@ -174,6 +186,8 @@ function ProviderModelRow({
   source,
   capability,
   onDelete,
+  reasoningEffort,
+  onReasoningChange,
 }: {
   provider: string;
   protocol: string;
@@ -182,6 +196,8 @@ function ProviderModelRow({
   source: "server" | "local";
   capability?: ModelCapabilityInfo;
   onDelete?: () => void;
+  reasoningEffort?: ReasoningEffort;
+  onReasoningChange?: (value: ReasoningEffort | undefined) => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -214,6 +230,27 @@ function ProviderModelRow({
           </Button>
         )}
       </div>
+      {onReasoningChange && (
+        <details className="rounded border border-border p-2">
+          <summary className="cursor-pointer text-xs text-muted-foreground">
+            {t("settings.modelReasoningDefault")} ·{" "}
+            {t(
+              reasoningEffort
+                ? `settings.reasoningLevel.${reasoningEffort}`
+                : "settings.reasoningTaskDefault",
+            )}
+          </summary>
+          <div className="mt-2">
+            <ModelReasoningSettings
+              model={modelId}
+              provider={provider}
+              protocol={protocol}
+              value={reasoningEffort}
+              onChange={onReasoningChange}
+            />
+          </div>
+        </details>
+      )}
       <PingButton target={{ kind: "preset", presetId }} />
     </div>
   );

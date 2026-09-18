@@ -1,3 +1,5 @@
+import type { ReasoningEffort } from "@/services/api.js";
+import { ImportedModelReasoning } from "./model-reasoning-settings.js";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -26,7 +28,7 @@ export function ProviderDialog({
   const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[85dvh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("settings.addProvider", "Add provider")}</DialogTitle>
           <DialogDescription>
@@ -62,6 +64,15 @@ export function ProviderDialog({
             onChange={(modelIds) => onDraftChange({ ...draft, modelIds })}
           />
         </div>
+        <ImportedModelReasoning
+          modelIds={draft.modelIds}
+          provider={draft.providerId}
+          protocol={draft.protocol}
+          values={draft.reasoningDefaults ?? {}}
+          onChange={(reasoningDefaults) =>
+            onDraftChange({ ...draft, reasoningDefaults })
+          }
+        />
         <Button
           onClick={onSubmit}
           disabled={
@@ -80,6 +91,9 @@ export function ProviderDialog({
 export function ModelDialog({
   open,
   providerId,
+  protocol,
+  reasoningDefaults,
+  onReasoningChange,
   value,
   onOpenChange,
   onChange,
@@ -87,6 +101,11 @@ export function ModelDialog({
 }: {
   open: boolean;
   providerId: string;
+  protocol?: string;
+  reasoningDefaults: Record<string, ReasoningEffort | undefined>;
+  onReasoningChange: (
+    values: Record<string, ReasoningEffort | undefined>,
+  ) => void;
   value: string;
   onOpenChange: (open: boolean) => void;
   onChange: (value: string) => void;
@@ -96,7 +115,7 @@ export function ModelDialog({
   const count = parseModelIds(value).length;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85dvh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("settings.addModel", "Add model")}</DialogTitle>
           <DialogDescription>
@@ -108,6 +127,13 @@ export function ModelDialog({
           </DialogDescription>
         </DialogHeader>
         <ModelIdsTextarea value={value} onChange={onChange} />
+        <ImportedModelReasoning
+          modelIds={value}
+          provider={providerId}
+          protocol={protocol}
+          values={reasoningDefaults}
+          onChange={onReasoningChange}
+        />
         <Button onClick={onSubmit} disabled={count === 0}>
           <Plus className="h-3.5 w-3.5" />
           {t("settings.addModelsCount", {

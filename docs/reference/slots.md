@@ -65,7 +65,7 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 设置界面将连接信息和模型 ID 分开保存：一个服务商配置一组 `baseUrl`、协议、API 密钥和价格倍率，并可包含多个模型 ID。用途绑定只引用其中一个模型。请求时前端把该引用编译为兼容服务器的自定义 preset；preset 是内部传输结构，用户无需单独创建。
 
-持久化层只保存 `llm.providers`。旧版 `llm.customPresets` 在启动时执行一次可重试的单向迁移，成功后删除；兼容 facade 和 `X-Slot-Config.customPresets` 均按请求从 providers 投影，不再双写。
+持久化层只保存 `llm.providers`，其中每个模型条目可携带 `reasoningEffort` 默认值。添加服务商、批量添加模型和编辑现有模型时均可逐模型设置；导入/导出保留该字段。旧版 `llm.customPresets` 在启动时执行一次可重试的单向迁移，成功后删除；兼容 facade 和 `X-Slot-Config.customPresets` 均按请求从 providers 投影，不再双写。模型默认值参与请求 overlay 的完整身份，避免同一模型引用在不同请求中使用不同设置时串用配置。
 
 首次手动创建服务商与模型时，若 `story` / `plugin` 尚未显式分配，设置页会把这两个用途同时绑定到该模型，保证叙事与插件任务都能立即运行。DeepSeek、OpenAI、Anthropic、DashScope 即使首次配置未填写 `baseUrl`，也会使用框架内置的官方端点与协议；用户填写的地址始终优先。
 
@@ -81,7 +81,11 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 ## 思考强度
 
-“生成参数”页面按原始模型 ID 的上游命名空间识别思考档位。例如服务商为 `openai`、模型 ID 为 `deepseek/deepseek-v4-flash` 时仍使用 DeepSeek 的 `关闭 / high / max` 档位。留空表示沿用服务商默认行为，不发送强度覆盖。
+“生成参数”页面按原始模型 ID 的上游命名空间识别思考档位。例如服务商为 `openai`、模型 ID 为 `deepseek/deepseek-v4-flash` 时仍使用 DeepSeek 的 `关闭 / high / max` 档位。选项由模型能力决定，不把各厂商的强度假定为等价。
+
+用户设置的生效顺序为：用途显式覆盖 → 模型 / TOML 默认 → 任务默认 → 服务商默认。用途留空表示继承；模型留空表示按任务决定。显式 `provider-default` 表示让服务商决定，清除继承的思考请求字段并跳过任务默认，不能把它当成未配置。记忆提取的任务默认仍为关闭思考，用户在用途或模型上设置的档位优先。界面分别显示继承值和显式覆盖，不把服务商文档中的默认档位冒充本次任务的实际参数。
+
+`REASONING_EFFORT_VALUES` 与 `ReasoningEffort` 由 `@covel/shared` 定义，前端持久化、请求入口校验和 provider adapter 共用。模型参数只通过白名单字段传输；不会把任意导入 JSON 合并进服务商请求。现有 `disabled` / `automatic` 等值保持兼容，老配置不需要迁移。
 
 统一的 `reasoningEffort` 设置会按接口协议转换：
 

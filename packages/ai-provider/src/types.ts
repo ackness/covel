@@ -173,6 +173,7 @@ export interface ProviderDefaults {
  * the frontend stores in `covel:customPresets`.
  */
 export interface CustomPresetInput {
+  reasoningEffort?: ReasoningEffort;
   id: string;
   name: string;
   provider: string;

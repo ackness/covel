@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { SettingsStore, type SettingsStoreApi } from "@covel/settings";
@@ -82,6 +88,73 @@ beforeEach(async () => {
 });
 
 describe("provider configuration flow", () => {
+  it("saves separate reasoning defaults when adding several models", async () => {
+    mocks.lookup.mockImplementation(async (model: string) => ({
+      found: true,
+      source: "known",
+      pricingKind: "unknown",
+      candidates: [],
+      capability: { input: ["text"], output: ["text"] },
+      reasoning: model.startsWith("qwen")
+        ? {
+            family: "qwen",
+            options: [{ value: "disabled" }, { value: "automatic" }],
+          }
+        : {
+            family: "deepseek",
+            options: [
+              { value: "disabled" },
+              { value: "high" },
+              { value: "max" },
+            ],
+          },
+    }));
+    render(<LlmPresetsPane />);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Add provider" })[0]!,
+    );
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.change(
+      dialog.getByPlaceholderText(i18n.t("settings.providerIdExample")),
+      { target: { value: "fixture" } },
+    );
+    fireEvent.change(dialog.getByRole("textbox", { name: /Model IDs/ }), {
+      target: { value: "qwen3.8-flash\ndeepseek-v4-flash" },
+    });
+    fireEvent.click(
+      dialog.getByText("Model reasoning default", { selector: "summary" }),
+    );
+    const qwen = within(dialog.getByRole("group", { name: "qwen3.8-flash" }));
+    const deepseek = within(
+      dialog.getByRole("group", { name: "deepseek-v4-flash" }),
+    );
+    await waitFor(() => expect(qwen.getAllByRole("option")).toHaveLength(4));
+    expect(qwen.queryByRole("option", { name: /high/ })).toBeNull();
+    fireEvent.change(qwen.getByRole("combobox"), {
+      target: { value: "disabled" },
+    });
+    fireEvent.change(deepseek.getByRole("combobox"), {
+      target: { value: "high" },
+    });
+    fireEvent.click(dialog.getByRole("button", { name: "Add provider" }));
+    await waitFor(() =>
+      expect(mocks.store.get("llm.providers")).toEqual([
+        expect.objectContaining({
+          id: "fixture",
+          models: [
+            expect.objectContaining({
+              modelId: "qwen3.8-flash",
+              reasoningEffort: "disabled",
+            }),
+            expect.objectContaining({
+              modelId: "deepseek-v4-flash",
+              reasoningEffort: "high",
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
   it("has one model test and queries capabilities with the configured protocol", async () => {
     render(<LlmPresetsPane />);
     expect(screen.getAllByRole("button", { name: "Test model" })).toHaveLength(

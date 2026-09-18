@@ -4,7 +4,11 @@ import type {
   SlotConfigEntry,
 } from "@/services/api.js";
 import type { LegacyCustomPresetShape } from "@/services/api/provider-model-profiles.js";
-import { providerKeyToId } from "@covel/shared";
+import {
+  providerKeyToId,
+  isReasoningEffort,
+  type ReasoningEffort,
+} from "@covel/shared";
 
 export interface ProviderCatalogEntry {
   /** Stable connection identity shown in the catalogue. */
@@ -18,6 +22,7 @@ export interface ProviderCatalogEntry {
 }
 
 export interface ProviderDraft {
+  reasoningDefaults?: Record<string, ReasoningEffort | undefined>;
   providerId: string;
   baseUrl: string;
   protocol: string;
@@ -208,7 +213,16 @@ export function sanitizeImportedProfile(
         typeof model.name === "string"
           ? model.name.trim().slice(0, MAX_PROVIDER_ID_LENGTH)
           : "";
-      return [{ ref, modelId, ...(name ? { name } : {}) }];
+      return [
+        {
+          ref,
+          modelId,
+          ...(name ? { name } : {}),
+          ...(isReasoningEffort(model.reasoningEffort)
+            ? { reasoningEffort: model.reasoningEffort }
+            : {}),
+        },
+      ];
     },
   );
   if (models.length === 0) return null;

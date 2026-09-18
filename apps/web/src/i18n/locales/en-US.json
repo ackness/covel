@@ -938,7 +938,7 @@
     "capabilityEstimatedShort": "Protocol defaults",
     "reasoningEffort": "Reasoning effort",
     "reasoningEffortHint": "Levels are limited to those recognised for the current {{family}} model.",
-    "reasoningUnavailable": "No configurable reasoning effort was recognised for this model. Provider defaults will be used.",
+    "reasoningUnavailable": "No configurable reasoning level was recognised. You can inherit settings or use provider defaults.",
     "deepseekReasoningSamplingHint": "DeepSeek ignores temperature, Top P, frequency penalty, and presence penalty while thinking is enabled.",
     "reasoningFamily": {
       "openai": "OpenAI",
@@ -958,7 +958,8 @@
       "medium": "Medium",
       "high": "High",
       "xhigh": "Extra high",
-      "max": "Maximum"
+      "max": "Maximum",
+      "provider-default": "Provider default"
     },
     "modelLimitsUnknown": "Model limits unknown",
     "capabilityUnknownHint": "No matching model record was found. Protocol support is estimated; token limits follow the model configuration and manual overrides.",
@@ -980,7 +981,15 @@
     "effectiveOutputBudget": "Effective output budget",
     "remainingInputBudget": "Remaining input budget",
     "outputBudgetConflict": "The output budget must leave room for input in the context window. Lower the output limit or correct the model's context window.",
-    "tokenBudgetPreviewHint": "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 32,768; server limits may reduce the budget."
+    "tokenBudgetPreviewHint": "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 32,768; server limits may reduce the budget.",
+    "modelReasoningDefault": "Model reasoning default",
+    "reasoningTaskDefault": "Use task defaults",
+    "reasoningInherit": "Inherit model / task settings",
+    "reasoningInheritedValue": "Inherited setting",
+    "reasoningExplicitValue": "Explicit override",
+    "reasoningPrecedenceHint": "Role overrides take priority over model defaults, then task defaults. Provider default skips the task reasoning preference.",
+    "reasoningCurrentValue": "Current setting",
+    "reasoningUnsupported": "The saved level is not supported by this model. Choose an available level or restore the default."
   },
   "appearance": {
     "previewTitle": "Reading preview",

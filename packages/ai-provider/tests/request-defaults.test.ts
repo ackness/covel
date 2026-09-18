@@ -70,6 +70,48 @@ describe("runtime request defaults", () => {
   it.each([
     {
       create: createOpenAiChatAdapter,
+      model: "qwen3.8-flash",
+      metadata: { enable_thinking: true },
+    },
+    {
+      create: createOpenAiResponsesAdapter,
+      model: "gpt-5.4",
+      metadata: { reasoning: { effort: "high", summary: "auto" } },
+    },
+    {
+      create: createAnthropicMessagesAdapter,
+      model: "claude-opus-4-6",
+      metadata: {
+        thinking: { type: "enabled", budget_tokens: 2048 },
+        output_config: { effort: "high" },
+      },
+    },
+  ])(
+    "lets explicit provider defaults clear inherited reasoning for $model",
+    async ({ create, model, metadata }) => {
+      const captured = captureResponse();
+      await create().generateText(config, {
+        ...params,
+        model,
+        providerRequestMetadata: {
+          ...metadata,
+          parameterOverrides: { reasoningEffort: "provider-default" },
+        },
+      });
+      expect(captured()).not.toHaveProperty("enable_thinking");
+      expect(captured()).not.toHaveProperty("thinking");
+      expect(captured()).not.toHaveProperty("reasoning.effort");
+      expect(captured()).not.toHaveProperty("output_config.effort");
+      if (model === "gpt-5.4")
+        expect(captured()).toHaveProperty("reasoning.summary", "auto");
+      expect(captured().tool_choice).toEqual(
+        model.startsWith("claude") ? undefined : "auto",
+      );
+    },
+  );
+  it.each([
+    {
+      create: createOpenAiChatAdapter,
       model: "deepseek-chat",
       choice: "required",
     },

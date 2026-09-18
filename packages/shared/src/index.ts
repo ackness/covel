@@ -285,3 +285,6 @@ export {
   resolveProviderRequestBody,
   type LLMProviderRequestTrace,
 } from "./llm-request-trace.js";
+
+export { REASONING_EFFORT_VALUES, isReasoningEffort } from "./reasoning.js";
+export type { ReasoningEffort } from "./reasoning.js";

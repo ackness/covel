@@ -37,19 +37,11 @@ export interface SlotOverridesInput {
       maxOutputTokens?: number;
       frequencyPenalty?: number;
       presencePenalty?: number;
-      reasoningEffort?:
-        | "disabled"
-        | "automatic"
-        | "none"
-        | "minimal"
-        | "low"
-        | "medium"
-        | "high"
-        | "xhigh"
-        | "max";
+      reasoningEffort?: import("@covel/shared").ReasoningEffort;
     }
   >;
   customPresets?: Array<{
+    reasoningEffort?: import("@covel/shared").ReasoningEffort;
     id: string;
     name: string;
     provider: string;

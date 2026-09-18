@@ -92,6 +92,7 @@ function overlayPresetKey(cp: CustomPresetInput): string {
       cp.baseUrl ?? null,
       cp.protocol ?? null,
       cp.name ?? null,
+      cp.reasoningEffort ?? null,
     ])
   );
 }
@@ -162,6 +163,13 @@ export function applySlotOverlay(
         model: cp.model,
         ...(cp.protocol ? { protocol: cp.protocol } : {}),
         ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
+        ...(cp.reasoningEffort
+          ? {
+              providerRequestMetadata: {
+                parameterOverrides: { reasoningEffort: cp.reasoningEffort },
+              },
+            }
+          : {}),
         tier: "medium",
         supportedModes: supportedModesForCapability(capability),
         enabled: true,

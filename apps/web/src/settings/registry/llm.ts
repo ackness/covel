@@ -24,6 +24,7 @@ const providerModelProfileSchema = z.object({
     z.object({
       ref: z.string().min(1),
       modelId: z.string().min(1),
+      reasoningEffort: z.enum(REASONING_EFFORT_VALUES).optional(),
       name: z.string().optional(),
     }),
   ),
