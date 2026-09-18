@@ -12,6 +12,7 @@
 
 import { invokeWithSignal } from "./invoke-with-signal.js";
 import { cloneHookData } from "./hook-data.js";
+import { z } from "zod";
 import type { EventBus } from "@covel/events";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { HOOK_SEMANTICS } from "./types.js";
@@ -31,6 +32,19 @@ import type {
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const ENFORCE_ORDER = { pre: 0, normal: 1, post: 2 } as const;
+const hookResultSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("continue"),
+    replace: z
+      .custom<Record<string, unknown>>((value) => {
+        if (value === null || typeof value !== "object") return false;
+        const prototype = Object.getPrototypeOf(value);
+        return prototype === Object.prototype || prototype === null;
+      })
+      .optional(),
+  }),
+  z.object({ action: z.literal("abort"), reason: z.string() }),
+]);
 
 interface HookPipelineRunOptions {
   readonly eventBus?: EventBus;
@@ -278,7 +292,13 @@ export class HookPipeline {
           );
           signal.throwIfAborted();
           // Take ownership before trace awaits or the next handler can yield.
-          return cloneHookData(returned);
+          const owned = cloneHookData(returned);
+          if (!hookResultSchema.safeParse(owned).success) {
+            // Do not include untrusted return values in diagnostic errors.
+            throw new TypeError("Hook handler returned an invalid result");
+          }
+          // Keep the owned data: schema output can drop execution artifacts.
+          return owned;
         },
         ctx.signal,
         timeoutMs,

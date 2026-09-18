@@ -7,6 +7,7 @@ import type {
 } from "@covel/shared";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
+import type { HookResult } from "../src/hooks/types.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
@@ -134,6 +135,7 @@ const scenarios = [
   "hook fired trace failure",
   "hook rewritten trace failure",
   "hook aborted trace failure",
+  "invalid Hook return",
   "missing runtime",
 ] as const;
 
@@ -223,6 +225,8 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
           const postRuntime = vi.fn(
             async (_context: unknown, payload: unknown) => {
               const { result } = payload as { result: RuntimeResult };
+              if (scenario === "invalid Hook return")
+                return undefined as unknown as HookResult<unknown>;
               if (scenario === "hook aborted trace failure")
                 return { action: "abort" as const, reason: "policy denied" };
               if (scenario === "hook rewritten trace failure")
@@ -373,6 +377,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
               scenario === "success" ||
               scenario === "recover" ||
               scenario === "trace failure" ||
+              scenario === "invalid Hook return" ||
               scenario in failingHookTrace
                 ? "success"
                 : "failed";

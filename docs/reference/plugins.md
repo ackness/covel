@@ -1262,6 +1262,8 @@ tools:
 
 Hook 的 `match` 谓词与 handler 使用相同的异常隔离规则：过滤器抛错会带注册 Hook 的身份发布 `hook.error`；顺序/first/stream 语义返回 abort，parallel 观察语义记录失败后继续其它 Hook。过滤器返回 false 时不执行 handler，也不发布 `hook.fired`。
 
+Hook 返回值在运行时校验：使用 `{ action: "continue" }`、`{ action: "continue", replace: { ... } }` 或 `{ action: "abort", reason: "..." }`。`replace` 顶层必须为可浅合并的普通数据对象（允许 null prototype），嵌套字段仍遵循快照数据约束。缺少返回值、非法 action、非字符串 reason 或非法 replace 按 handler 异常处理，发布带 Hook 身份的 `hook.error`，诊断不包含非法值原文。顺序流水线停止后续 handler；观察型事件继续；各 wire helper 保持自身的 abort 策略，例如 `PostRuntime` 保留原执行结果而不重新执行 Hook。
+
 Hook 诊断与策略结果分开处理：`hook.fired`、`hook.rewrote`、`hook.aborted` 的 trace 投递失败不会跳过 handler、丢弃改写或再次调用 Hook；`hook.error`、`hook.timeout` 等事件广播失败也不会覆盖原有拒绝或观察语义。框架记录会话、回合、runtime 和注册 Hook 的关联信息，不把投递异常原文、payload 或玩家内容复制到兜底告警。Hook 自身的异常仍按该事件的失败语义处理。
 
 Hook 的 payload 是数据快照：流水线在入口取得副本，`match` 与每个 handler 再分别取得独立副本。原地修改后仅返回 `continue` 不会改变原始输入或后续 Hook；需要改写时显式返回 `replace`。顺序流水线浅合并替换字段，下一 handler 看到已接受的替换。返回值在 handler 完成时复制，保留返回对象后再修改不能改变已接受结果；观察型事件不接受替换。`ctx.activePluginIds` 同样按 handler 复制，取消信号和只读配置访问器仍是上下文能力。

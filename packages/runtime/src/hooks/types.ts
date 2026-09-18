@@ -113,6 +113,8 @@ export interface HookContext {
  * - `continue` — pipeline proceeds.
  * - `continue` + `replace` — sequential hooks shallow-merge into the next payload.
  * - `abort` — sequential hooks stop the pipeline; parallel hooks record the abort.
+ * The pipeline validates this envelope at runtime. `replace` must be a data
+ * record for shallow merging; malformed results follow handler-error semantics.
  */
 export type HookResult<P> =
   | { readonly action: "continue" }

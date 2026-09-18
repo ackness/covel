@@ -56,7 +56,7 @@ function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
       observed.push(result);
       return recover
         ? {
-            action: "replace",
+            action: "continue",
             replace: {
               result: {
                 ...result,

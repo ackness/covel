@@ -79,7 +79,7 @@ describe("agent tool deadline", () => {
         event: "PostRuntime",
         async handler() {
           return {
-            action: "replace",
+            action: "continue",
             replace: {
               result: {
                 pluginId: manifest.pluginId,
@@ -162,7 +162,7 @@ describe("agent tool deadline", () => {
           event: "PostRuntime",
           async handler() {
             return {
-              action: "replace",
+              action: "continue",
               replace: {
                 result: {
                   pluginId: manifest.pluginId,
