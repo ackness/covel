@@ -247,7 +247,6 @@ function isFreshLocalCheckpoint(checkpoint: BrowserCheckpoint): boolean {
 
 export class LocalDataService implements DataService {
   private readonly vault: BrowserVault;
-  private statePatches = new Map<string, StatePatchRecord[]>();
   private initPromise: Promise<void> | null = null;
 
   constructor(vault?: BrowserVault) {
@@ -572,10 +571,6 @@ export class LocalDataService implements DataService {
   }
 
   private async deleteSessionNow(sessionId: string): Promise<void> {
-    // Evict before the store teardown, not after: the in-memory list is
-    // authoritative once hydrated, so it must not survive a delete that failed
-    // partway through.
-    this.statePatches.delete(sessionId);
     const vault = await this.ready();
     await Promise.all([
       vault.deleteSession(sessionId),
@@ -589,12 +584,16 @@ export class LocalDataService implements DataService {
         }
       }),
     ]);
-    appKv
-      .removeStatePatches(sessionId)
-      .catch(ignoreError("remove state patches on delete"));
-    appKv
-      .removeSubmittedBlocks(sessionId)
-      .catch(ignoreError("remove submitted blocks on delete"));
+    // Keep ownership until cache cleanup settles, so a queued append cannot
+    // race removal. Cache failure still must not undo the domain deletion.
+    await Promise.all([
+      appKv
+        .removeStatePatches(sessionId)
+        .catch(ignoreError("remove state patches on delete")),
+      appKv
+        .removeSubmittedBlocks(sessionId)
+        .catch(ignoreError("remove submitted blocks on delete")),
+    ]);
   }
 
   // Messages
@@ -675,46 +674,21 @@ export class LocalDataService implements DataService {
   // State patches
 
   async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-    return this.hydrateStatePatches(sessionId);
-  }
-
-  /**
-   * The in-memory map is empty after a page reload, so appending straight to it
-   * and writing the result back to IDB used to overwrite the whole persisted
-   * array with a single patch — the session's entire state history, gone on the
-   * first turn after a refresh. Read through IDB before touching the list.
-   */
-  private async hydrateStatePatches(
-    sessionId: string,
-  ): Promise<StatePatchRecord[]> {
-    const cached = this.statePatches.get(sessionId);
-    if (cached) return cached;
-    const persisted = (await appKv.getStatePatches(sessionId)) ?? [];
-    // Re-read: an append may have landed while the IDB read was in flight.
-    const raced = this.statePatches.get(sessionId);
-    if (raced) return raced;
-    this.statePatches.set(sessionId, persisted);
-    return persisted;
+    return (await appKv.getStatePatches(sessionId)) ?? [];
   }
 
   async addStatePatch(
     sessionId: string,
     patch: StatePatchRecord,
   ): Promise<void> {
-    const hydrated = await this.hydrateStatePatches(sessionId);
-    // Re-read after the await. One turn commonly commits several `state.changed`
-    // events that arrive in a single flush, and `sse-handler` fires this
-    // fire-and-forget per event: without the re-read, two appends resolving in
-    // the same tick both build on the same base list and the second overwrites
-    // the first. Each continuation's `set` below is synchronous, so re-reading
-    // here always observes the previous append.
-    const list = this.statePatches.get(sessionId) ?? hydrated;
-    const next = [...list, patch];
-    this.statePatches.set(sessionId, next);
-    // Persist to IDB (fire-and-forget)
-    appKv
-      .saveStatePatches(sessionId, next)
-      .catch(ignoreError("save state patches"));
+    if (patch.sessionId !== sessionId)
+      throw new Error("State patch session mismatch");
+    const owned = structuredClone(patch);
+    await this.withSessionWorkspaceLock(sessionId, async () => {
+      if (!(await this.vault.getSession(sessionId)))
+        throw new Error(`Session not found: ${sessionId}`);
+      await appKv.appendStatePatch(owned);
+    });
   }
 
   // Submitted blocks

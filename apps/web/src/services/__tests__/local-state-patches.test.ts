@@ -1,127 +1,171 @@
-/**
- * Regression test: in local (browser-IDB) mode the state-patch list is cached
- * in memory, and that cache is empty after a page reload. `addStatePatch` used
- * to append to the empty cache and write the result back to IDB, overwriting
- * the whole persisted array — the session's entire state history destroyed by
- * the first turn after a refresh.
- */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "fake-indexeddb/auto";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { APP_KV_STORE_STATE_PATCHES } from "@covel/store/idb-schema";
 import type { StatePatchRecord } from "../api/types.js";
+import { getStatePatches, removeStatePatches } from "../app-kv-store.js";
+import { LocalDataService } from "../data-service/local.js";
+import { BrowserVault } from "../storage/browser-vault.js";
 
-const idb = vi.hoisted(() => {
-  const patches = new Map<string, StatePatchRecord[]>();
-  return {
-    patches,
-    getStatePatches: vi.fn(async (id: string) => patches.get(id) ?? null),
-    saveStatePatches: vi.fn(async (id: string, next: StatePatchRecord[]) => {
-      patches.set(id, next);
-    }),
-    removeStatePatches: vi.fn(async (id: string) => {
-      patches.delete(id);
-    }),
-  };
-});
+vi.mock("../api.js", () => ({ deleteSession: vi.fn(async () => {}) }));
 
-vi.mock("../app-kv-store.js", () => ({
-  getStatePatches: idb.getStatePatches,
-  saveStatePatches: idb.saveStatePatches,
-  removeStatePatches: idb.removeStatePatches,
-  getSubmittedBlocks: vi.fn(async () => null),
-  saveSubmittedBlocks: vi.fn(async () => {}),
-  removeSubmittedBlocks: vi.fn(async () => {}),
-  getWorldOverlay: vi.fn(async () => null),
-  saveWorldOverlay: vi.fn(async () => {}),
-  migrateLocalStorageToIdb: vi.fn(async () => {}),
-}));
-
-const { LocalDataService } = await import("../data-service/local.js");
+let vault: BrowserVault;
+let service: LocalDataService;
+let second: LocalDataService;
+let sessionId: string;
 
 function patch(id: string): StatePatchRecord {
   return {
     id,
-    sessionId: "sess-1",
-    summary: `patch ${id}`,
-    packageName: "test",
-    createdAt: "2026-07-25T00:00:00Z",
+    sessionId,
+    summary: id,
+    packageName: "probe",
+    createdAt: "2026-01-01",
   };
 }
 
-beforeEach(() => {
-  idb.patches.clear();
-  vi.clearAllMocks();
+beforeEach(async () => {
+  sessionId = `patch-session-${crypto.randomUUID()}`;
+  vault = new BrowserVault({ dbName: `patch-vault-${crypto.randomUUID()}` });
+  await vault.upsertWorld({
+    id: "world",
+    name: "World",
+    description: "",
+    createdAt: "2026-01-01",
+  });
+  service = new LocalDataService(vault);
+  second = new LocalDataService(vault);
+  await service.createSession("world", undefined, sessionId);
 });
 
-describe("LocalDataService state patches", () => {
-  it("keeps persisted history when appending after a reload", async () => {
-    idb.patches.set("sess-1", [patch("p1"), patch("p2")]);
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await removeStatePatches(sessionId);
+  await vault.deleteDatabase();
+});
 
-    // A fresh instance models the post-reload state: empty in-memory cache.
-    const ds = new LocalDataService();
-    await ds.addStatePatch("sess-1", patch("p3"));
+it("reads persisted history and appends without losing it after reload", async () => {
+  await service.addStatePatch(sessionId, patch("first"));
+  await service.addStatePatch(sessionId, patch("second"));
+  expect(
+    (await second.listStatePatches(sessionId)).map((item) => item.id),
+  ).toEqual(["first", "second"]);
+  await second.addStatePatch(sessionId, patch("third"));
+  expect((await getStatePatches(sessionId))?.map((item) => item.id)).toEqual([
+    "first",
+    "second",
+    "third",
+  ]);
+});
 
-    expect(idb.patches.get("sess-1")?.map((p) => p.id)).toEqual([
-      "p1",
-      "p2",
-      "p3",
-    ]);
-    expect((await ds.listStatePatches("sess-1")).map((p) => p.id)).toEqual([
-      "p1",
-      "p2",
-      "p3",
-    ]);
-  });
-
-  it("appends in order across several writes", async () => {
-    const ds = new LocalDataService();
-    await ds.addStatePatch("sess-1", patch("a"));
-    await ds.addStatePatch("sess-1", patch("b"));
-
-    expect(idb.patches.get("sess-1")?.map((p) => p.id)).toEqual(["a", "b"]);
-  });
-
-  it("does not lose a patch when appends race in the same tick", async () => {
-    // One turn commits several `state.changed` events in a single flush and
-    // `sse-handler` calls this fire-and-forget per event.
-    idb.patches.set("sess-1", [patch("p0")]);
-    const ds = new LocalDataService();
-
+it.each([false, true])(
+  "retains same-instance concurrent appends (warm: %s)",
+  async (warm) => {
+    if (warm) await service.addStatePatch(sessionId, patch("existing"));
     await Promise.all([
-      ds.addStatePatch("sess-1", patch("a")),
-      ds.addStatePatch("sess-1", patch("b")),
+      service.addStatePatch(sessionId, patch("first")),
+      service.addStatePatch(sessionId, patch("second")),
     ]);
-
     expect(
-      (await ds.listStatePatches("sess-1")).map((p) => p.id).sort(),
-    ).toEqual(["a", "b", "p0"]);
-    expect(
-      idb.patches
-        .get("sess-1")
-        ?.map((p) => p.id)
-        .sort(),
-    ).toEqual(["a", "b", "p0"]);
+      (await getStatePatches(sessionId))?.map((item) => item.id).sort(),
+    ).toEqual(warm ? ["existing", "first", "second"] : ["first", "second"]);
+  },
+);
+
+it("retains appends from different services that both read an empty list", async () => {
+  await Promise.all([
+    service.listStatePatches(sessionId),
+    second.listStatePatches(sessionId),
+  ]);
+  await Promise.all([
+    service.addStatePatch(sessionId, patch("first")),
+    second.addStatePatch(sessionId, patch("second")),
+  ]);
+  expect(
+    (await getStatePatches(sessionId))?.map((item) => item.id).sort(),
+  ).toEqual(["first", "second"]);
+});
+
+it("reads another service's writes after its own earlier read", async () => {
+  expect(await service.listStatePatches(sessionId)).toEqual([]);
+  await second.addStatePatch(sessionId, patch("other-service"));
+  expect(
+    (await service.listStatePatches(sessionId)).map((item) => item.id),
+  ).toEqual(["other-service"]);
+});
+
+it("rejects a late append after session deletion without rebuilding the cache", async () => {
+  await second.listStatePatches(sessionId);
+  await service.deleteSession(sessionId);
+  // Wait for cache cleanup too, even on the old fire-and-forget implementation.
+  await getStatePatches(sessionId);
+  await expect(second.addStatePatch(sessionId, patch("late"))).rejects.toThrow(
+    "Session not found",
+  );
+  expect(await getStatePatches(sessionId)).toBeNull();
+});
+
+it("rechecks existence when an append waits behind session deletion", async () => {
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
   });
-
-  it("does not lose a patch when appends race on a warm cache", async () => {
-    const ds = new LocalDataService();
-    await ds.addStatePatch("sess-1", patch("w0")); // warms the cache
-
-    await Promise.all([
-      ds.addStatePatch("sess-1", patch("w1")),
-      ds.addStatePatch("sess-1", patch("w2")),
-    ]);
-
-    expect(
-      (await ds.listStatePatches("sess-1")).map((p) => p.id).sort(),
-    ).toEqual(["w0", "w1", "w2"]);
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
   });
-
-  it("reads persisted history without an append", async () => {
-    idb.patches.set("sess-1", [patch("p1")]);
-
-    const ds = new LocalDataService();
-
-    expect((await ds.listStatePatches("sess-1")).map((p) => p.id)).toEqual([
-      "p1",
-    ]);
+  const owner = service.withSessionWorkspace(sessionId, async () => {
+    entered();
+    await gate;
   });
+  await started;
+  const deletion = second.deleteSession(sessionId);
+  const pendingCount = async () =>
+    (await navigator.locks.query()).pending?.filter((lock) =>
+      lock.name?.includes(sessionId),
+    ).length ?? 0;
+  let append: Promise<string> | undefined;
+  try {
+    await vi.waitFor(async () => expect(await pendingCount()).toBe(1));
+    append = service.addStatePatch(sessionId, patch("queued")).then(
+      () => "saved",
+      (error: Error) => error.message,
+    );
+    await vi.waitFor(async () => expect(await pendingCount()).toBe(2));
+  } finally {
+    release();
+    await Promise.all([owner, deletion]);
+  }
+  expect(await append).toBe(`Session not found: ${sessionId}`);
+  expect(await getStatePatches(sessionId)).toBeNull();
+});
+
+it("rejects a patch for another session before writing", async () => {
+  await expect(
+    service.addStatePatch(sessionId, {
+      ...patch("wrong-session"),
+      sessionId: "another-session",
+    }),
+  ).rejects.toThrow("session mismatch");
+  expect(await getStatePatches(sessionId)).toBeNull();
+});
+
+it("rejects transaction abort instead of acknowledging a patch that was not saved", async () => {
+  await getStatePatches(sessionId);
+  const put = IDBObjectStore.prototype.put;
+  vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
+    this: IDBObjectStore,
+    value,
+    key,
+  ) {
+    const request = put.call(this, value, key);
+    if (this.name === APP_KV_STORE_STATE_PATCHES)
+      request.addEventListener("success", () => this.transaction.abort(), {
+        once: true,
+      });
+    return request;
+  });
+  await expect(
+    service.addStatePatch(sessionId, patch("aborted")),
+  ).rejects.toThrow();
+  expect(await getStatePatches(sessionId)).toBeNull();
 });

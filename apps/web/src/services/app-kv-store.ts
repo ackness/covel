@@ -15,6 +15,7 @@ import {
   upgradeBrowserIdbSchema,
 } from "@covel/store/idb-schema";
 import { BROWSER_STORAGE_DB_NAME } from "./storage/data-store.js";
+import type { StatePatchRecord } from "./api/types.js";
 
 const DB_NAME = BROWSER_STORAGE_DB_NAME;
 const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
@@ -81,9 +82,10 @@ async function idbPut<T>(
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
-    const req = store.put(value, key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    store.put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("Cache write transaction aborted"));
   });
 }
 
@@ -92,9 +94,10 @@ async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
-    const req = store.delete(key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    store.delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("Cache deletion transaction aborted"));
   });
 }
 
@@ -102,18 +105,25 @@ async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
 
 export async function getStatePatches(
   sessionId: string,
-): Promise<import("./api/types.js").StatePatchRecord[] | null> {
-  return idbGet<import("./api/types.js").StatePatchRecord[]>(
-    STORE_STATE_PATCHES,
-    sessionId,
-  );
+): Promise<StatePatchRecord[] | null> {
+  return idbGet<StatePatchRecord[]>(STORE_STATE_PATCHES, sessionId);
 }
 
-export async function saveStatePatches(
-  sessionId: string,
-  patches: import("./api/types.js").StatePatchRecord[],
-): Promise<void> {
-  return idbPut(STORE_STATE_PATCHES, sessionId, patches);
+export async function appendStatePatch(patch: StatePatchRecord): Promise<void> {
+  const owned = structuredClone(patch);
+  const db = await openAppDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_STATE_PATCHES, "readwrite");
+    const store = tx.objectStore(STORE_STATE_PATCHES);
+    const req = store.get(owned.sessionId);
+    req.onsuccess = () => {
+      const current = (req.result as StatePatchRecord[] | undefined) ?? [];
+      store.put([...current, owned], owned.sessionId);
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("State patch transaction aborted"));
+  });
 }
 
 export async function removeStatePatches(sessionId: string): Promise<void> {
