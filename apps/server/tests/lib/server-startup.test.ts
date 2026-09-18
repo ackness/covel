@@ -31,6 +31,7 @@ vi.mock("../../src/world-file-watcher.js", () => ({
 }));
 
 let home: string;
+let startupImport: Promise<unknown> | undefined;
 beforeEach(async () => {
   vi.resetModules();
   Object.values(fakes).forEach((mock) => mock.mockReset());
@@ -42,10 +43,14 @@ beforeEach(async () => {
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 afterEach(async () => {
+  // A timed-out import keeps evaluating. Drain it before the next case resets
+  // shared mocks, otherwise it can acquire and close the next case's resources.
+  if (startupImport) await Promise.allSettled([startupImport]);
+  startupImport = undefined;
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   await rm(home, { recursive: true, force: true });
-});
+}, 15_000);
 
 describe("production composition root startup failure", () => {
   it.each([
@@ -100,7 +105,8 @@ describe("production composition root startup failure", () => {
           stop: close(`watcher-${index}`),
         };
       });
-      await expect(import("../../src/app.js")).rejects.toBe(failure);
+      startupImport = import("../../src/app.js");
+      await expect(startupImport).rejects.toBe(failure);
       const expected = {
         store: [],
         media: ["store"],
@@ -131,5 +137,8 @@ describe("production composition root startup failure", () => {
       };
       expect(released).toEqual(expected[phase]);
     },
+    // The first case transforms the full production composition root under
+    // workspace-wide test load; this suite checks ownership, not startup speed.
+    15_000,
   );
 });

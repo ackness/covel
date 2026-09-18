@@ -5,7 +5,7 @@
  * Inspired by Letta's memory tools:
  *   - conversation_search → memory-search (recall + archival)
  *   - core_memory_read    → memory-get-block
- *   - core_memory_replace → memory-update-block (restricted)
+ *   - core_memory_replace → memory-update-block
  */
 
 import type { Proposal } from "@covel/shared";
@@ -160,6 +160,27 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
         label: z.string().min(1).describe("当前世界声明的记忆块标签"),
       }),
       execute: async (params, context) => {
+        const pending = context.pendingProposals ?? [];
+        for (let i = pending.length - 1; i >= 0; i -= 1) {
+          const proposal = pending[i]!;
+          if (
+            proposal.type !== "working_memory.set" ||
+            proposal.sessionId !== context.sessionId ||
+            proposal.payload.scope !== CORE_MEMORY_SCOPE ||
+            proposal.payload.key !== params.label
+          )
+            continue;
+          // Match MemoryManager's block representation. Memory is shared
+          // within a session, so the proposal's source plugin is not a filter.
+          const raw = proposal.payload.value as
+            { text?: string } | string | null;
+          return {
+            found: true,
+            label: params.label,
+            content: typeof raw === "string" ? raw : (raw?.text ?? ""),
+            updatedAt: proposal.timestamp,
+          };
+        }
         const block = await deps.blocks.getBlock(
           context.sessionId,
           params.label,
@@ -199,14 +220,8 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
       execute: async (params, context) => {
         // Buffer the block write as a working_memory.set proposal. The commit
         // handler upserts working memory in the execution's transaction; a
-        // rollback drops it. NOTE: the old direct path (deps.blocks.updateBlock)
-        // also mirrored the block into plugin-data for the memory UI panel and
-        // truncated to a per-label cap. The commit handler does neither — the
-        // zod `.max(2000)` still bounds the size, and this tool has no
-        // production callers, so the mirror gap is inert. If a plugin adopts
-        // this tool and needs the panel mirror, add mirrorPluginId support to
-        // the working_memory.set payload/handler rather than reinstating a
-        // direct write. ponytail: mirror dropped, wire it when a caller needs it.
+        // rollback drops it. This generic working-memory write does not perform
+        // MemoryManager's per-label truncation or plugin-data panel mirroring.
         const proposal: Proposal = {
           id: crypto.randomUUID(),
           type: "working_memory.set",

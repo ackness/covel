@@ -93,7 +93,11 @@ async function mergeCharacterViews(
   context: ToolExecutionContext,
 ): Promise<CharacterView[]> {
   const stored = await store.listCharacters(context.sessionId);
-  const overlay = overlayCharacters(context.pendingProposals ?? []);
+  const overlay = overlayCharacters(
+    (context.pendingProposals ?? []).filter(
+      (proposal) => proposal.sessionId === context.sessionId,
+    ),
+  );
   if (overlay.size === 0) return stored.map((c) => ({ ...c }));
 
   const now = new Date().toISOString();
@@ -188,7 +192,12 @@ function createCreateCharacterTool(
       // into the stored fields — keeping the panel (which overlays defaults at
       // render time) in sync with what the model later reads via get-character
       // and prompt context. A null schema leaves fields untouched.
-      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      const schema = await loadCharacterSchema(
+        store,
+        deps,
+        context.sessionId,
+        context.pendingProposals,
+      );
       const fields = mergeSchemaDefaults(params.fields, schema);
 
       const id = `char-${crypto.randomUUID()}`;
@@ -279,7 +288,12 @@ function createUpdateCharacterTool(
           ? { ...prevFields, ...params.fields }
           : existing.fields;
       const newVersion = existing.version + 1;
-      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      const schema = await loadCharacterSchema(
+        store,
+        deps,
+        context.sessionId,
+        context.pendingProposals,
+      );
       // Validate the supplied patch, so correcting one legacy field does not
       // require rewriting unrelated attributes that were already malformed.
       if (params.fields !== undefined)
@@ -591,6 +605,7 @@ export function createCharacterTools(
           store,
           deps,
           context.sessionId,
+          context.pendingProposals,
         );
         return {
           _text: schema

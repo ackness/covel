@@ -2,7 +2,8 @@
  * Built-in plugin data tools — allow LLM agents to read/write plugin-scoped
  * persistent data via function calling.
  *
- * Read tools use the injected store directly. Write tools return
+ * Read tools overlay this execution's set, batch and delete proposals over
+ * the injected store. Write tools return
  * proposal-backed results so the Session Kernel commit chain performs the
  * actual persistence.
  */
@@ -14,6 +15,10 @@ import type {
 } from "@covel/shared";
 import { z } from "zod";
 import { withPendingProposals } from "../result.js";
+import {
+  overlayPluginDataRows,
+  overlayPluginDataValue,
+} from "../proposal-overlay.js";
 import { tool } from "../tool.js";
 import type { ToolModule } from "../types.js";
 
@@ -173,44 +178,6 @@ function createPluginDataSetBatchTool(): ToolModule {
   });
 }
 
-// ── Pending-write overlay ───────────────────────────────────────
-
-/**
- * Uncommitted `plugin.data` / `plugin.data.batch` proposals produced earlier
- * in THIS tool loop, keyed by JSON-encoded `[namespace, key]` tuples.
- *
- * Plugin-data writes go through proposals, which commit only at the end of the
- * turn. Without this overlay a runtime that calls `plugin-data-set` and then
- * reads the same key back in the same loop sees the PRE-write value, so it
- * either writes twice or "corrects" a value that was already correct. The
- * overlay makes a runtime read its own writes. Last write wins, matching the
- * order the commit pipeline will apply them in.
- */
-function buildPendingOverlay(context: {
-  readonly pluginId: string;
-  readonly pendingProposals?: readonly Proposal[];
-}): Map<string, PluginDataPayload> {
-  const overlay = new Map<string, PluginDataPayload>();
-  const overlayKey = (namespace: string, key: string) =>
-    JSON.stringify([namespace, key]);
-
-  for (const proposal of context.pendingProposals ?? []) {
-    // Only this plugin's own writes — the store call is already scoped to
-    // context.pluginId, and the overlay must not widen that.
-    if (proposal.source.pluginId !== context.pluginId) continue;
-
-    if (proposal.type === "plugin.data") {
-      const p = proposal.payload;
-      overlay.set(overlayKey(p.namespace, p.key), p);
-    } else if (proposal.type === "plugin.data.batch") {
-      for (const item of proposal.payload.items ?? []) {
-        overlay.set(overlayKey(item.namespace, item.key), item);
-      }
-    }
-  }
-  return overlay;
-}
-
 // ── plugin-data-get ─────────────────────────────────────────────
 
 function createPluginDataGetTool(store: PluginDataStore): ToolModule {
@@ -223,14 +190,23 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
     }),
     execute: async (params, context) => {
       const targetPlugin = context.pluginId;
-      const overlay = buildPendingOverlay(context);
-      const overlayKey = JSON.stringify([params.namespace, params.key]);
-      if (overlay.has(overlayKey)) {
+      const pending = overlayPluginDataValue(
+        (context.pendingProposals ?? []).filter(
+          (p) => p.sessionId === context.sessionId,
+        ),
+        targetPlugin,
+        params.namespace,
+        params.key,
+      );
+      if (pending.hit) {
+        if (pending.deleted) {
+          return { found: false, namespace: params.namespace, key: params.key };
+        }
         return {
           found: true,
           namespace: params.namespace,
           key: params.key,
-          value: overlay.get(overlayKey)!.value,
+          value: pending.value,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -287,14 +263,18 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
           updatedAt: r.updatedAt,
         });
       }
-      for (const [overlayKey, { namespace, key, value }] of buildPendingOverlay(
-        context,
+      for (const [
+        overlayKey,
+        { namespace, key, value, deleted },
+      ] of overlayPluginDataRows(
+        (context.pendingProposals ?? []).filter(
+          (p) => p.sessionId === context.sessionId,
+        ),
+        targetPlugin,
+        params.namespace,
       )) {
-        // A namespace filter must apply to pending writes too.
-        if (params.namespace !== undefined && namespace !== params.namespace) {
-          continue;
-        }
-        merged.set(overlayKey, { namespace, key, value, updatedAt: now });
+        if (deleted) merged.delete(overlayKey);
+        else merged.set(overlayKey, { namespace, key, value, updatedAt: now });
       }
 
       const items = [...merged.values()];
@@ -309,8 +289,8 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
  * Create plugin data tools bound to a DataStore instance.
  * Call this during bootstrap when the store is available.
  *
- * Event emission is handled at the store level (via the decorated store proxy
- * in bootstrap.ts), so these tools no longer need an EventBus reference.
+ * Writes and their committed events are owned by the Session Kernel commit
+ * chain; these tools never persist proposals or emit committed state events.
  */
 export function createPluginDataTools(store: PluginDataStore): ToolModule[] {
   return [

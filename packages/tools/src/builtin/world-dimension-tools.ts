@@ -15,6 +15,7 @@
 import { DIMENSION_KEYS, resolveI18nDeep } from "@covel/shared";
 import { z } from "zod";
 import { tool } from "../tool.js";
+import { overlayPluginDataValue } from "../proposal-overlay.js";
 import type { ToolModule } from "../types.js";
 
 type DimensionKey = (typeof DIMENSION_KEYS)[number];
@@ -215,12 +216,26 @@ function createWorldDimensionGetTool(
 
         const providerPluginId = await getProviderPluginId();
         if (providerPluginId) {
-          const record = await store.getPluginData(
-            context.sessionId,
+          const pending = overlayPluginDataValue(
+            (context.pendingProposals ?? []).filter(
+              (proposal) => proposal.sessionId === context.sessionId,
+            ),
             providerPluginId,
             "entries",
             dimension,
           );
+          // A pending delete removes the session override and reveals the
+          // bound world's metadata, just like a committed delete.
+          const record = pending.hit
+            ? pending.deleted
+              ? null
+              : { value: pending.value }
+            : await store.getPluginData(
+                context.sessionId,
+                providerPluginId,
+                "entries",
+                dimension,
+              );
           if (record) {
             const loaded = {
               source: "plugin-data" as const,

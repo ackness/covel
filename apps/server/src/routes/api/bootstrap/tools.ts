@@ -90,7 +90,8 @@ export async function setupPluginTools(
   toolMap.set(runtimeDoneTool.name, runtimeDoneTool);
   builtinToolNames.add(runtimeDoneTool.name);
 
-  // Register plugin-data tools (store-bound via closure; events emitted by store proxy)
+  // Register plugin-data tools. Reads overlay pending proposals; the Session
+  // Kernel owns committed writes and their events.
   for (const t of createPluginDataTools(store)) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);

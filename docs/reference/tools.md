@@ -357,7 +357,7 @@ interface UIRenderPart {
 
 **输出**: `{ found, namespace, key, value?, updatedAt? }`
 
-读取会叠加**本次 tool loop 内尚未提交**的 `plugin.data` / `plugin.data.batch` proposal（read-your-own-write）。plugin-data 写入走 proposal、在回合末才提交，若不叠加，同一 loop 内先 `plugin-data-set` 再读同一个 key 会拿到写入**前**的旧值，runtime 因而重复写入或「纠正」一个本已正确的值。叠加只覆盖**本插件自己**的 pending 写入，不放宽插件作用域；同 key 多次写入以最后一次为准（与提交顺序一致）。
+读取会叠加**本次执行内尚未提交**的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` proposal（read-your-own-write）。写入走 proposal、在执行完成时才提交；叠加只覆盖**当前会话、当前插件**的 pending 操作。同 key 按 proposal 顺序应用，最后一次为准：删除后读取返回 `found: false`，随后重新写入则读取新值。写入 `null` 是存储一个值，不能等同于删除。不同 runtime 的独立缓冲区不会在此合并。
 
 ---
 
@@ -371,9 +371,17 @@ interface UIRenderPart {
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
 
-与 `plugin-data-get` 一样叠加本 loop 内未提交的 pending 写入；`namespace` 过滤同样作用于 pending 项。
+与 `plugin-data-get` 一样叠加本次执行内未提交的写入和删除；被删除的条目不出现在列表中。`namespace` 过滤同样作用于 pending 项，不传时合并所有 namespace。
 
 读取和合并按完整的 `(namespace, key)` 字符串元组精确匹配，不以控制字符拆分或改写字段。框架导出的 `overlayPluginDataRows()` 使用 `JSON.stringify([namespace, key])` 作为 Map key；function runtime / guard 的缓冲读取遵循同样规则。
+
+---
+
+### memory-get-block / memory-update-block
+
+核心记忆块存储在当前会话的 `working_memory[scope="story"]` 中，按 `label` 对应的 key 共享。`memory-update-block` 返回完整替换文本的 `working_memory.set` proposal，不直接落库。`memory-get-block` 先读取本次执行中当前会话、相同 scope 和 key 的最后一条 pending proposal，再回退到已提交数据；该共享数据不按来源插件过滤。
+
+`memory-update-block` 的内容限制为 1–2000 字符，提交时另受工作记忆存储配额约束。此通用工具不会执行 MemoryManager 的按标签截断，也不会更新插件面板的 plugin-data 镜像。
 
 ---
 
@@ -385,6 +393,8 @@ interface UIRenderPart {
 
 1. 优先读当前 session 中 `world-data-provider` 插件写入的 `plugin_data[namespace="entries"]`
 2. 若该维度不存在，则回退到 `world.metadata.dimensions`
+
+第一步先按顺序叠加本次执行内当前会话、已解析的数据提供者的 pending 写入和删除。删除维度的会话副本后会回退到世界 metadata；其他会话或其他插件的 proposal 不参与读取。
 
 | 参数        | 类型                        | 必需 | 描述                                                  |
 | ----------- | --------------------------- | ---- | ----------------------------------------------------- |
@@ -536,6 +546,8 @@ interface UIRenderPart {
 会话工具描述另附精简字段约束（类型、数值上下界、enum options、数组/映射元素类型及嵌套结构），不重复长描述和默认值。`sync-characters` 的 creates/updates 共用一份约束说明；执行时仍重新读取权威 schema。数值 patch 是更新后的绝对值，不是增量。
 
 已声明属性的类型、范围、enum 与嵌套结构在产生写入 proposal **之前**强制校验；非法字符串、null 或非有限数值不能替代数值属性。`create-character` 合并缺省值后校验；`update-character` 校验本次 patch，允许逐字段修复既有旧数据。未声明键仍保留并返回 warning。`mergeSchemaDefaults` 与 `assertCharacterFields` 向插件提供相同边界，失败抛出 `CharacterFieldValidationError`。
+
+`get-character-schema`、创建时填充默认值和创建/更新时校验均先读取本次执行中当前会话、当前 world-data provider 的 pending schema 操作。删除 schema 后不再使用存储中的旧规则。底层 schema 读取异常会使工具失败，不会静默跳过校验；未配置 provider 或 schema 尚不存在时仍允许无 schema 的角色。角色列表、读取和去重只合并当前会话的 pending 角色。
 
 `char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
 

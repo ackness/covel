@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Proposal } from "@covel/shared";
 import { createWorldDimensionTools } from "../src/builtin/world-dimension-tools.js";
 import type { ToolExecutionContext, ToolModule } from "../src/types.js";
 
@@ -175,6 +176,80 @@ describe("builtin world dimension tools", () => {
     ]);
     expect(store.getWorld).toHaveBeenCalledTimes(1);
   });
+
+  it.each(["set", "batch", "delete", "recreate"] as const)(
+    "reads the provider's pending %s before committed dimensions",
+    async (operation) => {
+      seedPluginData(store, {
+        sessionId: "sess-1",
+        pluginId: "world-init",
+        namespace: "entries",
+        key: "tone",
+        value: { contentRating: "stored" },
+        updatedAt: "stored-time",
+      });
+      const base = {
+        id: "pending-dimension",
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        source: { pluginId: "world-init", runtimeId: "world-init/runtime" },
+        timestamp: "2026-08-25T00:00:00.000Z",
+      };
+      const item = {
+        namespace: "entries",
+        key: "tone",
+        value: { contentRating: "pending" },
+      };
+      const set: Proposal = { ...base, type: "plugin.data", payload: item };
+      const remove: Proposal = {
+        ...base,
+        type: "plugin.data.delete",
+        payload: { namespace: "entries", key: "tone" },
+      };
+      const proposals: Proposal[] =
+        operation === "set"
+          ? [set]
+          : operation === "batch"
+            ? [
+                {
+                  ...base,
+                  type: "plugin.data.batch",
+                  payload: { items: [item] },
+                },
+              ]
+            : operation === "delete"
+              ? [set, remove]
+              : [remove, set];
+      proposals.push(
+        {
+          ...set,
+          sessionId: "other-session",
+          payload: { ...item, value: { contentRating: "foreign" } },
+        },
+        {
+          ...remove,
+          source: {
+            pluginId: "other-provider",
+            runtimeId: "other-provider/runtime",
+          },
+        },
+      );
+      const result = await findByName(tools, "world-dimension-get").execute(
+        { queries: [{ dimension: "tone", path: "contentRating" }] },
+        { ...ctx(), pendingProposals: proposals },
+      );
+      expect(result).toMatchObject({
+        results: [
+          {
+            found: true,
+            source: operation === "delete" ? "world-metadata" : "plugin-data",
+            value: operation === "delete" ? "teen" : "pending",
+          },
+        ],
+      });
+      expect(store.getPluginData).not.toHaveBeenCalled();
+    },
+  );
 
   it("supports nested array/object paths and resolves i18n by session locale", async () => {
     const tool = findByName(tools, "world-dimension-get");

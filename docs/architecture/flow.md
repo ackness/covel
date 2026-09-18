@@ -817,7 +817,7 @@ sequenceDiagram
 启动 → 依赖注入              @covel/tools                     工具系统
                              ├── tool()                       工具定义 wrapper
                              ├── builtinUITools               create-form/choice/notification
-                             ├── createPluginDataTools()      plugin-data CRUD + 事件发射
+                             ├── createPluginDataTools()      plugin-data 读取 + 写入提案（Kernel 提交及发事件）
                              └── shortId/shortIdBatch()       LLM 友好的语义 ID 生成
 
 启动 → 状态管理              @covel/store                     DataStore 接口 + 3 个服务端后端实现
