@@ -8,6 +8,8 @@ import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { CoreMemoryBlockView } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import { getTurnExecutionSignal } from "./turn-control.js";
+import { awaitPendingMemory } from "./memory-barrier.js";
 
 export interface TurnSessionCharacter {
   readonly id?: string;
@@ -61,9 +63,11 @@ export async function loadTurnSessionState(args: {
 }): Promise<LoadedTurnSessionState> {
   const { input, deps, shouldAppendPlayerMessage } = args;
 
-  if (deps.memorySystem?.updater.awaitPending) {
-    await deps.memorySystem.updater.awaitPending(input.sessionId);
-  }
+  await awaitPendingMemory(
+    deps.memorySystem?.updater,
+    input.sessionId,
+    getTurnExecutionSignal(deps.turnControl),
+  );
 
   // Bounded per-turn reads: counts come from a store-side aggregate over the
   // FULL log, while the in-memory history is only the uncompacted suffix —

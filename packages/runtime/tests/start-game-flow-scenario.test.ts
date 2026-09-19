@@ -61,7 +61,6 @@ async function createScenarioStore(sessionId: string): Promise<DataStore> {
   await store.createSession({
     id: sessionId,
     worldId: "world-1",
-    presetId: null,
     status: "active",
     activePlugins: ["pregame", "world-init", "char-creator", "narrator"],
     phase: "setup",

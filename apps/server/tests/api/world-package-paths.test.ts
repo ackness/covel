@@ -1,3 +1,6 @@
+import { readWorldDeletion } from "../../src/world-lifecycle.js";
+import { createPluginRegistry } from "@covel/plugin-loader";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
   access,
   mkdir,
@@ -36,8 +39,12 @@ beforeEach(async () => {
   await mkdir(user);
   store = createMemoryStore();
   app = new Hono<WorldEnv>();
+  const sessionLock = createInProcessSessionLock();
+  const registry = createPluginRegistry();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
+    c.set("pluginRegistry", registry);
     c.set("worldsDirs", [bundled, user]);
     await next();
   });
@@ -145,7 +152,10 @@ it("restores the package after a database deletion failure and permits retry", a
     new Error("Synthetic database failure"),
   );
   expect((await removeWorld()).status).toBe(500);
-  expect(await store.getWorld("logical-world")).toEqual(before);
+  expect(await store.getWorld("logical-world")).toMatchObject(before!);
+  expect(
+    readWorldDeletion((await store.getWorld("logical-world"))!)?.retryable,
+  ).toBe(true);
   expect(await readFile(path.join(owned, "data/lore.json"), "utf8")).toBe(
     content,
   );

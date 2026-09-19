@@ -13,10 +13,13 @@ import type {
   BrowserCheckpoint,
   SessionCommit,
 } from "@covel/store/browser-sync";
-import { request } from "./request.js";
+import { isNotFound, request } from "./request.js";
+import { ignoreError } from "../../lib/ignore-error.js";
+import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
 import {
   clearSessionToken,
-  storeSessionToken,
+  getSessionToken,
+  storeCreatedSessionToken,
 } from "../session-credentials.js";
 import type {
   MessageRecord,
@@ -227,11 +230,14 @@ export async function listStateTables(
 
 export async function createSession(
   worldId: string,
-  presetId?: string,
   id?: string,
   plugins?: string[],
   locale?: string,
+  loreOverride?: string,
 ): Promise<SessionRecord> {
+  // Open credential storage before creating server state, and capture any
+  // previous authority before the HTTP request can overlap another creation.
+  const capturedToken = await getSessionToken(id ?? "");
   const { ownerToken, ...session } = await request<SessionCreateResponse>(
     "/api/sessions",
     {
@@ -240,21 +246,29 @@ export async function createSession(
       body: JSON.stringify({
         id,
         worldId,
-        presetId,
         ...(plugins ? { plugins } : {}),
         ...(locale ? { locale } : {}),
+        ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),
     },
   );
   // Persist the one-time owner token immediately so every follow-up call (which
   // never re-receives it) can present it on hosted tiers.
-  if (ownerToken) storeSessionToken(session.id, ownerToken);
+  if (id !== undefined && session.id !== id)
+    throw new Error("Created session does not match the requested identity");
+  if (typeof session.incarnation !== "string" || !session.incarnation)
+    throw new Error("Created session is missing its incarnation");
+  await storeCreatedSessionToken(session.id, ownerToken, capturedToken);
+  await verifyCreatedSessionCredential(
+    { sessionId: session.id, token: ownerToken },
+    session.incarnation,
+  );
   return session;
 }
 
 export async function updateSession(
   sessionId: string,
-  updates: Partial<Pick<SessionRecord, "status" | "presetId">> & {
+  updates: Partial<Pick<SessionRecord, "status">> & {
     /**
      * Per-runtime model slot overrides. Keys are runtime IDs in the form
      * `pluginId` (single-runtime plugin) or `pluginId/runtimeName` (multi-
@@ -283,16 +297,25 @@ export async function deleteSession(
   sessionId: string,
   options?: { silentErrors?: boolean },
 ): Promise<void> {
-  await request<{ ok: boolean }>(
-    `/api/sessions/${encodeURIComponent(sessionId)}`,
-    {
-      method: "DELETE",
-      ...options,
-    },
-  );
-  // Drop the stored owner token — the session is gone, keeping it only leaks
-  // stale key material into localStorage.
-  clearSessionToken(sessionId);
+  const capturedToken = await getSessionToken(sessionId);
+  const clearCaptured = () =>
+    clearSessionToken(sessionId, capturedToken).catch(
+      ignoreError("clear deleted session credential"),
+    );
+  try {
+    await request<{ ok: boolean }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}`,
+      {
+        ...options,
+        method: "DELETE",
+        headers: { "X-Session-Token": capturedToken ?? "" },
+      },
+    );
+  } catch (error) {
+    if (isNotFound(error)) await clearCaptured();
+    throw error;
+  }
+  await clearCaptured();
 }
 
 export async function listMessages(

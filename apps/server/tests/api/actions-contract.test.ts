@@ -10,10 +10,11 @@
  *   path. Whole-turn retry is the explicit `retry_turn` action.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
+import { createHookPipeline } from "@covel/runtime";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -70,6 +71,7 @@ describe("POST /api/actions — action type contract ", () => {
   let registry: PluginRegistry;
   let app: Hono;
   let loadedByName: Map<string, LoadedRuntime>;
+  let hookPipeline: ReturnType<typeof createHookPipeline>;
   const sessionId = "sess-contract";
   const NARRATOR_ID = "fake-narrator";
   const SIDE_ID = "fake-side";
@@ -77,6 +79,7 @@ describe("POST /api/actions — action type contract ", () => {
   beforeEach(async () => {
     store = createMemoryStore();
     registry = createPluginRegistry();
+    hookPipeline = createHookPipeline();
 
     const narrator = makeFakeLoadedRuntime({
       name: NARRATOR_ID,
@@ -96,6 +99,7 @@ describe("POST /api/actions — action type contract ", () => {
     registry.register(makeEntry({ id: SIDE_ID, loaded: side }));
 
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -103,13 +107,12 @@ describe("POST /api/actions — action type contract ", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: sessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [NARRATOR_ID, SIDE_ID],
       completedPlayerTurns: 1,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     const eventBus = createEventBus(store);
@@ -128,9 +131,148 @@ describe("POST /api/actions — action type contract ", () => {
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);
+      c.set("hookPipeline", hookPipeline);
       await next();
     });
     app.route("/api/actions", actionRoutes);
+  });
+
+  it("captures current world overrides for each player turn", async () => {
+    const seen: unknown[] = [];
+    hookPipeline.register({
+      id: "capture-settings",
+      event: "PreRuntime",
+      pluginId: NARRATOR_ID,
+      handler: async (ctx, payload) => {
+        if (ctx.runtimeId === NARRATOR_ID)
+          seen.push(payload.input.userSettings);
+        return { action: "continue" };
+      },
+    });
+    const worldId = `turn-settings-${crypto.randomUUID()}`;
+    await store.updateSession(sessionId, { worldId });
+    for (const tone of ["before", "after"]) {
+      await store.upsertWorld({
+        id: worldId,
+        name: "Settings world",
+        createdAt: new Date().toISOString(),
+        metadata: { pluginSettings: { [NARRATOR_ID]: { tone } } },
+      });
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: `world-settings-${tone}`,
+          type: "send_message",
+          sessionId,
+          payload: { content: tone },
+        }),
+      });
+      expect(response.status).toBe(200);
+      await drainStream(response);
+    }
+    expect(seen).toEqual([
+      { [NARRATOR_ID]: { tone: "before" } },
+      { [NARRATOR_ID]: { tone: "after" } },
+    ]);
+  });
+
+  it.each(["success", "failed"] as const)(
+    "preserves runtime identity and final status in SSE and trace: %s",
+    async (status) => {
+      if (status === "failed") {
+        const loaded = loadedByName.get(NARRATOR_ID)!;
+        loadedByName.set(NARRATOR_ID, {
+          ...loaded,
+          inputSchema: { type: "object", required: ["unavailableField"] },
+        });
+      }
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: "terminal-contract",
+          type: "send_message",
+          sessionId,
+          payload: { content: "Continue" },
+        }),
+      });
+      expect(response.status).toBe(200);
+      const envelopes = (await response.text())
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map(
+          (line) =>
+            JSON.parse(line.slice(6)) as {
+              type: string;
+              turnId: string;
+              payload: Record<string, unknown>;
+            },
+        );
+      const terminal = envelopes.filter(
+        (event) =>
+          ["runtime.completed", "runtime.failed"].includes(event.type) &&
+          event.payload.runtimeId === NARRATOR_ID,
+      );
+      expect(terminal).toHaveLength(1);
+      const event = terminal[0]!;
+      expect(event).toMatchObject({
+        type: status === "failed" ? "runtime.failed" : "runtime.completed",
+        payload: { status, runId: expect.any(String), turnId: event.turnId },
+      });
+      const traces = (await store.listTraceEvents(sessionId)).filter(
+        (trace) =>
+          ["runtime.completed", "runtime.failed"].includes(trace.type) &&
+          (trace.payload as Record<string, unknown>).runtimeId === NARRATOR_ID,
+      );
+      expect(traces).toHaveLength(1);
+      expect(traces[0]).toMatchObject({
+        type: event.type,
+        turnId: event.turnId,
+        payload: { status, runId: event.payload.runId, turnId: event.turnId },
+      });
+    },
+  );
+
+  it("delivers runtime SSE even when runtime trace persistence fails", async () => {
+    const persist = store.addTraceEvent.bind(store);
+    vi.spyOn(store, "addTraceEvent").mockImplementation(async (record) => {
+      if (record.type.startsWith("runtime."))
+        throw new Error("synthetic trace failure");
+      return persist(record);
+    });
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "trace-failure",
+        type: "send_message",
+        sessionId,
+        payload: { content: "Continue" },
+      }),
+    });
+    const envelopes = (await response.text())
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map(
+        (line) =>
+          JSON.parse(line.slice(6)) as {
+            type: string;
+            payload: Record<string, unknown>;
+          },
+      );
+    const runtime = envelopes.filter(
+      (event) => event.payload?.runtimeId === NARRATOR_ID,
+    );
+    expect(
+      runtime.filter((event) => event.type === "runtime.started"),
+    ).toHaveLength(1);
+    expect(
+      runtime.filter((event) => event.type === "runtime.completed"),
+    ).toHaveLength(1);
+    expect(
+      runtime.filter((event) => event.type === "runtime.failed"),
+    ).toHaveLength(0);
   });
 
   it("rejects the removed trigger_event action with 400", async () => {
@@ -356,6 +498,7 @@ describe("POST /api/actions — action type contract ", () => {
     // bug, not a request for the whole catalogue.
     const emptySessionId = "sess-no-plugins";
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -363,13 +506,12 @@ describe("POST /api/actions — action type contract ", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: emptySessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     const res = await app.request("/api/actions", {
@@ -424,6 +566,31 @@ describe("POST /api/actions — action type contract ", () => {
       "",
     );
   });
+
+  it.each(["Captured at creation", ""])(
+    "retains a persisted lore snapshot when starting without an override (%j)",
+    async (loreOverride) => {
+      const session = await store.getSession(sessionId);
+      await store.updateSession(sessionId, {
+        metadata: { ...session?.metadata, loreOverride },
+      });
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: "req-start-captured-lore",
+          type: "start_session",
+          sessionId,
+          payload: {},
+        }),
+      });
+      expect(response.status).toBe(200);
+      await drainStream(response);
+      expect((await store.getSession(sessionId))?.metadata?.loreOverride).toBe(
+        loreOverride,
+      );
+    },
+  );
 
   it("retry_turn re-runs the whole turn explicitly", async () => {
     const res = await app.request("/api/actions", {

@@ -3,19 +3,19 @@
  * Validate PLUGIN.md manifests from the command line.
  *
  * Usage:
- *   pnpm validate:plugin <path...> [--compat]
+ *   pnpm validate:plugin <path...>
  *
  * A path may be a PLUGIN.md file or a plugin directory (validates the root
  * PLUGIN.md if present plus every runtimes/<sub>/PLUGIN.md).
  *
  * Two passes per file:
- *  1. `parsePluginMd` — the loader's own compat parse (I18nText description
+ *  1. `parsePluginMd` — the loader's parse (I18nText description
  *     folding, lenient-field handling, line-numbered errors). This is what
  *     decides whether the plugin LOADS.
  *  2. `runtimeManifestAuthoringSchema` — the strict authoring target: every
  *     cross-field constraint enforced, including a required stage on
- *     auto/scheduled runtimes. Skipped with `--compat`, which checks only
- *     whether the manifest loads.
+ *     auto/scheduled runtimes. Validate the raw frontmatter so normalization
+ *     cannot hide an invalid declaration from authors.
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -24,13 +24,10 @@ import { parsePluginMd } from "../src/parse-plugin-md.js";
 import { runtimeManifestAuthoringSchema } from "@covel/shared";
 
 const args = process.argv.slice(2);
-const compatOnly = args.includes("--compat");
-const paths = args.filter((a) => a !== "--compat");
+const paths = args;
 
-if (paths.length === 0) {
-  console.error(
-    "Usage: pnpm validate:plugin <PLUGIN.md | plugin-dir>... [--compat]",
-  );
+if (paths.length === 0 || args.some((arg) => arg.startsWith("--"))) {
+  console.error("Usage: pnpm validate:plugin <PLUGIN.md | plugin-dir>...");
   process.exit(2);
 }
 
@@ -61,12 +58,9 @@ function collectManifestFiles(path: string): string[] {
 function validateFile(filePath: string): Record<string, unknown> | null {
   const content = readFileSync(filePath, "utf-8");
 
-  let manifest: Record<string, unknown>;
+  let parsed: ReturnType<typeof parsePluginMd>;
   try {
-    manifest = parsePluginMd(content, filePath).manifest as unknown as Record<
-      string,
-      unknown
-    >;
+    parsed = parsePluginMd(content, filePath);
   } catch (error: unknown) {
     console.error(`✗ ${filePath} (loader parse)`);
     console.error(
@@ -75,15 +69,11 @@ function validateFile(filePath: string): Record<string, unknown> | null {
     return null;
   }
 
-  if (compatOnly) {
-    console.log(`✓ ${filePath} (compat)`);
-    return manifest;
-  }
-
-  // parsePluginMd appends the derived pluginId; the strict schema rejects
-  // unknown keys, so strip it before the authoring pass.
-  const { pluginId: _derived, ...authoringInput } = manifest;
-  const result = runtimeManifestAuthoringSchema.safeParse(authoringInput);
+  // The loader may omit malformed optional fields after warning. The
+  // authoring contract must still reject their original declarations.
+  const result = runtimeManifestAuthoringSchema.safeParse(
+    parsed.rawFrontmatter,
+  );
   if (!result.success) {
     console.error(`✗ ${filePath} (authoring schema)`);
     for (const issue of result.error.issues) {
@@ -94,7 +84,7 @@ function validateFile(filePath: string): Record<string, unknown> | null {
     return null;
   }
   console.log(`✓ ${filePath}`);
-  return manifest;
+  return parsed.manifest as unknown as Record<string, unknown>;
 }
 
 // ── Cross-runtime (plugin-scope) checks ───────────────────────────

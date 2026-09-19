@@ -21,6 +21,12 @@ import {
 import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
 import type { ApprovalStatus, InputSlot, Proposal } from "@covel/shared";
+import { createToolExecutionContext } from "./tool-execution-context.js";
+import {
+  createToolExecutorLifetime,
+  waitForToolWork,
+} from "./tool-executor-lifetime.js";
+import { combineAbortSignals } from "../turn-executor/turn-control.js";
 
 // ── Structured tool error shape (returned to LLM) ────────────────
 
@@ -30,6 +36,7 @@ type ToolErrorCode =
   | "UNAUTHORIZED"
   | "INVALID_ARGS"
   | "VALIDATION_ERROR"
+  | "CANCELLED"
   | "EXECUTION_ERROR";
 
 function toolError(
@@ -55,6 +62,7 @@ export interface ToolCall {
 }
 
 export interface ToolCallContext {
+  readonly signal?: AbortSignal;
   readonly sessionId: string;
   readonly turnId: string;
   readonly pluginId: string;
@@ -108,6 +116,11 @@ export interface ToolExecutor {
   getToolInfo(name: string, context: ToolCallContext): ToolInfo | undefined;
 }
 
+export interface ManagedToolExecutor extends ToolExecutor {
+  /** Stop admission, cancel callers, and drain callbacks before closing their dependencies. */
+  close(): Promise<void>;
+}
+
 // ── Implementation ───────────────────────────────────────────────
 
 export interface ToolExecutorConfig {
@@ -116,7 +129,7 @@ export interface ToolExecutorConfig {
     name: string,
     context: ToolCallContext,
   ) => ToolModule | undefined;
-  /** Optional DataStore for recording tool calls. */
+  /** Optional DataStore for scoped tool reads and recording tool calls. */
   readonly store?: DataStore;
   /** Optional approval pipeline for permission checking. */
   readonly approval?: ApprovalPipeline;
@@ -212,8 +225,11 @@ function resolveToolModule(
   return config.findTool?.(name, context);
 }
 
-export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
-  return {
+export function createToolExecutor(
+  config: ToolExecutorConfig,
+): ManagedToolExecutor {
+  const lifetime = createToolExecutorLifetime();
+  const executor: ToolExecutor = {
     getToolInfo(name: string, context: ToolCallContext): ToolInfo | undefined {
       const tool = resolveToolModule(config, name, context);
       if (!tool) return undefined;
@@ -229,6 +245,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
       context: ToolCallContext,
     ): Promise<ToolCallResult> {
       const startTime = Date.now();
+      context.signal?.throwIfAborted();
 
       // 0. Runtime-level authorization. Enforced at the execution
       // boundary — after session overrides and PreToolUse replacement have
@@ -394,27 +411,36 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         };
       }
 
-      // Emit calling AFTER arg-parse so the trace carries the real arguments
-      await emitToolCalling(context, call, toolSource, approvalStatus);
-
       // 4. Execute
+      let invocation: ReturnType<typeof createToolExecutionContext> | undefined;
       try {
-        const execContext = {
-          sessionId: context.sessionId,
-          turnId: context.turnId,
-          pluginId: context.pluginId,
-          runtimeId: context.runtimeId,
-          inputSlots: context.inputSlots,
-          pendingProposals: context.pendingProposals,
-          emittedEventTopics: context.emittedEventTopics,
-          ...(context.turnNumber !== undefined
-            ? { turnNumber: context.turnNumber }
-            : {}),
-        };
-        const rawResult = await tool.execute(params, execContext);
-        const parsedResult = getToolContent(rawResult);
-        const pendingProposals = getPendingProposals(rawResult);
-        const emittedEvents = getEmittedEvents(rawResult);
+        invocation = createToolExecutionContext(context, config.store);
+        // Capture authority before any asynchronous trace work.
+        await emitToolCalling(context, call, toolSource, approvalStatus);
+        invocation.assertLive();
+        const active = invocation;
+        const work = lifetime.track(
+          (async () => {
+            try {
+              const rawResult = await tool.execute(params, active.context);
+              active.assertLive();
+              // Snapshot envelopes before cleanup or trace persistence can yield.
+              return {
+                parsedResult: structuredClone(getToolContent(rawResult)),
+                pendingProposals: structuredClone(
+                  getPendingProposals(rawResult),
+                ),
+                emittedEvents: structuredClone(getEmittedEvents(rawResult)),
+              };
+            } finally {
+              active.close();
+              await active.drain();
+            }
+          })(),
+        );
+        const { parsedResult, pendingProposals, emittedEvents } =
+          await waitForToolWork(work, context.signal!, () => active.close());
+        context.signal?.throwIfAborted();
 
         // Text-first convention: if the tool result is an object with a
         // `_text` string field, send ONLY the text as the LLM-facing payload
@@ -439,6 +465,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           true,
           approvalStatus,
         );
+        context.signal?.throwIfAborted();
         await emitToolCompleted(
           context,
           call,
@@ -447,6 +474,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           durationMs,
           approvalStatus,
         );
+        context.signal?.throwIfAborted();
         if (context.emitter && emittedEvents && emittedEvents.length > 0) {
           for (const event of emittedEvents) {
             await context.emitter.emit("domain-event.previewed", {
@@ -456,6 +484,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
               topic: event.topic,
               data: event.data,
             });
+            context.signal?.throwIfAborted();
           }
         }
         return {
@@ -469,11 +498,18 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           approvalStatus,
         };
       } catch (error: unknown) {
+        invocation?.close();
+        // The tracked callback owns its outstanding reads after cancellation.
+        // Waiting here would wedge the caller behind an uncooperative tool.
         let errorResult: string;
         let code: ToolErrorCode;
         let details: string[] | undefined;
         let message: string;
-        if (error instanceof ToolValidationError) {
+        if (context.signal?.aborted) {
+          code = "CANCELLED";
+          message = "Tool execution was cancelled";
+          errorResult = toolError(code, message);
+        } else if (error instanceof ToolValidationError) {
           // Dedupe Zod issues by path so only the FIRST issue on any given
           // field is reported. Zod v4 has a quirk where `z.array(...).max(N)`
           // will emit a bogus `too_big: expected string to have <=N characters`
@@ -533,8 +569,30 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           success: false,
           approvalStatus,
         };
+      } finally {
+        invocation?.close();
       }
     },
+  };
+  return {
+    getToolInfo(name, context) {
+      lifetime.assertOpen();
+      return executor.getToolInfo(name, context);
+    },
+    execute(call, context) {
+      try {
+        lifetime.assertOpen();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return lifetime.track(
+        executor.execute(call, {
+          ...context,
+          signal: combineAbortSignals(context.signal, lifetime.signal),
+        }),
+      );
+    },
+    close: () => lifetime.close(),
   };
 }
 

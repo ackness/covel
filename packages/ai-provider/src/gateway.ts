@@ -100,6 +100,15 @@ export function createGateway(deps: GatewayDependencies) {
 
   const { runOperation } = createRunOperation(deps, resolveSlotOrPassthrough);
 
+  function resolveTextTargets(
+    presetId: string | undefined,
+    options: GatewayOptions | undefined,
+  ): ResolvedTarget[] {
+    return options?.allowFallback === false
+      ? [deps.presetRegistry.resolveTextTarget({ presetId })]
+      : deps.presetRegistry.resolveTextTargetChain({ presetId });
+  }
+
   async function generateText(
     input: {
       presetId?: string;
@@ -116,8 +125,7 @@ export function createGateway(deps: GatewayDependencies) {
         presetId: input.presetId,
         mode: "text",
         fallbackTag: "text",
-        resolveTargets: (presetId) =>
-          deps.presetRegistry.resolveTextTargetChain({ presetId }),
+        resolveTargets: (presetId) => resolveTextTargets(presetId, options),
         execute: async (target, resolved) => {
           const result = await resolved.adapter.generateText(
             configWithSignal(resolved.config, options, {
@@ -167,8 +175,7 @@ export function createGateway(deps: GatewayDependencies) {
         // resolver has no separate "object" tag.
         mode: "object",
         fallbackTag: "text",
-        resolveTargets: (presetId) =>
-          deps.presetRegistry.resolveTextTargetChain({ presetId }),
+        resolveTargets: (presetId) => resolveTextTargets(presetId, options),
         execute: async (target, resolved) => {
           const result = await resolved.adapter.generateObject(
             configWithSignal(resolved.config, options, {
@@ -232,19 +239,18 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions,
   ): AsyncIterable<StreamEvent> {
-    const targets = deps.presetRegistry
-      .resolveTextTargetChain({
-        presetId: resolveSlotOrPassthrough(input.presetId, "text", options),
-      })
-      .map((target, index) =>
-        applyRequestCapabilityOverlay(
-          target,
-          input.presetId,
-          options?.slotOverrides,
-          options?.capabilityOverridePolicy ?? "restrict-only",
-          index === 0,
-        ),
-      );
+    const targets = resolveTextTargets(
+      resolveSlotOrPassthrough(input.presetId, "text", options),
+      options,
+    ).map((target, index) =>
+      applyRequestCapabilityOverlay(
+        target,
+        input.presetId,
+        options?.slotOverrides,
+        options?.capabilityOverridePolicy ?? "restrict-only",
+        index === 0,
+      ),
+    );
     let lastError: AiProviderError | null = null;
 
     for (const [index, target] of targets.entries()) {

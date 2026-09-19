@@ -116,6 +116,7 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
     // The persisted phase is stable; the route must not synthesize a phase
     // transition for every action.
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -123,13 +124,12 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: sessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     const eventBus = createEventBus(store);
@@ -214,6 +214,7 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
 
     const pendingSessionId = "sess-pending-pregame";
     await store.createSession({
+      locale: "zh-CN",
       phase: "setup",
       setupRuntimes: {
         [PREGAME_ID]: {
@@ -228,13 +229,12 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: pendingSessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: ["char-creator"],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     const res = await app.request("/api/actions", {

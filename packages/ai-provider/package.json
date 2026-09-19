@@ -1,12 +1,24 @@
 {
   "name": "@covel/ai-provider",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "private": true,
   "type": "module",
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./config": {
+      "types": "./src/config/llm-loader.ts",
+      "import": "./src/config/llm-loader.ts"
+    },
+    "./image-wires": {
+      "types": "./src/image/wire-registry.ts",
+      "import": "./src/image/wire-registry.ts"
+    },
+    "./url-safety": {
+      "types": "./src/adapters/http/url-safety.ts",
+      "import": "./src/adapters/http/url-safety.ts"
     }
   },
   "scripts": {

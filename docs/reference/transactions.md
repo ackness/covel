@@ -3,7 +3,7 @@
 > Covel's `DataStore` interface exposes a single scoped transaction contract —
 > `withTransaction(fn)` — that every backend must honor. This document captures
 > the contract, the per-backend implementation strategy, and how the kernel uses
-> transactional commits whenever the active store backend exposes it.
+> transactional commits required by every DataStore backend.
 
 ## Contract
 
@@ -17,10 +17,10 @@ interface DataStore {
    * re-thrown to the caller). No shared/global handle is mutated, so the tx scope
    * is bound to the single `fn` invocation.
    *
-   * Optional so partial mock stores remain assignable; all bundled backends
-   * implement it.
+   * Required for every DataStore, including test doubles used by the
+   * execution finalizer.
    */
-  withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
+  withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T>;
 }
 ```
 
@@ -71,10 +71,10 @@ can still fail after a valid story; their failure does not discard the story.
 ### MemoryStore
 
 Two-phase snapshot using a **shallow reference copy** of each collection
-(`new Map(value)` / `[...value]`), not a deep clone. On transaction start the
-store snapshots every collection (sessions, turn results, characters, plugin
-data, etc.) by copying the container while sharing the same record references. On
-rollback it clears each collection in place and refills it from the shadow so
+(`new Map(value)` / `[...value]`), not a deep clone. The transaction lazily
+captures each collection on its first write, using the method-to-collection
+mapping in `WRITE_METHOD_TOUCHES`. Unknown mutators conservatively capture all
+collections. On rollback it restores the captured collections in place so
 that any existing references the caller is holding stay valid. On commit it simply
 discards the shadow.
 
@@ -242,8 +242,8 @@ server transaction API in the browser.
 - `finalizeExecution`（`packages/runtime/src/commit/finalize-execution.ts`）把
   **整个 execution**——顶层结果加上拍平后的嵌套 `recursiveCall` 结果——的所有
   runtime 一起包进 **一个** `withTransaction`。三个提交拥有方
-  （`actions.ts` / `plugin-rpc/runtime-turn.ts` / `resume.ts`）现在都经它收口，
-  不再手写逐 runtime 的提交循环。
+  （`actions.ts` / `plugin-rpc/runtime-turn.ts` / `resume.ts`）通过 `commitExecution`
+  进入这个边界，再由同一宿主入口协调通知、快照和记忆调度。
 
 > **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
 > `recursiveCall` 结果）聚合进单一事务：
@@ -281,28 +281,36 @@ server transaction API in the browser.
 >   `framework.submit-form` 再用 store transaction 原子提交批量 player input。因而同一 session
 >   的 turn 与重复表单提交不会穿插，PG 多进程部署也由同一分布式锁键串行化。
 >
-> **降级**：不暴露 `withTransaction` 的 store（薄测试 mock / 旧后端）退回逐条提交，
-> 不承诺跨 runtime 回滚——与这些 store 一贯的尽力而为语义一致，并 warn 一次。
+> **必需事务**：`finalizeExecution` 要求完整 DataStore，直接调用 `withTransaction`，
+> 不提供无事务回合提交的降级。底层 `commitAll` 接收到 `StoreTransaction` 视图时不再开
+> 嵌套事务，而是复用调用方的事务；这个分支不代表完整 DataStore 可以省略事务实现。
 >
 > 注意 fork（`snapshots.ts`）仍是独立的会话重建事务：它重放快照、**不提交任何
 > proposal**，因此不经 `finalizeExecution`——两者共享"一个 `withTransaction` 包住整个
 > 写入序列"的模式，但属于不同关注点。
 
 ```ts
-// finalizeExecution: 整个 execution 的所有 runtime 结果进入单一事务。
-if (typeof store.withTransaction === "function") {
-  await store.withTransaction(async (tx) => {
-    for (const result of results) {
-      const out = await processRuntimeResult(result, tx, ...);
-      if (out.failedProposals.length > 0) throw new ProposalCommitFailure(...); // → 整回合回滚
+// finalizeExecution: all runtime results share one required transaction.
+await store.withTransaction(async (tx) => {
+  for (const result of results) {
+    const out = await processRuntimeResult(
+      result,
+      tx,
+      sessionId,
+      kindOf(result),
+      opts,
+    );
+    if (out.failedProposals.length > 0) {
+      throw new ProposalCommitFailure(out.failedProposals);
     }
-    for (const message of journalMessages) await tx.appendTurnMessage(message);
-    await extraInTx?.(tx); // caller 专属的事务内追加写（resume）
-    for (const turnId of turnIds) await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
-  });
-  // COMMIT 之后才 flush 缓冲的 fan-out；回滚则丢弃。
-}
-// 无 withTransaction 时降级为逐条提交，不承诺跨 runtime 回滚。
+  }
+  for (const message of journalMessages) await tx.appendTurnMessage(message);
+  await extraInTx?.(tx);
+  for (const turnId of turnIds) {
+    await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
+  }
+});
+// Flush buffered notifications only after COMMIT; discard them on rollback.
 ```
 
 ## World Data import
@@ -377,3 +385,9 @@ the affected table in the relevant reference doc.
 - **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑（新扫描会把该改动报为正常 conflict）或显式 `force`。路由同时持 SessionLock，挡住回合并发写。
 - **媒体副作用仍在 DB 事务内**（`deferMediaFinalize: false`）。DB 回滚无法撤销已写入的 media bytes，因此 materialize 过程使用**增量补偿栈**：每次 `put` 成功立即登记，中途失败也能清理已落盘的资产。
 - **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。
+
+核心记忆恢复任务也进入 `commitExecution` 的故事事务：宿主可提供 `memorySystem.updater.stageAfterTurn(tx, input)`，将叙事、已提交角色事实及模型槽标识存入保留命名空间，不保存凭据。存储失败会使本次提交失败，避免出现已承诺故事但没有恢复任务的间隙。
+
+服务器在提交后异步处理任务，并在下一次回合或会话修改之前通过 `awaitPending` 补做中断任务。核心记忆使用独立的 `memory-core` 锁；PostgreSQL 宿主提供 advisory lock，向量摄取使用另一个锁键。最终核心块、面板镜像和任务删除在同一个事务中提交；存储失败保留任务，已完成任务不再提取。模型响应失败按既有错误状态和 trace 报告后终结，避免旧失败任务越过新故事重新写入。恢复使用下一请求的 adapter/slot，不保存或重放旧 API Key。进程重启后按会话访问恢复，不在启动时调用所有会话的模型。
+
+恢复记录的会话归属取自存储行，payload 不冗余保存 sessionId；快照分支复制后仅处理子会话自身的任务与核心块。正常关机仍等待已登记的后台任务。独立消费者未提供 stageAfterTurn 时保留原有进程内 best-effort 更新行为。

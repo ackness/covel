@@ -18,10 +18,17 @@ import {
   reduceTurnResumed,
   reduceTurnSuspended,
 } from "./event-reducers.js";
+import {
+  invalidateSessionResource,
+  refreshSessionResource,
+} from "./session-resource-reads.js";
 import { toStreamMessages } from "./restore-session.js";
 import { addBlockMessageFromSse } from "./sse-handler.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
 import {
   buildDeferredExecutionStep,
   buildJobStatusExecutionStep,
@@ -38,11 +45,13 @@ interface UseSessionSubscriptionOptions {
   dispatch: (action: SessionAction) => void;
   workspace: SessionWorkspace;
   sessionIdRef: MutableRef<string | null>;
+  sessionGenerationRef: MutableRef<number>;
   stateRef: MutableRef<SessionState>;
   activeTurnIdRef: MutableRef<string | null>;
 }
 
 interface ExecutionObservation {
+  onSnapshotApplied?: () => void;
   stateRef: MutableRef<SessionState>;
   activeTurnIdRef: MutableRef<string | null>;
 }
@@ -83,12 +92,15 @@ export function isCurrentSubscriptionEvent(
 export function createSubscriptionEventHandler(
   options: Pick<
     UseSessionSubscriptionOptions,
-    "dispatch" | "workspace" | "sessionIdRef" | "stateRef"
+    "dispatch" | "sessionIdRef" | "stateRef"
   > & {
     onReset: () => void;
+    isCurrent: () => boolean;
+    getRecoveryGeneration: () => number;
   },
 ) {
   return (event: SubscriptionEvent): void => {
+    if (!options.isCurrent()) return;
     switch (event.type) {
       case "interaction.requested":
       case "ui.rendered": {
@@ -118,43 +130,57 @@ export function createSubscriptionEventHandler(
       case "plugin.deactivated": {
         const currentSid = options.sessionIdRef.current;
         if (currentSid) {
-          api
-            .listSessionPlugins(currentSid)
-            .then((res) => {
-              if (options.sessionIdRef.current !== currentSid) return;
-              options.dispatch({
-                type: "LOAD_SESSION_PLUGINS",
-                plugins: [...res.items],
-                commands: [...res.commands],
-              });
-            })
-            .catch(ignoreError("reload session plugins on plugin toggle"));
+          const recovery = options.getRecoveryGeneration();
+          invalidateSessionResource(options.dispatch, ["ui-specs", currentSid]);
+          void refreshSessionResource(
+            options.dispatch,
+            ["plugins", currentSid],
+            {
+              isCurrent: () =>
+                options.isCurrent() &&
+                options.sessionIdRef.current === currentSid &&
+                recovery === options.getRecoveryGeneration(),
+              read: () => api.listSessionPlugins(currentSid),
+              apply: (res) =>
+                options.dispatch({
+                  type: "LOAD_SESSION_PLUGINS",
+                  plugins: [...res.items],
+                  commands: [...res.commands],
+                }),
+            },
+          ).catch(ignoreError("reload session plugins on plugin toggle"));
         }
         break;
       }
       case "world.dimensions.changed": {
-        const worldId = event.payload?.worldId as string | undefined;
+        const worldId = event.payload?.worldId;
         const currentSid = options.sessionIdRef.current;
-        if (worldId) {
-          api
-            .getWorld(worldId)
-            .then((world) => {
-              if (options.sessionIdRef.current !== currentSid) return;
-              options.dispatch({ type: "UPDATE_WORLD", world });
-            })
-            .catch(ignoreError("refresh world on dimensions changed"));
+        if (
+          typeof worldId === "string" &&
+          worldId &&
+          worldId === options.stateRef.current.session?.worldId
+        ) {
+          const recovery = options.getRecoveryGeneration();
+          void refreshSessionResource(options.dispatch, ["world", worldId], {
+            isCurrent: () =>
+              options.isCurrent() &&
+              options.sessionIdRef.current === currentSid &&
+              options.stateRef.current.session?.worldId === worldId &&
+              recovery === options.getRecoveryGeneration(),
+            read: () => api.getWorld(worldId),
+            apply: (world) => options.dispatch({ type: "UPDATE_WORLD", world }),
+          }).catch(ignoreError("refresh world on dimensions changed"));
         }
         break;
       }
       case "plugin-data.changed": {
-        reducePluginDataChanged(options.dispatch, event.payload ?? {});
+        reducePluginDataChanged(
+          options.dispatch,
+          event.payload ?? {},
+          event.sessionId,
+        );
         if (containsTerminalBackgroundJob(event.payload ?? {})) {
-          const actionId = event.id
-            ? `background:${event.id}`
-            : `background:${crypto.randomUUID()}`;
-          options.workspace
-            .checkpoint(event.sessionId, actionId)
-            .catch(ignoreError("checkpoint terminal background job"));
+          options.onReset();
         }
         break;
       }
@@ -181,6 +207,9 @@ export function createSubscriptionEventHandler(
         const step = buildJobStatusExecutionStep(payload, existing);
         if (step) {
           options.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
+          // Detached calls finish outside the action stream. Recover their traces.
+          if (["completed", "failed", "skipped"].includes(step.status))
+            options.onReset();
         }
         break;
       }
@@ -218,103 +247,131 @@ export async function rehydrateSessionSideState(
   const isCurrent = (): boolean =>
     sessionIdRef.current === sessionId && isRevisionCurrent();
 
-  const pluginsTask = api
-    .listSessionPlugins(sessionId)
-    .then(async (res) => {
-      if (!isCurrent()) return;
-      dispatch({
-        type: "LOAD_SESSION_PLUGINS",
-        plugins: [...res.items],
-        commands: [...res.commands],
-      });
-      const rowsByPlugin = await Promise.all(
-        res.items
-          .filter((plugin) => plugin.active)
-          .map(async ({ id: pluginId }) => ({
+  const pluginsTask = (async () => {
+    const loaded: { plugins?: api.SessionPlugin[] } = {};
+    await refreshSessionResource(dispatch, ["plugins", sessionId], {
+      isCurrent,
+      read: () => api.listSessionPlugins(sessionId),
+      apply: (res) => {
+        loaded.plugins = [...res.items];
+        dispatch({
+          type: "LOAD_SESSION_PLUGINS",
+          plugins: loaded.plugins,
+          commands: [...res.commands],
+        });
+      },
+    });
+    if (!loaded.plugins || !isCurrent()) return;
+    const activePlugins = loaded.plugins.filter((plugin) => plugin.active);
+    await refreshSessionResource(dispatch, ["plugin-data", sessionId], {
+      isCurrent,
+      read: () =>
+        Promise.all(
+          activePlugins.map(async ({ id: pluginId }) => ({
             pluginId,
             rows: await api.listPluginData(sessionId, pluginId),
           })),
-      );
-      if (!isCurrent()) return;
-
-      const pluginData: PluginData = {};
-      for (const { pluginId, rows } of rowsByPlugin) {
-        const namespaces: Record<string, Record<string, unknown>> = {};
-        for (const row of rows) {
-          (namespaces[row.namespace] ??= {})[row.key] = row.value;
+        ),
+      apply: (rowsByPlugin) => {
+        const pluginData: PluginData = Object.create(null);
+        for (const { pluginId, rows } of rowsByPlugin) {
+          const namespaces: Record<
+            string,
+            Record<string, unknown>
+          > = Object.create(null);
+          for (const row of rows)
+            (namespaces[row.namespace] ??= Object.create(null))[row.key] =
+              row.value;
+          pluginData[pluginId] = namespaces;
         }
-        pluginData[pluginId] = namespaces;
-      }
-      replaceSessionPluginData(sessionId, pluginData);
-      dispatch({ type: "REPLACE_PLUGIN_DATA", pluginData });
-    })
-    .catch(ignoreError("reload session plugins and data after reconnect"));
+        replaceSessionPluginData(sessionId, pluginData);
+        dispatch({ type: "REPLACE_PLUGIN_DATA", pluginData });
+      },
+    });
+  })().catch(ignoreError("reload session plugins and data after reconnect"));
 
-  const snapshotTask = api
-    .getSessionView(sessionId)
-    .then(async (snapshot) => {
-      if (!isCurrent()) return;
-      dispatch({
-        type: "MERGE_RECOVERED_MESSAGES",
-        messages: toStreamMessages(snapshot.messages),
-      });
-      dispatch({
-        type: "SET_GAME_STATE",
-        state: enrichGameStateFromSnapshot(snapshot),
-      });
-      const execution = snapshot.execution;
-      const state = executionObservation?.stateRef.current;
-      if (
-        execution &&
-        executionObservation &&
-        state?.session?.id === sessionId &&
-        initialExecutionOwner === executionOwner(executionObservation)
-      ) {
-        const ownsStream = state.executing && !state.executionRecovery;
-        const interruptedCurrentStream =
-          execution.state === "interrupted" &&
-          !!execution.turnId &&
-          execution.turnId === executionObservation.activeTurnIdRef.current;
-        // A healthy POST stream remains authoritative for its live steps.
-        // Only confirmed interruption of that exact turn transfers ownership;
-        // disconnected/refresh sessions can adopt every server state.
-        if (!ownsStream || interruptedCurrentStream) {
+  const snapshotTask = (async () => {
+    let worldId: string | undefined;
+    await refreshSessionResource(
+      dispatch,
+      ["game-state", sessionId, "reconnect"],
+      {
+        isCurrent,
+        read: () => api.getSessionView(sessionId),
+        apply: (snapshot) => {
           dispatch({
-            type: "LOAD_EXECUTION_STEPS",
-            steps: reconcileExecutionSteps(
-              state.executionSteps,
-              snapshot.executionSteps,
-              execution,
-            ),
+            type: "MERGE_RECOVERED_MESSAGES",
+            messages: toStreamMessages(snapshot.messages),
           });
-          dispatch({
-            type: "SET_SESSION",
-            session: { ...state.session, ...snapshot.session },
-          });
-          dispatch({
-            type: "SET_EXECUTION_RECOVERY",
-            recovery: {
-              sessionId,
-              status: execution,
-              checking: false,
-              hydrating: false,
-            },
-          });
-        }
-      }
-      const worldId = snapshot.session.worldId;
-      if (!worldId) return;
-      const world = await api.getWorld(worldId);
-      if (isCurrent()) dispatch({ type: "UPDATE_WORLD", world });
-    })
-    .catch(ignoreError("refresh session snapshot and world after reconnect"));
+          publishSessionGameState(
+            dispatch,
+            sessionId,
+            enrichGameStateFromSnapshot(snapshot),
+          );
+          executionObservation?.onSnapshotApplied?.();
+          const execution = snapshot.execution;
+          const state = executionObservation?.stateRef.current;
+          if (
+            execution &&
+            executionObservation &&
+            state?.session?.id === sessionId &&
+            initialExecutionOwner === executionOwner(executionObservation)
+          ) {
+            const ownsStream = state.executing && !state.executionRecovery;
+            const interruptedCurrentStream =
+              execution.state === "interrupted" &&
+              !!execution.turnId &&
+              execution.turnId === executionObservation.activeTurnIdRef.current;
+            // A healthy POST stream remains authoritative for its live steps.
+            // Only confirmed interruption of that exact turn transfers ownership;
+            // disconnected/refresh sessions can adopt every server state.
+            if (!ownsStream || interruptedCurrentStream) {
+              dispatch({
+                type: "LOAD_EXECUTION_STEPS",
+                steps: reconcileExecutionSteps(
+                  state.executionSteps,
+                  snapshot.executionSteps,
+                  execution,
+                ),
+              });
+              dispatch({
+                type: "SET_SESSION",
+                session: { ...state.session, ...snapshot.session },
+              });
+              dispatch({
+                type: "SET_EXECUTION_RECOVERY",
+                recovery: {
+                  sessionId,
+                  status: execution,
+                  checking: false,
+                  hydrating: false,
+                },
+              });
+            }
+          }
+          worldId = snapshot.session.worldId;
+        },
+      },
+    );
+    if (!worldId || !isCurrent()) return;
+    const targetWorldId = worldId;
+    await refreshSessionResource(dispatch, ["world", worldId], {
+      isCurrent,
+      read: () => api.getWorld(targetWorldId),
+      apply: (world) => dispatch({ type: "UPDATE_WORLD", world }),
+    });
+  })().catch(ignoreError("refresh session snapshot and world after reconnect"));
 
-  const suspensionsTask = api
-    .listSuspensions(sessionId)
-    .then((suspensions) => {
-      if (isCurrent()) dispatch({ type: "SET_SUSPENSIONS", suspensions });
-    })
-    .catch(ignoreError("refresh suspensions after reconnect"));
+  const suspensionsTask = refreshSessionResource(
+    dispatch,
+    ["suspensions", sessionId],
+    {
+      isCurrent,
+      read: () => api.listSuspensions(sessionId),
+      apply: (suspensions) =>
+        dispatch({ type: "SET_SUSPENSIONS", suspensions }),
+    },
+  ).catch(ignoreError("refresh suspensions after reconnect"));
 
   await Promise.all([pluginsTask, snapshotTask, suspensionsTask]);
 }
@@ -324,9 +381,11 @@ export function useSessionSubscription({
   dispatch,
   workspace,
   sessionIdRef,
+  sessionGenerationRef,
   stateRef,
   activeTurnIdRef,
 }: UseSessionSubscriptionOptions): void {
+  const sessionGeneration = sessionGenerationRef.current;
   const subscriptionRef = useRef<SessionSubscription | null>(null);
 
   useEffect(() => {
@@ -343,42 +402,59 @@ export function useSessionSubscription({
       subscriptionRef.current.close();
     }
 
+    let closed = false;
+    const isCurrent = (): boolean =>
+      !closed &&
+      sessionIdRef.current === sessionId &&
+      sessionGenerationRef.current === sessionGeneration;
     let recoveryGeneration = 0;
     let recovering = false;
+    let stateRefreshPending = false;
     let bufferedEvents: SubscriptionEvent[] = [];
     let hasConnected = false;
 
     let startRecovery: () => void = () => undefined;
     const applySubscriptionEvent = createSubscriptionEventHandler({
       dispatch,
-      workspace,
       sessionIdRef,
       stateRef,
       onReset: () => startRecovery(),
+      isCurrent,
+      getRecoveryGeneration: () => recoveryGeneration,
     });
 
     startRecovery = (): void => {
+      if (!isCurrent()) return;
       const generation = ++recoveryGeneration;
       recovering = true;
+      stateRefreshPending = false;
       bufferedEvents = [];
-      const observation = { stateRef, activeTurnIdRef };
+      let snapshotPublished = false;
+      const observation = {
+        stateRef,
+        activeTurnIdRef,
+        onSnapshotApplied: () => {
+          snapshotPublished = true;
+          stateRefreshPending = false;
+        },
+      };
       const owner = executionOwner(observation);
       void rehydrateSessionSideState(
         sessionId,
         sessionIdRef,
         dispatch,
-        () => generation === recoveryGeneration,
+        () => isCurrent() && generation === recoveryGeneration,
         observation,
       ).then(() => {
-        if (
-          generation !== recoveryGeneration ||
-          sessionIdRef.current !== sessionId
-        ) {
+        if (generation !== recoveryGeneration || !isCurrent()) {
           return;
         }
         // If a POST started/ended or moved to its opening continuation during
         // the read, obtain a fresh snapshot before transferring ownership.
-        if (owner !== executionOwner(observation)) {
+        if (
+          owner !== executionOwner(observation) ||
+          (snapshotPublished && stateRefreshPending)
+        ) {
           startRecovery();
           return;
         }
@@ -394,10 +470,36 @@ export function useSessionSubscription({
       // switch, the old stream can therefore deliver one last event after
       // restoreSession has already rebound the shared stores to the new id.
       // Reject both stale connections and malformed/cross-session envelopes.
-      if (!isCurrentSubscriptionEvent(event, sessionId, sessionIdRef.current)) {
+      if (
+        !isCurrent() ||
+        !isCurrentSubscriptionEvent(event, sessionId, sessionIdRef.current)
+      ) {
         return;
       }
-      if (event.type === "system.reset") {
+      if (
+        event.type === "plugin-data.changed" &&
+        containsTerminalBackgroundJob(event.payload ?? {})
+      ) {
+        // Recovery can replace buffered projections. Checkpoint the committed
+        // background result on receipt, independently of projection replay.
+        const actionId = event.id
+          ? `background:${event.id}`
+          : `background:${crypto.randomUUID()}`;
+        workspace
+          .checkpoint(event.sessionId, actionId)
+          .catch(ignoreError("checkpoint terminal background job"));
+      }
+      if (
+        event.type === "state.changed" ||
+        event.type === "character.upserted"
+      ) {
+        // These are committed state notifications. Reuse the in-flight snapshot
+        // read instead of buffering reset triggers or duplicating action-stream
+        // patch history. A notice after publication needs one follow-up recovery.
+        invalidateSessionResource(dispatch, ["game-state", sessionId]);
+        if (recovering) stateRefreshPending = true;
+        else startRecovery();
+      } else if (event.type === "system.reset") {
         startRecovery();
       } else if (recovering) {
         // Apply live changes after the authoritative snapshot so an older HTTP
@@ -409,7 +511,11 @@ export function useSessionSubscription({
     };
 
     const handleConnectionStateChange = (next: ConnectionState): void => {
+      if (!isCurrent()) return;
       setConnectionState(next);
+      // Even a tab opened in the background can miss state changes before its
+      // first subscription. Recover on visibility resume as on a reconnect.
+      if (next === "paused") hasConnected = true;
       if (next === "connected") {
         const reconnected = hasConnected;
         hasConnected = true;
@@ -430,11 +536,21 @@ export function useSessionSubscription({
     sub.on("*", handleSubscriptionEvent);
 
     return () => {
+      closed = true;
       sub.close();
       recoveryGeneration += 1;
       bufferedEvents = [];
       subscriptionRef.current = null;
       setConnectionState("closed");
     };
-  }, [sessionId, dispatch, workspace, sessionIdRef, stateRef, activeTurnIdRef]);
+  }, [
+    sessionId,
+    sessionGeneration,
+    sessionGenerationRef,
+    dispatch,
+    workspace,
+    sessionIdRef,
+    stateRef,
+    activeTurnIdRef,
+  ]);
 }

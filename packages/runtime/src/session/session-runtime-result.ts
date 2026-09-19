@@ -34,9 +34,10 @@ export interface ProcessRuntimeResultOutput {
  * Process a single RuntimeResult through the full Kernel pipeline:
  *   RuntimeResult → normalizeOutput → commitAll → SessionEvent[]
  *
- * This is the single entry point that actions.ts should call for each
- * runtime result. It handles: normalization, persistence, tracing,
- * and event generation.
+ * This lower-level operation handles normalization, persistence, tracing,
+ * and event generation for one result. Hosts commit a complete execution
+ * through commitExecution, whose finalizer calls this inside one transaction
+ * for all top-level and nested results.
  *
  * Returns a structured result with both successful events and failed proposals.
  * Returns empty arrays for failed/skipped runtimes.

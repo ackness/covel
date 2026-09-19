@@ -231,7 +231,7 @@ function isValidForSpec(value: unknown, spec: PluginUserSettingSpec): boolean {
 }
 
 export function resolveUserSettings(
-  manifest: RuntimeManifest,
+  manifest: Pick<RuntimeManifest, "pluginId" | "userSettings">,
   allUserSettings: TurnInput["userSettings"],
 ): Readonly<Record<string, unknown>> | undefined {
   const specs = manifest.userSettings;

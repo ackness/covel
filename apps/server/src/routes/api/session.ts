@@ -13,14 +13,17 @@
  *   DELETE /api/sessions/:id/plugins/:pluginId — disable a plugin
  */
 
+import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { isSetupRuntime, readRuntimeEnv } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { SessionRecord } from "@covel/store";
-import { SessionAlreadyExistsError } from "@covel/store";
+import { SessionAlreadyExistsError } from "@covel/store/errors";
 import { runSessionStartHook, runWithHookScope } from "@covel/runtime";
 import { errorBody, readJsonBody } from "../../api-error.js";
+import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
+import { loadSessionHookScope } from "./session/hook-scope.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import {
   cleanupWorldDataMediaRefs,
@@ -41,6 +44,7 @@ import {
   resolveSessionParam,
   sessionIncarnationIdentity,
   publicSessionMetadata,
+  publicSessionIncarnation,
   SESSION_APPROVAL_SCOPE_KEY,
   SESSION_DELETION_PENDING_KEY,
   SESSION_INCARNATION_KEY,
@@ -109,14 +113,12 @@ function sessionHasSetupRuntime(
 /**
  * Prepare a session for the wire by stripping internal metadata credentials.
  */
-function sanitizeSessionForResponse<
-  T extends {
-    readonly metadata?: Record<string, unknown> | null;
-  },
->(session: T): T {
-  if (!session.metadata) return session;
+function sanitizeSessionForResponse<T extends SessionRecord>(
+  session: T,
+): T & { readonly incarnation: string } {
   return {
     ...session,
+    incarnation: publicSessionIncarnation(session),
     metadata: publicSessionMetadata(session.metadata),
   };
 }
@@ -182,6 +184,16 @@ sessionRoutes.post("/", async (c) => {
   const pluginRegistry = c.get("pluginRegistry");
   const worldsDirs = c.get("worldsDirs");
   const covelHome = c.get("covelHome");
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
+      decodedUserSettings.status,
+    );
+  }
+
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
@@ -225,6 +237,15 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
+  if (rawWorldId) {
+    const worldAccess = await withWritableWorld(
+      c,
+      rawWorldId,
+      async () => undefined,
+    );
+    if (worldAccess instanceof Response) return worldAccess;
+  }
+
   // Owner token: minted on every tier so a session created
   // locally keeps working if the deployment is later promoted to a hosted
   // tier. Only the hash is persisted; the raw token is returned once below.
@@ -248,7 +269,6 @@ sessionRoutes.post("/", async (c) => {
   const session: SessionRecord = {
     id,
     worldId: rawWorldId,
-    ...(parsedCreate.presetId ? { presetId: parsedCreate.presetId } : {}),
     // Validate the untrusted locale: it flows into locale-variant file-path
     // construction (world-data importer) and localized prompt text, so an
     // invalid/attacker-controlled value must never be stored verbatim.
@@ -261,12 +281,22 @@ sessionRoutes.post("/", async (c) => {
     createdAt: now,
     updatedAt: now,
     metadata: {
+      ...(parsedCreate.loreOverride !== undefined
+        ? { loreOverride: parsedCreate.loreOverride }
+        : {}),
       [SESSION_OWNER_TOKEN_HASH_KEY]: owner.tokenHash,
       [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
       [SESSION_INCARNATION_KEY]: randomUUID(),
       [SESSION_LIFECYCLE_PENDING_KEY]: startLifecycle,
     },
   };
+
+  const startScope = await loadSessionHookScope({
+    store,
+    pluginRegistry,
+    session,
+    userSettings: decodedUserSettings.settings,
+  });
 
   // Planning reads world files and may run approved/builtin projection code.
   // Do that before taking the session lock or opening the DB transaction; the
@@ -293,7 +323,9 @@ sessionRoutes.post("/", async (c) => {
   // update atomic with delete/recreate. Plugin hooks run after releasing this
   // main lock: hook code may call back through the HTTP API and must be able to
   // acquire the session lock without deadlocking.
-  const created = await sessionLock.withLock(id, async () => {
+  let creationStarted = false;
+  const commitCreation = async () => {
+    creationStarted = true;
     // Scoped transaction: createSession + world-data import + blueprint
     // fallback commit atomically. Writes flow through the tx-bound view (`tx`),
     // so a mid-import failure auto-rolls-back the session row — and on
@@ -380,15 +412,32 @@ sessionRoutes.post("/", async (c) => {
       );
       return { runStartHook: false };
     }
-  });
-  if (created instanceof Response) return created;
+  };
+  let created: Awaited<ReturnType<typeof commitCreation>> | Response;
+  try {
+    created = await sessionLock.withLock(id, () =>
+      rawWorldId
+        ? withWritableWorld(c, rawWorldId, commitCreation)
+        : commitCreation(),
+    );
+  } catch (error) {
+    if (!creationStarted)
+      await cleanupWorldDataMediaRefs({
+        mediaStore: c.get("mediaStore"),
+        refs: preparedMediaRefs,
+      });
+    throw error;
+  }
+  if (created instanceof Response) {
+    if (!creationStarted)
+      await cleanupWorldDataMediaRefs({
+        mediaStore: c.get("mediaStore"),
+        refs: preparedMediaRefs,
+      });
+    return created;
+  }
 
   const expectedIncarnation = sessionIncarnationIdentity(session);
-  const startScope = {
-    activePluginIds: new Set(
-      plugins.filter((p): p is string => typeof p === "string"),
-    ),
-  };
   if (created.runStartHook) {
     try {
       await runWithHookScope(startScope, () =>
@@ -497,6 +546,16 @@ sessionRoutes.patch("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const expectedIncarnation = sessionIncarnationIdentity(guard.session);
 
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
+      decodedUserSettings.status,
+    );
+  }
+
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
@@ -574,6 +633,15 @@ sessionRoutes.patch("/:id", async (c) => {
         }
       : updates;
 
+    const hookScope = fireEnd
+      ? await loadSessionHookScope({
+          store,
+          pluginRegistry: c.get("pluginRegistry"),
+          session,
+          userSettings: decodedUserSettings.settings,
+        })
+      : undefined;
+
     await store.updateSession(id, persistedUpdates);
 
     return {
@@ -581,17 +649,18 @@ sessionRoutes.patch("/:id", async (c) => {
       merged: { ...session, ...persistedUpdates },
       fireEnd,
       endLifecycle,
+      hookScope,
     };
   });
   if (updated instanceof Response) return updated;
 
-  if (updated.fireEnd) {
+  if (updated.hookScope) {
     c.get("clearSessionToolOverrides")?.(id);
     await fireSessionEnd(
       c.get("hookPipeline"),
       c.get("eventBus"),
       id,
-      updated.session.activePlugins,
+      updated.hookScope,
       "ended",
     );
   }

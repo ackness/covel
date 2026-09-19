@@ -318,7 +318,7 @@ interface UIRenderPart {
 
 **治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 store 事务。
 
-**保留命名空间**: `_` 前缀的 namespace（`_jobs` legacy 后台任务、`_runtime_jobs` staged detached 作业、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin 插件 handler 拿到的完整 store 句柄（function runtime / agent guard 的 `ctx.store` 与 RPC action handler 的 store 均经 `createTrustedHandlerStore()` 包装——保留 namespace 的读取不受影响，只拦截写入）。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
+**保留命名空间**: `_` 前缀的 namespace（`_jobs` legacy 后台任务、`_runtime_jobs` staged detached 作业、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin function runtime / agent guard 经 `createTrustedHandlerStore()` 获得的显式提案写入能力。全部插件 RPC action（包括 builtin）经 `createRpcHandlerStoreView()` 获取按 session/plugin 绑定的即时写入能力；保留 namespace 的读取不受影响。两类插件句柄均不暴露宿主事务、会话生命周期或存储关闭方法。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
 
 ---
 
@@ -357,7 +357,7 @@ interface UIRenderPart {
 
 **输出**: `{ found, namespace, key, value?, updatedAt? }`
 
-读取会叠加**本次 tool loop 内尚未提交**的 `plugin.data` / `plugin.data.batch` proposal（read-your-own-write）。plugin-data 写入走 proposal、在回合末才提交，若不叠加，同一 loop 内先 `plugin-data-set` 再读同一个 key 会拿到写入**前**的旧值，runtime 因而重复写入或「纠正」一个本已正确的值。叠加只覆盖**本插件自己**的 pending 写入，不放宽插件作用域；同 key 多次写入以最后一次为准（与提交顺序一致）。
+读取会叠加**本次执行内尚未提交**的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` proposal（read-your-own-write）。写入走 proposal、在执行完成时才提交；叠加只覆盖**当前会话、当前插件**的 pending 操作。同 key 按 proposal 顺序应用，最后一次为准：删除后读取返回 `found: false`，随后重新写入则读取新值。写入 `null` 是存储一个值，不能等同于删除。不同 runtime 的独立缓冲区不会在此合并。
 
 ---
 
@@ -371,9 +371,17 @@ interface UIRenderPart {
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
 
-与 `plugin-data-get` 一样叠加本 loop 内未提交的 pending 写入；`namespace` 过滤同样作用于 pending 项。
+与 `plugin-data-get` 一样叠加本次执行内未提交的写入和删除；被删除的条目不出现在列表中。`namespace` 过滤同样作用于 pending 项，不传时合并所有 namespace。
 
 读取和合并按完整的 `(namespace, key)` 字符串元组精确匹配，不以控制字符拆分或改写字段。框架导出的 `overlayPluginDataRows()` 使用 `JSON.stringify([namespace, key])` 作为 Map key；function runtime / guard 的缓冲读取遵循同样规则。
+
+---
+
+### memory-get-block / memory-update-block
+
+核心记忆块存储在当前会话的 `working_memory[scope="story"]` 中，按 `label` 对应的 key 共享。`memory-update-block` 返回完整替换文本的 `working_memory.set` proposal，不直接落库。`memory-get-block` 先读取本次执行中当前会话、相同 scope 和 key 的最后一条 pending proposal，再回退到已提交数据；该共享数据不按来源插件过滤。
+
+`memory-update-block` 的内容限制为 1–2000 字符，提交时另受工作记忆存储配额约束。此通用工具不会执行 MemoryManager 的按标签截断，也不会更新插件面板的 plugin-data 镜像。
 
 ---
 
@@ -385,6 +393,8 @@ interface UIRenderPart {
 
 1. 优先读当前 session 中 `world-data-provider` 插件写入的 `plugin_data[namespace="entries"]`
 2. 若该维度不存在，则回退到 `world.metadata.dimensions`
+
+第一步先按顺序叠加本次执行内当前会话、已解析的数据提供者的 pending 写入和删除。删除维度的会话副本后会回退到世界 metadata；其他会话或其他插件的 proposal 不参与读取。
 
 | 参数        | 类型                        | 必需 | 描述                                                  |
 | ----------- | --------------------------- | ---- | ----------------------------------------------------- |
@@ -409,6 +419,8 @@ interface UIRenderPart {
 - `regions[0].name`
 - `tiers[2].description`
 - `startingResources.硬币`
+
+路径只读取对象自身的字段和数组元素，不读取原型链属性。JSON 自身声明的同名键仍可读取。数组下标必须是非负安全整数；`regions.[0]`、`regions[0]name`、小数或缺失分隔符等非法语法返回该查询的 `error`。根数组可使用 `[0].name`，嵌套数组可使用连续下标。
 
 **输出 (parsedResult)**:
 
@@ -533,7 +545,15 @@ interface UIRenderPart {
 
 `create-character` 与 `update-character` 的 LLM wire schema 把 `fields` 保持为紧凑对象，不在两份工具定义中重复整个世界属性表。权威 id、类型、范围、enum、默认值和说明仍保存在会话 world schema；执行边界按该 schema 合并默认值、强制校验已声明字段，对未声明字段返回 warning。这样 8k 等小窗口 slot 不会仅因角色属性较多就被两份重复 JSON Schema 占满。
 
+会话工具描述另附精简字段约束（类型、数值上下界、enum options、数组/映射元素类型及嵌套结构），不重复长描述和默认值。`sync-characters` 的 creates/updates 共用一份约束说明；执行时仍重新读取权威 schema。数值 patch 是更新后的绝对值，不是增量。
+
 已声明属性的类型、范围、enum 与嵌套结构在产生写入 proposal **之前**强制校验；非法字符串、null 或非有限数值不能替代数值属性。`create-character` 合并缺省值后校验；`update-character` 校验本次 patch，允许逐字段修复既有旧数据。未声明键仍保留并返回 warning。`mergeSchemaDefaults` 与 `assertCharacterFields` 向插件提供相同边界，失败抛出 `CharacterFieldValidationError`。
+
+`get-character-schema`、创建时填充默认值和创建/更新时校验均先读取本次执行中当前会话、当前 world-data provider 的 pending schema 操作。删除 schema 后不再使用存储中的旧规则。底层 schema 读取异常会使工具失败，不会静默跳过校验；未配置 provider 或 schema 尚不存在时仍允许无 schema 的角色。角色列表、读取和去重只合并当前会话的 pending 角色。
+
+角色读取按提案顺序应用更新，与提交复用 `materializeCharacterUpsert`：带 `expectedVersion` 的更新浅合并对象字段，保留未修改字段，每次递增当前版本；空字符串描述可清空旧描述，非对象字段值整体替换。整个 `fields` 为 `null` 表示清空属性，读取时统一为 `undefined`；对象内的 `null` 值保持不变。不带 `expectedVersion` 的 upsert 是完整替换，不继承被省略的旧字段。底层 `CharacterStore.upsertCharacter` 保存完整快照（包括传入的创建时间），Memory、SQLite、PostgreSQL 使用相同语义。提交时仍执行版本和参数校验，pending 视图不代表已经提交成功。
+
+**辅助 API 迁移**：`overlayCharacters(proposals, stored, sessionId)` 现在必须接收已存储角色和会话 ID，返回该会话完整角色视图的 `Map<string, CharacterRecord>`，不再返回最后一条原始 payload。结果与输入引用隔离。`CharacterRecord` 由 `@covel/shared` 定义，`@covel/store` 保留同名类型导出。
 
 `char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
 
@@ -601,9 +621,13 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 两组不能同时为空；没有明确变化时 runtime 应调用 `runtime-done`。`creates[]` 与 `create-character` 参数相同，`updates[]` 与 `update-character` 参数相同。
 
-**输出 (parsedResult)**: `{ _text, success: true, created, updated }`
+同 session 同 `(name, type)` 的重复 create 作为幂等命中返回 `unchanged`，包含已有角色 id；不覆盖已有 description/fields，也不阻断批次内其他合法操作。修改既有角色必须显式放入 `updates`。其他校验失败仍使整批失败，修正后需重新提交完整批次。
+
+**输出 (parsedResult)**: `{ _text, success: true, created, updated, unchanged }`
 
 **使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
+
+该 tracker 继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。
 
 ---
 
@@ -888,6 +912,10 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 工具执行统一经过 `ToolExecutor`：通过注入的 `findTool(name, context)` 解析出 `ToolModule` 后直接调用 `module.execute(args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
 
+**取消与资源归属**：执行器将调用方取消与宿主关闭合并到 `context.signal`。取消会撤销调用级读取能力，并以 `CANCELLED` 结束对工具回调的等待；迟到的返回值、提案和事件不会被接受。取消不会强制终止任意同进程 JavaScript：执行器继续跟踪尚未完成的回调和读取，包括内置工具持有的宿主能力。正常完成也会等待工具已经发起但没有自行等待的读取。
+
+`createToolExecutor` 返回 `ManagedToolExecutor`，其 `close()` 幂等地停止接收新调用、取消已有调用并排空所拥有的工作。嵌入宿主必须在关闭 Store、插件注册和事件基础设施之前等待它。服务端通过 `bootstrapApi().closeTools()` 接入统一关闭流程；若排空超过宿主关闭预算，依赖保留到进程退出，不在回调仍运行时提前关闭。
+
 **执行端授权**：工具白名单同时约束 LLM 广告面和执行面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
 
 接口位于 `@covel/tools`：
@@ -942,7 +970,7 @@ Bootstrap 时自动分类：
 
 - 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
 - 审批激活后，entry 模块会 JIT 执行并完成注册；未授权 session 无法触发 community runtime/hook。
-- community entry factory 的 `toolkit.store` 不开放任何方法，因为该全局 factory 没有可绑定的 request session；RPC/function runtime 使用各自的 session/plugin-scoped store。
+- 所有 entry factory 的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前 session/plugin 状态；RPC/function runtime 使用各自的 scoped store。
 - community agent guard 仅获得只读 store 与纯输入；`pluginData`、logger、gateway、utils、media、assetProgress 等副作用能力不注入，`recursiveCall` 会拒绝。写入放在 runtime handler 返回的 proposal/`pluginData[]` 中。
 - 进程内 ESM 本身不是沙箱。self 层级以本机用户为信任边界；hosted 层级把 community server-code 定义为 operator 级全局信任。真正的多租户第三方代码需要独立 worker/process 隔离。
 
@@ -1046,7 +1074,7 @@ POST /api/sessions/:id/plugin-rpc
 
 ### 方式一：工厂函数（推荐）
 
-插件本地工具使用工厂函数模式，工厂参数就是 `covel.toolkit`——框架注入 `tool`, `z`, `shortId`, `shortIdBatch`, `withPendingProposals`, `store`：
+插件本地工具使用工厂函数模式，工厂参数就是 `covel.toolkit`——框架注入 `tool`, `z`, `shortId`, `shortIdBatch`, `withPendingProposals`：
 
 ```javascript
 // tools/my-tool.js
@@ -1068,14 +1096,24 @@ export default function ({ tool, z, shortId }) {
 
 **注入对象**:
 
-| 字段                   | 类型      | 描述                                                           |
-| ---------------------- | --------- | -------------------------------------------------------------- |
-| `tool`                 | function  | `tool()` 包装函数，定义工具参数和执行逻辑                      |
-| `z`                    | object    | Zod schema 库，用于参数验证                                    |
-| `shortId`              | function  | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID        |
-| `shortIdBatch`         | function  | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID      |
-| `withPendingProposals` | function  | 把工具返回值和待提交 proposal 绑定，交给 commit chain 统一落盘 |
-| `store`                | DataStore | DataStore 实例，用于直接读写持久化数据（如批量操作）           |
+| 字段                   | 类型     | 描述                                                           |
+| ---------------------- | -------- | -------------------------------------------------------------- |
+| `tool`                 | function | `tool()` 包装函数，定义工具参数和执行逻辑                      |
+| `z`                    | object   | Zod schema 库，用于参数验证                                    |
+| `shortId`              | function | `shortId(prefix, label, sessionId)` — 生成单个短语义 ID        |
+| `shortIdBatch`         | function | `shortIdBatch(prefix, labels, sessionId)` — 批量生成短 ID      |
+| `withPendingProposals` | function | 把工具返回值和待提交 proposal 绑定，交给 commit chain 统一落盘 |
+
+**执行期读取与取消**：生产宿主和 `test-runtime` 在每次工具调用中注入 `context.store`，接口复用 `FunctionStoreView`：
+
+- `getPluginData(namespace, key)` / `listPluginData(namespace)` 绑定当前 session/plugin，按顺序合并同次执行中已有的 set、batch 和 delete 提案。
+- `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` 只读取当前会话；有 limit 时读取最近消息。
+- 读取值、输入 slots、已有提案和事件主题是独立副本。修改它们不会修改数据库或调用方缓冲。返回的内容、提案和事件也会在异步记录前复制。
+- 读取句柄在工具返回、抛错或调用取消后失效；取消期间已经开始的读取不会再向工具交付结果。工具应等待自身读取完成再返回；宿主仍会等待已发起读取结束后才完成该工具调用。
+- `context.signal` 传递调用方的取消信号；外部请求应使用该信号。取消后的迟到结果不会被作为成功提案返回。框架不能强制终止同进程 JavaScript，也不能撤销已发出的外部副作用。
+- 不配置 DataStore 的独立无状态 executor 不提供 `context.store`。直接调用 `tool.execute()` 的宿主或单元测试需自行提供上下文；插件测试可用 `bindToolStore`（`@covel/plugin-test-utils`）。
+
+这是一项不兼容的 API 修正：移除 `PluginToolkit.store` 和 `PluginStoreView`。旧工具应把工厂闭包中的 `store.getPluginData(sessionId, pluginId, namespace, key)` 改成 `context.store.getPluginData(namespace, key)`，并移除对执行器已有提案的重复合并。组合工具内部直接调用子工具时，新产生的局部提案尚未进入执行器读取快照；这类子调用仍需显式使用 `overlayPluginDataValue` 等纯辅助函数合并局部提案（例如 codex 的同步工具）。写入仍返回 `withPendingProposals(...)`，不可在工具执行中直接提交领域状态。
 
 ### 方式二：直接导出（TypeScript）
 
@@ -1190,3 +1228,5 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
   "payload": { "scope": "player", "key": "mood" }
 }
 ```
+
+`working_memory.set` 提交要求适配器同时提供 `upsertWorkingMemory` 和 `listWorkingMemory`；缺少查询能力时拒绝写入，不跳过会话条目配额。

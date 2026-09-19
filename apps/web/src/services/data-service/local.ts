@@ -1,6 +1,7 @@
 import {
   DEFAULT_LOCALE,
   worldDimensionsSchema,
+  worldWireRecordSchema,
   characterBlueprintToCharacterUpsert,
   decodePageCursor,
   encodePageCursor,
@@ -36,7 +37,12 @@ import {
   serverCheckpointWorld,
   syncWorldToServer,
 } from "./local-world-sync.js";
-import type { DataService, SessionPatch, WorldPatch } from "./types.js";
+import type {
+  DataService,
+  SessionPatch,
+  SessionWorkspaceOperations,
+  WorldPatch,
+} from "./types.js";
 
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
 const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
@@ -242,9 +248,7 @@ function isFreshLocalCheckpoint(checkpoint: BrowserCheckpoint): boolean {
 
 export class LocalDataService implements DataService {
   private readonly vault: BrowserVault;
-  private statePatches = new Map<string, StatePatchRecord[]>();
   private initPromise: Promise<void> | null = null;
-  private workspaceTail: Promise<void> = Promise.resolve();
 
   constructor(vault?: BrowserVault) {
     this.vault = vault ?? new BrowserVault();
@@ -252,20 +256,20 @@ export class LocalDataService implements DataService {
 
   private async ready(): Promise<BrowserVault> {
     if (!this.initPromise) {
-      this.initPromise = (async () => {
-        const existing = await this.vault.listWorlds();
-        if (existing.length === 0) {
-          for (const seed of LOCAL_SEED_WORLDS) {
-            await this.vault.upsertWorld({
-              id: uid("world"),
-              name: seed.name as StoreWorldRecord["name"],
-              description: seed.description as StoreWorldRecord["description"],
-              tags: seed.tags,
-              createdAt: new Date().toISOString(),
-            });
-          }
-        }
-      })();
+      this.initPromise = this.vault
+        .initializeWorlds(
+          LOCAL_SEED_WORLDS.map((seed) => ({
+            id: uid("world"),
+            name: seed.name as StoreWorldRecord["name"],
+            description: seed.description as StoreWorldRecord["description"],
+            tags: seed.tags,
+            createdAt: new Date().toISOString(),
+          })),
+        )
+        .catch((error: unknown) => {
+          this.initPromise = null;
+          throw error;
+        });
     }
     await this.initPromise;
     return this.vault;
@@ -304,13 +308,26 @@ export class LocalDataService implements DataService {
     return result.checkpoint;
   }
 
-  private enqueueWorkspace<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.workspaceTail.then(operation, operation);
-    this.workspaceTail = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+  private async withSessionWorkspaceLock<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+    creatingWorldId?: string,
+  ): Promise<T> {
+    const vault = await this.ready();
+    const worldId =
+      creatingWorldId ??
+      (await vault.getLatestCheckpoint(sessionId))?.session.worldId;
+    // Always acquire world before session. World deletion holds the exclusive
+    // world lock before draining session locks, so reversing this order deadlocks.
+    const run = () =>
+      vault.withSessionLock(sessionId, async () => {
+        const current = await vault.getLatestCheckpoint(sessionId);
+        if (current && current.session.worldId !== worldId) {
+          throw new Error(`Session world changed while waiting: ${sessionId}`);
+        }
+        return operation();
+      });
+    return worldId ? vault.withWorldLock(worldId, "shared", run) : run();
   }
 
   private mutateCheckpoint(
@@ -318,8 +335,28 @@ export class LocalDataService implements DataService {
     domain: string,
     mutate: (checkpoint: BrowserCheckpoint) => BrowserCheckpoint,
   ): Promise<BrowserCheckpoint> {
-    return this.enqueueWorkspace(() =>
-      this.mutateCheckpointNow(sessionId, domain, mutate),
+    return this.withSessionWorkspaceLock(sessionId, async () => {
+      await this.recoverPendingCommitNow(sessionId);
+      return this.mutateCheckpointNow(sessionId, domain, mutate);
+    });
+  }
+
+  withSessionWorkspace<T>(
+    sessionId: string,
+    operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
+  ): Promise<T> {
+    return this.withSessionWorkspaceLock(sessionId, () =>
+      operation({
+        persistInput: async (message) => {
+          if (message.sessionId !== sessionId)
+            throw new Error("Workspace input session mismatch");
+          await this.recoverPendingCommitNow(sessionId);
+          await this.addMessageNow(message);
+        },
+        hydrate: () => this.syncToServerNow(sessionId),
+        stage: (actionId) => this.stageServerCommitNow(sessionId, actionId),
+        commit: (actionId) => this.commitFromServerNow(sessionId, actionId),
+      }),
     );
   }
 
@@ -345,7 +382,9 @@ export class LocalDataService implements DataService {
       description,
       createdAt: new Date().toISOString(),
     };
-    await vault.upsertWorld(world as StoreWorldRecord);
+    await vault.withWorldLock(world.id, "exclusive", () =>
+      vault.upsertWorld(world as StoreWorldRecord),
+    );
     return world;
   }
 
@@ -370,12 +409,16 @@ export class LocalDataService implements DataService {
       updatedAt: now,
       createdAt: world.createdAt ?? now,
     };
-    await vault.upsertWorld(record as StoreWorldRecord);
+    await vault.withWorldLock(record.id, "exclusive", () =>
+      vault.upsertWorld(record as StoreWorldRecord),
+    );
     return record;
   }
 
   async updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord> {
-    return this.enqueueWorkspace(() => this.updateWorldNow(id, patch));
+    return this.vault.withWorldLock(id, "exclusive", () =>
+      this.updateWorldNow(id, patch),
+    );
   }
 
   private async updateWorldNow(
@@ -397,19 +440,25 @@ export class LocalDataService implements DataService {
   }
 
   async deleteWorld(id: string): Promise<void> {
-    return this.enqueueWorkspace(async () => {
+    return this.vault.withWorldLock(id, "exclusive", async () => {
       const sessions = await this.listSessions(id);
-      await (await this.ready()).deleteWorld(id);
       // Only clean up mirrors owned by these browser sessions. The server's
       // shared world may still be used by another browser or player.
       await Promise.all(
-        sessions.map((session) => this.deleteSession(session.id)),
+        // The exclusive world lock already excludes all session work and new
+        // creation. Do not request a shared world lock recursively here.
+        sessions.map((session) =>
+          this.vault.withSessionLock(session.id, () =>
+            this.deleteSessionNow(session.id),
+          ),
+        ),
       );
+      await (await this.ready()).deleteWorld(id);
     });
   }
 
   async prepareWorldForServer(worldId: string): Promise<void> {
-    return this.enqueueWorkspace(async () => {
+    return this.vault.withWorldLock(worldId, "shared", async () => {
       const world = await (await this.ready()).getWorld(worldId);
       if (!world) throw new Error(`World not found: ${worldId}`);
       await syncWorldToServer(world);
@@ -441,11 +490,12 @@ export class LocalDataService implements DataService {
 
   async createSession(
     worldId: string,
-    presetId?: string,
     _id?: string,
     _plugins?: string[],
     locale?: string,
+    loreOverride?: string,
   ): Promise<SessionRecord> {
+    worldWireRecordSchema.shape.lore.parse(loreOverride);
     const vault = await this.ready();
     const nowIso = new Date().toISOString();
     const session: SessionRecord = {
@@ -457,7 +507,6 @@ export class LocalDataService implements DataService {
       completedPlayerTurns: 0,
       setupRuntimes: {},
       activePlugins: _plugins ?? [],
-      presetId,
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -470,13 +519,19 @@ export class LocalDataService implements DataService {
       setupRuntimes: {},
       locale: locale ?? DEFAULT_LOCALE,
       activePlugins: _plugins ?? [],
-      presetId,
-      metadata: presetId ? { presetId } : undefined,
+      metadata: loreOverride !== undefined ? { loreOverride } : {},
       createdAt: nowIso,
       updatedAt: nowIso,
     };
-    const world = await vault.getWorld(worldId);
-    await vault.saveCheckpoint(initialCheckpoint(storeSession, world));
+    await this.withSessionWorkspaceLock(
+      session.id,
+      async () => {
+        const world = await vault.getWorld(worldId);
+        if (!world) throw new Error(`World not found: ${worldId}`);
+        await vault.saveCheckpoint(initialCheckpoint(storeSession, world));
+      },
+      worldId,
+    );
     return session;
   }
 
@@ -498,7 +553,6 @@ export class LocalDataService implements DataService {
         session: {
           ...checkpoint.session,
           ...(updates.status !== undefined ? { status: nextStatus } : {}),
-          ...("presetId" in updates ? { presetId: updates.presetId } : {}),
           ...(updates.runtimeModelOverrides !== undefined
             ? { runtimeModelOverrides: updates.runtimeModelOverrides }
             : {}),
@@ -510,10 +564,12 @@ export class LocalDataService implements DataService {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    // Evict before the store teardown, not after: the in-memory list is
-    // authoritative once hydrated, so it must not survive a delete that failed
-    // partway through.
-    this.statePatches.delete(sessionId);
+    return this.withSessionWorkspaceLock(sessionId, () =>
+      this.deleteSessionNow(sessionId),
+    );
+  }
+
+  private async deleteSessionNow(sessionId: string): Promise<void> {
     const vault = await this.ready();
     await Promise.all([
       vault.deleteSession(sessionId),
@@ -527,12 +583,19 @@ export class LocalDataService implements DataService {
         }
       }),
     ]);
-    appKv
-      .removeStatePatches(sessionId)
-      .catch(ignoreError("remove state patches on delete"));
-    appKv
-      .removeSubmittedBlocks(sessionId)
-      .catch(ignoreError("remove submitted blocks on delete"));
+    // Keep ownership until cache cleanup settles, so a queued append cannot
+    // race removal. Cache failure still must not undo the domain deletion.
+    await Promise.all([
+      appKv
+        .removeStatePatches(sessionId)
+        .catch(ignoreError("remove state patches on delete")),
+      appKv
+        .removeSubmittedBlocks(sessionId)
+        .catch(ignoreError("remove submitted blocks on delete")),
+      appKv
+        .removeExecutionSteps(sessionId)
+        .catch(ignoreError("remove execution steps on delete")),
+    ]);
   }
 
   // Messages
@@ -577,6 +640,13 @@ export class LocalDataService implements DataService {
   }
 
   async addMessage(msg: MessageRecord): Promise<void> {
+    return this.withSessionWorkspaceLock(msg.sessionId, async () => {
+      await this.recoverPendingCommitNow(msg.sessionId);
+      await this.addMessageNow(msg);
+    });
+  }
+
+  private async addMessageNow(msg: MessageRecord): Promise<void> {
     const record: StoreMessageRecord = {
       id: msg.id,
       sessionId: msg.sessionId,
@@ -590,58 +660,46 @@ export class LocalDataService implements DataService {
       },
       createdAt: msg.createdAt,
     };
-    await this.mutateCheckpoint(record.sessionId, "message", (checkpoint) => ({
-      ...checkpoint,
-      messages: [
-        ...checkpoint.messages.filter((item) => item.id !== record.id),
-        record,
-      ],
-    }));
+    await this.mutateCheckpointNow(
+      record.sessionId,
+      "message",
+      (checkpoint) => ({
+        ...checkpoint,
+        messages: [
+          ...checkpoint.messages.filter((item) => item.id !== record.id),
+          record,
+        ],
+      }),
+    );
   }
 
   // State patches
 
   async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-    return this.hydrateStatePatches(sessionId);
-  }
-
-  /**
-   * The in-memory map is empty after a page reload, so appending straight to it
-   * and writing the result back to IDB used to overwrite the whole persisted
-   * array with a single patch — the session's entire state history, gone on the
-   * first turn after a refresh. Read through IDB before touching the list.
-   */
-  private async hydrateStatePatches(
-    sessionId: string,
-  ): Promise<StatePatchRecord[]> {
-    const cached = this.statePatches.get(sessionId);
-    if (cached) return cached;
-    const persisted = (await appKv.getStatePatches(sessionId)) ?? [];
-    // Re-read: an append may have landed while the IDB read was in flight.
-    const raced = this.statePatches.get(sessionId);
-    if (raced) return raced;
-    this.statePatches.set(sessionId, persisted);
-    return persisted;
+    return (await appKv.getStatePatches(sessionId)) ?? [];
   }
 
   async addStatePatch(
     sessionId: string,
     patch: StatePatchRecord,
   ): Promise<void> {
-    const hydrated = await this.hydrateStatePatches(sessionId);
-    // Re-read after the await. One turn commonly commits several `state.changed`
-    // events that arrive in a single flush, and `sse-handler` fires this
-    // fire-and-forget per event: without the re-read, two appends resolving in
-    // the same tick both build on the same base list and the second overwrites
-    // the first. Each continuation's `set` below is synchronous, so re-reading
-    // here always observes the previous append.
-    const list = this.statePatches.get(sessionId) ?? hydrated;
-    const next = [...list, patch];
-    this.statePatches.set(sessionId, next);
-    // Persist to IDB (fire-and-forget)
-    appKv
-      .saveStatePatches(sessionId, next)
-      .catch(ignoreError("save state patches"));
+    if (patch.sessionId !== sessionId)
+      throw new Error("State patch session mismatch");
+    const owned = structuredClone(patch);
+    await this.writeSessionCache(sessionId, () =>
+      appKv.appendStatePatch(owned),
+    );
+  }
+
+  private async writeSessionCache(
+    sessionId: string,
+    write: () => Promise<void>,
+  ): Promise<void> {
+    await this.withSessionWorkspaceLock(sessionId, async () => {
+      if (!(await this.vault.getSession(sessionId)))
+        throw new Error(`Session not found: ${sessionId}`);
+      await write();
+    });
   }
 
   // Submitted blocks
@@ -651,7 +709,10 @@ export class LocalDataService implements DataService {
     blockIds: string[],
     values: Record<string, Record<string, unknown>>,
   ): Promise<void> {
-    await appKv.saveSubmittedBlocks(sessionId, blockIds, values);
+    const owned = structuredClone({ blockIds, values });
+    await this.writeSessionCache(sessionId, () =>
+      appKv.saveSubmittedBlocks(sessionId, owned.blockIds, owned.values),
+    );
   }
 
   async loadSubmittedBlocks(sessionId: string) {
@@ -661,14 +722,26 @@ export class LocalDataService implements DataService {
   // Sync to server
 
   async stageServerCommit(sessionId: string, actionId: string): Promise<void> {
-    return this.enqueueWorkspace(async () => {
-      await this.recoverPendingCommitNow(sessionId, actionId);
-      await (await this.ready()).stagePendingCommit(sessionId, actionId);
-    });
+    return this.withSessionWorkspaceLock(sessionId, () =>
+      this.stageServerCommitNow(sessionId, actionId),
+    );
+  }
+
+  private async stageServerCommitNow(
+    sessionId: string,
+    actionId: string,
+  ): Promise<void> {
+    await this.recoverPendingCommitNow(sessionId, actionId);
+    const vault = await this.ready();
+    if (!(await vault.getLatestCheckpoint(sessionId)))
+      throw new Error(`Session not found: ${sessionId}`);
+    await vault.stagePendingCommit(sessionId, actionId);
   }
 
   async syncToServer(sessionId: string): Promise<void> {
-    return this.enqueueWorkspace(() => this.syncToServerNow(sessionId));
+    return this.withSessionWorkspaceLock(sessionId, () =>
+      this.syncToServerNow(sessionId),
+    );
   }
 
   private async recoverPendingCommitNow(
@@ -693,11 +766,11 @@ export class LocalDataService implements DataService {
     await this.recoverPendingCommitNow(sessionId);
     const vault = await this.ready();
     let checkpoint = await vault.getLatestCheckpoint(sessionId);
-    if (!checkpoint) return;
+    if (!checkpoint) throw new Error(`Session not found: ${sessionId}`);
     const world = checkpoint.session.worldId
       ? await vault.getWorld(checkpoint.session.worldId)
       : null;
-    if (!world) return;
+    if (!world) throw new Error(`World not found for session: ${sessionId}`);
     if (JSON.stringify(checkpoint.world) !== JSON.stringify(world)) {
       checkpoint = await this.mutateCheckpointNow(
         sessionId,
@@ -724,10 +797,12 @@ export class LocalDataService implements DataService {
       if (!isNotFound(err)) throw err;
       const created = await api.createSession(
         serverWorldId,
-        session.presetId,
         serverSessionId,
         [...session.activePlugins],
         session.locale,
+        typeof checkpoint.session.metadata?.loreOverride === "string"
+          ? checkpoint.session.metadata.loreOverride
+          : undefined,
       );
       // Only a never-hydrated local session needs the server to resolve its
       // initial setup band. When rebuilding an ephemeral mirror after a server
@@ -757,7 +832,7 @@ export class LocalDataService implements DataService {
   }
 
   async commitFromServer(sessionId: string, actionId: string): Promise<void> {
-    return this.enqueueWorkspace(() =>
+    return this.withSessionWorkspaceLock(sessionId, () =>
       this.commitFromServerNow(sessionId, actionId),
     );
   }
@@ -791,7 +866,10 @@ export class LocalDataService implements DataService {
   }
 
   async saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {
-    await appKv.saveExecutionSteps(sessionId, steps);
+    const owned = structuredClone(steps);
+    await this.writeSessionCache(sessionId, () =>
+      appKv.saveExecutionSteps(sessionId, owned),
+    );
   }
 
   async loadExecutionSteps(sessionId: string): Promise<unknown[]> {

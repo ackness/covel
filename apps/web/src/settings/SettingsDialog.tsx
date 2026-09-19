@@ -262,13 +262,7 @@ function renderPane(
     );
   }
   if (node.id === "llm.slots") return <LlmSlotsPane />;
-  if (
-    node.id === "llm.providers" ||
-    node.id === "llm.keys" ||
-    node.id === "llm.presets"
-  ) {
-    return <LlmPresetsPane />;
-  }
+  if (node.id === "llm.providers") return <LlmPresetsPane />;
   if (node.id === "llm.advanced") return <LlmAdvancedPane />;
   if (node.id === "data") return <DataPane />;
   if (node.id === "desktop") return <DesktopPane />;

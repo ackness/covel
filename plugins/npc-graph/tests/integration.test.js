@@ -1,3 +1,4 @@
+import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * npc-graph end-to-end integration test (no real LLM).
  *
@@ -115,7 +116,10 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
 
   beforeEach(() => {
     store = createMockStore();
-    upsertTool = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
+    upsertTool = bindToolStore(
+      createUpsertNpcGraph({ tool, z, shortIdBatch }),
+      store,
+    );
   });
 
   it("extracts a small cast on turn 3, then retrieves them on turn 4", async () => {

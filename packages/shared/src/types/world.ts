@@ -192,6 +192,7 @@ export interface WorldStartingConditions {
 // ── Aggregate ────────────────────────────────────────────────────
 
 export interface WorldDimensions {
+  readonly time?: import("../schemas/world-time.js").WorldTimeDefinition;
   readonly geography?: WorldGeography;
   readonly factions?: WorldFaction[];
   readonly powerSystem?: WorldPowerSystem;

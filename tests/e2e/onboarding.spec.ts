@@ -49,9 +49,32 @@ test("first visit starts from the landing page, explains preparation and can be 
   await expect(guide.getByRole("status")).toContainText(
     "complete model setup before starting a game",
   );
+  // Hold the real persistence lock so dismissal must wait for the saved flag.
+  await page.evaluate(
+    () =>
+      new Promise<void>((acquired) => {
+        const held = new Promise<void>((release) => {
+          Object.assign(window, { releaseOnboardingSave: release });
+        });
+        void navigator.locks.request("covel:settings-persistence", async () => {
+          acquired();
+          await held;
+        });
+      }),
+  );
   await guide
     .getByRole("button", { name: "Choose a world", exact: true })
     .click();
+  await expect(guide).toBeVisible();
+  await expect(guide).toHaveAttribute("aria-busy", "true");
+  expect((await storedEntries(page))["ui.onboardedVersion"]).toBe(0);
+  await page.evaluate(() => {
+    const fixtureWindow = window as typeof window & {
+      releaseOnboardingSave?: () => void;
+    };
+    fixtureWindow.releaseOnboardingSave?.();
+    delete fixtureWindow.releaseOnboardingSave;
+  });
   await expect(guide).toHaveCount(0);
   expect((await storedEntries(page))["ui.onboardedVersion"]).toBe(
     ONBOARDING_VERSION,
@@ -186,6 +209,7 @@ test("an upgrade can be skipped without rewriting existing model roles", async (
   await expect(guide).toContainText("story-model");
   await expect(guide).toContainText("tracker-model");
   await guide.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(guide).toHaveCount(0);
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "Choose a world" }),

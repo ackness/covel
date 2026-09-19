@@ -101,8 +101,8 @@ export interface KernelStore {
     key: string,
   ): Promise<void>;
   /**
-   * Working Memory upsert. Optional so the kernel stays compatible
-   * with thin mock stores in existing tests that don't need WM.
+   * Working Memory capability. Adapters without it reject working-memory
+   * proposals. Writable adapters must also implement listWorkingMemory.
    */
   upsertWorkingMemory?(record: {
     id: string;
@@ -115,8 +115,7 @@ export interface KernelStore {
   }): Promise<void>;
   /**
    * Working Memory listing — used by the `working_memory.set` commit handler to
-   * enforce the per-session entry quota. Optional for the same reason as
-   * `upsertWorkingMemory`; when absent the quota check is skipped.
+   * enforce the per-session entry quota. A write is rejected when absent.
    */
   listWorkingMemory?(sessionId: string): Promise<
     readonly {

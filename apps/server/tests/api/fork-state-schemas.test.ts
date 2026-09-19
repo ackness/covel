@@ -11,6 +11,7 @@ import {
 import { buildSessionSnapshot } from "@covel/runtime";
 import {
   makeSession,
+  makeWorld,
   makeStateEntry,
   makeStateSchema,
 } from "../../../../packages/store/src/contract/test-fixtures.js";
@@ -28,7 +29,13 @@ describe.each(["memory", "sqlite"])("fork state schemas on %s", (backend) => {
       backend === "sqlite"
         ? createSqliteStore(":memory:")
         : createMemoryStore();
-    await store.createSession(makeSession({ id: "parent" }));
+    await store.createWorld(makeWorld({ id: "world-1" }));
+    await store.createSession(
+      makeSession({
+        id: "parent",
+        metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      }),
+    );
     const routes = new Hono<{
       Variables: { store: DataStore; sessionLock: SessionLock };
     }>();
@@ -132,19 +139,15 @@ describe.each(["memory", "sqlite"])("fork state schemas on %s", (backend) => {
     expect(await store.listStateSchemas(child.sessionId)).toEqual([]);
   });
 
-  it("uses available parent definitions for legacy snapshots, but rejects missing required tables", async () => {
+  it("rejects entries whose captured table definition is missing", async () => {
     await seed();
     const snapshot = await capture();
-    const { stateSchemas: _schemas, ...legacyPayload } = snapshot.payload;
-    const legacy = { ...snapshot, payload: legacyPayload };
-    await store.saveSnapshot(legacy);
-    const child = await successfulFork(legacy);
-    expect(
-      (await buildSessionSnapshot(store, child.sessionId)).gameState,
-    ).toEqual({ inventory: { gold: 10 } });
-    await store.deleteStateSchema("parent", "inventory");
+    await store.saveSnapshot({
+      ...snapshot,
+      payload: { ...snapshot.payload, stateSchemas: [] },
+    });
     const before = await store.listSessions();
-    const response = await fork(legacy);
+    const response = await fork(snapshot);
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
       code: "snapshot_schema_missing",

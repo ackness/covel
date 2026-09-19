@@ -1,3 +1,4 @@
+import type { SessionLock } from "./lib/session-lock.js";
 import type { DataStore } from "@covel/store";
 import { reconcileSeededWorlds, seedWorlds } from "./world-seed-loader.js";
 
@@ -5,6 +6,7 @@ import { reconcileSeededWorlds, seedWorlds } from "./world-seed-loader.js";
 export async function seedAndReconcileWorlds(
   store: DataStore,
   worldsDirs: readonly string[],
+  sessionLock: SessionLock,
 ): Promise<void> {
   const liveWorldIds = new Set<string>();
   const claimedWorldIds = new Set<string>();
@@ -14,7 +16,7 @@ export async function seedAndReconcileWorlds(
   // by a lower-priority seed during the same startup pass.
   for (const dir of [...worldsDirs].reverse()) {
     try {
-      const result = await seedWorlds(store, dir, claimedWorldIds);
+      const result = await seedWorlds(store, dir, sessionLock, claimedWorldIds);
       for (const id of result.worldIds) {
         liveWorldIds.add(id);
         claimedWorldIds.add(id);
@@ -41,6 +43,7 @@ export async function seedAndReconcileWorlds(
     const { removed, keptWithSessions } = await reconcileSeededWorlds(
       store,
       liveWorldIds,
+      sessionLock,
     );
     if (removed.length > 0) {
       console.log(

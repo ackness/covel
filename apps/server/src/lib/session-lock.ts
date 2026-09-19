@@ -13,6 +13,9 @@
  *
  * `bootstrapApi()` picks the backend-appropriate lock at composition time
  * so route handlers only depend on the `SessionLock` interface.
+ * Namespaced `world:<id>` keys also coordinate server world mutations. Paths
+ * needing both domains acquire session locks before world locks. World deletion
+ * releases its world lock before draining sessions or running lifecycle hooks.
  *
  * Rationale
  *   - Audit 2026-04-20 finding 1: without serialization, two concurrent

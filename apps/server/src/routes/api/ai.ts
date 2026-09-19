@@ -6,11 +6,12 @@
  * (generating → validating → saving) and receive the final WorldRecord.
  */
 
+import { worldOperationLockId } from "../../world-lifecycle.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
+import { streamOwnedSSE } from "../../application-work.js";
 import { createWorld, type GeneratedWorldPackageContent } from "@covel/create";
 import {
   DEFAULT_LOCALE,
@@ -252,7 +253,8 @@ aiRoutes.post(
       `[ai/generate-world] outputDir=${outputDir}, saveTarget=${saveTarget}, concept="${(concept as string).trim().slice(0, 40)}..."`,
     );
 
-    return streamSSE(c, async (stream) => {
+    const shutdownSignal = c.get("requestWork")?.signal;
+    return streamOwnedSSE(c, async (stream) => {
       const send = async (event: GenerateEvent) => {
         await stream.writeSSE({ data: JSON.stringify(event) });
       };
@@ -260,6 +262,7 @@ aiRoutes.post(
       let generatedWorldDir: string | undefined;
       let activated = false;
       try {
+        shutdownSignal?.throwIfAborted();
         await send({ type: "progress", phase: "generating" });
 
         const createOpts = {
@@ -269,7 +272,9 @@ aiRoutes.post(
           model: typeof body.model === "string" ? body.model : undefined,
           locale: normalizeLocale(body.locale, DEFAULT_LOCALE),
           brief: brief.value,
-          signal: c.req.raw.signal,
+          signal: shutdownSignal
+            ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
+            : c.req.raw.signal,
           attemptTimeoutMs: GENERATE_WORLD_ATTEMPT_TIMEOUT_MS,
           logger: {
             info: (...args: unknown[]) => console.log("[createWorld]", ...args),
@@ -329,7 +334,14 @@ aiRoutes.post(
             ? fileRecord
             : recordForStoreOnly(fileRecord, saveTarget);
         if (saveTarget !== "return-only") {
-          if (!(await store.createWorld(record))) {
+          shutdownSignal?.throwIfAborted();
+          if (
+            !(await c
+              .get("sessionLock")
+              .withLock(worldOperationLockId(record.id), () =>
+                store.createWorld(record),
+              ))
+          ) {
             throw new Error(`World already exists: ${record.id}`);
           }
           activated = true;

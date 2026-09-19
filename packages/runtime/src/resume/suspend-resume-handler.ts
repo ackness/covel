@@ -22,8 +22,7 @@ import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent, SuspendSentinel } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
-import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
+import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
 
@@ -117,38 +116,13 @@ export async function handleSuspension(
     timestamp: new Date().toISOString(),
   };
 
-  const finalResult = attachSuspensionArtifact(
-    await runPostRuntimeHook(
-      {
-        pipeline: hookPipeline,
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        eventBus: deps.eventBus,
-        emitter: deps.emitter,
-      },
-      suspendedResult,
-    ),
-    { record: suspension },
+  const finalResult = await finalizeRuntimeResult(
+    { ...deps, hookPipeline },
+    manifest,
+    input,
+    suspendedResult,
   );
-
-  try {
-    await deps.onRuntimeComplete?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: "suspended",
-      durationMs: finalResult.durationMs,
-    });
-  } catch {
-    /* callback error must not kill runtime */
-  }
-
-  emitSubEvent(deps.eventBus, "runtime", "runtime.completed", input.sessionId, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    status: "suspended",
-    durationMs: finalResult.durationMs,
-  });
-  return finalResult;
+  return finalResult.status === "suspended"
+    ? attachSuspensionArtifact(finalResult, { record: suspension })
+    : finalResult;
 }

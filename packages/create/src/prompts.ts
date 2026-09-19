@@ -1,4 +1,4 @@
-import { interpolate, loadPrompt } from "@covel/context";
+import { interpolate, loadPrompt, type PromptLoader } from "@covel/context";
 import type {
   WorldCreationBrief,
   WorldPackageContentKind,
@@ -21,10 +21,11 @@ export async function buildWorldPrompt(
   concept: string,
   locale: string,
   brief?: WorldCreationBrief,
+  loader: PromptLoader = loadPrompt,
 ): Promise<string> {
   const promptLocale = resolvePromptLocale(locale);
 
-  const template = await loadPrompt(
+  const template = await loader(
     "server",
     "generate-world",
     promptLocale.locale,
@@ -39,9 +40,10 @@ export async function buildWorldPrompt(
 
 export async function buildWorldLoreRepairPrompt(
   locale: string,
+  loader: PromptLoader = loadPrompt,
 ): Promise<string> {
   const promptLocale = resolvePromptLocale(locale);
-  const template = await loadPrompt(
+  const template = await loader(
     "server",
     "repair-world-lore",
     promptLocale.locale,

@@ -144,3 +144,27 @@ describe("preset-registry", () => {
     expect(chain).toHaveLength(2);
   });
 });
+
+describe("request overlay visibility", () => {
+  it("keeps transient presets out of public catalogs and implicit defaults", () => {
+    const transient: PresetConfig = {
+      id: "private-overlay",
+      name: "Private request",
+      provider: "private-provider",
+      model: "private-model",
+      tier: "medium",
+      enabled: true,
+      supportedModes: ["text", "embed"],
+      isDefault: true,
+      requestScoped: true,
+    };
+    const registry = createPresetRegistry({ profiles: [], presets: [] });
+    registry.addPreset(transient);
+    expect(registry.listPresets()).toEqual([]);
+    expect(() => registry.resolveTextTarget({})).toThrow();
+    expect(() => registry.resolveEmbeddingTarget()).toThrow();
+    expect(
+      registry.resolveTextTarget({ presetId: transient.id }).preset?.model,
+    ).toBe("private-model");
+  });
+});

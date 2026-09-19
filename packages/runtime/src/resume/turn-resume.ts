@@ -1,3 +1,5 @@
+import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
+import { DEFAULT_MAX_TOOL_STEPS } from "../agent-loop/agent-loop-policy.js";
 import type {
   ExecutionContext,
   LLMTargetIdentity,
@@ -10,21 +12,18 @@ import type {
 import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
-import {
-  runPostRuntimeHook,
-  runPreRuntimeHook,
-} from "../hooks/wire-helpers.js";
-import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
-import { storyOutputError } from "../agent-loop/story-output.js";
-import {
-  completionContractError,
-  withAgentFailureTarget,
-} from "../agent-loop/runtime-completion.js";
+import { completionContractError } from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
+import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
+import {
+  finalizeRuntimeResult,
+  runRuntimePreHook,
+} from "../turn-executor/runtime-finalization.js";
+import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
 export interface ResumeSuspendedRuntimeOptions {
@@ -55,11 +54,7 @@ export async function resumeSuspendedRuntime(
   options?: ResumeSuspendedRuntimeOptions,
 ): Promise<RuntimeResult> {
   const startTime = Date.now();
-  const maxSteps = options?.maxSteps ?? 10;
-  const timeoutMs = options?.timeoutMs ?? manifest.timeoutMs ?? 60000;
   const runId = crypto.randomUUID();
-  const hookPipeline = deps.hookPipeline;
-  let lastTarget: LLMTargetIdentity | undefined;
 
   // Minimal TurnInput for the resumed runtime: session/turn come from the
   // suspension and there is no fresh player message. With no model overrides the
@@ -73,62 +68,72 @@ export async function resumeSuspendedRuntime(
     ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
   };
 
-  const postRuntimeOpts = {
-    pipeline: hookPipeline,
-    sessionId: suspension.sessionId,
-    turnId: suspension.turnId,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    eventBus: deps.eventBus,
-    emitter: deps.emitter,
-  };
-  const finalizeWithPostRuntime = async (
-    result: RuntimeResult,
-  ): Promise<RuntimeResult> => {
-    const final = hookPipeline
-      ? await runPostRuntimeHook(postRuntimeOpts, result)
-      : result;
-    const error =
-      manifest.outputKind === "story" && final.status === "success"
-        ? storyOutputError(final.output)
-        : undefined;
-    return withAgentFailureTarget(
-      error ? { ...final, status: "failed", output: null, error } : final,
-      lastTarget,
-    );
-  };
-
-  // ── PreRuntime hook ──────────────────────────────────────────────
-  if (hookPipeline) {
-    const preRtResult = await runPreRuntimeHook({
-      pipeline: hookPipeline,
-      sessionId: suspension.sessionId,
-      turnId: suspension.turnId,
+  try {
+    return await executeResumedRuntime(suspension, resumeData, manifest, deps, {
+      startTime,
+      runId,
+      input,
+      options,
+    });
+  } catch (error: unknown) {
+    return finalizeRuntimeResult(
+      deps,
       manifest,
       input,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    });
-    if (preRtResult.action === "abort") {
-      return finalizeWithPostRuntime({
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
+      makeFailedResult(
+        manifest,
+        input,
         runId,
-        turnId: suspension.turnId,
-        status: "skipped",
-        output: null,
-        toolCalls: [],
-        durationMs: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-      });
-    }
+        startTime,
+        error instanceof Error ? error.message : String(error),
+      ),
+      { cause: error },
+    );
   }
+}
+
+async function executeResumedRuntime(
+  suspension: SuspensionRecord,
+  resumeData: unknown,
+  manifest: RuntimeManifest,
+  deps: TurnExecutorDeps,
+  execution: {
+    readonly startTime: number;
+    readonly runId: string;
+    readonly input: TurnInput;
+    readonly options?: ResumeSuspendedRuntimeOptions;
+  },
+): Promise<RuntimeResult> {
+  const { startTime, runId, input, options } = execution;
+  const maxSteps = options?.maxSteps ?? DEFAULT_MAX_TOOL_STEPS;
+  const timeoutMs = options?.timeoutMs ?? manifest.timeoutMs ?? 60000;
+  const hookPipeline = deps.hookPipeline;
+  let lastTarget: LLMTargetIdentity | undefined;
+  let deltaCount = 0;
+
+  const finalizeWithPostRuntime = (
+    result: RuntimeResult,
+  ): Promise<RuntimeResult> =>
+    finalizeRuntimeResult(deps, manifest, input, result, {
+      lastTarget,
+      deltaCount,
+    });
+
+  const preRuntime = await runRuntimePreHook(
+    deps,
+    manifest,
+    input,
+    runId,
+    startTime,
+  );
+  if (preRuntime) return preRuntime;
 
   const loaded = await deps.loadRuntime(
     manifest,
     undefined,
     suspension.sessionId,
   );
+  throwIfTurnExecutionAborted(deps.turnControl, "resume loading");
   if (!loaded) {
     return finalizeWithPostRuntime({
       pluginId: manifest.pluginId,
@@ -179,6 +184,11 @@ export async function resumeSuspendedRuntime(
       allowSuspend: false,
     });
   }
+
+  await reportRuntimeStarted(deps, input.sessionId, manifest, {
+    turnId: input.turnId,
+    runId,
+  });
 
   // Rebuild the mid-turn transcript from the suspension and append the resume
   // payload: a tool result for the suspend tool (agent runtimes) or a user
@@ -251,6 +261,7 @@ export async function resumeSuspendedRuntime(
   // the union types honest.
   if ("status" in toolLoop) return toolLoop;
   lastTarget = toolLoop.lastTarget;
+  deltaCount = toolLoop.streamDeltaCount;
 
   const {
     finalContent,

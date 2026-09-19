@@ -11,6 +11,8 @@ import {
   type WorldWireRecord,
 } from "@covel/shared";
 import { request, requestResponse } from "./request.js";
+import { pruneMissingSessionCredentials } from "./session-credential-cleanup.js";
+import { ignoreError } from "../../lib/ignore-error.js";
 import type {
   GeneratedWorldSaveTarget,
   WorldDataPreflightResponse,
@@ -85,10 +87,16 @@ export async function updateWorld(
 }
 
 export async function deleteWorld(id: string): Promise<void> {
-  await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    operatorAuth: true,
-  });
+  try {
+    await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      operatorAuth: true,
+    });
+  } finally {
+    await pruneMissingSessionCredentials().catch(
+      ignoreError("clean session credentials after world deletion"),
+    );
+  }
 }
 
 export async function preflightWorldData(

@@ -1,6 +1,6 @@
 {
   "name": "@covel/events",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "private": true,
   "type": "module",
   "exports": {
@@ -16,10 +16,10 @@
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*",
-    "@covel/store": "workspace:*"
+    "@covel/shared": "workspace:*"
   },
   "devDependencies": {
+    "@covel/store": "workspace:*",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }

@@ -25,16 +25,9 @@ function navigation() {
   return buildNavTree(store, { locale: "en-US" });
 }
 
-it("routes legacy links, composite settings and plugin group links to current panes", () => {
+it("routes current composite settings and plugin groups to their panes", () => {
   const tree = navigation();
-  for (const key of [
-    "llm.keys",
-    "llm.presets",
-    "llm.customPresets",
-    "keys.custom",
-  ]) {
-    expect(resolveSettingsNode(tree, key)?.id).toBe("llm.providers");
-  }
+  expect(resolveSettingsNode(tree, "keys.custom")?.id).toBe("llm.providers");
   expect(resolveSettingsNode(tree, "llm.paramOverrides")?.id).toBe(
     "llm.advanced",
   );

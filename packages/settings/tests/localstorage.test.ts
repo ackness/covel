@@ -67,11 +67,12 @@ describe("LocalStorageBackend", () => {
     await expect(be.loadSecrets()).rejects.toThrow(/invalid/);
   });
 
-  it("migrates v1 on read and detects a stale revision", async () => {
+  it("reads the current bundle and detects a stale revision", async () => {
     storage.setItem(
       "covel:settings",
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        revision: 0,
         savedAt: "old",
         entries: { old: true },
       }),
@@ -92,4 +93,21 @@ describe("LocalStorageBackend", () => {
       currentRevision: 1,
     });
   });
+
+  it.each([undefined, 1])(
+    "preserves unsupported version %s on read and write",
+    async (schemaVersion) => {
+      const contents = JSON.stringify({
+        ...(schemaVersion === undefined ? {} : { schemaVersion }),
+        entries: { retained: true },
+      });
+      storage.setItem("covel:settings", contents);
+      const backend = createLocalStorageBackend(storage);
+      await expect(backend.load()).rejects.toThrow(/unsupported/);
+      await expect(backend.save({ replacement: true })).rejects.toThrow(
+        /unsupported/,
+      );
+      expect(storage.getItem("covel:settings")).toBe(contents);
+    },
+  );
 });

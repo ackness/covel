@@ -49,7 +49,7 @@ export function bufferPluginData(
     source: proposalSource(ctx),
     turnId: ctx.turnId,
     sessionId: ctx.sessionId,
-    payload: { namespace, key, value },
+    payload: { namespace, key, value: structuredClone(value) },
     timestamp: new Date().toISOString(),
   });
 }
@@ -70,7 +70,7 @@ export function bufferPluginDataBatch(
       items: items.map((i) => ({
         namespace: i.namespace,
         key: i.key,
-        value: i.value,
+        value: structuredClone(i.value),
       })),
     },
     timestamp: new Date().toISOString(),
@@ -118,7 +118,9 @@ export function bufferCharacterUpsert(
       ...(record.description !== undefined
         ? { description: record.description }
         : {}),
-      ...(record.fields !== undefined ? { fields: record.fields } : {}),
+      ...(record.fields !== undefined
+        ? { fields: structuredClone(record.fields) }
+        : {}),
       version: record.version,
       createdAt: record.createdAt,
     },
@@ -131,35 +133,41 @@ export function mergePluginDataRows(
   stored: readonly PluginDataRecord[],
   buffer: ExecutionWriteBuffer,
   sessionId: string,
-  pluginId: string,
+  pluginId?: string,
   namespace?: string,
 ): PluginDataRecord[] {
-  const overlay = overlayPluginDataRows(buffer, pluginId, namespace);
-  if (overlay.size === 0) return [...stored];
+  const pluginIds =
+    pluginId === undefined
+      ? new Set(buffer.map((proposal) => proposal.source.pluginId))
+      : [pluginId];
   const now = new Date().toISOString();
   const byKey = new Map<string, PluginDataRecord>();
-  const compositeKey = (ns: string, key: string) => JSON.stringify([ns, key]);
+  const compositeKey = (owner: string, ns: string, key: string) =>
+    JSON.stringify([owner, ns, key]);
   for (const row of stored)
-    byKey.set(compositeKey(row.namespace, row.key), row);
-  for (const entry of overlay.values()) {
-    const ck = compositeKey(entry.namespace, entry.key);
-    if (entry.deleted) {
-      byKey.delete(ck);
-      continue;
+    byKey.set(compositeKey(row.pluginId, row.namespace, row.key), row);
+  for (const owner of pluginIds) {
+    const overlay = overlayPluginDataRows(buffer, owner, namespace);
+    for (const entry of overlay.values()) {
+      const ck = compositeKey(owner, entry.namespace, entry.key);
+      if (entry.deleted) {
+        byKey.delete(ck);
+        continue;
+      }
+      const base = byKey.get(ck);
+      byKey.set(ck, {
+        id: base?.id ?? crypto.randomUUID(),
+        sessionId,
+        pluginId: owner,
+        namespace: entry.namespace,
+        key: entry.key,
+        value: entry.value,
+        createdAt: base?.createdAt ?? now,
+        updatedAt: now,
+      });
     }
-    const base = byKey.get(ck);
-    byKey.set(ck, {
-      id: base?.id ?? crypto.randomUUID(),
-      sessionId,
-      pluginId,
-      namespace: entry.namespace,
-      key: entry.key,
-      value: entry.value,
-      createdAt: base?.createdAt ?? now,
-      updatedAt: now,
-    });
   }
-  return [...byKey.values()];
+  return structuredClone([...byKey.values()]);
 }
 
 /** Merge committed characters with buffered `character.upsert` writes. */
@@ -168,28 +176,5 @@ export function mergeCharacterRecords(
   buffer: ExecutionWriteBuffer,
   sessionId: string,
 ): CharacterRecord[] {
-  const overlay = overlayCharacters(buffer);
-  if (overlay.size === 0) return [...stored];
-  const now = new Date().toISOString();
-  const byId = new Map<string, CharacterRecord>();
-  for (const row of stored) byId.set(row.id, row);
-  for (const [id, payload] of overlay) {
-    const base = byId.get(id);
-    byId.set(id, {
-      id,
-      sessionId,
-      name: payload.name,
-      type: payload.type ?? base?.type ?? "npc",
-      ...((payload.description ?? base?.description)
-        ? { description: payload.description ?? base?.description }
-        : {}),
-      ...((payload.fields ?? base?.fields)
-        ? { fields: payload.fields ?? base?.fields }
-        : {}),
-      version: payload.version ?? base?.version ?? 1,
-      createdAt: base?.createdAt ?? payload.createdAt ?? now,
-      updatedAt: now,
-    });
-  }
-  return [...byId.values()];
+  return [...overlayCharacters(buffer, stored, sessionId).values()];
 }

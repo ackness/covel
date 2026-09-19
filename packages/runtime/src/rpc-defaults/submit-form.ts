@@ -494,10 +494,9 @@ export function createSubmitFormHandler(
       submissions.push(sub);
     }
 
-    // Framework defaults run with the trusted store view, whose runtime surface
-    // is the full DataStore. Keep the public RpcHandlerStore contract narrow for
-    // third-party handlers and narrow this cast to the two framework-only reads /
-    // transaction methods used here.
+    // The host gives registered framework defaults its transaction-owning store.
+    // Plugin actions receive the narrower RpcHandlerStore capability instead.
+    // Keep this cast limited to the two framework-only methods used here.
     const frameworkStore = store as typeof store &
       Pick<DataStore, "listPlayerInputs" | "withTransaction">;
     const messages = (await frameworkStore.listTurnMessages(

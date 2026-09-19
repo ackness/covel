@@ -3,7 +3,11 @@ import { createGateway } from "../src/gateway.js";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import { createProviderRegistry } from "../src/provider-registry.js";
 import { createSlotRegistry } from "../src/slot-registry.js";
-import { __internals } from "../src/slot-overlay.js";
+import {
+  __internals,
+  applySlotOverlay,
+  resolveOverlayPresetId,
+} from "../src/slot-overlay.js";
 import type {
   ModelProfile,
   PresetConfig,
@@ -152,15 +156,69 @@ function setup() {
   return { gateway, calls, providerRegistry, presetRegistry };
 }
 
+describe("explicit model binding identity", () => {
+  it("keeps same-named local models and server presets distinct in one request", async () => {
+    const { gateway, calls, presetRegistry } = setup();
+    const slotOverrides = {
+      slotBindings: {
+        local: { modelRef: "ds-chat" },
+        server: { presetId: "ds-chat" },
+      },
+      customPresets: [
+        {
+          id: "ds-chat",
+          name: "Local model",
+          provider: "vendorX",
+          model: "local-model",
+          baseUrl: "https://local.example/v1",
+        },
+      ],
+    };
+    for (const presetId of ["local", "server"]) {
+      await gateway.generateText(
+        { presetId, messages: [{ role: "user", content: "hi" }] },
+        { slotOverrides },
+      );
+    }
+    expect(calls.map(({ provider, model }) => ({ provider, model }))).toEqual([
+      { provider: "vendorX", model: "local-model" },
+      { provider: "deepseek", model: "deepseek-chat" },
+    ]);
+    expect(gateway.resolveSlot("local", { slotOverrides })).toMatchObject({
+      presetId: "ds-chat",
+      provider: "vendorX",
+      model: "local-model",
+    });
+    expect(
+      presetRegistry.resolveTextTarget({ presetId: "ds-chat" }).preset?.model,
+    ).toBe("deepseek-chat");
+  });
+
+  it("rejects a missing explicit local reference even when a base preset shares its id", async () => {
+    const { gateway, calls } = setup();
+    const slotOverrides = {
+      slotBindings: { story: { modelRef: "ds-chat" } },
+      customPresets: [],
+    };
+    await expect(
+      gateway.generateText(
+        { presetId: "story", messages: [{ role: "user", content: "hi" }] },
+        { slotOverrides },
+      ),
+    ).rejects.toThrow();
+    expect(calls).toEqual([]);
+  });
+});
+
 describe("gateway + slotOverrides", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("routes a slot-name request through slotPresetOverrides to a client custom preset", async () => {
+  it("routes a slot-name request through slotBindings to a client custom preset", async () => {
     const { gateway, calls, presetRegistry } = setup();
     const overrides: SlotOverridesInput = {
-      slotPresetOverrides: { fast: "custom_abc" },
+      slotBindings: { fast: { modelRef: "custom_abc" } },
       customPresets: [
         {
           id: "custom_abc",
@@ -853,7 +911,7 @@ describe("gateway + slotOverrides", () => {
       { presetId: "story", messages: [{ role: "user", content: "hi" }] },
       {
         apiKeys: { deepseek: "sk-deepseek-TEST" },
-        slotOverrides: { slotPresetOverrides: { fast: "custom_abc" } },
+        slotOverrides: { slotBindings: { fast: { modelRef: "custom_abc" } } },
       },
     );
 
@@ -862,4 +920,35 @@ describe("gateway + slotOverrides", () => {
     expect(calls[0].model).toBe("deepseek-chat");
     expect(calls[0].apiKey).toBe("sk-deepseek-TEST");
   });
+});
+
+it("rejects a scoped ID owned only by another concurrent request", async () => {
+  const { gateway, presetRegistry, calls } = setup();
+  const foreign = {
+    customPresets: [
+      {
+        id: "foreign",
+        name: "Foreign",
+        provider: "vendorX",
+        model: "private-model",
+      },
+    ],
+  };
+  const cleanup = applySlotOverlay({ presetRegistry }, foreign);
+  try {
+    const foreignId = resolveOverlayPresetId(
+      "foreign",
+      foreign,
+      presetRegistry.hasPreset,
+    );
+    await expect(
+      gateway.generateText({
+        presetId: foreignId,
+        messages: [{ role: "user", content: "hi" }],
+      }),
+    ).rejects.toThrow("does not belong to this request");
+    expect(calls).toEqual([]);
+  } finally {
+    cleanup();
+  }
 });

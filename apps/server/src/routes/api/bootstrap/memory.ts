@@ -12,7 +12,8 @@ import { FrameworkCapability } from "@covel/shared";
 import type { MemoryBlockSchema, RuntimeManifest } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
-import { getCachedWorld } from "../../../world-cache.js";
+import { observeMemoryUpdate } from "./memory-observation.js";
+import { createMemoryRecovery } from "./memory-recovery.js";
 
 export interface CreateBootstrapMemorySystemParams {
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
@@ -29,7 +30,11 @@ export interface CreateBootstrapMemorySystemParams {
     sessionId: string,
     task: () => Promise<T>,
   ) => Promise<T>;
-  readonly preferredMemorySlot?: string;
+  readonly runCoreExclusive?: <T>(
+    sessionId: string,
+    task: () => Promise<T>,
+  ) => Promise<T>;
+  readonly preferredMemorySlot?: string | (() => string);
   readonly resolveModel: (
     manifest: RuntimeManifest,
     apiOverride?: string,
@@ -50,7 +55,7 @@ export interface BootstrapMemorySystem {
   readonly memorySystem: MemorySystem;
   readonly tools: readonly ToolModule[];
   /** Reuse the manager and pending-update queue with this request's model. */
-  forRequest(llmAdapter: LLMAdapter): MemorySystem;
+  forRequest(llmAdapter: LLMAdapter, modelSlot?: string): MemorySystem;
 }
 
 export function createBootstrapMemorySystem({
@@ -59,6 +64,7 @@ export function createBootstrapMemorySystem({
   llmAdapter,
   embed,
   runIngestExclusive,
+  runCoreExclusive,
   preferredMemorySlot,
   resolveModel,
   getPluginSource,
@@ -66,8 +72,11 @@ export function createBootstrapMemorySystem({
   // Resolve which slot to use for memory LLM calls. Use slot ids here so
   // memory follows the same contract as runtime bindings and player-facing
   // settings instead of reaching into internal preset ids.
-  const resolvedMemorySlot = preferredMemorySlot ?? "plugin";
-  console.log(`[bootstrap] Memory system using slot: ${resolvedMemorySlot}`);
+  const resolveMemorySlot = () =>
+    (typeof preferredMemorySlot === "function"
+      ? preferredMemorySlot()
+      : preferredMemorySlot) ?? "plugin";
+  console.log(`[bootstrap] Memory system using slot: ${resolveMemorySlot()}`);
 
   const memoryPanelPluginId = findMemoryPanelPluginId(manifestCache);
   if (memoryPanelPluginId) {
@@ -107,18 +116,17 @@ export function createBootstrapMemorySystem({
   // Per-session block resolver: merge the global (plugin) blocks with the
   // session's world-declared `memoryBlocks`. Base blocks win on label collision
   // (builtin defaults stay protected); the world only ADDS new genre-specific
-  // labels (e.g. a detective world's `clues` / `suspects`). The world record is
-  // served from a short-TTL per-`worldId` cache (`getCachedWorld`), so this
-  // never accumulates per session and a re-imported world refreshes on its own.
-  // The merge is cheap and re-run per call. On any store error we fall back to
-  // base blocks (and don't pin them — the next turn retries via the world cache).
+  // labels (e.g. a detective world's `clues` / `suspects`). Read the current
+  // store on every resolution so edits and same-id world replacements are
+  // visible to the next operation. The merge is cheap and re-run per call.
+  // Store errors fall back to base blocks; the next operation retries the read.
   const resolveBlocks = async (
     sessionId: string,
   ): Promise<readonly MemoryBlockSchema[] | undefined> => {
     try {
       const session = await store.getSession(sessionId);
       if (!session?.worldId) return baseBlocks;
-      const world = await getCachedWorld(store, session.worldId);
+      const world = await store.getWorld(session.worldId);
       const worldBlocks = (
         world?.metadata as Record<string, unknown> | undefined
       )?.memoryBlocks;
@@ -149,7 +157,11 @@ export function createBootstrapMemorySystem({
       model?: string;
     }) {
       const response = await adapter.generate({
-        model: resolvedMemorySlot,
+        model: params.model ?? resolveMemorySlot(),
+        signal: AbortSignal.timeout(120_000),
+        // Fact extraction needs no extended reasoning. Explicit slot/model
+        // settings still take precedence over this request default.
+        defaults: { reasoningEffort: "disabled" },
         messages: [
           { role: "system", content: params.systemPrompt },
           ...params.messages.map((m) => ({
@@ -162,6 +174,12 @@ export function createBootstrapMemorySystem({
     },
   });
 
+  const coreMemory = {
+    ...(memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : {}),
+    blocks: baseBlocks,
+    resolveBlocks,
+  };
+  const recovery = createMemoryRecovery(store, coreMemory, runCoreExclusive);
   const baseSystem = createMemorySystem(
     {
       store,
@@ -172,12 +190,12 @@ export function createBootstrapMemorySystem({
         resolveModel({ name: slot, model: slot } as RuntimeManifest),
     },
     {
-      coreMemory: {
-        ...(memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : {}),
-        blocks: baseBlocks,
-        resolveBlocks,
+      coreMemory,
+      updater: {
+        commitUpdate: recovery.commitUpdate,
+        onUpdate: (input, result) =>
+          observeMemoryUpdate(store, memoryPanelPluginId, input, result),
       },
-      updater: { modelSlot: resolvedMemorySlot },
     },
   );
 
@@ -187,7 +205,7 @@ export function createBootstrapMemorySystem({
   // wrap that injected method so it ALSO kicks a best-effort `ingest(sessionId)`
   // on the same post-commit tick. Ingestion is itself fire-and-forget and never
   // throws, so it cannot block or fail the turn. No-op when vectors are disabled.
-  const memorySystem: MemorySystem = embed
+  const sharedSystem: MemorySystem = embed
     ? withPostTurnIngestion(baseSystem)
     : baseSystem;
 
@@ -197,19 +215,22 @@ export function createBootstrapMemorySystem({
     } recall/archival search`,
   );
 
+  function forRequest(adapter: LLMAdapter, modelSlot?: string): MemorySystem {
+    const requestLlm = createMemoryLlm(adapter);
+    return {
+      ...sharedSystem,
+      updater: recovery.wrap(
+        sharedSystem.updater,
+        sharedSystem.manager,
+        requestLlm,
+        () => modelSlot ?? resolveMemorySlot(),
+      ),
+    };
+  }
+  const memorySystem = forRequest(llmAdapter);
   return {
     memorySystem,
-    forRequest(adapter) {
-      const requestLlm = createMemoryLlm(adapter);
-      return {
-        ...memorySystem,
-        updater: {
-          ...memorySystem.updater,
-          updateAfterTurn: (params) =>
-            memorySystem.updater.updateAfterTurn(params, requestLlm),
-        },
-      };
-    },
+    forRequest,
     tools: createMemoryTools({
       recall: memorySystem.recall,
       archival: memorySystem.archival,

@@ -202,7 +202,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 | capabilities  | `[world-data-provider]`                                                                                                                 |
 | tools.plugin  | `initialize-world`                                                                                                                      |
 | tools.builtin | 无（setup 期只写世界 schema，不回读自身 plugin-data）                                                                                   |
-| 调用边界      | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools: [initialize-world]`                  |
+| 调用边界      | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools: [initialize-world]`            |
 | ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`                                                                                    |
 
 无论 guard 复用已存在 schema、采用世界声明、从 dimensions 派生，还是 agent 生成，成功/完成输出都会携带结构化 `worldSchema`。下游 setup runtime 可在同一 execution 中通过 runtime inject 消费它；持久 `world.schema` 仍在 proposal commit 后成为后续 execution 的 store 真值。
@@ -227,7 +227,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 - namespace `schema` — 维度 schema 定义（plugin_data），通过 `world.schema` 注入 prompt。
 - session lorebook（`strategy: 'constant'`）— 世界词条数据，通过 `world.entries` 注入 prompt。
 
-`initialize-world` 内部组合 `set-world-schema` 与 `set-world-entries-batch`，把 schema plugin-data、entries plugin-data 和 session lorebook proposals 一起交给 finalizer；任一部分失败时不会提交半套世界数据。每个词条成为一条 `constant` 类型的 lorebook row，id 按 `world-entry:<key>` 稳定化，`insertionOrder` 按批内顺序以 100 为步长递增。两个低层工具仍由 entry 注册用于兼容，但不再暴露给捆绑 runtime。
+`initialize-world` 内部组合 `set-world-schema` 与 `set-world-entries-batch`，把 schema plugin-data、entries plugin-data 和 session lorebook proposals 一起交给 finalizer；任一部分失败时不会提交半套世界数据。每个词条成为一条 `constant` 类型的 lorebook row，id 按 `world-entry:<key>` 稳定化，`insertionOrder` 按批内顺序以 100 为步长递增。两个低层工具仍由 entry 注册，可供显式声明它们的 runtime 使用；捆绑 runtime 使用组合工具。
 
 ---
 
@@ -310,8 +310,8 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 | inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true`；该 typed input 同时形成 DAG 边和失败 gate                                                                                |
 | input.inject | `plugin-data[nodes]` → `<existing-npcs>`、`plugin-data[edges]` → `<existing-relations>`（`format: summary`，现有图在构建 prompt 时注入，免去每轮 `list-npc-graph` 往返；工具 name-first，LLM 只需看见图，不需携带 id） |
 | model slot   | `plugin`                                                                                                                                                                                                               |
-| tools.plugin | `upsert-npc-graph`（批量写节点+边）；`list-npc-graph` 仍注册作兼容读取，但不向本 runtime 声明                                                                                                                          |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools: [upsert-npc-graph]`                                                                                                                    |
+| tools.plugin | `upsert-npc-graph`（批量写节点+边）；`list-npc-graph` 仍注册为读取工具，但不向本 runtime 声明                                                                                                                          |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools: [upsert-npc-graph]`                                                                                                              |
 | ui.right     | `./ui/npc-graph-panel.json`                                                                                                                                                                                            |
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
@@ -405,17 +405,17 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/world-ir/`
 
-| 字段         | 值                                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------------------ |
-| displayName  | `世界事实提取` / `World Fact Extraction`                                                               |
-| stage        | `post-turn`                                                                                            |
-| trigger      | `auto`                                                                                                 |
-| inputs       | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`，本地字符串 schema，`required: true` |
-| output       | `schema: covel://world/ir/v1`，`recordAs: world-ir-v1`                                                 |
-| capabilities | `[world-ir-provider]`                                                                                  |
-| relations    | `provides: [world-ir-provider]`                                                                        |
-| tools.plugin | `submit-world-facts`                                                                                   |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools`     |
+| 字段         | 值                                                                                                       |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| displayName  | `世界事实提取` / `World Fact Extraction`                                                                 |
+| stage        | `post-turn`                                                                                              |
+| trigger      | `auto`                                                                                                   |
+| inputs       | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`，本地字符串 schema，`required: true`   |
+| output       | `schema: covel://world/ir/v1`，`recordAs: world-ir-v1`                                                   |
+| capabilities | `[world-ir-provider]`                                                                                    |
+| relations    | `provides: [world-ir-provider]`                                                                          |
+| tools.plugin | `submit-world-facts`                                                                                     |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `requireToolUse` · `completeAfterTools` |
 
 `world-ir` 只抽取本轮明确事实，通过一次 `submit-world-facts` 工具调用提交 `summary`、`entities`、`relations`、`events`、`statements`。工具参数 schema 直接复用 `worldIRV1Schema`，同时执行全局 id 唯一、entity 引用完整、深度和节点预算等语义校验；校验错误带参数路径返回给模型，可在第二个 step 修正。工具成功后其结果直接成为 runtime output 并再次通过 `covel://world/ir/v1` schema gate，不再让模型另外生成容易截断或夹带 Markdown 的 JSON 文本。非法输出使本 runtime 失败，下游必需输入随即 skip，但本轮 story 与无关插件仍可提交。
 
@@ -444,14 +444,14 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 | inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true` |
 | model        | `plugin`                                                                                     |
 | tools.plugin | `sync-codex-entries`                                                                         |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools`              |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools`        |
 | ui.right     | `./ui/codex-panel.json`                                                                      |
 | ui.message   | `./ui/codex-message.json`                                                                    |
 | input.inject | `plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`）        |
 
 **职责**: 从 `<runtime-inputs>.worldIR.value` 识别并登记本轮出现的知识条目（地点 / 人物 / 势力 / 物品 / 技能 / 传闻 / 怪物）。对"没有新发现"的回合调用 `runtime-done` 结束。prompt 同时看到共享 WorldIR 和已登记条目 `<existing-entries>`，所以 LLM 把新增放入 `sync-codex-entries.unlocks`、补充放入 `updates`，一次调用即可提交全部变化，无需额外 `plugin-data-list` 往返。
 
-**数据持久化**: `sync-codex-entries` 内部复用 `unlock-codex-entries` 与 `update-codex-entry`：新增批量写入 `plugin_data[entries]`，更新按 `entryId`（就是 plugin-data 的 key，形如 `codex-xxx`）以 append-only 语义合并内容、标签并可选升级 `rarity`。所有 proposal 只在完整 sync 成功后一起返回；任一更新目标不存在时整次工具调用失败，不会留下半批图鉴写入。两个低层工具仍注册用于兼容，但不向捆绑 runtime 声明。
+**数据持久化**: `sync-codex-entries` 内部复用 `unlock-codex-entries` 与 `update-codex-entry`：新增批量写入 `plugin_data[entries]`，更新按 `entryId`（就是 plugin-data 的 key，形如 `codex-xxx`）以 append-only 语义合并内容、标签并可选升级 `rarity`。所有 proposal 只在完整 sync 成功后一起返回；任一更新目标不存在时整次工具调用失败，不会留下半批图鉴写入。两个低层工具仍注册，可供显式声明它们的 runtime 使用，但不向捆绑 runtime 声明。
 
 **框架能力依赖**：`input.inject: plugin-data` source 由 `@covel/context` 的 async build 路径提供；当 manifest 声明了任何 `kind: plugin-data` 注入时，turn-executor 会自动切到异步装配路径并调用 `store.listPluginData(sessionId, pluginId, namespace)`。同步路径保持零改动，其他插件不受影响。
 
@@ -600,9 +600,9 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 | stage              | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                                                                                                                                                                                                    |
 | trigger            | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                               |
 | model              | `plugin`                                                                                                                                                                                                                                                                                     |
-| tools.builtin      | `sync-characters`、`get-character`；前者直接广播，后者通过 `tools.defer` + `search-tools` 按需激活（不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                                                                                                        |
+| tools.builtin      | `sync-characters`、`get-character` 均直接可见；`get-character` 在一次读取后移除（不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                                                                                                                           |
 | completeAfterTools | `[sync-characters]` — 整批写入成功后直接结束，不额外请求 `runtime-done`                                                                                                                                                                                                                      |
-| 调用边界           | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000`                                                                                                                                                                                                                                     |
+| 调用边界           | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000`                                                                                                                                                                                                                               |
 | input.inject       | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[characters]` → `<existing-characters>`（`format: summary`，现有角色名册在构建 prompt 时注入，免去每轮 `list-characters` 往返 —— 同 codex `<existing-entries>` 模式） |
 | needs              | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                                                                                                                                                                                                       |
 
@@ -611,7 +611,7 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 1. 查看 `<existing-characters>`（框架自动注入的现有角色名册，行首即角色 id）避免重复——名册既已注入，本 runtime 不再声明 `list-characters`
 2. 阅读叙事识别新 NPC + 状态变化
 3. 仅对明确出现的变化调用一次 `sync-characters`（update 用注入名册里的 id；摘要不足以决策时才按需 `get-character`）
-4. 每次最多创建 5 个 NPC、更新 10 个已有角色；任一子操作失败时整批 proposal 都不提交
+4. 每次最多创建 5 个 NPC、更新 10 个已有角色；重复 create 幂等返回已有 id，不覆盖档案；其他子操作失败时整批 proposal 都不提交，可在剩余步骤内修正并重提完整批次
 5. 无变化时调用 `runtime-done`；sync 成功后框架自动结束
 6. 不修改玩家角色属性（除非叙事明确描述）
 
@@ -1023,19 +1023,19 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 
 ### dashscope-image-gen/prompt-generator
 
-| 字段         | 值                                                                                                                    |
-| ------------ | --------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                                                              |
-| runtimeType  | `agent`                                                                                                               |
-| model        | `default`                                                                                                             |
-| trigger      | `manual`（右侧 `ui/generate-button.json`，`expectsBackgroundFollower`）                                               |
-| execution    | `background`（prompt LLM 与后续出图均不阻塞玩家继续操作）                                                             |
-| tools.plugin | `submit-dashscope-text-prompt`、`submit-dashscope-structured-prompt`，按 `promptMode` 二选一                          |
-| output       | `schema: ./output.schema.json` — 工具返回规范化 `{ prompt, promptMode, composition }`，固定事件由工具发射             |
-| 调用边界     | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 50000` · `requireToolUse` · 两个提交工具均列入 `completeAfterTools` |
-| capabilities | `[image-prompt, manual-invoke]`                                                                                       |
-| input.inject | `plugin-data[prompts]` → `<previous-image-prompts>`（`ids-only`，避免复述旧图）                                       |
-| userSettings | `composition`（single-scene / comic-strip）· `comicPanels` 等构图选项                                                 |
+| 字段         | 值                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                                                    |
+| runtimeType  | `agent`                                                                                                                     |
+| model        | `default`                                                                                                                   |
+| trigger      | `manual`（右侧 `ui/generate-button.json`，`expectsBackgroundFollower`）                                                     |
+| execution    | `background`（prompt LLM 与后续出图均不阻塞玩家继续操作）                                                                   |
+| tools.plugin | `submit-dashscope-text-prompt`、`submit-dashscope-structured-prompt`，按 `promptMode` 二选一                                |
+| output       | `schema: ./output.schema.json` — 工具返回规范化 `{ prompt, promptMode, composition }`，固定事件由工具发射                   |
+| 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 50000` · `requireToolUse` · 两个提交工具均列入 `completeAfterTools` |
+| capabilities | `[image-prompt, manual-invoke]`                                                                                             |
+| input.inject | `plugin-data[prompts]` → `<previous-image-prompts>`（`ids-only`，避免复述旧图）                                             |
+| userSettings | `composition`（single-scene / comic-strip）· `comicPanels` 等构图选项                                                       |
 
 Prompt agent 不再直接拼 `{ topic, data }` JSON 信封：文本模式把字符串交给 text tool，精细模式把对象交给 structured tool，工具负责规范化、写 `plugin_data[prompts]` 并通过 `withEmittedEvents` 发射固定的 `image.generate.requested`。模型无法再漏写/写空 topic；一次提交成功后后台 follower 链继续运行。
 
@@ -1192,7 +1192,7 @@ description: # I18nText：一句话简介
 
 **没有** `displayName` 时，UI 退回显示 plugin id（如 `dashscope-image-gen`），冗长且不直观。所有插件（含内置与第三方）都**建议**声明 `displayName`；23 个内置插件均已声明中英文名。
 
-> 兼容：多 runtime 插件的**包级 PLUGIN.md**（根目录仅含摘要 frontmatter、不作为 runtime 加载）若把 `name` 写成 I18nText 对象，仍会作为展示名的回落来源；但新代码应优先用 `displayName`，不要重载 `name`。
+> 多 runtime 插件的**包级 PLUGIN.md** 提供包元数据，实际 runtime 位于 `runtimes/`。根 `name` 使用插件 ID 字符串，多语言展示名使用 `displayName`；不要把展示对象写入 `name`。
 
 ### pluginType
 
@@ -1223,7 +1223,7 @@ entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一�
 ```js
 // server/index.js
 export default function (covel) {
-  // 本地工具（toolkit 提供 { tool, z, shortId, shortIdBatch, withPendingProposals, store }）
+  // 本地工具（toolkit 提供 { tool, z, shortId, shortIdBatch, withPendingProposals }）
   covel.registerTool(
     covel.toolkit.tool({
       name: "my-tool",
@@ -1246,6 +1246,7 @@ export default function (covel) {
 - **来源门控**与 local tools 一致：builtin 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
 - builtin entry 启动失败后保持待激活，首次 RPC 可按真实发现来源重试，无需社区插件审批或管理员凭据。待激活的 community 或来源缺失的插件仍必须经过原有服务器代码和动作审批；托管环境仍要求管理员凭据。
 - **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册与名称冲突保留警告跳过行为。
+- **宿主清理**：成功注册的撤销函数由 API 宿主持有。宿主停止请求与后台接单，排空已接纳的 HTTP/SSE 业务、runtime 与记忆任务后，关闭 entry 激活入口，等待已经接纳的审批检查和工厂结束，再逆序撤销工具、Hook、RPC、表单校验器及 wire。关闭期间结束的工厂不能再发布注册；后续启动失败同样撤销已发布的批次。插件自行发起的 I/O 或后台任务不属于这项注册清理保证。
 - entry 抛错、非函数导出、缺失文件或路径逃逸均视为激活失败。builtin 启动时记录失败并继续其它插件；`ensurePluginEntry` 调用方收到错误，失败不记作已加载，后续调用可以重试。并发激活共享一次尝试，成功后才去重。
 - 注册 API 仅在工厂执行期间有效；工厂必须 await 自己的初始化，返回后再注册会抛错。回滚只涵盖框架托管注册，不撤销模块顶层 I/O、外部请求或插件自行启动的任务；会话停用不卸载进程共享注册。
 - 底层 Hook、RPC 与媒体 wire registry 的注册返回幂等撤销函数，仅清理该注册实例；旧句柄不会删除同名后继注册。PluginAPI 继续返回 `void`，批次由框架管理。
@@ -1259,7 +1260,28 @@ tools:
     - plugin-data-get
 ```
 
+Hook 的 `match` 谓词与 handler 使用相同的异常隔离规则：过滤器抛错会带注册 Hook 的身份发布 `hook.error`；顺序/first/stream 语义返回 abort，parallel 观察语义记录失败后继续其它 Hook。过滤器返回 false 时不执行 handler，也不发布 `hook.fired`。
+
+Hook 返回值在运行时校验：使用 `{ action: "continue" }`、`{ action: "continue", replace: { ... } }` 或 `{ action: "abort", reason: "..." }`。`replace` 顶层必须为可浅合并的普通数据对象（允许 null prototype），嵌套字段仍遵循快照数据约束。缺少返回值、非法 action、非字符串 reason 或非法 replace 按 handler 异常处理，发布带 Hook 身份的 `hook.error`，诊断不包含非法值原文。顺序流水线停止后续 handler；观察型事件继续；各 wire helper 保持自身的 abort 策略，例如 `PostRuntime` 保留原执行结果而不重新执行 Hook。
+
+Hook 诊断与策略结果分开处理：`hook.fired`、`hook.rewrote`、`hook.aborted` 的 trace 投递失败不会跳过 handler、丢弃改写或再次调用 Hook；`hook.error`、`hook.timeout` 等事件广播失败也不会覆盖原有拒绝或观察语义。框架记录会话、回合、runtime 和注册 Hook 的关联信息，不把投递异常原文、payload 或玩家内容复制到兜底告警。Hook 自身的异常仍按该事件的失败语义处理。
+
+Hook 的 payload 是数据快照：流水线在入口取得副本，`match` 与每个 handler 再分别取得独立副本。原地修改后仅返回 `continue` 不会改变原始输入或后续 Hook；需要改写时显式返回 `replace`。顺序流水线浅合并替换字段，下一 handler 看到已接受的替换。返回值在 handler 完成时复制，保留返回对象后再修改不能改变已接受结果；观察型事件不接受替换。`ctx.activePluginIds` 同样按 handler 复制，取消信号和只读配置访问器仍是上下文能力。
+
+快照保留非枚举字段和 Symbol 字段，包括工具提案、领域事件、对话日志与暂停记录。payload 和替换值可使用普通数据对象、数组、Map、Set、Date、RegExp、ArrayBuffer 及其视图；不接受函数、访问器、未支持的类实例、共享内存或其它能力对象。无法复制的数据按该事件的失败语义处理并发布 `hook.error`，不会退回共享原对象。此机制隔离数据引用，不是同进程插件代码的沙箱，也不能撤销 Hook 自行发起的外部副作用。
+
 Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。`PreStateCommit` 继承传入 `finalizeExecution` 的取消信号，取消会停止后续提案并回滚事务。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、`PostStateCommit` 和会话生命周期的收尾 Hook 使用自己的超时界限。
+
+`ctx.getOwnSettings()` 返回本插件在**本次操作开始时**解析的只读配置：请求的 `X-Plugin-User-Settings` 覆盖世界 `metadata.pluginSettings`，未提供的声明字段使用 manifest 默认值；非法覆盖值仍按字段约束回退。快照复制后深度冻结，不冻结调用方的默认值或配置对象。世界配置直接读取本次操作所用的 DataStore，不在进程内按世界 ID 缓存；已提交的世界编辑在下一次读取时生效，不会跨存储实例串用同名世界。运行中修改玩家或世界配置不会改变已捕获的操作快照，后续操作才读取新值。
+
+| 入口                         | 配置读取与提交时点                                                                                                                                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 玩家回合、手动执行、后台执行 | 执行前解析；执行阶段与 `PreStateCommit` / `PostStateCommit` 使用同一组配置值。排队的后台任务携带入队时的请求/世界覆盖，在执行开始时解析 manifest 默认值；不在提交时重读玩家设置。 |
+| 恢复 suspension              | 使用本次恢复请求与当前世界配置；恢复执行和提交共享快照，不沿用暂停前的请求配置。                                                                                                  |
+| 创建、结束、删除会话         | 在写入会话状态前解析；锁外的 `SessionStart` / `SessionEnd` 使用已捕获快照。无请求覆盖时使用世界与 manifest 默认值。                                                               |
+| 角色 REST 编辑               | 在会话锁内、提案提交前解析，供两个提交 Hook 使用。                                                                                                                                |
+
+Hook 仍只读取其注册插件的配置；framework Hook 返回空对象。直接调用 `pipeline.run` 的嵌入宿主需要通过 `runWithHookScope` 显式提供作用域；嵌套作用域不自动继承另一操作的配置。宿主直接调用 `commitExecution` / `finalizeExecution` 时，可通过 `hookSettings` 传递 `buildHookSettings` 生成的操作快照；省略时仅解析所传 runtime 的 manifest 默认值。
 
 #### 模型响应校验
 
@@ -1319,7 +1341,7 @@ export default function (covel) {
 | `active-runtimes` | 当前会话激活 runtime 的 `id`、`pluginId`、类型、stage、outputKind、capabilities                                                 |
 | `models`          | 包含 `active-runtimes`，并为每个 runtime 增加当前 slot、服务端解析后的 model ID 与来源（session override / manifest / default） |
 
-无论是否声明额外 scope，RPC handler 都继续获得基础 `ctx.sessionId`、`ctx.pluginId`、`ctx.locale` 和既有的 `ctx.store` 视图（community handler 的 plugin-data 访问按自身插件隔离）；`context` 不控制这些既有 RPC 能力。环境快照不包含 provider key、prompt、用户设置或任意 plugin-data。handler 看到的是**执行前**快照；响应的顶层 `environment` 是 handler 完成后重新读取 session、同步激活 runtime 并解析模型所得的**执行后**快照，因此切换 story model、启停 runtime 的命令不会把旧上下文回给客户端。
+无论是否声明额外 scope，RPC handler 都继续获得基础 `ctx.sessionId`、`ctx.pluginId`、`ctx.locale` 和既有的 `ctx.store` 视图（所有插件 action 的 plugin-data 访问都按当前 session 和自身插件隔离）；`context` 不控制这些既有 RPC 能力。环境快照不包含 provider key、prompt、用户设置或任意 plugin-data。handler 看到的是**执行前**快照；响应的顶层 `environment` 是 handler 完成后重新读取 session、同步激活 runtime 并解析模型所得的**执行后**快照，因此切换 story model、启停 runtime 的命令不会把旧上下文回给客户端。
 
 参数仅使用一个小型 shell-like tokenizer：支持空格、单/双引号和反斜杠转义，不执行变量展开、命令替换、glob 或任意代码。多个 runtime 声明同名且定义一致的命令会合并；定义不一致时服务端警告并稳定采用先发现的声明。多 runtime 插件应把命令声明放在实际 runtime 的 `PLUGIN.md`，共享的 `entry` 仍只需注册一次。
 
@@ -1444,6 +1466,30 @@ tools:
 
 `resultFormat` 已从 manifest schema 移除；function handler 不能返回缺少 `outcome` 的旧式普通对象。业务数据放入 `success.value`，它必须是 JSON 值。`ctx.pluginData.set/delete` 写入执行 buffer，成功提交后才持久化并通知前端；实时进度使用 `ctx.progress.report`。领域 effects 仅在 `success` 中生效，由内核在 proposal 提交前物化；非 success 的领域 effects 会被剥离并记录诊断。完整 TypeScript 类型见 `packages/shared/src/types/handler-result.ts`。
 
+### Handler store and commit ownership
+
+- Function runtimes and agent guards receive an execution-owned store capability.
+  Builtins may read sessions, worlds, accepted inputs, messages, characters and
+  plugin data. Their only store writes are `setPluginData`, `setPluginDataBatch`,
+  `deletePluginData` and `upsertCharacter`, all buffered as proposals for the
+  current execution. Host transactions, session mutations, compare-and-set and
+  store disposal are not exposed. `createTrustedHandlerStore` now requires both
+  an execution context and a write buffer; callers must not use it for RPCs.
+- Community runtimes keep the narrower `FunctionStoreView`. Its reads and
+  `ctx.pluginData` share the execution buffer. Returned records and buffered
+  inputs are owned copies, so editing an object cannot mutate stored data or
+  silently change a pending proposal. Overlays apply only to the execution
+  session; deleting a row returns `null` on read. List pagination follows the
+  overlay, including pending inserts and deletes.
+- Plugin RPC actions, including builtins, receive `RpcHandlerStore` scoped to
+  the current session/plugin. Its writes are immediate and serialized by the
+  host session lock. A later handler failure does not undo an earlier successful
+  write. Actions needing whole-execution rollback should invoke a runtime and
+  submit domain effects. Registered framework defaults retain their explicit
+  host transaction ownership (for example, atomic form submission batches).
+- Progress and diagnostics retain their separate live channels. Capability
+  narrowing governs framework handles; in-process plugin code is not a sandbox.
+
 ### recursiveCall
 
 Function runtime 和 guard 的 `FunctionHandlerContext` 暴露：
@@ -1463,7 +1509,7 @@ interface FunctionHandlerContext {
 **执行身份由框架持有，插件不可覆盖**：
 
 - `RecursiveCallDelta = Omit<Partial<TurnInput>, "sessionId" | "turnId" | "origin" | "parentTurnId">`。这四个字段即使在运行时被传入也会被剥离——嵌套调用必须留在父 session 内（否则已批准的 handler 可读取并写入其他 session，绕过 hosted 的 session-owner 边界），并保留框架签发的子 `turnId`（否则其 execution artifact 无法随父回合结算）。
-- `NestedTurnResult = Omit<TurnResult, "completeTurn">`。completion barrier 只保留在顶层框架控制面；嵌套调用方若能触发它，就会在父回合 proposal 提交之前发出权威的 `turn.completed` 并启动 memory ingestion。
+- `NestedTurnResult = TurnResult`，两者均为纯执行数据，不再携带 `completeTurn` 回调。宿主在会话锁内统一调用 `commitExecution`，由它在 proposal 提交成功后生成快照、通知完成并调度记忆提取；嵌套结果随父执行一起提交。
   嵌套调用默认深度上限为 `10`，manifest 可用 `maxRecursionDepth` 覆盖：
 
 ```yaml
@@ -1497,7 +1543,7 @@ builtin `memory` 插件声明默认的四个通用块（`story_state` / `charact
 
 每轮结束后的抽取输入同时包含叙事、工具摘要，以及已提交会话状态中的玩家角色和最近一次表单值。结构化会话事实具有最高事实优先级；`player_profile` 的首行由框架根据角色记录与世界属性显示名确定性生成，LLM 只维护其后的动态状态摘要。这样后续回合无法翻译、改写或覆盖玩家已确认的姓名与属性值。
 
-**世界包**在 `world.yaml` 顶层（而非 `PLUGIN.md`）声明 `memoryBlocks`（字段形状相同）。与插件块的全局聚合不同，世界块**按 session 解析**：记忆系统把该 session 所属世界的块合并到全局插件块之上——基础块（插件 / 框架默认）在标签冲突时优先（builtin 默认受保护），世界只**新增**未占用的标签。因此侦探世界的会话才会出现 `clues` / `suspects`，其它题材会话不受影响。世界侧声明与示例见 [world-data.md #世界记忆块memoryblocks](world-data.md#世界记忆块memoryblocks)。
+**世界包**在 `world.yaml` 顶层（而非 `PLUGIN.md`）声明 `memoryBlocks`（字段形状相同）。与插件块的全局聚合不同，世界块**按 session 解析**：记忆系统把该 session 所属世界的块合并到全局插件块之上——基础块（插件 / 框架默认）在标签冲突时优先（builtin 默认受保护），世界只**新增**未占用的标签。因此侦探世界的会话才会出现 `clues` / `suspects`，其它题材会话不受影响。每次块结构解析读取当前 DataStore 世界记录，已提交的修改或删除在下次解析时可见；这不追溯修改正在执行的记忆抽取，也不删除旧标签的持久化内容。世界侧声明与示例见 [world-data.md #世界记忆块memoryblocks](world-data.md#世界记忆块memoryblocks)。
 
 | 字段             | 类型                     | 说明                                                                   |
 | ---------------- | ------------------------ | ---------------------------------------------------------------------- |
@@ -1578,7 +1624,8 @@ outputKind: story
 - **不持会话锁执行**:后台 follower 的 handler 跑在会话锁**外**,只有提交阶段(finalize 事务 + auto-snapshot)进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。由此带来两条对插件作者可见的约定:
   - 同一 runtime 的并发 follower 由框架按 `<sessionId>::<runtimeId>` 串行,所以 handler 里"这张图是不是已经生成过"这类 check-then-act 仍然是原子的,不会重复计费;**跨 runtime 不保证**。
   - handler 执行期间读到的会话数据可能被并发的玩家回合改写。handler 对**自己**命名空间的读-改-写是安全的(读经 writeBuffer overlay、写在同一事务提交),但如果 handler 把别处的状态读出来再写回去,请假设中途可能已经变了。
-- **进程重启不恢复**:后台任务由进程内队列驱动,没有持久队列。重启后开机扫描会把上一个进程留下的 `pending` 行标为 `failed`(`reason: "orphaned"`,保留 `triggerEvent` 供重试),框架**不自动重跑**——重跑要再计一次费,且请求级 `userSettings` 没有持久化在任务行上。需要"一键重试"的插件自行读这行的 `triggerEvent` 提供入口。
+- **队列与关闭责任**：每个 API bootstrap 持有独立队列，最多同时执行 4 个任务、排队 1024 个任务；等待任务按会话轮转，同一会话按入队顺序执行。队满的任务记为 `failed`（`reason: "background-queue-full"`）。宿主关闭时拒绝新任务，将尚未执行的任务记为 `failed`（`reason: "server-shutdown"`），向运行中的任务传递取消信号，并等待登记、执行及终态写入结束后再关闭存储与事件总线。取消发生在提交完成前会阻止领域写入，已成功提交的领域数据不会因此回滚或自动重跑。超过宿主排空时限时，仍有生产者使用的依赖保持打开直到进程退出；同进程 JS 无法被强制终止。
+- **进程重启不重跑**：后台任务由进程内队列驱动，`_jobs` 是状态记录，不是持久执行队列。Memory/SQLite 单进程模式下，启动扫描会把上一个进程留下的 `pending` 行标为 `failed`（`reason: "orphaned"`，保留 `triggerEvent` 供重试）。PostgreSQL 模式不执行这项扫描，因为旧 `_jobs` 没有可续租的跨进程所有权，无法区分崩溃任务与其它活跃实例的任务；异常退出后可能留下 `pending`。框架**不自动重跑**——重跑可能再次计费，且请求级 `userSettings` 没有持久化在任务行上。需要重试的插件自行读取 `triggerEvent` 提供入口。下节的 staged detached job 使用另一套持久租约协议。
 
 示例:
 
@@ -1618,6 +1665,8 @@ effects:
 | `overlap`        | 仅 `serial`，缺省同值 | 同一 `(session, plugin, runtime)` 的任务按原始回合顺序串行；不同 runtime 可受 worker 全局并发上限并发执行 |
 | `stalePolicy`    | 仅 `reject`，缺省同值 | session incarnation、插件审批代次或插件版本变化时拒绝执行/提交，不把旧结果写进新上下文                    |
 
+服务关闭时 detached worker 停止接单，取消尚未跨过提交屏障的执行并记录 `cancelled` / `worker-shutdown`；已进入 `committing` 的作业继续结算。宿主等待 worker 的在途领任务、执行收尾和存储操作完成，再释放依赖。取消不会自动重跑可能已计费的 provider 调用；不合作的代码不能被同进程强制终止，关闭排空超时会记录警告并交给进程退出处理，不提前关闭仍被 worker 使用的存储。
+
 声明是请求，不是安全证明。首版只有满足以下条件的 runtime 才会实际后台化：
 
 - `runtimeType: function`，且 stage 为 `post-turn` 或 `audit`；`story` 输出在 manifest 加载阶段直接拒绝。
@@ -1638,6 +1687,10 @@ queued -> claimed -> running -> committing -> succeeded
 ```
 
 worker 以 CAS claim 和可续租 lease 防止多 Pod 重复执行，默认全局并发为 4、同 runtime 串行。启动时会继续执行未过期且从未 claim 的 `queued` 作业；排队超时任务置为 `timed_out`，lease 已过期的在途任务置为 `orphaned`，失败终态**不会自动重放**可能已经计费的调用。完成结果写入 job 的 `result`，失败写 `reason/error`；`cancelled` 是控制面的终态，不允许迟到结果复活。当前枚举故意闭合，未来增加 overlap/stale 策略或终态时必须扩展 manifest schema、discovery、状态迁移、协议、Web 恢复和各存储后端测试，不能静默重解释现有值。
+
+worker 在提交屏障和终态转换前停止并等待自己已开始的续租，避免续租与提交争抢 CAS revision。恢复扫描必须匹配扫描时的 revision，期间成功续租的作业不会被误判为 orphaned；队首过期或已被其它 worker 认领时继续查找同会话有效候选。
+
+领域 proposal、journal 与 job 的 `succeeded/result` 在同一 `finalizeExecution` 事务中提交；业务失败或完成 CAS 失败会使整个事务回滚。事务后 Hook、状态通知或 executor 返回失败不降低已持久化的成功状态；漏发的公开状态由现有终态对账补齐，不再次执行 provider。恢复由 worker 首次唤醒与后续 30 秒维护间隔驱动，失败后 1 秒重试；满并发时仍执行维护。`committing` 任务必须先非阻塞取得 session 提交锁，锁忙则跳过，防止停止续租但仍在提交的任务被误判。自定义 `SessionLock` 必须提供与 `withLock` 共用互斥域的 `tryWithLock`，不具备该能力时宿主启动明确失败并回收已分配资源。worker 关闭会停止维护调度并等待在途扫描、锁回调和执行任务。
 
 内置首个 opt-in 是 `mimo-tts/auto-narrate`。涉及世界状态、角色、任务、记忆或被其他 runtime 消费的 post-turn runtime 应继续使用 `await`。
 
@@ -1738,11 +1791,16 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 模型重试的并发队列支持取消：已取消 waiter 立即退出，不等待在途请求完成，不发起新的 provider 请求，不占用后继请求配额；有效排队时长仍按原契约补偿 runtime deadline。
 
+**Agent 工具循环预算**：工具执行及循环内的 Hook 使用剩余预算对应的取消信号。预算耗尽后，当前 runtime 失败，已有正文、工具提案或迟到的 completing-tool 结果都不能将本次执行变为成功；普通执行与恢复执行复用此边界。模型请求阶段由 retry 层管理计时和排队补偿，回到工具循环后继续使用补偿后的剩余预算。工具执行器拥有取消后仍在运行的回调，宿主关闭前必须排空；审计持久化与资源清理可能晚于执行预算完成。同进程不合作代码和已经发出的外部效果不能被强制终止或撤回。
+
+`PostRuntime` 仍可观察超时或父执行取消产生的失败，但不能将其改写为可提交的成功结果。这一终态约束适用于 agent、agent guard 和 function runtime；普通业务失败的 Hook 恢复能力保持不变。
+
 **Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse` / `completeAfterTools`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免它在本次执行已经收场之后仍然写入。吊销挂在超时本身、不挂在任何锁上，因此对持锁与不持锁的执行路径一样有效。协作式 handler 应监听 `ctx.signal` 主动取消。
 
 | 字段                     | 类型       | 默认                                              | 含义                                                                                                                                                                                                                                 |
 | ------------------------ | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `timeoutMs`              | `number`   | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                                           |
+| `timeoutMs`              | `number`   | 60000                                             | runtime 执行预算。Agent 模型排队时间顺延；到期取消工具等待并拒绝迟到结果，审计和资源排空不构成同进程代码的强制终止保证                                                                                                               |
+| `maxSteps`               | `number`   | `20`                                              | 单次执行的模型响应轮数上限；一个响应可含多个工具调用。manifest 覆盖调用方选项，最后使用框架默认；普通、递归和恢复执行沿用同一规则。                                                                                                  |
 | `maxRetries`             | `number`   | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                                           |
 | `callTimeoutMs`          | `number`   | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                                  |
 | `firstTokenTimeoutMs`    | `number`   | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                                                                                                                                                                      |
@@ -1762,7 +1820,7 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **`completeAfterTools` 适用边界**：适合“某个工具成功就是最终产物”的单步或单批 agent runtime。框架仍会执行同一响应中的全部工具调用；只把终结工具列入，不要把需要读取结果后继续决策的查询工具列入。通常 runtime 输出由调用记录组成；当非 story runtime 同时声明 `output.schema`、`requireToolUse: true` 和 `completeAfterTools` 时，框架改用函数调用作为唯一结构化输出通道，不再发送 `responseFormat`，并将成功终结工具返回的对象作为 runtime 输出再次执行 `output.schema` 校验。`output.schema` 必须描述工具的实际对象结果；最简单的做法是原样返回参数，也可以像 `initialize-world` 一样在工具内做确定性组合和补充。
 
-**捆绑结构化 agent 的边界**：单步/单批工具型 runtime 统一把 `maxSteps` 收紧为 2、`maxRetries` 设为 0，并设置 50–60 秒 `callTimeoutMs`；成功写入工具列入 `completeAfterTools`。这让一次无响应的 provider 调用不会通过外层重试占满 120 秒以上预算，同时保留一个 step 给工具参数 schema 修正。主叙事 runtime 不套用这一工具完成配置；两个内置叙事插件通过输出审查 Hook 缓冲正文，检查通过后整段展示，框架的其他 runtime 仍可选择流式输出。
+**捆绑结构化 agent 的边界**：内置 agent runtime 继承框架默认的 20 步工具循环预算，允许小模型多次读取、修正参数后再提交；成功写入工具列入 `completeAfterTools`，成功后立即结束。`maxRetries: 0`、50–60 秒 `callTimeoutMs`、运行总超时和重复调用检测继续生效，增加步数不会增加这些时间上限。主叙事 runtime 不套用这一工具完成配置；两个内置叙事插件通过输出审查 Hook 缓冲正文，检查通过后整段展示，框架的其他 runtime 仍可选择流式输出。
 
 **四类重试触发条件：**
 
@@ -1773,7 +1831,7 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **扰动策略**：重试时框架在 messages 末尾追加一条 `[retry N] ...` system 消息，并随 `N` 递增加入空格 padding，确保 prompt 字节串不同，避免 provider 端 KV-cache 复读同一回应。
 
-**与 gateway fallback 的关系**：`llm.toml` 中 `fallback = "story"` 依然生效。本层的同 preset 重试先跑完后，失败才沿 gateway 的 preset fallback chain 继续尝试下一条。总时长硬上限仍是 `timeoutMs`。
+**与 gateway fallback 的关系**：`llm.toml` 中 `fallback = "story"` 依然生效。本层的同 preset 重试先跑完后，失败才沿 gateway 的 preset fallback chain 继续尝试下一条。fallback 仍受当前剩余执行预算约束。
 
 示例 frontmatter：
 
@@ -1948,7 +2006,7 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### Manifest 加载失败的边界
 
-`pnpm validate:plugin` 先调用 loader 兼容 schema 解析 `PLUGIN.md`，再调用 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层错误通常表示缺少 `---`、YAML 无效或 frontmatter 无法解析，并会阻止 loader 发现该 runtime；authoring 层则报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。生产 loader 为兼容旧 manifest 使用较宽松的输入 schema，因此“server 能加载”不等于“通过当前作者规范”；提交或发布前应以该 CLI 的 strict 结果为准。传入插件目录时，还会检查多 runtime 的插件级 `userSettings` 冲突。
+`pnpm validate:plugin` 先用 loader 解析 `PLUGIN.md`，再对**原始 frontmatter** 执行 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层提供 YAML/字段的行号诊断，authoring 层报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。loader 对非法可选 note 字段的警告和省略不能绕过作者校验：原始 `authorsNote` / `postHistory` 有误仍会失败。合法 I18nText 展示字段、无调度的 Hook/UI-only 声明及 multi-runtime 根元数据都保留；不要求这些声明虚构 `stage`。传入插件目录时，还会检查跨 runtime 的插件级 `userSettings` 冲突。CLI 只验证当前作者合同，没有跳过严格校验的模式。
 
 这条 CLI 检查只验证 manifest 与跨 runtime 声明，不执行 `entry`、handler 或 LLM。要验证 runtime 行为，应使用 `pnpm test:runtime`；要验证 server、SSE 和审批链路，应使用 HTTP E2E。
 
@@ -2014,9 +2072,9 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 
 manifest 字段演进必须同时考虑作者输入、loader 归一化、生成的 JSON Schema、discovery 摘要、运行时消费方、文档和测试：
 
-- **新增**：优先增加带安全默认值的可选字段；旧 host 不理解新调度语义时必须 fail closed，不能把控制字段藏进可忽略的扩展对象。`turnCompletion` 使用嵌套对象，后续策略可在不扩张顶层命名空间的前提下增加。
-- **修改或重命名**：只在 loader 边界短期接受旧名称，归一化后仅保留规范名称；同时出现新旧名称时应拒绝，且不能静默重解释既有枚举值。
-- **删除**：先迁移仓库内 manifest 和消费方，再经过明确的弃用周期；删除已有字段或枚举值属于 manifest 契约的破坏性变更。strict authoring schema 应继续拒绝未知字段，避免拼写错误被当作向前兼容。
+- **新增**：根据当前需求决定必填、可选及默认值，同时实现生产和消费方；不能把调度控制字段藏进可忽略的扩展对象。`turnCompletion` 使用嵌套对象表达相关策略。
+- **修改或重命名**：同步更新仓库内生产方、消费方、schema、fixtures 和文档，只保留当前名称与语义；不为早期开发数据增加别名、双读或迁移分支。
+- **删除**：同时移除仓库内声明和消费路径，并说明受影响的开发数据需要重建。strict authoring schema 继续拒绝未知字段；不为早期数据设置额外弃用周期。
 
 对 `turnCompletion` 增加 `overlap`、`stalePolicy` 或终态时，还必须同步合法状态迁移、持久化恢复、SSE 投影和各存储后端测试；仅更新 schema 不足以形成可用契约。
 
@@ -2047,3 +2105,26 @@ tools:
 ```
 
 框架在 commit 链上看到该字段为 `true` 时，会把该 `runtimeId` 标为 `session.setupRuntimes` 的 `done` 状态；后续轮次的调度器会跳过已完成的 `setup` stage runtime。这是 runtime 粒度的闸门；顶层 `session.phase`（`setup` / `playing`）只是粗粒度的 stage-band 选择器，不下放到单插件的触发条件里，两者互不冲突。
+
+### Host execution commit lifecycle
+
+`executeTurn` / `resumeSuspendedRuntime` 仅执行并返回结果，宿主负责会话锁、权限、执行认领和重试身份，然后调用 `@covel/runtime` 的 `commitExecution`。它在一个事务中提交顶层与嵌套结果、消息、暂停状态、会话计数与 `recordAs` 导出，随后负责通知与快照，并从已提交的会话状态准备记忆。`loadOutputSchema` 与 `mediaStore` 在普通、manual 和 resume 入口都由宿主提供。
+
+普通执行与恢复执行共用 runtime 生命周期：`PreRuntime` 在 agent、function 或 agent guard 的业务执行之前运行一次；框架的依赖、激活输入及权限检查仍先行，失败时不会交由插件 Hook 绕过。`PostRuntime` 处理返回结果后，再校验故事输出、超时与父级取消，最后发送完成回调和唯一的 runtime 终态事件。两种 Hook 都接收父级取消信号。钩子拒绝后不执行 handler、guard 或模型调用；钩子处理期间发生父级取消时，返回失败且无输出，暂停结果也不再附带可持久化的继续执行记录。
+
+恢复执行中的模型、工具循环、函数或加载异常会转换为 `RuntimeResult` 失败候选，与普通执行一起经过 `PostRuntime`。调用方应检查最终返回的 `status`，不能依赖这些执行异常抛出来判断失败。普通业务异常可以由 Hook 恢复；超时和父级取消不能恢复为成功，story 的成功输出仍须包含有效正文。HTTP 恢复最终失败仍返回 500 并释放认领，暂停记录保持未解决，可再次重试。
+
+完成回调与 `runtime.failed` / `runtime.completed` 反映 **Hook 处理后的最终结果**：已恢复为成功的业务错误报告成功，Hook 降级和无效故事输出报告失败。运行通知、故事完成 trace 与 action SSE 保留 `turnId` 和 `runId`；runtime 终态表示执行结束，不表示领域事务已提交。trace 持久化失败不阻断 runtime SSE，回调或终态通知失败不重新执行 Hook。
+
+- `completion.kind: "turn"`：快照后发出 `turn.completed`，调度当前成功故事结果的记忆提取。
+- `completion.kind: "resume"`：提交后发出 `turn.resumed`、强制快照并提取记忆，不额外发出 `turn.completed`。
+- `completion.kind: "detached"`：保留提交与快照，不完成父回合或重复提取故事。
+- 含暂停结果时保存快照，暂不发出完成通知或提取记忆。事务失败则不执行这些提交后步骤。
+
+通知、快照或记忆准备失败不会把已持久化结果改为失败；`snapshotFailed` 独立报告检查点问题。核心记忆提取仍为异步派生任务，检查点包含提交前已完成的记忆及本次事务写入，不保证包含本次尚未完成的提取。此 API 每次认领执行调用一次，不提供跨进程执行去重；低层 `finalizeExecution` 保留给事务本身的测试和组合。宿主统一通过此入口提交，避免自行拼接 finalizer、快照和完成通知。
+
+执行契约（`LoadedRuntime`、`FunctionHandlerContext`、gateway/media 接口）从 `@covel/shared/plugin-runtime` 导入。该入口仅导出类型；`plugin-loader` 为加载侧重导出部分类型，负责文件发现、加载和注册，不是 runtime 的生产依赖。
+
+世界时间通过内置 core-plugin 提供，使用 capability 输入绑定和普通事务化 plugin-data，无内核插件 ID 分支。历法、粗粒度时段与倒流/随机 prompt 见 [World time](./world-time.md)。
+
+图片 handler 的共享流程现在从 `@covel/plugin-handlers-utils/image-generation` 导入 `runImageGeneration`；基础字符串、proposal 与取消辅助函数继续从根入口导入。

@@ -109,8 +109,8 @@ memoryBlocks:
       zh-CN: 校园日程
       en-US: Campus Schedule
     extractionHint:
-      zh-CN: 当前日期、星期、时段、地点、天气、下一次铃声或闭校时间，以及本时段可自然登场的角色和已经约好的去处。
-      en-US: Current date, weekday, time block, location, weather, next bell or campus closing time, who can naturally appear now, and any scheduled destination.
+      zh-CN: 当前地点、天气、下一次铃声或闭校约定、可自然登场的角色和已经约好的去处。当前日期与时段以世界时间插件为准，不在记忆中维护另一份时钟。
+      en-US: Current location, weather, next bell or campus closing appointment, likely characters and scheduled destinations. The world-time plugin owns the current date and phase; do not maintain a second clock in memory.
     icon: Clock
     maxChars: 1000
 # World-declared character attributes. world-init writes these verbatim as the

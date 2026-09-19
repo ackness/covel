@@ -266,7 +266,6 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       status: "active",
       completedPlayerTurns: 1,
 
-      presetId: null,
       activePlugins: ["narrator", "optional-plugin"],
       createdAt: new Date().toISOString(),
     });
@@ -446,7 +445,6 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         status: "active",
         completedPlayerTurns: 1,
 
-        presetId: null,
         activePlugins: ["default-engine"],
         createdAt: new Date().toISOString(),
       });

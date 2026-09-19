@@ -2,6 +2,7 @@
  * POST /api/sessions/:id/plugin-rpc integration tests.
  */
 
+import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
@@ -68,8 +69,10 @@ function setup(): {
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
+  const pluginBackgroundQueue = createTestBackgroundQueue();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
+    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("store", store);
     c.set("rpcExecutor", executor);
     c.set("rpcRegistry", registry);
@@ -495,6 +498,71 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(await res.json()).toMatchObject({ code: "session_not_active" });
   });
 
+  it("gives builtin plugin actions scoped immediate writes without host store authority", async () => {
+    let exposed: string[] = [];
+    const createdAt = "2026-01-01T00:00:00.000Z";
+    await store.setPluginData({
+      id: "existing-entry",
+      sessionId: "sess-rpc-1",
+      pluginId: "codex",
+      namespace: "entries",
+      key: "entry",
+      value: { ready: false },
+      createdAt,
+      updatedAt: createdAt,
+    });
+    registry.registerPluginHandler(
+      "codex",
+      "edit",
+      async (_payload, context) => {
+        exposed = ["withTransaction", "close", "updateSession"].filter(
+          (name) => typeof Reflect.get(context.store, name) === "function",
+        );
+        const snapshot = (await context.store.getSession("other")) as {
+          status: string;
+        };
+        snapshot.status = "ended";
+        const value = { ready: true };
+        const now = new Date().toISOString();
+        await context.store.setPluginData!({
+          sessionId: "other",
+          pluginId: "other",
+          namespace: "entries",
+          key: "entry",
+          value,
+          createdAt: now,
+          updatedAt: now,
+        });
+        value.ready = false;
+        throw new Error("after the immediate write");
+      },
+      {},
+      "builtin",
+    );
+    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: "codex",
+        action: "edit",
+      }),
+    });
+    expect(res.status).toBe(500);
+    expect(exposed).toEqual([]);
+    expect((await store.getSession("sess-rpc-1"))?.status).toBe("active");
+    expect(
+      await store.getPluginData("sess-rpc-1", "codex", "entries", "entry"),
+    ).toMatchObject({
+      id: "existing-entry",
+      createdAt,
+      value: { ready: true },
+    });
+    expect(
+      await store.getPluginData("other", "other", "entries", "entry"),
+    ).toBeNull();
+  });
+
   it("dispatches an entry-registered plugin action", async () => {
     registry.registerPluginHandler(
       "codex",
@@ -812,8 +880,10 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const hasPendingEntry = (pluginId: string): boolean =>
       pluginId === PLUGIN_ID && !activated;
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("rpcExecutor", executor);
       c.set("rpcRegistry", registry);
@@ -1160,8 +1230,10 @@ function setupRuntimeTestEnv(args: {
     },
   };
 
+  const pluginBackgroundQueue = createTestBackgroundQueue();
   const app = new Hono();
   app.use("*", async (c, next) => {
+    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("store", store);
     c.set("pluginRegistry", pluginRegistry);
     c.set("rpcExecutor", rpcExecutor);
@@ -1405,8 +1477,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       if (manifest.name === "chat-mode-narrator") return narratorLoaded;
       return undefined;
     };
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -1727,6 +1801,48 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       size: "1024*1024",
       quality: 95,
     });
+  });
+
+  it("refreshes world settings between manual runtime operations", async () => {
+    const seen: unknown[] = [];
+    const { app, store } = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: SYNC_RUNTIME,
+      execution: "sync",
+      userSettings: [
+        { key: "tone", type: "text", default: "default", label: "Tone" },
+      ],
+      handler: async (ctx) => {
+        seen.push(ctx.userSettings);
+        return { ok: true };
+      },
+    });
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+    const worldId = `rpc-settings-${crypto.randomUUID()}`;
+    await store.updateSession(SESSION_ID, { worldId });
+    for (const tone of ["before", "after"]) {
+      await store.upsertWorld({
+        id: worldId,
+        name: "Settings world",
+        createdAt: new Date().toISOString(),
+        metadata: { pluginSettings: { [PLUGIN_ID]: { tone } } },
+      });
+      const response = await app.request(
+        `/api/sessions/${SESSION_ID}/plugin-rpc`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "runtime",
+            pluginId: PLUGIN_ID,
+            runtimeId: SYNC_RUNTIME,
+            payload: {},
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+    }
+    expect(seen).toEqual([{ tone: "before" }, { tone: "after" }]);
   });
 
   it("falls back to manifest defaults when no X-Plugin-User-Settings header is sent", async () => {
@@ -2257,8 +2373,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2409,8 +2527,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2658,8 +2778,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);

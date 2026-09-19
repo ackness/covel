@@ -12,7 +12,7 @@ export function ConnectionStatus() {
   const { t } = useTranslation();
   const state = useConnectionState();
 
-  if (state === "connected") return null;
+  if (state === "connected" || state === "paused") return null;
 
   const isReconnecting = state === "reconnecting";
   const isConnecting = state === "connecting";

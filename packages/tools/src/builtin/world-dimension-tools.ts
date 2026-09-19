@@ -15,6 +15,7 @@
 import { DIMENSION_KEYS, resolveI18nDeep } from "@covel/shared";
 import { z } from "zod";
 import { tool } from "../tool.js";
+import { overlayPluginDataValue } from "../proposal-overlay.js";
 import type { ToolModule } from "../types.js";
 
 type DimensionKey = (typeof DIMENSION_KEYS)[number];
@@ -76,17 +77,20 @@ function parsePath(path: string): Array<string | number> | null {
     }
 
     if (path[index] === "[") {
-      if (!expectSegment && path[index - 1] === ".") return null;
+      if (expectSegment && index !== 0) return null;
       const close = path.indexOf("]", index);
       if (close < 0) return null;
       const raw = path.slice(index + 1, close);
       if (!/^\d+$/.test(raw)) return null;
-      tokens.push(Number(raw));
+      const arrayIndex = Number(raw);
+      if (!Number.isSafeInteger(arrayIndex)) return null;
+      tokens.push(arrayIndex);
       index = close + 1;
       expectSegment = false;
       continue;
     }
 
+    if (!expectSegment) return null;
     let end = index;
     while (
       end < path.length &&
@@ -118,14 +122,14 @@ function getByPath(
   let current: unknown = value;
   for (const token of tokens) {
     if (typeof token === "number") {
-      if (!Array.isArray(current) || token < 0 || token >= current.length) {
+      if (!Array.isArray(current) || !Object.hasOwn(current, token)) {
         return { found: false };
       }
       current = current[token];
       continue;
     }
 
-    if (!isPlainObject(current) || !(token in current)) {
+    if (!isPlainObject(current) || !Object.hasOwn(current, token)) {
       return { found: false };
     }
     current = current[token];
@@ -215,12 +219,26 @@ function createWorldDimensionGetTool(
 
         const providerPluginId = await getProviderPluginId();
         if (providerPluginId) {
-          const record = await store.getPluginData(
-            context.sessionId,
+          const pending = overlayPluginDataValue(
+            (context.pendingProposals ?? []).filter(
+              (proposal) => proposal.sessionId === context.sessionId,
+            ),
             providerPluginId,
             "entries",
             dimension,
           );
+          // A pending delete removes the session override and reveals the
+          // bound world's metadata, just like a committed delete.
+          const record = pending.hit
+            ? pending.deleted
+              ? null
+              : { value: pending.value }
+            : await store.getPluginData(
+                context.sessionId,
+                providerPluginId,
+                "entries",
+                dimension,
+              );
           if (record) {
             const loaded = {
               source: "plugin-data" as const,
@@ -238,7 +256,7 @@ function createWorldDimensionGetTool(
         const dimensions = isPlainObject(metadata?.dimensions)
           ? metadata.dimensions
           : undefined;
-        if (dimensions && dimension in dimensions) {
+        if (dimensions && Object.hasOwn(dimensions, dimension)) {
           const loaded = {
             source: "world-metadata" as const,
             value: dimensions[dimension],

@@ -4,11 +4,12 @@ import {
   collectExecutionSuspensions,
   createDetachedProposalGuard,
   executeTurn,
-  finalizeExecution,
-  saveAutoSnapshot,
+  commitExecution,
+  buildHookSettings,
+  snapshotUserSettings,
   type TurnExecutorDeps,
 } from "@covel/runtime";
-import type { DataStore, SessionRecord } from "@covel/store";
+import type { DataStore, SessionRecord, StoreTransaction } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type {
   DeferredRuntimeJob,
@@ -55,6 +56,7 @@ export interface PluginRpcRuntimeTurnContext {
 }
 
 export interface RunManualTurnArgs {
+  readonly executionSignal?: AbortSignal;
   readonly turnId: string;
   readonly runtimeId: string;
   readonly payload?: unknown;
@@ -77,6 +79,7 @@ export interface RunManualTurnArgs {
 }
 
 export interface RunDeferredFollowerArgs {
+  readonly executionSignal?: AbortSignal;
   readonly followerTurnId: string;
   readonly runtimeId: string;
   readonly triggerEvent: {
@@ -101,6 +104,10 @@ export interface RunDetachedStageArgs {
     readonly backgroundTurnId: string;
     readonly backgroundExecutionId: string;
   }) => Promise<void>;
+  readonly completeInTx: (
+    tx: StoreTransaction,
+    result: Awaited<ReturnType<typeof executeTurn>>,
+  ) => Promise<void>;
   readonly beforeExecute?: () => Promise<void>;
   readonly executionSignal?: AbortSignal;
 }
@@ -134,6 +141,20 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly commit: TurnCommitOutcome;
   }>;
 } {
+  function executionControl(
+    signal?: AbortSignal,
+  ): TurnExecutorDeps["turnControl"] {
+    const current = ctx.deps.turnControl;
+    return signal
+      ? {
+          ...current,
+          executionSignal: current?.executionSignal
+            ? AbortSignal.any([current.executionSignal, signal])
+            : signal,
+        }
+      : current;
+  }
+
   function assertApprovalScope(
     session: SessionRecord,
     runtimeId: string,
@@ -168,11 +189,14 @@ export function createPluginRpcRuntimeTurnRunner(
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
+    hookSettings: ReturnType<typeof buildHookSettings>,
     opts: {
+      readonly executionSignal?: AbortSignal;
       readonly proposalGuard?: Parameters<
-        typeof finalizeExecution
+        typeof commitExecution
       >[0]["proposalGuard"];
-      readonly completeTurn?: boolean;
+      readonly completionKind?: "turn" | "detached";
+      readonly extraInTx?: (tx: StoreTransaction) => Promise<void>;
     } = {},
   ): Promise<TurnCommitOutcome> {
     // Commit the whole execution (top-level + nested recursiveCall results) in
@@ -180,11 +204,37 @@ export function createPluginRpcRuntimeTurnRunner(
     // rolls the turn back (committed siblings included) and settles the
     // turn_results row to `failed`; a clean run settles it `committed`, both
     // inside that transaction.
-    const outcome = await finalizeExecution({
+    const outcome = await commitExecution({
+      signal: opts.executionSignal,
+      completion:
+        opts.completionKind === "detached"
+          ? { kind: "detached", turnId: turnResult.turnId }
+          : {
+              kind: "turn",
+              turnId: turnResult.turnId,
+              durationMs: turnResult.durationMs,
+            },
+      memorySystem: ctx.deps.memorySystem,
+      capabilityPluginIds: ctx.deps.capabilityPluginIds,
+      onFinalized: async (outcome) => {
+        // Commit failures must not report success. Surface each one as a
+        // `proposal.failed` trace event (manual/background turns have no live
+        // action stream; the /debug timeline and subscription channel carry it).
+        for (const fp of outcome.failedProposals) {
+          await emitter.emit("proposal.failed", {
+            proposalId: fp.proposal.id,
+            proposalType: fp.proposal.type,
+            runtimeId: fp.proposal.source.runtimeId,
+            pluginId: fp.proposal.source.pluginId,
+            error: fp.error,
+          });
+        }
+      },
       store: ctx.store,
       sessionId: ctx.sessionId,
       executionContext: turnResult.executionContext,
       runtimes: ctx.activeRuntimes,
+      hookSettings,
       results: [
         ...turnResult.runtimeResults,
         ...(turnResult.nestedRuntimeResults ?? []),
@@ -195,6 +245,7 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
       emitter,
+      ...(opts.extraInTx ? { extraInTx: opts.extraInTx } : {}),
       ...(opts.proposalGuard ? { proposalGuard: opts.proposalGuard } : {}),
       // Manual / late-setup runs settle their setup attempts too (a manual
       // retrigger of a pending setup runtime burns an attempt).
@@ -211,62 +262,12 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
     });
 
-    // Commit failures must not report success. Surface each one as a
-    // `proposal.failed` trace event (manual/background turns have no live
-    // action stream; the /debug timeline and subscription channel carry it).
-    for (const fp of outcome.failedProposals) {
-      await emitter.emit("proposal.failed", {
-        proposalId: fp.proposal.id,
-        proposalType: fp.proposal.type,
-        runtimeId: fp.proposal.source.runtimeId,
-        pluginId: fp.proposal.source.pluginId,
-        error: fp.error,
-      });
-    }
-
     const committed = outcome.status === "committed";
-    let snapshotFailed = false;
-    if (committed) {
-      try {
-        await saveAutoSnapshot({
-          store: ctx.store,
-          sessionId: ctx.sessionId,
-          turnId: turnResult.turnId,
-          eventBus: ctx.eventBus,
-        });
-      } catch (err) {
-        snapshotFailed = true;
-        console.warn(
-          `[plugin-rpc] auto snapshot failed for session ${ctx.sessionId} turn ${turnResult.turnId}:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    } else {
-      console.error(
-        `[plugin-rpc] proposal commit failed for session ${ctx.sessionId} turn ${turnResult.turnId} — ` +
-          "withholding auto-snapshot and turn completion",
-      );
-    }
-
-    // Commit barrier: fire the authoritative turn.completed event and memory
-    // ingestion only when every proposal committed. A failed auto-snapshot does
-    // NOT withhold completion — the proposals already committed (commit_status
-    // was settled inside finalize), so business state is consistent and only
-    // the best-effort checkpoint is missing; counting it as a failure made the
-    // sync RPC return 500 and the client retry, replaying committed proposals.
-    // So `committed` tracks proposal commit alone, matching commit_status;
-    // `snapshotFailed` stays on the outcome for observability.
-    const hasSuspendedRuntime = [
-      ...turnResult.runtimeResults,
-      ...(turnResult.nestedRuntimeResults ?? []),
-    ].some((result) => result.status === "suspended");
-    if (committed && !hasSuspendedRuntime && opts.completeTurn !== false) {
-      await turnResult.completeTurn?.();
-    }
     return {
       committed,
       failedProposalCount: outcome.failedProposals.length,
-      snapshotFailed,
+      snapshotFailed: outcome.snapshotFailed,
+      ...(outcome.error ? { error: outcome.error } : {}),
     };
   }
 
@@ -304,16 +305,23 @@ export function createPluginRpcRuntimeTurnRunner(
       readonly executionSignal?: AbortSignal;
       readonly rejectSuspension?: boolean;
       readonly proposalGuard?: Parameters<
-        typeof finalizeExecution
+        typeof commitExecution
       >[0]["proposalGuard"];
-      readonly completeTurn?: boolean;
+      readonly completionKind?: "turn" | "detached";
+      readonly completeInTx?: RunDetachedStageArgs["completeInTx"];
     } = {},
   ): Promise<{
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
     readonly commit: TurnCommitOutcome;
   }> {
+    const userSettings = snapshotUserSettings(turnInput.userSettings);
+    const hookSettings = buildHookSettings(ctx.activeRuntimes, userSettings);
+    const executionInput = { ...turnInput, userSettings };
+    const turnControl = executionControl(opts.executionSignal);
+    const executionSignal = turnControl?.executionSignal;
     const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
     return ctx.sessionLock.withLock(jobLockId, async () => {
+      executionSignal?.throwIfAborted();
       // Detached work does not hold the main session lock during provider
       // execution. Take it briefly to linearize authorization against a
       // concurrent revoke/disable/delete before spending external work.
@@ -335,17 +343,16 @@ export function createPluginRpcRuntimeTurnRunner(
             throw new SessionApprovalScopeChangedError();
           }
           await opts.beforeExecute?.();
+          executionSignal?.throwIfAborted();
         }),
       );
-      const result = await executeTurn(turnInput, ctx.activeRuntimes, {
+      const result = await executeTurn(executionInput, ctx.activeRuntimes, {
         ...ctx.deps,
         store: ctx.store,
         eventBus: ctx.eventBus,
         emitter,
         ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-        ...(opts.executionSignal
-          ? { turnControl: { executionSignal: opts.executionSignal } }
-          : {}),
+        turnControl,
       });
       if (
         opts.rejectSuspension === true &&
@@ -383,12 +390,17 @@ export function createPluginRpcRuntimeTurnRunner(
               backgroundExecutionId: result.executionContext.executionId,
             });
           }
-          return processTurnResults(result, emitter, {
+          const completeInTx = opts.completeInTx;
+          return processTurnResults(result, emitter, hookSettings, {
+            executionSignal,
+            ...(completeInTx
+              ? { extraInTx: (tx) => completeInTx(tx, result) }
+              : {}),
             ...(opts.proposalGuard
               ? { proposalGuard: opts.proposalGuard }
               : {}),
-            ...(opts.completeTurn !== undefined
-              ? { completeTurn: opts.completeTurn }
+            ...(opts.completionKind !== undefined
+              ? { completionKind: opts.completionKind }
               : {}),
           });
         },
@@ -430,26 +442,45 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
+    const userSettings = snapshotUserSettings(turnInput.userSettings);
+    const hookSettings = buildHookSettings(ctx.activeRuntimes, userSettings);
+    const executionInput = { ...turnInput, userSettings };
+
     // Background mode has already returned 202 to the client and detached from
     // the request, and the only manual runtime that uses it is a media
     // generation (mimo-tts/manual-narrate) — exactly the shape that must not
     // hold the session lock. Sync mode is request-bound, short, and its caller
     // awaits the HTTP response, so it keeps the whole run serialised.
+    const turnControl = executionControl(args.executionSignal);
+    const executionSignal = turnControl?.executionSignal;
     const { result, commit } = args.detached
-      ? await runDetached(args.runtimeId, turnInput, emitter).then((r) => ({
+      ? await runDetached(args.runtimeId, executionInput, emitter, {
+          executionSignal: args.executionSignal,
+        }).then((r) => ({
           result: r.turnResult,
           commit: r.commit,
         }))
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
           await requireLiveApprovedSession(args.runtimeId);
-          const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
-            ...ctx.deps,
-            store: ctx.store,
-            eventBus: ctx.eventBus,
+          executionSignal?.throwIfAborted();
+          const turnResult = await executeTurn(
+            executionInput,
+            ctx.activeRuntimes,
+            {
+              ...ctx.deps,
+              turnControl,
+              store: ctx.store,
+              eventBus: ctx.eventBus,
+              emitter,
+              ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+            },
+          );
+          const outcome = await processTurnResults(
+            turnResult,
             emitter,
-            ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-          });
-          const outcome = await processTurnResults(turnResult, emitter);
+            hookSettings,
+            { executionSignal },
+          );
           return { result: turnResult, commit: outcome };
         });
 
@@ -501,7 +532,9 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    return runDetached(args.runtimeId, turnInput, emitter);
+    return runDetached(args.runtimeId, turnInput, emitter, {
+      executionSignal: args.executionSignal,
+    });
   }
 
   async function runDetachedStage(args: RunDetachedStageArgs): Promise<{
@@ -550,12 +583,13 @@ export function createPluginRpcRuntimeTurnRunner(
         ? { expectedPluginVersion: args.descriptor.pluginVersion }
         : {}),
       beforeCommit: args.beforeCommit,
+      completeInTx: args.completeInTx,
       ...(args.beforeExecute ? { beforeExecute: args.beforeExecute } : {}),
       ...(args.executionSignal
         ? { executionSignal: args.executionSignal }
         : {}),
       proposalGuard: createDetachedProposalGuard(target),
-      completeTurn: false,
+      completionKind: "detached",
       rejectSuspension: true,
     });
   }

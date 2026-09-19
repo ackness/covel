@@ -1,3 +1,8 @@
+import {
+  captureContinuation,
+  AnthropicContinuationAccumulator,
+} from "./provider-continuation.js";
+import { readAnthropicReasoning } from "./http/reasoning-readers.js";
 /** Appended to system prompt for Anthropic generateObject (no native JSON mode). */
 const ANTHROPIC_JSON_DIRECTIVE = "Respond with JSON only.";
 
@@ -111,7 +116,7 @@ function extractAnthropicParameterOverrides(
   context: ModelRequestContext | undefined,
   model: string,
 ): Record<string, unknown> {
-  return {
+  const fields: Record<string, unknown> = {
     ...extractParameterOverrides(meta, ANTHROPIC_PARAMETER_FIELD_MAP),
     ...extractReasoningRequestFields(
       meta,
@@ -120,6 +125,41 @@ function extractAnthropicParameterOverrides(
       model,
     ),
   };
+  const effective = { ...sanitizeAnthropicMetadata(meta), ...fields };
+  const thinking = effective.thinking as { type?: string } | undefined;
+  const fixedSampling =
+    /claude-(?:(?:fable|mythos|opus|sonnet)-5|opus-4-[78])/.test(
+      model.toLowerCase(),
+    );
+  const thinkingEnabled =
+    thinking?.type === "adaptive" || thinking?.type === "enabled";
+  // Claude rejects incompatible sampling values instead of ignoring them.
+  if (
+    fixedSampling ||
+    (model.toLowerCase().includes("claude") && thinkingEnabled)
+  ) {
+    fields.temperature = undefined;
+    fields.top_k = undefined;
+    if (
+      fixedSampling ||
+      (typeof effective.top_p === "number" &&
+        (effective.top_p < 0.95 || effective.top_p > 1))
+    )
+      fields.top_p = undefined;
+  }
+  if (
+    thinking?.type === "disabled" &&
+    effective.output_config &&
+    typeof effective.output_config === "object"
+  ) {
+    const outputConfig = { ...effective.output_config } as Record<
+      string,
+      unknown
+    >;
+    delete outputConfig.effort;
+    fields.output_config = outputConfig;
+  }
+  return fields;
 }
 
 /**
@@ -284,6 +324,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       params = withTextRequestDefaults(params);
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
+        { model: params.model, config },
       );
       const anthropicTools = toAnthropicTools(params.tools);
       const systemField = buildAnthropicSystemField(system, config);
@@ -317,6 +358,13 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         text: readAnthropicText(payload),
         finishReason: String(payload.stop_reason ?? "stop"),
         usage: readAnthropicUsage(payload),
+        reasoningContent: readAnthropicReasoning(payload),
+        providerContinuation: captureContinuation(
+          "anthropic-messages-v1",
+          params.model,
+          config,
+          payload.content,
+        ),
         ...(toolCalls ? { toolCalls } : {}),
       };
     },
@@ -324,6 +372,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
     async generateObject(config, params, context) {
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
+        { model: params.model, config },
       );
       const systemField = buildAnthropicSystemField(
         system,
@@ -368,6 +417,13 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         object: validation.data,
         finishReason: String(payload.stop_reason ?? "stop"),
         usage: readAnthropicUsage(payload),
+        reasoningContent: readAnthropicReasoning(payload),
+        providerContinuation: captureContinuation(
+          "anthropic-messages-v1",
+          params.model,
+          config,
+          payload.content,
+        ),
       };
     },
 
@@ -375,6 +431,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       params = withTextRequestDefaults(params);
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
+        { model: params.model, config },
       );
       const anthropicTools = toAnthropicTools(params.tools);
       const systemField = buildAnthropicSystemField(system, config);
@@ -409,6 +466,8 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
+      const thinkingBlocks = new Map<number, string>();
+      const continuation = new AnthropicContinuationAccumulator();
       // Anthropic streams a tool call as `content_block_start` (id + name),
       // then its arguments as `input_json_delta` fragments, closed by
       // `content_block_stop`. Accumulate per block index and emit once whole —
@@ -419,6 +478,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
+        continuation.push(payload);
         const delta = payload.delta as Record<string, unknown> | undefined;
         if (
           payload.type === "content_block_delta" &&
@@ -431,6 +491,12 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         if (payload.type === "content_block_start") {
           const block = payload.content_block as
             Record<string, unknown> | undefined;
+          if (block?.type === "thinking") {
+            const text =
+              typeof block.thinking === "string" ? block.thinking : "";
+            thinkingBlocks.set(Number(payload.index ?? 0), text);
+            if (text) yield { type: "reasoning-delta", reasoningDelta: text };
+          }
           if (block?.type === "tool_use") {
             pendingToolBlocks.set(Number(payload.index ?? 0), {
               id: String(block.id ?? ""),
@@ -438,6 +504,19 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
               json: "",
             });
           }
+        }
+
+        if (
+          payload.type === "content_block_delta" &&
+          delta?.type === "thinking_delta" &&
+          typeof delta.thinking === "string"
+        ) {
+          const index = Number(payload.index ?? 0);
+          thinkingBlocks.set(
+            index,
+            (thinkingBlocks.get(index) ?? "") + delta.thinking,
+          );
+          yield { type: "reasoning-delta", reasoningDelta: delta.thinking };
         }
 
         if (
@@ -489,7 +568,23 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         }
       }
 
-      yield { type: "done", finishReason, usage };
+      const reasoningContent = [...thinkingBlocks.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, text]) => text)
+        .filter((text) => text.trim())
+        .join("\n\n");
+      yield {
+        type: "done",
+        finishReason,
+        usage,
+        ...(reasoningContent ? { reasoningContent } : {}),
+        providerContinuation: captureContinuation(
+          "anthropic-messages-v1",
+          params.model,
+          config,
+          continuation.items(),
+        ),
+      };
     },
 
     async embed() {

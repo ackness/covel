@@ -20,13 +20,15 @@
  * and lets either branch be deleted independently.
  */
 
+import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { collectMediaRefIds } from "@covel/shared";
-import { rebindSnapshotPayloadSession } from "@covel/store";
+import { rebindSnapshotPayloadSession } from "@covel/store/session";
 import type {
   DataStore,
+  StoreTransaction,
   MediaStore,
   SnapshotRecord,
   CharacterRecord,
@@ -345,7 +347,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         // successfully-added refs below.
         const forkMediaIds: string[] = [];
         try {
-          forkSnapshot = await store.withTransaction!(async (tx) => {
+          const materializeChild = async (tx: StoreTransaction) => {
             // Restore lifecycle and runtime selection from the captured point.
             // `ended` is terminal with no un-end API, so a fork is resumable.
             await tx.createSession({
@@ -360,9 +362,11 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               setupRuntimes: snapshotSession.setupRuntimes,
               locale: snapshotSession.locale,
               activePlugins: childActivePlugins,
-              presetId: snapshotSession.presetId,
               runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
               metadata: {
+                ...(snapshotSession.loreOverride !== undefined
+                  ? { loreOverride: snapshotSession.loreOverride }
+                  : {}),
                 [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
                 [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
                 [SESSION_INCARNATION_KEY]: randomUUID(),
@@ -421,7 +425,10 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 if (!newId) return base;
                 const value =
                   base.value && typeof base.value === "object"
-                    ? { ...(base.value as Record<string, unknown>), id: newId }
+                    ? {
+                        ...(base.value as Record<string, unknown>),
+                        id: newId,
+                      }
                     : base.value;
                 return { ...base, key: newId, value };
               });
@@ -539,19 +546,14 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             //
             // Current v3 payloads carry the summaries referenced at capture
             // time. Re-mint those ids and rewrite each copied message tag.
-            // Legacy v3 payloads have no sessionSummaries field; their raw
-            // message content is still present, so clear every compaction tag
-            // rather than hiding history behind a missing summary.
             const capturedSummaries = snapshot.payload.sessionSummaries;
             const capturedSummaryById = new Map(
-              (capturedSummaries ?? []).map(
+              capturedSummaries.map(
                 (summary) => [summary.id, summary] as const,
               ),
             );
             const capturedMessageSummaryIds =
-              capturedSummaries === undefined
-                ? undefined
-                : snapshot.payload.compactedMessageSummaryIds;
+              snapshot.payload.compactedMessageSummaryIds;
             const summaryIdMap = new Map<string, string>();
             const childSessionSummaries: SessionSummaryRecord[] = [];
             const childCompactedMessageSummaryIds: Record<string, string> = {};
@@ -568,31 +570,24 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               for (let i = 0; i <= cursorIdx; i++) {
                 const m = parentMessages[i]!;
                 let compactedAtTurnId: string | undefined;
-                const capturedSummaryId =
-                  capturedSummaries === undefined
-                    ? undefined
-                    : (capturedMessageSummaryIds?.[m.id] ??
-                      (capturedMessageSummaryIds === undefined
-                        ? m.compactedAtTurnId
-                        : undefined));
+                const capturedSummaryId = capturedMessageSummaryIds[m.id];
                 if (capturedSummaryId !== undefined) {
+                  // Payload validation guarantees every captured reference exists.
                   const capturedSummary =
-                    capturedSummaryById.get(capturedSummaryId);
-                  if (capturedSummary) {
-                    let childSummaryId = summaryIdMap.get(capturedSummary.id);
-                    if (!childSummaryId) {
-                      childSummaryId = randomUUID();
-                      summaryIdMap.set(capturedSummary.id, childSummaryId);
-                      const childSummary: SessionSummaryRecord = {
-                        ...capturedSummary,
-                        id: childSummaryId,
-                        sessionId: childSessionId,
-                      };
-                      await tx.saveSessionSummary(childSummary);
-                      childSessionSummaries.push(childSummary);
-                    }
-                    compactedAtTurnId = childSummaryId;
+                    capturedSummaryById.get(capturedSummaryId)!;
+                  let childSummaryId = summaryIdMap.get(capturedSummary.id);
+                  if (!childSummaryId) {
+                    childSummaryId = randomUUID();
+                    summaryIdMap.set(capturedSummary.id, childSummaryId);
+                    const childSummary: SessionSummaryRecord = {
+                      ...capturedSummary,
+                      id: childSummaryId,
+                      sessionId: childSessionId,
+                    };
+                    await tx.saveSessionSummary(childSummary);
+                    childSessionSummaries.push(childSummary);
                   }
+                  compactedAtTurnId = childSummaryId;
                 }
                 const childMessageId = randomUUID();
                 const copy: TurnMessageRecord = {
@@ -635,7 +630,13 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             };
             await tx.saveSnapshot(built);
             return built;
-          });
+          };
+          const createChild = () => store.withTransaction(materializeChild);
+          const result = parentSession.worldId
+            ? await withWritableWorld(c, parentSession.worldId, createChild)
+            : await createChild();
+          if (result instanceof Response) return result;
+          forkSnapshot = result;
         } catch (err) {
           if (mediaStore && forkMediaIds.length > 0) {
             await Promise.allSettled(

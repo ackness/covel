@@ -1,3 +1,12 @@
+import {
+  captureContinuation,
+  continuationItems,
+} from "./provider-continuation.js";
+import type { ProviderConfig } from "../types.js";
+import {
+  readResponsesReasoning,
+  ResponsesReasoningAccumulator,
+} from "./http/reasoning-readers.js";
 import type { LLMResponseFormat } from "@covel/shared";
 import {
   withTextRequestDefaults,
@@ -78,7 +87,7 @@ function extractResponsesParameterOverrides(
   context: ModelRequestContext | undefined,
   model: string,
 ): Record<string, unknown> {
-  return {
+  const fields = {
     ...extractParameterOverrides(meta, RESPONSES_PARAMETER_FIELD_MAP),
     ...extractReasoningRequestFields(
       meta,
@@ -87,6 +96,27 @@ function extractResponsesParameterOverrides(
       model,
     ),
   };
+  const knownReasoningModel = /(?:^|[/])(?:gpt-5|o[34](?:-|$))/.test(
+    model.toLowerCase(),
+  );
+  const reasoning =
+    fields.reasoning ?? sanitizeResponsesMetadata(meta).reasoning;
+  const options =
+    reasoning && typeof reasoning === "object" && !Array.isArray(reasoning)
+      ? (reasoning as Record<string, unknown>)
+      : {};
+  if (knownReasoningModel && options.effort !== "none") {
+    fields.reasoning = { summary: "auto", ...options };
+    if (meta?.store === false) {
+      fields.include = [
+        ...new Set([
+          ...(Array.isArray(meta.include) ? meta.include : []),
+          "reasoning.encrypted_content",
+        ]),
+      ];
+    }
+  }
+  return fields;
 }
 
 /**
@@ -154,9 +184,18 @@ function responsesContentToText(content: TextMessageContent): string {
  * `function_call_output` (the result, keyed by the same `call_id`). Without
  * this round-trip the multi-turn tool loop breaks on the follow-up turn.
  */
-function serializeResponsesInput(messages: TextMessage[]): unknown[] {
+function serializeResponsesInput(
+  messages: TextMessage[],
+  model: string,
+  config: ProviderConfig,
+): unknown[] {
   const items: unknown[] = [];
   for (const msg of messages) {
+    const native = continuationItems(msg, "openai-responses-v1", model, config);
+    if (native) {
+      items.push(...native);
+      continue;
+    }
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
       const text = responsesContentToText(msg.content);
       if (text.length > 0) {
@@ -235,7 +274,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const messages = applyCapabilityFallback(params.messages, context);
       const body: Record<string, unknown> = {
         model: params.model,
-        input: serializeResponsesInput(messages),
+        input: serializeResponsesInput(messages, params.model, config),
         ...(params.responseFormat
           ? { text: { format: toResponsesJsonSchema(params.responseFormat) } }
           : {}),
@@ -262,6 +301,13 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         text: readResponsesOutputText(payload),
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
+        reasoningContent: readResponsesReasoning(payload),
+        providerContinuation: captureContinuation(
+          "openai-responses-v1",
+          params.model,
+          config,
+          payload.output,
+        ),
         toolCalls: readResponseToolCalls(payload),
       };
     },
@@ -270,7 +316,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const messages = applyCapabilityFallback(params.messages, context);
       const response = await postJson(config, "/responses", {
         model: params.model,
-        input: serializeResponsesInput(messages),
+        input: serializeResponsesInput(messages, params.model, config),
         text: { format: { type: "json_schema" } },
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(
@@ -297,6 +343,13 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         object: validation.data,
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
+        reasoningContent: readResponsesReasoning(payload),
+        providerContinuation: captureContinuation(
+          "openai-responses-v1",
+          params.model,
+          config,
+          payload.output,
+        ),
       };
     },
 
@@ -305,7 +358,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const messages = applyCapabilityFallback(params.messages, context);
       const body: Record<string, unknown> = {
         model: params.model,
-        input: serializeResponsesInput(messages),
+        input: serializeResponsesInput(messages, params.model, config),
         stream: true,
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(
@@ -331,6 +384,9 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let streamFinishReason = "stop";
+      const reasoning = new ResponsesReasoningAccumulator();
+      const outputItems = new Map<number, unknown>();
+      let completedOutput: unknown;
       // Accumulate streaming function-call items keyed by the Responses item
       // id. Insertion order (first `output_item.added`) drives emission order.
       const toolCallAcc = new Map<
@@ -339,6 +395,10 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
+        if (payload.type === "response.output_item.done")
+          outputItems.set(Number(payload.output_index ?? 0), payload.item);
+        const reasoningDelta = reasoning.push(payload);
+        if (reasoningDelta) yield { type: "reasoning-delta", reasoningDelta };
         if (
           payload.type === "response.output_text.delta" &&
           typeof payload.delta === "string"
@@ -385,6 +445,8 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           const responseObj = payload.response as
             Record<string, unknown> | undefined;
           usage = readOpenAiResponsesUsage(responseObj);
+          if (Array.isArray(responseObj?.output))
+            completedOutput = responseObj.output;
           streamFinishReason = mapResponseStatus(
             responseObj?.status ?? terminalStatus,
           );
@@ -404,7 +466,21 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         };
       }
 
-      yield { type: "done", finishReason: streamFinishReason, usage };
+      yield {
+        type: "done",
+        finishReason: streamFinishReason,
+        usage,
+        reasoningContent: reasoning.text(),
+        providerContinuation: captureContinuation(
+          "openai-responses-v1",
+          params.model,
+          config,
+          completedOutput ??
+            [...outputItems.entries()]
+              .sort(([a], [b]) => a - b)
+              .map(([, item]) => item),
+        ),
+      };
     },
 
     // Delegate non-text operations to the chat adapter

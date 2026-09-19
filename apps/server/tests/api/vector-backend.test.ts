@@ -1,3 +1,4 @@
+import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,7 @@ it.each(["none", "embedded"] as const)(
   "honors vector backend %s for model locks, ingestion and recall",
   async (vectorBackend) => {
     const pluginsDir = await mkdtemp(join(tmpdir(), "covel-vector-config-"));
+    let boot: Awaited<ReturnType<typeof bootstrapApi>> | undefined;
     try {
       const store = createMemoryStore();
       const now = new Date().toISOString();
@@ -46,7 +48,7 @@ it.each(["none", "embedded"] as const)(
       const lock = vi.fn(async () => undefined);
       let memory: MemorySystem | undefined;
       let injectedLock: unknown;
-      const { app } = await bootstrapApi({
+      const { app } = (boot = await bootstrapApi({
         pluginsDir,
         store,
         storeBackend: "memory",
@@ -61,7 +63,7 @@ it.each(["none", "embedded"] as const)(
             await next();
           },
         ],
-      });
+      }));
       expect((await app.request("/api/health")).status).toBe(200);
       expect(memory).toBeDefined();
       await memory!.ingest("session");
@@ -79,6 +81,8 @@ it.each(["none", "embedded"] as const)(
         expect(embed).toHaveBeenCalledTimes(2);
       }
     } finally {
+      await closeTestApi(boot);
+      await boot?.store.close();
       await rm(pluginsDir, { recursive: true, force: true });
     }
   },

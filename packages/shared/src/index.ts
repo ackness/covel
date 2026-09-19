@@ -1,5 +1,9 @@
 // ── Types ─────────────────────────────────────────────────────────
 export * from "./types/index.js";
+export { llmModelBindingSchema } from "./model-binding.js";
+export type { LlmModelBinding } from "./model-binding.js";
+export type { CharacterRecord } from "./types/character-record.js";
+export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
@@ -174,6 +178,10 @@ export {
 } from "./schemas/world.js";
 
 export type { WorldManifestInput } from "./schemas/world.js";
+export {
+  worldTimeSchema,
+  type WorldTimeDefinition,
+} from "./schemas/world-time.js";
 
 // ── API Transport Contracts ────────────────────────────────────
 export {
@@ -281,3 +289,6 @@ export {
   resolveProviderRequestBody,
   type LLMProviderRequestTrace,
 } from "./llm-request-trace.js";
+
+export { REASONING_EFFORT_VALUES, isReasoningEffort } from "./reasoning.js";
+export type { ReasoningEffort } from "./reasoning.js";

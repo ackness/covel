@@ -1,6 +1,6 @@
 /**
  * Event bus — fan-out to onEmit subscribers with per-session replay buffer.
- * Optionally persists events to a DataStore for audit trail.
+ * Optionally persists events through an EventStore for audit trail.
  *
  * Ring buffer design (RING_BUFFER_MAX = 1000 per session):
  * Enables SSE reconnection recovery — when a client disconnects and reconnects,
@@ -42,7 +42,7 @@
  */
 
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
-import type { DataStore, EventRecord } from "@covel/store";
+import type { EventStore, EventStoreRecord } from "./event-store.js";
 import { RingBuffer } from "./ring-buffer.js";
 
 /** Result of a replay query — `gap` means the cursor could not be bridged. */
@@ -103,6 +103,8 @@ export interface EventBus {
    * rejects (per-event failures are already logged).
    */
   flush(): Promise<void>;
+  /** Stop intake, drain persistence/transport work, and close the owned transport. */
+  close(): Promise<void>;
 }
 
 /**
@@ -114,10 +116,13 @@ export interface EventBus {
  */
 export interface EventBusTransport {
   publish(payload: string): void | Promise<void>;
-  subscribe(handler: (payload: string) => void): void;
+  subscribe(handler: (payload: string) => void): void | (() => void);
+  /** Optional for transports without owned resources. Called after bus drain. */
+  close?(): Promise<void>;
 }
 
 export interface EventBusOptions {
+  /** Owned by the bus; close() releases it after pending work settles. */
   readonly transport?: EventBusTransport;
 }
 
@@ -159,7 +164,7 @@ interface SessionState {
  * Wire frame moved over the transport. `seq` is the origin's per-session
  * sequence number (receivers order-buffer on it). Exactly one of `event` /
  * `ref` is set: `event` inlines the full SubscriptionEvent (small payloads);
- * `ref` points at a persisted EventRecord for oversize payloads (receivers
+ * `ref` points at a persisted EventStoreRecord for oversize payloads (receivers
  * re-fetch from the shared store via `getEventById`).
  */
 interface TransportFrame {
@@ -257,7 +262,7 @@ function parseTransportFrame(payload: string): TransportFrame | undefined {
 }
 
 export function createEventBus(
-  store?: DataStore,
+  store?: EventStore,
   options?: EventBusOptions,
 ): EventBus {
   // ── Subscription infrastructure ────────────────────────────────
@@ -268,6 +273,9 @@ export function createEventBus(
   const emitCallbacks = new Set<(event: SubscriptionEvent) => void>();
   const resetCallbacks = new Set<(reset: EventBusReset) => void>();
   const transport = options?.transport;
+  let closed = false;
+  let closing: Promise<void> | undefined;
+  const deliveries = new Set<Promise<void>>();
   // Identifies this bus instance on the transport channel so we can drop
   // self-echoed frames (PG NOTIFY delivers to the notifying pod too).
   const originId = crypto.randomUUID();
@@ -280,7 +288,7 @@ export function createEventBus(
 
   // ── Bounded persist queue ─────────────────────────
   interface PersistItem {
-    readonly record: EventRecord;
+    readonly record: EventStoreRecord;
     /** Always called exactly once: true after a successful save, false on error/drop. */
     readonly settle?: (ok: boolean) => void;
   }
@@ -442,6 +450,7 @@ export function createEventBus(
   }
 
   async function deliverFrame(frame: TransportFrame): Promise<void> {
+    if (closed) return;
     if (frame.event) {
       deliverRemote(frame.event);
       return;
@@ -454,6 +463,7 @@ export function createEventBus(
       frame.ref.sessionId,
       frame.ref.eventId,
     );
+    if (closed) return;
     if (!record) {
       throw new Error(
         `transport ref "${frame.ref.eventId}" not found in store`,
@@ -507,8 +517,12 @@ export function createEventBus(
         // A received ref can still be unreadable or gone from storage. Its
         // origin seq has already advanced, so invalidate here on the delivery
         // chain before successors receive apparently contiguous replay ids.
-        invalidateReplay(rs.sessionId);
+        if (!closed) invalidateReplay(rs.sessionId);
       });
+    // Track even evicted receive states until their pending store reads end.
+    const delivery = rs.chain;
+    deliveries.add(delivery);
+    void delivery.then(() => deliveries.delete(delivery));
   }
 
   /**
@@ -530,7 +544,9 @@ export function createEventBus(
     // before any post-hole frame is assigned a new local replay id. This makes
     // the skipped transport range visible to SSE clients and replay callers.
     rs.chain = rs.chain
-      .then(() => invalidateReplay(rs.sessionId))
+      .then(() => {
+        if (!closed) invalidateReplay(rs.sessionId);
+      })
       .catch((err) => {
         console.error("[EventBus] replay invalidation failed:", err);
       });
@@ -542,6 +558,7 @@ export function createEventBus(
   }
 
   function handleTransportFrame(payload: string): void {
+    if (closed) return;
     const frame = parseTransportFrame(payload);
     if (!frame) {
       console.warn("[EventBus] ignoring malformed transport frame");
@@ -579,12 +596,11 @@ export function createEventBus(
     }
   }
 
-  if (transport) {
-    transport.subscribe(handleTransportFrame);
-  }
+  const unsubscribe = transport?.subscribe(handleTransportFrame);
 
   const bus: EventBus = {
     emit(message: CovelMessage): void {
+      if (closed) return;
       // ── Subscription event creation ──────────────────────────
       const state = touchSession(message.sessionId);
       state.seq += 1;
@@ -747,6 +763,37 @@ export function createEventBus(
         persistDrain = { promise, resolve };
       }
       await persistDrain.promise;
+    },
+
+    close(): Promise<void> {
+      if (closing) return closing;
+      closed = true;
+      try {
+        unsubscribe?.();
+      } catch (error) {
+        // Intake is already disabled; a faulty adapter must not skip drain.
+        console.warn("[EventBus] transport unsubscribe failed:", error);
+      }
+      for (const state of receiveStates.values()) {
+        if (state.timer) clearTimeout(state.timer);
+        state.pending.clear();
+      }
+      closing = (async () => {
+        try {
+          await Promise.all([
+            bus.flush(),
+            ...outboxTails.values(),
+            ...deliveries,
+          ]);
+        } finally {
+          sessions.clear();
+          receiveStates.clear();
+          emitCallbacks.clear();
+          resetCallbacks.clear();
+          await transport?.close?.();
+        }
+      })();
+      return closing;
     },
   };
 

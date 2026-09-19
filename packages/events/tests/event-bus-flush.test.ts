@@ -28,7 +28,7 @@ function controlledPersistence() {
     await store.saveEvent(record);
   });
   return {
-    bus: createEventBus({ ...store, saveEvent }),
+    bus: createEventBus({ saveEvent, getEventById: store.getEventById }),
     store,
     saveEvent,
     pending,

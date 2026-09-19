@@ -36,7 +36,13 @@ export type {
 } from "./budget.js";
 
 // ── Prompt Loader ────────────────────────────────────────────────
-export { loadPrompt, interpolate, setPromptsRoot } from "./prompts-loader.js";
+export {
+  loadPrompt,
+  createPromptLoader,
+  interpolate,
+  setPromptsRoot,
+} from "./prompts-loader.js";
+export type { PromptLoader } from "./prompts-loader.js";
 
 // ── Compactor ────────────────────────────────────────────
 export { maybeCompact } from "./compactor.js";
@@ -67,4 +73,7 @@ export type { BuildSessionContextSnapshotOpts } from "./session-context.js";
 export { applyBranchReplyAcceptedCandidates } from "./branch-reply-history.js";
 
 // ── Narrow store interface (layering boundary) ──────────────────
-export type { SessionContextStore } from "./session-context-store.js";
+export type {
+  SessionContextStore,
+  SessionContextReadStore,
+} from "./session-context-store.js";

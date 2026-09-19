@@ -1,3 +1,4 @@
+import { closeTestApi } from "../helpers/close-api.js";
 /** Regression: UI discovery is declaration-only and never imports runtime code. */
 
 import fs from "node:fs";
@@ -94,7 +95,9 @@ describe("bootstrap UI-spec declaration discovery", () => {
     });
   });
 
-  afterAll(() => {
+  afterAll(async () => {
+    await closeTestApi(result);
+    await result?.store.close();
     fs.rmSync(tmpRoot, { recursive: true, force: true });
     const g = globalThis as Record<string, unknown>;
     delete g[BUILTIN_FLAG];

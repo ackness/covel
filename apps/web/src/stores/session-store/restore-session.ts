@@ -5,7 +5,11 @@ import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import type { SnapshotMessage } from "@covel/shared";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
 
 interface MutableRef<T> {
@@ -66,49 +70,54 @@ async function restoreServerSnapshot(
   isCurrent: () => boolean,
 ): Promise<boolean> {
   try {
-    const snapshot = await api.getSessionView(sessionId);
-    if (!isCurrent()) return false;
-    dispatch({
-      type: "LOAD_MESSAGES",
-      messages: toStreamMessages(snapshot.messages),
-    });
-    // snapshot.messages 只是最近一窗；记录游标作为"加载更旧"的起点。
-    // null / undefined ⇒ 已到历史开头，禁用向上加载。
-    dispatch({
-      type: "SET_OLDER_MESSAGES_CURSOR",
-      cursor: snapshot.messagesCursor ?? null,
-    });
+    let applied = false;
+    await refreshSessionResource(
+      dispatch,
+      ["game-state", sessionId, "restore"],
+      {
+        isCurrent,
+        read: () => api.getSessionView(sessionId),
+        apply: (snapshot) => {
+          dispatch({
+            type: "MERGE_RECOVERED_MESSAGES",
+            messages: toStreamMessages(snapshot.messages),
+          });
+          // snapshot.messages 只是最近一窗；记录游标作为"加载更旧"的起点。
+          // null / undefined ⇒ 已到历史开头，禁用向上加载。
+          dispatch({
+            type: "SET_OLDER_MESSAGES_CURSOR",
+            cursor: snapshot.messagesCursor ?? null,
+          });
 
-    if (
-      snapshot.characters.length > 0 ||
-      Object.keys(snapshot.gameState).length > 0 ||
-      snapshot.characterSchema
-    ) {
-      dispatch({
-        type: "SET_GAME_STATE",
-        state: enrichGameStateFromSnapshot(snapshot),
-      });
-    }
+          publishSessionGameState(
+            dispatch,
+            sessionId,
+            enrichGameStateFromSnapshot(snapshot),
+          );
 
-    dispatch({
-      type: "LOAD_EXECUTION_STEPS",
-      steps: reconcileExecutionSteps(
-        localSteps,
-        snapshot.executionSteps,
-        snapshot.execution,
-      ),
-    });
-    dispatch({
-      type: "SET_EXECUTION_RECOVERY",
-      recovery: {
-        sessionId,
-        status: snapshot.execution ?? null,
-        hydrating: false,
-        checking: !snapshot.execution,
+          dispatch({
+            type: "LOAD_EXECUTION_STEPS",
+            steps: reconcileExecutionSteps(
+              localSteps,
+              snapshot.executionSteps,
+              snapshot.execution,
+            ),
+          });
+          dispatch({
+            type: "SET_EXECUTION_RECOVERY",
+            recovery: {
+              sessionId,
+              status: snapshot.execution ?? null,
+              hydrating: false,
+              checking: !snapshot.execution,
+            },
+          });
+
+          applied = true;
+        },
       },
-    });
-
-    return true;
+    );
+    return applied;
   } catch {
     return false;
   }
@@ -126,7 +135,7 @@ async function restoreLocalFallback(
 
   if (messagesResult.status === "fulfilled") {
     dispatch({
-      type: "LOAD_MESSAGES",
+      type: "MERGE_RECOVERED_MESSAGES",
       messages: toStreamMessages(messagesResult.value),
     });
     // 本地回退走 ds.listMessages 全量恢复，没有更旧要加载 → 游标置空。
@@ -134,7 +143,7 @@ async function restoreLocalFallback(
   }
   if (patchesResult.status === "fulfilled") {
     dispatch({
-      type: "LOAD_STATE_PATCHES",
+      type: "MERGE_INITIAL_STATE_PATCHES",
       patches: patchesResult.value,
     });
   }
@@ -142,12 +151,14 @@ async function restoreLocalFallback(
 
 async function restoreSubmittedBlocks(
   ds: DataService,
-  sessionId: string,
+  session: api.SessionRecord,
   dispatch: SessionDispatch,
 ): Promise<void> {
   try {
-    const { ids: blockIds, values: blockValues } =
-      await ds.loadSubmittedBlocks(sessionId);
+    const { ids: blockIds, values: blockValues } = await ds.loadSubmittedBlocks(
+      session.id,
+      session,
+    );
     for (const blockId of blockIds) {
       dispatch({
         type: "SUBMIT_BLOCK",
@@ -165,6 +176,12 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
     runtimeId: (raw.runtimeId as string) ?? "unknown",
     pluginId: (raw.pluginId as string) ?? "",
     status: raw.status as ExecutionStep["status"],
+    reasoning: Array.isArray(raw.reasoning)
+      ? (raw.reasoning as ExecutionStep["reasoning"])
+      : undefined,
+    toolName: typeof raw.toolName === "string" ? raw.toolName : undefined,
+    abortReason:
+      typeof raw.abortReason === "string" ? raw.abortReason : undefined,
     label: raw.label as string | undefined,
     detail: raw.detail as string | undefined,
     durationMs: raw.durationMs as number | undefined,
@@ -193,10 +210,10 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
 
 async function restorePersistedExecutionSteps(
   ds: DataService,
-  sessionId: string,
+  session: api.SessionRecord,
 ): Promise<ExecutionStep[]> {
   try {
-    const raw = (await ds.loadExecutionSteps(sessionId)) as Array<
+    const raw = (await ds.loadExecutionSteps(session.id, session)) as Array<
       Record<string, unknown>
     >;
     return raw.map(toExecutionStep);
@@ -207,31 +224,25 @@ async function restorePersistedExecutionSteps(
 
 function refreshSessionSideData(
   sessionId: string,
-  targetSessionId: string,
-  sessionIdRef: MutableRef<string | null>,
   dispatch: SessionDispatch,
+  isCurrent: () => boolean,
 ): void {
-  api
-    .listSessionPlugins(sessionId)
-    .then((res) => {
-      if (sessionIdRef.current === targetSessionId) {
-        dispatch({
-          type: "LOAD_SESSION_PLUGINS",
-          plugins: [...res.items],
-          commands: [...res.commands],
-        });
-      }
-    })
-    .catch(ignoreError("list session plugins on restore"));
+  void refreshSessionResource(dispatch, ["plugins", sessionId], {
+    isCurrent,
+    read: () => api.listSessionPlugins(sessionId),
+    apply: (res) =>
+      dispatch({
+        type: "LOAD_SESSION_PLUGINS",
+        plugins: [...res.items],
+        commands: [...res.commands],
+      }),
+  }).catch(ignoreError("list session plugins on restore"));
 
-  api
-    .listSuspensions(sessionId)
-    .then((suspensions) => {
-      if (sessionIdRef.current === targetSessionId) {
-        dispatch({ type: "SET_SUSPENSIONS", suspensions });
-      }
-    })
-    .catch(ignoreError("list suspensions on restore"));
+  void refreshSessionResource(dispatch, ["suspensions", sessionId], {
+    isCurrent,
+    read: () => api.listSuspensions(sessionId),
+    apply: (suspensions) => dispatch({ type: "SET_SUSPENSIONS", suspensions }),
+  }).catch(ignoreError("list suspensions on restore"));
 }
 
 export async function restoreSessionState({
@@ -308,11 +319,11 @@ export async function restoreSessionState({
   if (!isCurrent()) return;
   dispatch({ type: "SET_SESSION", session: freshSession });
 
-  const localSteps = await restorePersistedExecutionSteps(ds, session.id);
+  const localSteps = await restorePersistedExecutionSteps(ds, freshSession);
   if (!isCurrent()) return;
   const snapshotLoaded = await restoreServerSnapshot(
     session.id,
-    dispatchCurrent,
+    dispatch,
     localSteps,
     isCurrent,
   );
@@ -333,13 +344,8 @@ export async function restoreSessionState({
     });
   }
 
-  await restoreSubmittedBlocks(ds, session.id, dispatchCurrent);
+  await restoreSubmittedBlocks(ds, freshSession, dispatchCurrent);
   if (!isCurrent()) return;
 
-  refreshSessionSideData(
-    session.id,
-    targetSessionId,
-    sessionIdRef,
-    dispatchCurrent,
-  );
+  refreshSessionSideData(session.id, dispatch, isCurrent);
 }

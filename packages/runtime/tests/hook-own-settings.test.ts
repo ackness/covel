@@ -27,6 +27,8 @@ import {
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookContext } from "../src/hooks/types.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { buildHookSettings } from "../src/hooks/hook-settings.js";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
@@ -63,11 +65,119 @@ describe("hook-scope settings", () => {
     expect(isHookScopeActive()).toBe(false);
   });
 
-  it("degrades to {} when the scope carries no settings (e.g. session/commit scopes)", () => {
+  it("degrades to {} when a custom scope carries no settings", () => {
     runWithHookScope({ activePluginIds: new Set(["plugin-a"]) }, () => {
       expect(isHookScopeActive()).toBe(true);
       expect(currentOwnSettings("plugin-a")).toEqual({});
     });
+  });
+});
+
+describe("operation settings snapshot", () => {
+  it("owns nested defaults without freezing or retaining caller-owned objects", () => {
+    const defaults = { nested: { value: "original" } };
+    const snapshot = buildHookSettings(
+      [
+        {
+          pluginId: "configured",
+          userSettings: [
+            { key: "config", type: "text", default: defaults, label: "Config" },
+          ],
+        },
+      ],
+      undefined,
+    );
+    expect(Object.isFrozen(defaults)).toBe(false);
+    defaults.nested.value = "edited";
+    expect(snapshot.configured.config).toEqual({
+      nested: { value: "original" },
+    });
+    expect(Object.isFrozen(snapshot.configured.config)).toBe(true);
+    expect(
+      Object.isFrozen((snapshot.configured.config as typeof defaults).nested),
+    ).toBe(true);
+  });
+
+  it("isolates concurrent operations through pre/post commit and ignores the caller's unrelated scope", async () => {
+    const manifest = makeCfgManifest();
+    const pipeline = createHookPipeline();
+    const observed: Array<{
+      sessionId: string;
+      event: string;
+      settings: unknown;
+    }> = [];
+    for (const event of ["PreStateCommit", "PostStateCommit"] as const) {
+      pipeline.register({
+        id: `configured:${event}`,
+        event,
+        pluginId: manifest.pluginId,
+        handler: async (ctx) => {
+          await Promise.resolve();
+          observed.push({
+            sessionId: ctx.sessionId,
+            event,
+            settings: ctx.getOwnSettings?.(),
+          });
+          return { action: "continue" };
+        },
+      });
+    }
+    const outcomes = await runWithHookScope(
+      {
+        activePluginIds: new Set([manifest.pluginId]),
+        settings: { [manifest.pluginId]: { tone: "unrelated-operation" } },
+      },
+      () =>
+        Promise.all(
+          ["a", "b", "defaults"].map(async (sessionId) => {
+            const hookSettings =
+              sessionId === "defaults"
+                ? undefined
+                : buildHookSettings([manifest], {
+                    [manifest.pluginId]: { tone: sessionId },
+                  });
+            return finalizeExecution({
+              store: createMemoryStore(),
+              sessionId,
+              executionContext: {
+                executionId: sessionId,
+                origin: "manual",
+                countPolicy: "none",
+              },
+              runtimes: [manifest],
+              hookSettings,
+              hookPipeline: pipeline,
+              turnIds: [],
+              results: [
+                {
+                  runtimeId: manifest.name,
+                  pluginId: manifest.pluginId,
+                  turnId: sessionId,
+                  runId: sessionId,
+                  status: "success",
+                  output: {
+                    statePatches: [{ table: "stats", field: "hp", value: 1 }],
+                  },
+                  toolCalls: [],
+                  durationMs: 0,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            });
+          }),
+        ),
+    );
+    expect(outcomes.every((outcome) => outcome.status === "committed")).toBe(
+      true,
+    );
+    expect(observed).toHaveLength(6);
+    for (const entry of observed) {
+      expect(entry.settings).toEqual({
+        tone: entry.sessionId === "defaults" ? "neutral" : entry.sessionId,
+        verbosity: 3,
+      });
+      expect(Object.isFrozen(entry.settings)).toBe(true);
+    }
   });
 });
 
@@ -80,6 +190,73 @@ const baseCtx: HookContext = {
 };
 
 describe("HookPipeline getOwnSettings injection", () => {
+  it("binds a retained settings accessor to the originating operation", async () => {
+    const pipeline = createHookPipeline();
+    let readSettings: HookContext["getOwnSettings"];
+    pipeline.register({
+      id: "capture-settings",
+      event: "TurnStart",
+      pluginId: "plugin-a",
+      handler: async (ctx) => {
+        readSettings = ctx.getOwnSettings;
+        return { action: "continue" };
+      },
+    });
+    await runWithHookScope(
+      {
+        activePluginIds: new Set(["plugin-a"]),
+        settings: { "plugin-a": Object.freeze({ tone: "origin" }) },
+      },
+      () => pipeline.run("TurnStart", baseCtx, {}),
+    );
+    expect(readSettings?.()).toEqual({ tone: "origin" });
+    runWithHookScope(
+      {
+        activePluginIds: new Set(["plugin-a"]),
+        settings: { "plugin-a": Object.freeze({ tone: "another-session" }) },
+      },
+      () => expect(readSettings?.()).toEqual({ tone: "origin" }),
+    );
+  });
+
+  it("does not let caller or handler mutations widen another hook's activation set", async () => {
+    const pipeline = createHookPipeline();
+    const activePluginIds = new Set(["plugin-a"]);
+    const seen: string[][] = [];
+    const inactive = vi.fn(async () => ({ action: "continue" as const }));
+    pipeline.register({
+      id: "mutating-hook",
+      event: "TurnStart",
+      pluginId: "plugin-a",
+      handler: async (ctx) => {
+        (ctx.activePluginIds as Set<string>).add("plugin-b");
+        return { action: "continue" };
+      },
+    });
+    pipeline.register({
+      id: "following-hook",
+      event: "TurnStart",
+      pluginId: "plugin-a",
+      handler: async (ctx) => {
+        seen.push([...(ctx.activePluginIds ?? [])]);
+        return { action: "continue" };
+      },
+    });
+    pipeline.register({
+      id: "inactive-hook",
+      event: "TurnStop",
+      pluginId: "plugin-b",
+      handler: inactive,
+    });
+    await runWithHookScope({ activePluginIds }, async () => {
+      activePluginIds.add("plugin-b");
+      await pipeline.run("TurnStart", baseCtx, {});
+      await pipeline.run("TurnStop", { ...baseCtx, event: "TurnStop" }, {});
+    });
+    expect(seen).toEqual([["plugin-a"]]);
+    expect(inactive).not.toHaveBeenCalled();
+  });
+
   it("gives a plugin hook its own frozen settings inside a scope", async () => {
     const pipeline = createHookPipeline();
     let seen: Readonly<Record<string, unknown>> | undefined;
@@ -229,11 +406,62 @@ function makeCfgManifest(): RuntimeManifest {
 }
 
 describe("executeTurn → hook getOwnSettings end-to-end", () => {
+  it("preserves each runtime's own default when a plugin declares several runtimes", async () => {
+    const makeRuntime = (name: string, tone: string): RuntimeManifest => ({
+      ...makeCfgManifest(),
+      name,
+      runtimeType: "function",
+      userSettings: [
+        { key: "tone", type: "text", default: tone, label: "Tone" },
+      ],
+    });
+    const manifests = [
+      makeRuntime("configured/a", "quiet"),
+      makeRuntime("configured/b", "loud"),
+    ];
+    const seen: unknown[] = [];
+    const result = await executeTurn(
+      { sessionId: "defaults", turnId: "defaults", playerMessage: "hello" },
+      manifests,
+      {
+        store: await createMainLoopStore("defaults"),
+        llm: new SimpleMockLLM(),
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            seen.push(ctx.userSettings);
+            return { outcome: "success", value: {} };
+          },
+        }),
+      },
+    );
+    expect(result.runtimeResults.map((entry) => entry.status)).toEqual([
+      "success",
+      "success",
+    ]);
+    expect(seen).toEqual(
+      expect.arrayContaining([{ tone: "quiet" }, { tone: "loud" }]),
+    );
+    expect(seen).toHaveLength(2);
+  });
+
   it("merges manifest defaults with player values and exposes them to an in-turn hook", async () => {
     const sessionId = "sess-cfg";
     const manifest = makeCfgManifest();
     const pipeline = createHookPipeline();
 
+    const playerValues = { tone: "dramatic" };
+    let runtimeSettings: unknown;
+    pipeline.register({
+      id: "cfg-plugin:PreRuntime:settings",
+      event: "PreRuntime",
+      pluginId: "cfg-plugin",
+      handler: async (_ctx, payload) => {
+        runtimeSettings = payload.input.userSettings;
+        return { action: "continue" };
+      },
+    });
     let cfgSeen: Readonly<Record<string, unknown>> | undefined;
     let otherSeen: Readonly<Record<string, unknown>> | undefined;
 
@@ -243,6 +471,7 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
       pluginId: "cfg-plugin",
       handler: async (ctx) => {
         cfgSeen = ctx.getOwnSettings?.();
+        playerValues.tone = "changed-after-start";
         return { action: "continue" };
       },
     });
@@ -271,7 +500,7 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
       turnId: "turn-cfg",
       playerMessage: "hello",
       // Player saved only `tone`; `verbosity` falls back to the manifest default.
-      userSettings: { "cfg-plugin": { tone: "dramatic" } },
+      userSettings: { "cfg-plugin": playerValues },
     };
 
     const result = await executeTurn(input, [manifest], deps);
@@ -280,6 +509,10 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
     // Player value wins for tone; manifest default fills missing verbosity.
     expect(cfgSeen).toEqual({ tone: "dramatic", verbosity: 3 });
     expect(Object.isFrozen(cfgSeen)).toBe(true);
+    expect(runtimeSettings).toEqual({
+      "cfg-plugin": { tone: "dramatic" },
+    });
+    expect(playerValues.tone).toBe("changed-after-start");
     // Framework hook sees an empty bucket.
     expect(otherSeen).toEqual({});
   });

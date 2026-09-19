@@ -44,15 +44,21 @@ export function createPresetRegistry(options: {
     return Array.from(profiles.values());
   }
 
-  /** List all registered presets. */
+  /** List persistent presets; request overlays must not enter public catalogs. */
   function listPresets(): PresetConfig[] {
-    return Array.from(presets.values());
+    return Array.from(presets.values()).filter(
+      (preset) => !preset.requestScoped,
+    );
   }
 
   /** Resolve a single preset by ID (or find the default). */
   function resolvePreset(presetId?: string): PresetConfig | null {
     if (!presetId) {
-      return Array.from(presets.values()).find((p) => p.isDefault) ?? null;
+      return (
+        Array.from(presets.values()).find(
+          (p) => p.enabled && p.isDefault && !p.requestScoped,
+        ) ?? null
+      );
     }
 
     const preset = presets.get(presetId) ?? null;
@@ -178,8 +184,9 @@ export function createPresetRegistry(options: {
     // and (optionally) the matching preset for baseUrl/protocol hints.
     const profile = profiles.get("embed-default") ?? null;
     const preset =
-      Array.from(presets.values()).find((p) =>
-        p.supportedModes.includes("embed"),
+      Array.from(presets.values()).find(
+        (p) =>
+          p.enabled && !p.requestScoped && p.supportedModes.includes("embed"),
       ) ?? null;
 
     if (!profile && !preset) {

@@ -5,7 +5,7 @@ import type { PendingInteractionDraft, SessionState } from "./types.js";
 export interface SessionActions {
   boot: () => Promise<void>;
   selectWorld: (worldId: string) => void;
-  startGame: (plugins?: string[]) => Promise<void>;
+  startGame: (plugins?: string[], loreOverride?: string) => Promise<void>;
   beginAdventure: () => void;
   resumeSession: (session: api.SessionRecord) => Promise<void>;
   resumeSessionById: (sessionId: string) => Promise<void>;

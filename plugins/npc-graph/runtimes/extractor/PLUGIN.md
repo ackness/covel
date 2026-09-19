@@ -15,7 +15,6 @@ llm:
   reasoningEffort: disabled
   toolChoice: required
 timeoutMs: 120000
-maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 60000
 # A successful graph mutation is the complete result; no extra runtime-done

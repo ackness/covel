@@ -9,10 +9,11 @@
  * resolution (no network) and passes through untraced.
  *
  * PII: only the prompt SHAPE (message count + total char length) is emitted —
- * never the raw prompt or response text.
+ * never the raw prompt or response body. Provider-exposed reasoning is retained
+ * separately for the user-visible thinking panel and DEBUG.
  */
 
-import type { PluginRuntimeGateway } from "@covel/plugin-loader";
+import type { PluginRuntimeGateway } from "@covel/shared/plugin-runtime";
 import type { LLMUsageSummary } from "@covel/shared";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { summarizeTraceError } from "./trace-error.js";
@@ -65,6 +66,7 @@ export function withGatewayTrace(
   async function traced<
     R extends {
       finishReason: string;
+      reasoningContent?: string;
       usage: LLMUsageSummary;
       model?: string;
       provider?: string;
@@ -82,6 +84,9 @@ export function withGatewayTrace(
         ...ctx,
         method,
         finishReason: result.finishReason,
+        ...(result.reasoningContent
+          ? { reasoningContent: result.reasoningContent }
+          : {}),
         usage: result.usage,
         ...(result.model ? { model: result.model } : {}),
         ...(result.provider ? { provider: result.provider } : {}),

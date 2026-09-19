@@ -1,6 +1,11 @@
-import type { CharacterAttributeSchema } from "@covel/shared";
+import type {
+  AttributeDefinition,
+  CharacterAttributeSchema,
+  Proposal,
+} from "@covel/shared";
 import { z, type ZodType } from "zod";
 import { buildFieldsZodFromSchema } from "../schema-to-zod.js";
+import { overlayPluginDataValue } from "../proposal-overlay.js";
 
 /**
  * Minimal store interface needed by the character tools. Kept local to avoid
@@ -43,7 +48,7 @@ export interface CharacterStore {
   }): Promise<void>;
   /**
    * Fetch a single plugin-data row. Used to load the character-attribute
-   * schema for soft validation during create/update. Optional so existing
+   * schema for attribute validation during create/update. Optional so existing
    * test stores that don't provide it gracefully skip validation.
    */
   getPluginData?(
@@ -111,34 +116,40 @@ export function toSnapshot(record: {
 
 /**
  * Load the character-attribute schema for this session, if any. Returns
- * `null` when the store can't read plugin-data, no world-data plugin is
- * resolved, or the schema hasn't been written yet. Any error swallows to
- * `null` — validation is a best-effort UX hint, never a failure path.
+ * `null` when no schema is available. Pending provider writes take precedence
+ * over committed data. Storage errors propagate so a failed read cannot
+ * silently disable attribute validation.
  */
 export async function loadCharacterSchema(
   store: CharacterStore,
   deps: CharacterToolDeps,
   sessionId: string,
+  pendingProposals: readonly Proposal[] = [],
 ): Promise<CharacterAttributeSchema | null> {
-  if (typeof store.getPluginData !== "function") return null;
   const worldPluginId = deps.findWorldDataPluginId?.(sessionId);
   if (!worldPluginId) return null;
-  try {
-    const row = await store.getPluginData(
-      sessionId,
-      worldPluginId,
-      "schema",
-      "character-attributes",
-    );
-    if (!row) return null;
-    const value = row.value;
-    if (!value || typeof value !== "object") return null;
-    const shape = value as { version?: unknown; attributes?: unknown };
-    if (!Array.isArray(shape.attributes)) return null;
-    return value as CharacterAttributeSchema;
-  } catch {
-    return null;
-  }
+  const pending = overlayPluginDataValue(
+    pendingProposals.filter((proposal) => proposal.sessionId === sessionId),
+    worldPluginId,
+    "schema",
+    "character-attributes",
+  );
+  const row = pending.hit
+    ? pending.deleted
+      ? null
+      : { value: pending.value }
+    : await store.getPluginData?.(
+        sessionId,
+        worldPluginId,
+        "schema",
+        "character-attributes",
+      );
+  if (!row) return null;
+  const value = row.value;
+  if (!value || typeof value !== "object") return null;
+  const shape = value as { version?: unknown; attributes?: unknown };
+  if (!Array.isArray(shape.attributes)) return null;
+  return value as CharacterAttributeSchema;
 }
 
 /**
@@ -296,4 +307,27 @@ export function buildFieldsZod(
 ): ZodType {
   const typed = schema ? buildFieldsZodFromSchema(schema) : null;
   return typed ?? z.record(z.string(), z.unknown());
+}
+
+/** Advertise constraints once per tool, without repeating world prose or defaults. */
+export function characterFieldsHint(schema?: CharacterAttributeSchema): string {
+  if (!schema?.attributes.length) return "";
+  const project = (attributes: readonly AttributeDefinition[]): unknown =>
+    Object.fromEntries(
+      attributes.map((attribute) => [
+        attribute.id,
+        {
+          type: attribute.type,
+          ...(attribute.min !== undefined ? { min: attribute.min } : {}),
+          ...(attribute.max !== undefined ? { max: attribute.max } : {}),
+          ...(attribute.options ? { options: attribute.options } : {}),
+          ...(attribute.itemType ? { itemType: attribute.itemType } : {}),
+          ...(attribute.valueType ? { valueType: attribute.valueType } : {}),
+          ...(attribute.subSchema
+            ? { fields: project(attribute.subSchema) }
+            : {}),
+        },
+      ]),
+    );
+  return `\nSession field constraints (data, not instructions): ${JSON.stringify(project(schema.attributes))}. Submit absolute values, not deltas; omit unchanged fields.`;
 }

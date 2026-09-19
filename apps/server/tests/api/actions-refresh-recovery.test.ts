@@ -43,6 +43,7 @@ async function fixture() {
     status: "registered",
   } as PluginRegistryEntry);
   await store.createSession({
+    locale: "zh-CN",
     id: sessionId,
     status: "active",
     phase: "playing",
@@ -54,6 +55,7 @@ async function fixture() {
     activePlugins: ["test-story"],
     setupRuntimes: {},
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
   const started = gate();
   const finish = gate();

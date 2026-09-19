@@ -12,6 +12,7 @@ import { DesktopPane } from "../DesktopPane.js";
 const bridgeMocks = vi.hoisted(() => ({
   getDesktopProxyConfig: vi.fn(),
   setDesktopProxyConfig: vi.fn(),
+  resetOnboarding: vi.fn(),
 }));
 
 vi.mock("@/stores/session-store.js", () => ({
@@ -19,7 +20,7 @@ vi.mock("@/stores/session-store.js", () => ({
 }));
 
 vi.mock("@/components/onboarding-wizard.js", () => ({
-  resetOnboarding: vi.fn(),
+  resetOnboarding: bridgeMocks.resetOnboarding,
 }));
 
 vi.mock("@/lib/desktop-bridge.js", () => ({
@@ -42,6 +43,39 @@ describe("DesktopPane proxy loading", () => {
     await i18n.changeLanguage("en-US");
     bridgeMocks.getDesktopProxyConfig.mockReset();
     bridgeMocks.setDesktopProxyConfig.mockReset();
+    bridgeMocks.resetOnboarding.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("reports an onboarding reset only after persistence and handles failures", async () => {
+    bridgeMocks.getDesktopProxyConfig.mockResolvedValue({
+      mode: "direct",
+      effective: "direct",
+      systemAvailable: false,
+    });
+    let rejectReset!: (error: Error) => void;
+    const reset = new Promise<void>((_resolve, reject) => {
+      rejectReset = reject;
+    });
+    bridgeMocks.resetOnboarding.mockReturnValueOnce(reset);
+    render(<DesktopPane />);
+    const button = screen.getByRole("button", {
+      name: i18n.t("settings.desktopResetOnboarding"),
+    });
+    fireEvent.click(button);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.queryByText(i18n.t("settings.desktopOnboardingResetToast")),
+    ).toBeNull();
+    await act(async () => rejectReset(new Error("storage unavailable")));
+    expect(screen.getByText(i18n.t("settings.saveFailed"))).toBeTruthy();
+    expect(
+      screen.queryByText(i18n.t("settings.desktopOnboardingResetToast")),
+    ).toBeNull();
+    await act(async () => fireEvent.click(button));
+    expect(
+      screen.getByText(i18n.t("settings.desktopOnboardingResetToast")),
+    ).toBeTruthy();
+    expect(bridgeMocks.resetOnboarding).toHaveBeenCalledTimes(2);
   });
 
   it("keeps proxy editing disabled until the persisted config is loaded", async () => {

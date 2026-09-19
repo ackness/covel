@@ -18,7 +18,7 @@ import {
   createMediaStoreFromEnv,
   createStoreFromEnv,
   resolveBackendFromEnv,
-} from "@covel/store";
+} from "@covel/store/factory";
 import { resolveUserResourceDirs } from "./lib/user-resource-dirs.js";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
 import {
@@ -55,9 +55,10 @@ import {
 } from "@covel/shared";
 import type { Sql } from "postgres";
 import {
-  awaitPendingMemoryBackgroundTasks,
-  pendingMemoryBackgroundTaskCount,
-} from "@covel/memory";
+  createServerResourceDrain,
+  type ServerResources,
+} from "./server-resources.js";
+import { createApplicationWork } from "./application-work.js";
 
 /**
  * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
@@ -104,6 +105,9 @@ const env = readRuntimeEnv();
 // Fail fast on an unsafe hosted posture before any route is
 // wired or the caller starts listening. No-op for self-deploy/desktop.
 validateSecurityPosture(env);
+
+const applicationWork = createApplicationWork();
+app.use("*", applicationWork.middleware);
 
 // ── Global error handler ────────────────────────────────────────
 const isDev = env.nodeEnv !== "production";
@@ -177,234 +181,189 @@ app.use(
 // docker where the server is spawned directly.
 loadKeysEnvInto(process.env);
 
-// ── Initialize AI + Store ────────────────────────────────────────
-const ai = createAiStack();
-const storeBackend = resolveBackendFromEnv();
-const store = await createStoreFromEnv();
-const mediaStore = await createMediaStoreFromEnv(process.env);
+const resources: ServerResources = { applicationWork, worldWatchers: [] };
+export const drainServerResources = createServerResourceDrain(resources);
 
-// ── Session lock ────────────────────────────────────────────────
-//
-// PG deployments need cross-pod mutual exclusion per sessionId; the
-// in-process `Map`-based lock only serialises within one Node process.
-// We open a separate small postgres.js client dedicated to advisory
-// locks so long-held lock connections never starve the data path.
-//
-// For memory/sqlite or when DATABASE_URL is missing we fall through to
-// the in-process implementation — those topologies are single-process
-// by construction, so the simpler lock is both sufficient and cheaper.
-let sessionLock: SessionLock;
-let memoryIngestLock: SessionLock;
-// Hoisted so the shutdown drain below can close the lock pool.
-let lockSql: Sql | undefined;
-let ingestLockSql: Sql | undefined;
-if (storeBackend === "pg" && env.databaseUrl) {
-  const { default: postgres } = await import("postgres");
-  // `max` sizes the lock pool. Each in-flight turn holds one reserved
-  // connection for the duration of executeTurn; the default 16 is well above
-  // the expected peak per pod and keeps PG connection usage bounded. Tune via
-  // COVEL_PG_LOCK_POOL_MAX for higher-concurrency pods.
-  lockSql = postgres(env.databaseUrl!, {
-    max: readEnvInt("COVEL_PG_LOCK_POOL_MAX", 16),
-  });
-  sessionLock = createPgAdvisorySessionLock(lockSql);
-  // Embedding sweeps hold their lock during provider I/O. Keep them on a
-  // smaller independent pool so background work cannot starve player turns.
-  ingestLockSql = postgres(env.databaseUrl!, {
-    max: readEnvInt("COVEL_PG_INGEST_LOCK_POOL_MAX", 4),
-  });
-  memoryIngestLock = createPgAdvisorySessionLock(ingestLockSql);
-  console.log(
-    "[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
-  );
-} else {
-  sessionLock = createInProcessSessionLock();
-  memoryIngestLock = createInProcessSessionLock();
-  console.log(
-    `[server] session lock: in-process (${storeBackend} backend — single-process scope)`,
-  );
-}
-
-// Collect all *_API_KEY env vars dynamically so any provider can be added
-// to llm.toml without requiring code changes here.
-const apiKeys = providerApiKeysFromEnv(process.env);
-// Env-derived keys ride the `envApiKeys` channel so the provider registry
-// origin-gates them — the startup paths never carry request-scoped
-// slot overlays today, but the provenance stays honest if that changes.
-const llmAdapter = createGatewayAdapter(ai.gateway, { envApiKeys: apiKeys });
-// Function-runtime gateway facade — shares the same preset/provider
-// registry and env apiKeys as the agent-runtime LLM adapter. Plugins
-// that need generateImage / generateText / generateObject reach it via
-// `FunctionHandlerContext.gateway`. `toZodSchema` is left off at
-// startup: the framework's agent runtimes already cover structured
-// output via responseFormat, and plugin-data calls use tool schemas —
-// exposing `generateObject` would require importing zod into the
-// app.ts composition root. A future PR can supply a converter if a
-// plugin genuinely needs it.
-const pluginGateway = createPluginRuntimeGateway(ai.gateway, {
-  envApiKeys: apiKeys,
-});
-// Stateless plugin utility surface — exposed to function handlers via
-// `FunctionHandlerContext.utils`. Plugins call these in lieu of bare
-// fetch / hand-rolled SSRF checks so the framework stays the single
-// source of truth for those policies.
-const pluginUtils = {
-  validateBaseUrl: validateBaseUrlForPlugin,
-  fetchWithRetry,
-};
-const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
-
-// ── Bootstrap API ───────────────────────────────────────────────
-// Bundled plugins ship inside the repo / packaged app. The desktop shell
-// can additionally mount a user plugins directory via COVEL_USER_PLUGINS_DIR
-// (typically `<userData>/plugins`). Bundled wins on id collision so user
-// plugins can augment but not shadow core functionality.
-const bundledPluginsDir =
-  env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
-const userDirs = resolveUserResourceDirs(env);
-const pluginsDirs = mergeDirs(bundledPluginsDir, userDirs.plugins);
-const ensureEmbeddingLock = createEmbeddingLockHelper({ store, ai, apiKeys });
-// Embedding seam for the semantic memory tier. The memory package never
-// imports a provider — it gets this injected (mirrors the LLM adapter). Routes
-// through the same gateway embed slot the embedding-lock probe uses, so the
-// produced dimension always matches the session's locked vector model.
-const memoryEmbed = async (
-  texts: readonly string[],
-): Promise<Float32Array[]> => {
-  const res = await ai.gateway.embed(
-    { values: [...texts] },
-    apiKeys ? { envApiKeys: apiKeys } : undefined,
-  );
-  return res.embeddings.map((e) => Float32Array.from(e));
-};
-const perRequestLlm = createPerRequestLlmMiddleware({
-  ai,
-  envApiKeys: apiKeys,
-  defaultLlmAdapter: llmAdapter,
-  defaultPluginGateway: pluginGateway,
-});
-// ── Seed worlds ──────────────────────────────────────────────────
-// User worlds use the same resolved directory as the install API, even
-// on a fresh installation where that directory does not exist yet.
-const bundledWorldsDir =
-  env.worldsDir ?? resolve(import.meta.dirname, "../../../worlds");
-const worldsDirs = mergeDirs(bundledWorldsDir, userDirs.worlds);
-
-const api = await bootstrapApi({
-  pluginsDir: bundledPluginsDir,
-  pluginsDirs,
-  worldsDirs,
-  covelHome: env.covelHome,
-  llmAdapter,
-  pluginGateway,
-  pluginUtils,
-  store,
-  storeBackend,
-  mediaStore,
-  mediaBackend: env.mediaBackend,
-  vectorBackend: env.vectorBackend,
-  ensureEmbeddingLock,
-  memoryEmbed,
-  preferredMemorySlot,
-  perRequestMiddleware: [perRequestLlm],
-  sessionLock,
-  memoryIngestLock,
-});
-
-await seedAndReconcileWorlds(store, worldsDirs);
-
-// ── World file watcher (hot-reload) ─────────────────────────────
-const worldWatchers = worldsDirs.map((dir) =>
-  createWorldFileWatcher(dir, store, api.eventBus, worldsDirs),
-);
-for (const watcher of worldWatchers) watcher.start();
-const stopWatchers = () => {
-  for (const watcher of worldWatchers) watcher.stop();
-};
-
-// ── Graceful shutdown drain (audit R-11) ─────────────────────────
-// Ordered resource drain passed to registerGracefulShutdown() by index.ts and
-// run after the HTTP server stops accepting requests: stop watchers (no new
-// world reloads), flush post-turn memory work before its backing store closes,
-// flush pending eventBus persistence, then close the MediaStore, DataStore, and
-// dedicated PG lock pool. Each phase is time-boxed so one stuck resource cannot
-// eat the whole force-exit budget — a timed-out phase is logged and skipped.
-const DRAIN_PHASE_TIMEOUT_MS = 2_000;
-const MEMORY_DRAIN_TIMEOUT_MS = 5_000;
-
-async function drainPhase(
-  name: string,
-  run: () => Promise<unknown> | void,
-  timeoutMs = DRAIN_PHASE_TIMEOUT_MS,
-): Promise<void> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`timed out after ${timeoutMs}ms`)),
-      timeoutMs,
-    );
-  });
+async function initializeServer(): Promise<void> {
   try {
-    await Promise.race([Promise.resolve(run()), timeout]);
-  } catch (err) {
-    console.warn(
-      `[shutdown] drain phase "${name}" failed:`,
-      err instanceof Error ? err.message : String(err),
-    );
-  } finally {
-    clearTimeout(timer);
+    // ── Initialize AI + Store ────────────────────────────────────────
+    const ai = createAiStack();
+    const storeBackend = resolveBackendFromEnv();
+    const store = (resources.store = await createStoreFromEnv());
+    const mediaStore = (resources.mediaStore = await createMediaStoreFromEnv(
+      process.env,
+    ));
+
+    // ── Session lock ────────────────────────────────────────────────
+    //
+    // PG deployments need cross-pod mutual exclusion per sessionId; the
+    // in-process `Map`-based lock only serialises within one Node process.
+    // We open a separate small postgres.js client dedicated to advisory
+    // locks so long-held lock connections never starve the data path.
+    //
+    // For memory/sqlite or when DATABASE_URL is missing we fall through to
+    // the in-process implementation — those topologies are single-process
+    // by construction, so the simpler lock is both sufficient and cheaper.
+    let sessionLock: SessionLock;
+    let memoryIngestLock: SessionLock;
+    // Register each pool before another startup step can fail.
+    let lockSql: Sql | undefined;
+    let ingestLockSql: Sql | undefined;
+    if (storeBackend === "pg" && env.databaseUrl) {
+      const { default: postgres } = await import("postgres");
+      // `max` sizes the lock pool. Each in-flight turn holds one reserved
+      // connection for the duration of executeTurn; the default 16 is well above
+      // the expected peak per pod and keeps PG connection usage bounded. Tune via
+      // COVEL_PG_LOCK_POOL_MAX for higher-concurrency pods.
+      lockSql = resources.lockSql = postgres(env.databaseUrl!, {
+        max: readEnvInt("COVEL_PG_LOCK_POOL_MAX", 16),
+      });
+      sessionLock = createPgAdvisorySessionLock(lockSql);
+      // Embedding sweeps hold their lock during provider I/O. Keep them on a
+      // smaller independent pool so background work cannot starve player turns.
+      ingestLockSql = resources.ingestLockSql = postgres(env.databaseUrl!, {
+        max: readEnvInt("COVEL_PG_INGEST_LOCK_POOL_MAX", 4),
+      });
+      memoryIngestLock = createPgAdvisorySessionLock(ingestLockSql);
+      console.log(
+        "[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
+      );
+    } else {
+      sessionLock = createInProcessSessionLock();
+      memoryIngestLock = createInProcessSessionLock();
+      console.log(
+        `[server] session lock: in-process (${storeBackend} backend — single-process scope)`,
+      );
+    }
+
+    // Collect all *_API_KEY env vars dynamically so any provider can be added
+    // to llm.toml without requiring code changes here.
+    const apiKeys = providerApiKeysFromEnv(process.env);
+    // Env-derived keys ride the `envApiKeys` channel so the provider registry
+    // origin-gates them — the startup paths never carry request-scoped
+    // slot overlays today, but the provenance stays honest if that changes.
+    const llmAdapter = createGatewayAdapter(ai.gateway, {
+      envApiKeys: apiKeys,
+    });
+    // Function-runtime gateway facade — shares the same preset/provider
+    // registry and env apiKeys as the agent-runtime LLM adapter. Plugins
+    // that need generateImage / generateText / generateObject reach it via
+    // `FunctionHandlerContext.gateway`. `toZodSchema` is left off at
+    // startup: the framework's agent runtimes already cover structured
+    // output via responseFormat, and plugin-data calls use tool schemas —
+    // exposing `generateObject` would require importing zod into the
+    // app.ts composition root. A future PR can supply a converter if a
+    // plugin genuinely needs it.
+    const pluginGateway = createPluginRuntimeGateway(ai.gateway, {
+      envApiKeys: apiKeys,
+    });
+    // Stateless plugin utility surface — exposed to function handlers via
+    // `FunctionHandlerContext.utils`. Plugins call these in lieu of bare
+    // fetch / hand-rolled SSRF checks so the framework stays the single
+    // source of truth for those policies.
+    const pluginUtils = {
+      validateBaseUrl: validateBaseUrlForPlugin,
+      fetchWithRetry,
+    };
+    const preferredMemorySlot = () =>
+      resolvePreferredMemorySlot(ai.slotRegistry);
+
+    // ── Bootstrap API ───────────────────────────────────────────────
+    // Bundled plugins ship inside the repo / packaged app. The desktop shell
+    // can additionally mount a user plugins directory via COVEL_USER_PLUGINS_DIR
+    // (typically `<userData>/plugins`). Bundled wins on id collision so user
+    // plugins can augment but not shadow core functionality.
+    const bundledPluginsDir =
+      env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
+    const userDirs = resolveUserResourceDirs(env);
+    const pluginsDirs = mergeDirs(bundledPluginsDir, userDirs.plugins);
+    const ensureEmbeddingLock = createEmbeddingLockHelper({
+      store,
+      ai,
+      apiKeys,
+    });
+    // Embedding seam for the semantic memory tier. The memory package never
+    // imports a provider — it gets this injected (mirrors the LLM adapter). Routes
+    // through the same gateway embed slot the embedding-lock probe uses, so the
+    // produced dimension always matches the session's locked vector model.
+    const memoryEmbed = async (
+      texts: readonly string[],
+    ): Promise<Float32Array[]> => {
+      const res = await ai.gateway.embed(
+        { values: [...texts] },
+        apiKeys ? { envApiKeys: apiKeys } : undefined,
+      );
+      return res.embeddings.map((e) => Float32Array.from(e));
+    };
+    const perRequestLlm = createPerRequestLlmMiddleware({
+      ai,
+      envApiKeys: apiKeys,
+      defaultLlmAdapter: llmAdapter,
+      defaultPluginGateway: pluginGateway,
+    });
+    // ── Seed worlds ──────────────────────────────────────────────────
+    // User worlds use the same resolved directory as the install API, even
+    // on a fresh installation where that directory does not exist yet.
+    const bundledWorldsDir =
+      env.worldsDir ?? resolve(import.meta.dirname, "../../../worlds");
+    const worldsDirs = mergeDirs(bundledWorldsDir, userDirs.worlds);
+
+    const api = (resources.api = await bootstrapApi({
+      applicationWork,
+      pluginsDir: bundledPluginsDir,
+      pluginsDirs,
+      worldsDirs,
+      covelHome: env.covelHome,
+      llmAdapter,
+      pluginGateway,
+      pluginUtils,
+      store,
+      storeBackend,
+      mediaStore,
+      mediaBackend: env.mediaBackend,
+      vectorBackend: env.vectorBackend,
+      ensureEmbeddingLock,
+      memoryEmbed,
+      preferredMemorySlot,
+      perRequestMiddleware: [perRequestLlm],
+      sessionLock,
+      memoryIngestLock,
+    }));
+
+    await seedAndReconcileWorlds(store, worldsDirs, sessionLock);
+
+    // ── World file watcher (hot-reload) ─────────────────────────────
+    for (const dir of worldsDirs) {
+      const watcher = createWorldFileWatcher(
+        dir,
+        store,
+        api.eventBus,
+        sessionLock,
+        worldsDirs,
+      );
+      resources.worldWatchers.push(watcher);
+      watcher.start();
+    }
+
+    // ── Mount routes ─────────────────────────────────────────────────
+    app.route("/", api.app);
+    app.route("/", createModelDbRoutes(ai));
+    app.route("/", createMiscApiRoutes(ai, api.registry, store));
+    app.route("/", createConfigApiRoutes({ apiKeys }));
+    app.route("/", createAppUpdateRoutes());
+
+    // ── Static file serving (production) ─────────────────────────────
+    if (env.serveStatic) {
+      const root = env.staticDir;
+      app.use("/*", serveStatic({ root }));
+      app.get("*", serveStatic({ root, path: "/index.html" }));
+    }
+  } catch (error) {
+    await drainServerResources();
+    throw error;
   }
 }
 
-export const drainServerResources = async (): Promise<void> => {
-  await drainPhase("stop world watchers", () => stopWatchers());
-  await drainPhase(
-    "flush memory background tasks",
-    async () => {
-      const result = await awaitPendingMemoryBackgroundTasks();
-      if (result.rejected > 0) {
-        console.warn(
-          `[shutdown] ${result.rejected} memory background task(s) failed while draining: ${result.failures.join("; ")}`,
-        );
-      }
-    },
-    MEMORY_DRAIN_TIMEOUT_MS,
-  );
-  const memoryTasksStillPending = pendingMemoryBackgroundTaskCount();
-  if (memoryTasksStillPending > 0) {
-    console.warn(
-      `[shutdown] ${memoryTasksStillPending} memory background task(s) still pending; continuing resource shutdown`,
-    );
-  }
-  await drainPhase("flush event bus", () => api.eventBus.flush());
-  if (mediaStore?.close) {
-    await drainPhase("close media store", () => mediaStore.close!());
-  }
-  await drainPhase("close data store", () => store.close());
-  if (lockSql) {
-    // `timeout: 1` (seconds) force-closes connections still held by an
-    // in-flight lock; PG auto-releases advisory locks on disconnect.
-    await drainPhase("close pg lock pool", () => lockSql!.end({ timeout: 1 }));
-  }
-  if (ingestLockSql) {
-    await drainPhase("close pg ingest lock pool", () =>
-      ingestLockSql!.end({ timeout: 1 }),
-    );
-  }
-};
-
-// ── Mount routes ─────────────────────────────────────────────────
-app.route("/", api.app);
-app.route("/", createModelDbRoutes(ai));
-app.route("/", createMiscApiRoutes(ai, api.registry, store));
-app.route("/", createConfigApiRoutes({ apiKeys }));
-app.route("/", createAppUpdateRoutes());
-
-// ── Static file serving (production) ─────────────────────────────
-if (env.serveStatic) {
-  const root = env.staticDir;
-  app.use("/*", serveStatic({ root }));
-  app.get("*", serveStatic({ root, path: "/index.html" }));
-}
+await initializeServer();
 
 export { app };

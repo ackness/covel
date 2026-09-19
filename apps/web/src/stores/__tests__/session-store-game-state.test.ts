@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { initialState, reducer } from "../session-store/reducer.js";
 import {
   enrichGameStateFromSnapshot,
   mergeGameStateForReplacement,
@@ -115,3 +116,15 @@ describe("enrichGameStateFromSnapshot", () => {
     expect(enriched).toEqual({ characters });
   });
 });
+
+it.each(["RESET_SESSION", "RESET_TO_WORLD_SELECT"] as const)(
+  "clears complete snapshot ownership on %s",
+  (type) => {
+    const observed = reducer(initialState, {
+      type: "SET_GAME_STATE",
+      state: {},
+    });
+    expect(observed.hasGameStateSnapshot).toBe(true);
+    expect(reducer(observed, { type }).hasGameStateSnapshot).toBe(false);
+  },
+);

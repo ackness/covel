@@ -6,14 +6,16 @@ import { ActionableErrorNotice } from "@/components/shared/actionable-error-noti
 import { pingPreset, type PingResult } from "@/services/api.js";
 
 /**
- * Ping target — either a specific preset or a named slot.
+ * Ping target: a local model, server preset, or named slot.
  *
  * Slots resolve server-side through: client override → slotRegistry → tag
  * fallback → any enabled preset. The response's `testedTarget.resolvedVia`
  * lets the UI warn when a slot silently fell through.
  */
 export type PingTarget =
-  { kind: "preset"; presetId: string } | { kind: "slot"; slotId: string };
+  | { kind: "preset"; presetId: string }
+  | { kind: "model"; modelRef: string }
+  | { kind: "slot"; slotId: string };
 
 export type PingVariant = "inline" | "icon";
 
@@ -39,7 +41,7 @@ interface PingButtonProps {
   className?: string;
 }
 
-// Module-level cache keyed by the server request id (preset id or `slot-<name>`).
+// Cache identity includes the explicit model, server preset, or slot namespace.
 // A successful probe is often reused across multiple UI surfaces (active
 // model row + settings pane), so caching at this level avoids hitting the
 // provider once per component.
@@ -65,11 +67,13 @@ function getCacheRevision(): number {
 function cacheKeyFor(target: PingTarget): string {
   return target.kind === "preset"
     ? `preset:${target.presetId}`
-    : `slot:${target.slotId}`;
+    : target.kind === "model"
+      ? `model:${target.modelRef}`
+      : `slot:${target.slotId}`;
 }
 
 /**
- * Shared Ping button — calls `/api/ai/ping` with an explicit `presetId` or `slot`,
+ * Shared Ping button — calls `/api/ai/ping` with `modelRef`, `presetId`, or `slot`,
  * displays latency or error inline, and caches results for `cacheTtlMs`.
  *
  * Used by: settings key pane, settings slot pane (display-only), onboarding
@@ -128,7 +132,11 @@ export function PingButton({
       }
       requestGeneration = cacheInvalidationGeneration;
       const res = await pingPreset(
-        target.kind === "preset" ? target.presetId : { slot: target.slotId },
+        target.kind === "preset"
+          ? { presetId: target.presetId }
+          : target.kind === "model"
+            ? { modelRef: target.modelRef }
+            : { slot: target.slotId },
       );
       if (requestGeneration !== cacheInvalidationGeneration) return;
       resultCache.set(cacheKey, { result: res, at: Date.now() });
@@ -270,13 +278,6 @@ export function PingButton({
       )}
     </span>
   );
-}
-
-/** Invalidate the cached ping result for one target (e.g. after key edit). */
-export function invalidatePingResult(target: PingTarget): void {
-  resultCache.delete(cacheKeyFor(target));
-  cacheInvalidationGeneration += 1;
-  publishCacheChange();
 }
 
 /** API-key edits can affect every preset/slot using that provider. */

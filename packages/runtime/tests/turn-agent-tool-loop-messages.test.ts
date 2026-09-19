@@ -72,3 +72,17 @@ describe("turn-agent-tool-loop message helpers", () => {
     });
   });
 });
+
+it("keeps signed provider state unchanged in tool-loop history", () => {
+  const providerContinuation = {
+    protocol: "anthropic-messages-v1",
+    model: "fixture",
+    items: [{ type: "thinking", thinking: "summary", signature: "opaque" }],
+  };
+  const message = buildAssistantToolCallMessage({
+    content: null,
+    toolCalls: [],
+    providerContinuation,
+  });
+  expect(message.providerContinuation).toBe(providerContinuation);
+});

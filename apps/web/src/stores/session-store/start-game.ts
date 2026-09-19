@@ -2,7 +2,11 @@ import i18n from "i18next";
 import * as api from "@/services/api";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import { hydratePluginDataForUiSpecs } from "./plugin-data-hydration.js";
 import type { SessionDispatch } from "./types.js";
 
@@ -17,33 +21,8 @@ interface StartGameOptions {
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
   world: api.WorldRecord;
-  presets: readonly api.PresetSummary[];
-  llmConfig: api.LlmConfigResponse | null;
   plugins?: string[];
-}
-
-function selectPresetId(
-  presets: readonly api.PresetSummary[],
-  llmConfig: api.LlmConfigResponse | null,
-): string | undefined {
-  const slotConfig = api.getSlotConfig();
-  const configuredSlotIds = llmConfig?.configured
-    ? Object.keys(llmConfig.slots)
-    : [];
-  const primarySlotId = configuredSlotIds[0];
-  const primaryPresetId = primarySlotId
-    ? (slotConfig[primarySlotId]?.modelRef ??
-      slotConfig[primarySlotId]?.presetId ??
-      `slot-${primarySlotId}`)
-    : undefined;
-  const defaultPresetId =
-    slotConfig.default?.modelRef ?? slotConfig.default?.presetId;
-  return (
-    primaryPresetId ??
-    defaultPresetId ??
-    presets.find((preset) => preset.isDefault)?.id ??
-    presets[0]?.id
-  );
+  loreOverride?: string;
 }
 
 async function hydrateInitialSnapshot(
@@ -51,12 +30,15 @@ async function hydrateInitialSnapshot(
   isCurrent: () => boolean,
   dispatch: SessionDispatch,
 ): Promise<void> {
-  const snapshot = await api.getSessionView(sessionId);
-  if (!isCurrent()) return;
-
-  dispatch({
-    type: "SET_GAME_STATE",
-    state: enrichGameStateFromSnapshot(snapshot),
+  await refreshSessionResource(dispatch, ["game-state", sessionId, "start"], {
+    isCurrent,
+    read: () => api.getSessionView(sessionId),
+    apply: (snapshot) =>
+      publishSessionGameState(
+        dispatch,
+        sessionId,
+        enrichGameStateFromSnapshot(snapshot),
+      ),
   });
 }
 
@@ -93,9 +75,8 @@ export async function startGameSession({
   sessionIdRef,
   sessionGenerationRef,
   world,
-  presets,
-  llmConfig,
   plugins,
+  loreOverride,
 }: StartGameOptions): Promise<void> {
   const generation = ++sessionGenerationRef.current;
   const previousSessionId = sessionIdRef.current;
@@ -108,10 +89,10 @@ export async function startGameSession({
   try {
     const session = await ds.createSession(
       world.id,
-      selectPresetId(presets, llmConfig),
       undefined,
       plugins,
       world.locale ?? i18n.language,
+      loreOverride,
     );
     createdSessionId = session.id;
     if (!isCurrent()) return;

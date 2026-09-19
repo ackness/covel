@@ -41,7 +41,7 @@ export function createCodexEntrySchema(z) {
   });
 }
 
-export default function ({ tool, z, shortIdBatch, store }) {
+export default function ({ tool, z, shortIdBatch }) {
   const codexEntrySchema = createCodexEntrySchema(z);
 
   return tool({

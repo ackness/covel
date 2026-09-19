@@ -30,7 +30,7 @@ export type SqliteTransactions = Pick<DataStore, "withTransaction">;
  *   ingestion — is deferred until after `withTransaction` resolves
  *   (`postCommit` fan-out in
  *   packages/runtime/src/commit/session-commit-pipeline.ts and
- *   `TurnResult.completeTurn`). So no write of turn N can be captured by
+ *   `commitExecution`). So no write of turn N can be captured by
  *   turn N's own commit transaction from outside it.
  *
  *   CROSS-SESSION / NON-TURN WRITES — now closed by the serialized write gate

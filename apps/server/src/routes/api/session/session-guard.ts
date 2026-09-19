@@ -109,26 +109,20 @@ export function mintSessionApprovalScope(): string {
   return randomUUID();
 }
 
-/**
- * Stable identity used to reject stale mutations after same-id recreation.
- *
- * Sessions created before incarnation metadata was introduced still need to
- * remain deletable after an in-place upgrade. Their owner hash is already a
- * private, immutable random value; rows old enough to lack that hash fall back
- * to their persisted id/creation time. Every current create path mints an
- * incarnation nonce, so a recreated current row can never compare equal to a
- * legacy row through either compatibility branch.
- */
+/** Stable identity used to reject stale mutations after same-id recreation. */
 export function sessionIncarnationIdentity(session: SessionRecord): string {
   const nonce = session.metadata?.[SESSION_INCARNATION_KEY];
-  if (typeof nonce === "string" && nonce.length > 0) {
-    return `incarnation:${nonce}`;
+  if (typeof nonce !== "string" || !nonce) {
+    throw new Error("Session is missing its persisted incarnation");
   }
-  const ownerHash = session.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY];
-  if (typeof ownerHash === "string" && ownerHash.length > 0) {
-    return `legacy-owner:${ownerHash}`;
-  }
-  return `legacy-created:${session.id}:${session.createdAt}`;
+  return `incarnation:${nonce}`;
+}
+
+/** Public equality tag; never expose the private incarnation or owner metadata. */
+export function publicSessionIncarnation(session: SessionRecord): string {
+  return createHash("sha256")
+    .update(sessionIncarnationIdentity(session))
+    .digest("hex");
 }
 
 /**
@@ -150,6 +144,11 @@ export async function withLockedSessionMutation<T>(options: {
   readonly mutate: (session: SessionRecord) => Promise<T>;
 }): Promise<T | Response> {
   return options.sessionLock.withLock(options.sessionId, async () => {
+    // A committed turn may still be refreshing its derived memory. Snapshots,
+    // edits and checkpoint replacement must not race that pending write.
+    await options.c
+      .get("memorySystem")
+      ?.updater.awaitPending?.(options.sessionId);
     const live = await options.store.getSession(options.sessionId);
     if (!live) {
       return options.c.json(
@@ -406,8 +405,16 @@ export async function resolveSessionParam(
   c: Context,
   paramName: "id" | "sessionId" = "id",
 ): Promise<ResolveResult> {
-  const store = c.get("store");
   const sessionId = c.req.param(paramName) ?? "";
+  return resolveSessionById(c, sessionId);
+}
+
+/** Resolve an explicit id with the same authorization and read barrier as routes. */
+export async function resolveSessionById(
+  c: Context,
+  sessionId: string,
+): Promise<ResolveResult> {
+  const store = c.get("store");
   const session = await store.getSession(sessionId);
   if (!session) {
     return {

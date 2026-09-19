@@ -1,8 +1,22 @@
 import type { MessageRecord, StatePatchRecord, WorldRecord } from "../api.js";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
-import * as appKv from "../app-kv-store.js";
-import type { DataService, SessionPatch, WorldPatch } from "./types.js";
+import { ignoreError } from "../../lib/ignore-error.js";
+import {
+  captureRemoteUiStamp,
+  discardRemoteUiOwner,
+  invalidateRemoteUiScope,
+  listRemoteUiOwners,
+  RemoteUiCacheChangedError,
+  useRemoteUiCache,
+  type RemoteUiScope,
+} from "../storage/remote-ui-cache.js";
+import type {
+  DataService,
+  SessionPatch,
+  SessionUiOwner,
+  WorldPatch,
+} from "./types.js";
 
 /**
  * `null` means "no such record" — nothing else. An auth failure, a 500, or a
@@ -16,7 +30,118 @@ function nullIfMissing(err: unknown): null {
   throw err;
 }
 
+function validateCacheSession(
+  session: SessionUiOwner,
+  sessionId: string,
+): void {
+  if (
+    session.id !== sessionId ||
+    typeof session.incarnation !== "string" ||
+    !session.incarnation ||
+    (session.worldId != null && typeof session.worldId !== "string")
+  ) {
+    throw new Error("Remote session response cannot verify cache ownership");
+  }
+}
+
 export class RemoteDataService implements DataService {
+  private async useCache(
+    sessionId: string,
+    session: SessionUiOwner,
+    update?: Parameters<typeof useRemoteUiCache>[2],
+  ) {
+    if (
+      session?.id !== sessionId ||
+      typeof session.incarnation !== "string" ||
+      !session.incarnation
+    ) {
+      throw new Error(
+        "Remote UI cache requires the captured session incarnation",
+      );
+    }
+    const owner = {
+      sessionId,
+      worldId: session.worldId ?? "",
+      incarnation: session.incarnation,
+    };
+    const owned = structuredClone(update);
+    const stamp = await captureRemoteUiStamp(owner);
+    // A previously verified binding can accept display updates locally. Reads
+    // still verify the server, and the transaction fences replacement/deletion.
+    if (
+      owned &&
+      stamp.cachedIncarnation === owner.incarnation &&
+      stamp.cachedWorldId === owner.worldId
+    ) {
+      return useRemoteUiCache(owner, stamp, owned);
+    }
+    let live;
+    try {
+      live = await api.getSession(sessionId, { silentErrors: true });
+    } catch (error) {
+      if (isNotFound(error)) {
+        await discardRemoteUiOwner(owner).catch(
+          ignoreError("discard missing remote session cache"),
+        );
+      }
+      throw error;
+    }
+    validateCacheSession(live, sessionId);
+    if (
+      live.incarnation !== owner.incarnation ||
+      (live.worldId ?? "") !== owner.worldId
+    ) {
+      await discardRemoteUiOwner(owner).catch(
+        ignoreError("discard replaced remote session cache"),
+      );
+      throw new RemoteUiCacheChangedError();
+    }
+    return useRemoteUiCache(owner, stamp, owned);
+  }
+
+  private async reconcileCaches(scope: RemoteUiScope): Promise<void> {
+    const owners = await listRemoteUiOwners(scope);
+    for (const owner of owners) {
+      let discard = false;
+      try {
+        const live = await api.getSession(owner.sessionId, {
+          silentErrors: true,
+        });
+        validateCacheSession(live, owner.sessionId);
+        discard = live.incarnation !== owner.incarnation;
+      } catch (error) {
+        if (isNotFound(error)) discard = true;
+        else ignoreError("verify remote cache after deletion")(error);
+      }
+      if (discard) {
+        await discardRemoteUiOwner(owner).catch(
+          ignoreError("discard remote cache after deletion"),
+        );
+      }
+    }
+  }
+
+  private async deleteWithCacheCleanup(
+    scope: RemoteUiScope,
+    remove: () => Promise<void>,
+  ): Promise<void> {
+    // Cache failures must not prevent authoritative deletion. Epoch changes on
+    // both sides fence reads that overlap the server mutation, including retries.
+    await invalidateRemoteUiScope(scope).catch(
+      ignoreError("invalidate remote cache before deletion"),
+    );
+    try {
+      await remove();
+    } finally {
+      await invalidateRemoteUiScope(scope).catch(
+        ignoreError("invalidate remote cache after deletion"),
+      );
+      await this.reconcileCaches(scope).catch(
+        ignoreError("clean remote caches after deletion"),
+      );
+    }
+  }
+
   async listWorlds() {
     return api.listWorlds();
   }
@@ -37,7 +162,9 @@ export class RemoteDataService implements DataService {
     return api.updateWorld(id, patch);
   }
   async deleteWorld(id: string) {
-    return api.deleteWorld(id);
+    return this.deleteWithCacheCleanup({ kind: "world", id }, () =>
+      api.deleteWorld(id),
+    );
   }
   async prepareWorldForServer() {
     // No-op: the remote store is already the server's authority.
@@ -55,18 +182,20 @@ export class RemoteDataService implements DataService {
   }
   async createSession(
     worldId: string,
-    presetId?: string,
     id?: string,
     plugins?: string[],
     locale?: string,
+    loreOverride?: string,
   ) {
-    return api.createSession(worldId, presetId, id, plugins, locale);
+    return api.createSession(worldId, id, plugins, locale, loreOverride);
   }
   async updateSession(sessionId: string, updates: SessionPatch) {
     return api.updateSession(sessionId, updates);
   }
   async deleteSession(sessionId: string) {
-    return api.deleteSession(sessionId);
+    return this.deleteWithCacheCleanup({ kind: "session", id: sessionId }, () =>
+      api.deleteSession(sessionId),
+    );
   }
 
   async listMessages(sessionId: string) {
@@ -93,14 +222,17 @@ export class RemoteDataService implements DataService {
     sessionId: string,
     blockIds: string[],
     values: Record<string, Record<string, unknown>>,
+    owner: SessionUiOwner,
   ) {
-    // T3: use client-side IDB — submitted block state is a UI concern.
-    // Could be promoted to a server endpoint if cross-device resume is needed.
-    await appKv.saveSubmittedBlocks(sessionId, blockIds, values);
+    await this.useCache(sessionId, owner, {
+      kind: "submitted",
+      ids: blockIds,
+      values,
+    });
   }
 
-  async loadSubmittedBlocks(sessionId: string) {
-    return appKv.getSubmittedBlocks(sessionId);
+  async loadSubmittedBlocks(sessionId: string, owner: SessionUiOwner) {
+    return (await this.useCache(sessionId, owner)).submitted;
   }
 
   async syncToServer() {
@@ -115,11 +247,15 @@ export class RemoteDataService implements DataService {
     // No-op: remote mode commits directly to the authoritative server store.
   }
 
-  async saveExecutionSteps(sessionId: string, steps: unknown[]) {
-    await appKv.saveExecutionSteps(sessionId, steps);
+  async saveExecutionSteps(
+    sessionId: string,
+    steps: unknown[],
+    owner: SessionUiOwner,
+  ) {
+    await this.useCache(sessionId, owner, { kind: "steps", steps });
   }
 
-  async loadExecutionSteps(sessionId: string) {
-    return appKv.getExecutionSteps(sessionId);
+  async loadExecutionSteps(sessionId: string, owner: SessionUiOwner) {
+    return (await this.useCache(sessionId, owner)).steps;
   }
 }

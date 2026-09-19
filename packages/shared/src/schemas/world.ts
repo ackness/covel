@@ -7,6 +7,7 @@
 
 import { z } from "zod";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
+import { worldTimeSchema } from "./world-time.js";
 
 // ── Common ──────────────────────────────────────────────────────
 
@@ -230,6 +231,7 @@ export const worldStartingConditionsSchema = z
 
 export const worldDimensionsSchema = z
   .object({
+    time: worldTimeSchema.optional(),
     geography: worldGeographySchema.optional(),
     factions: z.array(worldFactionSchema).optional(),
     powerSystem: worldPowerSystemSchema.optional(),
@@ -246,6 +248,7 @@ export const worldDimensionsSchema = z
 
 /** Maps each dimension key to its Zod sub-schema for per-file validation. */
 export const DIMENSION_KEY_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  time: worldTimeSchema,
   geography: worldGeographySchema,
   factions: z.array(worldFactionSchema),
   powerSystem: worldPowerSystemSchema,

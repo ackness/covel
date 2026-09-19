@@ -1,9 +1,6 @@
 import type { MediaStore } from "@covel/shared";
 import { readRuntimeEnv } from "@covel/shared";
 import { resolve } from "node:path";
-import { createMemoryMediaStore } from "./memory.js";
-import { createPgMediaStore } from "./pg.js";
-import { createSqliteMediaStore } from "./sqlite.js";
 import type { MediaStoreBackend, MediaStoreConfig } from "./types.js";
 
 function resolveMediaBackend(
@@ -23,15 +20,19 @@ export async function createMediaStore(
   switch (backend) {
     case "none":
       return undefined;
-    case "memory":
+    case "memory": {
+      const { createMemoryMediaStore } = await import("./memory.js");
       return createMemoryMediaStore();
+    }
     case "sqlite": {
+      const { createSqliteMediaStore } = await import("./sqlite.js");
       const sqlitePath = resolve(config.sqlitePath ?? "./data/covel.db");
       return createSqliteMediaStore(sqlitePath, {
         mediaRoot: config.mediaRoot,
       });
     }
     case "pg": {
+      const { createPgMediaStore } = await import("./pg.js");
       if (!config.databaseUrl) return undefined;
       return createPgMediaStore(config.databaseUrl);
     }

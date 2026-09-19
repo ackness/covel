@@ -205,6 +205,7 @@ async function keepFocusedGuidePluginSet(page: Page) {
   await page
     .locator('button[aria-controls="plugin-selection-card-content"]')
     .click();
+  await page.getByTestId("advanced-plugin-settings").locator("summary").click();
   const unrelatedOptionalPlugins = [
     "codex",
     "npc-graph",

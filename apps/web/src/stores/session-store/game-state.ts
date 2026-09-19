@@ -1,10 +1,21 @@
 import { deepMerge } from "@covel/shared";
-import type { SnapshotCharacter } from "./types.js";
+import type { SnapshotCharacter, SessionDispatch } from "./types.js";
+import { invalidateSessionResource } from "./session-resource-reads.js";
 
 interface GameStateSnapshotSlice {
   readonly gameState?: Record<string, unknown>;
   readonly characters: readonly SnapshotCharacter[];
   readonly characterSchema?: unknown;
+}
+
+/** Publish a complete current snapshot before other in-flight state reads. */
+export function publishSessionGameState(
+  dispatch: SessionDispatch,
+  sessionId: string,
+  state: Record<string, unknown>,
+): void {
+  invalidateSessionResource(dispatch, ["game-state", sessionId]);
+  dispatch({ type: "SET_GAME_STATE", state });
 }
 
 /**

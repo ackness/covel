@@ -5,7 +5,6 @@ import {
   applySlotOverlay,
   publicPresetId,
   resolveOverlayPresetId,
-  resolveSlotOverride,
   type SlotOverridesInput,
 } from "../src/index.js";
 import { __internals } from "../src/slot-overlay.js";
@@ -350,35 +349,5 @@ describe("resolveOverlayPresetId", () => {
 describe("publicPresetId", () => {
   it("is the identity for plain preset ids", () => {
     expect(publicPresetId("ds-chat")).toBe("ds-chat");
-  });
-});
-
-describe("resolveSlotOverride", () => {
-  it("returns the override when slotPresetOverrides has the key", () => {
-    expect(
-      resolveSlotOverride("fast", {
-        slotPresetOverrides: { fast: "custom_abc" },
-      }),
-    ).toBe("custom_abc");
-  });
-
-  it("returns the input unchanged when no override matches", () => {
-    expect(
-      resolveSlotOverride("story", {
-        slotPresetOverrides: { fast: "custom_abc" },
-      }),
-    ).toBe("story");
-  });
-
-  it("returns the input unchanged when overrides are undefined", () => {
-    expect(resolveSlotOverride("story", undefined)).toBe("story");
-  });
-
-  it("ignores empty-string overrides", () => {
-    expect(
-      resolveSlotOverride("fast", {
-        slotPresetOverrides: { fast: "" },
-      }),
-    ).toBe("fast");
   });
 });

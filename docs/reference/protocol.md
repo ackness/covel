@@ -70,10 +70,10 @@
 | 事件类型              | 方向 | 描述                                      | 负载                                                                                                                                                                                                                                                                                                                  |
 | --------------------- | ---- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`   | S→C  | 回合执行开始                              | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                    |
-| `runtime.started`     | S→C  | 单个 runtime 开始                         | `{ runtimeId, pluginId, label }`                                                                                                                                                                                                                                                                                      |
+| `runtime.started`     | S→C  | 单个 runtime 开始                         | `{ runtimeId, pluginId, turnId, runId, label }`                                                                                                                                                                                                                                                                       |
 | `runtime.deferred`    | S→C  | staged runtime 已随原始回合提交并转入后台 | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                                                                                                                                                                                                                        |
-| `runtime.completed`   | S→C  | 单个 runtime 完成                         | `{ runtimeId, pluginId, durationMs }`                                                                                                                                                                                                                                                                                 |
-| `runtime.failed`      | S→C  | 单个 runtime 失败                         | `{ runtimeId, pluginId, error }`                                                                                                                                                                                                                                                                                      |
+| `runtime.completed`   | S→C  | 单个 runtime 完成                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                                                                                                                                                                                                                          |
+| `runtime.failed`      | S→C  | 单个 runtime 失败                         | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error }`                                                                                                                                                                                                                                                   |
 | `execution.completed` | S→C  | 回合执行终态                              | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`） |
 
 > **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态并按 `committed` 收敛 optimistic 输出）。setup 提交失败时不会启动接力，终态直接返回 `committed: false`。
@@ -202,7 +202,15 @@ Provider 图片输入矩阵：
 | `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果 |
 | `orphaned`            | 在途 owner 停止续租且 lease 过期                                                                                 |
 
-启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。`_runtime_jobs` 不进入 snapshot/fork payload，也不允许插件直接读写。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
+启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。`_runtime_jobs` 不进入 snapshot/fork payload，写入由框架控制；现有插件 store 的保留 namespace 读取合同仍适用。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
+
+领域结果与 `succeeded/result` 在同一事务内持久化，事务回滚不会留下成功任务。事务后通知失败不改变任务成功状态，也不会开放重试。恢复扫描仅处理扫描 revision 未变化的过期租约；worker 首次唤醒及后续 30 秒维护间隔恢复过期任务，失败后 1 秒重试；`committing` 须先取得非阻塞 session 提交锁，锁忙则推迟。维护独立于执行容量，关闭等待实际扫描与锁回调退出。
+
+以下后台任务 HTTP 读取出口（专用 runtime-jobs、通用 plugin-data 全量/namespace/key、state）
+共用公开投影：移除冻结输入 `payload` 与原始错误，保留作业/来源/后台执行关联 ID、当前状态和业务结果。
+`job-status.updated` 同样只发送已知 reason 与按状态分类的固定安全错误文案，不透传 provider 或 handler 的异常文本。
+只有 reason 的排队超时在页面重载后也保留可理解的失败说明。内部任务错误、普通游戏结果、插件直接读取及其它 trace/log 通道有各自合同，
+这项 HTTP/SSE 投影不等于对所有日志或游戏内容进行脱敏。
 
 客户端可用 `GET /api/sessions/:id/runtime-jobs` 恢复状态与成功结果；响应会移除包含冻结输入、设置与审批身份的内部 `payload`。detached runtime 内部通过 `ctx.progress` 发出的插件子任务消息会由内核在 `data` 中追加不可伪造的 `runtimeJobId` 与 `originTurnId`，客户端据此折叠到父任务，而不是产生孤立状态行。`POST .../:jobId/cancel` 只接受 `queued/claimed/running`，以 CAS 写入 `cancelled`，已经进入 `committing` 或终态的作业返回冲突。`POST .../:jobId/retry` 只接受失败类终态，显式创建新 `jobId` 和 queued 记录并使用当前 session incarnation、approval scope、locale 与 runtime model overrides；旧终态不改变，也不会被后台自动重放。
 
@@ -238,6 +246,8 @@ Provider 图片输入矩阵：
 
 `working_memory.changed` 由 commit chain 在提交 `working_memory.set` proposal 后通过 `makeEvent` 产出，作为 commit event **直接写入 `/api/actions` 流**（与 `narrative.completed` 等同走 commit-direct 路径，不经 `FORWARDED_EVENT_TYPES` 白名单）。因此它**是 `CovelEvent` union 的成员**（`COVEL_EVENT_META` 中 `forwardToActionStream: false`——该 flag 只管 eventBus→action-stream 转发，对 commit-direct 事件无效）。前端 actions handler **显式不渲染**它（UI 通过 `state.changed` 感知 working memory 变化）；闭合 union 会强制新增事件在前端选择处理或忽略。
 
+`memory.updated` 是后台核心记忆提取的完成记录，写入 `trace_events`，沿用来源回合的 `turnId` / `traceId`。payload 包含 `status: succeeded | failed`、`slot`、`updated`、`blocksChanged`、可选 `error` 和 `updatedAt`。它不转发到已结束的 action stream；界面通过记忆宿主插件的 `_memory/update` 数据及现有 `plugin-data.changed` 订阅显示失败，重连时从持久化数据恢复。
+
 `context.compacted` 是 **trace-only** 事件：由 Compactor 完成摘要写入后写入 `trace_events` 表，不进入 `CovelEvent` union，仅可通过 `/api/traces/:sessionId` 离线查询。
 
 `recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。
@@ -256,6 +266,8 @@ Provider 图片输入矩阵：
 | `GET /api/events/stream` | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`）     | `EventSource` + `addEventListener('<type>', handler)` —— 不监听就被静默丢弃 | `apps/web/src/services/subscription.ts`            |
 
 `/api/events/stream` 在连接建立时先发一条 `system.connected`，每 30s 发 `system.heartbeat`；带 `lastEventId` 时会先回放 EventBus 缓存中 `seq > lastEventId` 的事件再切到实时。
+
+`@covel/events` 的 `createEventBus(store?, options?)` 只要求可选的 `EventStore`，包含 `saveEvent(record)` 和按 session 隔离的 `getEventById(sessionId, id)` 两个异步方法。记录类型 `EventStoreRecord` 随包导出；现有 DataStore 可直接传入，独立宿主无需实现其他数据库方法。持久化仍是有界、尽力而为的审计队列，`flush()` 等待队列排空但不保证 transport 已送达。超大 transport 帧仍在保存成功后发送引用，由接收方通过相同存储读取；此接口收窄不改变回放、顺序或失败处理语义。
 
 #### 事件 id 形态：`${epoch}:${seq}`（H-05/H-06）
 
@@ -538,6 +550,18 @@ error.occurred        → executionError
 
 ## 七、Debug trace events
 
+内置 `TurnEmitter` 的诊断持久化与广播均为 best-effort：存储接口同步抛错或异步拒绝时仍尝试广播，广播抛错时仍等待已开始的持久化完成。投递失败的兜底告警只包含事件类型、sessionId、turnId 和 traceId，不复制原始异常或 trace 正文。Hook trace 投递失败不改变已接受的策略结果，也不触发重复的 runtime 收尾；诊断记录缺失不代表领域提交失败。
+
+### Thinking output and continuation
+
+`LLMResponse.reasoningContent` is provider-exposed text or a summary, separate from narrative content. The adapters normalize Chat `reasoning_content`, Responses `output[].summary[].text`, and Anthropic `thinking` blocks. Encrypted/redacted state and signatures are never interpreted as display text. No thinking panel is rendered when the provider returns no readable content.
+
+The session transcript and DEBUG show this text in a disclosure that starts collapsed. Session entries are grouped by source turn and runtime, with one entry per completed model call, including function-plugin gateway calls. Live action events and persisted trace recovery share an identity (`turnId`, runtime, event type, `flowId`, `seq`) so replay does not duplicate entries. Reload restores available local execution history and the server's retained trace window. Detached task completion triggers snapshot recovery. Reasoning is shown after each call finishes; token-by-token UI streaming is not part of this contract.
+
+`LLMStreamEvent.reasoning-delta` is distinct from narrative deltas and counts as provider activity for the first-token timeout. The call's total timeout still applies. `providerContinuation` preserves native ordered response items, including signatures and encrypted reasoning, for tool continuation only on the same protocol, model, and endpoint. Runtime carries this opaque field through stream completion, assistant tool-call messages, and suspension history; display/response trace payloads consume only `reasoningContent`. Request traces can contain replayed native items, as they reflect the actual outbound request.
+
+This separation follows the [AI SDK reasoning stream protocol](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol) and [provider-specific Responses continuation](https://github.com/vercel/ai/blob/main/packages/openai/src/responses/convert-to-openai-responses-input.ts); Covel retains its own gateway and adds no SDK dependency. Wire behavior follows [Alibaba's Chat API](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions), [OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning), and [Anthropic thinking](https://platform.claude.com/docs/en/build-with-claude/thinking).
+
 These events ride the standard SSE envelope and are also persisted into `trace_events`. They are emitted by the runtime's `TurnEmitter` (`packages/runtime/src/trace/turn-emitter.ts`), fanned out both to `trace_events` (for the `/api/traces` read API and the `/debug` inspector) and to the global `EventBus` (where the `/api/actions` SSE route re-forwards them through `FORWARDED_EVENT_TYPES` — the set derived from `COVEL_EVENT_META[type].forwardToActionStream`, replacing the former hand-written `FORWARDED_SUBTYPES`).
 
 | Type                     | Payload                                                                                                                                                                                                                                                                                                                                    |
@@ -547,8 +571,8 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `tool.failed`            | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }`                                                                                                                                                                                                                  |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }` — `emit-event` 校验成功后的临时表现层信号；持久业务状态仍由正常事件链提交。                                                                                                                                                                                                             |
 | `llm.calling`            | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                       |
-| `llm.responded`          | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`；`usage` 为 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是 provider 报告的子集。                                                                          |
-| `gateway.responded`      | function-runtime gateway 的成功结果；文本/对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, model?, provider?, durationMs }`，`model/provider` 是 fallback 后实际命中的目标。转写调用同样携带可用的 `usage/model/provider`；旧 trace 或不支持该元数据的自定义 gateway 可以省略。                                             |
+| `llm.responded`          | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`；`usage` 为 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是 provider 报告的子集。                                                       |
+| `gateway.responded`      | function-runtime gateway 的成功结果；文本/对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是 fallback 后实际命中的目标。转写调用同样携带可用的 `usage/model/provider`；旧 trace 或不支持该元数据的自定义 gateway 可以省略。                          |
 | `message.completed`      | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
 | `block.emitted`          | `{ runtimeId, pluginId, proposalId, source, block }`                                                                                                                                                                                                                                                                                       |
 | `ui.rendered`            | `{ runtimeId, pluginId, proposalId, source, render, block? }` — `/actions` SSE forwards this so chat can render committed `ui.render` blocks live; older trace-only payloads may omit `block`, in which case clients synthesize it from `render`.                                                                                          |
@@ -584,7 +608,7 @@ Payload notes:
   最终 provider/model 会稍后写入 calling 事件，耗时判断应结合 `startedAt` 与 responded
   的 `durationMs`。
 - `llm.calling.queueWaitMs` 是该次尝试实际等待框架并发槽的毫秒数；模型调用 `durationMs` 从取得并发槽后开始计时，包含响应流读取。历史或不经过重试层的调用可以缺少队列指标，不能将缺失解释为零。
-- `runtime.completed` 的 `status: "failed"`、`turn.completed` 的 `committed: false` 均属于诊断失败；LLM 尝试失败后重试成功仍保留失败记录，界面应将“已恢复的尝试”与任务最终状态区分。
+- 新执行的 runtime 终态在 `PostRuntime` 与输出/取消校验后发布：最终失败使用 `runtime.failed`，最终成功或暂停使用 `runtime.completed`（action SSE 将跳过映射为 `runtime.skipped`）。终态 payload 保留 `turnId` 和 `runId`，不等同于事务提交成功。历史 `runtime.completed` 的 `status: "failed"`、`turn.completed` 的 `committed: false` 仍属于诊断失败；LLM 尝试失败后重试成功仍保留失败记录，界面应将“已恢复的尝试”与任务最终状态区分。
 - `llm.calling` 可附带 `responseFormat`、`defaults`、`maxOutputTokens`，描述 runtime 请求的结构化输出与生成约束；实际协议请求见可选 `providerRequests` 数组。仅提供自定义 LLM adapter 且未实现观察入口时，该数组缺失，不应从逻辑消息猜测最终请求。
 - `providerRequests[]` 格式：`{ schemaVersion: 1, provider, protocol, body, complete, omittedFieldCount, startedAt, durationMs, transportAttempt, statusCode?, failed? }`。`body` 来自 HTTP adapter 序列化后的 JSON 投影，包括 adapter 附加的结构化提示、消息/工具转换以及参数覆盖后的值；数组顺序保留目标 fallback 和 HTTP 重试，`transportAttempt` 在每个协议请求内从 0 开始。外层 trace/turn/runtime/attempt 标识负责关联，不新增领域写入或恢复权威。
 - 同一 `llm.calling.providerRequests` 数组内完全相同的请求体只保存一次。重复项使用 `schemaVersion: 2` 和 `bodyRef` 替代 `body`，其余尝试元数据独立保留；`bodyRef` 是同数组中更早的完整请求体项的零基索引，不允许引用链、前向引用或跨 trace 引用。HTTP 观察回调仍返回完整 v1 请求；仅 trace 序列化采用去重表示。调试页兼容历史完整项，并在查看、复制时解析引用；无效引用显示不可用，不猜测正文。逻辑消息和实际协议请求仍分别保留。
@@ -593,3 +617,35 @@ Payload notes:
 - 请求正文沿用现有 trace 的敏感上下文访问与留存边界，包含玩家文本，不能当作可公开导出的脱敏日志。function runtime 的 `gateway.*` 继续只记录形状，不扩大其正文收集范围。
 - `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` to preserve the logical schema; providerRequests contains the final protocol representation.
 - `llm.calling.provider` is `null` at direct `generate` / `generateStream` sites where the resolved provider string is not available; slot-routed calls populate it with the provider name (`openai`, `anthropic`, `deepseek`, `qwen`).
+
+## Event bus lifecycle and client handler failures
+
+`EventBus.flush()` waits for the bounded audit-persistence queue. It does not
+wait for cross-process delivery and does not stop new events.
+`EventBus.close()` is idempotent: it stops local emission and remote intake,
+unsubscribes where supported, clears receive-gap timers, waits for outstanding
+persistence, ordered publishes and received-reference reads, then closes its
+owned transport. Calls to `emit()` after close are ignored. A transport may
+return an unsubscribe function from `subscribe()` and implement `close()` when
+it owns resources; the PostgreSQL implementation releases its LISTEN/NOTIFY
+client through that lifecycle. The server closes the worker before the bus,
+and the bus before its backing store.
+
+World file watchers stop intake and await their accepted reloads before worker
+shutdown. Reloads of one physical world directory run in order, so a slow
+earlier load cannot replace the result of a later reload. Shutdown leaves
+dependencies open for process exit if a producer exceeds its drain budget.
+
+A browser subscription isolates each event handler. A synchronous handler
+failure is reported with session id, event id/type and error type; it does not
+log the event payload or exception message, and other subscribers continue.
+Connection recovery and `system.reset` still rebuild from authoritative state;
+a handler warning alone does not change the replay cursor or trigger a retry.
+
+Batch plugin-data notifications are scoped to `(sessionId, pluginId)`, even
+when a single store call writes several sessions. Transactional notifications
+remain buffered until commit and are discarded on rollback.
+
+Browser media-resolution warnings identify the session, media id and HTTP
+status or error type. They omit signed URLs and exception messages so media
+access tokens do not enter diagnostic logs.

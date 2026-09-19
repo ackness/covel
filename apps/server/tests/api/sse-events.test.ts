@@ -167,7 +167,6 @@ describe("SSE Events", () => {
         status: "active",
         completedPlayerTurns: 1,
 
-        presetId: null,
         activePlugins: [],
         createdAt: new Date().toISOString(),
       });

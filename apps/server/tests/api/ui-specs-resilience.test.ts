@@ -92,7 +92,6 @@ describe("GET /api/ui-specs — one bad runtime must not 500 the whole response"
       status: "active",
       completedPlayerTurns: 1,
 
-      presetId: null,
       activePlugins: ["good-plugin", "broken-plugin"],
       createdAt: new Date().toISOString(),
     });

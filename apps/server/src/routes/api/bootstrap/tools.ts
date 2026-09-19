@@ -27,7 +27,7 @@ import { FrameworkCapability } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   createToolExecutor,
-  type ToolExecutor,
+  type ManagedToolExecutor,
   type LLMAdapter,
 } from "@covel/runtime";
 import { createApprovalPipeline } from "@covel/approval";
@@ -53,7 +53,7 @@ export interface PluginToolsResult {
   readonly toolMap: Map<string, ToolModule>;
   readonly builtinToolNames: Set<string>;
   readonly localToolNames: Set<string>;
-  readonly toolExecutor: ToolExecutor;
+  readonly toolExecutor: ManagedToolExecutor;
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
   /** Drop the per-session tool override cache entry. Called on session
    *  end/delete so the map does not grow for the lifetime of the process. */
@@ -90,7 +90,8 @@ export async function setupPluginTools(
   toolMap.set(runtimeDoneTool.name, runtimeDoneTool);
   builtinToolNames.add(runtimeDoneTool.name);
 
-  // Register plugin-data tools (store-bound via closure; events emitted by store proxy)
+  // Register plugin-data tools. Reads overlay pending proposals; the Session
+  // Kernel owns committed writes and their events.
   for (const t of createPluginDataTools(store)) {
     toolMap.set(t.name, t);
     builtinToolNames.add(t.name);
@@ -123,11 +124,10 @@ export async function setupPluginTools(
 
   // ── Per-session tool overrides (Phase 2) ──────────────────────
   //
-  // Phase 1 made write-tool `fields` validation soft (warnings in `_text`).
-  // Phase 2 lets the LLM see the world-specific schema directly in the tool
-  // parameters: `prepareToolsForSession(sessionId)` loads the active
-  // CharacterAttributeSchema and rebuilds the character write tools with
-  // strongly-typed `fields` Zod, then caches them per session. The
+  // Advertise the world's field constraints once in each write tool's
+  // description, retaining compact generic parameters. Execution validates
+  // against the current stored schema. Preparation refreshes the per-session
+  // tools before execution so changes in worlds cannot leak between sessions. The
   // `findTool` resolver below checks this cache before falling back to the
   // generic toolMap. Action handlers call `prepareToolsForSession` before
   // every `executeTurn` so the LLM always gets the freshest schema.

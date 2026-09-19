@@ -5,19 +5,16 @@
  * state patches, world overlays, submitted block UI state, etc.
  */
 
-// Backend-free schema module: constants plus the cache/media upgrade function.
+// Backend-free cache schema constants.
 import {
   APP_KV_STORE_EXECUTION_STEPS,
   APP_KV_STORE_STATE_PATCHES,
   APP_KV_STORE_SUBMITTED_BLOCKS,
   APP_KV_STORE_WORLD_OVERLAYS,
-  BROWSER_IDB_SCHEMA_VERSION,
-  upgradeBrowserIdbSchema,
 } from "@covel/store/idb-schema";
-import { BROWSER_STORAGE_DB_NAME } from "./storage/data-store.js";
-
-const DB_NAME = BROWSER_STORAGE_DB_NAME;
-const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
+import { mergeExecutionHistory } from "./execution-history.js";
+import { openBrowserCacheDb } from "./storage/cache-db.js";
+import type { StatePatchRecord } from "./api/types.js";
 
 const STORE_WORLD_OVERLAYS = APP_KV_STORE_WORLD_OVERLAYS; // key: worldId
 const STORE_STATE_PATCHES = APP_KV_STORE_STATE_PATCHES; // key: sessionId
@@ -30,39 +27,11 @@ type StoreNames =
   | typeof STORE_SUBMITTED_BLOCKS
   | typeof STORE_EXECUTION_STEPS;
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function openAppDb(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (event) => {
-      const transaction = req.transaction!;
-      void upgradeBrowserIdbSchema(
-        req.result,
-        event.oldVersion,
-        transaction,
-      ).catch(() => {
-        // Reject the open request instead of allowing a partially migrated
-        // schema to commit after an asynchronous upgrade failure.
-        try {
-          transaction.abort();
-        } catch {
-          // The transaction already aborted or completed.
-        }
-      });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  return dbPromise;
-}
-
 async function idbGet<T>(
   storeName: StoreNames,
   key: string,
 ): Promise<T | null> {
-  const db = await openAppDb();
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readonly");
     const store = tx.objectStore(storeName);
@@ -77,24 +46,27 @@ async function idbPut<T>(
   key: string,
   value: T,
 ): Promise<void> {
-  const db = await openAppDb();
+  const owned = structuredClone(value);
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
-    const req = store.put(value, key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    store.put(owned, key);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("Cache write transaction aborted"));
   });
 }
 
 async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
-  const db = await openAppDb();
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
-    const req = store.delete(key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    store.delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("Cache deletion transaction aborted"));
   });
 }
 
@@ -102,18 +74,27 @@ async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
 
 export async function getStatePatches(
   sessionId: string,
-): Promise<import("./api/types.js").StatePatchRecord[] | null> {
-  return idbGet<import("./api/types.js").StatePatchRecord[]>(
-    STORE_STATE_PATCHES,
-    sessionId,
-  );
+): Promise<StatePatchRecord[] | null> {
+  return idbGet<StatePatchRecord[]>(STORE_STATE_PATCHES, sessionId);
 }
 
-export async function saveStatePatches(
-  sessionId: string,
-  patches: import("./api/types.js").StatePatchRecord[],
-): Promise<void> {
-  return idbPut(STORE_STATE_PATCHES, sessionId, patches);
+export async function appendStatePatch(patch: StatePatchRecord): Promise<void> {
+  const owned = structuredClone(patch);
+  const db = await openBrowserCacheDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_STATE_PATCHES, "readwrite");
+    const store = tx.objectStore(STORE_STATE_PATCHES);
+    const req = store.get(owned.sessionId);
+    req.onsuccess = () => {
+      const current = (req.result as StatePatchRecord[] | undefined) ?? [];
+      if (!current.some((existing) => existing.id === owned.id)) {
+        store.put([...current, owned], owned.sessionId);
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("State patch transaction aborted"));
+  });
 }
 
 export async function removeStatePatches(sessionId: string): Promise<void> {
@@ -169,7 +150,8 @@ export async function saveSubmittedBlocks(
   ids: string[],
   values: Record<string, Record<string, unknown>>,
 ): Promise<void> {
-  const db = await openAppDb();
+  const owned = structuredClone({ ids, values });
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     // One readwrite transaction serializes concurrent submissions, including
     // writes from another tab, without dropping previously submitted forms.
@@ -180,8 +162,8 @@ export async function saveSubmittedBlocks(
       const current = req.result as SubmittedBlocksRecord | undefined;
       store.put(
         {
-          ids: [...new Set([...(current?.ids ?? []), ...ids])],
-          values: { ...current?.values, ...values },
+          ids: [...new Set([...(current?.ids ?? []), ...owned.ids])],
+          values: { ...current?.values, ...owned.values },
         } satisfies SubmittedBlocksRecord,
         sessionId,
       );
@@ -206,5 +188,31 @@ export async function saveExecutionSteps(
   sessionId: string,
   steps: unknown[],
 ): Promise<void> {
-  return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
+  const owned = structuredClone(steps);
+  const db = await openBrowserCacheDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_EXECUTION_STEPS, "readwrite");
+    const store = tx.objectStore(STORE_EXECUTION_STEPS);
+    let failure: unknown;
+    const req = store.get(sessionId);
+    req.onsuccess = () => {
+      try {
+        store.put(mergeExecutionHistory(req.result ?? [], owned), sessionId);
+      } catch (error) {
+        failure = error;
+        tx.abort();
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(
+        failure ??
+          tx.error ??
+          new Error("Execution history transaction aborted"),
+      );
+  });
+}
+
+export async function removeExecutionSteps(sessionId: string): Promise<void> {
+  return idbDelete(STORE_EXECUTION_STEPS, sessionId);
 }

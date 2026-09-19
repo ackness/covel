@@ -66,6 +66,16 @@ function makeWmProposal(overrides?: Partial<Proposal>): Proposal {
 }
 
 describe("working_memory.set commit handler", () => {
+  it("rejects a writable adapter that cannot enforce the entry quota", async () => {
+    const store = makeRecordingStore();
+    const result = await createCommitPipeline({
+      ...store,
+      listWorkingMemory: undefined,
+    }).commit(makeWmProposal());
+    expect(result.committed).toBe(false);
+    expect(result.error).toContain("quota");
+    expect(store.wmEntries).toEqual([]);
+  });
   describe("commit", () => {
     it("persists the WM entry and returns committed=true", async () => {
       const store = makeRecordingStore();

@@ -40,17 +40,19 @@ const setupRuntimeState = z.discriminatedUnion("state", [
     blockedAt: timestamp,
   }),
 ]);
-const snapshotSession = z.looseObject({
+const sessionState = z.looseObject({
   status: z.enum(["active", "paused", "ended"]),
   phase: z.enum(["setup", "playing"]),
   completedPlayerTurns: z.number().int().nonnegative(),
   setupRuntimes: z.record(z.string(), setupRuntimeState),
   locale: nonEmptyString,
   activePlugins: z.array(z.string()),
-  presetId: z.string().optional(),
   runtimeModelOverrides: z.record(z.string(), z.string()).optional(),
 });
-export const session = snapshotSession.extend({
+const snapshotSession = sessionState.extend({
+  loreOverride: z.string().optional(),
+});
+export const session = sessionState.extend({
   id: nonEmptyString,
   worldId: z.string().optional(),
   createdAt: timestamp,
@@ -141,15 +143,46 @@ const runtimeExport = z.looseObject({
 
 export const snapshotRecordArrays = {
   characters: z.array(characters),
-  stateSchemas: z.array(stateSchemas).optional(),
-  runtimeExports: z.array(runtimeExport).optional(),
+  stateSchemas: z.array(stateSchemas),
+  runtimeExports: z.array(runtimeExport),
   stateEntries: z.array(stateEntries),
   pluginData: z.array(pluginData),
   workingMemory: z.array(workingMemory),
-  sessionSummaries: z.array(sessionSummaries).optional(),
+  sessionSummaries: z.array(sessionSummaries),
   lorebookEntries: z.array(lorebookEntries),
   suspensions: z.array(suspensions),
 };
+
+export const snapshotPayloadSchema = z
+  .looseObject({
+    schemaVersion: z.literal(3),
+    turnId: z.string(),
+    session: snapshotSession,
+    ...snapshotRecordArrays,
+    compactedMessageSummaryIds: z.record(z.string(), z.string()),
+    messagesCursor: z.string(),
+    displayMessagesBoundary: z
+      .object({
+        createdAt: timestamp,
+        ids: z.array(nonEmptyString).min(1),
+      })
+      .nullable(),
+  })
+  .superRefine((payload, ctx) => {
+    const summaries = new Set(
+      payload.sessionSummaries.map((summary) => summary.id),
+    );
+    for (const [messageId, summaryId] of Object.entries(
+      payload.compactedMessageSummaryIds,
+    )) {
+      if (!summaries.has(summaryId))
+        ctx.addIssue({
+          code: "custom",
+          path: ["compactedMessageSummaryIds", messageId],
+          message: "must reference a captured session summary",
+        });
+    }
+  });
 
 export const checkpointLifecycleArrays = {
   suspensions: z.array(suspensions),
@@ -158,21 +191,7 @@ export const checkpointLifecycleArrays = {
       turnId: z.string(),
       kind: z.enum(["auto", "manual", "fork"]),
       parentId: z.string().optional(),
-      payload: z.looseObject({
-        schemaVersion: z.literal(3),
-        turnId: z.string(),
-        session: snapshotSession,
-        ...snapshotRecordArrays,
-        compactedMessageSummaryIds: z.record(z.string(), z.string()).optional(),
-        messagesCursor: z.string(),
-        displayMessagesBoundary: z
-          .object({
-            createdAt: timestamp,
-            ids: z.array(nonEmptyString).min(1),
-          })
-          .nullable()
-          .optional(),
-      }),
+      payload: snapshotPayloadSchema,
     }),
   ),
   logicalTurnLedger: z.array(

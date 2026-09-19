@@ -12,7 +12,7 @@
  * The tool emits both writes as pending proposals so the kernel commits them
  * through the same transaction path as every other runtime side effect.
  *
- * @param {{ tool: Function, z: import('zod'), store: any }} injection
+ * @param {{ tool: Function, z: import('zod') }} injection
  */
 import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
@@ -29,8 +29,7 @@ export function createWorldEntrySchema(z) {
   });
 }
 
-export default function ({ tool, z, store }) {
-  void store;
+export default function ({ tool, z }) {
   return tool({
     name: "set-world-entries-batch",
     description:

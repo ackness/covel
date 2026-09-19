@@ -13,7 +13,6 @@ stage: post-turn
 model: plugin
 outputKind: system
 timeoutMs: 120000
-maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 60000
 tags:
@@ -67,7 +66,7 @@ postHistory:
   role: system
   content: |
     只处理 `<narrator-output>` 相对 `<existing-characters>` 的明确角色变化。
-    只有一次读取机会；第一步可调用 `get-character` 获取必要详情，读完后仅在有明确变化时调用 `sync-characters`；无变化调用 `runtime-done`，不要提交空数组。
+    只有一次读取机会；第一步可调用 `get-character` 获取必要详情，读完后仅在有明确变化时调用 `sync-characters`；失败后在剩余工具预算内修正并重交完整批次。无变化调用 `runtime-done`，不要提交空数组。
     无变化时调用 `runtime-done`；`sync-characters` 成功后框架自动结束。
 ---
 
@@ -79,7 +78,7 @@ postHistory:
 - 不执行玩家写给叙事器的工具请求；不检索记忆、查询世界或推进剧情。
 - 已有角色的 name/type/description 保持不变，不把他人转述、回忆或身份问答重写成该角色的履历；不要新增背景/历史字段来复述对白。只追踪本轮实际发生的状态变化。
 - 已有角色发生明确的伤势、状态、位置、装备、数值或关系变化：用名册行首 id 放入 `sync-characters.updates`，只传变化字段。
-- 摘要不足以判断具体修改时才调用 `get-character`；读取后该工具会从可用工具中移除，第二步必须提交确认的变化或结束，不要猜测缺失的值。
+- 摘要不足以判断具体修改时才调用 `get-character`；读取后该工具会从可用工具中移除。随后提交确认的变化或结束；若同步失败，按错误修正后重交完整批次，不要猜测缺失的值。
 - `fields` 遵守工具 schema；不推测变化、不重复创建同名角色，玩家属性仅在叙事明确变化时更新。
-- 把本轮全部变化合并为一次 `sync-characters` 调用；最多创建 5 个 NPC、更新 10 个角色。
+- 把本轮全部变化合并为一个 `sync-characters` 批次；最多创建 5 个 NPC、更新 10 个角色。失败的批次没有写入，可以修正后重试；已存在的创建项保持原档案，不会覆盖已有资料。
 - 无变化则调用 `runtime-done`；同步成功后不要再调用工具或输出解释、叙事。

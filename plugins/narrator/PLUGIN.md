@@ -35,6 +35,9 @@ relations:
   conflicts:
     - chat-mode-narrator
 inputs:
+  worldTime:
+    from: { capability: world-time-context, cardinality: one }
+    required: false
   tabletopCheck:
     from: { capability: tabletop-check, cardinality: one }
     select: /checkContext
@@ -123,3 +126,7 @@ postHistory:
 - 融入玩家背景；人物口吻、动机、地点、势力和术语必须与已知设定一致
 - 用环境、人物反应和感官细节推进，不替玩家决定行动
 - 根据叙事风格设定（{{ world.tone }}）调整文风
+
+## 世界时间
+
+若 `<runtime-inputs>` 中有 `worldTime`，以其 `value` 的日期、时段和时间定义作为本轮起点。遵循定义的方向与 `evolution.prompt`，在叙事中明确自然耗时或时间跳转，不随意重置日期。时间插件在叙事后确定性结算，旧记忆中的时间不能覆盖此权威起点。

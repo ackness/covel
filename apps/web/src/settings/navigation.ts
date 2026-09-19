@@ -221,19 +221,12 @@ export function buildNavTree(
 
 export { APPEARANCE_NODE_ID, OPERATOR_ACCESS_NODE_ID, PACKAGES_NODE_ID };
 
-/** Resolve old links and composite setting keys to their current pane. */
+/** Resolve current pane IDs and composite setting keys. */
 export function resolveSettingsNode(
   nodes: readonly NavNode[],
   key: string,
 ): NavNode | undefined {
-  const aliases: Record<string, string> = {
-    "llm.keys": "llm.providers",
-    "llm.presets": "llm.providers",
-    "llm.customPresets": "llm.providers",
-  };
-  const target = key.startsWith("keys.")
-    ? "llm.providers"
-    : (aliases[key] ?? key);
+  const target = key.startsWith("keys.") ? "llm.providers" : key;
   const exact = nodes.find((node) => node.id === target);
   if (exact) {
     return exact.id === "llm" || exact.id === "plugin"

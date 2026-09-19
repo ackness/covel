@@ -48,7 +48,7 @@ plugins/my-codex/
 
 **tools/unlock-codex-entries.js：**
 
-插件本地工具使用**工厂函数**模式 — entry 模块调用工厂时传入 `covel.toolkit`，即 `{ tool, z, shortId, shortIdBatch, withPendingProposals, store }` 注入包：
+插件本地工具使用**工厂函数**模式 — entry 模块调用工厂时传入 `covel.toolkit`，即 `{ tool, z, shortId, shortIdBatch, withPendingProposals }` 注入包：
 
 ```javascript
 // 工厂函数接收框架注入
@@ -118,7 +118,7 @@ export default function ({ tool, z, shortIdBatch }) {
 
 **关键点：**
 
-1. **工厂函数** — `export default function ({ tool, z, shortId, shortIdBatch, withPendingProposals, store })` 接收 `covel.toolkit` 注入，通常无需 import
+1. **工厂函数** — `export default function ({ tool, z, shortId, shortIdBatch, withPendingProposals })` 接收 `covel.toolkit` 注入，通常无需 import
 2. **Zod 定义参数** — 框架自动从 Zod schema 生成 JSON Schema 注入 LLM 上下文，LLM 才知道如何调用
 3. **`.describe()` 很重要** — 每个参数的 describe 会作为参数说明发给 LLM
 4. **`execute(params, context)`** — params 是经过 Zod 验证的输入，context 包含会话信息
@@ -335,7 +335,7 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 - 不能以 `framework-` 开头(保留命名空间)
 - builtin 插件的 entry 在启动时执行,action 立即可用;community 插件延迟到审批通过 / 首次激活时执行 entry。handler 抛错由框架捕获并返回 500
 - payload 可以是任意 JSON,推荐在 handler 内自己用 zod 校验
-- handler 的 `store` 是 raw `DataStore`,可以读写,但**不要绕过 commit 链做大型状态变更**——那是 turn pipeline 的职责。RPC 适合小范围读 / 通知 / 重新触发的场景
+- RPC handler 的 `store` 是绑定当前 session/plugin 的能力视图，不暴露完整 DataStore；写入即时生效，后续异常不自动回滚。需要事务提案的状态变更通过 runtime 执行。
 
 **框架默认 action(无需声明,所有插件可直接调):**
 
@@ -367,25 +367,29 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 }
 ```
 
-**local tool 单元测试（tests/my-plugin.test.js）** —— 直接 import 工具工厂，注入 toolkit 与 mock store 后调用 `execute`（完整真实范例：[`plugins/codex/tests/codex.test.js`](../../plugins/codex/tests/codex.test.js)）：
+**local tool 单元测试（tests/my-plugin.test.js）** —— 直接 import 工具工厂，再用 `bindToolStore` 为每次 `execute` 提供 scoped store 和 pending overlay（完整真实范例：[`plugins/codex/tests/codex.test.js`](../../plugins/codex/tests/codex.test.js)）：
 
 ```js
 import { describe, it, expect } from "vitest";
 import { tool, z, shortIdBatch, getPendingProposals } from "@covel/tools";
 import createUnlockCodexEntries from "../tools/unlock-codex-entries.js";
+import { bindToolStore } from "@covel/plugin-test-utils";
 
 describe("unlock-codex-entries", () => {
   it("unlocks a location entry", async () => {
-    const unlockTool = createUnlockCodexEntries({
-      tool,
-      z,
-      shortIdBatch,
-      store: mockPluginDataStore, // in-memory stub，见 codex.test.js
-    });
+    const unlockTool = bindToolStore(
+      createUnlockCodexEntries({ tool, z, shortIdBatch }),
+      mockPluginDataStore,
+    );
 
     const result = await unlockTool.execute(
       { entries: [{ category: "location", title: "青萍山", content: "…" }] },
-      { sessionId: "sess-1", turnId: "turn-1", pluginId: "my-codex" },
+      {
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        pluginId: "my-codex",
+        runtimeId: "my-codex/main",
+      },
     );
 
     // 写入以 proposal 形式挂在返回值上，由框架 commit

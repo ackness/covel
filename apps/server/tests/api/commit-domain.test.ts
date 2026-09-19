@@ -137,6 +137,7 @@ describe("commit-domain fault injection (Batch 2)", () => {
     registry.register(makeEntry({ id: RUNTIME_ID, loaded }));
 
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -144,13 +145,12 @@ describe("commit-domain fault injection (Batch 2)", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     eventBus = createEventBus(store);

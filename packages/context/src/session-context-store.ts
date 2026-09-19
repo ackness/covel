@@ -32,7 +32,7 @@ import type {
   WorldRecord,
 } from "./store-records.js";
 
-export interface SessionContextStore {
+export interface SessionContextReadStore {
   // ── Reads (session-context.ts / session-context-views.ts) ───────
   getSession(sessionId: string): Promise<SessionRecord | null>;
   getWorld(worldId: string): Promise<WorldRecord | null>;
@@ -66,7 +66,9 @@ export interface SessionContextStore {
   listSessionSummaries?(
     sessionId: string,
   ): Promise<readonly SessionSummaryRecord[]>;
+}
 
+export interface SessionContextStore extends SessionContextReadStore {
   // ── Writes (compactor.ts) ───────────────────────────────────────
   saveSessionSummary(record: SessionSummaryRecord): Promise<void>;
   tagTurnMessagesCompacted(

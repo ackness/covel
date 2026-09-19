@@ -9,7 +9,8 @@
  * (Compaction lives in `@covel/context`'s `maybeCompact`, not this package.)
  *
  * Public surface is intentionally narrow: consumers compose the whole system
- * via `createMemorySystem`. The individual tier factories stay package-internal.
+ * via `createMemorySystem`. `createMemoryManager` also supports a host-owned
+ * transaction boundary for final block writes and recovery receipts.
  */
 
 // ── Types ────────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ export type {
   MemoryLLMAdapter,
   MemoryUpdaterConfig,
   MemoryUpdateResult,
+  MemoryUpdateInput,
   MemoryAuthoritativeFacts,
   MemoryUpdater,
   RecallSearchResult,
@@ -39,6 +41,7 @@ export type { EmbedFn } from "./vector-common.js";
 export {
   awaitPendingMemoryBackgroundTasks,
   pendingMemoryBackgroundTaskCount,
+  trackMemoryBackgroundTask,
 } from "./background-tasks.js";
 export type {
   MemoryBackgroundDrainResult,
@@ -48,4 +51,13 @@ export type {
 
 // ── Memory system facade ─────────────────────────────────────────
 export { createMemorySystem } from "./memory-system.js";
+export { createMemoryManager } from "./core-memory.js";
 export type { CreateMemorySystemOptions } from "./memory-system.js";
+
+export type {
+  MemoryStore,
+  CoreMemoryStore,
+  RecallStore,
+  ArchivalStore,
+  VectorIngestStore,
+} from "./store-contracts.js";

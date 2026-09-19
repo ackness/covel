@@ -7,6 +7,7 @@ import type {
   RuntimeResult,
 } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
+import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createPluginRpcRuntimeTurnRunner } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
@@ -40,6 +41,9 @@ function manifest(): RuntimeManifest {
     needs: [PRODUCER_ID],
     effects: { writes: ["plugin-data:self:tracks"] },
     turnCompletion: { mode: "detached" },
+    userSettings: [
+      { key: "tone", type: "text", default: "manifest", label: "Tone" },
+    ],
   };
 }
 
@@ -84,7 +88,11 @@ function descriptor(): DeferredRuntimeJob {
 }
 
 describe("plugin RPC detached-stage runner", () => {
-  async function setup(handler: FunctionHandler) {
+  async function setup(
+    handler: FunctionHandler,
+    hookPipeline?: HookPipeline,
+    runtimeManifest = manifest(),
+  ) {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
@@ -103,7 +111,6 @@ describe("plugin RPC detached-stage runner", () => {
       updatedAt: now,
     });
     const session = (await store.getSession(SESSION_ID))!;
-    const runtimeManifest = manifest();
     const loaded: LoadedRuntime = {
       manifest: runtimeManifest,
       promptTemplate: "",
@@ -119,6 +126,7 @@ describe("plugin RPC detached-stage runner", () => {
       sessionId: SESSION_ID,
       session,
       activeRuntimes: [producerManifest(), runtimeManifest],
+      hookPipeline,
       approvalScopes: new Map([
         [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
       ]),
@@ -131,6 +139,83 @@ describe("plugin RPC detached-stage runner", () => {
     });
     return { store, session, runner, observed };
   }
+
+  it.each(["manual", "background", "detached-stage"] as const)(
+    "keeps operation settings during %s commit",
+    async (mode) => {
+      const pipeline = createHookPipeline();
+      const seen: Array<{ event: string; settings: unknown }> = [];
+      for (const event of [
+        "TurnStart",
+        "PreStateCommit",
+        "PostStateCommit",
+      ] as const) {
+        pipeline.register({
+          id: `settings:${event}`,
+          event,
+          pluginId: PLUGIN_ID,
+          handler: async (ctx) => {
+            seen.push({ event, settings: ctx.getOwnSettings?.() });
+            return { action: "continue" };
+          },
+        });
+      }
+      const values = { tone: "captured" };
+      const handlerSettings: unknown[] = [];
+      const { runner, session } = await setup(
+        async (ctx) => {
+          handlerSettings.push(ctx.userSettings);
+          values.tone = "changed-during-execution";
+          return {
+            outcome: "success",
+            value: {},
+            effects: {
+              pluginData: [{ namespace: "tracks", key: "settings", value: {} }],
+            },
+          };
+        },
+        pipeline,
+        mode === "detached-stage"
+          ? manifest()
+          : {
+              ...manifest(),
+              stage: undefined,
+              trigger: { type: "manual" },
+              inputs: undefined,
+              needs: undefined,
+              turnCompletion: undefined,
+            },
+      );
+      const userSettings = { [PLUGIN_ID]: values };
+      const outcome =
+        mode === "detached-stage"
+          ? await runner.runDetachedStage({
+              descriptor: descriptor(),
+              backgroundTurnId: "settings-turn",
+              userSettings,
+              expectedSessionIncarnation: sessionIncarnationIdentity(session),
+              beforeCommit: async () => {},
+              completeInTx: async () => {},
+            })
+          : await runner.runManualTurn({
+              turnId: "settings-turn",
+              runtimeId: RUNTIME_ID,
+              userSettings,
+              detached: mode === "background",
+              retrySeedResults: [sourceResult()],
+            });
+      expect(outcome.commit.committed).toBe(true);
+      expect(handlerSettings).toEqual([{ tone: "captured" }]);
+      expect(seen.map((entry) => entry.event)).toEqual([
+        "TurnStart",
+        "PreStateCommit",
+        "PostStateCommit",
+      ]);
+      expect(seen.map((entry) => entry.settings)).toEqual(
+        Array.from({ length: 3 }, () => ({ tone: "captured" })),
+      );
+    },
+  );
 
   it("rehydrates frozen inputs, commits output, and does not complete a player turn", async () => {
     const handler: FunctionHandler = async (ctx) => {
@@ -158,6 +243,7 @@ describe("plugin RPC detached-stage runner", () => {
       backgroundTurnId: "background-turn",
       expectedSessionIncarnation: sessionIncarnationIdentity(session),
       beforeCommit,
+      completeInTx: async () => {},
     });
 
     expect(outcome.commit.committed).toBe(true);
@@ -171,6 +257,115 @@ describe("plugin RPC detached-stage runner", () => {
       value: { source: "frozen source output" },
     });
     expect(observed).not.toContain("turn.completed");
+  });
+
+  it.each(["manual", "background", "detached-stage"] as const)(
+    "rolls back %s output when execution is cancelled during PreStateCommit",
+    async (mode) => {
+      const abort = new AbortController();
+      const pipeline = createHookPipeline();
+      const postCommit = vi.fn(async () => ({ action: "continue" as const }));
+      pipeline.register({
+        id: "cancel-at-commit",
+        event: "PreStateCommit",
+        pluginId: PLUGIN_ID,
+        handler: async () => {
+          abort.abort(new Error("host shutdown"));
+          return { action: "continue" };
+        },
+      });
+      pipeline.register({
+        id: "observe-commit",
+        event: "PostStateCommit",
+        pluginId: PLUGIN_ID,
+        handler: postCommit,
+      });
+      const { runner, session, store } = await setup(
+        async () => ({
+          outcome: "success",
+          value: {},
+          effects: {
+            pluginData: [{ namespace: "tracks", key: "cancelled", value: {} }],
+          },
+        }),
+        pipeline,
+        mode === "detached-stage"
+          ? manifest()
+          : {
+              ...manifest(),
+              stage: undefined,
+              trigger: { type: "manual" },
+              inputs: undefined,
+              needs: undefined,
+              turnCompletion: undefined,
+            },
+      );
+      const outcome =
+        mode === "detached-stage"
+          ? await runner.runDetachedStage({
+              descriptor: descriptor(),
+              backgroundTurnId: "cancel-at-commit",
+              executionSignal: abort.signal,
+              expectedSessionIncarnation: sessionIncarnationIdentity(session),
+              beforeCommit: async () => {},
+              completeInTx: async () => {},
+            })
+          : await runner.runManualTurn({
+              turnId: "cancel-at-commit",
+              runtimeId: RUNTIME_ID,
+              detached: mode === "background",
+              executionSignal: abort.signal,
+            });
+      expect(abort.signal.aborted).toBe(true);
+      expect(outcome.commit.committed).toBe(false);
+      expect(
+        await store.listPluginData(SESSION_ID, PLUGIN_ID, "tracks"),
+      ).toEqual([]);
+      expect(postCommit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves a durable commit when shutdown starts in a post-commit hook", async () => {
+    const abort = new AbortController();
+    const pipeline = createHookPipeline();
+    pipeline.register({
+      id: "shutdown-after-commit",
+      event: "PostStateCommit",
+      pluginId: PLUGIN_ID,
+      handler: async () => {
+        abort.abort(new Error("host shutdown"));
+        return { action: "continue" };
+      },
+    });
+    const { runner, store } = await setup(
+      async () => ({
+        outcome: "success",
+        value: {},
+        effects: {
+          pluginData: [{ namespace: "tracks", key: "committed", value: {} }],
+        },
+      }),
+      pipeline,
+      {
+        ...manifest(),
+        stage: undefined,
+        trigger: { type: "manual" },
+        inputs: undefined,
+        needs: undefined,
+        turnCompletion: undefined,
+      },
+    );
+    const outcome = await runner.runManualTurn({
+      turnId: "close-after-commit",
+      runtimeId: RUNTIME_ID,
+      detached: true,
+      executionSignal: abort.signal,
+    });
+    expect(abort.signal.aborted).toBe(true);
+    expect(outcome.commit.committed).toBe(true);
+    expect(
+      await store.getPluginData(SESSION_ID, PLUGIN_ID, "tracks", "committed"),
+    ).toMatchObject({ value: {} });
   });
 
   it("rejects an undeclared effect before any domain proposal commits", async () => {
@@ -189,6 +384,7 @@ describe("plugin RPC detached-stage runner", () => {
       backgroundTurnId: "background-turn-guarded",
       expectedSessionIncarnation: sessionIncarnationIdentity(session),
       beforeCommit: async () => {},
+      completeInTx: async () => {},
     });
 
     expect(outcome.commit).toMatchObject({

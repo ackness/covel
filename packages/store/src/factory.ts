@@ -17,7 +17,8 @@ import { readRuntimeEnv } from "@covel/shared";
 /**
  * Create a `DataStore` instance for the specified backend.
  *
- * Lazily imports the backend module so unused backends are not bundled.
+ * Loads only the selected backend. Import this factory subpath to avoid the
+ * legacy root entry's eager backend exports.
  *
  * @param config - Store configuration specifying the backend (`memory`, `sqlite`, or `pg`) and connection details.
  * @returns A `DataStore` instance ready for use.
@@ -87,3 +88,8 @@ export function createStoreFromEnv(): Promise<DataStore> {
 export function resolveBackendFromEnv(): RuntimeStoreBackend {
   return readRuntimeEnv().storeBackend;
 }
+
+export {
+  createMediaStore,
+  createMediaStoreFromEnv,
+} from "./media-store/factory.js";

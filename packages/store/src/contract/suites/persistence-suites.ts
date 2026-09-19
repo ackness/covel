@@ -445,21 +445,6 @@ export function registerPersistenceStoreSuites(
       expect(result!.payload.messagesCursor).toBe("tm-last-abc");
     });
 
-    it("accepts legacy schema-v3 payloads without session summaries", async () => {
-      const currentPayload = makeSnapshotPayload();
-      const { sessionSummaries: _legacyOmission, ...legacyPayload } =
-        currentPayload;
-      const snap = makeSnapshot({
-        sessionId: "sess-snap-legacy-v3",
-        payload: legacyPayload as SnapshotPayload,
-      });
-      await store.saveSnapshot(snap);
-
-      const result = await store.getSnapshot(snap.id);
-      expect(result?.payload.schemaVersion).toBe(3);
-      expect(result?.payload.sessionSummaries).toBeUndefined();
-    });
-
     it("round-trips the current snapshot session lifecycle state", async () => {
       const payload = makeSnapshotPayload();
       const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });
@@ -472,8 +457,8 @@ export function registerPersistenceStoreSuites(
     });
 
     it("keeps optional session fields absent after round-trip", async () => {
-      // presetId / runtimeModelOverrides are optional — JSON serialisation
-      // must not resurrect them as null (store-backend parity contract).
+      // Optional runtimeModelOverrides must not reappear as null after JSON
+      // serialization (store-backend parity contract).
       const payload = makeSnapshotPayload({
         session: {
           status: "paused",
@@ -489,7 +474,6 @@ export function registerPersistenceStoreSuites(
 
       const result = (await store.getSnapshot(snap.id))!
         .payload as SnapshotPayload;
-      expect(result.session.presetId).toBeUndefined();
       expect(result.session.runtimeModelOverrides).toBeUndefined();
       expect(result.session.status).toBe("paused");
     });

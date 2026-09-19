@@ -491,3 +491,74 @@ describe("concurrent writes", () => {
     expect(store.get("ui.scheme")).toBe("dark");
   });
 });
+
+describe("ordinary settings batches", () => {
+  it("rejects an import batch before changing dependent settings or secrets", async () => {
+    const before = { "ui.locale": "en-US", selected: "old" };
+    const adapter = createMemoryAdapter(before);
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+    await store.init();
+    const save = vi.spyOn(adapter, "save");
+    const saveSecrets = vi.spyOn(adapter, "saveSecrets");
+    await expect(
+      store.import(
+        {
+          schemaVersion: 1,
+          exportedAt: "2026-01-01T00:00:00.000Z",
+          entries: { selected: "new", "ui.locale": "invalid" },
+          keys: { fixture: "synthetic-secret" },
+        },
+        { keys: ["selected", "ui.locale"], includeSecrets: true },
+      ),
+    ).rejects.toThrow();
+    expect(adapter.readEntries()).toEqual(before);
+    expect(store.snapshotSecrets()).toEqual({});
+    expect(save).not.toHaveBeenCalled();
+    expect(saveSecrets).not.toHaveBeenCalled();
+  });
+
+  it("validates the whole batch before changing values or saving", async () => {
+    const adapter = createMemoryAdapter({
+      "ui.locale": "zh-CN",
+      selected: "old",
+    });
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+    await store.init();
+    const save = vi.spyOn(adapter, "save");
+    await expect(
+      store.setMany({ selected: "new", "ui.locale": "invalid" }),
+    ).rejects.toThrow();
+    expect(store.get("selected")).toBe("old");
+    expect(save).not.toHaveBeenCalled();
+    await expect(
+      store.setMany({ selected: "new", "keys.fixture": "synthetic" }),
+    ).rejects.toThrow("separate keys channel");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("captures one batch and restores all its values when persistence fails", async () => {
+    const before = { selected: "old", bindings: { story: "old" } };
+    const adapter = createMemoryAdapter(before);
+    const store = new SettingsStore(adapter);
+    await store.init();
+    const failed = Promise.withResolvers<void>();
+    vi.spyOn(adapter, "save").mockImplementationOnce(() => failed.promise);
+    const input = { selected: "new", bindings: { story: "new" } };
+    const saved = store.setMany(input);
+    input.bindings.story = "late mutation";
+    const assertion = expect(saved).rejects.toThrow("synthetic failure");
+    expect(store.get("bindings")).toEqual({ story: "new" });
+    failed.reject(new Error("synthetic failure"));
+    await assertion;
+    expect(store.get("bindings")).toEqual(before.bindings);
+    expect(store.get("selected")).toBe("old");
+    expect(adapter.readEntries()).toEqual(before);
+    await store.setMany({ selected: "retry", bindings: { story: "retry" } });
+    expect(adapter.readEntries()).toEqual({
+      selected: "retry",
+      bindings: { story: "retry" },
+    });
+  });
+});

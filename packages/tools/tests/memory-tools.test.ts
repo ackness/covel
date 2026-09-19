@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Proposal } from "@covel/shared";
 import { createMemoryTools, getPendingProposals } from "../src/index.js";
 import type { ToolExecutionContext, ToolModule } from "../src/types.js";
 
@@ -16,6 +17,94 @@ const context: ToolExecutionContext = {
 };
 
 describe("memory block tools", () => {
+  it.each([false, true])(
+    "reads the latest pending update before commit (stored block: %s)",
+    async (stored) => {
+      const getBlock = vi.fn(async () =>
+        stored
+          ? { label: "quest_threads", content: "old", updatedAt: "old-time" }
+          : null,
+      );
+      const tools = createMemoryTools({
+        recall: { search: async () => [] },
+        archival: { search: async () => [] },
+        blocks: { getBlock },
+      });
+      const update = findTool(tools, "memory-update-block");
+      const first = await update.execute(
+        { label: "quest_threads", content: "first" },
+        context,
+      );
+      const last = await update.execute(
+        { label: "quest_threads", content: "latest" },
+        { ...context, pluginId: "another-plugin" },
+      );
+      const pending = [
+        ...getPendingProposals(first),
+        ...getPendingProposals(last),
+      ];
+      expect(
+        await findTool(tools, "memory-get-block").execute(
+          { label: "quest_threads" },
+          { ...context, pendingProposals: pending },
+        ),
+      ).toMatchObject({
+        found: true,
+        label: "quest_threads",
+        content: "latest",
+        updatedAt: pending.at(-1)?.timestamp,
+      });
+      expect(getBlock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores pending memory from another session, scope or label", async () => {
+    const getBlock = vi.fn(async () => ({
+      label: "quest_threads",
+      content: "stored",
+      updatedAt: "stored-time",
+    }));
+    const tools = createMemoryTools({
+      recall: { search: async () => [] },
+      archival: { search: async () => [] },
+      blocks: { getBlock },
+    });
+    const proposal: Proposal = {
+      id: "pending-memory",
+      type: "working_memory.set",
+      source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+      timestamp: "2026-08-25T00:00:00.000Z",
+      payload: {
+        scope: "story",
+        key: "quest_threads",
+        value: { text: "pending" },
+      },
+    };
+    expect(
+      await findTool(tools, "memory-get-block").execute(
+        { label: "quest_threads" },
+        {
+          ...context,
+          pendingProposals: [
+            { ...proposal, sessionId: "other-session" },
+            { ...proposal, payload: { ...proposal.payload, scope: "player" } },
+            {
+              ...proposal,
+              payload: { ...proposal.payload, key: "other-label" },
+            },
+          ],
+        },
+      ),
+    ).toMatchObject({
+      found: true,
+      content: "stored",
+      updatedAt: "stored-time",
+    });
+    expect(getBlock).toHaveBeenCalledWith(context.sessionId, "quest_threads");
+  });
+
   it("accepts a world-defined custom block label for reads and writes", async () => {
     const getBlock = vi.fn(async (_sessionId: string, label: string) => ({
       label,

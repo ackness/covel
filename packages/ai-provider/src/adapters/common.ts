@@ -10,6 +10,7 @@
  */
 
 import type { ImagePart } from "../types.js";
+import { readReasoningEffort } from "../reasoning-effort.js";
 
 /**
  * Maps a camelCase `parameterOverrides` source key to the provider's wire-format
@@ -56,6 +57,24 @@ export function createMetadataSanitizer(
     const sanitized: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(meta)) {
       if (!protectedKeys.has(k)) sanitized[k] = v;
+    }
+    const selection = readReasoningEffort(meta);
+    // Explicit UI selections own the budget too; Qwen rejects budget + effort.
+    if (selection) delete sanitized.thinking_budget;
+    if (selection === "provider-default") {
+      // This is an explicit opt-out, not inheritance from a lower layer.
+      delete sanitized.enable_thinking;
+      delete sanitized.thinking;
+      delete sanitized.reasoning_effort;
+      for (const key of ["reasoning", "output_config"]) {
+        const value = sanitized[key];
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          const rest = { ...value } as Record<string, unknown>;
+          delete rest.effort;
+          if (Object.keys(rest).length) sanitized[key] = rest;
+          else delete sanitized[key];
+        }
+      }
     }
     return sanitized;
   };

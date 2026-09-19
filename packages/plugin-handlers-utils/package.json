@@ -1,12 +1,16 @@
 {
   "name": "@covel/plugin-handlers-utils",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "private": true,
   "type": "module",
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./image-generation": {
+      "types": "./src/image-generation.ts",
+      "import": "./src/image-generation.ts"
     }
   },
   "scripts": {

@@ -19,7 +19,7 @@
  * points):
  *   - executeTurn (turn pipeline) — turn + LLM + tool hooks, compaction
  *   - server session routes — SessionStart / SessionEnd
- *   - createRuntimeResultProcessor.process — commit (Pre/PostStateCommit)
+ *   - finalizeExecution — commit (Pre/PostStateCommit)
  *   - resume route — resume exec + its commit
  *   - characters route — direct character.upsert commit
  */
@@ -30,11 +30,12 @@ export interface HookScope {
   /** Plugin ids active in the current session. */
   readonly activePluginIds: ReadonlySet<string>;
   /**
-   * Per-plugin, read-only `userSettings` snapshot for this turn, keyed by
+   * Per-plugin, read-only `userSettings` snapshot for this operation, keyed by
    * `pluginId`. Each bucket is the plugin's resolved settings (manifest
-   * defaults merged with the player's saved values), already frozen. The turn
-   * pipeline populates this; other scope sites (session / resume / commit /
-   * characters) omit it, in which case `getOwnSettings` degrades to `{}`.
+   * defaults merged with world and player values), already frozen. Production
+   * entry points capture this before execution or lifecycle mutation and pass
+   * it through commit. Scope-less/custom callers may omit it; the accessor
+   * then returns `{}`. Nested scopes never inherit another operation's settings.
    */
   readonly settings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
@@ -48,7 +49,10 @@ const EMPTY_SETTINGS: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /** Run `fn` with the given active-plugin scope visible to the hook pipeline. */
 export function runWithHookScope<T>(scope: HookScope, fn: () => T): T {
-  return storage.run(scope, fn);
+  return storage.run(
+    { ...scope, activePluginIds: new Set(scope.activePluginIds) },
+    fn,
+  );
 }
 
 /** Active plugin ids for the current async context, or undefined if unscoped. */

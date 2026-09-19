@@ -1,11 +1,13 @@
 /** Lightweight browser cache/media schema. Business data lives in BrowserVault. */
-export const BROWSER_IDB_SCHEMA_VERSION = 1;
+export const BROWSER_IDB_SCHEMA_VERSION = 2;
 export const BROWSER_IDB_DATABASE_NAME = "covel-browser-cache";
 
 export const APP_KV_STORE_WORLD_OVERLAYS = "worldOverlays";
 export const APP_KV_STORE_STATE_PATCHES = "statePatches";
 export const APP_KV_STORE_SUBMITTED_BLOCKS = "submittedBlocks";
 export const APP_KV_STORE_EXECUTION_STEPS = "executionSteps";
+export const REMOTE_UI_CACHE_STORE = "remoteSessionUi";
+export const REMOTE_UI_CACHE_EPOCHS = "remoteUiEpochs";
 export const MEDIA_CACHE_STORE_BLOBS = "media_cache_blobs";
 
 interface BrowserSchemaStore {
@@ -50,6 +52,11 @@ export function upgradeBrowserIdbSchema(
   ensureStore(db, APP_KV_STORE_STATE_PATCHES);
   ensureStore(db, APP_KV_STORE_SUBMITTED_BLOCKS);
   ensureStore(db, APP_KV_STORE_EXECUTION_STEPS);
+  const remoteUi = ensureStore(db, REMOTE_UI_CACHE_STORE, {
+    keyPath: "sessionId",
+  });
+  remoteUi?.createIndex("worldId", "worldId");
+  ensureStore(db, REMOTE_UI_CACHE_EPOCHS);
   ensureStore(db, MEDIA_CACHE_STORE_BLOBS, { keyPath: "id" });
   return Promise.resolve();
 }

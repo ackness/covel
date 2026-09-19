@@ -1,4 +1,4 @@
-import { supportsVector } from "@covel/store";
+import { supportsVector } from "@covel/store/vector";
 import type { DataStore, SessionRecord } from "@covel/store";
 
 interface SessionEmbeddingInfo {

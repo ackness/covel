@@ -13,7 +13,6 @@ import { z } from "zod";
 import type { BootstrapPluginEntriesParams } from "./plugin-entry.js";
 import type { EntryRegistrationBatch } from "./entry-registration-batch.js";
 import { registerNamespaced } from "./plugin-wires.js";
-import { scopeStoreToPlugin } from "./plugin-store-scope.js";
 
 const HOOK_EVENT_SET: ReadonlySet<string> = new Set(HOOK_EVENTS);
 
@@ -49,18 +48,13 @@ export function buildEntryApi(
   );
   const pluginTrust: RpcTrustLevel = trustInfo.source;
 
-  // Community entries get a pluginId-scoped store view; builtin entries keep
-  // the raw store.
+  // Registration has no session authority. Reads are injected per tool call.
   const toolkit: PluginToolkit = {
     tool,
     z,
     shortId,
     shortIdBatch,
     withPendingProposals,
-    store:
-      pluginTrust === "community"
-        ? scopeStoreToPlugin(store, pluginId, "plugin-entry")
-        : store,
   };
 
   return {

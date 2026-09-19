@@ -5,7 +5,6 @@ import {
   type PersistenceProfile,
 } from "./browser-sync.js";
 import type { DataStore, SessionRecord, StoreTransaction } from "../types.js";
-import { rebindSnapshotPayloadSession } from "../records/snapshot-session-scope.js";
 
 export interface ExportSessionCheckpointOptions {
   readonly profile?: PersistenceProfile;
@@ -119,16 +118,7 @@ export async function exportSessionCheckpoint(
     sessionSummaries,
     playerInputs,
     suspensions,
-    snapshots: snapshots.map((snapshot) =>
-      snapshot.kind === "fork"
-        ? {
-            ...snapshot,
-            // Historical fork snapshots retained the parent's row scope.
-            // Normalize trusted store data before enforcing the wire boundary.
-            payload: rebindSnapshotPayloadSession(snapshot.payload, sessionId),
-          }
-        : snapshot,
-    ),
+    snapshots,
     worldDataLedger,
     logicalTurnLedger,
     setupAttempts,

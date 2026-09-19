@@ -20,7 +20,7 @@ describe("createGatewayAdapter target resolution", () => {
       },
     };
     const slotOverrides = {
-      slotPresetOverrides: { story: "custom-story" },
+      slotBindings: { story: { modelRef: "custom-story" } },
     };
     const adapter = createGatewayAdapter(gateway, {
       apiKeys: { "deepseek-proxy": "request-key" },
@@ -313,5 +313,54 @@ describe("createGatewayAdapter target resolution", () => {
     expect(streamOptions!.parameterOverrides).toEqual({
       maxOutputTokens: 512,
     });
+  });
+});
+
+describe("reasoning transport", () => {
+  it("forwards reasoning activity and opaque continuation in both directions", async () => {
+    const providerContinuation = {
+      protocol: "anthropic-messages-v1",
+      model: "fixture",
+      items: [{ type: "thinking", thinking: "summary", signature: "opaque" }],
+    };
+    let captured: Parameters<GatewayLike["generateText"]>[0] | undefined;
+    const gateway: GatewayLike = {
+      resolveSlot: () => null,
+      async generateText(input) {
+        captured = input;
+        return {
+          text: "answer",
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          providerContinuation,
+        };
+      },
+      async *streamText() {
+        yield { type: "reasoning-delta", reasoningDelta: "summary" };
+        yield {
+          type: "done",
+          finishReason: "stop",
+          providerContinuation,
+          reasoningContent: "summary",
+        };
+      },
+    };
+    const adapter = createGatewayAdapter(gateway);
+    const events = await Array.fromAsync(adapter.stream!({ messages: [] }));
+    expect(events[0]).toEqual({
+      type: "reasoning-delta",
+      reasoningDelta: "summary",
+    });
+    expect(events[1]).toMatchObject({
+      providerContinuation,
+      reasoningContent: "summary",
+    });
+    const result = await adapter.generate({
+      messages: [{ role: "assistant", content: "", providerContinuation }],
+    });
+    expect(captured?.messages[0]?.providerContinuation).toEqual(
+      providerContinuation,
+    );
+    expect(result.providerContinuation).toEqual(providerContinuation);
   });
 });

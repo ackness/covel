@@ -31,7 +31,7 @@ function response(name, args) {
   };
 }
 
-async function run(secondResponse) {
+async function run(secondResponse, ...corrections) {
   const store = createMemoryStore();
   await store.createSession({
     id: sessionId,
@@ -86,7 +86,11 @@ async function run(secondResponse) {
     store,
   });
   const llm = new MockLLM({
-    responses: [response("get-character", { id: characterId }), secondResponse],
+    responses: [
+      response("get-character", { id: characterId }),
+      secondResponse,
+      ...corrections,
+    ],
   });
   const tools = new Map(
     [
@@ -168,7 +172,8 @@ async function run(secondResponse) {
   const tracker = result.runtimeResults.find(
     (item) => item.runtimeId === runtimeId,
   );
-  expect(llm.calls).toHaveLength(2);
+  expect(llm.calls.length).toBeGreaterThanOrEqual(2);
+  expect(llm.calls.length).toBeLessThanOrEqual(20);
   expect(llm.calls[0].toolNames).toContain("get-character");
   expect(llm.calls[1].toolNames).not.toContain("get-character");
   expect(llm.calls[1].toolNames).toContain("sync-characters");
@@ -178,10 +183,53 @@ async function run(secondResponse) {
     success: true,
     parsedResult: { found: true },
   });
-  return { store, tracker, toolResults };
+  return { store, tracker, toolResults, llm };
 }
 
-describe("character tracker two-step runtime", () => {
+describe("character tracker correction budget", () => {
+  it("allows repeated parameter corrections through step 20 without committing failed attempts", async () => {
+    const corrections = Array.from({ length: 18 }, (_, index) =>
+      response("sync-characters", {
+        updates: [{ id: characterId, fields: { systems: -index - 1 } }],
+      }),
+    );
+    const { store, tracker, toolResults, llm } = await run(
+      ...corrections,
+      response("sync-characters", {
+        updates: [{ id: characterId, fields: { systems: 3 } }],
+      }),
+    );
+    expect(llm.calls).toHaveLength(20);
+    expect(toolResults.slice(1, 19).every((result) => !result.success)).toBe(
+      true,
+    );
+    expect(tracker.status).toBe("success");
+    expect((await store.listCharacters(sessionId))[0]).toMatchObject({
+      fields: { systems: 3 },
+      version: 2,
+    });
+  });
+
+  it("corrects an out-of-range write after reading details and commits once", async () => {
+    const { store, tracker, toolResults, llm } = await run(
+      response("sync-characters", {
+        updates: [{ id: characterId, fields: { systems: -1 } }],
+      }),
+      response("sync-characters", {
+        updates: [{ id: characterId, fields: { systems: 3 } }],
+      }),
+    );
+    expect(llm.calls).toHaveLength(3);
+    expect(llm.calls[2].toolNames).not.toContain("get-character");
+    expect(toolResults[1].success).toBe(false);
+    expect(toolResults[2].success).toBe(true);
+    expect(tracker.status).toBe("success");
+    expect((await store.listCharacters(sessionId))[0]).toMatchObject({
+      fields: { systems: 3 },
+      version: 2,
+    });
+  });
+
   it("rejects a biography rewrite without committing the accompanying state patch", async () => {
     const { store, tracker } = await run(
       response("sync-characters", {
@@ -231,7 +279,9 @@ describe("character tracker two-step runtime", () => {
       response("get-character", { id: characterId }),
     );
     expect(tracker.status).toBe("failed");
-    expect(tracker.error).toContain("exhausted the tool loop after 2 steps");
+    expect(tracker.error).toMatch(
+      /exhausted the tool loop|requireExplicitCompletion/,
+    );
     expect(getPendingProposals(tracker.output) ?? []).toEqual([]);
     expect((await store.listCharacters(sessionId))[0].version).toBe(1);
   });

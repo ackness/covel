@@ -8,56 +8,99 @@
  * it unconditionally — a stray token on a self tier is harmless, and one code
  * path beats branching on the deployment tier the client can't reliably know.
  *
- * localStorage-backed as a single JSON map, written atomically (read → spread →
- * write) so concurrent create/delete never leave a half-written key.
+ * Session tokens live in a dedicated IndexedDB database. Transactions preserve
+ * sibling writes and compare captured authority before clearing a credential.
+ * Credentials are not display caches and never enter checkpoint exports.
  */
 
-const STORAGE_KEY = "covel:session-tokens";
+import Dexie, { type Table } from "dexie";
+import { z } from "zod";
+
+export const SESSION_CREDENTIAL_DB_NAME = "covel-browser-credentials";
 const OPERATOR_STORAGE_KEY = "covel:operator-token";
 
-function readMap(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    // Guard against corrupt/legacy shapes — never trust persisted JSON.
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, string>)
-      : {};
-  } catch {
-    // localStorage unavailable (private mode / non-browser test env) or bad
-    // JSON — treat as empty; the hosted follow-up will fail visibly, not
-    // silently corrupt state.
-    return {};
+const credentialSchema = z.object({
+  sessionId: z.string().min(1),
+  token: z.string().min(1),
+});
+type SessionCredential = z.infer<typeof credentialSchema>;
+let database: Dexie | undefined;
+
+async function sessionTable(): Promise<Table<SessionCredential, string>> {
+  if (!database) {
+    database = new Dexie(SESSION_CREDENTIAL_DB_NAME);
+    database.version(1).stores({ sessions: "sessionId" });
   }
+  await database.open();
+  return database.table("sessions");
 }
 
-function writeMap(map: Record<string, string>): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-  } catch {
-    // localStorage unavailable (private mode, storage blocked). Tokens just
-    // won't persist across reloads; there is nothing to recover here.
-  }
+function validateCredential(value: unknown): SessionCredential {
+  const parsed = credentialSchema.safeParse(value);
+  if (!parsed.success) throw new Error("Invalid session credential record");
+  return parsed.data;
+}
+
+async function readToken(
+  table: Table<SessionCredential, string>,
+  sessionId: string,
+): Promise<string | undefined> {
+  const record = await table.get(sessionId);
+  return record === undefined ? undefined : validateCredential(record).token;
 }
 
 /** Persist the one-time owner token for a session. No-op on empty inputs. */
-export function storeSessionToken(sessionId: string, token: string): void {
+export async function storeSessionToken(
+  sessionId: string,
+  token: string,
+): Promise<void> {
   if (!sessionId || !token) return;
-  writeMap({ ...readMap(), [sessionId]: token });
+  const record = validateCredential({ sessionId, token });
+  await (await sessionTable()).put(record);
 }
 
 /** The owner token for a session, or undefined if none is stored. */
-export function getSessionToken(sessionId: string): string | undefined {
-  return readMap()[sessionId];
+export async function getSessionToken(
+  sessionId: string,
+): Promise<string | undefined> {
+  const table = await sessionTable();
+  return sessionId ? readToken(table, sessionId) : undefined;
 }
 
-/** Drop a session's token (delete / logout / import). No-op if absent. */
-export function clearSessionToken(sessionId: string): void {
-  const map = readMap();
-  if (!(sessionId in map)) return;
-  const { [sessionId]: _removed, ...rest } = map;
-  writeMap(rest);
+/** Capture stored authority for server-confirmed missing-session cleanup. */
+export async function listSessionCredentials(): Promise<SessionCredential[]> {
+  const records: unknown[] = await (await sessionTable()).toArray();
+  return records.map(validateCredential);
+}
+
+/** Admit a creation response without overwriting another in-flight creation. */
+export async function storeCreatedSessionToken(
+  sessionId: string,
+  token: string,
+  capturedToken: string | undefined,
+): Promise<void> {
+  const record = validateCredential({ sessionId, token });
+  const table = await sessionTable();
+  await table.db.transaction("rw", table, async () => {
+    const current = await readToken(table, sessionId);
+    if (current && current !== capturedToken && current !== token) {
+      throw new Error("Session credential changed during creation");
+    }
+    await table.put(record);
+  });
+}
+
+/** Clear exactly the authority captured by the deleting operation. */
+export async function clearSessionToken(
+  sessionId: string,
+  capturedToken: string | undefined,
+): Promise<void> {
+  if (!sessionId || !capturedToken) return;
+  const table = await sessionTable();
+  await table.db.transaction("rw", table, async () => {
+    if ((await readToken(table, sessionId)) === capturedToken)
+      await table.delete(sessionId);
+  });
 }
 
 /** Persist the operator credential used for hosted administrative calls. */
@@ -86,11 +129,11 @@ export function clearOperatorToken(): void {
   }
 }
 
-export function sessionAuthHeaders(
+export async function sessionAuthHeaders(
   sessionId: string | undefined,
-): Record<string, string> {
+): Promise<Record<string, string>> {
   if (!sessionId) return {};
-  const token = getSessionToken(sessionId);
+  const token = await getSessionToken(sessionId);
   return token ? { "X-Session-Token": token } : {};
 }
 

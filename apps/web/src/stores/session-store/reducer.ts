@@ -1,8 +1,10 @@
+import { appendReasoningStep, mergeReasoning } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import { deepMerge, encodePageCursor } from "@covel/shared";
 import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
+  upsertGameStateCharacter,
 } from "./game-state.js";
 import {
   buildDurableRuntimeJobExecutionStep,
@@ -42,6 +44,9 @@ function upsertExecutionStep(
   const updated = {
     ...(idx >= 0 ? next[idx] : undefined),
     ...step,
+    ...(next[idx]?.reasoning || step.reasoning
+      ? { reasoning: mergeReasoning(next[idx]?.reasoning, step.reasoning) }
+      : {}),
     ...(committed ? { attemptStatus: "committed" as const } : {}),
     ...(idx >= 0 &&
     next[idx].attemptStatus === "committed" &&
@@ -127,6 +132,7 @@ export const initialState: SessionState = {
   actionGeneration: 0,
   statePatches: [],
   gameState: {},
+  hasGameStateSnapshot: false,
   pluginData: {},
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
@@ -150,6 +156,7 @@ const SESSION_RESET: Partial<SessionState> = {
   olderMessagesCursor: null,
   statePatches: [],
   gameState: {},
+  hasGameStateSnapshot: false,
   pluginData: {},
   executing: false,
   executionError: null,
@@ -346,6 +353,8 @@ export function reducer(
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
     case "ADD_STATE_PATCH": {
+      if (state.statePatches.some((patch) => patch.id === action.patch.id))
+        return state;
       const patchData = action.patch.data as
         Record<string, unknown> | undefined;
       const newGameState = patchData
@@ -403,17 +412,51 @@ export function reducer(
     }
     case "SET_OLDER_MESSAGES_CURSOR":
       return { ...state, olderMessagesCursor: action.cursor };
-    case "LOAD_STATE_PATCHES":
+    case "MERGE_INITIAL_STATE_PATCHES": {
+      const currentIds = new Set(state.statePatches.map((patch) => patch.id));
+      const historical = new Map(
+        action.patches.map((patch) => [patch.id, patch]),
+      );
+      const patches = [
+        ...[...historical.values()].filter(
+          (patch) => !currentIds.has(patch.id),
+        ),
+        ...state.statePatches,
+      ];
       return {
         ...state,
-        statePatches: action.patches,
-        gameState: rebuildGameStateFromPatches(action.patches),
+        statePatches: patches,
+        // Live increments win over cached history. Once a full snapshot was
+        // published, even its empty state is authoritative for deleted fields.
+        gameState: state.hasGameStateSnapshot
+          ? state.gameState
+          : deepMerge(rebuildGameStateFromPatches(patches), state.gameState),
+      };
+    }
+    case "UPSERT_GAME_STATE_CHARACTER":
+      return {
+        ...state,
+        gameState: upsertGameStateCharacter(state.gameState, action.character),
       };
     case "SET_GAME_STATE":
       return {
         ...state,
         gameState: mergeGameStateForReplacement(state.gameState, action.state),
+        hasGameStateSnapshot: true,
       };
+    case "APPEND_REASONING": {
+      const previous = state.executionSteps.find(
+        (step) =>
+          step.turnId === action.turnId && step.runtimeId === action.runtimeId,
+      );
+      return {
+        ...state,
+        executionSteps: upsertExecutionStep(
+          state.executionSteps,
+          appendReasoningStep(previous, action),
+        ),
+      };
+    }
     case "UPSERT_EXECUTION_STEP": {
       // Upsert on (turnId, runtimeId). Transitions running → completed/failed/
       // skipped / etc happen in place — missed runtime.completed no longer
@@ -463,9 +506,6 @@ export function reducer(
         ),
       };
     }
-    case "CLEAR_EXECUTION_STEPS":
-      // Only clear in-memory — localStorage is preserved for session history
-      return { ...state, executionSteps: [] };
     case "SET_SUSPENSIONS":
       return { ...state, suspensions: action.suspensions };
     case "ADD_SUSPENSION": {
@@ -553,12 +593,34 @@ export function reducer(
       );
       return { ...state, messages: filtered };
     }
-    case "REPLACE_PLUGIN_DATA": {
+    case "REPLACE_PLUGIN_DATA":
+    case "REPLACE_PLUGIN_DATA_FOR_PLUGIN":
+    case "REPLACE_PLUGIN_DATA_NAMESPACE": {
+      const replacements =
+        action.type === "REPLACE_PLUGIN_DATA"
+          ? action.pluginData
+          : {
+              [action.pluginId]:
+                action.type === "REPLACE_PLUGIN_DATA_FOR_PLUGIN"
+                  ? action.namespaces
+                  : { [action.namespace]: action.data },
+            };
       let nextState: SessionState = {
         ...state,
-        pluginData: action.pluginData,
+        pluginData:
+          action.type === "REPLACE_PLUGIN_DATA"
+            ? replacements
+            : action.type === "REPLACE_PLUGIN_DATA_NAMESPACE"
+              ? {
+                  ...state.pluginData,
+                  [action.pluginId]: {
+                    ...state.pluginData[action.pluginId],
+                    ...replacements[action.pluginId],
+                  },
+                }
+              : { ...state.pluginData, ...replacements },
       };
-      for (const [pluginId, namespaces] of Object.entries(action.pluginData)) {
+      for (const [pluginId, namespaces] of Object.entries(replacements)) {
         for (const [jobId, value] of Object.entries(namespaces._jobs ?? {})) {
           const step = buildLegacyJobExecutionStep(pluginId, jobId, value);
           if (step) {
@@ -591,22 +653,28 @@ export function reducer(
         }
       }
       for (const entry of nextState.messageUiSpecs) {
-        nextState = applyPluginMessageSurface(nextState, entry.pluginId);
+        if (
+          action.type === "REPLACE_PLUGIN_DATA" ||
+          entry.pluginId === action.pluginId
+        ) {
+          nextState = applyPluginMessageSurface(nextState, entry.pluginId);
+        }
       }
       return nextState;
     }
     case "PLUGIN_DATA_CHANGED": {
       const { pluginId, changes } = action;
       const prev = state.pluginData;
-      const pluginNs = { ...prev[pluginId] };
+      let pluginNs = { ...prev[pluginId] };
       for (const change of changes) {
-        const ns = { ...pluginNs[change.namespace] };
-        if (change.operation === "delete") {
-          delete ns[change.key];
-        } else {
-          ns[change.key] = change.value;
-        }
-        pluginNs[change.namespace] = ns;
+        const ns = {
+          ...pluginNs[change.namespace],
+          ...(change.operation === "delete"
+            ? {}
+            : { [change.key]: change.value }),
+        };
+        if (change.operation === "delete") delete ns[change.key];
+        pluginNs = { ...pluginNs, [change.namespace]: ns };
       }
       let nextState: SessionState = {
         ...state,

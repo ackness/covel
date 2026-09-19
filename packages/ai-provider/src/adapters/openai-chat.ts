@@ -264,6 +264,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
       return {
         object: validation.data,
+        reasoningContent: readOpenAiChatReasoningContent(payload) ?? undefined,
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
       };

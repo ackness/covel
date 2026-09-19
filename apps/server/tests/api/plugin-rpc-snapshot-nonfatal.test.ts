@@ -44,6 +44,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
     };
     const now = new Date().toISOString();
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -51,9 +52,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 
@@ -107,6 +106,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
       const store = createMemoryStore();
       const now = new Date().toISOString();
       await store.createSession({
+        locale: "zh-CN",
         phase: "playing",
         setupRuntimes: {},
         metadata: {
@@ -114,9 +114,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
           sessionIncarnationNonce: globalThis.crypto.randomUUID(),
         },
         id: SESSION_ID,
-        worldId: null,
         status: "active",
-        presetId: null,
         activePlugins: [PLUGIN_ID],
         completedPlayerTurns: 1,
 

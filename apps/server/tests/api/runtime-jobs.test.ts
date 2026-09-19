@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
   createMemoryStore,
   createSqliteStore,
@@ -17,8 +18,10 @@ import {
   transitionRuntimeJob,
 } from "../../src/routes/api/plugin-rpc/jobs.js";
 import {
+  appendRuntimeJobStatus,
   createRuntimeJobWorker,
   makeRuntimeJobStatusRecord,
+  type RuntimeJobExecutionControl,
 } from "../../src/routes/api/plugin-rpc/runtime-job-worker.js";
 
 const ENQUEUED_AT = "2026-09-03T00:00:00.000Z";
@@ -28,6 +31,7 @@ function session(id: string): SessionRecord {
     id,
     worldId: "world",
     status: "active",
+    locale: "en-US",
     phase: "playing",
     completedPlayerTurns: 1,
     setupRuntimes: {},
@@ -59,14 +63,34 @@ function job(
   };
 }
 
+async function writeAtomicTrack(
+  store: Pick<DataStore, "setPluginData">,
+): Promise<void> {
+  await store.setPluginData({
+    id: "atomic-domain-row",
+    sessionId: "session-a",
+    pluginId: "mimo-tts",
+    namespace: "tracks",
+    key: "atomic",
+    value: { generated: true },
+    createdAt: ENQUEUED_AT,
+    updatedAt: ENQUEUED_AT,
+  });
+}
+
 describe.each([
   ["memory", () => createMemoryStore()],
   ["sqlite", () => createSqliteStore(":memory:")],
 ] as const)("durable runtime jobs (%s)", (_name, createStore) => {
   let store: DataStore;
+  let tryWithCommitLock: ReturnType<
+    typeof createInProcessSessionLock
+  >["tryWithLock"];
 
   beforeEach(async () => {
     store = createStore();
+    const lock = createInProcessSessionLock();
+    tryWithCommitLock = lock.tryWithLock.bind(lock);
     await store.createSession(session("session-a"));
     await store.createSession(session("session-b"));
   });
@@ -106,9 +130,16 @@ describe.each([
         backgroundTurnId: "background-turn",
         backgroundExecutionId: "background-execution",
       });
-      return { result: { ok: true } };
+      await store.withTransaction((tx) =>
+        control.completeInTx(tx, { ok: true }),
+      );
     });
-    const worker = createRuntimeJobWorker({ store, eventBus, execute });
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      execute,
+    });
 
     worker.wake();
     await vi.waitFor(async () => {
@@ -136,6 +167,289 @@ describe.each([
     worker.close();
   });
 
+  it.each(["execution-failed", "SYNTHETIC_PRIVATE_REASON"])(
+    "publishes safe SSE diagnostics for reason %s while preserving job identities",
+    async (reason) => {
+      await createRuntimeJob(store, job());
+      const failure = new Error("Authorization: Bearer SYNTHETIC_NEVER_VALID");
+      const failed = await transitionRuntimeJob(store, {
+        ...job(),
+        from: ["queued"],
+        to: "failed",
+        reason,
+        error: failure.message,
+      });
+      const eventBus = createEventBus();
+      try {
+        expect(failed).not.toBeNull();
+        await appendRuntimeJobStatus(store, eventBus, failed!);
+        const events = eventBus.getEventsAfter("session-a", 0).events;
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+          type: "job-status.updated",
+          sessionId: "session-a",
+          payload: {
+            sessionId: "session-a",
+            progressScopeId: "job-a",
+            pluginId: "mimo-tts",
+            runtimeId: "mimo-tts/auto-narrate",
+            jobId: "job-a",
+            state: "failed",
+            message: "Runtime job execution failed.",
+            data: {
+              originTurnId: "source-turn",
+              durableStatus: "failed",
+              error: "Runtime job execution failed.",
+            },
+          },
+        });
+        const serialized = JSON.stringify(events);
+        expect(serialized).not.toContain(failure.message);
+        expect(serialized).not.toContain("SYNTHETIC_PRIVATE_REASON");
+        expect(events[0]!.payload.data).toEqual({
+          originTurnId: "source-turn",
+          durableStatus: "failed",
+          error: "Runtime job execution failed.",
+          ...(reason === "execution-failed" ? { reason } : {}),
+        });
+        expect(
+          (await store.listJobStatus("session-a", { jobId: "job-a" }))[0],
+        ).toEqual(events[0]!.payload);
+        await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+          reason,
+          error: failure.message,
+        });
+      } finally {
+        await eventBus.close();
+      }
+    },
+  );
+
+  it("persists success with domain writes before the executor returns", async () => {
+    await createRuntimeJob(store, job());
+    const committed = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const eventBus = createEventBus();
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      execute: async (_job, control) => {
+        await control.beforeCommit({
+          backgroundTurnId: "atomic-turn",
+          backgroundExecutionId: "atomic-execution",
+        });
+        await store.withTransaction(async (tx) => {
+          await writeAtomicTrack(tx);
+          await control.completeInTx(tx, { generated: true });
+        });
+        committed.resolve();
+        await finish.promise;
+      },
+    });
+    try {
+      worker.wake();
+      await committed.promise;
+      await expect(
+        store.getPluginData("session-a", "mimo-tts", "tracks", "atomic"),
+      ).resolves.toMatchObject({ value: { generated: true } });
+      await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+        status: "succeeded",
+        result: { generated: true },
+      });
+      await expect(
+        recoverExpiredRuntimeJobs(store, {
+          tryWithCommitLock,
+          now: "2099-01-01T00:00:00.000Z",
+        }),
+      ).resolves.toEqual({ timedOut: 0, orphaned: 0 });
+      expect(
+        (await store.listJobStatus("session-a", { jobId: "job-a" })).at(-1)
+          ?.state,
+      ).toBe("progress");
+      const replay = vi.fn(async () => {});
+      const replacement = createRuntimeJobWorker({
+        tryWithCommitLock,
+        store,
+        eventBus,
+        execute: replay,
+      });
+      try {
+        replacement.wake();
+        await vi.waitFor(async () => {
+          expect(
+            (await store.listJobStatus("session-a", { jobId: "job-a" })).at(-1)
+              ?.state,
+          ).toBe("succeeded");
+        });
+        expect(replay).not.toHaveBeenCalled();
+      } finally {
+        await replacement.close();
+      }
+    } finally {
+      finish.resolve();
+      await worker.close();
+      await eventBus.close();
+    }
+  });
+
+  it.each(["rollback", "lease-loss", "no-barrier"] as const)(
+    "rolls domain writes back when completion fails due to %s",
+    async (failure) => {
+      await createRuntimeJob(store, job());
+      const eventBus = createEventBus();
+      const worker = createRuntimeJobWorker({
+        tryWithCommitLock,
+        store,
+        eventBus,
+        execute: async (_job, control) => {
+          if (failure !== "no-barrier") {
+            await control.beforeCommit({
+              backgroundTurnId: "atomic-turn",
+              backgroundExecutionId: "atomic-execution",
+            });
+          }
+          if (failure === "lease-loss") {
+            await recoverExpiredRuntimeJobs(store, {
+              tryWithCommitLock,
+              now: "2099-01-01T00:00:00.000Z",
+            });
+          }
+          await store.withTransaction(async (tx) => {
+            await writeAtomicTrack(tx);
+            await control.completeInTx(tx, { generated: true });
+            if (failure === "rollback")
+              throw new Error("synthetic transaction rollback");
+          });
+        },
+      });
+      try {
+        worker.wake();
+        await vi.waitFor(async () => {
+          await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+            status:
+              failure === "rollback"
+                ? "failed"
+                : failure === "lease-loss"
+                  ? "orphaned"
+                  : "stale",
+          });
+        });
+        await worker.close();
+        await expect(
+          store.getPluginData("session-a", "mimo-tts", "tracks", "atomic"),
+        ).resolves.toBeNull();
+        expect(
+          (await store.listJobStatus("session-a", { jobId: "job-a" })).some(
+            (row) => row.state === "succeeded",
+          ),
+        ).toBe(false);
+        if (failure === "rollback") {
+          await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+            error: "synthetic transaction rollback",
+          });
+        }
+      } finally {
+        await worker.close();
+        await eventBus.close();
+      }
+    },
+  );
+
+  it.each(["executor", "projection"] as const)(
+    "keeps committed success when post-commit %s work fails",
+    async (failure) => {
+      await createRuntimeJob(store, job());
+      const eventBus = createEventBus();
+      const append = store.appendJobStatus.bind(store);
+      let rejected = false;
+      const intercepted = vi
+        .spyOn(store, "appendJobStatus")
+        .mockImplementation(async (row) => {
+          if (
+            failure === "projection" &&
+            row.state === "succeeded" &&
+            !rejected
+          ) {
+            rejected = true;
+            throw new Error("synthetic projection failure");
+          }
+          return append(row);
+        });
+      const execute = vi.fn(
+        async (_job, control: RuntimeJobExecutionControl) => {
+          await control.beforeCommit({
+            backgroundTurnId: "atomic-turn",
+            backgroundExecutionId: "atomic-execution",
+          });
+          await store.withTransaction(async (tx) => {
+            await writeAtomicTrack(tx);
+            await control.completeInTx(tx, { generated: true });
+          });
+          if (failure === "executor")
+            throw new Error("synthetic post-commit failure");
+        },
+      );
+      const worker = createRuntimeJobWorker({
+        tryWithCommitLock,
+        store,
+        eventBus,
+        execute,
+      });
+      try {
+        worker.wake();
+        await vi.waitFor(async () => {
+          expect(
+            (await store.listJobStatus("session-a", { jobId: "job-a" })).at(-1)
+              ?.state,
+          ).toBe("succeeded");
+        });
+        await worker.close();
+        expect(execute).toHaveBeenCalledOnce();
+        await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+          status: "succeeded",
+          result: { generated: true },
+        });
+        await expect(
+          store.getPluginData("session-a", "mimo-tts", "tracks", "atomic"),
+        ).resolves.toMatchObject({ value: { generated: true } });
+        expect(rejected).toBe(failure === "projection");
+      } finally {
+        await worker.close();
+        intercepted.mockRestore();
+        await eventBus.close();
+      }
+    },
+  );
+
+  it("fails an executor that returns without completing its transaction", async () => {
+    await createRuntimeJob(store, job());
+    const eventBus = createEventBus();
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      execute: async (_job, control) => {
+        await control.beforeCommit({
+          backgroundTurnId: "missing-turn",
+          backgroundExecutionId: "missing-execution",
+        });
+      },
+    });
+    try {
+      worker.wake();
+      await vi.waitFor(async () => {
+        await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+          status: "failed",
+          error: "runtime job returned without a committed result",
+        });
+      });
+    } finally {
+      await worker.close();
+      await eventBus.close();
+    }
+  });
+
   it("times out without allowing a late execution to commit", async () => {
     await createRuntimeJob(
       store,
@@ -148,6 +462,7 @@ describe.each([
     const committed = vi.fn();
     const eventBus = createEventBus(store);
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus,
       execute: async (_runtimeJob, control) => {
@@ -156,8 +471,8 @@ describe.each([
           backgroundTurnId: "late-turn",
           backgroundExecutionId: "late-execution",
         });
+        await store.withTransaction((tx) => control.completeInTx(tx));
         committed();
-        return {};
       },
     });
 
@@ -180,6 +495,135 @@ describe.each([
     worker.close();
   });
 
+  it("cancels uncommitted work on close and waits for the runner to release resources", async () => {
+    await createRuntimeJob(store, job());
+    await createRuntimeJob(store, job("session-a", "queued-after-close"));
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let control!: RuntimeJobExecutionControl;
+    const execute = vi.fn(async (_job, next: RuntimeJobExecutionControl) => {
+      control = next;
+      await blocked;
+      await control.assertCurrent();
+    });
+    const eventBus = createEventBus(store);
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      execute,
+      concurrency: 1,
+    });
+    worker.wake();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+
+    const closing = worker.close();
+    expect(worker.close()).toBe(closing);
+    expect(control.signal.aborted).toBe(true);
+    let closed = false;
+    void closing.then(() => {
+      closed = true;
+    });
+    await vi.waitFor(() => expect(worker.activeCount).toBe(0));
+    expect(closed).toBe(false);
+    release();
+    await closing;
+    worker.wake();
+    expect(execute).toHaveBeenCalledOnce();
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "cancelled",
+      reason: "worker-shutdown",
+    });
+    await expect(
+      getRuntimeJob(store, job("session-a", "queued-after-close")),
+    ).resolves.toMatchObject({ status: "queued" });
+    const read = vi.spyOn(store, "getPluginData");
+    await expect(control.assertCurrent()).rejects.toThrow("shutting down");
+    await expect(
+      control.beforeCommit({
+        backgroundTurnId: "late",
+        backgroundExecutionId: "late",
+      }),
+    ).rejects.toThrow("shutting down");
+    expect(read).not.toHaveBeenCalled();
+    read.mockRestore();
+    await eventBus.close();
+  });
+
+  it("lets a job already inside the commit barrier finish before close resolves", async () => {
+    await createRuntimeJob(store, job());
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let signal: AbortSignal | undefined;
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(),
+      execute: async (_job, control) => {
+        await control.beforeCommit({
+          backgroundTurnId: "commit-turn",
+          backgroundExecutionId: "commit-execution",
+        });
+        signal = control.signal;
+        await blocked;
+        await store.withTransaction((tx) =>
+          control.completeInTx(tx, "committed"),
+        );
+      },
+    });
+    worker.wake();
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    const closing = worker.close();
+    expect(signal!.aborted).toBe(false);
+    expect(worker.activeCount).toBe(1);
+    release();
+    await closing;
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "succeeded",
+      result: "committed",
+    });
+    expect(worker.activeCount).toBe(0);
+  });
+
+  it("releases the concurrency slot when claimed-job progress persistence fails", async () => {
+    await createRuntimeJob(store, job());
+    await createRuntimeJob(store, job("session-a", "job-b"));
+    const append = vi
+      .spyOn(store, "appendJobStatus")
+      .mockRejectedValueOnce(new Error("temporary progress write failure"));
+    const execute = vi.fn(async (_job, control: RuntimeJobExecutionControl) => {
+      await control.beforeCommit({
+        backgroundTurnId: "turn-b",
+        backgroundExecutionId: "execution-b",
+      });
+      await store.withTransaction((tx) => control.completeInTx(tx));
+    });
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(),
+      execute,
+      concurrency: 1,
+    });
+    worker.wake();
+    await vi.waitFor(async () => {
+      await expect(
+        getRuntimeJob(store, job("session-a", "job-b")),
+      ).resolves.toMatchObject({ status: "succeeded" });
+    });
+    await worker.close();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(worker.activeCount).toBe(0);
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "failed",
+    });
+    append.mockRestore();
+  });
+
   it("publishes a terminal status when queued work expires before claim", async () => {
     await createRuntimeJob(
       store,
@@ -187,6 +631,7 @@ describe.each([
     );
     const execute = vi.fn();
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(store),
       execute,
@@ -215,6 +660,7 @@ describe.each([
     });
     const started: string[] = [];
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(store),
       concurrency: 2,
@@ -225,7 +671,7 @@ describe.each([
           backgroundTurnId: `${runtimeJob.jobId}-turn`,
           backgroundExecutionId: `${runtimeJob.jobId}-execution`,
         });
-        return {};
+        await store.withTransaction((tx) => control.completeInTx(tx));
       },
     });
 
@@ -266,6 +712,158 @@ describe.each([
     });
     expect(stored).toMatchObject({ status: "claimed", attempt: 1 });
     expect(["worker-a", "worker-b"]).toContain(stored?.ownerId);
+  });
+
+  it("serializes repeated wakes while a claim is pending and cancels that claim on close", async () => {
+    await createRuntimeJob(store, job());
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const claim = vi.fn(async () => {
+      await blocked;
+    });
+    const compare = store.compareAndSetPluginData.bind(store);
+    const intercepted = vi
+      .spyOn(store, "compareAndSetPluginData")
+      .mockImplementation(async (record, revision) => {
+        if ((record.value as { status?: string }).status === "claimed")
+          await claim();
+        return compare(record, revision);
+      });
+    const execute = vi.fn();
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(),
+      execute,
+      concurrency: 1,
+    });
+    worker.wake();
+    await vi.waitFor(() => expect(claim).toHaveBeenCalledOnce());
+    worker.wake();
+    worker.wake();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(claim).toHaveBeenCalledOnce();
+    const closing = worker.close();
+    release();
+    await closing;
+    expect(execute).not.toHaveBeenCalled();
+    expect(worker.activeCount).toBe(0);
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "cancelled",
+      reason: "worker-shutdown",
+    });
+    intercepted.mockRestore();
+  });
+
+  it("waits for an in-flight renewal before crossing the commit barrier", async () => {
+    await createRuntimeJob(store, job());
+    const renewal = Promise.withResolvers<void>();
+    const execution = Promise.withResolvers<void>();
+    let initialLease: string | undefined;
+    let renewing = false;
+    const swap = store.compareAndSetPluginData.bind(store);
+    const intercepted = vi
+      .spyOn(store, "compareAndSetPluginData")
+      .mockImplementation(async (record, revision) => {
+        const value = record.value as Record<string, unknown>;
+        if (
+          value.status === "running" &&
+          initialLease &&
+          value.leaseExpiresAt !== initialLease
+        ) {
+          renewing = true;
+          await renewal.promise;
+        }
+        if (value.status === "committing") await renewal.promise;
+        return swap(record, revision);
+      });
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(),
+      leaseMs: 90,
+      execute: async (claimed, control) => {
+        initialLease = claimed.leaseExpiresAt;
+        await execution.promise;
+        await control.beforeCommit({
+          backgroundTurnId: "background-turn",
+          backgroundExecutionId: "background-execution",
+        });
+        await store.withTransaction((tx) => control.completeInTx(tx));
+      },
+    });
+    try {
+      worker.wake();
+      await vi.waitFor(() => expect(renewing).toBe(true));
+      execution.resolve();
+      // Let the commit attempt reach storage while the renewal CAS is pending.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      renewal.resolve();
+      await vi.waitFor(async () => {
+        await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+          status: "succeeded",
+        });
+      });
+    } finally {
+      execution.resolve();
+      renewal.resolve();
+      await worker.close();
+      intercepted.mockRestore();
+    }
+  });
+
+  it("claims valid work behind an expired queue head without another wake", async () => {
+    await createRuntimeJob(
+      store,
+      job("session-a", "a-expired", { maxQueueMs: 1 }),
+    );
+    await createRuntimeJob(store, job("session-a", "b-valid"));
+
+    await expect(
+      claimNextRuntimeJob(store, { ownerId: "worker", leaseMs: 30_000 }),
+    ).resolves.toMatchObject({ job: { jobId: "b-valid", status: "claimed" } });
+    await expect(
+      getRuntimeJob(store, job("session-a", "a-expired")),
+    ).resolves.toMatchObject({ status: "timed_out" });
+  });
+
+  it("does not orphan a job renewed after the recovery scan", async () => {
+    await createRuntimeJob(store, job());
+    await claimRuntimeJob(store, {
+      ...job(),
+      ownerId: "worker",
+      leaseMs: 1_000,
+      now: ENQUEUED_AT,
+    });
+    const list = store.listPluginDataSessionScope.bind(store);
+    const intercepted = vi
+      .spyOn(store, "listPluginDataSessionScope")
+      .mockImplementationOnce(async (sessionId) => {
+        const rows = await list(sessionId);
+        await renewRuntimeJobLease(store, {
+          ...job(),
+          ownerId: "worker",
+          leaseMs: 10_000,
+          now: "2026-09-03T00:00:01.500Z",
+        });
+        return rows;
+      });
+    try {
+      await expect(
+        recoverExpiredRuntimeJobs(store, {
+          tryWithCommitLock,
+          now: "2026-09-03T00:00:02.000Z",
+        }),
+      ).resolves.toEqual({ timedOut: 0, orphaned: 0 });
+      await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+        status: "claimed",
+        leaseExpiresAt: "2026-09-03T00:00:11.500Z",
+      });
+    } finally {
+      intercepted.mockRestore();
+    }
   });
 
   it("renews leases and rejects transitions from another owner", async () => {
@@ -320,6 +918,7 @@ describe.each([
 
     await expect(
       recoverExpiredRuntimeJobs(store, {
+        tryWithCommitLock,
         now: "2026-09-03T00:00:02.000Z",
       }),
     ).resolves.toEqual({ timedOut: 1, orphaned: 1 });

@@ -751,3 +751,5 @@ sources:
 - `merge` 只支持 `replace` 与 `skipExisting`。
 - `key` 只支持简单字段名、markdown/text literal key、media `filename`。
 - remote、SQLite source、CUE、RO-Crate、复杂 JSON Patch override 属于后续阶段。
+
+世界时间是正式的 `time` 维度，支持内联、`dimensionSources.time` 和 `world:metadata.dimensions` 数据源。字段、倒流/随机规则及会话快照语义见 [World time](./world-time.md)。

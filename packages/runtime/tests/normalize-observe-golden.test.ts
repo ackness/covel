@@ -118,6 +118,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "mimo-tts/auto-narrate",
       "scene-prompts",
       "world-ir",
+      "world-time/advance",
     ]);
     expect(levels[1]).toEqual([
       "affinity",

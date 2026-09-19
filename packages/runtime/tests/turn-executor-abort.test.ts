@@ -5,7 +5,7 @@
  * runtimes that completed before the abort are preserved.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -54,6 +54,51 @@ function prose(content: string): LLMResponse {
 }
 
 describe("executeTurn player abort", () => {
+  it("stops while waiting for prior memory without starting a runtime or cancelling that memory", async () => {
+    const controller = new AbortController();
+    const waiting = Promise.withResolvers<void>();
+    const memory = Promise.withResolvers<void>();
+    const loadRuntime = vi.fn();
+    const store = createMemoryStore();
+    let settled = false;
+    const turn = executeTurn(input, [manifest("story", 500)], {
+      store,
+      loadRuntime,
+      llm: { generate: vi.fn() },
+      turnControl: { signal: controller.signal },
+      memorySystem: {
+        manager: {
+          initializeDefaults: async () => {},
+          loadBlocks: async () => [],
+        },
+        updater: {
+          updateAfterTurn: vi.fn(),
+          awaitPending: () => {
+            waiting.resolve();
+            return memory.promise;
+          },
+        },
+      },
+    }).then((result) => {
+      settled = true;
+      return result;
+    });
+    await waiting.promise;
+    controller.abort();
+    try {
+      await vi.waitFor(() => expect(settled).toBe(true), { timeout: 200 });
+      expect(await turn).toMatchObject({
+        abortReason: PLAYER_ABORT_REASON,
+        runtimeResults: [],
+      });
+      expect(loadRuntime).not.toHaveBeenCalled();
+      expect(await store.listTurnMessages(input.sessionId)).toEqual([]);
+    } finally {
+      memory.resolve();
+      await turn;
+    }
+  });
+
   it("stops scheduling later groups and surfaces abortReason; earlier results survive", async () => {
     const controller = new AbortController();
     const calledRuntimes: string[] = [];

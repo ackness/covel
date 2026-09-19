@@ -1,4 +1,5 @@
 import { parseJsonSseData, readSseStream } from "../sse.js";
+import { pauseSessionSubscriptions } from "../subscription.js";
 import {
   actionRequestSchema,
   sseEnvelopeSchema,
@@ -36,6 +37,7 @@ export function sendAction(
   onApproval?: (approval: ActionApproval) => Promise<boolean>,
 ): AbortController {
   const controller = new AbortController();
+  const resumeSubscriptions = pauseSessionSubscriptions();
 
   (async () => {
     try {
@@ -102,6 +104,8 @@ export function sendAction(
       if ((err as Error).name !== "AbortError") {
         onError?.(err instanceof Error ? err : new Error(String(err)));
       }
+    } finally {
+      resumeSubscriptions();
     }
   })();
 

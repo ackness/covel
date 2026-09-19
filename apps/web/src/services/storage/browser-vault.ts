@@ -26,7 +26,7 @@ export interface BrowserVaultOptions {
 }
 
 export const BROWSER_VAULT_DB_NAME = "covel-browser-vault";
-export const BROWSER_VAULT_SCHEMA_VERSION = 4;
+export const BROWSER_VAULT_SCHEMA_VERSION = 5;
 
 export class BrowserVaultError extends Error {
   constructor(message: string) {
@@ -77,32 +77,23 @@ class BrowserVaultDatabase extends Dexie {
   commits!: Table<CommitRecord, string>;
   pendingCommits!: Table<PendingCommitRecord, string>;
   worlds!: Table<WorldRecord, string>;
+  initialization!: Table<{ key: string }, string>;
 
   constructor(name: string) {
     super(name);
-    const schema = {
-      checkpoints: "sessionId, revision, committedAt",
-      commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
-      pendingCommits: "sessionId, actionId, stagedAt",
-      worlds: "id, createdAt, updatedAt",
-    };
-    this.version(3).stores(schema);
     this.version(BROWSER_VAULT_SCHEMA_VERSION)
-      .stores(schema)
-      .upgrade(async (tx) => {
-        const commits = tx.table<CommitRecord, string>("commits");
-        // Read one old snapshot at a time. Keep the upgrade transaction alive
-        // during Web Crypto, so interruption rolls the entire migration back.
-        for (
-          let record = await commits.orderBy(":id").first();
-          record;
-          record = await commits.where(":id").above(record.id).first()
-        ) {
-          const digest = await Dexie.waitFor(
-            hashCheckpointJson(record.checkpointDigest),
-          );
-          await commits.update(record.id, { checkpointDigest: digest });
-        }
+      .stores({
+        checkpoints: "sessionId, revision, committedAt",
+        commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
+        pendingCommits: "sessionId, actionId, stagedAt",
+        worlds: "id, createdAt, updatedAt",
+        initialization: "key",
+      })
+      .upgrade(() => {
+        // Reject unsupported data before IndexedDB can commit a schema change.
+        throw new BrowserVaultError(
+          "Unsupported browser vault version; recreate development data",
+        );
       });
   }
 }
@@ -190,6 +181,42 @@ export class BrowserVault {
 
   constructor(options: BrowserVaultOptions = {}) {
     this.db = new BrowserVaultDatabase(options.dbName ?? BROWSER_VAULT_DB_NAME);
+  }
+
+  /** Own a session across documents and release ownership on document exit. */
+  async withSessionLock<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return this.withLock(
+      "session-workspace",
+      sessionId,
+      "exclusive",
+      operation,
+    );
+  }
+
+  async withWorldLock<T>(
+    worldId: string,
+    mode: "shared" | "exclusive",
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return this.withLock("world-workspace", worldId, mode, operation);
+  }
+
+  private async withLock<T>(
+    scope: string,
+    id: string,
+    mode: "shared" | "exclusive",
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    if (!globalThis.navigator?.locks) {
+      throw new BrowserVaultError(
+        "Browser-private storage requires Web Locks; use HTTPS or localhost in a supported browser",
+      );
+    }
+    const name = JSON.stringify([this.db.name, scope, id]);
+    return navigator.locks.request(name, { mode }, operation);
   }
 
   async saveCheckpoint(value: BrowserCheckpoint): Promise<BrowserCheckpoint> {
@@ -368,6 +395,25 @@ export class BrowserVault {
     return worlds.map((world) => structuredClone(world));
   }
 
+  async initializeWorlds(worlds: readonly WorldRecord[]): Promise<void> {
+    const seeds = structuredClone(worlds);
+    for (const world of seeds) assertNoSecrets(world, "world");
+    await this.db.transaction(
+      "rw",
+      this.db.worlds,
+      this.db.initialization,
+      async () => {
+        if (await this.db.initialization.get("worlds")) return;
+        if ((await this.db.worlds.count()) === 0) {
+          for (const world of seeds) await this.db.worlds.put(world);
+        }
+        // The marker commits with the complete seed set, including when two
+        // documents initialize concurrently. Failed writes leave both absent.
+        await this.db.initialization.put({ key: "worlds" });
+      },
+    );
+  }
+
   async getWorld(id: string): Promise<WorldRecord | null> {
     const world = await this.db.worlds.get(id);
     return world ? structuredClone(world) : null;
@@ -420,12 +466,14 @@ export class BrowserVault {
       this.db.commits,
       this.db.pendingCommits,
       this.db.worlds,
+      this.db.initialization,
       async () => {
         await Promise.all([
           this.db.checkpoints.clear(),
           this.db.commits.clear(),
           this.db.pendingCommits.clear(),
           this.db.worlds.clear(),
+          this.db.initialization.clear(),
         ]);
       },
     );

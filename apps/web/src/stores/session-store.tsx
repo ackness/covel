@@ -10,7 +10,7 @@ import {
 } from "./session-store/context.js";
 import {
   useBootEffect,
-  useMessageUiSpecHydrationEffect,
+  useUiSpecHydrationEffect,
   usePersistExecutionStepsEffect,
 } from "./session-store/effects.js";
 import { initialState, reducer } from "./session-store/reducer.js";
@@ -73,7 +73,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     workspace,
   });
   usePersistExecutionStepsEffect(state, ds);
-  useMessageUiSpecHydrationEffect(sessionId, dispatch);
+  useUiSpecHydrationEffect(
+    sessionId,
+    dispatch,
+    refs.sessionGenerationRef,
+    state.sessionPlugins,
+  );
   useSessionSubscription({
     sessionId,
     dispatch,
@@ -81,6 +86,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     sessionIdRef: refs.sessionIdRef,
     stateRef: refs.stateRef,
     activeTurnIdRef: refs.lastBackfilledTurnIdRef,
+    sessionGenerationRef: refs.sessionGenerationRef,
   });
 
   // Two providers: the actions value is referentially stable across streaming

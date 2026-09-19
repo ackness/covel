@@ -10,6 +10,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { SettingsStore } from "@covel/settings";
 import type { PluginSummary, LlmConfigResponse } from "@/services/api.js";
 import i18n from "@/i18n";
+import { registerProviderKeys } from "../../registry/keys.js";
 import { registerLlmSettings } from "../../registry/llm.js";
 import { registerPluginUserSettings } from "../../registry/plugin.js";
 import { useLlmSlotIds } from "../use-llm-slot-ids.js";
@@ -36,7 +37,11 @@ const mocks = vi.hoisted(() => ({
     },
   } as LlmConfigResponse,
 }));
-vi.mock("@/settings/store", () => ({ getSettings: () => mocks.store }));
+vi.mock("@/settings/store", () => ({
+  getSettings: () => mocks.store,
+  registerKnownProviders: (ids: readonly string[]) =>
+    registerProviderKeys(mocks.store, ids),
+}));
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: { plugins: mocks.plugins, presets: [], llmConfig: mocks.llm },
@@ -133,12 +138,14 @@ it("edits saved parameters for a default-only server configuration", async () =>
   );
 });
 
-it("disables generation inputs when no role is available", () => {
+it("exposes the framework memory role even without server-defined slots", () => {
   mocks.plugins = [];
   mocks.llm = { ...mocks.llm, slots: {} };
   render(<LlmAdvancedPane />);
-  for (const input of screen.getAllByRole("spinbutton"))
-    expect(input.matches(":disabled")).toBe(true);
+  const picker = screen.getByRole("combobox", {
+    name: i18n.t("settings.selectSlot"),
+  }) as HTMLSelectElement;
+  expect(picker.value).toBe("memory");
   expect(mocks.store.get("llm.paramOverrides")).toEqual({});
 });
 
@@ -152,6 +159,7 @@ it("keeps saved, runtime and user-selected roles in both settings panes after li
     "analysis",
     "image",
     "archived",
+    "memory",
   ]);
   await act(async () => {
     await mocks.store.set("llm.slotConfig", {

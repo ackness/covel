@@ -7,6 +7,21 @@ import {
 } from "../app-kv-store.js";
 
 describe("submitted block persistence", () => {
+  it("captures submitted ids and nested values before asynchronous storage work", async () => {
+    const sessionId = `owned-form-${crypto.randomUUID()}`;
+    const ids = ["form"];
+    const values = { form: { choice: { score: 7 } } };
+    const saving = saveSubmittedBlocks(sessionId, ids, values);
+    ids.push("later");
+    values.form.choice.score = 99;
+    await saving;
+    expect(await getSubmittedBlocks(sessionId)).toEqual({
+      ids: ["form"],
+      values: { form: { choice: { score: 7 } } },
+    });
+    await removeSubmittedBlocks(sessionId);
+  });
+
   it("retains both submissions when concurrent writes start from the same record", async () => {
     const sessionId = "concurrent-submissions";
     await Promise.all([

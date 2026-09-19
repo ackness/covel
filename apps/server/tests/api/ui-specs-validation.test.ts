@@ -48,7 +48,7 @@ const GOOD_SPEC = JSON.stringify({
   label: { zh: "好面板", en: "Good" },
   view: { component: "Text", props: { content: "Hi" } },
 });
-// No `view` and no `_componentPath` → structural failure.
+// No declarative `view` means a structural failure.
 const NO_VIEW_SPEC = JSON.stringify({ id: "broken", label: { en: "Broken" } });
 // specVersion above what the server supports → version failure.
 const FUTURE_SPEC = JSON.stringify({
@@ -111,7 +111,6 @@ describe("GET /api/ui-specs — per-spec validation", () => {
       status: "active",
       completedPlayerTurns: 1,
 
-      presetId: null,
       activePlugins: ["good-panel", "bad-panel", "future-panel"],
       createdAt: new Date().toISOString(),
     });

@@ -4,13 +4,18 @@ import type {
   ReasoningEffortProfile,
   SlotConfigEntry,
 } from "@/services/api.js";
-import { slotBindingId } from "@/services/api.js";
+import { slotBindingKey } from "@/services/api.js";
 
 export function isReasoningEffortOverrideValid(
   profile: ReasoningEffortProfile | null | undefined,
   override: ReasoningEffort | undefined,
 ): boolean {
-  if (override === undefined || profile === undefined) return true;
+  if (
+    override === undefined ||
+    override === "provider-default" ||
+    profile === undefined
+  )
+    return true;
   return profile?.options.some((option) => option.value === override) ?? false;
 }
 
@@ -40,7 +45,8 @@ export function clearChangedSlotReasoningEfforts(
   let nextOverrides = overrides;
   for (const slotId of slotIds) {
     if (
-      slotBindingId(previousSlots[slotId]) !== slotBindingId(nextSlots[slotId])
+      slotBindingKey(previousSlots[slotId]) !==
+      slotBindingKey(nextSlots[slotId])
     ) {
       nextOverrides = clearReasoningEffortOverride(nextOverrides, slotId);
     }

@@ -22,12 +22,12 @@
  * No LLM embedding is performed here — vector storage of edge facts is
  * wired in Phase 3 where the retrieval path lives.
  *
- * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function, store: any }} injection
+ * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function }} injection
  */
 import { makeProposal } from "@covel/plugin-handlers-utils";
-import { overlayPluginDataRows, withPendingProposals } from "@covel/tools";
+import { withPendingProposals } from "@covel/tools";
 
-export default function ({ tool, z, shortIdBatch, store }) {
+export default function ({ tool, z, shortIdBatch }) {
   const nodeInputSchema = z.object({
     name: z
       .string()
@@ -129,27 +129,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
 
       const incomingNodes = params.nodes ?? [];
       const incomingEdges = params.edges ?? [];
-      // Earlier tool calls have not committed yet. Reuse the framework's
-      // plugin-scoped overlay for nodes, edge versions and adjacency alike.
-      const pending = overlayPluginDataRows(
-        context.pendingProposals ?? [],
-        context.pluginId,
-      );
-      const readRows = async (namespace) => {
-        const rows =
-          (await store.listPluginData(
-            context.sessionId,
-            context.pluginId,
-            namespace,
-          )) ?? [];
-        const merged = new Map(rows.map((row) => [row.key, row]));
-        for (const row of pending.values()) {
-          if (row.namespace !== namespace) continue;
-          if (row.deleted) merged.delete(row.key);
-          else merged.set(row.key, row);
-        }
-        return [...merged.values()];
-      };
+      const readRows = (namespace) => context.store.listPluginData(namespace);
 
       // ── 1. Load existing nodes and build a name → NpcNode index ──
       const existingNodeRows = await readRows("nodes");
@@ -412,14 +392,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
 
       // ── 5. Load existing index entries for staged keys and merge ──
       for (const [indexKey, bucket] of adjacencyUpdates) {
-        const existing =
-          pending.get(JSON.stringify(["index", indexKey])) ??
-          (await store.getPluginData(
-            context.sessionId,
-            context.pluginId,
-            "index",
-            indexKey,
-          ));
+        const existing = await context.store.getPluginData("index", indexKey);
         /** @type {string[]} */
         const prev = Array.isArray(existing?.value) ? existing.value : [];
         const merged = Array.from(

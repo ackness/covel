@@ -31,12 +31,16 @@ export interface TraceRecorder {
   runtimeStarted(info: {
     runtimeId: string;
     pluginId: string;
+    runId?: string;
+    turnId?: string;
     /** Named stage (setup/pre-turn/…); absent for event/manual/UI-only. */
     stage?: Stage;
   }): Promise<void>;
   runtimeCompleted(info: {
     runtimeId: string;
     pluginId: string;
+    runId?: string;
+    turnId?: string;
     status: string;
     durationMs: number;
     error?: string;
@@ -44,7 +48,11 @@ export interface TraceRecorder {
   runtimeFailed(info: {
     runtimeId: string;
     pluginId: string;
+    runId?: string;
+    turnId?: string;
     error: string;
+    status?: string;
+    durationMs?: number;
   }): Promise<void>;
 }
 

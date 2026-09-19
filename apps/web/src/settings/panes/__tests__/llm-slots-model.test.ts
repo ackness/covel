@@ -97,7 +97,7 @@ describe("llm slots model", () => {
         discoveredSlotIds: ["image", "plugin"],
         savedSlotIds: ["custom-role", "story"],
       }),
-    ).toEqual(["story", "default", "image", "plugin", "custom-role"]);
+    ).toEqual(["story", "default", "image", "plugin", "custom-role", "memory"]);
 
     expect(
       createVisibleSlotIds({
@@ -133,6 +133,31 @@ describe("llm slots model", () => {
       image: { presetId: "image" },
       vector: { presetId: "slot-vector" },
     });
+  });
+
+  it("retains model defaults when collecting role choices", () => {
+    const choices = collectLlmSlotPresetCandidates(
+      [
+        {
+          id: "server",
+          name: "Server",
+          provider: "fixture",
+          model: "same",
+          parameterOverrides: { reasoningEffort: "high" },
+        },
+      ],
+      [
+        {
+          id: "local",
+          name: "Local",
+          provider: "fixture",
+          model: "same",
+          reasoningEffort: "disabled",
+        },
+      ],
+    );
+    expect(choices[0]!.parameterOverrides?.reasoningEffort).toBe("high");
+    expect(choices[1]!.reasoningEffort).toBe("disabled");
   });
 
   it("marks collected presets with their source", () => {
@@ -177,7 +202,7 @@ describe("llm slots model", () => {
     ]);
   });
 
-  it("offers the server base only within its own provider", () => {
+  it("keeps same-ID server configurations selectable alongside the server base", () => {
     const choices = createProviderScopedModelChoices({
       provider: "deepseek",
       presets: [
@@ -203,6 +228,8 @@ describe("llm slots model", () => {
 
     expect(choices.includesServerBase).toBe(true);
     expect(choices.presets.map((preset) => preset.id)).toEqual([
+      "slot-story",
+      "slot-plugin",
       "custom-deepseek",
     ]);
   });

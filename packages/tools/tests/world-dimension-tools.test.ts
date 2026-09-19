@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Proposal } from "@covel/shared";
 import { createWorldDimensionTools } from "../src/builtin/world-dimension-tools.js";
 import type { ToolExecutionContext, ToolModule } from "../src/types.js";
 
@@ -176,6 +177,80 @@ describe("builtin world dimension tools", () => {
     expect(store.getWorld).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["set", "batch", "delete", "recreate"] as const)(
+    "reads the provider's pending %s before committed dimensions",
+    async (operation) => {
+      seedPluginData(store, {
+        sessionId: "sess-1",
+        pluginId: "world-init",
+        namespace: "entries",
+        key: "tone",
+        value: { contentRating: "stored" },
+        updatedAt: "stored-time",
+      });
+      const base = {
+        id: "pending-dimension",
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        source: { pluginId: "world-init", runtimeId: "world-init/runtime" },
+        timestamp: "2026-08-25T00:00:00.000Z",
+      };
+      const item = {
+        namespace: "entries",
+        key: "tone",
+        value: { contentRating: "pending" },
+      };
+      const set: Proposal = { ...base, type: "plugin.data", payload: item };
+      const remove: Proposal = {
+        ...base,
+        type: "plugin.data.delete",
+        payload: { namespace: "entries", key: "tone" },
+      };
+      const proposals: Proposal[] =
+        operation === "set"
+          ? [set]
+          : operation === "batch"
+            ? [
+                {
+                  ...base,
+                  type: "plugin.data.batch",
+                  payload: { items: [item] },
+                },
+              ]
+            : operation === "delete"
+              ? [set, remove]
+              : [remove, set];
+      proposals.push(
+        {
+          ...set,
+          sessionId: "other-session",
+          payload: { ...item, value: { contentRating: "foreign" } },
+        },
+        {
+          ...remove,
+          source: {
+            pluginId: "other-provider",
+            runtimeId: "other-provider/runtime",
+          },
+        },
+      );
+      const result = await findByName(tools, "world-dimension-get").execute(
+        { queries: [{ dimension: "tone", path: "contentRating" }] },
+        { ...ctx(), pendingProposals: proposals },
+      );
+      expect(result).toMatchObject({
+        results: [
+          {
+            found: true,
+            source: operation === "delete" ? "world-metadata" : "plugin-data",
+            value: operation === "delete" ? "teen" : "pending",
+          },
+        ],
+      });
+      expect(store.getPluginData).not.toHaveBeenCalled();
+    },
+  );
+
   it("supports nested array/object paths and resolves i18n by session locale", async () => {
     const tool = findByName(tools, "world-dimension-get");
     const result = (await tool.execute(
@@ -291,11 +366,20 @@ describe("builtin world dimension tools", () => {
     expect(result._text).toContain("not found");
   });
 
-  it("reports invalid path syntax as a query error", async () => {
+  it.each([
+    "genres[abc]",
+    "regions.[0].name",
+    "regions[0]name",
+    "regions[0]..name",
+    "regions[]",
+    "regions[-1]",
+    "regions[1.5]",
+    "regions[9007199254740993]",
+  ])("reports invalid path syntax %s as a query error", async (path) => {
     const tool = findByName(tools, "world-dimension-get");
     const result = (await tool.execute(
       {
-        queries: [{ dimension: "tone", path: "genres[abc]" }],
+        queries: [{ dimension: "geography", path }],
       },
       ctx(),
     )) as {
@@ -305,9 +389,78 @@ describe("builtin world dimension tools", () => {
     expect(result.results[0]).toEqual(
       expect.objectContaining({
         found: false,
-        error: "Invalid path syntax: genres[abc]",
+        error: `Invalid path syntax: ${path}`,
       }),
     );
+  });
+
+  it("does not read inherited object properties as world fields", async () => {
+    const result = await findByName(tools, "world-dimension-get").execute(
+      {
+        queries: ["constructor", "__proto__", "toString"].map((path) => ({
+          dimension: "geography",
+          path,
+        })),
+      },
+      ctx(),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      results: [
+        { found: false, error: "Field path not found" },
+        { found: false, error: "Field path not found" },
+        { found: false, error: "Field path not found" },
+      ],
+    });
+  });
+
+  it("preserves own JSON keys that happen to use prototype property names", async () => {
+    seedPluginData(store, {
+      sessionId: "sess-1",
+      pluginId: "world-init",
+      namespace: "entries",
+      key: "geography",
+      value: JSON.parse(
+        '{"constructor":{"label":"own constructor"},"__proto__":{"label":"own proto"}}',
+      ),
+      updatedAt: "stored-time",
+    });
+    const result = await findByName(tools, "world-dimension-get").execute(
+      {
+        queries: ["constructor.label", "__proto__.label"].map((path) => ({
+          dimension: "geography",
+          path,
+        })),
+        resolveI18n: false,
+      },
+      ctx(),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      results: [
+        { found: true, value: "own constructor" },
+        { found: true, value: "own proto" },
+      ],
+    });
+  });
+
+  it("supports root arrays and adjacent array indices", async () => {
+    seedPluginData(store, {
+      sessionId: "sess-1",
+      pluginId: "world-init",
+      namespace: "entries",
+      key: "geography",
+      value: [{ roads: [["Bridge"]] }],
+      updatedAt: "stored-time",
+    });
+    expect(
+      await findByName(tools, "world-dimension-get").execute(
+        {
+          queries: [{ dimension: "geography", path: "[0].roads[0][0]" }],
+        },
+        ctx(),
+      ),
+    ).toMatchObject({ results: [{ found: true, value: "Bridge" }] });
   });
 
   it("still works when no world-data-provider plugin is active", async () => {

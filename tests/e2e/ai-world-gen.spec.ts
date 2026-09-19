@@ -73,8 +73,13 @@ test.describe("AI World Generation", () => {
     await expect(worldCards.first()).toBeVisible({ timeout: 15_000 });
     const initialWorldCount = await worldCards.count();
     const initialWorldIds = new Set(
-      (await worldCards.allTextContents()).flatMap((text) => {
-        const id = text.match(/№\s*\d+\s*·\s*([A-Za-z0-9_-]+)/)?.[1];
+      (
+        await worldCards
+          .locator(".ui-meta")
+          .filter({ hasText: /^№/ })
+          .allTextContents()
+      ).flatMap((text) => {
+        const id = text.trim().match(/^№\s*\d+\s*·\s*([A-Za-z0-9_-]+)$/)?.[1];
         return id ? [id] : [];
       }),
     );
@@ -202,9 +207,15 @@ test.describe("AI World Generation", () => {
     let newWorldIndex = -1;
     let newWorldId: string | undefined;
     for (let i = 0; i < (await updatedWorldCards.count()); i++) {
-      const id = (await updatedWorldCards.nth(i).textContent())?.match(
-        /№\s*\d+\s*·\s*([A-Za-z0-9_-]+)/,
-      )?.[1];
+      const id = (
+        await updatedWorldCards
+          .nth(i)
+          .locator(".ui-meta")
+          .filter({ hasText: /^№/ })
+          .textContent()
+      )
+        ?.trim()
+        .match(/^№\s*\d+\s*·\s*([A-Za-z0-9_-]+)$/)?.[1];
       if (id && !initialWorldIds.has(id)) {
         newWorldIndex = i;
         newWorldId = id;

@@ -11,7 +11,10 @@
  */
 
 import { invokeWithSignal } from "./invoke-with-signal.js";
+import { cloneHookData } from "./hook-data.js";
+import { z } from "zod";
 import type { EventBus } from "@covel/events";
+import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { HOOK_SEMANTICS } from "./types.js";
 import {
   currentActivePluginIds,
@@ -29,10 +32,23 @@ import type {
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const ENFORCE_ORDER = { pre: 0, normal: 1, post: 2 } as const;
+const hookResultSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("continue"),
+    replace: z
+      .custom<Record<string, unknown>>((value) => {
+        if (value === null || typeof value !== "object") return false;
+        const prototype = Object.getPrototypeOf(value);
+        return prototype === Object.prototype || prototype === null;
+      })
+      .optional(),
+  }),
+  z.object({ action: z.literal("abort"), reason: z.string() }),
+]);
 
 interface HookPipelineRunOptions {
   readonly eventBus?: EventBus;
-  readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
+  readonly emitter?: TurnEmitter;
 }
 
 export class HookPipeline {
@@ -99,19 +115,39 @@ export class HookPipeline {
 
     const handlers = orderHandlers(scoped);
     const semantic = HOOK_SEMANTICS[event];
+    let ownedPayload: P;
+    try {
+      ownedPayload = cloneHookData(payload);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      // Invalid data must not bypass policy hooks or turn an observer failure
+      // into a failure of an already committed operation.
+      for (const reg of semantic === "parallel"
+        ? handlers
+        : handlers.slice(0, 1)) {
+        emitHookEvent(opts?.eventBus, ctxScoped, "hook.error", {
+          hookId: reg.id,
+          hookPluginId: reg.pluginId,
+          reason,
+        });
+      }
+      return semantic === "parallel"
+        ? { action: "continue" }
+        : { action: "abort", reason };
+    }
 
     if (semantic === "first") {
-      return this.runFirst(event, ctxScoped, payload, handlers, opts);
+      return this.runFirst(event, ctxScoped, ownedPayload, handlers, opts);
     }
     if (semantic === "sequential") {
-      return this.runSequential(event, ctxScoped, payload, handlers, opts);
+      return this.runSequential(event, ctxScoped, ownedPayload, handlers, opts);
     }
     if (semantic === "parallel") {
-      return this.runParallel(event, ctxScoped, payload, handlers, opts);
+      return this.runParallel(event, ctxScoped, ownedPayload, handlers, opts);
     }
 
     // Stream hooks share sequential behavior until a stream transform hook is added.
-    return this.runSequential(event, ctxScoped, payload, handlers, opts);
+    return this.runSequential(event, ctxScoped, ownedPayload, handlers, opts);
   }
 
   private async runFirst<P>(
@@ -122,9 +158,6 @@ export class HookPipeline {
     opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
     for (const reg of handlers) {
-      if (reg.match && !reg.match(payload)) {
-        continue;
-      }
       const result = await this.invokeHandler(event, ctx, payload, reg, opts);
       if (result.action === "abort") {
         return result;
@@ -148,10 +181,6 @@ export class HookPipeline {
     const accumulated: Partial<P> = {};
 
     for (const reg of handlers) {
-      if (reg.match && !reg.match(currentPayload)) {
-        continue;
-      }
-
       const result = await this.invokeHandler(
         event,
         ctx,
@@ -184,15 +213,14 @@ export class HookPipeline {
     handlers: readonly HookRegistration<unknown>[],
     opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
-    const matching = handlers.filter((reg) => !reg.match || reg.match(payload));
     const settled = await Promise.allSettled(
-      matching.map((reg) => this.invokeHandler(event, ctx, payload, reg, opts)),
+      handlers.map((reg) => this.invokeHandler(event, ctx, payload, reg, opts)),
     );
 
     for (let i = 0; i < settled.length; i++) {
       const item = settled[i];
       if (item.status === "rejected") {
-        const reg = matching[i];
+        const reg = handlers[i];
         const reason =
           item.reason instanceof Error
             ? item.reason.message
@@ -218,20 +246,6 @@ export class HookPipeline {
     const timeoutMs = reg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const handler = reg.handler as HookHandler<P>;
 
-    // Emit `hook.fired` once per invocation attempt, before the handler runs.
-    if (opts?.emitter) {
-      const proposalType = extractProposalType(event, payload);
-      await opts.emitter.emit("hook.fired", {
-        event,
-        hookName: reg.id,
-        pluginId: reg.pluginId ?? null,
-        runtimeId: ctx.runtimeId,
-        targetId: extractTargetId(event, payload),
-        targetType: extractTargetType(event),
-        ...(proposalType ? { proposalType } : {}),
-      });
-    }
-
     let result: HookResult<P>;
     const timeoutMessage = `hook ${reg.id} timed out after ${timeoutMs}ms`;
 
@@ -240,13 +254,52 @@ export class HookPipeline {
     // Only attached when a scope is active — mirrors the run()-level ctxScoped
     // gate. Scope-less calls still receive the per-handler cancellation signal.
     // Framework hooks (no pluginId) get a getter returning `{}`.
-    const ctxForHandler: HookContext = isHookScopeActive()
-      ? { ...ctx, getOwnSettings: () => currentOwnSettings(reg.pluginId) }
-      : ctx;
+    const ownSettings = currentOwnSettings(reg.pluginId);
+    const ctxForHandler: HookContext = {
+      ...ctx,
+      // A supplied activation set needs isolation even without an ambient scope.
+      ...(ctx.activePluginIds
+        ? { activePluginIds: new Set(ctx.activePluginIds) }
+        : {}),
+      ...(isHookScopeActive() ? { getOwnSettings: () => ownSettings } : {}),
+    };
 
     try {
+      // Filters are plugin code too: failures follow this event's abort or
+      // observe-only semantics and retain the registering hook's identity.
+      if (reg.match && !reg.match(cloneHookData(payload)))
+        return { action: "continue" };
+
+      // Emit `hook.fired` once per invocation attempt, before the handler runs.
+      if (opts?.emitter) {
+        const proposalType = extractProposalType(event, payload);
+        await emitHookTrace(opts.emitter, ctx, reg, "hook.fired", {
+          event,
+          hookName: reg.id,
+          pluginId: reg.pluginId ?? null,
+          runtimeId: ctx.runtimeId,
+          targetId: extractTargetId(event, payload),
+          targetType: extractTargetType(event),
+          ...(proposalType ? { proposalType } : {}),
+        });
+      }
+
       result = await invokeWithSignal(
-        (signal) => handler({ ...ctxForHandler, signal }, payload),
+        async (signal) => {
+          const returned = await handler(
+            { ...ctxForHandler, signal },
+            cloneHookData(payload),
+          );
+          signal.throwIfAborted();
+          // Take ownership before trace awaits or the next handler can yield.
+          const owned = cloneHookData(returned);
+          if (!hookResultSchema.safeParse(owned).success) {
+            // Do not include untrusted return values in diagnostic errors.
+            throw new TypeError("Hook handler returned an invalid result");
+          }
+          // Keep the owned data: schema output can drop execution artifacts.
+          return owned;
+        },
         ctx.signal,
         timeoutMs,
         timeoutMessage,
@@ -275,7 +328,7 @@ export class HookPipeline {
       });
       if (opts?.emitter) {
         const proposalType = extractProposalType(event, payload);
-        await opts.emitter.emit("hook.aborted", {
+        await emitHookTrace(opts.emitter, ctx, reg, "hook.aborted", {
           event,
           hookName: reg.id,
           pluginId: reg.pluginId ?? null,
@@ -295,13 +348,13 @@ export class HookPipeline {
       const before = payload;
       const after = { ...payload, ...result.replace };
       const proposalType = extractProposalType(event, payload);
-      await opts.emitter.emit("hook.rewrote", {
+      await emitHookTrace(opts.emitter, ctx, reg, "hook.rewrote", {
         event,
         hookName: reg.id,
         pluginId: reg.pluginId ?? null,
         runtimeId: ctx.runtimeId,
         targetId: extractTargetId(event, payload),
-        diff: { before, after },
+        diff: cloneHookData({ before, after }),
         ...(proposalType ? { proposalType } : {}),
       });
     }
@@ -341,29 +394,66 @@ function emitHookEvent(
   eventBus: EventBus | undefined,
   ctx: HookContext,
   subType: string,
-  extra: Record<string, unknown>,
+  extra: { hookId: string; hookPluginId?: string; reason: string },
 ): void {
   if (!eventBus) return;
-  eventBus.emit({
-    id: crypto.randomUUID(),
-    type: "event",
-    topic: "hooks",
-    sessionId: ctx.sessionId,
-    timestamp: new Date().toISOString(),
-    payload: {
-      _subTopic: "hooks",
-      _subType: subType,
+  try {
+    eventBus.emit({
+      id: crypto.randomUUID(),
+      type: "event",
+      topic: "hooks",
+      sessionId: ctx.sessionId,
+      timestamp: new Date().toISOString(),
+      payload: {
+        _subTopic: "hooks",
+        _subType: subType,
+        event: ctx.event,
+        sessionId: ctx.sessionId,
+        turnId: ctx.turnId,
+        // Context identity of the runtime being gated (e.g. the runtime whose
+        // tool is being wrapped by PreToolUse). May differ from `hookPluginId`
+        // below, which identifies the plugin that REGISTERED this hook.
+        pluginId: ctx.pluginId,
+        runtimeId: ctx.runtimeId,
+        ...extra,
+      },
+    });
+  } catch {
+    console.warn("[hook-pipeline] event delivery failed", {
+      type: subType,
       event: ctx.event,
       sessionId: ctx.sessionId,
       turnId: ctx.turnId,
-      // Context identity of the runtime being gated (e.g. the runtime whose
-      // tool is being wrapped by PreToolUse). May differ from `hookPluginId`
-      // below, which identifies the plugin that REGISTERED this hook.
-      pluginId: ctx.pluginId,
       runtimeId: ctx.runtimeId,
-      ...extra,
-    },
-  });
+      hookId: extra.hookId,
+      hookPluginId: extra.hookPluginId,
+    });
+  }
+}
+
+/** Diagnostic failures cannot skip a policy or change its accepted result. */
+async function emitHookTrace(
+  emitter: TurnEmitter,
+  ctx: HookContext,
+  reg: Pick<HookRegistration, "id" | "pluginId">,
+  type: "hook.fired" | "hook.aborted" | "hook.rewrote",
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await emitter.emit(type, payload);
+  } catch {
+    // Error text and trace payloads can contain credentials or player content.
+    console.warn("[hook-pipeline] trace delivery failed", {
+      type,
+      event: ctx.event,
+      sessionId: ctx.sessionId,
+      turnId: ctx.turnId,
+      traceId: emitter.traceId,
+      runtimeId: ctx.runtimeId,
+      hookId: reg.id,
+      hookPluginId: reg.pluginId,
+    });
+  }
 }
 
 /**

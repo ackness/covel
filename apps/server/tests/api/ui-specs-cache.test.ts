@@ -80,7 +80,6 @@ describe("GET /api/ui-specs — registry snapshot", () => {
       worldId: null,
       status: "active",
       completedPlayerTurns: 1,
-      presetId: null,
       activePlugins: ["panel-plugin"],
       createdAt: new Date().toISOString(),
       metadata: {
@@ -175,7 +174,7 @@ describe("GET /api/ui-specs — registry snapshot", () => {
     },
   );
 
-  it("preserves client-only component declarations through a linked plugin root", async () => {
+  it("keeps JSON UI and diagnoses unsupported components through a linked plugin root", async () => {
     const alias = join(dir, "plugin-alias");
     await symlink(join(dir, "panel-plugin"), alias, "dir");
     const entry = registry.get("panel-plugin")!;
@@ -183,7 +182,7 @@ describe("GET /api/ui-specs — registry snapshot", () => {
       ...entry.manifest!,
       manifest: {
         ...entry.manifest!.manifest,
-        ui: { right: ["./ui/client-only.tsx"] },
+        ui: { right: ["./ui/panel.json", "./ui/client-only.tsx"] },
       },
     };
     registry.register({
@@ -199,7 +198,15 @@ describe("GET /api/ui-specs — registry snapshot", () => {
       right: [
         {
           pluginId: "panel-plugin",
-          specs: [{ _componentPath: "./ui/client-only.tsx" }],
+          specs: [{ id: "panel", view: { component: "Text" } }],
+        },
+      ],
+      diagnostics: [
+        {
+          pluginId: "panel-plugin",
+          slot: "right",
+          specIndex: 1,
+          issues: [expect.objectContaining({ path: "_componentPath" })],
         },
       ],
     });

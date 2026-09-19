@@ -15,6 +15,8 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
+import type { SessionLock } from "./lib/session-lock.js";
+import { isWorldDeleting, worldOperationLockId } from "./world-lifecycle.js";
 import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -360,15 +362,15 @@ async function loadCharacterBlueprints(
 /**
  * Discover and load all world packages from a directory.
  * Validates each world.yaml against worldManifestSchema.
- * Returns WorldRecord[] ready for upsert.
+ * Inventories package identities; content is loaded after world-lock admission.
  */
 async function loadWorldPackages(worldsDir: string): Promise<{
-  records: WorldRecord[];
+  packages: { id: string; directory: string }[];
   worldIds: string[];
   complete: boolean;
 }> {
   const entries = await readdir(worldsDir, { withFileTypes: true });
-  const records: WorldRecord[] = [];
+  const packages: { id: string; directory: string }[] = [];
   const identityCounts = new Map<string, number>();
   let complete = true;
 
@@ -392,17 +394,17 @@ async function loadWorldPackages(worldsDir: string): Promise<{
         continue;
       }
       const { id } = await readWorldManifest(worldDir);
-      if (id) identityCounts.set(id, (identityCounts.get(id) ?? 0) + 1);
-      const record = await loadSingleWorld(worldDir);
-      if (record) records.push(record);
-      else complete = false;
+      if (id) {
+        identityCounts.set(id, (identityCounts.get(id) ?? 0) + 1);
+        packages.push({ id, directory: worldDir });
+      } else complete = false;
     } catch (err) {
       complete = false;
       console.warn(`[world-seed] Failed to load world ${entry.name}:`, err);
     }
   }
 
-  const uniqueRecords = records.filter((record) => {
+  const uniquePackages = packages.filter((record) => {
     if (identityCounts.get(record.id) === 1) return true;
     complete = false;
     console.warn(
@@ -411,7 +413,7 @@ async function loadWorldPackages(worldsDir: string): Promise<{
     return false;
   });
   return {
-    records: uniqueRecords,
+    packages: uniquePackages,
     worldIds: [...identityCounts.keys()],
     complete,
   };
@@ -425,28 +427,41 @@ async function loadWorldPackages(worldsDir: string): Promise<{
 export async function seedWorlds(
   store: DataStore,
   worldsDir: string,
+  sessionLock: SessionLock,
   excludedWorldIds: ReadonlySet<string> = new Set(),
 ): Promise<{ worldIds: string[]; complete: boolean }> {
   const inventory = await loadWorldPackages(worldsDir);
-  const records = inventory.records.filter(
-    (record) => !excludedWorldIds.has(record.id),
-  );
-
-  if (records.length > 0) {
-    const existingWorlds = new Map(
-      (await store.listWorlds()).map((world) => [world.id, world]),
-    );
-    for (const record of records) {
-      await store.upsertWorld(
-        preserveWorldProvenance(record, existingWorlds.get(record.id)),
-      );
+  let complete = inventory.complete;
+  const loaded: string[] = [];
+  for (const entry of inventory.packages) {
+    if (excludedWorldIds.has(entry.id)) continue;
+    try {
+      await sessionLock.withLock(worldOperationLockId(entry.id), async () => {
+        const existing = await store.getWorld(entry.id);
+        if (existing && isWorldDeleting(existing)) return;
+        // Read content only after admission. A package removed while this seed
+        // waited cannot be reconstructed from a stale inventory record.
+        const record = await loadSingleWorld(entry.directory);
+        if (!record || record.id !== entry.id) {
+          complete = false;
+          return;
+        }
+        await store.upsertWorld(
+          preserveWorldProvenance(record, existing ?? undefined),
+        );
+        loaded.push(record.id);
+      });
+    } catch (error) {
+      complete = false;
+      console.warn(`[world-seed] Failed to load world ${entry.id}:`, error);
     }
+  }
+  if (loaded.length > 0) {
     console.log(
-      `[world-seed] Loaded ${records.length} world(s): ${records.map((r) => r.id).join(", ")}`,
+      `[world-seed] Loaded ${loaded.length} world(s): ${loaded.join(", ")}`,
     );
   }
-
-  return { worldIds: inventory.worldIds, complete: inventory.complete };
+  return { worldIds: inventory.worldIds, complete };
 }
 
 /** Disk content does not own a world's origin, storage binding, or creation date. */
@@ -494,26 +509,26 @@ export interface WorldReconcileResult {
 export async function reconcileSeededWorlds(
   store: DataStore,
   liveWorldIds: ReadonlySet<string>,
+  sessionLock: SessionLock,
 ): Promise<WorldReconcileResult> {
   const removed: string[] = [];
   const keptWithSessions: string[] = [];
   const worlds = await store.listWorlds();
-  let sessions: { worldId?: string }[] | null = null;
 
   for (const world of worlds) {
     if (liveWorldIds.has(world.id)) continue;
-    const source = (world.metadata as Record<string, unknown> | undefined)
-      ?.source;
-    if (source !== "file") continue;
-
-    if (!sessions) sessions = await store.listSessions();
-    if (sessions.some((s) => s.worldId === world.id)) {
-      keptWithSessions.push(world.id);
-      continue;
-    }
-
-    await store.deleteWorld(world.id);
-    removed.push(world.id);
+    await sessionLock.withLock(worldOperationLockId(world.id), async () => {
+      const live = await store.getWorld(world.id);
+      if (!live || live.metadata?.source !== "file" || isWorldDeleting(live))
+        return;
+      const sessions = await store.listSessions();
+      if (sessions.some((session) => session.worldId === world.id)) {
+        keptWithSessions.push(world.id);
+        return;
+      }
+      await store.deleteWorld(world.id);
+      removed.push(world.id);
+    });
   }
 
   return { removed, keptWithSessions };

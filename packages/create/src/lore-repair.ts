@@ -1,4 +1,5 @@
 import type { LLMAdapter } from "@covel/shared";
+import type { PromptLoader } from "@covel/context";
 import { parseWorldLoreRepairOutput } from "./lore-processor.js";
 import { requestLlmResponse } from "./llm-request.js";
 import { buildWorldLoreRepairPrompt } from "./prompts.js";
@@ -10,6 +11,7 @@ interface WorldLoreRepairOptions {
   readonly lore: string;
   readonly errors: readonly string[];
   readonly signal: AbortSignal;
+  readonly loadPrompt?: PromptLoader;
 }
 
 export type WorldLoreRepairResult =
@@ -19,7 +21,10 @@ export type WorldLoreRepairResult =
 export async function repairWorldLore(
   options: WorldLoreRepairOptions,
 ): Promise<WorldLoreRepairResult> {
-  const systemPrompt = await buildWorldLoreRepairPrompt(options.locale);
+  const systemPrompt = await buildWorldLoreRepairPrompt(
+    options.locale,
+    options.loadPrompt,
+  );
   const response = await requestLlmResponse({
     llm: options.llm,
     model: options.model,

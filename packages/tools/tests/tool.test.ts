@@ -54,7 +54,11 @@ describe("tool()", () => {
       runtimeId: "r1",
     };
     // Missing required field 'city'
-    await expect(mod.execute({} as never, ctx)).rejects.toThrow();
+    await expect(mod.execute({}, ctx)).rejects.toMatchObject({
+      name: "ToolValidationError",
+      code: "VALIDATION_ERROR",
+      details: [{ path: "city", message: expect.any(String) }],
+    });
   });
 
   it("handles complex schema with optional, enum, and nested fields", () => {

@@ -255,7 +255,7 @@ describe("shared WorldIR turn pipeline", () => {
         },
       ],
     };
-    const { result, observedInputs } = await runPipeline(
+    const { result, observedInputs, llm } = await runPipeline(
       JSON.stringify(invalid),
     );
     const byRuntime = new Map(
@@ -267,7 +267,19 @@ describe("shared WorldIR turn pipeline", () => {
 
     expect(byRuntime.get("narrator")?.status).toBe("success");
     expect(byRuntime.get("world-ir")?.status).toBe("failed");
-    expect(byRuntime.get("world-ir")?.error).toContain("does not exist");
+    // With the larger budget this permanently invalid model reaches the
+    // repeated-call guard. It must still receive the original validation error.
+    expect(byRuntime.get("world-ir")?.error).toContain("tool-loop detected");
+    expect(
+      llm.calls
+        .flatMap((call) => call.messages)
+        .some(
+          (message) =>
+            message.role === "tool" &&
+            typeof message.content === "string" &&
+            message.content.includes("does not exist"),
+        ),
+    ).toBe(true);
     expect(byRuntime.get("test-world-ir-consumer")?.status).toBe("skipped");
     expect(byRuntime.get("test-world-ir-consumer")?.output).toMatchObject({
       reason: "upstream-failed",

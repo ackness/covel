@@ -43,7 +43,6 @@ describe("GET /api/sessions/:id/state — database view", () => {
       },
       id: sessionId,
       worldId: "cloudmere",
-      presetId: "default",
       completedPlayerTurns: 2,
       status: "active",
       locale: "zh-CN",

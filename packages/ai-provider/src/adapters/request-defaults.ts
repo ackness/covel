@@ -1,5 +1,8 @@
 import type { LLMRequestDefaults } from "@covel/shared";
-import { resolveReasoningEffortProfile } from "../reasoning-effort.js";
+import {
+  readReasoningEffort,
+  resolveReasoningEffortProfile,
+} from "../reasoning-effort.js";
 import type { TextGenerationParams } from "../types.js";
 
 /** User slot/preset metadata and parameter overrides always beat runtime defaults. */
@@ -8,6 +11,10 @@ export function withTextRequestDefaults(
 ): TextGenerationParams {
   const metadata = params.providerRequestMetadata;
   const overrides = metadata?.parameterOverrides;
+  if (readReasoningEffort(metadata) === "provider-default") {
+    // Provider defaults may enable thinking, which can reject forced tools.
+    return { ...params, defaults: undefined };
+  }
   const hasOverride =
     overrides !== null &&
     typeof overrides === "object" &&
@@ -18,20 +25,23 @@ export function withTextRequestDefaults(
       "reasoningEffort",
       "reasoning_effort",
       "enable_thinking",
+      "thinking_budget",
       "thinking",
       "reasoning",
       "output_config",
     ].some((key) => metadata?.[key] !== undefined);
   if (!params.defaults?.reasoningEffort || hasReasoning) return params;
   const profile = resolveReasoningEffortProfile(params.model);
-  const selection = profile?.options.some((option) => option.value === "none")
+  const defaultSelection = profile?.options.some(
+    (option) => option.value === "none",
+  )
     ? "none"
     : params.defaults.reasoningEffort;
   return {
     ...params,
     providerRequestMetadata: {
       ...metadata,
-      reasoningEffort: selection,
+      reasoningEffort: defaultSelection,
     },
   };
 }

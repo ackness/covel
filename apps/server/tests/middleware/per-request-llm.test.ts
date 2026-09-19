@@ -12,7 +12,7 @@
  * mock gateway saw the expected options.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import type { LLMAdapter } from "@covel/runtime";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
@@ -252,7 +252,7 @@ describe("per-request LLM middleware", () => {
       ).toBeUndefined();
     },
   );
-  it("forwards customPresets and slotPresetOverrides to the gateway", async () => {
+  it("forwards customPresets and slotBindings to the gateway", async () => {
     const { ai, calls } = createMockAi();
     const defaultAdapter: LLMAdapter = {
       async generate() {
@@ -268,7 +268,7 @@ describe("per-request LLM middleware", () => {
     });
 
     const slotConfig = {
-      slotPresetOverrides: { fast: "custom_abc" },
+      slotBindings: { fast: { modelRef: "custom_abc" } },
       parameterOverrides: {
         fast: {
           temperature: 0.2,
@@ -303,7 +303,7 @@ describe("per-request LLM middleware", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].presetId).toBe("fast");
     expect(calls[0].slotOverrides).toMatchObject({
-      slotPresetOverrides: { fast: "custom_abc" },
+      slotBindings: { fast: { modelRef: "custom_abc" } },
       parameterOverrides: {
         fast: {
           temperature: 0.2,
@@ -357,7 +357,7 @@ describe("per-request LLM middleware", () => {
     expect(calls).toHaveLength(0); // mock gateway untouched
   });
 
-  it("tolerates malformed X-Slot-Config headers without failing the request", async () => {
+  it("rejects malformed routing configuration without calling a model", async () => {
     const { ai, calls } = createMockAi();
     const defaultAdapter: LLMAdapter = {
       async generate() {
@@ -384,8 +384,8 @@ describe("per-request LLM middleware", () => {
       },
       body: JSON.stringify({ model: "story" }),
     });
-    expect(res.status).toBe(200);
-    // No slot overrides detected → default adapter used, mock gateway not hit.
+    expect(res.status).toBe(400);
+    // Invalid routing is rejected before either adapter can execute.
     expect(calls).toHaveLength(0);
   });
 
@@ -403,7 +403,7 @@ describe("per-request LLM middleware", () => {
     });
 
     const slotConfig = {
-      slotPresetOverrides: { image: "custom_dashscope" },
+      slotBindings: { image: { modelRef: "custom_dashscope" } },
       customPresets: [
         {
           id: "custom_dashscope",
@@ -435,7 +435,7 @@ describe("per-request LLM middleware", () => {
     expect(imageCall!.envApiKeys).toEqual({ deepseek: "env-key" });
     expect(imageCall!.capabilityOverridePolicy).toBe("full");
     expect(imageCall!.slotOverrides).toMatchObject({
-      slotPresetOverrides: { image: "custom_dashscope" },
+      slotBindings: { image: { modelRef: "custom_dashscope" } },
       customPresets: [
         expect.objectContaining({
           id: "custom_dashscope",
@@ -460,7 +460,6 @@ describe("per-request LLM middleware", () => {
         },
       });
       const header = b64({
-        capabilityOverridePolicy: "full",
         capabilityOverrides: {
           story: {
             input: ["text", "bogus", "text"],
@@ -601,7 +600,7 @@ describe("per-request LLM middleware", () => {
     expect(calls[0].envApiKeys).toEqual({ openai: "sk-env-SECRET" });
   });
 
-  it("drops custom preset entries missing required fields", async () => {
+  it("rejects invalid model definitions without partially applying the batch", async () => {
     const { ai, calls } = createMockAi();
     const app = buildTestApp({
       ai,
@@ -639,17 +638,11 @@ describe("per-request LLM middleware", () => {
       },
       body: JSON.stringify({ model: "good" }),
     });
-    expect(res.status).toBe(200);
-    expect(calls).toHaveLength(1);
-    expect(calls[0].slotOverrides?.customPresets).toHaveLength(1);
-    expect(calls[0].slotOverrides?.customPresets?.[0]).toMatchObject({
-      id: "good",
-      provider: "vendorX",
-      model: "ok-m",
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "invalid_llm_configuration",
     });
-    expect(calls[0].slotOverrides?.customPresets?.[0]).not.toHaveProperty(
-      "protocol",
-    );
+    expect(calls).toEqual([]);
   });
 
   it("strips providerRequestMetadata from a browser-supplied preset", async () => {
@@ -702,4 +695,42 @@ describe("per-request LLM middleware", () => {
     expect(preset).not.toHaveProperty("providerRequestMetadata");
     expect(JSON.stringify(preset)).not.toContain("evil-wire");
   });
+});
+
+describe("routing configuration validation", () => {
+  it.each([
+    { slotBindings: { story: { modelRef: "missing" } } },
+    { slotBindings: { story: { modelRef: "a", presetId: "a" } } },
+    { slotBindings: { story: { presetId: "\u0000overlay:foreign" } } },
+    { slotBindings: { story: "ambiguous" } },
+    { capabilityOverridePolicy: "full" },
+    {
+      customPresets: [
+        { id: "same", provider: "a", model: "a" },
+        { id: "same", provider: "b", model: "b" },
+      ],
+    },
+  ])(
+    "rejects ambiguous or undeclared targets before executing for %j",
+    async (configuration) => {
+      const { ai, calls } = createMockAi();
+      const generate = vi.fn<LLMAdapter["generate"]>();
+      const app = buildTestApp({
+        ai,
+        envApiKeys: {},
+        defaultAdapter: { generate },
+      });
+      const response = await app.request("/echo", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "X-Slot-Config": b64(configuration),
+        },
+        body: JSON.stringify({ model: "story" }),
+      });
+      expect(response.status).toBe(400);
+      expect(generate).not.toHaveBeenCalled();
+      expect(calls).toEqual([]);
+    },
+  );
 });

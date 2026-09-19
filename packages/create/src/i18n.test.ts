@@ -2,14 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { setPromptsRoot } from "@covel/context";
+import { createPromptLoader } from "@covel/context";
 import { buildWorldLoreRepairPrompt, buildWorldPrompt } from "./prompts.js";
 
 describe("world creation locale", () => {
   let temporaryPromptsRoot: string | undefined;
 
   afterEach(async () => {
-    setPromptsRoot(null);
     if (temporaryPromptsRoot) {
       await rm(temporaryPromptsRoot, { recursive: true, force: true });
       temporaryPromptsRoot = undefined;
@@ -48,9 +47,12 @@ describe("world creation locale", () => {
       "RU TEMPLATE: {{ concept }} / {{ locale }} / {{ language }}",
       "utf8",
     );
-    setPromptsRoot(temporaryPromptsRoot);
-
-    const prompt = await buildWorldPrompt("Город под дождём", "ru_ru");
+    const prompt = await buildWorldPrompt(
+      "Город под дождём",
+      "ru_ru",
+      undefined,
+      createPromptLoader(temporaryPromptsRoot),
+    );
 
     expect(prompt).toContain("RU TEMPLATE: Город под дождём / ru-RU / Русский");
   });

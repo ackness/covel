@@ -1,4 +1,4 @@
-/** Reserve the second tracker step for a write or an explicit no-op. */
+/** Allow one detail read, reserving subsequent steps for writes and correction. */
 export default function trackerReadBudget(_ctx, payload) {
   if (payload.runtimeId !== "char-creator/character-tracker") {
     return { action: "continue" };
@@ -40,7 +40,7 @@ export default function trackerReadBudget(_ctx, payload) {
         {
           role: "system",
           content:
-            "The character detail read is complete. This is the final step: call sync-characters once with confirmed changes, or runtime-done when no changes are supported. Do not request more character details or invent missing values.",
+            "The character detail read is complete. Call sync-characters with confirmed changes, or runtime-done when no changes are supported. After a failed sync, correct and resubmit the full batch. Do not request more character details or invent missing values.",
         },
       ],
     },

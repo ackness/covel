@@ -4,7 +4,7 @@
  * After each turn completes, the updater:
  *   1. Reads the current core memory blocks
  *   2. Reads the turn's narrative output + tool call summaries
- *   3. Calls a cheap LLM (memory slot → story fallback) with a structured prompt
+ *   3. Calls the selected memory model with a structured prompt
  *   4. Parses the JSON response to get block updates
  *   5. Writes only the changed blocks
  *
@@ -158,6 +158,7 @@ export function createMemoryUpdater(
     );
 
     let authoritativeBlocksChanged: CoreMemoryLabel[] = [];
+    let persisting = false;
 
     try {
       // Persist confirmed character fields before waiting on the summarizer.
@@ -170,7 +171,9 @@ export function createMemoryUpdater(
         lang,
       });
       if (authoritativeUpdates.size > 0) {
+        persisting = true;
         await manager.updateBlocks(sessionId, authoritativeUpdates);
+        persisting = false;
         authoritativeBlocksChanged = [...authoritativeUpdates.keys()];
       }
 
@@ -192,7 +195,7 @@ export function createMemoryUpdater(
           requestLlm.complete({
             systemPrompt: buildSystemPrompt(schema, lang, effectiveLocale),
             messages: [{ role: "user", content: userPrompt }],
-            model: config?.modelSlot,
+            model: params.modelSlot ?? config?.modelSlot,
           }),
         {
           onRetry: (error, nextAttempt) => {
@@ -211,13 +214,17 @@ export function createMemoryUpdater(
         lang,
       });
       if (parsed.size === 0) {
+        persisting = true;
+        await config?.commitUpdate?.(params, parsed);
         return {
           updated: authoritativeBlocksChanged.length > 0,
           blocksChanged: authoritativeBlocksChanged,
         };
       }
 
-      await manager.updateBlocks(sessionId, parsed);
+      persisting = true;
+      if (config?.commitUpdate) await config.commitUpdate(params, parsed);
+      else await manager.updateBlocks(sessionId, parsed);
 
       return {
         updated: true,
@@ -232,6 +239,7 @@ export function createMemoryUpdater(
         updated: authoritativeBlocksChanged.length > 0,
         blocksChanged: authoritativeBlocksChanged,
         error: err instanceof Error ? err.message : String(err),
+        ...(persisting ? { persistenceFailed: true } : {}),
       };
     }
   }
@@ -241,12 +249,37 @@ export function createMemoryUpdater(
       // Chain this call behind any in-flight update for the same session so
       // we never race two LLM completions writing the same block, and so
       // `awaitPending` can serialise on the latest write.
+      const queued = pending.has(params.sessionId);
       const previous = pending.get(params.sessionId) ?? Promise.resolve();
       const next = previous
         .catch(() => {
           /* previous failure already reported to its caller */
         })
-        .then(() => runUpdate(params, llmOverride ?? llm));
+        .then(async () => {
+          // Queued callers may have captured their blocks before an earlier
+          // update settled. Use committed blocks once that predecessor finishes.
+          const input = queued
+            ? {
+                ...params,
+                currentBlocks: await manager.loadBlocks(params.sessionId),
+              }
+            : params;
+          return runUpdate(input, llmOverride ?? llm);
+        })
+        .catch((error: unknown): MemoryUpdateResult => ({
+          updated: false,
+          blocksChanged: [],
+          error: error instanceof Error ? error.message : String(error),
+          persistenceFailed: true,
+        }))
+        .then(async (result) => {
+          try {
+            await config?.onUpdate?.(params, result);
+          } catch (error) {
+            console.warn("[memory] update observer failed:", error);
+          }
+          return result;
+        });
       const tracked = trackMemoryBackgroundTask(next, {
         kind: "core-update",
         sessionId: params.sessionId,
@@ -479,20 +512,40 @@ function parseBlockUpdates(
   } catch {
     // Try to extract JSON from surrounding text
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return result;
+    if (!jsonMatch)
+      throw new Error(
+        "Memory update returned invalid JSON; expected a block object or {}.",
+      );
     try {
       obj = JSON.parse(jsonMatch[0]);
     } catch {
-      return result;
+      throw new Error(
+        "Memory update returned invalid JSON; expected a block object or {}.",
+      );
     }
   }
 
-  // Extract valid block updates
-  for (const [key, value] of Object.entries(obj)) {
-    if (validLabels.has(key) && typeof value === "string" && value.trim()) {
-      result.set(key, value.trim());
-    }
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+    throw new Error(
+      "Memory update must be a JSON object; use {} only when nothing changed.",
+    );
   }
+
+  // Unknown labels remain forward compatible, but malformed known blocks and
+  // envelopes with no recognized content cannot masquerade as a valid no-op.
+  for (const [key, value] of Object.entries(obj)) {
+    if (!validLabels.has(key)) continue;
+    if (typeof value !== "string" || !value.trim())
+      throw new Error(
+        `Memory block "${key}" must contain non-empty text; omit unchanged blocks.`,
+      );
+    result.set(key, value.trim());
+  }
+
+  if (Object.keys(obj).length > 0 && result.size === 0)
+    throw new Error(
+      "Memory update contained no recognized blocks; use {} only when nothing changed.",
+    );
 
   return result;
 }

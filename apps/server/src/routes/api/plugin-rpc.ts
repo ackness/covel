@@ -52,7 +52,6 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
-import { getCachedWorld } from "../../world-cache.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import {
   createPluginRpcRuntimeTurnRunner,
@@ -72,7 +71,7 @@ import {
   parseSessionCommandInvocation,
   resolveSessionCommand,
 } from "./session/commands.js";
-import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
+import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
 
@@ -290,7 +289,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // under the player's header overrides — same resolution chain as the main
     // turn route (player override → world default → manifest default).
     const world = session.worldId
-      ? await getCachedWorld(store, session.worldId)
+      ? await store.getWorld(session.worldId)
       : null;
     const userSettingsMap = mergePluginUserSettings(
       readWorldPluginSettings(world?.metadata),
@@ -345,12 +344,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           sessionApprovalScope(session, runtime.pluginId),
         ]),
       ),
-      deps: buildManualTurnExecutorDeps(c, capabilityPluginIds),
+      deps: buildTurnExecutorDeps(c, capabilityPluginIds),
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 
-    const runManualTurn = () =>
+    const runManualTurn = (executionSignal?: AbortSignal) =>
       runtimeTurnRunner.runManualTurn({
+        executionSignal,
         turnId,
         runtimeId: body.runtimeId!,
         // Background mode returns 202 and detaches from this request, and the
@@ -366,6 +366,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       });
 
     const jobRunner = createPluginRpcJobRunner({
+      queue: c.get("pluginBackgroundQueue"),
       store,
       sessionId,
       sessionLock,

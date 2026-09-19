@@ -299,7 +299,6 @@ describe("createBootstrapMemorySystem", () => {
       id: sessionId,
       worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [],
       completedPlayerTurns: 0,
 

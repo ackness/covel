@@ -70,7 +70,7 @@ describe("char-creator plugin", () => {
     it("requires one create-character-form call and stops immediately after success", () => {
       expect(manifest.requireToolUse).toBe(true);
       expect(manifest.completeAfterTools).toEqual(["create-character-form"]);
-      expect(manifest.maxSteps).toBe(2);
+      expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
       expect(manifest.maxRetries).toBe(0);
     });
 
@@ -139,14 +139,14 @@ describe("char-creator plugin", () => {
       expect(manifest.stage).toBe("post-turn");
     });
 
-    it("exposes writes and the detail read within the two-step budget", () => {
+    it("reserves a correction step after the detail read and write", () => {
       expect(manifest.tools?.builtin).toEqual([
         "sync-characters",
         "get-character",
       ]);
       expect(manifest.completeAfterTools).toEqual(["sync-characters"]);
       expect(manifest.tools?.defer).toBeUndefined();
-      expect(manifest.maxSteps).toBe(2);
+      expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
       expect(manifest.maxRetries).toBe(0);
     });
 

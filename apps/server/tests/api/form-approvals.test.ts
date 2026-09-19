@@ -51,7 +51,10 @@ describe("form provider authorization", () => {
       setupRuntimes: {},
       completedPlayerTurns: 0,
       activePlugins: providers,
-      metadata: { approvalScopeNonce: "synthetic-scope" },
+      metadata: {
+        approvalScopeNonce: "synthetic-scope",
+        sessionIncarnationNonce: crypto.randomUUID(),
+      },
       createdAt: now,
       updatedAt: now,
     });

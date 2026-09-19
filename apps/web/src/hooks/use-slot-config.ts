@@ -1,3 +1,4 @@
+import { formatModelConfigLabel } from "@/lib/model-config-label.js";
 import { useState, useMemo, useCallback } from "react";
 import { useSetting } from "@/settings/use-settings.js";
 import {
@@ -5,7 +6,7 @@ import {
   getCustomPresets,
   slotBindingId,
   type SlotConfigEntry,
-  type CustomPreset,
+  type ModelParameterOverrides,
   type PresetSummary,
   type LlmConfigResponse,
 } from "@/services/api.js";
@@ -22,6 +23,8 @@ export interface ResolvedSlot {
   serverModel?: string;
   /** Server-configured provider for this slot (from llm.toml). */
   serverProvider?: string;
+  /** Effective saved selection after role overrides; undefined leaves task policy in control. */
+  reasoningEffort?: ModelParameterOverrides["reasoningEffort"];
 }
 
 /** Return the model that requests for this slot will use on this client. */
@@ -33,8 +36,20 @@ export function effectiveSlotModel(
 
 /** Format a runtime-binding option as `<slot> · <effective model>`. */
 export function formatSlotBindingLabel(slot: ResolvedSlot): string {
-  const model = effectiveSlotModel(slot);
+  const model = formatSlotModelLabel(slot);
   return model ? `${slot.slotId} · ${model}` : slot.slotId;
+}
+
+/** Configuration name and effective saved reasoning, without changing the API ID. */
+export function formatSlotModelLabel(slot: ResolvedSlot): string | undefined {
+  const model = effectiveSlotModel(slot);
+  return model
+    ? formatModelConfigLabel({
+        ...slot.preset,
+        model,
+        reasoningEffort: slot.reasoningEffort ?? slot.preset?.reasoningEffort,
+      })
+    : undefined;
 }
 
 function inferClientSlotTag(slotId: string): string {
@@ -53,10 +68,10 @@ export function formatSlotLabel(
 ): string | null {
   if (!slot) return null;
   if (slot.preset) {
-    return `${slot.preset.provider} \u00B7 ${slot.preset.model}`;
+    return `${slot.preset.provider} \u00B7 ${formatSlotModelLabel(slot)}`;
   }
   if (slot.serverModel) {
-    return `${slot.slotId} \u00B7 ${slot.serverModel}`;
+    return `${slot.slotId} \u00B7 ${formatSlotModelLabel(slot)}`;
   }
   return slot.slotId;
 }
@@ -75,7 +90,8 @@ export function useSlotConfig(
   const [slotConfigSnapshot] =
     useSetting<Record<string, SlotConfigEntry>>("llm.slotConfig");
   const [providerProfilesSnapshot] = useSetting<unknown>("llm.providers");
-  const [legacyPresetsSnapshot] = useSetting<unknown>("llm.customPresets");
+  const [parameterOverrides] =
+    useSetting<Record<string, ModelParameterOverrides>>("llm.paramOverrides");
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -86,21 +102,34 @@ export function useSlotConfig(
 
   const customPresets = useMemo(
     () => getCustomPresets(),
-    [providerProfilesSnapshot, legacyPresetsSnapshot, version],
+    [providerProfilesSnapshot, version],
   );
 
-  const allPresets = useMemo(() => {
-    const customs: PresetSummary[] = customPresets.map((p) => ({
+  const localPresets = useMemo(() => {
+    return customPresets.map((p): PresetSummary => ({
       id: p.id,
       name: p.name,
       provider: p.provider,
       model: p.model,
+      reasoningEffort: p.reasoningEffort,
+      protocol: p.protocol,
       enabled: true,
       isDefault: false,
       scope: "custom",
     }));
-    return [...serverPresets, ...customs];
-  }, [serverPresets, customPresets]);
+  }, [customPresets]);
+  const allPresets = useMemo(
+    () => [...serverPresets, ...localPresets],
+    [serverPresets, localPresets],
+  );
+  const findBinding = useCallback(
+    (entry: (typeof slotConfig)[string] | undefined) => {
+      return entry?.modelRef !== undefined
+        ? localPresets.find((p) => p.id === entry.modelRef)
+        : serverPresets.find((p) => p.id === entry?.presetId);
+    },
+    [localPresets, serverPresets],
+  );
 
   /** Resolve a slot name to a preset (checks user config, falls back to server default). */
   const resolveSlot = useCallback(
@@ -108,12 +137,11 @@ export function useSlotConfig(
       const entry = slotConfig[slotId];
       const bindingId = slotBindingId(entry);
       if (bindingId) {
-        const found = allPresets.find((p) => p.id === bindingId);
-        if (found) return found;
+        return findBinding(entry) ?? null;
       }
       return serverPresets.find((p) => p.isDefault) ?? serverPresets[0] ?? null;
     },
-    [slotConfig, allPresets, serverPresets],
+    [slotConfig, findBinding, serverPresets],
   );
 
   /**
@@ -142,17 +170,15 @@ export function useSlotConfig(
       for (const [slotId, slotInfo] of Object.entries(llmConfig.slots)) {
         const userEntry = slotConfig[slotId];
         const presetId = slotBindingId(userEntry) ?? "";
-        const preset = presetId
-          ? (allPresets.find((p) => p.id === presetId) ?? null)
-          : null;
+        const preset = presetId ? (findBinding(userEntry) ?? null) : null;
         out.push({
           slotId,
           presetId,
           preset,
           label: slotId,
           tag: slotInfo.tag ?? "text",
-          serverModel: slotInfo.model,
-          serverProvider: slotInfo.provider,
+          serverModel: presetId && !preset ? undefined : slotInfo.model,
+          serverProvider: presetId && !preset ? undefined : slotInfo.provider,
         });
         seen.add(slotId);
       }
@@ -162,9 +188,7 @@ export function useSlotConfig(
     for (const [slotId, entry] of Object.entries(slotConfig)) {
       if (seen.has(slotId)) continue;
       const presetId = slotBindingId(entry) ?? "";
-      const preset = presetId
-        ? (allPresets.find((p) => p.id === presetId) ?? null)
-        : null;
+      const preset = presetId ? (findBinding(entry) ?? null) : null;
       out.push({
         slotId,
         presetId,
@@ -194,8 +218,17 @@ export function useSlotConfig(
       }
     }
 
-    return out;
-  }, [slotConfig, allPresets, serverPresets, llmConfig]);
+    return out.map((slot) => ({
+      ...slot,
+      reasoningEffort:
+        parameterOverrides?.[slot.slotId]?.reasoningEffort ??
+        slot.preset?.reasoningEffort ??
+        slot.preset?.parameterOverrides?.reasoningEffort ??
+        (slot.preset || slot.presetId
+          ? undefined
+          : llmConfig?.slots[slot.slotId]?.parameterOverrides?.reasoningEffort),
+    }));
+  }, [slotConfig, findBinding, serverPresets, llmConfig, parameterOverrides]);
 
   return { slotConfig, resolvedSlots, allPresets, resolveSlot, refresh };
 }

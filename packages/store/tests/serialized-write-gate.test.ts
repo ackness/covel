@@ -39,7 +39,6 @@ async function seedSession(store: DataStore, id: string): Promise<void> {
     id,
     worldId: null,
     status: "active",
-    presetId: null,
     activePlugins: [],
     phase: "setup",
     completedPlayerTurns: 0,

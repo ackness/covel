@@ -326,3 +326,29 @@ describe("settings synchronization", () => {
     expect(adapter.saveSecrets).not.toHaveBeenCalled();
   });
 });
+
+it("rejects a complete batch when another instance changes either dependent key", async () => {
+  const { adapter, read } = backend({
+    models: ["a"],
+    slots: { story: "a" },
+    independent: false,
+  });
+  const local = new SettingsStore(adapter);
+  const remote = new SettingsStore(adapter);
+  await Promise.all([local.init(), remote.init()]);
+  await remote.set("slots", { story: "remote" });
+  await expect(local.setMany({ models: [], slots: {} })).rejects.toBeInstanceOf(
+    SettingsRevisionConflictError,
+  );
+  expect(read().entries).toEqual({
+    models: ["a"],
+    slots: { story: "remote" },
+    independent: false,
+  });
+  await local.setMany({ models: ["b"], slots: { story: "b" } });
+  expect(read().entries).toEqual({
+    models: ["b"],
+    slots: { story: "b" },
+    independent: false,
+  });
+});

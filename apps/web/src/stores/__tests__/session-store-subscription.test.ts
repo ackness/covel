@@ -22,7 +22,6 @@ import {
   rehydrateSessionSideState,
 } from "../session-store/subscription.js";
 import { reducer as sessionReducer } from "../session-store/reducer.js";
-import type { SessionWorkspace } from "@/services/data-service.js";
 
 function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
   return {
@@ -387,10 +386,11 @@ describe("session subscription event ownership", () => {
       dispatch: (action) => {
         state = sessionReducer(state, action);
       },
-      workspace: {} as SessionWorkspace,
       stateRef: { current: state },
       sessionIdRef: { current: "s1" },
       onReset: () => {},
+      isCurrent: () => true,
+      getRecoveryGeneration: () => 0,
     });
     const event = {
       id: "event-form",

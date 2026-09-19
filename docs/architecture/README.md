@@ -8,6 +8,7 @@
 | ------------------------------------------------ | ------------------------------------------------------------------------------- |
 | [`design-principles.md`](./design-principles.md) | 设计理念：内核提供原语 / 插件承载玩法、插头 vs 电器裁决、三种写法、可表达边界。 |
 | [`flow.md`](./flow.md)                           | 端到端 turn pipeline、状态模型、插件执行、前后端数据流。                        |
+| [`packages.md`](./packages.md)                   | 工作区库的实际消费方、依赖注入链路与复用限制。                                  |
 | [`npc-graph.md`](./npc-graph.md)                 | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。                      |
 | [`storage.md`](./storage.md)                     | DataStore 后端、事务与持久化边界。                                              |
 | [`refactoring-plan.md`](./refactoring-plan.md)   | current-only 架构收敛的范围、阶段、验收与回滚计划（实施中）。                   |

@@ -1,7 +1,7 @@
 /**
  * Snapshot and suspension record types.
  *
- * Split out of `../types.ts` by domain; re-exported there for compatibility.
+ * Re-exported through the store's public types entry point.
  */
 
 import type {
@@ -35,41 +35,35 @@ import type {
  *  - `fork`   — created when a fork rebuilds a new session; `parentId`
  *               points at the origin snapshot.
  *
- * `payload.schemaVersion` allows future migrations without requiring a DB
- * schema change — the envelope stays stable while the payload can evolve.
+ * `payload.schemaVersion` identifies the current payload contract. Earlier
+ * formats are unsupported; affected development snapshots must be recreated.
  */
 export type SnapshotKind = "auto" | "manual" | "fork";
 
-interface SnapshotPayloadBase {
+export interface SnapshotPayload {
+  readonly schemaVersion: 3;
+  readonly session: SnapshotSessionState;
   readonly turnId: string;
   readonly characters: readonly CharacterRecord[];
   readonly stateEntries: readonly StateEntryRecord[];
-  /** Frozen table definitions. Legacy v3 payloads omit this field. */
-  readonly stateSchemas?: readonly StateSchemaRecord[];
-  /** Latest visible revision of every export series; absent in legacy v3. */
-  readonly runtimeExports?: readonly RuntimeExportRecord[];
+  /** Frozen table definitions. Empty means no captured tables. */
+  readonly stateSchemas: readonly StateSchemaRecord[];
+  /** Latest visible revision of every export series at capture time. */
+  readonly runtimeExports: readonly RuntimeExportRecord[];
   readonly pluginData: readonly PluginDataRecord[];
   readonly workingMemory: readonly WorkingMemoryRecord[];
   /**
    * Compaction summaries referenced by messages at or before
    * {@link messagesCursor}.
-   *
-   * Added compatibly to schema v3. Absence identifies a legacy v3 payload;
-   * fork restores those snapshots from the preserved raw message content and
-   * clears compaction tags instead of hiding history behind missing summaries.
    */
-  readonly sessionSummaries?: readonly SessionSummaryRecord[];
+  readonly sessionSummaries: readonly SessionSummaryRecord[];
   /**
    * Snapshot-time mapping from parent `turn_message.id` to the summary id that
    * represented it. Message compaction tags are mutable because rolling
    * summaries retag the historical prefix; retaining this exact mapping keeps
    * a later fork pinned to the snapshot instant.
-   *
-   * Optional for compatibility with earlier schema-v3 payloads. When absent,
-   * fork falls back to the live message tags and safely preserves raw history
-   * if those tags no longer match the captured summaries.
    */
-  readonly compactedMessageSummaryIds?: Readonly<Record<string, string>>;
+  readonly compactedMessageSummaryIds: Readonly<Record<string, string>>;
   /**
    * Session-scoped lorebook entries. Captured from the
    * `lorebook_entries` table at snapshot time so forks can rehydrate the
@@ -100,10 +94,9 @@ interface SnapshotPayloadBase {
   /**
    * Chat history boundary, independent of the model conversation cursor.
    * Capture every id in the newest millisecond so later same-time messages
-   * cannot enter an older fork. Null means empty; absent legacy v3 payloads
-   * use the snapshot timestamp as a best-effort cutoff.
+   * cannot enter an older fork. Null means empty.
    */
-  readonly displayMessagesBoundary?: {
+  readonly displayMessagesBoundary: {
     readonly createdAt: string;
     readonly ids: readonly string[];
   } | null;
@@ -111,8 +104,8 @@ interface SnapshotPayloadBase {
 
 /**
  * Session-level state that must be restored from the same point in time as
- * the materialized rows above. Fields unrelated to scheduling or runtime
- * selection (for example embedding maintenance locks) remain session-local.
+ * the materialized rows above. Authority and maintenance fields (for example
+ * owner tokens and embedding locks) remain session-local.
  */
 export type SnapshotSessionState = Readonly<
   Pick<
@@ -123,16 +116,12 @@ export type SnapshotSessionState = Readonly<
     | "setupRuntimes"
     | "locale"
     | "activePlugins"
-    | "presetId"
     | "runtimeModelOverrides"
-  >
+  > & {
+    /** Captured metadata override. Empty means clear; absent keeps world fallback. */
+    loreOverride?: string;
+  }
 >;
-
-/** Current snapshot format. */
-export interface SnapshotPayload extends SnapshotPayloadBase {
-  readonly schemaVersion: 3;
-  readonly session: SnapshotSessionState;
-}
 
 export interface SnapshotRecord {
   readonly id: string;

@@ -6,6 +6,7 @@
  *   returns `{ ok, id, restartRequired: false }` after activating the world.
  */
 
+import { worldOperationLockId } from "../../../world-lifecycle.js";
 import path from "node:path";
 import { rm } from "node:fs/promises";
 import { loadSingleWorld } from "../../../world-seed-loader.js";
@@ -112,8 +113,10 @@ worldInstallRoutes.post("/world", async (c) => {
       });
       if (!record) throw httpError(400, "Installed world could not be loaded");
       const created = await c
-        .get("store")
-        .createWorld(record)
+        .get("sessionLock")
+        .withLock(worldOperationLockId(record.id), () =>
+          c.get("store").createWorld(record),
+        )
         .catch(() => {
           throw httpError(
             500,

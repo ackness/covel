@@ -84,6 +84,8 @@ export interface SettingsStoreApi {
   listEntries(): readonly SettingEntry[];
   export(opts?: { includeSecrets?: boolean }): Promise<SettingsExportBundle>;
   set<T>(key: SettingKey, value: T): Promise<void>;
+  /** Validate and persist ordinary settings together; secret keys are rejected. */
+  setMany(entries: Readonly<Record<SettingKey, unknown>>): Promise<void>;
   clear(key: SettingKey): Promise<void>;
   clearAll(): Promise<void>;
   import(

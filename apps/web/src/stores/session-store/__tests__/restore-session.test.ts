@@ -118,6 +118,41 @@ describe("restoreSessionState workspace ordering", () => {
       steps: [expect.objectContaining(step)],
     });
   });
+  it("retains reasoning and diagnostic fields when their server trace window has expired", async () => {
+    const ds = makeDataService([]);
+    const step = {
+      runtimeId: "tracker",
+      pluginId: "tracker",
+      turnId: "old-turn",
+      status: "failed",
+      toolName: "tracker.lookup",
+      abortReason: "manual-abort",
+      reasoning: [
+        {
+          id: "reasoning",
+          content: "Captured reasoning",
+          timestamp: "2026-09-05T00:00:00Z",
+          model: "test-model",
+          sequence: 1,
+        },
+      ],
+    };
+    vi.mocked(ds.loadExecutionSteps).mockResolvedValue([step]);
+    const dispatch = vi.fn();
+    await restoreSessionState({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef: { current: null },
+      sessionGenerationRef,
+      worlds: [world],
+      session,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "LOAD_EXECUTION_STEPS",
+      steps: [expect.objectContaining(step)],
+    });
+  });
   it("restores authoritative terminal steps and the updated session clock", async () => {
     const ds = makeDataService([]);
     vi.mocked(ds.loadExecutionSteps).mockResolvedValue([

@@ -109,7 +109,6 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 1,
 

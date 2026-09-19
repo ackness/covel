@@ -10,7 +10,7 @@
  * `withUtilsTrace`), so the facade returns their utils unchanged.
  */
 
-import type { PluginRuntimeUtils } from "@covel/plugin-loader";
+import type { PluginRuntimeUtils } from "@covel/shared/plugin-runtime";
 import type { HttpPermissionDecl } from "@covel/shared";
 
 export interface HttpPermissionOptions {

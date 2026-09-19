@@ -41,9 +41,13 @@ export interface WorldRecord {
 export type GeneratedWorldSaveTarget =
   "server-file" | "server-store" | "return-only";
 
-export interface SessionRecord extends Omit<SharedSession, "worldId"> {
+export interface SessionRecord extends Omit<
+  SharedSession,
+  "worldId" | "incarnation"
+> {
   readonly worldId: string;
-  presetId?: string;
+  /** Server-issued identity; browser-local records use workspace ownership. */
+  readonly incarnation?: string;
 }
 
 /**
@@ -54,7 +58,8 @@ export interface SessionRecord extends Omit<SharedSession, "worldId"> {
  * reaches the stored `SessionRecord` that read endpoints return.
  */
 export interface SessionCreateResponse extends SessionRecord {
-  ownerToken?: string;
+  ownerToken: string;
+  readonly incarnation: string;
 }
 
 export interface MessageRecord {
@@ -80,6 +85,7 @@ export interface StatePatchRecord {
 }
 
 export interface PresetSummary {
+  reasoningEffort?: import("@covel/shared").ReasoningEffort;
   id: string;
   name: string;
   provider: string;

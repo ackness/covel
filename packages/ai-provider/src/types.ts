@@ -1,5 +1,6 @@
 import type {
   LLMResponseFormat,
+  LLMProviderContinuation,
   LLMProviderRequest,
   LLMRequestDefaults,
   LLMUsageSummary,
@@ -170,9 +171,10 @@ export interface ProviderDefaults {
 /**
  * Minimal preset definition accepted from untrusted request contexts
  * (browser `X-Slot-Config` header, ping body, etc.). Mirrors the shape
- * the frontend stores in `covel:customPresets`.
+ * the current frontend projects from `llm.providers`.
  */
 export interface CustomPresetInput {
+  reasoningEffort?: ReasoningEffort;
   id: string;
   name: string;
   provider: string;
@@ -202,8 +204,8 @@ export type CapabilityOverridePolicy = "full" | "restrict-only";
  * text slot.
  */
 export interface SlotOverridesInput {
-  /** Slot-name → preset-id. Consulted before the server slotRegistry. */
-  slotPresetOverrides?: Record<string, string>;
+  /** Explicit local/server bindings, consulted before the server slot registry. */
+  slotBindings?: Record<string, import("@covel/shared").LlmModelBinding>;
   /** Slot-name → generation parameter overrides. */
   parameterOverrides?: Record<string, ModelParameterOverrides>;
   /** Preset definitions added for the duration of the call. */
@@ -333,6 +335,7 @@ export interface TextMessage {
    * openai-chat adapter maps this to the `reasoning_content` wire field.
    */
   reasoningContent?: string;
+  providerContinuation?: LLMProviderContinuation;
 }
 
 /** Provider-layer name for the framework's canonical usage accounting ABI. */
@@ -344,13 +347,9 @@ export interface TextGenerationResult {
   usage: UsageSummary;
   /** Tool calls requested by the model (present when finishReason involves tool use). */
   toolCalls?: ToolCallPart[];
-  /**
-   * Raw reasoning text emitted by the model in thinking mode. Present only
-   * when the provider exposes `reasoning_content` (DashScope Qwen, DeepSeek
-   * v4 thinking, etc.). Callers must carry this back on the assistant
-   * message of the next request when composing a multi-turn tool loop.
-   */
+  /** Provider-exposed reasoning text or summary; never decoded hidden state. */
   reasoningContent?: string;
+  providerContinuation?: LLMProviderContinuation;
 }
 
 // ── Object Generation ──────────────────────────────────────────────
@@ -363,6 +362,8 @@ export interface ObjectGenerationParams<
 
 export interface ObjectGenerationResult<TObject = unknown> {
   object: TObject;
+  reasoningContent?: string;
+  providerContinuation?: LLMProviderContinuation;
   finishReason: string;
   usage: UsageSummary;
 }
@@ -378,12 +379,11 @@ export type StreamEvent =
       finishReason: string;
       usage: UsageSummary;
       /**
-       * Full reasoning_content accumulated over the stream. Exposed on
-       * `done` so downstream callers that stitch a follow-up assistant
-       * turn (e.g. streaming → non-stream tool loop fallback) can echo it
-       * back per the provider's thinking-mode contract.
+       * Full provider-exposed reasoning text or summary. Preserve it together
+       * with providerContinuation when composing a follow-up assistant turn.
        */
       reasoningContent?: string;
+      providerContinuation?: LLMProviderContinuation;
     };
 
 // ── Embedding ──────────────────────────────────────────────────────

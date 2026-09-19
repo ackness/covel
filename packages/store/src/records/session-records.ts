@@ -1,7 +1,5 @@
 /**
- * Session record type and normalisers.
- *
- * Split out of `../types.ts` by domain; re-exported there for compatibility.
+ * Session record type and partial-update semantics.
  */
 
 import type { SessionStatus, SetupRuntimeState } from "@covel/shared";
@@ -13,7 +11,6 @@ export interface SessionRecord {
   readonly status: SessionStatus;
   readonly locale: string;
   readonly activePlugins: readonly string[];
-  readonly presetId?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
@@ -40,22 +37,6 @@ export interface SessionRecord {
   readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
 }
 
-export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
-  const metadataPresetId = session.metadata?.presetId;
-  if (session.presetId === undefined) {
-    return typeof metadataPresetId === "string"
-      ? { ...session, presetId: metadataPresetId }
-      : session;
-  }
-  return {
-    ...session,
-    metadata: {
-      ...session.metadata,
-      presetId: session.presetId,
-    },
-  };
-}
-
 export function mergeSessionPatch(
   existing: SessionRecord,
   patch: Partial<
@@ -63,7 +44,6 @@ export function mergeSessionPatch(
       SessionRecord,
       | "status"
       | "activePlugins"
-      | "presetId"
       | "locale"
       | "updatedAt"
       | "metadata"
@@ -80,16 +60,9 @@ export function mergeSessionPatch(
     ...existing.metadata,
     ...patch.metadata,
   };
-  if ("presetId" in patch) {
-    if (patch.presetId === undefined) {
-      delete metadata.presetId;
-    } else {
-      metadata.presetId = patch.presetId;
-    }
-  }
-  return normalizeSessionRecord({
+  return {
     ...existing,
     ...patch,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-  });
+  };
 }

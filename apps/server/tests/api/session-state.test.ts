@@ -100,8 +100,15 @@ describe("Session Routes", () => {
   let store: DataStore;
   let pluginRegistry: PluginRegistry;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     store = createMemoryStore();
+    for (const id of ["cloudmere", "testworld", "mistport"])
+      await store.createWorld({
+        id,
+        name: id,
+        description: "Synthetic world",
+        createdAt: new Date().toISOString(),
+      });
     pluginRegistry = createPluginRegistry();
     app = createTestApp({ store, pluginRegistry });
   });
@@ -142,32 +149,6 @@ describe("Session Routes", () => {
       expect(session!.phase).toBe("playing");
       expect(session!.completedPlayerTurns).toBe(0);
       expect(session!.setupRuntimes).toEqual({});
-    });
-
-    it("persists presetId on creation", async () => {
-      const res = await app.request("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ presetId: "story-fast" }),
-      });
-
-      expect(res.status).toBe(201);
-      const body = (await json(res)) as { id: string; presetId?: string };
-      expect(body.presetId).toBe("story-fast");
-      expect((await store.getSession(body.id))?.presetId).toBe("story-fast");
-    });
-
-    it("rejects an invalid presetId on creation", async () => {
-      const res = await app.request("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ presetId: "" }),
-      });
-
-      expect(res.status).toBe(400);
-      await expect(res.json()).resolves.toMatchObject({
-        error: "presetId must be a non-empty string",
-      });
     });
 
     it("rejects worldId with invalid characters", async () => {
@@ -298,31 +279,6 @@ describe("Session Routes", () => {
       // Verify it's gone
       const session = await store.getSession(sessionId);
       expect(session).toBeNull();
-    });
-
-    it("deletes a legacy session without incarnation metadata", async () => {
-      const sessionId = "legacy-player-world-session";
-      const now = new Date().toISOString();
-      await store.createSession({
-        id: sessionId,
-        worldId: "legacy-player-world",
-        status: "active",
-        phase: "playing",
-        completedPlayerTurns: 0,
-        setupRuntimes: {},
-        activePlugins: [],
-        locale: "zh-CN",
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const res = await app.request(`/api/sessions/${sessionId}`, {
-        method: "DELETE",
-      });
-
-      expect(res.status).toBe(200);
-      expect(await json(res)).toMatchObject({ ok: true });
-      expect(await store.getSession(sessionId)).toBeNull();
     });
 
     it("returns 404 for unknown session", async () => {

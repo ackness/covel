@@ -110,6 +110,8 @@
     "getStarted": "开始使用"
   },
   "session": {
+    "reasoningContent": "思考内容",
+    "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
     "config": "工作室配置",
     "status": "会话状态",
     "providers": "激活的模型",
@@ -207,6 +209,12 @@
     "loreModified": "已修改（{{count}} 字符）",
     "loreOriginal": "原始（{{count}} 字符）",
     "lorePlaceholder": "用 Markdown 输入世界传说...",
+    "loreDraft": {
+      "loading": "正在读取已保存的草稿…",
+      "saving": "正在保存草稿…",
+      "load-error": "无法读取已保存的草稿。请重试，或编辑文本以使用新草稿。",
+      "save-error": "草稿未能保存供下次使用。现在开始游戏仍会使用此处显示的文本。"
+    },
     "switchSession": "切换会话",
     "currentWorld": "当前会话",
     "statusActive": "进行中",
@@ -312,6 +320,9 @@
     "suspensionAgoMinutes": "{{count}} 分钟前",
     "suspensionAgoHours": "{{count}} 小时前",
     "suspensionAgoDays": "{{count}} 天前",
+    "memoryUpdateFailed": "故事记忆更新失败",
+    "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
+    "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
     "worldDataPreflight": {
       "title": "世界数据",
@@ -575,6 +586,8 @@
     "deleteConfirmAction": "删除"
   },
   "settings": {
+    "modelBindingMissing": "所选模型不可用，请重新选择模型或重置此用途。",
+    "resetModelBinding": "重置模型绑定",
     "storageMode": "数据存储",
     "storageLocal": "本地",
     "storageRemote": "远程",
@@ -748,6 +761,8 @@
     "exported": "已导出",
     "importHeader": "导入",
     "importChoose": "选择文件...",
+    "providerImportChanged": "读取文件期间模型设置已更改，当前修改已保留。请重新选择文件后重试。",
+    "providerKeyCleanupFailed": "模型设置已保存，但部分已移除连接的密钥未能清除。",
     "importInvalid": "文件无效",
     "imported": "已导入",
     "importPreview": "预览 — 选择要导入的项",
@@ -934,8 +949,10 @@
     "modelIdsPerLineHint": "每行输入一个模型 ID；空行和重复项会自动忽略。",
     "capabilityEstimatedShort": "使用协议基础能力",
     "reasoningEffort": "思考强度",
+    "reasoningBudget": "预算 {{count}} tokens",
+    "reasoningBudgetHint": "这些档位是应用的思考预算预设，并非模型原生档位；实际思考长度可短于预算。",
     "reasoningEffortHint": "已按 {{family}} 的接口规则列出当前模型支持的档位。",
-    "reasoningUnavailable": "当前模型未识别到可配置的思考强度，将沿用服务商默认行为。",
+    "reasoningUnavailable": "尚未识别到可调节的思考档位，可以继承设置或选择服务商默认。",
     "deepseekReasoningSamplingHint": "DeepSeek 开启思考时会忽略温度、Top P、频率惩罚和存在惩罚。",
     "reasoningFamily": {
       "openai": "OpenAI",
@@ -948,14 +965,15 @@
     },
     "reasoningLevel": {
       "disabled": "关闭思考",
-      "automatic": "自动思考",
+      "automatic": "开启思考",
       "none": "不使用推理",
       "minimal": "最低",
       "low": "较低",
       "medium": "中等",
       "high": "较高",
       "xhigh": "很高",
-      "max": "最高"
+      "max": "最高",
+      "provider-default": "服务商默认"
     },
     "modelLimitsUnknown": "模型上限未知",
     "capabilityUnknownHint": "未找到对应模型记录。协议支持为估计值；token 上限以模型配置和手动覆盖为准。",
@@ -977,7 +995,21 @@
     "effectiveOutputBudget": "有效输出预算",
     "remainingInputBudget": "剩余输入预算",
     "outputBudgetConflict": "输出预算需要在上下文窗口中为输入留出空间。请降低输出上限，或修正模型的上下文窗口。",
-    "tokenBudgetPreviewHint": "预算按当前配置计算。输入包含系统指令、历史和工具；未知上下文窗口按 32,768 计算，服务端限制可能进一步缩小预算。"
+    "tokenBudgetPreviewHint": "预算按当前配置计算。输入包含系统指令、历史和工具；未知上下文窗口按 32,768 计算，服务端限制可能进一步缩小预算。",
+    "modelConfiguration": "模型配置",
+    "modelConfigurations": "模型配置",
+    "modelConfigurationName": "配置名称",
+    "duplicateModelConfiguration": "复制配置",
+    "modelConfigurationCopy": "{{name}} 副本",
+    "modelReasoningReuseHint": "此设置自动保存，供选择这份配置的主叙事和所有插件共用。需要另一种强度时，复制配置后修改即可；用途中的显式覆盖仍优先。",
+    "modelReasoningDefault": "模型默认思考",
+    "reasoningTaskDefault": "按任务决定",
+    "reasoningInherit": "继承模型 / 任务设置",
+    "reasoningInheritedValue": "继承设置",
+    "reasoningExplicitValue": "显式覆盖",
+    "reasoningPrecedenceHint": "用途覆盖优先于模型默认；未设置时按任务决定。选择服务商默认会跳过任务的思考建议。",
+    "reasoningCurrentValue": "当前设置",
+    "reasoningUnsupported": "当前模型不支持已保存的档位，请选择可用档位或恢复默认。"
   },
   "appearance": {
     "previewTitle": "阅读预览",

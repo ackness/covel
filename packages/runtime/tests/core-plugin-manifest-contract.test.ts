@@ -43,6 +43,15 @@ function requireRuntime(
 }
 
 describe("core plugin manifest contract", () => {
+  it("lets bundled agent runtimes inherit the shared tool budget", async () => {
+    const manifests = await loadRuntimeManifests();
+    for (const manifest of manifests.values()) {
+      if (manifest.runtimeType !== "function") {
+        expect(manifest.maxSteps, manifest.name).toBeUndefined();
+      }
+    }
+  });
+
   it("keeps the Pre-Game chain in framework scheduling order", async () => {
     const manifests = await loadRuntimeManifests();
     const pregame = requireRuntime(manifests, "pregame");
@@ -65,7 +74,6 @@ describe("core plugin manifest contract", () => {
       trigger: { type: "auto", maxTriggerCount: 1 },
       requireToolUse: true,
       completeAfterTools: ["initialize-world"],
-      maxSteps: 2,
       maxRetries: 0,
       output: { schema: "./output.schema.json" },
     });
@@ -83,7 +91,6 @@ describe("core plugin manifest contract", () => {
       trigger: { type: "auto" },
       requireToolUse: true,
       completeAfterTools: ["create-character-form"],
-      maxSteps: 2,
       maxRetries: 0,
       // Turn-scoped needs carry both the intra-stage order and the same-turn
       // gate; the explicit stage picks the band.
@@ -185,7 +192,6 @@ describe("core plugin manifest contract", () => {
         toolChoice: { name: "generate-guide" },
       },
       completeAfterTools: ["generate-guide"],
-      maxSteps: 2,
       maxRetries: 0,
     });
     expect(
@@ -195,7 +201,6 @@ describe("core plugin manifest contract", () => {
         builtin: ["sync-characters", "get-character"],
       },
       completeAfterTools: ["sync-characters"],
-      maxSteps: 2,
       maxRetries: 0,
     });
 

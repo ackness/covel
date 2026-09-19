@@ -31,6 +31,19 @@ try {
   assertRejectsInvalidSettings('{"entries":[]}', "array entries load");
   assertRejectsInvalidSettings("{}", "missing entries load");
 
+  for (const schemaVersion of [undefined, 1]) {
+    const contents = JSON.stringify({
+      schemaVersion,
+      entries: { retained: true },
+    });
+    assertRejectsInvalidSettings(contents, "unsupported settings version");
+    assert.throws(
+      () => writeSettingsEntriesAtomic(settingsFile, { replacement: true }),
+      /unsupported settings schemaVersion/,
+    );
+    assert.equal(fs.readFileSync(settingsFile, "utf-8"), contents);
+  }
+
   // A sidecar-save failure may use the local fallback only for an intact
   // existing bundle; preserve corrupt input byte-for-byte by refusing it.
   const corrupt = '{"entries":';
@@ -47,7 +60,8 @@ try {
   fs.writeFileSync(
     settingsFile,
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
+      revision: 0,
       savedAt: "old",
       entries: { old: true },
     }),

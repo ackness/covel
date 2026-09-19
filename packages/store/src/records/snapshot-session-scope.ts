@@ -12,27 +12,21 @@ export function rebindSnapshotPayloadSession(
     ...payload,
     characters: rebind(payload.characters),
     stateEntries: rebind(payload.stateEntries),
-    ...(payload.stateSchemas === undefined
-      ? {}
-      : { stateSchemas: rebind(payload.stateSchemas) }),
-    ...(payload.runtimeExports === undefined
-      ? {}
-      : { runtimeExports: rebind(payload.runtimeExports) }),
+    stateSchemas: rebind(payload.stateSchemas),
+    runtimeExports: rebind(payload.runtimeExports),
     pluginData: rebind(payload.pluginData),
     workingMemory: rebind(payload.workingMemory),
     lorebookEntries: rebind(payload.lorebookEntries),
     suspensions: payload.suspensions.map((record) => ({
       ...record,
-      // Suspension IDs are global. Historical fork payloads kept the parent
-      // ID, so scope their replacement deterministically across exports.
+      // Suspension IDs are global, so copying into another session requires
+      // a distinct ID while repeated rebinding of the same payload stays stable.
       id:
         record.sessionId === sessionId
           ? record.id
           : `fork:${encodeURIComponent(sessionId)}:${encodeURIComponent(record.id)}`,
       sessionId,
     })),
-    ...(payload.sessionSummaries === undefined
-      ? {}
-      : { sessionSummaries: rebind(payload.sessionSummaries) }),
+    sessionSummaries: rebind(payload.sessionSummaries),
   };
 }

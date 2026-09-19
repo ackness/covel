@@ -24,8 +24,6 @@
  * `number[]` once, not per call.
  */
 
-import type { DataStore } from "./types.js";
-
 // ── Model identity & routing ─────────────────────────────────────
 
 /** Identity of an embedding model. Used as routing key. */
@@ -182,16 +180,17 @@ export interface VectorModelOps {
  * VectorStoreCapability and VectorModelOps. Callers should branch on
  * this rather than relying on backend-specific imports.
  */
-export function supportsVector(
-  store: DataStore,
-): store is DataStore & VectorStoreCapability & VectorModelOps {
+export function supportsVector<T extends object>(
+  store: T,
+): store is T & VectorStoreCapability & VectorModelOps {
   const candidate = store as Partial<VectorStoreCapability & VectorModelOps>;
   return (
     typeof candidate.upsertVector === "function" &&
     typeof candidate.searchVectors === "function" &&
     typeof candidate.deleteVectors === "function" &&
     typeof candidate.ensureVectorModel === "function" &&
-    typeof candidate.resolveSessionVectorTarget === "function"
+    typeof candidate.resolveSessionVectorTarget === "function" &&
+    typeof candidate.listVectorModels === "function"
   );
 }
 

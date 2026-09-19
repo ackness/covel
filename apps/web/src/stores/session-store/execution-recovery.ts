@@ -2,7 +2,11 @@ import { useEffect } from "react";
 import type { SessionExecutionStatus } from "@covel/shared";
 import * as api from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import { toStreamMessages } from "./restore-session.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import type { MutableRef } from "./runtime-refs.js";
@@ -25,29 +29,37 @@ export async function refreshRecoveredExecution(
 ): Promise<SessionExecutionStatus> {
   if (status.state !== "running") await options.workspace.hydrate(sessionId);
   if (!isCurrent()) return status;
-  const [snapshot, session] = await Promise.all([
-    api.getSessionView(sessionId),
-    api.getSession(sessionId),
-  ]);
-  if (!isCurrent()) return status;
-  const authoritative = snapshot.execution ?? status;
-  options.dispatch({ type: "SET_SESSION", session });
-  options.dispatch({
-    type: "MERGE_RECOVERED_MESSAGES",
-    messages: toStreamMessages(snapshot.messages),
-  });
-  options.dispatch({
-    type: "SET_GAME_STATE",
-    state: enrichGameStateFromSnapshot(snapshot),
-  });
-  options.dispatch({
-    type: "LOAD_EXECUTION_STEPS",
-    steps: reconcileExecutionSteps(
-      options.stateRef.current.executionSteps,
-      snapshot.executionSteps,
-      authoritative,
-    ),
-  });
+  let authoritative = status;
+  await refreshSessionResource(
+    options.dispatch,
+    ["game-state", sessionId, "execution-recovery"],
+    {
+      isCurrent,
+      read: () =>
+        Promise.all([api.getSessionView(sessionId), api.getSession(sessionId)]),
+      apply: ([snapshot, session]) => {
+        authoritative = snapshot.execution ?? status;
+        options.dispatch({ type: "SET_SESSION", session });
+        options.dispatch({
+          type: "MERGE_RECOVERED_MESSAGES",
+          messages: toStreamMessages(snapshot.messages),
+        });
+        publishSessionGameState(
+          options.dispatch,
+          sessionId,
+          enrichGameStateFromSnapshot(snapshot),
+        );
+        options.dispatch({
+          type: "LOAD_EXECUTION_STEPS",
+          steps: reconcileExecutionSteps(
+            options.stateRef.current.executionSteps,
+            snapshot.executionSteps,
+            authoritative,
+          ),
+        });
+      },
+    },
+  );
   return authoritative;
 }
 

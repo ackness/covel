@@ -34,6 +34,7 @@ import type {
 export interface ChatMessagesProps {
   messages: StreamMessage[];
   executionSteps: ExecutionStep[];
+  showExecutionTimeline?: boolean;
   executionError: string | null;
   executing: boolean;
   session: SessionRecord;
@@ -71,6 +72,7 @@ interface ConfirmRequest extends PluginRpcConfirmRequest {
 export function ChatMessages({
   messages,
   executionSteps,
+  showExecutionTimeline,
   executionError,
   executing,
   session,
@@ -221,6 +223,7 @@ export function ChatMessages({
   const renderedRows = useMessageGrouping({
     messages,
     executionSteps,
+    showExecutionTimeline,
     executing,
     plugins,
     onRetryRuntime,

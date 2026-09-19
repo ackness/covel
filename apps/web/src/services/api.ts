@@ -22,7 +22,6 @@ export * from "./api/llm.js";
 export * from "./api/media.js";
 export * from "./api/actions.js";
 export {
-  addCustomPreset,
   clearPrepRuntimeBindings,
   getCustomPresets,
   getParamOverrides,
@@ -31,10 +30,7 @@ export {
   getProviderPriceMultiplier,
   getProviderPriceMultipliers,
   getProviderProfiles,
-  migrateLegacyProviderProfiles,
   getSlotConfig,
-  removeCustomPreset,
-  setCustomPresets,
   setParamOverrides,
   setPrepRuntimeBindings,
   setProviderKeys,
@@ -43,18 +39,18 @@ export {
   setProviderProfiles,
   setSlotConfig,
   slotBindingId,
+  slotBindingKey,
 } from "./api/model-settings.js";
 export type {
-  CustomPreset,
   ModelParameterOverrides,
   SlotConfigEntry,
 } from "./api/model-settings.js";
 export {
   flattenProviderProfiles,
-  profilesFromLegacyPresets,
   upsertProviderModel,
 } from "./api/provider-model-profiles.js";
 export type {
+  CustomPreset,
   ProviderModelEntry,
   ProviderModelProfile,
 } from "./api/provider-model-profiles.js";

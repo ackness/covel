@@ -51,7 +51,7 @@ test("malformed stored themes do not prevent appearance settings from loading", 
   expect(pageErrors).toEqual([]);
 });
 
-test("provider import keeps valid profiles alongside malformed legacy entries", async ({
+test("provider import accepts current exports and rejects obsolete files without changing settings", async ({
   page,
 }) => {
   await seedBrowserSettings(page, {
@@ -59,52 +59,49 @@ test("provider import keeps valid profiles alongside malformed legacy entries", 
     "ui.locale": "en-US",
   });
   await page.goto("/session");
-  const dialog = await openSettings(page);
-  await dialog.getByLabel("Import", { exact: true }).setInputFiles({
-    name: "synthetic-providers.json",
-    mimeType: "application/json",
-    buffer: Buffer.from(
-      JSON.stringify([
-        {
-          id: "broken-url",
-          name: "Broken URL",
-          provider: "synthetic",
-          model: "broken",
-          baseUrl: 42,
-        },
-        {
-          id: "broken-protocol",
-          name: "Broken protocol",
-          provider: "synthetic",
-          model: "broken",
-          protocol: {},
-        },
-        {
-          id: "legacy-model",
-          name: "Legacy",
-          provider: "synthetic",
-          model: "legacy",
-        },
-        {
-          id: "current",
-          name: "Current",
-          baseUrl: "",
-          models: [{ ref: "current-model", modelId: "current" }],
-        },
-      ]),
-    ),
+  let dialog = await openSettings(page);
+  const current = {
+    id: "current",
+    name: "Current",
+    baseUrl: "https://current.example/v1",
+    models: [{ ref: "current-model", modelId: "current" }],
+  };
+  const upload = async (value: unknown) => {
+    await dialog.getByLabel("Import", { exact: true }).setInputFiles({
+      name: "synthetic-providers.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(value)),
+    });
+  };
+  const savedProfiles = () =>
+    page.evaluate(() => {
+      const settings = JSON.parse(localStorage.getItem("covel:settings")!);
+      return settings.entries["llm.providers"];
+    });
+  await upload({
+    version: 2,
+    providers: [null, { id: "broken", models: "invalid" }, current],
   });
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const settings = JSON.parse(localStorage.getItem("covel:settings")!);
-        return settings.entries["llm.providers"]
-          ?.map((profile: { models: { ref: string }[] }) =>
-            profile.models.map((model) => model.ref),
-          )
-          .flat()
-          .sort();
-      }),
-    )
-    .toEqual(["current-model", "legacy-model"]);
+  await expect.poll(savedProfiles).toEqual([current]);
+
+  await upload([
+    { id: "obsolete", name: "Obsolete", provider: "old", model: "old" },
+  ]);
+  await expect(dialog.getByRole("alert")).toHaveText("Invalid settings file");
+  expect(await savedProfiles()).toEqual([current]);
+
+  const updated = {
+    ...current,
+    models: [...current.models, { ref: "second", modelId: "second" }],
+  };
+  await upload({ version: 2, providers: [updated] });
+  await expect.poll(savedProfiles).toEqual([updated]);
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+
+  await page.reload();
+  dialog = await openSettings(page);
+  expect(await savedProfiles()).toEqual([updated]);
+  await expect(
+    dialog.getByText("current", { exact: true }).first(),
+  ).toBeVisible();
 });

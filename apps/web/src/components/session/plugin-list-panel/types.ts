@@ -59,28 +59,3 @@ export interface SessionPluginItemProps {
   onRuntimeModelOverrideChange?: RuntimeModelOverrideChange;
   setupRuntimes?: Record<string, SetupRuntimeState>;
 }
-
-export const TRIGGER_LABELS: Record<string, { key: string; fallback: string }> =
-  {
-    auto: { key: "plugin.triggerAuto", fallback: "Every turn" },
-    always: { key: "plugin.triggerAlways", fallback: "Always" },
-    scheduled: { key: "plugin.triggerScheduled", fallback: "Scheduled" },
-    interval: { key: "plugin.triggerInterval", fallback: "Interval" },
-    manual: { key: "plugin.triggerManual", fallback: "Manual" },
-    event: { key: "plugin.triggerEvent", fallback: "Event" },
-  };
-
-export const TRIGGER_TYPE_I18N: Record<
-  string,
-  { key: string; fallback: string }
-> = {
-  auto: { key: "plugin.triggerAuto", fallback: "Every turn" },
-  scheduled: { key: "plugin.triggerScheduled", fallback: "Scheduled" },
-  manual: { key: "plugin.triggerManual", fallback: "Manual" },
-  event: { key: "plugin.triggerEvent", fallback: "Event" },
-};
-
-export const RUNTIME_TYPE_ICONS: Record<string, string> = {
-  agent: "LLM",
-  function: "Fn",
-};

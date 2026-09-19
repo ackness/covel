@@ -41,6 +41,13 @@ import {
 
 import { interpolateTemplate } from "./prompt-internals.js";
 
+/** Locale-aware template source, injectable into prompt consumers. */
+export type PromptLoader = (
+  dir: string,
+  name: string,
+  locale?: string,
+) => Promise<string>;
+
 // ── Path resolution ─────────────────────────────────────────────
 
 /**
@@ -55,8 +62,8 @@ import { interpolateTemplate } from "./prompt-internals.js";
 let promptsRootCache: string | null = null;
 
 /**
- * Override the cached prompts root. Intended for tests and embedding scenarios
- * where the working directory differs from the monorepo layout.
+ * Override the default loader's cached root for the whole process.
+ * Use `createPromptLoader` for independent consumers or concurrent tests.
  */
 export function setPromptsRoot(root: string | null): void {
   promptsRootCache = root;
@@ -161,7 +168,26 @@ export async function loadPrompt(
   name: string,
   locale?: string,
 ): Promise<string> {
-  const root = await findPromptsRoot();
+  return loadPromptFromRoot(await findPromptsRoot(), dir, name, locale);
+}
+
+/**
+ * Bind a loader to an explicit root without changing the process default.
+ * Relative roots are resolved at creation; templates are read on every call
+ * so edits remain visible. Locale fallback matches `loadPrompt`.
+ */
+export function createPromptLoader(root: string): PromptLoader {
+  const resolvedRoot = path.resolve(root);
+  return (dir, name, locale) =>
+    loadPromptFromRoot(resolvedRoot, dir, name, locale);
+}
+
+async function loadPromptFromRoot(
+  root: string,
+  dir: string,
+  name: string,
+  locale?: string,
+): Promise<string> {
   const subDir = path.join(root, dir);
   const candidates = localeCandidates(name, locale);
 

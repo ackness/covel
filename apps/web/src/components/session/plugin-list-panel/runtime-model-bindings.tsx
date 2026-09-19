@@ -23,7 +23,14 @@ export function RuntimeModelBindings(props: RuntimeModelBindingsProps) {
   return (
     <div className="space-y-2 px-2.5 pb-2">
       {props.runtimes
-        .filter((runtime) => runtime.runtimeType === "agent")
+        .filter(
+          (runtime) =>
+            runtime.runtimeType === "agent" &&
+            (runtime.model !== undefined ||
+              runtime.stage !== undefined ||
+              runtime.trigger.type === "manual" ||
+              runtime.trigger.type === "event"),
+        )
         .map((runtime) => (
           <RuntimeModelBinding key={runtime.id} {...props} runtime={runtime} />
         ))}

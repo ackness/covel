@@ -1,16 +1,19 @@
 import { estimateTokens } from "@covel/context";
 import type { TurnExecutorDeps } from "@covel/runtime";
 import type { Context } from "hono";
-import type { TurnCapabilityPluginIds } from "./turn-capabilities.js";
+import {
+  resolveTurnCapabilityPluginIds,
+  type TurnCapabilityPluginIds,
+} from "./turn-capabilities.js";
 
 /**
- * Dependencies shared by manual runtime execution and detached followers.
+ * Dependencies shared by player, manual, detached and resumed execution.
  *
  * Keep this composition in one place so action, plugin invocation, and job
  * routes cannot silently drift when a new runtime service is introduced.
  * Request-specific observability and commit ownership stay with the caller.
  */
-export function buildManualTurnExecutorDeps(
+export function buildTurnExecutorDeps(
   c: Context,
   capabilityPluginIds: TurnCapabilityPluginIds,
 ): Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter"> {
@@ -21,8 +24,11 @@ export function buildManualTurnExecutorDeps(
   const contextBudget = c.get("turnContextBudget");
   const eventDirectory = c.get("eventDirectory");
   const hookPipeline = c.get("hookPipeline");
+  const memorySystem = c.get("memorySystem");
+  const executionSignal = c.get("requestWork")?.signal;
 
   return {
+    ...(executionSignal ? { turnControl: { executionSignal } } : {}),
     loadRuntime: c.get("loadRuntimeFn"),
     llm: c.get("llmAdapter"),
     ...(hookPipeline ? { hookPipeline } : {}),
@@ -36,6 +42,7 @@ export function buildManualTurnExecutorDeps(
     ...(contextBudget ? { estimator: estimateTokens, contextBudget } : {}),
     capabilityPluginIds,
     ...(eventDirectory ? { eventDirectory } : {}),
+    ...(memorySystem ? { memorySystem } : {}),
   };
 }
 
@@ -44,23 +51,16 @@ export function buildResumeTurnExecutorDeps(
   c: Context,
   emitter: NonNullable<TurnExecutorDeps["emitter"]>,
 ): TurnExecutorDeps {
-  const gateway = c.get("pluginGateway");
-  const utils = c.get("pluginUtils");
-  const hookPipeline = c.get("hookPipeline");
-  const eventBus = c.get("eventBus");
-  const contextBudget = c.get("turnContextBudget");
-
   return {
-    loadRuntime: c.get("loadRuntimeFn"),
-    llm: c.get("llmAdapter"),
-    ...(gateway ? { gateway } : {}),
-    ...(utils ? { utils } : {}),
+    ...buildTurnExecutorDeps(
+      c,
+      resolveTurnCapabilityPluginIds(
+        c.get("pluginRegistry"),
+        emitter.sessionId,
+      ),
+    ),
     store: c.get("store"),
-    toolExecutor: c.get("toolExecutor"),
-    resolveModel: c.get("resolveModel"),
-    ...(contextBudget ? { estimator: estimateTokens, contextBudget } : {}),
-    ...(hookPipeline ? { hookPipeline } : {}),
-    ...(eventBus ? { eventBus } : {}),
+    ...(c.get("eventBus") ? { eventBus: c.get("eventBus") } : {}),
     emitter,
   };
 }

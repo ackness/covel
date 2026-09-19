@@ -18,9 +18,3 @@ export function requiredPluginIdsForWorld(
 ): Set<string> {
   return new Set(plan?.policy.requiredPluginIds ?? []);
 }
-
-export function excludedPluginIdsForWorld(
-  plan: api.WorldPluginPlan | null,
-): Set<string> {
-  return new Set(plan?.policy.excludedPluginIds ?? []);
-}

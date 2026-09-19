@@ -1,3 +1,4 @@
+import { closeTestApi } from "../helpers/close-api.js";
 import {
   mkdtemp,
   mkdir,
@@ -55,8 +56,7 @@ describe("tabletop package installed as a third-party ZIP", () => {
   }));
 
   async function restart() {
-    boot?.runtimeJobWorker.close();
-    await boot?.eventBus.flush();
+    await closeTestApi(boot);
     await store.close();
     store = createSqliteStore(path.join(root, "session.sqlite"));
     boot = await bootstrapApi({
@@ -299,8 +299,7 @@ sources:
     ).toEqual({ id: "creation", ...rules });
   });
   afterEach(async () => {
-    boot?.runtimeJobWorker.close();
-    await boot?.eventBus.flush();
+    await closeTestApi(boot);
     await store?.close();
     vi.unstubAllEnvs();
     await rm(root, { recursive: true, force: true });

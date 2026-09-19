@@ -2,36 +2,65 @@ import type { SessionContextSnapshot } from "@covel/context";
 import {
   resolveI18nText,
   type I18nText,
+  type RuntimeManifest,
   type TurnInput,
   type TurnResult,
 } from "@covel/shared";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { CoreMemoryBlock } from "./session-state.js";
 
-export function schedulePostTurnMemoryUpdate(args: {
-  readonly input: TurnInput;
-  readonly turnResult: TurnResult;
-  readonly deps: TurnExecutorDeps;
+export function buildPostTurnMemoryUpdate(args: {
+  readonly input: Pick<TurnInput, "sessionId" | "turnId" | "locale">;
+  readonly turnResult: Pick<TurnResult, "runtimeResults">;
+  readonly runtimes: readonly Pick<RuntimeManifest, "name" | "outputKind">[];
+  readonly deps: Pick<TurnExecutorDeps, "memorySystem" | "emitter">;
   readonly coreMemoryBlocks: readonly CoreMemoryBlock[];
   readonly sessionContext?: SessionContextSnapshot;
-}): void {
+}):
+  | Parameters<
+      NonNullable<
+        TurnExecutorDeps["memorySystem"]
+      >["updater"]["updateAfterTurn"]
+    >[0]
+  | undefined {
   const { input, turnResult, deps, coreMemoryBlocks, sessionContext } = args;
   if (!deps.memorySystem || coreMemoryBlocks.length === 0) {
     return;
   }
 
-  const narrativeParts = collectNarrativeParts(turnResult);
+  const storyRuntimeIds = new Set(
+    args.runtimes
+      .filter((runtime) => runtime.outputKind === "story")
+      .map((runtime) => runtime.name),
+  );
+  const narrativeParts = collectNarrativeParts(
+    turnResult,
+    input.turnId,
+    storyRuntimeIds,
+  );
   const narrativeText = narrativeParts.join("\n\n");
 
   if (!narrativeText.trim()) {
     return;
   }
 
-  const toolSummaries = turnResult.runtimeResults.flatMap((rr) =>
-    rr.toolCalls.map(
-      (tc) => `[${tc.toolName}] ${JSON.stringify(tc.input).slice(0, 200)}`,
-    ),
-  );
+  const toolSummaries = turnResult.runtimeResults
+    .filter((rr) => rr.status === "success" && rr.turnId === input.turnId)
+    .flatMap((rr) =>
+      rr.toolCalls
+        .filter(
+          (tc) =>
+            tc.approvalStatus === "auto-allowed" &&
+            !(
+              tc.output &&
+              typeof tc.output === "object" &&
+              "error" in tc.output
+            ),
+        )
+        .map(
+          (tc) => `[${tc.toolName}] ${JSON.stringify(tc.input).slice(0, 200)}`,
+        ),
+    );
   const playerCharacter = sessionContext?.characters.find(
     (character) => character.type === "player",
   );
@@ -49,28 +78,36 @@ export function schedulePostTurnMemoryUpdate(args: {
         }
       : undefined;
 
-  deps.memorySystem.updater
-    .updateAfterTurn({
-      sessionId: input.sessionId,
-      narrativeText,
-      toolCallSummaries: toolSummaries.length > 0 ? toolSummaries : undefined,
-      authoritativeFacts,
-      currentBlocks: coreMemoryBlocks,
-      locale: input.locale,
-    })
+  return {
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    traceId: deps.emitter?.traceId,
+    narrativeText,
+    toolCallSummaries: toolSummaries.length > 0 ? toolSummaries : undefined,
+    authoritativeFacts,
+    currentBlocks: coreMemoryBlocks,
+    locale: input.locale,
+  };
+}
+
+export function dispatchMemoryUpdate(
+  memory: NonNullable<TurnExecutorDeps["memorySystem"]>,
+  input: Parameters<typeof memory.updater.updateAfterTurn>[0],
+): void {
+  void memory.updater
+    .updateAfterTurn(input)
     .then((result) => {
-      if (result.error) {
+      if (result.error)
         console.warn(
           `[turn-executor] memory update for ${input.sessionId} reported error: ${result.error}`,
         );
-      }
     })
-    .catch((err) => {
+    .catch((error: unknown) =>
       console.warn(
         `[turn-executor] memory update failed for ${input.sessionId}:`,
-        err,
-      );
-    });
+        error,
+      ),
+    );
 }
 
 function extractPlayerFieldLabels(
@@ -100,13 +137,23 @@ function extractPlayerFieldLabels(
   return Object.keys(labels).length > 0 ? labels : undefined;
 }
 
-function collectNarrativeParts(turnResult: TurnResult): string[] {
+function collectNarrativeParts(
+  turnResult: Pick<TurnResult, "runtimeResults">,
+  turnId: string,
+  storyRuntimeIds: ReadonlySet<string>,
+): string[] {
   const narrativeParts: string[] = [];
   for (const rr of turnResult.runtimeResults) {
+    // Retry seed results are context, not newly committed narrative.
+    if (
+      rr.status !== "success" ||
+      rr.turnId !== turnId ||
+      !storyRuntimeIds.has(rr.runtimeId)
+    )
+      continue;
     const out = rr.output as Record<string, unknown> | null;
-    const text =
-      (out?.narrativeOutput as string) ?? (out?.text as string) ?? "";
-    if (text.trim()) narrativeParts.push(text);
+    const text = out?.narrativeOutput ?? out?.text;
+    if (typeof text === "string" && text.trim()) narrativeParts.push(text);
   }
   return narrativeParts;
 }

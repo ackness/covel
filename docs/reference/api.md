@@ -20,10 +20,25 @@ an object payload before publishing.
 | 后端       | 值              | 用途                                                                                                                     |
 | ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | SQLite     | `sqlite` (默认) | 本机开发 / 单机部署，数据落到 `./data/covel.db`                                                                          |
-| Memory     | `memory`        | 测试或一次性 demo，数据存于内存，重启丢失                                                                                |
+| Memory     | `memory`        | 测试 / 浏览器私有模式的临时执行；进程内数据重启丢失，私有模式由 BrowserVault 持久化                                      |
 | PostgreSQL | `pg`            | 生产环境，需配置 `DATABASE_URL`；**多实例部署自动启用 `pg_advisory_lock` 分布式会话锁，跨 Node 进程对同一 session 互斥** |
 
 > **注意**: `idb` 不是 `@covel/store` 的 `DataStore` 后端；它仅用于浏览器端 MediaStore / BrowserVault 能力。常规服务器部署使用 `memory` / `sqlite` / `pg`。
+
+### 多实例能力边界
+
+PostgreSQL 提供共享数据和部分跨进程协调；选择 `pg` 不会把所有进程内能力变为共享服务。
+
+| 能力                             | Memory / SQLite                         | PostgreSQL 多实例                                                                                        |
+| -------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 会话写入互斥                     | 进程内锁；按单进程部署使用              | 共享数据库的 advisory lock                                                                               |
+| EventBus 到 SSE 订阅者的事件投递 | 当前进程内广播                          | 通过 PG LISTEN/NOTIFY 转发；初始化失败会阻止宿主启动，不静默降级                                         |
+| 活跃回合的 `steer` / `abort`     | 操作当前进程持有的执行句柄              | 仍为进程内能力；请求必须到达执行该回合的实例。命中其它实例时，即使数据库显示回合正在执行，也会返回 `409` |
+| 旧式后台任务 `_jobs` 的重启清理  | 启动时可将前进程遗留的 pending 标为失败 | 禁用基于进程 owner 的清理，避免误判其它存活实例；没有跨实例租约恢复保证                                  |
+| 分阶段任务 `_runtime_jobs`       | 持久性取决于存储后端                    | 通过 CAS 和可续期租约认领；过期的 claimed/running/committing 任务标为 orphaned，不自动重放外部效果       |
+| 媒体二进制数据                   | 由独立的 `MEDIA_BACKEND` 决定           | `mirror` 使用 PG；显式选择本地媒体后端不会自动共享其文件                                                 |
+
+需要可靠控制当前回合的部署应使用单实例，或确保动作与其 `steer` / `abort` 请求路由到同一执行实例。实例退出后的内存执行句柄不能迁移；共享数据库不代表活跃回合可以由另一实例无缝接管。任务恢复细节见 [Protocol](protocol.md)，浏览器与服务器的数据权威划分见 [Storage Architecture](../architecture/storage.md)。
 
 ### 响应格式约定
 
@@ -61,6 +76,14 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
 ### 鉴权：Session owner token
 
 `POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希。owner hash、approval/session incarnation、lifecycle/delete lease 等框架私有 metadata 在 session CRUD、snapshot 与 `/state` 虚拟表响应中都会被剥离。
+
+Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-credentials` IndexedDB 中，不放入显示缓存、游戏 checkpoint 或设置导出。创建操作等待凭证持久化后才返回；同 ID 创建的迟到响应不能覆盖另一操作已保存的新凭证。旧的 localStorage token JSON 不再读取或迁移，使用旧格式凭证的开发会话应重建。
+
+凭证读写接口为异步操作。`clearSessionToken(sessionId, capturedToken)` 在同一事务内核对并删除捕获的 token；未知或不同的当前 token 保留。删除 HTTP 请求使用同一份捕获值，成功或确认 404 后清理；鉴权与其他失败保留凭证。清理故障不撤销服务端删除，后续 404 删除尝试可以重试清理。同一请求的传输重试保留已捕获的请求头，凭证存储失败不按网络故障重试，读取凭证期间的取消不会继续发出请求。
+
+世界删除无论成功、部分失败或返回缺失，都会核验本浏览器已保存的会话凭证。每个核验请求携带捕获的 owner token，只有会话 GET 明确返回 `404` 且 `code: "session_not_found"` 才按捕获值清理。服务端集合列表可能隐藏会话，不能作为缺失证据；凭证表也不重复维护世界归属。此前或其他设备已删除的会话会一并回收，仍存在、鉴权失败或无法确认的记录保留。核验请求共用 3 秒截止时间、不重试；核验或清理故障不覆盖原始世界删除结果，核验失败日志只报告数量，存储读取失败报告通用诊断；均不包含凭证、身份或响应正文。
+
+创建响应必须包含当前 `incarnation`。凭证持久化后，客户端使用刚收到的 token 核验该身份，补齐“创建响应晚于世界删除清理”的交错。确认会话缺失或身份已变时，按捕获值清理并报告创建已失效；无法核验时保留已成功创建并持久化的凭证，记录诊断。这些核验不是客户端与服务器之间的分布式事务，离线或后续外部删除仍需下次操作确认。
 
 **分层强制（tiered enforcement）**：
 
@@ -247,18 +270,26 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                   | 描述                                                                                                                                                                        |
-| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                          | 列出所有世界                                                                                                                                                                |
-| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                                                                                                |
-| POST   | `/api/worlds`                          | 创建/更新世界                                                                                                                                                               |
-| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                             |
-| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
-| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                                                                                                   |
-| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                                                                                                |
-| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                            |
-| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                  |
-| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                            |
+| 方法   | 路径                                   | 描述                                                                                                                                                                                    |
+| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                          | 列出所有世界                                                                                                                                                                            |
+| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                                                                                                            |
+| POST   | `/api/worlds`                          | 创建世界；已有 ID 返回 `409 world_already_exists`                                                                                                                                       |
+| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                                         |
+| DELETE | `/api/worlds/:id`                      | 删除世界及其全部会话（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                                                                                                               |
+| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                                                                                                            |
+| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                                        |
+| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                              |
+| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
+
+服务端删除世界先在短世界锁内记录删除状态，释放世界锁后逐个执行完整的会话删除流程，包括等待执行写入、生命周期钩子、媒体引用与进程内状态清理，最后删除世界记录和对应文件包。底层 `DataStore.deleteWorld` 仍只删除世界记录；需要级联清理的调用必须经过 API 生命周期流程。
+
+删除中的世界仍可读取；世界 PATCH、维度导入、会话创建、fork 和 browser checkpoint 写入返回 `409 world_deleting`。checkpoint 同时检查原世界与目标世界，启动加载与文件监听也不会覆盖删除状态或用等待锁前的旧读取结果重建已删除文件世界。`metadata.worldDeletion` 由服务端管理，客户端不能通过世界写入或 checkpoint 设置、清除该字段。
+
+服务端创建、fork 和 checkpoint 写入按“会话锁 → 世界锁”提交；世界 DELETE 不持有世界锁等待会话锁、后台执行或插件钩子。后文浏览器私有模式的 Web Locks 是独立的客户端协议，使用自己的锁顺序。
+
+级联删除不是跨全部会话的一次数据库事务。部分清理失败时已删除的会话不恢复，世界保留可重试标记；再次 DELETE 继续清理，普通失败重试不会重复已完成的 SessionEnd。运行中的 SessionStart 等生命周期钩子可使删除返回 `409 session_lifecycle_busy`。进程中断遗留的删除租约可在 10 分钟后由后续 DELETE 接管。
 
 ### 会话管理
 
@@ -269,6 +300,16 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | GET    | `/api/sessions/:id` | 获取会话信息                                       |
 | PATCH  | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
 | DELETE | `/api/sessions/:id` | 删除会话                                           |
+
+会话列表、创建、详情与 PATCH 响应包含 `incarnation`：同一条持久化会话的稳定、不透明身份标记。它不随普通字段修改变化；删除后用相同 ID 重建会生成新标记，即使创建时间恰好相同。客户端只比较相等性，不从中推导业务含义；它不授予权限，也不替代 owner token。服务端从内部身份派生此值，不接受客户端设置，内部 nonce 和凭据哈希仍不公开。
+
+远程模式的表单提交标记与历史执行时间线保存在独立的浏览器缓存中。缓存调用携带界面当时的会话身份，读取和首次建立或更换归属时向服务端核对；已核验归属的显示更新直接在浏览器保存，避免每段流式输出都请求服务端。所有操作在 IndexedDB 事务中检查会话和世界的删除时序，以及缓存是否已绑定另一条同 ID 会话。表单增量在事务内合并，时间线仍保存显示快照。网络或鉴权错误不作为“会话不存在”处理，也不会用旧缓存替代服务端权威。
+
+远程删除在服务端请求前后使相关缓存操作失效，随后核对已缓存会话，清理已消失或被替换的记录；部分世界删除失败也清理已确认删除的部分，并保留失败响应与仍有效的缓存。缓存故障不撤销服务端删除，后续删除或缓存读取可重试清理。此协调使用 IndexedDB，不要求 Web Locks。其他设备直接删除后，本浏览器在下次核对时清理，不承诺离线浏览器即时物理清除。
+
+缓存库 v2 为远程缓存记录会话身份和世界归属；本地与远程模式使用各自的缓存表。远程模式只读取当前格式，不迁移或回退到之前的纯 sessionId 缓存，显示历史从当前会话重新积累。服务端游戏状态不受此缓存变更影响。
+
+`DataService` 的四个表单/时间线缓存方法要求调用方传入操作发起时的会话对象（`id`、`worldId`、`incarnation`），不能在异步等待后重新推断归属。远程读取和归属核验增加一次会话 GET；响应缺少有效身份属于契约错误，缓存操作失败。前后端按当前契约一起更新，不支持混合版本。服务端会话必须已有持久化 incarnation nonce，不再用 owner hash 或创建时间回填身份；缺少该字段的开发期数据应重建。
 
 ### 浏览器私有工作区
 
@@ -291,6 +332,18 @@ checkpoint 的 sessionId，world.id 必须匹配 session.worldId，违规返回 
 快照、挂起记录及世界导入账本的全局记录 ID 已属于其他会话时，返回
 `400 session_record_scope_conflict`，整个 checkpoint 写入回滚。
 checkpoint 不允许携带 provider key、owner token 或其他凭据。
+
+Web 私有模式按 vault 数据库和 session ID 取得跨标签页 Web Lock，在同一次持有期间完成：恢复前次 pending、持久化本次输入、上传 checkpoint、记录本次 pending、执行、下载 commit 并清理 pending。普通本地 checkpoint 修改和会话删除也使用同一锁；排队期间已失效的动作不会持久化新输入。其它会话仍可独立执行。页面关闭会释放锁，另一个页面可继续恢复，而不会把仍由活跃页面持有的操作提前导出为旧结果。服务端单次请求的会话锁和 revision 检查不能替代这项客户端完整操作协调。
+
+世界与会话共用固定的锁顺序：先世界、后会话。会话创建、修改、删除及完整工作区操作持有世界共享锁；世界字段修改、生成结果整条保存和删除持有世界独占锁。不同会话仍可并行，但世界修改会等待正在执行的会话完成，避免 checkpoint 的旧世界副本覆盖新数据。删除世界先排空已获准的会话操作，再枚举和清理会话；删除后排到的新建会话重新检查世界是否存在，缺失时失败。世界字段 patch 在锁内合并最新记录；`saveGeneratedWorld` 则保持显式整条替换语义。
+
+浏览器样例世界只在新 vault 首次初始化且世界列表为空时插入。样例与初始化标记在同一事务内提交，跨标签页只初始化一次，失败可以重试且不留下部分样例。删除全部世界后刷新仍保持空列表。Dexie schema v5 升级保留已有列表（包括空列表），不会再次补入样例；显式清空整个 vault 才会重置初始化标记。
+
+状态变化的本地显示历史保存在独立缓存库中，不替代 checkpoint。读取直接查询 IndexedDB，单条追加在读写事务内合并，并等事务提交后完成。追加沿用世界/会话锁，在排队结束后检查会话仍然存在；迟到追加不能重建已删会话的历史。缓存失败不撤销已提交的游戏状态或会话删除。
+
+本地表单和执行时间线保存也共用上述锁与会话存在性检查，入队前复制输入。删除会话（包括删除世界时清理其会话）等待显示历史、表单和时间线缓存全部清理结束；迟到保存失败，不重建已删会话的缓存。清理失败沿用开发环境警告，不撤销会话删除，再次删除可重试清理。表单在事务内合并，时间线仍替换显示快照；这些缓存不替代游戏状态，远程模式也不因此获得本地 vault 的生命周期协调。
+
+浏览器私有执行需要支持 Web Locks 的 HTTPS 或 localhost 环境；缺少能力时，在发送动作前报告工作区错误，不降级为只在当前标签页排队。锁只协调共享同源 vault 的文档，不跨独立浏览器或不同 origin。远程存储模式仍由服务端协调。`LocalDataService` 的工作区回调提供已持锁的输入/同步操作，调用方须等待这些操作完成；不要在回调内再次调用获取本地世界锁或会话锁的公开方法。
 
 启用会话所有者鉴权的共享部署中，普通 checkpoint 同步保留服务端已有的全局
 世界记录，忽略上传的世界内容；后续 commit 返回服务端世界版本。通过 checkpoint
@@ -357,7 +410,7 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 | POST | `/api/sessions/:id/steer` | 向进行中的回合插话。body `{ message: string }`。消息并入 story runtime 的下一次 LLM 调用并持久化到消息历史。无进行中回合返回 `409`  |
 | POST | `/api/sessions/:id/abort` | 中止进行中的回合：立刻切断在途 LLM 流（绕过部分内容 salvage，不落任何半截提案），停止调度后续 runtime。无进行中回合返回 `409`。幂等 |
 
-- abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`；已在 abort 前正常完成的 runtime 结果照常提交。
+- abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`。提交前收到停止信号时，本次执行不提交消息、领域状态或回合计数；已经提交的回合不回滚。回合开始前和提交前等待上一轮记忆更新时同样响应停止，取消当前等待并释放会话执行锁；上一轮已提交回合的记忆更新独立完成。
 - steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
 - 注册发生在取得 session lock 后，覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。因此刷新时不会在提交尚未完成时误判为空闲；排队请求不会覆盖当前回合的控制注册。停止信号不能撤回已经完成的事务；跨进程执行状态探测不改变 steer/abort 仍需到达执行进程的限制。
@@ -1084,23 +1137,32 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 ```json
 {
   "worldId": "mistport",
-  "presetId": "default",
   "locale": "zh-CN",
   "plugins": ["pregame", "narrator", "codex"]
 }
 ```
 
-| 字段       | 类型     | 必填 | 说明                                                          |
-| ---------- | -------- | ---- | ------------------------------------------------------------- |
-| `worldId`  | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                |
-| `presetId` | string   | 否   | 会话模型预设 ID；创建与后续 PATCH 使用同一字段                |
-| `locale`   | string   | 否   | 语言区域，默认 `zh-CN`                                        |
-| `plugins`  | string[] | 否   | 要激活的插件 ID 列表                                          |
-| `id`       | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
+| 字段           | 类型     | 必填 | 说明                                                                                                  |
+| -------------- | -------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| `worldId`      | string   | 否   | 已存在且未进入删除流程的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                      |
+| `locale`       | string   | 否   | 语言区域，默认 `zh-CN`                                                                                |
+| `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                                  |
+| `id`           | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`）                                         |
+| `loreOverride` | string   | 否   | 本次会话的世界背景快照，沿用世界文档的字符串契约；空字符串表示显式清空，与会话同次创建保存到 metadata |
+
+会话不保存独立的 `presetId` 模型选择；模型路由使用槽位配置、请求级覆盖与 `runtimeModelOverrides`。
+
+Web 准备页把当前显示的背景文本随创建请求传入；浏览器私有模式先保存到
+BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后台草稿保存失败不会
+改变本次会话选择。之后的开始冒险、刷新和恢复使用会话已保存的背景，
+不会重新读取按世界共享的编辑草稿，也不随世界后续编辑改变。
+未提供该字段的 API 调用保留使用世界原文的行为；既有会话不会自动导入世界草稿。
 
 客户端自定义 `id` 已存在时返回
 `409 { "error": "Session already exists: <id>", "code": "session_already_exists" }`。
 创建操作不会覆盖原会话，也不会把原会话的子记录解释为新会话数据。
+
+提供 `worldId` 时，世界不存在返回 `404 world_not_found`，世界删除中返回 `409 world_deleting`。服务端在资源准备前及会话提交时分别检查，提交前世界被删除会释放本次准备的媒体引用。省略 `worldId` 的无世界会话仍可创建。
 
 世界包字段会影响准备页和 session 初始化：
 
@@ -1117,7 +1179,6 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 {
   "id": "mistport-a1b2c3d4",
   "worldId": "mistport",
-  "presetId": "default",
   "locale": "zh-CN",
   "status": "active",
   "phase": "setup",
@@ -1261,7 +1322,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 - 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
 - `session.completedPlayerTurns` 表示已提交的主循环玩家进度：setup 阶段的执行会保存 `turn_results`，但不会计入；`phase` 翻到 `playing` 后由首个成功的 player logical turn 推进为 `1`
-- 服务端对每个 runtimeResult 运行 `processRuntimeResult` 提交管道：normalize → state.commit → 触发后续 SessionEvent
+- 服务端通过 `commitExecution` 在一个事务中提交顶层和递归子执行结果、journal 与 suspension；内部逐结果执行 normalize → state.commit，事务提交后再发布 SessionEvent。
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 - `turnCompletion.mode: detached` 只会对通过安全检查的 `post-turn` / `audit` function 叶节点生效；其上游结果、来源 execution、模型和设置在原始回合冻结，queued 记录与原始回合原子提交。静态不安全的声明保留前台执行并产生诊断
 
@@ -2488,7 +2549,9 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 #### `POST /api/sessions/:id/snapshots`
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
+当前快照 v3 合同要求 `stateSchemas`、`runtimeExports`、`sessionSummaries`、`compactedMessageSummaryIds` 和 `displayMessagesBoundary` 全部存在。空数组、空映射及 `null` 聊天边界有明确含义；缺失字段的旧开发快照必须重建，不迁移、不使用父会话当前状态补全。存储写入、SQL 读取和 browser checkpoint 共用 payload schema 校验；摘要映射必须指向快照中实际捕获的摘要，非法引用会被拒绝。
+
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
 **响应 201（直接返回 `SnapshotRecord`）:**
 
@@ -2506,28 +2569,42 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
       "phase": "playing",
       "completedPlayerTurns": 42,
       "setupRuntimes": {
-        "world-init": { "state": "done", "resolution": "completed" }
+        "world-init": {
+          "state": "done",
+          "resolution": "completed",
+          "generation": 1,
+          "attempts": 1,
+          "pluginVersion": "1.0.0",
+          "completedAt": "2026-04-13T00:00:00.000Z"
+        }
       },
       "locale": "zh-CN",
       "activePlugins": ["world-init", "narrator"],
-      "presetId": "default",
-      "runtimeModelOverrides": { "narrator": "balance" }
+      "runtimeModelOverrides": { "narrator": "balance" },
+      "loreOverride": "The session's captured world lore."
     },
     "characters": [/* ... */],
+    "stateSchemas": [/* StateSchemaRecord[] */],
     "stateEntries": [/* ... */],
+    "runtimeExports": [/* RuntimeExportRecord[] */],
     "pluginData": [/* ... */],
     "workingMemory": [/* ... */],
     "sessionSummaries": [/* 当前消息前缀引用的 SessionSummaryRecord[] */],
     "compactedMessageSummaryIds": { "tm_abc": "summary_xyz" },
     "lorebookEntries": [],
     "suspensions": [/* 未解决的 SuspensionRecord[] */],
-    "messagesCursor": "tm_abc"
+    "messagesCursor": "tm_abc",
+    "displayMessagesBoundary": null
   },
   "createdAt": "2026-04-13T00:00:00.000Z"
 }
 ```
 
 返回 `201 Created`；session 不存在时返回 `404`。
+
+`payload.session.loreOverride` 捕获会话 metadata 中的背景覆盖，空字符串表示显式清空；
+没有覆盖时省略，继续沿用世界背景。此字段沿用世界文档字符串契约，随检查点导出和传输保留。
+快照不复制整份 metadata，owner token、审批作用域和会话实例身份仍由新会话独立生成。
 
 #### `GET /api/sessions/:id/snapshots`
 
@@ -2569,11 +2646,11 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 服务端会：
 
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
-2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
-3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session。新 v3 payload 用 `stateSchemas` 冻结表结构，空数组表示快照时没有表；fork 重建表 ID，并将子表结构写入子快照，父会话后续修改不影响再次分叉。旧 v3 缺少该字段时兼容使用父会话当前结构；任何状态记录缺少对应表结构时返回 `409 snapshot_schema_missing` 并回滚，不返回状态不完整的分支；
-4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。早期 schema v3 payload 没有精确映射时回退到父消息当前标签；没有 `sessionSummaries` 时则保留原始消息正文并清除压缩标签，避免产生孤儿引用。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
-   界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。早期 v3 快照没有此字段时，以快照 `createdAt` 为兼容截止时间，无法还原该毫秒内的精确成员。子快照写入新的消息边界，支持继续分叉。
-   新 v3 payload 的 `runtimeExports` 冻结各生产者/名称在捕获时可见的最新导出修订及其值；空数组表示没有导出。分叉、连续分叉及检查点迁移均使用这份记录，后续同毫秒提交不会混入。早期 v3 缺少该字段时才按 `createdAt` 截止兼容读取，无法重建该毫秒内的精确历史。捕获使用 `listRuntimeExports(sessionId, { latestOnly: true })`，SQL 在数据库内筛选每组最高修订，避免读取全部历史 JSON。自动快照仍使用全部提案提交完成后的实际捕获时间。
+2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / runtimeModelOverrides，并把可选的 `loreOverride` 恢复到子会话 metadata。后续父会话或世界背景编辑不改变已捕获的覆盖值，子快照也保留该值以支持连续分叉；当前合同中缺少该可选字段表示使用世界背景，不从父会话当前 metadata 推测历史值。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
+3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session。当前 v3 payload 用必需的 `stateSchemas` 冻结表结构，空数组表示快照时没有表；fork 重建表 ID，并将子表结构写入子快照，父会话后续修改不影响再次分叉。任何状态记录缺少对应表结构时返回 `409 snapshot_schema_missing` 并回滚，不返回状态不完整的分支；
+4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。这些字段为必需字段，不读取父消息当前标签推测历史。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
+   界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。子快照写入新的消息边界，支持继续分叉。
+   当前 v3 payload 必需的 `runtimeExports` 冻结各生产者/名称在捕获时可见的最新导出修订及其值；空数组表示没有导出。分叉、连续分叉及检查点传输均使用这份记录，后续同毫秒提交不会混入。捕获使用 `listRuntimeExports(sessionId, { latestOnly: true })`，SQL 在数据库内筛选每组最高修订，避免读取全部历史 JSON。自动快照仍使用全部提案提交完成后的实际捕获时间。
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
 6. 在 eventBus 上广播 `session.forked`（SSE topic=`session`）。
 
@@ -2591,6 +2668,8 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；内部写入失败返回 `500`。
 
 整个 fork 在父 session 执行锁内读取来源数据，并在 `withTransaction` 下写入；中途任何失败都会 rollback，不会留下半成品子 session。与手动快照一样，PG 部署下锁获取超时返回 `503 { code: 'session_busy' }`。
+
+关联世界的 fork 在提交前检查世界仍存在且未删除，分别以 `404 world_not_found` 或 `409 world_deleting` 拒绝无效分叉；无世界会话仍可 fork。
 
 ---
 
@@ -2803,16 +2882,16 @@ id: evt-002
 
 **社区插件授权**：缺少授权时，在启动 SSE 和写入回合之前返回 HTTP **202 JSON** `{ status: "approval-required", approvalId, pending }`。客户端通过审批接口授予当前会话权限后，使用同一个 `requestId` 重发原请求；可能依次询问 `covel:plugin-server-code` 及各个 `runtime:<name>`。普通动作检查已选插件中参与自动执行的 runtime（经过 capability provider 替换），显式重试只检查选定的目标；手动 runtime 的普通调用仍走 plugin-RPC 授权。拒绝审批不得执行回合。hosted 模式仍要求 operator 权限；执行器在真正加载代码时继续检查授权。Web 客户端支持连续审批，并拒绝重复或跨会话的审批响应。
 
-| `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                   |
-| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                        |
-| `command`         | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                   |
-| `loreOverride`    | `start_session`         | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                             |
-| —                 | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                        |
-| `runtimeId`       | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                             |
-| `retryFromTurnId` | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。 |
-| `runtimeIds`      | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                   |
-| `retryFromTurnId` | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                            |
+| `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                                                                         |
+| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                              |
+| `command`         | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                         |
+| `loreOverride`    | `start_session`         | 可选的显式覆盖，最多 500000 字符。服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空；省略则保留已保存快照。Web Prep 在创建会话时传入快照，开始冒险不再发送世界草稿。 |
+| —                 | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                                                                              |
+| `runtimeId`       | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                   |
+| `retryFromTurnId` | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。                                                       |
+| `runtimeIds`      | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                                                                         |
+| `retryFromTurnId` | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                                                                                  |
 
 **批量恢复边界**：一次 action、一次会话锁和一次事务提交，不追加玩家输入、不推进玩家回合数、不触发开场接力。仅原始回合及关联的已提交重试中成功的非目标结果可作为上下文；种子不会重复提交或重放事件。目标间保留正常输入校验、依赖顺序和独立任务并行；失败依赖导致的 skipped 不会把原失败任务标为已修复。批量恢复和带明确来源的单任务恢复均保持前台，不通过事件订阅、递归调用或后台分发扩大所选范围。显式单任务来源重试同样校验来源与最新失败状态；普通不带来源的 manual / plugin-RPC 调用保留原有事件链、递归和分发行为。
 
@@ -2857,23 +2936,41 @@ interface SseEnvelope {
 
 #### `POST /api/ai/ping`
 
-测试 LLM 提供商连通性。
+用一次最小流式请求测试所选模型，并返回实际 provider/model 与延迟。
 
-**请求体:**
+请求体只可选择一种目标：`{ "presetId": "server-preset" }`、
+`{ "modelRef": "local-model-ref" }` 或 `{ "slot": "story" }`。
+本地引用须在 `X-Slot-Config.customPresets` 中声明；用途覆盖使用
+`X-Slot-Config.slotBindings`，保留 `modelRef` / `presetId` 类型。
+显式模型不存在时返回 `ok: false`，不测试其它模型；模型 ID 中的 `slot-` 没有别名含义。
+未指定目标时测试默认用途，未配置用途允许服务端回退。
+解析后只探测选中的具体模型；即使配置了备用模型，选中模型失败也返回 `ok: false`，
+不会以备用模型的成功代替。用途测试保留原 slot 的参数和能力覆盖，slot 名与其他预设 ID
+同名时仍调用该用途已解析出的模型。
 
-```json
-{ "presetId": "default" }
-```
+非法路由头返回 `400 { code: "invalid_llm_configuration", error: "..." }`，
+无效 JSON、未知请求字段及互斥目标冲突返回 400。合法空对象 `{}` 保留默认探测；
+请求体或路由校验失败不会调用 provider。
 
-**响应:**
+响应示例：
 
 ```json
 {
   "ok": true,
-  "latencyMs": 0,
-  "text": "Model plan default (deepseek/deepseek-v4-flash) configured"
+  "latencyMs": 250,
+  "ttfbMs": 180,
+  "text": "Hello!",
+  "testedTarget": {
+    "presetId": "server-preset",
+    "provider": "example-provider",
+    "model": "example-model",
+    "resolvedVia": "direct"
+  }
 }
 ```
+
+`resolvedVia` 为 `direct`、`slot`、`tag-fallback` 或 `any`；目录接口不公开其他请求
+临时注册的模型配置，连接测试也不会从这些配置中隐式选择目标。
 
 #### `POST /api/ai/generate-world`
 
@@ -3179,6 +3276,8 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
 客户端流解析支持 LF、CRLF 和 CR 分隔；只在空行处提交完整事件，EOF 不补发未结束的帧。取消或事件处理失败时释放 reader 并取消未结束的响应；已关闭的订阅不会因迟到的响应恢复连接状态。GET 重试等待同样响应取消，不会因自定义 abort reason 继续重试或弹出网络错误。
 
+Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/events/stream` 辅助订阅，释放浏览器同源 HTTP 连接；执行流继续运行。页面可见且全部行动流结束后，用保存的事件游标重连，并重新读取权威会话状态，补齐暂停期间的插件数据、消息和后台任务。首次在后台打开的页面也执行恢复；暂停或关闭前的迟到响应不能重建旧连接。恢复消息按回合与内容将玩家本地回显替换为服务端记录，避免不同消息 ID 导致重复显示。
+
 ### 事件类型枚举（`CovelEventType`）
 
 完整定义见 `packages/shared/src/types/protocol.ts`。所有 server→client 事件收口为单一 discriminated union `CovelEvent`，事件名类型直接使用 `CovelEventType`。事件是否转发到 `/api/actions` 流由 `COVEL_EVENT_META[type].forwardToActionStream` 决定，转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据派生。完整分类表见 [protocol.md § 一、事件类型](./protocol.md#一事件类型covelevent)。
@@ -3295,7 +3394,7 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 ### T3: 商业部署 (Commercial)
 
 - **服务器存储**: PostgreSQL（需配置 `DATABASE_URL`）
-- **前端存储**: 无本地缓存，所有 CRUD 委托给服务器 API
+- **前端存储**: 游戏数据 CRUD 委托给服务器 API；表单提交标记与历史时间线保留按会话身份校验的浏览器显示缓存。
 - **API 密钥**: 平台 + 用户双层管理
 - **认证**: 必需
 
@@ -3314,6 +3413,34 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | 配置     | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                      |
 
 > **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。session 作用域 mutation、turn、resume、detached commit 等在专用 PG 连接上取得 advisory lock，确保同一 key 跨 Pod 串行；同一 async 分支的嵌套/批量 key 共用一条 reserved connection，避免 `max=1` 或多 key drain 耗尽连接池。Memory / SQLite 后端使用进程内 Promise-chain 锁，覆盖单进程场景。
+
+### 服务生命周期
+
+服务端启动时逐项登记 DataStore、MediaStore、PG 锁池、API 服务与文件监听器的归属。
+后续启动步骤失败时，使用与正常退出相同的幂等排空流程，并保留原始启动错误。
+API 装配失败自行释放已创建的事件传输和插件注册；注入的存储仍由调用方关闭。
+
+启动扫描不阻塞 API 就绪，但通过 `ApiBootstrapResult.startupMaintenance` 跟踪，
+宿主关闭时同时停止请求接纳、文件监听和两个后台队列，等待它们与启动扫描结束，
+再排空记忆任务、调用 `closePluginEntries()`、关闭事件总线与底层存储/连接池。
+同时通知各生产者停止，可以让后台任务释放前台请求正在等待的会话锁。
+各排空阶段有时限；已跟踪的工作未结束时保留其依赖，交由进程最终退出处理。
+
+`ApiBootstrapResult.applicationWork.close()` 跟踪业务完成，不以 HTTP 连接关闭或
+Response 创建作为完成条件。普通请求覆盖完整 middleware/handler；action、世界生成、
+长期订阅的 SSE 回调及其读写队列、请求触发的 suspension 扫描也纳入跟踪。
+关闭后新请求返回 `503 / server_shutting_down`。玩家回合、手动 runtime、resume 和
+世界生成收到宿主取消；排队的 action/resume 在取得锁后再次检查，取消的领域提交回滚，
+已经成功提交的状态不撤销。长期订阅停止读写并释放注册。
+
+客户端断开 action SSE 仍不等于取消回合，刷新后继续使用 execution 恢复协议。
+宿主取消不伪装成玩家主动 abort。世界生成收到调用方取消后不再重试 provider，
+迟到的模型输出不作为有效结果。普通 RPC handler 或插件自行启动的不合作代码不能被
+同进程强制终止；任务跟踪不替代插件能力限制或外部副作用的独立恢复协议。
+
+嵌入式调用方同样需要遵守上述顺序，不能仅调用 `worker.close()` 后立即关闭存储。
+一个外层 Hono 宿主可向 `bootstrapApi` 注入自己的 `applicationWork`，并将其 middleware
+放在宿主路由之前，使 API 与配置、模型等其它路由共享同一关闭边界。
 
 ### 关键环境变量
 

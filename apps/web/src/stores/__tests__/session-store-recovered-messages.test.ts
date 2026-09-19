@@ -29,6 +29,27 @@ function merge(
 }
 
 describe("reconnect message recovery", () => {
+  it("replaces player echoes once without collapsing repeated inputs across or within turns", () => {
+    const user = (id: string, turnId = "turn-1"): StreamMessage => ({
+      id,
+      turnId,
+      role: "user",
+      content: "Go on",
+      timestamp: "2026-09-18T00:00:00Z",
+    });
+    const old = user("old", "turn-0");
+    const recovered = [user("server-1"), user("server-2"), story("reply")];
+    const current = [old, user("echo-1"), user("echo-2"), story("reply")];
+    const next = merge(current, recovered);
+    expect(next.map((row) => row.id)).toEqual([
+      "old",
+      "server-1",
+      "server-2",
+      "reply",
+    ]);
+    expect(merge(next, recovered)).toEqual(next);
+    expect(current[1].id).toBe("echo-1");
+  });
   it("restores the missing story before an already hydrated guide", () => {
     const guide = {
       ...story("plugin-message:guide:turn-1"),

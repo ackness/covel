@@ -2,8 +2,8 @@
  * UI spec validation — Zod schema + structured diagnostics for /api/ui-specs.
  *
  * A "UI spec" is the JSON object a plugin ships under `ui/*.json` (or a
- * `{ _componentPath }` stub the loader emits for `.tsx`/`.js` custom
- * components). Specs are *untrusted plugin input*, so the aggregation endpoint
+ * `{ _componentPath }` marker for an unsupported non-JSON declaration).
+ * Specs are *untrusted plugin input*, so the aggregation endpoint
  * validates every spec before exposing it to the frontend. A single malformed
  * spec must never poison the whole response — it is skipped from the rendered
  * slots and reported via `diagnostics` so the offending plugin/field/problem
@@ -129,12 +129,18 @@ const uiSpecSchema = z
   .superRefine((spec, ctx) => {
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasComponentPath = typeof spec._componentPath === "string";
-    if (!hasView && !hasComponentPath) {
+    if (hasComponentPath) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["_componentPath"],
+        message:
+          "custom component files are not supported; declare a JSON UI spec with a `view` object",
+      });
+    } else if (!hasView) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["view"],
-        message:
-          "spec must declare a `view` object (json-render) or a `_componentPath` (custom component)",
+        message: "spec must declare a `view` object (json-render)",
       });
     }
   });

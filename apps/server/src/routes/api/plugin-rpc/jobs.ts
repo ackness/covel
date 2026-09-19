@@ -1,5 +1,6 @@
 import type { DataStore } from "@covel/store";
 import type { PluginDataRecord, StoreTransaction } from "@covel/store";
+import type { SessionLock } from "../../../lib/session-lock.js";
 
 export type PluginJobValue = Readonly<Record<string, unknown>> & {
   readonly status: "pending" | "done" | "failed";
@@ -141,11 +142,6 @@ export type RuntimeJobStatus =
   | "stale"
   | "orphaned";
 
-export type RuntimeJobActiveStatus = Extract<
-  RuntimeJobStatus,
-  "queued" | "claimed" | "running" | "committing"
->;
-
 export interface RuntimeJobOrigin {
   readonly activation: "stage" | "event" | "manual";
   readonly sourceTurnId: string;
@@ -215,6 +211,7 @@ export interface TransitionRuntimeJobArgs {
   readonly to: RuntimeJobStatus;
   readonly ownerId?: string;
   readonly now?: string;
+  readonly expectedUpdatedAt?: string;
   readonly leaseExpiresAt?: string;
   readonly backgroundTurnId?: string;
   readonly backgroundExecutionId?: string;
@@ -460,6 +457,12 @@ export async function transitionRuntimeJob(
 ): Promise<RuntimeJobRecord | null> {
   const existing = await getRuntimeJob(store, args);
   if (!existing || !args.from.includes(existing.status)) return null;
+  if (
+    args.expectedUpdatedAt !== undefined &&
+    existing.updatedAt !== args.expectedUpdatedAt
+  ) {
+    return null;
+  }
   if (!LEGAL_RUNTIME_JOB_TRANSITIONS[existing.status].has(args.to)) {
     throw new Error(
       `illegal runtime job transition: ${existing.status} -> ${args.to}`,
@@ -624,21 +627,23 @@ export async function claimNextRuntimeJob(
       sessionId,
       statuses: ["queued"],
     });
-    const candidate = candidates.find(
-      (job) =>
-        !args.excludeRuntimeKeys?.has(
-          `${job.sessionId}\u0000${job.pluginId}\u0000${job.runtimeId}`,
-        ),
-    );
-    if (!candidate) continue;
-    const claimed = await claimRuntimeJob(store, {
-      sessionId,
-      pluginId: candidate.pluginId,
-      jobId: candidate.jobId,
-      ownerId: args.ownerId,
-      leaseMs: args.leaseMs,
-    });
-    if (claimed) return { job: claimed, nextSessionCursor: sessionId };
+    for (const candidate of candidates) {
+      if (
+        args.excludeRuntimeKeys?.has(
+          `${candidate.sessionId}\u0000${candidate.pluginId}\u0000${candidate.runtimeId}`,
+        )
+      ) {
+        continue;
+      }
+      const claimed = await claimRuntimeJob(store, {
+        sessionId,
+        pluginId: candidate.pluginId,
+        jobId: candidate.jobId,
+        ownerId: args.ownerId,
+        leaseMs: args.leaseMs,
+      });
+      if (claimed) return { job: claimed, nextSessionCursor: sessionId };
+    }
   }
   return null;
 }
@@ -646,7 +651,10 @@ export async function claimNextRuntimeJob(
 /** Terminalise expired work; never automatically replay potentially paid work. */
 export async function recoverExpiredRuntimeJobs(
   store: RuntimeJobStore,
-  opts: { readonly now?: string } = {},
+  opts: {
+    readonly now?: string;
+    readonly tryWithCommitLock: NonNullable<SessionLock["tryWithLock"]>;
+  },
 ): Promise<{ readonly timedOut: number; readonly orphaned: number }> {
   const now = opts.now ?? new Date().toISOString();
   const nowMs = Date.parse(now);
@@ -684,17 +692,29 @@ export async function recoverExpiredRuntimeJobs(
         job.leaseExpiresAt !== undefined &&
         nowMs >= Date.parse(job.leaseExpiresAt)
       ) {
-        const changed = await transitionRuntimeJob(store, {
-          sessionId: job.sessionId,
-          pluginId: job.pluginId,
-          jobId: job.jobId,
-          from: [job.status],
-          to: "orphaned",
-          now,
-          reason: "lease-expired",
-          error: "runtime job owner stopped renewing its lease",
-        });
-        if (changed) orphaned++;
+        const recover = () =>
+          transitionRuntimeJob(store, {
+            sessionId: job.sessionId,
+            pluginId: job.pluginId,
+            jobId: job.jobId,
+            from: [job.status],
+            to: "orphaned",
+            now,
+            expectedUpdatedAt: job.updatedAt,
+            reason: "lease-expired",
+            error: "runtime job owner stopped renewing its lease",
+          });
+        // Committing jobs stop renewing while the runner owns the session
+        // commit lock. An expired timestamp alone cannot identify a dead owner.
+        if (job.status === "committing") {
+          const recovered = await opts.tryWithCommitLock(
+            job.sessionId,
+            recover,
+          );
+          if (recovered.acquired && recovered.value) orphaned++;
+        } else if (await recover()) {
+          orphaned++;
+        }
       }
     }
   }

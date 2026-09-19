@@ -61,6 +61,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 切换会话时同时重置所选分组、子面板及其本地 UI 状态。插件数据加载带有目标 sessionId，旧会话响应不能写入当前会话。所选插件分组移除后回到世界文档；纵向导航可独立滚动，窄屏弹层同样支持长面板列表。
 
+数据库面板的手动刷新、失败重试与状态事件触发的自动刷新共用请求生命周期。会话或刷新版本变化后，旧请求返回的数据和错误均被忽略，也不能修改当前请求的加载状态。
+
 ### 当前注册的面板
 
 | 插件/runtime                                                             | 面板 ID             | 图标               | group         | 数据 namespace | 描述                                                                                                |
@@ -88,7 +90,9 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 > `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则 之间切换。（旧 `world-entries` 子 Tab 已移除：对导入型世界它只是 `world-overview` 已格式化渲染的同一份 dimensions 的原始 JSON 重复；`entries` 的 lorebook/prompt 写入不变，`/debug` Data Explorer 仍可查看。）
 > `character` 组汇聚 `char-creator` 的 character-panel（活角色列表，character-tracker runtime 共享 namespace `characters`，由 `sync-characters` 原子批量写入；底层复用 `create-character` / `update-character`）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；同一批角色导入后会 mirror 成活的 `CharacterRecord`，两个子 Tab 分别呈现"源"与"当前"。
 > `npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
-> `memory` 是纯 UI 插件（`pluginType: core-plugin`，`trigger.type: manual`）：插件自身不写入 plugin-data，框架的 Memory System (`@covel/memory`) 负责在每轮结束后落 working memory / recall / archival，spec 直接读取这些表。
+> `memory` 是纯 UI 插件（`pluginType: core-plugin`，没有 stage/model，不参与自动执行）：插件自身不写入 plugin-data，框架的 Memory System (`@covel/memory`) 负责在每轮结束后更新核心记忆，并在启用向量后进行 recall / archival 索引，面板读取框架镜像的记忆块。
+
+框架按 `memory-panel` capability 发现宿主，将最近一次提取结果保存到保留 namespace `_memory` 的 `update` key。右侧面板在 `status: failed` 时展示提示和错误详情，成功后自动移除；该状态使用现有 plugin-data hydration/SSE 路径，按 session 隔离，不注入模型记忆块。没有记忆面板宿主时仍记录 trace，但不显示面板提示。
 
 ### 世界文档（框架自持 Tab）
 
@@ -160,16 +164,16 @@ ui:
   [UI Components / Display](ui-components.md#display)
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
-- `view` — json-render nested spec，使用框架 catalog 中的组件。当前 Web UI 只执行这类声明式 spec；loader 仍会为 `.tsx`/`.js` 文件生成 `_componentPath` 兼容占位，但浏览器端不会加载或执行插件代码
+- `view` — json-render nested spec，使用框架 catalog 中的组件。当前 Web UI 只执行这类声明式 spec；`.tsx`、`.js` 等非 JSON UI 声明不受支持，API 会给出对应诊断并剔除该项
 
 ### Spec 校验与版本
 
 `/api/ui-specs` 聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`），spec 是**不可信的插件输入**：
 
 - `specVersion` 可省略（按 v1 处理）。声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`，见 `apps/server/src/routes/misc-api/ui-spec-schema.ts`）会被拒绝，旧服务端遇到新插件包时显式报错而非渲染坏面板。
-- 每个 spec 必须声明 `view`（对象）或 `_componentPath`（自定义组件）之一，否则校验失败。
+- 每个 spec 必须声明 `view`（对象），否则校验失败。
 - `view` 会递归校验 `component` / `type`、`children`、命名 `slots`、`repeat` 与 `on` / `watch` action binding 包络。组件名必须来自共享的 `PLUGIN_UI_COMPONENT_NAMES`；未知组件在服务端即产生带路径的诊断。`props` 和 directive 表达式保持开放，由组件和 json-render 在运行时解析，以便插件扩展数据形状。
-- `_componentPath` 目前只保留 loader/server 的兼容性，不是 Web 插件执行入口。需要自定义能力时，应组合 catalog 组件并绑定 framework action；不要依赖浏览器动态执行插件 `.tsx` / `.js`。
+- loader 用 `_componentPath` 保留非 JSON 声明的位置，以便 API 返回具体诊断；它不是有效 UI spec，也不是 Web 插件执行入口。含该字段的 spec 会被剔除，即使同时声明了 `view`。需要自定义能力时，应组合 catalog 组件并绑定 framework action；不要依赖浏览器动态执行插件 `.tsx` / `.js`。同一插件的其它合法 JSON spec 继续显示。
 - **单个坏 spec 不污染整个响应**：校验失败的 spec 从对应 slot 中剔除，并在响应顶层 `diagnostics[]` 中给出具体诊断（`{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`）——指明哪个插件、哪个字段、什么问题，而非泛泛的 "Invalid panel spec"。
 - 前端（`right-panel.tsx`）在 dev 模式下把这些诊断打到 console；`plugin-panel.tsx` 的本地兜底消息也会带上 spec 名与具体原因（缺 `view` / `view` 非对象 / 转换失败）。
 

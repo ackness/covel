@@ -13,13 +13,20 @@ import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
 import { createHookPipeline } from "@covel/runtime";
 import { sessionRoutes } from "../../src/routes/api/session.js";
+import { characterRoutes } from "../../src/routes/api/characters.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { backgroundRuntimeLockId } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
 
 const TEST_APPROVAL_SCOPE = "session-lifecycle-test-scope";
 
-function build() {
+async function build() {
   const store = createMemoryStore();
+  await store.createWorld({
+    id: "cloudmere",
+    name: "Lifecycle world",
+    description: "Synthetic world",
+    createdAt: new Date().toISOString(),
+  });
   const hookPipeline = createHookPipeline();
   const sessionLock = createInProcessSessionLock();
   const pluginRegistry = createPluginRegistry();
@@ -60,6 +67,70 @@ async function createSession(app: Hono): Promise<string> {
   const body = (await res.json()) as { id: string };
   return body.id;
 }
+
+describe("session creation lore snapshot", () => {
+  it.each(["Prep draft", "", undefined])(
+    "persists lore before SessionStart and retains it on reload (%j)",
+    async (loreOverride) => {
+      const { app, store, hookPipeline } = await build();
+      let hookLore: unknown;
+      hookPipeline.register({
+        id: "lore-observer",
+        event: "SessionStart",
+        async handler(payload) {
+          hookLore = (await store.getSession(payload.sessionId))?.metadata
+            ?.loreOverride;
+          return { action: "continue" };
+        },
+      });
+      const response = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "lore-session",
+          worldId: "cloudmere",
+          locale: "en-US",
+          loreOverride,
+        }),
+      });
+      expect(response.status).toBe(201);
+      expect(hookLore).toBe(loreOverride);
+      const persisted = await store.getSession("lore-session");
+      expect(persisted?.metadata?.loreOverride).toBe(loreOverride);
+      const restored = await app.request("/api/sessions/lore-session");
+      expect(restored.status).toBe(200);
+      expect((await restored.json()).metadata?.loreOverride).toBe(loreOverride);
+    },
+  );
+
+  it.each([
+    { label: "null", value: null },
+    { label: "number", value: 1 },
+  ])("rejects $label lore before session creation", async ({ value }) => {
+    const { app, store } = await build();
+    const response = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "invalid-lore", loreOverride: value }),
+    });
+    expect(response.status).toBe(400);
+    expect(await store.getSession("invalid-lore")).toBeNull();
+  });
+
+  it("captures long world lore without imposing the action-override length limit", async () => {
+    const { app, store } = await build();
+    const loreOverride = "x".repeat(500_001);
+    const response = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "long-lore", loreOverride }),
+    });
+    expect(response.status).toBe(201);
+    expect((await store.getSession("long-lore"))?.metadata?.loreOverride).toBe(
+      loreOverride,
+    );
+  });
+});
 
 function registerCommunityPlugin(
   pluginRegistry: ReturnType<typeof createPluginRegistry>,
@@ -114,8 +185,178 @@ function grantSessionApproval(
 }
 
 describe("Session lifecycle hooks", () => {
+  it.each(["PATCH", "DELETE"])(
+    "keeps a session active if %s cannot read its hook configuration",
+    async (method) => {
+      const { app, store } = await build();
+      const id = await createSession(app);
+      await store.updateSession(id, {
+        worldId: `unreadable-${crypto.randomUUID()}`,
+      });
+      vi.spyOn(store, "getWorld").mockRejectedValueOnce(
+        new Error("Synthetic settings read failure"),
+      );
+      app.onError((_error, c) => c.json({ error: "read failed" }, 500));
+      const response = await app.request(`/api/sessions/${id}`, {
+        method,
+        headers: { "content-type": "application/json" },
+        ...(method === "PATCH"
+          ? { body: JSON.stringify({ status: "ended" }) }
+          : {}),
+      });
+      expect(response.status).toBe(500);
+      const session = await store.getSession(id);
+      expect(session?.status).toBe("active");
+      expect(session?.metadata?.sessionDeletionPending).toBeUndefined();
+      expect(session?.metadata?.sessionLifecyclePending).toBeUndefined();
+    },
+  );
+
+  it.each(["ended", "deleted"] as const)(
+    "provides request/world/default settings to lifecycle and character hooks (%s)",
+    async (reason) => {
+      const { app, store, pluginRegistry, hookPipeline } = await build();
+      app.route("/api/sessions", characterRoutes);
+      const pluginId = "configured";
+      pluginRegistry.register({
+        id: pluginId,
+        source: "builtin",
+        status: "registered",
+        loadedRuntimes: new Map(),
+        summary: {
+          id: pluginId,
+          name: "Configured",
+          description: "",
+          pluginType: "plugin",
+          runtimeCount: 1,
+        },
+        manifest: {
+          manifest: {
+            name: pluginId,
+            pluginId,
+            description: "",
+            runtimeType: "function",
+            userSettings: [
+              { key: "tone", type: "text", default: "manifest", label: "Tone" },
+              { key: "detail", type: "number", default: 1, label: "Detail" },
+              {
+                key: "fallback",
+                type: "toggle",
+                default: true,
+                label: "Fallback",
+              },
+            ],
+          },
+          promptTemplate: "",
+          rawFrontmatter: {},
+        },
+      });
+      const worldId = `settings-${crypto.randomUUID()}`;
+      await store.upsertWorld({
+        id: worldId,
+        name: "Settings world",
+        createdAt: new Date().toISOString(),
+        metadata: {
+          pluginSettings: { [pluginId]: { tone: "world", detail: 2 } },
+        },
+      });
+      const seen: Array<{ event: string; settings: unknown }> = [];
+      for (const event of [
+        "SessionStart",
+        "PreStateCommit",
+        "PostStateCommit",
+        "SessionEnd",
+      ] as const) {
+        hookPipeline.register({
+          id: `configured:${event}`,
+          event,
+          pluginId,
+          handler: async (ctx) => {
+            seen.push({ event, settings: ctx.getOwnSettings?.() });
+            return { action: "continue" };
+          },
+        });
+      }
+      const headers = {
+        "content-type": "application/json",
+        "X-Plugin-User-Settings": Buffer.from(
+          JSON.stringify({ [pluginId]: { tone: "player" } }),
+        ).toString("base64"),
+      };
+      const created = await app.request("/api/sessions", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ worldId, plugins: [pluginId] }),
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const currentWorld = (await store.getWorld(worldId))!;
+      await store.upsertWorld({
+        ...currentWorld,
+        metadata: {
+          ...currentWorld.metadata,
+          pluginSettings: { [pluginId]: { tone: "updated-world", detail: 3 } },
+        },
+      });
+      const character = await app.request(`/api/sessions/${id}/characters`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ id: "character", name: "Synthetic" }),
+      });
+      expect(character.status).toBe(200);
+      // Without request overrides the new lifecycle operation resolves world defaults.
+      const ended = await app.request(
+        `/api/sessions/${id}`,
+        reason === "ended"
+          ? {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ status: "ended" }),
+            }
+          : { method: "DELETE" },
+      );
+      expect(ended.status).toBe(200);
+      expect(seen.map((entry) => entry.event)).toEqual([
+        "SessionStart",
+        "PreStateCommit",
+        "PostStateCommit",
+        "SessionEnd",
+      ]);
+      expect(seen.map((entry) => entry.settings)).toEqual([
+        { tone: "player", detail: 2, fallback: true },
+        ...Array.from({ length: 2 }, () => ({
+          tone: "player",
+          detail: 3,
+          fallback: true,
+        })),
+        { tone: "updated-world", detail: 3, fallback: true },
+      ]);
+      expect(seen.every((entry) => Object.isFrozen(entry.settings))).toBe(true);
+    },
+  );
+
+  it.each(["PATCH", "DELETE"])(
+    "rejects an oversized settings header before a %s mutation",
+    async (method) => {
+      const { app, store } = await build();
+      const id = await createSession(app);
+      const response = await app.request(`/api/sessions/${id}`, {
+        method,
+        headers: {
+          "content-type": "application/json",
+          "X-Plugin-User-Settings": "x".repeat(9_000),
+        },
+        ...(method === "PATCH"
+          ? { body: JSON.stringify({ status: "ended" }) }
+          : {}),
+      });
+      expect(response.status).toBe(431);
+      expect((await store.getSession(id))?.status).toBe("active");
+    },
+  );
+
   it("fires SessionStart on session creation with sessionId + worldId", async () => {
-    const { app, hookPipeline } = build();
+    const { app, hookPipeline } = await build();
     const handler = vi.fn().mockResolvedValue({ action: "continue" });
     hookPipeline.register({
       id: "test:SessionStart:0",
@@ -131,7 +372,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("lets SessionStart call the same session API without deadlocking", async () => {
-    const { app, hookPipeline, store } = build();
+    const { app, hookPipeline, store } = await build();
     hookPipeline.register({
       id: "test:SessionStart:http-reentry",
       event: "SessionStart",
@@ -175,7 +416,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("still returns the one-time owner token when lifecycle marker cleanup fails", async () => {
-    const { app, store } = build();
+    const { app, store } = await build();
     const originalUpdate = store.updateSession.bind(store);
     vi.spyOn(store, "updateSession").mockImplementation(async (id, patch) => {
       if (
@@ -211,7 +452,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("returns the owner token and skips SessionStart when lease refresh fails", async () => {
-    const { app, hookPipeline, store } = build();
+    const { app, hookPipeline, store } = await build();
     const startHandler = vi.fn().mockResolvedValue({ action: "continue" });
     hookPipeline.register({
       id: "test:SessionStart:lease-refresh-failure",
@@ -246,7 +487,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("rejects delete while SessionStart is in progress and succeeds on retry", async () => {
-    const { app, hookPipeline, store } = build();
+    const { app, hookPipeline, store } = await build();
     const id = "create-delete-linearized";
     let releaseHook!: () => void;
     let markHookStarted!: () => void;
@@ -291,7 +532,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("fires SessionEnd on transition to ended (and not twice)", async () => {
-    const { app, hookPipeline } = build();
+    const { app, hookPipeline } = await build();
     const handler = vi.fn().mockResolvedValue({ action: "continue" });
     hookPipeline.register({
       id: "test:SessionEnd:0",
@@ -326,7 +567,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("rejects a status transition re-entered from SessionEnd without deadlocking", async () => {
-    const { app, hookPipeline, store } = build();
+    const { app, hookPipeline, store } = await build();
     hookPipeline.register({
       id: "test:SessionEnd:http-reentry",
       event: "SessionEnd",
@@ -367,7 +608,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("fires SessionEnd with reason 'deleted' on DELETE", async () => {
-    const { app, hookPipeline } = build();
+    const { app, hookPipeline } = await build();
     const handler = vi.fn().mockResolvedValue({ action: "continue" });
     hookPipeline.register({
       id: "test:SessionEnd:del",
@@ -387,7 +628,7 @@ describe("Session lifecycle hooks", () => {
 
   it("purges process-local activations, approvals, and tool overrides after DELETE", async () => {
     const { app, pluginRegistry, rpcApprovalGate, clearSessionToolOverrides } =
-      build();
+      await build();
     registerCommunityPlugin(pluginRegistry);
     const id = await createSession(app);
     pluginRegistry.activate("community-plugin", id);
@@ -426,7 +667,7 @@ describe("Session lifecycle hooks", () => {
       pluginRegistry,
       rpcApprovalGate,
       clearSessionToolOverrides,
-    } = build();
+    } = await build();
     registerCommunityPlugin(pluginRegistry);
     const id = await createSession(app);
     pluginRegistry.activate("community-plugin", id);
@@ -471,7 +712,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("makes a drain-lock failure immediately retryable without firing SessionEnd twice", async () => {
-    const { app, hookPipeline, sessionLock, store } = build();
+    const { app, hookPipeline, sessionLock, store } = await build();
     const endHandler = vi.fn().mockResolvedValue({ action: "continue" });
     hookPipeline.register({
       id: "test:SessionEnd:drain-retry",
@@ -510,7 +751,7 @@ describe("Session lifecycle hooks", () => {
       pluginRegistry,
       rpcApprovalGate,
       clearSessionToolOverrides,
-    } = build();
+    } = await build();
     registerCommunityPlugin(pluginRegistry);
     const id = await createSession(app);
     pluginRegistry.activate("community-plugin", id);
@@ -541,7 +782,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("waits for an active session writer before cascading delete", async () => {
-    const { app, sessionLock, store } = build();
+    const { app, sessionLock, store } = await build();
     const id = await createSession(app);
     let releaseWriter!: () => void;
     let markWriterStarted!: () => void;
@@ -576,7 +817,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("drains detached runtime work before deleting execution artifacts", async () => {
-    const { app, sessionLock, store, mediaStore } = build();
+    const { app, sessionLock, store, mediaStore } = await build();
     const id = await createSession(app);
     let releaseRuntime!: () => void;
     let markRuntimeStarted!: () => void;
@@ -647,7 +888,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("does not recreate an id until delete cleanup releases the session lock", async () => {
-    const { app, hookPipeline, store } = build();
+    const { app, hookPipeline, store } = await build();
     const id = await createSession(app);
     let releaseHook!: () => void;
     let markHookStarted!: () => void;
@@ -693,7 +934,7 @@ describe("Session lifecycle hooks", () => {
   });
 
   it("does not fire SessionEnd again when DELETE-ing an already-ended session", async () => {
-    const { app, hookPipeline } = build();
+    const { app, hookPipeline } = await build();
     const handler = vi.fn().mockResolvedValue({ action: "continue" });
     hookPipeline.register({
       id: "test:SessionEnd:ended-then-deleted",

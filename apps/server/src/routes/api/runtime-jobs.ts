@@ -19,15 +19,9 @@ import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
+import { publicRuntimeJob } from "./plugin-rpc/runtime-job-public.js";
 
 export const runtimeJobRoutes = new Hono();
-
-function publicRuntimeJob(
-  job: RuntimeJobRecord,
-): Omit<RuntimeJobRecord, "payload"> {
-  const { payload: _payload, ...visible } = job;
-  return visible;
-}
 
 async function findJob(
   store: Parameters<typeof listRuntimeJobs>[0],

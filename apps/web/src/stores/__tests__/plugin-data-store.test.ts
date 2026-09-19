@@ -18,6 +18,7 @@ import {
   getPluginNamespaceSnapshot,
   loadPluginData,
   resetPluginData,
+  replacePluginDataForSession,
   setActiveSession,
   usePluginData,
   usePluginNamespace,
@@ -185,5 +186,40 @@ describe("plugin-data-store — React hook integration", () => {
       setActiveSession("session-a");
     });
     expect(result.current).toEqual({ x: "from A" });
+  });
+});
+
+it("replaces all namespaces only for the requested active-session plugin", () => {
+  setActiveSession("session-a");
+  loadPluginData("provider", "removed", [{ key: "stale", value: true }]);
+  loadPluginData("other", "message", [{ key: "kept", value: true }]);
+  expect(
+    replacePluginDataForSession("session-a", "provider", {
+      current: { value: "fresh" },
+    }),
+  ).toBe(true);
+  expect(getPluginNamespaceSnapshot("provider", "removed")).toEqual({});
+  expect(getPluginNamespaceSnapshot("provider", "current")).toEqual({
+    value: "fresh",
+  });
+  expect(getPluginNamespaceSnapshot("other", "message")).toEqual({
+    kept: true,
+  });
+  expect(replacePluginDataForSession("session-a", "provider", {})).toBe(true);
+  expect(getPluginNamespaceSnapshot("provider", "current")).toEqual({});
+});
+
+it("rejects a late plugin replacement or deletion for another active session", () => {
+  setActiveSession("session-a");
+  loadPluginData("provider", "message", [{ key: "value", value: "a" }]);
+  setActiveSession("session-b");
+  loadPluginData("provider", "message", [{ key: "value", value: "b" }]);
+  expect(replacePluginDataForSession("session-a", "provider", {})).toBe(false);
+  expect(getPluginNamespaceSnapshot("provider", "message")).toEqual({
+    value: "b",
+  });
+  setActiveSession("session-a");
+  expect(getPluginNamespaceSnapshot("provider", "message")).toEqual({
+    value: "a",
   });
 });

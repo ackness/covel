@@ -7,7 +7,7 @@ import type {
 } from "@covel/shared";
 import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import { withPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
@@ -18,17 +18,17 @@ import {
 import { createExecutionWriteBuffer } from "../function-runtime/execution-write-buffer.js";
 import { createRuntimeMediaContext } from "../function-runtime/runtime-media-context.js";
 import { withUtilsTrace } from "../function-runtime/utils-trace.js";
-import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
+import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import {
   createAssetProgressEmitter,
-  emitSubEvent,
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import {
   combineAbortSignals,
   getTurnExecutionSignal,
+  RuntimeTimeoutError,
 } from "../turn-executor/turn-control.js";
 import {
   withDefaultGatewaySignal,
@@ -162,7 +162,7 @@ export async function executeAgentGuard({
       ? revocable(
           trustedGuard
             ? createTrustedHandlerStore(deps.store, guardHelperCtx, writeBuffer)
-            : createFunctionStoreView(deps.store, guardHelperCtx),
+            : createFunctionStoreView(deps.store, guardHelperCtx, writeBuffer),
         )
       : undefined;
     const guardLoggerHandle =
@@ -295,7 +295,7 @@ export async function executeAgentGuard({
         aborted,
         new Promise<never>(() => {
           deadlineTimer = setTimeout(() => {
-            const err = new Error(
+            const err = new RuntimeTimeoutError(
               `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
             );
             // Revoke BEFORE rejecting: once the turn moves on, the still-
@@ -358,44 +358,10 @@ export async function executeAgentGuard({
         timestamp: new Date().toISOString(),
       };
 
-      // Guard skipped: emit completed (without ever emitting started) so frontend
-      // shows "skipped" instead of an infinite spinner.
-      try {
-        await deps.onRuntimeComplete?.({
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: "skipped",
-          durationMs: result.durationMs,
-        });
-      } catch {
-        /* callback error must not kill runtime */
-      }
-
-      emitSubEvent(
-        deps.eventBus,
-        "runtime",
-        "runtime.completed",
-        input.sessionId,
-        {
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: "skipped",
-          durationMs: result.durationMs,
-        },
-      );
-
-      // PostRuntime hook — guard-skipped path
-      const postResult = await runPostRuntimeHook(
-        {
-          pipeline: hookPipeline,
-          signal: getTurnExecutionSignal(deps.turnControl),
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          pluginId: manifest.pluginId,
-          runtimeId: manifest.name,
-          eventBus: deps.eventBus,
-          emitter: deps.emitter,
-        },
+      const postResult = await finalizeRuntimeResult(
+        { ...deps, hookPipeline },
+        manifest,
+        input,
         result,
       );
       const postOutput = postResult.output as Record<string, unknown> | null;

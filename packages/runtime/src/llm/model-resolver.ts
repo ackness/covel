@@ -21,7 +21,7 @@
  */
 
 import type { RuntimeManifest } from "@covel/shared";
-import type { PluginLlmConfig } from "@covel/plugin-loader";
+import type { PluginLlmConfig } from "@covel/shared/plugin-runtime";
 
 export interface ModelResolverConfig {
   /** Map of pluginId/runtimeName → PluginLlmConfig (from plugin-level llm.toml files). */

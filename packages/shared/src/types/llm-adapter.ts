@@ -25,6 +25,14 @@ export interface LLMImagePart {
 export type LLMContentPart = LLMTextPart | LLMImagePart;
 export type LLMMessageContent = string | readonly LLMContentPart[];
 
+/** Opaque adapter state for same-target tool continuation, separate from visible reasoning. */
+export interface LLMProviderContinuation {
+  readonly protocol: string;
+  readonly model: string;
+  readonly baseUrl?: string;
+  readonly items: readonly Readonly<Record<string, unknown>>[];
+}
+
 export interface LLMMessage {
   readonly role: "system" | "user" | "assistant" | "tool";
   readonly content: LLMMessageContent;
@@ -39,6 +47,7 @@ export interface LLMMessage {
    * openai-chat adapter's `serializeMessages` for the wire mapping.
    */
   readonly reasoningContent?: string;
+  readonly providerContinuation?: LLMProviderContinuation;
 }
 
 export interface LLMToolCall {
@@ -64,11 +73,12 @@ export interface LLMResponse {
   readonly finishReason: "stop" | "tool_calls" | "length" | "error";
   readonly usage: LLMUsageSummary;
   /**
-   * Reasoning text emitted by providers in thinking mode. When present it
-   * must be carried back on the assistant message for the next request in
-   * a multi-turn tool loop.
+   * Provider-exposed reasoning text or summary, separate from the answer.
+   * Preserve it in tool-loop history; adapters decide how to replay it and
+   * use providerContinuation when native signed or encrypted state is required.
    */
   readonly reasoningContent?: string;
+  readonly providerContinuation?: LLMProviderContinuation;
 }
 
 export interface LLMToolDefinition {
@@ -91,6 +101,7 @@ export interface LLMResponseFormat {
 }
 
 export type LLMStreamEvent =
+  | { readonly type: "reasoning-delta"; readonly reasoningDelta: string }
   | { readonly type: "text-delta"; readonly textDelta: string }
   | {
       readonly type: "tool-call";
@@ -101,8 +112,9 @@ export type LLMStreamEvent =
   | {
       readonly type: "done";
       readonly finishReason: string;
-      /** Accumulated reasoning_content emitted during the stream. */
+      /** Accumulated provider-exposed reasoning text or summary. */
       readonly reasoningContent?: string;
+      readonly providerContinuation?: LLMProviderContinuation;
       /**
        * Token usage reported by the provider on stream completion. Optional
        * because not every adapter emits it; consumers default to 0/0.

@@ -153,6 +153,32 @@ async function run(opts: {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe("runAgentToolLoop core", () => {
+  it("passes cancellation into the tool and rejects its late output", async () => {
+    const controller = new AbortController();
+    const entered = vi.fn();
+    const module = tool({
+      name: "mark",
+      description: "Fixture",
+      parameters: z.object({}),
+      async execute(_args, context) {
+        entered();
+        expect(context.signal?.aborted).toBe(false);
+        controller.abort();
+        expect(context.signal?.aborted).toBe(true);
+        return { late: true };
+      },
+    });
+    await expect(
+      run({
+        llm: new ScriptedLLM([toolCall("mark", {})]),
+        deps: {
+          turnControl: { signal: controller.signal },
+          toolExecutor: createToolExecutor({ findTool: () => module }),
+        },
+      }),
+    ).rejects.toThrow(TurnAbortedError);
+    expect(entered).toHaveBeenCalledTimes(1);
+  });
   it("bare prose finish: one call, finalContent set, no deltas", async () => {
     const llm = new ScriptedLLM([prose("done story")]);
     const result = await run({ llm });

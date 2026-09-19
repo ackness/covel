@@ -145,7 +145,7 @@ export type ReasoningProviderFamily =
 
 export interface ReasoningEffortProfile {
   family: ReasoningProviderFamily;
-  options: Array<{ value: ReasoningEffort }>;
+  options: Array<{ value: ReasoningEffort; thinkingBudgetTokens?: number }>;
   defaultValue?: ReasoningEffort;
 }
 
@@ -289,14 +289,12 @@ export interface PingResult {
 }
 
 /**
- * Send a minimal "hi" to a specific preset to test connectivity and latency.
- * Requires API keys in localStorage.
+ * Send a minimal "hi" to an explicit model, preset, or role to test connectivity.
+ * Local model requests include their definition even when no role uses it.
  */
 export async function pingPreset(
-  target: string | { slot: string },
+  target: import("@covel/shared").LlmModelBinding | { slot: string },
 ): Promise<PingResult> {
-  const requestTarget =
-    typeof target === "string" ? { presetId: target } : target;
   let res: Response;
   try {
     res = await requestResponse("/api/ai/ping", {
@@ -304,10 +302,11 @@ export async function pingPreset(
       headers: {
         ...buildProviderKeysHeader(),
         ...buildSlotConfigHeaderInternal({
-          includeCustomPresetIds: typeof target === "string" ? [target] : [],
+          includeModelRefs:
+            "modelRef" in target && target.modelRef ? [target.modelRef] : [],
         }),
       },
-      body: JSON.stringify(requestTarget),
+      body: JSON.stringify(target),
       operatorAuth: true,
       silentErrors: true,
     });

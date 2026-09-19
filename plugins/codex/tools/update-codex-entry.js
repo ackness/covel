@@ -12,7 +12,7 @@
  */
 
 import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import { overlayPluginDataValue, withPendingProposals } from "@covel/tools";
 import { getCategoryMetadata } from "../category-metadata.js";
 
 export function createCodexUpdateSchema(z) {
@@ -30,7 +30,7 @@ export function createCodexUpdateSchema(z) {
   });
 }
 
-export default function ({ tool, z, store }) {
+export default function ({ tool, z }) {
   return tool({
     name: "update-codex-entry",
     description:
@@ -39,14 +39,19 @@ export default function ({ tool, z, store }) {
     execute: async (params, context) => {
       const now = new Date().toISOString();
 
-      const existing =
-        getPendingEntry(context.pendingProposals, context, params.entryId) ??
-        (await store.getPluginData(
-          context.sessionId,
-          context.pluginId,
-          "entries",
-          params.entryId,
-        ));
+      // Composite tools can add proposals between direct calls to this helper;
+      // those local additions are newer than the executor's read snapshot.
+      const pending = overlayPluginDataValue(
+        context.pendingProposals ?? [],
+        context.pluginId,
+        "entries",
+        params.entryId,
+      );
+      const existing = pending.hit
+        ? pending.deleted
+          ? null
+          : { value: pending.value }
+        : await context.store.getPluginData("entries", params.entryId);
 
       if (!existing) {
         return { updated: false, error: `Entry ${params.entryId} not found` };
@@ -102,39 +107,6 @@ export default function ({ tool, z, store }) {
       );
     },
   });
-}
-
-function getPendingEntry(pendingProposals, context, entryId) {
-  if (!Array.isArray(pendingProposals) || pendingProposals.length === 0) {
-    return null;
-  }
-
-  for (let i = pendingProposals.length - 1; i >= 0; i--) {
-    const proposal = pendingProposals[i];
-    if (!proposal || proposal.sessionId !== context.sessionId) continue;
-    if (proposal.source?.pluginId !== context.pluginId) continue;
-
-    if (proposal.type === "plugin.data") {
-      if (
-        proposal.payload?.namespace !== "entries" ||
-        proposal.payload?.key !== entryId
-      )
-        continue;
-      return { value: proposal.payload.value };
-    }
-
-    if (proposal.type === "plugin.data.batch") {
-      const item = proposal.payload?.items?.find?.(
-        (candidate) =>
-          candidate.namespace === "entries" && candidate.key === entryId,
-      );
-      if (item) {
-        return { value: item.value };
-      }
-    }
-  }
-
-  return null;
 }
 
 function mergeTags(existing, newTags) {

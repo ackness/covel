@@ -1,3 +1,5 @@
+import type { PluginBackgroundQueue } from "./routes/api/plugin-rpc/background-queue.js";
+import type { RequestWork } from "./application-work.js";
 import type { DataStore, MediaStore, StoreBackend } from "@covel/store";
 import type {
   PluginRegistry,
@@ -46,6 +48,8 @@ type ActivatePluginServerCodeFn = (
 
 declare module "hono" {
   interface ContextVariableMap {
+    /** Owns asynchronous request work, including SSE callbacks and cleanup. */
+    requestWork?: RequestWork;
     store: DataStore;
     /**
      * Incarnation captured by `resolveSessionParam()` for GET/HEAD requests.
@@ -67,6 +71,7 @@ declare module "hono" {
     llmAdapter: LLMAdapter;
     /** True when per-request headers replaced the startup LLM facade. */
     requestLlmOverridden?: boolean;
+    requestMemorySlot?: string;
     /**
      * Narrow gateway facade exposed to function-runtime handlers via
      * `FunctionHandlerContext.gateway`. Set by `bootstrapApi()` when the
@@ -109,6 +114,8 @@ declare module "hono" {
     sessionLock: SessionLock;
     /** Durable scheduler-detached runtime queue worker. */
     runtimeJobWorker?: RuntimeJobWorker;
+    /** Bootstrap-owned legacy RPC/follower queue, including registration writes. */
+    pluginBackgroundQueue: PluginBackgroundQueue;
     /**
      * Content-addressable media store used by `/api/media/:id`,
      * `/api/sessions/:id/media-token`, and runtime `ctx.media`.

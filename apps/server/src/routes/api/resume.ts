@@ -25,6 +25,7 @@
  */
 
 import { Hono } from "hono";
+import { trackRequestWork } from "../../application-work.js";
 import { z } from "zod";
 // Ajv 8 ships as CJS with both `module.exports = Ajv` and `exports.default = Ajv`.
 // Under NodeNext + esModuleInterop, TS sees the default-import as the module's
@@ -34,12 +35,12 @@ import type { DataStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
-  finalizeExecution,
+  commitExecution,
   resumeSuspendedRuntime,
   buildHookSettings,
+  snapshotUserSettings,
   createTurnEmitter,
   runWithHookScope,
-  saveAutoSnapshot,
 } from "@covel/runtime";
 import type {
   ExecutionContext,
@@ -57,7 +58,6 @@ import {
   withLockedSessionMutation,
 } from "./session/session-guard.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
-import { getCachedWorld } from "../../world-cache.js";
 import {
   decodePluginUserSettingsHeader,
   mergePluginUserSettings,
@@ -152,7 +152,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     );
   }
   // Opportunistic, time-gated, best-effort: never blocks the resume.
-  void maybeSweepExpiredSuspensions(store);
+  void trackRequestWork(c, () => maybeSweepExpiredSuspensions(store));
   const pluginRegistry = c.get("pluginRegistry");
 
   const parsedBody = await parseJsonBody(
@@ -245,115 +245,106 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   // Resume + commit fire hooks outside executeTurn — establish the session
   // hook scope so a plugin's hooks only run for sessions where it is active
   // (see hooks/hook-scope.ts).
-  const activePluginIds = new Set<string>();
-
-  let hookSettings: ReturnType<typeof buildHookSettings> | undefined;
-
   try {
-    return await runWithHookScope(
-      {
-        activePluginIds,
-        get settings() {
-          return hookSettings;
-        },
-      },
-      async () => {
-        return sessionLock.withLock(sessionId, async () => {
-          // Active gate under the lock — a paused/ended session must
-          // not accept a resume (it would commit state and write history).
-          const liveSession = await store.getSession(sessionId);
-          if (!liveSession) {
-            return c.json(
-              errorBody(`Session not found: ${sessionId}`, {
-                code: "session_not_found",
-              }),
-              404,
-            );
-          }
-          const ownerDenied = checkSessionOwner(c, liveSession);
-          if (ownerDenied) return ownerDenied;
-          if (
-            sessionIncarnationIdentity(liveSession) !==
-            sessionIncarnationIdentity(guard.session)
-          ) {
-            return c.json(
-              errorBody("Session was replaced while resume was waiting", {
-                code: "session_incarnation_changed",
-              }),
-              409,
-            );
-          }
-          if (liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]) {
-            return c.json(
-              errorBody("Session deletion is in progress; retry DELETE", {
-                code: "session_deleting",
-              }),
-              409,
-            );
-          }
-          if (liveSession.status !== "active") {
-            return c.json(
-              errorBody(
-                `session is ${liveSession.status}; it must be active to resume`,
-                { code: "session_not_active" },
-              ),
-              409,
-            );
-          }
+    return await sessionLock.withLock(sessionId, async () => {
+      c.get("requestWork")?.signal.throwIfAborted();
+      // Active gate under the lock — a paused/ended session must
+      // not accept a resume (it would commit state and write history).
+      const liveSession = await store.getSession(sessionId);
+      if (!liveSession) {
+        return c.json(
+          errorBody(`Session not found: ${sessionId}`, {
+            code: "session_not_found",
+          }),
+          404,
+        );
+      }
+      const ownerDenied = checkSessionOwner(c, liveSession);
+      if (ownerDenied) return ownerDenied;
+      if (
+        sessionIncarnationIdentity(liveSession) !==
+        sessionIncarnationIdentity(guard.session)
+      ) {
+        return c.json(
+          errorBody("Session was replaced while resume was waiting", {
+            code: "session_incarnation_changed",
+          }),
+          409,
+        );
+      }
+      if (liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]) {
+        return c.json(
+          errorBody("Session deletion is in progress; retry DELETE", {
+            code: "session_deleting",
+          }),
+          409,
+        );
+      }
+      if (liveSession.status !== "active") {
+        return c.json(
+          errorBody(
+            `session is ${liveSession.status}; it must be active to resume`,
+            { code: "session_not_active" },
+          ),
+          409,
+        );
+      }
 
-          const liveSuspension = await store.getSuspension(suspensionId);
-          if (!liveSuspension || liveSuspension.sessionId !== sessionId) {
-            return c.json(errorBody("Suspension not found"), 404);
-          }
-          if (liveSuspension.resolvedAt) {
-            return c.json(errorBody("Suspension already resolved"), 409);
-          }
-          const liveValidationError = validateAgainstJsonSchema(
-            data,
-            liveSuspension.resumeSchema,
-          );
-          if (liveValidationError !== null) {
-            return c.json(
-              errorBody(
-                `Resume data validation failed: ${liveValidationError}`,
-              ),
-              400,
-            );
-          }
+      const liveSuspension = await store.getSuspension(suspensionId);
+      if (!liveSuspension || liveSuspension.sessionId !== sessionId) {
+        return c.json(errorBody("Suspension not found"), 404);
+      }
+      if (liveSuspension.resolvedAt) {
+        return c.json(errorBody("Suspension already resolved"), 409);
+      }
+      const liveValidationError = validateAgainstJsonSchema(
+        data,
+        liveSuspension.resumeSchema,
+      );
+      if (liveValidationError !== null) {
+        return c.json(
+          errorBody(`Resume data validation failed: ${liveValidationError}`),
+          400,
+        );
+      }
 
-          // Rebuild the process-local activation view from persisted truth only
-          // after the lifecycle checks above. A disabled runtime cannot be
-          // resumed from a stale registry snapshot.
-          pluginRegistry.syncSessionActivations(
-            sessionId,
-            liveSession.activePlugins,
-          );
-          const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
-          const effectiveManifest: RuntimeManifest | undefined =
-            activeRuntimes.find((rt) => rt.name === liveSuspension.runtimeId);
-          if (!effectiveManifest) {
-            return c.json(
-              errorBody(
-                `Runtime "${liveSuspension.runtimeId}" not found in registry`,
-              ),
-              404,
-            );
-          }
-          activePluginIds.clear();
-          for (const runtime of activeRuntimes) {
-            activePluginIds.add(runtime.pluginId);
-          }
-          const world = liveSession.worldId
-            ? await getCachedWorld(store, liveSession.worldId)
-            : null;
-          const userSettings = mergePluginUserSettings(
-            readWorldPluginSettings(world?.metadata),
-            decodedUserSettings.settings,
-          );
-          hookSettings = buildHookSettings(activeRuntimes, userSettings);
-
+      // Rebuild the process-local activation view from persisted truth only
+      // after the lifecycle checks above. A disabled runtime cannot be
+      // resumed from a stale registry snapshot.
+      pluginRegistry.syncSessionActivations(
+        sessionId,
+        liveSession.activePlugins,
+      );
+      const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+      const effectiveManifest: RuntimeManifest | undefined =
+        activeRuntimes.find((rt) => rt.name === liveSuspension.runtimeId);
+      if (!effectiveManifest) {
+        return c.json(
+          errorBody(
+            `Runtime "${liveSuspension.runtimeId}" not found in registry`,
+          ),
+          404,
+        );
+      }
+      const activePluginIds = new Set(
+        activeRuntimes.map((runtime) => runtime.pluginId),
+      );
+      const world = liveSession.worldId
+        ? await store.getWorld(liveSession.worldId)
+        : null;
+      const userSettings = snapshotUserSettings(
+        mergePluginUserSettings(
+          readWorldPluginSettings(world?.metadata),
+          decodedUserSettings.settings,
+        ),
+      );
+      const hookSettings = buildHookSettings(activeRuntimes, userSettings);
+      return runWithHookScope(
+        { activePluginIds, settings: hookSettings },
+        async () => {
           // Claim while holding the same lifecycle lock as resume execution and
           // suspension abandonment. This closes the delete/claim race.
+          c.get("requestWork")?.signal.throwIfAborted();
           const claimed = await store.claimSuspension(suspensionId);
           if (!claimed) {
             return c.json(errorBody("Suspension already resolved"), 409);
@@ -364,11 +355,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           // incarnation and activation set have been accepted.
           await prepareToolsForSession?.(sessionId);
 
+          const resumeDeps = buildResumeTurnExecutorDeps(c, emitter);
           const result = await resumeSuspendedRuntime(
             liveSuspension,
             data,
             effectiveManifest!,
-            buildResumeTurnExecutorDeps(c, emitter),
+            resumeDeps,
             { userSettings },
           );
 
@@ -449,7 +441,29 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 
           // finalize owns the transaction, the commit barrier (buffered fan-out
           // flushed only after commit, dropped on rollback), and the hook scope.
-          const outcome = await finalizeExecution({
+          const outcome = await commitExecution({
+            signal: c.get("requestWork")?.signal,
+            completion: {
+              kind: "resume",
+              turnId: suspension.turnId,
+              suspensionId: suspension.id,
+              pluginId: effectiveManifest.pluginId,
+              runtimeId: effectiveManifest.name,
+            },
+            memorySystem: resumeDeps.memorySystem,
+            capabilityPluginIds: resumeDeps.capabilityPluginIds,
+            loadOutputSchema: async () =>
+              (
+                await resumeDeps.loadRuntime(
+                  effectiveManifest,
+                  liveSession.locale,
+                  sessionId,
+                )
+              )?.outputSchema,
+            mediaStore: resumeDeps.mediaStore,
+            onFinalized: (outcome) => {
+              if (outcome.status === "committed") claimAcquired = false;
+            },
             store,
             sessionId,
             executionContext: resumeExecutionContext,
@@ -461,6 +475,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             results: [result],
             turnIds: [],
             activePluginIds,
+            hookSettings,
             ...(hookPipeline ? { hookPipeline } : {}),
             ...(eventBus ? { eventBus } : {}),
             emitter,
@@ -481,53 +496,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
               500,
             );
           }
-          claimAcquired = false;
           const events = outcome.events;
 
-          // Announce the resume only after the transaction landed — an event
-          // for a rolled-back resume would desync clients.
-          eventBus?.emit({
-            id: crypto.randomUUID(),
-            type: "event",
-            topic: "game",
-            sessionId,
-            timestamp: new Date().toISOString(),
-            payload: {
-              _subTopic: "game",
-              _subType: "turn.resumed",
-              sessionId,
-              turnId: suspension.turnId,
-              suspensionId: suspension.id,
-              pluginId: effectiveManifest!.pluginId,
-              runtimeId: effectiveManifest!.name,
-            },
-          });
-
-          // Resume commits proposals like any other turn path, so it must leave
-          // an auto snapshot behind — without this, a fork taken after a resume
-          // silently misses the resumed runtime's writes. Same turnId as the
-          // originating suspension so the snapshot lines up with its turn.
-          // `force` bypasses the checkpoint-cadence throttle: resumes are rare
-          // and this snapshot is load-bearing regardless of turn number.
-          try {
-            await saveAutoSnapshot({
-              store,
-              sessionId,
-              turnId: suspension.turnId,
-              force: true,
-              ...(eventBus ? { eventBus } : {}),
-            });
-          } catch (err) {
-            console.warn(
-              `[resume] auto snapshot failed for session ${sessionId} turn ${suspension.turnId}:`,
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-
           return c.json({ result, events });
-        });
-      },
-    );
+        },
+      );
+    });
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The
     // runtime error propagates to the caller; the suspension is back to
@@ -574,7 +548,7 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
   // Opportunistic, time-gated, best-effort: never blocks the listing.
-  void maybeSweepExpiredSuspensions(store);
+  void trackRequestWork(c, () => maybeSweepExpiredSuspensions(store));
 
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;

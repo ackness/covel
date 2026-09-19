@@ -25,6 +25,7 @@ beforeEach(async () => {
   mediaStore = createMemoryMediaStore();
   await store.createSession({
     id: "parent",
+    metadata: { sessionIncarnationNonce: crypto.randomUUID() },
     status: "active",
     phase: "playing",
     completedPlayerTurns: 1,
@@ -157,23 +158,6 @@ it("keeps an explicitly empty chat boundary empty after the parent gains message
   expect((await buildSessionSnapshot(store, child.sessionId)).messages).toEqual(
     [],
   );
-});
-
-it("uses the snapshot timestamp for legacy v3 chat history", async () => {
-  await add("old");
-  const snapshot = await capture();
-  const legacy = {
-    ...snapshot,
-    payload: { ...snapshot.payload, displayMessagesBoundary: undefined },
-  };
-  await store.saveSnapshot(legacy);
-  await add("future", "2099-01-01T00:00:00.000Z");
-  const child = await successfulFork(legacy);
-  expect(
-    (await buildSessionSnapshot(store, child.sessionId)).messages.map(
-      (message) => message.content,
-    ),
-  ).toEqual(["old"]);
 });
 
 it("rejects an unavailable chat boundary without leaving a partial child", async () => {

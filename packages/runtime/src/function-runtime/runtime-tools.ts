@@ -1,4 +1,4 @@
-import type { FunctionHandlerContext } from "@covel/plugin-loader";
+import type { FunctionHandlerContext } from "@covel/shared/plugin-runtime";
 import {
   toJsonValueOrDiagnostic,
   type InputSlot,
@@ -72,6 +72,7 @@ export function createRuntimeTools(options: {
           { toolCallId: call.id, name: call.name, arguments: call.arguments },
           {
             ...context,
+            signal,
             authorizedToolNames,
             pendingProposals: buffer,
             inputSlots: options.inputs,

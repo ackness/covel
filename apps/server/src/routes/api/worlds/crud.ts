@@ -2,18 +2,16 @@
  * World CRUD routes — list, get, create, partial update, delete.
  */
 
+import { worldOperationLockId } from "../../../world-lifecycle.js";
 import { Hono } from "hono";
 import {
   worldCreateRequestSchema,
   worldPatchRequestSchema,
 } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
-import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
-import {
-  resolveGeneratedWorldPackage,
-  deleteWorldPackage,
-  WorldPackageResolutionError,
-} from "./file-package.js";
+import { errorBody, readJsonBody } from "../../../api-error.js";
+import { deleteWorldWithLifecycle } from "./delete-route.js";
+import { withWritableWorld } from "./mutation-guard.js";
 import { checkWorldWriteAccess } from "./world-write-guard.js";
 import { type WorldEnv, resolveWorldMetadata } from "./shared.js";
 
@@ -73,7 +71,11 @@ worldCrudRoutes.post("/", async (c) => {
     updatedAt: now,
   };
 
-  if (!(await store.createWorld(record))) {
+  if (
+    !(await c
+      .get("sessionLock")
+      .withLock(worldOperationLockId(id), () => store.createWorld(record)))
+  ) {
     return c.json(
       errorBody("World already exists", { code: "world_already_exists" }),
       409,
@@ -88,11 +90,6 @@ worldCrudRoutes.patch("/:id", async (c) => {
   if (denied) return denied;
   const store = c.get("store");
   const id = c.req.param("id");
-  const existing = await store.getWorld(id);
-  if (!existing) {
-    return c.json(errorBody("World not found"), 404);
-  }
-
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
   const validated = worldPatchRequestSchema.safeParse(parsed.body);
@@ -105,60 +102,30 @@ worldCrudRoutes.patch("/:id", async (c) => {
     );
   }
   const body = { ...validated.data };
-  const now = new Date().toISOString();
-  const metadataResult = resolveWorldMetadata(body, existing.metadata ?? {});
-  if (metadataResult.error) {
-    return c.json(metadataResult.error.body, metadataResult.error.status);
-  }
+  return withWritableWorld(c, id, async (existing) => {
+    const now = new Date().toISOString();
+    const metadataResult = resolveWorldMetadata(body, existing.metadata ?? {});
+    if (metadataResult.error) {
+      return c.json(metadataResult.error.body, metadataResult.error.status);
+    }
 
-  const updated: WorldRecord = {
-    ...existing,
-    name: body.name ?? existing.name,
-    description: body.description ?? existing.description,
-    lore: body.lore ?? existing.lore,
-    tags: body.tags ?? existing.tags,
-    locale: body.locale ?? existing.locale,
-    metadata: metadataResult.metadata,
-    dimensions: metadataResult.metadata
-      ?.dimensions as WorldRecord["dimensions"],
-    updatedAt: now,
-  };
+    const updated: WorldRecord = {
+      ...existing,
+      name: body.name ?? existing.name,
+      description: body.description ?? existing.description,
+      lore: body.lore ?? existing.lore,
+      tags: body.tags ?? existing.tags,
+      locale: body.locale ?? existing.locale,
+      metadata: metadataResult.metadata,
+      dimensions: metadataResult.metadata
+        ?.dimensions as WorldRecord["dimensions"],
+      updatedAt: now,
+    };
 
-  await store.upsertWorld(updated);
-  return c.json(updated);
+    await store.upsertWorld(updated);
+    return c.json(updated);
+  });
 });
 
 // DELETE /worlds/:id
-worldCrudRoutes.delete("/:id", async (c) => {
-  const denied = checkWorldWriteAccess(c);
-  if (denied) return denied;
-  const store = c.get("store");
-  const id = c.req.param("id");
-  const world = await store.getWorld(id);
-  if (!world) {
-    return c.json(errorBody("World not found"), 404);
-  }
-  const meta = world.metadata as Record<string, unknown> | undefined;
-  if (meta?.source === "file") {
-    return c.json(errorBody("Built-in worlds cannot be deleted"), 403);
-  }
-  if (meta?.source === "generated-file") {
-    let worldPath: string;
-    try {
-      worldPath = await resolveGeneratedWorldPackage(
-        world,
-        c.get("worldsDirs") ?? [],
-      );
-    } catch (error) {
-      if (!(error instanceof WorldPackageResolutionError)) throw error;
-      return c.json(
-        errorBody(error.message, { code: "world_package_unresolved" }),
-        409,
-      );
-    }
-    await deleteWorldPackage(worldPath, () => store.deleteWorld(id));
-  } else {
-    await store.deleteWorld(id);
-  }
-  return c.json(okBody());
-});
+worldCrudRoutes.delete("/:id", deleteWorldWithLifecycle);

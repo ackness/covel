@@ -17,27 +17,17 @@ export async function readForkDisplayMessages(
   const boundary = snapshot.payload.displayMessagesBoundary;
   if (boundary === null) return [];
   const messages = await store.listMessages(parentSessionId);
-  let visible: MessageRecord[];
-  if (boundary === undefined) {
-    // Legacy v3 did not capture a chat cursor. Preserve the timestamp-bounded
-    // history; exact same-millisecond membership is unknowable for old saves.
-    visible = messages.filter(
-      (message) => message.createdAt <= snapshot.createdAt,
-    );
-  } else {
-    const ids = new Set(boundary.ids);
-    const present = new Set(
-      messages
-        .filter((message) => message.createdAt === boundary.createdAt)
-        .map((message) => message.id),
-    );
-    if (boundary.ids.some((id) => !present.has(id)))
-      throw new ForkCursorMissingError();
-    visible = messages.filter(
-      (message) =>
-        message.createdAt < boundary.createdAt || ids.has(message.id),
-    );
-  }
+  const ids = new Set(boundary.ids);
+  const present = new Set(
+    messages
+      .filter((message) => message.createdAt === boundary.createdAt)
+      .map((message) => message.id),
+  );
+  if (boundary.ids.some((id) => !present.has(id)))
+    throw new ForkCursorMissingError();
+  const visible = messages.filter(
+    (message) => message.createdAt < boundary.createdAt || ids.has(message.id),
+  );
   // Match the UI's keyset ordering, including on MemoryStore.
   return visible.sort((a, b) =>
     a.createdAt < b.createdAt

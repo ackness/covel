@@ -1,3 +1,4 @@
+import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -41,7 +42,7 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
   }));
 
   async function restart() {
-    boot?.runtimeJobWorker.close();
+    await closeTestApi(boot);
     boot = await bootstrapApi({
       pluginsDir: builtinDir,
       pluginsDirs: [builtinDir, userDir],
@@ -158,7 +159,7 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
   });
 
   afterEach(async () => {
-    boot?.runtimeJobWorker.close();
+    await closeTestApi(boot);
     vi.unstubAllEnvs();
     await rm(root, { recursive: true, force: true });
   });

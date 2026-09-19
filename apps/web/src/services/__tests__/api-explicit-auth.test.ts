@@ -1,3 +1,4 @@
+import { clearSessionCredentialFixtures } from "../../test/session-credentials.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const localStorageMock = (() => {
@@ -45,7 +46,10 @@ function headersAt(fetchMock: ReturnType<typeof vi.fn>, index = 0) {
   return new Headers(fetchMock.mock.calls[index]?.[1]?.headers);
 }
 
-beforeEach(() => localStorageMock.clear());
+beforeEach(async () => {
+  localStorageMock.clear();
+  await clearSessionCredentialFixtures();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -55,7 +59,7 @@ afterEach(() => {
 
 describe("explicit session auth on indirect routes", () => {
   it("retries restored form submissions with the same values and both credentials", async () => {
-    api.storeSessionToken("sess-1", "synthetic-owner");
+    await api.storeSessionToken("sess-1", "synthetic-owner");
     api.storeOperatorToken("synthetic-operator");
     const result = { results: [{ interactionId: "form", accepted: true }] };
     const fetchMock = vi
@@ -174,7 +178,7 @@ describe("explicit session auth on indirect routes", () => {
   );
 
   it("authenticates action, steer, abort, media upload, UI specs, and traces", async () => {
-    api.storeSessionToken("sess-1", "owner-secret");
+    await api.storeSessionToken("sess-1", "owner-secret");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -280,8 +284,12 @@ describe("operator auth on hosted administration routes", () => {
         okJson({
           id: "sess-1",
           ownerToken: "owner-secret",
+          incarnation: "synthetic-incarnation",
           worldId: "world-1",
         }),
+      )
+      .mockResolvedValueOnce(
+        okJson({ id: "sess-1", incarnation: "synthetic-incarnation" }),
       )
       .mockResolvedValueOnce(okJson({ ok: true }))
       .mockResolvedValueOnce(okJson({ ok: true, latencyMs: 10 }))
@@ -307,7 +315,7 @@ describe("operator auth on hosted administration routes", () => {
     await api.listSessions("world-1");
     await api.createSession("world-1");
     await api.refreshModelDb();
-    await api.pingPreset("preset-1");
+    await api.pingPreset({ presetId: "preset-1" });
     await api.installPackage(
       "plugin",
       new File(["zip"], "fixture.zip", { type: "application/zip" }),
@@ -315,13 +323,15 @@ describe("operator auth on hosted administration routes", () => {
     await api.fetchServerProviderKeys();
     await api.uninstallPlugin("fixture-plugin");
 
-    for (let index = 0; index < 7; index++) {
+    for (const index of [0, 1, 3, 4, 5, 6, 7]) {
       expect(headersAt(fetchMock, index).get("Authorization")).toBe(
         "Bearer operator-secret",
       );
     }
-    expect(headersAt(fetchMock, 4).get("Content-Type")).toBeNull();
-    expect(fetchMock.mock.calls[4]?.[1]?.body).toBeInstanceOf(FormData);
-    expect(api.getSessionToken("sess-1")).toBe("owner-secret");
+    expect(headersAt(fetchMock, 2).get("X-Session-Token")).toBe("owner-secret");
+    expect(headersAt(fetchMock, 2).get("Authorization")).toBeNull();
+    expect(headersAt(fetchMock, 5).get("Content-Type")).toBeNull();
+    expect(fetchMock.mock.calls[5]?.[1]?.body).toBeInstanceOf(FormData);
+    expect(await api.getSessionToken("sess-1")).toBe("owner-secret");
   });
 });

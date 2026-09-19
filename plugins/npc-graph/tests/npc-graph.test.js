@@ -1,3 +1,4 @@
+import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * npc-graph plugin tests.
  *
@@ -124,7 +125,7 @@ describe("npc-graph manifests", () => {
     // codex, and character-tracker.
     expect(extractor.stage).toBe("post-turn");
     expect(extractor.completeAfterTools).toEqual(["upsert-npc-graph"]);
-    expect(extractor.maxSteps).toBe(2);
+    expect(extractor.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(extractor.maxRetries).toBe(0);
     expect(extractor.capabilities).toContain("npc-graph");
     expect(extractor.tools?.plugin).toEqual(["upsert-npc-graph"]);
@@ -182,8 +183,11 @@ describe("upsert-npc-graph", () => {
 
   beforeEach(() => {
     store = createMockStore();
-    upsertTool = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
-    listTool = createListNpcGraph({ tool, z, store });
+    upsertTool = bindToolStore(
+      createUpsertNpcGraph({ tool, z, shortIdBatch }),
+      store,
+    );
+    listTool = bindToolStore(createListNpcGraph({ tool, z }), store);
   });
 
   it("publishes the node and name-based edge schema to the model", () => {

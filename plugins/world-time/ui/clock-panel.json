@@ -1,0 +1,45 @@
+{
+  "id": "world-time",
+  "label": {
+    "zh": "世界时间",
+    "en": "World Time"
+  },
+  "icon": "calendar-days",
+  "groupOrder": 100,
+  "dataSource": {
+    "namespace": "clock"
+  },
+  "emptyState": {
+    "message": {
+      "zh": "时间将在故事开始后显示。",
+      "en": "Time appears when the story starts."
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": {
+      "gap": "sm"
+    },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "$state": "/current/display"
+          },
+          "size": "lg"
+        }
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "$state": "/current/reason"
+          },
+          "variant": "muted",
+          "size": "sm"
+        }
+      }
+    ]
+  }
+}

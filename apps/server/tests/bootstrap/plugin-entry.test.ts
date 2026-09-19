@@ -9,6 +9,7 @@ import type {
 } from "@covel/plugin-loader";
 import {
   createHookPipeline,
+  createToolExecutor,
   createPluginRpcRegistry,
   type HookContext,
 } from "@covel/runtime";
@@ -104,6 +105,108 @@ export default function (covel) {
 const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
 describe("createBootstrapPluginEntries", () => {
+  it("unregisters successful entries so a fresh host can register the same wires", async () => {
+    const plugin = writePlugin("entry-host-lifecycle", FULL_ENTRY_SRC);
+    const params = makeParams([plugin]);
+    const closeStore = vi.spyOn(params.store, "close");
+    const entries = await createBootstrapPluginEntries(params);
+    expect(getSpeechWire("entry-host-lifecycle/entry-tts")).not.toBeNull();
+    const closing = entries.close();
+    expect(entries.close()).toBe(closing);
+    await closing;
+    expect(getSpeechWire("entry-host-lifecycle/entry-tts")).toBeNull();
+    expect(params.toolMap.size).toBe(0);
+    expect(params.localToolNames.size).toBe(0);
+    expect(params.pluginToolAccess.size).toBe(0);
+    expect(params.rpcRegistry.list()).toEqual([]);
+    expect(closeStore).not.toHaveBeenCalled();
+    await expect(
+      entries.ensurePluginEntry("entry-host-lifecycle"),
+    ).rejects.toThrow("closed");
+    const replacement = await createBootstrapPluginEntries(
+      makeParams([plugin]),
+    );
+    try {
+      expect(getSpeechWire("entry-host-lifecycle/entry-tts")).not.toBeNull();
+      await entries.close();
+      expect(getSpeechWire("entry-host-lifecycle/entry-tts")).not.toBeNull();
+    } finally {
+      await replacement.close();
+    }
+  });
+
+  it("drains an admitted approval check without loading code after close", async () => {
+    const plugin = writePlugin("entry-closing-approval", FULL_ENTRY_SRC, {
+      source: "community",
+    });
+    const params = makeParams([plugin]);
+    const approval = Promise.withResolvers<boolean>();
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      isCommunityServerCodeApproved: () => approval.promise,
+    });
+    const activation = entries.ensurePluginEntry(
+      "entry-closing-approval",
+      "session",
+    );
+    const rejected = expect(activation).rejects.toThrow("closed");
+    let closed = false;
+    const closing = entries.close().then(() => {
+      closed = true;
+    });
+    try {
+      await Promise.resolve();
+      expect(closed).toBe(false);
+    } finally {
+      approval.resolve(true);
+      await Promise.all([rejected, closing]);
+    }
+    expect(params.toolMap.size).toBe(0);
+    expect(getSpeechWire("entry-closing-approval/entry-tts")).toBeNull();
+  });
+
+  it("waits for a running entry factory and discards its late publication", async () => {
+    const state = {
+      started: Promise.withResolvers<void>(),
+      release: Promise.withResolvers<void>(),
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelClosingEntry = state;
+    const plugin = writePlugin(
+      "entry-closing-factory",
+      `
+      export default async function(api) {
+        api.registerRpc("early", async () => true);
+        globalThis.__covelClosingEntry.started.resolve();
+        await globalThis.__covelClosingEntry.release.promise;
+        api.registerRpc("late", async () => true);
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries(params);
+    const activation = entries.ensurePluginEntry(
+      "entry-closing-factory",
+      "session",
+    );
+    const rejected = expect(activation).rejects.toThrow("failed to activate");
+    await state.started.promise;
+    let closed = false;
+    const closing = entries.close().then(() => {
+      closed = true;
+    });
+    try {
+      await Promise.resolve();
+      expect(closed).toBe(false);
+    } finally {
+      state.release.resolve();
+      await Promise.all([rejected, closing]);
+      delete globals.__covelClosingEntry;
+    }
+    expect(params.rpcRegistry.list()).toEqual([]);
+  });
+
   it("runs builtin entries at boot: tool, hook, rpc, and wires all registered", async () => {
     const p = writePlugin("entry-full-a", FULL_ENTRY_SRC);
     const params = makeParams([p]);
@@ -461,168 +564,75 @@ export default (covel) => {
     warn.mockRestore();
   });
 
-  it("denies plugin_data writes on a community entry's toolkit.store", async () => {
-    // Entry factories run at activation time with no request session, so a
-    // community entry's plugin_data writes cannot be session-scoped — they
-    // are denied outright (writes flow through proposals or the per-dispatch
-    // RPC store), even when forging a foreign pluginId.
-    const p = writePlugin(
-      "entry-scope-a",
-      `
-export default async function (covel) {
-  let error = "";
-  try {
-    await covel.toolkit.store.setPluginData({
-      id: "forged",
-      sessionId: "s1",
-      pluginId: "victim-plugin",
-      namespace: "ns",
-      key: "k",
-      value: { secret: 1 },
-      createdAt: "t",
-      updatedAt: "t",
-    });
-  } catch (e) {
-    error = String((e && e.message) || e);
-  }
-  covel.registerRpc("dump-error", async () => error);
+  it.each(["builtin", "community"] as const)(
+    "injects pure helpers at %s activation and scoped reads at execution",
+    async (source) => {
+      const pluginId = `entry-reads-${source}`;
+      const p = writePlugin(
+        pluginId,
+        `
+export default function (covel) {
+  if ("store" in covel.toolkit) throw new Error("Activation received store authority");
+  covel.registerTool(covel.toolkit.tool({
+    name: "read-state",
+    description: "Read own state",
+    parameters: covel.toolkit.z.object({}),
+    async execute(_args, ctx) {
+      if (ctx.store.setPluginData || ctx.store.close || ctx.store.withTransaction) {
+        throw new Error("Tool received host authority");
+      }
+      const row = await ctx.store.getPluginData("entries", "current");
+      return row.value;
+    },
+  }));
 }
 `,
-      { source: "community" },
-    );
-    const params = makeParams([p]);
-    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
-    await ensurePluginEntry("entry-scope-a");
-
-    const dump = params.rpcRegistry.getPluginAction(
-      "entry-scope-a",
-      "dump-error",
-    );
-    const error = (await dump?.handler?.({}, {
-      sessionId: "s1",
-      pluginId: "entry-scope-a",
-    } as never)) as string;
-    expect(error).toContain("not available to a community plugin toolkit");
-
-    // Nothing landed anywhere — neither the forged victim namespace nor the
-    // entry's own.
-    expect(
-      await params.store.getPluginData("s1", "victim-plugin", "ns", "k"),
-    ).toBeNull();
-    expect(
-      await params.store.getPluginData("s1", "entry-scope-a", "ns", "k"),
-    ).toBeNull();
-  });
-
-  it("default-denies mutators on a community toolkit.store", async () => {
-    // A community entry factory has no request-bound session, so every store
-    // method is denied. Request/runtime handlers get scoped stores separately.
-    const p = writePlugin(
-      "entry-deny-a",
-      `
-export default async function (covel) {
-  const errors = {};
-  const attempt = async (name, fn) => {
-    try { await fn(); errors[name] = ""; }
-    catch (e) { errors[name] = String((e && e.message) || e); }
-  };
-  const store = covel.toolkit.store;
-  await attempt("upsertCharacter", () => store.upsertCharacter({
-    id: "c1", sessionId: "other-session", name: "Mallory",
-  }));
-  await attempt("updateSession", () => store.updateSession("other-session", { status: "ended" }));
-  await attempt("deleteSession", () => store.deleteSession("other-session"));
-  await attempt("addMessage", () => store.addMessage({
-    id: "m1", sessionId: "other-session", role: "user", content: "hi",
-  }));
-  await attempt("addTraceEvent", () => store.addTraceEvent({ id: "t1", sessionId: "other-session" }));
-  await attempt("listPluginDataSessionScope", () => store.listPluginDataSessionScope("s1"));
-  // plugin_data writes are denied too (no request session to scope them to).
-  await attempt("setPluginData", () => store.setPluginData({
-    id: "x", sessionId: "s1", pluginId: "entry-deny-a", namespace: "ns", key: "k",
-    value: 1, createdAt: "t", updatedAt: "t",
-  }));
-  await attempt("setPluginDataBatch", () => store.setPluginDataBatch([]));
-  await attempt("deletePluginData", () => store.deletePluginData("s1", "entry-deny-a", "ns", "k"));
-  // Reads are denied too: the caller-selected session id is not an authority.
-  await attempt("getSession", () => store.getSession("s1"));
-  await attempt("listTurnMessages", () => store.listTurnMessages("s1"));
-  await attempt("getPluginData", () => store.getPluginData("s1", "forged", "ns", "k"));
-  await attempt("listPluginData", () => store.listPluginData("s1", "forged", "ns"));
-  covel.registerRpc("dump-errors", async () => errors);
-}
-`,
-      { source: "community" },
-    );
-    const params = makeParams([p]);
-    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
-    await ensurePluginEntry("entry-deny-a");
-
-    const dump = params.rpcRegistry.getPluginAction(
-      "entry-deny-a",
-      "dump-errors",
-    );
-    const errors = (await dump?.handler?.({}, {
-      sessionId: "s1",
-      pluginId: "entry-deny-a",
-    } as never)) as Record<string, string>;
-    // The denial names the plugin-facing toolkit; the `[plugin-entry]` prefix
-    // identifies the activation path that supplied it.
-    const DENIED = "not available to a community plugin toolkit";
-    for (const method of [
-      "upsertCharacter",
-      "updateSession",
-      "deleteSession",
-      "addMessage",
-      "addTraceEvent",
-      "listPluginDataSessionScope",
-      "setPluginData",
-      "setPluginDataBatch",
-      "deletePluginData",
-      "getSession",
-      "listTurnMessages",
-      "getPluginData",
-      "listPluginData",
-    ]) {
-      expect(errors[method], method).toContain(DENIED);
-      expect(errors[method], method).toContain(method);
-    }
-    // Nothing actually landed on the raw store.
-    expect(await params.store.listCharacters("other-session")).toEqual([]);
-    expect(await params.store.listMessages("other-session")).toEqual([]);
-    expect(await params.store.getSession("other-session")).toBeNull();
-  });
-
-  it("leaves a builtin entry's toolkit.store unscoped", async () => {
-    const p = writePlugin(
-      "entry-raw-a",
-      `
-export default async function (covel) {
-  await covel.toolkit.store.setPluginData({
-    id: "raw",
-    sessionId: "s1",
-    pluginId: "other-plugin",
-    namespace: "ns",
-    key: "k",
-    value: { v: 2 },
-    createdAt: "t",
-    updatedAt: "t",
-  });
-}
-`,
-    );
-    const params = makeParams([p]);
-    await createBootstrapPluginEntries(params);
-
-    // Builtin trust: the raw store honoured the caller-supplied pluginId.
-    const row = await params.store.getPluginData(
-      "s1",
-      "other-plugin",
-      "ns",
-      "k",
-    );
-    expect(row?.value).toEqual({ v: 2 });
-  });
+        { source },
+      );
+      const params = makeParams([p]);
+      for (const [sessionId, owner, value] of [
+        ["s1", pluginId, "first"],
+        ["s2", pluginId, "second"],
+        ["s1", "other-plugin", "foreign"],
+      ]) {
+        await params.store.setPluginData({
+          id: `${sessionId}-${owner}`,
+          sessionId,
+          pluginId: owner,
+          namespace: "entries",
+          key: "current",
+          value,
+          createdAt: "t",
+          updatedAt: "t",
+        });
+      }
+      const entries = await createBootstrapPluginEntries(params);
+      await entries.ensurePluginEntry(pluginId);
+      const executor = createToolExecutor({
+        store: params.store,
+        findTool: () => params.toolMap.get("read-state"),
+      });
+      const results = await Promise.all(
+        ["s1", "s2"].map((sessionId) =>
+          executor.execute(
+            { toolCallId: sessionId, name: "read-state", arguments: "{}" },
+            {
+              sessionId,
+              pluginId,
+              turnId: "turn",
+              runtimeId: `${pluginId}/main`,
+            },
+          ),
+        ),
+      );
+      expect(results.map((result) => result.success)).toEqual([true, true]);
+      expect(results.map((result) => result.parsedResult)).toEqual([
+        "first",
+        "second",
+      ]);
+      await entries.close();
+    },
+  );
 
   it("clamps a community entry that declares trustLevel:builtin down to community (LOW)", async () => {
     const p = writePlugin(

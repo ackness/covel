@@ -20,7 +20,6 @@ test("saved custom roles remain editable in generation, assignment and import pa
     ],
     "llm.slotConfig": {
       "custom-analysis": {
-        presetId: "legacy-model",
         modelRef: "fixture-model",
       },
     },

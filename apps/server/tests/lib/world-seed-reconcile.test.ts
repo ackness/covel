@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -35,10 +36,11 @@ it.each(["id: [unterminated\n", "id: broken\n"])(
   "keeps existing DB worlds after partial package failure: %s",
   async (invalid) => {
     const store = createMemoryStore();
-    await seedAndReconcileWorlds(store, [root]);
+    const sessionLock = createInProcessSessionLock();
+    await seedAndReconcileWorlds(store, [root], sessionLock);
     await writeFile(path.join(root, "broken/world.yaml"), invalid, "utf8");
     await rm(path.join(root, "removed"), { recursive: true });
-    await seedAndReconcileWorlds(store, [root]);
+    await seedAndReconcileWorlds(store, [root], sessionLock);
     expect((await store.listWorlds()).map((world) => world.id).sort()).toEqual([
       "broken",
       "healthy",
@@ -49,11 +51,16 @@ it.each(["id: [unterminated\n", "id: broken\n"])(
 
 it("keeps worlds when one source cannot be scanned, then reconciles a complete scan", async () => {
   const store = createMemoryStore();
-  await seedAndReconcileWorlds(store, [root]);
+  const sessionLock = createInProcessSessionLock();
+  await seedAndReconcileWorlds(store, [root], sessionLock);
   await rm(path.join(root, "removed"), { recursive: true });
-  await seedAndReconcileWorlds(store, [root, path.join(root, "missing-root")]);
+  await seedAndReconcileWorlds(
+    store,
+    [root, path.join(root, "missing-root")],
+    sessionLock,
+  );
   expect(await store.getWorld("removed")).not.toBeNull();
-  await seedAndReconcileWorlds(store, [root]);
+  await seedAndReconcileWorlds(store, [root], sessionLock);
   expect(await store.getWorld("removed")).toBeNull();
   expect(await store.getWorld("healthy")).not.toBeNull();
 });
@@ -71,8 +78,9 @@ it("keeps the last good override when a higher-priority package fails to load", 
     "utf8",
   );
   const store = createMemoryStore();
+  const sessionLock = createInProcessSessionLock();
   try {
-    await seedAndReconcileWorlds(store, [root, user]);
+    await seedAndReconcileWorlds(store, [root, user], sessionLock);
     const before = await store.getWorld("healthy");
     expect(before?.name).toBe("User world");
     await writeFile(
@@ -80,7 +88,7 @@ it("keeps the last good override when a higher-priority package fails to load", 
       "genres: invalid\n",
       "utf8",
     );
-    await seedAndReconcileWorlds(store, [root, user]);
+    await seedAndReconcileWorlds(store, [root, user], sessionLock);
     expect(await store.getWorld("healthy")).toEqual(before);
   } finally {
     await store.close();
@@ -89,8 +97,9 @@ it("keeps the last good override when a higher-priority package fails to load", 
 
 it("does not choose an arbitrary duplicate id or follow a linked manifest", async () => {
   const store = createMemoryStore();
+  const sessionLock = createInProcessSessionLock();
   try {
-    await seedAndReconcileWorlds(store, [root]);
+    await seedAndReconcileWorlds(store, [root], sessionLock);
     const before = await store.getWorld("healthy");
     const duplicate = path.join(root, "zzz-duplicate");
     await mkdir(duplicate);
@@ -99,7 +108,7 @@ it("does not choose an arbitrary duplicate id or follow a linked manifest", asyn
       'schemaVersion: "1.0"\nid: healthy\nname: Duplicate\nsummary: Ambiguous fixture\ndefaultLocale: en-US\n',
       "utf8",
     );
-    await seedAndReconcileWorlds(store, [root]);
+    await seedAndReconcileWorlds(store, [root], sessionLock);
     expect(await store.getWorld("healthy")).toEqual(before);
     await rm(duplicate, { recursive: true });
     const linked = path.join(root, "linked");
@@ -109,7 +118,7 @@ it("does not choose an arbitrary duplicate id or follow a linked manifest", asyn
       path.join(linked, "world.yaml"),
     );
     await rm(path.join(root, "removed"), { recursive: true });
-    await seedAndReconcileWorlds(store, [root]);
+    await seedAndReconcileWorlds(store, [root], sessionLock);
     expect(await store.getWorld("removed")).not.toBeNull();
   } finally {
     await store.close();

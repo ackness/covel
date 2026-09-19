@@ -64,11 +64,17 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Package boundaries
+        run: pnpm check:boundaries
+
       - name: Dependency hygiene (knip)
         run: pnpm deps:check
 
       - name: Test
-        run: pnpm test
+        # Bound both workspace tasks and their worker pools on shared runners.
+        env:
+          VITEST_MAX_WORKERS: "2"
+        run: pnpm test --concurrency=2
 
       # Exclude convention-only `_archive`; every active plugin directory is
       # validated together so cross-runtime collisions are also detected.

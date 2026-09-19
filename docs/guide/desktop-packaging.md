@@ -11,6 +11,13 @@ The bundled snapshot is generated from the fixed LiteLLM commit declared in `pac
 
 Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
+The staging tree owns its files: after `pnpm deploy`, the build replaces hardlinks
+with independent copies before rewriting resources or caching the output. Neither
+packaging nor a Turbo cache restore may modify workspace sources or pnpm's package
+store. Turbo's desktop task waits for the server build and includes server code,
+workspace packages, bundled plugins, prompts and worlds in its cache inputs;
+generated output, dependency directories and task logs are excluded.
+
 Builds do not bundle the developer's `llm.toml` or other private server configuration. Staging and unpacked-installer checks reject these files at the server resource root. Startup smoke tests use a temporary synthetic configuration and a separate no-configuration run; neither requires provider credentials or calls a model. Installed applications always read `llm.toml` from the user configuration root, including when the file is created after first launch. Missing bundled resource directories retain their positions in discovery; user plugins never inherit builtin trust because installation resources are absent.
 
 The startup smoke test also rejects bundled plugin load failures, including
@@ -151,6 +158,20 @@ still lands on two files:
    Windows).
 
 Release CI verifies the unpacked application resources on each platform before uploading only the distributable files. Signature checks are intentionally absent while official builds are unsigned.
+
+## Sidecar shutdown
+
+Normal application quit waits for the sidecar to exit before allowing Electron
+to terminate. Restart uses the same stop barrier. A private parent-child IPC
+message requests the server drain on every platform; SIGTERM is only a fallback
+when IPC is unavailable (Windows terminates forcibly on that fallback).
+The sidecar has 12 seconds to finish its server drain (whose own force-exit
+budget is 10 seconds), then
+receives SIGKILL; failure to observe exit within another second is reported
+and prevents starting a replacement sidecar. Signal errors do not count as
+confirmed exit. Operating-system forced termination remains outside this
+graceful path. Run `pnpm --filter @covel/desktop test` for process-drain and
+quit re-entry regression checks.
 
 ## Auto-update publishing
 

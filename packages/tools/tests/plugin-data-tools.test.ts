@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPluginDataTools, getPendingProposals } from "../src/index.js";
 import type { ToolExecutionContext, ToolModule } from "../src/types.js";
+import type { Proposal } from "@covel/shared";
 
 function createMockStore() {
   return {
@@ -169,6 +170,118 @@ describe("plugin-data reads see this loop's own pending writes", () => {
   beforeEach(() => {
     store = createMockStore();
     tools = createPluginDataTools(store);
+  });
+
+  function remove(overrides: Partial<Proposal> = {}): Proposal {
+    const context = ctx();
+    return {
+      id: "pending-delete",
+      type: "plugin.data.delete",
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+      source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
+      timestamp: "2026-09-19T00:00:00.000Z",
+      payload: { namespace: "entries", key: "alpha" },
+      ...overrides,
+    } as Proposal;
+  }
+
+  it.each([
+    { name: "delete persisted value", commands: ["delete"], found: false },
+    { name: "set then delete", commands: ["set", "delete"], found: false },
+    { name: "batch then delete", commands: ["batch", "delete"], found: false },
+    { name: "delete then set", commands: ["delete", "set"], found: true },
+    { name: "delete then batch", commands: ["delete", "batch"], found: true },
+    {
+      name: "delete then store null",
+      commands: ["delete", "null"],
+      found: true,
+    },
+  ])(
+    "get/list agree after $name without writing",
+    async ({ commands, found }) => {
+      const pending: Proposal[] = [];
+      for (const command of commands) {
+        if (command === "delete") {
+          pending.push(remove());
+        } else {
+          const item = {
+            namespace: "entries",
+            key: "alpha",
+            value: command === "null" ? null : "replacement",
+          };
+          const result = await findByName(
+            tools,
+            command === "batch" ? "plugin-data-set-batch" : "plugin-data-set",
+          ).execute(command === "batch" ? { items: [item] } : item, ctx());
+          pending.push(...getPendingProposals(result));
+        }
+      }
+      const context = { ...ctx(), pendingProposals: pending };
+      const value = commands.at(-1) === "null" ? null : "replacement";
+      expect(
+        await findByName(tools, "plugin-data-get").execute(
+          { namespace: "entries", key: "alpha" },
+          context,
+        ),
+      ).toMatchObject(found ? { found: true, value } : { found: false });
+      for (const args of [{}, { namespace: "entries" }]) {
+        expect(
+          await findByName(tools, "plugin-data-list").execute(args, context),
+        ).toMatchObject({
+          count: found ? 1 : 0,
+          items: found ? [{ namespace: "entries", key: "alpha", value }] : [],
+        });
+      }
+      expect(store.setPluginData).not.toHaveBeenCalled();
+      expect(store.setPluginDataBatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores deletion proposals owned by another session or plugin", async () => {
+    const context = {
+      ...ctx(),
+      pendingProposals: [
+        remove({ sessionId: "foreign-session" }),
+        remove({
+          source: {
+            pluginId: "foreign-plugin",
+            runtimeId: "foreign-plugin/main",
+          },
+        }),
+      ],
+    };
+    expect(
+      await findByName(tools, "plugin-data-get").execute(
+        { namespace: "entries", key: "alpha" },
+        context,
+      ),
+    ).toMatchObject({ found: true, value: { saved: true } });
+    expect(
+      await findByName(tools, "plugin-data-list").execute({}, context),
+    ).toMatchObject({
+      count: 1,
+      items: [{ key: "alpha", value: { saved: true } }],
+    });
+  });
+
+  it("deletes only the exact tuple and tolerates deletion of an absent key", async () => {
+    const stored = [
+      { namespace: "a", key: "b\u0000c", value: "first", updatedAt: "t" },
+      { namespace: "a\u0000b", key: "c", value: "second", updatedAt: "t" },
+    ];
+    store.listPluginData.mockResolvedValue(stored);
+    const context = {
+      ...ctx(),
+      pendingProposals: [
+        remove({ payload: { namespace: "a", key: "b\u0000c" } }),
+        remove({ payload: { namespace: "missing", key: "missing" } }),
+      ],
+    };
+    expect(
+      await findByName(tools, "plugin-data-list").execute({}, context),
+    ).toEqual({ count: 1, items: [stored[1]] });
+    expect(stored).toHaveLength(2);
   });
 
   async function setThenRead(

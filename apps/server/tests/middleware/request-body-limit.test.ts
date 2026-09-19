@@ -130,7 +130,10 @@ describe("request body limits", () => {
         activePlugins: [],
         locale: "zh-CN",
         metadata: owned
-          ? { ownerTokenHash: hashSessionOwnerToken(ownerToken) }
+          ? {
+              ownerTokenHash: hashSessionOwnerToken(ownerToken),
+              sessionIncarnationNonce: crypto.randomUUID(),
+            }
           : undefined,
         createdAt: "2026-08-25T00:00:00.000Z",
         updatedAt: "2026-08-25T00:00:00.000Z",

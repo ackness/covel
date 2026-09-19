@@ -250,6 +250,149 @@ describe("builtin character tools", () => {
     });
   });
 
+  it.each(["set", "batch", "delete"] as const)(
+    "uses the provider's pending schema %s for reads and character writes",
+    async (operation) => {
+      const storedSchema = {
+        version: 1,
+        attributes: [
+          { id: "power", name: "Power", type: "number", defaultValue: 1 },
+        ],
+      };
+      const pendingSchema = {
+        version: 1,
+        attributes: [
+          {
+            id: "power",
+            name: "Power",
+            type: "number",
+            max: 5,
+            defaultValue: 3,
+          },
+        ],
+      };
+      const getPluginData = vi.fn(async () => ({
+        value: storedSchema,
+        updatedAt: "stored-time",
+      }));
+      const caller = new Loop(
+        createCharacterTools(Object.assign(store, { getPluginData }), {
+          findWorldDataPluginId: () => "custom-provider",
+        }),
+        store,
+      );
+      const base = {
+        id: "pending-schema",
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        source: {
+          pluginId: "custom-provider",
+          runtimeId: "custom-provider/runtime",
+        },
+        timestamp: "2026-08-25T00:00:00.000Z",
+      };
+      const payload = {
+        namespace: "schema",
+        key: "character-attributes",
+        value: pendingSchema,
+      };
+      const set: Proposal = { ...base, type: "plugin.data", payload };
+      const remove: Proposal = {
+        ...base,
+        type: "plugin.data.delete",
+        payload: { namespace: payload.namespace, key: payload.key },
+      };
+      caller.pending =
+        operation === "set"
+          ? [remove, set]
+          : operation === "batch"
+            ? [
+                {
+                  ...base,
+                  type: "plugin.data.batch",
+                  payload: { items: [payload] },
+                },
+              ]
+            : [set, remove];
+      caller.pending.push(
+        {
+          ...set,
+          sessionId: "other-session",
+          payload: { ...payload, value: storedSchema },
+        },
+        {
+          ...remove,
+          source: {
+            pluginId: "other-provider",
+            runtimeId: "other-provider/runtime",
+          },
+        },
+      );
+      expect(await caller.call("get-character-schema", {})).toMatchObject({
+        schema: operation === "delete" ? null : pendingSchema,
+      });
+      const created = await caller.call("create-character", {
+        name: "Alex",
+        type: "player",
+      });
+      const create = caller.pending.at(-1);
+      expect(create).toMatchObject({
+        type: "character.upsert",
+        payload: { fields: operation === "delete" ? {} : { power: 3 } },
+      });
+      if (operation !== "delete") {
+        await expect(
+          caller.call("update-character", {
+            id: created.characterId,
+            fields: { power: 6 },
+          }),
+        ).rejects.toThrow(/power/);
+        expect(caller.pending.at(-1)).toBe(create);
+      }
+      expect(getPluginData).not.toHaveBeenCalled();
+      expect(store.characters).toEqual([]);
+      expect(store.pluginData).toEqual([]);
+    },
+  );
+
+  it("propagates schema read failures before creating a character proposal", async () => {
+    const caller = new Loop(
+      createCharacterTools(
+        Object.assign(store, {
+          getPluginData: async () => {
+            throw new Error("schema store unavailable");
+          },
+        }),
+        { findWorldDataPluginId: () => "custom-provider" },
+      ),
+      store,
+    );
+    await expect(
+      caller.call("create-character", {
+        name: "Alex",
+        type: "player",
+        fields: { power: "invalid" },
+      }),
+    ).rejects.toThrow("schema store unavailable");
+    expect(caller.pending).toEqual([]);
+    expect(store.characters).toEqual([]);
+  });
+
+  it("ignores pending characters from a different session", async () => {
+    await loop.call("create-character", { name: "Alex", type: "player" });
+    loop.pending = loop.pending.map((p) => ({
+      ...p,
+      sessionId: "other-session",
+    }));
+    const created = await loop.call("create-character", {
+      name: "Alex",
+      type: "player",
+    });
+    expect(created).toMatchObject({ success: true, existed: false });
+    expect(loop.pending).toHaveLength(2);
+    expect(loop.pending[1]?.sessionId).toBe("sess-1");
+  });
+
   it("rejects invalid create/update fields before exposing any proposal", async () => {
     const schemaStore = Object.assign(store, {
       getPluginData: async () => ({
@@ -344,6 +487,55 @@ describe("builtin character tools", () => {
   });
 
   describe("create-character", () => {
+    it.each([false, true])(
+      "preserves chained partial updates before commit (stored: %s)",
+      async (stored) => {
+        const created = await loop.call("create-character", {
+          name: "Probe",
+          type: "npc",
+          description: "original",
+          fields: { hp: 10, mp: 5 },
+        });
+        if (stored) loop.commit();
+        await loop.call("update-character", {
+          id: created.characterId,
+          fields: { hp: 8 },
+        });
+        await loop.call("update-character", {
+          id: created.characterId,
+          fields: { mp: 4 },
+        });
+        await loop.call("update-character", {
+          id: created.characterId,
+          description: "",
+        });
+        const read = await loop.call("get-character", {
+          id: created.characterId,
+        });
+        expect(read).toMatchObject({
+          found: true,
+          character: {
+            name: "Probe",
+            type: "npc",
+            description: "",
+            fields: { hp: 8, mp: 4 },
+            version: 4,
+          },
+        });
+        const snapshot = read.character as { fields: Record<string, unknown> };
+        snapshot.fields.hp = -1;
+        expect(
+          await loop.call("get-character", { id: created.characterId }),
+        ).toMatchObject({ character: { fields: { hp: 8, mp: 4 } } });
+        loop.commit();
+        expect(
+          await loop.call("get-character", { id: created.characterId }),
+        ).toMatchObject({
+          character: { fields: { hp: 8, mp: 4 }, version: 4, description: "" },
+        });
+      },
+    );
+
     it("emits a character.upsert proposal that persists on commit", async () => {
       const result = await loop.call("create-character", {
         name: "柳无痕",

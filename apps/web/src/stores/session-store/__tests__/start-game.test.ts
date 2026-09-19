@@ -4,7 +4,6 @@ import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
-  getSlotConfig: vi.fn(),
   getPrepRuntimeBindings: vi.fn(),
   updateSession: vi.fn(),
   clearPrepRuntimeBindings: vi.fn(),
@@ -74,7 +73,6 @@ const sessionGenerationRef = { current: 0 };
 beforeEach(() => {
   sessionGenerationRef.current = 0;
   vi.clearAllMocks();
-  api.getSlotConfig.mockReturnValue({});
   api.getPrepRuntimeBindings.mockReturnValue({ narrator: "fast" });
   api.updateSession.mockResolvedValue(session);
   api.getSessionView.mockResolvedValue({});
@@ -82,6 +80,22 @@ beforeEach(() => {
 });
 
 describe("startGameSession bootstrap order", () => {
+  it.each(["Current draft", ""])(
+    "persists the selected lore with the session (%j)",
+    async (loreOverride) => {
+      const ds = makeDataService([]);
+      await startGameSession({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch: vi.fn(),
+        sessionIdRef: { current: null },
+        sessionGenerationRef,
+        world,
+        loreOverride,
+      });
+      expect(vi.mocked(ds.createSession).mock.calls[0]?.[4]).toBe(loreOverride);
+    },
+  );
   it("uses the world language when creating a session", async () => {
     const ds = makeDataService([]);
 
@@ -92,16 +106,14 @@ describe("startGameSession bootstrap order", () => {
       sessionIdRef: { current: null },
       sessionGenerationRef,
       world: { ...world, locale: "en-US" },
-      presets: [],
-      llmConfig: null,
     });
 
     expect(ds.createSession).toHaveBeenCalledWith(
       world.id,
       undefined,
       undefined,
-      undefined,
       "en-US",
+      undefined,
     );
   });
 
@@ -126,8 +138,6 @@ describe("startGameSession bootstrap order", () => {
       sessionIdRef: { current: null },
       sessionGenerationRef,
       world,
-      presets: [],
-      llmConfig: null,
       plugins: ["pregame", "world-init"],
     });
 
@@ -153,8 +163,6 @@ describe("startGameSession bootstrap order", () => {
       sessionIdRef: { current: null },
       sessionGenerationRef,
       world,
-      presets: [],
-      llmConfig: null,
       plugins: ["pregame", "world-init"],
     });
 
@@ -176,8 +184,6 @@ describe("startGameSession bootstrap order", () => {
         sessionIdRef: { current: null },
         sessionGenerationRef,
         world,
-        presets: [],
-        llmConfig: null,
       }),
     ).rejects.toThrow("offline");
 
@@ -206,8 +212,6 @@ describe("startGameSession bootstrap order", () => {
         sessionIdRef,
         sessionGenerationRef,
         world,
-        presets: [],
-        llmConfig: null,
       }),
     ).rejects.toThrow("snapshot failed");
 
@@ -239,8 +243,6 @@ describe("startGameSession bootstrap order", () => {
       sessionIdRef,
       sessionGenerationRef,
       world,
-      presets: [],
-      llmConfig: null,
     });
     await vi.waitFor(() => expect(sessionIdRef.current).toBe(session.id));
     sessionIdRef.current = "sess-b";
@@ -271,8 +273,6 @@ describe("startGameSession bootstrap order", () => {
       sessionIdRef,
       sessionGenerationRef,
       world,
-      presets: [],
-      llmConfig: null,
     });
     await vi.waitFor(() => expect(api.getSessionView).toHaveBeenCalled());
     sessionGenerationRef.current += 1;
@@ -301,8 +301,6 @@ describe("startGameSession bootstrap order", () => {
       sessionIdRef,
       sessionGenerationRef,
       world,
-      presets: [],
-      llmConfig: null,
     });
     await vi.waitFor(() => expect(ds.syncToServer).toHaveBeenCalled());
     sessionGenerationRef.current += 1;
@@ -334,8 +332,6 @@ describe("startGameSession bootstrap order", () => {
       sessionIdRef: { current: null },
       sessionGenerationRef,
       world,
-      presets: [],
-      llmConfig: null,
     });
     await vi.waitFor(() => expect(ds.deleteSession).toHaveBeenCalled());
     sessionGenerationRef.current += 1;

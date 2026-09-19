@@ -104,7 +104,7 @@ export function useBuildSessionActions({
   );
 
   const startGame = useCallback(
-    async (plugins?: string[]) => {
+    async (plugins?: string[], loreOverride?: string) => {
       if (!state.world) return;
       await startGameSession({
         ds,
@@ -113,21 +113,11 @@ export function useBuildSessionActions({
         sessionIdRef,
         sessionGenerationRef,
         world: state.world,
-        presets: state.presets,
-        llmConfig: state.llmConfig,
         plugins,
+        loreOverride,
       });
     },
-    [
-      ds,
-      workspace,
-      dispatch,
-      sessionIdRef,
-      sessionGenerationRef,
-      state.world,
-      state.presets,
-      state.llmConfig,
-    ],
+    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.world],
   );
 
   const resyncSession = useCallback(
@@ -148,53 +138,45 @@ export function useBuildSessionActions({
     if (!canRunSessionAction(state)) return;
     const sessionId = state.session?.id;
     if (!sessionId) return;
-    const worldId = state.world?.id ?? "";
     const owner = claimAction(sessionId);
 
-    const postStart = (loreOverride?: unknown) => {
-      if (!owner.isCurrent()) return;
-      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
-      dispatch({ type: "SET_EXECUTING", value: true });
-      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-      const requestId = owner.requestId;
-      void workspace
-        .run(sessionId, requestId, () => {
-          if (!owner.isCurrent()) {
-            return Promise.reject(
-              new Error("Session changed before action start"),
-            );
-          }
-          return runActionStream(
-            {
-              requestId,
-              type: "start_session",
-              sessionId,
-              locale: state.session?.locale ?? i18n.language,
-              payload: typeof loreOverride === "string" ? { loreOverride } : {},
-            },
-            handleSseEvent,
-            dispatch,
-            { sessionIdRef, isCurrentAction: owner.isCurrent },
+    if (!owner.isCurrent()) return;
+    dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
+    dispatch({ type: "SET_EXECUTING", value: true });
+    dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+    const requestId = owner.requestId;
+    void workspace
+      .run(sessionId, requestId, () => {
+        if (!owner.isCurrent()) {
+          return Promise.reject(
+            new Error("Session changed before action start"),
           );
-        })
-        .catch((error: unknown) => {
-          if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
-        })
-        .finally(() => {
-          finalizeActionExecution(
-            dispatch,
+        }
+        return runActionStream(
+          {
+            requestId,
+            type: "start_session",
             sessionId,
-            sessionIdRef,
-            owner.isCurrent,
-          );
-          resyncSession(sessionId, owner.isCurrent);
-        });
-    };
-
-    void api
-      .getWorldOverlay(worldId)
-      .then((overlay) => postStart(overlay?.lore))
-      .catch(() => postStart());
+            locale: state.session?.locale ?? i18n.language,
+            payload: {},
+          },
+          handleSseEvent,
+          dispatch,
+          { sessionIdRef, isCurrentAction: owner.isCurrent },
+        );
+      })
+      .catch((error: unknown) => {
+        if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
+      })
+      .finally(() => {
+        finalizeActionExecution(
+          dispatch,
+          sessionId,
+          sessionIdRef,
+          owner.isCurrent,
+        );
+        resyncSession(sessionId, owner.isCurrent);
+      });
   }, [
     workspace,
     state,
@@ -263,14 +245,13 @@ export function useBuildSessionActions({
             content,
             ...opts,
             session: state.session,
-            ds,
             workspace,
             dispatch,
             handleSseEvent,
             sessionIdRef,
           })
         : Promise.resolve(),
-    [workspace, ds, dispatch, state.session, handleSseEvent, sessionIdRef],
+    [workspace, dispatch, state.session, handleSseEvent, sessionIdRef],
   );
 
   const sendMessage = useCallback(
@@ -334,7 +315,7 @@ export function useBuildSessionActions({
 
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;
-    // 从 ref 读取最新游标，避免闭包捕获陈旧值并保持该 action 引用稳定。
+    const generation = sessionGenerationRef.current;
     const cursor = stateRef.current.olderMessagesCursor;
     if (!sid || !cursor) return;
     try {
@@ -342,8 +323,13 @@ export function useBuildSessionActions({
         cursor,
         limit: OLDER_MESSAGES_PAGE_SIZE,
       });
-      // 会话可能在请求期间被切换 —— 丢弃过期响应。
-      if (sessionIdRef.current !== sid) return;
+      // A previous visit or an already consumed page cannot rewind history.
+      if (
+        sessionIdRef.current !== sid ||
+        sessionGenerationRef.current !== generation ||
+        stateRef.current.olderMessagesCursor !== cursor
+      )
+        return;
       dispatch({
         type: "PREPEND_MESSAGES",
         messages: toStreamMessages(page.items),
@@ -352,20 +338,22 @@ export function useBuildSessionActions({
     } catch {
       // 非关键：下次滚动到顶部时会重试。
     }
-  }, [ds, dispatch, sessionIdRef, stateRef]);
+  }, [ds, dispatch, sessionIdRef, sessionGenerationRef, stateRef]);
 
   const submitBlock = useCallback(
     (blockId: string, values?: Record<string, unknown>) => {
-      dispatch({ type: "SUBMIT_BLOCK", blockId, values });
       const sid = sessionIdRef.current;
-      if (!sid) return;
+      const owner = stateRef.current.session;
+      dispatch({ type: "SUBMIT_BLOCK", blockId, values });
+      if (!sid || owner?.id !== sid) return;
       ds.saveSubmittedBlocks(
         sid,
         [blockId],
         values ? { [blockId]: values } : {},
+        owner,
       ).catch(ignoreError("save submitted blocks"));
     },
-    [ds, dispatch, sessionIdRef],
+    [ds, dispatch, sessionIdRef, stateRef],
   );
 
   const submittingInteractions = useRef(new Set<string>());

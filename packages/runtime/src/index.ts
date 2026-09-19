@@ -30,11 +30,15 @@ export type {
 export { executeParallel } from "./schedule/parallel-executor.js";
 export type { RuntimeExecuteFn } from "./schedule/parallel-executor.js";
 
+export {
+  buildHookSettings,
+  snapshotUserSettings,
+} from "./hooks/hook-settings.js";
+
 // ── Turn Executor ────────────────────────────────────────────────
 export {
   executeTurn,
   resumeSuspendedRuntime,
-  buildHookSettings,
 } from "./turn-executor/turn-executor.js";
 export type {
   AgentLoopDeps,
@@ -90,6 +94,7 @@ export type {
 export { createToolExecutor } from "./agent-loop/tool-executor.js";
 export type {
   ToolExecutor,
+  ManagedToolExecutor,
   ToolInfo,
   ToolCall,
   ToolCallContext,
@@ -108,7 +113,6 @@ export type {
   PluginEntryFactory,
   PluginHookOptions,
   PluginRpcOptions,
-  PluginStoreView,
   PluginToolkit,
 } from "./plugin-api.js";
 
@@ -163,6 +167,12 @@ export type {
   TraceRecorder,
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
+export { commitExecution } from "./commit/commit-execution.js";
+export type {
+  CommitExecutionArgs,
+  CommitExecutionOutcome,
+  ExecutionCompletion,
+} from "./commit/commit-execution.js";
 export { finalizeExecution } from "./commit/finalize-execution.js";
 export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
 export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";
@@ -196,7 +206,11 @@ export {
   runSessionEndHook,
   runWithHookScope,
 } from "./hooks/index.js";
-export type { SessionStartPayload, SessionEndPayload } from "./hooks/index.js";
+export type {
+  HookScope,
+  SessionStartPayload,
+  SessionEndPayload,
+} from "./hooks/index.js";
 export { HOOK_SEMANTICS } from "./hooks/index.js";
 export type {
   HookEvent,
@@ -228,7 +242,10 @@ export {
   createRpcHandlerStoreView,
   createTrustedHandlerStore,
 } from "./function-runtime/plugin-handler-helpers.js";
-export type { HandlerHelperContext } from "./function-runtime/plugin-handler-helpers.js";
+export type {
+  HandlerHelperContext,
+  TrustedHandlerStore,
+} from "./function-runtime/plugin-handler-helpers.js";
 
 export { resolveRequestContextBudget } from "./agent-loop/request-context-budget.js";
 export type {

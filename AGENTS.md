@@ -14,9 +14,11 @@ Covel is a pnpm/Turborepo TypeScript modular monolith: plugins carry gameplay lo
 
 ## Coding Style & Architecture Rules
 
-Use strict TypeScript and ESM. Follow Prettier output (two-space indentation, double quotes, semicolons) and include `.js` extensions in TypeScript relative imports for NodeNext resolution. Use `camelCase` for values/functions, `PascalCase` for types and React components, and kebab-case module names. Avoid bare `any`; validate external input with Zod. Aim for at most 400 lines per file; 800 is the hard limit.
+Use strict TypeScript and ESM. Follow Prettier output (two-space indentation, double quotes, semicolons) and include `.js` extensions in TypeScript relative imports for NodeNext resolution. Use `camelCase` for values/functions, `PascalCase` for types and React components, and kebab-case module names. Avoid bare `any`; validate external input with Zod. Prefer focused files; 400 and 800 lines are review guidelines, not hard limits. Split a file only when its responsibilities or maintenance cost justify the change, not merely because of its length.
 
 Framework code in `packages/`, `apps/server/src/`, and `apps/web/src/` must not branch on concrete plugin IDs. Discover behavior through manifest `capabilities` and `outputKind`. Update the matching `docs/reference/` page whenever a framework-visible contract changes.
+
+During early development, target the current contract only. Update producers, consumers, schemas, fixtures, and documentation together; do not add old-version migrations, dual reads/writes, aliases, or fallback branches solely to preserve development data. Document when affected development data must be recreated. Keep required runtime concurrency, failure handling, and supported backend differences; these are not version compatibility.
 
 ## Testing Guidelines
 

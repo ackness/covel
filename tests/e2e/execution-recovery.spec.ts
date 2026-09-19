@@ -218,8 +218,8 @@ test("older orphaned execution stays before the latest story while an optional t
     const dialog = page.getByRole("dialog");
     const role = dialog.getByRole("group", { name: "plugin", exact: true });
     await role
-      .getByRole("combobox", { name: "模型 ID", exact: true })
-      .selectOption("replacement");
+      .getByRole("combobox", { name: "模型配置", exact: true })
+      .selectOption("preset:replacement");
     await role
       .getByRole("button", {
         name: "生成参数（token、温度、思考强度）",
@@ -245,7 +245,7 @@ test("older orphaned execution stays before the latest story while an optional t
       ),
     );
     expect(overlay).toMatchObject({
-      slotPresetOverrides: { plugin: "replacement" },
+      slotBindings: { plugin: { presetId: "replacement" } },
       parameterOverrides: { plugin: { maxOutputTokens: 32768 } },
     });
     await expect.poll(() => fixture.actions.length).toBe(1);

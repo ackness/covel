@@ -11,3 +11,4 @@ export type {
   SessionPin,
 } from "./event-bus.js";
 export { RingBuffer } from "./ring-buffer.js";
+export type { EventStore, EventStoreRecord } from "./event-store.js";

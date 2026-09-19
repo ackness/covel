@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import type { FunctionHandler } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import { createCharacterTools, getPendingProposals, tool } from "@covel/tools";
@@ -85,6 +86,71 @@ async function commit(
 }
 
 describe("governed function tools", () => {
+  it("passes handler cancellation into tools and drops late buffered writes", async () => {
+    const controller = new AbortController();
+    const buffer = [];
+    const command = tool({
+      name: "list-characters",
+      description: "Fixture",
+      parameters: z.object({}),
+      async execute(_args, context) {
+        expect(context.signal?.aborted).toBe(false);
+        controller.abort(new Error("handler cancelled"));
+        expect(context.signal?.aborted).toBe(true);
+        return { late: true };
+      },
+    });
+    const bound = createRuntimeTools({
+      manifest,
+      context: { ...input, pluginId: "community", runtimeId: manifest.name },
+      buffer,
+      signal: controller.signal,
+      assertLive: () => controller.signal.throwIfAborted(),
+      deps: {
+        loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+        llm: {
+          generate: async () => {
+            throw new Error("unused");
+          },
+        },
+        toolExecutor: createToolExecutor({ findTool: () => command }),
+      },
+    });
+    await expect(bound.tools.call("list-characters", {})).rejects.toThrow(
+      "handler cancelled",
+    );
+    await expect(bound.drain()).rejects.toThrow("handler cancelled");
+    expect(buffer).toEqual([]);
+  });
+  it("shares buffered plugin data with the community store view without early persistence", async () => {
+    let observed: unknown;
+    const f = await fixture(async (ctx) => {
+      await ctx.pluginData!.set("audit", "created", { ready: true });
+      const view = ctx.store as FunctionStoreView;
+      observed = await view.getPluginData("audit", "created");
+      return { outcome: "success", value: {} };
+    });
+    expect(f.result.runtimeResults[0]?.status).toBe("success");
+    expect(observed).toMatchObject({ value: { ready: true } });
+    expect(
+      await f.store.getPluginData(
+        input.sessionId,
+        "community",
+        "audit",
+        "created",
+      ),
+    ).toBeNull();
+    await commit(f);
+    expect(
+      await f.store.getPluginData(
+        input.sessionId,
+        "community",
+        "audit",
+        "created",
+      ),
+    ).toMatchObject({ value: { ready: true } });
+  });
+
   it("rolls character and plugin data back together when finalization fails", async () => {
     const f = await fixture(async (ctx) => {
       await ctx.tools!.call("create-character", {

@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 
 import { ensureElectronBinary } from "./ensure-electron.mjs";
+import { detachStagingHardlinks } from "./staging-files.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
@@ -330,7 +331,7 @@ console.log("  ✓ web-dist copied");
 // `pnpm deploy` 创建 standalone 部署目录。
 // - --filter 锁定目标 workspace 包
 // - --prod 剔除 devDeps
-// - --legacy 走复制语义（2026+ 默认开启 dedicated-lockfile，用 --legacy 关掉）
+// - --legacy disables the dedicated lockfile but may still create hardlinks.
 // - --ignore-scripts 阻止 legacy deploy 因 binding.gyp 隐式调用 node-gyp；
 //   better-sqlite3 13 已随包携带 Node-API prebuild，下面会逐架构校验，
 //   esbuild 的平台包也由 ensureRuntimePackages + 完整性检查显式保证。
@@ -346,6 +347,12 @@ execSync(
   },
 );
 console.log("  ✓ pnpm deploy → staging/server/ (hoisted)");
+
+// Cache restoration writes into existing output files. Detach pnpm's hardlinks
+// before any staged-file rewrite, so neither those writes nor a later cache
+// hit can roll workspace sources or the pnpm package store back to old bytes.
+const detachedFiles = detachStagingHardlinks(serverStaging);
+console.log(`  ✓ detached ${detachedFiles} shared staging file(s)`);
 
 // pnpm deploy on workspaces still shows cross-platform gaps around hoisted
 // runtime packages. Restore the critical tsx/esbuild tree explicitly so the

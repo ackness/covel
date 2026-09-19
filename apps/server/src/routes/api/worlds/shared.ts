@@ -10,6 +10,7 @@ import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { errorBody, type ApiErrorResponse } from "../../../api-error.js";
 import type { SessionLock } from "../../../lib/session-lock.js";
+import { withoutWorldDeletion } from "../../../world-lifecycle.js";
 
 export type WorldEnv = {
   Variables: {
@@ -19,11 +20,7 @@ export type WorldEnv = {
     mediaStore?: MediaStore;
     worldsDirs?: readonly string[];
     covelHome?: string;
-    /**
-     * Optional so bare test harnesses that mount these routes directly keep
-     * working; production always injects it via the bootstrap middleware.
-     */
-    sessionLock?: SessionLock;
+    sessionLock: SessionLock;
   };
 };
 
@@ -66,7 +63,9 @@ export function resolveWorldMetadata(
     };
   }
 
-  const metadataPatch = isRecord(body.metadata) ? body.metadata : undefined;
+  const metadataPatch = isRecord(body.metadata)
+    ? withoutWorldDeletion(body.metadata)
+    : undefined;
   const hasTopLevelDimensions = Object.prototype.hasOwnProperty.call(
     body,
     "dimensions",

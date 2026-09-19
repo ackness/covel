@@ -1,3 +1,4 @@
+import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * affinity plugin tests.
  *
@@ -179,12 +180,14 @@ describe("update-affinity", () => {
 
   beforeEach(() => {
     mockStore = createMockPluginDataStore();
-    updateAffinityTool = createUpdateAffinity({
-      tool,
-      z,
-      shortIdBatch,
-      store: mockStore,
-    });
+    updateAffinityTool = bindToolStore(
+      createUpdateAffinity({
+        tool,
+        z,
+        shortIdBatch,
+      }),
+      mockStore,
+    );
   });
 
   it("creates an unknown NPC at score 0 and applies the delta with derived fields", async () => {
@@ -522,7 +525,7 @@ describe("affinity plugin manifest", () => {
     expect(manifest.tools?.plugin).toEqual(["update-affinity"]);
     expect(manifest.entry).toBe("./server/index.js");
     expect(manifest.completeAfterTools).toEqual(["update-affinity"]);
-    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(0);
   });
 

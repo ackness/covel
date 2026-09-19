@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import type { CovelMessage } from "@covel/shared";
-import type { DataStore } from "@covel/store";
+import type { EventStore } from "../src/index.js";
 import {
   createEventBus,
   MAX_TRACKED_SESSIONS,
@@ -160,7 +160,10 @@ describe("bounded persist queue (audit R-03)", () => {
     const saveEvent = vi.fn(
       () => new Promise<void>((resolve) => pending.push(resolve)),
     );
-    const store = { saveEvent } as unknown as DataStore;
+    const store: EventStore = {
+      saveEvent,
+      getEventById: async () => null,
+    };
     const bus = createEventBus(store);
 
     const OVERFLOW = 5;

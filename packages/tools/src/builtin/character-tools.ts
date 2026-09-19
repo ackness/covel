@@ -2,9 +2,9 @@
  * Built-in character management tools.
  *
  * These tools are the canonical way for plugin LLM agents to create and update
- * characters (players, NPCs, companions) in the current session. They write
- * directly to the `characters` table via the injected DataStore and mirror each
- * write to `plugin_data[pluginId][namespace="characters"][key=charId]` so that
+ * characters (players, NPCs, companions) in the current session. They return
+ * buffered character proposals; the commit handler writes the character table
+ * and mirrors to `plugin_data[pluginId][namespace="characters"][key=charId]` so that
  * right-panel specs subscribing to plugin data receive live updates through the
  * existing SSE `plugin-data.changed` channel.
  *
@@ -25,6 +25,7 @@
 
 import type {
   CharacterAttributeSchema,
+  CharacterRecord,
   CharacterUpsertPayload,
   Proposal,
 } from "@covel/shared";
@@ -42,6 +43,7 @@ import {
   buildFieldsZod,
   assertCharacterFields,
   characterTypeSchema,
+  characterFieldsHint,
   formatFields,
   formatFieldValue,
   loadCharacterSchema,
@@ -65,19 +67,6 @@ export type {
 
 // ── Buffered write plumbing ──────────────────────────────────────
 
-/** Store-record view of a character, merging committed rows with buffered writes. */
-interface CharacterView {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly name: string;
-  readonly type: string;
-  readonly description?: string;
-  readonly fields?: unknown;
-  readonly version: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
 /**
  * Session characters as seen by THIS execution: committed rows overlaid with
  * `character.upsert` proposals buffered earlier in the same tool loop. Writes
@@ -90,29 +79,15 @@ interface CharacterView {
 async function mergeCharacterViews(
   store: CharacterStore,
   context: ToolExecutionContext,
-): Promise<CharacterView[]> {
+): Promise<CharacterRecord[]> {
   const stored = await store.listCharacters(context.sessionId);
-  const overlay = overlayCharacters(context.pendingProposals ?? []);
-  if (overlay.size === 0) return stored.map((c) => ({ ...c }));
-
-  const now = new Date().toISOString();
-  const byId = new Map<string, CharacterView>();
-  for (const c of stored) byId.set(c.id, { ...c });
-  for (const [id, payload] of overlay) {
-    const base = byId.get(id);
-    byId.set(id, {
-      id,
-      sessionId: context.sessionId,
-      name: payload.name,
-      type: payload.type ?? base?.type ?? "npc",
-      description: payload.description ?? base?.description,
-      fields: payload.fields ?? base?.fields,
-      version: payload.version ?? base?.version ?? 1,
-      createdAt: base?.createdAt ?? payload.createdAt ?? now,
-      updatedAt: now,
-    });
-  }
-  return [...byId.values()];
+  return [
+    ...overlayCharacters(
+      context.pendingProposals ?? [],
+      stored,
+      context.sessionId,
+    ).values(),
+  ];
 }
 
 /**
@@ -156,10 +131,11 @@ function createCharacterParametersSchema() {
 function createCreateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
+  schema?: CharacterAttributeSchema,
 ): ToolModule {
   return tool({
     name: "create-character",
-    description: CREATE_DESCRIPTION,
+    description: CREATE_DESCRIPTION + characterFieldsHint(schema),
     parameters: createCharacterParametersSchema(),
     execute: async (params, context) => {
       const now = new Date().toISOString();
@@ -186,7 +162,12 @@ function createCreateCharacterTool(
       // into the stored fields — keeping the panel (which overlays defaults at
       // render time) in sync with what the model later reads via get-character
       // and prompt context. A null schema leaves fields untouched.
-      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      const schema = await loadCharacterSchema(
+        store,
+        deps,
+        context.sessionId,
+        context.pendingProposals,
+      );
       const fields = mergeSchemaDefaults(params.fields, schema);
 
       const id = `char-${crypto.randomUUID()}`;
@@ -251,10 +232,11 @@ function createUpdateCharacterParametersSchema() {
 function createUpdateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
+  schema?: CharacterAttributeSchema,
 ): ToolModule {
   return tool({
     name: "update-character",
-    description: UPDATE_DESCRIPTION,
+    description: UPDATE_DESCRIPTION + characterFieldsHint(schema),
     parameters: createUpdateCharacterParametersSchema(),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
@@ -276,7 +258,12 @@ function createUpdateCharacterTool(
           ? { ...prevFields, ...params.fields }
           : existing.fields;
       const newVersion = existing.version + 1;
-      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      const schema = await loadCharacterSchema(
+        store,
+        deps,
+        context.sessionId,
+        context.pendingProposals,
+      );
       // Validate the supplied patch, so correcting one legacy field does not
       // require rewriting unrelated attributes that were already malformed.
       if (params.fields !== undefined)
@@ -361,6 +348,7 @@ interface CharacterWriteOutput {
 function createSyncCharactersTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
+  schema?: CharacterAttributeSchema,
 ): ToolModule {
   const createCharacter = createCreateCharacterTool(store, deps);
   const updateCharacter = createUpdateCharacterTool(store, deps);
@@ -368,7 +356,8 @@ function createSyncCharactersTool(
   return tool({
     name: "sync-characters",
     description:
-      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Call once at most; use runtime-done when neither array has changes.",
+      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Duplicate creates are returned as unchanged and never overwrite existing profiles; put changes in updates. Correct and resubmit the full batch after a failure; use runtime-done when neither array has changes." +
+      characterFieldsHint(schema),
     parameters: z
       .object({
         creates: z
@@ -390,6 +379,7 @@ function createSyncCharactersTool(
       const proposals: Proposal[] = [];
       const created: Array<Record<string, unknown>> = [];
       const updated: Array<Record<string, unknown>> = [];
+      const unchanged: Array<Record<string, unknown>> = [];
 
       for (const params of creates) {
         const rawResult = await createCharacter.execute(params, {
@@ -397,10 +387,18 @@ function createSyncCharactersTool(
           pendingProposals: [...(context.pendingProposals ?? []), ...proposals],
         });
         const result = getToolContent(rawResult) as CharacterWriteOutput;
-        if (result.success !== true || result.existed === true) {
+        if (result.success !== true) {
           throw new Error(
             result._text ?? `Character ${params.name} could not be created`,
           );
+        }
+        if (result.existed === true) {
+          unchanged.push({
+            characterId: result.characterId,
+            name: result.name,
+            type: result.type,
+          });
+          continue;
         }
         proposals.push(...getPendingProposals(rawResult));
         created.push({
@@ -430,10 +428,11 @@ function createSyncCharactersTool(
 
       return withPendingProposals(
         {
-          _text: `Synchronized ${created.length} new and ${updated.length} existing characters.`,
+          _text: `Synchronized ${created.length} new and ${updated.length} existing characters.${unchanged.length ? ` Duplicate creates left unchanged: ${JSON.stringify(unchanged)}. Put explicit field changes in updates using these ids.` : ""}`,
           success: true,
           created,
           updated,
+          unchanged,
         },
         proposals,
       );
@@ -576,6 +575,7 @@ export function createCharacterTools(
           store,
           deps,
           context.sessionId,
+          context.pendingProposals,
         );
         return {
           _text: schema
@@ -595,9 +595,10 @@ export function createCharacterTools(
 
 /**
  * Build session write-tool variants. The LLM-facing `fields` schema stays a
- * compact generic object: duplicating a world's complete attribute schema in
- * both create + update definitions can consume thousands of tokens. Execution
- * still loads the authoritative session schema for defaults and validation.
+ * compact generic object; each tool advertises structural field constraints
+ * once in its description. World prose/defaults are not repeated in the create
+ * and update arrays. Execution reloads the authoritative session schema for
+ * defaults and validation, including changes made after tool preparation.
  *
  * Read tools (`list-characters`, `get-character`) are schema-independent so
  * they're not rebuilt here; callers keep using the globally-registered
@@ -606,11 +607,11 @@ export function createCharacterTools(
 export function buildSessionCharacterWriteTools(
   store: CharacterStore,
   deps: CharacterToolDeps,
-  _schema: CharacterAttributeSchema,
+  schema: CharacterAttributeSchema,
 ): readonly ToolModule[] {
   return [
-    createCreateCharacterTool(store, deps),
-    createUpdateCharacterTool(store, deps),
-    createSyncCharactersTool(store, deps),
+    createCreateCharacterTool(store, deps, schema),
+    createUpdateCharacterTool(store, deps, schema),
+    createSyncCharactersTool(store, deps, schema),
   ];
 }

@@ -7,7 +7,7 @@ import {
   applySlotOverlay,
   publicPresetId,
   resolveOverlayPresetId,
-  resolveSlotOverride,
+  resolveModelBinding,
 } from "./slot-overlay.js";
 import { targetModel, targetProvider } from "./gateway-lifecycle.js";
 import type {
@@ -71,6 +71,8 @@ export interface GatewayOptions {
   parameterOverrides?: ModelParameterOverrides;
   /** Abort signal for cancellation (e.g. budget timeout). */
   signal?: AbortSignal;
+  /** Allow configured text/object/stream fallback targets; defaults to true. */
+  allowFallback?: boolean;
   /** Synchronously observes every concrete provider/model attempt. */
   onTargetAttempt?: (target: { provider: string; model: string }) => void;
   /**
@@ -138,23 +140,16 @@ export function createGatewaySlotResolution(
   ): string | undefined {
     if (!presetId) return presetId;
 
-    // Per-request client override takes highest precedence. When the slot
-    // name matches a key in `slotPresetOverrides` we treat the result as
-    // an already-resolved preset id and short-circuit — skipping the
-    // slot-registry lookup prevents the tag-based fallback from silently
-    // routing a browser-only slot name (e.g. "fast") to the first
-    // llm.toml slot (e.g. "story").
-    //
-    // A preset id declared in the request's own customPresets is then
-    // mapped to its request-scoped overlay registration — the
-    // request only ever resolves the config it declared itself, never a
-    // same-named registration from a concurrent request.
-    const clientOverride = resolveSlotOverride(
-      presetId,
-      options?.slotOverrides,
-    );
+    const binding = options?.slotOverrides?.slotBindings?.[presetId];
+    if (binding) {
+      return resolveModelBinding(
+        binding,
+        options?.slotOverrides,
+        (id) => deps.presetRegistry.hasPreset?.(id) ?? false,
+      );
+    }
     const overlayId = resolveOverlayPresetId(
-      clientOverride,
+      presetId,
       options?.slotOverrides,
       (id) => deps.presetRegistry.hasPreset?.(id) ?? false,
     );

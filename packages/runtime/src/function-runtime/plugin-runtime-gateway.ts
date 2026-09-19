@@ -17,7 +17,7 @@
 import type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
-} from "@covel/plugin-loader";
+} from "@covel/shared/plugin-runtime";
 import type { LLMUsageSummary } from "@covel/shared";
 import type { ZodType } from "zod";
 import type {
@@ -55,6 +55,7 @@ export interface FullGatewayLike {
     options?: FullGatewayOptions,
   ): Promise<{
     text: string;
+    reasoningContent?: string;
     finishReason: string;
     usage: LLMUsageSummary;
     model?: string;
@@ -71,6 +72,7 @@ export interface FullGatewayLike {
     options?: FullGatewayOptions,
   ): Promise<{
     object: T;
+    reasoningContent?: string;
     finishReason: string;
     usage: LLMUsageSummary;
     model?: string;
@@ -209,6 +211,9 @@ export function createPluginRuntimeGateway(
       return {
         text: result.text,
         finishReason: result.finishReason,
+        ...(result.reasoningContent
+          ? { reasoningContent: result.reasoningContent }
+          : {}),
         usage: result.usage,
         ...(result.model ? { model: result.model } : {}),
         ...(result.provider ? { provider: result.provider } : {}),
@@ -228,6 +233,7 @@ export function createPluginRuntimeGateway(
       readonly signal?: AbortSignal;
     }): Promise<{
       readonly object: T;
+      readonly reasoningContent?: string;
       readonly finishReason: string;
       readonly usage: LLMUsageSummary;
     }> {
@@ -266,6 +272,9 @@ export function createPluginRuntimeGateway(
       return {
         object: result.object,
         finishReason: result.finishReason,
+        ...(result.reasoningContent
+          ? { reasoningContent: result.reasoningContent }
+          : {}),
         usage: result.usage,
         ...(result.model ? { model: result.model } : {}),
         ...(result.provider ? { provider: result.provider } : {}),

@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RuntimeManifest } from "@covel/shared";
-import type { DataStore } from "@covel/store";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import type { PluginAPI } from "@covel/runtime";
 import {
@@ -114,7 +113,6 @@ export async function loadRuntimeBundle(args: {
   readonly runtimeId: string;
   readonly locale: string;
   readonly ignoreUpstreams?: boolean;
-  readonly store?: DataStore;
 }): Promise<RuntimeLoadResult> {
   const discovery = await discoverPlugin(args.pluginsDir, args.pluginId);
   const rawManifests = await loadRuntimeManifests(discovery);
@@ -129,7 +127,7 @@ export async function loadRuntimeBundle(args: {
     rawManifests,
     locale: args.locale,
   });
-  const entryTools = await loadEntryTools(discovery, manifests, args.store);
+  const entryTools = await loadEntryTools(discovery, manifests);
   return {
     discovery,
     rawManifests,
@@ -152,7 +150,6 @@ export async function loadRuntimeBundle(args: {
 export async function loadEntryTools(
   discovery: PluginDiscoveryResult,
   manifests: readonly RuntimeManifest[],
-  store?: DataStore,
 ): Promise<readonly ToolModule[]> {
   const entryPaths = new Set(
     manifests.flatMap((manifest) => (manifest.entry ? [manifest.entry] : [])),
@@ -172,7 +169,7 @@ export async function loadEntryTools(
   if (entryPaths.size === 0) return [];
 
   const registered: ToolModule[] = [];
-  const covel = {
+  const covel: PluginAPI = {
     pluginId: discovery.id,
     toolkit: {
       tool,
@@ -180,7 +177,6 @@ export async function loadEntryTools(
       shortId,
       shortIdBatch,
       withPendingProposals,
-      ...(store ? { store } : {}),
     },
     http: { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
     registerTool(toolModule: ToolModule) {
@@ -188,8 +184,9 @@ export async function loadEntryTools(
     },
     on() {},
     registerRpc() {},
+    registerFormValidator() {},
     registerWires() {},
-  } as unknown as PluginAPI;
+  };
 
   for (const entryPath of entryPaths) {
     const fullPath = path.resolve(discovery.rootPath, entryPath);

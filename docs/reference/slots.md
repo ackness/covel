@@ -28,7 +28,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 2. **Tag-aware fallback** — 具名未命中时，回落到第一个**同 tag** 的 slot（`gateway-slot-resolution.ts`）。**跨 tag fallback 被禁止**：image 请求永远不会静默路由到 text slot。
 3. **省略 presetId** — 媒体操作有约定默认名：`generateImage` → `"image"`、`synthesizeSpeech` → `"speech"`、`transcribeAudio` → `"transcription"`，保证进入同 tag fallback 链而不是落到默认 text slot。
 4. **Per-runtime 覆盖** — `sessions.runtime_model_overrides`（runtimeId → slot 名）先于 `manifest.model` 与 gateway 默认（`packages/runtime/src/agent-loop/agent-loop-policy.ts`；请求级 `modelOverride` 只对 `outputKind: story` 的 runtime 优先于它）。
-5. **Per-request 覆盖** — 前端经 `X-Slot-Config` / `X-Provider-Keys` header 注入的自定义 preset 与 key 覆盖同名配置（`middleware/per-request-llm.ts`）。
+5. **Per-request 覆盖** — 前端经 `X-Slot-Config.slotBindings` 明确选择本地 `modelRef` 或服务端 `presetId`，并由 `X-Provider-Keys` 提供本次请求的连接密钥。两种模型身份可同名，临时配置不会替换服务端预设。
 
 模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：请求级 operational 覆盖 → `llm.toml` 手动字段 → 内置模型资料 → 版本化 LiteLLM 快照 → 协议默认。请求覆盖经 `X-Slot-Config.capabilityOverrides` 下发，只包含 input/output/features/contextWindow/maxOutputTokens；价格覆盖仅供客户端显示，绝不进入服务端信任边界。`self` 部署允许本机用户扩张能力；`demo` / `commercial` 只接受基础能力的非空子集，并对 token 上限取服务端值与请求值的较小者。每次请求只克隆 effective target，不修改全局 registry。每次 agent 调用在 `PreLLMCall` 之后通过 `LLMAdapter.resolveBudget(slot)` 读取实际用途的 `contextWindow`、`maxOutputTokens` 和用户请求的 `requestedMaxOutputTokens`，再预留输出并裁剪输入；上下文组装和 `PostContextAssembly` 不再提前按其他模型的窗口裁剪历史。story / plugin 各自使用实际目标的窗口，compactor 使用 `fast` 的当前配置；请求覆盖与 `llm.toml` 热更新都通过同一 adapter 解析。`createTurnContextBudget` 仅提供未知模型的 32,768 窗口回退值；显式 `COVEL_COMPACTOR_CONTEXT_WINDOW` 通过 `BudgetOptions.contextWindowLimit` 保留为部署上限，不能扩大模型自身能力。
 
@@ -57,11 +57,44 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 后台记忆更新使用触发它的请求 adapter，切换模型或调整输出参数后重试同样生效。请求包装器共享记忆管理器及按 session 串行的 pending 队列：`MemoryUpdater.updateAfterTurn(params, llmOverride?)` 捕获本次 adapter，`awaitPending(sessionId)` 仍等待同一队列。恢复暂停任务时重新使用当前请求的上下文预算。调用前预算超限、provider 初始化失败和上游请求失败均在错误详情保留实际 provider/model；无效输出参数归为不可重试的配置错误。
 
+记忆提取是框架服务。用途分配始终列出 `memory`，即使服务端未定义该 slot：浏览器显式绑定优先；未绑定时服务端依次选择 `memory`、`plugin`、`story`、首个 text slot。每次任务读取最新基础配置，支持热重载；排队任务保留各自请求的 adapter 和 slot。纯 UI、无 model/stage 的自动声明不会在会话插件列表显示无效的 runtime 模型选择器。
+
+记忆请求每次调用的整体超时为 120 秒（包含该调用内部的传输重试），默认关闭额外思考以降低事实提取耗时；用户显式配置的思考参数仍优先。memory 库保留有限瞬态重试，gateway 返回的不可重试错误（包括整体超时）不会重试。`{}` 表示合法的无变化；非法 JSON、非对象或没有有效记忆块的非空结果均记录失败。结果以 `memory.updated` 写入该回合 trace，并在 `memory-panel` capability 的宿主下持久化 `_memory/update` 状态。已结束的 provider / 解析失败会清除该任务的待恢复记录，下一轮不会立即重复同一失败请求；进程中断或持久化失败的任务仍保留恢复能力。失败不回滚已提交剧情；下一次有叙事输出的成功回合会提取新剧情，成功后清除失败提示。
+
+## 请求中的模型身份
+
+设备设置与 `X-Slot-Config.slotBindings` 共用显式联合合同：每个用途只接受
+`{ "modelRef": "local-reference" }` 或 `{ "presetId": "server-preset" }`。
+本地引用必须由本次 `customPresets` 声明；同名服务端预设不能补足缺失的本地引用。
+错误的绑定形状、重复模型引用、缺失定义和非法路由头在执行前返回
+`400 invalid_llm_configuration`，不会忽略配置后调用其他模型。
+
+临时注册按本次配置隔离；公共模型目录与默认 text/embedding 选择只读取持久配置，
+请求不能通过内部 scoped ID 访问另一个请求的模型。显式本地与服务端选择同名时，
+模型标签、能力、参数编辑和连接测试均按选择类型解析。
+
+`POST /api/ai/ping` 接受互斥的 `modelRef`、`presetId` 或 `slot`。
+本地模型测试会附带其本次定义；用途测试保留用途名及其参数。
+显式模型不存在时返回失败，不测试其它模型。省略目标或指定未配置用途仍允许服务端
+用途回退，并在 `testedTarget.resolvedVia` 中标明实际来源。
+选定目标后，Ping 固定本次模型绑定并保留原用途的参数和能力覆盖，同名预设不会再次
+改变路由。选中模型失败时直接返回失败，不执行配置中的备用模型。无效 JSON、未知
+请求字段及同时指定多个目标返回 400；合法 `{}` 仍表示默认用途测试。
+
+底层 Gateway 的 `generateText`、`generateObject` 和 `streamText` 接受
+`GatewayOptions.allowFallback`，默认 `true`，保留普通生成的备用模型链。
+设为 `false` 时只解析并调用主目标，缺失的显式目标仍报错；此选项不改变具名用途的
+同 tag 解析规则。Ping 在固定实际绑定后使用 `allowFallback: false`。
+
 ## 服务商与模型 ID
 
 设置界面将连接信息和模型 ID 分开保存：一个服务商配置一组 `baseUrl`、协议、API 密钥和价格倍率，并可包含多个模型 ID。用途绑定只引用其中一个模型。请求时前端把该引用编译为兼容服务器的自定义 preset；preset 是内部传输结构，用户无需单独创建。
 
-持久化层只保存 `llm.providers`。旧版 `llm.customPresets` 在启动时执行一次可重试的单向迁移，成功后删除；兼容 facade 和 `X-Slot-Config.customPresets` 均按请求从 providers 投影，不再双写。
+持久化层只保存 `llm.providers`，其中每个模型条目可携带 `reasoningEffort` 默认值。添加服务商、批量添加模型和编辑现有模型时均可逐模型设置；导入/导出保留该字段。不迁移、双写或读取旧模型配置。`X-Slot-Config.customPresets` 是当前请求从 providers 投影的临时模型定义。模型默认值参与请求 overlay 的完整身份，避免同一模型引用在不同请求中使用不同设置时串用配置。
+
+模型条目的 `ref` 是配置身份，`modelId` 只是发送给服务商的原始 API 模型 ID。同一连接允许保存多个相同 `modelId` 的配置，分别设置名称和思考档位，例如“快速工具 / 关闭思考”和“详细叙事 / 开启思考”。添加时仅复用模型 ID、名称和思考设置均相同的条目；复制配置生成独立 `ref`，编辑名称或思考设置不改变引用。导入要求规范化后的 `ref` 在全部连接中唯一，重复引用整批拒绝；不按 API 模型 ID 合并。
+
+服务商与模型页面支持复制配置、编辑名称、自动保存思考设置；用途分配、插件绑定和会话摘要显示配置名及思考设置。主叙事、代理插件、函数插件和记忆任务通过同一请求配置链路继承所选模型默认值，无需逐用途重复设置。显式用途覆盖仍优先于模型默认。当前 `automatic` 档位用于 Qwen，界面显示“开启思考”，发送 `enable_thinking: true`，并非按任务自动选择开关。
 
 首次手动创建服务商与模型时，若 `story` / `plugin` 尚未显式分配，设置页会把这两个用途同时绑定到该模型，保证叙事与插件任务都能立即运行。DeepSeek、OpenAI、Anthropic、DashScope 即使首次配置未填写 `baseUrl`，也会使用框架内置的官方端点与协议；用户填写的地址始终优先。
 
@@ -77,15 +110,19 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 ## 思考强度
 
-“生成参数”页面按原始模型 ID 的上游命名空间识别思考档位。例如服务商为 `openai`、模型 ID 为 `deepseek/deepseek-v4-flash` 时仍使用 DeepSeek 的 `关闭 / high / max` 档位。留空表示沿用服务商默认行为，不发送强度覆盖。
+“生成参数”页面按原始模型 ID 的上游命名空间识别思考档位。例如服务商为 `openai`、模型 ID 为 `deepseek/deepseek-v4-flash` 时仍使用 DeepSeek 的 `关闭 / high / max` 档位。选项由模型能力决定，不把各厂商的强度假定为等价。
+
+用户设置的生效顺序为：用途显式覆盖 → 模型 / TOML 默认 → 任务默认 → 服务商默认。用途留空表示继承；模型留空表示按任务决定。显式 `provider-default` 表示让服务商决定，清除继承的思考请求字段并跳过任务默认，不能把它当成未配置。记忆提取的任务默认仍为关闭思考，用户在用途或模型上设置的档位优先。界面分别显示继承值和显式覆盖，不把服务商文档中的默认档位冒充本次任务的实际参数。
+
+`REASONING_EFFORT_VALUES` 与 `ReasoningEffort` 由 `@covel/shared` 定义，前端持久化、请求入口校验和 provider adapter 共用。模型参数只通过白名单字段传输；不会把任意导入 JSON 合并进服务商请求。现有 `disabled` / `automatic` 等值保持兼容，老配置不需要迁移。
 
 统一的 `reasoningEffort` 设置会按接口协议转换：
 
-- OpenAI Chat 和兼容接口：`reasoning_effort`；DeepSeek 同时发送 `thinking.type`，Qwen 使用 `enable_thinking`。
-- OpenAI Responses：`reasoning: { effort }`。
-- Anthropic Messages：`output_config: { effort }`；DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
+- OpenAI Chat 和兼容接口：`reasoning_effort`；DeepSeek 同时发送 `thinking.type`，Qwen 开关使用 `enable_thinking`；Qwen3.8 Chat 的原生 `low/medium/xhigh` 使用 `reasoning_effort`，已确认的 Qwen3.5–3.7 Max/Plus/Flash 使用 `thinking_budget` 预算预设（2048/8192/16384），界面明确标注 token 数值。预算预设不是服务商原生档位，实际消耗可以少于预算。显式档位会清理继承的预算，避免 Qwen3.8 同时发送两种参数。
+- OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。`store: false` 时请求加密 reasoning，用于工具续调。
+- Anthropic Messages：`output_config: { effort }`；已识别的自适应思考模型选择档位时启用 `thinking.type: "adaptive"`，默认请求可见摘要 `display: "summarized"`；不可关闭思考的模型不显示关闭选项。Claude 请求会移除与思考冲突的采样参数，关闭思考时清理继承的 effort，避免组合产生 400 错误。DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
 
-当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 的 `minimal/low/medium/high`、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/自动模式。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。
+当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 的 `minimal/low/medium/high`、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/开启、原生档位或预算预设。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。
 
 ## 媒体 wire 路由键（`providerRequestMetadata`）
 

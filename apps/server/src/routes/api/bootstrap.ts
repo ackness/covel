@@ -1,5 +1,9 @@
 /** Wire the API dependency graph for production and tests. */
 
+import {
+  createPluginBackgroundQueue,
+  type PluginBackgroundQueue,
+} from "./plugin-rpc/background-queue.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
 import { readRuntimeEnv } from "@covel/shared";
@@ -35,6 +39,10 @@ import {
   type SessionLock,
 } from "../../lib/session-lock.js";
 import { makeErrorHandler } from "../../api-error.js";
+import {
+  createApplicationWork,
+  type ApplicationWork,
+} from "../../application-work.js";
 import { sessionRoutes } from "./session.js";
 import { pluginRoutes } from "./plugins.js";
 import { frameworkRoutes } from "./framework.js";
@@ -59,10 +67,7 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
-import {
-  recoverExpiredRuntimeJobs,
-  sweepStalePendingJobs,
-} from "./plugin-rpc/jobs.js";
+import { sweepStalePendingJobs } from "./plugin-rpc/jobs.js";
 import {
   createRuntimeJobWorker,
   parseStagedRuntimeJobPayload,
@@ -103,6 +108,8 @@ import {
 // ── Bootstrap config ─────────────────────────────────────────────
 
 export interface ApiBootstrapConfig {
+  /** Share the composition root's request owner, or create one for an embedded API. */
+  readonly applicationWork?: ApplicationWork;
   /** Path to plugins directory (e.g., 'plugins/'). Used when `pluginsDirs` is not provided. */
   readonly pluginsDir: string;
   /**
@@ -164,7 +171,7 @@ export interface ApiBootstrapConfig {
    * memory uses the same slot-id contract exposed to runtime bindings and
    * player-facing settings (`memory` → `plugin` → `story` → first text slot).
    */
-  readonly preferredMemorySlot?: string;
+  readonly preferredMemorySlot?: string | (() => string);
   /**
    * Optional per-request middleware inserted AFTER the default dependency
    * injection middleware but BEFORE route handlers execute. Intended for
@@ -179,7 +186,8 @@ export interface ApiBootstrapConfig {
    * Multi-pod PG deployments MUST pass a distributed implementation —
    * typically `createPgAdvisorySessionLock(sql)` from
    * `../../lib/pg-session-lock.ts` — so mutual exclusion is enforced
-   * across processes.
+   * across processes. The implementation must also provide nonblocking
+   * `tryWithLock` so durable recovery can distinguish live commits.
    */
   readonly sessionLock?: SessionLock;
   /**
@@ -200,12 +208,20 @@ export interface ApiBootstrapConfig {
 }
 
 export interface ApiBootstrapResult {
+  readonly applicationWork: ApplicationWork;
   readonly app: Hono;
   readonly registry: PluginRegistry;
   readonly store: DataStore;
   readonly eventBus: EventBus;
   readonly compactorRunner: CompactorRunner;
   readonly runtimeJobWorker: RuntimeJobWorker;
+  readonly pluginBackgroundQueue: PluginBackgroundQueue;
+  /** Non-blocking startup scans; the host must drain these before closing storage. */
+  readonly startupMaintenance: Promise<void>;
+  /** Stop tool admission and drain cancelled callbacks before releasing dependencies. */
+  readonly closeTools: () => Promise<void>;
+  /** Unregister capabilities only after runtime and memory producers have stopped. */
+  readonly closePluginEntries: () => Promise<void>;
   /**
    * Refresh the per-session tool override cache for `(create|update)-character`
    * so the next `executeTurn` exposes schema-typed `fields` to the LLM.
@@ -228,20 +244,55 @@ export async function bootstrapApi(
   // failure propagates: with a PG store backend, an unreachable PG is fatal
   // anyway, and silently degrading to single-pod fan-out would be incorrect.
   let eventTransport: EventBusTransport | undefined;
-  const databaseUrl = readRuntimeEnv().databaseUrl;
-  if (config.storeBackend === "pg" && databaseUrl) {
-    const { createPgEventTransport } =
-      await import("../../lib/pg-event-transport.js");
-    eventTransport = await createPgEventTransport(databaseUrl);
-    console.log(
-      "[bootstrap] event bus transport: pg listen/notify (cross-pod fan-out enabled)",
+  let eventBus: EventBus | undefined;
+  const owned: {
+    pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
+    closeTools?: () => Promise<void>;
+  } = {};
+  try {
+    const databaseUrl = readRuntimeEnv().databaseUrl;
+    if (config.storeBackend === "pg" && databaseUrl) {
+      const { createPgEventTransport } =
+        await import("../../lib/pg-event-transport.js");
+      eventTransport = await createPgEventTransport(databaseUrl);
+      console.log(
+        "[bootstrap] event bus transport: pg listen/notify (cross-pod fan-out enabled)",
+      );
+    }
+    eventBus = createEventBus(
+      config.store,
+      eventTransport ? { transport: eventTransport } : undefined,
     );
+    return await assembleApi(config, eventBus, owned);
+  } catch (error) {
+    await owned.closeTools?.();
+    try {
+      await owned.pluginEntries?.close();
+    } catch {
+      console.warn(
+        "[bootstrap] failed to clean up plugin entries after startup failure",
+      );
+    }
+    try {
+      if (eventBus) await eventBus.close();
+      else await eventTransport?.close?.();
+    } catch {
+      console.warn(
+        "[bootstrap] failed to close event infrastructure after startup failure",
+      );
+    }
+    throw error;
   }
-  const eventBus = createEventBus(
-    config.store,
-    eventTransport ? { transport: eventTransport } : undefined,
-  );
+}
 
+async function assembleApi(
+  config: ApiBootstrapConfig,
+  eventBus: EventBus,
+  owned: {
+    pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
+    closeTools?: () => Promise<void>;
+  },
+): Promise<ApiBootstrapResult> {
   // Per-session serializer. The caller (e.g. `app.ts`) may inject a PG
   // advisory-lock implementation for multi-pod safety; otherwise we fall
   // back to the in-process chain lock which is correct for single-process
@@ -249,6 +300,10 @@ export async function bootstrapApi(
   // via `c.get('sessionLock')` and never import a concrete lock module.
   const sessionLock: SessionLock =
     config.sessionLock ?? createInProcessSessionLock();
+  const tryWithCommitLock = sessionLock.tryWithLock?.bind(sessionLock);
+  if (!tryWithCommitLock) {
+    throw new Error("durable runtime jobs require a nonblocking session lock");
+  }
   const memoryIngestLock: SessionLock =
     config.memoryIngestLock ?? createInProcessSessionLock();
   console.log(
@@ -258,40 +313,6 @@ export async function bootstrapApi(
   // Wrap store to automatically emit plugin-data.changed SSE events
   // on every setPluginData / setPluginDataBatch call, regardless of caller.
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
-
-  // One-time startup sweep of stale suspensions accumulated while the server
-  // was down. Fire-and-forget — never blocks boot.
-  void maybeSweepExpiredSuspensions(store, { force: true }).catch(
-    (err: unknown) =>
-      console.warn(
-        "[suspension-sweep] startup sweep failed:",
-        err instanceof Error ? err.message : String(err),
-      ),
-  );
-
-  // One-time startup sweep of background-job rows orphaned by a crash/restart
-  // (audit R-10). Ownership is process-local, so it is exact only for the
-  // single-process memory/sqlite deployments. A PG deployment may have other
-  // live Pods; sweeping their foreign owner ids would falsely fail live work.
-  // Leave PG orphans pending until the job model gains a renewable lease.
-  if (config.storeBackend !== "pg") {
-    void sweepStalePendingJobs(store).catch((err: unknown) =>
-      console.warn(
-        "[job-sweep] startup sweep failed:",
-        err instanceof Error ? err.message : String(err),
-      ),
-    );
-  }
-
-  // Durable staged-runtime jobs use renewable leases, so the sweep is safe on
-  // every backend, including multiple PostgreSQL Pods. Expired work becomes a
-  // terminal audit record and is never silently re-billed.
-  void recoverExpiredRuntimeJobs(store).catch((err: unknown) =>
-    console.warn(
-      "[runtime-job-sweep] startup sweep failed:",
-      err instanceof Error ? err.message : String(err),
-    ),
-  );
 
   const { registry, discoveryMap, manifestCache } =
     await discoverAndRegisterPlugins({
@@ -430,6 +451,7 @@ export async function bootstrapApi(
     llmAdapter: config.llmAdapter,
     eventDirectory,
   });
+  owned.closeTools = () => toolExecutor.close();
 
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
@@ -480,18 +502,19 @@ export async function bootstrapApi(
   // Unified plugin server entries (`entry` frontmatter field) — needs the
   // tool map, hook pipeline, and rpc registry above. Builtin
   // entries run here; community entries defer to ensurePluginEntry.
-  const pluginEntries = await createBootstrapPluginEntries({
-    discoveryMap,
-    manifestCache,
-    store,
-    toolMap,
-    localToolNames,
-    pluginToolAccess,
-    hookPipeline,
-    rpcRegistry,
-    isCommunityServerCodeApproved,
-    isCommunityHookApproved,
-  });
+  const pluginEntries = (owned.pluginEntries =
+    await createBootstrapPluginEntries({
+      discoveryMap,
+      manifestCache,
+      store,
+      toolMap,
+      localToolNames,
+      pluginToolAccess,
+      hookPipeline,
+      rpcRegistry,
+      isCommunityServerCodeApproved,
+      isCommunityHookApproved,
+    }));
   ensurePluginEntry = pluginEntries.ensurePluginEntry;
 
   // Community activation seam: running the plugin's `entry` module is what
@@ -529,6 +552,11 @@ export async function bootstrapApi(
         `memory-ingest:${JSON.stringify([sessionId])}`,
         task,
       ),
+    runCoreExclusive: (sessionId, task) =>
+      memoryIngestLock.withLock(
+        `memory-core:${JSON.stringify([sessionId])}`,
+        task,
+      ),
     preferredMemorySlot: config.preferredMemorySlot,
     resolveModel,
     // Break memoryBlocks label collisions by trust tier (builtin > community),
@@ -543,9 +571,11 @@ export async function bootstrapApi(
     }
   }
 
+  const pluginBackgroundQueue = createPluginBackgroundQueue();
   const runtimeJobWorker = createRuntimeJobWorker({
     store,
     eventBus,
+    tryWithCommitLock,
     execute: async (job, control) => {
       const payload = parseStagedRuntimeJobPayload(job.payload);
       if (
@@ -636,48 +666,51 @@ export async function bootstrapApi(
         ...(payload.runtimeModelOverrides
           ? { runtimeModelOverrides: payload.runtimeModelOverrides }
           : {}),
+        completeInTx: async (tx, turnResult) => {
+          const runtimeResult = turnResult.runtimeResults.find(
+            (result) => result.runtimeId === job.runtimeId,
+          );
+          if (runtimeResult?.status !== "success") {
+            throw new Error(
+              runtimeResult?.error ??
+                `detached runtime ended with ${runtimeResult?.status ?? "no result"}`,
+            );
+          }
+          const runtimeOutput = runtimeResult.output;
+          if (
+            runtimeOutput?.status === "failed" ||
+            (typeof runtimeOutput?.error === "string" && runtimeOutput.error)
+          ) {
+            throw new Error(
+              typeof runtimeOutput.error === "string"
+                ? runtimeOutput.error
+                : "detached runtime reported a failed business result",
+            );
+          }
+          await control.completeInTx(tx, {
+            turnId: turnResult.turnId,
+            executionId: turnResult.executionContext.executionId,
+            runtimeId: runtimeResult.runtimeId,
+            durationMs: runtimeResult.durationMs,
+            output: runtimeResult.output,
+          });
+        },
         beforeCommit: control.beforeCommit,
         beforeExecute: control.assertCurrent,
         executionSignal: control.signal,
       });
-      const runtimeResult = outcome.turnResult.runtimeResults.find(
-        (result) => result.runtimeId === job.runtimeId,
-      );
-      if (runtimeResult?.status !== "success") {
-        throw new Error(
-          runtimeResult?.error ??
-            `detached runtime ended with ${runtimeResult?.status ?? "no result"}`,
-        );
-      }
-      const runtimeOutput = runtimeResult.output;
-      if (
-        runtimeOutput?.status === "failed" ||
-        (typeof runtimeOutput?.error === "string" && runtimeOutput.error)
-      ) {
-        throw new Error(
-          typeof runtimeOutput.error === "string"
-            ? runtimeOutput.error
-            : "detached runtime reported a failed business result",
-        );
-      }
       if (!outcome.commit.committed) {
-        throw new Error("detached runtime proposals did not commit");
+        throw new Error(
+          outcome.commit.error ?? "detached runtime proposals did not commit",
+        );
       }
-      return {
-        result: {
-          turnId: outcome.turnResult.turnId,
-          executionId: outcome.turnResult.executionContext.executionId,
-          runtimeId: runtimeResult.runtimeId,
-          durationMs: runtimeResult.durationMs,
-          output: runtimeResult.output,
-        },
-      };
     },
   });
-  runtimeJobWorker.wake();
 
   // 9. Create app with dependency injection middleware
   const app = new Hono();
+  const applicationWork = config.applicationWork ?? createApplicationWork();
+  app.use("*", applicationWork.middleware);
   const browserWorkspaceCache = createBrowserWorkspaceCache();
 
   const isDev = runtimeEnv.nodeEnv !== "production";
@@ -710,6 +743,7 @@ export async function bootstrapApi(
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("sessionLock", sessionLock);
     c.set("runtimeJobWorker", runtimeJobWorker);
+    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
@@ -787,13 +821,35 @@ export async function bootstrapApi(
   app.route("/api/traces", traceRoutes);
   app.route("/api/media", mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
+  // Start maintenance only after assembly succeeds. These scans remain
+  // non-blocking for readiness, but belong to the host's drain boundary.
+  const startupMaintenance = Promise.all([
+    maybeSweepExpiredSuspensions(store, { force: true }).catch(() => {
+      console.warn("[suspension-sweep] startup sweep failed");
+    }),
+    // Legacy ownership is process-local; PG may still have other live owners.
+    ...(config.storeBackend !== "pg"
+      ? [
+          sweepStalePendingJobs(store).catch(() => {
+            console.warn("[job-sweep] startup sweep failed");
+          }),
+        ]
+      : []),
+  ]).then(() => undefined);
+  runtimeJobWorker.wake();
+
   return {
     app,
+    applicationWork,
     registry,
     store,
     eventBus,
     compactorRunner,
     runtimeJobWorker,
+    pluginBackgroundQueue,
+    startupMaintenance,
+    closeTools: () => toolExecutor.close(),
+    closePluginEntries: () => pluginEntries.close(),
     prepareToolsForSession,
   };
 }

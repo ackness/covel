@@ -23,7 +23,11 @@ import { sessionRoutes } from "../../src/routes/api/session.js";
 import { stateRoutes } from "../../src/routes/api/state.js";
 import { rateLimiter } from "../../src/middleware/rate-limit.js";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
+import { worldRoutes } from "../../src/routes/api/worlds.js";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -33,9 +37,10 @@ function createTestApp(deps: {
   mediaStore?: MediaStore;
   worldsDirs?: readonly string[];
   covelHome?: string;
+  sessionLock?: SessionLock;
 }) {
   const app = new Hono();
-  const sessionLock = createInProcessSessionLock();
+  const sessionLock = deps.sessionLock ?? createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", deps.store);
     c.set("pluginRegistry", deps.pluginRegistry);
@@ -581,6 +586,12 @@ sources:
         "media/portraits/mio.png": "png-ish",
       },
     });
+    await store.createWorld({
+      id: world.worldId,
+      name: "Media world",
+      description: "Synthetic world",
+      createdAt: new Date().toISOString(),
+    });
     registerPresenceAssetsPlugin(pluginRegistry);
     const mediaStore = createMemoryMediaStore();
     const failingMediaStore = new Proxy(mediaStore, {
@@ -623,6 +634,87 @@ sources:
     expect(
       await store.listWorldDataImportLedger("sess-media-finalize"),
     ).toEqual([]);
+    expect(await mediaStore.listAssets()).toEqual([]);
+    expect(await mediaStore.listRefs()).toEqual([]);
+  });
+
+  it("releases prepared media when world deletion wins before session admission", async () => {
+    const world = await makeWorldPackage({
+      id: "deleted-before-create",
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+      files: { "media/portraits/mio.png": "png-ish" },
+    });
+    await store.createWorld({
+      id: world.worldId,
+      name: "Deleted world",
+      description: "Synthetic world",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        source: "generated-file",
+        storage: {
+          scope: "server",
+          backend: "file",
+          path: world.worldsDir,
+          durable: true,
+        },
+      },
+    });
+    registerPresenceAssetsPlugin(pluginRegistry);
+    const mediaStore = createMemoryMediaStore();
+    const sessionLock = createInProcessSessionLock();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const withLock = sessionLock.withLock.bind(sessionLock);
+    vi.spyOn(sessionLock, "withLock").mockImplementation(async (id, fn) => {
+      if (id === "delayed-create") {
+        entered.resolve();
+        await release.promise;
+      }
+      return withLock(id, fn);
+    });
+    app = createTestApp({
+      store,
+      pluginRegistry,
+      mediaStore,
+      sessionLock,
+      worldsDirs: [world.worldsDir],
+    });
+    app.route("/api/worlds", worldRoutes);
+    const creation = app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "delayed-create",
+        worldId: world.worldId,
+        plugins: ["character-presence"],
+      }),
+    });
+    try {
+      await entered.promise;
+      expect(await mediaStore.listAssets()).toHaveLength(1);
+      expect(
+        (
+          await app.request(`/api/worlds/${world.worldId}`, {
+            method: "DELETE",
+          })
+        ).status,
+      ).toBe(200);
+    } finally {
+      release.resolve();
+      await creation;
+    }
+    const response = await creation;
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "world_not_found" });
+    expect(await store.getSession("delayed-create")).toBeNull();
     expect(await mediaStore.listAssets()).toEqual([]);
     expect(await mediaStore.listRefs()).toEqual([]);
   });

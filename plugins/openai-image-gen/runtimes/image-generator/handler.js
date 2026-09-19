@@ -1,3 +1,4 @@
+import { runImageGeneration } from "@covel/plugin-handlers-utils/image-generation";
 /**
  * @covel/plugin-openai-image-gen — image-generator handler
  *
@@ -21,11 +22,7 @@
  * re-renders when commit lands.
  */
 
-import {
-  optionalNumber,
-  optionalString,
-  runImageGeneration,
-} from "@covel/plugin-handlers-utils";
+import { optionalNumber, optionalString } from "@covel/plugin-handlers-utils";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 300000;
 

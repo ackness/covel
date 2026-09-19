@@ -2,118 +2,72 @@ import { describe, expect, it } from "vitest";
 
 import {
   flattenProviderProfiles,
-  profilesFromLegacyPresets,
   upsertProviderModel,
 } from "../provider-model-profiles.js";
 
 describe("provider model profiles", () => {
-  it("groups legacy presets by provider and preserves stable model refs", () => {
-    const profiles = profilesFromLegacyPresets([
-      {
-        id: "custom_openai",
-        name: "OpenAI",
-        provider: "openai",
-        baseUrl: "https://openai.example/v1",
-        model: "openai/gpt-5.6-sol",
-        protocol: "openai-responses-v1",
-      },
-      {
-        id: "custom_deepseek",
-        name: "DeepSeek",
-        provider: "openai",
-        baseUrl: "https://openai.example/v1",
-        model: "deepseek/deepseek-v4-flash",
-        protocol: "openai-responses-v1",
-      },
+  it("keeps same-ID configurations independently addressable and exact additions idempotent", () => {
+    const input = {
+      providerId: "fixture",
+      baseUrl: "https://fixture.invalid",
+      modelId: "qwen3.8-flash",
+    };
+    const off = upsertProviderModel(
+      [],
+      { ...input, reasoningEffort: "disabled" },
+      () => "off",
+    );
+    const on = upsertProviderModel(
+      off.profiles,
+      { ...input, reasoningEffort: "automatic" },
+      () => "on",
+    );
+    const copy = upsertProviderModel(
+      on.profiles,
+      { ...input, reasoningEffort: "automatic", modelName: "Narration" },
+      () => "copy",
+    );
+    const repeat = upsertProviderModel(
+      copy.profiles,
+      { ...input, reasoningEffort: "automatic" },
+      () => "unexpected",
+    );
+    expect(repeat.modelRef).toBe("on");
+    expect(repeat.profiles[0]!.models.map((model) => model.ref)).toEqual([
+      "off",
+      "on",
+      "copy",
     ]);
-
-    expect(profiles).toEqual([
-      {
-        id: "openai",
-        name: "openai",
-        baseUrl: "https://openai.example/v1",
-        protocol: "openai-responses-v1",
-        models: [
-          {
-            ref: "custom_openai",
-            modelId: "openai/gpt-5.6-sol",
-            name: "OpenAI",
-          },
-          {
-            ref: "custom_deepseek",
-            modelId: "deepseek/deepseek-v4-flash",
-            name: "DeepSeek",
-          },
-        ],
-      },
-    ]);
-  });
-
-  it("keeps separate legacy connections for the same provider routable", () => {
-    const legacy = [
-      {
-        id: "official_model",
-        name: "Official",
-        provider: "openai",
-        baseUrl: "https://api.openai.com/v1",
-        model: "gpt-5",
-        protocol: "openai-responses-v1",
-      },
-      {
-        id: "proxy_model",
-        name: "Proxy",
-        provider: "openai",
-        baseUrl: "https://proxy.example/v1",
-        model: "gpt-4.1",
-        protocol: "openai-chat-v1",
-      },
-      {
-        id: "proxy_responses_model",
-        name: "Proxy Responses",
-        provider: "openai",
-        baseUrl: "https://proxy.example/v1",
-        model: "gpt-5-mini",
-        protocol: "openai-responses-v1",
-      },
-    ];
-
-    const profiles = profilesFromLegacyPresets(legacy);
-    const flattened = flattenProviderProfiles(profiles);
-
-    expect(profiles).toHaveLength(3);
-    expect(new Set(profiles.map((profile) => profile.id)).size).toBe(3);
-    expect(new Set(flattened.map((preset) => preset.provider)).size).toBe(3);
     expect(
-      flattened.map(({ provider: _provider, ...preset }) => preset),
-    ).toEqual(legacy.map(({ provider: _provider, ...preset }) => preset));
-  });
-
-  it("normalizes provider ids before grouping legacy presets", () => {
-    const profiles = profilesFromLegacyPresets([
+      flattenProviderProfiles(repeat.profiles).map(
+        ({ id, name, model, reasoningEffort }) => ({
+          id,
+          name,
+          model,
+          reasoningEffort,
+        }),
+      ),
+    ).toEqual([
       {
-        id: "model_a",
-        name: "A",
-        provider: "openai",
-        baseUrl: "https://openai.example/v1",
-        model: "gpt-5",
+        id: "off",
+        name: input.modelId,
+        model: input.modelId,
+        reasoningEffort: "disabled",
       },
       {
-        id: "model_b",
-        name: "B",
-        provider: "OpenAI",
-        baseUrl: "https://openai.example/v1",
-        model: "gpt-4.1",
+        id: "on",
+        name: input.modelId,
+        model: input.modelId,
+        reasoningEffort: "automatic",
+      },
+      {
+        id: "copy",
+        name: "Narration",
+        model: input.modelId,
+        reasoningEffort: "automatic",
       },
     ]);
-
-    expect(profiles).toHaveLength(1);
-    expect(profiles[0]?.id).toBe("openai");
-    expect(profiles[0]?.models.map((model) => model.ref)).toEqual([
-      "model_a",
-      "model_b",
-    ]);
   });
-
   it("flattens provider models into the existing request overlay shape", () => {
     const flattened = flattenProviderProfiles([
       {

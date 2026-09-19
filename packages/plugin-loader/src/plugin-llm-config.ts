@@ -16,19 +16,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { parse as parseToml } from "smol-toml";
 
-export interface PluginLlmSlot {
-  readonly provider: string;
-  readonly model: string;
-  readonly baseUrl?: string;
-  readonly protocol?: string;
-}
-
-export interface PluginLlmConfig {
-  /** Default model slot for this plugin. */
-  readonly defaultSlot?: PluginLlmSlot;
-  /** Named slots (e.g., plugin.fast, plugin.image). */
-  readonly slots: Readonly<Record<string, PluginLlmSlot>>;
-}
+import type {
+  PluginLlmSlot,
+  PluginLlmConfig,
+} from "@covel/shared/plugin-runtime";
+export type {
+  PluginLlmSlot,
+  PluginLlmConfig,
+} from "@covel/shared/plugin-runtime";
 
 /**
  * Load plugin-level llm.toml from a plugin directory.

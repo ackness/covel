@@ -271,6 +271,7 @@ describe("start-game API lifecycle scenario", () => {
     }
 
     await store.createSession({
+      locale: "zh-CN",
       phase: "setup",
       setupRuntimes: Object.fromEntries(
         ["pregame", "world-init/schema-gen", "char-creator/player-init"].map(
@@ -291,7 +292,6 @@ describe("start-game API lifecycle scenario", () => {
       },
       id: "sess-start-flow-api",
       worldId: "world-1",
-      presetId: null,
       status: "active",
       activePlugins: ["pregame", "world-init", "char-creator", "narrator"],
       completedPlayerTurns: 0,

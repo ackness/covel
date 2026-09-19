@@ -35,7 +35,9 @@ describe("PingButton cache invalidation", () => {
     const buttons = screen.getAllByRole("button", { name: "Ping" });
     fireEvent.click(buttons[0]);
     await waitFor(() =>
-      expect(apiMocks.pingPreset).toHaveBeenCalledWith("slot-plugin"),
+      expect(apiMocks.pingPreset).toHaveBeenCalledWith({
+        presetId: "slot-plugin",
+      }),
     );
     await screen.findByText("10ms");
     fireEvent.click(buttons[1]);
@@ -89,9 +91,9 @@ describe("PingButton cache invalidation", () => {
   it("keeps concurrent results for different targets", async () => {
     const resolvers = new Map<string, (result: PingResult) => void>();
     apiMocks.pingPreset.mockImplementation(
-      (requestId: string) =>
+      (target: { presetId: string }) =>
         new Promise<PingResult>((resolve) => {
-          resolvers.set(requestId, resolve);
+          resolvers.set(target.presetId, resolve);
         }),
     );
     render(
@@ -114,5 +116,38 @@ describe("PingButton cache invalidation", () => {
 
     expect(await screen.findByText("22ms")).not.toBeNull();
     expect(screen.getByText("11ms")).not.toBeNull();
+  });
+
+  it("separates local model and server preset requests and caches when IDs match", async () => {
+    apiMocks.pingPreset.mockImplementation(
+      async (target: { modelRef?: string; presetId?: string }) => ({
+        ok: true,
+        latencyMs: target.modelRef ? 13 : 29,
+      }),
+    );
+    const renderButtons = () => (
+      <>
+        <PingButton target={{ kind: "model", modelRef: "same-id" }} />
+        <PingButton target={{ kind: "preset", presetId: "same-id" }} />
+      </>
+    );
+    const first = render(renderButtons());
+    const buttons = screen.getAllByRole("button", { name: "Ping" });
+    fireEvent.click(buttons[0]);
+    await screen.findByText("13ms");
+    expect(screen.queryByText("29ms")).toBeNull();
+    fireEvent.click(buttons[1]);
+    await screen.findByText("29ms");
+    expect(apiMocks.pingPreset.mock.calls.map(([target]) => target)).toEqual([
+      { modelRef: "same-id" },
+      { presetId: "same-id" },
+    ]);
+    first.unmount();
+    render(renderButtons());
+    expect(await screen.findByText("13ms")).not.toBeNull();
+    expect(await screen.findByText("29ms")).not.toBeNull();
+    for (const button of screen.getAllByRole("button", { name: "Ping" }))
+      fireEvent.click(button);
+    expect(apiMocks.pingPreset).toHaveBeenCalledTimes(2);
   });
 });

@@ -105,14 +105,29 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
     store = createMemoryStore();
     registry = createPluginRegistry();
 
-    const loaded = makeFakeLoadedRuntime({
+    const baseLoaded = makeFakeLoadedRuntime({
       name: RUNTIME_ID,
       pluginId: RUNTIME_ID,
       outputKind: "story",
     });
+    const loaded = {
+      ...baseLoaded,
+      manifest: {
+        ...baseLoaded.manifest,
+        userSettings: [
+          {
+            key: "tone",
+            type: "text" as const,
+            default: "manifest",
+            label: "Tone",
+          },
+        ],
+      },
+    };
     registry.register(makeEntry({ id: RUNTIME_ID, loaded }));
 
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -120,13 +135,12 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: sessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     // Priority 500 runtimes need turnNumber >= 1 → seed a prior player message
@@ -167,6 +181,51 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       await next();
     });
     app.route("/api/actions", actionRoutes);
+  });
+
+  it("keeps request settings available through execution and both commit hooks", async () => {
+    const seen: Array<{ event: string; settings: unknown }> = [];
+    for (const event of [
+      "TurnStart",
+      "PreStateCommit",
+      "PostStateCommit",
+    ] as const) {
+      hookPipeline.register({
+        id: `settings:${event}`,
+        event,
+        pluginId: RUNTIME_ID,
+        handler: async (ctx) => {
+          seen.push({ event, settings: ctx.getOwnSettings?.() });
+          return { action: "continue" };
+        },
+      });
+    }
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Plugin-User-Settings": Buffer.from(
+          JSON.stringify({ [RUNTIME_ID]: { tone: "player" } }),
+        ).toString("base64"),
+      },
+      body: JSON.stringify({
+        requestId: "settings",
+        type: "send_message",
+        sessionId,
+        payload: { content: "look around" },
+      }),
+    });
+    expect(response.status).toBe(200);
+    await drainActionStream(response);
+    expect(seen.map((entry) => entry.event)).toEqual([
+      "TurnStart",
+      "PreStateCommit",
+      "PostStateCommit",
+    ]);
+    expect(seen.every((entry) => Object.isFrozen(entry.settings))).toBe(true);
+    expect(seen.map((entry) => entry.settings)).toEqual(
+      Array.from({ length: 3 }, () => ({ tone: "player" })),
+    );
   });
 
   it("shapes the actual main-turn LLM call through active context and request hooks", async () => {
@@ -215,6 +274,12 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       }),
     });
     const events = await drainActionStream(response);
+    expect(
+      events.find((event) => event.type === "runtime.started")?.payload,
+    ).toMatchObject({
+      runtimeId: RUNTIME_ID,
+      kind: "story",
+    });
     expect(llmCalls).toEqual([
       expect.objectContaining({ model: "hook-shaped-model" }),
     ]);

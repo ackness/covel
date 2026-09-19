@@ -69,7 +69,7 @@ import type {
 ```typescript
 import type {
   PluginAPI, // entry 工厂接收的 facade（registerTool / on / registerRpc / registerWires）
-  PluginToolkit, // covel.toolkit 注入包 { tool, z, shortId, shortIdBatch, withPendingProposals, store }
+  PluginToolkit, // covel.toolkit 注入包 { tool, z, shortId, shortIdBatch, withPendingProposals }
   PluginEntryFactory, // entry 模块 default export 的签名
   PluginHookOptions, // covel.on 的 options
   PluginRpcOptions, // covel.registerRpc 的 options
@@ -103,9 +103,9 @@ const mockLLM = new MockLLM({
 });
 ```
 
-**手搓 turn-executor 跑完整 turn**：需要验证 agent tool loop、同 turn event 链或 proposal commit 时，用 `@covel/runtime` 公开导出手工组装 —— `discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，`processRuntimeResult` 落库 proposal。完整可运行范例见 [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) 与 [`packages/runtime/tests/emit-event-integration.test.ts`](../../packages/runtime/tests/emit-event-integration.test.ts)，入口选择见 [plugin-testing.md](./plugin-testing.md)。
+**手工装配完整执行**：需要验证 agent tool loop、同 turn event 链或 proposal commit 时，用 `@covel/runtime` 公开导出手工组装：`discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，再通过 `commitExecution` 一次提交顶层与递归结果、journal 和 suspension。作者工具中的 [`execution.ts`](../../packages/test-runtime/src/execution.ts) 展示完整提交参数；底层 event/proposal 组合测试不能替代宿主完整提交。入口选择见 [plugin-testing.md](./plugin-testing.md)。
 
-**断言 Store 状态**：MemoryStore 实现完整 `DataStore` 接口，turn 执行 + `processRuntimeResult` 之后可直接 `store.listPluginData(...)` / `store.getState(...)` 断言持久化结果。
+**断言 Store 状态**：MemoryStore 实现完整 `DataStore` 接口。先检查 `commitExecution` 的状态，再用 `store.listPluginData(...)` / `store.getState(...)` 断言持久化结果；执行成功与提交成功是不同结果。
 
 ## 3. 审批管线
 
@@ -311,6 +311,8 @@ export default async function handler(
 ```
 
 > **注意**: 函数 runtime 返回值必须是 `HandlerResult`。领域写入放在 `success.effects` 中；`skipped` / `failed` 只能携带观测 effects。`proposals: [...]` 不是 handler 的公开返回字段。
+
+运行时的 `ctx.store` 和 `ctx.pluginData` 读取共享本次执行的待提交写入；返回对象是独立副本，修改它不等于保存。builtin handler 也不获得完整 DataStore，其额外领域写入必须经过 proposal 提交。RPC action 的写入则在会话锁内即时生效，后续异常不会自动回滚先前的写入；需要整批回滚时应通过 runtime 的 effects 执行。
 
 `FunctionHandlerContext` 暴露的字段(仅列和插件作者最相关的):
 

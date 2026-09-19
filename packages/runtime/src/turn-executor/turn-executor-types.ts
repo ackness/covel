@@ -4,8 +4,12 @@ import type {
   PluginRuntimeGateway,
   PluginRuntimeUtils,
   PluginSource,
-} from "@covel/plugin-loader";
-import type { DataStore, WorkingMemoryRecord } from "@covel/store";
+} from "@covel/shared/plugin-runtime";
+import type {
+  DataStore,
+  WorkingMemoryRecord,
+  StoreTransaction,
+} from "@covel/store";
 import type {
   BudgetOptions,
   CompactorRunner,
@@ -57,6 +61,8 @@ export interface AgentLoopDeps {
   readonly onRuntimeComplete?: (info: {
     runtimeId: string;
     pluginId: string;
+    turnId?: string;
+    runId?: string;
     status: string;
     durationMs: number;
     error?: string;
@@ -119,6 +125,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly onRuntimeStart?: (info: {
     runtimeId: string;
     pluginId: string;
+    turnId?: string;
+    runId?: string;
     /** Named stage; absent for event/manual/UI-only runtimes. */
     stage?: Stage;
   }) => Promise<void>;
@@ -178,6 +186,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     readonly updater: {
       updateAfterTurn(params: {
         sessionId: string;
+        turnId?: string;
+        traceId?: string;
         narrativeText: string;
         toolCallSummaries?: readonly string[];
         authoritativeFacts?: {
@@ -197,6 +207,15 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
         blocksChanged: readonly string[];
         error?: string;
       }>;
+      /** Persist recovery intent inside the story transaction, when supported. */
+      stageAfterTurn?(
+        tx: Pick<StoreTransaction, "setPluginData">,
+        input: Parameters<
+          NonNullable<
+            TurnExecutorDeps["memorySystem"]
+          >["updater"]["updateAfterTurn"]
+        >[0],
+      ): Promise<void>;
       /** Optional — await any pending updateAfterTurn for the session. */
       awaitPending?(sessionId: string): Promise<void>;
     };
@@ -234,7 +253,7 @@ export interface CapabilityPluginIds {
 }
 
 export interface TurnExecutorOptions {
-  /** Max LLM tool-calling loop steps per runtime. Default: 10. */
+  /** Max LLM tool-calling loop steps per runtime. Default: 20. */
   readonly maxSteps?: number;
   /** Timeout per runtime in ms. Default: 60000. */
   readonly timeoutMs?: number;

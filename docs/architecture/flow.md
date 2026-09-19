@@ -110,16 +110,18 @@ flowchart TB
 
     subgraph Group["每个 DAG 层级组（同组并行，跨组串行；name 做并列 tiebreak）"]
       direction TB
-      G1["guard? (agent runtime)"] --> G2["SSE: runtime.started"]
-      G2 --> G3["PreRuntime hook"]
-      G3 --> RT{"runtimeType"}
+      Gate["框架依赖 / 输入 / 权限检查"] --> G3["PreRuntime hook"]
+      G3 --> G1["guard? (agent runtime)"]
+      G1 --> G2["SSE: runtime.started"]
+      G2 --> RT{"runtimeType"}
       RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，物化 success.value / effects"]
       F1 --> G6
       RT -->|agent| G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
       G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse"]
       G5 --> G6["normalizeOutput → Proposal[]"]
       G6 --> G7["PostRuntime hook"]
-      G7 --> G8["SSE: runtime.completed<br/>status = success|skipped|suspended|failed"]
+      G7 --> Final["校验故事输出 / 超时 / 父级取消"]
+      Final --> G8["唯一终态 + turnId / runId<br/>runtime.completed / runtime.failed / runtime.skipped"]
     end
 
     Group --> Commit["CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
@@ -164,13 +166,15 @@ flowchart LR
     Queued --> Claim["CAS claim + renewable lease"]
     Claim --> Run["background execution<br/>同 runtime serial"]
     Run --> Guard["running -> committing CAS<br/>session lock + incarnation/effect guard"]
-    Guard -->|pass| Success["领域提交 + succeeded"]
+    Guard -->|pass| Success["同一事务：领域提交 + succeeded/result"]
     Guard -->|reject| Terminal["failed / timed_out / cancelled<br/>stale / orphaned"]
     Success --> Status["job-status.updated<br/>data.originTurnId"]
     Terminal --> Status
 ```
 
 `maxQueueMs` 从 `enqueuedAt` 限制 claim 等待，`maxExecutionMs` 从 running 限制后台控制面期限；它们不代替 runtime 的 `timeoutMs`。worker 默认最多并行 4 个不同 runtime，以 session round-robin 取队列，同一 `(session, plugin, runtime)` 只允许一个 active job。重启后，未过排队期限且从未 claim 的 `queued` 作业可以继续执行；排队超时会变为 `timed_out`，lease 已过期的在途作业会变为 `orphaned`，后两者不会自动 replay。玩家明确 retry 时创建新 jobId。
+
+worker 进入提交屏障前排空自身续租；`extraInTx` 在领域提交事务内完成 job 的成功 CAS。业务失败、完成 CAS 失败和事务末尾失败均回滚领域写入及 job 成功。成功事件在事务外发布；事件丢失可从已持久化终态补齐，不重跑任务。worker 首次唤醒及后续 30 秒维护间隔扫描过期租约，扫描失败 1 秒后重试；维护不受执行槽满影响。`committing` 任务须先非阻塞取得同一提交锁，锁忙时留待下一轮。关闭会停止后续调度并等待在途扫描及锁回调。
 
 首版 effect contract 只允许显式声明的 assets/media、本插件非保留 plugin-data、UI 和 HTTP 资源，实际 proposal 在提交前再验证一次。由于输入是来源回合快照而非 live state，涉及状态、角色、任务、记忆、交互、event、`recordAs` 或存在前台消费者的 runtime 会留在 foreground。`mimo-tts/auto-narrate` 是首个 opt-in。
 
@@ -744,7 +748,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: narrative.delta (仅流式 runtime)
         Kernel-->>Web: SSE: narrative.completed
         Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
-        Server-->>Web: SSE: runtime.completed { status }
+        Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     Kernel->>Server: 登记 setupRuntimes 完成镜像；未集齐则 phase 保持 'setup'
     end
@@ -776,7 +780,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
         Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
         Kernel-->>Web: SSE: state.changed / record.updated / event.emitted
-        Server-->>Web: SSE: runtime.completed { status: success | skipped | suspended | failed }
+        Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     end
 
@@ -817,7 +821,7 @@ sequenceDiagram
 启动 → 依赖注入              @covel/tools                     工具系统
                              ├── tool()                       工具定义 wrapper
                              ├── builtinUITools               create-form/choice/notification
-                             ├── createPluginDataTools()      plugin-data CRUD + 事件发射
+                             ├── createPluginDataTools()      plugin-data 读取 + 写入提案（Kernel 提交及发事件）
                              └── shortId/shortIdBatch()       LLM 友好的语义 ID 生成
 
 启动 → 状态管理              @covel/store                     DataStore 接口 + 3 个服务端后端实现

@@ -26,6 +26,85 @@ function makeBusSpy(): EventBus & {
 }
 
 describe("TurnEmitter", () => {
+  it.each([false, true])(
+    "isolates synchronous and asynchronous store failures and redacts fallback logs (async=%s)",
+    async (asynchronous) => {
+      const store = {
+        addTraceEvent() {
+          const error = new Error(
+            "private database credential and player text",
+          );
+          if (asynchronous) return Promise.reject(error);
+          throw error;
+        },
+      };
+      const bus = makeBusSpy();
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const emitter = createTurnEmitter({
+          store,
+          eventBus: bus,
+          sessionId: "S",
+          turnId: "T",
+          traceId: "trace",
+        });
+        await expect(
+          emitter.emit("hook.fired", { hookName: "probe" }),
+        ).resolves.toBeUndefined();
+        expect(bus.emitted).toHaveLength(1);
+        expect(warning).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            sessionId: "S",
+            turnId: "T",
+            traceId: "trace",
+            type: "hook.fired",
+          }),
+        );
+        expect(JSON.stringify(warning.mock.calls)).not.toContain(
+          "private database credential and player text",
+        );
+      } finally {
+        warning.mockRestore();
+      }
+    },
+  );
+
+  it("retains persistence when broadcasting fails without logging its error contents", async () => {
+    const store = makeStoreSpy();
+    const bus = makeBusSpy();
+    bus.emit = () => {
+      throw new Error("private broadcast content");
+    };
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const emitter = createTurnEmitter({
+        store,
+        eventBus: bus,
+        sessionId: "S",
+        turnId: "T",
+      });
+      await expect(
+        emitter.emit("hook.rewrote", { diff: { value: "private payload" } }),
+      ).resolves.toBeUndefined();
+      expect(store.addTraceEvent).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          sessionId: "S",
+          turnId: "T",
+          traceId: "T",
+          type: "hook.rewrote",
+        }),
+      );
+      expect(JSON.stringify(warning.mock.calls)).not.toMatch(
+        /private broadcast content|private payload/,
+      );
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
   it("persists to store and broadcasts on eventBus with monotonic seq", async () => {
     const store = makeStoreSpy();
     const bus = makeBusSpy();

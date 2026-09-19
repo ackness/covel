@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, Info, Loader2, RotateCw } from "lucide-react";
 import {
@@ -10,8 +10,6 @@ import {
   refreshModelDb,
   reloadLlmConfig,
   setCapabilityOverrides,
-  setParamOverrides,
-  setSlotConfig,
   slotBindingId,
   type ModelCapabilityInfo,
   type ModelDbInfo,
@@ -30,6 +28,7 @@ import { useLlmSlotIds } from "./use-llm-slot-ids.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { clearChangedSlotReasoningEfforts } from "./llm-reasoning-effort.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
+import { useSettingsStore } from "../use-settings.js";
 
 /**
  * Pane that surfaces the `[covel.<slot>]` sections from llm.toml and lets the
@@ -38,6 +37,7 @@ import { useSettingsRevision } from "../use-settings-revision.js";
  */
 export function LlmSlotsPane() {
   const { t } = useTranslation();
+  const store = useSettingsStore();
   const { state, boot } = useSession();
   const llm = state.llmConfig;
   const isConfigured = llm?.configured ?? false;
@@ -52,6 +52,16 @@ export function LlmSlotsPane() {
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reloading, setReloading] = useState(false);
+  const [savingSlot, setSavingSlot] = useState(false);
+  const [slotSaveError, setSlotSaveError] = useState<string | null>(null);
+  const pendingSlotSave = useRef(false);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const revision = useSettingsRevision([
     "llm.providers",
     "llm.slotConfig",
@@ -76,18 +86,36 @@ export function LlmSlotsPane() {
 
   const { slots, configuredSlots, discoveredSlotIds } = useLlmSlotIds();
 
-  const commitSlot = (next: Record<string, SlotConfigEntry>) => {
+  const commitSlot = async (next: Record<string, SlotConfigEntry>) => {
+    if (pendingSlotSave.current || !mounted.current) return;
+    pendingSlotSave.current = true;
+    setSavingSlot(true);
+    setSlotSaveError(null);
     const currentParamOverrides = getParamOverrides();
     const nextParamOverrides = clearChangedSlotReasoningEfforts(
       slotConfig,
       next,
       currentParamOverrides,
     );
-    if (nextParamOverrides !== currentParamOverrides) {
-      setParamOverrides(nextParamOverrides);
+    try {
+      await store.setMany({
+        "llm.slotConfig": next,
+        ...(nextParamOverrides !== currentParamOverrides
+          ? { "llm.paramOverrides": nextParamOverrides }
+          : {}),
+      });
+      if (mounted.current) setSlotConfigLocal(getSlotConfig());
+    } catch {
+      const message = t("settings.saveFailed");
+      if (mounted.current) {
+        setSlotConfigLocal(getSlotConfig());
+        setSlotSaveError(message);
+      }
+      emitToast("error", message);
+    } finally {
+      pendingSlotSave.current = false;
+      if (mounted.current) setSavingSlot(false);
     }
-    setSlotConfigLocal(next);
-    setSlotConfig(next);
   };
 
   const autoBindDiscoveredSlots = () => {
@@ -268,6 +296,7 @@ export function LlmSlotsPane() {
               variant="outline"
               size="sm"
               className="text-[11px] shrink-0"
+              disabled={savingSlot}
               onClick={autoBindDiscoveredSlots}
             >
               {t("settings.autoBindSlots", "Auto-bind")}
@@ -289,26 +318,38 @@ export function LlmSlotsPane() {
           </div>
         </div>
       )}
-      {slots.map((slotId) => (
-        <LlmSlotCard
-          key={`${slotId}:${modelDbInfo?.updatedAt ?? ""}`}
-          slotId={slotId}
-          slotConfig={slotConfig}
-          serverSlot={isConfigured ? llm!.slots[slotId] : null}
-          allPresets={allPresets}
-          capOverride={capOverrides[slotId]}
-          isConfigured={isConfigured}
-          isFirst={isConfigured && slotId === configuredSlots[0]}
-          isDiscovered={discoveredSlotIds.includes(slotId)}
-          isEditing={editingSlot === slotId}
-          commitSlot={commitSlot}
-          onToggleEditing={() =>
-            setEditingSlot(editingSlot === slotId ? null : slotId)
-          }
-          onResetCapability={() => resetCapOverride(slotId)}
-          onUpdateCapability={(patch) => updateCapOverride(slotId, patch)}
-        />
-      ))}
+      {slotSaveError && (
+        <p role="alert" className="text-xs text-destructive">
+          {slotSaveError}
+        </p>
+      )}
+      <fieldset
+        disabled={savingSlot}
+        aria-busy={savingSlot}
+        className="min-w-0 space-y-3"
+      >
+        {slots.map((slotId) => (
+          <LlmSlotCard
+            key={slotId}
+            slotId={slotId}
+            catalogRevision={modelDbInfo?.updatedAt ?? undefined}
+            slotConfig={slotConfig}
+            serverSlot={isConfigured ? llm!.slots[slotId] : null}
+            allPresets={allPresets}
+            capOverride={capOverrides[slotId]}
+            isConfigured={isConfigured}
+            isFirst={isConfigured && slotId === configuredSlots[0]}
+            isDiscovered={discoveredSlotIds.includes(slotId)}
+            isEditing={editingSlot === slotId}
+            commitSlot={commitSlot}
+            onToggleEditing={() =>
+              setEditingSlot(editingSlot === slotId ? null : slotId)
+            }
+            onResetCapability={() => resetCapOverride(slotId)}
+            onUpdateCapability={(patch) => updateCapOverride(slotId, patch)}
+          />
+        ))}
+      </fieldset>
 
       <div className="border border-dashed border-border p-3 space-y-2 mt-2">
         <div className="flex items-center justify-between">

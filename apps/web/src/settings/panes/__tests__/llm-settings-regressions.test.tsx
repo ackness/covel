@@ -4,26 +4,34 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type {
   ModelParameterOverrides,
   ProviderModelProfile,
   ReasoningEffortProfile,
+  PresetSummary,
+  SlotConfigEntry,
 } from "@/services/api.js";
 import {
   LlmAdvancedPane,
   parseNumericParameterOverride,
 } from "../LlmAdvancedPane.js";
 import { ProviderDetails } from "../llm-provider-details.js";
+import { LlmSlotCard } from "../llm-slot-card.js";
+import { collectLlmSlotPresetCandidates } from "../llm-slots-model.js";
 import {
   clearChangedSlotReasoningEfforts,
   pruneInvalidReasoningEffortOverride,
 } from "../llm-reasoning-effort.js";
 
 vi.mock("@/components/shared/ping-button.js", () => ({
-  PingButton: () => null,
+  PingButton: ({ target }: { target: unknown }) => (
+    <output data-testid="ping-target">{JSON.stringify(target)}</output>
+  ),
 }));
 
 const apiMocks = vi.hoisted(() => ({
@@ -34,6 +42,9 @@ const apiMocks = vi.hoisted(() => ({
   setParamOverrides: vi.fn(),
   getCapabilityOverrides: vi.fn(),
   setCapabilityOverrides: vi.fn(),
+  setSlotConfig: vi.fn(),
+  serverPresets: [] as PresetSummary[],
+  serverParameters: undefined as ModelParameterOverrides | undefined,
 }));
 
 vi.mock("@/stores/session-store.js", () => ({
@@ -45,6 +56,7 @@ vi.mock("@/stores/session-store.js", () => ({
           story: {
             provider: "openai",
             model: "story-model",
+            parameterOverrides: apiMocks.serverParameters,
             capability: {
               input: ["text"],
               output: ["text"],
@@ -55,7 +67,7 @@ vi.mock("@/stores/session-store.js", () => ({
           fast: { provider: "deepseek", model: "fast-model" },
         },
       },
-      presets: [],
+      presets: apiMocks.serverPresets,
     },
   }),
 }));
@@ -78,6 +90,19 @@ vi.mock("@/services/api.js", async (importOriginal) => {
     setParamOverrides: apiMocks.setParamOverrides,
     getCapabilityOverrides: apiMocks.getCapabilityOverrides,
     setCapabilityOverrides: apiMocks.setCapabilityOverrides,
+    setSlotConfig: apiMocks.setSlotConfig,
+  };
+});
+
+vi.mock("@/settings/use-settings.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/settings/use-settings.js")>();
+  return {
+    ...original,
+    useSetting: (key: string) =>
+      key === "llm.slotConfig"
+        ? [apiMocks.getSlotConfig(), apiMocks.setSlotConfig]
+        : original.useSetting(key),
   };
 });
 
@@ -100,6 +125,246 @@ describe("LLM settings regressions", () => {
     apiMocks.setParamOverrides.mockReset();
     apiMocks.getCapabilityOverrides.mockReset().mockReturnValue({});
     apiMocks.setCapabilityOverrides.mockReset();
+    apiMocks.serverPresets = [];
+    apiMocks.serverParameters = undefined;
+    apiMocks.setSlotConfig.mockReset();
+  });
+
+  it("keeps a missing local binding visible for deliberate reselection or reset", () => {
+    const commitSlot = vi.fn();
+    const serverSlot = {
+      provider: "fixture",
+      model: "server-model",
+      protocol: "openai-chat-v1",
+      tag: "text",
+    };
+    render(
+      <LlmSlotCard
+        slotId="story"
+        slotConfig={{ story: { modelRef: "missing" } }}
+        serverSlot={serverSlot}
+        allPresets={collectLlmSlotPresetCandidates(
+          [
+            {
+              id: "missing",
+              name: "Server replacement",
+              provider: "fixture",
+              model: "server-model",
+            },
+          ],
+          [],
+        )}
+        capOverride={undefined}
+        isConfigured
+        isFirst={false}
+        isDiscovered={false}
+        isEditing={false}
+        commitSlot={commitSlot}
+        onToggleEditing={() => undefined}
+        onResetCapability={() => undefined}
+        onUpdateCapability={() => undefined}
+      />,
+    );
+    expect(apiMocks.lookupModelCapabilityDetails).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "selected model is unavailable",
+    );
+    const models = screen.getByRole("combobox", {
+      name: "Model configuration",
+    }) as HTMLSelectElement;
+    expect(models.value).toBe("model:missing");
+    expect(commitSlot).not.toHaveBeenCalled();
+    fireEvent.change(models, { target: { value: "preset:missing" } });
+    expect(commitSlot).toHaveBeenLastCalledWith({
+      story: { presetId: "missing" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(commitSlot).toHaveBeenLastCalledWith({});
+  });
+
+  it("does not borrow server capabilities or parameters for a missing local binding", () => {
+    apiMocks.serverParameters = {
+      maxOutputTokens: 12345,
+      temperature: 0.4,
+      reasoningEffort: "high",
+    };
+    apiMocks.getSlotConfig.mockReturnValue({
+      story: { modelRef: "missing" },
+      fast: { presetId: "kept" },
+    });
+    render(<LlmAdvancedPane />);
+    expect(apiMocks.lookupModelCapabilityDetails).not.toHaveBeenCalled();
+    expect(screen.queryByText("story-model", { exact: true })).toBeNull();
+    expect(screen.queryByText("12,345", { exact: true })).toBeNull();
+    expect(screen.queryByText(/384,000/)).toBeNull();
+    expect(
+      (
+        screen.getByRole("spinbutton", {
+          name: "Temperature",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("1");
+    expect(apiMocks.setSlotConfig).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reset model binding" }),
+    );
+    expect(apiMocks.setSlotConfig).toHaveBeenCalledWith({
+      fast: { presetId: "kept" },
+    });
+    expect(screen.getByRole("alert").textContent).toContain(
+      "selected model is unavailable",
+    );
+  });
+
+  it("selects same-named local and server role models without collapsing their identity", () => {
+    const commit = vi.fn();
+    const allPresets = collectLlmSlotPresetCandidates(
+      [
+        {
+          id: "same",
+          name: "Server configuration",
+          provider: "fixture",
+          model: "server-model",
+        },
+      ],
+      [
+        {
+          id: "same",
+          name: "Local configuration",
+          provider: "fixture",
+          model: "local-model",
+        },
+      ],
+    );
+    function Role() {
+      const [slots, setSlots] = useState<Record<string, SlotConfigEntry>>({
+        story: { modelRef: "same" },
+      });
+      return (
+        <LlmSlotCard
+          slotId="story"
+          slotConfig={slots}
+          serverSlot={undefined}
+          allPresets={allPresets}
+          capOverride={undefined}
+          isConfigured={false}
+          isFirst={false}
+          isDiscovered={false}
+          isEditing={false}
+          commitSlot={(next) => {
+            commit(next);
+            setSlots(next);
+          }}
+          onToggleEditing={() => undefined}
+          onResetCapability={() => undefined}
+          onUpdateCapability={() => undefined}
+        />
+      );
+    }
+    render(<Role />);
+    const models = screen.getByRole("combobox", {
+      name: "Model configuration",
+    });
+    expect((models as HTMLSelectElement).value).toBe("model:same");
+    fireEvent.change(models, { target: { value: "preset:same" } });
+    expect(commit).toHaveBeenLastCalledWith({ story: { presetId: "same" } });
+    expect((models as HTMLSelectElement).value).toBe("preset:same");
+    fireEvent.change(models, { target: { value: "model:same" } });
+    expect(commit).toHaveBeenLastCalledWith({ story: { modelRef: "same" } });
+    expect((models as HTMLSelectElement).value).toBe("model:same");
+  });
+
+  it("uses the bound namespace for generation settings and model metadata", async () => {
+    apiMocks.serverPresets = [
+      {
+        id: "same",
+        name: "Server",
+        provider: "fixture",
+        model: "server-model",
+        enabled: true,
+        isDefault: false,
+        scope: "server",
+      },
+    ];
+    apiMocks.getProviderProfiles.mockReturnValue([
+      {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://fixture.invalid",
+        models: [{ ref: "same", modelId: "local-model" }],
+      },
+    ]);
+    apiMocks.getSlotConfig.mockReturnValue({ story: { modelRef: "same" } });
+    const { rerender } = render(<LlmAdvancedPane />);
+    await waitFor(() =>
+      expect(apiMocks.lookupModelCapabilityDetails).toHaveBeenLastCalledWith(
+        "local-model",
+        "fixture",
+        "openai-chat-v1",
+      ),
+    );
+    expect(screen.getByText("local-model", { exact: true })).toBeTruthy();
+    apiMocks.getSlotConfig.mockReturnValue({ story: { presetId: "same" } });
+    rerender(<LlmAdvancedPane />);
+    await waitFor(() =>
+      expect(apiMocks.lookupModelCapabilityDetails).toHaveBeenLastCalledWith(
+        "server-model",
+        "fixture",
+        "openai-chat-v1",
+      ),
+    );
+    expect(screen.getByText("server-model", { exact: true })).toBeTruthy();
+  });
+
+  it("pings local provider rows as models and server rows as presets", () => {
+    render(
+      <ProviderDetails
+        provider={{
+          id: "fixture",
+          provider: "fixture",
+          baseUrl: "https://fixture.invalid",
+          protocol: "openai-chat-v1",
+          serverModels: [
+            {
+              id: "same",
+              name: "Server configuration",
+              provider: "fixture",
+              model: "server-model",
+              enabled: true,
+              isDefault: false,
+              scope: "server",
+            },
+          ],
+          localProfile: {
+            id: "fixture",
+            name: "Fixture",
+            baseUrl: "https://fixture.invalid",
+            models: [
+              {
+                ref: "same",
+                name: "Local configuration",
+                modelId: "local-model",
+              },
+            ],
+          },
+        }}
+        onAddModel={() => undefined}
+        onPatchLocalProfile={() => undefined}
+        onDeleteLocalModel={() => undefined}
+        onDuplicateLocalModel={() => undefined}
+        onDeleteLocalProvider={() => undefined}
+      />,
+    );
+    expect(
+      within(
+        screen.getByRole("group", { name: "Local configuration" }),
+      ).getByTestId("ping-target").textContent,
+    ).toBe(JSON.stringify({ kind: "model", modelRef: "same" }));
+    expect(
+      within(
+        screen.getByRole("group", { name: "Server configuration" }),
+      ).getByTestId("ping-target").textContent,
+    ).toBe(JSON.stringify({ kind: "preset", presetId: "same" }));
   });
 
   it("removes a reasoning override that the newly bound model cannot use", () => {
@@ -124,6 +389,16 @@ describe("LLM settings regressions", () => {
         profile([{ value: "xhigh" }]),
       ),
     ).toBe(overrides);
+  });
+
+  it("clears model-specific reasoning when a same-named binding changes namespace", () => {
+    expect(
+      clearChangedSlotReasoningEfforts(
+        { story: { modelRef: "same" } },
+        { story: { presetId: "same" } },
+        { story: { reasoningEffort: "high", temperature: 0.2 } },
+      ),
+    ).toEqual({ story: { temperature: 0.2 } });
   });
 
   it("clears reasoning synchronously when a slot binding changes", () => {
@@ -311,6 +586,7 @@ describe("LLM settings regressions", () => {
         onAddModel={vi.fn()}
         onPatchLocalProfile={onPatchLocalProfile}
         onDeleteLocalModel={vi.fn()}
+        onDuplicateLocalModel={vi.fn()}
         onDeleteLocalProvider={vi.fn()}
       />,
     );
@@ -356,6 +632,7 @@ describe("LLM settings regressions", () => {
         onAddModel={vi.fn()}
         onPatchLocalProfile={patch}
         onDeleteLocalModel={vi.fn()}
+        onDuplicateLocalModel={vi.fn()}
         onDeleteLocalProvider={vi.fn()}
       />
     );

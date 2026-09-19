@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { aiRoutes } from "../../src/routes/api/ai.js";
+import { createApplicationWork } from "../../src/application-work.js";
 
 const WORLD_YAML = `schemaVersion: "1.0"
 id: generated-world
@@ -79,9 +81,11 @@ function createTestApp(
   llm: LLMAdapter = new FixedLlm(),
 ): Hono<Env> {
   const app = new Hono<Env>();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("llmAdapter", llm);
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     c.set("storeBackend", "memory");
     await next();
   });
@@ -142,6 +146,39 @@ describe("ai world generation route", () => {
       process.env.COVEL_WORLDS_DIR = previousWorldsDir;
     }
     await rm(worldsDir, { recursive: true, force: true });
+  });
+
+  it("cancels world generation on host shutdown without another provider attempt", async () => {
+    const work = createApplicationWork();
+    const started = Promise.withResolvers<AbortSignal>();
+    const generate: LLMAdapter["generate"] = vi.fn(async ({ signal }) => {
+      signal!.throwIfAborted();
+      started.resolve(signal!);
+      return new Promise((_resolve, reject) => {
+        signal!.addEventListener("abort", () => reject(signal!.reason), {
+          once: true,
+        });
+      });
+    });
+    app = new Hono<Env>();
+    app.use("*", work.middleware);
+    app.route("/", createTestApp(store, { generate }));
+    const response = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "Cancelled synthetic world",
+        saveTarget: "server-file",
+      }),
+    });
+    const body = response.text();
+    const signal = await started.promise;
+    await work.close();
+    await body;
+    expect(signal.aborted).toBe(true);
+    expect(generate).toHaveBeenCalledOnce();
+    expect(await store.listWorlds()).toEqual([]);
+    expect(await readdir(worldsDir)).toEqual([]);
   });
 
   it.each(["collision", "database-error"])(

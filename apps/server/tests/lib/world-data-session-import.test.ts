@@ -1687,23 +1687,23 @@ sources: {}
     expect(await store.listCharacters(sessionId)).not.toHaveLength(0);
   });
 
-  it("materializes bundled world portraits into the media store and links presence", async () => {
-    const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
-    const pluginRegistry = await builtinPluginRegistry();
-    const activePlugins = [
-      "living-world-rules",
-      "character-blueprint",
-      "char-creator",
-      "character-presence",
-      "scene-stage",
-    ];
-
-    for (const [worldId, locale, portraitCount] of [
-      ["emberback", "en-US", 3],
-      ["mistport", "zh-CN", 7],
-      ["mistport", "en-US", 7],
-      ["haruka-academy", "zh-CN", 8],
-    ] as const) {
+  it.each([
+    ["emberback", "en-US", 3],
+    ["mistport", "zh-CN", 7],
+    ["mistport", "en-US", 7],
+    ["haruka-academy", "zh-CN", 8],
+  ] as const)(
+    "materializes bundled %s portraits (%s) into the media store and links presence",
+    async (worldId, locale, portraitCount) => {
+      const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
+      const pluginRegistry = await builtinPluginRegistry();
+      const activePlugins = [
+        "living-world-rules",
+        "character-blueprint",
+        "char-creator",
+        "character-presence",
+        "scene-stage",
+      ];
       const sessionId = `sess-portraits-${worldId}-${locale}`;
       const worldRoot = path.join(worldsDir, worldId);
       const descriptor = await loadWorldDataDescriptor({
@@ -1809,8 +1809,8 @@ sources: {}
         expect(assetIds.has(value.avatar?.id ?? "")).toBe(true);
         expect(assetIds.has(value.sprite?.id ?? "")).toBe(true);
       }
-    }
-  });
+    },
+  );
 });
 
 describe("world data sync compare-and-swap", () => {

@@ -6,7 +6,7 @@
  */
 
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
+import { streamOwnedSSE } from "../../application-work.js";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type {
@@ -22,8 +22,9 @@ import {
   createTurnEmitter,
   collectExecutionJournal,
   collectExecutionSuspensions,
-  finalizeExecution,
-  saveAutoSnapshot,
+  commitExecution,
+  buildHookSettings,
+  snapshotUserSettings,
 } from "@covel/runtime";
 import type {
   CovelEventType,
@@ -42,7 +43,6 @@ import {
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { createRuntimeJob, type RuntimeJobRecord } from "./plugin-rpc/jobs.js";
@@ -60,7 +60,6 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
-import { getCachedWorld } from "../../world-cache.js";
 import { registerActiveTurn } from "./turn-control.js";
 import {
   assertRecoverableTurn,
@@ -73,7 +72,7 @@ import {
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
-import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
+import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import {
   prepareRuntimeRetry,
   settleRuntimeRetry,
@@ -238,14 +237,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // registry before its ABA check rejects.
   let activeRuntimes: readonly RuntimeManifest[] = [];
 
-  // Resolve runtime display kind from manifest declarations for progress SSE.
-  // The commit path creates its own processor once the per-turn emitter exists.
-  let outputKindResolver = createRuntimeResultProcessor({
-    store,
-    sessionId,
-    runtimes: activeRuntimes,
-  });
-
   // Framework-capability plugin ids discovered by capability — never by id.
   // Single source of truth in resolveTurnCapabilityPluginIds.
   let capabilityPluginIds: TurnCapabilityPluginIds = {
@@ -254,7 +245,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     promptHistoryRewriterPluginId: undefined,
   };
 
-  return streamSSE(c, async (stream) => {
+  return streamOwnedSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
     // The turn currently writing to this stream. The opening-continuation
@@ -374,6 +365,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         approvalScopes,
         queuedRuntimeJobs,
       } = await sessionLock.withLock(sessionId, async () => {
+        c.get("requestWork")?.signal.throwIfAborted();
         // This execution now owns the session — events on the bus
         // from here on belong to this turn.
         subscribeEventForwarding();
@@ -431,11 +423,25 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             requestId,
           );
           releaseTurnControl = registeredTurn.release;
-          outputKindResolver = createRuntimeResultProcessor({
-            store,
-            sessionId,
-            runtimes: activeRuntimes,
-          });
+          const executionSignal = c.get("requestWork")?.signal;
+          const turnControl = {
+            ...registeredTurn.turnControl,
+            ...(executionSignal ? { executionSignal } : {}),
+          };
+          const commitSignal = executionSignal
+            ? AbortSignal.any([
+                registeredTurn.turnControl.signal!,
+                executionSignal,
+              ])
+            : registeredTurn.turnControl.signal;
+          commitSignal?.throwIfAborted();
+          // Progress display metadata follows the live manifests for this run.
+          const outputKindByRuntime = new Map(
+            activeRuntimes.map((runtime) => [
+              runtime.name,
+              runtime.outputKind ?? "plugin",
+            ]),
+          );
           capabilityPluginIds = resolveTurnCapabilityPluginIds(
             pluginRegistry,
             sessionId,
@@ -578,12 +584,16 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // manifest defaults — player + world tuning were silently dropped on the
           // main route (only plugin-rpc read the header).
           const world = session.worldId
-            ? await getCachedWorld(store, session.worldId)
+            ? await store.getWorld(session.worldId)
             : null;
-          const userSettings = mergePluginUserSettings(
-            readWorldPluginSettings(world?.metadata),
-            decodedUserSettings.settings,
+          const userSettings = snapshotUserSettings(
+            mergePluginUserSettings(
+              readWorldPluginSettings(world?.metadata),
+              decodedUserSettings.settings,
+            ),
           );
+
+          const hookSettings = buildHookSettings(activeRuntimes, userSettings);
 
           const turnInput = {
             sessionId,
@@ -595,7 +605,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ...(turnOrigin === "player" && !isRuntimeRetry
               ? { logicalTurnId: crypto.randomUUID() }
               : {}),
-            ...(userSettings ? { userSettings } : {}),
+            userSettings,
             // Snapshot session-level per-runtime slot overrides so the
             // turn executor can consult them when resolving each runtime's
             // model. The session record was loaded above (line ~67).
@@ -625,7 +635,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // transport does not cancel this turn; a refreshed client observes
           // it through the read-only execution endpoint until finalization.
           const result = await executeTurn(turnInput, activeRuntimes, {
-            ...buildManualTurnExecutorDeps(c, capabilityPluginIds),
+            ...buildTurnExecutorDeps(c, capabilityPluginIds),
             // The main turn path never passed the eventBus, so every
             // `emitSubEvent` inside the executor — including the
             // completion barrier's `turn.completed` — silently no-opped on
@@ -639,52 +649,46 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               await writeEvent("narrative.delta", {
                 runtimeId: delta.runtimeId,
                 pluginId: delta.pluginId,
-                kind: outputKindResolver.getOutputKind(delta.runtimeId),
+                kind: outputKindByRuntime.get(delta.runtimeId) ?? "plugin",
                 delta: delta.textDelta,
               });
             },
             onRuntimeStart: async (info) => {
-              await trace.runtimeStarted({
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                ...(info.stage !== undefined ? { stage: info.stage } : {}),
-              });
-              const kind = outputKindResolver.getOutputKind(info.runtimeId);
-              await writeEvent("runtime.started", {
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                ...(info.stage !== undefined ? { stage: info.stage } : {}),
-                kind,
-                label: info.pluginId + "/" + kind,
-              });
+              try {
+                await trace.runtimeStarted(info);
+              } finally {
+                const kind =
+                  outputKindByRuntime.get(info.runtimeId) ?? "plugin";
+                await writeEvent("runtime.started", {
+                  ...info,
+                  kind,
+                  label: info.pluginId + "/" + kind,
+                });
+              }
             },
             onRuntimeComplete: async (info) => {
-              await trace.runtimeCompleted({
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                status: info.status,
-                durationMs: info.durationMs,
-                ...(info.error ? { error: info.error } : {}),
-              });
-              const eventType =
-                info.status === "failed"
-                  ? "runtime.failed"
-                  : info.status === "skipped"
-                    ? "runtime.skipped"
-                    : "runtime.completed";
-              await writeEvent(eventType, {
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                durationMs: info.durationMs,
-                status: info.status,
-                ...(info.status === "failed" && info.error
-                  ? { error: info.error }
-                  : {}),
-              });
+              try {
+                if (info.status === "failed") {
+                  await trace.runtimeFailed({
+                    ...info,
+                    error: info.error ?? "Runtime failed",
+                  });
+                } else {
+                  await trace.runtimeCompleted(info);
+                }
+              } finally {
+                const eventType =
+                  info.status === "failed"
+                    ? "runtime.failed"
+                    : info.status === "skipped"
+                      ? "runtime.skipped"
+                      : "runtime.completed";
+                await writeEvent(eventType, { ...info });
+              }
             },
             ...(memorySystem ? { memorySystem } : {}),
             // Player mid-turn steering + abort.
-            turnControl: registeredTurn.turnControl,
+            turnControl,
           });
 
           // Commit the whole execution — top-level plus nested recursiveCall
@@ -709,8 +713,38 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly job: RuntimeJobRecord;
             readonly status: JobStatusRecord;
           }> = [];
-          const outcome = await finalizeExecution({
-            signal: registeredTurn.turnControl.signal,
+          const outcome = await commitExecution({
+            completion: {
+              kind: "turn",
+              turnId: result.turnId,
+              durationMs: result.durationMs,
+            },
+            memorySystem,
+            capabilityPluginIds,
+            onFinalized: async (outcome) => {
+              commitStatusSettled = true;
+              for (const evt of outcome.events) {
+                // Emit using CovelEventType directly.
+                await writeEvent(evt.type, {
+                  ...evt.payload,
+                  runtimeId: evt.source.runtimeId,
+                  pluginId: evt.source.pluginId,
+                });
+              }
+              // Commit failures are surfaced as `proposal.failed` SSE events; any
+              // failure withholds the completion barrier below (turn.completed,
+              // memory ingestion, auto-snapshot success signal).
+              for (const fp of outcome.failedProposals) {
+                await writeEvent("proposal.failed", {
+                  proposalId: fp.proposal.id,
+                  proposalType: fp.proposal.type,
+                  runtimeId: fp.proposal.source.runtimeId,
+                  pluginId: fp.proposal.source.pluginId,
+                  error: fp.error,
+                });
+              }
+            },
+            signal: commitSignal,
             store,
             sessionId,
             // A suspension persists the original counting responsibility for
@@ -719,6 +753,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ? { ...result.executionContext, countPolicy: "none" }
               : result.executionContext,
             runtimes: activeRuntimes,
+            hookSettings,
             results: finalizableResults,
             journalMessages: collectExecutionJournal(result),
             suspensions: collectExecutionSuspensions(result),
@@ -825,29 +860,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             // MediaRef canonicalization / ownership for published export values.
             ...(mediaStore ? { mediaStore } : {}),
           });
-          // finalize owns the commit_status settle (committed or failed).
-          commitStatusSettled = true;
-
-          for (const evt of outcome.events) {
-            // Emit using CovelEventType directly.
-            await writeEvent(evt.type, {
-              ...evt.payload,
-              runtimeId: evt.source.runtimeId,
-              pluginId: evt.source.pluginId,
-            });
-          }
-          // Commit failures are surfaced as `proposal.failed` SSE events; any
-          // failure withholds the completion barrier below (turn.completed,
-          // memory ingestion, auto-snapshot success signal).
-          for (const fp of outcome.failedProposals) {
-            await writeEvent("proposal.failed", {
-              proposalId: fp.proposal.id,
-              proposalType: fp.proposal.type,
-              runtimeId: fp.proposal.source.runtimeId,
-              pluginId: fp.proposal.source.pluginId,
-              error: fp.error,
-            });
-          }
           const committed = outcome.status === "committed";
           currentRetryScope = settleRuntimeRetry(
             retryPlan,
@@ -861,43 +873,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const commitError = committed
             ? undefined
             : outcome.error || proposalErrors || "Execution commit failed";
-
-          // Turn accounting happens inside the finalize transaction. The
-          // automatic snapshot stays outside, captured last so it contains
-          // every committed proposal and the authoritative session clock.
-          if (committed) {
-            try {
-              await saveAutoSnapshot({
-                store,
-                sessionId,
-                turnId: turnArgs.turnId,
-                eventBus,
-              });
-            } catch (err) {
-              // Best-effort checkpoint: a failed snapshot is logged but does
-              // not fail the turn — the proposals are already durable.
-              console.warn(
-                `[actions] auto snapshot failed for session ${sessionId} turn ${turnArgs.turnId}:`,
-                err instanceof Error ? err.message : String(err),
-              );
-            }
-          } else {
-            console.error(
-              `[actions] proposal commit failed for session ${sessionId} turn ${turnArgs.turnId} — ` +
-                "withholding auto-snapshot and turn completion",
-            );
-          }
-
-          // Commit barrier: the authoritative turn.completed event and
-          // post-turn memory ingestion fire once every proposal committed.
-          // A failed auto-snapshot does NOT hold them back — the business
-          // state is already durable (the session clock advanced on the same
-          // proposal-only condition), only the best-effort checkpoint is
-          // missing and the next turn snapshots again. Gating completion on
-          // the snapshot would strand a fully-committed turn as "incomplete".
-          if (committed && !hasSuspendedRuntime) {
-            await result.completeTurn?.();
-          }
 
           return {
             result:
@@ -979,15 +954,16 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           session: { ...followerSession, locale: effectiveLocale },
           activeRuntimes,
           approvalScopes,
-          deps: buildManualTurnExecutorDeps(c, capabilityPluginIds),
+          deps: buildTurnExecutorDeps(c, capabilityPluginIds),
           ...(hookPipeline ? { hookPipeline } : {}),
         });
         const jobRunner = createPluginRpcJobRunner({
+          queue: c.get("pluginBackgroundQueue"),
           store,
           sessionId,
           sessionLock,
           approvalScopes,
-          ...(userSettings ? { userSettings } : {}),
+          userSettings,
           // The main turn path has no manual-trigger concept —
           // `scheduleDeferredFollowers` is the only method this route calls.
           runManualTurn: () => {
@@ -1096,6 +1072,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     } finally {
       releaseTurnControl?.();
       eventBusUnsubscribe?.();
+      await writeChain;
     }
   });
 });

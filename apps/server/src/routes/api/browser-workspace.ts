@@ -1,3 +1,9 @@
+import {
+  isWorldDeleting,
+  withoutWorldDeletion,
+  worldOperationLockId,
+} from "../../world-lifecycle.js";
+import { preserveWorldProvenance } from "../../world-seed-loader.js";
 import { Hono } from "hono";
 import { canonicalizeLocale } from "@covel/shared";
 import {
@@ -10,7 +16,7 @@ import {
   type BrowserCheckpoint,
   type DataStore,
   type SessionCommit,
-} from "@covel/store";
+} from "@covel/store/session";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import {
   publicSessionMetadata,
@@ -161,84 +167,147 @@ export function createBrowserWorkspaceRoutes(
       expectedSession: guard.session,
       allowedStatuses: "any",
       mutate: async (live) => {
-        const incarnation = sessionIncarnationIdentity(live);
-        const head = cache.get(sessionId, incarnation);
-        if (head && checkpoint.revision < head.revision) {
-          return c.json(
-            errorBody("Browser checkpoint revision is stale", {
-              code: "revision_conflict",
-              details: {
-                expectedRevision: head.revision,
-                actualRevision: checkpoint.revision,
-              },
-            }),
-            409,
-          );
-        }
-        if (head?.revision === checkpoint.revision) {
-          if (head.actionId !== checkpoint.actionId) {
-            return c.json(
-              errorBody(
-                "Browser checkpoint revision already has another head",
-                {
+        const worldIds = [
+          ...new Set(
+            [live.worldId, checkpoint.session.worldId].filter(
+              (id): id is string => id !== undefined,
+            ),
+          ),
+        ].sort();
+        return c
+          .get("sessionLock")
+          .withLocks(worldIds.map(worldOperationLockId), async () => {
+            const worlds = new Map(
+              await Promise.all(
+                worldIds.map(
+                  async (id) =>
+                    [id, await c.get("store").getWorld(id)] as const,
+                ),
+              ),
+            );
+            if (
+              [...worlds.values()].some(
+                (world) => world && isWorldDeleting(world),
+              )
+            ) {
+              return c.json(
+                errorBody("World deletion is in progress; retry deletion", {
+                  code: "world_deleting",
+                }),
+                409,
+              );
+            }
+            const incarnation = sessionIncarnationIdentity(live);
+            const head = cache.get(sessionId, incarnation);
+            if (head && checkpoint.revision < head.revision) {
+              return c.json(
+                errorBody("Browser checkpoint revision is stale", {
                   code: "revision_conflict",
                   details: {
-                    expectedActionId: head.actionId,
-                    actualActionId: checkpoint.actionId,
+                    expectedRevision: head.revision,
+                    actualRevision: checkpoint.revision,
+                  },
+                }),
+                409,
+              );
+            }
+            if (head?.revision === checkpoint.revision) {
+              if (head.actionId !== checkpoint.actionId) {
+                return c.json(
+                  errorBody(
+                    "Browser checkpoint revision already has another head",
+                    {
+                      code: "revision_conflict",
+                      details: {
+                        expectedActionId: head.actionId,
+                        actualActionId: checkpoint.actionId,
+                      },
+                    },
+                  ),
+                  409,
+                );
+              }
+              return c.json({
+                ok: true,
+                revision: head.revision,
+                unchanged: true,
+              });
+            }
+
+            const writeWorld =
+              !isSessionOwnerAuthEnforced(c) || hasOperatorToken(c);
+            if (checkpoint.session.worldId && !writeWorld) {
+              const world = worlds.get(checkpoint.session.worldId);
+              // Ordinary session sync uses the server's existing catalog record.
+              // Seed timestamps and derived metadata may change across restarts.
+              if (!world) {
+                return c.json(
+                  errorBody("Operator token required to write a global world", {
+                    code: "operator_token_required",
+                  }),
+                  401,
+                );
+              }
+            }
+            if (
+              checkpoint.session.worldId &&
+              !worlds.get(checkpoint.session.worldId) &&
+              !checkpoint.world
+            ) {
+              return c.json(
+                errorBody("World not found", { code: "world_not_found" }),
+                404,
+              );
+            }
+            const admittedCheckpoint = {
+              ...checkpoint,
+              world: checkpoint.world
+                ? preserveWorldProvenance(
+                    {
+                      ...checkpoint.world,
+                      metadata: withoutWorldDeletion(checkpoint.world.metadata),
+                    },
+                    worlds.get(checkpoint.world.id) ?? undefined,
+                  )
+                : null,
+            };
+            try {
+              await replaceSessionFromCheckpoint(
+                c.get("store"),
+                admittedCheckpoint,
+                {
+                  writeWorld,
+                  session: {
+                    ...checkpoint.session,
+                    createdAt: live.createdAt,
+                    phase: checkpoint.session.phase,
+                    completedPlayerTurns:
+                      checkpoint.session.completedPlayerTurns,
+                    setupRuntimes: checkpoint.session.setupRuntimes,
+                    metadata: {
+                      ...publicSessionMetadata(checkpoint.session.metadata),
+                      ...live.metadata,
+                    },
                   },
                 },
-              ),
-              409,
-            );
-          }
-          return c.json({ ok: true, revision: head.revision, unchanged: true });
-        }
-
-        const writeWorld =
-          !isSessionOwnerAuthEnforced(c) || hasOperatorToken(c);
-        if (checkpoint.session.worldId && !writeWorld) {
-          const world = await c
-            .get("store")
-            .getWorld(checkpoint.session.worldId);
-          // Ordinary session sync uses the server's existing catalog record.
-          // Seed timestamps and derived metadata may change across restarts.
-          if (!world) {
-            return c.json(
-              errorBody("Operator token required to write a global world", {
-                code: "operator_token_required",
-              }),
-              401,
-            );
-          }
-        }
-        try {
-          await replaceSessionFromCheckpoint(c.get("store"), checkpoint, {
-            writeWorld,
-            session: {
-              ...checkpoint.session,
-              createdAt: live.createdAt,
-              phase: checkpoint.session.phase,
-              completedPlayerTurns: checkpoint.session.completedPlayerTurns,
-              setupRuntimes: checkpoint.session.setupRuntimes,
-              metadata: {
-                ...publicSessionMetadata(checkpoint.session.metadata),
-                ...live.metadata,
-              },
-            },
+              );
+            } catch (error) {
+              if (error instanceof SessionRecordScopeConflictError) {
+                return c.json(
+                  errorBody(error.message, { code: error.code }),
+                  400,
+                );
+              }
+              throw error;
+            }
+            cache.set(sessionId, {
+              incarnation,
+              revision: checkpoint.revision,
+              actionId: checkpoint.actionId,
+              commits: new Map(),
+            });
+            return c.json({ ok: true, revision: checkpoint.revision });
           });
-        } catch (error) {
-          if (error instanceof SessionRecordScopeConflictError) {
-            return c.json(errorBody(error.message, { code: error.code }), 400);
-          }
-          throw error;
-        }
-        cache.set(sessionId, {
-          incarnation,
-          revision: checkpoint.revision,
-          actionId: checkpoint.actionId,
-          commits: new Map(),
-        });
-        return c.json({ ok: true, revision: checkpoint.revision });
       },
     });
   });

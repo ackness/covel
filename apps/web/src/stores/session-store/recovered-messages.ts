@@ -11,6 +11,7 @@ export function mergeRecoveredMessages(
 ): StreamMessage[] {
   if (recovered.length === 0) return current;
   const messages = [...current];
+  const recoveredIds = new Set(recovered.map((message) => message.id));
   let previous = -1;
   for (let index = 0; index < recovered.length; index += 1) {
     const message = recovered[index];
@@ -18,6 +19,24 @@ export function mergeRecoveredMessages(
     if (existing >= 0) {
       // A later live completion may have arrived while the snapshot was read.
       previous = existing;
+      continue;
+    }
+    // Player echoes receive the turn ID from execution.started, but the server
+    // allocates their durable message IDs. Reconcile each echo once; identical
+    // steering messages and inputs in other turns must retain their own rows.
+    const echo =
+      message.role === "user" && message.turnId
+        ? messages.findIndex(
+            (row) =>
+              row.role === "user" &&
+              row.turnId === message.turnId &&
+              row.content === message.content &&
+              !recoveredIds.has(row.id),
+          )
+        : -1;
+    if (echo >= 0) {
+      messages[echo] = message;
+      previous = echo;
       continue;
     }
     const stream =

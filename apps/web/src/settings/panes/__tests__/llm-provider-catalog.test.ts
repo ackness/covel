@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { profilesFromLegacyPresets } from "@/services/api/provider-model-profiles.js";
 import {
   bindFirstProviderModel,
   buildProviderCatalog,
-  isLegacyPreset,
+  parseProviderImport,
   normalizeProviderId,
   normalizeProviderProfiles,
   parseModelIds,
@@ -12,41 +11,126 @@ import {
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
-  it.each([{ baseUrl: 42 }, { protocol: {} }])(
-    "isolates malformed legacy connection fields %j during import",
-    (invalidFields) => {
-      const candidates: unknown[] = [
+  it("preserves same-model configurations with distinct references across export/import", () => {
+    const profile = {
+      id: "fixture",
+      name: "Fixture",
+      baseUrl: "https://fixture.invalid",
+      models: [
         {
-          id: "broken",
-          name: "Broken",
-          provider: "synthetic",
-          model: "broken-model",
-          ...invalidFields,
+          ref: "off",
+          name: "Quick",
+          modelId: "qwen3.8-flash",
+          reasoningEffort: "disabled",
         },
         {
-          id: "legacy",
-          name: "Legacy",
-          provider: "synthetic",
-          model: "legacy-model",
+          ref: "on",
+          name: "Story",
+          modelId: "qwen3.8-flash",
+          reasoningEffort: "automatic",
         },
-        {
-          id: "current",
-          name: "Current",
-          baseUrl: "",
-          models: [{ ref: "current-model", modelId: "current-model" }],
-        },
-      ];
-      const imported = [
-        ...sanitizeImportedProfiles(
-          profilesFromLegacyPresets(candidates.filter(isLegacyPreset)),
-        ),
-        ...sanitizeImportedProfiles(candidates),
-      ];
-      expect(
-        imported.flatMap((profile) => profile.models.map((m) => m.ref)),
-      ).toEqual(["legacy", "current-model"]);
+      ],
+    };
+    const exported = JSON.parse(JSON.stringify(profile));
+    expect(parseProviderImport({ version: 2, providers: [exported] })).toEqual([
+      profile,
+    ]);
+  });
+
+  it.each([
+    "within one connection",
+    "across connections",
+    "connection identity",
+  ])(
+    "rejects conflicting import references %s instead of silently merging them",
+    (collision) => {
+      const profile = {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://fixture.example/v1",
+        models: [{ ref: "model", modelId: "opaque-model" }],
+      };
+      const profiles =
+        collision === "within one connection"
+          ? [{ ...profile, models: [...profile.models, ...profile.models] }]
+          : [
+              profile,
+              {
+                ...profile,
+                id: collision === "connection identity" ? profile.id : "other",
+                models: [
+                  {
+                    ref:
+                      collision === "connection identity"
+                        ? "other-model"
+                        : "model",
+                    modelId: "different-model",
+                  },
+                ],
+              },
+            ];
+      expect(() =>
+        parseProviderImport({ version: 2, providers: profiles }),
+      ).toThrow();
     },
   );
+
+  it("preserves per-model reasoning defaults and drops invalid imported values", () => {
+    const imported = sanitizeImportedProfile({
+      id: "fixture",
+      name: "Fixture",
+      baseUrl: "https://provider.example/v1",
+      models: [
+        { ref: "a", modelId: "qwen3.8-flash", reasoningEffort: "disabled" },
+        { ref: "b", modelId: "deepseek-v4-flash", reasoningEffort: "high" },
+        {
+          ref: "c",
+          modelId: "custom-model",
+          reasoningEffort: "provider-default",
+        },
+        {
+          ref: "d",
+          modelId: "custom-model-2",
+          reasoningEffort: { injected: true },
+        },
+      ],
+    });
+    expect(imported?.models.map((model) => model.reasoningEffort)).toEqual([
+      "disabled",
+      "high",
+      "provider-default",
+      undefined,
+    ]);
+  });
+  it.each([[], { version: 1, providers: [] }, { providers: [] }])(
+    "rejects an unsupported provider import envelope: %j",
+    (value) => {
+      expect(() => parseProviderImport(value)).toThrow();
+    },
+  );
+
+  it("imports only usable current profiles from a current export", () => {
+    const current = {
+      id: "current",
+      name: "Current",
+      baseUrl: "",
+      models: [{ ref: "model", modelId: "opaque-model" }],
+    };
+    expect(
+      parseProviderImport({
+        version: 2,
+        providers: [
+          null,
+          { id: "old", name: "Old", provider: "old", model: "old" },
+          current,
+        ],
+      }),
+    ).toEqual([current]);
+    expect(() =>
+      parseProviderImport({ version: 2, providers: [{ id: "broken" }] }),
+    ).toThrow();
+    expect(parseProviderImport({ version: 2, providers: [] })).toEqual([]);
+  });
 
   it("binds the first manually created model to story and plugin", () => {
     expect(bindFirstProviderModel({}, [], "model_first", [], [])).toEqual({
@@ -325,4 +409,18 @@ describe("provider catalogue", () => {
       sanitizeImportedProfile({ ...base, protocol: { arbitrary: true } }),
     ).toEqual(base);
   });
+});
+
+it("round-trips an empty connection without inventing or deleting models", () => {
+  const empty = {
+    id: "empty",
+    name: "Empty",
+    baseUrl: "https://empty.example/v1",
+    models: [],
+  };
+  expect(
+    parseProviderImport(
+      JSON.parse(JSON.stringify({ version: 2, providers: [empty] })),
+    ),
+  ).toEqual([empty]);
 });

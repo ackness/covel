@@ -38,7 +38,7 @@ const CHANGE_META = {
   failed: { badge: { zh: "失败", en: "Failed" }, color: "red" },
 };
 
-export default function ({ tool, z, shortIdBatch, store }) {
+export default function ({ tool, z, shortIdBatch }) {
   const objectiveSchema = z.object({
     id: z
       .string()
@@ -116,12 +116,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
       const incoming = (params.quests ?? []).slice(0, MAX_QUESTS_PER_CALL);
 
       // ── 1. Load existing quests and index them by normalized name ──
-      const existingRows =
-        (await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "quests",
-        )) ?? [];
+      const existingRows = (await context.store.listPluginData("quests")) ?? [];
       /** @type {Map<string, { key: string, value: any }>} */
       const rowByName = new Map();
       for (const row of existingRows) {

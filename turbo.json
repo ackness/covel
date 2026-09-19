@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-9-4.turborepo.dev/schema.json",
+  "globalPassThroughEnv": ["VITEST_MAX_WORKERS"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -18,8 +19,28 @@
       ]
     },
     "@covel/desktop#build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", "staging/**"]
+      "dependsOn": ["^build", "@covel/server#build"],
+      "outputs": ["dist/**", "staging/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/server/src/**",
+        "$TURBO_ROOT$/apps/server/package.json",
+        "$TURBO_ROOT$/apps/server/tsconfig.json",
+        "$TURBO_ROOT$/apps/server/drizzle.config.ts",
+        "$TURBO_ROOT$/apps/server/drizzle/**",
+        "$TURBO_ROOT$/packages/**",
+        "$TURBO_ROOT$/plugins/**",
+        "$TURBO_ROOT$/prompts/**",
+        "$TURBO_ROOT$/worlds/**",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "!$TURBO_ROOT$/**/node_modules/**",
+        "!$TURBO_ROOT$/**/.turbo/**",
+        "!$TURBO_ROOT$/**/dist/**",
+        "!$TURBO_ROOT$/**/coverage/**",
+        "!$TURBO_ROOT$/**/.cache/**",
+        "!$TURBO_ROOT$/**/*.tsbuildinfo"
+      ]
     },
     "generate:routes": {
       "cache": true,

@@ -106,9 +106,30 @@ describe("plugin UI spec validation", () => {
     );
   });
 
-  it("continues accepting loader-owned custom component stubs", () => {
-    const spec = { _componentPath: "ui/panel.tsx" };
-    expect(partition([spec])).toEqual({ valid: [spec], diagnostics: [] });
+  it.each(["ui/panel.tsx", "ui/panel.js", "ui/panel.txt"])(
+    "diagnoses unsupported component files: %s",
+    (componentPath) => {
+      const result = partition([{ _componentPath: componentPath }]);
+      expect(result.valid).toEqual([]);
+      expect(result.diagnostics).toHaveLength(1);
+      expect(result.diagnostics[0]).toMatchObject({
+        pluginId: "test-plugin",
+        runtimeId: "test-runtime",
+        slot: "right",
+        issues: [expect.objectContaining({ path: "_componentPath" })],
+      });
+    },
+  );
+
+  it("does not advertise component execution alongside a declarative view", () => {
+    const result = partition([
+      {
+        _componentPath: "ui/panel.js",
+        view: { component: "Text", props: { content: "Hello" } },
+      },
+    ]);
+    expect(result.valid).toEqual([]);
+    expect(result.diagnostics[0]?.issues[0]?.path).toBe("_componentPath");
   });
 
   it("accepts every bundled plugin UI spec", () => {

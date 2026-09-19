@@ -20,6 +20,14 @@ export interface StreamMessage {
   block?: Record<string, unknown>;
 }
 
+export interface ReasoningEntry {
+  id: string;
+  content: string;
+  timestamp: string;
+  sequence?: number;
+  model?: string;
+}
+
 /**
  * Aggregated runtime status — ONE row per (turnId, runtimeId).
  *
@@ -36,6 +44,8 @@ export interface StreamMessage {
  * cleanly. That is what we adopt here to keep chips from getting stuck.
  */
 export interface ExecutionStep {
+  /** Provider-exposed reasoning, one entry per completed model call. */
+  reasoning?: readonly ReasoningEntry[];
   runtimeId: string;
   pluginId: string;
   status:
@@ -178,8 +188,11 @@ export interface SessionState {
     data?: unknown;
   }>;
 
-  /** Accumulated game state from state.patch events. */
+  /** Current game state, updated by full snapshots and committed increments. */
   gameState: Record<string, unknown>;
+
+  /** An authoritative snapshot, including an empty one, supersedes cached patches. */
+  hasGameStateSnapshot: boolean;
 
   /** Plugin data keyed by pluginId -> namespace -> key -> value. Updated via plugin-data.changed events. */
   pluginData: Record<string, Record<string, Record<string, unknown>>>;
@@ -289,13 +302,20 @@ export type SessionAction =
     }
   | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: PageCursor | null }
   | {
-      type: "LOAD_STATE_PATCHES";
+      type: "MERGE_INITIAL_STATE_PATCHES";
       patches: Array<{
         id: string;
         summary: string;
         packageName: string;
         data?: unknown;
       }>;
+    }
+  | {
+      type: "APPEND_REASONING";
+      turnId: string;
+      runtimeId: string;
+      pluginId: string;
+      entry: ReasoningEntry;
     }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep }
   | {
@@ -306,7 +326,6 @@ export type SessionAction =
       abortReason?: string;
     }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
-  | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string; values?: Record<string, unknown> }
@@ -317,6 +336,7 @@ export type SessionAction =
       keepRuntimeIds: ReadonlySet<string>;
     }
   | { type: "SET_GAME_STATE"; state: Record<string, unknown> }
+  | { type: "UPSERT_GAME_STATE_CHARACTER"; character: SnapshotCharacter }
   | { type: "REMOVE_SESSION"; sessionId: string }
   | {
       type: "LOAD_SESSION_PLUGINS";
@@ -338,6 +358,17 @@ export type SessionAction =
   | {
       type: "REPLACE_PLUGIN_DATA";
       pluginData: Record<string, Record<string, Record<string, unknown>>>;
+    }
+  | {
+      type: "REPLACE_PLUGIN_DATA_FOR_PLUGIN";
+      pluginId: string;
+      namespaces: Record<string, Record<string, unknown>>;
+    }
+  | {
+      type: "REPLACE_PLUGIN_DATA_NAMESPACE";
+      pluginId: string;
+      namespace: string;
+      data: Record<string, unknown>;
     }
   | { type: "LOAD_MESSAGE_UI_SPECS"; specs: api.UISlotEntry[] }
   | { type: "UPSERT_PLUGIN_MESSAGE_SURFACE"; pluginId: string }

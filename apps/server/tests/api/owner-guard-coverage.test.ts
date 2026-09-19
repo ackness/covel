@@ -148,6 +148,12 @@ describe("commercial tier — owner guard on indirect session-scoped routes", ()
     process.env.DEPLOYMENT_TIER = "commercial";
     process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
     h = createHarness();
+    await h.store.createWorld({
+      id: "w1",
+      name: "Owner guard world",
+      description: "Synthetic world",
+      createdAt: new Date().toISOString(),
+    });
     victim = await createSession(h.app, { worldId: "w1" }, OPERATOR);
     attacker = await createSession(h.app, { worldId: "w1" }, OPERATOR);
   });

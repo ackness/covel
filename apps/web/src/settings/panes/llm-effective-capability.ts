@@ -23,6 +23,7 @@ export function resolveEffectiveModelTarget(
         protocol?: string;
         capability?: ModelCapabilityInfo;
         parameterOverrides?: ModelParameterOverrides;
+        reasoningEffort?: ModelParameterOverrides["reasoningEffort"];
       }
     | undefined,
   serverSlot: LlmSlotInfo | null | undefined,
@@ -39,7 +40,12 @@ export function resolveEffectiveModelTarget(
     // A role override changes the request target. The previous slot's limits
     // cannot establish the capabilities of the newly selected model.
     baseCapability: target?.capability,
-    parameterDefaults: target?.parameterOverrides,
+    parameterDefaults: boundModel?.reasoningEffort
+      ? {
+          ...target?.parameterOverrides,
+          reasoningEffort: boundModel.reasoningEffort,
+        }
+      : target?.parameterOverrides,
   };
 }
 

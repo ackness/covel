@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.37] - 2026-09-19
+
+This release adds world-owned clocks and reusable reasoning configurations, repairs character and memory integration, and makes execution, recovery, and browser persistence consistent across framework entry points.
+
+### Added
+
+- **World-owned time advances with the story.** The `world-time` plugin supports custom calendars, eras, day lengths, and coarse phases declared by world packages. Models propose elapsed time; deterministic tools calculate and commit the clock with the story. Narrators receive the authoritative time, a plugin panel displays it, and `/time` reads the committed value without advancing a turn. Failed execution preserves the previous clock (#75).
+- **Model reasoning configurations can be named and reused.** Provider models carry reasoning defaults, roles can override them, and supported protocols receive the corresponding provider parameters. Story and execution views retain normalized reasoning output separately from visible narrative.
+
+### Fixed
+
+- **Character tracking accepts idempotent results and can correct invalid tool arguments.** World attribute constraints reach the model, unchanged values are successful no-ops, and bundled agents use the shared step budget instead of a two-step limit (#72).
+- **Memory updates use the current request's model and credentials.** Background extraction follows the selected model role, records correlated failures, and exposes degraded updates to the player. Non-schedulable UI/hook plugins no longer show model selectors with no consumer. Committed memory work has durable recovery intent; failed terminal work is not automatically replayed (#74).
+- **Execution has one commit and finalization path.** Player, manual, background, recursive, and resumed work preserve operation settings and scoped permissions. Handler and tool writes remain buffered until commit; cancellation, timeout, hook review, suspension, and terminal notifications follow the same lifecycle.
+- **Tools and hooks cannot retain mutable host state.** Tool reads see pending proposals through invocation-scoped capabilities; late reads are revoked after completion. Hooks receive owned snapshots and validated result envelopes, while callback failures remain separate from policy decisions.
+- **World and session lifecycles preserve their own data.** Preparation lore survives session creation, snapshots, and forks. World deletion coordinates session cleanup and credentials, and late cache responses cannot resurrect deleted or replaced sessions. Browser workspace operations serialize across tabs.
+- **Shutdown drains owned work before closing dependencies.** Foreground requests, background work, event delivery, world reloads, and desktop sidecars settle before stores close; failed startup unwinds acquired resources. Desktop staging copies files without modifying workspace or package-cache sources.
+
+- SQLite media initialization releases its connection reference on failure. Settings observer exceptions no longer change persistence outcomes or prevent sibling notifications.
+- Archival indexing preserves existing vectors and content hashes when character or lorebook reads fail, while successful empty reads still remove deleted records.
+- Plugin author validation checks raw declarations before optional-field normalization; test-runtime background followers use the production execution and commit lifecycle.
+- Browser initialization and reconnect share snapshot ownership, preserve live messages and state, and deduplicate replayed state-patch history. Plugin-panel data seeds replace deleted namespaces; missing model bindings remain visible until explicitly reset or replaced.
+- Model bindings preserve local versus server identity through settings, headers, UI and connectivity probes. Same-named targets route independently; malformed or missing local definitions reject before execution. Request overlays stay out of public model catalogs and implicit defaults.
+- Durable workers continuously recover expired leases, protecting active commits with nonblocking session locks. Maintenance runs at full execution capacity, stops on close, and retains sanitized failure diagnostics.
+- Durable job HTTP reads and status events share a public projection that excludes frozen inputs and raw provider/handler failures, while preserving result and execution identity.
+
+- Session restore and subscription reads share resource ownership. Live plugin-data and suspension changes invalidate stale initial reads; overlapping full and namespace loads re-read without losing unaffected fields. Invalid selected settings-import values reject before either persistence channel starts writing.
+- Provider settings reject duplicate connection identities and model references before saving or importing, preventing ambiguous model routing. Inline endpoint and model-name edits keep drafts after persistence failure and recognize their normalized saved values.
+- Detached runtime results and durable job success now commit together. Failed business output rolls back proposals; post-commit notification failures cannot reopen completed work. Lease recovery respects renewed revisions, expired queue heads no longer block later work, and terminal transitions wait for in-flight renewal.
+- Partial execution history writes preserve other turns across browser tabs. Delayed history pages and subscription refreshes cannot overwrite a newer visit or request; restored history retains reasoning, tool identity and abort reason.
+- Session creation now persists embedding model identity and lock time consistently across storage backends.
+- Model profile saves and role bindings now persist as one ordinary-settings mutation. Removing a last model retains the connection and key. Connection-key cleanup waits for a successful configuration save and reports failures separately.
+- Provider creation retains drafts on persistence failure. Delayed imports cannot overwrite intervening connection edits, newer imports or an unmounted pane.
+
+### Changed
+
+- Settings persistence accepts only its current v2 envelope across browser, REST, and desktop IPC. Unsupported development files remain untouched and must be recreated; the separate v1 settings export format is unchanged. Removed unused host helpers and the manifest validator's `--compat` bypass.
+- Removed the unused session `presetId` field and its metadata mirror from API, browser, store and snapshot contracts. Model routing continues through slots, request overrides and `runtimeModelOverrides`. Recreate development checkpoints and snapshots that do not satisfy the current contract; no migration or automatic data deletion is provided.
+- Model settings use only current provider profiles and version 2 provider exports. Removed legacy model/key migrations, read-time rewrites, unused preset-write APIs and navigation aliases. Recreate affected development model configurations and connection keys explicitly. Current server preset bindings remain supported; ambiguous bindings are rejected.
+- Model getters no longer attach API keys, and request key routing no longer borrows provider-family keys. Server-managed key markers are never sent as provider credentials.
+- Browser vaults and snapshots now use the current data contract only. Removed historical vault data migrations and snapshot field fallbacks that inferred captured state from the live parent. Snapshot storage and checkpoint validation share the payload schema and reject uncaptured summary references.
+- Recreate development vaults older than schema v5 and snapshots missing the current required fields. Unsupported vault versions fail before schema changes commit; no migration or automatic data deletion is performed. Current empty captures and optional world-lore selection remain supported.
+
+### Upgrade notes
+
+- **BREAKING CHANGE:** Update the server, Web client, desktop shell, and framework packages together. Browser-private workspaces require Web Locks on HTTPS or localhost. The current development contracts require vault schema v5, complete snapshot v3 payloads, persisted settings v2, and provider-profile export v2; the independent general settings export v1 remains supported. Export important content before upgrading. Unsupported development settings, credentials, caches, and snapshots must be recreated explicitly; this release does not migrate or automatically delete them.
+- Plugin authors must use invocation-scoped `context.store` reads and proposal-backed writes; factory-time `PluginToolkit.store` access is removed. Hooks must return a valid `continue` or `abort` envelope and publish changes through explicit replacements. UI panels must use supported JSON declarations; `_componentPath` declarations are rejected with diagnostics. See the updated plugin, hook, transaction, and settings references.
+- Custom hosts must use `executeTurn` / `commitExecution`, inspect resumed runtime failure results, and await worker/event-bus shutdown. Model request overlays now use typed `slotBindings` with distinct `modelRef` / `presetId` identities. Session creation no longer accepts the unused `presetId`; custom session locks must provide `tryWithLock` in the same lock domain.
+- World-time inference can add one model call per successful story turn. The fallback calendar is a generic world calendar, not Gregorian conversion. Model failures remain visible and leave time unchanged.
+- macOS Apple Silicon and Windows x64 packages are **unsigned**, and macOS packages are **not notarized**. First launch may show Gatekeeper or SmartScreen warnings. Windows build/install checks do not imply a complete interactive Windows playthrough.
+
 ## [0.0.36] - 2026-09-17
 
 This patch makes model token budgets configurable and consistent across story, plugin, retry and background requests, and identifies the model responsible when a task fails.
@@ -1217,7 +1268,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.36...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.37...HEAD
+[0.0.37]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.37
 [0.0.36]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.36
 [0.0.31]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.31
 [0.0.30]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.30

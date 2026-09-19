@@ -84,6 +84,7 @@ function createTestApp(
 
 async function createSession(store: DataStore, sessionId = "sess-1") {
   await store.createSession({
+    locale: "zh-CN",
     phase: "playing",
     setupRuntimes: {},
     metadata: {
@@ -286,6 +287,18 @@ describe("Resume Routes", () => {
       const hookPipeline = createHookPipeline();
       let runtimeInputSettings: unknown;
       let hookSettings: unknown;
+      const commitSettings: unknown[] = [];
+      for (const event of ["PreStateCommit", "PostStateCommit"] as const) {
+        hookPipeline.register({
+          id: `test-plugin:${event}:settings`,
+          event,
+          pluginId: "test-plugin",
+          handler: async (ctx) => {
+            commitSettings.push(ctx.getOwnSettings?.());
+            return { action: "continue" };
+          },
+        });
+      }
       hookPipeline.register({
         id: "test-plugin:PreRuntime:settings",
         event: "PreRuntime",
@@ -321,6 +334,40 @@ describe("Resume Routes", () => {
         "test-plugin": { tone: "player", detail: 2 },
       });
       expect(hookSettings).toEqual({
+        tone: "player",
+        detail: 2,
+        fallback: "manifest-only",
+      });
+      expect(commitSettings.length).toBeGreaterThanOrEqual(2);
+      expect(commitSettings.every((value) => value === hookSettings)).toBe(
+        true,
+      );
+      const capturedHookSettings = hookSettings;
+      const currentWorld = (await store.getWorld(worldId))!;
+      await store.upsertWorld({
+        ...currentWorld,
+        metadata: {
+          pluginSettings: {
+            "test-plugin": { tone: "updated-world", detail: 3 },
+          },
+        },
+      });
+      await createSuspension(store, { id: "susp-2" });
+      const next = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-2/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Bob" } }),
+        },
+      );
+      expect(next.status).toBe(200);
+      expect(hookSettings).toEqual({
+        tone: "updated-world",
+        detail: 3,
+        fallback: "manifest-only",
+      });
+      expect(capturedHookSettings).toEqual({
         tone: "player",
         detail: 2,
         fallback: "manifest-only",
@@ -622,6 +669,44 @@ describe("Resume Routes", () => {
       expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeUndefined();
     });
 
+    it("releases a failed execution claim and retries the same suspension", async () => {
+      await createSuspension(store);
+      const hookPipeline = createHookPipeline();
+      const postRuntime = vi.fn(async () => ({ action: "continue" as const }));
+      hookPipeline.register({
+        id: "resume-terminal",
+        event: "PostRuntime",
+        handler: postRuntime,
+      });
+      const generate = vi.fn(makeDefaultLLM().generate);
+      generate.mockRejectedValueOnce(new Error("synthetic provider failure"));
+      const app = createTestApp(
+        makeDefaultDeps(store, { llmAdapter: { generate }, hookPipeline }),
+      );
+      const resume = () =>
+        app.request("/api/sessions/sess-1/suspensions/susp-1/resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Alice" } }),
+        });
+
+      const failed = await resume();
+      expect(failed.status).toBe(500);
+      expect(await failed.json()).toMatchObject({
+        result: {
+          status: "failed",
+          output: null,
+          error: expect.stringContaining("synthetic provider failure"),
+        },
+      });
+      expect(postRuntime).toHaveBeenCalledTimes(1);
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeUndefined();
+
+      expect((await resume()).status).toBe(200);
+      expect(postRuntime).toHaveBeenCalledTimes(2);
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeDefined();
+    });
+
     it("returns 200 with result on successful resume", async () => {
       await createSuspension(store);
       const app = createTestApp(makeDefaultDeps(store));
@@ -834,6 +919,7 @@ describe("Resume Routes", () => {
         await store.deleteSession("sess-1");
         const now = new Date().toISOString();
         await store.createSession({
+          locale: "zh-CN",
           phase: "playing",
           setupRuntimes: {},
           id: "sess-1",

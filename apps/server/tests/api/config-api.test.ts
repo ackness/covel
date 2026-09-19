@@ -304,6 +304,35 @@ describe("config API env and file contracts", () => {
     );
   });
 
+  it.each([undefined, 1])(
+    "refuses to read or replace settings version %s",
+    async (schemaVersion) => {
+      process.env.COVEL_HOME = tmpHome;
+      const settingsFile = path.join(tmpHome, "settings.json");
+      const contents = JSON.stringify({
+        schemaVersion,
+        entries: { retained: true },
+      });
+      fs.writeFileSync(settingsFile, contents, "utf-8");
+      const app = buildApp(apiKeys);
+      const read = await app.request("/api/config/settings");
+      expect(read.status).toBe(500);
+      await expect(read.json()).resolves.toMatchObject({
+        code: "settings_file_invalid",
+      });
+      const write = await app.request("/api/config/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entries: { replacement: true },
+          expectedRevision: 0,
+        }),
+      });
+      expect(write.status).toBe(409);
+      expect(fs.readFileSync(settingsFile, "utf-8")).toBe(contents);
+    },
+  );
+
   it("rewrites data_root only for absolute paths", async () => {
     process.env.COVEL_HOME = tmpHome;
     const app = buildApp(apiKeys);
@@ -636,7 +665,8 @@ describe("config API env and file contracts", () => {
       fs.writeFileSync(
         path.join(tmpHome, "settings.json"),
         JSON.stringify({
-          schemaVersion: 1,
+          schemaVersion: 2,
+          revision: 0,
           savedAt: "now",
           entries: { importedSecret: "sk-test" },
         }),

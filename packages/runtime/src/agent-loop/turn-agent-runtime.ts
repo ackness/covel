@@ -1,3 +1,4 @@
+import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   RuntimeManifest,
@@ -8,8 +9,8 @@ import type {
   InputSlot,
 } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
-import { DEFAULT_LOCALE, getRuntimeSpec } from "@covel/shared";
-import type { LoadedRuntime } from "@covel/plugin-loader";
+import { DEFAULT_LOCALE } from "@covel/shared";
+import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   buildContext,
   buildContextAsync,
@@ -22,32 +23,19 @@ import type {
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
-import {
-  runPreRuntimeHook,
-  runPostRuntimeHook,
-  runPostContextAssemblyHook,
-} from "../hooks/wire-helpers.js";
-import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
+import { runPostContextAssemblyHook } from "../hooks/wire-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
-import { storyOutputError } from "./story-output.js";
 import { agentInputSlots } from "./runtime-input-slots.js";
 import { filterRuntimeHistory } from "./message-filter.js";
 import {
   checkSchemaProseFailure,
   checkSchemaValidation,
 } from "./runtime-output-validator.js";
-import {
-  emitMessageCompleted,
-  emitRuntimeCompleted,
-  emitRuntimeFailed,
-} from "../trace/runtime-telemetry.js";
+import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
-import {
-  completionContractError,
-  withAgentFailureTarget,
-} from "./runtime-completion.js";
+import { completionContractError } from "./runtime-completion.js";
 
 export interface AgentCompactionRefresh {
   readonly compacted: boolean;
@@ -130,84 +118,10 @@ export async function executeAgentRuntime({
   // ── Agent runtime: LLM pipeline ─────────────────────────────
   // Emit start AFTER guard passes (or no guard exists) — prevents
   // frontend showing an infinite spinner for guard-skipped runtimes.
-  const stage = getRuntimeSpec(manifest).stage;
-  try {
-    await deps.onRuntimeStart?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      ...(stage !== undefined ? { stage } : {}),
-    });
-  } catch {
-    /* callback error must not kill runtime */
-  }
-  emitSubEvent(deps.eventBus, "runtime", "runtime.started", input.sessionId, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    ...(stage !== undefined ? { stage } : {}),
+  await reportRuntimeStarted(deps, input.sessionId, manifest, {
+    turnId: input.turnId,
+    runId,
   });
-
-  // ── PreRuntime hook ──────────────────────────────────
-  {
-    const preRtResult = await runPreRuntimeHook({
-      pipeline: hookPipeline,
-      signal: getTurnExecutionSignal(deps.turnControl),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      manifest,
-      input,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    });
-    if (preRtResult.action === "abort") {
-      const skippedResult: RuntimeResult = {
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        runId,
-        turnId: input.turnId,
-        status: "skipped",
-        output: { skipped: true, reason: preRtResult.reason },
-        toolCalls: [],
-        durationMs: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-      };
-      try {
-        await deps.onRuntimeComplete?.({
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: skippedResult.status,
-          durationMs: skippedResult.durationMs,
-        });
-      } catch {
-        /* callback error must not replace the hook result */
-      }
-      emitSubEvent(
-        deps.eventBus,
-        "runtime",
-        "runtime.completed",
-        input.sessionId,
-        {
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: skippedResult.status,
-          durationMs: skippedResult.durationMs,
-          reason: preRtResult.reason,
-        },
-      );
-      return runPostRuntimeHook(
-        {
-          pipeline: hookPipeline,
-          signal: getTurnExecutionSignal(deps.turnControl),
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          pluginId: manifest.pluginId,
-          runtimeId: manifest.name,
-          eventBus: deps.eventBus,
-          emitter: deps.emitter,
-        },
-        skippedResult,
-      );
-    }
-  }
 
   // Every agent applies the actual target budget immediately before calling it.
   const budgetEligible =
@@ -374,47 +288,11 @@ export async function executeAgentRuntime({
     deadline,
   } = toolLoop;
 
-  // Shared PostRuntime-hook opts for every terminal path of this runtime.
-  const postRuntimeOpts = {
-    pipeline: hookPipeline,
-    signal: getTurnExecutionSignal(deps.turnControl),
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    eventBus: deps.eventBus,
-    emitter: deps.emitter,
-  };
-  const finalizeFailure = async (
-    result: RuntimeResult,
-  ): Promise<RuntimeResult> => {
-    result = withAgentFailureTarget(result, toolLoop.lastTarget);
-    // Single terminal-event funnel for RETURNED failures. Every returned
-    // failure path (timeout without content, requireToolUse unmet,
-    // tool-failed, schema/prose short-circuits, retry exhaustion) lands here;
-    // the direct completion callback drives the per-action SSE stream, while
-    // the EventBus emission drives trace subscribers. Both are required:
-    // runtime lifecycle events are deliberately excluded from generic action-
-    // stream forwarding to avoid duplicate envelopes.
-    if (result.status === "failed") {
-      try {
-        await deps.onRuntimeComplete?.({
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: result.status,
-          durationMs: result.durationMs,
-          ...(result.error ? { error: result.error } : {}),
-        });
-      } catch {
-        /* callback error must not replace the runtime failure */
-      }
-      emitRuntimeFailed(deps, input.sessionId, manifest, result);
-    }
-    return withAgentFailureTarget(
-      await runPostRuntimeHook(postRuntimeOpts, result),
-      toolLoop.lastTarget,
-    );
-  };
+  const finalizeFailure = (result: RuntimeResult): Promise<RuntimeResult> =>
+    finalizeRuntimeResult({ ...deps, hookPipeline }, manifest, input, result, {
+      lastTarget: toolLoop.lastTarget,
+      deltaCount: streamDeltaCount,
+    });
 
   if (!stoppedWithResponse && !finalContent) {
     return finalizeFailure({
@@ -545,82 +423,20 @@ export async function executeAgentRuntime({
     timestamp: new Date().toISOString(),
   };
 
-  // PostRuntime hook — agent success path. Runs BEFORE anything is
-  // persisted : prompt history, commit proposals, and SSE must all see
-  // the SAME finalized output. Previously the raw result was appended to
-  // TurnMessages first and only the commit/SSE path saw the hook rewrite —
-  // e.g. a hook downgrading success→failed still left the unrewritten
-  // narrative in history.
-  const result = withAgentFailureTarget(
-    await runPostRuntimeHook(postRuntimeOpts, rawResult),
-    toolLoop.lastTarget,
+  const result = await finalizeRuntimeResult(
+    { ...deps, hookPipeline },
+    manifest,
+    input,
+    rawResult,
+    { lastTarget: toolLoop.lastTarget, deltaCount: streamDeltaCount },
   );
-  const finalOutput = (result.output ?? output) as Record<string, unknown>;
-  const storyError =
-    manifest.outputKind === "story" && result.status === "success"
-      ? storyOutputError(result.output)
-      : undefined;
-  if (storyError) {
-    const failed = withAgentFailureTarget(
-      {
-        ...result,
-        status: "failed",
-        output: null,
-        error: storyError,
-      },
-      toolLoop.lastTarget,
-    );
-    try {
-      await deps.onRuntimeComplete?.({
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: "failed",
-        durationMs: result.durationMs,
-        error: failed.error,
-      });
-    } catch {
-      // Telemetry cannot turn a missing story into a successful result.
-    }
-    emitRuntimeFailed(deps, input.sessionId, manifest, failed);
-    return failed;
-  }
-
-  if (deps.store) attachRuntimeJournal(result, input, manifest, finalOutput);
-
-  try {
-    await deps.onRuntimeComplete?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: result.status,
-      durationMs: result.durationMs,
-    });
-  } catch {
-    /* callback error must not kill runtime */
-  }
-
-  // Emit the finalized (PostRuntime-rewritten) story content. A hook may redact
-  // or replace the narrative, or downgrade the result to failed; the trace must
-  // describe the same committed result as the journal above.
-  const completedContent =
-    typeof finalOutput.narrativeOutput === "string"
-      ? finalOutput.narrativeOutput
-      : typeof finalOutput.content === "string"
-        ? finalOutput.content
-        : "";
-  if (
-    result.status === "success" &&
-    completedContent.length > 0 &&
-    manifest.outputKind === "story"
-  ) {
-    await emitMessageCompleted(
-      deps.emitter,
+  if (deps.store && result.output) {
+    attachRuntimeJournal(
+      result,
+      input,
       manifest,
-      completedContent,
-      streamDeltaCount,
+      result.output as Record<string, unknown>,
     );
   }
-
-  emitRuntimeCompleted(deps, input.sessionId, manifest, result);
-
   return result;
 }

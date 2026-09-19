@@ -110,6 +110,55 @@ describe("HookPipeline", () => {
   });
 
   describe("basic registration and execution", () => {
+    it.each<HookSemantic>(["first", "sequential", "stream", "parallel"])(
+      "isolates and reports a throwing match under %s semantics",
+      async (semantic) => {
+        HOOK_SEMANTICS.TurnStart = semantic;
+        const bus = createEventBus();
+        const events: Array<{ type: string; payload: unknown }> = [];
+        bus.onEmit((event) => events.push(event));
+        const brokenHandler = vi.fn();
+        const laterHandler = vi.fn().mockResolvedValue({ action: "continue" });
+        pipeline.register({
+          id: "plugin-a:broken-match",
+          pluginId: "plugin-a",
+          event: "TurnStart",
+          match: () => {
+            throw new Error("invalid filter input");
+          },
+          handler: brokenHandler,
+        });
+        pipeline.register({
+          id: "plugin-b:observer",
+          pluginId: "plugin-b",
+          event: "TurnStart",
+          handler: laterHandler,
+        });
+
+        await expect(
+          pipeline.run("TurnStart", makeCtx(), {}, { eventBus: bus }),
+        ).resolves.toEqual(
+          semantic === "parallel"
+            ? { action: "continue" }
+            : { action: "abort", reason: "invalid filter input" },
+        );
+        expect(brokenHandler).not.toHaveBeenCalled();
+        expect(laterHandler).toHaveBeenCalledTimes(
+          semantic === "parallel" ? 1 : 0,
+        );
+        expect(events).toEqual([
+          expect.objectContaining({
+            type: "hook.error",
+            payload: expect.objectContaining({
+              hookId: "plugin-a:broken-match",
+              hookPluginId: "plugin-a",
+              reason: "invalid filter input",
+            }),
+          }),
+        ]);
+      },
+    );
+
     it("returns continue when no handlers are registered", async () => {
       const result = await pipeline.run("TurnStart", makeCtx(), { foo: "bar" });
       expect(result.action).toBe("continue");

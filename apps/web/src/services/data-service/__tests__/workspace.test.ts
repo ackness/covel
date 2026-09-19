@@ -3,10 +3,24 @@ import {
   createSessionWorkspace,
   SessionWorkspaceSyncError,
 } from "../workspace.js";
-import type { DataService } from "../types.js";
+import type { DataService, SessionWorkspaceOperations } from "../types.js";
 
 function makeService(order: string[]): DataService {
-  return {
+  const scope = crypto.randomUUID();
+  const service = {
+    withSessionWorkspace<T>(
+      sessionId: string,
+      operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
+    ) {
+      return navigator.locks.request(`${scope}:${sessionId}`, () =>
+        operation({
+          persistInput: (message) => service.addMessage(message),
+          hydrate: () => service.syncToServer(sessionId),
+          stage: (actionId) => service.stageServerCommit(sessionId, actionId),
+          commit: (actionId) => service.commitFromServer(sessionId, actionId),
+        }),
+      );
+    },
     syncToServer: vi.fn(async () => {
       order.push("hydrate");
     }),
@@ -17,9 +31,118 @@ function makeService(order: string[]): DataService {
       order.push(`checkpoint:${actionId}`);
     }),
   } as unknown as DataService;
+  return service;
 }
 
 describe("SessionWorkspace", () => {
+  it("persists input inside ownership before uploading or executing", async () => {
+    const order: string[] = [];
+    const service = makeService(order);
+    service.addMessage = vi.fn(async () => {
+      order.push("input");
+    });
+    const workspace = createSessionWorkspace(service, "local");
+    await workspace.run(
+      "sess-1",
+      "action",
+      async () => {
+        order.push("mutate");
+      },
+      {
+        input: {
+          id: "input",
+          sessionId: "sess-1",
+          role: "user",
+          content: "Continue",
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+      },
+    );
+    expect(order).toEqual([
+      "input",
+      "hydrate",
+      "stage:action",
+      "mutate",
+      "checkpoint:action",
+    ]);
+  });
+
+  it("does not persist input or execute a superseded queued action", async () => {
+    const order: string[] = [];
+    const service = makeService(order);
+    service.addMessage = vi.fn();
+    const workspace = createSessionWorkspace(service, "local");
+    let start!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = workspace.run("sess-1", "first-action", async () => {
+      start();
+      await hold;
+    });
+    await started;
+    let current = true;
+    const queued = workspace.run(
+      "sess-1",
+      "action",
+      async () => {
+        order.push("mutate");
+      },
+      {
+        isCurrent: () => current,
+        input: {
+          id: "input",
+          sessionId: "sess-1",
+          role: "user",
+          content: "Continue",
+          createdAt: "2026-01-01T00:00:00Z",
+        },
+      },
+    );
+    const rejected = expect(queued).rejects.toThrow("superseded");
+    current = false;
+    release();
+    await first;
+    await rejected;
+    expect(service.addMessage).not.toHaveBeenCalled();
+    expect(order).toEqual([
+      "hydrate",
+      "stage:first-action",
+      "checkpoint:first-action",
+    ]);
+  });
+
+  it("does not dispatch an action when input persistence fails", async () => {
+    const order: string[] = [];
+    const service = makeService(order);
+    service.addMessage = vi
+      .fn()
+      .mockRejectedValue(new Error("storage unavailable"));
+    const workspace = createSessionWorkspace(service, "local");
+    await expect(
+      workspace.run(
+        "sess-1",
+        "action",
+        async () => {
+          order.push("mutate");
+        },
+        {
+          input: {
+            id: "input",
+            sessionId: "sess-1",
+            role: "user",
+            content: "Continue",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ stage: "input" });
+    expect(order).toEqual([]);
+  });
   it("keeps local hydrate, stage, mutation, and commit in one FIFO job", async () => {
     const order: string[] = [];
     const workspace = createSessionWorkspace(makeService(order), "local");

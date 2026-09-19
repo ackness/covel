@@ -10,6 +10,7 @@
 import { Hono } from "hono";
 import type { StateChangeEntry, StateTableSchema } from "@covel/shared";
 import type { DataStore } from "@covel/store";
+import { publicPluginDataValue } from "./plugin-rpc/runtime-job-public.js";
 import {
   publicSessionMetadata,
   resolveSessionParam,
@@ -121,7 +122,7 @@ stateRoutes.get("/:id/state", async (c) => {
         entry = { keys: new Set(), data: {} };
         byTable.set(tableName, entry);
       }
-      entry.data[row.key] = row.value;
+      entry.data[row.key] = publicPluginDataValue(row);
       entry.keys.add(row.key);
     }
     // Stable alphabetical ordering so the UI doesn't shuffle between refreshes.

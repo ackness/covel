@@ -8,7 +8,7 @@
  * targeted the still-waiting turn 2.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
@@ -24,6 +24,7 @@ import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { abortActiveTurn } from "../../src/routes/api/turn-control.js";
 import { parseJsonFrames } from "./sse-test-utils.js";
+import { createApplicationWork } from "../../src/application-work.js";
 
 const PLUGIN_ID = "test-concurrency";
 const RUNTIME = "test-concurrency/main";
@@ -102,6 +103,79 @@ async function drain(
 }
 
 describe("POST /api/actions — steer/abort targets the executing turn, not a queued one (A-02)", () => {
+  it("rejects an admitted action still waiting for its session lock when the host closes", async () => {
+    const store = createMemoryStore();
+    const registry = createPluginRegistry();
+    const handler = vi.fn(async () => ({
+      outcome: "success" as const,
+      value: {},
+    }));
+    const entry = makeRegistryEntry(handler);
+    registry.register(entry);
+    const sessionLock = createInProcessSessionLock();
+    const work = createApplicationWork();
+    const eventBus = createEventBus(store);
+    const app = new Hono();
+    app.use("*", work.middleware);
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("pluginRegistry", registry);
+      c.set("sessionLock", sessionLock);
+      c.set("eventBus", eventBus);
+      c.set("loadRuntimeFn", async () => entry.loadedRuntimes.get(RUNTIME));
+      c.set("resolveModel", () => undefined);
+      await next();
+    });
+    app.route("/api/actions", actionRoutes);
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: null,
+      metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      phase: "playing",
+      status: "active",
+      activePlugins: [PLUGIN_ID],
+      setupRuntimes: {},
+      completedPlayerTurns: 1,
+      createdAt: new Date().toISOString(),
+    });
+    const locked = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const blocker = sessionLock.withLock(SESSION_ID, async () => {
+      locked.resolve();
+      await release.promise;
+    });
+    await locked.promise;
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "queued-shutdown",
+        sessionId: SESSION_ID,
+        type: "send_message",
+        payload: { content: "Do not execute." },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const body = response.text();
+    let closed = false;
+    const closing = work.close().then(() => {
+      closed = true;
+    });
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(closed).toBe(false);
+    } finally {
+      release.resolve();
+      await Promise.all([blocker, body, closing]);
+    }
+    expect(handler).not.toHaveBeenCalled();
+    expect(await store.listTurnMessages(SESSION_ID)).toEqual([]);
+    expect(await store.listTurnResults(SESSION_ID)).toEqual([]);
+    expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(1);
+    await eventBus.close();
+    await store.close();
+  });
+
   it("abort during turn 1 hits turn 1 while turn 2 waits on the session lock", async () => {
     const store: DataStore = createMemoryStore();
     const pluginRegistry = createPluginRegistry();
@@ -155,7 +229,6 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 

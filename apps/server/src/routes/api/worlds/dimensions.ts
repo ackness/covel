@@ -5,6 +5,7 @@
  *   POST /worlds/:id/dimensions/import — replace dimensions from a JSON body.
  */
 
+import { withWritableWorld } from "./mutation-guard.js";
 import { Hono } from "hono";
 import { stringify as stringifyYaml } from "yaml";
 import { validateDimensions } from "@covel/shared";
@@ -55,11 +56,6 @@ worldDimensionRoutes.post("/:id/dimensions/import", async (c) => {
   const eventBus = c.get("eventBus");
   const id = c.req.param("id");
 
-  const existing = await store.getWorld(id);
-  if (!existing) {
-    return c.json(errorBody("World not found"), 404);
-  }
-
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
@@ -78,35 +74,37 @@ worldDimensionRoutes.post("/:id/dimensions/import", async (c) => {
     );
   }
 
-  const now = new Date().toISOString();
-  const meta = (existing.metadata as Record<string, unknown>) ?? {};
-  const updated: WorldRecord = {
-    ...existing,
-    metadata: { ...meta, dimensions: validation.data },
-    dimensions: validation.data as WorldRecord["dimensions"],
-    updatedAt: now,
-  };
+  return withWritableWorld(c, id, async (existing) => {
+    const now = new Date().toISOString();
+    const meta = (existing.metadata as Record<string, unknown>) ?? {};
+    const updated: WorldRecord = {
+      ...existing,
+      metadata: { ...meta, dimensions: validation.data },
+      dimensions: validation.data as WorldRecord["dimensions"],
+      updatedAt: now,
+    };
 
-  await store.upsertWorld(updated);
+    await store.upsertWorld(updated);
 
-  // Notify active sessions
-  const sessions = await store.listSessions();
-  const affected = sessions.filter((s) => s.worldId === id);
-  for (const session of affected) {
-    eventBus.emit({
-      id: crypto.randomUUID(),
-      type: "event",
-      topic: "system",
-      payload: {
-        _subTopic: "system",
-        _subType: "world.dimensions.changed",
-        worldId: id,
-        changedKeys: Object.keys(dimensions),
-      },
-      sessionId: session.id,
-      timestamp: now,
-    });
-  }
+    // Notify active sessions
+    const sessions = await store.listSessions();
+    const affected = sessions.filter((s) => s.worldId === id);
+    for (const session of affected) {
+      eventBus.emit({
+        id: crypto.randomUUID(),
+        type: "event",
+        topic: "system",
+        payload: {
+          _subTopic: "system",
+          _subType: "world.dimensions.changed",
+          worldId: id,
+          changedKeys: Object.keys(dimensions),
+        },
+        sessionId: session.id,
+        timestamp: now,
+      });
+    }
 
-  return c.json(updated);
+    return c.json(updated);
+  });
 });

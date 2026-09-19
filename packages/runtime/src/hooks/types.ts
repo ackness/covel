@@ -85,7 +85,7 @@ export interface HookContext {
    */
   readonly activePluginIds?: ReadonlySet<string>;
   /**
-   * Read-only accessor for the handler's *own* plugin settings this turn.
+   * Read-only accessor for the handler's *own* plugin settings for this operation.
    *
    * The pipeline injects this (from the same session hook scope that carries
    * `activePluginIds`) just before invoking each handler, bound to that
@@ -113,6 +113,8 @@ export interface HookContext {
  * - `continue` — pipeline proceeds.
  * - `continue` + `replace` — sequential hooks shallow-merge into the next payload.
  * - `abort` — sequential hooks stop the pipeline; parallel hooks record the abort.
+ * The pipeline validates this envelope at runtime. `replace` must be a data
+ * record for shallow merging; malformed results follow handler-error semantics.
  */
 export type HookResult<P> =
   | { readonly action: "continue" }
@@ -121,6 +123,7 @@ export type HookResult<P> =
 
 // ── Hook handler ─────────────────────────────────────────────────
 
+/** Receives a private data snapshot; publish changes only through `replace`. */
 export type HookHandler<P = unknown> = (
   ctx: HookContext,
   payload: P,
@@ -134,7 +137,7 @@ export interface HookRegistration<P = unknown> {
   readonly event: HookEvent;
   /** undefined = global/framework hook. */
   readonly pluginId?: string;
-  /** Optional filter — only invoke this handler when match returns true. */
+  /** Optional filter with its own snapshot; only invoke the handler when true. */
   readonly match?: (payload: P) => boolean;
   readonly handler: HookHandler<P>;
   /** Per-handler timeout in ms. Default 5000. */

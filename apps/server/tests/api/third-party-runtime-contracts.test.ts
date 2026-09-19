@@ -1,3 +1,4 @@
+import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -54,7 +55,7 @@ describe("runtime contracts through an installed community package", () => {
   }));
 
   async function restart() {
-    boot?.runtimeJobWorker.close();
+    await closeTestApi(boot);
     boot = await bootstrapApi({
       pluginsDir: path.join(root, "builtin"),
       pluginsDirs: [path.join(root, "builtin"), path.join(root, "user")],
@@ -151,7 +152,7 @@ describe("runtime contracts through an installed community package", () => {
   });
 
   afterEach(async () => {
-    boot?.runtimeJobWorker.close();
+    await closeTestApi(boot);
     vi.unstubAllEnvs();
     await rm(root, { recursive: true, force: true });
   });

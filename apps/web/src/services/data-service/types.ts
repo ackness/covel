@@ -9,10 +9,29 @@ import type {
 export type WorldPatch = WorldPatchRequest;
 
 export type SessionPatch = Partial<
-  Pick<SessionRecord, "status" | "presetId" | "runtimeModelOverrides">
+  Pick<SessionRecord, "status" | "runtimeModelOverrides">
 >;
 
+/** Captured session identity; remote caches must not infer it after awaiting I/O. */
+export type SessionUiOwner = Pick<
+  SessionRecord,
+  "id" | "worldId" | "incarnation"
+>;
+
+/** Operations bound to one exclusively owned browser session. */
+export interface SessionWorkspaceOperations {
+  persistInput(message: MessageRecord): Promise<void>;
+  hydrate(): Promise<void>;
+  stage(actionId: string): Promise<void>;
+  commit(actionId: string): Promise<void>;
+}
+
 export interface DataService {
+  /** Browser implementations hold ownership across the whole exchange. */
+  withSessionWorkspace?<T>(
+    sessionId: string,
+    operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
+  ): Promise<T>;
   // Worlds
   listWorlds(): Promise<WorldRecord[]>;
   getWorld(id: string): Promise<WorldRecord | null>;
@@ -29,10 +48,10 @@ export interface DataService {
   getSession(sessionId: string): Promise<SessionRecord | null>;
   createSession(
     worldId: string,
-    presetId?: string,
     id?: string,
     plugins?: string[],
     locale?: string,
+    loreOverride?: string,
   ): Promise<SessionRecord>;
   updateSession(
     sessionId: string,
@@ -69,12 +88,16 @@ export interface DataService {
     sessionId: string,
     blockIds: string[],
     values: Record<string, Record<string, unknown>>,
+    owner: SessionUiOwner,
   ): Promise<void>;
 
   /**
    * Load submitted block IDs + values for a session. Both default to empty.
    */
-  loadSubmittedBlocks(sessionId: string): Promise<{
+  loadSubmittedBlocks(
+    sessionId: string,
+    owner: SessionUiOwner,
+  ): Promise<{
     ids: string[];
     values: Record<string, Record<string, unknown>>;
   }>;
@@ -92,8 +115,15 @@ export interface DataService {
   /** Persist the transient server result as the next browser checkpoint. */
   commitFromServer(sessionId: string, actionId: string): Promise<void>;
 
-  /** Persist accumulated execution timeline steps for a session. */
-  saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void>;
+  /** Merge partial history by turn/runtime. Empty batches preserve history; session/world deletion clears it. */
+  saveExecutionSteps(
+    sessionId: string,
+    steps: unknown[],
+    owner: SessionUiOwner,
+  ): Promise<void>;
   /** Load persisted execution timeline steps for a session. */
-  loadExecutionSteps(sessionId: string): Promise<unknown[]>;
+  loadExecutionSteps(
+    sessionId: string,
+    owner: SessionUiOwner,
+  ): Promise<unknown[]>;
 }

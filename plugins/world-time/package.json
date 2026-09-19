@@ -1,0 +1,22 @@
+{
+  "name": "@covel/plugin-world-time",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@covel/shared": "workspace:*",
+    "@covel/tools": "workspace:*",
+    "@covel/plugin-handlers-utils": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/runtime": "workspace:*",
+    "@covel/store": "workspace:*",
+    "vitest": "^4.1.11"
+  }
+}

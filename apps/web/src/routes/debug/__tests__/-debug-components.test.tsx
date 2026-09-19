@@ -394,6 +394,24 @@ describe("debug route components", () => {
     expect(screen.getByText("30001ms")).toBeDefined();
   });
 
+  it.each(["llm.responded", "gateway.responded"])(
+    "shows %s reasoning in a collapsed disclosure",
+    (type) => {
+      render(
+        <EventDetailPanel
+          event={traceEvent(type, {
+            reasoningContent: "Provider summary",
+            text: "Answer",
+          })}
+          onClose={vi.fn()}
+        />,
+      );
+      const panel = screen.getByTestId("reasoning-disclosure");
+      expect(panel.hasAttribute("open")).toBe(false);
+      expect(panel.textContent).toContain("Provider summary");
+    },
+  );
+
   it("reads tool input and legacy nested trace payloads", () => {
     const { rerender } = render(
       <EventDetailPanel

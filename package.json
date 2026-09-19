@@ -1,6 +1,6 @@
 {
   "name": "covel",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "private": true,
   "type": "module",
   "scripts": {
@@ -41,7 +41,8 @@
     "check:env": "node ./scripts/check-production-env.mjs",
     "create-plugin": "node scripts/create-plugin.js",
     "release:preflight": "node ./scripts/release-preflight.mjs",
-    "preinstall": "node ./scripts/require-pnpm.mjs"
+    "preinstall": "node ./scripts/require-pnpm.mjs",
+    "check:boundaries": "node --test scripts/tests/package-imports.test.mjs && node scripts/check-package-boundaries.mjs"
   },
   "packageManager": "pnpm@11.22.0",
   "engines": {
@@ -60,6 +61,9 @@
     "sqlite-vec": "^0.1.9",
     "tsx": "4.23.12",
     "turbo": "2.10.11",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@covel/ai-provider": "workspace:*",
+    "@covel/shared": "workspace:*",
+    "oxc-parser": "0.143.0"
   }
 }

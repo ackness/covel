@@ -1,4 +1,10 @@
-import type { DataService } from "./types.js";
+import type { MessageRecord } from "../api.js";
+import type { DataService, SessionWorkspaceOperations } from "./types.js";
+
+interface WorkspaceRunOptions {
+  readonly input?: MessageRecord;
+  readonly isCurrent?: () => boolean;
+}
 
 /**
  * Coordinates the browser-private server mirror around session mutations.
@@ -13,13 +19,14 @@ export interface SessionWorkspace {
     sessionId: string,
     actionId: string,
     mutate: () => Promise<T>,
+    options?: WorkspaceRunOptions,
   ): Promise<T>;
   checkpoint(sessionId: string, actionId: string): Promise<void>;
 }
 
 export class SessionWorkspaceSyncError extends Error {
   constructor(
-    readonly stage: "hydrate" | "checkpoint",
+    readonly stage: "input" | "hydrate" | "checkpoint",
     readonly sessionId: string,
     readonly actionId: string | undefined,
     readonly cause: unknown,
@@ -31,32 +38,48 @@ export class SessionWorkspaceSyncError extends Error {
 }
 
 class LocalSessionWorkspace implements SessionWorkspace {
-  private readonly tails = new Map<string, Promise<void>>();
-
   constructor(private readonly dataService: DataService) {}
 
   private enqueue<T>(
     sessionId: string,
-    operation: () => Promise<T>,
+    operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
   ): Promise<T> {
-    const tail = this.tails.get(sessionId) ?? Promise.resolve();
-    const result = tail.then(operation, operation);
-    const settled = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.tails.set(sessionId, settled);
-    void settled.then(() => {
-      if (this.tails.get(sessionId) === settled) {
-        this.tails.delete(sessionId);
-      }
-    });
-    return result;
+    if (!this.dataService.withSessionWorkspace) {
+      return Promise.reject(
+        new SessionWorkspaceSyncError(
+          "hydrate",
+          sessionId,
+          undefined,
+          new Error(
+            "Local data service must provide exclusive workspace ownership",
+          ),
+        ),
+      );
+    }
+    let admitted = false;
+    return this.dataService
+      .withSessionWorkspace(sessionId, (workspace) => {
+        admitted = true;
+        return operation(workspace);
+      })
+      .catch((error: unknown) => {
+        if (admitted) throw error;
+        throw new SessionWorkspaceSyncError(
+          "hydrate",
+          sessionId,
+          undefined,
+          error,
+        );
+      });
   }
 
-  private async commit(sessionId: string, actionId: string): Promise<void> {
+  private async commit(
+    sessionId: string,
+    actionId: string,
+    workspace: SessionWorkspaceOperations,
+  ): Promise<void> {
     try {
-      await this.dataService.commitFromServer(sessionId, actionId);
+      await workspace.commit(actionId);
     } catch (error) {
       throw new SessionWorkspaceSyncError(
         "checkpoint",
@@ -67,9 +90,13 @@ class LocalSessionWorkspace implements SessionWorkspace {
     }
   }
 
-  private async stage(sessionId: string, actionId: string): Promise<void> {
+  private async stage(
+    sessionId: string,
+    actionId: string,
+    workspace: SessionWorkspaceOperations,
+  ): Promise<void> {
     try {
-      await this.dataService.stageServerCommit(sessionId, actionId);
+      await workspace.stage(actionId);
     } catch (error) {
       throw new SessionWorkspaceSyncError(
         "checkpoint",
@@ -80,9 +107,12 @@ class LocalSessionWorkspace implements SessionWorkspace {
     }
   }
 
-  private async prepare(sessionId: string): Promise<void> {
+  private async prepare(
+    sessionId: string,
+    workspace: SessionWorkspaceOperations,
+  ): Promise<void> {
     try {
-      await this.dataService.syncToServer(sessionId);
+      await workspace.hydrate();
     } catch (error) {
       throw new SessionWorkspaceSyncError(
         "hydrate",
@@ -94,27 +124,46 @@ class LocalSessionWorkspace implements SessionWorkspace {
   }
 
   hydrate(sessionId: string): Promise<void> {
-    return this.enqueue(sessionId, () => this.prepare(sessionId));
+    return this.enqueue(sessionId, (workspace) =>
+      this.prepare(sessionId, workspace),
+    );
   }
 
   run<T>(
     sessionId: string,
     actionId: string,
     mutate: () => Promise<T>,
+    options?: WorkspaceRunOptions,
   ): Promise<T> {
-    return this.enqueue(sessionId, async () => {
-      await this.prepare(sessionId);
-      await this.stage(sessionId, actionId);
+    return this.enqueue(sessionId, async (workspace) => {
+      if (options?.isCurrent && !options.isCurrent())
+        throw new Error("Action was superseded before execution");
+      if (options?.input) {
+        try {
+          if (options.input.sessionId !== sessionId)
+            throw new Error("Workspace input session mismatch");
+          await workspace.persistInput(options.input);
+        } catch (error) {
+          throw new SessionWorkspaceSyncError(
+            "input",
+            sessionId,
+            actionId,
+            error,
+          );
+        }
+      }
+      await this.prepare(sessionId, workspace);
+      await this.stage(sessionId, actionId, workspace);
       const result = await mutate();
-      await this.commit(sessionId, actionId);
+      await this.commit(sessionId, actionId, workspace);
       return result;
     });
   }
 
   checkpoint(sessionId: string, actionId: string): Promise<void> {
-    return this.enqueue(sessionId, async () => {
-      await this.stage(sessionId, actionId);
-      await this.commit(sessionId, actionId);
+    return this.enqueue(sessionId, async (workspace) => {
+      await this.stage(sessionId, actionId, workspace);
+      await this.commit(sessionId, actionId, workspace);
     });
   }
 }
@@ -128,7 +177,12 @@ class RemoteSessionWorkspace implements SessionWorkspace {
     _sessionId: string,
     _actionId: string,
     mutate: () => Promise<T>,
+    options?: WorkspaceRunOptions,
   ): Promise<T> {
+    if (options?.isCurrent && !options.isCurrent())
+      return Promise.reject(
+        new Error("Action was superseded before execution"),
+      );
     return mutate();
   }
 

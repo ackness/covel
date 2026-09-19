@@ -2,7 +2,7 @@ import type { LLMMessage, LLMResponse } from "../llm/llm-adapter.js";
 
 type ToolCallResponse = Pick<
   LLMResponse,
-  "content" | "toolCalls" | "reasoningContent"
+  "content" | "toolCalls" | "reasoningContent" | "providerContinuation"
 >;
 
 export function buildAssistantToolCallMessage(
@@ -10,6 +10,9 @@ export function buildAssistantToolCallMessage(
 ): LLMMessage {
   return {
     role: "assistant",
+    ...(response.providerContinuation
+      ? { providerContinuation: response.providerContinuation }
+      : {}),
     content: response.content ?? "",
     toolCalls: response.toolCalls,
     ...(response.reasoningContent

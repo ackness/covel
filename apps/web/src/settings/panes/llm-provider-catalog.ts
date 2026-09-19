@@ -3,8 +3,13 @@ import type {
   ProviderModelProfile,
   SlotConfigEntry,
 } from "@/services/api.js";
-import type { LegacyCustomPresetShape } from "@/services/api/provider-model-profiles.js";
-import { providerKeyToId } from "@covel/shared";
+import { z } from "zod";
+import { providerModelProfilesSchema } from "../registry/llm.js";
+import {
+  providerKeyToId,
+  isReasoningEffort,
+  type ReasoningEffort,
+} from "@covel/shared";
 
 export interface ProviderCatalogEntry {
   /** Stable connection identity shown in the catalogue. */
@@ -18,6 +23,7 @@ export interface ProviderCatalogEntry {
 }
 
 export interface ProviderDraft {
+  reasoningDefaults?: Record<string, ReasoningEffort | undefined>;
   providerId: string;
   baseUrl: string;
   protocol: string;
@@ -66,8 +72,8 @@ export function normalizeProviderId(value: string): string {
 }
 
 /**
- * Canonicalize provider identity before UI operations and merge legacy
- * case/punctuation aliases without dropping their model bindings.
+ * Canonicalize user-entered provider identities before UI operations and
+ * merge matching connections without dropping model bindings.
  */
 export function normalizeProviderProfiles(
   profiles: readonly ProviderModelProfile[],
@@ -187,8 +193,6 @@ export function sanitizeImportedProfile(
   );
   if (!id) return null;
 
-  const seenRefs = new Set<string>();
-  const seenModelIds = new Set<string>();
   const models = profile.models.flatMap(
     (value): ProviderModelProfile["models"] => {
       if (!value || typeof value !== "object" || Array.isArray(value))
@@ -199,19 +203,26 @@ export function sanitizeImportedProfile(
       }
       const ref = model.ref.trim().slice(0, MAX_PROVIDER_ID_LENGTH);
       const modelId = model.modelId.trim().slice(0, MAX_MODEL_ID_LENGTH);
-      if (!ref || !modelId || seenRefs.has(ref) || seenModelIds.has(modelId)) {
+      if (!ref || !modelId) {
         return [];
       }
-      seenRefs.add(ref);
-      seenModelIds.add(modelId);
       const name =
         typeof model.name === "string"
           ? model.name.trim().slice(0, MAX_PROVIDER_ID_LENGTH)
           : "";
-      return [{ ref, modelId, ...(name ? { name } : {}) }];
+      return [
+        {
+          ref,
+          modelId,
+          ...(name ? { name } : {}),
+          ...(isReasoningEffort(model.reasoningEffort)
+            ? { reasoningEffort: model.reasoningEffort }
+            : {}),
+        },
+      ];
     },
   );
-  if (models.length === 0) return null;
+  if (profile.models.length > 0 && models.length === 0) return null;
 
   const name =
     typeof profile.name === "string"
@@ -259,17 +270,17 @@ export function sanitizeImportedProfiles(
     .filter((profile): profile is ProviderModelProfile => profile !== null);
 }
 
-export function isLegacyPreset(
-  value: unknown,
-): value is LegacyCustomPresetShape {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const preset = value as Record<string, unknown>;
-  return (
-    typeof preset.id === "string" &&
-    typeof preset.name === "string" &&
-    typeof preset.provider === "string" &&
-    typeof preset.model === "string" &&
-    (preset.baseUrl === undefined || typeof preset.baseUrl === "string") &&
-    (preset.protocol === undefined || typeof preset.protocol === "string")
-  );
+const providerImportSchema = z.object({
+  version: z.literal(2),
+  providers: z.array(z.unknown()).max(200),
+});
+
+/** Read only the envelope produced by the current provider export. */
+export function parseProviderImport(value: unknown): ProviderModelProfile[] {
+  const parsed = providerImportSchema.parse(value);
+  const profiles = sanitizeImportedProfiles(parsed.providers);
+  if (parsed.providers.length > 0 && profiles.length === 0) {
+    throw new Error("No valid provider profiles");
+  }
+  return providerModelProfilesSchema.parse(profiles);
 }

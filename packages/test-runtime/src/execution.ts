@@ -1,18 +1,18 @@
 import type {
-  LoadedRuntime,
-  PluginRuntimeGateway,
-  PluginRuntimeUtils,
-} from "@covel/plugin-loader";
-import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
-import type { DataStore, MediaStore } from "@covel/store";
+  RuntimeManifest,
+  RuntimeResult,
+  TurnInput,
+  TurnResult,
+} from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import {
-  createFunctionStoreView,
-  createPluginDataWriter,
-  createPluginLogger,
-  createRuntimeMediaContext,
-  materializeHandlerSuccess,
-  normalizeHandlerResult,
-  processRuntimeResult,
+  buildHookSettings,
+  collectExecutionJournal,
+  collectExecutionSuspensions,
+  commitExecution,
+  executeTurn,
+  snapshotUserSettings,
+  type TurnExecutorDeps,
 } from "@covel/runtime";
 
 export interface DeferredFollowerInput {
@@ -30,6 +30,8 @@ export interface DeferredFollowerJobResult {
   readonly pluginId: string;
   readonly status: "done" | "failed";
   readonly result: RuntimeResult;
+  readonly runtimeResults: readonly RuntimeResult[];
+  readonly deferredFollowers: readonly DeferredFollowerInput[];
 }
 
 export interface ExpectedFollowerFailureJob {
@@ -83,33 +85,77 @@ export async function writeExpectedFollowerFailureJob(args: {
   };
 }
 
+/** Commit one isolated author-tool execution through the host's finalizer. */
+export async function commitDebugExecution(args: {
+  readonly turn: TurnResult;
+  readonly manifests: readonly RuntimeManifest[];
+  readonly deps: TurnExecutorDeps & { readonly store: DataStore };
+  readonly locale: string;
+  readonly userSettings: TurnInput["userSettings"];
+  readonly detached: boolean;
+}) {
+  const { turn, deps } = args;
+  const signals = [
+    deps.turnControl?.signal,
+    deps.turnControl?.executionSignal,
+  ].filter((signal): signal is AbortSignal => signal !== undefined);
+  return commitExecution({
+    store: deps.store,
+    signal: signals.length > 0 ? AbortSignal.any(signals) : undefined,
+    sessionId: turn.sessionId,
+    executionContext: turn.executionContext,
+    runtimes: args.manifests,
+    results: [...turn.runtimeResults, ...(turn.nestedRuntimeResults ?? [])],
+    journalMessages: collectExecutionJournal(turn),
+    suspensions: collectExecutionSuspensions(turn),
+    turnIds: [turn.turnId],
+    completion: args.detached
+      ? { kind: "detached", turnId: turn.turnId }
+      : { kind: "turn", turnId: turn.turnId, durationMs: turn.durationMs },
+    hookPipeline: deps.hookPipeline,
+    hookSettings: buildHookSettings(args.manifests, args.userSettings),
+    eventBus: deps.eventBus,
+    emitter: deps.emitter,
+    ...(turn.setupRan ? { setupRan: turn.setupRan } : {}),
+    ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
+    loadOutputSchema: async (runtimeId) => {
+      const runtime = args.manifests.find((item) => item.name === runtimeId);
+      return runtime
+        ? (await deps.loadRuntime(runtime, args.locale, turn.sessionId))
+            ?.outputSchema
+        : undefined;
+    },
+  });
+}
+
 export async function runDeferredFollower(args: {
   readonly follower: DeferredFollowerInput;
   readonly sessionId: string;
   readonly locale: string;
-  readonly store: DataStore;
   readonly manifests: readonly RuntimeManifest[];
-  readonly loadedCache: Map<string, LoadedRuntime>;
-  readonly gateway: PluginRuntimeGateway;
-  readonly mediaStore: MediaStore;
-  readonly utils: PluginRuntimeUtils;
+  readonly deps: TurnExecutorDeps & { readonly store: DataStore };
   readonly userSettings?: Record<string, unknown>;
 }): Promise<DeferredFollowerJobResult> {
+  const { store } = args.deps;
   const manifest = args.manifests.find(
     (item) => item.name === args.follower.runtimeId,
   );
   if (!manifest)
     throw new Error(`deferred follower not found: ${args.follower.runtimeId}`);
-  const loaded = args.loadedCache.get(manifest.name);
+  const loaded = await args.deps.loadRuntime(
+    manifest,
+    args.locale,
+    args.sessionId,
+  );
   if (!loaded?.handler)
     throw new Error(
       `deferred follower has no handler: ${args.follower.runtimeId}`,
     );
 
   const jobId = makeJobId();
-  const turnId = `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const turnId = `turn-${crypto.randomUUID()}`;
   const startedAt = new Date().toISOString();
-  await args.store.setPluginData({
+  await store.setPluginData({
     id: `${args.sessionId}:${args.follower.pluginId}:_jobs:${jobId}`,
     sessionId: args.sessionId,
     pluginId: args.follower.pluginId,
@@ -126,143 +172,113 @@ export async function runDeferredFollower(args: {
   });
 
   const startMs = Date.now();
-  const helperCtx = {
-    sessionId: args.sessionId,
-    turnId,
-    pluginId: args.follower.pluginId,
-    runtimeId: args.follower.runtimeId,
-  };
+  const userSettings = snapshotUserSettings(
+    args.userSettings ? { [manifest.pluginId]: args.userSettings } : undefined,
+  );
+  let runtimeResult: RuntimeResult;
+  let runtimeResults: readonly RuntimeResult[];
+  let deferredFollowers: readonly DeferredFollowerInput[] = [];
   try {
-    const mediaHandle = createRuntimeMediaContext(args.mediaStore, args.utils, {
-      sessionId: args.sessionId,
-      pluginId: args.follower.pluginId,
-    });
-    const rawOutput = await loaded.handler({
-      sessionId: args.sessionId,
-      turnId,
-      pluginId: args.follower.pluginId,
-      runtimeId: args.follower.runtimeId,
-      playerMessage: "",
-      locale: args.locale,
-      store: createFunctionStoreView(args.store, helperCtx),
-      recursiveCall: async () => {
-        throw new Error(
-          "recursiveCall is unavailable for test-runtime deferred followers",
-        );
-      },
-      recursionDepth: 0,
-      gateway: args.gateway,
-      utils: args.utils,
-      media: mediaHandle,
-      triggerEvent: args.follower.triggerEvent,
-      ...(args.userSettings ? { userSettings: args.userSettings } : {}),
-      pluginData: createPluginDataWriter(args.store, helperCtx),
-      logger: createPluginLogger(args.store, helperCtx),
-    });
-    const { outcome } = normalizeHandlerResult(rawOutput);
-    const outputRecord: Record<string, unknown> =
-      outcome.outcome === "success"
-        ? materializeHandlerSuccess(outcome, rawOutput)
-        : outcome.outcome === "failed"
-          ? { error: outcome.error }
-          : outcome.outcome === "skipped"
-            ? { skipReason: outcome.skipReason }
-            : {
-                reason: outcome.reason,
-                resumeSchema: outcome.resumeSchema,
-              };
-    const failed = outcome.outcome === "failed";
-    const completedAt = new Date().toISOString();
-    const runtimeResult: RuntimeResult = {
-      runtimeId: args.follower.runtimeId,
-      pluginId: args.follower.pluginId,
-      runId: turnId,
-      turnId,
-      status: outcome.outcome === "success" ? "success" : outcome.outcome,
-      durationMs: Date.now() - startMs,
-      output: outputRecord,
-      toolCalls: [],
-      timestamp: completedAt,
-      ...(failed
-        ? {
-            error: outcome.outcome === "failed" ? outcome.error : undefined,
-          }
-        : {}),
-    };
-    const processOpts = {
-      capabilities: manifest.capabilities ?? [],
-    };
-    await processRuntimeResult(
-      runtimeResult,
-      args.store,
-      args.sessionId,
-      manifest.outputKind ?? "plugin",
-      processOpts,
-    );
-    await args.store.setPluginData({
-      id: `${args.sessionId}:${args.follower.pluginId}:_jobs:${jobId}`,
-      sessionId: args.sessionId,
-      pluginId: args.follower.pluginId,
-      namespace: "_jobs",
-      key: jobId,
-      value: {
-        status: failed ? "failed" : "done",
-        runtimeId: args.follower.runtimeId,
+    // Match the host's detached event invocation. The shared executor owns
+    // setting defaults, buffered writes, timeouts and capability revocation.
+    const turn = await executeTurn(
+      {
+        sessionId: args.sessionId,
         turnId,
-        startedAt,
-        completedAt,
-        durationMs: runtimeResult.durationMs,
-        ...(runtimeResult.error ? { error: runtimeResult.error } : {}),
-        runtimeResults: [runtimeResult],
+        playerMessage: "",
+        locale: args.locale,
+        origin: "background",
+        manualTrigger: {
+          runtimeId: manifest.name,
+          triggerEvent: args.follower.triggerEvent,
+        },
+        userSettings,
       },
-      createdAt: startedAt,
-      updatedAt: completedAt,
+      args.manifests,
+      args.deps,
+    );
+    const target = turn.runtimeResults.find(
+      (result) => result.runtimeId === manifest.name,
+    );
+    if (!target)
+      throw new Error(`deferred follower produced no result: ${manifest.name}`);
+    runtimeResults = [
+      ...turn.runtimeResults,
+      ...(turn.nestedRuntimeResults ?? []),
+    ];
+    // One isolated in-memory run owns this store. As in the host, all sibling
+    // and nested proposals share a single commit; no per-result commit loop.
+    const commit = await commitDebugExecution({
+      turn,
+      manifests: args.manifests,
+      deps: args.deps,
+      locale: args.locale,
+      userSettings,
+      detached: true,
     });
-    return {
-      jobId,
-      runtimeId: args.follower.runtimeId,
-      pluginId: args.follower.pluginId,
-      status: failed ? "failed" : "done",
-      result: runtimeResult,
-    };
+    // The host only chains events after their producing execution commits.
+    if (commit.status === "committed")
+      deferredFollowers = turn.deferredFollowers ?? [];
+    runtimeResult =
+      commit.status === "committed"
+        ? target
+        : {
+            ...target,
+            status: "failed",
+            error:
+              commit.error ??
+              commit.failedProposals[0]?.error ??
+              "Execution commit failed",
+          };
+    runtimeResults = runtimeResults.map((result) =>
+      result === target ? runtimeResult : result,
+    );
   } catch (error) {
-    const completedAt = new Date().toISOString();
-    const runtimeResult: RuntimeResult = {
+    runtimeResult = {
       runtimeId: args.follower.runtimeId,
       pluginId: args.follower.pluginId,
-      runId: turnId,
+      runId: crypto.randomUUID(),
       turnId,
       status: "failed",
       durationMs: Date.now() - startMs,
       output: {},
       toolCalls: [],
-      timestamp: completedAt,
+      timestamp: new Date().toISOString(),
       error: error instanceof Error ? error.message : String(error),
     };
-    await args.store.setPluginData({
-      id: `${args.sessionId}:${args.follower.pluginId}:_jobs:${jobId}`,
-      sessionId: args.sessionId,
-      pluginId: args.follower.pluginId,
-      namespace: "_jobs",
-      key: jobId,
-      value: {
-        status: "failed",
-        runtimeId: args.follower.runtimeId,
-        turnId,
-        startedAt,
-        completedAt,
-        error: runtimeResult.error,
-        runtimeResults: [runtimeResult],
-      },
-      createdAt: startedAt,
-      updatedAt: completedAt,
-    });
-    return {
-      jobId,
-      runtimeId: args.follower.runtimeId,
-      pluginId: args.follower.pluginId,
-      status: "failed",
-      result: runtimeResult,
-    };
+    runtimeResults = [runtimeResult];
   }
+
+  const failed =
+    runtimeResult.status === "failed" || runtimeResult.status === "skipped";
+  const status = failed ? "failed" : "done";
+  const completedAt = new Date().toISOString();
+  await store.setPluginData({
+    id: `${args.sessionId}:${args.follower.pluginId}:_jobs:${jobId}`,
+    sessionId: args.sessionId,
+    pluginId: args.follower.pluginId,
+    namespace: "_jobs",
+    key: jobId,
+    value: {
+      status,
+      runtimeId: args.follower.runtimeId,
+      turnId,
+      startedAt,
+      completedAt,
+      durationMs: runtimeResult.durationMs,
+      ...(runtimeResult.error ? { error: runtimeResult.error } : {}),
+      runtimeResults,
+    },
+    createdAt: startedAt,
+    updatedAt: completedAt,
+  });
+  return {
+    jobId,
+    runtimeId: args.follower.runtimeId,
+    pluginId: args.follower.pluginId,
+    status,
+    result: runtimeResult,
+    runtimeResults,
+    deferredFollowers,
+  };
 }

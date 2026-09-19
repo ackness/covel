@@ -209,7 +209,10 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async upsertCharacter(record) {
-      state.characters.set(characterKey(record.sessionId, record.id), record);
+      state.characters.set(characterKey(record.sessionId, record.id), {
+        ...record,
+        fields: record.fields ?? undefined,
+      });
     },
 
     async listCharacters(sessionId) {
