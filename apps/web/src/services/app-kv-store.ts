@@ -35,7 +35,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openAppDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (event) => {
       const transaction = req.transaction!;
@@ -53,10 +53,25 @@ function openAppDb(): Promise<IDBDatabase> {
         }
       });
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => {
+        db.close();
+        forgetConnection();
+      };
+      db.onclose = forgetConnection;
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
-  return dbPromise;
+  function forgetConnection() {
+    // An older handle must not invalidate a replacement connection.
+    if (dbPromise === opening) dbPromise = null;
+  }
+  dbPromise = opening;
+  // Report this operation's failure; let the next caller try opening again.
+  void opening.catch(forgetConnection);
+  return opening;
 }
 
 async function idbGet<T>(

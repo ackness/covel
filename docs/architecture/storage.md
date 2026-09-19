@@ -157,6 +157,11 @@ not merge concurrent tabs' distinct histories.
 
 App-KV writes and deletions resolve on transaction completion, not individual
 request success. An aborted transaction rejects even if its request succeeded.
+The app-KV connection shares an in-flight open, but discards failed opens and
+unexpectedly closed handles so a later operation can reconnect. A version-change
+notification closes and releases that handle to allow deletion or upgrades;
+it does not delete data or automatically replay the failed operation. Other
+connections to the shared cache database have their own lifecycle.
 Callers receive patch persistence failures; the SSE consumer reports them as
 best-effort display-cache failures without changing the committed game outcome.
 
