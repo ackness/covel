@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
+import { createHookPipeline } from "@covel/runtime";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -70,6 +71,7 @@ describe("POST /api/actions — action type contract ", () => {
   let registry: PluginRegistry;
   let app: Hono;
   let loadedByName: Map<string, LoadedRuntime>;
+  let hookPipeline: ReturnType<typeof createHookPipeline>;
   const sessionId = "sess-contract";
   const NARRATOR_ID = "fake-narrator";
   const SIDE_ID = "fake-side";
@@ -77,6 +79,7 @@ describe("POST /api/actions — action type contract ", () => {
   beforeEach(async () => {
     store = createMemoryStore();
     registry = createPluginRegistry();
+    hookPipeline = createHookPipeline();
 
     const narrator = makeFakeLoadedRuntime({
       name: NARRATOR_ID,
@@ -128,9 +131,50 @@ describe("POST /api/actions — action type contract ", () => {
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);
+      c.set("hookPipeline", hookPipeline);
       await next();
     });
     app.route("/api/actions", actionRoutes);
+  });
+
+  it("captures current world overrides for each player turn", async () => {
+    const seen: unknown[] = [];
+    hookPipeline.register({
+      id: "capture-settings",
+      event: "PreRuntime",
+      pluginId: NARRATOR_ID,
+      handler: async (ctx, payload) => {
+        if (ctx.runtimeId === NARRATOR_ID)
+          seen.push(payload.input.userSettings);
+        return { action: "continue" };
+      },
+    });
+    const worldId = `turn-settings-${crypto.randomUUID()}`;
+    await store.updateSession(sessionId, { worldId });
+    for (const tone of ["before", "after"]) {
+      await store.upsertWorld({
+        id: worldId,
+        name: "Settings world",
+        createdAt: new Date().toISOString(),
+        metadata: { pluginSettings: { [NARRATOR_ID]: { tone } } },
+      });
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: `world-settings-${tone}`,
+          type: "send_message",
+          sessionId,
+          payload: { content: tone },
+        }),
+      });
+      expect(response.status).toBe(200);
+      await drainStream(response);
+    }
+    expect(seen).toEqual([
+      { [NARRATOR_ID]: { tone: "before" } },
+      { [NARRATOR_ID]: { tone: "after" } },
+    ]);
   });
 
   it.each(["success", "failed"] as const)(

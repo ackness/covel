@@ -52,7 +52,6 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
-import { getCachedWorld } from "../../world-cache.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import {
   createPluginRpcRuntimeTurnRunner,
@@ -290,7 +289,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // under the player's header overrides — same resolution chain as the main
     // turn route (player override → world default → manifest default).
     const world = session.worldId
-      ? await getCachedWorld(store, session.worldId)
+      ? await store.getWorld(session.worldId)
       : null;
     const userSettingsMap = mergePluginUserSettings(
       readWorldPluginSettings(world?.metadata),

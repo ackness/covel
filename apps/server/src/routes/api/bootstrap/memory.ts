@@ -12,7 +12,6 @@ import { FrameworkCapability } from "@covel/shared";
 import type { MemoryBlockSchema, RuntimeManifest } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
-import { getCachedWorld } from "../../../world-cache.js";
 import { observeMemoryUpdate } from "./memory-observation.js";
 import { createMemoryRecovery } from "./memory-recovery.js";
 
@@ -117,18 +116,17 @@ export function createBootstrapMemorySystem({
   // Per-session block resolver: merge the global (plugin) blocks with the
   // session's world-declared `memoryBlocks`. Base blocks win on label collision
   // (builtin defaults stay protected); the world only ADDS new genre-specific
-  // labels (e.g. a detective world's `clues` / `suspects`). The world record is
-  // served from a short-TTL per-`worldId` cache (`getCachedWorld`), so this
-  // never accumulates per session and a re-imported world refreshes on its own.
-  // The merge is cheap and re-run per call. On any store error we fall back to
-  // base blocks (and don't pin them — the next turn retries via the world cache).
+  // labels (e.g. a detective world's `clues` / `suspects`). Read the current
+  // store on every resolution so edits and same-id world replacements are
+  // visible to the next operation. The merge is cheap and re-run per call.
+  // Store errors fall back to base blocks; the next operation retries the read.
   const resolveBlocks = async (
     sessionId: string,
   ): Promise<readonly MemoryBlockSchema[] | undefined> => {
     try {
       const session = await store.getSession(sessionId);
       if (!session?.worldId) return baseBlocks;
-      const world = await getCachedWorld(store, session.worldId);
+      const world = await store.getWorld(session.worldId);
       const worldBlocks = (
         world?.metadata as Record<string, unknown> | undefined
       )?.memoryBlocks;

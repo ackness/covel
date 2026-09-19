@@ -9,6 +9,7 @@ import type {
 } from "@covel/runtime";
 import type { LLMMessage } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
+import { awaitPendingMemoryBackgroundTasks } from "@covel/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 
@@ -378,7 +379,15 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(new Set(observedTurnIds).size).toBe(3);
     expect(mockLLM.narratorCalls).toBe(3);
     expect(mockLLM.scenePromptCalls).toBe(3);
+    // Stream completion commits the turn; memory extraction has its own drain.
+    const memoryDrain = await awaitPendingMemoryBackgroundTasks();
+    expect(memoryDrain.rejected).toBe(0);
     expect(mockLLM.memoryCalls).toBe(3);
+    expect(
+      (await store.listWorkingMemory(sessionId)).find(
+        (record) => record.scope === "story" && record.key === "scene",
+      )?.value,
+    ).toEqual({ text: "第3轮课间教室" });
     // Acceptance: character-tracker executes in dialogue mode once the
     // chat engine succeeds (it gates on the narrative-engine capability now).
     expect(mockLLM.trackerCalls).toBe(3);

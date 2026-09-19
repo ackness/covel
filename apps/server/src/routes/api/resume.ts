@@ -58,7 +58,6 @@ import {
   withLockedSessionMutation,
 } from "./session/session-guard.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
-import { getCachedWorld } from "../../world-cache.js";
 import {
   decodePluginUserSettingsHeader,
   mergePluginUserSettings,
@@ -331,7 +330,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         activeRuntimes.map((runtime) => runtime.pluginId),
       );
       const world = liveSession.worldId
-        ? await getCachedWorld(store, liveSession.worldId)
+        ? await store.getWorld(liveSession.worldId)
         : null;
       const userSettings = snapshotUserSettings(
         mergePluginUserSettings(

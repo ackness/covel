@@ -1803,6 +1803,48 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
   });
 
+  it("refreshes world settings between manual runtime operations", async () => {
+    const seen: unknown[] = [];
+    const { app, store } = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: SYNC_RUNTIME,
+      execution: "sync",
+      userSettings: [
+        { key: "tone", type: "text", default: "default", label: "Tone" },
+      ],
+      handler: async (ctx) => {
+        seen.push(ctx.userSettings);
+        return { ok: true };
+      },
+    });
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+    const worldId = `rpc-settings-${crypto.randomUUID()}`;
+    await store.updateSession(SESSION_ID, { worldId });
+    for (const tone of ["before", "after"]) {
+      await store.upsertWorld({
+        id: worldId,
+        name: "Settings world",
+        createdAt: new Date().toISOString(),
+        metadata: { pluginSettings: { [PLUGIN_ID]: { tone } } },
+      });
+      const response = await app.request(
+        `/api/sessions/${SESSION_ID}/plugin-rpc`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "runtime",
+            pluginId: PLUGIN_ID,
+            runtimeId: SYNC_RUNTIME,
+            payload: {},
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+    }
+    expect(seen).toEqual([{ tone: "before" }, { tone: "after" }]);
+  });
+
   it("falls back to manifest defaults when no X-Plugin-User-Settings header is sent", async () => {
     let handlerCtx: Record<string, unknown> | undefined;
     const { app, store } = setupRuntimeTestEnv({

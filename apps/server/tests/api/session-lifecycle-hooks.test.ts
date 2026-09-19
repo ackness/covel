@@ -290,6 +290,14 @@ describe("Session lifecycle hooks", () => {
       });
       expect(created.status).toBe(201);
       const { id } = (await created.json()) as { id: string };
+      const currentWorld = (await store.getWorld(worldId))!;
+      await store.upsertWorld({
+        ...currentWorld,
+        metadata: {
+          ...currentWorld.metadata,
+          pluginSettings: { [pluginId]: { tone: "updated-world", detail: 3 } },
+        },
+      });
       const character = await app.request(`/api/sessions/${id}/characters`, {
         method: "POST",
         headers,
@@ -315,12 +323,13 @@ describe("Session lifecycle hooks", () => {
         "SessionEnd",
       ]);
       expect(seen.map((entry) => entry.settings)).toEqual([
-        ...Array.from({ length: 3 }, () => ({
+        { tone: "player", detail: 2, fallback: true },
+        ...Array.from({ length: 2 }, () => ({
           tone: "player",
-          detail: 2,
+          detail: 3,
           fallback: true,
         })),
-        { tone: "world", detail: 2, fallback: true },
+        { tone: "updated-world", detail: 3, fallback: true },
       ]);
       expect(seen.every((entry) => Object.isFrozen(entry.settings))).toBe(true);
     },

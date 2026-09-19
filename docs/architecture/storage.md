@@ -48,6 +48,12 @@ jobs and durable staged jobs also have different restart guarantees. The
 [API deployment capability matrix](../reference/api.md#多实例能力边界) records
 these limits; selecting PostgreSQL does not provide transparent execution failover.
 
+World settings and memory block schemas are read from the operation's current
+DataStore. There is no process-wide world-record cache: committed edits and
+same-ID replacements become visible on the next read, and independent stores
+cannot share world records accidentally. Runtime settings remain captured for
+each operation, so subsequent edits do not mutate an in-flight snapshot.
+
 ## Server World and Session Deletion
 
 The world DELETE API owns cascade orchestration. It claims a persisted deletion

@@ -60,7 +60,6 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
-import { getCachedWorld } from "../../world-cache.js";
 import { registerActiveTurn } from "./turn-control.js";
 import {
   assertRecoverableTurn,
@@ -585,7 +584,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // manifest defaults — player + world tuning were silently dropped on the
           // main route (only plugin-rpc read the header).
           const world = session.worldId
-            ? await getCachedWorld(store, session.worldId)
+            ? await store.getWorld(session.worldId)
             : null;
           const userSettings = snapshotUserSettings(
             mergePluginUserSettings(

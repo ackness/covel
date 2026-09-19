@@ -2,7 +2,6 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import { buildHookSettings, type HookScope } from "@covel/runtime";
 import type { TurnInput } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
-import { getCachedWorld } from "../../../world-cache.js";
 import {
   mergePluginUserSettings,
   readWorldPluginSettings,
@@ -29,7 +28,7 @@ export async function loadSessionHookScope(args: {
     return manifests.map(({ manifest }) => ({ ...manifest, pluginId }));
   });
   const world = args.session.worldId
-    ? await getCachedWorld(args.store, args.session.worldId)
+    ? await args.store.getWorld(args.session.worldId)
     : null;
   return {
     activePluginIds,

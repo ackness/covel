@@ -341,6 +341,36 @@ describe("Resume Routes", () => {
       expect(commitSettings.every((value) => value === hookSettings)).toBe(
         true,
       );
+      const capturedHookSettings = hookSettings;
+      const currentWorld = (await store.getWorld(worldId))!;
+      await store.upsertWorld({
+        ...currentWorld,
+        metadata: {
+          pluginSettings: {
+            "test-plugin": { tone: "updated-world", detail: 3 },
+          },
+        },
+      });
+      await createSuspension(store, { id: "susp-2" });
+      const next = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-2/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Bob" } }),
+        },
+      );
+      expect(next.status).toBe(200);
+      expect(hookSettings).toEqual({
+        tone: "updated-world",
+        detail: 3,
+        fallback: "manifest-only",
+      });
+      expect(capturedHookSettings).toEqual({
+        tone: "player",
+        detail: 2,
+        fallback: "manifest-only",
+      });
     });
 
     it("restores persisted plugin activations before scoping resume hooks", async () => {
