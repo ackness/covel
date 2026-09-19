@@ -28,7 +28,7 @@ import {
   createExecutionStepUpdate,
   runtimeJobCorrelationId,
 } from "./execution-steps.js";
-import { upsertGameStateCharacter } from "./game-state.js";
+import { invalidateSessionResource } from "./session-resource-reads.js";
 import { retryStepMetadata } from "./execution-projection.js";
 import { buildRetryAttemptSteps } from "./execution-attempts.js";
 import type {
@@ -217,6 +217,18 @@ function toAssetProgressEvent(
   };
 }
 
+function statePatchId(envelope: api.SseEnvelope, prefix: string): string {
+  // The action stream assigns a unique traceId and serial seq per connection.
+  // Replayed envelopes retain their identity; malformed/missing IDs cannot
+  // collapse independent changes delivered within the same millisecond.
+  return typeof envelope.traceId === "string" &&
+    envelope.traceId &&
+    Number.isSafeInteger(envelope.seq) &&
+    envelope.seq >= 0
+    ? `${prefix}_${envelope.traceId}:${envelope.seq}`
+    : `${prefix}_${crypto.randomUUID()}`;
+}
+
 export function createSseEventHandler(
   deps: SseEventHandlerDeps,
 ): SseEventHandler {
@@ -370,16 +382,25 @@ export function createSseEventHandler(
         break;
       }
       case "state.changed": {
-        const table = payload.table as string | undefined;
-        const field = payload.field as string | undefined;
-        const value = payload.value;
+        const { table, field, value } = payload;
+        if (
+          typeof table !== "string" ||
+          !table ||
+          typeof field !== "string" ||
+          !field
+        )
+          break;
         const patch = {
-          id: `sp_${Date.now()}`,
-          summary: field ? `${table ?? "default"}.${field}` : "state change",
+          id: statePatchId(envelope, "sp"),
+          summary: `${table}.${field}`,
           packageName: (payload.pluginId as string) ?? "system",
-          data: field ? { [field]: value } : undefined,
+          data: { [table]: { [field]: value } },
         };
 
+        invalidateSessionResource(deps.dispatch, [
+          "game-state",
+          envelope.sessionId,
+        ]);
         deps.dispatch({ type: "ADD_STATE_PATCH", patch });
         const sid = deps.sessionIdRef.current;
         if (sid) {
@@ -538,16 +559,17 @@ export function createSseEventHandler(
         const topic = (payload.topic as string) ?? (payload.type as string);
         const eventData = payload.data ?? payload;
         if (topic) {
+          const id = statePatchId(envelope, "evt");
           deps.dispatch({
             type: "ADD_STATE_PATCH",
             patch: {
-              id: `evt_${Date.now()}`,
+              id,
               summary: `event: ${topic}`,
               packageName: (payload.pluginId as string) ?? "system",
               data: {
                 events: [
                   {
-                    id: `evt_${Date.now()}`,
+                    id,
                     title: topic,
                     type: (payload.eventType as string) ?? topic,
                     status: "active",
@@ -600,12 +622,13 @@ export function createSseEventHandler(
       case "character.upserted": {
         const character = payload.character;
         if (character && typeof character === "object") {
+          invalidateSessionResource(deps.dispatch, [
+            "game-state",
+            envelope.sessionId,
+          ]);
           deps.dispatch({
-            type: "SET_GAME_STATE",
-            state: upsertGameStateCharacter(
-              deps.stateRef.current.gameState,
-              character as SnapshotCharacter,
-            ),
+            type: "UPSERT_GAME_STATE_CHARACTER",
+            character: character as SnapshotCharacter,
           });
         }
         break;

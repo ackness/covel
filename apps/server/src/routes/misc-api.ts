@@ -11,7 +11,7 @@ import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
   publicPresetId,
-  resolveOverlayPresetId,
+  resolveModelBinding,
 } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
@@ -231,83 +231,93 @@ export function createMiscApiRoutes(
     const denied = checkHostedOperator(c);
     if (denied) return denied;
     const parsedBody = z
-      .object({
-        presetId: z.string().optional(),
-        slot: z.string().optional(),
+      .strictObject({
+        presetId: z
+          .string()
+          .min(1)
+          .refine((id) => !id.includes("\u0000"))
+          .optional(),
+        modelRef: z.string().trim().min(1).optional(),
+        slot: z.string().min(1).optional(),
       })
-      .safeParse(await c.req.json().catch(() => ({})));
+      .refine(
+        (body) =>
+          [body.presetId, body.modelRef, body.slot].filter(
+            (value) => value !== undefined,
+          ).length <= 1,
+      )
+      .safeParse(await c.req.json().catch(() => undefined));
     if (!parsedBody.success) {
       return c.json(errorBody("Invalid ping request body"), 400);
     }
     const body = parsedBody.data;
     const apiKeys = parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {};
-    const slotConfig = parseSlotOverrides(c.req.header("X-Slot-Config")) ?? {};
-    let requestedSlot = body.presetId ? undefined : (body.slot ?? "default");
+    const slotHeader = c.req.header("X-Slot-Config");
+    const parsedSlots = parseSlotOverrides(slotHeader);
+    if (slotHeader !== undefined && parsedSlots === null) {
+      return c.json(
+        errorBody("Invalid model configuration", {
+          code: "invalid_llm_configuration",
+        }),
+        400,
+      );
+    }
+    const slotConfig = parsedSlots ?? {};
+    const requestedSlot =
+      body.presetId || body.modelRef ? undefined : (body.slot ?? "default");
 
     // Register client-declared custom presets via the shared overlay helper
     // (request-isolated scoped ids, ref-counted, base-registry-safe).
     const cleanupTransient = applySlotOverlay(ai, slotConfig);
 
-    const allPresets = ai.presetRegistry.listPresets().filter((p) => p.enabled);
-
-    // Overlay presets register under request-scoped ids — map a
-    // public id through THIS request's own custom-preset declarations.
-    const findPresetById = (id: string | undefined) => {
-      const effective = resolveOverlayPresetId(id, slotConfig, (k) =>
-        ai.presetRegistry.hasPreset(k),
+    const serverPresets = ai.presetRegistry
+      .listPresets()
+      .filter((p) => p.enabled);
+    const findBinding = (binding: import("@covel/shared").LlmModelBinding) => {
+      const id = resolveModelBinding(binding, slotConfig, (key) =>
+        ai.presetRegistry.hasPreset(key),
       );
-      return allPresets.find((p) => p.id === effective);
+      return ai.presetRegistry.resolvePreset(id) ?? undefined;
     };
-
-    // Resolution chain:
-    //   1. Direct preset id match (includes overlay-registered ones)
-    //   2. `slot-<name>` → client slotPresetOverrides → slotRegistry
-    //   3. Text-tag fallback (mirrors gateway.streamText behaviour)
-    //   4. Any enabled preset
-    //
-    // `resolvedVia` is echoed back in `testedTarget` so the UI can warn
-    // when a slot Ping silently fell through to a tag-fallback preset
-    // (i.e. the slot the user typed isn't actually configured).
     type ResolvedVia = "direct" | "slot" | "tag-fallback" | "any";
     let resolvedVia: ResolvedVia = "direct";
-    let preset = body.presetId ? findPresetById(body.presetId) : undefined;
-    // Older clients used slot-prefixed IDs for roles without a direct preset.
-    if (!preset && body.presetId?.startsWith("slot-"))
-      requestedSlot = body.presetId.slice(5);
-    if (!preset && requestedSlot) {
-      const slotName = requestedSlot;
-      const overrideId = slotConfig.slotPresetOverrides?.[slotName];
-      if (overrideId) {
-        preset = findPresetById(overrideId);
+    let preset: (typeof serverPresets)[number] | undefined;
+    const explicitBinding = body.modelRef
+      ? { modelRef: body.modelRef }
+      : body.presetId
+        ? { presetId: body.presetId }
+        : requestedSlot
+          ? slotConfig.slotBindings?.[requestedSlot]
+          : undefined;
+    try {
+      if (explicitBinding) {
+        preset = findBinding(explicitBinding);
+        if (requestedSlot) resolvedVia = "slot";
+      } else if (requestedSlot) {
+        const id = ai.slotRegistry.resolveSlot(requestedSlot);
+        preset = serverPresets.find((p) => p.id === id);
         if (preset) resolvedVia = "slot";
       }
-      if (!preset) {
-        const presetIdFromSlot = ai.slotRegistry.resolveSlot(slotName);
-        if (presetIdFromSlot) {
-          preset = allPresets.find((p) => p.id === presetIdFromSlot);
-          if (preset) resolvedVia = "slot";
-        }
-      }
-    }
-    if (!preset) {
-      const textSlots = ai.slotRegistry.listSlotsByTag("text");
-      if (textSlots.length > 0) {
-        preset = allPresets.find((p) => p.id === textSlots[0].presetId);
+      if (!preset && !explicitBinding) {
+        const textSlots = ai.slotRegistry.listSlotsByTag("text");
+        preset = serverPresets.find((p) => p.id === textSlots[0]?.presetId);
         if (preset) resolvedVia = "tag-fallback";
       }
+      if (!preset && !explicitBinding) {
+        preset = serverPresets[0];
+        if (preset) resolvedVia = "any";
+      }
+    } catch {
+      // A missing explicit reference must never probe a different model.
     }
-    if (!preset) {
-      preset = allPresets[0];
-      if (preset) resolvedVia = "any";
-    }
-
     if (!preset) {
       cleanupTransient();
       return c.json({
         ok: false,
         latencyMs: 0,
-        error:
-          "No LLM provider configured. Add a slot to llm.toml or via Settings.",
+        error: explicitBinding
+          ? "Selected model is not available."
+          : "No LLM provider configured. Add a slot to llm.toml or via Settings.",
       });
     }
 
@@ -360,15 +370,24 @@ export function createMiscApiRoutes(
     try {
       for await (const event of ai.gateway.streamText(
         {
-          presetId:
-            resolvedVia === "any" ? preset.id : (requestedSlot ?? preset.id),
+          presetId: requestedSlot ?? preset.id,
           messages: [{ role: "user", content: "hi" }],
         },
         {
           apiKeys,
           signal: abort.signal,
+          allowFallback: false,
           envApiKeys: providerApiKeysFromEnv(),
-          slotOverrides: slotConfig,
+          slotOverrides: requestedSlot
+            ? {
+                ...slotConfig,
+                // Pin the resolved target while retaining the original slot's
+                // parameter/capability keys and its local/server namespace.
+                slotBindings: {
+                  [requestedSlot]: explicitBinding ?? { presetId: preset.id },
+                },
+              }
+            : { ...slotConfig, slotBindings: undefined },
           capabilityOverridePolicy:
             readRuntimeEnv().deploymentTier === "self"
               ? "full"

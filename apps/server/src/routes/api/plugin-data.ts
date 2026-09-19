@@ -17,6 +17,7 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import { reservedPluginDataNamespaceError } from "@covel/shared";
 import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
+import { publicPluginDataValue } from "./plugin-rpc/runtime-job-public.js";
 import {
   resolveSessionParam,
   withLockedSessionMutation,
@@ -114,7 +115,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
     items: records.map((r) => ({
       namespace: r.namespace,
       key: r.key,
-      value: r.value,
+      value: publicPluginDataValue(r),
       updatedAt: r.updatedAt,
     })),
   });
@@ -148,7 +149,7 @@ pluginDataRoutes.get(
     return c.json({
       namespace: record.namespace,
       key: record.key,
-      value: record.value,
+      value: publicPluginDataValue(record),
       updatedAt: record.updatedAt,
     });
   },
@@ -282,7 +283,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId", async (c) => {
     items: records.map((r) => ({
       namespace: r.namespace,
       key: r.key,
-      value: r.value,
+      value: publicPluginDataValue(r),
       updatedAt: r.updatedAt,
     })),
   });

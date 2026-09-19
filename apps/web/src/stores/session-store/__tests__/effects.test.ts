@@ -13,7 +13,7 @@ const pluginStore = vi.hoisted(() => ({
 vi.mock("@/services/api", () => api);
 vi.mock("@/stores/plugin-data-store.js", () => pluginStore);
 
-const { useMessageUiSpecHydrationEffect } = await import("../effects.js");
+const { useUiSpecHydrationEffect } = await import("../effects.js");
 
 const generationRef = { current: 0 };
 
@@ -27,7 +27,7 @@ const messageSpecs = {
   ],
 } as UISpecsResponse;
 
-describe("useMessageUiSpecHydrationEffect", () => {
+describe("useUiSpecHydrationEffect", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -46,7 +46,7 @@ describe("useMessageUiSpecHydrationEffect", () => {
     const dispatch = vi.fn();
 
     renderHook(() =>
-      useMessageUiSpecHydrationEffect("sess-a", dispatch, generationRef),
+      useUiSpecHydrationEffect("sess-a", dispatch, generationRef, []),
     );
 
     await waitFor(() => {
@@ -58,16 +58,10 @@ describe("useMessageUiSpecHydrationEffect", () => {
       );
     });
     expect(dispatch).toHaveBeenCalledWith({
-      type: "PLUGIN_DATA_CHANGED",
+      type: "REPLACE_PLUGIN_DATA_NAMESPACE",
       pluginId: "scene-prompts",
-      changes: [
-        {
-          namespace: "message",
-          key: "prompts",
-          value: ["Ask about the note"],
-          operation: "set",
-        },
-      ],
+      namespace: "message",
+      data: { prompts: ["Ask about the note"] },
     });
   });
 
@@ -76,7 +70,7 @@ describe("useMessageUiSpecHydrationEffect", () => {
     api.listPluginData.mockResolvedValue([]);
 
     renderHook(() =>
-      useMessageUiSpecHydrationEffect("sess-a", vi.fn(), generationRef),
+      useUiSpecHydrationEffect("sess-a", vi.fn(), generationRef, []),
     );
 
     await waitFor(() => {
@@ -102,7 +96,7 @@ describe("useMessageUiSpecHydrationEffect", () => {
     const dispatch = vi.fn();
     const { rerender } = renderHook(
       ({ sessionId }) =>
-        useMessageUiSpecHydrationEffect(sessionId, dispatch, generationRef),
+        useUiSpecHydrationEffect(sessionId, dispatch, generationRef, []),
       { initialProps: { sessionId: "sess-a" } },
     );
 
@@ -131,7 +125,7 @@ describe("useMessageUiSpecHydrationEffect", () => {
 
     expect(pluginStore.loadPluginDataForSession).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "PLUGIN_DATA_CHANGED" }),
+      expect.objectContaining({ type: "REPLACE_PLUGIN_DATA_NAMESPACE" }),
     );
   });
 });

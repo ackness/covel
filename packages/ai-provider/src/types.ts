@@ -171,7 +171,7 @@ export interface ProviderDefaults {
 /**
  * Minimal preset definition accepted from untrusted request contexts
  * (browser `X-Slot-Config` header, ping body, etc.). Mirrors the shape
- * the frontend stores in `covel:customPresets`.
+ * the current frontend projects from `llm.providers`.
  */
 export interface CustomPresetInput {
   reasoningEffort?: ReasoningEffort;
@@ -204,8 +204,8 @@ export type CapabilityOverridePolicy = "full" | "restrict-only";
  * text slot.
  */
 export interface SlotOverridesInput {
-  /** Slot-name → preset-id. Consulted before the server slotRegistry. */
-  slotPresetOverrides?: Record<string, string>;
+  /** Explicit local/server bindings, consulted before the server slot registry. */
+  slotBindings?: Record<string, import("@covel/shared").LlmModelBinding>;
   /** Slot-name → generation parameter overrides. */
   parameterOverrides?: Record<string, ModelParameterOverrides>;
   /** Preset definitions added for the duration of the call. */

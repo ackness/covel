@@ -1,5 +1,6 @@
 import type { DataStore } from "@covel/store";
 import type { PluginDataRecord, StoreTransaction } from "@covel/store";
+import type { SessionLock } from "../../../lib/session-lock.js";
 
 export type PluginJobValue = Readonly<Record<string, unknown>> & {
   readonly status: "pending" | "done" | "failed";
@@ -655,7 +656,10 @@ export async function claimNextRuntimeJob(
 /** Terminalise expired work; never automatically replay potentially paid work. */
 export async function recoverExpiredRuntimeJobs(
   store: RuntimeJobStore,
-  opts: { readonly now?: string } = {},
+  opts: {
+    readonly now?: string;
+    readonly tryWithCommitLock: NonNullable<SessionLock["tryWithLock"]>;
+  },
 ): Promise<{ readonly timedOut: number; readonly orphaned: number }> {
   const now = opts.now ?? new Date().toISOString();
   const nowMs = Date.parse(now);
@@ -693,18 +697,29 @@ export async function recoverExpiredRuntimeJobs(
         job.leaseExpiresAt !== undefined &&
         nowMs >= Date.parse(job.leaseExpiresAt)
       ) {
-        const changed = await transitionRuntimeJob(store, {
-          sessionId: job.sessionId,
-          pluginId: job.pluginId,
-          jobId: job.jobId,
-          from: [job.status],
-          to: "orphaned",
-          now,
-          expectedUpdatedAt: job.updatedAt,
-          reason: "lease-expired",
-          error: "runtime job owner stopped renewing its lease",
-        });
-        if (changed) orphaned++;
+        const recover = () =>
+          transitionRuntimeJob(store, {
+            sessionId: job.sessionId,
+            pluginId: job.pluginId,
+            jobId: job.jobId,
+            from: [job.status],
+            to: "orphaned",
+            now,
+            expectedUpdatedAt: job.updatedAt,
+            reason: "lease-expired",
+            error: "runtime job owner stopped renewing its lease",
+          });
+        // Committing jobs stop renewing while the runner owns the session
+        // commit lock. An expired timestamp alone cannot identify a dead owner.
+        if (job.status === "committing") {
+          const recovered = await opts.tryWithCommitLock(
+            job.sessionId,
+            recover,
+          );
+          if (recovered.acquired && recovered.value) orphaned++;
+        } else if (await recover()) {
+          orphaned++;
+        }
       }
     }
   }

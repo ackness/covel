@@ -1,8 +1,5 @@
 import * as api from "@/services/api";
-import {
-  loadPluginDataForSession,
-  type PluginDataChange,
-} from "@/stores/plugin-data-store.js";
+import { loadPluginDataForSession } from "@/stores/plugin-data-store.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
 import type { SessionDispatch } from "./types.js";
 
@@ -45,20 +42,18 @@ async function hydratePluginDataNamespaces(
           isCurrent,
           read: () => api.listPluginData(sessionId, pluginId, namespace),
           apply: (rows) => {
-            if (rows.length === 0) return;
             loadPluginDataForSession(
               sessionId,
               pluginId,
               namespace,
               rows.map((row) => ({ key: row.key, value: row.value })),
             );
-            const changes: PluginDataChange[] = rows.map((row) => ({
+            dispatch({
+              type: "REPLACE_PLUGIN_DATA_NAMESPACE",
+              pluginId,
               namespace,
-              key: row.key,
-              value: row.value,
-              operation: "set",
-            }));
-            dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
+              data: Object.fromEntries(rows.map((row) => [row.key, row.value])),
+            });
           },
         },
       ),

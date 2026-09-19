@@ -315,7 +315,7 @@ describe("operator auth on hosted administration routes", () => {
     await api.listSessions("world-1");
     await api.createSession("world-1");
     await api.refreshModelDb();
-    await api.pingPreset("preset-1");
+    await api.pingPreset({ presetId: "preset-1" });
     await api.installPackage(
       "plugin",
       new File(["zip"], "fixture.zip", { type: "application/zip" }),

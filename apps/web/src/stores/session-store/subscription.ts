@@ -25,7 +25,10 @@ import {
 import { toStreamMessages } from "./restore-session.js";
 import { addBlockMessageFromSse } from "./sse-handler.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
 import {
   buildDeferredExecutionStep,
   buildJobStatusExecutionStep,
@@ -48,6 +51,7 @@ interface UseSessionSubscriptionOptions {
 }
 
 interface ExecutionObservation {
+  onSnapshotApplied?: () => void;
   stateRef: MutableRef<SessionState>;
   activeTurnIdRef: MutableRef<string | null>;
 }
@@ -88,7 +92,7 @@ export function isCurrentSubscriptionEvent(
 export function createSubscriptionEventHandler(
   options: Pick<
     UseSessionSubscriptionOptions,
-    "dispatch" | "workspace" | "sessionIdRef" | "stateRef"
+    "dispatch" | "sessionIdRef" | "stateRef"
   > & {
     onReset: () => void;
     isCurrent: () => boolean;
@@ -177,12 +181,6 @@ export function createSubscriptionEventHandler(
         );
         if (containsTerminalBackgroundJob(event.payload ?? {})) {
           options.onReset();
-          const actionId = event.id
-            ? `background:${event.id}`
-            : `background:${crypto.randomUUID()}`;
-          options.workspace
-            .checkpoint(event.sessionId, actionId)
-            .catch(ignoreError("checkpoint terminal background job"));
         }
         break;
       }
@@ -275,11 +273,15 @@ export async function rehydrateSessionSideState(
           })),
         ),
       apply: (rowsByPlugin) => {
-        const pluginData: PluginData = {};
+        const pluginData: PluginData = Object.create(null);
         for (const { pluginId, rows } of rowsByPlugin) {
-          const namespaces: Record<string, Record<string, unknown>> = {};
+          const namespaces: Record<
+            string,
+            Record<string, unknown>
+          > = Object.create(null);
           for (const row of rows)
-            (namespaces[row.namespace] ??= {})[row.key] = row.value;
+            (namespaces[row.namespace] ??= Object.create(null))[row.key] =
+              row.value;
           pluginData[pluginId] = namespaces;
         }
         replaceSessionPluginData(sessionId, pluginData);
@@ -288,67 +290,77 @@ export async function rehydrateSessionSideState(
     });
   })().catch(ignoreError("reload session plugins and data after reconnect"));
 
-  const snapshotTask = api
-    .getSessionView(sessionId)
-    .then(async (snapshot) => {
-      if (!isCurrent()) return;
-      dispatch({
-        type: "MERGE_RECOVERED_MESSAGES",
-        messages: toStreamMessages(snapshot.messages),
-      });
-      dispatch({
-        type: "SET_GAME_STATE",
-        state: enrichGameStateFromSnapshot(snapshot),
-      });
-      const execution = snapshot.execution;
-      const state = executionObservation?.stateRef.current;
-      if (
-        execution &&
-        executionObservation &&
-        state?.session?.id === sessionId &&
-        initialExecutionOwner === executionOwner(executionObservation)
-      ) {
-        const ownsStream = state.executing && !state.executionRecovery;
-        const interruptedCurrentStream =
-          execution.state === "interrupted" &&
-          !!execution.turnId &&
-          execution.turnId === executionObservation.activeTurnIdRef.current;
-        // A healthy POST stream remains authoritative for its live steps.
-        // Only confirmed interruption of that exact turn transfers ownership;
-        // disconnected/refresh sessions can adopt every server state.
-        if (!ownsStream || interruptedCurrentStream) {
-          dispatch({
-            type: "LOAD_EXECUTION_STEPS",
-            steps: reconcileExecutionSteps(
-              state.executionSteps,
-              snapshot.executionSteps,
-              execution,
-            ),
-          });
-          dispatch({
-            type: "SET_SESSION",
-            session: { ...state.session, ...snapshot.session },
-          });
-          dispatch({
-            type: "SET_EXECUTION_RECOVERY",
-            recovery: {
-              sessionId,
-              status: execution,
-              checking: false,
-              hydrating: false,
-            },
-          });
-        }
-      }
-      const worldId = snapshot.session.worldId;
-      if (!worldId) return;
-      await refreshSessionResource(dispatch, ["world", worldId], {
+  const snapshotTask = (async () => {
+    let worldId: string | undefined;
+    await refreshSessionResource(
+      dispatch,
+      ["game-state", sessionId, "reconnect"],
+      {
         isCurrent,
-        read: () => api.getWorld(worldId),
-        apply: (world) => dispatch({ type: "UPDATE_WORLD", world }),
-      });
-    })
-    .catch(ignoreError("refresh session snapshot and world after reconnect"));
+        read: () => api.getSessionView(sessionId),
+        apply: (snapshot) => {
+          dispatch({
+            type: "MERGE_RECOVERED_MESSAGES",
+            messages: toStreamMessages(snapshot.messages),
+          });
+          publishSessionGameState(
+            dispatch,
+            sessionId,
+            enrichGameStateFromSnapshot(snapshot),
+          );
+          executionObservation?.onSnapshotApplied?.();
+          const execution = snapshot.execution;
+          const state = executionObservation?.stateRef.current;
+          if (
+            execution &&
+            executionObservation &&
+            state?.session?.id === sessionId &&
+            initialExecutionOwner === executionOwner(executionObservation)
+          ) {
+            const ownsStream = state.executing && !state.executionRecovery;
+            const interruptedCurrentStream =
+              execution.state === "interrupted" &&
+              !!execution.turnId &&
+              execution.turnId === executionObservation.activeTurnIdRef.current;
+            // A healthy POST stream remains authoritative for its live steps.
+            // Only confirmed interruption of that exact turn transfers ownership;
+            // disconnected/refresh sessions can adopt every server state.
+            if (!ownsStream || interruptedCurrentStream) {
+              dispatch({
+                type: "LOAD_EXECUTION_STEPS",
+                steps: reconcileExecutionSteps(
+                  state.executionSteps,
+                  snapshot.executionSteps,
+                  execution,
+                ),
+              });
+              dispatch({
+                type: "SET_SESSION",
+                session: { ...state.session, ...snapshot.session },
+              });
+              dispatch({
+                type: "SET_EXECUTION_RECOVERY",
+                recovery: {
+                  sessionId,
+                  status: execution,
+                  checking: false,
+                  hydrating: false,
+                },
+              });
+            }
+          }
+          worldId = snapshot.session.worldId;
+        },
+      },
+    );
+    if (!worldId || !isCurrent()) return;
+    const targetWorldId = worldId;
+    await refreshSessionResource(dispatch, ["world", worldId], {
+      isCurrent,
+      read: () => api.getWorld(targetWorldId),
+      apply: (world) => dispatch({ type: "UPDATE_WORLD", world }),
+    });
+  })().catch(ignoreError("refresh session snapshot and world after reconnect"));
 
   const suspensionsTask = refreshSessionResource(
     dispatch,
@@ -397,13 +409,13 @@ export function useSessionSubscription({
       sessionGenerationRef.current === sessionGeneration;
     let recoveryGeneration = 0;
     let recovering = false;
+    let stateRefreshPending = false;
     let bufferedEvents: SubscriptionEvent[] = [];
     let hasConnected = false;
 
     let startRecovery: () => void = () => undefined;
     const applySubscriptionEvent = createSubscriptionEventHandler({
       dispatch,
-      workspace,
       sessionIdRef,
       stateRef,
       onReset: () => startRecovery(),
@@ -415,8 +427,17 @@ export function useSessionSubscription({
       if (!isCurrent()) return;
       const generation = ++recoveryGeneration;
       recovering = true;
+      stateRefreshPending = false;
       bufferedEvents = [];
-      const observation = { stateRef, activeTurnIdRef };
+      let snapshotPublished = false;
+      const observation = {
+        stateRef,
+        activeTurnIdRef,
+        onSnapshotApplied: () => {
+          snapshotPublished = true;
+          stateRefreshPending = false;
+        },
+      };
       const owner = executionOwner(observation);
       void rehydrateSessionSideState(
         sessionId,
@@ -430,7 +451,10 @@ export function useSessionSubscription({
         }
         // If a POST started/ended or moved to its opening continuation during
         // the read, obtain a fresh snapshot before transferring ownership.
-        if (owner !== executionOwner(observation)) {
+        if (
+          owner !== executionOwner(observation) ||
+          (snapshotPublished && stateRefreshPending)
+        ) {
           startRecovery();
           return;
         }
@@ -452,7 +476,30 @@ export function useSessionSubscription({
       ) {
         return;
       }
-      if (event.type === "system.reset") {
+      if (
+        event.type === "plugin-data.changed" &&
+        containsTerminalBackgroundJob(event.payload ?? {})
+      ) {
+        // Recovery can replace buffered projections. Checkpoint the committed
+        // background result on receipt, independently of projection replay.
+        const actionId = event.id
+          ? `background:${event.id}`
+          : `background:${crypto.randomUUID()}`;
+        workspace
+          .checkpoint(event.sessionId, actionId)
+          .catch(ignoreError("checkpoint terminal background job"));
+      }
+      if (
+        event.type === "state.changed" ||
+        event.type === "character.upserted"
+      ) {
+        // These are committed state notifications. Reuse the in-flight snapshot
+        // read instead of buffering reset triggers or duplicating action-stream
+        // patch history. A notice after publication needs one follow-up recovery.
+        invalidateSessionResource(dispatch, ["game-state", sessionId]);
+        if (recovering) stateRefreshPending = true;
+        else startRecovery();
+      } else if (event.type === "system.reset") {
         startRecovery();
       } else if (recovering) {
         // Apply live changes after the authoritative snapshot so an older HTTP

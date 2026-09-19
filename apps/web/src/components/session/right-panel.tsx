@@ -13,11 +13,7 @@ import { MemoryUpdateNotice } from "./memory-update-notice.js";
 import { PluginPanel } from "./plugin-panel.js";
 import type { PluginPanelStateCache } from "./plugin-panel.js";
 import { DatabasePanel } from "./database-panel.js";
-import {
-  fetchServerHealth,
-  fetchUiSpecs,
-  listPluginData,
-} from "@/services/api.js";
+import { fetchServerHealth, fetchUiSpecs } from "@/services/api.js";
 import type { WorldRecord } from "@/services/api.js";
 import type { ServerStoreBackend } from "@/services/data-service.js";
 import {
@@ -31,7 +27,6 @@ import {
   selectedPluginPanelIndex,
   type PluginPanelTabGroup,
 } from "@/lib/plugin-panel-tabs.js";
-import { loadPluginDataForSession } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -228,7 +223,7 @@ function SessionRightPanel({
     setPendingPanelRequest(null);
   }, [pendingPanelRequest, pluginTabGroups]);
 
-  // Load plugin panel specs from /api/ui-specs and seed plugin-data-store.
+  // Load localized panel definitions; the session provider owns data hydration.
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
@@ -262,24 +257,6 @@ function SessionRightPanel({
             },
           }),
         );
-
-        const pluginIds = new Set(specs.right.map((entry) => entry.pluginId));
-        for (const pid of pluginIds) {
-          listPluginData(sessionId, pid)
-            .then((items) => {
-              if (cancelled) return;
-              const byNs = new Map<string, { key: string; value: unknown }[]>();
-              for (const item of items) {
-                const arr = byNs.get(item.namespace) ?? [];
-                arr.push({ key: item.key, value: item.value });
-                byNs.set(item.namespace, arr);
-              }
-              for (const [ns, entries] of byNs) {
-                loadPluginDataForSession(sessionId, pid, ns, entries);
-              }
-            })
-            .catch(ignoreError("seed plugin data store"));
-        }
       })
       .catch(ignoreError("fetch ui specs for right panel"));
     return () => {

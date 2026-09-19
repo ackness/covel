@@ -131,8 +131,11 @@ test("same API model configurations can be copied, named, shared, and imported i
     .getByRole("combobox", { name: "Model configuration", exact: true })
     .selectOption({ label: "Detailed story · Extra high" });
   await expect(
+    story.getByRole("combobox", { name: "Model configuration", exact: true }),
+  ).toHaveValue(`model:${detailedRef}`);
+  await expect(
     plugin.getByRole("combobox", { name: "Model configuration", exact: true }),
-  ).toHaveValue("quick");
+  ).toHaveValue("model:quick");
   await page.keyboard.press("Escape");
   await page.reload();
   await page
@@ -143,10 +146,10 @@ test("same API model configurations can be copied, named, shared, and imported i
     .click();
   await expect(
     story.getByRole("combobox", { name: "Model configuration", exact: true }),
-  ).toHaveValue(detailedRef);
+  ).toHaveValue(`model:${detailedRef}`);
   await expect(
     plugin.getByRole("combobox", { name: "Model configuration", exact: true }),
-  ).toHaveValue("quick");
+  ).toHaveValue("model:quick");
   await story.getByRole("button", { name: /Generation parameters/ }).click();
   await plugin.getByRole("button", { name: /Generation parameters/ }).click();
   await expect(

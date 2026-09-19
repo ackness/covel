@@ -9,8 +9,8 @@ import {
   getCapabilityOverrides,
   setParamOverrides,
   setCapabilityOverrides,
-  slotBindingId,
   type ModelParameterOverrides,
+  type SlotConfigEntry,
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -27,6 +27,7 @@ import { MaxOutputTokensCard, ValueCell } from "./llm-max-output-tokens.js";
 import { ModelTokenLimits } from "./llm-token-limits.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 import { useLlmSlotIds } from "./use-llm-slot-ids.js";
+import { useSetting } from "../use-settings.js";
 
 type NumericParameter = Exclude<
   keyof ModelParameterOverrides,
@@ -118,6 +119,8 @@ export function LlmAdvancedPane({
   const { state } = useSession();
   const llm = state.llmConfig;
   const { slots } = useLlmSlotIds();
+  const [, updateSlotConfig] =
+    useSetting<Record<string, SlotConfigEntry>>("llm.slotConfig");
 
   const [paramOverrides, setParamOverridesLocal] = useState<
     Record<string, ModelParameterOverrides>
@@ -139,11 +142,16 @@ export function LlmAdvancedPane({
   const serverSlot = llm?.slots[selectedSlot];
   const localModels = flattenProviderProfiles(getProviderProfiles());
   const slotConfig = getSlotConfig();
-  const boundModelId = slotBindingId(slotConfig[selectedSlot]);
-  const boundModel = [...state.presets, ...localModels].find(
-    (preset) => preset.id === boundModelId,
+  const binding = slotConfig[selectedSlot];
+  const boundModel =
+    binding?.modelRef !== undefined
+      ? localModels.find((preset) => preset.id === binding.modelRef)
+      : state.presets.find((preset) => preset.id === binding?.presetId);
+  const missingBinding = !!binding && !boundModel;
+  const effectiveTarget = resolveEffectiveModelTarget(
+    boundModel,
+    missingBinding ? undefined : serverSlot,
   );
-  const effectiveTarget = resolveEffectiveModelTarget(boundModel, serverSlot);
   const lookup = useModelCapability(
     effectiveTarget.model,
     effectiveTarget.provider,
@@ -254,6 +262,28 @@ export function LlmAdvancedPane({
               <span className="font-mono">{effectiveTarget.model}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {missingBinding && (
+        <div role="alert" className="space-y-2 text-xs text-destructive">
+          <p>
+            {t(
+              "settings.modelBindingMissing",
+              "The selected model is unavailable. Choose another model or reset this role.",
+            )}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const next = { ...getSlotConfig() };
+              delete next[selectedSlot];
+              void updateSlotConfig(next);
+            }}
+          >
+            {t("settings.resetModelBinding", "Reset model binding")}
+          </Button>
         </div>
       )}
 

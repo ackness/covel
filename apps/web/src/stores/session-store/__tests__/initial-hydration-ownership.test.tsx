@@ -14,9 +14,13 @@ import {
 } from "@/stores/plugin-data-store.js";
 import { initialState, reducer } from "../reducer.js";
 import { restoreSessionState } from "../restore-session.js";
-import { createSubscriptionEventHandler } from "../subscription.js";
+import {
+  createSubscriptionEventHandler,
+  rehydrateSessionSideState,
+} from "../subscription.js";
 import { createSseEventHandler } from "../sse-handler.js";
-import { useMessageUiSpecHydrationEffect } from "../effects.js";
+import { hydratePluginDataForUiSpecs } from "../plugin-data-hydration.js";
+import { useUiSpecHydrationEffect } from "../effects.js";
 import type { SessionAction, SessionState } from "../types.js";
 
 const api = vi.hoisted(() => ({
@@ -26,6 +30,7 @@ const api = vi.hoisted(() => ({
   listSuspensions: vi.fn(),
   getSessionView: vi.fn(),
   getSession: vi.fn(),
+  getWorld: vi.fn(),
   markServerAck: vi.fn(),
 }));
 vi.mock("@/services/api", () => api);
@@ -60,22 +65,33 @@ const suspension = {
 };
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
-function setup() {
+function setup(batched = false) {
   const sessionIdRef = { current: session.id as string | null };
   const sessionGenerationRef = { current: 0 };
   const stateRef = { current: { ...initialState, session } as SessionState };
+  const queued: SessionAction[] = [];
   const dispatch = (action: SessionAction) => {
-    stateRef.current = reducer(stateRef.current, action);
+    if (batched) queued.push(action);
+    else stateRef.current = reducer(stateRef.current, action);
+  };
+  const flush = () => {
+    for (const action of queued.splice(0))
+      stateRef.current = reducer(stateRef.current, action);
   };
   const workspace = {
     hydrate: vi.fn(async () => {}),
   } as unknown as SessionWorkspace;
   const ds = {
+    listMessages: vi.fn(async () => []),
+    listStatePatches: vi.fn(async () => []),
+    addStatePatch: vi.fn(async () => {}),
     loadExecutionSteps: vi.fn(async () => []),
     loadSubmittedBlocks: vi.fn(async () => ({ ids: [], values: {} })),
   } as unknown as DataService;
@@ -83,7 +99,6 @@ function setup() {
     sessionIdRef,
     stateRef,
     dispatch,
-    workspace,
     onReset: () => {},
     isCurrent: () => true,
     getRecoveryGeneration: () => 0,
@@ -127,7 +142,17 @@ function setup() {
       sessionIdRef,
       sessionGenerationRef,
     });
-  return { stateRef, dispatch, handler, restore, send, sessionGenerationRef };
+  return {
+    stateRef,
+    dispatch,
+    handler,
+    restore,
+    send,
+    flush,
+    sessionGenerationRef,
+    sessionIdRef,
+    ds,
+  };
 }
 function event(
   type: string,
@@ -148,6 +173,7 @@ beforeEach(() => {
   __clearAllPluginDataForTest();
   setActiveSession(session.id);
   api.getSession.mockResolvedValue(session);
+  api.getWorld.mockResolvedValue(world);
   api.getSessionView.mockResolvedValue({
     session,
     messages: [],
@@ -221,11 +247,7 @@ it.each([
     api.listPluginData.mockReturnValueOnce(old.promise);
     const { stateRef, send, dispatch, sessionGenerationRef } = setup();
     renderHook(() =>
-      useMessageUiSpecHydrationEffect(
-        session.id,
-        dispatch,
-        sessionGenerationRef,
-      ),
+      useUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef, []),
     );
     await waitFor(() => expect(api.listPluginData).toHaveBeenCalledOnce());
     api.listPluginData.mockResolvedValue([
@@ -282,11 +304,7 @@ it.each([
     api.listPluginData.mockReturnValueOnce(old.promise);
     const { stateRef, handler, dispatch, sessionGenerationRef } = setup();
     renderHook(() =>
-      useMessageUiSpecHydrationEffect(
-        session.id,
-        dispatch,
-        sessionGenerationRef,
-      ),
+      useUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef, []),
     );
     await waitFor(() => expect(api.listPluginData).toHaveBeenCalledOnce());
     handler(
@@ -322,7 +340,7 @@ it("does not re-read or publish a dirty namespace after unmount", async () => {
   api.listPluginData.mockReturnValueOnce(old.promise);
   const { stateRef, handler, dispatch, sessionGenerationRef } = setup();
   const { unmount } = renderHook(() =>
-    useMessageUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef),
+    useUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef, []),
   );
   await waitFor(() => expect(api.listPluginData).toHaveBeenCalledOnce());
   handler(
@@ -356,7 +374,7 @@ it("does not let a previous same-session visit retry over the new visit", async 
   api.listPluginData.mockReturnValueOnce(old.promise);
   const { stateRef, handler, dispatch, sessionGenerationRef } = setup();
   const { rerender } = renderHook(() =>
-    useMessageUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef),
+    useUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef, []),
   );
   await waitFor(() => expect(api.listPluginData).toHaveBeenCalledOnce());
   handler(
@@ -400,7 +418,7 @@ it("re-reads an initial UI spec response invalidated by a committed plugin toggl
   });
   const { stateRef, handler, dispatch, sessionGenerationRef } = setup();
   renderHook(() =>
-    useMessageUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef),
+    useUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef, []),
   );
   handler(event("plugin.activated"));
   await act(async () => {
@@ -418,4 +436,448 @@ it("re-reads an initial UI spec response invalidated by a committed plugin toggl
   expect(
     stateRef.current.messageUiSpecs.map((entry) => entry.pluginId),
   ).toEqual(["current-plugin"]);
+});
+
+it.each(["server", "local fallback"])(
+  "preserves live subscription messages while the initial %s history loads",
+  async (source) => {
+    const pending = deferred<unknown>();
+    api.getSessionView.mockReturnValueOnce(pending.promise);
+    const history = {
+      id: "history",
+      role: "assistant" as const,
+      content: "Earlier",
+      sessionId: session.id,
+      createdAt: "2026-09-18T00:00:00Z",
+    };
+    const { restore, handler, stateRef, ds } = setup();
+    vi.mocked(ds.listMessages).mockResolvedValue([history]);
+    const restoring = restore();
+    await waitFor(() => expect(api.getSessionView).toHaveBeenCalledOnce());
+    handler(
+      event("interaction.requested", {
+        turnId: "manual-turn",
+        block: {
+          id: "current-block",
+          type: "interactive_form",
+          data: { interactionId: "check", fields: [] },
+          meta: { runtimeId: "plugin/check" },
+        },
+      }),
+    );
+    expect(stateRef.current.messages.map((message) => message.id)).toEqual([
+      "current-block",
+    ]);
+    await act(async () => {
+      if (source === "server")
+        pending.resolve({
+          session,
+          messages: [history],
+          characters: [],
+          gameState: {},
+          executionSteps: [],
+        });
+      else pending.reject(new Error("offline"));
+      await restoring;
+    });
+    expect(stateRef.current.messages.map((message) => message.id)).toEqual([
+      "history",
+      "current-block",
+    ]);
+  },
+);
+
+it.each(["restore", "reconnect"])(
+  "re-reads an older game snapshot after %s publishes the current view",
+  async (first) => {
+    const initial = deferred<unknown>();
+    const reconnect = deferred<unknown>();
+    const currentView = {
+      session,
+      messages: [],
+      characters: [],
+      gameState: { stats: { hp: 9, mp: 3 } },
+      executionSteps: [],
+      execution: { state: "idle" },
+    };
+    api.getSessionView
+      .mockReturnValueOnce(initial.promise)
+      .mockReturnValueOnce(reconnect.promise)
+      .mockResolvedValue(currentView);
+    const { restore, stateRef, sessionIdRef, dispatch } = setup();
+    const restoring = restore();
+    await waitFor(() => expect(api.getSessionView).toHaveBeenCalledOnce());
+    const recovering = rehydrateSessionSideState(
+      session.id,
+      sessionIdRef,
+      dispatch,
+      () => true,
+      {
+        stateRef,
+        activeTurnIdRef: { current: null },
+      },
+    );
+    await act(async () => {
+      (first === "restore" ? initial : reconnect).resolve(currentView);
+      await (first === "restore" ? restoring : recovering);
+    });
+    expect(stateRef.current.gameState).toEqual({
+      ...currentView.gameState,
+      characters: [],
+    });
+    await act(async () => {
+      (first === "restore" ? reconnect : initial).resolve({
+        ...currentView,
+        gameState: { stats: { hp: 1 } },
+      });
+      await Promise.all([restoring, recovering]);
+    });
+    expect(stateRef.current.gameState).toEqual({
+      ...currentView.gameState,
+      characters: [],
+    });
+    expect(api.getSessionView).toHaveBeenCalledTimes(3);
+  },
+);
+
+it("accepts an empty authoritative initial view after committed state was deleted", async () => {
+  const pending = deferred<unknown>();
+  api.getSessionView.mockReturnValueOnce(pending.promise);
+  const { restore, stateRef, send } = setup();
+  const restoring = restore();
+  await waitFor(() => expect(api.getSessionView).toHaveBeenCalledOnce());
+  send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
+  await act(async () => {
+    pending.resolve({
+      session,
+      messages: [],
+      characters: [],
+      gameState: { stats: { hp: 1 } },
+      executionSteps: [],
+    });
+    await restoring;
+  });
+  expect(stateRef.current.gameState).toEqual({ characters: [] });
+  expect(api.getSessionView).toHaveBeenCalledTimes(2);
+});
+
+it("keeps newer contents for a shared message ID and adopts the initial history cursor", async () => {
+  const pending = deferred<unknown>();
+  api.getSessionView.mockReturnValueOnce(pending.promise);
+  const { restore, handler, stateRef } = setup();
+  const restoring = restore();
+  await waitFor(() => expect(api.getSessionView).toHaveBeenCalledOnce());
+  const block = {
+    id: "current-block",
+    type: "interactive_form",
+    data: { interactionId: "current", fields: [] },
+    meta: { runtimeId: "plugin/check" },
+  };
+  handler(event("interaction.requested", { turnId: "turn", block }));
+  await act(async () => {
+    pending.resolve({
+      session,
+      characters: [],
+      gameState: {},
+      executionSteps: [],
+      messagesCursor: "older-edge",
+      messages: [
+        {
+          id: block.id,
+          role: "assistant",
+          content: "Obsolete",
+          sessionId: session.id,
+          createdAt: session.createdAt,
+          turnId: "turn",
+          block: { ...block, data: { interactionId: "obsolete" } },
+        },
+      ],
+    });
+    await restoring;
+  });
+  expect(stateRef.current.messages).toHaveLength(1);
+  expect(stateRef.current.messages[0]?.block).toEqual(block);
+  expect(stateRef.current.olderMessagesCursor).toBe("older-edge");
+});
+
+it("projects committed state changes with the same table/field shape as session views", () => {
+  const { stateRef, send } = setup();
+  stateRef.current = {
+    ...stateRef.current,
+    gameState: { stats: { hp: 1, mp: 3 }, weather: { sky: "clear" } },
+  };
+  send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
+  expect(stateRef.current.gameState).toEqual({
+    stats: { hp: 9, mp: 3 },
+    weather: { sky: "clear" },
+  });
+});
+
+it("keeps live state patches when the local fallback returns an older history", async () => {
+  api.getSessionView.mockRejectedValue(new Error("offline"));
+  const pending =
+    deferred<Awaited<ReturnType<DataService["listStatePatches"]>>>();
+  const { restore, stateRef, send, ds } = setup();
+  vi.mocked(ds.listStatePatches).mockReturnValueOnce(pending.promise);
+  const restoring = restore();
+  await waitFor(() => expect(ds.listStatePatches).toHaveBeenCalledOnce());
+  send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
+  await act(async () => {
+    pending.resolve([
+      {
+        id: "history-patch",
+        sessionId: session.id,
+        summary: "Earlier",
+        packageName: "plugin",
+        data: { stats: { hp: 1, mp: 3 } },
+        createdAt: session.createdAt,
+      },
+      {
+        ...stateRef.current.statePatches[0]!,
+        sessionId: session.id,
+        data: { stats: { hp: 1 } },
+        createdAt: session.createdAt,
+      },
+    ]);
+    await restoring;
+  });
+  expect(stateRef.current.gameState).toEqual({ stats: { hp: 9, mp: 3 } });
+  expect(stateRef.current.statePatches).toHaveLength(2);
+  expect(stateRef.current.hasGameStateSnapshot).toBe(false);
+});
+
+it("does not rebuild deleted fields from cached patches after an authoritative empty snapshot", async () => {
+  api.getSessionView.mockRejectedValueOnce(new Error("offline"));
+  const pending =
+    deferred<Awaited<ReturnType<DataService["listStatePatches"]>>>();
+  const { restore, stateRef, sessionIdRef, dispatch, ds } = setup();
+  vi.mocked(ds.listStatePatches).mockReturnValueOnce(pending.promise);
+  const restoring = restore();
+  await waitFor(() => expect(ds.listStatePatches).toHaveBeenCalledOnce());
+  await rehydrateSessionSideState(session.id, sessionIdRef, dispatch);
+  await act(async () => {
+    pending.resolve([
+      {
+        id: "history-patch",
+        sessionId: session.id,
+        summary: "Earlier",
+        packageName: "plugin",
+        data: { stats: { hp: 1 } },
+        createdAt: session.createdAt,
+      },
+    ]);
+    await restoring;
+  });
+  expect(stateRef.current.gameState).toEqual({ characters: [] });
+  expect(stateRef.current.statePatches).toHaveLength(1);
+});
+
+it("preserves independent character commits delivered before React publishes the next state ref", () => {
+  const { send, flush, stateRef } = setup(true);
+  const characters = [
+    { id: "one", name: "One", type: "npc" },
+    { id: "two", name: "Two", type: "npc" },
+  ];
+  for (const character of characters)
+    send("action", "character.upserted", { character });
+  flush();
+  expect(stateRef.current.gameState.characters).toEqual(characters);
+  expect(stateRef.current.hasGameStateSnapshot).toBe(false);
+});
+
+it.each([
+  { empty: false, source: "provider" },
+  { empty: true, source: "provider" },
+  { empty: false, source: "start" },
+  { empty: true, source: "start" },
+])(
+  "replaces the $source message-only namespace in both stores when its snapshot is empty=$empty",
+  async ({ empty, source }) => {
+    const { stateRef, handler, dispatch, sessionGenerationRef } = setup();
+    handler(
+      event("plugin-data.changed", {
+        pluginId: "plugin",
+        changes: [
+          {
+            namespace: "message",
+            key: "removed-turn",
+            value: { turnId: "removed-turn", text: "Old" },
+            operation: "set",
+          },
+          {
+            namespace: "unrelated",
+            key: "keep",
+            value: true,
+            operation: "set",
+          },
+        ],
+      }),
+    );
+    api.fetchUiSpecs.mockResolvedValue({
+      right: [],
+      message: [
+        {
+          pluginId: "plugin",
+          specs: [{ id: "message", dataSource: { namespace: "message" } }],
+        },
+      ],
+    });
+    const value = { turnId: "current-turn", text: "Current" };
+    api.listPluginData.mockResolvedValue(
+      empty ? [] : [{ namespace: "message", key: "current-turn", value }],
+    );
+    if (source === "provider") {
+      renderHook(() =>
+        useUiSpecHydrationEffect(
+          session.id,
+          dispatch,
+          sessionGenerationRef,
+          [],
+        ),
+      );
+      await act(async () => {});
+    } else await hydratePluginDataForUiSpecs(session.id, dispatch);
+    const expected = empty ? {} : { "current-turn": value };
+    expect(getPluginNamespaceSnapshot("plugin", "message")).toEqual(expected);
+    expect(stateRef.current.pluginData.plugin?.message).toEqual(expected);
+    expect(stateRef.current.pluginData.plugin?.unrelated).toEqual({
+      keep: true,
+    });
+    if (source === "provider")
+      expect(stateRef.current.messages.map((message) => message.id)).toEqual(
+        empty ? [] : ["plugin-message:plugin:current-turn"],
+      );
+  },
+);
+
+it("retains an own __proto__ message key in both hydration stores", async () => {
+  const { stateRef, dispatch, sessionGenerationRef } = setup();
+  const value = { marker: "retained" };
+  api.listPluginData.mockResolvedValue([
+    { namespace: "message", key: "__proto__", value },
+  ]);
+  renderHook(() =>
+    useUiSpecHydrationEffect(session.id, dispatch, sessionGenerationRef, []),
+  );
+  await act(async () => {});
+  const external = getPluginNamespaceSnapshot("plugin", "message");
+  expect(Object.hasOwn(external, "__proto__")).toBe(true);
+  expect(
+    Object.hasOwn(stateRef.current.pluginData.plugin!.message!, "__proto__"),
+  ).toBe(true);
+  expect(external["__proto__"]).toEqual(value);
+  expect(stateRef.current.pluginData.plugin!.message!["__proto__"]).toEqual(
+    value,
+  );
+});
+
+it("preserves and deletes special own plugin-data properties in both live stores", () => {
+  const { stateRef, handler } = setup();
+  const value = { marker: "retained" };
+  for (const namespace of ["__proto__", "message"]) {
+    handler(
+      event("plugin-data.changed", {
+        pluginId: "plugin",
+        changes: [{ namespace, key: "__proto__", value, operation: "set" }],
+      }),
+    );
+    const external = getPluginNamespaceSnapshot("plugin", namespace);
+    expect(Object.hasOwn(stateRef.current.pluginData.plugin!, namespace)).toBe(
+      true,
+    );
+    expect(Object.hasOwn(external, "__proto__")).toBe(true);
+    expect(
+      Object.hasOwn(
+        stateRef.current.pluginData.plugin![namespace]!,
+        "__proto__",
+      ),
+    ).toBe(true);
+    expect(external["__proto__"]).toEqual(value);
+    handler(
+      event("plugin-data.changed", {
+        pluginId: "plugin",
+        changes: [{ namespace, key: "__proto__", operation: "delete" }],
+      }),
+    );
+    expect(
+      Object.hasOwn(
+        getPluginNamespaceSnapshot("plugin", namespace),
+        "__proto__",
+      ),
+    ).toBe(false);
+    expect(
+      Object.hasOwn(
+        stateRef.current.pluginData.plugin![namespace]!,
+        "__proto__",
+      ),
+    ).toBe(false);
+  }
+});
+
+it("preserves special own namespace/key properties in whole-plugin recovery without prototype pollution", async () => {
+  const probe = "__browserRecoveryPrototypeProbe__";
+  const original = Object.getOwnPropertyDescriptor(Object.prototype, probe);
+  api.listSessionPlugins.mockResolvedValue({
+    items: [plugin("plugin")],
+    commands: [],
+  });
+  api.listPluginData.mockResolvedValue([
+    { namespace: "__proto__", key: probe, value: "kept" },
+    { namespace: "panel", key: "__proto__", value: { marker: "kept" } },
+  ]);
+  const { stateRef, sessionIdRef, dispatch } = setup();
+  try {
+    await rehydrateSessionSideState(session.id, sessionIdRef, dispatch);
+    expect(Object.getOwnPropertyDescriptor(Object.prototype, probe)).toEqual(
+      original,
+    );
+    expect(
+      Object.hasOwn(stateRef.current.pluginData.plugin!, "__proto__"),
+    ).toBe(true);
+    expect(
+      Object.hasOwn(getPluginNamespaceSnapshot("plugin", "__proto__"), probe),
+    ).toBe(true);
+    expect(
+      Object.hasOwn(stateRef.current.pluginData.plugin!.panel!, "__proto__"),
+    ).toBe(true);
+    expect(
+      Object.hasOwn(getPluginNamespaceSnapshot("plugin", "panel"), "__proto__"),
+    ).toBe(true);
+    expect(getPluginNamespaceSnapshot("plugin", "__proto__")[probe]).toBe(
+      "kept",
+    );
+  } finally {
+    if (original) Object.defineProperty(Object.prototype, probe, original);
+    else Reflect.deleteProperty(Object.prototype, probe);
+  }
+});
+
+it("preserves special own namespace/key properties through the start-game namespace seed", async () => {
+  const { dispatch, stateRef } = setup();
+  api.fetchUiSpecs.mockResolvedValue({
+    right: [
+      {
+        pluginId: "plugin",
+        specs: [{ dataSource: { namespace: "__proto__" } }],
+      },
+    ],
+    message: [],
+  });
+  const value = { marker: "retained" };
+  api.listPluginData.mockResolvedValue([
+    { namespace: "__proto__", key: "__proto__", value },
+  ]);
+  await hydratePluginDataForUiSpecs(session.id, dispatch);
+  const namespaces = stateRef.current.pluginData.plugin!;
+  expect(Object.hasOwn(namespaces, "__proto__")).toBe(true);
+  expect(Object.hasOwn(namespaces["__proto__"]!, "__proto__")).toBe(true);
+  expect(
+    Object.hasOwn(
+      getPluginNamespaceSnapshot("plugin", "__proto__"),
+      "__proto__",
+    ),
+  ).toBe(true);
+  expect(
+    getPluginNamespaceSnapshot("plugin", "__proto__")["__proto__"],
+  ).toEqual(value);
 });

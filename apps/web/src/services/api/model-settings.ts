@@ -126,7 +126,7 @@ export function buildAiHeaders(): Record<string, string> {
 }
 
 interface SlotConfigHeaderOptions {
-  includeCustomPresetIds?: readonly string[];
+  includeModelRefs?: readonly string[];
 }
 
 export function buildSlotConfigHeaderInternal(
@@ -168,24 +168,12 @@ export function buildSlotConfigHeaderInternal(
       .filter(([, override]) => Object.keys(override).length > 0),
   );
 
-  const slotPresetOverrides = Object.fromEntries(
-    Object.entries(slotConfig)
-      .map(([slotId, entry]) => [slotId, slotBindingId(entry)] as const)
-      .filter((entry): entry is readonly [string, string] => !!entry[1]),
-  );
-
-  // Only include custom presets the current request can actually resolve.
-  // This keeps the header aligned with the fields the server middleware
-  // consumes (`slotPresetOverrides` + `customPresets`) and lets direct
-  // preset probes include an unbound custom preset by id.
+  // Preserve the namespace selected in settings across the request boundary.
+  const slotBindings = slotConfig;
   const customPresets = getCustomPresets();
-  const customPresetIds = new Set(customPresets.map((preset) => preset.id));
-  const referencedCustomIds = new Set<string>();
-  for (const id of Object.values(slotPresetOverrides)) {
-    if (customPresetIds.has(id)) referencedCustomIds.add(id);
-  }
-  for (const id of options.includeCustomPresetIds ?? []) {
-    if (customPresetIds.has(id)) referencedCustomIds.add(id);
+  const referencedCustomIds = new Set<string>(options.includeModelRefs ?? []);
+  for (const binding of Object.values(slotBindings)) {
+    if (binding.modelRef) referencedCustomIds.add(binding.modelRef);
   }
   const customPresetDefs = customPresets
     .filter((p) => referencedCustomIds.has(p.id))
@@ -201,12 +189,12 @@ export function buildSlotConfigHeaderInternal(
       }),
     );
 
-  const hasSlotPresetOverrides = Object.keys(slotPresetOverrides).length > 0;
+  const hasSlotBindings = Object.keys(slotBindings).length > 0;
   const hasParamOverrides = Object.keys(paramOverrides).length > 0;
   const hasCapabilityOverrides = Object.keys(capabilityOverrides).length > 0;
   const hasCustom = customPresetDefs.length > 0;
   if (
-    !hasSlotPresetOverrides &&
+    !hasSlotBindings &&
     !hasParamOverrides &&
     !hasCapabilityOverrides &&
     !hasCustom
@@ -214,7 +202,7 @@ export function buildSlotConfigHeaderInternal(
     return {};
   return {
     "X-Slot-Config": encodeBase64Json({
-      ...(hasSlotPresetOverrides ? { slotPresetOverrides } : {}),
+      ...(hasSlotBindings ? { slotBindings } : {}),
       ...(hasParamOverrides ? { parameterOverrides: paramOverrides } : {}),
       ...(hasCapabilityOverrides ? { capabilityOverrides } : {}),
       ...(hasCustom ? { customPresets: customPresetDefs } : {}),
@@ -274,9 +262,18 @@ export async function setProviderKeysAsync(
 //
 // Stored model roles select either a server preset or a local model reference.
 
-export type SlotConfigEntry =
-  | { modelRef: string; presetId?: never }
-  | { presetId: string; modelRef?: never };
+export type SlotConfigEntry = import("@covel/shared").LlmModelBinding;
+
+/** Stable UI identity; local and server choices may share the same public ID. */
+export function slotBindingKey(
+  entry: SlotConfigEntry | undefined,
+): string | undefined {
+  return entry?.modelRef !== undefined
+    ? `model:${entry.modelRef}`
+    : entry?.presetId !== undefined
+      ? `preset:${entry.presetId}`
+      : undefined;
+}
 
 export function slotBindingId(
   entry: SlotConfigEntry | null | undefined,

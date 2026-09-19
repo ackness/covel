@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { z } from "zod";
 import { createGateway } from "../src/gateway.js";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import { createProviderRegistry } from "../src/provider-registry.js";
@@ -127,6 +128,80 @@ describe("gateway", () => {
     expect(result.model).toBe("test-model");
     expect(result.provider).toBe("test");
   });
+
+  describe.each(["generateText", "generateObject", "streamText"] as const)(
+    "%s fallback policy",
+    (operation) => {
+      function fixture() {
+        const calls: string[] = [];
+        const record = (model: string) => {
+          calls.push(model);
+          if (model === "test-model")
+            throw new Error("Synthetic primary failure");
+        };
+        const successful = createStubAdapter();
+        const { gateway } = setup({
+          async generateText(config, params, context) {
+            record(params.model);
+            return successful.generateText(config, params, context);
+          },
+          async generateObject(config, params, context) {
+            record(params.model);
+            return successful.generateObject(config, params, context);
+          },
+          async *streamText(config, params, context) {
+            record(params.model);
+            yield* successful.streamText(config, params, context);
+          },
+        });
+        const run = async (allowFallback?: boolean, presetId = "primary") => {
+          const input = {
+            presetId,
+            messages: [{ role: "user" as const, content: "hi" }],
+          };
+          const options = { allowFallback };
+          if (operation === "generateText")
+            return gateway.generateText(input, options);
+          if (operation === "generateObject")
+            return gateway.generateObject(
+              { ...input, schema: z.object({ result: z.boolean() }) },
+              options,
+            );
+          const events: StreamEvent[] = [];
+          for await (const event of gateway.streamText(input, options))
+            events.push(event);
+          return events;
+        };
+        return { calls, run };
+      }
+
+      it.each([undefined, true, false])(
+        "uses fallback only when allowed (allowFallback=%s)",
+        async (allowFallback) => {
+          const { calls, run } = fixture();
+          if (allowFallback === false) {
+            await expect(run(allowFallback)).rejects.toMatchObject({
+              provider: "test",
+              model: "test-model",
+            });
+          } else {
+            await expect(run(allowFallback)).resolves.toBeDefined();
+          }
+          expect(calls).toEqual(
+            allowFallback === false
+              ? ["test-model"]
+              : ["test-model", "backup-model"],
+          );
+        },
+      );
+
+      it("rejects a missing explicit target without using the default", async () => {
+        const { calls, run } = fixture();
+        await expect(run(false, "missing")).rejects.toThrow("not found");
+        expect(calls).toEqual([]);
+      });
+    },
+  );
 
   it.each(["generate", "stream"])(
     "identifies the actual failed fallback model in %s errors",

@@ -202,9 +202,15 @@ Provider 图片输入矩阵：
 | `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果 |
 | `orphaned`            | 在途 owner 停止续租且 lease 过期                                                                                 |
 
-启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。`_runtime_jobs` 不进入 snapshot/fork payload，也不允许插件直接读写。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
+启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。`_runtime_jobs` 不进入 snapshot/fork payload，写入由框架控制；现有插件 store 的保留 namespace 读取合同仍适用。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
 
-领域结果与 `succeeded/result` 在同一事务内持久化，事务回滚不会留下成功任务。事务后通知失败不改变任务成功状态，也不会开放重试。恢复扫描仅处理扫描 revision 未变化的过期租约；当前恢复只在启动时执行，启动后才过期的死亡 owner 仍需后续恢复机制。
+领域结果与 `succeeded/result` 在同一事务内持久化，事务回滚不会留下成功任务。事务后通知失败不改变任务成功状态，也不会开放重试。恢复扫描仅处理扫描 revision 未变化的过期租约；worker 首次唤醒及后续 30 秒维护间隔恢复过期任务，失败后 1 秒重试；`committing` 须先取得非阻塞 session 提交锁，锁忙则推迟。维护独立于执行容量，关闭等待实际扫描与锁回调退出。
+
+以下后台任务 HTTP 读取出口（专用 runtime-jobs、通用 plugin-data 全量/namespace/key、state）
+共用公开投影：移除冻结输入 `payload` 与原始错误，保留作业/来源/后台执行关联 ID、当前状态和业务结果。
+`job-status.updated` 同样只发送已知 reason 与按状态分类的固定安全错误文案，不透传 provider 或 handler 的异常文本。
+只有 reason 的排队超时在页面重载后也保留可理解的失败说明。内部任务错误、普通游戏结果、插件直接读取及其它 trace/log 通道有各自合同，
+这项 HTTP/SSE 投影不等于对所有日志或游戏内容进行脱敏。
 
 客户端可用 `GET /api/sessions/:id/runtime-jobs` 恢复状态与成功结果；响应会移除包含冻结输入、设置与审批身份的内部 `payload`。detached runtime 内部通过 `ctx.progress` 发出的插件子任务消息会由内核在 `data` 中追加不可伪造的 `runtimeJobId` 与 `originTurnId`，客户端据此折叠到父任务，而不是产生孤立状态行。`POST .../:jobId/cancel` 只接受 `queued/claimed/running`，以 CAS 写入 `cancelled`，已经进入 `committing` 或终态的作业返回冲突。`POST .../:jobId/retry` 只接受失败类终态，显式创建新 `jobId` 和 queued 记录并使用当前 session incarnation、approval scope、locale 与 runtime model overrides；旧终态不改变，也不会被后台自动重放。
 

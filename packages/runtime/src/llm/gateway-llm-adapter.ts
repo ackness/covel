@@ -28,7 +28,7 @@ import type {
  * package (which already depends on `@covel/runtime`'s sibling).
  */
 export interface SlotOverridesInput {
-  slotPresetOverrides?: Record<string, string>;
+  slotBindings?: Record<string, import("@covel/shared").LlmModelBinding>;
   parameterOverrides?: Record<
     string,
     {

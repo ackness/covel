@@ -98,7 +98,7 @@ function fixture() {
                 reasoningEffort: modelDefault,
               },
             ],
-            slotPresetOverrides: { memory: "same-ref" },
+            slotBindings: { memory: { modelRef: "same-ref" } },
             ...(roleOverride
               ? {
                   parameterOverrides: {
@@ -139,11 +139,11 @@ describe("reasoning settings through the request boundary", () => {
               baseUrl: "https://provider.example/v1",
               protocol: "openai-chat-v1",
             })),
-            slotPresetOverrides: {
-              story: "thinking-on",
-              plugin: "thinking-off",
-              memory: "thinking-on",
-              "custom-role": "thinking-off",
+            slotBindings: {
+              story: { modelRef: "thinking-on" },
+              plugin: { modelRef: "thinking-off" },
+              memory: { modelRef: "thinking-on" },
+              "custom-role": { modelRef: "thinking-off" },
             },
           }),
         ).toString("base64"),

@@ -87,6 +87,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("explicit model binding headers", () => {
+  it("retains local versus server identity when their ids match", async () => {
+    await setProviderProfiles(
+      [
+        {
+          id: "local-provider",
+          name: "Local",
+          baseUrl: "https://local.example/v1",
+          models: [{ ref: "shared-id", modelId: "local-model" }],
+        },
+      ],
+      {
+        story: { modelRef: "shared-id" },
+        memory: { presetId: "shared-id" },
+      },
+    );
+    const overlay = JSON.parse(
+      atob(buildSlotConfigHeaderInternal()["X-Slot-Config"]!),
+    );
+    expect(overlay.slotBindings).toEqual({
+      story: { modelRef: "shared-id" },
+      memory: { presetId: "shared-id" },
+    });
+    expect(overlay.customPresets).toEqual([
+      expect.objectContaining({ id: "shared-id", model: "local-model" }),
+    ]);
+  });
+});
+
 describe("custom preset secret channel", () => {
   it("carries per-model reasoning defaults separately from role overrides", async () => {
     await setProviderProfiles([
@@ -174,8 +203,8 @@ describe("custom preset secret channel", () => {
     const encoded = buildSlotConfigHeaderInternal()["X-Slot-Config"];
     expect(encoded).toBeTruthy();
     const overlay = JSON.parse(atob(encoded!));
-    expect(overlay.slotPresetOverrides).toEqual({
-      default: "model_deepseek",
+    expect(overlay.slotBindings).toEqual({
+      default: { modelRef: "model_deepseek" },
     });
     expect(overlay.parameterOverrides).toEqual({
       default: { temperature: 0.4, reasoningEffort: "max" },

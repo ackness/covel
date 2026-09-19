@@ -586,6 +586,8 @@
     "deleteConfirmAction": "删除"
   },
   "settings": {
+    "modelBindingMissing": "所选模型不可用，请重新选择模型或重置此用途。",
+    "resetModelBinding": "重置模型绑定",
     "storageMode": "数据存储",
     "storageLocal": "本地",
     "storageRemote": "远程",

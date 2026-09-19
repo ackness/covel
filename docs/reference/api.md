@@ -2936,23 +2936,41 @@ interface SseEnvelope {
 
 #### `POST /api/ai/ping`
 
-测试 LLM 提供商连通性。
+用一次最小流式请求测试所选模型，并返回实际 provider/model 与延迟。
 
-**请求体:**
+请求体只可选择一种目标：`{ "presetId": "server-preset" }`、
+`{ "modelRef": "local-model-ref" }` 或 `{ "slot": "story" }`。
+本地引用须在 `X-Slot-Config.customPresets` 中声明；用途覆盖使用
+`X-Slot-Config.slotBindings`，保留 `modelRef` / `presetId` 类型。
+显式模型不存在时返回 `ok: false`，不测试其它模型；模型 ID 中的 `slot-` 没有别名含义。
+未指定目标时测试默认用途，未配置用途允许服务端回退。
+解析后只探测选中的具体模型；即使配置了备用模型，选中模型失败也返回 `ok: false`，
+不会以备用模型的成功代替。用途测试保留原 slot 的参数和能力覆盖，slot 名与其他预设 ID
+同名时仍调用该用途已解析出的模型。
 
-```json
-{ "presetId": "default" }
-```
+非法路由头返回 `400 { code: "invalid_llm_configuration", error: "..." }`，
+无效 JSON、未知请求字段及互斥目标冲突返回 400。合法空对象 `{}` 保留默认探测；
+请求体或路由校验失败不会调用 provider。
 
-**响应:**
+响应示例：
 
 ```json
 {
   "ok": true,
-  "latencyMs": 0,
-  "text": "Model plan default (deepseek/deepseek-v4-flash) configured"
+  "latencyMs": 250,
+  "ttfbMs": 180,
+  "text": "Hello!",
+  "testedTarget": {
+    "presetId": "server-preset",
+    "provider": "example-provider",
+    "model": "example-model",
+    "resolvedVia": "direct"
+  }
 }
 ```
+
+`resolvedVia` 为 `direct`、`slot`、`tag-fallback` 或 `any`；目录接口不公开其他请求
+临时注册的模型配置，连接测试也不会从这些配置中隐式选择目标。
 
 #### `POST /api/ai/generate-world`
 

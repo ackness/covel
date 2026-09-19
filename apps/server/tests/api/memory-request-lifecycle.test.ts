@@ -215,7 +215,7 @@ describe("request-scoped memory lifecycle", () => {
       headers: {
         "X-Provider-Keys": encode({ fixture: "synthetic-browser-key" }),
         "X-Slot-Config": encode({
-          slotPresetOverrides: { memory: "custom-memory" },
+          slotBindings: { memory: { presetId: "custom-memory" } },
         }),
       },
     });
@@ -226,7 +226,7 @@ describe("request-scoped memory lifecycle", () => {
       expect.objectContaining({
         apiKeys: { fixture: "synthetic-browser-key" },
         slotOverrides: expect.objectContaining({
-          slotPresetOverrides: { memory: "custom-memory" },
+          slotBindings: { memory: { presetId: "custom-memory" } },
         }),
       }),
     );

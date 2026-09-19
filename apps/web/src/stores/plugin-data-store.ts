@@ -95,16 +95,15 @@ export function applyChanges(
 ): void {
   if (!activeSessionId) return;
   const prev = sessionStores.get(activeSessionId) ?? {};
-  const pluginNs = { ...prev[pluginId] };
+  let pluginNs = { ...prev[pluginId] };
 
   for (const change of changes) {
-    const ns = { ...pluginNs[change.namespace] };
-    if (change.operation === "delete") {
-      delete ns[change.key];
-    } else {
-      ns[change.key] = change.value;
-    }
-    pluginNs[change.namespace] = ns;
+    const ns = {
+      ...pluginNs[change.namespace],
+      ...(change.operation === "delete" ? {} : { [change.key]: change.value }),
+    };
+    if (change.operation === "delete") delete ns[change.key];
+    pluginNs = { ...pluginNs, [change.namespace]: ns };
   }
 
   sessionStores.set(activeSessionId, { ...prev, [pluginId]: pluginNs });
@@ -129,14 +128,27 @@ export function loadPluginDataForSession(
   items: readonly { key: string; value: unknown }[],
 ): void {
   const prev = sessionStores.get(sessionId) ?? {};
-  const pluginNs = { ...prev[pluginId] };
-  const ns: Record<string, unknown> = {};
-  for (const item of items) {
-    ns[item.key] = item.value;
-  }
-  pluginNs[namespace] = ns;
+  const pluginNs = {
+    ...prev[pluginId],
+    [namespace]: Object.fromEntries(
+      items.map((item) => [item.key, item.value]),
+    ),
+  };
   sessionStores.set(sessionId, { ...prev, [pluginId]: pluginNs });
   if (activeSessionId === sessionId) notify();
+}
+
+/** Replace one active session's plugin snapshot, including absent namespaces. */
+export function replacePluginDataForSession(
+  sessionId: string,
+  pluginId: string,
+  namespaces: PluginData[string],
+): boolean {
+  if (activeSessionId !== sessionId) return false;
+  const previous = sessionStores.get(sessionId) ?? {};
+  sessionStores.set(sessionId, { ...previous, [pluginId]: namespaces });
+  notify();
+  return true;
 }
 
 /** Atomically replace the active session's complete plugin-data snapshot. */

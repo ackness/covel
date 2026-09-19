@@ -29,6 +29,7 @@
  */
 
 import type { MiddlewareHandler } from "hono";
+import { z } from "zod";
 import {
   createGatewayAdapter,
   createPluginRuntimeGateway,
@@ -41,7 +42,7 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import { decodeBase64Json } from "../lib/base64-json.js";
-import { isReasoningEffort, readRuntimeEnv } from "@covel/shared";
+import { llmModelBindingSchema, readRuntimeEnv } from "@covel/shared";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
@@ -93,7 +94,17 @@ export function createPerRequestLlmMiddleware(
 ): MiddlewareHandler {
   return async (c, next) => {
     const requestKeys = parseProviderKeys(c.req.header("X-Provider-Keys"));
-    const slotOverrides = parseSlotOverrides(c.req.header("X-Slot-Config"));
+    const slotHeader = c.req.header("X-Slot-Config");
+    const slotOverrides = parseSlotOverrides(slotHeader);
+    if (slotHeader !== undefined && slotOverrides === null) {
+      return c.json(
+        {
+          error: "Invalid model configuration",
+          code: "invalid_llm_configuration",
+        },
+        400,
+      );
+    }
     const capabilityOverridePolicy =
       readRuntimeEnv().deploymentTier === "self" ? "full" : "restrict-only";
 
@@ -103,7 +114,7 @@ export function createPerRequestLlmMiddleware(
       slotOverrides !== null &&
       ((slotOverrides.customPresets?.length ?? 0) > 0 ||
         Object.keys(slotOverrides.parameterOverrides ?? {}).length > 0 ||
-        Object.keys(slotOverrides.slotPresetOverrides ?? {}).length > 0 ||
+        Object.keys(slotOverrides.slotBindings ?? {}).length > 0 ||
         Object.keys(slotOverrides.capabilityOverrides ?? {}).length > 0);
 
     if (!hasRequestKeys && !hasOverrides) {
@@ -137,7 +148,7 @@ export function createPerRequestLlmMiddleware(
     c.set("llmAdapter", perRequestAdapter);
     c.set("pluginGateway", perRequestPluginGateway);
     c.set("requestLlmOverridden", true);
-    if (slotOverrides?.slotPresetOverrides?.memory) {
+    if (slotOverrides?.slotBindings?.memory) {
       c.set("requestMemorySlot", "memory");
     }
     await next();
@@ -158,28 +169,46 @@ export function parseProviderKeys(
   return result;
 }
 
+const publicModelId = z
+  .string()
+  .min(1)
+  .refine((id) => !id.includes("\u0000"));
+const slotOverrideEnvelopeSchema = z.strictObject({
+  slotBindings: z.record(z.string().min(1), llmModelBindingSchema).optional(),
+  parameterOverrides: z.unknown().optional(),
+  capabilityOverrides: z.unknown().optional(),
+  customPresets: z
+    .array(
+      z.object({
+        id: z.string().trim().pipe(publicModelId),
+        name: z.string().optional(),
+        provider: z.string().min(1),
+        model: z.string().min(1),
+        baseUrl: z.string().optional(),
+        protocol: z.enum(PROVIDER_PROTOCOLS).optional(),
+        reasoningEffort: z
+          .enum(REASONING_EFFORT_VALUES)
+          .optional()
+          .catch(undefined),
+      }),
+    )
+    .optional(),
+});
+
 export function parseSlotOverrides(
   header: string | undefined,
 ): SlotOverridesInput | null {
   if (!header || header.length > MAX_HEADER_BYTES) return null;
   // Defensive try/catch: untrusted browser input parsed across many branches.
   try {
-    const parsed = decodeBase64Json(header);
-    if (!parsed || typeof parsed !== "object") return null;
+    const decoded = slotOverrideEnvelopeSchema.safeParse(
+      decodeBase64Json(header),
+    );
+    if (!decoded.success) return null;
+    const parsed = decoded.data;
     const out: SlotOverridesInput = {};
-    const slotMap = (parsed as Record<string, unknown>).slotPresetOverrides;
-    if (slotMap && typeof slotMap === "object" && !Array.isArray(slotMap)) {
-      const clean: Record<string, string> = {};
-      for (const [k, v] of Object.entries(slotMap as Record<string, unknown>)) {
-        if (typeof k === "string" && typeof v === "string" && v.length > 0) {
-          clean[k] = v;
-        }
-      }
-      if (Object.keys(clean).length > 0) out.slotPresetOverrides = clean;
-    }
-    const paramMap =
-      (parsed as Record<string, unknown>).parameterOverrides ??
-      (parsed as Record<string, unknown>).paramOverrides;
+    if (parsed.slotBindings) out.slotBindings = parsed.slotBindings;
+    const paramMap = parsed.parameterOverrides;
     if (paramMap && typeof paramMap === "object" && !Array.isArray(paramMap)) {
       const clean: NonNullable<SlotOverridesInput["parameterOverrides"]> = {};
       for (const [slotId, raw] of Object.entries(
@@ -221,46 +250,21 @@ export function parseSlotOverrides(
       }
       if (Object.keys(clean).length > 0) out.parameterOverrides = clean;
     }
-    const customPresets = (parsed as Record<string, unknown>).customPresets;
-    if (Array.isArray(customPresets)) {
-      const clean: SlotOverridesInput["customPresets"] = [];
-      for (const raw of customPresets) {
-        if (!raw || typeof raw !== "object") continue;
-        const r = raw as Record<string, unknown>;
-        if (
-          typeof r.id === "string" &&
-          r.id.length > 0 &&
-          typeof r.provider === "string" &&
-          r.provider.length > 0 &&
-          typeof r.model === "string" &&
-          r.model.length > 0
-        ) {
-          clean.push({
-            id: r.id,
-            name: typeof r.name === "string" ? r.name : r.id,
-            provider: r.provider,
-            model: r.model,
-            ...(isReasoningEffort(r.reasoningEffort)
-              ? { reasoningEffort: r.reasoningEffort }
-              : {}),
-            ...(typeof r.baseUrl === "string" ? { baseUrl: r.baseUrl } : {}),
-            ...(typeof r.protocol === "string" &&
-            (PROVIDER_PROTOCOLS as readonly string[]).includes(r.protocol)
-              ? {
-                  protocol:
-                    r.protocol as SlotOverridesInput["customPresets"] extends Array<
-                      infer T
-                    >
-                      ? T extends { protocol?: infer P }
-                        ? P
-                        : never
-                      : never,
-                }
-              : {}),
-          });
-        }
-      }
-      if (clean.length > 0) out.customPresets = clean;
+    const customPresets = parsed.customPresets;
+    if (customPresets) {
+      const ids = new Set(customPresets.map((preset) => preset.id));
+      if (ids.size !== customPresets.length) return null;
+      out.customPresets = customPresets.map((preset) => ({
+        ...preset,
+        name: preset.name ?? preset.id,
+      }));
+    }
+    for (const binding of Object.values(out.slotBindings ?? {})) {
+      if (
+        binding.modelRef !== undefined &&
+        !out.customPresets?.some((p) => p.id === binding.modelRef)
+      )
+        return null;
     }
     const capabilityMap = (parsed as Record<string, unknown>)
       .capabilityOverrides;

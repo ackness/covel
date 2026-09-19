@@ -1690,7 +1690,7 @@ worker 以 CAS claim 和可续租 lease 防止多 Pod 重复执行，默认全�
 
 worker 在提交屏障和终态转换前停止并等待自己已开始的续租，避免续租与提交争抢 CAS revision。恢复扫描必须匹配扫描时的 revision，期间成功续租的作业不会被误判为 orphaned；队首过期或已被其它 worker 认领时继续查找同会话有效候选。
 
-领域 proposal、journal 与 job 的 `succeeded/result` 在同一 `finalizeExecution` 事务中提交；业务失败或完成 CAS 失败会使整个事务回滚。事务后 Hook、状态通知或 executor 返回失败不降低已持久化的成功状态；漏发的公开状态由现有终态对账补齐，不再次执行 provider。当前过期租约恢复仍只在启动时扫描一次，启动时尚未过期的死亡 owner 没有持续恢复保证。
+领域 proposal、journal 与 job 的 `succeeded/result` 在同一 `finalizeExecution` 事务中提交；业务失败或完成 CAS 失败会使整个事务回滚。事务后 Hook、状态通知或 executor 返回失败不降低已持久化的成功状态；漏发的公开状态由现有终态对账补齐，不再次执行 provider。恢复由 worker 首次唤醒与后续 30 秒维护间隔驱动，失败后 1 秒重试；满并发时仍执行维护。`committing` 任务必须先非阻塞取得 session 提交锁，锁忙则跳过，防止停止续租但仍在提交的任务被误判。自定义 `SessionLock` 必须提供与 `withLock` 共用互斥域的 `tryWithLock`，不具备该能力时宿主启动明确失败并回收已分配资源。worker 关闭会停止维护调度并等待在途扫描、锁回调和执行任务。
 
 内置首个 opt-in 是 `mimo-tts/auto-narrate`。涉及世界状态、角色、任务、记忆或被其他 runtime 消费的 post-turn runtime 应继续使用 `await`。
 

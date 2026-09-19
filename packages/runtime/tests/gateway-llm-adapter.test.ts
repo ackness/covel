@@ -20,7 +20,7 @@ describe("createGatewayAdapter target resolution", () => {
       },
     };
     const slotOverrides = {
-      slotPresetOverrides: { story: "custom-story" },
+      slotBindings: { story: { modelRef: "custom-story" } },
     };
     const adapter = createGatewayAdapter(gateway, {
       apiKeys: { "deepseek-proxy": "request-key" },

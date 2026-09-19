@@ -6,20 +6,24 @@ import type {
   JobStatusState,
   JsonValue,
 } from "@covel/shared";
+import type { SessionLock } from "../../../lib/session-lock.js";
 
 import {
   claimNextRuntimeJob,
   getRuntimeJob,
   listRuntimeJobs,
+  recoverExpiredRuntimeJobs,
   renewRuntimeJobLease,
   transitionRuntimeJob,
   type RuntimeJobRecord,
   type RuntimeJobStatus,
 } from "./jobs.js";
+import { publicRuntimeJobDiagnostics } from "./runtime-job-public.js";
 
 const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_LEASE_MS = 120_000;
 const DRAIN_RETRY_MS = 1_000;
+const MAINTENANCE_INTERVAL_MS = 30_000;
 
 export interface StagedRuntimeJobPayload {
   readonly schemaVersion: 1;
@@ -139,19 +143,11 @@ function publicProgress(status: RuntimeJobStatus): number {
   }
 }
 
-function statusData(job: RuntimeJobRecord): JsonValue {
-  return {
-    originTurnId: job.origin.sourceTurnId,
-    durableStatus: job.status,
-    ...(job.reason ? { reason: job.reason } : {}),
-    ...(job.error ? { error: job.error } : {}),
-  };
-}
-
 export function makeRuntimeJobStatusRecord(
   job: RuntimeJobRecord,
   sequence: number,
 ): JobStatusRecord {
+  const diagnostics = publicRuntimeJobDiagnostics(job);
   return {
     sessionId: job.sessionId,
     // Control-plane jobs own an independent scope. Reusing the source
@@ -164,8 +160,12 @@ export function makeRuntimeJobStatusRecord(
     jobId: job.jobId,
     state: publicState(job.status),
     progress: publicProgress(job.status),
-    ...((job.reason ?? job.error) ? { message: job.reason ?? job.error } : {}),
-    data: statusData(job),
+    ...(diagnostics.error ? { message: diagnostics.error } : {}),
+    data: {
+      originTurnId: job.origin.sourceTurnId,
+      durableStatus: job.status,
+      ...diagnostics,
+    },
     sequence,
     createdAt: job.updatedAt,
   };
@@ -228,6 +228,7 @@ function errorMessage(error: unknown): string {
 export function createRuntimeJobWorker(args: {
   readonly store: DataStore;
   readonly eventBus: EventBus;
+  readonly tryWithCommitLock: NonNullable<SessionLock["tryWithLock"]>;
   readonly execute: (
     job: RuntimeJobRecord,
     control: RuntimeJobExecutionControl,
@@ -236,6 +237,11 @@ export function createRuntimeJobWorker(args: {
   readonly leaseMs?: number;
   readonly ownerId?: string;
 }): RuntimeJobWorker {
+  if (typeof args.tryWithCommitLock !== "function") {
+    throw new TypeError(
+      "runtime job worker requires a nonblocking commit lock",
+    );
+  }
   const concurrency = args.concurrency ?? DEFAULT_CONCURRENCY;
   const leaseMs = args.leaseMs ?? DEFAULT_LEASE_MS;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
@@ -251,7 +257,8 @@ export function createRuntimeJobWorker(args: {
   let sessionCursor: string | undefined;
   let scheduled: ReturnType<typeof setImmediate> | undefined;
   let draining: Promise<void> | undefined;
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let wakeTimer: ReturnType<typeof setTimeout> | undefined;
+  let nextMaintenanceAt = 0;
   let wakeRequested = false;
   let closed = false;
   let closing: Promise<void> | undefined;
@@ -489,7 +496,58 @@ export function createRuntimeJobWorker(args: {
     }
   };
 
+  const reconcileTerminalJobs = async (): Promise<void> => {
+    // Durable state can outlive its event projection after a crash or a
+    // failed notification. Reconcile it independently of execution capacity.
+    for (const session of await args.store.listSessions()) {
+      if (closed) return;
+      const terminal = await listRuntimeJobs(args.store, {
+        sessionId: session.id,
+        statuses: [
+          "succeeded",
+          "failed",
+          "timed_out",
+          "cancelled",
+          "stale",
+          "orphaned",
+        ],
+      });
+      for (const job of terminal) {
+        if (closed) return;
+        const rows = await args.store.listJobStatus(job.sessionId, {
+          progressScopeId: job.jobId,
+          jobId: job.jobId,
+        });
+        const latest = rows.at(-1);
+        const durableStatus =
+          latest?.data &&
+          typeof latest.data === "object" &&
+          !Array.isArray(latest.data)
+            ? (latest.data as Readonly<Record<string, JsonValue>>).durableStatus
+            : undefined;
+        if (durableStatus !== job.status) {
+          await appendRuntimeJobStatus(args.store, args.eventBus, job);
+        }
+      }
+    }
+  };
+
   const drain = async (): Promise<void> => {
+    let maintained = false;
+    if (!closed && Date.now() >= nextMaintenanceAt) {
+      try {
+        await recoverExpiredRuntimeJobs(args.store, {
+          tryWithCommitLock: args.tryWithCommitLock,
+        });
+        await reconcileTerminalJobs();
+        maintained = true;
+        nextMaintenanceAt = Date.now() + MAINTENANCE_INTERVAL_MS;
+      } catch (error) {
+        nextMaintenanceAt = Date.now() + DRAIN_RETRY_MS;
+        throw error;
+      }
+    }
+
     while (!closed && activeCount < concurrency) {
       const claimed = await claimNextRuntimeJob(args.store, {
         ownerId,
@@ -498,41 +556,7 @@ export function createRuntimeJobWorker(args: {
         excludeRuntimeKeys: activeRuntimeKeys,
       });
       if (!claimed) {
-        // claimRuntimeJob and the startup recovery sweep can terminalize work
-        // without owning an EventBus. Reconcile those durable states once the
-        // runnable queue is empty so live clients never keep a stale spinner.
-        for (const session of await args.store.listSessions()) {
-          if (closed) return;
-          const terminal = await listRuntimeJobs(args.store, {
-            sessionId: session.id,
-            statuses: [
-              "succeeded",
-              "failed",
-              "timed_out",
-              "cancelled",
-              "stale",
-              "orphaned",
-            ],
-          });
-          for (const job of terminal) {
-            if (closed) return;
-            const rows = await args.store.listJobStatus(job.sessionId, {
-              progressScopeId: job.jobId,
-              jobId: job.jobId,
-            });
-            const latest = rows.at(-1);
-            const durableStatus =
-              latest?.data &&
-              typeof latest.data === "object" &&
-              !Array.isArray(latest.data)
-                ? (latest.data as Readonly<Record<string, JsonValue>>)
-                    .durableStatus
-                : undefined;
-            if (durableStatus !== job.status) {
-              await appendRuntimeJobStatus(args.store, args.eventBus, job);
-            }
-          }
-        }
+        if (!maintained) await reconcileTerminalJobs();
         return;
       }
       sessionCursor = claimed.nextSessionCursor;
@@ -551,26 +575,34 @@ export function createRuntimeJobWorker(args: {
       return;
     }
     if (scheduled) return;
-    if (retryTimer) clearTimeout(retryTimer);
+    if (wakeTimer) clearTimeout(wakeTimer);
     scheduled = setImmediate(() => {
       scheduled = undefined;
+      let retryDrain = false;
       draining = drain()
-        .catch((error) => {
-          console.warn(
-            "[runtime-job-worker] drain failed:",
-            errorMessage(error),
-          );
-          if (!closed) {
-            retryTimer = setTimeout(wake, DRAIN_RETRY_MS);
-            retryTimer.unref?.();
-          }
+        .catch(() => {
+          retryDrain = true;
+          console.warn("[runtime-job-worker] drain failed; retry scheduled");
         })
         .finally(() => {
           draining = undefined;
+          if (closed) return;
           if (wakeRequested) {
             wakeRequested = false;
             wake();
+            return;
           }
+          const untilMaintenance = Math.max(1, nextMaintenanceAt - Date.now());
+          wakeTimer = setTimeout(
+            () => {
+              wakeTimer = undefined;
+              wake();
+            },
+            retryDrain
+              ? Math.min(DRAIN_RETRY_MS, untilMaintenance)
+              : untilMaintenance,
+          );
+          wakeTimer.unref?.();
         });
     });
   }
@@ -581,7 +613,7 @@ export function createRuntimeJobWorker(args: {
       if (closing) return closing;
       closed = true;
       if (scheduled) clearImmediate(scheduled);
-      if (retryTimer) clearTimeout(retryTimer);
+      if (wakeTimer) clearTimeout(wakeTimer);
       for (const stop of stopExecutions) stop();
       closing = (async () => {
         // An in-flight claim may return after close. runOne sees closed and

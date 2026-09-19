@@ -4,7 +4,11 @@ import { requestConfirm } from "@/lib/confirm-channel.js";
 import { resolvePluginRpcApprovalResponse } from "@/components/session/plugin-rpc-ui.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionActions } from "./context.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SessionDispatch } from "./types.js";
 import {
@@ -101,13 +105,20 @@ export async function submitInteractionBlock(
     });
     if (!owner.isCurrent()) return;
     try {
-      const snapshot = await api.getSessionView(sid);
-      if (owner.isCurrent()) {
-        dispatch({
-          type: "SET_GAME_STATE",
-          state: enrichGameStateFromSnapshot(snapshot),
-        });
-      }
+      await refreshSessionResource(
+        dispatch,
+        ["game-state", sid, "interaction"],
+        {
+          isCurrent: owner.isCurrent,
+          read: () => api.getSessionView(sid),
+          apply: (snapshot) =>
+            publishSessionGameState(
+              dispatch,
+              sid,
+              enrichGameStateFromSnapshot(snapshot),
+            ),
+        },
+      );
     } catch {
       // Reconnect will reconcile the character schema if this refresh fails.
     }

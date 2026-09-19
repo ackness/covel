@@ -39,6 +39,7 @@ export {
   setProviderProfiles,
   setSlotConfig,
   slotBindingId,
+  slotBindingKey,
 } from "./api/model-settings.js";
 export type {
   ModelParameterOverrides,

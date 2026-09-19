@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { Pencil, RotateCw } from "lucide-react";
 import {
-  slotBindingId,
+  slotBindingKey,
   type LlmSlotInfo,
   type SlotConfigEntry,
   type ModelCapabilityInfo,
@@ -59,9 +59,19 @@ export function LlmSlotCard({
 }: LlmSlotCardProps) {
   const { t } = useTranslation();
   const [editingParameters, setEditingParameters] = useState(false);
-  const selectedPresetId = slotBindingId(slotConfig[slotId]) ?? "";
-  const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
-  const target = resolveEffectiveModelTarget(selectedPreset, serverSlot);
+  const selectedKey = slotBindingKey(slotConfig[slotId]) ?? "";
+  const candidateKey = (preset: (typeof allPresets)[number]) =>
+    slotBindingKey(
+      preset.isCustom ? { modelRef: preset.id } : { presetId: preset.id },
+    );
+  const selectedPreset = allPresets.find(
+    (preset) => candidateKey(preset) === selectedKey,
+  );
+  const missingBinding = !!selectedKey && !selectedPreset;
+  const target = resolveEffectiveModelTarget(
+    selectedPreset,
+    missingBinding ? undefined : serverSlot,
+  );
   const lookup = useModelCapability(
     target.model,
     target.provider,
@@ -78,14 +88,17 @@ export function LlmSlotCard({
       [
         ...allPresets.map((preset) => preset.provider),
         effectiveProvider,
+        serverSlot?.provider,
       ].filter(Boolean),
     ),
   );
-  const modelChoices = createProviderScopedModelChoices({
-    provider: effectiveProvider,
-    presets: allPresets,
-    serverSlot,
-  });
+  const modelChoices = missingBinding
+    ? { presets: allPresets, includesServerBase: !!serverSlot }
+    : createProviderScopedModelChoices({
+        provider: effectiveProvider,
+        presets: allPresets,
+        serverSlot,
+      });
   const isRequired = !isConfigured && slotId === "default";
   const isVirtualSlot = isDiscovered && !serverSlot;
   const hasCapOverride = !!capOverride;
@@ -139,7 +152,7 @@ export function LlmSlotCard({
               {t("settings.overrideApplied")}
             </Badge>
           )}
-          {selectedPreset && serverSlot && (
+          {((selectedPreset && serverSlot) || missingBinding) && (
             <Button
               variant="ghost"
               size="sm"
@@ -149,10 +162,14 @@ export function LlmSlotCard({
                 delete updated[slotId];
                 commitSlot(updated);
               }}
-              title={t("settings.useLlmTomlDefault", {
-                provider: serverSlot.provider,
-                model: serverSlot.model,
-              })}
+              title={
+                serverSlot
+                  ? t("settings.useLlmTomlDefault", {
+                      provider: serverSlot.provider,
+                      model: serverSlot.model,
+                    })
+                  : t("settings.resetOverride")
+              }
             >
               <RotateCw className="mr-0.5 h-3 w-3" />
               {t("settings.resetOverride")}
@@ -160,6 +177,15 @@ export function LlmSlotCard({
           )}
         </div>
       </div>
+
+      {missingBinding && (
+        <p role="alert" className="text-xs text-destructive">
+          {t(
+            "settings.modelBindingMissing",
+            "The selected model is unavailable. Choose another model or reset this role.",
+          )}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="space-y-1">
@@ -199,8 +225,8 @@ export function LlmSlotCard({
           </span>
           <select
             value={
-              selectedPreset
-                ? selectedPresetId
+              selectedPreset || missingBinding
+                ? selectedKey
                 : modelChoices.includesServerBase
                   ? "__base"
                   : ""
@@ -214,7 +240,7 @@ export function LlmSlotCard({
                 return;
               }
               const candidate = allPresets.find(
-                (preset) => preset.id === value,
+                (preset) => candidateKey(preset) === value,
               );
               if (!candidate) return;
               commitSlot({
@@ -226,6 +252,14 @@ export function LlmSlotCard({
             }}
             className="w-full bg-background border border-border px-3 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary"
           >
+            {missingBinding && (
+              <option value={selectedKey} disabled>
+                {t(
+                  "settings.modelBindingMissing",
+                  "The selected model is unavailable. Choose another model or reset this role.",
+                )}
+              </option>
+            )}
             {modelChoices.includesServerBase && serverSlot && (
               <option value="__base">
                 {t("settings.useDefault")} ·{" "}
@@ -239,7 +273,7 @@ export function LlmSlotCard({
                 </option>
               )}
             {modelChoices.presets.map((preset) => (
-              <option key={preset.id} value={preset.id}>
+              <option key={candidateKey(preset)} value={candidateKey(preset)}>
                 {formatModelConfigLabel(preset)}
               </option>
             ))}

@@ -6,7 +6,10 @@ import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import type { SnapshotMessage } from "@covel/shared";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import { refreshSessionResource } from "./session-resource-reads.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
 
 interface MutableRef<T> {
@@ -67,49 +70,54 @@ async function restoreServerSnapshot(
   isCurrent: () => boolean,
 ): Promise<boolean> {
   try {
-    const snapshot = await api.getSessionView(sessionId);
-    if (!isCurrent()) return false;
-    dispatch({
-      type: "LOAD_MESSAGES",
-      messages: toStreamMessages(snapshot.messages),
-    });
-    // snapshot.messages 只是最近一窗；记录游标作为"加载更旧"的起点。
-    // null / undefined ⇒ 已到历史开头，禁用向上加载。
-    dispatch({
-      type: "SET_OLDER_MESSAGES_CURSOR",
-      cursor: snapshot.messagesCursor ?? null,
-    });
+    let applied = false;
+    await refreshSessionResource(
+      dispatch,
+      ["game-state", sessionId, "restore"],
+      {
+        isCurrent,
+        read: () => api.getSessionView(sessionId),
+        apply: (snapshot) => {
+          dispatch({
+            type: "MERGE_RECOVERED_MESSAGES",
+            messages: toStreamMessages(snapshot.messages),
+          });
+          // snapshot.messages 只是最近一窗；记录游标作为"加载更旧"的起点。
+          // null / undefined ⇒ 已到历史开头，禁用向上加载。
+          dispatch({
+            type: "SET_OLDER_MESSAGES_CURSOR",
+            cursor: snapshot.messagesCursor ?? null,
+          });
 
-    if (
-      snapshot.characters.length > 0 ||
-      Object.keys(snapshot.gameState).length > 0 ||
-      snapshot.characterSchema
-    ) {
-      dispatch({
-        type: "SET_GAME_STATE",
-        state: enrichGameStateFromSnapshot(snapshot),
-      });
-    }
+          publishSessionGameState(
+            dispatch,
+            sessionId,
+            enrichGameStateFromSnapshot(snapshot),
+          );
 
-    dispatch({
-      type: "LOAD_EXECUTION_STEPS",
-      steps: reconcileExecutionSteps(
-        localSteps,
-        snapshot.executionSteps,
-        snapshot.execution,
-      ),
-    });
-    dispatch({
-      type: "SET_EXECUTION_RECOVERY",
-      recovery: {
-        sessionId,
-        status: snapshot.execution ?? null,
-        hydrating: false,
-        checking: !snapshot.execution,
+          dispatch({
+            type: "LOAD_EXECUTION_STEPS",
+            steps: reconcileExecutionSteps(
+              localSteps,
+              snapshot.executionSteps,
+              snapshot.execution,
+            ),
+          });
+          dispatch({
+            type: "SET_EXECUTION_RECOVERY",
+            recovery: {
+              sessionId,
+              status: snapshot.execution ?? null,
+              hydrating: false,
+              checking: !snapshot.execution,
+            },
+          });
+
+          applied = true;
+        },
       },
-    });
-
-    return true;
+    );
+    return applied;
   } catch {
     return false;
   }
@@ -127,7 +135,7 @@ async function restoreLocalFallback(
 
   if (messagesResult.status === "fulfilled") {
     dispatch({
-      type: "LOAD_MESSAGES",
+      type: "MERGE_RECOVERED_MESSAGES",
       messages: toStreamMessages(messagesResult.value),
     });
     // 本地回退走 ds.listMessages 全量恢复，没有更旧要加载 → 游标置空。
@@ -135,7 +143,7 @@ async function restoreLocalFallback(
   }
   if (patchesResult.status === "fulfilled") {
     dispatch({
-      type: "LOAD_STATE_PATCHES",
+      type: "MERGE_INITIAL_STATE_PATCHES",
       patches: patchesResult.value,
     });
   }
@@ -315,7 +323,7 @@ export async function restoreSessionState({
   if (!isCurrent()) return;
   const snapshotLoaded = await restoreServerSnapshot(
     session.id,
-    dispatchCurrent,
+    dispatch,
     localSteps,
     isCurrent,
   );

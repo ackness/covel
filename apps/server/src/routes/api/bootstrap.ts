@@ -67,10 +67,7 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
-import {
-  recoverExpiredRuntimeJobs,
-  sweepStalePendingJobs,
-} from "./plugin-rpc/jobs.js";
+import { sweepStalePendingJobs } from "./plugin-rpc/jobs.js";
 import {
   createRuntimeJobWorker,
   parseStagedRuntimeJobPayload,
@@ -189,7 +186,8 @@ export interface ApiBootstrapConfig {
    * Multi-pod PG deployments MUST pass a distributed implementation —
    * typically `createPgAdvisorySessionLock(sql)` from
    * `../../lib/pg-session-lock.ts` — so mutual exclusion is enforced
-   * across processes.
+   * across processes. The implementation must also provide nonblocking
+   * `tryWithLock` so durable recovery can distinguish live commits.
    */
   readonly sessionLock?: SessionLock;
   /**
@@ -302,6 +300,10 @@ async function assembleApi(
   // via `c.get('sessionLock')` and never import a concrete lock module.
   const sessionLock: SessionLock =
     config.sessionLock ?? createInProcessSessionLock();
+  const tryWithCommitLock = sessionLock.tryWithLock?.bind(sessionLock);
+  if (!tryWithCommitLock) {
+    throw new Error("durable runtime jobs require a nonblocking session lock");
+  }
   const memoryIngestLock: SessionLock =
     config.memoryIngestLock ?? createInProcessSessionLock();
   console.log(
@@ -573,6 +575,7 @@ async function assembleApi(
   const runtimeJobWorker = createRuntimeJobWorker({
     store,
     eventBus,
+    tryWithCommitLock,
     execute: async (job, control) => {
       const payload = parseStagedRuntimeJobPayload(job.payload);
       if (
@@ -832,9 +835,6 @@ async function assembleApi(
           }),
         ]
       : []),
-    recoverExpiredRuntimeJobs(store).catch(() => {
-      console.warn("[runtime-job-sweep] startup sweep failed");
-    }),
   ]).then(() => undefined);
   runtimeJobWorker.wake();
 

@@ -1,3 +1,4 @@
+import type { LlmModelBinding } from "@covel/shared";
 /**
  * Per-request overlay for the preset registry.
  *
@@ -24,7 +25,8 @@
  * (see `createProviderRegistry().resolve`), so there is no shared
  * provider state a concurrent request could poison. Entries present in
  * the base registry (llm.toml) are never shadowed: a custom preset whose
- * id matches a base preset resolves to the base preset unchanged.
+ * id matches a base preset coexists under its scoped ID. Explicit local
+ * bindings select that scoped ID; server bindings keep the base ID.
  */
 
 import type {
@@ -146,10 +148,6 @@ export function applySlotOverlay(
 
   for (const cp of customPresets) {
     if (!isUsableCustomPreset(cp)) continue;
-
-    // Never shadow an llm.toml / process-wide preset — the base entry
-    // keeps resolving under its public id.
-    if (hasPreset.call(deps.presetRegistry, cp.id)) continue;
 
     const key = overlayPresetKey(cp);
     // Hot-reload clears the registry while earlier requests can still own
@@ -300,6 +298,15 @@ export function resolveOverlayPresetId(
   overrides: SlotOverridesInput | undefined,
   hasPreset: ((id: string) => boolean) | undefined,
 ): string | undefined {
+  if (presetId?.startsWith(SCOPE_PREFIX)) {
+    const owned = overrides?.customPresets?.some(
+      (preset) =>
+        isUsableCustomPreset(preset) && overlayPresetKey(preset) === presetId,
+    );
+    if (!owned || !hasPreset?.(presetId))
+      throw new Error("Preset does not belong to this request");
+    return presetId;
+  }
   if (!presetId || !hasPreset || hasPreset(presetId)) return presetId;
   const customPresets = overrides?.customPresets;
   if (!customPresets || customPresets.length === 0) return presetId;
@@ -307,28 +314,34 @@ export function resolveOverlayPresetId(
   for (const cp of customPresets) {
     if (cp.id !== presetId || !isUsableCustomPreset(cp)) continue;
     const key = overlayPresetKey(cp);
-    // Registered scoped id → use it; otherwise (base preset shadows the
-    // custom one, or the overlay wasn't applied) keep the public id.
+    // A direct public ID resolves only this request's registration.
+    // Explicit local bindings require registration and never fall back.
     return hasPreset(key) ? key : presetId;
   }
   return presetId;
 }
 
-/**
- * Resolve a requested presetId against per-request slot overrides.
- *
- * If the requested id matches a key in `slotPresetOverrides`, returns
- * the overridden preset id. Otherwise returns the input unchanged so
- * callers can fall through to the base slot registry.
- */
-export function resolveSlotOverride(
-  presetId: string | undefined,
+/** Resolve an explicit binding without falling back to another namespace. */
+export function resolveModelBinding(
+  binding: LlmModelBinding,
   overrides: SlotOverridesInput | undefined,
-): string | undefined {
-  if (!presetId || !overrides?.slotPresetOverrides) return presetId;
-  const override = overrides.slotPresetOverrides[presetId];
-  if (override && override.length > 0) return override;
-  return presetId;
+  hasPreset: (id: string) => boolean,
+): string {
+  if (binding.presetId !== undefined) {
+    if (binding.presetId.includes("\u0000"))
+      throw new Error("Invalid server preset ID");
+    return binding.presetId;
+  }
+  const preset = overrides?.customPresets?.find(
+    (p) => p.id === binding.modelRef && isUsableCustomPreset(p),
+  );
+  if (preset) {
+    const key = overlayPresetKey(preset);
+    if (hasPreset(key)) return key;
+  }
+  throw new Error(
+    `Local model reference "${binding.modelRef}" is not available`,
+  );
 }
 
 function isUsableCustomPreset(cp: CustomPresetInput): boolean {

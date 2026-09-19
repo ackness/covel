@@ -87,7 +87,9 @@ export async function appendStatePatch(patch: StatePatchRecord): Promise<void> {
     const req = store.get(owned.sessionId);
     req.onsuccess = () => {
       const current = (req.result as StatePatchRecord[] | undefined) ?? [];
-      store.put([...current, owned], owned.sessionId);
+      if (!current.some((existing) => existing.id === owned.id)) {
+        store.put([...current, owned], owned.sessionId);
+      }
     };
     tx.oncomplete = () => resolve();
     tx.onabort = () =>

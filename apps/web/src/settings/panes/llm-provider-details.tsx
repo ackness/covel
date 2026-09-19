@@ -318,7 +318,13 @@ function ProviderModelRow({
           </div>
         </details>
       )}
-      <PingButton target={{ kind: "preset", presetId }} />
+      <PingButton
+        target={
+          source === "local"
+            ? { kind: "model", modelRef: presetId }
+            : { kind: "preset", presetId }
+        }
+      />
     </div>
   );
 }

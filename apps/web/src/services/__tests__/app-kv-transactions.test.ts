@@ -115,3 +115,30 @@ it("rejects unkeyed timeline rows without partially overwriting history", async 
   ).rejects.toThrow("Invalid execution history identity");
   expect(await getExecutionSteps(sessionId)).toEqual([before]);
 });
+
+it("deduplicates replayed state patches atomically while preserving distinct same-time commits", async () => {
+  const sessionId = `replayed-patches-${crypto.randomUUID()}`;
+  const patch = {
+    id: "sp_trace:1",
+    sessionId,
+    summary: "First",
+    packageName: "probe",
+    data: { stats: { hp: 1 } },
+    createdAt: "2026-09-19T00:00:00Z",
+  };
+  const writes = Promise.all([
+    appendStatePatch(patch),
+    appendStatePatch({ ...patch, data: { stats: { hp: 999 } } }),
+    appendStatePatch({
+      ...patch,
+      id: "sp_trace:2",
+      data: { stats: { mp: 3 } },
+    }),
+  ]);
+  patch.data.stats.hp = 100;
+  await writes;
+  expect(await getStatePatches(sessionId)).toEqual([
+    { ...patch, data: { stats: { hp: 1 } } },
+    { ...patch, id: "sp_trace:2", data: { stats: { mp: 3 } } },
+  ]);
+});

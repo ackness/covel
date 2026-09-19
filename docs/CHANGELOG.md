@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- Browser initialization and reconnect share snapshot ownership, preserve live messages and state, and deduplicate replayed state-patch history. Plugin-panel data seeds replace deleted namespaces; missing model bindings remain visible until explicitly reset or replaced.
+- Model bindings preserve local versus server identity through settings, headers, UI and connectivity probes. Same-named targets route independently; malformed or missing local definitions reject before execution. Request overlays stay out of public model catalogs and implicit defaults.
+- Durable workers continuously recover expired leases, protecting active commits with nonblocking session locks. Maintenance runs at full execution capacity, stops on close, and retains sanitized failure diagnostics.
+- Durable job HTTP reads and status events share a public projection that excludes frozen inputs and raw provider/handler failures, while preserving result and execution identity.
+
 - Session restore and subscription reads share resource ownership. Live plugin-data and suspension changes invalidate stale initial reads; overlapping full and namespace loads re-read without losing unaffected fields. Invalid selected settings-import values reject before either persistence channel starts writing.
 - Provider settings reject duplicate connection identities and model references before saving or importing, preventing ambiguous model routing. Inline endpoint and model-name edits keep drafts after persistence failure and recognize their normalized saved values.
 - Detached runtime results and durable job success now commit together. Failed business output rolls back proposals; post-commit notification failures cannot reopen completed work. Lease recovery respects renewed revisions, expired queue heads no longer block later work, and terminal transitions wait for in-flight renewal.

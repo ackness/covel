@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store";
 import { createPluginRegistry } from "@covel/plugin-loader";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
 import { createPgEventTransport } from "../../src/lib/pg-event-transport.js";
@@ -117,6 +118,44 @@ describe("API bootstrap resource ownership", () => {
     // Injected resources stay owned by the composition root.
     expect(closeStore).not.toHaveBeenCalled();
     await store.close();
+  });
+
+  it("unwinds acquired event resources when the commit lock cannot support recovery", async () => {
+    vi.stubEnv("DATABASE_URL", "postgres://fixture.invalid/test");
+    vi.mocked(discoverAndRegisterPlugins).mockClear();
+    vi.mocked(setupPluginTools).mockClear();
+    const unsubscribe = vi.fn();
+    const close = vi.fn(async () => {});
+    vi.mocked(createPgEventTransport).mockResolvedValueOnce({
+      publish: async () => {},
+      subscribe: () => unsubscribe,
+      close,
+    });
+    const { tryWithLock: _probe, ...sessionLock } =
+      createInProcessSessionLock();
+    const store = createMemoryStore();
+    const closeStore = vi.spyOn(store, "close");
+    try {
+      await expect(
+        bootstrapApi({
+          pluginsDir: "unused",
+          storeBackend: "pg",
+          store,
+          sessionLock,
+          llmAdapter: { generate: vi.fn() },
+        }),
+      ).rejects.toThrow(
+        "durable runtime jobs require a nonblocking session lock",
+      );
+      expect(discoverAndRegisterPlugins).not.toHaveBeenCalled();
+      expect(setupPluginTools).not.toHaveBeenCalled();
+      expect(unsubscribe).toHaveBeenCalledOnce();
+      expect(close).toHaveBeenCalledOnce();
+      expect(closeStore).not.toHaveBeenCalled();
+      await expect(store.listSessions()).resolves.toEqual([]);
+    } finally {
+      await store.close();
+    }
   });
 
   it("returns before startup scans finish but includes them in the host drain", async () => {

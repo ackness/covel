@@ -40,6 +40,7 @@ function stateFor(
     suspensions: [],
     statePatches: [],
     gameState: {},
+    hasGameStateSnapshot: false,
     pluginData: {},
     messageUiSpecs: [],
     pendingInteractionDrafts: [],

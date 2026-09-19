@@ -65,7 +65,11 @@ describe("plugin-data hydration session guard", () => {
       [{ key: "a", value: 1 }],
     );
     expect(dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "PLUGIN_DATA_CHANGED" }),
+      expect.objectContaining({
+        type: "REPLACE_PLUGIN_DATA_NAMESPACE",
+        namespace: "panel",
+        data: { a: 1 },
+      }),
     );
   });
 });

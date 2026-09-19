@@ -39,7 +39,7 @@ describe("encodeBase64Json", () => {
   });
 
   it("still matches plain btoa for ascii-only payloads", () => {
-    const value = { slotPresetOverrides: { default: "custom_1" } };
+    const value = { slotBindings: { default: { modelRef: "custom_1" } } };
 
     expect(encodeBase64Json(value)).toBe(btoa(JSON.stringify(value)));
   });

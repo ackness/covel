@@ -2,7 +2,11 @@ import i18n from "i18next";
 import * as api from "@/services/api";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import {
+  enrichGameStateFromSnapshot,
+  publishSessionGameState,
+} from "./game-state.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import { hydratePluginDataForUiSpecs } from "./plugin-data-hydration.js";
 import type { SessionDispatch } from "./types.js";
 
@@ -26,12 +30,15 @@ async function hydrateInitialSnapshot(
   isCurrent: () => boolean,
   dispatch: SessionDispatch,
 ): Promise<void> {
-  const snapshot = await api.getSessionView(sessionId);
-  if (!isCurrent()) return;
-
-  dispatch({
-    type: "SET_GAME_STATE",
-    state: enrichGameStateFromSnapshot(snapshot),
+  await refreshSessionResource(dispatch, ["game-state", sessionId, "start"], {
+    isCurrent,
+    read: () => api.getSessionView(sessionId),
+    apply: (snapshot) =>
+      publishSessionGameState(
+        dispatch,
+        sessionId,
+        enrichGameStateFromSnapshot(snapshot),
+      ),
   });
 }
 

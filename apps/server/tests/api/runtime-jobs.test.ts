@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
   createMemoryStore,
   createSqliteStore,
@@ -17,6 +18,7 @@ import {
   transitionRuntimeJob,
 } from "../../src/routes/api/plugin-rpc/jobs.js";
 import {
+  appendRuntimeJobStatus,
   createRuntimeJobWorker,
   makeRuntimeJobStatusRecord,
   type RuntimeJobExecutionControl,
@@ -81,9 +83,14 @@ describe.each([
   ["sqlite", () => createSqliteStore(":memory:")],
 ] as const)("durable runtime jobs (%s)", (_name, createStore) => {
   let store: DataStore;
+  let tryWithCommitLock: ReturnType<
+    typeof createInProcessSessionLock
+  >["tryWithLock"];
 
   beforeEach(async () => {
     store = createStore();
+    const lock = createInProcessSessionLock();
+    tryWithCommitLock = lock.tryWithLock.bind(lock);
     await store.createSession(session("session-a"));
     await store.createSession(session("session-b"));
   });
@@ -127,7 +134,12 @@ describe.each([
         control.completeInTx(tx, { ok: true }),
       );
     });
-    const worker = createRuntimeJobWorker({ store, eventBus, execute });
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus,
+      execute,
+    });
 
     worker.wake();
     await vi.waitFor(async () => {
@@ -155,12 +167,71 @@ describe.each([
     worker.close();
   });
 
+  it.each(["execution-failed", "SYNTHETIC_PRIVATE_REASON"])(
+    "publishes safe SSE diagnostics for reason %s while preserving job identities",
+    async (reason) => {
+      await createRuntimeJob(store, job());
+      const failure = new Error("Authorization: Bearer SYNTHETIC_NEVER_VALID");
+      const failed = await transitionRuntimeJob(store, {
+        ...job(),
+        from: ["queued"],
+        to: "failed",
+        reason,
+        error: failure.message,
+      });
+      const eventBus = createEventBus();
+      try {
+        expect(failed).not.toBeNull();
+        await appendRuntimeJobStatus(store, eventBus, failed!);
+        const events = eventBus.getEventsAfter("session-a", 0).events;
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+          type: "job-status.updated",
+          sessionId: "session-a",
+          payload: {
+            sessionId: "session-a",
+            progressScopeId: "job-a",
+            pluginId: "mimo-tts",
+            runtimeId: "mimo-tts/auto-narrate",
+            jobId: "job-a",
+            state: "failed",
+            message: "Runtime job execution failed.",
+            data: {
+              originTurnId: "source-turn",
+              durableStatus: "failed",
+              error: "Runtime job execution failed.",
+            },
+          },
+        });
+        const serialized = JSON.stringify(events);
+        expect(serialized).not.toContain(failure.message);
+        expect(serialized).not.toContain("SYNTHETIC_PRIVATE_REASON");
+        expect(events[0]!.payload.data).toEqual({
+          originTurnId: "source-turn",
+          durableStatus: "failed",
+          error: "Runtime job execution failed.",
+          ...(reason === "execution-failed" ? { reason } : {}),
+        });
+        expect(
+          (await store.listJobStatus("session-a", { jobId: "job-a" }))[0],
+        ).toEqual(events[0]!.payload);
+        await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+          reason,
+          error: failure.message,
+        });
+      } finally {
+        await eventBus.close();
+      }
+    },
+  );
+
   it("persists success with domain writes before the executor returns", async () => {
     await createRuntimeJob(store, job());
     const committed = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
     const eventBus = createEventBus();
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus,
       execute: async (_job, control) => {
@@ -187,7 +258,10 @@ describe.each([
         result: { generated: true },
       });
       await expect(
-        recoverExpiredRuntimeJobs(store, { now: "2099-01-01T00:00:00.000Z" }),
+        recoverExpiredRuntimeJobs(store, {
+          tryWithCommitLock,
+          now: "2099-01-01T00:00:00.000Z",
+        }),
       ).resolves.toEqual({ timedOut: 0, orphaned: 0 });
       expect(
         (await store.listJobStatus("session-a", { jobId: "job-a" })).at(-1)
@@ -195,6 +269,7 @@ describe.each([
       ).toBe("progress");
       const replay = vi.fn(async () => {});
       const replacement = createRuntimeJobWorker({
+        tryWithCommitLock,
         store,
         eventBus,
         execute: replay,
@@ -224,6 +299,7 @@ describe.each([
       await createRuntimeJob(store, job());
       const eventBus = createEventBus();
       const worker = createRuntimeJobWorker({
+        tryWithCommitLock,
         store,
         eventBus,
         execute: async (_job, control) => {
@@ -235,6 +311,7 @@ describe.each([
           }
           if (failure === "lease-loss") {
             await recoverExpiredRuntimeJobs(store, {
+              tryWithCommitLock,
               now: "2099-01-01T00:00:00.000Z",
             });
           }
@@ -313,7 +390,12 @@ describe.each([
             throw new Error("synthetic post-commit failure");
         },
       );
-      const worker = createRuntimeJobWorker({ store, eventBus, execute });
+      const worker = createRuntimeJobWorker({
+        tryWithCommitLock,
+        store,
+        eventBus,
+        execute,
+      });
       try {
         worker.wake();
         await vi.waitFor(async () => {
@@ -344,6 +426,7 @@ describe.each([
     await createRuntimeJob(store, job());
     const eventBus = createEventBus();
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus,
       execute: async (_job, control) => {
@@ -379,6 +462,7 @@ describe.each([
     const committed = vi.fn();
     const eventBus = createEventBus(store);
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus,
       execute: async (_runtimeJob, control) => {
@@ -426,6 +510,7 @@ describe.each([
     });
     const eventBus = createEventBus(store);
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus,
       execute,
@@ -475,6 +560,7 @@ describe.each([
     });
     let signal: AbortSignal | undefined;
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(),
       execute: async (_job, control) => {
@@ -517,6 +603,7 @@ describe.each([
       await store.withTransaction((tx) => control.completeInTx(tx));
     });
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(),
       execute,
@@ -544,6 +631,7 @@ describe.each([
     );
     const execute = vi.fn();
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(store),
       execute,
@@ -572,6 +660,7 @@ describe.each([
     });
     const started: string[] = [];
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(store),
       concurrency: 2,
@@ -627,30 +716,35 @@ describe.each([
 
   it("serializes repeated wakes while a claim is pending and cancels that claim on close", async () => {
     await createRuntimeJob(store, job());
-    const sessions = await store.listSessions();
     let release!: () => void;
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const list = vi
-      .spyOn(store, "listSessions")
-      .mockImplementationOnce(async () => {
-        await blocked;
-        return sessions;
+    const claim = vi.fn(async () => {
+      await blocked;
+    });
+    const compare = store.compareAndSetPluginData.bind(store);
+    const intercepted = vi
+      .spyOn(store, "compareAndSetPluginData")
+      .mockImplementation(async (record, revision) => {
+        if ((record.value as { status?: string }).status === "claimed")
+          await claim();
+        return compare(record, revision);
       });
     const execute = vi.fn();
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(),
       execute,
       concurrency: 1,
     });
     worker.wake();
-    await vi.waitFor(() => expect(list).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(claim).toHaveBeenCalledOnce());
     worker.wake();
     worker.wake();
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(list).toHaveBeenCalledOnce();
+    expect(claim).toHaveBeenCalledOnce();
     const closing = worker.close();
     release();
     await closing;
@@ -660,7 +754,7 @@ describe.each([
       status: "cancelled",
       reason: "worker-shutdown",
     });
-    list.mockRestore();
+    intercepted.mockRestore();
   });
 
   it("waits for an in-flight renewal before crossing the commit barrier", async () => {
@@ -686,6 +780,7 @@ describe.each([
         return swap(record, revision);
       });
     const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
       store,
       eventBus: createEventBus(),
       leaseMs: 90,
@@ -758,6 +853,7 @@ describe.each([
     try {
       await expect(
         recoverExpiredRuntimeJobs(store, {
+          tryWithCommitLock,
           now: "2026-09-03T00:00:02.000Z",
         }),
       ).resolves.toEqual({ timedOut: 0, orphaned: 0 });
@@ -822,6 +918,7 @@ describe.each([
 
     await expect(
       recoverExpiredRuntimeJobs(store, {
+        tryWithCommitLock,
         now: "2026-09-03T00:00:02.000Z",
       }),
     ).resolves.toEqual({ timedOut: 1, orphaned: 1 });

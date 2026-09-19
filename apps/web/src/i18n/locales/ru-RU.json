@@ -588,6 +588,8 @@
     "deleteConfirmAction": "Удалить"
   },
   "settings": {
+    "modelBindingMissing": "Выбранная модель недоступна. Выберите другую модель или сбросьте привязку роли.",
+    "resetModelBinding": "Сбросить привязку модели",
     "storageMode": "Хранение данных",
     "storageLocal": "Локальное",
     "storageRemote": "Удалённое",

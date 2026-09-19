@@ -86,3 +86,13 @@ Creation dialogs close only after persistence succeeds. Pending saves disable re
 Inline endpoint and model-name edits publish confirmed values only after persistence succeeds. Blur normalizes surrounding whitespace so a successful local save is not mistaken for an external edit. Persistence failure retains the editable draft.
 
 General settings import validates all selected ordinary keys before writing either channel. An invalid selected key rejects the batch instead of being skipped while dependent keys are saved. Ordinary settings and secrets still use separate persistence channels.
+
+Bindings preserve the `modelRef` / `presetId` namespace in storage, requests and
+UI selection. Equal names can identify different local and server models.
+Changing namespace clears model-specific reasoning overrides. The request field
+is `slotBindings`; local definitions must accompany references. Invalid routing
+shapes, duplicate or missing references reject before execution. The stored
+binding format is unchanged; no dual protocol supports old clients. Connectivity
+requests and their cache also distinguish local models, server presets and roles.
+
+Changing or resetting a model role saves its binding and dependent reasoning-parameter cleanup in one `setMany` operation. Role cards pause edits while saving and publish the confirmed selection after success; failure retains the previous configuration and reports the save error.

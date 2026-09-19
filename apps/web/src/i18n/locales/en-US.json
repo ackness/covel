@@ -586,6 +586,8 @@
     "deleteConfirmAction": "Delete"
   },
   "settings": {
+    "modelBindingMissing": "The selected model is unavailable. Choose another model or reset this role.",
+    "resetModelBinding": "Reset model binding",
     "storageMode": "Data Storage",
     "storageLocal": "Local",
     "storageRemote": "Remote",

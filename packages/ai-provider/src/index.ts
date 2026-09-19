@@ -135,7 +135,7 @@ export {
   applySlotOverlay,
   publicPresetId,
   resolveOverlayPresetId,
-  resolveSlotOverride,
+  resolveModelBinding,
   type OverlayDeps,
 } from "./slot-overlay.js";
 

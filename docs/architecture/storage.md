@@ -184,7 +184,24 @@ transitions. Status alone cannot establish order across tabs; a shared causal
 revision for competing observations of the same row remains outside this contract.
 History restoration retains persisted reasoning, tool identity and abort reason.
 
-Session restoration, subscription refresh and message/spec namespace hydration share in-flight resource ownership within each provider instance. New reads replace older reads of the same resource. Committed live events invalidate overlapping reads; an otherwise current read fetches again to retain fields absent from the event. Publishing an overlapping full/namespace read also invalidates the other pending observation. Completed reads release their entries; obsolete visits stop and network errors do not retry in a loop. This does not yet cover every independent panel seed or session-view publication path.
+Session restoration, subscription refresh, and message/right-panel hydration share
+in-flight resource ownership within each provider instance. The session provider
+owns plugin-data seeds; the right panel loads only localized display definitions.
+New reads replace older reads of the same resource. Committed events and snapshot
+publication invalidate overlapping pending observations. A current invalidated read
+fetches again; obsolete visits stop and network errors propagate without a retry
+loop. Plugin snapshots replace their namespaces, including deleted entries.
+
+Start, restore, reconnect, execution recovery, and interaction submission publish
+game state through the same ownership boundary. Committed state/character events
+received during recovery invalidate its pending snapshot; an event arriving after
+snapshot publication schedules one subsequent recovery. These signals are not
+buffered for replay. Terminal background-job notifications trigger their browser
+checkpoint immediately after session/visit validation, before any UI recovery
+buffering; restarting a display refresh cannot discard the required persistence.
+Initial history merges retain current messages with the same ID. Cached state patches fill initial state only before any authoritative snapshot
+has arrived; an empty authoritative snapshot still prevents deleted fields from
+being restored from the cache. Character increments update reducer state directly.
 
 Remote deletion invalidates the affected session/world epoch before and after the
 server request and reconciles cached owners against the server, including partial
@@ -218,7 +235,9 @@ Removing the session's submitted-block record remains the explicit reset path.
 
 State-change display history is an IndexedDB read-through cache, not a second
 authoritative game-state store. Appending one record reads and writes within one
-readwrite transaction; there is no per-service array cache to overwrite another
+readwrite transaction and deduplicates by event ID. State patches retain their
+`table.field` shape; live event identity uses `traceId` plus `seq`, with a UUID
+when a valid identity pair is unavailable. There is no per-service array cache to overwrite another
 tab's history or retain stale reads. LocalDataService snapshots each append and
 holds world/session ownership through the write, checking that the session still
 exists after admission. The same ownership and existence check applies to local
@@ -229,8 +248,8 @@ before releasing ownership. Cleanup failures do not undo domain deletion; they
 use the existing development warning path and can be retried by deleting again.
 Remote mode still uses browser form/timeline caches without this local-vault
 ownership guarantee; cross-device form state and remote cache cleanup are not
-provided by this mechanism. Timeline saves replace the display snapshot and do
-not merge concurrent tabs' distinct histories.
+provided by this mechanism. Both modes merge distinct timeline rows transactionally;
+competing observations of the same row still have no shared causal revision.
 
 App-KV writes and deletions resolve on transaction completion, not individual
 request success. An aborted transaction rejects even if its request succeeded.
@@ -364,3 +383,6 @@ and browser checkpoint validation use the same schema, including captured summar
 reference integrity. The snapshot builder captures JSON-serialized data, omitting
 undefined object properties without mutating live MemoryStore records. Checkpoint
 export validates stored fork ownership without repairing historical parent-scoped rows.
+
+Development caches containing the former flat state-patch shape must be recreated;
+no compatibility reader or cache migration is provided.

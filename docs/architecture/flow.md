@@ -174,7 +174,7 @@ flowchart LR
 
 `maxQueueMs` 从 `enqueuedAt` 限制 claim 等待，`maxExecutionMs` 从 running 限制后台控制面期限；它们不代替 runtime 的 `timeoutMs`。worker 默认最多并行 4 个不同 runtime，以 session round-robin 取队列，同一 `(session, plugin, runtime)` 只允许一个 active job。重启后，未过排队期限且从未 claim 的 `queued` 作业可以继续执行；排队超时会变为 `timed_out`，lease 已过期的在途作业会变为 `orphaned`，后两者不会自动 replay。玩家明确 retry 时创建新 jobId。
 
-worker 进入提交屏障前排空自身续租；`extraInTx` 在领域提交事务内完成 job 的成功 CAS。业务失败、完成 CAS 失败和事务末尾失败均回滚领域写入及 job 成功。成功事件在事务外发布；事件丢失可从已持久化终态补齐，不重跑任务。过期恢复仍为启动扫描，尚未提供持续租约恢复调度。
+worker 进入提交屏障前排空自身续租；`extraInTx` 在领域提交事务内完成 job 的成功 CAS。业务失败、完成 CAS 失败和事务末尾失败均回滚领域写入及 job 成功。成功事件在事务外发布；事件丢失可从已持久化终态补齐，不重跑任务。worker 首次唤醒及后续 30 秒维护间隔扫描过期租约，扫描失败 1 秒后重试；维护不受执行槽满影响。`committing` 任务须先非阻塞取得同一提交锁，锁忙时留待下一轮。关闭会停止后续调度并等待在途扫描及锁回调。
 
 首版 effect contract 只允许显式声明的 assets/media、本插件非保留 plugin-data、UI 和 HTTP 资源，实际 proposal 在提交前再验证一次。由于输入是来源回合快照而非 live state，涉及状态、角色、任务、记忆、交互、event、`recordAs` 或存在前台消费者的 runtime 会留在 foreground。`mimo-tts/auto-narrate` 是首个 opt-in。
 

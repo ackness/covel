@@ -50,6 +50,60 @@ beforeEach(async () => {
 });
 
 describe("useSlotConfig", () => {
+  it("does not advertise server defaults for an unresolved explicit local model", () => {
+    modelSettings.slotConfig = { story: { modelRef: "missing" } };
+    modelSettings.customPresets = [];
+    modelSettings.values.set("llm.slotConfig", modelSettings.slotConfig);
+    const server = {
+      ...preset("missing", "server", "server-model"),
+      enabled: true,
+      isDefault: true,
+      scope: "server",
+    };
+    const { result } = renderHook(() =>
+      useSlotConfig([server], {
+        configured: true,
+        providers: ["server"],
+        slots: {
+          story: {
+            provider: "server",
+            model: "server-model",
+            protocol: "openai-chat-v1",
+            tag: "text",
+            parameterOverrides: { reasoningEffort: "high" },
+          },
+        },
+      }),
+    );
+    expect(result.current.resolveSlot("story")).toBeNull();
+    const slot = result.current.resolvedSlots[0]!;
+    expect(effectiveSlotModel(slot)).toBeUndefined();
+    expect(slot.serverProvider).toBeUndefined();
+    expect(slot.reasoningEffort).toBeUndefined();
+    expect(result.current.slotConfig.story).toEqual({ modelRef: "missing" });
+  });
+
+  it("resolves same-named local and server choices using their explicit namespace", () => {
+    modelSettings.slotConfig = {
+      story: { modelRef: "shared" },
+      memory: { presetId: "shared" },
+    };
+    modelSettings.customPresets = [preset("shared", "local", "local-model")];
+    modelSettings.values.set("llm.slotConfig", modelSettings.slotConfig);
+    const server = {
+      ...preset("shared", "server", "server-model"),
+      enabled: true,
+      isDefault: true,
+      scope: "server",
+    };
+    const { result } = renderHook(() => useSlotConfig([server]));
+    expect(result.current.resolveSlot("story")?.model).toBe("local-model");
+    expect(result.current.resolveSlot("memory")?.model).toBe("server-model");
+    expect(
+      result.current.resolvedSlots.map((slot) => slot.preset?.model),
+    ).toEqual(["local-model", "server-model"]);
+  });
+
   it("labels shared model variants and reacts to role overrides without changing the API ID", () => {
     modelSettings.customPresets = [
       {
