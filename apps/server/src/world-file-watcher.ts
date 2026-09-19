@@ -6,6 +6,9 @@
  * Changes are debounced per world directory to handle multi-file writes.
  */
 
+import type { SessionLock } from "./lib/session-lock.js";
+import { isWorldDeleting, worldOperationLockId } from "./world-lifecycle.js";
+import { resolveContainedPath } from "./world-data/safe-path.js";
 import { watch, type FSWatcher } from "node:fs";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
@@ -15,7 +18,10 @@ import {
   loadSingleWorld,
   preserveWorldProvenance,
 } from "./world-seed-loader.js";
-import { resolveWorldRoot } from "./world-data/session-import/utils.js";
+import {
+  readWorldManifest,
+  resolveWorldRoot,
+} from "./world-data/session-import/utils.js";
 
 export interface WorldFileWatcher {
   start(): void;
@@ -36,6 +42,7 @@ export function createWorldFileWatcher(
   worldsDir: string,
   store: DataStore,
   eventBus: EventBus,
+  sessionLock: SessionLock,
   worldsDirs: readonly string[] = [worldsDir],
 ): WorldFileWatcher {
   let watcher: FSWatcher | null = null;
@@ -77,43 +84,55 @@ export function createWorldFileWatcher(
     const worldDir = path.join(worldsDir, directoryName);
 
     try {
-      const newRecord = await loadSingleWorld(worldDir);
-      if (!newRecord) return;
+      if (!(await resolveContainedPath(worldDir, "world.yaml"))) return;
+      const { id: worldId } = await readWorldManifest(worldDir);
+      if (!worldId) return;
+      const changedKeys = await sessionLock.withLock(
+        worldOperationLockId(worldId),
+        async () => {
+          const newRecord = await loadSingleWorld(worldDir);
+          if (!newRecord || newRecord.id !== worldId) return;
+          const activeRoot = await resolveWorldRoot(worldId, worldsDirs);
+          if (activeRoot !== (await realpath(worldDir))) return;
+          const existing = await store.getWorld(worldId);
+          if (!existing || isWorldDeleting(existing)) return;
 
-      const worldId = newRecord.id;
-      const activeRoot = await resolveWorldRoot(worldId, worldsDirs);
-      if (activeRoot !== (await realpath(worldDir))) return;
-      const existing = await store.getWorld(worldId);
-      if (!existing) return;
+          // Compare dimensions (serialized JSON comparison)
+          const oldDims = (
+            existing.metadata as Record<string, unknown> | undefined
+          )?.dimensions;
+          const newDims = (
+            newRecord.metadata as Record<string, unknown> | undefined
+          )?.dimensions;
+          const oldJson = JSON.stringify(oldDims ?? {});
+          const newJson = JSON.stringify(newDims ?? {});
 
-      // Compare dimensions (serialized JSON comparison)
-      const oldDims = (existing.metadata as Record<string, unknown> | undefined)
-        ?.dimensions;
-      const newDims = (
-        newRecord.metadata as Record<string, unknown> | undefined
-      )?.dimensions;
-      const oldJson = JSON.stringify(oldDims ?? {});
-      const newJson = JSON.stringify(newDims ?? {});
+          if (oldJson === newJson) return;
 
-      if (oldJson === newJson) return;
+          // Find which dimension keys changed
+          const oldMap = (oldDims ?? {}) as Record<string, unknown>;
+          const newMap = (newDims ?? {}) as Record<string, unknown>;
+          const allKeys = new Set([
+            ...Object.keys(oldMap),
+            ...Object.keys(newMap),
+          ]);
+          const changedKeys: string[] = [];
+          for (const key of allKeys) {
+            if (JSON.stringify(oldMap[key]) !== JSON.stringify(newMap[key])) {
+              changedKeys.push(key);
+            }
+          }
 
-      // Find which dimension keys changed
-      const oldMap = (oldDims ?? {}) as Record<string, unknown>;
-      const newMap = (newDims ?? {}) as Record<string, unknown>;
-      const allKeys = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
-      const changedKeys: string[] = [];
-      for (const key of allKeys) {
-        if (JSON.stringify(oldMap[key]) !== JSON.stringify(newMap[key])) {
-          changedKeys.push(key);
-        }
-      }
+          // Package reloads cannot change the world's storage ownership.
+          await store.upsertWorld({
+            ...preserveWorldProvenance(newRecord, existing),
+            updatedAt: new Date().toISOString(),
+          });
 
-      // Package reloads cannot change the world's storage ownership.
-      await store.upsertWorld({
-        ...preserveWorldProvenance(newRecord, existing),
-        updatedAt: new Date().toISOString(),
-      });
-
+          return changedKeys;
+        },
+      );
+      if (!changedKeys) return;
       console.log(
         `[world-watcher] ${worldId}: dimensions updated (${changedKeys.join(", ")})`,
       );

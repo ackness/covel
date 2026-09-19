@@ -11,6 +11,7 @@ import {
 } from "@covel/store";
 import {
   makeSession,
+  makeWorld,
   makeSnapshot,
   makeRuntimeExport,
 } from "../../../../packages/store/src/contract/test-fixtures.js";
@@ -75,6 +76,7 @@ describe.each(["memory", "sqlite"])(
           ? createSqliteStore(":memory:")
           : createMemoryStore();
       try {
+        await store.createWorld(makeWorld({ id: "world-1" }));
         await store.createSession(makeSession({ id: "parent" }));
         async function publish(threshold: number, sessionId = "parent") {
           const outcome = await finalizeExecution({

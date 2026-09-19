@@ -6,6 +6,7 @@
  * (generating → validating → saving) and receive the final WorldRecord.
  */
 
+import { worldOperationLockId } from "../../world-lifecycle.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -334,7 +335,13 @@ aiRoutes.post(
             : recordForStoreOnly(fileRecord, saveTarget);
         if (saveTarget !== "return-only") {
           shutdownSignal?.throwIfAborted();
-          if (!(await store.createWorld(record))) {
+          if (
+            !(await c
+              .get("sessionLock")
+              .withLock(worldOperationLockId(record.id), () =>
+                store.createWorld(record),
+              ))
+          ) {
             throw new Error(`World already exists: ${record.id}`);
           }
           activated = true;

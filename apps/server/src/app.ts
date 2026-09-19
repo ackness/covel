@@ -330,7 +330,7 @@ async function initializeServer(): Promise<void> {
       memoryIngestLock,
     }));
 
-    await seedAndReconcileWorlds(store, worldsDirs);
+    await seedAndReconcileWorlds(store, worldsDirs, sessionLock);
 
     // ── World file watcher (hot-reload) ─────────────────────────────
     for (const dir of worldsDirs) {
@@ -338,6 +338,7 @@ async function initializeServer(): Promise<void> {
         dir,
         store,
         api.eventBus,
+        sessionLock,
         worldsDirs,
       );
       resources.worldWatchers.push(watcher);

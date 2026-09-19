@@ -20,6 +20,7 @@
  * and lets either branch be deleted independently.
  */
 
+import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
@@ -27,6 +28,7 @@ import { collectMediaRefIds } from "@covel/shared";
 import { rebindSnapshotPayloadSession } from "@covel/store/session";
 import type {
   DataStore,
+  StoreTransaction,
   MediaStore,
   SnapshotRecord,
   CharacterRecord,
@@ -345,7 +347,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         // successfully-added refs below.
         const forkMediaIds: string[] = [];
         try {
-          forkSnapshot = await store.withTransaction!(async (tx) => {
+          const materializeChild = async (tx: StoreTransaction) => {
             // Restore lifecycle and runtime selection from the captured point.
             // `ended` is terminal with no un-end API, so a fork is resumable.
             await tx.createSession({
@@ -424,7 +426,10 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 if (!newId) return base;
                 const value =
                   base.value && typeof base.value === "object"
-                    ? { ...(base.value as Record<string, unknown>), id: newId }
+                    ? {
+                        ...(base.value as Record<string, unknown>),
+                        id: newId,
+                      }
                     : base.value;
                 return { ...base, key: newId, value };
               });
@@ -638,7 +643,13 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             };
             await tx.saveSnapshot(built);
             return built;
-          });
+          };
+          const createChild = () => store.withTransaction(materializeChild);
+          const result = parentSession.worldId
+            ? await withWritableWorld(c, parentSession.worldId, createChild)
+            : await createChild();
+          if (result instanceof Response) return result;
+          forkSnapshot = result;
         } catch (err) {
           if (mediaStore && forkMediaIds.length > 0) {
             await Promise.allSettled(

@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -80,9 +81,11 @@ function createTestApp(
   llm: LLMAdapter = new FixedLlm(),
 ): Hono<Env> {
   const app = new Hono<Env>();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("llmAdapter", llm);
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     c.set("storeBackend", "memory");
     await next();
   });

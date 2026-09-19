@@ -262,18 +262,26 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                   | 描述                                                                                                                                                                        |
-| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                          | 列出所有世界                                                                                                                                                                |
-| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                                                                                                |
-| POST   | `/api/worlds`                          | 创建/更新世界                                                                                                                                                               |
-| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                             |
-| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
-| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                                                                                                   |
-| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                                                                                                |
-| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                            |
-| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                  |
-| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                            |
+| 方法   | 路径                                   | 描述                                                                                                                                                                                    |
+| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                          | 列出所有世界                                                                                                                                                                            |
+| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                                                                                                            |
+| POST   | `/api/worlds`                          | 创建世界；已有 ID 返回 `409 world_already_exists`                                                                                                                                       |
+| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                                         |
+| DELETE | `/api/worlds/:id`                      | 删除世界及其全部会话（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                                                                                                               |
+| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                                                                                                            |
+| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                                        |
+| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                              |
+| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
+
+服务端删除世界先在短世界锁内记录删除状态，释放世界锁后逐个执行完整的会话删除流程，包括等待执行写入、生命周期钩子、媒体引用与进程内状态清理，最后删除世界记录和对应文件包。底层 `DataStore.deleteWorld` 仍只删除世界记录；需要级联清理的调用必须经过 API 生命周期流程。
+
+删除中的世界仍可读取；世界 PATCH、维度导入、会话创建、fork 和 browser checkpoint 写入返回 `409 world_deleting`。checkpoint 同时检查原世界与目标世界，启动加载与文件监听也不会覆盖删除状态或用等待锁前的旧读取结果重建已删除文件世界。`metadata.worldDeletion` 由服务端管理，客户端不能通过世界写入或 checkpoint 设置、清除该字段。
+
+服务端创建、fork 和 checkpoint 写入按“会话锁 → 世界锁”提交；世界 DELETE 不持有世界锁等待会话锁、后台执行或插件钩子。后文浏览器私有模式的 Web Locks 是独立的客户端协议，使用自己的锁顺序。
+
+级联删除不是跨全部会话的一次数据库事务。部分清理失败时已删除的会话不恢复，世界保留可重试标记；再次 DELETE 继续清理，普通失败重试不会重复已完成的 SessionEnd。运行中的 SessionStart 等生命周期钩子可使删除返回 `409 session_lifecycle_busy`。进程中断遗留的删除租约可在 10 分钟后由后续 DELETE 接管。
 
 ### 会话管理
 
@@ -1119,7 +1127,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 | 字段           | 类型     | 必填 | 说明                                                                                                  |
 | -------------- | -------- | ---- | ----------------------------------------------------------------------------------------------------- |
-| `worldId`      | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                                        |
+| `worldId`      | string   | 否   | 已存在且未进入删除流程的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                      |
 | `presetId`     | string   | 否   | 会话模型预设 ID；创建与后续 PATCH 使用同一字段                                                        |
 | `locale`       | string   | 否   | 语言区域，默认 `zh-CN`                                                                                |
 | `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                                  |
@@ -1135,6 +1143,8 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 客户端自定义 `id` 已存在时返回
 `409 { "error": "Session already exists: <id>", "code": "session_already_exists" }`。
 创建操作不会覆盖原会话，也不会把原会话的子记录解释为新会话数据。
+
+提供 `worldId` 时，世界不存在返回 `404 world_not_found`，世界删除中返回 `409 world_deleting`。服务端在资源准备前及会话提交时分别检查，提交前世界被删除会释放本次准备的媒体引用。省略 `worldId` 的无世界会话仍可创建。
 
 世界包字段会影响准备页和 session 初始化：
 
@@ -2630,6 +2640,8 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 返回 `201 Created`；快照不属于该 session、快照不存在、或父 session 不存在均返回 `404`；`fromSnapshotId` 缺失返回 `400`；`payload.messagesCursor` 指向的消息已不在父 session 中返回 `409 { code: 'cursor_missing' }`；内部写入失败返回 `500`。
 
 整个 fork 在父 session 执行锁内读取来源数据，并在 `withTransaction` 下写入；中途任何失败都会 rollback，不会留下半成品子 session。与手动快照一样，PG 部署下锁获取超时返回 `503 { code: 'session_busy' }`。
+
+关联世界的 fork 在提交前检查世界仍存在且未删除，分别以 `404 world_not_found` 或 `409 world_deleting` 拒绝无效分叉；无世界会话仍可 fork。
 
 ---
 

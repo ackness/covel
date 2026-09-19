@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import path from "node:path";
@@ -11,6 +12,7 @@ const fixtures = vi.hoisted(() => ({
 vi.mock("node:fs", () => ({ watch: fixtures.watch }));
 vi.mock("node:fs/promises", () => ({
   realpath: async (value: string) => value,
+  lstat: async () => ({ isSymbolicLink: () => false }),
 }));
 vi.mock("../../src/world-seed-loader.js", () => ({
   loadSingleWorld: fixtures.load,
@@ -18,6 +20,7 @@ vi.mock("../../src/world-seed-loader.js", () => ({
 }));
 vi.mock("../../src/world-data/session-import/utils.js", () => ({
   resolveWorldRoot: async () => fixtures.worldRoot,
+  readWorldManifest: async () => ({ id: "world" }),
 }));
 
 import { createWorldFileWatcher } from "../../src/world-file-watcher.js";
@@ -59,9 +62,15 @@ it("serializes reloads and drains accepted work before releasing dependencies", 
     upsertWorld: write,
     listSessions: async () => [],
   } as unknown as DataStore;
-  const watcher = createWorldFileWatcher(root, store, {
-    emit: vi.fn(),
-  } as unknown as EventBus);
+  const sessionLock = createInProcessSessionLock();
+  const watcher = createWorldFileWatcher(
+    root,
+    store,
+    {
+      emit: vi.fn(),
+    } as unknown as EventBus,
+    sessionLock,
+  );
   watcher.start();
   change("change", path.join("world", "tone.yaml"));
   await vi.advanceTimersByTimeAsync(500);

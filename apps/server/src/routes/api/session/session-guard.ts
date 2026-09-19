@@ -411,8 +411,16 @@ export async function resolveSessionParam(
   c: Context,
   paramName: "id" | "sessionId" = "id",
 ): Promise<ResolveResult> {
-  const store = c.get("store");
   const sessionId = c.req.param(paramName) ?? "";
+  return resolveSessionById(c, sessionId);
+}
+
+/** Resolve an explicit id with the same authorization and read barrier as routes. */
+export async function resolveSessionById(
+  c: Context,
+  sessionId: string,
+): Promise<ResolveResult> {
+  const store = c.get("store");
   const session = await store.getSession(sessionId);
   if (!session) {
     return {

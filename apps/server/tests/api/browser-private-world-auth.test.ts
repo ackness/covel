@@ -1,3 +1,5 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { createPluginRegistry } from "@covel/plugin-loader";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -97,10 +99,14 @@ describe("browser-private shared world authorization", () => {
     const generate = vi
       .fn<LLMAdapter["generate"]>()
       .mockRejectedValue(new Error("Unauthorized generation reached the LLM"));
+    const sessionLock = createInProcessSessionLock();
+    const registry = createPluginRegistry();
     const app = new Hono();
     const eventBus = createEventBus();
     app.use("*", async (c, next) => {
       c.set("store", store);
+      c.set("sessionLock", sessionLock);
+      c.set("pluginRegistry", registry);
       c.set("storeBackend", backend);
       c.set("eventBus", eventBus);
       c.set("worldsDirs", [worldsDir]);

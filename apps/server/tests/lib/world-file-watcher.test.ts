@@ -1,3 +1,5 @@
+import { createPluginRegistry } from "@covel/plugin-loader";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -17,9 +19,10 @@ it.each(["fixture-world", "physical-folder"])(
     const worldDir = path.join(root, directoryName);
     const dimensionsDir = path.join(worldDir, "dimensions");
     const store = createMemoryStore();
+    const sessionLock = createInProcessSessionLock();
     const bus = createEventBus(store);
     const emit = vi.spyOn(bus, "emit");
-    const watcher = createWorldFileWatcher(root, store, bus);
+    const watcher = createWorldFileWatcher(root, store, bus, sessionLock);
     try {
       await mkdir(dimensionsDir, { recursive: true });
       await writeFile(
@@ -110,15 +113,18 @@ dimensionSources:
       if (decoy)
         expect(await store.getWorld(directoryName)).toEqual(decoyBefore);
       // Boot-time seeding must preserve the same provenance as hot reload.
-      await seedWorlds(store, root);
+      await seedWorlds(store, root, sessionLock);
       expect(await store.getWorld("fixture-world")).toMatchObject({
         createdAt: record!.createdAt,
         metadata: { source: "generated-file", storage },
       });
       if (directoryName === "fixture-world") {
         const app = new Hono<WorldEnv>();
+        const registry = createPluginRegistry();
         app.use("*", async (c, next) => {
           c.set("store", store);
+          c.set("sessionLock", sessionLock);
+          c.set("pluginRegistry", registry);
           c.set("worldsDirs", [root]);
           await next();
         });

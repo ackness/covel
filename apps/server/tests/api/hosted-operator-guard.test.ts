@@ -1,3 +1,5 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { createPluginRegistry } from "@covel/plugin-loader";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
@@ -20,10 +22,14 @@ afterEach(() => {
 });
 
 function createApp(store: DataStore): Hono {
+  const sessionLock = createInProcessSessionLock();
+  const registry = createPluginRegistry();
   const app = new Hono();
   const eventBus = createEventBus(store);
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
+    c.set("pluginRegistry", registry);
     c.set("eventBus", eventBus);
     c.set("worldsDirs", []);
     await next();

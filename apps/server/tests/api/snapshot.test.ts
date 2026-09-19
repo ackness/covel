@@ -69,6 +69,12 @@ async function createSession(
   id = "sess-1",
   worldId = "test-world",
 ) {
+  await store.createWorld({
+    id: worldId,
+    name: "Snapshot world",
+    description: "Synthetic world",
+    createdAt: new Date().toISOString(),
+  });
   await store.createSession({
     phase: "playing",
     setupRuntimes: {},

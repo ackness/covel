@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -15,9 +16,10 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
     path.join(roots[1]!, "renamed-package"),
   ];
   const store = createMemoryStore();
+  const sessionLock = createInProcessSessionLock();
   const bus = createEventBus(store);
   const watchers = roots.map((dir) =>
-    createWorldFileWatcher(dir, store, bus, roots),
+    createWorldFileWatcher(dir, store, bus, sessionLock, roots),
   );
   const update = (dir: string, genre: string) =>
     writeFile(
@@ -35,7 +37,7 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
       );
       await update(dir, index === 0 ? "mystery" : "fantasy");
     }
-    await seedAndReconcileWorlds(store, roots);
+    await seedAndReconcileWorlds(store, roots, sessionLock);
     const before = await store.getWorld("shared-world");
     expect(before?.metadata?.dimensions).toMatchObject({
       tone: { genres: ["fantasy"] },

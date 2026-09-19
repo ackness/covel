@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 /**
  * Install route tests — drag-and-drop plugin + world package import.
  *
@@ -40,8 +41,10 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 function createTestApp(store = createMemoryStore()): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     c.set("worldsDirs", [worldsDir]);
     await next();
   });

@@ -100,8 +100,15 @@ describe("Session Routes", () => {
   let store: DataStore;
   let pluginRegistry: PluginRegistry;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     store = createMemoryStore();
+    for (const id of ["cloudmere", "testworld", "mistport"])
+      await store.createWorld({
+        id,
+        name: id,
+        description: "Synthetic world",
+        createdAt: new Date().toISOString(),
+      });
     pluginRegistry = createPluginRegistry();
     app = createTestApp({ store, pluginRegistry });
   });

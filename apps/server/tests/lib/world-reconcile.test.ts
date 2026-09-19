@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -61,12 +62,14 @@ async function listWorldIds(store: DataStore): Promise<string[]> {
 describe("reconcileSeededWorlds", () => {
   it("removes a file-seeded world that is gone from every package and has no sessions", async () => {
     const store = createMemoryStore();
+    const sessionLock = createInProcessSessionLock();
     await addWorld(store, "mistport", "file");
     await addWorld(store, "cloudmere", "file"); // archived, no sessions
 
     const result = await reconcileSeededWorlds(
       store,
       new Set(["mistport"]), // cloudmere no longer seeded
+      sessionLock,
     );
 
     expect(result.removed).toEqual(["cloudmere"]);
@@ -76,12 +79,14 @@ describe("reconcileSeededWorlds", () => {
 
   it("keeps worlds that are still present in the live set", async () => {
     const store = createMemoryStore();
+    const sessionLock = createInProcessSessionLock();
     await addWorld(store, "mistport", "file");
     await addWorld(store, "haruka-academy", "file");
 
     const result = await reconcileSeededWorlds(
       store,
       new Set(["mistport", "haruka-academy"]),
+      sessionLock,
     );
 
     expect(result.removed).toEqual([]);
@@ -90,11 +95,16 @@ describe("reconcileSeededWorlds", () => {
 
   it("never touches AI-generated worlds even when absent from the live set", async () => {
     const store = createMemoryStore();
+    const sessionLock = createInProcessSessionLock();
     await addWorld(store, "mistport", "file");
     await addWorld(store, "my-generated", "generated"); // DB-only, no files
     await addWorld(store, "saved-gen", "generated-file"); // file removed by user
 
-    const result = await reconcileSeededWorlds(store, new Set(["mistport"]));
+    const result = await reconcileSeededWorlds(
+      store,
+      new Set(["mistport"]),
+      sessionLock,
+    );
 
     expect(result.removed).toEqual([]);
     expect(await listWorldIds(store)).toEqual([
@@ -106,11 +116,16 @@ describe("reconcileSeededWorlds", () => {
 
   it("keeps a stale world that still has saved sessions instead of deleting saves", async () => {
     const store = createMemoryStore();
+    const sessionLock = createInProcessSessionLock();
     await addWorld(store, "mistport", "file");
     await addWorld(store, "cloudmere", "file");
     await addSession(store, "sess-1", "cloudmere"); // player has a save here
 
-    const result = await reconcileSeededWorlds(store, new Set(["mistport"]));
+    const result = await reconcileSeededWorlds(
+      store,
+      new Set(["mistport"]),
+      sessionLock,
+    );
 
     expect(result.removed).toEqual([]);
     expect(result.keptWithSessions).toEqual(["cloudmere"]);
@@ -140,7 +155,9 @@ supportedLocales: [zh-CN]
     await make("beta");
 
     const store = createMemoryStore();
-    const result = await seedWorlds(store, root);
+
+    const sessionLock = createInProcessSessionLock();
+    const result = await seedWorlds(store, root, sessionLock);
 
     expect([...result.worldIds].sort()).toEqual(["alpha", "beta"]);
     expect(result.complete).toBe(true);

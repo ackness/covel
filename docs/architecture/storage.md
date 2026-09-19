@@ -48,6 +48,31 @@ jobs and durable staged jobs also have different restart guarantees. The
 [API deployment capability matrix](../reference/api.md#多实例能力边界) records
 these limits; selecting PostgreSQL does not provide transparent execution failover.
 
+## Server World and Session Deletion
+
+The world DELETE API owns cascade orchestration. It claims a persisted deletion
+lease under a short `world:<id>` lock, releases that lock, and deletes each save
+through the same lifecycle path as session DELETE. That path drains writers and
+background work, runs SessionEnd, releases media references, and clears transient
+session state. The world record and generated package are removed only after no
+sessions remain. Raw `DataStore.deleteWorld` only removes the world record.
+
+Session creation, forks, and checkpoint replacement commit under session locks
+followed by world locks. World deletion never holds a world lock while waiting
+for a session or running hooks. World edits, new sessions, forks, and checkpoint
+replacement reject worlds marked for deletion; seed and file reload also honor
+the marker and re-read disk content after acquiring the lock. All server paths
+use the backend-selected `SessionLock`, including PostgreSQL advisory locks.
+
+The cascade is not one transaction across every session. Failed cleanup preserves
+the world with a retryable marker; another DELETE resumes remaining work. A stale
+lease can be reclaimed after ten minutes. Clients cannot set or clear the reserved
+`metadata.worldDeletion` field. Session creation and fork require an existing,
+non-deleting world when a world ID is supplied; worldless sessions remain valid.
+
+Browser Web Locks below coordinate a separate client-owned workspace. Remote
+browser display caches remain the frontend's responsibility.
+
 ## Browser-Private Protocol
 
 The browser is authoritative in local mode. The server may read API keys from

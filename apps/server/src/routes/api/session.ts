@@ -13,6 +13,7 @@
  *   DELETE /api/sessions/:id/plugins/:pluginId — disable a plugin
  */
 
+import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { isSetupRuntime, readRuntimeEnv } from "@covel/shared";
@@ -237,6 +238,15 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
+  if (rawWorldId) {
+    const worldAccess = await withWritableWorld(
+      c,
+      rawWorldId,
+      async () => undefined,
+    );
+    if (worldAccess instanceof Response) return worldAccess;
+  }
+
   // Owner token: minted on every tier so a session created
   // locally keeps working if the deployment is later promoted to a hosted
   // tier. Only the hash is persisted; the raw token is returned once below.
@@ -315,7 +325,9 @@ sessionRoutes.post("/", async (c) => {
   // update atomic with delete/recreate. Plugin hooks run after releasing this
   // main lock: hook code may call back through the HTTP API and must be able to
   // acquire the session lock without deadlocking.
-  const created = await sessionLock.withLock(id, async () => {
+  let creationStarted = false;
+  const commitCreation = async () => {
+    creationStarted = true;
     // Scoped transaction: createSession + world-data import + blueprint
     // fallback commit atomically. Writes flow through the tx-bound view (`tx`),
     // so a mid-import failure auto-rolls-back the session row — and on
@@ -402,8 +414,30 @@ sessionRoutes.post("/", async (c) => {
       );
       return { runStartHook: false };
     }
-  });
-  if (created instanceof Response) return created;
+  };
+  let created: Awaited<ReturnType<typeof commitCreation>> | Response;
+  try {
+    created = await sessionLock.withLock(id, () =>
+      rawWorldId
+        ? withWritableWorld(c, rawWorldId, commitCreation)
+        : commitCreation(),
+    );
+  } catch (error) {
+    if (!creationStarted)
+      await cleanupWorldDataMediaRefs({
+        mediaStore: c.get("mediaStore"),
+        refs: preparedMediaRefs,
+      });
+    throw error;
+  }
+  if (created instanceof Response) {
+    if (!creationStarted)
+      await cleanupWorldDataMediaRefs({
+        mediaStore: c.get("mediaStore"),
+        refs: preparedMediaRefs,
+      });
+    return created;
+  }
 
   const expectedIncarnation = sessionIncarnationIdentity(session);
   if (created.runStartHook) {

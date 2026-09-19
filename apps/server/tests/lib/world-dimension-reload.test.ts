@@ -1,3 +1,4 @@
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -40,10 +41,11 @@ it.each(["yaml", "schema", "missing", "unreadable"])(
     const manifestFile = path.join(worldDir, "world.yaml");
     const toneFile = path.join(worldDir, "tone.yaml");
     const store = createMemoryStore();
+    const sessionLock = createInProcessSessionLock();
     const bus = createEventBus(store);
     const emit = vi.spyOn(bus, "emit");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const watcher = createWorldFileWatcher(root, store, bus);
+    const watcher = createWorldFileWatcher(root, store, bus, sessionLock);
     try {
       await mkdir(worldDir);
       const manifest = `schemaVersion: "1.0"
@@ -65,7 +67,7 @@ dimensionSources:
         "genres: [mystery]\ncontentRating: teen\n",
         "utf8",
       );
-      await seedWorlds(store, root);
+      await seedWorlds(store, root, sessionLock);
       const before = (await store.getWorld("fixture-world"))!;
       expect(before).toMatchObject({
         metadata: { dimensions: { tone: { genres: ["mystery"] } } },
@@ -92,7 +94,7 @@ dimensionSources:
         timeout: 5000,
       });
       expect(await loadSingleWorld(worldDir)).toBeNull();
-      await seedAndReconcileWorlds(store, [root]);
+      await seedAndReconcileWorlds(store, [root], sessionLock);
       expect(await store.getWorld("fixture-world")).toEqual(before);
       expect(await store.getWorld("absent-package")).not.toBeNull();
       expect(emit).not.toHaveBeenCalled();
@@ -115,7 +117,7 @@ dimensionSources:
         },
         { timeout: 5000 },
       );
-      await seedAndReconcileWorlds(store, [root]);
+      await seedAndReconcileWorlds(store, [root], sessionLock);
       expect(await store.getWorld("absent-package")).toBeNull();
     } finally {
       await watcher.stop();
