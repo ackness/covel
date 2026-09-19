@@ -80,7 +80,7 @@ export type {
   EvaluationParams,
   EvaluationResult,
 } from "./evaluation/types.js";
-export { createTypeSafeSystemOneAdapter } from "./adapters/typesafe-systemone.js";
+export { createEvaluationAdapter } from "./adapters/evaluation.js";
 
 // Adapters
 export type { ModelProviderAdapter } from "./adapters/adapter.js";

@@ -151,7 +151,17 @@ export function ProviderDetails({
             <ProviderModelRow
               key={model.ref}
               provider={provider.provider}
-              protocol={localProfile.protocol ?? provider.protocol}
+              protocol={
+                model.protocol ?? localProfile.protocol ?? provider.protocol
+              }
+              modelProtocol={model.protocol}
+              onProtocolChange={(protocol) =>
+                onPatchLocalProfile({
+                  models: localProfile.models.map((entry) =>
+                    entry.ref === model.ref ? { ...entry, protocol } : entry,
+                  ),
+                })
+              }
               modelId={model.modelId}
               name={model.name}
               presetId={model.ref}
@@ -192,6 +202,8 @@ export function ProviderDetails({
 function ProviderModelRow({
   provider,
   protocol,
+  modelProtocol,
+  onProtocolChange,
   modelId,
   name,
   presetId,
@@ -205,6 +217,8 @@ function ProviderModelRow({
 }: {
   provider: string;
   protocol: string;
+  modelProtocol?: string;
+  onProtocolChange?: (value: string | undefined) => void;
   modelId: string;
   name?: string;
   presetId: string;
@@ -271,6 +285,16 @@ function ProviderModelRow({
           </Button>
         )}
       </div>
+      {onProtocolChange && (
+        <label className="block space-y-1 text-xs">
+          <span>{t("settings.protocol")}</span>
+          <ProtocolSelect
+            value={modelProtocol ?? ""}
+            onChange={(value) => onProtocolChange(value || undefined)}
+            inheritLabel={t("settings.inheritProviderProtocol")}
+          />
+        </label>
+      )}
       {onReasoningChange && (
         <details className="rounded border border-border p-2">
           <summary className="cursor-pointer text-xs text-muted-foreground">
@@ -359,6 +383,9 @@ function ModelCapabilitySummary({
                 defaultValue: "Model limits unknown",
               })}
       </span>
+      {capability?.output.includes("evaluation") && (
+        <span>{t("settings.modalOutEvaluation")}</span>
+      )}
       {supportsImage && (
         <span>{t("settings.modalInImage", "Image input")}</span>
       )}

@@ -32,6 +32,8 @@ export const PROVIDER_PROTOCOLS = [
   "openai-responses-v1",
   "anthropic-messages-v1",
   "typesafe-systemone-v1",
+  "openrouter-decisions-v1",
+  "vercel-evaluation-v4",
 ] as const;
 
 export type ProviderProtocol = (typeof PROVIDER_PROTOCOLS)[number];

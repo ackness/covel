@@ -61,6 +61,7 @@ export function LlmPresetsPane() {
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [providerDraft, setProviderDraft] =
     useState<ProviderDraft>(EMPTY_PROVIDER_DRAFT);
+  const [modelProtocolDraft, setModelProtocolDraft] = useState("");
   const [modelIdsDraft, setModelIdsDraft] = useState("");
   const [modelReasoningDraft, setModelReasoningDraft] = useState<
     Record<string, ReasoningEffort | undefined>
@@ -140,6 +141,7 @@ export function LlmPresetsPane() {
     provider: Pick<ProviderCatalogEntry, "id" | "baseUrl" | "protocol">,
     rawIds: string,
     reasoningDefaults: Record<string, ReasoningEffort | undefined> = {},
+    modelProtocol?: string,
   ):
     { profiles: ProviderModelProfile[]; firstModelRef: string } | undefined => {
     const providerId = normalizeProviderId(provider.id);
@@ -153,6 +155,7 @@ export function LlmPresetsPane() {
         providerId,
         baseUrl: provider.baseUrl,
         protocol: provider.protocol,
+        modelProtocol,
         modelId,
         reasoningEffort: reasoningDefaults[modelId],
       });
@@ -173,9 +176,7 @@ export function LlmPresetsPane() {
     const baseUrl =
       providerDraft.baseUrl.trim() || knownConnection?.baseUrl || "";
     const protocol =
-      providerDraft.baseUrl.trim() || !knownConnection
-        ? providerDraft.protocol
-        : knownConnection.protocol;
+      providerDraft.protocol || knownConnection?.protocol || "openai-chat-v1";
     const prepared = prepareModels(
       {
         id: providerId,
@@ -190,7 +191,13 @@ export function LlmPresetsPane() {
     const nextSlots = bindFirstProviderModel(
       currentSlots,
       profiles,
-      prepared.firstModelRef,
+      [
+        "openai-chat-v1",
+        "openai-responses-v1",
+        "anthropic-messages-v1",
+      ].includes(protocol)
+        ? prepared.firstModelRef
+        : undefined,
       state.presets,
       Object.keys(state.llmConfig?.slots ?? {}),
     );
@@ -207,9 +214,11 @@ export function LlmPresetsPane() {
       selectedProvider,
       modelIdsDraft,
       modelReasoningDraft,
+      modelProtocolDraft || undefined,
     );
     if (!prepared || !(await commit(prepared.profiles))) return;
     setModelReasoningDraft({});
+    setModelProtocolDraft("");
     setModelIdsDraft("");
     setModelDialogOpen(false);
   };
@@ -245,6 +254,7 @@ export function LlmPresetsPane() {
       protocol: selectedProvider.protocol,
       modelId: model.modelId,
       modelName: name,
+      modelProtocol: model.protocol,
       reasoningEffort: model.reasoningEffort,
     });
     void commit(result.profiles);
@@ -449,6 +459,8 @@ export function LlmPresetsPane() {
           error={saveError}
           providerId={selectedProvider.id}
           protocol={selectedProvider.protocol}
+          modelProtocol={modelProtocolDraft}
+          onProtocolChange={setModelProtocolDraft}
           reasoningDefaults={modelReasoningDraft}
           onReasoningChange={setModelReasoningDraft}
           value={modelIdsDraft}

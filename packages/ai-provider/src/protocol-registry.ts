@@ -12,7 +12,7 @@
  * entry for a new `ProviderProtocol` member is a *compile error*.
  */
 
-import { createTypeSafeSystemOneAdapter } from "./adapters/typesafe-systemone.js";
+import { createEvaluationAdapter } from "./adapters/evaluation.js";
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
 import { createOpenAiChatAdapter } from "./adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "./adapters/openai-responses.js";
@@ -63,7 +63,25 @@ export const BASE_CAPABILITY_DEFAULTS: ModelCapability = {
  */
 const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
   "typesafe-systemone-v1": {
-    createAdapter: createTypeSafeSystemOneAdapter,
+    createAdapter: () => createEvaluationAdapter("typesafe-systemone-v1"),
+    cacheStrategy: "none",
+    capabilityDefaults: {
+      input: ["text"],
+      output: ["evaluation"],
+      features: [],
+    },
+  },
+  "openrouter-decisions-v1": {
+    createAdapter: () => createEvaluationAdapter("openrouter-decisions-v1"),
+    cacheStrategy: "none",
+    capabilityDefaults: {
+      input: ["text"],
+      output: ["evaluation"],
+      features: [],
+    },
+  },
+  "vercel-evaluation-v4": {
+    createAdapter: () => createEvaluationAdapter("vercel-evaluation-v4"),
     cacheStrategy: "none",
     capabilityDefaults: {
       input: ["text"],

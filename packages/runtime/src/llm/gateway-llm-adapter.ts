@@ -52,7 +52,9 @@ export interface SlotOverridesInput {
       | "openai-chat-v1"
       | "openai-responses-v1"
       | "anthropic-messages-v1"
-      | "typesafe-systemone-v1";
+      | "typesafe-systemone-v1"
+      | "openrouter-decisions-v1"
+      | "vercel-evaluation-v4";
   }>;
   capabilityOverrides?: Record<
     string,

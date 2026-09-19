@@ -45,9 +45,9 @@ export type EvaluationAnswer<
     ? {
         type: "choice";
         choice: keyof C & string;
-        probabilities: Record<keyof C & string, number>;
+        probabilities?: Record<keyof C & string, number>;
       }
-    : { type: "score"; score: number; probabilities: Record<string, number> };
+    : { type: "score"; score: number; probabilities?: Record<string, number> };
 
 export interface EvaluationParams<
   Q extends EvaluationQuestions = EvaluationQuestions,

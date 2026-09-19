@@ -4,7 +4,7 @@ import {
   createPresetRegistry,
   createProviderRegistry,
   createSlotRegistry,
-  createTypeSafeSystemOneAdapter,
+  createEvaluationAdapter,
   parseLlmConfig,
   resolveCapability,
   type EvaluationParams,
@@ -80,10 +80,8 @@ describe("native TypeSafe System One protocol", () => {
     "maps typed questions, preserves probabilities and the actual model via %s",
     async (baseUrl) => {
       const fetchMock = mockResponse();
-      const result = await createTypeSafeSystemOneAdapter().evaluate!(
-        { ...config, baseUrl },
-        params,
-      );
+      const result = await createEvaluationAdapter("typesafe-systemone-v1")
+        .evaluate!({ ...config, baseUrl }, params);
       expect(fetchMock).toHaveBeenCalledWith(
         "https://api.typesafe.ai/v1/systemone",
         expect.objectContaining({ method: "POST", redirect: "manual" }),
@@ -144,7 +142,7 @@ describe("native TypeSafe System One protocol", () => {
     async (invalidQuestions) => {
       const fetchMock = mockResponse();
       await expect(
-        createTypeSafeSystemOneAdapter().evaluate!(config, {
+        createEvaluationAdapter("typesafe-systemone-v1").evaluate!(config, {
           ...params,
           questions: invalidQuestions,
         } as unknown as EvaluationParams),
@@ -184,14 +182,20 @@ describe("native TypeSafe System One protocol", () => {
     mutate(body);
     mockResponse(body);
     await expect(
-      createTypeSafeSystemOneAdapter().evaluate!(config, params),
+      createEvaluationAdapter("typesafe-systemone-v1").evaluate!(
+        config,
+        params,
+      ),
     ).rejects.toMatchObject({ code: "SCHEMA_VALIDATION_FAILED" });
   });
 
   it("uses the requested ID and empty usage when optional metadata is absent", async () => {
     mockResponse({ answers: responseBody().answers });
     expect(
-      await createTypeSafeSystemOneAdapter().evaluate!(config, params),
+      await createEvaluationAdapter("typesafe-systemone-v1").evaluate!(
+        config,
+        params,
+      ),
     ).toMatchObject({
       model: "jev-latest",
       usage: { inputTokens: 0, outputTokens: 0 },
@@ -207,7 +211,10 @@ describe("native TypeSafe System One protocol", () => {
         .mockResolvedValue(new Response("upstream error", { status }));
       vi.stubGlobal("fetch", fetchMock);
       await expect(
-        createTypeSafeSystemOneAdapter().evaluate!(config, params),
+        createEvaluationAdapter("typesafe-systemone-v1").evaluate!(
+          config,
+          params,
+        ),
       ).rejects.toMatchObject({
         statusCode: status,
         code: status === 429 ? "RATE_LIMITED" : "PROVIDER_ERROR",
@@ -222,7 +229,10 @@ describe("native TypeSafe System One protocol", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(null, { status: 529, headers: { "retry-after": "1" } }),
     );
-    const pending = createTypeSafeSystemOneAdapter().evaluate!(config, params);
+    const pending = createEvaluationAdapter("typesafe-systemone-v1").evaluate!(
+      config,
+      params,
+    );
     await vi.runAllTimersAsync();
     await expect(pending).resolves.toMatchObject({ model: "jev-1.13.0" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -231,7 +241,7 @@ describe("native TypeSafe System One protocol", () => {
   it("rejects private endpoints and redirects before following them", async () => {
     const fetchMock = mockResponse();
     await expect(
-      createTypeSafeSystemOneAdapter().evaluate!(
+      createEvaluationAdapter("typesafe-systemone-v1").evaluate!(
         { ...config, baseUrl: "https://169.254.169.254" },
         params,
       ),
@@ -244,14 +254,17 @@ describe("native TypeSafe System One protocol", () => {
       }),
     );
     await expect(
-      createTypeSafeSystemOneAdapter().evaluate!(config, params),
+      createEvaluationAdapter("typesafe-systemone-v1").evaluate!(
+        config,
+        params,
+      ),
     ).rejects.toThrow(/refusing to follow redirect/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not advertise or send generative requests", async () => {
     const fetchMock = mockResponse();
-    const adapter = createTypeSafeSystemOneAdapter();
+    const adapter = createEvaluationAdapter("typesafe-systemone-v1");
     await expect(
       adapter.generateText(config, { model: "jev-latest", messages: [] }),
     ).rejects.toMatchObject({ code: "CONFIG_ERROR" });
@@ -401,4 +414,133 @@ protocol = "typesafe-systemone-v1"`);
     ).rejects.toMatchObject({ code: "CONFIG_ERROR" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+});
+
+describe("evaluation protocols on shared provider connections", () => {
+  it.each([
+    [
+      "openrouter-decisions-v1",
+      "https://openrouter.ai/api/v1",
+      "https://openrouter.ai/api/alpha/decisions",
+      "typesafe/jev-1.13",
+    ],
+    [
+      "openrouter-decisions-v1",
+      "https://router.example/proxy/api/alpha/",
+      "https://router.example/proxy/api/alpha/decisions",
+      "future/model",
+    ],
+    [
+      "vercel-evaluation-v4",
+      "https://ai-gateway.vercel.sh/v1",
+      "https://ai-gateway.vercel.sh/v4/ai/evaluation-model",
+      "typesafe-ai/jev",
+    ],
+    [
+      "vercel-evaluation-v4",
+      "https://gateway.example/proxy/v4/ai/",
+      "https://gateway.example/proxy/v4/ai/evaluation-model",
+      "future/model",
+    ],
+  ] as const)(
+    "routes %s via %s without rewriting %s",
+    async (protocol, baseUrl, endpoint, model) => {
+      const vercel = protocol === "vercel-evaluation-v4";
+      const fetchMock = mockResponse(
+        vercel
+          ? {
+              answers: {
+                ...responseBody().answers,
+                coherent: { type: "boolean", probability: 0.92 },
+              },
+              rounding: { probabilityDecimals: 2 },
+              usage: { inputTokens: 123, outputTokens: 12 },
+              providerMetadata: { gateway: { cost: "0.001" } },
+            }
+          : responseBody(),
+      );
+      const { gateway } = setup();
+      const onProviderRequest = vi.fn();
+      const result = await gateway.evaluate(
+        { ...params, presetId: "evaluation-model" },
+        {
+          apiKeys: { connection: "synthetic-key" },
+          onProviderRequest,
+          slotOverrides: {
+            customPresets: [
+              {
+                id: "evaluation-model",
+                name: "Evaluation",
+                provider: "connection",
+                baseUrl,
+                model,
+                protocol,
+              },
+            ],
+          },
+        },
+      );
+      expect(fetchMock.mock.calls[0]![0]).toBe(endpoint);
+      const init = fetchMock.mock.calls[0]![1]!;
+      const headers = new Headers(init.headers);
+      expect(headers.get("authorization")).toBe("Bearer synthetic-key");
+      expect(JSON.parse(init.body as string)).toEqual({
+        ...(!vercel ? { model } : {}),
+        state: params.state,
+        questions: vercel
+          ? questions
+          : { ...questions, coherent: { ...questions.coherent, type: "noul" } },
+      });
+      if (vercel) {
+        expect(headers.get("ai-model-id")).toBe(model);
+        expect(headers.get("ai-gateway-auth-method")).toBe("api-key");
+        expect(headers.get("ai-gateway-protocol-version")).toBe("0.0.1");
+        expect(headers.get("ai-evaluation-model-specification-version")).toBe(
+          "4",
+        );
+        expect(result.providerMetadata).toMatchObject({
+          gateway: { cost: "0.001" },
+        });
+      }
+      expect(result).toMatchObject({
+        provider: "connection",
+        usage: { inputTokens: 123, outputTokens: 12 },
+        answers: { coherent: { type: "boolean", probability: 0.92 } },
+      });
+      expect(onProviderRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ protocol, complete: true }),
+      );
+    },
+  );
+
+  it.each(["openrouter-decisions-v1", "vercel-evaluation-v4"] as const)(
+    "accepts omitted distributions but rejects invalid supplied distributions through %s",
+    async (protocol) => {
+      const body = {
+        answers: {
+          intent: { type: "choice", choice: "talk" },
+          severity: { type: "score", score: 1.4 },
+          coherent:
+            protocol === "vercel-evaluation-v4"
+              ? { type: "boolean", probability: 0.9 }
+              : { type: "noul", noul: 0.9 },
+        },
+      };
+      mockResponse(body);
+      const adapter = createEvaluationAdapter(protocol);
+      expect(
+        (await adapter.evaluate!(config, params)).answers.intent.probabilities,
+      ).toBeUndefined();
+      mockResponse({
+        ...body,
+        answers: {
+          ...body.answers,
+          intent: { ...body.answers.intent, probabilities: { talk: 1.2 } },
+        },
+      });
+      await expect(adapter.evaluate!(config, params)).rejects.toMatchObject({
+        code: "SCHEMA_VALIDATION_FAILED",
+      });
+    },
+  );
 });

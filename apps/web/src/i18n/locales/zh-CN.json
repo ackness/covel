@@ -908,6 +908,8 @@
     "modelIdOpaqueHint": "模型 ID 会按原样发送。openai/gpt-5.6-sol 等带命名空间的 ID 不会被改写。",
     "models": "个模型",
     "baseUrl": "API 地址",
+    "providerProtocolDefault": "服务商默认协议",
+    "inheritProviderProtocol": "使用服务商协议",
     "protocol": "接口协议",
     "modelIds": "模型 ID",
     "modelId": "模型 ID",

@@ -60,6 +60,7 @@ export function ProviderDialog({
             className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
           />
           <ProtocolSelect
+            inheritLabel={t("settings.providerProtocolDefault")}
             value={draft.protocol}
             onChange={(protocol) => onDraftChange({ ...draft, protocol })}
           />
@@ -103,6 +104,8 @@ export function ModelDialog({
   error,
   providerId,
   protocol,
+  modelProtocol,
+  onProtocolChange,
   reasoningDefaults,
   onReasoningChange,
   value,
@@ -115,6 +118,8 @@ export function ModelDialog({
   error: string | null;
   providerId: string;
   protocol?: string;
+  modelProtocol: string;
+  onProtocolChange: (value: string) => void;
   reasoningDefaults: Record<string, ReasoningEffort | undefined>;
   onReasoningChange: (
     values: Record<string, ReasoningEffort | undefined>,
@@ -141,10 +146,18 @@ export function ModelDialog({
         </DialogHeader>
         <fieldset disabled={busy} className="min-w-0 space-y-3">
           <ModelIdsTextarea value={value} onChange={onChange} />
+          <label className="block space-y-1 text-xs">
+            <span>{t("settings.protocol")}</span>
+            <ProtocolSelect
+              value={modelProtocol}
+              onChange={onProtocolChange}
+              inheritLabel={t("settings.inheritProviderProtocol")}
+            />
+          </label>
           <ImportedModelReasoning
             modelIds={value}
             provider={providerId}
-            protocol={protocol}
+            protocol={modelProtocol || protocol}
             values={reasoningDefaults}
             onChange={onReasoningChange}
           />
@@ -200,10 +213,12 @@ export function ProtocolSelect({
   value,
   onChange,
   disabled = false,
+  inheritLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  inheritLabel?: string;
 }) {
   return (
     <select
@@ -212,10 +227,13 @@ export function ProtocolSelect({
       onChange={(event) => onChange(event.target.value)}
       className="w-full border border-border bg-background px-2 py-1.5 text-xs outline-none disabled:bg-muted/30 disabled:text-muted-foreground focus:ring-1 focus:ring-primary"
     >
+      {inheritLabel && <option value="">{inheritLabel}</option>}
       <option value="openai-chat-v1">OpenAI Chat</option>
       <option value="openai-responses-v1">OpenAI Responses</option>
       <option value="anthropic-messages-v1">Anthropic Messages</option>
       <option value="typesafe-systemone-v1">TypeSafe System One</option>
+      <option value="openrouter-decisions-v1">OpenRouter Decisions</option>
+      <option value="vercel-evaluation-v4">Vercel AI Gateway Evaluation</option>
     </select>
   );
 }

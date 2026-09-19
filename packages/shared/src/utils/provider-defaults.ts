@@ -2,7 +2,9 @@ export type BuiltinProviderProtocol =
   | "openai-chat-v1"
   | "openai-responses-v1"
   | "anthropic-messages-v1"
-  | "typesafe-systemone-v1";
+  | "typesafe-systemone-v1"
+  | "openrouter-decisions-v1"
+  | "vercel-evaluation-v4";
 
 export interface BuiltinProviderConnection {
   readonly baseUrl: string;
@@ -11,6 +13,14 @@ export interface BuiltinProviderConnection {
 
 /** Canonical public endpoints used when a first-run profile omits baseUrl. */
 export const BUILTIN_PROVIDER_CONNECTIONS = {
+  openrouter: {
+    baseUrl: "https://openrouter.ai/api/v1",
+    protocol: "openai-chat-v1",
+  },
+  vercel: {
+    baseUrl: "https://ai-gateway.vercel.sh/v1",
+    protocol: "openai-chat-v1",
+  },
   typesafe: {
     baseUrl: "https://api.typesafe.ai/v1",
     protocol: "typesafe-systemone-v1",

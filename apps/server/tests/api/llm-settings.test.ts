@@ -92,61 +92,88 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("pings an evaluation model through System One and cleans up its request overlay", async () => {
-  const { app, presetRegistry } = setup();
-  const fetchMock = vi.fn().mockResolvedValue(
-    Response.json({
-      model: "jev-1.13.0",
-      answers: { connected: { type: "noul", noul: 1 } },
-      usage: { input_tokens: 10, output_tokens: 2 },
-    }),
-  );
-  vi.stubGlobal("fetch", fetchMock);
-  const response = await app.request("/api/ai/ping", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "X-Provider-Keys": Buffer.from(
-        JSON.stringify({ typesafe: "synthetic-request-key" }),
-      ).toString("base64"),
-      "X-Slot-Config": Buffer.from(
-        JSON.stringify({
-          customPresets: [
-            {
-              id: "jev-model",
-              name: "Jev",
-              provider: "typesafe",
-              model: "jev-latest",
-              protocol: "typesafe-systemone-v1",
-            },
-          ],
-        }),
-      ).toString("base64"),
-    },
-    body: JSON.stringify({ modelRef: "jev-model" }),
-  });
-  expect(await response.json()).toMatchObject({
-    ok: true,
-    usage: { inputTokens: 10, outputTokens: 2 },
-    testedTarget: {
-      provider: "typesafe",
-      model: "jev-latest",
-      protocol: "typesafe-systemone-v1",
-    },
-  });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock.mock.calls[0]![0]).toBe(
-    "https://api.typesafe.ai/v1/systemone",
-  );
-  const init = fetchMock.mock.calls[0]![1] as RequestInit;
-  expect(new Headers(init.headers).get("authorization")).toBe(
-    "Bearer synthetic-request-key",
-  );
-  expect(JSON.parse(init.body as string)).toMatchObject({
-    questions: { connected: { type: "noul" } },
-  });
-  expect(presetRegistry.listPresets()).toHaveLength(1);
-});
+it.each([
+  {
+    provider: "typesafe",
+    model: "jev-latest",
+    protocol: "typesafe-systemone-v1",
+    endpoint: "https://api.typesafe.ai/v1/systemone",
+  },
+  {
+    provider: "openrouter",
+    model: "typesafe/jev-1.13",
+    protocol: "openrouter-decisions-v1",
+    endpoint: "https://openrouter.ai/api/alpha/decisions",
+  },
+  {
+    provider: "vercel",
+    model: "typesafe-ai/jev",
+    protocol: "vercel-evaluation-v4",
+    endpoint: "https://ai-gateway.vercel.sh/v4/ai/evaluation-model",
+  },
+])(
+  "pings an evaluation model through $provider and cleans up its request overlay",
+  async ({ provider, model, protocol, endpoint }) => {
+    const vercel = provider === "vercel";
+    const { app, presetRegistry } = setup();
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        model: "jev-1.13.0",
+        answers: {
+          connected: vercel
+            ? { type: "boolean", probability: 1 }
+            : { type: "noul", noul: 1 },
+        },
+        usage: vercel
+          ? { inputTokens: 10, outputTokens: 2 }
+          : { input_tokens: 10, output_tokens: 2 },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await app.request("/api/ai/ping", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Provider-Keys": Buffer.from(
+          JSON.stringify({ [provider]: "synthetic-request-key" }),
+        ).toString("base64"),
+        "X-Slot-Config": Buffer.from(
+          JSON.stringify({
+            customPresets: [
+              {
+                id: "jev-model",
+                name: "Jev",
+                provider,
+                model,
+                protocol,
+              },
+            ],
+          }),
+        ).toString("base64"),
+      },
+      body: JSON.stringify({ modelRef: "jev-model" }),
+    });
+    expect(await response.json()).toMatchObject({
+      ok: true,
+      usage: { inputTokens: 10, outputTokens: 2 },
+      testedTarget: {
+        provider,
+        model,
+        protocol,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]![0]).toBe(endpoint);
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
+    expect(new Headers(init.headers).get("authorization")).toBe(
+      "Bearer synthetic-request-key",
+    );
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      questions: { connected: { type: vercel ? "boolean" : "noul" } },
+    });
+    expect(presetRegistry.listPresets()).toHaveLength(1);
+  },
+);
 
 describe("explicit ping model identity", () => {
   it.each([{ presetId: "slot-story" }, { slot: "story" }])(
