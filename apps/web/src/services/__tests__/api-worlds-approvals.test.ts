@@ -1,3 +1,4 @@
+import { clearSessionCredentialFixtures } from "../../test/session-credentials.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { subscribeToast } from "../../lib/toast-channel.js";
 
@@ -54,7 +55,8 @@ function mockFetchOnce(body: unknown, status = 200): void {
   );
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await clearSessionCredentialFixtures();
   vi.restoreAllMocks();
   localStorageMock.clear();
 });
@@ -256,7 +258,7 @@ describe("world API mapping", () => {
   });
 
   it("preflightWorldData posts selected plugins and returns plan details", async () => {
-    storeSessionToken("sess-1", "owner-secret");
+    await storeSessionToken("sess-1", "owner-secret");
     mockFetchOnce({
       imported: true,
       diagnostics: [],
@@ -331,7 +333,7 @@ describe("approvals API helpers", () => {
   });
 
   it("sends the session owner token for an approval decision", async () => {
-    storeSessionToken("sess-1", "owner-secret");
+    await storeSessionToken("sess-1", "owner-secret");
     mockFetchOnce({ ok: true });
 
     await resolveApproval("approval-1", "allow", "session", "sess-1");

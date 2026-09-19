@@ -1,3 +1,4 @@
+import { clearSessionCredentialFixtures } from "../../test/session-credentials.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const localStorageMock = (() => {
@@ -45,7 +46,10 @@ function headersAt(fetchMock: ReturnType<typeof vi.fn>, index = 0) {
   return new Headers(fetchMock.mock.calls[index]?.[1]?.headers);
 }
 
-beforeEach(() => localStorageMock.clear());
+beforeEach(async () => {
+  localStorageMock.clear();
+  await clearSessionCredentialFixtures();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -55,7 +59,7 @@ afterEach(() => {
 
 describe("explicit session auth on indirect routes", () => {
   it("retries restored form submissions with the same values and both credentials", async () => {
-    api.storeSessionToken("sess-1", "synthetic-owner");
+    await api.storeSessionToken("sess-1", "synthetic-owner");
     api.storeOperatorToken("synthetic-operator");
     const result = { results: [{ interactionId: "form", accepted: true }] };
     const fetchMock = vi
@@ -174,7 +178,7 @@ describe("explicit session auth on indirect routes", () => {
   );
 
   it("authenticates action, steer, abort, media upload, UI specs, and traces", async () => {
-    api.storeSessionToken("sess-1", "owner-secret");
+    await api.storeSessionToken("sess-1", "owner-secret");
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -322,6 +326,6 @@ describe("operator auth on hosted administration routes", () => {
     }
     expect(headersAt(fetchMock, 4).get("Content-Type")).toBeNull();
     expect(fetchMock.mock.calls[4]?.[1]?.body).toBeInstanceOf(FormData);
-    expect(api.getSessionToken("sess-1")).toBe("owner-secret");
+    expect(await api.getSessionToken("sess-1")).toBe("owner-secret");
   });
 });

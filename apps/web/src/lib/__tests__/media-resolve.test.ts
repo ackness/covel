@@ -214,7 +214,7 @@ describe("resolveMediaSrc", () => {
   );
 
   it("uses the server-issued signed URL after authorization", async () => {
-    storeSessionToken("s1", "owner-secret");
+    await storeSessionToken("s1", "owner-secret");
     const baseRef = await pngRef();
     const refWithUrl: MediaRef = {
       ...baseRef,

@@ -77,6 +77,10 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
 
 `POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希。owner hash、approval/session incarnation、lifecycle/delete lease 等框架私有 metadata 在 session CRUD、snapshot 与 `/state` 虚拟表响应中都会被剥离。
 
+Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-credentials` IndexedDB 中，不放入显示缓存、游戏 checkpoint 或设置导出。创建操作等待凭证持久化后才返回；同 ID 创建的迟到响应不能覆盖另一操作已保存的新凭证。旧的 localStorage token JSON 不再读取或迁移，使用旧格式凭证的开发会话应重建。
+
+凭证读写接口为异步操作。`clearSessionToken(sessionId, capturedToken)` 在同一事务内核对并删除捕获的 token；未知或不同的当前 token 保留。删除 HTTP 请求使用同一份捕获值，成功或确认 404 后清理；鉴权与其他失败保留凭证。清理故障不撤销服务端删除，后续 404 删除尝试可以重试清理。同一请求的传输重试保留已捕获的请求头，凭证存储失败不按网络故障重试，读取凭证期间的取消不会继续发出请求。
+
 **分层强制（tiered enforcement）**：
 
 | `DEPLOYMENT_TIER`     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |

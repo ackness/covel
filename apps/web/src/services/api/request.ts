@@ -15,12 +15,9 @@ import { buildAiHeaders, needsProviderKeys } from "./model-settings.js";
  */
 const SESSION_PATH_RE = /\/api\/sessions\/([^/?#]+)/;
 
-/** Owner-token header for a session-scoped request, or `{}` when the URL isn't
- * session-scoped or no token is stored. Harmless on tiers that ignore it. */
-function sessionTokenHeader(url: string): Record<string, string> {
+function sessionIdFromUrl(url: string): string | undefined {
   const id = SESSION_PATH_RE.exec(url)?.[1];
-  if (!id) return {};
-  return sessionAuthHeaders(decodeURIComponent(id));
+  return id ? decodeURIComponent(id) : undefined;
 }
 
 /**
@@ -180,13 +177,40 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-function mergeRequestHeaders(
+/** IDB reads may finish later; the cancelled request need not wait for them. */
+function waitForHeaders(
+  pending: Promise<Headers>,
+  signal?: AbortSignal | null,
+): Promise<Headers> {
+  if (!signal) return pending;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    void pending.then(
+      (headers) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(headers);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+    if (signal.aborted) onAbort();
+  });
+}
+
+async function mergeRequestHeaders(
   url: string,
   fetchInit: RequestInit,
   sessionId: string | undefined,
   operatorAuth: boolean | undefined,
-): Headers {
+): Promise<Headers> {
   const headers = new Headers();
+  const explicit = new Headers(fetchInit.headers);
   if (typeof fetchInit.body === "string") {
     headers.set("Content-Type", "application/json");
   }
@@ -195,18 +219,20 @@ function mergeRequestHeaders(
   )) {
     headers.set(name, value);
   }
-  for (const [name, value] of Object.entries(sessionTokenHeader(url))) {
-    headers.set(name, value);
-  }
-  for (const [name, value] of Object.entries(sessionAuthHeaders(sessionId))) {
-    headers.set(name, value);
+  if (!explicit.has("X-Session-Token")) {
+    const sessionHeaders = await sessionAuthHeaders(
+      sessionId || sessionIdFromUrl(url),
+    );
+    for (const [name, value] of Object.entries(sessionHeaders)) {
+      headers.set(name, value);
+    }
   }
   if (operatorAuth) {
     for (const [name, value] of Object.entries(operatorAuthHeaders())) {
       headers.set(name, value);
     }
   }
-  new Headers(fetchInit.headers).forEach((value, name) => {
+  explicit.forEach((value, name) => {
     headers.set(name, value);
   });
   return headers;
@@ -234,6 +260,20 @@ export async function requestResponse(
   // of double-submitting. Non-GET requests keep the single-shot behaviour.
   const canRetry = retry !== false && isIdempotent(fetchInit);
 
+  fetchInit.signal?.throwIfAborted();
+  let headers: Headers;
+  try {
+    headers = await waitForHeaders(
+      mergeRequestHeaders(url, fetchInit, sessionId, operatorAuth),
+      fetchInit.signal,
+    );
+  } catch (error) {
+    if (fetchInit.signal?.aborted) throw fetchInit.signal.reason;
+    if (!silentErrors) emitResponseErrorToast(url, error);
+    throw error;
+  }
+  // One logical request retains its authority and model configuration across
+  // transport retries. Cancellation during credential I/O still stops fetch.
   for (let attempt = 0; ; attempt++) {
     fetchInit.signal?.throwIfAborted();
     const isLastAttempt = attempt >= MAX_RETRIES;
@@ -242,7 +282,7 @@ export async function requestResponse(
     try {
       res = await fetch(url, {
         ...fetchInit,
-        headers: mergeRequestHeaders(url, fetchInit, sessionId, operatorAuth),
+        headers,
       });
     } catch (err) {
       // Intentional cancellation is neither a network failure nor retryable.

@@ -196,6 +196,7 @@ describe("subscription visibility", () => {
       .mockResolvedValue(new Response(new ReadableStream()));
     vi.stubGlobal("fetch", fetch);
     subscription = createSessionSubscription("session");
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     setVisibility("hidden");
     setVisibility("visible");
     await vi.waitFor(() => expect(subscription!.state).toBe("connected"));

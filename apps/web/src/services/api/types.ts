@@ -59,7 +59,7 @@ export interface SessionRecord extends Omit<
  * reaches the stored `SessionRecord` that read endpoints return.
  */
 export interface SessionCreateResponse extends SessionRecord {
-  ownerToken?: string;
+  ownerToken: string;
 }
 
 export interface MessageRecord {

@@ -7,6 +7,7 @@
 // default to zh-CN so historical Chinese assertions keep working.
 import i18n, { i18nReady } from "@/i18n";
 import { locks } from "node:worker_threads";
+import "fake-indexeddb/auto";
 
 // jsdom lacks Web Locks. Use the configured Node runtime's real LockManager.
 Object.defineProperty(navigator, "locks", {

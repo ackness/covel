@@ -146,13 +146,18 @@ payloads, and schema v1 checkpoints at the storage boundary.
 
 ## Browser Databases
 
-The web app uses two databases with separate lifecycles:
+The web app uses three databases with separate lifecycles:
 
 - `covel-browser-vault` (Dexie schema v5): latest session checkpoints, compact
   action-idempotency records, pending server commits, and browser-authored
   worlds with a durable initialization marker.
 - `covel-browser-cache` (native IDB schema v2): UI state, submitted blocks,
   execution-display cache, media metadata, and render blobs.
+- `covel-browser-credentials` (Dexie schema v1): one-time session owner tokens,
+  keyed by session ID. Independent transactions prevent concurrent sibling writes
+  from overwriting each other; captured-token comparisons protect replacement
+  credentials from delayed create/delete responses. Credentials are excluded from
+  caches and game/settings exports. The old localStorage token map is unsupported.
 
 Remote UI caches have a separate `remoteSessionUi` store with session incarnation
 and world ownership, plus short operation epochs in `remoteUiEpochs`. Cache reads

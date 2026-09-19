@@ -118,6 +118,7 @@ describe("SSE subscription retry policy", () => {
     const sub = createSessionSubscription("sess-1", {
       onStateChange: (state) => states.push(state),
     });
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalledOnce());
     sub.close();
     const cancel = vi.fn();
     complete(new Response(new ReadableStream({ cancel })));
