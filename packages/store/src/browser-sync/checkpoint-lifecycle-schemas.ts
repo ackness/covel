@@ -40,7 +40,7 @@ const setupRuntimeState = z.discriminatedUnion("state", [
     blockedAt: timestamp,
   }),
 ]);
-const snapshotSession = z.looseObject({
+const sessionState = z.looseObject({
   status: z.enum(["active", "paused", "ended"]),
   phase: z.enum(["setup", "playing"]),
   completedPlayerTurns: z.number().int().nonnegative(),
@@ -50,7 +50,10 @@ const snapshotSession = z.looseObject({
   presetId: z.string().optional(),
   runtimeModelOverrides: z.record(z.string(), z.string()).optional(),
 });
-export const session = snapshotSession.extend({
+const snapshotSession = sessionState.extend({
+  loreOverride: z.string().optional(),
+});
+export const session = sessionState.extend({
   id: nonEmptyString,
   worldId: z.string().optional(),
   createdAt: timestamp,

@@ -111,8 +111,8 @@ interface SnapshotPayloadBase {
 
 /**
  * Session-level state that must be restored from the same point in time as
- * the materialized rows above. Fields unrelated to scheduling or runtime
- * selection (for example embedding maintenance locks) remain session-local.
+ * the materialized rows above. Authority and maintenance fields (for example
+ * owner tokens and embedding locks) remain session-local.
  */
 export type SnapshotSessionState = Readonly<
   Pick<
@@ -125,7 +125,10 @@ export type SnapshotSessionState = Readonly<
     | "activePlugins"
     | "presetId"
     | "runtimeModelOverrides"
-  >
+  > & {
+    /** Captured metadata override. Empty means clear; absent keeps world fallback. */
+    loreOverride?: string;
+  }
 >;
 
 /** Current snapshot format. */

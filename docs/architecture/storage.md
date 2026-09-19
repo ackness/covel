@@ -253,6 +253,14 @@ use the world-record lore schema so existing long documents remain usable;
 explicit action overrides keep their existing 500000-character limit. HTTP
 request size limits still apply. See [session API](../reference/api.md#post-apisessions).
 
+Materialized snapshots capture the optional override as `session.loreOverride`.
+Fork restores that value into child metadata, and checkpoint transfer and repeated
+forks preserve it, including an explicit empty string. Only this gameplay field
+travels from metadata; each child receives fresh ownership and lifecycle identity.
+An absent field keeps world-lore fallback, including older v3 snapshots that never
+captured it. The live parent's metadata cannot reconstruct a missing historical
+override. See [snapshot and fork API](../reference/api.md#snapshot--fork).
+
 ## Record Identity
 
 World dimensions and session preset/model fields are normalized at the shared

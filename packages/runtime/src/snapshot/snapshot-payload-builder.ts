@@ -155,6 +155,9 @@ export async function buildSnapshotPayload(
       phase: session.phase,
       completedPlayerTurns: session.completedPlayerTurns,
       setupRuntimes: session.setupRuntimes,
+      ...(typeof session.metadata?.loreOverride === "string"
+        ? { loreOverride: session.metadata.loreOverride }
+        : {}),
     },
     characters,
     stateSchemas,

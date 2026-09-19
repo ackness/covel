@@ -363,6 +363,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               presetId: snapshotSession.presetId,
               runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
               metadata: {
+                ...(snapshotSession.loreOverride !== undefined
+                  ? { loreOverride: snapshotSession.loreOverride }
+                  : {}),
                 [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
                 [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
                 [SESSION_INCARNATION_KEY]: randomUUID(),

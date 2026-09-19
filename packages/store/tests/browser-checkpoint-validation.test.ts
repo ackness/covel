@@ -156,6 +156,27 @@ describe("checkpoint record validation", () => {
     expect(validateBrowserCheckpoint(checkpoint)).toEqual(checkpoint);
   });
 
+  it.each([null, 123, { text: "invalid" }])(
+    "rejects malformed snapshot lore: %j",
+    (loreOverride) => {
+      const snapshot = checkpoint.snapshots[0]!;
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          snapshots: [
+            {
+              ...snapshot,
+              payload: {
+                ...snapshot.payload,
+                session: { ...snapshot.payload.session, loreOverride },
+              },
+            },
+          ],
+        }),
+      ).toThrow(/snapshots\[0\].payload.session.loreOverride/);
+    },
+  );
+
   it.each([
     { createdAt: "invalid", ids: ["message"] },
     { createdAt: timestamp, ids: [] },

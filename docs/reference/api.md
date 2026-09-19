@@ -2545,7 +2545,8 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
       "locale": "zh-CN",
       "activePlugins": ["world-init", "narrator"],
       "presetId": "default",
-      "runtimeModelOverrides": { "narrator": "balance" }
+      "runtimeModelOverrides": { "narrator": "balance" },
+      "loreOverride": "The session's captured world lore."
     },
     "characters": [/* ... */],
     "stateEntries": [/* ... */],
@@ -2562,6 +2563,10 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 ```
 
 返回 `201 Created`；session 不存在时返回 `404`。
+
+`payload.session.loreOverride` 捕获会话 metadata 中的背景覆盖，空字符串表示显式清空；
+没有覆盖时省略，继续沿用世界背景。此字段沿用世界文档字符串契约，随检查点导出和迁移保留。
+快照不复制整份 metadata，owner token、审批作用域和会话实例身份仍由新会话独立生成。
 
 #### `GET /api/sessions/:id/snapshots`
 
@@ -2603,7 +2608,7 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 服务端会：
 
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
-2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
+2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides，并把可选的 `loreOverride` 恢复到子会话 metadata。后续父会话或世界背景编辑不改变已捕获的覆盖值，子快照也保留该值以支持连续分叉；缺少该字段（包括旧 v3 快照）时继续沿用世界背景，不从父会话当前 metadata 推测历史值。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session。新 v3 payload 用 `stateSchemas` 冻结表结构，空数组表示快照时没有表；fork 重建表 ID，并将子表结构写入子快照，父会话后续修改不影响再次分叉。旧 v3 缺少该字段时兼容使用父会话当前结构；任何状态记录缺少对应表结构时返回 `409 snapshot_schema_missing` 并回滚，不返回状态不完整的分支；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。早期 schema v3 payload 没有精确映射时回退到父消息当前标签；没有 `sessionSummaries` 时则保留原始消息正文并清除压缩标签，避免产生孤儿引用。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
    界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。早期 v3 快照没有此字段时，以快照 `createdAt` 为兼容截止时间，无法还原该毫秒内的精确成员。子快照写入新的消息边界，支持继续分叉。
