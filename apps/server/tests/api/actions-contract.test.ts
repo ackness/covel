@@ -523,6 +523,31 @@ describe("POST /api/actions — action type contract ", () => {
     );
   });
 
+  it.each(["Captured at creation", ""])(
+    "retains a persisted lore snapshot when starting without an override (%j)",
+    async (loreOverride) => {
+      const session = await store.getSession(sessionId);
+      await store.updateSession(sessionId, {
+        metadata: { ...session?.metadata, loreOverride },
+      });
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: "req-start-captured-lore",
+          type: "start_session",
+          sessionId,
+          payload: {},
+        }),
+      });
+      expect(response.status).toBe(200);
+      await drainStream(response);
+      expect((await store.getSession(sessionId))?.metadata?.loreOverride).toBe(
+        loreOverride,
+      );
+    },
+  );
+
   it("retry_turn re-runs the whole turn explicitly", async () => {
     const res = await app.request("/api/actions", {
       method: "POST",

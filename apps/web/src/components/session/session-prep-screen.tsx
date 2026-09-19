@@ -34,6 +34,7 @@ import {
 import { WorldInfoCard } from "./session-prep/world-info-card.js";
 import { SessionHistoryCard } from "./session-prep/session-history-card.js";
 import { WorldLoreCard } from "./session-prep/world-lore-card.js";
+import { useWorldLore } from "./session-prep/use-world-lore.js";
 import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
@@ -173,35 +174,10 @@ export function SessionPrepScreen({
     }
   }, [deleteTarget, onDeleteSession]);
 
-  const [loreValue, setLoreValue] = useState<string>(text(world.lore));
   const originalLore = text(world.lore);
-  const isLoreModified = loreValue !== originalLore;
-
-  useEffect(() => {
-    api.getWorldOverlay(world.id).then((overlay) => {
-      if (overlay?.lore) setLoreValue(overlay.lore);
-    });
-  }, [world.id]);
-
-  const handleLoreChange = useCallback(
-    (value: string) => {
-      setLoreValue(value);
-      if (value !== originalLore) {
-        void api.setWorldOverlay(world.id, {
-          lore: value,
-          updatedAt: new Date().toISOString(),
-        });
-      } else {
-        void api.removeWorldOverlay(world.id);
-      }
-    },
-    [originalLore, world.id],
-  );
-
-  const resetLore = useCallback(() => {
-    setLoreValue(originalLore);
-    void api.removeWorldOverlay(world.id);
-  }, [originalLore, world.id]);
+  const lore = useWorldLore(world.id, originalLore);
+  const loreUnavailable =
+    lore.status === "loading" || lore.status === "load-error";
 
   const handleSettingsOpenChange = useCallback(
     (open: boolean) => {
@@ -268,17 +244,24 @@ export function SessionPrepScreen({
   const [resumingId, setResumingId] = useState<string | null>(null);
 
   const handleStart = useCallback(async () => {
-    if (isStarting || pluginPlanUnavailable) return;
+    if (isStarting || pluginPlanUnavailable || loreUnavailable) return;
     setIsStarting(true);
     try {
-      await onStart(startPluginsPayload(selectedPluginIds));
+      await onStart(startPluginsPayload(selectedPluginIds), lore.value);
     } catch {
       // startGameSession stores the actionable message in session state; keep
       // this handler settled while the prep screen renders that message.
     } finally {
       setIsStarting(false);
     }
-  }, [isStarting, pluginPlanUnavailable, selectedPluginIds, onStart]);
+  }, [
+    isStarting,
+    pluginPlanUnavailable,
+    loreUnavailable,
+    lore.value,
+    selectedPluginIds,
+    onStart,
+  ]);
 
   const handleResume = useCallback(
     async (session: api.SessionRecord) => {
@@ -348,7 +331,9 @@ export function SessionPrepScreen({
                 <Button
                   size="sm"
                   className="h-10 shrink-0 px-5 font-bold uppercase tracking-widest"
-                  disabled={isStarting || pluginPlanUnavailable}
+                  disabled={
+                    isStarting || pluginPlanUnavailable || loreUnavailable
+                  }
                   onClick={() => void handleStart()}
                 >
                   {isStarting ? (
@@ -451,11 +436,13 @@ export function SessionPrepScreen({
               <WorldLoreCard
                 expanded={loreExpanded}
                 onToggle={() => setLoreExpanded(!loreExpanded)}
-                loreValue={loreValue}
+                loreValue={lore.value}
                 originalLore={originalLore}
-                isModified={isLoreModified}
-                onLoreChange={handleLoreChange}
-                onResetLore={resetLore}
+                isModified={lore.value !== originalLore}
+                onLoreChange={lore.change}
+                onResetLore={lore.reset}
+                draftStatus={lore.status}
+                onRetry={lore.retry}
               />
 
               <DimensionActions
@@ -519,7 +506,7 @@ export function SessionPrepScreen({
       <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
         <Button
           className="h-12 w-full font-semibold uppercase tracking-wider shadow-(--shadow-pop)"
-          disabled={isStarting || pluginPlanUnavailable}
+          disabled={isStarting || pluginPlanUnavailable || loreUnavailable}
           onClick={() => void handleStart()}
         >
           {isStarting ? (

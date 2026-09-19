@@ -91,6 +91,26 @@ beforeEach(() => {
 });
 
 describe("same-session action ownership", () => {
+  it("starts with the persisted session lore without reading a mutable world draft", async () => {
+    const overlay = vi
+      .mocked(api.getWorldOverlay)
+      .mockReturnValue(new Promise(() => {}));
+    const send = vi
+      .spyOn(api, "sendAction")
+      .mockImplementation(() => new AbortController());
+    const { result } = renderActions({
+      run: (_id, _request, mutate) => mutate(),
+      hydrate: vi.fn(),
+      checkpoint: vi.fn(),
+    });
+    await act(async () => result.current.actions.beginAdventure());
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      type: "start_session",
+      payload: {},
+    });
+    expect(overlay).not.toHaveBeenCalled();
+  });
   it.each([
     { first: "kernel", fails: false },
     { first: "send", fails: false },

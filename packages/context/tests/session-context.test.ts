@@ -162,21 +162,22 @@ describe("buildSessionContextSnapshot — basic shape", () => {
 // ── Test B: Structured world context ────────────────────────────
 
 describe("buildSessionContextSnapshot — world context", () => {
-  it("uses the session lore override on every context rebuild", async () => {
-    const store = createMemoryStore();
-    await store.upsertWorld(makeWorld({ lore: "Original lore" }));
-    await store.createSession(
-      makeSession({ metadata: { loreOverride: "Player-edited lore" } }),
-    );
+  it.each(["Player-edited lore", ""])(
+    "uses the session lore override on every context rebuild (%j)",
+    async (loreOverride) => {
+      const store = createMemoryStore();
+      await store.upsertWorld(makeWorld({ lore: "Original lore" }));
+      await store.createSession(makeSession({ metadata: { loreOverride } }));
 
-    const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
-      locale: "zh-CN",
-      turnNumber: 1,
-      worldId: "w1",
-    });
+      const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+        locale: "zh-CN",
+        turnNumber: 1,
+        worldId: "w1",
+      });
 
-    expect(snapshot.world.lore).toBe("Player-edited lore");
-  });
+      expect(snapshot.world.lore).toBe(loreOverride);
+    },
+  );
 
   it("loads world metadata, schema, and lorebook entries into world.*", async () => {
     const store = createMemoryStore();

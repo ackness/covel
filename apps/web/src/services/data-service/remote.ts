@@ -59,8 +59,16 @@ export class RemoteDataService implements DataService {
     id?: string,
     plugins?: string[],
     locale?: string,
+    loreOverride?: string,
   ) {
-    return api.createSession(worldId, presetId, id, plugins, locale);
+    return api.createSession(
+      worldId,
+      presetId,
+      id,
+      plugins,
+      locale,
+      loreOverride,
+    );
   }
   async updateSession(sessionId: string, updates: SessionPatch) {
     return api.updateSession(sessionId, updates);

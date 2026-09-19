@@ -62,6 +62,70 @@ async function createSession(app: Hono): Promise<string> {
   return body.id;
 }
 
+describe("session creation lore snapshot", () => {
+  it.each(["Prep draft", "", undefined])(
+    "persists lore before SessionStart and retains it on reload (%j)",
+    async (loreOverride) => {
+      const { app, store, hookPipeline } = build();
+      let hookLore: unknown;
+      hookPipeline.register({
+        id: "lore-observer",
+        event: "SessionStart",
+        async handler(payload) {
+          hookLore = (await store.getSession(payload.sessionId))?.metadata
+            ?.loreOverride;
+          return { action: "continue" };
+        },
+      });
+      const response = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "lore-session",
+          worldId: "cloudmere",
+          locale: "en-US",
+          loreOverride,
+        }),
+      });
+      expect(response.status).toBe(201);
+      expect(hookLore).toBe(loreOverride);
+      const persisted = await store.getSession("lore-session");
+      expect(persisted?.metadata?.loreOverride).toBe(loreOverride);
+      const restored = await app.request("/api/sessions/lore-session");
+      expect(restored.status).toBe(200);
+      expect((await restored.json()).metadata?.loreOverride).toBe(loreOverride);
+    },
+  );
+
+  it.each([
+    { label: "null", value: null },
+    { label: "number", value: 1 },
+  ])("rejects $label lore before session creation", async ({ value }) => {
+    const { app, store } = build();
+    const response = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "invalid-lore", loreOverride: value }),
+    });
+    expect(response.status).toBe(400);
+    expect(await store.getSession("invalid-lore")).toBeNull();
+  });
+
+  it("captures long world lore without imposing the action-override length limit", async () => {
+    const { app, store } = build();
+    const loreOverride = "x".repeat(500_001);
+    const response = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "long-lore", loreOverride }),
+    });
+    expect(response.status).toBe(201);
+    expect((await store.getSession("long-lore"))?.metadata?.loreOverride).toBe(
+      loreOverride,
+    );
+  });
+});
+
 function registerCommunityPlugin(
   pluginRegistry: ReturnType<typeof createPluginRegistry>,
 ): void {

@@ -104,7 +104,7 @@ export function useBuildSessionActions({
   );
 
   const startGame = useCallback(
-    async (plugins?: string[]) => {
+    async (plugins?: string[], loreOverride?: string) => {
       if (!state.world) return;
       await startGameSession({
         ds,
@@ -116,6 +116,7 @@ export function useBuildSessionActions({
         presets: state.presets,
         llmConfig: state.llmConfig,
         plugins,
+        loreOverride,
       });
     },
     [
@@ -148,53 +149,45 @@ export function useBuildSessionActions({
     if (!canRunSessionAction(state)) return;
     const sessionId = state.session?.id;
     if (!sessionId) return;
-    const worldId = state.world?.id ?? "";
     const owner = claimAction(sessionId);
 
-    const postStart = (loreOverride?: unknown) => {
-      if (!owner.isCurrent()) return;
-      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
-      dispatch({ type: "SET_EXECUTING", value: true });
-      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-      const requestId = owner.requestId;
-      void workspace
-        .run(sessionId, requestId, () => {
-          if (!owner.isCurrent()) {
-            return Promise.reject(
-              new Error("Session changed before action start"),
-            );
-          }
-          return runActionStream(
-            {
-              requestId,
-              type: "start_session",
-              sessionId,
-              locale: state.session?.locale ?? i18n.language,
-              payload: typeof loreOverride === "string" ? { loreOverride } : {},
-            },
-            handleSseEvent,
-            dispatch,
-            { sessionIdRef, isCurrentAction: owner.isCurrent },
+    if (!owner.isCurrent()) return;
+    dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
+    dispatch({ type: "SET_EXECUTING", value: true });
+    dispatch({ type: "SET_EXECUTION_ERROR", error: null });
+    const requestId = owner.requestId;
+    void workspace
+      .run(sessionId, requestId, () => {
+        if (!owner.isCurrent()) {
+          return Promise.reject(
+            new Error("Session changed before action start"),
           );
-        })
-        .catch((error: unknown) => {
-          if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
-        })
-        .finally(() => {
-          finalizeActionExecution(
-            dispatch,
+        }
+        return runActionStream(
+          {
+            requestId,
+            type: "start_session",
             sessionId,
-            sessionIdRef,
-            owner.isCurrent,
-          );
-          resyncSession(sessionId, owner.isCurrent);
-        });
-    };
-
-    void api
-      .getWorldOverlay(worldId)
-      .then((overlay) => postStart(overlay?.lore))
-      .catch(() => postStart());
+            locale: state.session?.locale ?? i18n.language,
+            payload: {},
+          },
+          handleSseEvent,
+          dispatch,
+          { sessionIdRef, isCurrentAction: owner.isCurrent },
+        );
+      })
+      .catch((error: unknown) => {
+        if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
+      })
+      .finally(() => {
+        finalizeActionExecution(
+          dispatch,
+          sessionId,
+          sessionIdRef,
+          owner.isCurrent,
+        );
+        resyncSession(sessionId, owner.isCurrent);
+      });
   }, [
     workspace,
     state,

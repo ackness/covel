@@ -209,6 +209,12 @@
     "loreModified": "已修改（{{count}} 字符）",
     "loreOriginal": "原始（{{count}} 字符）",
     "lorePlaceholder": "用 Markdown 输入世界传说...",
+    "loreDraft": {
+      "loading": "正在读取已保存的草稿…",
+      "saving": "正在保存草稿…",
+      "load-error": "无法读取已保存的草稿。请重试，或编辑文本以使用新草稿。",
+      "save-error": "草稿未能保存供下次使用。现在开始游戏仍会使用此处显示的文本。"
+    },
     "switchSession": "切换会话",
     "currentWorld": "当前会话",
     "statusActive": "进行中",

@@ -273,6 +273,9 @@ sessionRoutes.post("/", async (c) => {
     createdAt: now,
     updatedAt: now,
     metadata: {
+      ...(parsedCreate.loreOverride !== undefined
+        ? { loreOverride: parsedCreate.loreOverride }
+        : {}),
       [SESSION_OWNER_TOKEN_HASH_KEY]: owner.tokenHash,
       [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
       [SESSION_INCARNATION_KEY]: randomUUID(),

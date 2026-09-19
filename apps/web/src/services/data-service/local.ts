@@ -1,6 +1,7 @@
 import {
   DEFAULT_LOCALE,
   worldDimensionsSchema,
+  worldWireRecordSchema,
   characterBlueprintToCharacterUpsert,
   decodePageCursor,
   encodePageCursor,
@@ -493,7 +494,9 @@ export class LocalDataService implements DataService {
     _id?: string,
     _plugins?: string[],
     locale?: string,
+    loreOverride?: string,
   ): Promise<SessionRecord> {
+    worldWireRecordSchema.shape.lore.parse(loreOverride);
     const vault = await this.ready();
     const nowIso = new Date().toISOString();
     const session: SessionRecord = {
@@ -519,7 +522,10 @@ export class LocalDataService implements DataService {
       locale: locale ?? DEFAULT_LOCALE,
       activePlugins: _plugins ?? [],
       presetId,
-      metadata: presetId ? { presetId } : undefined,
+      metadata: {
+        ...(presetId ? { presetId } : {}),
+        ...(loreOverride !== undefined ? { loreOverride } : {}),
+      },
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -802,6 +808,9 @@ export class LocalDataService implements DataService {
         serverSessionId,
         [...session.activePlugins],
         session.locale,
+        typeof checkpoint.session.metadata?.loreOverride === "string"
+          ? checkpoint.session.metadata.loreOverride
+          : undefined,
       );
       // Only a never-hydrated local session needs the server to resolve its
       // initial setup band. When rebuilding an ephemeral mirror after a server

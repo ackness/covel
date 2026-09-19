@@ -9,7 +9,7 @@ export interface SessionPrepScreenProps {
   /** Last session-creation error, surfaced while the prep screen stays mounted. */
   startError?: string | null;
   onBack: () => void;
-  onStart: (plugins?: string[]) => Promise<void> | void;
+  onStart: (plugins?: string[], loreOverride?: string) => Promise<void> | void;
   onResume: (session: api.SessionRecord) => Promise<void> | void;
   onDeleteSession: (sessionId: string) => Promise<void>;
   settingsOpen: boolean;

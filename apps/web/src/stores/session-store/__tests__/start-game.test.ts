@@ -82,6 +82,24 @@ beforeEach(() => {
 });
 
 describe("startGameSession bootstrap order", () => {
+  it.each(["Current draft", ""])(
+    "persists the selected lore with the session (%j)",
+    async (loreOverride) => {
+      const ds = makeDataService([]);
+      await startGameSession({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch: vi.fn(),
+        sessionIdRef: { current: null },
+        sessionGenerationRef,
+        world,
+        presets: [],
+        llmConfig: null,
+        loreOverride,
+      });
+      expect(vi.mocked(ds.createSession).mock.calls[0]?.[5]).toBe(loreOverride);
+    },
+  );
   it("uses the world language when creating a session", async () => {
     const ds = makeDataService([]);
 
@@ -102,6 +120,7 @@ describe("startGameSession bootstrap order", () => {
       undefined,
       undefined,
       "en-US",
+      undefined,
     );
   });
 

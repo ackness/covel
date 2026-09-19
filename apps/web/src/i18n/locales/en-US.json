@@ -209,6 +209,12 @@
     "loreModified": "Modified ({{count}} chars)",
     "loreOriginal": "Original ({{count}} chars)",
     "lorePlaceholder": "Enter world lore in Markdown...",
+    "loreDraft": {
+      "loading": "Loading saved draft...",
+      "saving": "Saving draft...",
+      "load-error": "Could not load the saved draft. Retry, or edit the text to use a new draft.",
+      "save-error": "Draft not saved for your next visit. Starting a game will use the text shown here."
+    },
     "switchSession": "Switch session",
     "currentWorld": "Current session",
     "statusActive": "Active",

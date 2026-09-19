@@ -20,6 +20,7 @@ interface StartGameOptions {
   presets: readonly api.PresetSummary[];
   llmConfig: api.LlmConfigResponse | null;
   plugins?: string[];
+  loreOverride?: string;
 }
 
 function selectPresetId(
@@ -96,6 +97,7 @@ export async function startGameSession({
   presets,
   llmConfig,
   plugins,
+  loreOverride,
 }: StartGameOptions): Promise<void> {
   const generation = ++sessionGenerationRef.current;
   const previousSessionId = sessionIdRef.current;
@@ -112,6 +114,7 @@ export async function startGameSession({
       undefined,
       plugins,
       world.locale ?? i18n.language,
+      loreOverride,
     );
     createdSessionId = session.id;
     if (!isCurrent()) return;

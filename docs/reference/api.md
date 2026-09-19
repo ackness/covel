@@ -1117,13 +1117,20 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 }
 ```
 
-| 字段       | 类型     | 必填 | 说明                                                          |
-| ---------- | -------- | ---- | ------------------------------------------------------------- |
-| `worldId`  | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                |
-| `presetId` | string   | 否   | 会话模型预设 ID；创建与后续 PATCH 使用同一字段                |
-| `locale`   | string   | 否   | 语言区域，默认 `zh-CN`                                        |
-| `plugins`  | string[] | 否   | 要激活的插件 ID 列表                                          |
-| `id`       | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
+| 字段           | 类型     | 必填 | 说明                                                                                                  |
+| -------------- | -------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| `worldId`      | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                                        |
+| `presetId`     | string   | 否   | 会话模型预设 ID；创建与后续 PATCH 使用同一字段                                                        |
+| `locale`       | string   | 否   | 语言区域，默认 `zh-CN`                                                                                |
+| `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                                  |
+| `id`           | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`）                                         |
+| `loreOverride` | string   | 否   | 本次会话的世界背景快照，沿用世界文档的字符串契约；空字符串表示显式清空，与会话同次创建保存到 metadata |
+
+Web 准备页把当前显示的背景文本随创建请求传入；浏览器私有模式先保存到
+BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后台草稿保存失败不会
+改变本次会话选择。之后的开始冒险、刷新和恢复使用会话已保存的背景，
+不会重新读取按世界共享的编辑草稿，也不随世界后续编辑改变。
+未提供该字段的 API 调用保留使用世界原文的行为；既有会话不会自动导入世界草稿。
 
 客户端自定义 `id` 已存在时返回
 `409 { "error": "Session already exists: <id>", "code": "session_already_exists" }`。
@@ -2830,16 +2837,16 @@ id: evt-002
 
 **社区插件授权**：缺少授权时，在启动 SSE 和写入回合之前返回 HTTP **202 JSON** `{ status: "approval-required", approvalId, pending }`。客户端通过审批接口授予当前会话权限后，使用同一个 `requestId` 重发原请求；可能依次询问 `covel:plugin-server-code` 及各个 `runtime:<name>`。普通动作检查已选插件中参与自动执行的 runtime（经过 capability provider 替换），显式重试只检查选定的目标；手动 runtime 的普通调用仍走 plugin-RPC 授权。拒绝审批不得执行回合。hosted 模式仍要求 operator 权限；执行器在真正加载代码时继续检查授权。Web 客户端支持连续审批，并拒绝重复或跨会话的审批响应。
 
-| `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                   |
-| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                        |
-| `command`         | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                   |
-| `loreOverride`    | `start_session`         | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                             |
-| —                 | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                        |
-| `runtimeId`       | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                             |
-| `retryFromTurnId` | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。 |
-| `runtimeIds`      | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                   |
-| `retryFromTurnId` | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                            |
+| `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                                                                         |
+| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                              |
+| `command`         | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                         |
+| `loreOverride`    | `start_session`         | 可选的显式覆盖，最多 500000 字符。服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空；省略则保留已保存快照。Web Prep 在创建会话时传入快照，开始冒险不再发送世界草稿。 |
+| —                 | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                                                                              |
+| `runtimeId`       | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                   |
+| `retryFromTurnId` | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。                                                       |
+| `runtimeIds`      | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                                                                         |
+| `retryFromTurnId` | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                                                                                  |
 
 **批量恢复边界**：一次 action、一次会话锁和一次事务提交，不追加玩家输入、不推进玩家回合数、不触发开场接力。仅原始回合及关联的已提交重试中成功的非目标结果可作为上下文；种子不会重复提交或重放事件。目标间保留正常输入校验、依赖顺序和独立任务并行；失败依赖导致的 skipped 不会把原失败任务标为已修复。批量恢复和带明确来源的单任务恢复均保持前台，不通过事件订阅、递归调用或后台分发扩大所选范围。显式单任务来源重试同样校验来源与最新失败状态；普通不带来源的 manual / plugin-RPC 调用保留原有事件链、递归和分发行为。
 

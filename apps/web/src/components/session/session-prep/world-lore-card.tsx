@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { CollapsibleCardHeader } from "./collapsible-card-header.js";
+import type { LoreDraftStatus } from "./use-world-lore.js";
 
 interface WorldLoreCardProps {
   expanded: boolean;
@@ -12,6 +13,8 @@ interface WorldLoreCardProps {
   isModified: boolean;
   onLoreChange: (value: string) => void;
   onResetLore: () => void;
+  draftStatus: LoreDraftStatus;
+  onRetry: () => void;
 }
 
 export function WorldLoreCard({
@@ -22,6 +25,8 @@ export function WorldLoreCard({
   isModified,
   onLoreChange,
   onResetLore,
+  draftStatus,
+  onRetry,
 }: WorldLoreCardProps) {
   const { t } = useTranslation();
 
@@ -48,6 +53,23 @@ export function WorldLoreCard({
           </Badge>
         )}
       </CollapsibleCardHeader>
+      {draftStatus !== "ready" && (
+        <div
+          className="px-4 pb-3 text-xs text-muted-foreground"
+          role={draftStatus.endsWith("error") ? "alert" : "status"}
+        >
+          {t(`session.loreDraft.${draftStatus}`)}
+          {draftStatus.endsWith("error") && (
+            <button
+              type="button"
+              className="ml-2 underline hover:text-primary"
+              onClick={onRetry}
+            >
+              {t("common.retry", "Retry")}
+            </button>
+          )}
+        </div>
+      )}
       {expanded && (
         <CardContent
           id="world-lore-card-content"

@@ -231,6 +231,7 @@ export async function createSession(
   id?: string,
   plugins?: string[],
   locale?: string,
+  loreOverride?: string,
 ): Promise<SessionRecord> {
   const { ownerToken, ...session } = await request<SessionCreateResponse>(
     "/api/sessions",
@@ -243,6 +244,7 @@ export async function createSession(
         presetId,
         ...(plugins ? { plugins } : {}),
         ...(locale ? { locale } : {}),
+        ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),
     },
   );

@@ -75,6 +75,59 @@ afterEach(async () => {
 });
 
 describe("LocalDataService browser-authoritative sync", () => {
+  it("captures a long world document without the action-override length limit", async () => {
+    const service = await serviceWithWorld();
+    const lore = "x".repeat(500_001);
+    await service.createSession(
+      "world-1",
+      undefined,
+      "long-lore",
+      [],
+      "en-US",
+      lore,
+    );
+    expect(
+      (await vault.getLatestCheckpoint("long-lore"))?.session.metadata
+        ?.loreOverride,
+    ).toBe(lore);
+  });
+  it.each(["Session draft", ""])(
+    "preserves session lore through reload and server mirror creation (%j)",
+    async (loreOverride) => {
+      const service = await serviceWithWorld();
+      await service.createSession(
+        "world-1",
+        undefined,
+        "sess-1",
+        [],
+        "en-US",
+        loreOverride,
+      );
+      await service.updateWorld("world-1", { lore: "Changed world" });
+      const reloaded = new LocalDataService(vault);
+      await reloaded.syncToServer("sess-1");
+      expect(api.createSession).toHaveBeenCalledWith(
+        "world-1",
+        undefined,
+        "sess-1",
+        [],
+        "en-US",
+        loreOverride,
+      );
+      expect(
+        (await vault.getLatestCheckpoint("sess-1"))?.session.metadata
+          ?.loreOverride,
+      ).toBe(loreOverride);
+      expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+        "sess-1",
+        expect.objectContaining({
+          session: expect.objectContaining({
+            metadata: expect.objectContaining({ loreOverride }),
+          }),
+        }),
+      );
+    },
+  );
   it("prepares the complete local world before server-side planning", async () => {
     const service = await serviceWithWorld("world-local", {
       pluginPolicy: { requiredPluginIds: ["world-notes"] },
@@ -337,6 +390,7 @@ describe("LocalDataService browser-authoritative sync", () => {
       "sess-1",
       [],
       "en-US",
+      undefined,
     );
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledOnce();
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(

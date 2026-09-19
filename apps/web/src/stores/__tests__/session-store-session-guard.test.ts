@@ -176,13 +176,11 @@ describe("runtime RPC — originating session", () => {
     expect(handleSseEvent).not.toHaveBeenCalled();
   });
 
-  it("does not begin adventure when the overlay resolves after a switch", async () => {
-    let resolveOverlay!: (value: null) => void;
-    vi.spyOn(api, "getWorldOverlay").mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveOverlay = resolve;
-      }),
-    );
+  it("does not begin adventure when workspace ownership arrives after a switch", async () => {
+    let releaseWorkspace!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      releaseWorkspace = resolve;
+    });
     const sendAction = vi.spyOn(api, "sendAction");
     const dispatch = vi.fn();
     const sessionIdRef = { current: "sess-a" as string | null };
@@ -223,7 +221,10 @@ describe("runtime RPC — originating session", () => {
         ds: {} as SseEventHandlerDeps["ds"],
         workspace: {
           hydrate: vi.fn(),
-          run: vi.fn(),
+          run: async (_id, _request, mutate) => {
+            await pending;
+            return mutate();
+          },
           checkpoint: vi.fn(),
         },
         refs,
@@ -233,14 +234,10 @@ describe("runtime RPC — originating session", () => {
 
     act(() => result.current.beginAdventure());
     sessionIdRef.current = "sess-b";
-    resolveOverlay(null);
-    await Promise.resolve();
-    await Promise.resolve();
+    dispatch.mockClear();
+    await act(async () => releaseWorkspace());
 
     expect(sendAction).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalledWith({
-      type: "SET_EXECUTING",
-      value: true,
-    });
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

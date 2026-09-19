@@ -235,6 +235,24 @@ The Dexie BrowserVault schema is owned by `apps/web` and is not advertised as a
 server `DataStore` migration. `VECTOR_BACKEND=embedded` uses the active server
 store capability; BrowserVault intentionally does not implement vector search.
 
+## Prep Drafts and Session Lore
+
+The world-keyed app-KV overlay is an editing draft for later visits. Reads are
+owned by the current world/source text and cannot replace a newer edit or reset.
+Empty strings are valid drafts. Read/write failures expose retry controls and
+safe operation diagnostics without logging lore or raw errors. Creation waits
+for the initial read or an explicit edit, but does not depend on draft writes.
+
+Prep passes its displayed lore directly to session creation. Local mode saves
+it in checkpoint session metadata; remote mode creates it in the server's
+session transaction. Both pass it to the initial server mirror before lifecycle
+hooks. Beginning or restoring that session does not read the world draft again.
+Existing sessions without a snapshot continue using world lore unless an API
+caller explicitly supplies a `start_session.loreOverride`. Creation snapshots
+use the world-record lore schema so existing long documents remain usable;
+explicit action overrides keep their existing 500000-character limit. HTTP
+request size limits still apply. See [session API](../reference/api.md#post-apisessions).
+
 ## Record Identity
 
 World dimensions and session preset/model fields are normalized at the shared

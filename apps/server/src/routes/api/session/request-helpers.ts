@@ -1,5 +1,6 @@
 import type { SessionRecord } from "@covel/store";
 import type { SessionStatus } from "@covel/shared";
+import { worldWireRecordSchema } from "@covel/shared";
 import {
   SAFE_WORLD_ID_RE,
   SAFE_SESSION_ID_RE,
@@ -22,12 +23,24 @@ type ParsedCreateSessionBody =
       id: string | undefined;
       presetId: string | undefined;
       requestedPlugins: string[];
+      loreOverride: string | undefined;
     }
   | { ok: false; error: string };
 
 export function parseCreateSessionBody(
   body: Record<string, unknown>,
 ): ParsedCreateSessionBody {
+  // Capture complete world documents; start-session action edits have a
+  // separate length limit that must not reject an existing world's lore here.
+  const loreOverride = worldWireRecordSchema.shape.lore.safeParse(
+    body.loreOverride,
+  );
+  if (!loreOverride.success) {
+    return {
+      ok: false,
+      error: "loreOverride must be a string",
+    };
+  }
   const rawWorldId =
     typeof body.worldId === "string" ? body.worldId : undefined;
   if (rawWorldId !== undefined && !SAFE_WORLD_ID_RE.test(rawWorldId)) {
@@ -66,6 +79,7 @@ export function parseCreateSessionBody(
     id: rawId,
     presetId,
     requestedPlugins,
+    loreOverride: loreOverride.data,
   };
 }
 
