@@ -34,7 +34,12 @@ describe.each(["memory", "sqlite"])(
           : createMemoryStore();
       try {
         for (const id of ["parent", "legacy-child", "empty-child"])
-          await store.createSession(makeSession({ id }));
+          await store.createSession(
+            makeSession({
+              id,
+              metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+            }),
+          );
         const first = makeRuntimeExport({
           sessionId: "parent",
           revision: 1,
@@ -77,7 +82,12 @@ describe.each(["memory", "sqlite"])(
           : createMemoryStore();
       try {
         await store.createWorld(makeWorld({ id: "world-1" }));
-        await store.createSession(makeSession({ id: "parent" }));
+        await store.createSession(
+          makeSession({
+            id: "parent",
+            metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+          }),
+        );
         async function publish(threshold: number, sessionId = "parent") {
           const outcome = await finalizeExecution({
             executionContext: {

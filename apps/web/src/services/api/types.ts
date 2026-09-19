@@ -41,8 +41,13 @@ export interface WorldRecord {
 export type GeneratedWorldSaveTarget =
   "server-file" | "server-store" | "return-only";
 
-export interface SessionRecord extends Omit<SharedSession, "worldId"> {
+export interface SessionRecord extends Omit<
+  SharedSession,
+  "worldId" | "incarnation"
+> {
   readonly worldId: string;
+  /** Server-issued identity; browser-local records use workspace ownership. */
+  readonly incarnation?: string;
   presetId?: string;
 }
 

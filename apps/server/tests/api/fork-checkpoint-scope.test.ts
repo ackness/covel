@@ -25,7 +25,12 @@ describe("fork checkpoint scope", () => {
     const store = createMemoryStore();
     await store.createWorld(makeWorld({ id: "world-1" }));
     const parentId = "parent-session";
-    await store.createSession(makeSession({ id: parentId }));
+    await store.createSession(
+      makeSession({
+        id: parentId,
+        metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      }),
+    );
     const parentSuspension = makeSuspension({ sessionId: parentId });
     await store.saveSuspension(parentSuspension);
     const sourceSnapshot = makeSnapshot({

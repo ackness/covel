@@ -30,7 +30,12 @@ describe.each(["memory", "sqlite"])("fork state schemas on %s", (backend) => {
         ? createSqliteStore(":memory:")
         : createMemoryStore();
     await store.createWorld(makeWorld({ id: "world-1" }));
-    await store.createSession(makeSession({ id: "parent" }));
+    await store.createSession(
+      makeSession({
+        id: "parent",
+        metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      }),
+    );
     const routes = new Hono<{
       Variables: { store: DataStore; sessionLock: SessionLock };
     }>();

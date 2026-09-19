@@ -18,6 +18,8 @@ Use strict TypeScript and ESM. Follow Prettier output (two-space indentation, do
 
 Framework code in `packages/`, `apps/server/src/`, and `apps/web/src/` must not branch on concrete plugin IDs. Discover behavior through manifest `capabilities` and `outputKind`. Update the matching `docs/reference/` page whenever a framework-visible contract changes.
 
+During early development, target the current contract only. Update producers, consumers, schemas, fixtures, and documentation together; do not add old-version migrations, dual reads/writes, aliases, or fallback branches solely to preserve development data. Document when affected development data must be recreated. Keep required runtime concurrency, failure handling, and supported backend differences; these are not version compatibility.
+
 ## Testing Guidelines
 
 Name Vitest files `*.test.ts` or `*.test.tsx` and Playwright files `*.spec.ts`. Add focused regression tests for features and fixes. The coverage goal is at least 80% (`pnpm test:coverage`), but CI does not currently enforce it.

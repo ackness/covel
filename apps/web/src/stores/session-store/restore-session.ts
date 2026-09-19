@@ -142,12 +142,14 @@ async function restoreLocalFallback(
 
 async function restoreSubmittedBlocks(
   ds: DataService,
-  sessionId: string,
+  session: api.SessionRecord,
   dispatch: SessionDispatch,
 ): Promise<void> {
   try {
-    const { ids: blockIds, values: blockValues } =
-      await ds.loadSubmittedBlocks(sessionId);
+    const { ids: blockIds, values: blockValues } = await ds.loadSubmittedBlocks(
+      session.id,
+      session,
+    );
     for (const blockId of blockIds) {
       dispatch({
         type: "SUBMIT_BLOCK",
@@ -193,10 +195,10 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
 
 async function restorePersistedExecutionSteps(
   ds: DataService,
-  sessionId: string,
+  session: api.SessionRecord,
 ): Promise<ExecutionStep[]> {
   try {
-    const raw = (await ds.loadExecutionSteps(sessionId)) as Array<
+    const raw = (await ds.loadExecutionSteps(session.id, session)) as Array<
       Record<string, unknown>
     >;
     return raw.map(toExecutionStep);
@@ -308,7 +310,7 @@ export async function restoreSessionState({
   if (!isCurrent()) return;
   dispatch({ type: "SET_SESSION", session: freshSession });
 
-  const localSteps = await restorePersistedExecutionSteps(ds, session.id);
+  const localSteps = await restorePersistedExecutionSteps(ds, freshSession);
   if (!isCurrent()) return;
   const snapshotLoaded = await restoreServerSnapshot(
     session.id,
@@ -333,7 +335,7 @@ export async function restoreSessionState({
     });
   }
 
-  await restoreSubmittedBlocks(ds, session.id, dispatchCurrent);
+  await restoreSubmittedBlocks(ds, freshSession, dispatchCurrent);
   if (!isCurrent()) return;
 
   refreshSessionSideData(

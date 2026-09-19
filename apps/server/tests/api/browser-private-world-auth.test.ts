@@ -92,7 +92,10 @@ describe("browser-private shared world authorization", () => {
       setupRuntimes: {},
       activePlugins: [],
       locale: "en-US",
-      metadata: { ownerTokenHash: hashSessionOwnerToken(OWNER_TOKEN) },
+      metadata: {
+        ownerTokenHash: hashSessionOwnerToken(OWNER_TOKEN),
+        sessionIncarnationNonce: crypto.randomUUID(),
+      },
       createdAt: "2026-08-25T00:00:00.000Z",
       updatedAt: "2026-08-25T00:00:00.000Z",
     });

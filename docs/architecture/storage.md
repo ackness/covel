@@ -151,8 +151,30 @@ The web app uses two databases with separate lifecycles:
 - `covel-browser-vault` (Dexie schema v5): latest session checkpoints, compact
   action-idempotency records, pending server commits, and browser-authored
   worlds with a durable initialization marker.
-- `covel-browser-cache` (native IDB schema v1): UI state, submitted blocks,
+- `covel-browser-cache` (native IDB schema v2): UI state, submitted blocks,
   execution-display cache, media metadata, and render blobs.
+
+Remote UI caches have a separate `remoteSessionUi` store with session incarnation
+and world ownership, plus short operation epochs in `remoteUiEpochs`. Cache reads
+and writes capture the caller's session identity. Reads and new/replaced bindings
+query the authoritative server; display updates under an already verified binding
+stay local. All operations validate epochs and the current cache binding inside
+an IndexedDB transaction.
+This prevents delayed responses from overwriting a same-ID replacement. Concurrent
+form submissions merge; timeline data remains a display snapshot.
+
+Remote deletion invalidates the affected session/world epoch before and after the
+server request and reconciles cached owners against the server, including partial
+failure. Authentication/network errors or missing identity tags preserve data; confirmed absence or a new
+incarnation allows removal. Cache errors do not roll back server deletion. This
+protocol needs no Web Locks and does not make offline clients immediately observe
+deletion performed by another device.
+
+Local and remote modes use distinct cache stores; a session ID alone cannot transfer
+ownership between them. Remote mode uses only the current identity-scoped schema.
+No migration, dual-read or fallback to previous remote display formats is provided.
+Reads and binding changes add a session GET; streaming updates do not. No throughput
+equivalence is assumed.
 
 Sample worlds are inserted only when a newly created vault first initializes
 an empty library. The world records and initialization marker commit in one

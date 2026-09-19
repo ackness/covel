@@ -44,6 +44,7 @@ import {
   resolveSessionParam,
   sessionIncarnationIdentity,
   publicSessionMetadata,
+  publicSessionIncarnation,
   SESSION_APPROVAL_SCOPE_KEY,
   SESSION_DELETION_PENDING_KEY,
   SESSION_INCARNATION_KEY,
@@ -112,14 +113,12 @@ function sessionHasSetupRuntime(
 /**
  * Prepare a session for the wire by stripping internal metadata credentials.
  */
-function sanitizeSessionForResponse<
-  T extends {
-    readonly metadata?: Record<string, unknown> | null;
-  },
->(session: T): T {
-  if (!session.metadata) return session;
+function sanitizeSessionForResponse<T extends SessionRecord>(
+  session: T,
+): T & { readonly incarnation: string } {
   return {
     ...session,
+    incarnation: publicSessionIncarnation(session),
     metadata: publicSessionMetadata(session.metadata),
   };
 }

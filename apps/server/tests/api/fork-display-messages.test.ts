@@ -25,6 +25,7 @@ beforeEach(async () => {
   mediaStore = createMemoryMediaStore();
   await store.createSession({
     id: "parent",
+    metadata: { sessionIncarnationNonce: crypto.randomUUID() },
     status: "active",
     phase: "playing",
     completedPlayerTurns: 1,

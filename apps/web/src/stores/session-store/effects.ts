@@ -23,10 +23,10 @@ export function usePersistExecutionStepsEffect(
   useEffect(() => {
     const sid = state.session?.id;
     if (!sid || state.executionSteps.length === 0) return;
-    ds.saveExecutionSteps(sid, state.executionSteps).catch(
+    ds.saveExecutionSteps(sid, state.executionSteps, state.session!).catch(
       ignoreError("save execution steps"),
     );
-  }, [state.executionSteps, state.session?.id, ds]);
+  }, [state.executionSteps, state.session?.id, state.session?.incarnation, ds]);
 }
 
 export function useMessageUiSpecHydrationEffect(

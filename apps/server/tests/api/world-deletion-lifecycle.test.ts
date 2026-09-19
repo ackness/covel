@@ -67,7 +67,11 @@ describe.each(["memory", "sqlite"])(
       await store.upsertWorld(makeWorld({ id: "beta" }));
       for (const id of ["alpha-one", "alpha-two", "beta-one"]) {
         await store.createSession(
-          makeSession({ id, worldId: id.split("-")[0] }),
+          makeSession({
+            id,
+            worldId: id.split("-")[0],
+            metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+          }),
         );
         await store.addMessage(
           makeMessage({ id: `${id}-message`, sessionId: id }),

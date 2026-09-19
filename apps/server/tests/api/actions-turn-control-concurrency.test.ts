@@ -130,6 +130,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
     await store.createSession({
       id: SESSION_ID,
       worldId: null,
+      metadata: { sessionIncarnationNonce: crypto.randomUUID() },
       phase: "playing",
       status: "active",
       activePlugins: [PLUGIN_ID],

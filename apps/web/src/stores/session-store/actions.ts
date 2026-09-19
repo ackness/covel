@@ -348,16 +348,18 @@ export function useBuildSessionActions({
 
   const submitBlock = useCallback(
     (blockId: string, values?: Record<string, unknown>) => {
-      dispatch({ type: "SUBMIT_BLOCK", blockId, values });
       const sid = sessionIdRef.current;
-      if (!sid) return;
+      const owner = stateRef.current.session;
+      dispatch({ type: "SUBMIT_BLOCK", blockId, values });
+      if (!sid || owner?.id !== sid) return;
       ds.saveSubmittedBlocks(
         sid,
         [blockId],
         values ? { [blockId]: values } : {},
+        owner,
       ).catch(ignoreError("save submitted blocks"));
     },
-    [ds, dispatch, sessionIdRef],
+    [ds, dispatch, sessionIdRef, stateRef],
   );
 
   const submittingInteractions = useRef(new Set<string>());

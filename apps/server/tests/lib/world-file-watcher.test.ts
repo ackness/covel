@@ -70,6 +70,7 @@ dimensionSources:
       const now = new Date().toISOString();
       await store.createSession({
         id: "watch-session",
+        metadata: { sessionIncarnationNonce: crypto.randomUUID() },
         worldId: "fixture-world",
         status: "active",
         phase: "playing",

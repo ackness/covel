@@ -17,6 +17,8 @@ export interface SessionEmbeddingInfo {
 
 export interface Session {
   readonly id: string;
+  /** Opaque API identity for one persisted incarnation; not an authorization token. */
+  readonly incarnation: string;
   readonly worldId?: string;
   /** Lifecycle flag. `active` under normal play; `paused`/`ended` stops scheduling. */
   readonly status: SessionStatus;

@@ -32,7 +32,7 @@ async function seed(target: DataStore, metadata?: Record<string, unknown>) {
 
     activePlugins: [],
     locale: "zh-CN",
-    metadata,
+    metadata: { ...metadata, sessionIncarnationNonce: crypto.randomUUID() },
     createdAt: "2026-08-25T00:00:00.000Z",
     updatedAt: "2026-08-25T00:00:00.000Z",
   });
@@ -61,6 +61,8 @@ beforeEach(async () => {
 
 describe("browser-private workspace exchange", () => {
   it("hydrates all checkpoint domains and preserves server-private metadata", async () => {
+    const nonce = (await store.getSession(SESSION_ID))?.metadata
+      ?.sessionIncarnationNonce;
     const browser = createMemoryStore();
     await seed(browser, { player: "local" });
     await browser.addMessage({
@@ -80,6 +82,7 @@ describe("browser-private workspace exchange", () => {
     expect((await store.getSession(SESSION_ID))?.metadata).toEqual({
       player: "local",
       ownerTokenHash: "server-private",
+      sessionIncarnationNonce: nonce,
     });
   });
 
