@@ -1,33 +1,11 @@
 /**
- * IndexedDB blob cache for MediaRef-addressed assets.
- *
- * - DB name:    `covel-browser-cache`
- * - Store:      `media_cache_blobs` (keyPath `id`, content-addressable SHA-256)
- * - Schema:     `MediaCacheRecord`
- *
- * The cache is content-addressable, so writes are idempotent: writing the
- * same `id` twice is a no-op (we keep the first record). LRU eviction is
- * intentionally deferred to P2 — see SPEC §5.1 (i).
- *
- * All failures are swallowed and logged via `console.warn`. The cache is
- * a soft optimisation: if IDB is unavailable (private mode, quota
- * exhausted, schema upgrade failure) the rendering layer must still
- * function via the network fallback in `media-resolve.ts`.
+ * Optional content-addressed render-blob cache, separate from game checkpoints.
+ * Failures return a cache miss or complete without a write, allowing the
+ * rendering layer to use its authorized network response. First writer wins.
  */
-
-// Import from the backend-free schema module (constants + the pure upgrade
-// function only). Business checkpoints live in the separate Dexie
-// BrowserVault and never share this cache schema.
-import {
-  BROWSER_IDB_SCHEMA_VERSION,
-  MEDIA_CACHE_STORE_BLOBS,
-  upgradeBrowserIdbSchema,
-} from "@covel/store/idb-schema";
-import { BROWSER_STORAGE_DB_NAME } from "@/services/storage";
-
-const DB_NAME = BROWSER_STORAGE_DB_NAME;
-const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
-const STORE_BLOBS = MEDIA_CACHE_STORE_BLOBS;
+import { z } from "zod";
+import { MEDIA_CACHE_STORE_BLOBS } from "@covel/store/idb-schema";
+import { openBrowserCacheDb } from "@/services/storage/cache-db.js";
 
 export interface MediaCacheRecord {
   readonly id: string;
@@ -37,177 +15,158 @@ export interface MediaCacheRecord {
   readonly savedAt: number;
 }
 
-let dbPromise: Promise<IDBDatabase | null> | null = null;
+const recordSchema = z
+  .object({
+    id: z.string(),
+    mime: z.string(),
+    size: z.number().int().nonnegative(),
+    blob: z.instanceof(Blob),
+    savedAt: z.number(),
+  })
+  .refine((record) => record.size === record.blob.size);
 
-function isIdbAvailable(): boolean {
-  return typeof indexedDB !== "undefined";
-}
-
-function openMediaDb(): Promise<IDBDatabase | null> {
-  if (dbPromise) return dbPromise;
-  if (!isIdbAvailable()) {
-    dbPromise = Promise.resolve(null);
-    return dbPromise;
-  }
-  dbPromise = new Promise<IDBDatabase | null>((resolve) => {
-    let req: IDBOpenDBRequest;
-    try {
-      req = indexedDB.open(DB_NAME, DB_VERSION);
-    } catch (err: unknown) {
-      console.warn("[media-cache] indexedDB.open threw", err);
-      resolve(null);
-      return;
-    }
-    req.onupgradeneeded = (event) => {
-      const transaction = req.transaction!;
-      void upgradeBrowserIdbSchema(
-        req.result,
-        event.oldVersion,
-        transaction,
-      ).catch((err: unknown) => {
-        console.warn("[media-cache] IndexedDB schema upgrade failed", err);
-        try {
-          transaction.abort();
-        } catch {
-          // The transaction already aborted or completed.
-        }
-      });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => {
-      console.warn("[media-cache] indexedDB.open error", req.error);
-      resolve(null);
-    };
-    req.onblocked = () => {
-      console.warn("[media-cache] indexedDB.open blocked");
-      resolve(null);
-    };
-  });
-  return dbPromise;
-}
-
-/**
- * Reset the cached `dbPromise`. Test-only — production callers should
- * never need this. Exported under a __test prefix to make the contract
- * obvious. Not in public surface.
- */
-export function __resetMediaCacheForTests(): void {
-  dbPromise = null;
-}
-
-/**
- * Optional structural shape used to verify a cached record at read time.
- * Mirrors the relevant `MediaRef` fields without coupling this module to
- * the shared types package — keeps the cache reusable from any caller
- * that wants the integrity guarantee.
- */
 export interface ExpectedRecordShape {
   readonly id: string;
   readonly mime: string;
   readonly size: number;
 }
 
+function warnCacheFailure(operation: string, error: unknown): void {
+  // Browser errors and caller-supplied records can include sensitive details.
+  console.warn(`[media-cache] ${operation} failed`, {
+    errorType: error instanceof Error ? error.name : typeof error,
+  });
+}
+
+async function transact<T>(
+  mode: IDBTransactionMode,
+  enqueue: (store: IDBObjectStore) => IDBRequest<T>,
+  onResult?: (value: T, store: IDBObjectStore) => void,
+): Promise<T | undefined> {
+  if (typeof indexedDB === "undefined") return undefined;
+  const db = await openBrowserCacheDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MEDIA_CACHE_STORE_BLOBS, mode);
+    const store = tx.objectStore(MEDIA_CACHE_STORE_BLOBS);
+    let request: IDBRequest<T>;
+    let failure: unknown;
+    const abort = (error: unknown) => {
+      failure = error;
+      try {
+        tx.abort();
+      } catch {
+        reject(error);
+      }
+    };
+    tx.oncomplete = () => resolve(request.result);
+    tx.onabort = () =>
+      reject(
+        failure ?? tx.error ?? new Error("Media cache transaction aborted"),
+      );
+    try {
+      request = enqueue(store);
+      if (onResult)
+        request.onsuccess = () => {
+          try {
+            onResult(request.result, store);
+          } catch (error) {
+            abort(error);
+          }
+        };
+    } catch (error) {
+      abort(error);
+    }
+  });
+}
+
 export async function getCachedMedia(
   id: string,
   expected?: ExpectedRecordShape,
 ): Promise<MediaCacheRecord | null> {
-  const db = await openMediaDb();
-  if (!db) return null;
-  const record = await new Promise<MediaCacheRecord | null>((resolve) => {
-    let tx: IDBTransaction;
-    try {
-      tx = db.transaction(STORE_BLOBS, "readonly");
-    } catch (err: unknown) {
-      console.warn("[media-cache] getCachedMedia tx error", err);
-      resolve(null);
-      return;
+  const shape = expected && {
+    id: expected.id,
+    mime: expected.mime,
+    size: expected.size,
+  };
+  try {
+    const raw: unknown = await transact("readonly", (store) => store.get(id));
+    if (raw === undefined) return null;
+    const record = parseCachedRecord(raw, shape);
+    if (!record) {
+      console.warn("[media-cache] evicting invalid record", { mediaId: id });
+      // Cleanup is best effort and must not delay an authorized network fetch.
+      void evictInvalidRecord(id, shape);
+      return null;
     }
-    const store = tx.objectStore(STORE_BLOBS);
-    const req = store.get(id);
-    req.onsuccess = () => {
-      const result = req.result as MediaCacheRecord | undefined;
-      resolve(result ?? null);
-    };
-    req.onerror = () => {
-      console.warn("[media-cache] getCachedMedia error", req.error);
-      resolve(null);
-    };
-  });
-  if (!record) return null;
-  if (expected && !cachedRecordMatches(record, expected)) {
-    console.warn(
-      "[media-cache] evicting cached record — does not match expected ref",
-      {
-        id: expected.id,
-        expected,
-        cached: { id: record.id, mime: record.mime, size: record.size },
-      },
-    );
-    // Fire-and-forget eviction; never block the read path on cleanup.
-    void deleteCachedMedia(id);
+    return record;
+  } catch (error) {
+    warnCacheFailure("read", error);
     return null;
   }
-  return record;
+}
+
+function parseCachedRecord(
+  raw: unknown,
+  expected?: ExpectedRecordShape,
+): MediaCacheRecord | null {
+  const parsed = recordSchema.safeParse(raw);
+  return parsed.success &&
+    (!expected || cachedRecordMatches(parsed.data, expected))
+    ? parsed.data
+    : null;
+}
+
+async function evictInvalidRecord(
+  id: string,
+  expected?: ExpectedRecordShape,
+): Promise<void> {
+  try {
+    await transact(
+      "readwrite",
+      (store) => store.get(id),
+      (current, store) => {
+        // Another tab may repair the record after the read that scheduled eviction.
+        if (current !== undefined && !parseCachedRecord(current, expected))
+          store.delete(id);
+      },
+    );
+  } catch (error) {
+    warnCacheFailure("evict", error);
+  }
 }
 
 function cachedRecordMatches(
   record: MediaCacheRecord,
   expected: ExpectedRecordShape,
 ): boolean {
-  if (record.id !== expected.id) return false;
-  if (record.size !== expected.size) return false;
-  if (record.blob.size !== expected.size) return false;
-  if (expected.mime && record.mime && record.mime !== expected.mime) {
-    return false;
-  }
-  return true;
+  return (
+    record.id === expected.id &&
+    record.size === expected.size &&
+    (!expected.mime || !record.mime || record.mime === expected.mime)
+  );
 }
 
 export async function putCachedMedia(record: MediaCacheRecord): Promise<void> {
-  const db = await openMediaDb();
-  if (!db) return;
-  // Idempotent: if the id already exists, skip the write. Content-addressable
-  // ids guarantee that the bytes match, so re-writing wastes I/O.
-  const existing = await getCachedMedia(record.id);
-  if (existing) return;
-
-  return new Promise<void>((resolve) => {
-    let tx: IDBTransaction;
-    try {
-      tx = db.transaction(STORE_BLOBS, "readwrite");
-    } catch (err: unknown) {
-      console.warn("[media-cache] putCachedMedia tx error", err);
-      resolve();
-      return;
-    }
-    const store = tx.objectStore(STORE_BLOBS);
-    const req = store.put(record);
-    req.onsuccess = () => resolve();
-    req.onerror = () => {
-      console.warn("[media-cache] putCachedMedia error", req.error);
-      resolve();
-    };
-  });
+  try {
+    // Zod copies the scalar metadata before waiting; Blob bytes are immutable.
+    const owned = recordSchema.parse(record);
+    await transact(
+      "readwrite",
+      (store) => store.get(owned.id),
+      (existing, store) => {
+        // Read and first insert share one transaction across all tabs.
+        if (existing === undefined) store.put(owned);
+      },
+    );
+  } catch (error) {
+    warnCacheFailure("write", error);
+  }
 }
 
 export async function deleteCachedMedia(id: string): Promise<void> {
-  const db = await openMediaDb();
-  if (!db) return;
-  return new Promise<void>((resolve) => {
-    let tx: IDBTransaction;
-    try {
-      tx = db.transaction(STORE_BLOBS, "readwrite");
-    } catch (err: unknown) {
-      console.warn("[media-cache] deleteCachedMedia tx error", err);
-      resolve();
-      return;
-    }
-    const store = tx.objectStore(STORE_BLOBS);
-    const req = store.delete(id);
-    req.onsuccess = () => resolve();
-    req.onerror = () => {
-      console.warn("[media-cache] deleteCachedMedia error", req.error);
-      resolve();
-    };
-  });
+  try {
+    await transact("readwrite", (store) => store.delete(id));
+  } catch (error) {
+    warnCacheFailure("delete", error);
+  }
 }

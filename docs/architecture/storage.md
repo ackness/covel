@@ -157,13 +157,26 @@ not merge concurrent tabs' distinct histories.
 
 App-KV writes and deletions resolve on transaction completion, not individual
 request success. An aborted transaction rejects even if its request succeeded.
-The app-KV connection shares an in-flight open, but discards failed opens and
-unexpectedly closed handles so a later operation can reconnect. A version-change
+App-KV and the optional render-blob cache share one connection and in-flight open
+per page. It discards failed opens and unexpectedly closed handles so a later operation can reconnect. A version-change
 notification closes and releases that handle to allow deletion or upgrades;
-it does not delete data or automatically replay the failed operation. Other
-connections to the shared cache database have their own lifecycle.
+it does not delete data or automatically replay the failed operation. Blocked
+opens reject instead of waiting indefinitely. While that native request remains
+blocked, later calls reuse the rejection instead of queuing another open. Any
+later abandoned upgrade is aborted or its handle closed. App-KV reports the error; the render cache
+falls back to the authorized network response. IndexedDbMediaStore's explicit
+backend connection has its own lifecycle.
 Callers receive patch persistence failures; the SSE consumer reports them as
 best-effort display-cache failures without changing the committed game outcome.
+
+Render-blob cache reads validate the stored record and expected media shape.
+Invalid data is a miss; deferred eviction rechecks inside a transaction so it
+cannot remove a valid replacement from another tab. First-write detection and
+insertion share a readwrite transaction, preserving the first record across tabs.
+Cache writes/deletions wait for transaction completion, and aborts produce safe
+diagnostics without rejecting the media rendering flow. Diagnostics omit raw
+browser errors and signed URLs. The cache is an optimization, not media authority.
+Capacity-based eviction remains unimplemented.
 
 Only the latest full checkpoint is retained. Snapshot history already exists
 inside the checkpoint; retaining a full checkpoint for every action would grow

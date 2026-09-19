@@ -6,15 +6,19 @@
  *   - sentinel placeholder when resolution fails
  *   - blob URL revoked on unmount
  *
- * Network and IDB are stubbed inline so the tests do not depend on
- * `fake-indexeddb` (not hoisted into apps/web/node_modules).
+ * Network responses are deterministic; fake-indexeddb covers transaction
+ * ordering with native structured-cloneable Blobs.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 
-import { Media } from "../Media.js";
-import { __resetMediaCacheForTests } from "../../lib/media-cache.js";
+import "fake-indexeddb/auto";
+import { IDBFactory as FakeIDBFactory } from "fake-indexeddb";
+import { Blob as NativeBlob } from "node:buffer";
+
+let Media: typeof import("../Media.js").Media;
+let connections: IDBDatabase[];
 import { sha256Hex } from "../../lib/media-hash.js";
 import type { MediaRef } from "@covel/shared";
 
@@ -28,108 +32,6 @@ async function makeRef(mime: string): Promise<MediaRef> {
   return { id, mime, size: PAYLOAD_BYTES.byteLength };
 }
 
-// ── Inline minimal IDB shim (same shape as media-cache.test.ts) ────
-
-interface FakeReq<T = unknown> {
-  result: T;
-  error: unknown;
-  onsuccess: (() => void) | null;
-  onerror: (() => void) | null;
-  onupgradeneeded?: ((event: { oldVersion: number }) => void) | null;
-  onblocked?: (() => void) | null;
-}
-
-class FakeStore {
-  data = new Map<string, unknown>();
-  constructor(readonly keyPath: string) {}
-  createIndex(): void {}
-  get(key: string): FakeReq {
-    const req = mk();
-    queueMicrotask(() => {
-      req.result = this.data.get(key);
-      req.onsuccess?.();
-    });
-    return req;
-  }
-  put(record: Record<string, unknown>, key?: string): FakeReq {
-    const req = mk();
-    const recordKey = key ?? (record[this.keyPath] as string);
-    queueMicrotask(() => {
-      this.data.set(recordKey, record);
-      req.onsuccess?.();
-    });
-    return req;
-  }
-  delete(): FakeReq {
-    const req = mk();
-    queueMicrotask(() => req.onsuccess?.());
-    return req;
-  }
-  openCursor(): FakeReq {
-    const req = mk();
-    queueMicrotask(() => {
-      req.result = null;
-      req.onsuccess?.();
-    });
-    return req;
-  }
-}
-class FakeTx {
-  constructor(readonly db: FakeDb) {}
-  objectStore(n: string): FakeStore {
-    const s = this.db.stores.get(n);
-    if (!s) throw new Error("missing store");
-    return s;
-  }
-}
-class FakeDb {
-  stores = new Map<string, FakeStore>();
-  objectStoreNames = { contains: (n: string) => this.stores.has(n) };
-  createObjectStore(name: string, opts?: { keyPath?: string }): FakeStore {
-    const s = new FakeStore(opts?.keyPath ?? "id");
-    this.stores.set(name, s);
-    return s;
-  }
-  transaction(name: string): FakeTx {
-    if (!this.stores.has(name)) throw new Error("no store");
-    return new FakeTx(this);
-  }
-}
-function mk<T = unknown>(): FakeReq<T> {
-  return {
-    result: undefined as T,
-    error: null,
-    onsuccess: null,
-    onerror: null,
-  };
-}
-const dbInstances = new Map<string, FakeDb>();
-function fakeIndexedDB() {
-  return {
-    open(name: string): FakeReq<FakeDb> {
-      const req = mk<FakeDb>();
-      let db = dbInstances.get(name);
-      const isNew = !db;
-      if (!db) {
-        db = new FakeDb();
-        dbInstances.set(name, db);
-      }
-      queueMicrotask(() => {
-        if (isNew) {
-          req.result = db as FakeDb;
-          req.onupgradeneeded?.({ oldVersion: 0 });
-        }
-        req.result = db as FakeDb;
-        req.onsuccess?.();
-      });
-      return req;
-    },
-  };
-}
-
-// ── Test harness ───────────────────────────────────────────────────
-
-const realIDB = (globalThis as { indexedDB?: unknown }).indexedDB;
 const realFetch = globalThis.fetch;
 const realCreateObjectURL = globalThis.URL.createObjectURL;
 const realRevokeObjectURL = globalThis.URL.revokeObjectURL;
@@ -137,10 +39,19 @@ const realRevokeObjectURL = globalThis.URL.revokeObjectURL;
 let revokeSpy: ReturnType<typeof vi.fn>;
 let urlCounter = 0;
 
-beforeEach(() => {
-  dbInstances.clear();
-  __resetMediaCacheForTests();
-  (globalThis as unknown as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
+beforeEach(async () => {
+  vi.resetModules();
+  const factory = new FakeIDBFactory();
+  connections = [];
+  vi.stubGlobal("indexedDB", factory);
+  vi.stubGlobal("Blob", NativeBlob);
+  const open = factory.open.bind(factory);
+  vi.spyOn(factory, "open").mockImplementation((name, version) => {
+    const request = open(name, version);
+    request.addEventListener("success", () => connections.push(request.result));
+    return request;
+  });
+  ({ Media } = await import("../Media.js"));
   urlCounter = 0;
   globalThis.URL.createObjectURL = vi.fn(
     () => "blob:test/" + ++urlCounter,
@@ -152,11 +63,9 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  if (realIDB === undefined) {
-    delete (globalThis as { indexedDB?: unknown }).indexedDB;
-  } else {
-    (globalThis as unknown as { indexedDB: unknown }).indexedDB = realIDB;
-  }
+  for (const connection of connections) connection.close();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   globalThis.fetch = realFetch;
   globalThis.URL.createObjectURL = realCreateObjectURL;
   globalThis.URL.revokeObjectURL = realRevokeObjectURL;

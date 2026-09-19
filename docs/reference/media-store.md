@@ -60,6 +60,21 @@ responses and `304` cache revalidation responses carry these protections.
 
 ## Backends
 
+The Web render-blob cache is separate from the `MediaStore` backend. Web media
+resolution authorizes the session before consulting this cache. Cache records are validated;
+malformed or mismatched entries fall back to verified network bytes. Concurrent
+writes retain the first record using one IndexedDB transaction. Write/delete
+completion follows transaction completion, and cache failures emit diagnostics
+without turning successfully downloaded media into a rendering failure.
+
+Render-cache and app-KV operations share one browser connection per page. Failed
+opens and closed handles can be retried by a later operation; version changes
+release the old handle. A blocked open returns a failure promptly and abandons
+its eventual upgrade/connection. Until that native request settles, later calls
+reuse its failure instead of queuing another blocked open. Cache diagnostics
+exclude raw exception details and signed URLs. Invalid-record eviction rechecks the current record before
+deleting, preserving another tab's valid replacement.
+
 | Backend         | Factory                                         | Byte storage                                           | `openReadStream()`          |
 | --------------- | ----------------------------------------------- | ------------------------------------------------------ | --------------------------- |
 | Memory          | `createMemoryMediaStore()`                      | Process memory                                         | yes (single chunk)          |

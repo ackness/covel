@@ -5,20 +5,15 @@
  * state patches, world overlays, submitted block UI state, etc.
  */
 
-// Backend-free schema module: constants plus the cache/media upgrade function.
+// Backend-free cache schema constants.
 import {
   APP_KV_STORE_EXECUTION_STEPS,
   APP_KV_STORE_STATE_PATCHES,
   APP_KV_STORE_SUBMITTED_BLOCKS,
   APP_KV_STORE_WORLD_OVERLAYS,
-  BROWSER_IDB_SCHEMA_VERSION,
-  upgradeBrowserIdbSchema,
 } from "@covel/store/idb-schema";
-import { BROWSER_STORAGE_DB_NAME } from "./storage/data-store.js";
+import { openBrowserCacheDb } from "./storage/cache-db.js";
 import type { StatePatchRecord } from "./api/types.js";
-
-const DB_NAME = BROWSER_STORAGE_DB_NAME;
-const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
 
 const STORE_WORLD_OVERLAYS = APP_KV_STORE_WORLD_OVERLAYS; // key: worldId
 const STORE_STATE_PATCHES = APP_KV_STORE_STATE_PATCHES; // key: sessionId
@@ -31,54 +26,11 @@ type StoreNames =
   | typeof STORE_SUBMITTED_BLOCKS
   | typeof STORE_EXECUTION_STEPS;
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function openAppDb(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  const opening = new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (event) => {
-      const transaction = req.transaction!;
-      void upgradeBrowserIdbSchema(
-        req.result,
-        event.oldVersion,
-        transaction,
-      ).catch(() => {
-        // Reject the open request instead of allowing a partially migrated
-        // schema to commit after an asynchronous upgrade failure.
-        try {
-          transaction.abort();
-        } catch {
-          // The transaction already aborted or completed.
-        }
-      });
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      db.onversionchange = () => {
-        db.close();
-        forgetConnection();
-      };
-      db.onclose = forgetConnection;
-      resolve(db);
-    };
-    req.onerror = () => reject(req.error);
-  });
-  function forgetConnection() {
-    // An older handle must not invalidate a replacement connection.
-    if (dbPromise === opening) dbPromise = null;
-  }
-  dbPromise = opening;
-  // Report this operation's failure; let the next caller try opening again.
-  void opening.catch(forgetConnection);
-  return opening;
-}
-
 async function idbGet<T>(
   storeName: StoreNames,
   key: string,
 ): Promise<T | null> {
-  const db = await openAppDb();
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readonly");
     const store = tx.objectStore(storeName);
@@ -94,7 +46,7 @@ async function idbPut<T>(
   value: T,
 ): Promise<void> {
   const owned = structuredClone(value);
-  const db = await openAppDb();
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
@@ -106,7 +58,7 @@ async function idbPut<T>(
 }
 
 async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
-  const db = await openAppDb();
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
@@ -127,7 +79,7 @@ export async function getStatePatches(
 
 export async function appendStatePatch(patch: StatePatchRecord): Promise<void> {
   const owned = structuredClone(patch);
-  const db = await openAppDb();
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_STATE_PATCHES, "readwrite");
     const store = tx.objectStore(STORE_STATE_PATCHES);
@@ -196,7 +148,7 @@ export async function saveSubmittedBlocks(
   values: Record<string, Record<string, unknown>>,
 ): Promise<void> {
   const owned = structuredClone({ ids, values });
-  const db = await openAppDb();
+  const db = await openBrowserCacheDb();
   return new Promise((resolve, reject) => {
     // One readwrite transaction serializes concurrent submissions, including
     // writes from another tab, without dropping previously submitted forms.

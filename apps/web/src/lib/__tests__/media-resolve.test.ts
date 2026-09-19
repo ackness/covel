@@ -7,124 +7,24 @@
  *   3. signed URL fetch (with integrity verification before caching)
  *   4. explicit error result on failure
  *
- * Uses the same minimal IDB shim from `media-cache.test.ts`. The IDB
- * cache is reset between tests so we can isolate the network paths.
+ * Uses fake-indexeddb and native structured-cloneable Blobs to cover
+ * real transaction ordering while keeping network responses deterministic.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __resetMediaCacheForTests } from "../media-cache.js";
-import { resolveMediaSrc, __testing } from "../media-resolve.js";
+import "fake-indexeddb/auto";
+import { IDBFactory as FakeIDBFactory } from "fake-indexeddb";
+import { Blob as NativeBlob } from "node:buffer";
 import { mediaTokenEndpoint } from "../../services/api/media.js";
 import { sha256Hex } from "../media-hash.js";
 import { storeSessionToken } from "../../services/session-credentials.js";
 import type { MediaRef } from "@covel/shared";
 
-// ── Inline minimal IDB shim (same shape as media-cache.test.ts) ────
+let connections: IDBDatabase[];
+let resolveMediaSrc: typeof import("../media-resolve.js").resolveMediaSrc;
+let __testing: typeof import("../media-resolve.js").__testing;
 
-interface FakeReq<T = unknown> {
-  result: T;
-  error: unknown;
-  onsuccess: (() => void) | null;
-  onerror: (() => void) | null;
-  onupgradeneeded?: ((event: { oldVersion: number }) => void) | null;
-  onblocked?: (() => void) | null;
-}
-
-class FakeStore {
-  data = new Map<string, unknown>();
-  constructor(readonly keyPath: string) {}
-  createIndex(): void {}
-  get(key: string): FakeReq {
-    const req = mk();
-    queueMicrotask(() => {
-      req.result = this.data.get(key);
-      req.onsuccess?.();
-    });
-    return req;
-  }
-  put(record: Record<string, unknown>, key?: string): FakeReq {
-    const req = mk();
-    const recordKey = key ?? (record[this.keyPath] as string);
-    queueMicrotask(() => {
-      this.data.set(recordKey, record);
-      req.onsuccess?.();
-    });
-    return req;
-  }
-  delete(key: string): FakeReq {
-    const req = mk();
-    queueMicrotask(() => {
-      this.data.delete(key);
-      req.onsuccess?.();
-    });
-    return req;
-  }
-  openCursor(): FakeReq {
-    const req = mk();
-    queueMicrotask(() => {
-      req.result = null;
-      req.onsuccess?.();
-    });
-    return req;
-  }
-}
-class FakeTx {
-  constructor(readonly db: FakeDb) {}
-  objectStore(n: string): FakeStore {
-    const s = this.db.stores.get(n);
-    if (!s) throw new Error("missing store");
-    return s;
-  }
-}
-class FakeDb {
-  stores = new Map<string, FakeStore>();
-  objectStoreNames = { contains: (n: string) => this.stores.has(n) };
-  createObjectStore(name: string, opts?: { keyPath?: string }): FakeStore {
-    const s = new FakeStore(opts?.keyPath ?? "id");
-    this.stores.set(name, s);
-    return s;
-  }
-  transaction(name: string): FakeTx {
-    if (!this.stores.has(name)) throw new Error("no store");
-    return new FakeTx(this);
-  }
-}
-function mk<T = unknown>(): FakeReq<T> {
-  return {
-    result: undefined as T,
-    error: null,
-    onsuccess: null,
-    onerror: null,
-  };
-}
-const dbInstances = new Map<string, FakeDb>();
-function fakeIndexedDB() {
-  return {
-    open(name: string): FakeReq<FakeDb> {
-      const req = mk<FakeDb>();
-      let db = dbInstances.get(name);
-      const isNew = !db;
-      if (!db) {
-        db = new FakeDb();
-        dbInstances.set(name, db);
-      }
-      queueMicrotask(() => {
-        if (isNew) {
-          req.result = db as FakeDb;
-          req.onupgradeneeded?.({ oldVersion: 0 });
-        }
-        req.result = db as FakeDb;
-        req.onsuccess?.();
-      });
-      return req;
-    },
-  };
-}
-
-// ── Test setup ─────────────────────────────────────────────────────
-
-const realIDB = (globalThis as { indexedDB?: unknown }).indexedDB;
 const realFetch = globalThis.fetch;
 const realLocalStorage = Object.getOwnPropertyDescriptor(
   globalThis,
@@ -135,7 +35,8 @@ const realRevokeObjectURL = globalThis.URL.revokeObjectURL;
 
 let createdUrls: string[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
   const credentials = new Map<string, string>();
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
@@ -145,9 +46,17 @@ beforeEach(() => {
       removeItem: (key: string) => credentials.delete(key),
     },
   });
-  dbInstances.clear();
-  __resetMediaCacheForTests();
-  (globalThis as unknown as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
+  const factory = new FakeIDBFactory();
+  connections = [];
+  vi.stubGlobal("indexedDB", factory);
+  vi.stubGlobal("Blob", NativeBlob);
+  const open = factory.open.bind(factory);
+  vi.spyOn(factory, "open").mockImplementation((name, version) => {
+    const request = open(name, version);
+    request.addEventListener("success", () => connections.push(request.result));
+    return request;
+  });
+  ({ resolveMediaSrc, __testing } = await import("../media-resolve.js"));
 
   createdUrls = [];
   globalThis.URL.createObjectURL = vi.fn((blob: Blob | MediaSource) => {
@@ -165,11 +74,9 @@ afterEach(() => {
   } else {
     delete (globalThis as { localStorage?: Storage }).localStorage;
   }
-  if (realIDB === undefined) {
-    delete (globalThis as { indexedDB?: unknown }).indexedDB;
-  } else {
-    (globalThis as unknown as { indexedDB: unknown }).indexedDB = realIDB;
-  }
+  for (const connection of connections) connection.close();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   globalThis.fetch = realFetch;
   globalThis.URL.createObjectURL = realCreateObjectURL;
   globalThis.URL.revokeObjectURL = realRevokeObjectURL;
@@ -238,6 +145,25 @@ describe("mediaTokenEndpoint", () => {
 });
 
 describe("resolveMediaSrc", () => {
+  it("renders verified network bytes even when the cache write throws", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(() => {
+      throw new DOMException("Synthetic cache failure", "QuotaExceededError");
+    });
+    const ref = await pngRef();
+    mockFetch(async (url) =>
+      url.startsWith("/api/sessions/")
+        ? new Response(JSON.stringify({ url: "/api/media/fixture" }), {
+            headers: { "Content-Type": "application/json" },
+          })
+        : pngResponse(),
+    );
+    const result = await resolveMediaSrc(ref, { sessionId: "cache-failure" });
+    expect(result).toMatchObject({ ok: true, fromCache: false });
+    expect(await result.blob?.text()).toBe(PNG_PAYLOAD);
+    expect(warning).toHaveBeenCalled();
+  });
+
   it.each(["status", "network", "authorization"])(
     "reports %s failures without logging signed URLs or error messages",
     async (failure) => {
