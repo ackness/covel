@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-9-4.turborepo.dev/schema.json",
+  "globalPassThroughEnv": ["VITEST_MAX_WORKERS"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

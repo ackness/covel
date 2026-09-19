@@ -96,6 +96,8 @@ describe("runtime debug host integration", () => {
     expect(report.cases[0]?.status).toBe("passed");
   });
 
+  // CLI cases include a fresh Node/tsx import graph. Keep the outer budget
+  // above the child's 10-second hard limit, including setup on loaded CI hosts.
   it.each(["skipped-follower", "missing-follower"])(
     "fails cases and CLI when the job fails without a failed runtime (%s)",
     async (mode) => {
@@ -157,6 +159,7 @@ describe("runtime debug host integration", () => {
       expect(cli.status, cli.stderr).toBe(1);
       expect(cases.cases[0]?.status).toBe("failed");
     },
+    15_000,
   );
 
   it("commits and reports nested results from the initial runtime", async () => {
@@ -315,5 +318,5 @@ describe("runtime debug host integration", () => {
     );
     expect(cli.status, cli.stderr).toBe(1);
     expect(JSON.parse(cli.stdout).commitStatus).toBe("failed");
-  });
+  }, 15_000);
 });

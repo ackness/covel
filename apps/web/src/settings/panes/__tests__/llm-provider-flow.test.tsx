@@ -375,7 +375,7 @@ it.each([
     await waitFor(() =>
       expect(persistedEntries["llm.providers"]).toEqual(expected(draft)),
     );
-    expect(input.value).toBe(draft);
+    await waitFor(() => expect(input.value).toBe(draft));
     expect(screen.queryByText(i18n.t("settings.draftConflict"))).toBeNull();
 
     const next = `${draft}-next`;
