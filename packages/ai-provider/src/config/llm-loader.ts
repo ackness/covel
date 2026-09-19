@@ -184,6 +184,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
  * - image output → image
  * - audio output → speech
  * - embedding output → embed
+ * - evaluation output → evaluate
  */
 function deriveSupportedModes(
   outputModalities: readonly string[],
@@ -200,6 +201,9 @@ function deriveSupportedModes(
       case "audio":
         modes.push("speech");
         break;
+      case "evaluation":
+        modes.push("evaluate");
+        break;
       case "embedding":
         modes.push("embed");
         break;
@@ -210,9 +214,10 @@ function deriveSupportedModes(
 
 /**
  * Infer slot tag from output modalities.
- * If any output is "image", tag is "image". Otherwise "text".
+ * Evaluation and image outputs select their matching tag; otherwise text.
  */
 function inferTag(outputModalities: readonly string[]): string {
+  if (outputModalities.includes("evaluation")) return "evaluation";
   if (outputModalities.includes("image")) return "image";
   return "text";
 }

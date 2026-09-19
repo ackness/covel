@@ -677,6 +677,7 @@
     "modalOutImage": "Генерация изображений",
     "modalOutAudio": "Синтез речи",
     "modalOutEmbedding": "Эмбеддинги",
+    "modalOutEvaluation": "Оценка",
     "featFunctionCalling": "Вызов функций",
     "featStructuredOutput": "Структурированный вывод",
     "featStreaming": "Потоковая генерация",

@@ -215,6 +215,7 @@ export function ProtocolSelect({
       <option value="openai-chat-v1">OpenAI Chat</option>
       <option value="openai-responses-v1">OpenAI Responses</option>
       <option value="anthropic-messages-v1">Anthropic Messages</option>
+      <option value="typesafe-systemone-v1">TypeSafe System One</option>
     </select>
   );
 }

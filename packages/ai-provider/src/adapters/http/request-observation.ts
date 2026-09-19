@@ -5,6 +5,8 @@ import type { ProviderConfig } from "../../types.js";
 // that describe model input/generation are eligible for request traces.
 const MODEL_FIELDS = new Set([
   "model",
+  "state",
+  "questions",
   "messages",
   "input",
   "instructions",

@@ -171,6 +171,7 @@ const SUPPORTED_PROVIDER_PROTOCOLS = new Set([
   "openai-chat-v1",
   "openai-responses-v1",
   "anthropic-messages-v1",
+  "typesafe-systemone-v1",
 ]);
 
 /**

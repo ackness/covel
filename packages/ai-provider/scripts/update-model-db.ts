@@ -271,7 +271,14 @@ function isInputModality(s: string): s is InputModality {
 }
 
 function isOutputModality(s: string): s is OutputModality {
-  return ["text", "image", "audio", "video", "embedding"].includes(s);
+  return [
+    "text",
+    "image",
+    "audio",
+    "video",
+    "embedding",
+    "evaluation",
+  ].includes(s);
 }
 
 function roundPrice(n: number): number {

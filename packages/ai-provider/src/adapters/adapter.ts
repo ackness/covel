@@ -1,4 +1,10 @@
 import type {
+  EvaluationParams,
+  EvaluationQuestions,
+  EvaluationResult,
+} from "../evaluation/types.js";
+
+import type {
   EmbeddingParams,
   EmbeddingResult,
   ModelRequestContext,
@@ -15,6 +21,13 @@ import type {
  * Each protocol (OpenAI Chat, Anthropic Messages, etc.) implements this.
  */
 export interface ModelProviderAdapter {
+  /** Typed decisions; independent of text generation and tool calling. */
+  evaluate?<const Q extends EvaluationQuestions>(
+    config: ProviderConfig,
+    params: EvaluationParams<Q>,
+    context?: ModelRequestContext,
+  ): Promise<EvaluationResult<Q>>;
+
   generateText(
     config: ProviderConfig,
     params: TextGenerationParams,

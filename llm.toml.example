@@ -8,6 +8,7 @@
 # Each slot has a `tag` (auto-inferred from output modalities if omitted):
 #   - "text"  — text generation models (default)
 #   - "image" — image generation models
+#   - "evaluation" — typed decisions (Choice / Score / Boolean)
 #
 # Tags determine compatibility: a runtime requiring "text" can only
 # use slots tagged "text". Cross-tag fallback is forbidden.
@@ -19,6 +20,7 @@
 #   model      — opaque model ID passed to the provider API unchanged
 #   baseUrl    — API endpoint URL
 #   protocol   — "openai-chat-v1" | "openai-responses-v1" | "anthropic-messages-v1"
+#                | "typesafe-systemone-v1"
 #   fallback   — (optional) slot name to fall back to on failure (same tag only)
 #   tag        — (optional) capability tag, auto-inferred from output modalities
 #
@@ -174,3 +176,12 @@ fallback = "story"
 # model    = "claude-sonnet-4-6"
 # baseUrl  = "https://api.anthropic.com"
 # protocol = "anthropic-messages-v1"
+# Native typed evaluations; call gateway.evaluate(), not text generation.
+# See docs/reference/evaluation.md. Keys belong in .env.llm / keys.env.
+# [covel.evaluation]
+# provider = "typesafe"
+# model = "jev-latest"
+# baseUrl = "https://api.typesafe.ai/v1"
+# protocol = "typesafe-systemone-v1"
+# tag = "evaluation"
+# output = ["evaluation"]

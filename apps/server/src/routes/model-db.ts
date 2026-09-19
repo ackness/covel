@@ -7,6 +7,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { readRuntimeEnv } from "@covel/shared";
 import {
+  type ProviderProtocol,
   createModelDatabase,
   fetchLiteLlmModels,
   resolveCapabilityDetails,
@@ -57,11 +58,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
   app.get("/api/model-db/lookup", (c) => {
     const model = c.req.query("model") ?? "";
     const provider = c.req.query("provider");
-    const protocol = c.req.query("protocol") as
-      | "openai-chat-v1"
-      | "openai-responses-v1"
-      | "anthropic-messages-v1"
-      | undefined;
+    const protocol = c.req.query("protocol") as ProviderProtocol | undefined;
     const result = resolveCapabilityDetails(
       model,
       provider ?? undefined,

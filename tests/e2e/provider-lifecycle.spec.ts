@@ -21,6 +21,43 @@ async function savedEntries(page: Page) {
   );
 }
 
+test("TypeSafe models retain their native protocol across save and reload", async ({
+  page,
+}) => {
+  const settings = await openProviderSettings(page);
+  await settings
+    .getByRole("button", { name: "Add provider", exact: true })
+    .first()
+    .click();
+  const create = page.getByRole("dialog", {
+    name: "Add provider",
+    exact: true,
+  });
+  await create.getByPlaceholder("Provider ID, e.g. openai").fill("typesafe");
+  await create.getByRole("combobox").selectOption("typesafe-systemone-v1");
+  await create
+    .getByRole("textbox", { name: /^Model IDs(?:\s|$)/ })
+    .fill("jev-latest");
+  await create
+    .getByRole("button", { name: "Add provider", exact: true })
+    .click();
+  await expect(create).toHaveCount(0);
+  const profile = (await savedEntries(page))["llm.providers"].find(
+    (item: { id: string }) => item.id === "typesafe",
+  );
+  expect(profile).toMatchObject({
+    baseUrl: "https://api.typesafe.ai/v1",
+    protocol: "typesafe-systemone-v1",
+    models: [{ modelId: "jev-latest" }],
+  });
+  await page.reload();
+  expect(
+    (await savedEntries(page))["llm.providers"].find(
+      (item: { id: string }) => item.id === "typesafe",
+    ),
+  ).toEqual(profile);
+});
+
 test("failed provider creation keeps its draft and deleting its last model retains the connection", async ({
   page,
 }) => {

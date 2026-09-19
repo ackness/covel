@@ -1,5 +1,10 @@
 import type { LLMResponseFormat, LLMRequestDefaults } from "@covel/shared";
 import type { ZodType } from "zod";
+import type {
+  EvaluationParams,
+  EvaluationQuestions,
+  EvaluationResult,
+} from "./evaluation/types.js";
 
 import { AiProviderError } from "./errors.js";
 import type { ProviderResolution } from "./provider-registry.js";
@@ -85,7 +90,7 @@ export type { GatewayOptions } from "./gateway-slot-resolution.js";
 /**
  * Create the high-level AI gateway.
  *
- * Provides 7 operations with automatic fallback routing for text operations.
+ * Provides generation and evaluation operations with shared provider routing.
  */
 export function createGateway(deps: GatewayDependencies) {
   /**
@@ -107,6 +112,53 @@ export function createGateway(deps: GatewayDependencies) {
     return options?.allowFallback === false
       ? [deps.presetRegistry.resolveTextTarget({ presetId })]
       : deps.presetRegistry.resolveTextTargetChain({ presetId });
+  }
+
+  async function evaluate<const Q extends EvaluationQuestions>(
+    input: Omit<EvaluationParams<Q>, "model"> & { presetId?: string },
+    options?: GatewayOptions,
+  ): Promise<EvaluationResult<Q> & { provider: string }> {
+    return runOperation(
+      {
+        presetId: input.presetId ?? "evaluation",
+        mode: "evaluate",
+        fallbackTag: "evaluation",
+        resolveTargets: (presetId) => resolveTextTargets(presetId, options),
+        execute: async (target, resolved) => {
+          options?.signal?.throwIfAborted();
+          const modes =
+            target.preset?.supportedModes ?? target.profile.supportedModes;
+          if (!modes.includes("evaluate") || !resolved.adapter.evaluate) {
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: "Selected model does not support evaluation.",
+              provider: targetProvider(target),
+              model: targetModel(target),
+              retriable: false,
+            });
+          }
+          const result = await resolved.adapter.evaluate(
+            configWithSignal(resolved.config, options, {
+              provider: targetProvider(target),
+              protocol: resolved.protocol,
+            }),
+            {
+              model: targetModel(target),
+              state: input.state,
+              questions: input.questions,
+            },
+            {
+              profile: target.profile,
+              preset: target.preset,
+              mode: "evaluate",
+            },
+          );
+          return { ...result, provider: targetProvider(target) };
+        },
+        resolveUsage: (result) => result.usage,
+      },
+      options,
+    );
   }
 
   async function generateText(
@@ -608,6 +660,7 @@ export function createGateway(deps: GatewayDependencies) {
   }
 
   return {
+    evaluate,
     generateText,
     generateObject,
     streamText,

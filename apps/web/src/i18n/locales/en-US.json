@@ -675,6 +675,7 @@
     "modalOutImage": "Image Generation",
     "modalOutAudio": "Speech Synthesis",
     "modalOutEmbedding": "Embedding",
+    "modalOutEvaluation": "Evaluation",
     "featFunctionCalling": "Function Calling",
     "featStructuredOutput": "Structured Output",
     "featStreaming": "Streaming",

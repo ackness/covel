@@ -675,6 +675,7 @@
     "modalOutImage": "图片生成",
     "modalOutAudio": "语音合成",
     "modalOutEmbedding": "向量嵌入",
+    "modalOutEvaluation": "评估",
     "featFunctionCalling": "工具调用",
     "featStructuredOutput": "结构化输出",
     "featStreaming": "流式",

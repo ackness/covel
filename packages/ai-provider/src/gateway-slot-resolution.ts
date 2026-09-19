@@ -71,7 +71,7 @@ export interface GatewayOptions {
   parameterOverrides?: ModelParameterOverrides;
   /** Abort signal for cancellation (e.g. budget timeout). */
   signal?: AbortSignal;
-  /** Allow configured text/object/stream fallback targets; defaults to true. */
+  /** Allow configured text/object/stream/evaluate fallback targets; defaults to true. */
   allowFallback?: boolean;
   /** Synchronously observes every concrete provider/model attempt. */
   onTargetAttempt?: (target: { provider: string; model: string }) => void;

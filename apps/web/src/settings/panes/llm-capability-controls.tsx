@@ -21,6 +21,7 @@ const ALL_OUTPUT_MODALITY_IDS: OutputModality[] = [
   "image",
   "audio",
   "embedding",
+  "evaluation",
 ];
 const ALL_FEATURE_IDS: ModelFeature[] = [
   "function_calling",
@@ -41,6 +42,7 @@ const MODALITY_COLORS: Record<string, string> = {
   "out:image": "bg-violet-500/15 text-violet-600",
   "out:audio": "bg-amber-500/15 text-amber-600",
   "out:embedding": "bg-teal-500/15 text-teal-600",
+  "out:evaluation": "bg-cyan-500/15 text-cyan-600",
 };
 
 const MODALITY_LABEL_KEYS: Record<string, string> = {
@@ -51,6 +53,7 @@ const MODALITY_LABEL_KEYS: Record<string, string> = {
   "out:image": "settings.modalOutImage",
   "out:audio": "settings.modalOutAudio",
   "out:embedding": "settings.modalOutEmbedding",
+  "out:evaluation": "settings.modalOutEvaluation",
 };
 
 const FEATURE_LABEL_KEYS: Record<string, string> = {

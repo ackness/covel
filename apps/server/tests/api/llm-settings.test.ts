@@ -87,7 +87,66 @@ function setup(options: { failModel?: string } = {}) {
   return { app, requests, presetRegistry, slotRegistry };
 }
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+it("pings an evaluation model through System One and cleans up its request overlay", async () => {
+  const { app, presetRegistry } = setup();
+  const fetchMock = vi.fn().mockResolvedValue(
+    Response.json({
+      model: "jev-1.13.0",
+      answers: { connected: { type: "noul", noul: 1 } },
+      usage: { input_tokens: 10, output_tokens: 2 },
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const response = await app.request("/api/ai/ping", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "X-Provider-Keys": Buffer.from(
+        JSON.stringify({ typesafe: "synthetic-request-key" }),
+      ).toString("base64"),
+      "X-Slot-Config": Buffer.from(
+        JSON.stringify({
+          customPresets: [
+            {
+              id: "jev-model",
+              name: "Jev",
+              provider: "typesafe",
+              model: "jev-latest",
+              protocol: "typesafe-systemone-v1",
+            },
+          ],
+        }),
+      ).toString("base64"),
+    },
+    body: JSON.stringify({ modelRef: "jev-model" }),
+  });
+  expect(await response.json()).toMatchObject({
+    ok: true,
+    usage: { inputTokens: 10, outputTokens: 2 },
+    testedTarget: {
+      provider: "typesafe",
+      model: "jev-latest",
+      protocol: "typesafe-systemone-v1",
+    },
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0]![0]).toBe(
+    "https://api.typesafe.ai/v1/systemone",
+  );
+  const init = fetchMock.mock.calls[0]![1] as RequestInit;
+  expect(new Headers(init.headers).get("authorization")).toBe(
+    "Bearer synthetic-request-key",
+  );
+  expect(JSON.parse(init.body as string)).toMatchObject({
+    questions: { connected: { type: "noul" } },
+  });
+  expect(presetRegistry.listPresets()).toHaveLength(1);
+});
 
 describe("explicit ping model identity", () => {
   it.each([{ presetId: "slot-story" }, { slot: "story" }])(

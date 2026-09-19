@@ -49,13 +49,18 @@ export interface SlotOverridesInput {
     baseUrl?: string;
     model: string;
     protocol?:
-      "openai-chat-v1" | "openai-responses-v1" | "anthropic-messages-v1";
+      | "openai-chat-v1"
+      | "openai-responses-v1"
+      | "anthropic-messages-v1"
+      | "typesafe-systemone-v1";
   }>;
   capabilityOverrides?: Record<
     string,
     {
       input?: Array<"text" | "image" | "audio" | "video" | "file">;
-      output?: Array<"text" | "image" | "audio" | "video" | "embedding">;
+      output?: Array<
+        "text" | "image" | "audio" | "video" | "embedding" | "evaluation"
+      >;
       features?: Array<
         | "function_calling"
         | "structured_output"
