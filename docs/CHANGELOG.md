@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Changed
 
+- Model settings use only current provider profiles and version 2 provider exports. Removed legacy model/key migrations, read-time rewrites, unused preset-write APIs and navigation aliases. Recreate affected development model configurations and connection keys explicitly. Current server preset bindings remain supported; ambiguous bindings are rejected.
+- Model getters no longer attach API keys, and request key routing no longer borrows provider-family keys. Server-managed key markers are never sent as provider credentials.
 - Browser vaults and snapshots now use the current data contract only. Removed historical vault data migrations and snapshot field fallbacks that inferred captured state from the live parent. Snapshot storage and checkpoint validation share the payload schema and reject uncaptured summary references.
 - Recreate development vaults older than schema v5 and snapshots missing the current required fields. Unsupported vault versions fail before schema changes commit; no migration or automatic data deletion is performed. Current empty captures and optional world-lore selection remain supported.
 

@@ -47,7 +47,6 @@ beforeEach(async () => {
   modelSettings.customPresets = [preset("model-a", "openai", "gpt-old")];
   modelSettings.values.set("llm.slotConfig", modelSettings.slotConfig);
   modelSettings.values.set("llm.providers", [{ id: "openai" }]);
-  modelSettings.values.set("llm.customPresets", undefined);
 });
 
 describe("useSlotConfig", () => {

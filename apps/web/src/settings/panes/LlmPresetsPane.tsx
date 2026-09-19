@@ -4,7 +4,6 @@ import { ArrowLeft, Download, Plus, Server, Upload } from "lucide-react";
 import {
   getSlotConfig,
   getProviderProfiles,
-  profilesFromLegacyPresets,
   setProviderProfiles,
   setSlotConfig,
   upsertProviderModel,
@@ -19,11 +18,10 @@ import {
   buildProviderCatalog,
   bindFirstProviderModel,
   EMPTY_PROVIDER_DRAFT,
-  isLegacyPreset,
   normalizeProviderId,
   normalizeProviderProfiles,
   parseModelIds,
-  sanitizeImportedProfiles,
+  parseProviderImport,
   type ProviderCatalogEntry,
   type ProviderDraft,
 } from "./llm-provider-catalog.js";
@@ -39,6 +37,7 @@ export function LlmPresetsPane() {
   const { t } = useTranslation();
   const { state } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [importFailed, setImportFailed] = useState(false);
   const [profiles, setProfilesLocal] = useState<ProviderModelProfile[]>(() =>
     normalizeProviderProfiles(getProviderProfiles()),
   );
@@ -220,21 +219,13 @@ export function LlmPresetsPane() {
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setImportFailed(false);
     const reader = new FileReader();
+    reader.onerror = () => setImportFailed(true);
     reader.onload = () => {
       try {
         const raw: unknown = JSON.parse(String(reader.result));
-        const candidates =
-          raw && typeof raw === "object" && "providers" in raw
-            ? (raw as { providers?: unknown }).providers
-            : raw;
-        if (!Array.isArray(candidates) || candidates.length > 200) return;
-        const imported = [
-          ...sanitizeImportedProfiles(
-            profilesFromLegacyPresets(candidates.filter(isLegacyPreset)),
-          ),
-          ...sanitizeImportedProfiles(candidates),
-        ];
+        const imported = parseProviderImport(raw);
         const byId = new Map(
           normalizeProviderProfiles(profiles).map((profile) => [
             profile.id,
@@ -244,7 +235,7 @@ export function LlmPresetsPane() {
         for (const profile of imported) byId.set(profile.id, profile);
         commit(normalizeProviderProfiles([...byId.values()]));
       } catch {
-        // Ignore malformed imports and preserve the current configuration.
+        setImportFailed(true);
       }
     };
     reader.readAsText(file);
@@ -339,6 +330,11 @@ export function LlmPresetsPane() {
         </main>
       </div>
 
+      {importFailed && (
+        <p role="alert" className="text-xs text-destructive">
+          {t("settings.importInvalid")}
+        </p>
+      )}
       <div className="flex gap-2">
         <Button
           variant="outline"

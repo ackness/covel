@@ -8,10 +8,7 @@ import {
   setStorageMode,
   storageModeForServerStorage,
 } from "@/services/data-service";
-import {
-  fetchServerHealth,
-  migrateLegacyProviderProfiles,
-} from "@/services/api";
+import { fetchServerHealth } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
 import {
   applyAppearance,
@@ -80,7 +77,6 @@ function syncNextThemesStorage(scheme: ColorScheme): void {
 i18nReady
   .then(() => probeDesktopMode())
   .then(() => initSettings())
-  .then(() => migrateLegacyProviderProfiles())
   .then(async () => {
     const store = getSettings();
     syncThemeRegistry(store);

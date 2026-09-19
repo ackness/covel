@@ -10,9 +10,9 @@ Registered non-secret settings expose the schema's parsed result during hydratio
 
 Normalization during hydration or refresh does not independently trigger a save. Revision conflict checks still compare the original backend-confirmed snapshots, so filling defaults is not mistaken for a remote edit. Setting schemas must accept their own persisted output and normalize idempotently to support reloads, repeated registration, and synchronization.
 
-Legacy model-role bindings containing both `modelRef` and `presetId` normalize to `modelRef`, matching routing precedence. Bindings containing only `presetId` remain supported.
+Model-role bindings select exactly one target: `modelRef` for a local provider model or `presetId` for a server-configured preset. Ambiguous bindings containing both fields are rejected. Reading a binding never rewrites it.
 
-Invalid custom themes in settings backups are skipped individually while valid themes continue to load. Provider imports filter legacy entries with incorrectly typed connection fields while preserving valid legacy and current profiles in the same file.
+Invalid custom themes in settings backups are skipped individually while valid themes continue to load. Provider imports accept only the current `{ version: 2, providers: [...] }` export envelope and sanitize each current profile independently. Unsupported files or nonempty imports with no usable profiles show an error and preserve the current configuration.
 
 The Data import preview validates each entry against its currently registered schema. Incompatible entries and secrets misplaced in ordinary `entries` cannot be selected; unregistered ordinary keys remain importable. Backups containing only separate `keys` can also be applied. Import and reset report completion only after persistence succeeds; failed imports retain the preview and show an error.
 
@@ -44,7 +44,7 @@ Initial model-catalog metadata and manual refreshes reload capability data witho
 
 The world-list configuration entry opens Providers directly. Narrow screens show the provider list first, then full-width details with a return action. Each model has one connectivity-test entry in provider details.
 
-Model Roles and Generation share a live role catalogue combining server configuration, plugin runtime and `type: slot` declarations, user settings, and saved bindings and parameter overrides. Custom roles remain editable in both panes, and plugin setting options follow current model configuration. Legacy key/preset links resolve to Providers; composite setting keys resolve to their owning pane. The internal onboarding version is no longer exposed as a general setting.
+Model Roles and Generation share a live role catalogue combining server configuration, plugin runtime and `type: slot` declarations, user settings, and saved bindings and parameter overrides. Custom roles remain editable in both panes, and plugin setting options follow current model configuration. Current provider links and `keys.*` settings resolve to Providers; other composite setting keys resolve to their owning pane. The internal onboarding version is no longer exposed as a general setting.
 
 The onboarding guide waits for its completion flag to persist before dismissing. While a write is pending, duplicate dismissal is disabled; a failed save leaves the guide open with an error and allows retry. The desktop reset action likewise reports success only after the reset persists.
 
@@ -66,3 +66,9 @@ Custom model overlays are isolated per registry during model-config reloads. A m
 ## Debug refresh
 
 Initial session selection, manual refresh, and automatic refresh load session data and update the sidebar phase, completed player turns, and setup runtimes. The data view shows its last successful read time; failures retain that snapshot and mark it potentially stale. Late responses from a previous session cannot replace current data. Automatic refresh merges the latest trace page while retaining older loaded pages and their pagination cursor.
+
+## Current provider configuration
+
+`llm.providers` is the sole model-profile store. Startup and reads do not migrate or fall back to `llm.customPresets`; old navigation aliases and unused preset-write APIs have been removed. Recreate affected development model configurations and credentials through the current provider UI. Existing obsolete entries are not automatically deleted.
+
+Each connection uses `keys.<profile.id>`. Profiles and their flattened request overlays contain no API keys. A connection does not borrow another connection's or provider family's key, and server-managed secret markers are never sent as API keys. Server presets continue using their own provider keys. The flattened `customPresets` request field remains part of the current server routing contract.

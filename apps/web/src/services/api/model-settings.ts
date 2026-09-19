@@ -1,8 +1,4 @@
-import {
-  isReasoningEffort,
-  normalizeProviderKeyMap,
-  providerKeyToId,
-} from "@covel/shared";
+import { normalizeProviderKeyMap, providerKeyToId } from "@covel/shared";
 import {
   PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES,
   PLUGIN_USER_SETTINGS_HEADER_TOO_LARGE_CODE,
@@ -12,7 +8,7 @@ import { isServerManagedSecret } from "@covel/settings";
 import { getSettings, registerKnownProviders } from "@/settings/store";
 import {
   flattenProviderProfiles,
-  profilesFromLegacyPresets,
+  type CustomPreset,
   type ProviderModelProfile,
 } from "./provider-model-profiles.js";
 
@@ -71,26 +67,13 @@ export function encodePluginUserSettingsHeader(value: unknown): string {
 
 export function buildProviderKeysHeader(): Record<string, string> {
   const headers: Record<string, string> = {};
-  // Pull every secret the store knows about (registered or not). The
-  // `preset:<id>` namespace is only meaningful client-side - strip it
-  // before building the provider-keyed header the server expects.
-  const allSecrets = (
-    getSettings() as unknown as {
-      snapshotSecrets(): Record<string, string>;
-    }
-  ).snapshotSecrets();
-  const keys: Record<string, string> = {};
-  for (const [name, value] of Object.entries(allSecrets)) {
-    if (!name.startsWith("preset:") && !isServerManagedSecret(value)) {
-      keys[name] = value;
-    }
-  }
-  // Custom preset keys override globals for the same provider.
-  for (const preset of getCustomPresets()) {
-    if (preset.apiKey?.trim() && preset.provider) {
-      keys[preset.provider] = preset.apiKey.trim();
-    }
-  }
+  // Request keys are connection-scoped and never embedded in model profiles.
+  const keys = Object.fromEntries(
+    Object.entries(providerKeysSnapshot()).filter(
+      ([name, value]) =>
+        providerKeyToId(name) === name && !isServerManagedSecret(value),
+    ),
+  );
   if (Object.keys(keys).length > 0) {
     headers["X-Provider-Keys"] = encodeBase64Json(keys);
   }
@@ -289,32 +272,16 @@ export async function setProviderKeysAsync(
 
 // -- Slot / Preset / Parameter / Runtime-priority config -------
 //
-// All of these used to live in individual `covel:*` localStorage keys. They
-// are now thin wrappers over the unified SettingsStore. The API shape below
-// is preserved so existing call sites keep compiling.
+// Stored model roles select either a server preset or a local model reference.
 
-export interface SlotConfigEntry {
-  /** Legacy/server model plan binding. */
-  presetId?: string;
-  /** Provider-first model reference used by new settings. */
-  modelRef?: string;
-}
+export type SlotConfigEntry =
+  | { modelRef: string; presetId?: never }
+  | { presetId: string; modelRef?: never };
 
 export function slotBindingId(
   entry: SlotConfigEntry | null | undefined,
 ): string | undefined {
   return entry?.modelRef ?? entry?.presetId;
-}
-
-export interface CustomPreset {
-  reasoningEffort?: import("./llm.js").ReasoningEffort;
-  id: string;
-  name: string;
-  provider: string;
-  baseUrl: string;
-  model: string;
-  protocol?: string;
-  apiKey?: string;
 }
 
 export interface ModelParameterOverrides {
@@ -327,220 +294,20 @@ export interface ModelParameterOverrides {
 }
 
 export function getSlotConfig(): Record<string, SlotConfigEntry> {
-  const config =
-    getSettings().get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {};
-  const customIds = new Set(getCustomPresets().map((preset) => preset.id));
-  let migrated = false;
-  const next = Object.fromEntries(
-    Object.entries(config).map(([slotId, entry]) => {
-      if (entry.modelRef || !entry.presetId || !customIds.has(entry.presetId)) {
-        return [slotId, entry];
-      }
-      migrated = true;
-      return [slotId, { modelRef: entry.presetId }];
-    }),
+  return (
+    getSettings().get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {}
   );
-  if (migrated) void getSettings().set("llm.slotConfig", next);
-  return next;
 }
 
 export function setSlotConfig(config: Record<string, SlotConfigEntry>): void {
   void getSettings().set("llm.slotConfig", config);
 }
 
-function legacyPresetState(): {
-  presets: CustomPreset[];
-  present: boolean;
-  valid: boolean;
-} {
-  const store = getSettings();
-  const present = store.has("llm.customPresets");
-  const raw = store.get<unknown>("llm.customPresets");
-  if (!present) return { presets: [], present: false, valid: true };
-  if (!Array.isArray(raw)) return { presets: [], present: true, valid: false };
-
-  const presets: CustomPreset[] = [];
-  for (const value of raw) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return { presets: [], present: true, valid: false };
-    }
-    const preset = value as Record<string, unknown>;
-    if (
-      typeof preset.id !== "string" ||
-      typeof preset.name !== "string" ||
-      typeof preset.provider !== "string" ||
-      typeof preset.model !== "string" ||
-      (preset.baseUrl !== undefined && typeof preset.baseUrl !== "string") ||
-      (preset.protocol !== undefined && typeof preset.protocol !== "string") ||
-      (preset.apiKey !== undefined && typeof preset.apiKey !== "string")
-    ) {
-      return { presets: [], present: true, valid: false };
-    }
-    presets.push({
-      id: preset.id,
-      name: preset.name,
-      provider: preset.provider,
-      baseUrl: typeof preset.baseUrl === "string" ? preset.baseUrl : "",
-      model: preset.model,
-      ...(isReasoningEffort(preset.reasoningEffort)
-        ? { reasoningEffort: preset.reasoningEffort }
-        : {}),
-      ...(typeof preset.protocol === "string"
-        ? { protocol: preset.protocol }
-        : {}),
-      ...(typeof preset.apiKey === "string" ? { apiKey: preset.apiKey } : {}),
-    });
-  }
-  return { presets, present: true, valid: true };
-}
-
-function rawLegacyPresets(): CustomPreset[] {
-  return legacyPresetState().presets;
-}
-
-let providerProfileMigration: Promise<void> | null = null;
-
-function secretSnapshot(
-  store: ReturnType<typeof getSettings>,
-): Record<string, string> {
-  return (
-    store as unknown as { snapshotSecrets(): Record<string, string> }
-  ).snapshotSecrets();
-}
-
-function profileProviderId(profile: ProviderModelProfile): string {
-  return (
-    providerKeyToId(profile.provider ?? profile.id) ??
-    (profile.provider ?? profile.id).trim()
-  );
-}
-
-/** Persist connection-scoped keys, mirroring only the provider namespace. */
-async function persistProfileSecrets(
-  profiles: readonly ProviderModelProfile[],
-  presets: readonly CustomPreset[],
-  store: ReturnType<typeof getSettings>,
-): Promise<Set<string>> {
-  const legacyByRef = new Map(presets.map((preset) => [preset.id, preset]));
-  const confirmed = new Set<string>();
-  for (const profile of profiles) {
-    const profileId = profile.id.trim();
-    if (!profileId) continue;
-    let secrets = secretSnapshot(store);
-    let key: string | undefined = secrets[profileId]?.trim();
-    if (!key) {
-      // Preserve the old "last model key wins" rule for shared connections.
-      key = profile.models.reduce<string | undefined>(
-        (selected, model) =>
-          secrets[`preset:${model.ref}`]?.trim() ||
-          legacyByRef.get(model.ref)?.apiKey?.trim() ||
-          selected,
-        undefined,
-      );
-      const provider = profileProviderId(profile);
-      key ||= secrets[provider]?.trim();
-      if (key) await store.set(`keys.${profileId}`, key);
-    }
-    secrets = secretSnapshot(store);
-    if (key && secrets[profileId]?.trim() === key) {
-      confirmed.add(profileId);
-      const provider = profileProviderId(profile);
-      if (!secrets[provider]?.trim()) await store.set(`keys.${provider}`, key);
-    }
-  }
-  return confirmed;
-}
-
-/**
- * One-way migration from legacy custom presets to provider-first profiles.
- * Call only after `initSettings()`; getters deliberately have no writes.
- */
-export async function migrateLegacyProviderProfiles(): Promise<void> {
-  if (providerProfileMigration) return providerProfileMigration;
-  providerProfileMigration = (async () => {
-    const store = getSettings();
-    const existing =
-      store
-        .get<ProviderModelProfile[]>("llm.providers")
-        ?.filter(
-          (profile) => profile && typeof profile === "object" && profile.id,
-        ) ?? [];
-    const legacyState = legacyPresetState();
-    if (!legacyState.valid) {
-      console.warn(
-        "[settings] legacy llm.customPresets is invalid; preserving it for manual recovery",
-      );
-      return;
-    }
-    const legacy = legacyState.presets;
-    if (legacy.length === 0 && existing.length === 0) return;
-    const profiles = existing.length
-      ? existing
-      : profilesFromLegacyPresets(legacy);
-    if (profiles.length === 0) return;
-
-    registerKnownProviders(
-      profiles.flatMap((profile) => [profile.id, profileProviderId(profile)]),
-    );
-    const confirmed = await persistProfileSecrets(profiles, legacy, store);
-    const refs = new Set(
-      profiles.flatMap((profile) => profile.models.map((model) => model.ref)),
-    );
-    const fullyCovered = legacy.every((preset) => refs.has(preset.id));
-    if (!fullyCovered) return;
-
-    if (!existing.length) await store.set("llm.providers", profiles);
-    // Clear legacy settings only after canonical providers and destinations
-    // have been confirmed. Unmigrated preset secrets remain available.
-    if (legacyState.present) await store.clear("llm.customPresets");
-    const after = secretSnapshot(store);
-    await Promise.all(
-      [...confirmed].flatMap((profileId) => {
-        const profile = profiles.find(
-          (candidate) => candidate.id === profileId,
-        );
-        if (!profile || !after[profileId]?.trim()) return [];
-        return profile.models.map((model) =>
-          store.clear(`keys.preset:${model.ref}`),
-        );
-      }),
-    );
-  })().catch((error: unknown) => {
-    providerProfileMigration = null;
-    console.warn("[settings] legacy provider migration failed:", error);
-  });
-  return providerProfileMigration;
-}
-
 export function getProviderProfiles(): ProviderModelProfile[] {
-  const store = getSettings();
-  const stored =
-    store
-      .get<ProviderModelProfile[]>("llm.providers")
-      ?.filter(
-        (profile) => profile && typeof profile === "object" && profile.id,
-      ) ?? [];
-  if (stored.length > 0) {
-    registerKnownProviders(
-      stored.flatMap((profile) => [
-        profile.id,
-        profile.provider?.trim() || profile.id,
-      ]),
-    );
-    return stored;
-  }
-
-  const legacy = rawLegacyPresets();
-  const migrated = profilesFromLegacyPresets(legacy);
-  if (migrated.length > 0) {
-    registerKnownProviders(
-      migrated.flatMap((profile) => [
-        profile.id,
-        profile.provider?.trim() || profile.id,
-      ]),
-    );
-  }
-  return migrated;
+  const profiles =
+    getSettings().get<ProviderModelProfile[]>("llm.providers") ?? [];
+  registerKnownProviders(profiles.map((profile) => profile.id));
+  return profiles;
 }
 
 export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
@@ -587,17 +354,6 @@ export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
   const validModelRefs = new Set(
     normalized.flatMap((profile) => profile.models.map((model) => model.ref)),
   );
-  const secrets = (
-    store as unknown as { snapshotSecrets(): Record<string, string> }
-  ).snapshotSecrets();
-  for (const secretName of Object.keys(secrets)) {
-    if (
-      secretName.startsWith("preset:") &&
-      !validModelRefs.has(secretName.slice("preset:".length))
-    ) {
-      void store.clear(`keys.${secretName}`);
-    }
-  }
   const slotConfig =
     store.get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {};
   const prunedSlotConfig = Object.fromEntries(
@@ -640,96 +396,9 @@ export function setProviderPriceMultipliers(
   void getSettings().set("llm.providerPriceMultipliers", normalized);
 }
 
+/** Compile the current provider profiles for model pickers and request overlays. */
 export function getCustomPresets(): CustomPreset[] {
-  const profiles = getProviderProfiles();
-  const hasCanonicalProfiles =
-    (getSettings().get<ProviderModelProfile[]>("llm.providers")?.length ?? 0) >
-    0;
-  const raw = hasCanonicalProfiles
-    ? (flattenProviderProfiles(profiles) as CustomPreset[])
-    : rawLegacyPresets();
-  const secrets = (
-    getSettings() as unknown as { snapshotSecrets(): Record<string, string> }
-  ).snapshotSecrets();
-  const providerFallbackByModelRef = new Map(
-    profiles.flatMap((profile) =>
-      profile.models.map(
-        (model) => [model.ref, profile.provider?.trim() || profile.id] as const,
-      ),
-    ),
-  );
-
-  const merged = raw
-    .filter(
-      (preset): preset is CustomPreset =>
-        !!preset && typeof preset === "object",
-    )
-    .map((preset) => {
-      const provider =
-        providerKeyToId(preset.provider) ??
-        String(preset.provider ?? "").trim();
-      const secretFromConnection = secrets[provider];
-      const secretFromChannel = secrets[`preset:${preset.id}`];
-      const providerFallback = providerFallbackByModelRef.get(preset.id);
-      const secretFromProvider = providerFallback
-        ? secrets[providerFallback]
-        : undefined;
-      const apiKey =
-        (secretFromConnection && secretFromConnection.length > 0
-          ? secretFromConnection
-          : secretFromChannel && secretFromChannel.length > 0
-            ? secretFromChannel
-            : secretFromProvider && secretFromProvider.length > 0
-              ? secretFromProvider
-              : preset.apiKey) ?? undefined;
-      return { ...preset, provider, ...(apiKey ? { apiKey } : {}) };
-    })
-    .filter((preset) => preset.provider.length > 0);
-
-  return merged;
-}
-
-export function setCustomPresets(presets: CustomPreset[]): void {
-  const normalized = presets
-    .map((preset) => ({
-      ...preset,
-      provider: providerKeyToId(preset.provider) ?? preset.provider.trim(),
-    }))
-    .filter((preset) => preset.provider.length > 0);
-
-  const store = getSettings();
-
-  const profiles = profilesFromLegacyPresets(normalized);
-  // Persist the canonical value first, then serialize its secret writes behind
-  // that settings snapshot to avoid competing full-snapshot saves.
-  void store
-    .set("llm.providers", profiles)
-    .then(() => persistProfileSecrets(profiles, normalized, store))
-    .catch((error: unknown) => {
-      console.warn("[settings] provider profile write failed:", error);
-    });
-  registerKnownProviders(
-    profiles.flatMap((profile) => [profile.id, profileProviderId(profile)]),
-  );
-}
-
-export function addCustomPreset(preset: CustomPreset): void {
-  setCustomPresets([...getCustomPresets(), preset]);
-}
-
-export function removeCustomPreset(id: string): void {
-  const profiles = getProviderProfiles();
-  const profile = profiles.find((candidate) =>
-    candidate.models.some((model) => model.ref === id),
-  );
-  if (profile && profile.models.length === 1)
-    void getSettings().clear(`keys.${profile.id}`);
-  setProviderProfiles(
-    profiles.map((candidate) => ({
-      ...candidate,
-      models: candidate.models.filter((model) => model.ref !== id),
-    })),
-  );
+  return flattenProviderProfiles(getProviderProfiles());
 }
 
 export function getParamOverrides(): Record<string, ModelParameterOverrides> {

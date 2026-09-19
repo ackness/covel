@@ -92,7 +92,6 @@ export function useSlotConfig(
   const [providerProfilesSnapshot] = useSetting<unknown>("llm.providers");
   const [parameterOverrides] =
     useSetting<Record<string, ModelParameterOverrides>>("llm.paramOverrides");
-  const [legacyPresetsSnapshot] = useSetting<unknown>("llm.customPresets");
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -103,7 +102,7 @@ export function useSlotConfig(
 
   const customPresets = useMemo(
     () => getCustomPresets(),
-    [providerProfilesSnapshot, legacyPresetsSnapshot, version],
+    [providerProfilesSnapshot, version],
   );
 
   const allPresets = useMemo(() => {

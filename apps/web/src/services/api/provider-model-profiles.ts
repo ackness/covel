@@ -20,12 +20,12 @@ export interface ProviderModelProfile {
   models: ProviderModelEntry[];
 }
 
-export interface LegacyCustomPresetShape {
+export interface CustomPreset {
   reasoningEffort?: ReasoningEffort;
   id: string;
   name: string;
   provider: string;
-  baseUrl?: string;
+  baseUrl: string;
   model: string;
   protocol?: string;
 }
@@ -34,98 +34,10 @@ function normalizeProviderId(input: string): string {
   return providerKeyToId(input) ?? input.trim();
 }
 
-/** Convert old model-per-preset storage into provider-first profiles. */
-export function profilesFromLegacyPresets(
-  presets: readonly LegacyCustomPresetShape[],
-): ProviderModelProfile[] {
-  const profiles = new Map<string, ProviderModelProfile>();
-  const usedProfileIds = new Set<string>();
-  const reservedProviderIds = new Set(
-    presets
-      .map((preset) => normalizeProviderId(preset.provider))
-      .filter(Boolean),
-  );
-  const connectionKeysByProvider = new Map<string, Set<string>>();
-  for (const preset of presets) {
-    const providerId = normalizeProviderId(preset.provider);
-    if (!providerId || !preset.model.trim()) continue;
-    const connectionKey = JSON.stringify([
-      providerId,
-      preset.baseUrl?.trim() ?? "",
-      preset.protocol?.trim() || "",
-    ]);
-    const connectionKeys =
-      connectionKeysByProvider.get(providerId) ?? new Set();
-    connectionKeys.add(connectionKey);
-    connectionKeysByProvider.set(providerId, connectionKeys);
-  }
-  const providerConnectionCounts = new Map<string, number>();
-
-  const allocateProfileId = (providerId: string, presetId: string): string => {
-    const connectionCount = providerConnectionCounts.get(providerId) ?? 0;
-    providerConnectionCounts.set(providerId, connectionCount + 1);
-    if (
-      connectionKeysByProvider.get(providerId)?.size === 1 &&
-      !usedProfileIds.has(providerId)
-    ) {
-      usedProfileIds.add(providerId);
-      return providerId;
-    }
-
-    const suffix = presetId.trim() || String(connectionCount + 1);
-    const rawStem = `${providerId}-${suffix}`;
-    const stem = providerKeyToId(rawStem) ?? rawStem;
-    let candidate = stem;
-    let collision = 2;
-    while (
-      usedProfileIds.has(candidate) ||
-      reservedProviderIds.has(candidate)
-    ) {
-      candidate = `${stem}-${collision}`;
-      collision += 1;
-    }
-    usedProfileIds.add(candidate);
-    return candidate;
-  };
-
-  for (const preset of presets) {
-    const providerId = normalizeProviderId(preset.provider);
-    const modelId = preset.model.trim();
-    if (!providerId || !modelId) continue;
-    const baseUrl = preset.baseUrl?.trim() ?? "";
-    const protocol = preset.protocol?.trim() || undefined;
-    const connectionKey = JSON.stringify([providerId, baseUrl, protocol ?? ""]);
-
-    let profile = profiles.get(connectionKey);
-    if (!profile) {
-      const profileId = allocateProfileId(providerId, preset.id);
-      profile = {
-        id: profileId,
-        ...(profileId === providerId ? {} : { provider: providerId }),
-        name: providerId,
-        baseUrl,
-        ...(protocol ? { protocol } : {}),
-        models: [],
-      };
-      profiles.set(connectionKey, profile);
-    }
-    if (profile.models.some((model) => model.ref === preset.id)) continue;
-    profile.models.push({
-      ...(preset.reasoningEffort
-        ? { reasoningEffort: preset.reasoningEffort }
-        : {}),
-      ref: preset.id,
-      modelId,
-      ...(preset.name ? { name: preset.name } : {}),
-    });
-  }
-  return [...profiles.values()];
-}
-
 /** Compile provider-first storage into the existing request overlay contract. */
 export function flattenProviderProfiles(
   profiles: readonly ProviderModelProfile[],
-): LegacyCustomPresetShape[] {
+): CustomPreset[] {
   return profiles.flatMap((profile) =>
     profile.models
       .filter((model) => model.ref.trim() && model.modelId.trim())

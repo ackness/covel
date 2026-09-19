@@ -31,11 +31,11 @@ function createMemoryAdapter(): SettingsBackendAdapter {
 }
 
 describe("LLM settings registry validation", () => {
-  it("preserves modelRef precedence through hydration, import, writes and reload", async () => {
+  it("preserves current local and server bindings through hydration, import, writes and reload", async () => {
     const adapter = createMemoryAdapter();
     const entries = {
       "llm.slotConfig": {
-        story: { presetId: "legacy-model", modelRef: "chosen-model" },
+        story: { modelRef: "chosen-model" },
       },
     };
     await adapter.save(entries);
@@ -59,10 +59,25 @@ describe("LLM settings registry validation", () => {
       story: { modelRef: "chosen-model" },
     });
     await reloaded.set("llm.slotConfig", {
-      story: { presetId: "legacy-only" },
+      story: { presetId: "server-model" },
     });
     expect(reloaded.get("llm.slotConfig")).toEqual({
-      story: { presetId: "legacy-only" },
+      story: { presetId: "server-model" },
+    });
+  });
+
+  it("rejects ambiguous bindings instead of selecting a field by precedence", async () => {
+    const store = new SettingsStore(createMemoryAdapter());
+    registerLlmSettings(store);
+    await store.init();
+    await store.set("llm.slotConfig", { story: { modelRef: "current" } });
+    await expect(
+      store.set("llm.slotConfig", {
+        story: { modelRef: "current", presetId: "server" },
+      }),
+    ).rejects.toThrow();
+    expect(store.get("llm.slotConfig")).toEqual({
+      story: { modelRef: "current" },
     });
   });
 

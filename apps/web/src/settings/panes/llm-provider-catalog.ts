@@ -3,7 +3,7 @@ import type {
   ProviderModelProfile,
   SlotConfigEntry,
 } from "@/services/api.js";
-import type { LegacyCustomPresetShape } from "@/services/api/provider-model-profiles.js";
+import { z } from "zod";
 import {
   providerKeyToId,
   isReasoningEffort,
@@ -71,8 +71,8 @@ export function normalizeProviderId(value: string): string {
 }
 
 /**
- * Canonicalize provider identity before UI operations and merge legacy
- * case/punctuation aliases without dropping their model bindings.
+ * Canonicalize user-entered provider identities before UI operations and
+ * merge matching connections without dropping model bindings.
  */
 export function normalizeProviderProfiles(
   profiles: readonly ProviderModelProfile[],
@@ -271,17 +271,17 @@ export function sanitizeImportedProfiles(
     .filter((profile): profile is ProviderModelProfile => profile !== null);
 }
 
-export function isLegacyPreset(
-  value: unknown,
-): value is LegacyCustomPresetShape {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const preset = value as Record<string, unknown>;
-  return (
-    typeof preset.id === "string" &&
-    typeof preset.name === "string" &&
-    typeof preset.provider === "string" &&
-    typeof preset.model === "string" &&
-    (preset.baseUrl === undefined || typeof preset.baseUrl === "string") &&
-    (preset.protocol === undefined || typeof preset.protocol === "string")
-  );
+const providerImportSchema = z.object({
+  version: z.literal(2),
+  providers: z.array(z.unknown()).max(200),
+});
+
+/** Read only the envelope produced by the current provider export. */
+export function parseProviderImport(value: unknown): ProviderModelProfile[] {
+  const parsed = providerImportSchema.parse(value);
+  const profiles = sanitizeImportedProfiles(parsed.providers);
+  if (parsed.providers.length > 0 && profiles.length === 0) {
+    throw new Error("No valid provider profiles");
+  }
+  return profiles;
 }

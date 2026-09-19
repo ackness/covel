@@ -10,6 +10,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { SettingsStore } from "@covel/settings";
 import type { PluginSummary, LlmConfigResponse } from "@/services/api.js";
 import i18n from "@/i18n";
+import { registerProviderKeys } from "../../registry/keys.js";
 import { registerLlmSettings } from "../../registry/llm.js";
 import { registerPluginUserSettings } from "../../registry/plugin.js";
 import { useLlmSlotIds } from "../use-llm-slot-ids.js";
@@ -36,7 +37,11 @@ const mocks = vi.hoisted(() => ({
     },
   } as LlmConfigResponse,
 }));
-vi.mock("@/settings/store", () => ({ getSettings: () => mocks.store }));
+vi.mock("@/settings/store", () => ({
+  getSettings: () => mocks.store,
+  registerKnownProviders: (ids: readonly string[]) =>
+    registerProviderKeys(mocks.store, ids),
+}));
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: { plugins: mocks.plugins, presets: [], llmConfig: mocks.llm },
