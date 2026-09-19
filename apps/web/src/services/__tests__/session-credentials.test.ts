@@ -80,7 +80,14 @@ describe("credential ownership across HTTP responses", () => {
           return response.promise;
         })
         .mockResolvedValueOnce(
-          Response.json({ id: "same-id", ownerToken: "new-owner" }),
+          Response.json({
+            id: "same-id",
+            ownerToken: "new-owner",
+            incarnation: "new",
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ id: "same-id", incarnation: "new" }),
         ),
     );
     const pending = createSession("world", undefined, "same-id").then(
@@ -89,7 +96,13 @@ describe("credential ownership across HTTP responses", () => {
     );
     await entered.promise;
     await createSession("world", undefined, "same-id");
-    response.resolve(Response.json({ id: "same-id", ownerToken: "old-owner" }));
+    response.resolve(
+      Response.json({
+        id: "same-id",
+        ownerToken: "old-owner",
+        incarnation: "old",
+      }),
+    );
     expect(await pending).toMatchObject({
       message: "Session credential changed during creation",
     });

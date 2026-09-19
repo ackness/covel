@@ -284,8 +284,12 @@ describe("operator auth on hosted administration routes", () => {
         okJson({
           id: "sess-1",
           ownerToken: "owner-secret",
+          incarnation: "synthetic-incarnation",
           worldId: "world-1",
         }),
+      )
+      .mockResolvedValueOnce(
+        okJson({ id: "sess-1", incarnation: "synthetic-incarnation" }),
       )
       .mockResolvedValueOnce(okJson({ ok: true }))
       .mockResolvedValueOnce(okJson({ ok: true, latencyMs: 10 }))
@@ -319,13 +323,15 @@ describe("operator auth on hosted administration routes", () => {
     await api.fetchServerProviderKeys();
     await api.uninstallPlugin("fixture-plugin");
 
-    for (let index = 0; index < 7; index++) {
+    for (const index of [0, 1, 3, 4, 5, 6, 7]) {
       expect(headersAt(fetchMock, index).get("Authorization")).toBe(
         "Bearer operator-secret",
       );
     }
-    expect(headersAt(fetchMock, 4).get("Content-Type")).toBeNull();
-    expect(fetchMock.mock.calls[4]?.[1]?.body).toBeInstanceOf(FormData);
+    expect(headersAt(fetchMock, 2).get("X-Session-Token")).toBe("owner-secret");
+    expect(headersAt(fetchMock, 2).get("Authorization")).toBeNull();
+    expect(headersAt(fetchMock, 5).get("Content-Type")).toBeNull();
+    expect(fetchMock.mock.calls[5]?.[1]?.body).toBeInstanceOf(FormData);
     expect(await api.getSessionToken("sess-1")).toBe("owner-secret");
   });
 });

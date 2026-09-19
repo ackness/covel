@@ -67,6 +67,12 @@ export async function getSessionToken(
   return sessionId ? readToken(table, sessionId) : undefined;
 }
 
+/** Capture stored authority for server-confirmed missing-session cleanup. */
+export async function listSessionCredentials(): Promise<SessionCredential[]> {
+  const records: unknown[] = await (await sessionTable()).toArray();
+  return records.map(validateCredential);
+}
+
 /** Admit a creation response without overwriting another in-flight creation. */
 export async function storeCreatedSessionToken(
   sessionId: string,

@@ -15,6 +15,7 @@ import type {
 } from "@covel/store/browser-sync";
 import { isNotFound, request } from "./request.js";
 import { ignoreError } from "../../lib/ignore-error.js";
+import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
 import {
   clearSessionToken,
   getSessionToken,
@@ -257,7 +258,13 @@ export async function createSession(
   // never re-receives it) can present it on hosted tiers.
   if (id !== undefined && session.id !== id)
     throw new Error("Created session does not match the requested identity");
+  if (typeof session.incarnation !== "string" || !session.incarnation)
+    throw new Error("Created session is missing its incarnation");
   await storeCreatedSessionToken(session.id, ownerToken, capturedToken);
+  await verifyCreatedSessionCredential(
+    { sessionId: session.id, token: ownerToken },
+    session.incarnation,
+  );
   return session;
 }
 

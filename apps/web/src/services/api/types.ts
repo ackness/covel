@@ -60,6 +60,7 @@ export interface SessionRecord extends Omit<
  */
 export interface SessionCreateResponse extends SessionRecord {
   ownerToken: string;
+  readonly incarnation: string;
 }
 
 export interface MessageRecord {

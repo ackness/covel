@@ -159,6 +159,16 @@ The web app uses three databases with separate lifecycles:
   credentials from delayed create/delete responses. Credentials are excluded from
   caches and game/settings exports. The old localStorage token map is unsupported.
 
+After any remote world deletion attempt, the client probes its stored session
+credentials with their captured tokens and removes only explicit per-session
+`session_not_found` responses. It does not infer absence from a filtered session
+listing or duplicate world ownership in the credential table. A shared three-second
+network deadline bounds these probes; failures preserve both unverified credentials
+and the original deletion result. Newly created credentials are persisted before
+identity verification, so a late creation response can reconcile with completed
+deletion cleanup. Confirmed missing/replaced creation results fail; uncertain
+verification retains the durable credential. This is not a cross-network transaction.
+
 Remote UI caches have a separate `remoteSessionUi` store with session incarnation
 and world ownership, plus short operation epochs in `remoteUiEpochs`. Cache reads
 and writes capture the caller's session identity. Reads and new/replaced bindings
