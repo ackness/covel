@@ -84,6 +84,7 @@ function createTestApp(
 
 async function createSession(store: DataStore, sessionId = "sess-1") {
   await store.createSession({
+    locale: "zh-CN",
     phase: "playing",
     setupRuntimes: {},
     metadata: {
@@ -918,6 +919,7 @@ describe("Resume Routes", () => {
         await store.deleteSession("sess-1");
         const now = new Date().toISOString();
         await store.createSession({
+          locale: "zh-CN",
           phase: "playing",
           setupRuntimes: {},
           id: "sess-1",

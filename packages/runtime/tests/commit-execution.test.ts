@@ -11,8 +11,7 @@ async function fixture() {
   const store = createMemoryStore();
   await store.createSession({
     id: "session",
-    worldId: null,
-    presetId: null,
+    locale: "en-US",
     status: "active",
     phase: "playing",
     setupRuntimes: {},

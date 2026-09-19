@@ -13,7 +13,6 @@ import {
   createMemoryStore,
   type DataStore,
   type MediaStore,
-  type SnapshotPayload,
 } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
 import { decodePageCursor, type SubscriptionEvent } from "@covel/shared";
@@ -1129,61 +1128,6 @@ describe("Snapshot routes", () => {
         (await store.getSnapshot(body.forkSnapshotId))?.payload
           .compactedMessageSummaryIds,
       ).toEqual({ [childMessages[0]!.id]: childSummaries[0]!.id });
-    });
-
-    it("restores legacy v3 snapshots from raw messages when summaries are absent", async () => {
-      const app = createTestApp(store);
-      await store.saveSessionSummary({
-        id: "legacy-summary",
-        sessionId: "sess-1",
-        turnRangeStart: "turn-1",
-        turnRangeEnd: "turn-1",
-        content: "Legacy compacted history.",
-        focusSections: [],
-        createdAt: new Date().toISOString(),
-      });
-      await store.tagTurnMessagesCompacted(
-        "sess-1",
-        ["sess-1-tm-1"],
-        "legacy-summary",
-      );
-      const snapId = await createParentSnapshot(store, app);
-      const stored = (await store.getSnapshot(snapId))!;
-      const {
-        sessionSummaries: _legacySummaryOmission,
-        compactedMessageSummaryIds: _legacyMappingOmission,
-        ...legacyPayload
-      } = stored.payload;
-      await store.saveSnapshot({
-        ...stored,
-        payload: legacyPayload as SnapshotPayload,
-      });
-
-      const res = await app.request("/api/sessions/sess-1/fork", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromSnapshotId: snapId }),
-      });
-      expect(res.status).toBe(201);
-      const body = (await res.json()) as {
-        sessionId: string;
-        forkSnapshotId: string;
-      };
-      const childMessages = await store.listTurnMessages(body.sessionId);
-
-      expect(childMessages).toHaveLength(1);
-      expect(childMessages[0]).toMatchObject({
-        content: "The story begins.",
-        compactedAtTurnId: undefined,
-      });
-      expect(await store.listSessionSummaries(body.sessionId)).toEqual([]);
-      expect(
-        (await store.getSnapshot(body.forkSnapshotId))?.payload
-          .sessionSummaries,
-      ).toEqual([]);
-      expect(
-        (await store.listTurnMessages("sess-1"))[0]!.compactedAtTurnId,
-      ).toBe("legacy-summary");
     });
 
     it("emits state.snapshot.created (kind=fork) and session.forked on fork", async () => {

@@ -10,6 +10,7 @@ import type {
   SuspensionRecord,
 } from "../../types.js";
 import type { JsonReader } from "./json-reader.js";
+import { snapshotPayloadSchema } from "../../browser-sync/checkpoint-lifecycle-schemas.js";
 
 export interface SnapshotRow {
   id: string;
@@ -50,23 +51,13 @@ function requireSnapshotKind(value: string): SnapshotKind {
   return value as SnapshotKind;
 }
 
-function requireSnapshotPayload(value: unknown): SnapshotPayload {
-  const payload = requireRecord(value, "snapshot payload");
-  if (payload.schemaVersion !== 3) {
-    throw new Error(
-      `Invalid snapshot payload schemaVersion: ${String(payload.schemaVersion)}`,
-    );
+export function requireSnapshotPayload(value: unknown): SnapshotPayload {
+  const parsed = snapshotPayloadSchema.safeParse(value);
+  if (!parsed.success) {
+    const paths = parsed.error.issues.map((issue) => issue.path.join("."));
+    throw new Error(`Invalid snapshot payload: ${paths.join(", ")}`);
   }
-  requireRecord(payload.session, "snapshot session");
-  if (
-    payload.sessionSummaries !== undefined &&
-    !Array.isArray(payload.sessionSummaries)
-  ) {
-    throw new Error(
-      "Invalid snapshot payload sessionSummaries: expected array",
-    );
-  }
-  return payload as unknown as SnapshotPayload;
+  return value as SnapshotPayload;
 }
 
 function requirePendingContinuation(

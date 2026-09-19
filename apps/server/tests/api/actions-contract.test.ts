@@ -99,6 +99,7 @@ describe("POST /api/actions — action type contract ", () => {
     registry.register(makeEntry({ id: SIDE_ID, loaded: side }));
 
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -106,13 +107,12 @@ describe("POST /api/actions — action type contract ", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: sessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [NARRATOR_ID, SIDE_ID],
       completedPlayerTurns: 1,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     const eventBus = createEventBus(store);
@@ -498,6 +498,7 @@ describe("POST /api/actions — action type contract ", () => {
     // bug, not a request for the whole catalogue.
     const emptySessionId = "sess-no-plugins";
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -505,13 +506,12 @@ describe("POST /api/actions — action type contract ", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: emptySessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     const res = await app.request("/api/actions", {

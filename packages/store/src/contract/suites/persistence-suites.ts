@@ -445,21 +445,6 @@ export function registerPersistenceStoreSuites(
       expect(result!.payload.messagesCursor).toBe("tm-last-abc");
     });
 
-    it("accepts legacy schema-v3 payloads without session summaries", async () => {
-      const currentPayload = makeSnapshotPayload();
-      const { sessionSummaries: _legacyOmission, ...legacyPayload } =
-        currentPayload;
-      const snap = makeSnapshot({
-        sessionId: "sess-snap-legacy-v3",
-        payload: legacyPayload as SnapshotPayload,
-      });
-      await store.saveSnapshot(snap);
-
-      const result = await store.getSnapshot(snap.id);
-      expect(result?.payload.schemaVersion).toBe(3);
-      expect(result?.payload.sessionSummaries).toBeUndefined();
-    });
-
     it("round-trips the current snapshot session lifecycle state", async () => {
       const payload = makeSnapshotPayload();
       const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });

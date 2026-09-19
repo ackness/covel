@@ -156,105 +156,30 @@ describe("BrowserVault session commits", () => {
     }
   });
 
-  it.each([false, true])(
-    "compacts v3 bodies preserving recovery and replay (interrupted: %s)",
-    async (interrupted) => {
-      const dbName = `covel-browser-vault-test-${databaseNumber}`;
-      const old = new Dexie(dbName);
-      old.version(3).stores({
-        checkpoints: "sessionId, revision, committedAt",
-        commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
-        pendingCommits: "sessionId, actionId, stagedAt",
-        worlds: "id, createdAt, updatedAt",
+  it("rejects unsupported vault versions without altering their data", async () => {
+    const dbName = `covel-browser-vault-test-${databaseNumber}`;
+    const old = new Dexie(dbName);
+    old.version(4).stores({ archivedWorlds: "id" });
+    await old
+      .table("archivedWorlds")
+      .put({ id: "world", content: "Synthetic development data" });
+    old.close();
+    await expect(vault.getLatestCheckpoint("session-a")).rejects.toThrow(
+      "Unsupported browser vault version",
+    );
+    vault.close();
+    const unchanged = new Dexie(dbName);
+    try {
+      await unchanged.open();
+      expect(unchanged.verno).toBe(4);
+      expect(await unchanged.table("archivedWorlds").get("world")).toEqual({
+        id: "world",
+        content: "Synthetic development data",
       });
-      const previous = checkpoint("session-a", 1, "turn-1");
-      const next = checkpoint("session-a", 2, "turn-2");
-      // The v3 format used recursively sorted JSON instead of a content hash.
-      const sorted = (value: unknown): unknown =>
-        Array.isArray(value)
-          ? value.map(sorted)
-          : value && typeof value === "object"
-            ? Object.fromEntries(
-                Object.entries(value)
-                  .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-                  .map(([key, child]) => [key, sorted(child)]),
-              )
-            : value;
-      await old.table("checkpoints").put({
-        sessionId: "session-a",
-        revision: next.revision,
-        checkpoint: next,
-        committedAt: next.committedAt,
-      });
-      for (const value of [previous, next])
-        await old.table("commits").put({
-          id: `session-a\0${value.actionId}`,
-          sessionId: "session-a",
-          actionId: value.actionId,
-          baseRevision: value.revision - 1,
-          revision: value.revision,
-          checkpointDigest: JSON.stringify(sorted(value)),
-          committedAt: value.committedAt,
-        });
-      await old.table("pendingCommits").put({
-        sessionId: "session-a",
-        actionId: "pending",
-        stagedAt: next.committedAt,
-      });
-      old.close();
-      if (interrupted) {
-        const digest = crypto.subtle.digest.bind(crypto.subtle);
-        let calls = 0;
-        const spy = vi
-          .spyOn(crypto.subtle, "digest")
-          .mockImplementation((algorithm, data) => {
-            if (++calls === 2)
-              return Promise.reject(new Error("Synthetic digest failure"));
-            return digest(algorithm, data);
-          });
-        try {
-          await expect(vault.getLatestCheckpoint("session-a")).rejects.toThrow(
-            "Synthetic digest failure",
-          );
-          vault.close();
-          const unchanged = new Dexie(dbName);
-          try {
-            await unchanged.open();
-            expect(unchanged.verno).toBe(3);
-            const first = await unchanged
-              .table("commits")
-              .get("session-a\0turn-1");
-            expect(first.checkpointDigest).toBe(
-              JSON.stringify(sorted(previous)),
-            );
-          } finally {
-            unchanged.close();
-          }
-        } finally {
-          spy.mockRestore();
-        }
-        vault = new BrowserVault({ dbName });
-      }
-      expect(await vault.getLatestCheckpoint("session-a")).toEqual(next);
-      expect(await vault.getPendingCommit("session-a")).toBe("pending");
-      await expect(
-        vault.applySessionCommit(commit(next)),
-      ).resolves.toMatchObject({ duplicate: true });
-      await expect(
-        vault.applySessionCommit(
-          commit({ ...next, session: { ...next.session, locale: "en-US" } }),
-        ),
-      ).rejects.toBeInstanceOf(BrowserVaultConflictError);
-      const upgraded = new Dexie(dbName);
-      try {
-        await upgraded.open();
-        const row = await upgraded.table("commits").get("session-a\0turn-2");
-        expect(row.checkpointDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
-      } finally {
-        upgraded.close();
-      }
-    },
-  );
+    } finally {
+      unchanged.close();
+    }
+  });
 
   it("applies a commit atomically and makes action replay a no-op", async () => {
     const next = checkpoint("session-a", 1, "turn-1");

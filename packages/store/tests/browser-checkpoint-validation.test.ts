@@ -283,15 +283,25 @@ describe("checkpoint record validation", () => {
     },
   );
 
-  it("keeps optional fields compatible with earlier schema-v3 snapshots", () => {
+  it.each([
+    "stateSchemas",
+    "runtimeExports",
+    "sessionSummaries",
+    "compactedMessageSummaryIds",
+    "displayMessagesBoundary",
+  ])("rejects a snapshot missing current field %s", (field) => {
     const snapshot = checkpoint.snapshots[0]!;
-    const { sessionSummaries: _, ...legacyPayload } = snapshot.payload;
-    const legacyCheckpoint = {
+    const incompletePayload = { ...snapshot.payload } as Record<
+      string,
+      unknown
+    >;
+    delete incompletePayload[field];
+    const incompleteCheckpoint = {
       ...checkpoint,
-      snapshots: [{ ...snapshot, payload: legacyPayload }],
+      snapshots: [{ ...snapshot, payload: incompletePayload }],
     };
-    expect(validateBrowserCheckpoint(legacyCheckpoint)).toEqual(
-      legacyCheckpoint,
+    expect(() => validateBrowserCheckpoint(incompleteCheckpoint)).toThrow(
+      BrowserSyncValidationError,
     );
   });
 
@@ -388,55 +398,23 @@ describe("checkpoint record validation", () => {
     ).toThrow("pluginData[0].sessionId must match checkpoint.sessionId");
   });
 
-  it("exports historical fork payloads in the child scope without mutating stored history", async () => {
+  it("rejects foreign fork payload scope instead of repairing it during export", async () => {
     const store = createMemoryStore();
     const childSessionId = "child-session";
-    await store.createSession(checkpoint.session);
     await store.createSession(makeSession({ id: childSessionId }));
-    const legacySnapshot = {
+    const snapshot = {
       ...checkpoint.snapshots[0]!,
       kind: "fork" as const,
       sessionId: childSessionId,
     };
-    const parentSuspension = legacySnapshot.payload.suspensions[0]!;
-    await store.saveSuspension(parentSuspension);
-    await store.saveSnapshot(legacySnapshot);
-    const exported = await exportSessionCheckpoint(store, childSessionId, {
-      revision: 1,
-      actionId: "legacy-fork",
-    });
-
-    for (const key of Object.keys(
-      snapshotRecords,
-    ) as (keyof typeof snapshotRecords)[]) {
-      expect(
-        exported.snapshots[0]!.payload[key]?.map((record) => record.sessionId),
-      ).toEqual([childSessionId]);
-    }
-    expect(await store.getSnapshot(legacySnapshot.id)).toEqual(legacySnapshot);
-    const reboundSuspension = exported.snapshots[0]!.payload.suspensions[0]!;
-    expect(reboundSuspension.id).not.toBe(parentSuspension.id);
-    const repeatedExport = await exportSessionCheckpoint(
-      store,
-      childSessionId,
-      {
+    await store.saveSnapshot(snapshot);
+    await expect(
+      exportSessionCheckpoint(store, childSessionId, {
         revision: 1,
-        actionId: "legacy-fork",
-      },
-    );
-    expect(repeatedExport.snapshots[0]!.payload.suspensions[0]!.id).toBe(
-      reboundSuspension.id,
-    );
-    await store.saveSuspension(reboundSuspension);
-    expect(await store.getSuspension(parentSuspension.id)).toEqual(
-      parentSuspension,
-    );
-    expect(() =>
-      validateBrowserCheckpoint({
-        ...exported,
-        snapshots: [legacySnapshot],
+        actionId: "invalid-fork",
       }),
-    ).toThrow("must match checkpoint.sessionId");
+    ).rejects.toThrow("must match checkpoint.sessionId");
+    expect(await store.getSnapshot(snapshot.id)).toEqual(snapshot);
   });
 
   it("rejects a foreign plugin-data write before replacing either session", async () => {

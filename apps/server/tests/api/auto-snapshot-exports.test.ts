@@ -27,13 +27,13 @@ afterEach(() => vi.useRealTimers());
 describe.each(["memory", "sqlite"])(
   "auto snapshot export cutoff on %s",
   (backend) => {
-    it("retains legacy timestamp fallback while honoring an explicitly empty capture", async () => {
+    it("honors an empty capture even when the parent has published exports", async () => {
       const store =
         backend === "sqlite"
           ? createSqliteStore(":memory:")
           : createMemoryStore();
       try {
-        for (const id of ["parent", "legacy-child", "empty-child"])
+        for (const id of ["parent", "empty-child"])
           await store.createSession(
             makeSession({
               id,
@@ -55,16 +55,9 @@ describe.each(["memory", "sqlite"])(
           sessionId: "parent",
           createdAt: "2026-01-01T00:00:00.010Z",
         });
-        expect(snapshot.payload.runtimeExports).toBeUndefined();
+        expect(snapshot.payload.runtimeExports).toEqual([]);
         expect(
-          await copyForkRuntimeExports(store, snapshot, "legacy-child"),
-        ).toEqual([{ ...first, sessionId: "legacy-child" }]);
-        const empty = {
-          ...snapshot,
-          payload: { ...snapshot.payload, runtimeExports: [] },
-        };
-        expect(
-          await copyForkRuntimeExports(store, empty, "empty-child"),
+          await copyForkRuntimeExports(store, snapshot, "empty-child"),
         ).toEqual([]);
         expect(await store.listRuntimeExports("empty-child")).toEqual([]);
       } finally {

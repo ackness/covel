@@ -23,6 +23,7 @@ import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import { toSnapshotRecord, toSuspensionRecord } from "./mappers.js";
 import type { SnapshotRow, SuspensionRow } from "./mappers/snapshot-mappers.js";
+import { requireSnapshotPayload } from "./mappers/snapshot-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type {
   CursorPageOpts,
@@ -102,6 +103,7 @@ export function createSqlSnapshotRecords(
   return {
     // ── Snapshots ────────────────────────────────────────────────
     async saveSnapshot(record: SnapshotRecord): Promise<void> {
+      requireSnapshotPayload(record.payload);
       await runner.insert(stateSnapshots, values.snapshotInsert(record), {
         target: stateSnapshots.id,
         set: values.snapshotUpdate(record),

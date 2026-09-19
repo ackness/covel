@@ -81,36 +81,19 @@ class BrowserVaultDatabase extends Dexie {
 
   constructor(name: string) {
     super(name);
-    const schema = {
-      checkpoints: "sessionId, revision, committedAt",
-      commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
-      pendingCommits: "sessionId, actionId, stagedAt",
-      worlds: "id, createdAt, updatedAt",
-    };
-    this.version(3).stores(schema);
-    this.version(4)
-      .stores(schema)
-      .upgrade(async (tx) => {
-        const commits = tx.table<CommitRecord, string>("commits");
-        // Read one old snapshot at a time. Keep the upgrade transaction alive
-        // during Web Crypto, so interruption rolls the entire migration back.
-        for (
-          let record = await commits.orderBy(":id").first();
-          record;
-          record = await commits.where(":id").above(record.id).first()
-        ) {
-          const digest = await Dexie.waitFor(
-            hashCheckpointJson(record.checkpointDigest),
-          );
-          await commits.update(record.id, { checkpointDigest: digest });
-        }
-      });
     this.version(BROWSER_VAULT_SCHEMA_VERSION)
-      .stores({ ...schema, initialization: "key" })
-      .upgrade(async (tx) => {
-        // Existing empty libraries may be intentional. Only a newly created
-        // database receives samples; upgrades preserve the user's library.
-        await tx.table("initialization").put({ key: "worlds" });
+      .stores({
+        checkpoints: "sessionId, revision, committedAt",
+        commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
+        pendingCommits: "sessionId, actionId, stagedAt",
+        worlds: "id, createdAt, updatedAt",
+        initialization: "key",
+      })
+      .upgrade(() => {
+        // Reject unsupported data before IndexedDB can commit a schema change.
+        throw new BrowserVaultError(
+          "Unsupported browser vault version; recreate development data",
+        );
       });
   }
 }

@@ -108,6 +108,7 @@ describe("POST /api/actions — turn commit barrier", () => {
     // The first completed player turn is always an auto-snapshot checkpoint,
     // so the barrier assertions below can rely on a snapshot existing.
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -115,13 +116,12 @@ describe("POST /api/actions — turn commit barrier", () => {
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     // Prime one prior player message so turnNumber >= 1 and the main-loop
     // priority-500 runtime survives the Pre-Game band filter.
@@ -235,6 +235,7 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
     const registry = createPluginRegistry();
     registry.register(makeEntry(makeFakeLoadedRuntime({ name: RUNTIME_ID })));
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -242,13 +243,12 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: SESSION_ID,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 1,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     // A prior completed player turn: turn accounting must count history
     // exactly once, and the failing turn below must not add to it.

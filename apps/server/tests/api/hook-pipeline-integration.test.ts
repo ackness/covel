@@ -127,6 +127,7 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
     registry.register(makeEntry({ id: RUNTIME_ID, loaded }));
 
     await store.createSession({
+      locale: "zh-CN",
       phase: "playing",
       setupRuntimes: {},
       metadata: {
@@ -134,13 +135,12 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
       id: sessionId,
-      worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [RUNTIME_ID],
       completedPlayerTurns: 0,
 
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     // Priority 500 runtimes need turnNumber >= 1 → seed a prior player message

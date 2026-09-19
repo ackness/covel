@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- Browser vaults and snapshots now use the current data contract only. Removed historical vault data migrations and snapshot field fallbacks that inferred captured state from the live parent. Snapshot storage and checkpoint validation share the payload schema and reject uncaptured summary references.
+- Recreate development vaults older than schema v5 and snapshots missing the current required fields. Unsupported vault versions fail before schema changes commit; no migration or automatic data deletion is performed. Current empty captures and optional world-lore selection remain supported.
+
 ## [0.0.36] - 2026-09-17
 
 This patch makes model token budgets configurable and consistent across story, plugin, retry and background requests, and identifies the model responsible when a task fails.

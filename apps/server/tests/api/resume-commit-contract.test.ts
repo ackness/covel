@@ -23,8 +23,6 @@ describe("resume commit composition", () => {
       const now = new Date().toISOString();
       await store.createSession({
         id: "session",
-        worldId: null,
-        presetId: null,
         status: "active",
         phase: "playing",
         completedPlayerTurns: 2,

@@ -196,9 +196,10 @@ an empty library. The world records and initialization marker commit in one
 IndexedDB transaction, so concurrent tabs cannot seed duplicates and a failed
 write leaves no partial set. Initialization failures may be retried by the same
 service. Deleting every world preserves the marker and keeps the library empty
-after reload. Schema v5 upgrades mark existing libraries initialized, including
-empty ones, preserving user deletions rather than guessing whether to add
-samples. An explicit full vault reset clears the marker along with domain data.
+after reload. Only the current vault schema is maintained; old development vaults
+are rejected before a schema change commits and must be recreated explicitly
+before use. No historical content is migrated or cleared. An explicit full
+vault reset clears the marker along with domain data.
 
 Submitted block IDs and form values merge in one IndexedDB readwrite
 transaction. Concurrent submissions, including writes from separate tabs,
@@ -250,10 +251,10 @@ Only the latest full checkpoint is retained. Snapshot history already exists
 inside the checkpoint; retaining a full checkpoint for every action would grow
 quadratically. The compact `commits` table stores revision/action metadata and
 a fixed-length `sha256:` digest of the recursively key-sorted checkpoint JSON.
-BrowserVault schema v4 converts v3's historical JSON strings into these digests
-one record at a time in an atomic upgrade transaction. Checkpoints, worlds and
-pending recovery markers remain intact; replayed action IDs still reject changed
-content. Hashing new commits completes before their IndexedDB write transaction.
+Historical JSON commit digests are unsupported. Replayed action IDs still reject
+changed content. Hashing new commits completes before their IndexedDB write
+transaction. The sole version-change handler rejects unsupported vaults; it does
+not convert historical digests or write initialization markers.
 
 `BrowserVault` recursively rejects credential-shaped fields such as `apiKey`,
 access/refresh tokens, passwords, private keys, and client secrets before any
@@ -325,9 +326,8 @@ Materialized snapshots capture the optional override as `session.loreOverride`.
 Fork restores that value into child metadata, and checkpoint transfer and repeated
 forks preserve it, including an explicit empty string. Only this gameplay field
 travels from metadata; each child receives fresh ownership and lifecycle identity.
-An absent field keeps world-lore fallback, including older v3 snapshots that never
-captured it. The live parent's metadata cannot reconstruct a missing historical
-override. See [snapshot and fork API](../reference/api.md#snapshot--fork).
+An absent field selects world lore in the current contract. The live parent's
+metadata must not supply an override the snapshot did not capture. See [snapshot and fork API](../reference/api.md#snapshot--fork).
 
 ## Record Identity
 
@@ -336,3 +336,16 @@ record boundary. Character and lorebook IDs are session-local, with durable
 identity `(sessionId, id)` in MemoryStore, SQLite, PostgreSQL, and browser
 checkpoints. Browser persistence therefore shares domain shapes without sharing
 server table layouts or backend-specific CRUD implementations.
+
+## Current Snapshot Contract
+
+Snapshot payload schema v3 requires `stateSchemas`, `runtimeExports`,
+`sessionSummaries`, `compactedMessageSummaryIds` and `displayMessagesBoundary`.
+Empty arrays/maps and a null chat boundary are explicit captured values. Missing
+fields are invalid, including older development payloads carrying the same version.
+Recreate those snapshots; no migration or fallback to current parent state is provided.
+Memory, SQLite and PostgreSQL validate snapshot payloads before writes; SQL reads
+and browser checkpoint validation use the same schema, including captured summary
+reference integrity. The snapshot builder captures JSON-serialized data, omitting
+undefined object properties without mutating live MemoryStore records. Checkpoint
+export validates stored fork ownership without repairing historical parent-scoped rows.

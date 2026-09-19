@@ -185,7 +185,7 @@ describe.each(["memory", "sqlite"])("fork lore on %s", (backend) => {
     expect(await contextLore(child.sessionId)).toBe("World lore");
   });
 
-  it("accepts older v3 snapshots without inferring past lore from the live parent", async () => {
+  it("restores captured world-lore selection without inheriting the live parent override", async () => {
     const snapshot = makeSnapshot({ sessionId: "parent" });
     await store.saveSnapshot(snapshot);
     await store.updateSession("parent", {

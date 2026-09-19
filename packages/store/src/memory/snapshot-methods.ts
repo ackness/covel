@@ -2,6 +2,7 @@ import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
 import type { SnapshotMetadata } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 import { assertSessionRecordScope } from "./session-record-scope.js";
+import { requireSnapshotPayload } from "../common/mappers/snapshot-mappers.js";
 
 export function createSuspensionMethods(
   state: MemoryState,
@@ -69,6 +70,7 @@ export function createSuspensionMethods(
 export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
   return {
     async saveSnapshot(record) {
+      requireSnapshotPayload(record.payload);
       assertSessionRecordScope(
         "snapshot",
         record,

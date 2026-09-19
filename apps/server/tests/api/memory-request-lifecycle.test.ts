@@ -32,11 +32,11 @@ const response = {
 async function createFixture() {
   const store = createMemoryStore();
   await store.createSession({
+    locale: "zh-CN",
     id: "session",
     status: "active",
     phase: "playing",
     setupRuntimes: {},
-    worldId: null,
     completedPlayerTurns: 1,
     activePlugins: ["panel-host"],
     metadata: {
@@ -44,6 +44,7 @@ async function createFixture() {
       approvalScopeNonce: "fixture-scope",
     },
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
   const manifestCache = new Map<string, readonly ParsedPluginMd[]>([
     [

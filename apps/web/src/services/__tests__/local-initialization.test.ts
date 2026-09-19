@@ -1,5 +1,4 @@
 import "fake-indexeddb/auto";
-import Dexie from "dexie";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { LocalDataService } from "../data-service/local.js";
@@ -84,31 +83,3 @@ it("allows fresh initialization after an explicit full vault reset", async () =>
     LOCAL_SEED_WORLDS.length,
   );
 });
-
-it.each([false, true])(
-  "preserves a pre-existing v4 library on upgrade (has worlds: %s)",
-  async (hasWorlds) => {
-    const old = new Dexie(dbName);
-    old.version(4).stores({
-      checkpoints: "sessionId, revision, committedAt",
-      commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
-      pendingCommits: "sessionId, actionId, stagedAt",
-      worlds: "id, createdAt, updatedAt",
-    });
-    try {
-      await old.open();
-      if (hasWorlds)
-        await old.table("worlds").put({
-          id: "existing-world",
-          name: "Existing",
-          description: "",
-          createdAt: "2026-01-01",
-        });
-    } finally {
-      old.close();
-    }
-    expect(
-      (await new LocalDataService(vault).listWorlds()).map((world) => world.id),
-    ).toEqual(hasWorlds ? ["existing-world"] : []);
-  },
-);

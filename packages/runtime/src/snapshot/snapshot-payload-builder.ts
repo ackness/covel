@@ -142,7 +142,7 @@ export async function buildSnapshotPayload(
     (s) => s.resolvedAt === undefined,
   );
 
-  return {
+  const payload: SnapshotPayload = {
     // Version 3 is the sole supported snapshot schema.
     schemaVersion: 3,
     turnId,
@@ -172,6 +172,9 @@ export async function buildSnapshotPayload(
     messagesCursor,
     displayMessagesBoundary,
   };
+  // Capture the JSON contract, including omission of undefined object fields.
+  // The live MemoryStore may still contain those fields; do not mutate its rows.
+  return JSON.parse(JSON.stringify(payload)) as SnapshotPayload;
 }
 
 /** Read only the newest timestamp group, even when it spans multiple pages. */

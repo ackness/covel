@@ -385,6 +385,43 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("Snapshot payload", () => {
+    it("rejects an uncaptured summary reference without overwriting the snapshot", async () => {
+      const snapshot = makeSnapshot();
+      await store.saveSnapshot(snapshot);
+      await expect(
+        store.saveSnapshot({
+          ...snapshot,
+          payload: {
+            ...snapshot.payload,
+            compactedMessageSummaryIds: { message: "missing-summary" },
+          },
+        }),
+      ).rejects.toThrow("compactedMessageSummaryIds.message");
+      expect(await store.getSnapshot(snapshot.id)).toEqual(snapshot);
+    });
+    it.each([
+      "stateSchemas",
+      "runtimeExports",
+      "sessionSummaries",
+      "compactedMessageSummaryIds",
+      "displayMessagesBoundary",
+    ])(
+      "rejects missing %s without replacing an existing snapshot",
+      async (field) => {
+        const snapshot = makeSnapshot();
+        await store.saveSnapshot(snapshot);
+        const payload = { ...snapshot.payload } as Record<string, unknown>;
+        delete payload[field];
+        await expect(
+          store.saveSnapshot({
+            ...snapshot,
+            payload: payload as unknown as SnapshotPayload,
+          }),
+        ).rejects.toThrow(`Invalid snapshot payload: ${field}`);
+        expect(await store.getSnapshot(snapshot.id)).toEqual(snapshot);
+      },
+    );
+
     it("round-trips the setup-band session state", async () => {
       const payload = makeSnapshotPayload();
       const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });
