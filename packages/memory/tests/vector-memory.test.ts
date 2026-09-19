@@ -568,6 +568,95 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     expect(third.archival).toBe(1);
     expect(calls[calls.length - 1].length).toBe(1);
   });
+
+  it.each(["listCharacters", "listSessionLorebookEntries"] as const)(
+    "preserves the archival index and hashes when %s fails",
+    async (reader) => {
+      const { fn, calls } = spyEmbed();
+      const ingestor = createVectorIngestor({ store, embed: fn });
+      expect((await ingestor.ingest(sessionId)).archival).toBe(3);
+      const readVectors = () =>
+        store.searchVectors!({
+          sessionId,
+          query: embedText("forge"),
+          topK: 10,
+          pluginId: MEMORY_VECTOR_PLUGIN_ID,
+          namespace: ARCHIVAL_NAMESPACE,
+        });
+      const readHashes = () =>
+        store.getPluginData(
+          sessionId,
+          MEMORY_VECTOR_PLUGIN_ID,
+          "archival-ingest",
+          "hashes",
+        );
+      const vectorsBefore = await readVectors();
+      const hashesBefore = structuredClone(await readHashes());
+      expect(vectorsBefore).toHaveLength(3);
+      const error = new Error(`synthetic ${reader} failure`);
+      const readFailure = vi.spyOn(store, reader).mockRejectedValueOnce(error);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect.soft(ingestor.ingest(sessionId)).resolves.toEqual({
+          skipped: false,
+          recall: 0,
+          archival: 0,
+        });
+        expect.soft(await readVectors()).toEqual(vectorsBefore);
+        expect.soft(await readHashes()).toEqual(hashesBefore);
+        expect.soft(calls).toHaveLength(1);
+        expect.soft(warn).toHaveBeenCalledTimes(1);
+        expect
+          .soft(warn)
+          .toHaveBeenCalledWith(
+            expect.stringContaining(
+              `vector ingest (archival) failed for ${sessionId}`,
+            ),
+          );
+        expect
+          .soft(warn)
+          .toHaveBeenCalledWith(expect.stringContaining(error.message));
+
+        // A healthy read of unchanged sources must not pay to rebuild the index.
+        expect.soft((await ingestor.ingest(sessionId)).archival).toBe(0);
+        expect.soft(calls).toHaveLength(1);
+      } finally {
+        readFailure.mockRestore();
+        warn.mockRestore();
+      }
+    },
+  );
+
+  it("clears vectors and hashes after successful reads confirm all archival records were deleted", async () => {
+    const { fn, calls } = spyEmbed();
+    const ingestor = createVectorIngestor({ store, embed: fn });
+    expect((await ingestor.ingest(sessionId)).archival).toBe(3);
+    await store.deleteCharacter(sessionId, "c1");
+    await store.deleteCharacter(sessionId, "c2");
+    await store.deleteLorebookEntry(sessionId, "l1");
+
+    expect((await ingestor.ingest(sessionId)).archival).toBe(0);
+    expect(
+      await store.searchVectors!({
+        sessionId,
+        query: embedText("forge"),
+        topK: 10,
+        pluginId: MEMORY_VECTOR_PLUGIN_ID,
+        namespace: ARCHIVAL_NAMESPACE,
+      }),
+    ).toEqual([]);
+    expect(
+      (
+        await store.getPluginData(
+          sessionId,
+          MEMORY_VECTOR_PLUGIN_ID,
+          "archival-ingest",
+          "hashes",
+        )
+      )?.value,
+    ).toEqual({});
+    expect(calls).toHaveLength(1);
+  });
 });
 
 describe("graceful degradation", () => {

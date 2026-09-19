@@ -9,7 +9,8 @@ import type { RunRuntimeDebugOptions } from "./types.js";
 import {
   createToolExecutor,
   executeTurn,
-  processRuntimeResult,
+  snapshotUserSettings,
+  type TurnExecutorDeps,
 } from "@covel/runtime";
 import {
   builtinUITools,
@@ -21,7 +22,7 @@ import {
 } from "@covel/tools";
 import {
   evaluateExpectations,
-  isExpectedRuntimeFailure,
+  hasUnexpectedRunFailure,
   listPluginDataByNamespace,
   saveImageArtifacts,
   type CaseArtifact,
@@ -34,6 +35,7 @@ import {
   parseCaseFile,
 } from "./cases.js";
 import {
+  commitDebugExecution,
   runDeferredFollower,
   writeExpectedFollowerFailureJob,
 } from "./execution.js";
@@ -63,6 +65,8 @@ export interface RunRuntimeDebugResult {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly runtimeResults: readonly RuntimeResult[];
+  readonly commitStatus: "committed" | "failed";
+  readonly commitError?: string;
   readonly jobs: readonly {
     readonly jobId: string;
     readonly runtimeId: string;
@@ -70,6 +74,15 @@ export interface RunRuntimeDebugResult {
     readonly status: "done" | "failed";
   }[];
   readonly deferredFollowers: readonly {
+    readonly runtimeId: string;
+    readonly pluginId: string;
+    readonly triggerEvent: {
+      readonly topic: string;
+      readonly data: Readonly<Record<string, unknown>>;
+    };
+  }[];
+  /** Further background work discovered while running the first follower layer. */
+  readonly pendingDeferredFollowers: readonly {
     readonly runtimeId: string;
     readonly pluginId: string;
     readonly triggerEvent: {
@@ -161,6 +174,22 @@ export async function runRuntimeDebug(
   }
   const llm = buildMockLlm(options);
   const liveAdapters = options.mode === "live" ? makeLiveAdapters() : undefined;
+  const deps = {
+    loadRuntime: async (manifest) => loadedCache.get(manifest.name),
+    llm: liveAdapters?.llm ?? llm,
+    gateway: liveAdapters?.gateway ?? makeGateway(options),
+    utils: PLUGIN_UTILS,
+    mediaStore,
+    getPluginSource: () => discovery.source,
+    store,
+    toolExecutor: createToolExecutor({
+      findTool: (name) => toolMap.get(name),
+      store,
+    }),
+  } satisfies TurnExecutorDeps;
+  const userSettings = snapshotUserSettings(
+    options.userSettings ? { [pluginId]: options.userSettings } : undefined,
+  );
   const result = await executeTurn(
     {
       sessionId,
@@ -172,47 +201,22 @@ export async function runRuntimeDebug(
         runtimeId,
         ...(options.payload ? { payload: options.payload } : {}),
       },
-      ...(options.userSettings
-        ? { userSettings: { [pluginId]: options.userSettings } }
-        : {}),
+      userSettings,
     } satisfies TurnInput,
     manifests,
-    {
-      loadRuntime: async (manifest) => loadedCache.get(manifest.name),
-      llm: liveAdapters?.llm ?? llm,
-      gateway: liveAdapters?.gateway ?? makeGateway(options),
-      utils: PLUGIN_UTILS,
-      mediaStore,
-      getPluginSource: () => discovery.source,
-      store,
-      toolExecutor: createToolExecutor({
-        findTool: (name) => toolMap.get(name),
-        store,
-      }),
-    },
+    deps,
   );
 
-  const outputKindMap = new Map(
-    manifests.map((m) => [m.name, m.outputKind ?? "plugin"]),
-  );
-  const runtimeCapabilitiesMap = new Map(
-    manifests.map((m): [string, readonly string[]] => [
-      m.name,
-      m.capabilities ?? [],
-    ]),
-  );
-  for (const runtimeResult of result.runtimeResults) {
-    const processOpts = {
-      capabilities: runtimeCapabilitiesMap.get(runtimeResult.runtimeId) ?? [],
-    };
-    await processRuntimeResult(
-      runtimeResult,
-      store,
-      sessionId,
-      outputKindMap.get(runtimeResult.runtimeId) ?? "plugin",
-      processOpts,
-    );
-  }
+  const commit = await commitDebugExecution({
+    turn: result,
+    manifests,
+    deps,
+    locale,
+    userSettings,
+    detached: false,
+  });
+  const committedFollowers =
+    commit.status === "committed" ? (result.deferredFollowers ?? []) : [];
 
   const jobs: Array<{
     jobId: string;
@@ -221,18 +225,18 @@ export async function runRuntimeDebug(
     status: "done" | "failed";
   }> = [];
   const followerResults: RuntimeResult[] = [];
-  for (const follower of result.deferredFollowers ?? []) {
+  const pendingDeferredFollowers: RunRuntimeDebugResult["pendingDeferredFollowers"][number][] =
+    [];
+  for (const follower of committedFollowers) {
     const job = await runDeferredFollower({
       follower,
       sessionId,
       locale,
-      store,
       manifests,
-      loadedCache,
-      gateway: liveAdapters?.gateway ?? makeGateway(options),
-      mediaStore,
-      utils: PLUGIN_UTILS,
-      ...(options.userSettings ? { userSettings: options.userSettings } : {}),
+      deps,
+      ...(userSettings?.[pluginId]
+        ? { userSettings: userSettings[pluginId] }
+        : {}),
     });
     jobs.push({
       jobId: job.jobId,
@@ -240,12 +244,14 @@ export async function runRuntimeDebug(
       pluginId: job.pluginId,
       status: job.status,
     });
-    followerResults.push(job.result);
+    followerResults.push(...job.runtimeResults);
+    pendingDeferredFollowers.push(...job.deferredFollowers);
   }
 
   if (
     options.expectsBackgroundFollower === true &&
-    (result.deferredFollowers ?? []).length === 0
+    commit.status === "committed" &&
+    committedFollowers.length === 0
   ) {
     jobs.push(
       await writeExpectedFollowerFailureJob({
@@ -265,7 +271,11 @@ export async function runRuntimeDebug(
     pluginId,
   );
   const logs = pluginData._logs ?? [];
-  const allRuntimeResults = [...result.runtimeResults, ...followerResults];
+  const allRuntimeResults = [
+    ...result.runtimeResults,
+    ...(result.nestedRuntimeResults ?? []),
+    ...followerResults,
+  ];
   const baseResult = {
     status: "ok" as const,
     mode: options.mode ?? ("mock" as const),
@@ -275,8 +285,18 @@ export async function runRuntimeDebug(
     pluginId,
     runtimeId,
     runtimeResults: allRuntimeResults,
+    commitStatus: commit.status,
+    ...(commit.status === "failed"
+      ? {
+          commitError:
+            commit.error ??
+            commit.failedProposals[0]?.error ??
+            "Execution commit failed",
+        }
+      : {}),
     jobs,
-    deferredFollowers: result.deferredFollowers ?? [],
+    deferredFollowers: committedFollowers,
+    pendingDeferredFollowers,
     pluginData,
     logs,
     llmCalls: serializeLlmCalls(llm.calls, options.showPrompts === true),
@@ -311,11 +331,7 @@ export async function runRuntimeCases(
         cases: [
           {
             name: pluginId,
-            status: result.runtimeResults.some(
-              (item) => item.status === "failed",
-            )
-              ? "failed"
-              : "passed",
+            status: hasUnexpectedRunFailure(result) ? "failed" : "passed",
             result,
           },
         ],
@@ -352,15 +368,11 @@ export async function runRuntimeCases(
       mediaStore,
     });
     const withAssertions = { ...result, artifacts, assertions };
-    const runtimeFailed = withAssertions.runtimeResults.some(
-      (item) =>
-        item.status === "failed" &&
-        !isExpectedRuntimeFailure(item, testCase.expect),
-    );
+    const runFailed = hasUnexpectedRunFailure(withAssertions, testCase.expect);
     const assertionFailed = assertions.some((item) => item.status === "failed");
     results.push({
       name: testCase.name,
-      status: runtimeFailed || assertionFailed ? "failed" : "passed",
+      status: runFailed || assertionFailed ? "failed" : "passed",
       result: withAssertions,
     });
   }

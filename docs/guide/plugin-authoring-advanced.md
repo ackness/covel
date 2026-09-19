@@ -103,9 +103,9 @@ const mockLLM = new MockLLM({
 });
 ```
 
-**手搓 turn-executor 跑完整 turn**：需要验证 agent tool loop、同 turn event 链或 proposal commit 时，用 `@covel/runtime` 公开导出手工组装 —— `discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，`processRuntimeResult` 落库 proposal。完整可运行范例见 [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) 与 [`packages/runtime/tests/emit-event-integration.test.ts`](../../packages/runtime/tests/emit-event-integration.test.ts)，入口选择见 [plugin-testing.md](./plugin-testing.md)。
+**手工装配完整执行**：需要验证 agent tool loop、同 turn event 链或 proposal commit 时，用 `@covel/runtime` 公开导出手工组装：`discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，再通过 `commitExecution` 一次提交顶层与递归结果、journal 和 suspension。作者工具中的 [`execution.ts`](../../packages/test-runtime/src/execution.ts) 展示完整提交参数；底层 event/proposal 组合测试不能替代宿主完整提交。入口选择见 [plugin-testing.md](./plugin-testing.md)。
 
-**断言 Store 状态**：MemoryStore 实现完整 `DataStore` 接口，turn 执行 + `processRuntimeResult` 之后可直接 `store.listPluginData(...)` / `store.getState(...)` 断言持久化结果。
+**断言 Store 状态**：MemoryStore 实现完整 `DataStore` 接口。先检查 `commitExecution` 的状态，再用 `store.listPluginData(...)` / `store.getState(...)` 断言持久化结果；执行成功与提交成功是不同结果。
 
 ## 3. 审批管线
 

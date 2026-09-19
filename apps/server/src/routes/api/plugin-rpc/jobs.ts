@@ -142,11 +142,6 @@ export type RuntimeJobStatus =
   | "stale"
   | "orphaned";
 
-export type RuntimeJobActiveStatus = Extract<
-  RuntimeJobStatus,
-  "queued" | "claimed" | "running" | "committing"
->;
-
 export interface RuntimeJobOrigin {
   readonly activation: "stage" | "event" | "manual";
   readonly sourceTurnId: string;

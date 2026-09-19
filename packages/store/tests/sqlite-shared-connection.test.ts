@@ -1,13 +1,14 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteStore } from "../src/sqlite/sqlite-store.js";
 import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
 import {
   acquireSqliteConnection,
   releaseSqliteConnection,
 } from "../src/sqlite/shared-connection.js";
+import * as connections from "../src/sqlite/shared-connection.js";
 
 describe("sqlite shared connection", () => {
   let dir: string;
@@ -19,7 +20,91 @@ describe("sqlite shared connection", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("releases a failed media initialization without closing the existing data owner", async () => {
+    const store = createSqliteStore(dbPath);
+    const observed = acquireSqliteConnection(dbPath);
+    releaseSqliteConnection(observed);
+    const mediaRoot = path.join(dir, "blocked-media");
+    await writeFile(mediaRoot, "synthetic fixture");
+    let ownerClosed = false;
+    try {
+      expect(() => createSqliteMediaStore(dbPath, { mediaRoot })).toThrow(
+        expect.objectContaining({ code: "EEXIST" }),
+      );
+      expect(observed.open).toBe(true);
+      expect(await store.listSessions()).toEqual([]);
+      await store.close();
+      ownerClosed = true;
+      expect(observed.open).toBe(false);
+    } finally {
+      if (!ownerClosed) await store.close();
+      if (observed.open) releaseSqliteConnection(observed);
+    }
+  });
+
+  it("closes the only acquired connection on initialization failure and permits a fresh owner", async () => {
+    const acquire = connections.acquireSqliteConnection;
+    let observed: ReturnType<typeof acquire> | undefined;
+    const spy = vi
+      .spyOn(connections, "acquireSqliteConnection")
+      .mockImplementationOnce((file) => {
+        observed = acquire(file);
+        return observed;
+      });
+    const mediaRoot = path.join(dir, "blocked-media");
+    await writeFile(mediaRoot, "synthetic fixture");
+    try {
+      expect(() => createSqliteMediaStore(dbPath, { mediaRoot })).toThrow(
+        expect.objectContaining({ code: "EEXIST" }),
+      );
+      expect(observed).toBeDefined();
+      expect(observed?.open).toBe(false);
+      spy.mockRestore();
+
+      const media = createSqliteMediaStore(dbPath, {
+        mediaRoot: path.join(dir, "valid-media"),
+      });
+      try {
+        const ref = await media.put(new Uint8Array([1, 2, 3]), "image/png");
+        expect(await media.exists(ref.id)).toBe(true);
+      } finally {
+        await media.close?.();
+      }
+    } finally {
+      spy.mockRestore();
+      if (observed?.open) releaseSqliteConnection(observed);
+    }
+  });
+
+  it("preserves a later initialization error while returning only the failed owner's reference", () => {
+    const observed = acquireSqliteConnection(dbPath);
+    const error = new Error("synthetic prepare failure");
+    const prepare = vi.spyOn(observed, "prepare").mockImplementationOnce(() => {
+      throw error;
+    });
+    let ownerReleased = false;
+    try {
+      let failure: unknown;
+      try {
+        createSqliteMediaStore(dbPath);
+      } catch (caught) {
+        failure = caught;
+      }
+      expect(failure).toBe(error);
+      prepare.mockRestore();
+      expect(observed.prepare("SELECT 1 AS value").get()).toEqual({ value: 1 });
+      releaseSqliteConnection(observed);
+      ownerReleased = true;
+      expect(observed.open).toBe(false);
+    } finally {
+      prepare.mockRestore();
+      if (!ownerReleased) releaseSqliteConnection(observed);
+      if (observed.open) releaseSqliteConnection(observed);
+    }
   });
 
   it("lets the mirror media store write inside the main store's transaction without deadlocking", async () => {

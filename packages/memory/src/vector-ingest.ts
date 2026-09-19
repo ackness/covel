@@ -381,44 +381,36 @@ async function collectArchivalItems(
 ): Promise<ArchivalItem[]> {
   const items: ArchivalItem[] = [];
 
+  // Deletion detection needs both complete source reads. Let failures reach
+  // the sweep's archival catch before any vectors or hashes can be changed.
   // Lorebook entries. plugin_data is intentionally excluded (same isolation
   // reasoning as the keyword archival searcher — no plugin-agnostic way to scan
   // every plugin's namespaced data).
-  if (typeof store.listSessionLorebookEntries === "function") {
-    try {
-      const entries = await store.listSessionLorebookEntries(sessionId);
-      for (const entry of entries) {
-        const content = String(entry.content ?? "").trim();
-        if (!content) continue;
-        items.push({
-          vecKey: `lorebook:${entry.id}`,
-          displayKey: entry.keys?.[0] ?? entry.id,
-          text: content,
-          source: "lorebook",
-          ...(entry.pluginId ? { pluginId: entry.pluginId } : {}),
-        });
-      }
-    } catch {
-      // Non-fatal — backend may not support lorebook.
-    }
+  const entries = await store.listSessionLorebookEntries(sessionId);
+  for (const entry of entries) {
+    const content = String(entry.content ?? "").trim();
+    if (!content) continue;
+    items.push({
+      vecKey: `lorebook:${entry.id}`,
+      displayKey: entry.keys?.[0] ?? entry.id,
+      text: content,
+      source: "lorebook",
+      ...(entry.pluginId ? { pluginId: entry.pluginId } : {}),
+    });
   }
 
   // Character records.
-  try {
-    const characters = await store.listCharacters(sessionId);
-    for (const char of characters) {
-      const text =
-        `[${char.type}] ${char.name}: ${char.description ?? ""} ${JSON.stringify(char.fields ?? {})}`.trim();
-      if (!text) continue;
-      items.push({
-        vecKey: `character:${char.id}`,
-        displayKey: char.name,
-        text,
-        source: "character",
-      });
-    }
-  } catch {
-    // Non-fatal.
+  const characters = await store.listCharacters(sessionId);
+  for (const char of characters) {
+    const text =
+      `[${char.type}] ${char.name}: ${char.description ?? ""} ${JSON.stringify(char.fields ?? {})}`.trim();
+    if (!text) continue;
+    items.push({
+      vecKey: `character:${char.id}`,
+      displayKey: char.name,
+      text,
+      source: "character",
+    });
   }
 
   return items;

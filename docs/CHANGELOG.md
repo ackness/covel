@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- SQLite media initialization releases its connection reference on failure. Settings observer exceptions no longer change persistence outcomes or prevent sibling notifications.
+- Archival indexing preserves existing vectors and content hashes when character or lorebook reads fail, while successful empty reads still remove deleted records.
+- Plugin author validation checks raw declarations before optional-field normalization; test-runtime background followers use the production execution and commit lifecycle.
 - Browser initialization and reconnect share snapshot ownership, preserve live messages and state, and deduplicate replayed state-patch history. Plugin-panel data seeds replace deleted namespaces; missing model bindings remain visible until explicitly reset or replaced.
 - Model bindings preserve local versus server identity through settings, headers, UI and connectivity probes. Same-named targets route independently; malformed or missing local definitions reject before execution. Request overlays stay out of public model catalogs and implicit defaults.
 - Durable workers continuously recover expired leases, protecting active commits with nonblocking session locks. Maintenance runs at full execution capacity, stops on close, and retains sanitized failure diagnostics.
@@ -21,6 +24,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Changed
 
+- Settings persistence accepts only its current v2 envelope across browser, REST, and desktop IPC. Unsupported development files remain untouched and must be recreated; the separate v1 settings export format is unchanged. Removed unused host helpers and the manifest validator's `--compat` bypass.
 - Removed the unused session `presetId` field and its metadata mirror from API, browser, store and snapshot contracts. Model routing continues through slots, request overrides and `runtimeModelOverrides`. Recreate development checkpoints and snapshots that do not satisfy the current contract; no migration or automatic data deletion is provided.
 - Model settings use only current provider profiles and version 2 provider exports. Removed legacy model/key migrations, read-time rewrites, unused preset-write APIs and navigation aliases. Recreate affected development model configurations and connection keys explicitly. Current server preset bindings remain supported; ambiguous bindings are rejected.
 - Model getters no longer attach API keys, and request key routing no longer borrows provider-family keys. Server-managed key markers are never sent as provider credentials.

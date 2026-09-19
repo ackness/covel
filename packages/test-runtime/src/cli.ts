@@ -1,6 +1,7 @@
 #!/usr/bin/env -S node --import tsx
 
 import { runRuntimeDebug, runRuntimeCases } from "./runner.js";
+import { hasUnexpectedRunFailure } from "./reporting.js";
 
 interface CliOptions {
   target?: string;
@@ -185,16 +186,10 @@ try {
     : await runRuntimeCases(options);
   process.stdout.write(JSON.stringify(result, null, options.pretty ? 2 : 0));
   process.stdout.write("\n");
-  const runtimeResults =
-    "runtimeResults" in result
-      ? result.runtimeResults
-      : result.cases.flatMap((item) => item.result.runtimeResults);
-  const caseFailed =
-    "cases" in result && result.cases.some((item) => item.status === "failed");
   const failed =
     "cases" in result
-      ? caseFailed
-      : runtimeResults.some((r) => r.status === "failed");
+      ? result.cases.some((item) => item.status === "failed")
+      : hasUnexpectedRunFailure(result);
   process.exitCode = failed ? 1 : 0;
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

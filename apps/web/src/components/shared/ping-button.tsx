@@ -280,13 +280,6 @@ export function PingButton({
   );
 }
 
-/** Invalidate the cached ping result for one target (e.g. after key edit). */
-export function invalidatePingResult(target: PingTarget): void {
-  resultCache.delete(cacheKeyFor(target));
-  cacheInvalidationGeneration += 1;
-  publishCacheChange();
-}
-
 /** API-key edits can affect every preset/slot using that provider. */
 export function invalidateAllPingResults(): void {
   resultCache.clear();

@@ -177,6 +177,37 @@ export function isExpectedRuntimeFailure(
   });
 }
 
+/** One failure policy for single-run CLI output and case expectations. */
+export function hasUnexpectedRunFailure(
+  result: {
+    readonly commitStatus: "committed" | "failed";
+    readonly runtimeResults: readonly RuntimeResult[];
+    readonly jobs: readonly {
+      readonly runtimeId: string;
+      readonly status: "done" | "failed";
+    }[];
+  },
+  expected?: CaseExpectations,
+): boolean {
+  return (
+    result.commitStatus === "failed" ||
+    result.runtimeResults.some(
+      (runtime) =>
+        runtime.status === "failed" &&
+        !isExpectedRuntimeFailure(runtime, expected),
+    ) ||
+    result.jobs.some(
+      (job) =>
+        job.status === "failed" &&
+        !result.runtimeResults.some(
+          (runtime) =>
+            runtime.runtimeId === job.runtimeId &&
+            isExpectedRuntimeFailure(runtime, expected),
+        ),
+    )
+  );
+}
+
 export async function saveImageArtifacts(args: {
   readonly result: RuntimeReportResult;
   readonly pluginRoot: string;

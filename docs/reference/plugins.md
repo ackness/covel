@@ -227,7 +227,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 - namespace `schema` — 维度 schema 定义（plugin_data），通过 `world.schema` 注入 prompt。
 - session lorebook（`strategy: 'constant'`）— 世界词条数据，通过 `world.entries` 注入 prompt。
 
-`initialize-world` 内部组合 `set-world-schema` 与 `set-world-entries-batch`，把 schema plugin-data、entries plugin-data 和 session lorebook proposals 一起交给 finalizer；任一部分失败时不会提交半套世界数据。每个词条成为一条 `constant` 类型的 lorebook row，id 按 `world-entry:<key>` 稳定化，`insertionOrder` 按批内顺序以 100 为步长递增。两个低层工具仍由 entry 注册用于兼容，但不再暴露给捆绑 runtime。
+`initialize-world` 内部组合 `set-world-schema` 与 `set-world-entries-batch`，把 schema plugin-data、entries plugin-data 和 session lorebook proposals 一起交给 finalizer；任一部分失败时不会提交半套世界数据。每个词条成为一条 `constant` 类型的 lorebook row，id 按 `world-entry:<key>` 稳定化，`insertionOrder` 按批内顺序以 100 为步长递增。两个低层工具仍由 entry 注册，可供显式声明它们的 runtime 使用；捆绑 runtime 使用组合工具。
 
 ---
 
@@ -310,7 +310,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 | inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true`；该 typed input 同时形成 DAG 边和失败 gate                                                                                |
 | input.inject | `plugin-data[nodes]` → `<existing-npcs>`、`plugin-data[edges]` → `<existing-relations>`（`format: summary`，现有图在构建 prompt 时注入，免去每轮 `list-npc-graph` 往返；工具 name-first，LLM 只需看见图，不需携带 id） |
 | model slot   | `plugin`                                                                                                                                                                                                               |
-| tools.plugin | `upsert-npc-graph`（批量写节点+边）；`list-npc-graph` 仍注册作兼容读取，但不向本 runtime 声明                                                                                                                          |
+| tools.plugin | `upsert-npc-graph`（批量写节点+边）；`list-npc-graph` 仍注册为读取工具，但不向本 runtime 声明                                                                                                                          |
 | 调用边界     | 默认 `maxSteps: 20` · `maxRetries: 0` · `callTimeoutMs: 60000` · `completeAfterTools: [upsert-npc-graph]`                                                                                                              |
 | ui.right     | `./ui/npc-graph-panel.json`                                                                                                                                                                                            |
 
@@ -451,7 +451,7 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 
 **职责**: 从 `<runtime-inputs>.worldIR.value` 识别并登记本轮出现的知识条目（地点 / 人物 / 势力 / 物品 / 技能 / 传闻 / 怪物）。对"没有新发现"的回合调用 `runtime-done` 结束。prompt 同时看到共享 WorldIR 和已登记条目 `<existing-entries>`，所以 LLM 把新增放入 `sync-codex-entries.unlocks`、补充放入 `updates`，一次调用即可提交全部变化，无需额外 `plugin-data-list` 往返。
 
-**数据持久化**: `sync-codex-entries` 内部复用 `unlock-codex-entries` 与 `update-codex-entry`：新增批量写入 `plugin_data[entries]`，更新按 `entryId`（就是 plugin-data 的 key，形如 `codex-xxx`）以 append-only 语义合并内容、标签并可选升级 `rarity`。所有 proposal 只在完整 sync 成功后一起返回；任一更新目标不存在时整次工具调用失败，不会留下半批图鉴写入。两个低层工具仍注册用于兼容，但不向捆绑 runtime 声明。
+**数据持久化**: `sync-codex-entries` 内部复用 `unlock-codex-entries` 与 `update-codex-entry`：新增批量写入 `plugin_data[entries]`，更新按 `entryId`（就是 plugin-data 的 key，形如 `codex-xxx`）以 append-only 语义合并内容、标签并可选升级 `rarity`。所有 proposal 只在完整 sync 成功后一起返回；任一更新目标不存在时整次工具调用失败，不会留下半批图鉴写入。两个低层工具仍注册，可供显式声明它们的 runtime 使用，但不向捆绑 runtime 声明。
 
 **框架能力依赖**：`input.inject: plugin-data` source 由 `@covel/context` 的 async build 路径提供；当 manifest 声明了任何 `kind: plugin-data` 注入时，turn-executor 会自动切到异步装配路径并调用 `store.listPluginData(sessionId, pluginId, namespace)`。同步路径保持零改动，其他插件不受影响。
 
@@ -1192,7 +1192,7 @@ description: # I18nText：一句话简介
 
 **没有** `displayName` 时，UI 退回显示 plugin id（如 `dashscope-image-gen`），冗长且不直观。所有插件（含内置与第三方）都**建议**声明 `displayName`；23 个内置插件均已声明中英文名。
 
-> 兼容：多 runtime 插件的**包级 PLUGIN.md**（根目录仅含摘要 frontmatter、不作为 runtime 加载）若把 `name` 写成 I18nText 对象，仍会作为展示名的回落来源；但新代码应优先用 `displayName`，不要重载 `name`。
+> 多 runtime 插件的**包级 PLUGIN.md** 提供包元数据，实际 runtime 位于 `runtimes/`。根 `name` 使用插件 ID 字符串，多语言展示名使用 `displayName`；不要把展示对象写入 `name`。
 
 ### pluginType
 
@@ -2006,7 +2006,7 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### Manifest 加载失败的边界
 
-`pnpm validate:plugin` 先调用 loader 兼容 schema 解析 `PLUGIN.md`，再调用 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层错误通常表示缺少 `---`、YAML 无效或 frontmatter 无法解析，并会阻止 loader 发现该 runtime；authoring 层则报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。生产 loader 为兼容旧 manifest 使用较宽松的输入 schema，因此“server 能加载”不等于“通过当前作者规范”；提交或发布前应以该 CLI 的 strict 结果为准。传入插件目录时，还会检查多 runtime 的插件级 `userSettings` 冲突。
+`pnpm validate:plugin` 先用 loader 解析 `PLUGIN.md`，再对**原始 frontmatter** 执行 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层提供 YAML/字段的行号诊断，authoring 层报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。loader 对非法可选 note 字段的警告和省略不能绕过作者校验：原始 `authorsNote` / `postHistory` 有误仍会失败。合法 I18nText 展示字段、无调度的 Hook/UI-only 声明及 multi-runtime 根元数据都保留；不要求这些声明虚构 `stage`。传入插件目录时，还会检查跨 runtime 的插件级 `userSettings` 冲突。CLI 只验证当前作者合同，没有跳过严格校验的模式。
 
 这条 CLI 检查只验证 manifest 与跨 runtime 声明，不执行 `entry`、handler 或 LLM。要验证 runtime 行为，应使用 `pnpm test:runtime`；要验证 server、SSE 和审批链路，应使用 HTTP E2E。
 
@@ -2072,9 +2072,9 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 
 manifest 字段演进必须同时考虑作者输入、loader 归一化、生成的 JSON Schema、discovery 摘要、运行时消费方、文档和测试：
 
-- **新增**：优先增加带安全默认值的可选字段；旧 host 不理解新调度语义时必须 fail closed，不能把控制字段藏进可忽略的扩展对象。`turnCompletion` 使用嵌套对象，后续策略可在不扩张顶层命名空间的前提下增加。
-- **修改或重命名**：只在 loader 边界短期接受旧名称，归一化后仅保留规范名称；同时出现新旧名称时应拒绝，且不能静默重解释既有枚举值。
-- **删除**：先迁移仓库内 manifest 和消费方，再经过明确的弃用周期；删除已有字段或枚举值属于 manifest 契约的破坏性变更。strict authoring schema 应继续拒绝未知字段，避免拼写错误被当作向前兼容。
+- **新增**：根据当前需求决定必填、可选及默认值，同时实现生产和消费方；不能把调度控制字段藏进可忽略的扩展对象。`turnCompletion` 使用嵌套对象表达相关策略。
+- **修改或重命名**：同步更新仓库内生产方、消费方、schema、fixtures 和文档，只保留当前名称与语义；不为早期开发数据增加别名、双读或迁移分支。
+- **删除**：同时移除仓库内声明和消费路径，并说明受影响的开发数据需要重建。strict authoring schema 继续拒绝未知字段；不为早期数据设置额外弃用周期。
 
 对 `turnCompletion` 增加 `overlap`、`stalePolicy` 或终态时，还必须同步合法状态迁移、持久化恢复、SSE 投影和各存储后端测试；仅更新 schema 不足以形成可用契约。
 
@@ -2121,9 +2121,9 @@ tools:
 - `completion.kind: "detached"`：保留提交与快照，不完成父回合或重复提取故事。
 - 含暂停结果时保存快照，暂不发出完成通知或提取记忆。事务失败则不执行这些提交后步骤。
 
-通知、快照或记忆准备失败不会把已持久化结果改为失败；`snapshotFailed` 独立报告检查点问题。核心记忆提取仍为异步派生任务，检查点包含提交前已完成的记忆及本次事务写入，不保证包含本次尚未完成的提取。此 API 每次认领执行调用一次，不提供跨进程执行去重；低层 `finalizeExecution` 保留给事务本身的测试和组合。旧宿主应将 `finalizeExecution`、快照和 `result.completeTurn()` 的组合迁移到此入口。
+通知、快照或记忆准备失败不会把已持久化结果改为失败；`snapshotFailed` 独立报告检查点问题。核心记忆提取仍为异步派生任务，检查点包含提交前已完成的记忆及本次事务写入，不保证包含本次尚未完成的提取。此 API 每次认领执行调用一次，不提供跨进程执行去重；低层 `finalizeExecution` 保留给事务本身的测试和组合。宿主统一通过此入口提交，避免自行拼接 finalizer、快照和完成通知。
 
-执行契约（`LoadedRuntime`、`FunctionHandlerContext`、gateway/media 接口）从 `@covel/shared/plugin-runtime` 导入。该入口仅导出类型；`plugin-loader` 保留兼容类型导出，负责文件发现、加载和注册，不是 runtime 的生产依赖。
+执行契约（`LoadedRuntime`、`FunctionHandlerContext`、gateway/media 接口）从 `@covel/shared/plugin-runtime` 导入。该入口仅导出类型；`plugin-loader` 为加载侧重导出部分类型，负责文件发现、加载和注册，不是 runtime 的生产依赖。
 
 世界时间通过内置 core-plugin 提供，使用 capability 输入绑定和普通事务化 plugin-data，无内核插件 ID 分支。历法、粗粒度时段与倒流/随机 prompt 见 [World time](./world-time.md)。
 

@@ -42,6 +42,25 @@ export function createSqliteMediaStore(
   // materializing world portraits) while the main store holds a write
   // transaction. See sqlite/shared-connection.ts.
   const sqlite = acquireSqliteConnection(dbPath);
+  try {
+    return initializeSqliteMediaStore(sqlite, dbDir, options);
+  } catch (error) {
+    // Until construction returns, this factory owns the acquired reference.
+    try {
+      releaseSqliteConnection(sqlite);
+    } catch {
+      // Preserve the initialization error without logging private paths/details.
+      console.warn("[store] SQLite media initialization cleanup failed");
+    }
+    throw error;
+  }
+}
+
+function initializeSqliteMediaStore(
+  sqlite: ReturnType<typeof acquireSqliteConnection>,
+  dbDir: string,
+  options?: SqliteMediaStoreOptions,
+): MediaStore {
   createTables(sqlite);
 
   const mediaRoot = resolve(

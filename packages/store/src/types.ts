@@ -741,19 +741,17 @@ export interface TransactionalStore {
    * - PostgreSQL runs each call on an independent pooled connection (Drizzle's
    *   native `db.transaction`), giving true concurrency. A non-tx write made
    *   during a transaction stays isolated on its own connection.
-   * - Single-connection/snapshot backends (SQLite / Memory / IndexedDB)
+   * - Single-connection/snapshot backends (SQLite / Memory)
    *   serialize transactions and bundled root mutators through one write gate,
    *   so an unrelated root write waits instead of being folded into a rollback.
-   *   SQLite gates every store sharing its connection; IndexedDB gates every
-   *   handle for one database name through Web Locks when available.
+   *   SQLite gates every store sharing its connection.
    *
    * **Nesting is not supported on any backend.** Calling `withTransaction` from
    * inside another `withTransaction` callback rejects with a clear error rather
    * than (serialized backends) deadlocking on the serialization chain or (PG)
    * silently running a non-atomic inner transaction on a separate connection.
-   * Node backends use a precise async-context guard. IndexedDB uses a coarse
-   * per-handle flag and can conservatively reject a genuinely concurrent call
-   * on that same handle while a transaction callback is active.
+   * The bundled backends use a precise async-context guard to distinguish
+   * nested calls from genuinely concurrent transactions.
    *
    * Every store implements this boundary. Test doubles should use a bundled
    * in-memory store or provide the same transactional contract explicitly.

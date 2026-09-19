@@ -62,34 +62,3 @@ export function isStoryRuntime(manifest: {
     manifest.capabilities?.includes(FrameworkCapability.Narrative) === true
   );
 }
-
-export function normalizeRuntimeTrigger(trigger?: {
-  type?: string;
-  interval?: number;
-  cooldownTurns?: number;
-  maxTriggerCount?: number;
-  startTurn?: number;
-  topic?: string;
-}): {
-  type: string;
-  interval?: number;
-  cooldownTurns?: number;
-  maxTriggerCount?: number;
-  startTurn?: number;
-  topic?: string;
-} {
-  return {
-    type: trigger?.type ?? "auto",
-    ...(trigger?.interval !== undefined ? { interval: trigger.interval } : {}),
-    ...(trigger?.cooldownTurns !== undefined
-      ? { cooldownTurns: trigger.cooldownTurns }
-      : {}),
-    ...(trigger?.maxTriggerCount !== undefined
-      ? { maxTriggerCount: trigger.maxTriggerCount }
-      : {}),
-    ...(trigger?.startTurn !== undefined
-      ? { startTurn: trigger.startTurn }
-      : {}),
-    ...(trigger?.topic !== undefined ? { topic: trigger.topic } : {}),
-  };
-}

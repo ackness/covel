@@ -4,6 +4,8 @@
 
 `@covel/settings` provides schema registration, in-memory values, subscriptions, and persistence. Web uses localStorage; desktop uses the configuration API and `settings.json`. API keys use a separate secrets channel.
 
+Ordinary persisted settings accept only `schemaVersion: 2` with `revision`, `savedAt`, and `entries`. LocalStorage, REST, and desktop IPC share this validation. Unversioned and v1 development data are rejected on reads and replacement writes, without migration or deletion; recreate affected development settings. The separate settings import/export `SettingsExportBundle.schemaVersion: 1` remains the current export contract.
+
 ## Schema normalization
 
 Registered non-secret settings expose the schema's parsed result during hydration, dynamic registration, `set()`, `setMany()`, import, refresh, and rollback after a failed write. Nested `.default()` values and string trimming appear in `get()`, exports, and subscriber notifications; explicit writes persist the parsed result. Unregistered keys retain their original values.
@@ -15,6 +17,8 @@ Model-role bindings select exactly one target: `modelRef` for a local provider m
 Invalid custom themes in settings backups are skipped individually while valid themes continue to load. Provider imports accept only the current `{ version: 2, providers: [...] }` export envelope and sanitize each current profile independently. Unsupported files or nonempty imports with no usable profiles show an error and preserve the current configuration.
 
 The Data import preview validates each entry against its currently registered schema. Incompatible entries and secrets misplaced in ordinary `entries` cannot be selected; unregistered ordinary keys remain importable. Backups containing only separate `keys` can also be applied. Import and reset report completion only after persistence succeeds; failed imports retain the preview and show an error.
+
+Key, global, and persistence-error subscriptions isolate each synchronous callback failure. A throwing observer cannot suppress siblings, turn a successful save into a failure, or replace the real I/O error. Diagnostics contain no setting key, value, or raw callback error.
 
 ## Multiple instances and synchronization
 
@@ -28,7 +32,7 @@ Backends implementing `loadWithRevision` / `saveWithRevision` must check a monot
 - Each mutation attempts at most three CAS writes. Continued contention rejects the save without falling back to unconditional replacement.
 - Failed initial hydration remains read-only. Invalid remote values are neither published to subscribers nor used as the basis for another write attempt.
 
-`SettingsStoreApi.refresh(): Promise<void>` queues a read of non-secret settings and notifies keys whose values actually changed. Pending writes still compare against their original base when a refresh runs before them. Legacy adapters without the revision protocol retain their serialized snapshot writes; `refresh()` does not read these adapters.
+`SettingsStoreApi.refresh(): Promise<void>` queues a read of non-secret settings and notifies keys whose values actually changed. Pending writes still compare against their original base when a refresh runs before them. Custom adapters without revision capabilities use serialized snapshot writes; `refresh()` does not read these adapters. This backend capability difference does not permit old persistence formats.
 
 Web refreshes on storage events for `covel:settings`, window focus, and restored visibility. Endpoint, price multiplier, and output-limit drafts retain unfinished input when another window changes the saved value, block automatic overwrite, and offer an explicit reload action. API-key reads, writes, and deletions do not participate in this synchronization or merging.
 

@@ -42,8 +42,9 @@ export interface CreateMemorySystemOptions {
  * Create a fully wired memory system.
  *
  * Model slot resolution for the updater:
- *   explicit option (set by the bootstrap layer in production) → canonical
- *   "memory" slot → gateway default. See {@link resolveModelSlot}.
+ *   explicit option → canonical "memory" slot → gateway default.
+ * The host can supply a per-update model through its request-scoped updater
+ * wrapper. See {@link resolveModelSlot} for the system's default resolution.
  *
  * Recall and archival default to **keyword** searchers (see recall-search.ts /
  * archival-search.ts). When `deps.embed` is injected and the store supports
@@ -147,18 +148,10 @@ export function createMemorySystem(
 const MEMORY_SLOT = "memory";
 
 /**
- * Standalone/test fallback slot resolution.
- *
- * Production never reaches this: the bootstrap layer always passes an explicit
- * `updater.modelSlot` (it resolves the preferred memory slot itself), so
- * `createMemorySystem` short-circuits on `explicitModelSlot`. This helper only
- * runs for a bare standalone boot or a test that omits the slot.
- *
- * It probes the single canonical `"memory"` slot; when that is unconfigured it
- * returns `undefined` and the updater falls back to the gateway's default
- * slot. No other slot names are hardcoded here — a prior `"story"`
- * fallback was removed because it baked an unrelated magic slot id into the
- * memory package (the gateway's own default-slot resolution covers that case).
+ * Resolve the system's default updater slot when no explicit option is set.
+ * The canonical `"memory"` slot is used when configured; otherwise `undefined`
+ * lets the gateway select its default. Request-scoped update inputs can
+ * override this choice without changing the shared memory system.
  */
 function resolveModelSlot(
   resolveSlot?: (slot: string) => string | undefined,

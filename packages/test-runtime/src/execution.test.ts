@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { MockLLM } from "@covel/plugin-test-utils";
+import type { TurnExecutorDeps } from "@covel/runtime";
 import type {
   FunctionHandlerContext,
   LoadedRuntime,
@@ -20,6 +22,14 @@ import {
 const SESSION_ID = "session-execution";
 const PLUGIN_ID = "plugin";
 const RUNTIME_ID = "plugin/follower";
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 const gateway: PluginRuntimeGateway = {
   async generateText() {
@@ -49,6 +59,20 @@ const utils: PluginRuntimeUtils = {
     return Promise.resolve(new Response());
   },
 };
+
+function executionDeps(
+  store: Awaited<ReturnType<typeof createSessionStore>>,
+  loadedCache: Map<string, LoadedRuntime>,
+): TurnExecutorDeps & { store: typeof store } {
+  return {
+    store,
+    loadRuntime: async (manifest) => loadedCache.get(manifest.name),
+    llm: new MockLLM(),
+    gateway,
+    mediaStore: createMemoryMediaStore(),
+    utils,
+  };
+}
 
 function runtimeResult(patch: Partial<RuntimeResult> = {}): RuntimeResult {
   return {
@@ -117,6 +141,290 @@ async function getJobRow(
 }
 
 describe("test-runtime execution helpers", () => {
+  it("revokes a timed-out follower and discards its early and late writes", async () => {
+    vi.useFakeTimers();
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const lateWrite = deferred<unknown>();
+    const store = await createSessionStore();
+    const runtimeManifest = manifest({ timeoutMs: 20 });
+    const loadedCache = new Map([
+      [
+        RUNTIME_ID,
+        loadedRuntime(async (ctx) => {
+          await ctx.pluginData!.set("notes", "early", { value: "uncommitted" });
+          started.resolve();
+          await release.promise;
+          try {
+            await ctx.pluginData!.set("notes", "late", { value: "too-late" });
+            lateWrite.resolve(undefined);
+          } catch (error) {
+            lateWrite.resolve(error);
+          }
+          return { outcome: "success", value: null };
+        }, runtimeManifest),
+      ],
+    ]);
+    try {
+      const pending = runDeferredFollower({
+        follower: {
+          runtimeId: RUNTIME_ID,
+          pluginId: PLUGIN_ID,
+          triggerEvent: { topic: "test.ready", data: {} },
+        },
+        sessionId: SESSION_ID,
+        locale: "zh-CN",
+        manifests: [runtimeManifest],
+        deps: executionDeps(store, loadedCache),
+      });
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(21);
+      const job = await pending;
+      expect(job.status).toBe("failed");
+      expect(job.result.error).toContain("timed out after 20ms");
+      release.resolve();
+      expect(await lateWrite.promise).toBeInstanceOf(Error);
+      expect(
+        await store.listPluginData(SESSION_ID, PLUGIN_ID, "notes"),
+      ).toEqual([]);
+    } finally {
+      release.resolve();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([false, true])(
+    "commits nested results together and only exposes followers after commit (rollback=%s)",
+    async (rollback) => {
+      const store = await createSessionStore();
+      const parent = manifest();
+      const nested = manifest({
+        name: "plugin/nested",
+        trigger: { type: "manual" },
+      });
+      const next = manifest({
+        name: "plugin/next",
+        trigger: { type: "event", topic: "followup.ready" },
+        execution: "background",
+      });
+      const loadedCache = new Map([
+        [
+          parent.name,
+          loadedRuntime(async (ctx) => {
+            await ctx.pluginData!.set("notes", "parent", { ok: true });
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: nested.name },
+            });
+            return {
+              outcome: "success",
+              effects: {
+                events: [{ topic: "followup.ready", data: { ok: true } }],
+              },
+            };
+          }, parent),
+        ],
+        [
+          nested.name,
+          loadedRuntime(async (ctx) => {
+            await ctx.pluginData!.set("notes", "nested", { ok: true });
+            return { outcome: "success", value: null };
+          }, nested),
+        ],
+        [
+          next.name,
+          loadedRuntime(
+            async () => ({ outcome: "success", value: null }),
+            next,
+          ),
+        ],
+      ]);
+      if (rollback)
+        vi.spyOn(store, "withTransaction").mockRejectedValueOnce(
+          new Error("synthetic commit failure"),
+        );
+      const job = await runDeferredFollower({
+        follower: {
+          runtimeId: RUNTIME_ID,
+          pluginId: PLUGIN_ID,
+          triggerEvent: { topic: "test.ready", data: {} },
+        },
+        sessionId: SESSION_ID,
+        locale: "zh-CN",
+        manifests: [parent, nested, next],
+        deps: executionDeps(store, loadedCache),
+      });
+      expect(
+        job.runtimeResults.map((result) => result.runtimeId).sort(),
+      ).toEqual([parent.name, nested.name].sort());
+      expect(job.status).toBe(rollback ? "failed" : "done");
+      expect(
+        (await store.listPluginData(SESSION_ID, PLUGIN_ID, "notes"))
+          .map((row) => row.key)
+          .sort(),
+      ).toEqual(rollback ? [] : ["nested", "parent"]);
+      expect(job.deferredFollowers).toEqual(
+        rollback
+          ? []
+          : [
+              {
+                runtimeId: next.name,
+                pluginId: PLUGIN_ID,
+                triggerEvent: { topic: "followup.ready", data: { ok: true } },
+              },
+            ],
+      );
+    },
+  );
+
+  it.each(["skipped", "suspended"] as const)(
+    "preserves the host follower job semantics for %s",
+    async (outcome) => {
+      const store = await createSessionStore();
+      const runtimeManifest = manifest();
+      const loadedCache = new Map([
+        [
+          RUNTIME_ID,
+          loadedRuntime(async (ctx) => {
+            await ctx.pluginData!.set("notes", "discarded", {
+              value: "uncommitted",
+            });
+            return outcome === "skipped"
+              ? { outcome, skipReason: "nothing to do" }
+              : { outcome, reason: "needs input", resumeSchema: {} };
+          }, runtimeManifest),
+        ],
+      ]);
+      const job = await runDeferredFollower({
+        follower: {
+          runtimeId: RUNTIME_ID,
+          pluginId: PLUGIN_ID,
+          triggerEvent: { topic: "test.ready", data: {} },
+        },
+        sessionId: SESSION_ID,
+        locale: "zh-CN",
+        manifests: [runtimeManifest],
+        deps: executionDeps(store, loadedCache),
+      });
+      expect(job.result.status).toBe(outcome);
+      expect(job.status).toBe(outcome === "skipped" ? "failed" : "done");
+      expect(
+        await store.listPluginData(SESSION_ID, PLUGIN_ID, "notes"),
+      ).toEqual([]);
+      expect(await store.listSuspensions(SESSION_ID)).toHaveLength(
+        outcome === "suspended" ? 1 : 0,
+      );
+    },
+  );
+
+  it.each(["failed", "throw"])(
+    "discards buffered writes when a follower ends with %s",
+    async (ending) => {
+      const store = await createSessionStore();
+      const runtimeManifest = manifest();
+      const loadedCache = new Map([
+        [
+          RUNTIME_ID,
+          loadedRuntime(async (ctx) => {
+            await ctx.pluginData!.set("notes", "pending", {
+              value: "must-rollback",
+            });
+            if (ending === "throw") throw new Error("synthetic failure");
+            return { outcome: "failed", error: "synthetic failure" };
+          }, runtimeManifest),
+        ],
+      ]);
+      const job = await runDeferredFollower({
+        follower: {
+          runtimeId: RUNTIME_ID,
+          pluginId: PLUGIN_ID,
+          triggerEvent: { topic: "test.ready", data: {} },
+        },
+        sessionId: SESSION_ID,
+        locale: "zh-CN",
+        manifests: [runtimeManifest],
+        deps: executionDeps(store, loadedCache),
+      });
+      expect(job.status).toBe("failed");
+      expect(
+        await store.getPluginData(SESSION_ID, PLUGIN_ID, "notes", "pending"),
+      ).toBeNull();
+    },
+  );
+
+  it("keeps writes private until success while allowing the follower to read them", async () => {
+    const store = await createSessionStore();
+    const runtimeManifest = manifest();
+    let outsideValue: unknown;
+    let insideValue: unknown;
+    const loadedCache = new Map([
+      [
+        RUNTIME_ID,
+        loadedRuntime(async (ctx) => {
+          await ctx.pluginData!.set("notes", "pending", { value: "committed" });
+          outsideValue = await store.getPluginData(
+            SESSION_ID,
+            PLUGIN_ID,
+            "notes",
+            "pending",
+          );
+          insideValue = await ctx.pluginData!.get("notes", "pending");
+          return { outcome: "success", value: null };
+        }, runtimeManifest),
+      ],
+    ]);
+    const job = await runDeferredFollower({
+      follower: {
+        runtimeId: RUNTIME_ID,
+        pluginId: PLUGIN_ID,
+        triggerEvent: { topic: "test.ready", data: {} },
+      },
+      sessionId: SESSION_ID,
+      locale: "zh-CN",
+      manifests: [runtimeManifest],
+      deps: executionDeps(store, loadedCache),
+    });
+    expect(job.status).toBe("done");
+    expect(outsideValue).toBeNull();
+    expect(insideValue).toEqual({ value: "committed" });
+    expect(
+      (await store.getPluginData(SESSION_ID, PLUGIN_ID, "notes", "pending"))
+        ?.value,
+    ).toEqual({ value: "committed" });
+  });
+
+  it("uses declared setting defaults alongside explicit overrides", async () => {
+    const store = await createSessionStore();
+    const runtimeManifest = manifest({
+      userSettings: [
+        { key: "enabled", type: "toggle", default: true, label: "Enabled" },
+        { key: "count", type: "number", default: 2, label: "Count" },
+      ],
+    });
+    let received: unknown;
+    const loadedCache = new Map([
+      [
+        RUNTIME_ID,
+        loadedRuntime(async (ctx) => {
+          received = ctx.userSettings;
+          return { outcome: "success", value: null };
+        }, runtimeManifest),
+      ],
+    ]);
+    await runDeferredFollower({
+      follower: {
+        runtimeId: RUNTIME_ID,
+        pluginId: PLUGIN_ID,
+        triggerEvent: { topic: "test.ready", data: {} },
+      },
+      sessionId: SESSION_ID,
+      locale: "zh-CN",
+      manifests: [runtimeManifest],
+      deps: executionDeps(store, loadedCache),
+      userSettings: { count: 5 },
+    });
+    expect(received).toEqual({ enabled: true, count: 5 });
+  });
+
   it("writes expected follower failure jobs with failed runtime errors", async () => {
     const store = await createSessionStore();
     const failed = runtimeResult({
@@ -176,7 +484,16 @@ describe("test-runtime execution helpers", () => {
   it("runs deferred followers and commits returned plugin data", async () => {
     const store = await createSessionStore();
     let received: FunctionHandlerContext | undefined;
-    const runtimeManifest = manifest();
+    const runtimeManifest = manifest({
+      userSettings: [
+        {
+          key: "enabled",
+          type: "toggle",
+          default: false,
+          label: "Enabled",
+        },
+      ],
+    });
     const loadedCache = new Map([
       [
         RUNTIME_ID,
@@ -206,12 +523,8 @@ describe("test-runtime execution helpers", () => {
       },
       sessionId: SESSION_ID,
       locale: "zh-CN",
-      store,
       manifests: [runtimeManifest],
-      loadedCache,
-      gateway,
-      mediaStore: createMemoryMediaStore(),
-      utils,
+      deps: executionDeps(store, loadedCache),
       userSettings: { enabled: true },
     });
 
@@ -283,12 +596,8 @@ describe("test-runtime execution helpers", () => {
       },
       sessionId: SESSION_ID,
       locale: "zh-CN",
-      store,
       manifests: [runtimeManifest],
-      loadedCache,
-      gateway,
-      mediaStore: createMemoryMediaStore(),
-      utils,
+      deps: executionDeps(store, loadedCache),
     });
 
     expect(job.status).toBe("failed");
@@ -329,12 +638,8 @@ describe("test-runtime execution helpers", () => {
       },
       sessionId: SESSION_ID,
       locale: "zh-CN",
-      store,
       manifests: [runtimeManifest],
-      loadedCache,
-      gateway,
-      mediaStore: createMemoryMediaStore(),
-      utils,
+      deps: executionDeps(store, loadedCache),
     });
 
     expect(job.status).toBe("failed");
@@ -351,9 +656,9 @@ describe("test-runtime execution helpers", () => {
     });
   });
 
-  it("keeps recursiveCall unavailable for deferred followers", async () => {
+  it("enforces the declared recursion limit for deferred followers", async () => {
     const store = await createSessionStore();
-    const runtimeManifest = manifest();
+    const runtimeManifest = manifest({ maxRecursionDepth: 0 });
     const loadedCache = new Map([
       [
         RUNTIME_ID,
@@ -372,17 +677,13 @@ describe("test-runtime execution helpers", () => {
       },
       sessionId: SESSION_ID,
       locale: "zh-CN",
-      store,
       manifests: [runtimeManifest],
-      loadedCache,
-      gateway,
-      mediaStore: createMemoryMediaStore(),
-      utils,
+      deps: executionDeps(store, loadedCache),
     });
 
     expect(job.status).toBe("failed");
     expect(job.result.error).toBe(
-      "recursiveCall is unavailable for test-runtime deferred followers",
+      'recursiveCall exceeded max depth 0 for runtime "plugin/follower"',
     );
   });
 
@@ -398,12 +699,8 @@ describe("test-runtime execution helpers", () => {
         },
         sessionId: SESSION_ID,
         locale: "zh-CN",
-        store,
         manifests: [],
-        loadedCache: new Map(),
-        gateway,
-        mediaStore: createMemoryMediaStore(),
-        utils,
+        deps: executionDeps(store, new Map()),
       }),
     ).rejects.toThrow("deferred follower not found: plugin/follower");
 
@@ -416,12 +713,11 @@ describe("test-runtime execution helpers", () => {
         },
         sessionId: SESSION_ID,
         locale: "zh-CN",
-        store,
         manifests: [manifest()],
-        loadedCache: new Map([[RUNTIME_ID, loadedRuntime(undefined)]]),
-        gateway,
-        mediaStore: createMemoryMediaStore(),
-        utils,
+        deps: executionDeps(
+          store,
+          new Map([[RUNTIME_ID, loadedRuntime(undefined)]]),
+        ),
       }),
     ).rejects.toThrow("deferred follower has no handler: plugin/follower");
   });

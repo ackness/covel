@@ -23,20 +23,7 @@ export class ToolValidationError extends Error {
   constructor(zodError: ZodError) {
     super("Tool parameter validation failed");
     this.name = "ToolValidationError";
-    // Zod v4 uses .issues; v3 uses .errors (aliased to .issues in v4)
-    const issues =
-      (
-        zodError as unknown as {
-          issues?: Array<{ path: (string | number)[]; message: string }>;
-        }
-      ).issues ??
-      (
-        zodError as unknown as {
-          errors?: Array<{ path: (string | number)[]; message: string }>;
-        }
-      ).errors ??
-      [];
-    this.details = issues.map((issue) => ({
+    this.details = zodError.issues.map((issue) => ({
       path: issue.path.join(".") || "(root)",
       message: issue.message,
     }));

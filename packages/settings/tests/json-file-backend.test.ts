@@ -59,12 +59,47 @@ describe("json-file backend load contract", () => {
 
   it("returns stored entries on success", async () => {
     const backend = createJsonFileBackend({
-      fetchImpl: vi
-        .fn()
-        .mockResolvedValue(res(200, { entries: { "ui.locale": "en-US" } })),
+      fetchImpl: vi.fn().mockResolvedValue(
+        res(200, {
+          schemaVersion: 2,
+          revision: 0,
+          savedAt: "",
+          entries: { "ui.locale": "en-US" },
+        }),
+      ),
     });
     await expect(backend.load()).resolves.toEqual({ "ui.locale": "en-US" });
   });
+
+  it.each(["REST", "IPC"] as const)(
+    "rejects an unversioned %s response before saving",
+    async (transport) => {
+      const bundle = { entries: { retained: true } };
+      const fetchImpl = vi.fn().mockResolvedValue(res(200, bundle));
+      const invoke = vi.fn().mockResolvedValue(bundle);
+      const backend = createJsonFileBackend({
+        fetchImpl,
+        ...(transport === "IPC" ? { ipc: { invoke } } : {}),
+      });
+      await expect(backend.load()).rejects.toThrow(/unsupported/);
+      await expect(backend.save({ replacement: true })).rejects.toThrow(
+        /unsupported/,
+      );
+      if (transport === "IPC") {
+        expect(
+          invoke.mock.calls.every(
+            ([channel]) => channel === "covel:settings:load",
+          ),
+        ).toBe(true);
+        expect(fetchImpl).not.toHaveBeenCalled();
+      } else {
+        expect(fetchImpl.mock.calls.every(([, init]) => !init?.method)).toBe(
+          true,
+        );
+        expect(invoke).not.toHaveBeenCalled();
+      }
+    },
+  );
 });
 
 describe("json-file backend IPC write contract", () => {

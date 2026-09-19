@@ -4,7 +4,7 @@
  * After each turn completes, the updater:
  *   1. Reads the current core memory blocks
  *   2. Reads the turn's narrative output + tool call summaries
- *   3. Calls a cheap LLM (memory slot → story fallback) with a structured prompt
+ *   3. Calls the selected memory model with a structured prompt
  *   4. Parses the JSON response to get block updates
  *   5. Writes only the changed blocks
  *

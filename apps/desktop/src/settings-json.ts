@@ -19,15 +19,11 @@ export function isSettingsEntries(value: unknown): value is SettingsEntries {
 }
 
 /**
- * Load the entries from a SettingsStore JSON bundle. A missing file is the
+ * Load the current SettingsStore JSON bundle. A missing file is the
  * fresh-install case; every other read or bundle-shape failure is deliberate:
  * returning an empty snapshot would make the next save destroy recoverable
  * user settings.
  */
-export function readSettingsEntries(settingsFile: string): SettingsEntries {
-  return readSettingsBundle(settingsFile).entries;
-}
-
 export function readSettingsBundle(
   settingsFile: string,
 ): SettingsPersistenceBundle {

@@ -10,13 +10,6 @@ export interface SettingsPersistenceBundle {
 }
 
 const entriesSchema = z.record(z.string(), z.unknown());
-const v1Schema = z
-  .object({
-    schemaVersion: z.literal(1).optional(),
-    savedAt: z.string().optional(),
-    entries: entriesSchema,
-  })
-  .passthrough();
 const v2Schema = z
   .object({
     schemaVersion: z.literal(SETTINGS_PERSISTENCE_SCHEMA_VERSION),
@@ -35,10 +28,7 @@ export function emptySettingsPersistenceBundle(): SettingsPersistenceBundle {
   };
 }
 
-/**
- * Strictly parse persisted settings. Version 1 had no revision and is
- * migrated in memory to revision zero; the next successful save writes v2.
- */
+/** Parse the current persisted settings contract without migrating old data. */
 export function parseSettingsPersistenceBundle(
   value: unknown,
 ): SettingsPersistenceBundle {
@@ -46,18 +36,6 @@ export function parseSettingsPersistenceBundle(
     throw new Error("settings bundle must be an object");
   }
   const version = (value as { schemaVersion?: unknown }).schemaVersion;
-  if (version === undefined || version === 1) {
-    const parsed = v1Schema.safeParse(value);
-    if (!parsed.success) {
-      throw new Error(`settings v1 bundle is invalid: ${parsed.error.message}`);
-    }
-    return {
-      schemaVersion: SETTINGS_PERSISTENCE_SCHEMA_VERSION,
-      revision: 0,
-      savedAt: parsed.data.savedAt ?? "",
-      entries: parsed.data.entries,
-    };
-  }
   if (version === SETTINGS_PERSISTENCE_SCHEMA_VERSION) {
     const parsed = v2Schema.safeParse(value);
     if (!parsed.success) {

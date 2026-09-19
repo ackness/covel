@@ -153,23 +153,16 @@ a ref between the ref cleanup and asset deletion.
 
 `addRef()` is **idempotent on `(sessionId, mediaId)`** — the `media_refs` UNIQUE constraint ignores `plugin_id` (which is recorded as first-source metadata only). This is the safe behaviour because SQL `UNIQUE` treats every `NULL` as distinct, so a constraint that includes a nullable `plugin_id` would silently allow unbounded duplicate rows when callers passed `undefined`. The new key shape matches Memory and IndexedDB, which use `(sessionId, mediaId)` as their map key.
 
-> **Existing databases.** Fresh installs get the new constraint immediately. Existing PG/SQLite databases keep any pre-existing UNIQUE on `(session_id, media_id, plugin_id)` — that older index is strictly looser than the new one, so the stricter constraint wins and addRef stays safe. **Sites with legacy duplicate rows** (same `session_id` + `media_id` with different `plugin_id`) MUST run a one-off migration before the new index can be created. Templates:
->
-> ```sql
-> -- PostgreSQL
-> DELETE FROM media_refs a USING media_refs b
->   WHERE a.ctid > b.ctid AND a.session_id = b.session_id AND a.media_id = b.media_id;
-> CREATE UNIQUE INDEX pg_media_refs_unique_session_media_idx
->   ON media_refs(session_id, media_id);
->
-> -- SQLite (review and apply manually to a backed-up database)
-> DELETE FROM media_refs
->  WHERE rowid NOT IN (
->    SELECT MIN(rowid) FROM media_refs GROUP BY session_id, media_id
->  );
-> ```
+Only the current `(session_id, media_id)` constraint is supported. Recreate
+development databases that use the former media-reference shape; the framework
+does not migrate or automatically delete old rows.
 
 ## Lifecycle Cleanup
+
+The SQLite media factory owns its shared connection reference until construction
+succeeds. Initialization failure releases only that reference, preserves other
+owners and rethrows the original error. After success, the returned store's
+`close()` owns release; the connection closes when its last owner releases it.
 
 The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler integration. The route scans live sessions, messages, plugin data, runtime outputs, trace events, snapshots, turn results, `MediaStore.listAssets()`, and `MediaStore.listRefs()` with the shared `collectMediaRefIds()` scanner, then passes the protected id set into `MediaStore.cleanup()`.
 

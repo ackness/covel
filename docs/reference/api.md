@@ -1322,7 +1322,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 - 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
 - `session.completedPlayerTurns` 表示已提交的主循环玩家进度：setup 阶段的执行会保存 `turn_results`，但不会计入；`phase` 翻到 `playing` 后由首个成功的 player logical turn 推进为 `1`
-- 服务端对每个 runtimeResult 运行 `processRuntimeResult` 提交管道：normalize → state.commit → 触发后续 SessionEvent
+- 服务端通过 `commitExecution` 在一个事务中提交顶层和递归子执行结果、journal 与 suspension；内部逐结果执行 normalize → state.commit，事务提交后再发布 SessionEvent。
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 - `turnCompletion.mode: detached` 只会对通过安全检查的 `post-turn` / `audit` function 叶节点生效；其上游结果、来源 execution、模型和设置在原始回合冻结，queued 记录与原始回合原子提交。静态不安全的声明保留前台执行并产生诊断
 

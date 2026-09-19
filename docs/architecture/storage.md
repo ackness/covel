@@ -54,6 +54,12 @@ same-ID replacements become visible on the next read, and independent stores
 cannot share world records accidentally. Runtime settings remain captured for
 each operation, so subsequent edits do not mutate an in-flight snapshot.
 
+Archival vector deletion requires successful reads of both character and lorebook
+sources. A source read failure aborts that archival sweep, retains existing
+vectors and content hashes, and emits the existing session-correlated warning.
+A successful empty source is authoritative and still removes obsolete entries;
+the next healthy sweep can reuse unchanged hashes without another embedding call.
+
 ## Server World and Session Deletion
 
 The world DELETE API owns cascade orchestration. It claims a persisted deletion
