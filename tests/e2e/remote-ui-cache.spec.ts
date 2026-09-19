@@ -22,6 +22,20 @@ async function saveForm(page: Page, owner: Owner, label: string) {
     { owner, label },
   );
 }
+async function saveHistory(page: Page, owner: Owner, turnId: string) {
+  await page.evaluate(
+    async ({ owner, turnId }) => {
+      const modulePath = "/src/services/data-service/remote.ts";
+      const { RemoteDataService } = await import(modulePath);
+      await new RemoteDataService().saveExecutionSteps(
+        owner.id,
+        [{ turnId, runtimeId: "history-probe", status: "completed" }],
+        owner,
+      );
+    },
+    { owner, turnId },
+  );
+}
 async function loadCache(page: Page, owner: Owner) {
   return page.evaluate(async (owner) => {
     const modulePath = "/src/services/data-service/remote.ts";
@@ -63,7 +77,6 @@ for (const kind of ["session", "world"] as const) {
             });
           return new RemoteDataService().createSession(
             worldId,
-            undefined,
             id,
             [],
             "en-US",
@@ -79,11 +92,30 @@ for (const kind of ["session", "world"] as const) {
       await Promise.all([
         saveForm(page, owner, "first"),
         saveForm(second, owner, "second"),
+        saveHistory(page, owner, "first-turn"),
+        saveHistory(second, owner, "second-turn"),
       ]);
       expect((await loadCache(second, owner)).forms.ids.sort()).toEqual([
         "first",
         "second",
       ]);
+      await saveHistory(page, owner, "first-turn");
+      const cached = await loadCache(second, owner);
+      expect(cached.steps).toEqual(
+        expect.arrayContaining([
+          {
+            turnId: "first-turn",
+            runtimeId: "history-probe",
+            status: "completed",
+          },
+          {
+            turnId: "second-turn",
+            runtimeId: "history-probe",
+            status: "completed",
+          },
+        ]),
+      );
+      expect(cached.steps).toHaveLength(2);
 
       let entered!: () => void;
       const held = new Promise<void>((resolve) => {

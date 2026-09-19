@@ -4,6 +4,7 @@ import type {
   SlotConfigEntry,
 } from "@/services/api.js";
 import { z } from "zod";
+import { providerModelProfilesSchema } from "../registry/llm.js";
 import {
   providerKeyToId,
   isReasoningEffort,
@@ -192,7 +193,6 @@ export function sanitizeImportedProfile(
   );
   if (!id) return null;
 
-  const seenRefs = new Set<string>();
   const models = profile.models.flatMap(
     (value): ProviderModelProfile["models"] => {
       if (!value || typeof value !== "object" || Array.isArray(value))
@@ -203,10 +203,9 @@ export function sanitizeImportedProfile(
       }
       const ref = model.ref.trim().slice(0, MAX_PROVIDER_ID_LENGTH);
       const modelId = model.modelId.trim().slice(0, MAX_MODEL_ID_LENGTH);
-      if (!ref || !modelId || seenRefs.has(ref)) {
+      if (!ref || !modelId) {
         return [];
       }
-      seenRefs.add(ref);
       const name =
         typeof model.name === "string"
           ? model.name.trim().slice(0, MAX_PROVIDER_ID_LENGTH)
@@ -223,7 +222,7 @@ export function sanitizeImportedProfile(
       ];
     },
   );
-  if (models.length === 0) return null;
+  if (profile.models.length > 0 && models.length === 0) return null;
 
   const name =
     typeof profile.name === "string"
@@ -283,5 +282,5 @@ export function parseProviderImport(value: unknown): ProviderModelProfile[] {
   if (parsed.providers.length > 0 && profiles.length === 0) {
     throw new Error("No valid provider profiles");
   }
-  return profiles;
+  return providerModelProfilesSchema.parse(profiles);
 }

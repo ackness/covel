@@ -15,6 +15,8 @@ vi.mock("@/stores/plugin-data-store.js", () => pluginStore);
 
 const { useMessageUiSpecHydrationEffect } = await import("../effects.js");
 
+const generationRef = { current: 0 };
+
 const messageSpecs = {
   right: [],
   message: [
@@ -43,7 +45,9 @@ describe("useMessageUiSpecHydrationEffect", () => {
     api.listPluginData.mockResolvedValue(rows);
     const dispatch = vi.fn();
 
-    renderHook(() => useMessageUiSpecHydrationEffect("sess-a", dispatch));
+    renderHook(() =>
+      useMessageUiSpecHydrationEffect("sess-a", dispatch, generationRef),
+    );
 
     await waitFor(() => {
       expect(pluginStore.loadPluginDataForSession).toHaveBeenCalledWith(
@@ -71,7 +75,9 @@ describe("useMessageUiSpecHydrationEffect", () => {
     api.fetchUiSpecs.mockResolvedValue(messageSpecs);
     api.listPluginData.mockResolvedValue([]);
 
-    renderHook(() => useMessageUiSpecHydrationEffect("sess-a", vi.fn()));
+    renderHook(() =>
+      useMessageUiSpecHydrationEffect("sess-a", vi.fn(), generationRef),
+    );
 
     await waitFor(() => {
       expect(pluginStore.loadPluginDataForSession).toHaveBeenCalledWith(
@@ -95,7 +101,8 @@ describe("useMessageUiSpecHydrationEffect", () => {
     );
     const dispatch = vi.fn();
     const { rerender } = renderHook(
-      ({ sessionId }) => useMessageUiSpecHydrationEffect(sessionId, dispatch),
+      ({ sessionId }) =>
+        useMessageUiSpecHydrationEffect(sessionId, dispatch, generationRef),
       { initialProps: { sessionId: "sess-a" } },
     );
 

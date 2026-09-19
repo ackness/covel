@@ -202,7 +202,7 @@ it("does not restore a credential when creation completes after world cleanup", 
       );
     }),
   );
-  const pending = createSession("world", undefined, "session");
+  const pending = createSession("world", "session");
   const rejected = expect(pending).rejects.toThrow(
     "Created session is no longer current",
   );
@@ -239,7 +239,7 @@ it("rejects an obsolete creation without clearing a replacement credential", asy
         return Response.json({ id: "session", incarnation: "new" });
       }),
   );
-  await expect(createSession("world", undefined, "session")).rejects.toThrow(
+  await expect(createSession("world", "session")).rejects.toThrow(
     "Created session is no longer current",
   );
   expect(await getSessionToken("session")).toBe("synthetic-new");
@@ -266,9 +266,10 @@ it.each([
       )
       .mockResolvedValueOnce(Response.json(body, { status }));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(createSession("world", undefined, "session")).resolves.toEqual(
-      { id: "session", incarnation: "old" },
-    );
+    await expect(createSession("world", "session")).resolves.toEqual({
+      id: "session",
+      incarnation: "old",
+    });
     expect(await getSessionToken("session")).toBe("synthetic-owner");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledOnce();
@@ -299,7 +300,7 @@ it("reports obsolete creation even when credential cleanup fails", async () => {
         );
       }),
   );
-  await expect(createSession("world", undefined, "session")).rejects.toThrow(
+  await expect(createSession("world", "session")).rejects.toThrow(
     "Created session is no longer current",
   );
   expect(await getSessionToken("session")).toBe("synthetic-owner");
@@ -314,7 +315,7 @@ it("requires the current creation incarnation before saving credentials", async 
         Response.json({ id: "session", ownerToken: "synthetic-owner" }),
       ),
   );
-  await expect(createSession("world", undefined, "session")).rejects.toThrow(
+  await expect(createSession("world", "session")).rejects.toThrow(
     "Created session is missing its incarnation",
   );
   expect(await getSessionToken("session")).toBeUndefined();

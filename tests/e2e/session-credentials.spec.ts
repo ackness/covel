@@ -48,7 +48,7 @@ for (const operation of ["create", "delete"] as const) {
             description: "Synthetic",
           });
           if (operation === "delete")
-            await api.createSession(worldId, undefined, sessionId, []);
+            await api.createSession(worldId, sessionId, []);
         },
         { worldId, sessionId, operation },
       );
@@ -88,7 +88,7 @@ for (const operation of ["create", "delete"] as const) {
           const api = await import(path);
           try {
             if (operation === "create")
-              await api.createSession(worldId, undefined, sessionId, []);
+              await api.createSession(worldId, sessionId, []);
             else await api.deleteSession(sessionId);
             return undefined;
           } catch (error) {
@@ -103,7 +103,7 @@ for (const operation of ["create", "delete"] as const) {
           const path = "/src/services/api.ts";
           const api = await import(path);
           if (operation === "create") await api.deleteSession(sessionId);
-          await api.createSession(worldId, undefined, sessionId, []);
+          await api.createSession(worldId, sessionId, []);
         },
         { operation, worldId, sessionId },
       );

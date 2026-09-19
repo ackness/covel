@@ -176,7 +176,15 @@ query the authoritative server; display updates under an already verified bindin
 stay local. All operations validate epochs and the current cache binding inside
 an IndexedDB transaction.
 This prevents delayed responses from overwriting a same-ID replacement. Concurrent
-form submissions merge; timeline data remains a display snapshot.
+form submissions merge. Local and remote timeline writes merge partial history by
+`(turnId, runtimeId)` inside the same IndexedDB transaction as the write. An empty
+batch preserves history; session/world lifecycle deletion clears it explicitly.
+Matching rows use the incoming observation, including suspended-to-running
+transitions. Status alone cannot establish order across tabs; a shared causal
+revision for competing observations of the same row remains outside this contract.
+History restoration retains persisted reasoning, tool identity and abort reason.
+
+Session restoration, subscription refresh and message/spec namespace hydration share in-flight resource ownership within each provider instance. New reads replace older reads of the same resource. Committed live events invalidate overlapping reads; an otherwise current read fetches again to retain fields absent from the event. Publishing an overlapping full/namespace read also invalidates the other pending observation. Completed reads release their entries; obsolete visits stop and network errors do not retry in a loop. This does not yet cover every independent panel seed or session-view publication path.
 
 Remote deletion invalidates the affected session/world epoch before and after the
 server request and reconciles cached owners against the server, including partial
@@ -331,11 +339,18 @@ metadata must not supply an override the snapshot did not capture. See [snapshot
 
 ## Record Identity
 
-World dimensions and session preset/model fields are normalized at the shared
-record boundary. Character and lorebook IDs are session-local, with durable
+World dimensions are normalized at the shared record boundary. Character and
+lorebook IDs are session-local, with durable
 identity `(sessionId, id)` in MemoryStore, SQLite, PostgreSQL, and browser
 checkpoints. Browser persistence therefore shares domain shapes without sharing
 server table layouts or backend-specific CRUD implementations.
+
+Model routing uses slot settings, request overrides and session
+`runtimeModelOverrides`. Sessions do not carry a separate `presetId` selection;
+the former field never participated in execution and has been removed from
+session records, checkpoints and snapshots. Arbitrary session metadata does not
+supply model selection. Embedding model identity and lock time persist on create
+as well as update across MemoryStore, SQLite and PostgreSQL.
 
 ## Current Snapshot Contract
 

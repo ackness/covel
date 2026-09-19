@@ -21,7 +21,6 @@ async function fixture() {
   await store.createSession({
     id: "s",
     worldId: "w",
-    presetId: "default",
     locale: "en",
     status: "active",
     phase: "playing",

@@ -132,11 +132,7 @@ test("browser world edits and cascading deletion survive reload without a server
       },
       createdAt: "2026-01-01T00:00:00Z",
     });
-    await ds.createSession(
-      "review-local-world",
-      undefined,
-      "review-local-session",
-    );
+    await ds.createSession("review-local-world", "review-local-session");
   });
   await page.reload();
   const card = page
@@ -198,12 +194,9 @@ test("portrait replacement reaches the runtime and survives a browser checkpoint
       description: "Synthetic media test",
       createdAt: "2026-01-01T00:00:00Z",
     });
-    await ds.createSession(
-      "review-portrait-world",
-      undefined,
-      "review-portrait-session",
-      ["character-presence"],
-    );
+    await ds.createSession("review-portrait-world", "review-portrait-session", [
+      "character-presence",
+    ]);
     return getSessionWorkspace().run(
       "review-portrait-session",
       "seed-presence",

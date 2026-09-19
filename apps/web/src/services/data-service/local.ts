@@ -490,7 +490,6 @@ export class LocalDataService implements DataService {
 
   async createSession(
     worldId: string,
-    presetId?: string,
     _id?: string,
     _plugins?: string[],
     locale?: string,
@@ -508,7 +507,6 @@ export class LocalDataService implements DataService {
       completedPlayerTurns: 0,
       setupRuntimes: {},
       activePlugins: _plugins ?? [],
-      presetId,
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -521,11 +519,7 @@ export class LocalDataService implements DataService {
       setupRuntimes: {},
       locale: locale ?? DEFAULT_LOCALE,
       activePlugins: _plugins ?? [],
-      presetId,
-      metadata: {
-        ...(presetId ? { presetId } : {}),
-        ...(loreOverride !== undefined ? { loreOverride } : {}),
-      },
+      metadata: loreOverride !== undefined ? { loreOverride } : {},
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -559,7 +553,6 @@ export class LocalDataService implements DataService {
         session: {
           ...checkpoint.session,
           ...(updates.status !== undefined ? { status: nextStatus } : {}),
-          ...("presetId" in updates ? { presetId: updates.presetId } : {}),
           ...(updates.runtimeModelOverrides !== undefined
             ? { runtimeModelOverrides: updates.runtimeModelOverrides }
             : {}),
@@ -804,7 +797,6 @@ export class LocalDataService implements DataService {
       if (!isNotFound(err)) throw err;
       const created = await api.createSession(
         serverWorldId,
-        session.presetId,
         serverSessionId,
         [...session.activePlugins],
         session.locale,

@@ -149,47 +149,48 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect((await store.getSession(session.id))?.locale).toBe("en-US");
     });
 
-    it("persists session metadata and presetId through create and update", async () => {
+    it("merges session metadata without promoting arbitrary keys to typed fields", async () => {
       const session = makeSession({
-        presetId: "preset-a",
         metadata: {
-          presetId: "preset-a",
+          presetId: "metadata-value",
           localOnly: true,
         },
       });
       await store.createSession(session);
-      const created = await store.getSession(session.id);
-      expect(created?.presetId).toBe("preset-a");
-      expect(created?.metadata).toEqual({
-        presetId: "preset-a",
-        localOnly: true,
-      });
+      expect(await store.getSession(session.id)).toEqual(session);
+      expect(await store.listSessions()).toEqual([session]);
 
+      const updatedAt = ts(10);
       await store.updateSession(session.id, {
-        presetId: "preset-b",
-        updatedAt: ts(),
-      });
-      const updated = await store.getSession(session.id);
-      expect(updated?.presetId).toBe("preset-b");
-      expect(updated?.metadata).toMatchObject({
-        presetId: "preset-b",
-        localOnly: true,
-      });
-
-      await store.updateSession(session.id, {
-        presetId: "preset-c",
         metadata: {
+          presetId: "updated-metadata-value",
           mergedPatch: true,
         },
-        updatedAt: ts(),
+        updatedAt,
       });
-      const merged = await store.getSession(session.id);
-      expect(merged?.presetId).toBe("preset-c");
-      expect(merged?.metadata).toEqual({
-        presetId: "preset-c",
-        localOnly: true,
-        mergedPatch: true,
+      expect(await store.getSession(session.id)).toEqual({
+        ...session,
+        updatedAt,
+        metadata: {
+          presetId: "updated-metadata-value",
+          localOnly: true,
+          mergedPatch: true,
+        },
       });
+    });
+
+    it("persists session embedding model and lock on creation", async () => {
+      const session = makeSession({
+        embeddingModelId: 12,
+        embeddingLockedAt: ts(),
+      });
+      await store.createSession(session);
+      const created = await store.getSession(session.id);
+      expect(created?.embeddingModelId).toBe(session.embeddingModelId);
+      expect(created?.embeddingLockedAt).toBe(session.embeddingLockedAt);
+      const listed = (await store.listSessions())[0];
+      expect(listed?.embeddingModelId).toBe(session.embeddingModelId);
+      expect(listed?.embeddingLockedAt).toBe(session.embeddingLockedAt);
     });
 
     it("parity: createSession with undefined runtimeModelOverrides reads back absent", async () => {

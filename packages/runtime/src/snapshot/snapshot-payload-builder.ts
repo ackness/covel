@@ -150,7 +150,6 @@ export async function buildSnapshotPayload(
       status: session.status,
       locale: session.locale,
       activePlugins: session.activePlugins,
-      presetId: session.presetId,
       runtimeModelOverrides: session.runtimeModelOverrides,
       phase: session.phase,
       completedPlayerTurns: session.completedPlayerTurns,

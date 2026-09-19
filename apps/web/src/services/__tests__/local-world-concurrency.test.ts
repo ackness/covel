@@ -96,7 +96,7 @@ it("merges different world fields across service instances", async () => {
 });
 
 it("does not let a checkpoint overwrite a concurrent world edit", async () => {
-  await service.createSession("world-a", undefined, "session-a");
+  await service.createSession("world-a", "session-a");
   const committing = deferred();
   const release = deferred();
   const apply = vault.applySessionCommit.bind(vault);
@@ -133,7 +133,7 @@ it("drains admitted session creation before deleting the world", async () => {
     await release.promise;
   });
   await locked.promise;
-  const creation = service.createSession("world-a", undefined, "session-new");
+  const creation = service.createSession("world-a", "session-new");
   await vi.waitFor(async () => {
     expect(
       (await navigator.locks.query()).pending?.some(
@@ -160,7 +160,7 @@ it("drains admitted session creation before deleting the world", async () => {
 });
 
 it("rejects creation queued after world deletion has started", async () => {
-  await service.createSession("world-a", undefined, "session-a");
+  await service.createSession("world-a", "session-a");
   const deleting = deferred();
   const release = deferred();
   api.deleteSession.mockImplementationOnce(async () => {
@@ -171,7 +171,7 @@ it("rejects creation queued after world deletion has started", async () => {
   await deleting.promise;
   let done = false;
   const creation = second
-    .createSession("world-a", undefined, "session-new")
+    .createSession("world-a", "session-new")
     .then(
       () => "created",
       (error: Error) => error.message,
@@ -192,15 +192,15 @@ it("rejects creation queued after world deletion has started", async () => {
 
 it("rejects creation when the world no longer exists", async () => {
   await service.deleteWorld("world-a");
-  await expect(
-    second.createSession("world-a", undefined, "session-new"),
-  ).rejects.toThrow("World not found: world-a");
+  await expect(second.createSession("world-a", "session-new")).rejects.toThrow(
+    "World not found: world-a",
+  );
   expect(await second.getSession("session-new")).toBeNull();
 });
 
 it("keeps independent sessions and other worlds concurrent", async () => {
-  await service.createSession("world-a", undefined, "session-a");
-  await second.createSession("world-a", undefined, "session-a2");
+  await service.createSession("world-a", "session-a");
+  await second.createSession("world-a", "session-a2");
   const entered = deferred();
   const release = deferred();
   const owner = service.withSessionWorkspace("session-a", async () => {

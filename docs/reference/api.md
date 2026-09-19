@@ -1137,7 +1137,6 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 ```json
 {
   "worldId": "mistport",
-  "presetId": "default",
   "locale": "zh-CN",
   "plugins": ["pregame", "narrator", "codex"]
 }
@@ -1146,11 +1145,12 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 | 字段           | 类型     | 必填 | 说明                                                                                                  |
 | -------------- | -------- | ---- | ----------------------------------------------------------------------------------------------------- |
 | `worldId`      | string   | 否   | 已存在且未进入删除流程的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                      |
-| `presetId`     | string   | 否   | 会话模型预设 ID；创建与后续 PATCH 使用同一字段                                                        |
 | `locale`       | string   | 否   | 语言区域，默认 `zh-CN`                                                                                |
 | `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                                  |
 | `id`           | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`）                                         |
 | `loreOverride` | string   | 否   | 本次会话的世界背景快照，沿用世界文档的字符串契约；空字符串表示显式清空，与会话同次创建保存到 metadata |
+
+会话不保存独立的 `presetId` 模型选择；模型路由使用槽位配置、请求级覆盖与 `runtimeModelOverrides`。
 
 Web 准备页把当前显示的背景文本随创建请求传入；浏览器私有模式先保存到
 BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后台草稿保存失败不会
@@ -1179,7 +1179,6 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 {
   "id": "mistport-a1b2c3d4",
   "worldId": "mistport",
-  "presetId": "default",
   "locale": "zh-CN",
   "status": "active",
   "phase": "setup",
@@ -2552,7 +2551,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 当前快照 v3 合同要求 `stateSchemas`、`runtimeExports`、`sessionSummaries`、`compactedMessageSummaryIds` 和 `displayMessagesBoundary` 全部存在。空数组、空映射及 `null` 聊天边界有明确含义；缺失字段的旧开发快照必须重建，不迁移、不使用父会话当前状态补全。存储写入、SQL 读取和 browser checkpoint 共用 payload schema 校验；摘要映射必须指向快照中实际捕获的摘要，非法引用会被拒绝。
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
 **响应 201（直接返回 `SnapshotRecord`）:**
 
@@ -2581,7 +2580,6 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
       },
       "locale": "zh-CN",
       "activePlugins": ["world-init", "narrator"],
-      "presetId": "default",
       "runtimeModelOverrides": { "narrator": "balance" },
       "loreOverride": "The session's captured world lore."
     },
@@ -2648,7 +2646,7 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 服务端会：
 
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
-2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides，并把可选的 `loreOverride` 恢复到子会话 metadata。后续父会话或世界背景编辑不改变已捕获的覆盖值，子快照也保留该值以支持连续分叉；当前合同中缺少该可选字段表示使用世界背景，不从父会话当前 metadata 推测历史值。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
+2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / runtimeModelOverrides，并把可选的 `loreOverride` 恢复到子会话 metadata。后续父会话或世界背景编辑不改变已捕获的覆盖值，子快照也保留该值以支持连续分叉；当前合同中缺少该可选字段表示使用世界背景，不从父会话当前 metadata 推测历史值。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session。当前 v3 payload 用必需的 `stateSchemas` 冻结表结构，空数组表示快照时没有表；fork 重建表 ID，并将子表结构写入子快照，父会话后续修改不影响再次分叉。任何状态记录缺少对应表结构时返回 `409 snapshot_schema_missing` 并回滚，不返回状态不完整的分支；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。这些字段为必需字段，不读取父消息当前标签推测历史。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
    界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。子快照写入新的消息边界，支持继续分叉。

@@ -166,28 +166,38 @@ it.each([true, false])(
       await release.promise;
       return old;
     });
-    const pending = first.saveExecutionSteps(session.id, ["old"], session).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const pending = first
+      .saveExecutionSteps(
+        session.id,
+        [{ runtimeId: "probe", detail: "old" }],
+        session,
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
     await entered.promise;
     const replacement = { ...session, incarnation: "c".repeat(64) };
     try {
       if (deleteLocally) await second.deleteSession(session.id);
       live.set(session.id, replacement);
-      await second.saveExecutionSteps(session.id, ["new"], replacement);
+      await second.saveExecutionSteps(
+        session.id,
+        [{ runtimeId: "probe", detail: "new" }],
+        replacement,
+      );
     } finally {
       release.resolve();
     }
     expect(await pending).toBeInstanceOf(cache.RemoteUiCacheChangedError);
     expect(await second.loadExecutionSteps(session.id, replacement)).toEqual([
-      "new",
+      { runtimeId: "probe", detail: "new" },
     ]);
     await expect(
       first.loadSubmittedBlocks(session.id, old),
     ).rejects.toBeInstanceOf(cache.RemoteUiCacheChangedError);
     expect(await second.loadExecutionSteps(session.id, replacement)).toEqual([
-      "new",
+      { runtimeId: "probe", detail: "new" },
     ]);
   },
 );
@@ -280,10 +290,14 @@ it("rejects transaction aborts and preserves the previous committed cache", asyn
 
 it("requires a captured incarnation before accessing remote cached data", async () => {
   await expect(
-    first.saveExecutionSteps(session.id, ["unsafe"], {
-      ...session,
-      incarnation: undefined,
-    }),
+    first.saveExecutionSteps(
+      session.id,
+      [{ runtimeId: "probe", detail: "unsafe" }],
+      {
+        ...session,
+        incarnation: undefined,
+      },
+    ),
   ).rejects.toThrow("captured session incarnation");
   expect(api.getSession).not.toHaveBeenCalled();
   expect(await owners()).toEqual([]);
@@ -342,12 +356,18 @@ it("rejects a stale world binding after the session moves to another world", asy
   const moved = { ...session, worldId: other.worldId };
   try {
     live.set(session.id, moved);
-    await second.saveExecutionSteps(session.id, ["moved"], moved);
+    await second.saveExecutionSteps(
+      session.id,
+      [{ runtimeId: "probe", detail: "moved" }],
+      moved,
+    );
   } finally {
     release.resolve();
   }
   expect(await pending).toBeInstanceOf(cache.RemoteUiCacheChangedError);
-  expect(await second.loadExecutionSteps(session.id, moved)).toEqual(["moved"]);
+  expect(await second.loadExecutionSteps(session.id, moved)).toEqual([
+    { runtimeId: "probe", detail: "moved" },
+  ]);
   expect(await second.loadSubmittedBlocks(session.id, moved)).toMatchObject({
     ids: ["initial"],
   });
@@ -385,11 +405,15 @@ it("saves streaming display updates under a verified binding without repeated HT
   await save(first);
   vi.mocked(api.getSession).mockClear();
   for (let index = 0; index < 10; index++) {
-    await first.saveExecutionSteps(session.id, [{ index }], session);
+    await first.saveExecutionSteps(
+      session.id,
+      [{ runtimeId: "probe", index }],
+      session,
+    );
   }
   expect(api.getSession).not.toHaveBeenCalled();
   expect(await second.loadExecutionSteps(session.id, session)).toEqual([
-    { index: 9 },
+    { runtimeId: "probe", index: 9 },
   ]);
   expect(api.getSession).toHaveBeenCalledTimes(1);
 });
@@ -408,23 +432,68 @@ it.each(["session", "world"] as const)(
         return commit(owner, stamp, update);
       },
     );
-    const pending = first.saveExecutionSteps(session.id, ["old"], session).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const pending = first
+      .saveExecutionSteps(
+        session.id,
+        [{ runtimeId: "probe", detail: "old" }],
+        session,
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
     await entered.promise;
     const replacement = { ...session, incarnation: "replacement" };
     try {
       if (kind === "session") await second.deleteSession(session.id);
       else await second.deleteWorld(session.worldId);
       live.set(session.id, replacement);
-      await second.saveExecutionSteps(session.id, ["new"], replacement);
+      await second.saveExecutionSteps(
+        session.id,
+        [{ runtimeId: "probe", detail: "new" }],
+        replacement,
+      );
     } finally {
       release.resolve();
     }
     expect(await pending).toBeInstanceOf(cache.RemoteUiCacheChangedError);
     expect(await second.loadExecutionSteps(session.id, replacement)).toEqual([
-      "new",
+      { runtimeId: "probe", detail: "new" },
     ]);
   },
 );
+
+it("merges partial timeline windows across remote service instances", async () => {
+  const early = { turnId: "early", runtimeId: "story", status: "completed" };
+  const late = { turnId: "late", runtimeId: "story", status: "suspended" };
+  await Promise.all([
+    first.saveExecutionSteps(session.id, [early], session),
+    second.saveExecutionSteps(session.id, [late], session),
+  ]);
+  expect(await first.loadExecutionSteps(session.id, session)).toEqual([
+    early,
+    late,
+  ]);
+  const resumed = { ...late, status: "running" };
+  await second.saveExecutionSteps(session.id, [resumed], session);
+  await first.saveExecutionSteps(session.id, [], session);
+  expect(await first.loadExecutionSteps(session.id, session)).toEqual([
+    early,
+    resumed,
+  ]);
+  await second.deleteSession(session.id);
+  expect(await owners()).toEqual([]);
+});
+
+it("preserves the bound remote timeline when an incoming row has no identity", async () => {
+  const before = { turnId: "before", runtimeId: "story" };
+  await first.saveExecutionSteps(session.id, [before], session);
+  await expect(
+    second.saveExecutionSteps(
+      session.id,
+      [{ turnId: "new", runtimeId: "story" }, { status: "completed" }],
+      session,
+    ),
+  ).rejects.toThrow("Invalid execution history identity");
+  expect(await first.loadExecutionSteps(session.id, session)).toEqual([before]);
+});

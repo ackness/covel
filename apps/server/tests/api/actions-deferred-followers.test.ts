@@ -186,7 +186,6 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 
@@ -354,7 +353,6 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 

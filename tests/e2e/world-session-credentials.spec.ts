@@ -58,10 +58,10 @@ for (const delayed of ["creation", "verification"] as const) {
             name: "Other credential fixture",
             description: "Synthetic",
           });
-          await api.createSession(otherWorldId, undefined, otherId, []);
+          await api.createSession(otherWorldId, otherId, []);
           if (delayed === "verification") {
-            await api.createSession(worldId, undefined, sessionId, []);
-            await api.createSession(worldId, undefined, removedId, []);
+            await api.createSession(worldId, sessionId, []);
+            await api.createSession(worldId, removedId, []);
           }
         },
         { worldId, otherWorldId, sessionId, removedId, otherId, delayed },
@@ -87,7 +87,7 @@ for (const delayed of ["creation", "verification"] as const) {
           const api = await import(path);
           try {
             if (delayed === "creation")
-              await api.createSession(worldId, undefined, sessionId, []);
+              await api.createSession(worldId, sessionId, []);
             else await api.deleteWorld(worldId);
             return undefined;
           } catch (error) {
@@ -108,7 +108,7 @@ for (const delayed of ["creation", "verification"] as const) {
               name: "Replacement fixture",
               description: "Synthetic",
             });
-            await api.createSession(worldId, undefined, sessionId, []);
+            await api.createSession(worldId, sessionId, []);
           }
         },
         { delayed, worldId, sessionId },

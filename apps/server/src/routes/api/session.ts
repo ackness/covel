@@ -269,7 +269,6 @@ sessionRoutes.post("/", async (c) => {
   const session: SessionRecord = {
     id,
     worldId: rawWorldId,
-    ...(parsedCreate.presetId ? { presetId: parsedCreate.presetId } : {}),
     // Validate the untrusted locale: it flows into locale-variant file-path
     // construction (world-data importer) and localized prompt text, so an
     // invalid/attacker-controlled value must never be stored verbatim.

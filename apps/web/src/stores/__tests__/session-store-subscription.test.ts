@@ -391,6 +391,8 @@ describe("session subscription event ownership", () => {
       stateRef: { current: state },
       sessionIdRef: { current: "s1" },
       onReset: () => {},
+      isCurrent: () => true,
+      getRecoveryGeneration: () => 0,
     });
     const event = {
       id: "event-form",

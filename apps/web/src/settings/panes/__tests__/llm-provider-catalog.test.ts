@@ -11,7 +11,7 @@ import {
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
-  it("preserves same-ID configurations across export/import and only deduplicates references", () => {
+  it("preserves same-model configurations with distinct references across export/import", () => {
     const profile = {
       id: "fixture",
       name: "Fixture",
@@ -32,13 +32,48 @@ describe("provider catalogue", () => {
       ],
     };
     const exported = JSON.parse(JSON.stringify(profile));
-    expect(
-      sanitizeImportedProfile({
-        ...exported,
-        models: [...exported.models, exported.models[0]],
-      }),
-    ).toEqual(profile);
+    expect(parseProviderImport({ version: 2, providers: [exported] })).toEqual([
+      profile,
+    ]);
   });
+
+  it.each([
+    "within one connection",
+    "across connections",
+    "connection identity",
+  ])(
+    "rejects conflicting import references %s instead of silently merging them",
+    (collision) => {
+      const profile = {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://fixture.example/v1",
+        models: [{ ref: "model", modelId: "opaque-model" }],
+      };
+      const profiles =
+        collision === "within one connection"
+          ? [{ ...profile, models: [...profile.models, ...profile.models] }]
+          : [
+              profile,
+              {
+                ...profile,
+                id: collision === "connection identity" ? profile.id : "other",
+                models: [
+                  {
+                    ref:
+                      collision === "connection identity"
+                        ? "other-model"
+                        : "model",
+                    modelId: "different-model",
+                  },
+                ],
+              },
+            ];
+      expect(() =>
+        parseProviderImport({ version: 2, providers: profiles }),
+      ).toThrow();
+    },
+  );
 
   it("preserves per-model reasoning defaults and drops invalid imported values", () => {
     const imported = sanitizeImportedProfile({
@@ -374,4 +409,18 @@ describe("provider catalogue", () => {
       sanitizeImportedProfile({ ...base, protocol: { arbitrary: true } }),
     ).toEqual(base);
   });
+});
+
+it("round-trips an empty connection without inventing or deleting models", () => {
+  const empty = {
+    id: "empty",
+    name: "Empty",
+    baseUrl: "https://empty.example/v1",
+    models: [],
+  };
+  expect(
+    parseProviderImport(
+      JSON.parse(JSON.stringify({ version: 2, providers: [empty] })),
+    ),
+  ).toEqual([empty]);
 });

@@ -9,7 +9,7 @@ import {
   snapshotUserSettings,
   type TurnExecutorDeps,
 } from "@covel/runtime";
-import type { DataStore, SessionRecord } from "@covel/store";
+import type { DataStore, SessionRecord, StoreTransaction } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type {
   DeferredRuntimeJob,
@@ -104,6 +104,10 @@ export interface RunDetachedStageArgs {
     readonly backgroundTurnId: string;
     readonly backgroundExecutionId: string;
   }) => Promise<void>;
+  readonly completeInTx: (
+    tx: StoreTransaction,
+    result: Awaited<ReturnType<typeof executeTurn>>,
+  ) => Promise<void>;
   readonly beforeExecute?: () => Promise<void>;
   readonly executionSignal?: AbortSignal;
 }
@@ -192,6 +196,7 @@ export function createPluginRpcRuntimeTurnRunner(
         typeof commitExecution
       >[0]["proposalGuard"];
       readonly completionKind?: "turn" | "detached";
+      readonly extraInTx?: (tx: StoreTransaction) => Promise<void>;
     } = {},
   ): Promise<TurnCommitOutcome> {
     // Commit the whole execution (top-level + nested recursiveCall results) in
@@ -240,6 +245,7 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
       emitter,
+      ...(opts.extraInTx ? { extraInTx: opts.extraInTx } : {}),
       ...(opts.proposalGuard ? { proposalGuard: opts.proposalGuard } : {}),
       // Manual / late-setup runs settle their setup attempts too (a manual
       // retrigger of a pending setup runtime burns an attempt).
@@ -261,6 +267,7 @@ export function createPluginRpcRuntimeTurnRunner(
       committed,
       failedProposalCount: outcome.failedProposals.length,
       snapshotFailed: outcome.snapshotFailed,
+      ...(outcome.error ? { error: outcome.error } : {}),
     };
   }
 
@@ -301,6 +308,7 @@ export function createPluginRpcRuntimeTurnRunner(
         typeof commitExecution
       >[0]["proposalGuard"];
       readonly completionKind?: "turn" | "detached";
+      readonly completeInTx?: RunDetachedStageArgs["completeInTx"];
     } = {},
   ): Promise<{
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
@@ -382,8 +390,12 @@ export function createPluginRpcRuntimeTurnRunner(
               backgroundExecutionId: result.executionContext.executionId,
             });
           }
+          const completeInTx = opts.completeInTx;
           return processTurnResults(result, emitter, hookSettings, {
             executionSignal,
+            ...(completeInTx
+              ? { extraInTx: (tx) => completeInTx(tx, result) }
+              : {}),
             ...(opts.proposalGuard
               ? { proposalGuard: opts.proposalGuard }
               : {}),
@@ -571,6 +583,7 @@ export function createPluginRpcRuntimeTurnRunner(
         ? { expectedPluginVersion: args.descriptor.pluginVersion }
         : {}),
       beforeCommit: args.beforeCommit,
+      completeInTx: args.completeInTx,
       ...(args.beforeExecute ? { beforeExecute: args.beforeExecute } : {}),
       ...(args.executionSignal
         ? { executionSignal: args.executionSignal }

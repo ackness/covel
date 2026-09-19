@@ -88,13 +88,7 @@ test("session display caches persist across tabs and stay deleted after late wri
           description: "Synthetic",
           createdAt: "2026-01-01",
         });
-        await getDataService().createSession(
-          worldId,
-          undefined,
-          sessionId,
-          [],
-          "en-US",
-        );
+        await getDataService().createSession(worldId, sessionId, [], "en-US");
       },
       { worldId, sessionId },
     );

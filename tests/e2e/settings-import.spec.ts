@@ -80,7 +80,7 @@ test("provider import accepts current exports and rejects obsolete files without
     });
   await upload({
     version: 2,
-    providers: [null, { id: "broken", models: [] }, current],
+    providers: [null, { id: "broken", models: "invalid" }, current],
   });
   await expect.poll(savedProfiles).toEqual([current]);
 

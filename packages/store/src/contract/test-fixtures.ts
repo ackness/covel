@@ -414,7 +414,6 @@ export function makeSnapshotPayload(
       status: "active",
       locale: "zh-CN",
       activePlugins: ["setup", "narrator"],
-      presetId: "default",
       runtimeModelOverrides: { narrator: "balance" },
       phase: "playing",
       completedPlayerTurns: 2,

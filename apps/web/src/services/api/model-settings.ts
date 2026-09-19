@@ -310,10 +310,14 @@ export function getProviderProfiles(): ProviderModelProfile[] {
   return profiles;
 }
 
-export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
+export async function setProviderProfiles(
+  profiles: ProviderModelProfile[],
+  slotConfig: Record<string, SlotConfigEntry> = getSlotConfig(),
+): Promise<{ unclearedProviderIds: string[] }> {
   const store = getSettings();
   const previous =
     store.get<ProviderModelProfile[]>("llm.providers")?.filter(Boolean) ?? [];
+  const capturedSecrets = store.snapshotSecrets();
   const normalized = profiles
     .map((profile) => ({
       ...profile,
@@ -335,35 +339,51 @@ export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
         }))
         .filter((model) => model.ref && model.modelId),
     }))
-    .filter((profile) => profile.id && profile.models.length > 0);
+    .filter((profile) => profile.id);
   registerKnownProviders(
     normalized.flatMap((profile) => [
       profile.id,
       profile.provider?.trim() || profile.id,
     ]),
   );
-  void store.set("llm.providers", normalized);
-
-  const retainedProfileIds = new Set(normalized.map((profile) => profile.id));
-  for (const profile of previous) {
-    if (!retainedProfileIds.has(profile.id)) {
-      void store.clear(`keys.${profile.id}`);
-    }
-  }
-
   const validModelRefs = new Set(
     normalized.flatMap((profile) => profile.models.map((model) => model.ref)),
   );
-  const slotConfig =
-    store.get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {};
   const prunedSlotConfig = Object.fromEntries(
     Object.entries(slotConfig).filter(
       ([, entry]) => !entry.modelRef || validModelRefs.has(entry.modelRef),
     ),
   );
-  if (Object.keys(prunedSlotConfig).length !== Object.keys(slotConfig).length) {
-    void store.set("llm.slotConfig", prunedSlotConfig);
+  const retainedProfileIds = new Set(normalized.map((profile) => profile.id));
+  const removedProviderIds = previous
+    .map((profile) => profile.id)
+    .filter((id) => !retainedProfileIds.has(id));
+  await store.setMany({
+    "llm.providers": normalized,
+    "llm.slotConfig": prunedSlotConfig,
+  });
+
+  const unclearedProviderIds: string[] = [];
+  for (const providerId of removedProviderIds) {
+    if (capturedSecrets[providerId] === undefined) continue;
+    // A later profile save or credential edit owns its current value.
+    if (
+      (store.get<ProviderModelProfile[]>("llm.providers") ?? []).some(
+        (current) => current.id === providerId,
+      ) ||
+      store.snapshotSecrets()[providerId] !== capturedSecrets[providerId]
+    )
+      continue;
+    try {
+      await store.clear(`keys.${providerId}`);
+    } catch {
+      unclearedProviderIds.push(providerId);
+      console.warn("[settings] removed provider key cleanup failed", {
+        providerId,
+      });
+    }
   }
+  return { unclearedProviderIds };
 }
 
 export function getProviderPriceMultipliers(): Record<string, number> {

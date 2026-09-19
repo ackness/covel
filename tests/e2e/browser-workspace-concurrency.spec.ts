@@ -30,14 +30,14 @@ test("closing an owner tab releases the workspace and lets another tab recover t
           description: "Synthetic fixture",
           createdAt: "2026-01-01T00:00:00Z",
         });
-        await ds.createSession(worldId, undefined, sessionId, [], "en-US");
+        await ds.createSession(worldId, sessionId, [], "en-US");
         const probe = window as unknown as {
           mutationDone?: boolean;
           failure?: string;
         };
         void getSessionWorkspace()
           .run(sessionId, "owner-exit-action", async () => {
-            await updateSession(sessionId, { presetId: "owner-exit-preset" });
+            await updateSession(sessionId, { status: "paused" });
             probe.mutationDone = true;
             await new Promise<void>(() => {});
           })
@@ -66,7 +66,7 @@ test("closing an owner tab releases the workspace and lets another tab recover t
         pending: await new BrowserVault().getPendingCommit(sessionId),
       };
     }, sessionId);
-    expect(recovered.session.presetId).toBe("owner-exit-preset");
+    expect(recovered.session.status).toBe("paused");
     expect(recovered.pending).toBeNull();
   } finally {
     if (!page.isClosed()) await page.close();
@@ -115,7 +115,7 @@ for (const followUp of [
             description: "Synthetic fixture",
             createdAt: "2026-01-01T00:00:00Z",
           });
-          await ds.createSession(worldId, undefined, sessionId, [], "en-US");
+          await ds.createSession(worldId, sessionId, [], "en-US");
           const gate = Promise.withResolvers<void>();
           const probe = window as unknown as {
             releaseWorkspace: () => void;
@@ -128,7 +128,7 @@ for (const followUp of [
               probe.workspaceStarted = true;
               await gate.promise;
               await updateSession(sessionId, {
-                presetId: "completed-action-preset",
+                status: "paused",
               });
             })
             .then(
@@ -237,9 +237,9 @@ for (const followUp of [
         expect(persisted).toBeNull();
       } else {
         expect(
-          persisted.presetId,
+          persisted.status,
           `other tab recovered while live: ${recoveredWhileLive}`,
-        ).toBe("completed-action-preset");
+        ).toBe("paused");
         if (followUp === "local write")
           expect(persisted.runtimeModelOverrides).toEqual({
             "probe/main": "second-tab-slot",

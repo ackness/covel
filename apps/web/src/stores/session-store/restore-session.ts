@@ -5,6 +5,7 @@ import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import type { SnapshotMessage } from "@covel/shared";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
 
@@ -167,6 +168,12 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
     runtimeId: (raw.runtimeId as string) ?? "unknown",
     pluginId: (raw.pluginId as string) ?? "",
     status: raw.status as ExecutionStep["status"],
+    reasoning: Array.isArray(raw.reasoning)
+      ? (raw.reasoning as ExecutionStep["reasoning"])
+      : undefined,
+    toolName: typeof raw.toolName === "string" ? raw.toolName : undefined,
+    abortReason:
+      typeof raw.abortReason === "string" ? raw.abortReason : undefined,
     label: raw.label as string | undefined,
     detail: raw.detail as string | undefined,
     durationMs: raw.durationMs as number | undefined,
@@ -209,31 +216,25 @@ async function restorePersistedExecutionSteps(
 
 function refreshSessionSideData(
   sessionId: string,
-  targetSessionId: string,
-  sessionIdRef: MutableRef<string | null>,
   dispatch: SessionDispatch,
+  isCurrent: () => boolean,
 ): void {
-  api
-    .listSessionPlugins(sessionId)
-    .then((res) => {
-      if (sessionIdRef.current === targetSessionId) {
-        dispatch({
-          type: "LOAD_SESSION_PLUGINS",
-          plugins: [...res.items],
-          commands: [...res.commands],
-        });
-      }
-    })
-    .catch(ignoreError("list session plugins on restore"));
+  void refreshSessionResource(dispatch, ["plugins", sessionId], {
+    isCurrent,
+    read: () => api.listSessionPlugins(sessionId),
+    apply: (res) =>
+      dispatch({
+        type: "LOAD_SESSION_PLUGINS",
+        plugins: [...res.items],
+        commands: [...res.commands],
+      }),
+  }).catch(ignoreError("list session plugins on restore"));
 
-  api
-    .listSuspensions(sessionId)
-    .then((suspensions) => {
-      if (sessionIdRef.current === targetSessionId) {
-        dispatch({ type: "SET_SUSPENSIONS", suspensions });
-      }
-    })
-    .catch(ignoreError("list suspensions on restore"));
+  void refreshSessionResource(dispatch, ["suspensions", sessionId], {
+    isCurrent,
+    read: () => api.listSuspensions(sessionId),
+    apply: (suspensions) => dispatch({ type: "SET_SUSPENSIONS", suspensions }),
+  }).catch(ignoreError("list suspensions on restore"));
 }
 
 export async function restoreSessionState({
@@ -338,10 +339,5 @@ export async function restoreSessionState({
   await restoreSubmittedBlocks(ds, freshSession, dispatchCurrent);
   if (!isCurrent()) return;
 
-  refreshSessionSideData(
-    session.id,
-    targetSessionId,
-    sessionIdRef,
-    dispatchCurrent,
-  );
+  refreshSessionSideData(session.id, dispatch, isCurrent);
 }

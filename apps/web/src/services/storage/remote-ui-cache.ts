@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mergeExecutionHistory } from "../execution-history.js";
 import {
   REMOTE_UI_CACHE_STORE,
   REMOTE_UI_CACHE_EPOCHS,
@@ -163,7 +164,9 @@ export function useRemoteUiCache(
           ids: [...new Set([...record.submitted.ids, ...owned.ids])],
           values: { ...record.submitted.values, ...owned.values },
         };
-      } else if (owned?.kind === "steps") record.steps = owned.steps;
+      } else if (owned?.kind === "steps") {
+        record.steps = mergeExecutionHistory(record.steps, owned.steps);
+      }
       // Bind even empty reads so an older response cannot replace a new incarnation.
       record.worldId = owner.worldId;
       await request(records.put(record));

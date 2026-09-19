@@ -48,7 +48,6 @@ export interface SessionRecord extends Omit<
   readonly worldId: string;
   /** Server-issued identity; browser-local records use workspace ownership. */
   readonly incarnation?: string;
-  presetId?: string;
 }
 
 /**

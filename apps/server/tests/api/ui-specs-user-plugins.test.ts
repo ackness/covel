@@ -132,7 +132,6 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
       status: "active",
       completedPlayerTurns: 1,
 
-      presetId: null,
       // Both plugins are active in this session — the fix must expose
       // BOTH under the UI-specs endpoint, not just the bundled one.
       activePlugins: ["bundled-greeter", "user-imagebox"],

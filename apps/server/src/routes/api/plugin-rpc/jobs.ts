@@ -215,6 +215,7 @@ export interface TransitionRuntimeJobArgs {
   readonly to: RuntimeJobStatus;
   readonly ownerId?: string;
   readonly now?: string;
+  readonly expectedUpdatedAt?: string;
   readonly leaseExpiresAt?: string;
   readonly backgroundTurnId?: string;
   readonly backgroundExecutionId?: string;
@@ -460,6 +461,12 @@ export async function transitionRuntimeJob(
 ): Promise<RuntimeJobRecord | null> {
   const existing = await getRuntimeJob(store, args);
   if (!existing || !args.from.includes(existing.status)) return null;
+  if (
+    args.expectedUpdatedAt !== undefined &&
+    existing.updatedAt !== args.expectedUpdatedAt
+  ) {
+    return null;
+  }
   if (!LEGAL_RUNTIME_JOB_TRANSITIONS[existing.status].has(args.to)) {
     throw new Error(
       `illegal runtime job transition: ${existing.status} -> ${args.to}`,
@@ -624,21 +631,23 @@ export async function claimNextRuntimeJob(
       sessionId,
       statuses: ["queued"],
     });
-    const candidate = candidates.find(
-      (job) =>
-        !args.excludeRuntimeKeys?.has(
-          `${job.sessionId}\u0000${job.pluginId}\u0000${job.runtimeId}`,
-        ),
-    );
-    if (!candidate) continue;
-    const claimed = await claimRuntimeJob(store, {
-      sessionId,
-      pluginId: candidate.pluginId,
-      jobId: candidate.jobId,
-      ownerId: args.ownerId,
-      leaseMs: args.leaseMs,
-    });
-    if (claimed) return { job: claimed, nextSessionCursor: sessionId };
+    for (const candidate of candidates) {
+      if (
+        args.excludeRuntimeKeys?.has(
+          `${candidate.sessionId}\u0000${candidate.pluginId}\u0000${candidate.runtimeId}`,
+        )
+      ) {
+        continue;
+      }
+      const claimed = await claimRuntimeJob(store, {
+        sessionId,
+        pluginId: candidate.pluginId,
+        jobId: candidate.jobId,
+        ownerId: args.ownerId,
+        leaseMs: args.leaseMs,
+      });
+      if (claimed) return { job: claimed, nextSessionCursor: sessionId };
+    }
   }
   return null;
 }
@@ -691,6 +700,7 @@ export async function recoverExpiredRuntimeJobs(
           from: [job.status],
           to: "orphaned",
           now,
+          expectedUpdatedAt: job.updatedAt,
           reason: "lease-expired",
           error: "runtime job owner stopped renewing its lease",
         });

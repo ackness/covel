@@ -480,9 +480,6 @@ export function reducer(
         ),
       };
     }
-    case "CLEAR_EXECUTION_STEPS":
-      // Only clear in-memory — localStorage is preserved for session history
-      return { ...state, executionSteps: [] };
     case "SET_SUSPENSIONS":
       return { ...state, suspensions: action.suspensions };
     case "ADD_SUSPENSION": {

@@ -27,7 +27,6 @@ const session = {
   locale: "en-US",
   createdAt: "now",
   updatedAt: "now",
-  presetId: null,
 };
 function snapshot(state: "running" | "completed") {
   return {

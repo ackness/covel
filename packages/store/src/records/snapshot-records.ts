@@ -116,7 +116,6 @@ export type SnapshotSessionState = Readonly<
     | "setupRuntimes"
     | "locale"
     | "activePlugins"
-    | "presetId"
     | "runtimeModelOverrides"
   > & {
     /** Captured metadata override. Empty means clear; absent keeps world fallback. */

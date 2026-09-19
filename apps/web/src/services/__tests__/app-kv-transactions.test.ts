@@ -7,6 +7,7 @@ import {
   getStatePatches,
   getWorldOverlay,
   removeWorldOverlay,
+  removeExecutionSteps,
   setWorldOverlay,
   saveExecutionSteps,
 } from "../app-kv-store.js";
@@ -83,4 +84,34 @@ it("does not acknowledge deletion whose transaction aborts after request success
   });
   await expect(removeWorldOverlay(worldId)).rejects.toThrow();
   expect(await getWorldOverlay(worldId)).toEqual(before);
+});
+
+it("merges independent timeline windows atomically and preserves absent history", async () => {
+  const sessionId = `history-${crypto.randomUUID()}`;
+  const early = { turnId: "early", runtimeId: "story", status: "completed" };
+  const late = { turnId: "late", runtimeId: "story", status: "suspended" };
+  await Promise.all([
+    saveExecutionSteps(sessionId, [early]),
+    saveExecutionSteps(sessionId, [late]),
+  ]);
+  expect(await getExecutionSteps(sessionId)).toEqual([early, late]);
+  const resumed = { ...late, status: "running" };
+  await saveExecutionSteps(sessionId, [resumed]);
+  await saveExecutionSteps(sessionId, []);
+  expect(await getExecutionSteps(sessionId)).toEqual([early, resumed]);
+  await removeExecutionSteps(sessionId);
+  expect(await getExecutionSteps(sessionId)).toEqual([]);
+});
+
+it("rejects unkeyed timeline rows without partially overwriting history", async () => {
+  const sessionId = `invalid-history-${crypto.randomUUID()}`;
+  const before = { turnId: "before", runtimeId: "story" };
+  await saveExecutionSteps(sessionId, [before]);
+  await expect(
+    saveExecutionSteps(sessionId, [
+      { turnId: "new", runtimeId: "story" },
+      { status: "completed" },
+    ]),
+  ).rejects.toThrow("Invalid execution history identity");
+  expect(await getExecutionSteps(sessionId)).toEqual([before]);
 });

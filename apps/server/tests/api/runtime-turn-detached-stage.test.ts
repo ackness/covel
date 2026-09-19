@@ -195,6 +195,7 @@ describe("plugin RPC detached-stage runner", () => {
               userSettings,
               expectedSessionIncarnation: sessionIncarnationIdentity(session),
               beforeCommit: async () => {},
+              completeInTx: async () => {},
             })
           : await runner.runManualTurn({
               turnId: "settings-turn",
@@ -242,6 +243,7 @@ describe("plugin RPC detached-stage runner", () => {
       backgroundTurnId: "background-turn",
       expectedSessionIncarnation: sessionIncarnationIdentity(session),
       beforeCommit,
+      completeInTx: async () => {},
     });
 
     expect(outcome.commit.committed).toBe(true);
@@ -306,6 +308,7 @@ describe("plugin RPC detached-stage runner", () => {
               executionSignal: abort.signal,
               expectedSessionIncarnation: sessionIncarnationIdentity(session),
               beforeCommit: async () => {},
+              completeInTx: async () => {},
             })
           : await runner.runManualTurn({
               turnId: "cancel-at-commit",
@@ -381,6 +384,7 @@ describe("plugin RPC detached-stage runner", () => {
       backgroundTurnId: "background-turn-guarded",
       expectedSessionIncarnation: sessionIncarnationIdentity(session),
       beforeCommit: async () => {},
+      completeInTx: async () => {},
     });
 
     expect(outcome.commit).toMatchObject({

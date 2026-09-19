@@ -3,6 +3,7 @@ import {
   loadPluginDataForSession,
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
+import { refreshSessionResource } from "./session-resource-reads.js";
 import type { SessionDispatch } from "./types.js";
 
 interface PluginNamespace {
@@ -36,25 +37,32 @@ async function hydratePluginDataNamespaces(
   isCurrent: () => boolean,
 ): Promise<void> {
   await Promise.all(
-    namespaces.map(async ({ pluginId, namespace }) => {
-      const rows = await api.listPluginData(sessionId, pluginId, namespace);
-      if (!isCurrent() || rows.length === 0) return;
-
-      loadPluginDataForSession(
-        sessionId,
-        pluginId,
-        namespace,
-        rows.map((row) => ({ key: row.key, value: row.value })),
-      );
-
-      const changes: PluginDataChange[] = rows.map((row) => ({
-        namespace,
-        key: row.key,
-        value: row.value,
-        operation: "set",
-      }));
-      dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
-    }),
+    namespaces.map(({ pluginId, namespace }) =>
+      refreshSessionResource(
+        dispatch,
+        ["plugin-data", sessionId, pluginId, namespace],
+        {
+          isCurrent,
+          read: () => api.listPluginData(sessionId, pluginId, namespace),
+          apply: (rows) => {
+            if (rows.length === 0) return;
+            loadPluginDataForSession(
+              sessionId,
+              pluginId,
+              namespace,
+              rows.map((row) => ({ key: row.key, value: row.value })),
+            );
+            const changes: PluginDataChange[] = rows.map((row) => ({
+              namespace,
+              key: row.key,
+              value: row.value,
+              operation: "set",
+            }));
+            dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
+          },
+        },
+      ),
+    ),
   );
 }
 
@@ -63,12 +71,24 @@ export async function hydratePluginDataForUiSpecs(
   dispatch: SessionDispatch,
   isCurrent: () => boolean = () => true,
 ): Promise<void> {
-  const specs = await api.fetchUiSpecs(sessionId);
-  if (!isCurrent()) return;
-  await hydratePluginDataNamespaces(
-    sessionId,
-    collectSpecNamespaces(specs),
+  let namespaces: PluginNamespace[] | undefined;
+  await refreshSessionResource(
     dispatch,
-    isCurrent,
+    ["ui-specs", sessionId, "namespace-seed"],
+    {
+      isCurrent,
+      read: () => api.fetchUiSpecs(sessionId),
+      apply: (specs) => {
+        namespaces = collectSpecNamespaces(specs);
+      },
+    },
   );
+  if (namespaces && isCurrent()) {
+    await hydratePluginDataNamespaces(
+      sessionId,
+      namespaces,
+      dispatch,
+      isCurrent,
+    );
+  }
 }

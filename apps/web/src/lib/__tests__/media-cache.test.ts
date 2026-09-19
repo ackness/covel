@@ -66,7 +66,9 @@ describe("media-cache", () => {
     const app = await import("../../services/app-kv-store.js");
     await Promise.all([
       putCachedMedia(makeRecord("shared")),
-      app.saveExecutionSteps("session", [{ status: "completed" }]),
+      app.saveExecutionSteps("session", [
+        { runtimeId: "probe", status: "completed" },
+      ]),
     ]);
     expect(factory.open).toHaveBeenCalledTimes(1);
     await deleteCache();

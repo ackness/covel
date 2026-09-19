@@ -759,6 +759,8 @@
     "exported": "已导出",
     "importHeader": "导入",
     "importChoose": "选择文件...",
+    "providerImportChanged": "读取文件期间模型设置已更改，当前修改已保留。请重新选择文件后重试。",
+    "providerKeyCleanupFailed": "模型设置已保存，但部分已移除连接的密钥未能清除。",
     "importInvalid": "文件无效",
     "imported": "已导入",
     "importPreview": "预览 — 选择要导入的项",

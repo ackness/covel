@@ -89,7 +89,7 @@ afterEach(() => {
 
 describe("custom preset secret channel", () => {
   it("carries per-model reasoning defaults separately from role overrides", async () => {
-    setProviderProfiles([
+    await setProviderProfiles([
       {
         id: "fixture",
         name: "Fixture",
@@ -151,7 +151,7 @@ describe("custom preset secret channel", () => {
   });
 
   it("compiles a provider-first model reference without rewriting its model id", async () => {
-    setProviderProfiles([
+    await setProviderProfiles([
       {
         id: "openai",
         name: "OpenAI",
@@ -214,7 +214,7 @@ describe("custom preset secret channel", () => {
   });
 
   it("keeps connection secrets separate from model profiles through reload", async () => {
-    setProviderProfiles([
+    await setProviderProfiles([
       {
         id: "fixture",
         name: "Fixture",
@@ -250,7 +250,7 @@ describe("custom preset secret channel", () => {
     ).toEqual({ fixture: "synthetic-secret" });
   });
 
-  it("keeps a shared connection key until its last model is removed", async () => {
+  it("keeps a shared connection key until its connection is removed", async () => {
     const profile = {
       id: "fixture",
       name: "Fixture",
@@ -260,17 +260,17 @@ describe("custom preset secret channel", () => {
         { ref: "b", modelId: "b" },
       ],
     };
-    setProviderProfiles([profile]);
+    await setProviderProfiles([profile]);
     await getSettings().set("keys.fixture", "synthetic-secret");
-    setProviderProfiles([{ ...profile, models: [profile.models[0]!] }]);
+    await setProviderProfiles([{ ...profile, models: [profile.models[0]!] }]);
     await vi.waitFor(() => expect(getCustomPresets()).toHaveLength(1));
     expect(readKeysBlob().fixture).toBe("synthetic-secret");
-    setProviderProfiles([]);
+    await setProviderProfiles([]);
     await vi.waitFor(() => expect(readKeysBlob().fixture).toBeUndefined());
   });
 
   it("uses each connection's own key without borrowing from its provider family", async () => {
-    setProviderProfiles(
+    await setProviderProfiles(
       ["official", "proxy"].map((id) => ({
         id,
         provider: "openai",
@@ -317,7 +317,7 @@ describe("current-only model settings", () => {
   });
 
   it("does not rewrite a saved server binding while reading settings", async () => {
-    setProviderProfiles([
+    await setProviderProfiles([
       {
         id: "fixture",
         name: "Fixture",
@@ -336,7 +336,7 @@ describe("current-only model settings", () => {
   });
 
   it("never sends a server-managed marker for a configured connection", async () => {
-    setProviderProfiles([
+    await setProviderProfiles([
       {
         id: "fixture",
         name: "Fixture",

@@ -21,6 +21,7 @@ import {
   applyChanges as applyPluginDataStoreChanges,
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
+import { invalidateSessionResource } from "./session-resource-reads.js";
 import { buildResumedExecutionStep } from "./execution-steps.js";
 import {
   collectJobTransitions,
@@ -53,10 +54,19 @@ export interface EventContext {
 export function reducePluginDataChanged(
   dispatch: SessionDispatch,
   payload: Readonly<Record<string, unknown>>,
+  sessionId: string,
 ): void {
   const pluginId = payload.pluginId as string | undefined;
   const changes = payload.changes as readonly PluginDataChange[] | undefined;
   if (!pluginId || !changes) return;
+  for (const namespace of new Set(changes.map((change) => change.namespace))) {
+    invalidateSessionResource(dispatch, [
+      "plugin-data",
+      sessionId,
+      pluginId,
+      namespace,
+    ]);
+  }
   const transitions = collectJobTransitions(pluginId, changes);
   dispatch({ type: "PLUGIN_DATA_CHANGED", pluginId, changes });
   applyPluginDataStoreChanges(pluginId, changes);
@@ -75,6 +85,7 @@ export function reduceTurnSuspended(
 ): void {
   const id = payload.suspensionId as string | undefined;
   if (!id) return;
+  invalidateSessionResource(dispatch, ["suspensions", ctx.sessionId]);
   const suspension: SuspensionSummary = {
     id,
     sessionId: (payload.sessionId as string) ?? ctx.sessionId,
@@ -99,6 +110,7 @@ export function reduceTurnResumed(
 ): void {
   const id = payload.suspensionId as string | undefined;
   if (!id) return;
+  invalidateSessionResource(dispatch, ["suspensions", ctx.sessionId]);
   const resumedStep = buildResumedExecutionStep(payload, ctx.turnId);
   if (resumedStep) {
     dispatch({ type: "UPSERT_EXECUTION_STEP", step: resumedStep });

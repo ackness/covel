@@ -56,7 +56,7 @@ afterEach(async () => {
 
 async function failedDownload() {
   const service = new LocalDataService(vault);
-  await service.createSession("world", undefined, "session", [], "en-US");
+  await service.createSession("world", "session", [], "en-US");
   await service.addMessage({
     id: "durable-input",
     sessionId: "session",
@@ -78,7 +78,7 @@ async function failedDownload() {
 describe("workspace durable pending-commit recovery", () => {
   it("owns input persistence and the server exchange without acquiring the same lock twice", async () => {
     const service = new LocalDataService(vault);
-    await service.createSession("world", undefined, "session", [], "en-US");
+    await service.createSession("world", "session", [], "en-US");
     const mutate = vi.fn(async () => "done");
     await expect(
       createSessionWorkspace(service, "local").run(

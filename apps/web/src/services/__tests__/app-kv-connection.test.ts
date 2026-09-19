@@ -47,9 +47,11 @@ it("allows a later operation to retry a synchronous open failure", async () => {
   await expect(cache.getExecutionSteps("session")).rejects.toThrow(
     "Synthetic open failure",
   );
-  await cache.saveExecutionSteps("session", [{ status: "completed" }]);
+  await cache.saveExecutionSteps("session", [
+    { runtimeId: "probe", status: "completed" },
+  ]);
   expect(await cache.getExecutionSteps("session")).toEqual([
-    { status: "completed" },
+    { runtimeId: "probe", status: "completed" },
   ]);
 });
 
@@ -66,14 +68,18 @@ it("allows a later operation to retry after an asynchronous open error", async (
     name: "VersionError",
   });
   await deleteCache();
-  await cache.saveExecutionSteps("session", [{ status: "completed" }]);
+  await cache.saveExecutionSteps("session", [
+    { runtimeId: "probe", status: "completed" },
+  ]);
   expect(await cache.getExecutionSteps("session")).toEqual([
-    { status: "completed" },
+    { runtimeId: "probe", status: "completed" },
   ]);
 });
 
 it("reopens after an unexpected close and retains persisted data", async () => {
-  await cache.saveExecutionSteps("session", [{ status: "completed" }]);
+  await cache.saveExecutionSteps("session", [
+    { runtimeId: "probe", status: "completed" },
+  ]);
   const connection = connections[0]!;
   const closed = new Promise<void>((resolve) => {
     connection.addEventListener("close", () => resolve(), { once: true });
@@ -84,31 +90,39 @@ it("reopens after an unexpected close and retains persisted data", async () => {
   forceClose(connection);
   await closed;
   expect(await cache.getExecutionSteps("session")).toEqual([
-    { status: "completed" },
+    { runtimeId: "probe", status: "completed" },
   ]);
   expect(factory.open).toHaveBeenCalledTimes(2);
 });
 
 it("releases its connection for cache deletion and recreates it on demand", async () => {
-  await cache.saveExecutionSteps("session", [{ status: "completed" }]);
+  await cache.saveExecutionSteps("session", [
+    { runtimeId: "probe", status: "completed" },
+  ]);
   await deleteCache();
   expect(await cache.getExecutionSteps("session")).toEqual([]);
-  await cache.saveExecutionSteps("session", [{ status: "running" }]);
+  await cache.saveExecutionSteps("session", [
+    { runtimeId: "probe", status: "running" },
+  ]);
   expect(await cache.getExecutionSteps("session")).toEqual([
-    { status: "running" },
+    { runtimeId: "probe", status: "running" },
   ]);
 });
 
 it("shares an in-flight open across concurrent callers", async () => {
   await Promise.all([
-    cache.saveExecutionSteps("first", [{ status: "completed" }]),
-    cache.saveExecutionSteps("second", [{ status: "running" }]),
+    cache.saveExecutionSteps("first", [
+      { runtimeId: "probe", status: "completed" },
+    ]),
+    cache.saveExecutionSteps("second", [
+      { runtimeId: "probe", status: "running" },
+    ]),
   ]);
   expect(await cache.getExecutionSteps("first")).toEqual([
-    { status: "completed" },
+    { runtimeId: "probe", status: "completed" },
   ]);
   expect(await cache.getExecutionSteps("second")).toEqual([
-    { status: "running" },
+    { runtimeId: "probe", status: "running" },
   ]);
   expect(factory.open).toHaveBeenCalledTimes(1);
 });

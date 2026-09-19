@@ -563,7 +563,6 @@ describe("Snapshot routes", () => {
         },
         locale: "en-US",
         activePlugins: ["setup", "narrator"],
-        presetId: "slow-burn",
         runtimeModelOverrides: { narrator: "balance" },
       });
       const app = createTestApp(store);
@@ -576,7 +575,6 @@ describe("Snapshot routes", () => {
         setupRuntimes: {},
         locale: "ja-JP",
         activePlugins: ["other"],
-        presetId: "action",
         runtimeModelOverrides: { narrator: "fast" },
       });
 
@@ -601,7 +599,6 @@ describe("Snapshot routes", () => {
         },
         locale: "en-US",
         activePlugins: ["setup", "narrator"],
-        presetId: "slow-burn",
         runtimeModelOverrides: { narrator: "balance" },
       });
     });

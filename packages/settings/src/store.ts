@@ -366,6 +366,34 @@ export class SettingsStore implements SettingsStoreApi {
     }
   }
 
+  setMany(entries: Readonly<Record<SettingKey, unknown>>): Promise<void> {
+    try {
+      const updates = Object.entries(entries).map(([key, value]) => {
+        this.assertNonSecretEntry(key);
+        const schema = this.registry.get(key)?.schema;
+        const parsed = schema?.safeParse(value);
+        if (parsed && !parsed.success) {
+          throw new Error(`Settings validation failed for ${key}`);
+        }
+        return [key, structuredClone(parsed ? parsed.data : value)] as const;
+      });
+      if (updates.length === 0) return Promise.resolve();
+      return this.observePersistence(
+        this.persist(
+          "values",
+          () => {
+            for (const [key, value] of updates) this.values.set(key, value);
+          },
+          updates.map(([key]) => key),
+        ).then(() => {
+          for (const [key] of updates) this.notify(key, this.get(key));
+        }),
+      );
+    } catch (error) {
+      return this.observePersistence(Promise.reject(error));
+    }
+  }
+
   clear(key: SettingKey): Promise<void> {
     try {
       const entry = this.registry.get(key);
@@ -467,7 +495,9 @@ export class SettingsStore implements SettingsStoreApi {
       let normalized: unknown = value;
       if (entry) {
         const parsed = entry.schema.safeParse(value);
-        if (!parsed.success) continue;
+        if (!parsed.success) {
+          throw new Error(`Settings validation failed for ${key}`);
+        }
         normalized = parsed.data;
       }
       nonSecretUpdates.push([key, normalized]);

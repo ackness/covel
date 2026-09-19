@@ -9,7 +9,7 @@ import type {
 export type WorldPatch = WorldPatchRequest;
 
 export type SessionPatch = Partial<
-  Pick<SessionRecord, "status" | "presetId" | "runtimeModelOverrides">
+  Pick<SessionRecord, "status" | "runtimeModelOverrides">
 >;
 
 /** Captured session identity; remote caches must not infer it after awaiting I/O. */
@@ -48,7 +48,6 @@ export interface DataService {
   getSession(sessionId: string): Promise<SessionRecord | null>;
   createSession(
     worldId: string,
-    presetId?: string,
     id?: string,
     plugins?: string[],
     locale?: string,
@@ -116,7 +115,7 @@ export interface DataService {
   /** Persist the transient server result as the next browser checkpoint. */
   commitFromServer(sessionId: string, actionId: string): Promise<void>;
 
-  /** Persist accumulated execution timeline steps for a session. */
+  /** Merge partial history by turn/runtime. Empty batches preserve history; session/world deletion clears it. */
   saveExecutionSteps(
     sessionId: string,
     steps: unknown[],

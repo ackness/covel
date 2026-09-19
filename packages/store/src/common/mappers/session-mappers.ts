@@ -87,9 +87,6 @@ export function toSessionRecord(
     locale: row.locale,
     activePlugins,
     metadata,
-    ...(typeof metadata?.presetId === "string"
-      ? { presetId: metadata.presetId }
-      : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     ...(row.embeddingModelId != null

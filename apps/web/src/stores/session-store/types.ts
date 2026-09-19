@@ -323,7 +323,6 @@ export type SessionAction =
       abortReason?: string;
     }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
-  | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }
   | { type: "RESET_SESSION" }
   | { type: "SUBMIT_BLOCK"; blockId: string; values?: Record<string, unknown> }

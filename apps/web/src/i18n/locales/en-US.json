@@ -759,6 +759,8 @@
     "exported": "Exported",
     "importHeader": "Import",
     "importChoose": "Choose file...",
+    "providerImportChanged": "Model settings changed while reading the file. Your current edits were kept. Choose the file again to retry.",
+    "providerKeyCleanupFailed": "Model settings were saved, but some removed connection keys could not be cleared.",
     "importInvalid": "Invalid settings file",
     "imported": "Imported",
     "importPreview": "Preview — pick what to import",

@@ -1688,6 +1688,10 @@ queued -> claimed -> running -> committing -> succeeded
 
 worker 以 CAS claim 和可续租 lease 防止多 Pod 重复执行，默认全局并发为 4、同 runtime 串行。启动时会继续执行未过期且从未 claim 的 `queued` 作业；排队超时任务置为 `timed_out`，lease 已过期的在途任务置为 `orphaned`，失败终态**不会自动重放**可能已经计费的调用。完成结果写入 job 的 `result`，失败写 `reason/error`；`cancelled` 是控制面的终态，不允许迟到结果复活。当前枚举故意闭合，未来增加 overlap/stale 策略或终态时必须扩展 manifest schema、discovery、状态迁移、协议、Web 恢复和各存储后端测试，不能静默重解释现有值。
 
+worker 在提交屏障和终态转换前停止并等待自己已开始的续租，避免续租与提交争抢 CAS revision。恢复扫描必须匹配扫描时的 revision，期间成功续租的作业不会被误判为 orphaned；队首过期或已被其它 worker 认领时继续查找同会话有效候选。
+
+领域 proposal、journal 与 job 的 `succeeded/result` 在同一 `finalizeExecution` 事务中提交；业务失败或完成 CAS 失败会使整个事务回滚。事务后 Hook、状态通知或 executor 返回失败不降低已持久化的成功状态；漏发的公开状态由现有终态对账补齐，不再次执行 provider。当前过期租约恢复仍只在启动时扫描一次，启动时尚未过期的死亡 owner 没有持续恢复保证。
+
 内置首个 opt-in 是 `mimo-tts/auto-narrate`。涉及世界状态、角色、任务、记忆或被其他 runtime 消费的 post-turn runtime 应继续使用 `await`。
 
 ### capabilities

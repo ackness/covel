@@ -113,22 +113,11 @@ export function useBuildSessionActions({
         sessionIdRef,
         sessionGenerationRef,
         world: state.world,
-        presets: state.presets,
-        llmConfig: state.llmConfig,
         plugins,
         loreOverride,
       });
     },
-    [
-      ds,
-      workspace,
-      dispatch,
-      sessionIdRef,
-      sessionGenerationRef,
-      state.world,
-      state.presets,
-      state.llmConfig,
-    ],
+    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.world],
   );
 
   const resyncSession = useCallback(
@@ -326,7 +315,7 @@ export function useBuildSessionActions({
 
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;
-    // 从 ref 读取最新游标，避免闭包捕获陈旧值并保持该 action 引用稳定。
+    const generation = sessionGenerationRef.current;
     const cursor = stateRef.current.olderMessagesCursor;
     if (!sid || !cursor) return;
     try {
@@ -334,8 +323,13 @@ export function useBuildSessionActions({
         cursor,
         limit: OLDER_MESSAGES_PAGE_SIZE,
       });
-      // 会话可能在请求期间被切换 —— 丢弃过期响应。
-      if (sessionIdRef.current !== sid) return;
+      // A previous visit or an already consumed page cannot rewind history.
+      if (
+        sessionIdRef.current !== sid ||
+        sessionGenerationRef.current !== generation ||
+        stateRef.current.olderMessagesCursor !== cursor
+      )
+        return;
       dispatch({
         type: "PREPEND_MESSAGES",
         messages: toStreamMessages(page.items),
@@ -344,7 +338,7 @@ export function useBuildSessionActions({
     } catch {
       // 非关键：下次滚动到顶部时会重试。
     }
-  }, [ds, dispatch, sessionIdRef, stateRef]);
+  }, [ds, dispatch, sessionIdRef, sessionGenerationRef, stateRef]);
 
   const submitBlock = useCallback(
     (blockId: string, values?: Record<string, unknown>) => {

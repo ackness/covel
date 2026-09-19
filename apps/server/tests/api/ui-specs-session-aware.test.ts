@@ -154,7 +154,6 @@ describe("GET /api/ui-specs session-aware filter", () => {
       status: "active",
       completedPlayerTurns: 1,
 
-      presetId: null,
       activePlugins: ["codex"], // only codex active in this session
       createdAt: new Date().toISOString(),
     });

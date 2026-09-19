@@ -4,8 +4,19 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- Session restore and subscription reads share resource ownership. Live plugin-data and suspension changes invalidate stale initial reads; overlapping full and namespace loads re-read without losing unaffected fields. Invalid selected settings-import values reject before either persistence channel starts writing.
+- Provider settings reject duplicate connection identities and model references before saving or importing, preventing ambiguous model routing. Inline endpoint and model-name edits keep drafts after persistence failure and recognize their normalized saved values.
+- Detached runtime results and durable job success now commit together. Failed business output rolls back proposals; post-commit notification failures cannot reopen completed work. Lease recovery respects renewed revisions, expired queue heads no longer block later work, and terminal transitions wait for in-flight renewal.
+- Partial execution history writes preserve other turns across browser tabs. Delayed history pages and subscription refreshes cannot overwrite a newer visit or request; restored history retains reasoning, tool identity and abort reason.
+- Session creation now persists embedding model identity and lock time consistently across storage backends.
+- Model profile saves and role bindings now persist as one ordinary-settings mutation. Removing a last model retains the connection and key. Connection-key cleanup waits for a successful configuration save and reports failures separately.
+- Provider creation retains drafts on persistence failure. Delayed imports cannot overwrite intervening connection edits, newer imports or an unmounted pane.
+
 ### Changed
 
+- Removed the unused session `presetId` field and its metadata mirror from API, browser, store and snapshot contracts. Model routing continues through slots, request overrides and `runtimeModelOverrides`. Recreate development checkpoints and snapshots that do not satisfy the current contract; no migration or automatic data deletion is provided.
 - Model settings use only current provider profiles and version 2 provider exports. Removed legacy model/key migrations, read-time rewrites, unused preset-write APIs and navigation aliases. Recreate affected development model configurations and connection keys explicitly. Current server preset bindings remain supported; ambiguous bindings are rejected.
 - Model getters no longer attach API keys, and request key routing no longer borrows provider-family keys. Server-managed key markers are never sent as provider credentials.
 - Browser vaults and snapshots now use the current data contract only. Removed historical vault data migrations and snapshot field fallbacks that inferred captured state from the live parent. Snapshot storage and checkpoint validation share the payload schema and reject uncaptured summary references.

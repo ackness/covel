@@ -663,42 +663,44 @@ async function assembleApi(
         ...(payload.runtimeModelOverrides
           ? { runtimeModelOverrides: payload.runtimeModelOverrides }
           : {}),
+        completeInTx: async (tx, turnResult) => {
+          const runtimeResult = turnResult.runtimeResults.find(
+            (result) => result.runtimeId === job.runtimeId,
+          );
+          if (runtimeResult?.status !== "success") {
+            throw new Error(
+              runtimeResult?.error ??
+                `detached runtime ended with ${runtimeResult?.status ?? "no result"}`,
+            );
+          }
+          const runtimeOutput = runtimeResult.output;
+          if (
+            runtimeOutput?.status === "failed" ||
+            (typeof runtimeOutput?.error === "string" && runtimeOutput.error)
+          ) {
+            throw new Error(
+              typeof runtimeOutput.error === "string"
+                ? runtimeOutput.error
+                : "detached runtime reported a failed business result",
+            );
+          }
+          await control.completeInTx(tx, {
+            turnId: turnResult.turnId,
+            executionId: turnResult.executionContext.executionId,
+            runtimeId: runtimeResult.runtimeId,
+            durationMs: runtimeResult.durationMs,
+            output: runtimeResult.output,
+          });
+        },
         beforeCommit: control.beforeCommit,
         beforeExecute: control.assertCurrent,
         executionSignal: control.signal,
       });
-      const runtimeResult = outcome.turnResult.runtimeResults.find(
-        (result) => result.runtimeId === job.runtimeId,
-      );
-      if (runtimeResult?.status !== "success") {
-        throw new Error(
-          runtimeResult?.error ??
-            `detached runtime ended with ${runtimeResult?.status ?? "no result"}`,
-        );
-      }
-      const runtimeOutput = runtimeResult.output;
-      if (
-        runtimeOutput?.status === "failed" ||
-        (typeof runtimeOutput?.error === "string" && runtimeOutput.error)
-      ) {
-        throw new Error(
-          typeof runtimeOutput.error === "string"
-            ? runtimeOutput.error
-            : "detached runtime reported a failed business result",
-        );
-      }
       if (!outcome.commit.committed) {
-        throw new Error("detached runtime proposals did not commit");
+        throw new Error(
+          outcome.commit.error ?? "detached runtime proposals did not commit",
+        );
       }
-      return {
-        result: {
-          turnId: outcome.turnResult.turnId,
-          executionId: outcome.turnResult.executionContext.executionId,
-          runtimeId: runtimeResult.runtimeId,
-          durationMs: runtimeResult.durationMs,
-          output: runtimeResult.output,
-        },
-      };
     },
   });
 

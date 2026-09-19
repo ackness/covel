@@ -80,7 +80,6 @@ describe("GET /api/ui-specs — registry snapshot", () => {
       worldId: null,
       status: "active",
       completedPlayerTurns: 1,
-      presetId: null,
       activePlugins: ["panel-plugin"],
       createdAt: new Date().toISOString(),
       metadata: {

@@ -42,12 +42,10 @@ export function ProviderDetails({
   const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
 
   const commitBaseUrl = () => {
-    if (
-      localProfile &&
-      !baseUrl.conflict &&
-      baseUrl.draft !== committedBaseUrl
-    ) {
-      onPatchLocalProfile({ baseUrl: baseUrl.draft });
+    if (localProfile && !baseUrl.conflict) {
+      const next = baseUrl.draft.trim();
+      baseUrl.setDraft(next);
+      if (next !== committedBaseUrl) onPatchLocalProfile({ baseUrl: next });
     }
   };
   return (
@@ -294,11 +292,11 @@ function ProviderModelRow({
                   aria-invalid={nameDraft.conflict}
                   onChange={(event) => nameDraft.setDraft(event.target.value)}
                   onBlur={() => {
-                    if (
-                      !nameDraft.conflict &&
-                      nameDraft.draft.trim() !== (name ?? "")
-                    )
-                      onNameChange(nameDraft.draft.trim());
+                    if (!nameDraft.conflict) {
+                      const next = nameDraft.draft.trim();
+                      nameDraft.setDraft(next);
+                      if (next !== (name ?? "")) onNameChange(next);
+                    }
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") event.currentTarget.blur();

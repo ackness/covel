@@ -40,7 +40,7 @@ afterEach(async () => {
 });
 
 it("keeps edited worlds through later local checkpoint writes and a fresh service", async () => {
-  await service.createSession("world-a", undefined, "session-a");
+  await service.createSession("world-a", "session-a");
   await service.updateWorld("world-a", {
     dimensions: { history: [] },
     name: "Edited",
@@ -59,9 +59,9 @@ it("keeps edited worlds through later local checkpoint writes and a fresh servic
 });
 
 it("atomically deletes a world and its local sessions without deleting shared server worlds", async () => {
-  await service.createSession("world-a", undefined, "session-a");
-  await service.createSession("world-a", undefined, "session-a2");
-  await service.createSession("world-b", undefined, "session-b");
+  await service.createSession("world-a", "session-a");
+  await service.createSession("world-a", "session-a2");
+  await service.createSession("world-b", "session-b");
   await service.updateSession("session-a", { status: "paused" });
   await vault.stagePendingCommit("session-a", "pending-a");
   api.deleteSession.mockRejectedValue(new Error("offline"));

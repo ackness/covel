@@ -36,8 +36,8 @@ beforeEach(async () => {
     });
   service = new LocalDataService(vault);
   second = new LocalDataService(secondVault);
-  await service.createSession("world", undefined, sessionId);
-  await second.createSession("other-world", undefined, otherId);
+  await service.createSession("world", sessionId);
+  await second.createSession("other-world", otherId);
 });
 
 afterEach(async () => {

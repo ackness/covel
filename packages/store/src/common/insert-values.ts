@@ -53,7 +53,6 @@ export type SessionUpdatePatch = Partial<
     SessionRecord,
     | "status"
     | "activePlugins"
-    | "presetId"
     | "locale"
     | "updatedAt"
     | "metadata"
@@ -532,6 +531,8 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         metadata: json.writeNullableJson(record.metadata),
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        embeddingModelId: record.embeddingModelId ?? null,
+        embeddingLockedAt: record.embeddingLockedAt ?? null,
         runtimeModelOverrides: json.writeNullableJson(
           record.runtimeModelOverrides,
         ),
@@ -547,7 +548,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
       if (patch.activePlugins !== undefined) {
         values.activePlugins = json.writeJson(patch.activePlugins);
       }
-      if ("metadata" in patch || "presetId" in patch) {
+      if ("metadata" in patch) {
         values.metadata = json.writeNullableJson(merged.metadata);
       }
       if (patch.locale !== undefined) values.locale = patch.locale;

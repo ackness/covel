@@ -457,8 +457,8 @@ export function registerPersistenceStoreSuites(
     });
 
     it("keeps optional session fields absent after round-trip", async () => {
-      // presetId / runtimeModelOverrides are optional — JSON serialisation
-      // must not resurrect them as null (store-backend parity contract).
+      // Optional runtimeModelOverrides must not reappear as null after JSON
+      // serialization (store-backend parity contract).
       const payload = makeSnapshotPayload({
         session: {
           status: "paused",
@@ -474,7 +474,6 @@ export function registerPersistenceStoreSuites(
 
       const result = (await store.getSnapshot(snap.id))!
         .payload as SnapshotPayload;
-      expect(result.session.presetId).toBeUndefined();
       expect(result.session.runtimeModelOverrides).toBeUndefined();
       expect(result.session.status).toBe("paused");
     });

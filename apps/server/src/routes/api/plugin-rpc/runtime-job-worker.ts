@@ -1,5 +1,5 @@
 import type { EventBus } from "@covel/events";
-import type { DataStore } from "@covel/store";
+import type { DataStore, StoreTransaction } from "@covel/store";
 import type {
   DeferredRuntimeJob,
   JobStatusRecord,
@@ -70,10 +70,8 @@ export interface RuntimeJobExecutionControl {
     readonly backgroundTurnId: string;
     readonly backgroundExecutionId: string;
   }): Promise<void>;
-}
-
-export interface RuntimeJobExecutionResult {
-  readonly result?: unknown;
+  /** Persist success in the same transaction as every domain write. */
+  completeInTx(tx: StoreTransaction, result?: unknown): Promise<void>;
 }
 
 export interface RuntimeJobWorker {
@@ -233,7 +231,7 @@ export function createRuntimeJobWorker(args: {
   readonly execute: (
     job: RuntimeJobRecord,
     control: RuntimeJobExecutionControl,
-  ) => Promise<RuntimeJobExecutionResult>;
+  ) => Promise<void>;
   readonly concurrency?: number;
   readonly leaseMs?: number;
   readonly ownerId?: string;
@@ -258,7 +256,7 @@ export function createRuntimeJobWorker(args: {
   let closed = false;
   let closing: Promise<void> | undefined;
   const activeTasks = new Set<Promise<void>>();
-  const executions = new Set<Promise<RuntimeJobExecutionResult>>();
+  const executions = new Set<Promise<void>>();
   const stopExecutions = new Set<() => void>();
 
   const transition = async (
@@ -305,6 +303,14 @@ export function createRuntimeJobWorker(args: {
     };
     stopExecutions.add(stop);
     if (closed) stop();
+
+    const stopLeaseRenewal = async (): Promise<void> => {
+      stopRenewing = true;
+      if (renewalTimer) clearTimeout(renewalTimer);
+      // The lease and lifecycle share one CAS revision. Drain this owner's
+      // in-flight renewal before changing lifecycle state.
+      await renewalTask;
+    };
 
     const scheduleRenewal = (): void => {
       if (stopRenewing) return;
@@ -363,6 +369,7 @@ export function createRuntimeJobWorker(args: {
       if (current.maxExecutionMs !== undefined) {
         timeoutTimer = setTimeout(() => {
           deadlineTask = (async () => {
+            await stopLeaseRenewal();
             const timedOut = await transition(
               current,
               ["running"],
@@ -395,8 +402,8 @@ export function createRuntimeJobWorker(args: {
         },
         beforeCommit: async (identity) => {
           executionAbort.signal.throwIfAborted();
-          stopRenewing = true;
-          if (renewalTimer) clearTimeout(renewalTimer);
+          await stopLeaseRenewal();
+          executionAbort.signal.throwIfAborted();
           const committing = await transition(
             current,
             ["running"],
@@ -407,32 +414,45 @@ export function createRuntimeJobWorker(args: {
           current = committing;
           executionAbort.signal.throwIfAborted();
         },
+        completeInTx: async (tx, result) => {
+          executionAbort.signal.throwIfAborted();
+          const succeeded = await transitionRuntimeJob(tx, {
+            sessionId: current.sessionId,
+            pluginId: current.pluginId,
+            jobId: current.jobId,
+            ownerId,
+            from: ["committing"],
+            to: "succeeded",
+            ...(result === undefined ? {} : { result }),
+          });
+          if (!succeeded) throw new RuntimeJobNoLongerCurrentError();
+          // This transaction can still roll back. Do not publish status or
+          // treat the in-memory job as successful until the executor settles.
+        },
       });
       executions.add(execution);
       void execution.then(
         () => executions.delete(execution),
         () => executions.delete(execution),
       );
-      const result = await Promise.race([execution, aborted]);
+      await Promise.race([execution, aborted]);
       if (timeoutTimer) clearTimeout(timeoutTimer);
-      const succeeded = await transition(
-        current,
-        ["committing"],
-        "succeeded",
-        result.result === undefined ? {} : { result: result.result },
-      );
-      if (!succeeded) {
-        throw new RuntimeJobNoLongerCurrentError();
+      const succeeded = await getRuntimeJob(args.store, current);
+      if (succeeded?.status !== "succeeded" || succeeded.ownerId !== ownerId) {
+        throw new Error("runtime job returned without a committed result");
       }
+      current = succeeded;
+      await appendRuntimeJobStatus(args.store, args.eventBus, succeeded);
     } catch (error) {
       if (timeoutTimer) clearTimeout(timeoutTimer);
+      await stopLeaseRenewal();
       const stale =
         error instanceof RuntimeJobNoLongerCurrentError ||
         (error instanceof Error &&
           (error.name === "SessionApprovalScopeChangedError" ||
             error.name === "SessionNotActiveError"));
       const shuttingDown = error instanceof RuntimeJobWorkerClosedError;
-      await transition(
+      const terminal = await transition(
         current,
         ["claimed", "running", "committing"],
         shuttingDown ? "cancelled" : stale ? "stale" : "failed",
@@ -450,6 +470,12 @@ export function createRuntimeJobWorker(args: {
           errorMessage(transitionError),
         ),
       );
+      if (terminal === null && !stale && !shuttingDown) {
+        console.warn("[runtime-job-worker] completion follow-up failed", {
+          sessionId: current.sessionId,
+          jobId: current.jobId,
+        });
+      }
     } finally {
       stopRenewing = true;
       if (renewalTimer) clearTimeout(renewalTimer);

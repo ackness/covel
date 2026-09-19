@@ -111,7 +111,6 @@ describe("GET /api/ui-specs — per-spec validation", () => {
       status: "active",
       completedPlayerTurns: 1,
 
-      presetId: null,
       activePlugins: ["good-panel", "bad-panel", "future-panel"],
       createdAt: new Date().toISOString(),
     });

@@ -90,12 +90,12 @@ describe("credential ownership across HTTP responses", () => {
           Response.json({ id: "same-id", incarnation: "new" }),
         ),
     );
-    const pending = createSession("world", undefined, "same-id").then(
+    const pending = createSession("world", "same-id").then(
       () => undefined,
       (error: unknown) => error,
     );
     await entered.promise;
-    await createSession("world", undefined, "same-id");
+    await createSession("world", "same-id");
     response.resolve(
       Response.json({
         id: "same-id",

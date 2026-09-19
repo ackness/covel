@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
+import { providerKeyToId } from "@covel/shared";
 import { REASONING_EFFORT_VALUES } from "@/services/api/reasoning-effort.js";
 
 const slotConfigEntrySchema = z.union([
-  z.strictObject({ modelRef: z.string().min(1) }),
+  z.strictObject({ modelRef: z.string().trim().min(1) }),
   z.strictObject({ presetId: z.string().min(1) }),
 ]);
 
@@ -14,20 +15,51 @@ const providerPriceMultipliersSchema = z.record(
 );
 
 const providerModelProfileSchema = z.object({
-  id: z.string().min(1),
+  id: z
+    .string()
+    .transform((id) => providerKeyToId(id) ?? id.trim())
+    .pipe(z.string().min(1)),
   name: z.string(),
   provider: z.string().optional(),
   baseUrl: z.string(),
   protocol: z.string().optional(),
   models: z.array(
     z.object({
-      ref: z.string().min(1),
+      ref: z.string().trim().min(1),
       modelId: z.string().min(1),
       reasoningEffort: z.enum(REASONING_EFFORT_VALUES).optional(),
       name: z.string().optional(),
     }),
   ),
 });
+
+/** Connection identities and model references each have one owner. */
+export const providerModelProfilesSchema = z
+  .array(providerModelProfileSchema)
+  .superRefine((profiles, context) => {
+    const providerIds = new Set<string>();
+    const modelRefs = new Set<string>();
+    profiles.forEach((profile, profileIndex) => {
+      if (providerIds.has(profile.id)) {
+        context.addIssue({
+          code: "custom",
+          path: [profileIndex, "id"],
+          message: "Provider connection IDs must be unique",
+        });
+      }
+      providerIds.add(profile.id);
+      profile.models.forEach((model, modelIndex) => {
+        if (modelRefs.has(model.ref)) {
+          context.addIssue({
+            code: "custom",
+            path: [profileIndex, "models", modelIndex, "ref"],
+            message: "Model references must be unique across all connections",
+          });
+        }
+        modelRefs.add(model.ref);
+      });
+    });
+  });
 
 const paramOverrideSchema = z.object({
   temperature: z.number().optional(),
@@ -71,7 +103,7 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
 
   store.register({
     key: "llm.providers",
-    schema: z.array(providerModelProfileSchema),
+    schema: providerModelProfilesSchema,
     default: [],
     group: "llm",
     widget: "custom",

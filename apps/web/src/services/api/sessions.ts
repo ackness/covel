@@ -230,7 +230,6 @@ export async function listStateTables(
 
 export async function createSession(
   worldId: string,
-  presetId?: string,
   id?: string,
   plugins?: string[],
   locale?: string,
@@ -247,7 +246,6 @@ export async function createSession(
       body: JSON.stringify({
         id,
         worldId,
-        presetId,
         ...(plugins ? { plugins } : {}),
         ...(locale ? { locale } : {}),
         ...(loreOverride !== undefined ? { loreOverride } : {}),
@@ -270,7 +268,7 @@ export async function createSession(
 
 export async function updateSession(
   sessionId: string,
-  updates: Partial<Pick<SessionRecord, "status" | "presetId">> & {
+  updates: Partial<Pick<SessionRecord, "status">> & {
     /**
      * Per-runtime model slot overrides. Keys are runtime IDs in the form
      * `pluginId` (single-runtime plugin) or `pluginId/runtimeName` (multi-

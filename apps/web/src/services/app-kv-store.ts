@@ -12,6 +12,7 @@ import {
   APP_KV_STORE_SUBMITTED_BLOCKS,
   APP_KV_STORE_WORLD_OVERLAYS,
 } from "@covel/store/idb-schema";
+import { mergeExecutionHistory } from "./execution-history.js";
 import { openBrowserCacheDb } from "./storage/cache-db.js";
 import type { StatePatchRecord } from "./api/types.js";
 
@@ -185,7 +186,29 @@ export async function saveExecutionSteps(
   sessionId: string,
   steps: unknown[],
 ): Promise<void> {
-  return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
+  const owned = structuredClone(steps);
+  const db = await openBrowserCacheDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_EXECUTION_STEPS, "readwrite");
+    const store = tx.objectStore(STORE_EXECUTION_STEPS);
+    let failure: unknown;
+    const req = store.get(sessionId);
+    req.onsuccess = () => {
+      try {
+        store.put(mergeExecutionHistory(req.result ?? [], owned), sessionId);
+      } catch (error) {
+        failure = error;
+        tx.abort();
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(
+        failure ??
+          tx.error ??
+          new Error("Execution history transaction aborted"),
+      );
+  });
 }
 
 export async function removeExecutionSteps(sessionId: string): Promise<void> {

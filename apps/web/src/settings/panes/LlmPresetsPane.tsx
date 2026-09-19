@@ -5,13 +5,14 @@ import {
   getSlotConfig,
   getProviderProfiles,
   setProviderProfiles,
-  setSlotConfig,
   upsertProviderModel,
   type ProviderModelProfile,
   type ProviderModelEntry,
   type ReasoningEffort,
 } from "@/services/api.js";
 import { getBuiltinProviderConnection } from "@covel/shared";
+import { sameSettingValue } from "@covel/settings";
+import { emitToast } from "@/lib/toast-channel.js";
 import { Button } from "@/components/ui/button.js";
 import { useSession } from "@/stores/session-store.js";
 import {
@@ -37,7 +38,19 @@ export function LlmPresetsPane() {
   const { t } = useTranslation();
   const { state } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [importFailed, setImportFailed] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const pendingSave = useRef(false);
+  const mounted = useRef(false);
+  const importGeneration = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      importGeneration.current += 1;
+    };
+  }, []);
   const [profiles, setProfilesLocal] = useState<ProviderModelProfile[]>(() =>
     normalizeProviderProfiles(getProviderProfiles()),
   );
@@ -89,17 +102,46 @@ export function LlmPresetsPane() {
     }
   }, [catalog, selectedProviderId]);
 
-  const commit = (next: ProviderModelProfile[]) => {
-    const normalized = normalizeProviderProfiles(next);
-    setProfilesLocal(normalized);
-    setProviderProfiles(normalized);
+  const commit = async (
+    next: ProviderModelProfile[],
+    slots = getSlotConfig(),
+  ): Promise<boolean> => {
+    if (pendingSave.current || !mounted.current) return false;
+    pendingSave.current = true;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const normalized = normalizeProviderProfiles(next);
+      const result = await setProviderProfiles(normalized, slots);
+      if (mounted.current) {
+        setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
+      }
+      if (result.unclearedProviderIds.length > 0) {
+        const message = t("settings.providerKeyCleanupFailed");
+        if (mounted.current) setSaveError(message);
+        emitToast("error", message, result.unclearedProviderIds.join(", "));
+      }
+      return mounted.current;
+    } catch {
+      const message = t("settings.saveFailed");
+      if (mounted.current) {
+        setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
+        setSaveError(message);
+      }
+      emitToast("error", message);
+      return false;
+    } finally {
+      pendingSave.current = false;
+      if (mounted.current) setSaving(false);
+    }
   };
 
-  const addModels = (
+  const prepareModels = (
     provider: Pick<ProviderCatalogEntry, "id" | "baseUrl" | "protocol">,
     rawIds: string,
     reasoningDefaults: Record<string, ReasoningEffort | undefined> = {},
-  ): string | undefined => {
+  ):
+    { profiles: ProviderModelProfile[]; firstModelRef: string } | undefined => {
     const providerId = normalizeProviderId(provider.id);
     if (!providerId) return undefined;
     const modelIds = parseModelIds(rawIds);
@@ -117,11 +159,12 @@ export function LlmPresetsPane() {
       nextProfiles = result.profiles;
       firstModelRef ??= result.modelRef;
     }
-    commit(nextProfiles);
-    return firstModelRef;
+    return firstModelRef
+      ? { profiles: nextProfiles, firstModelRef }
+      : undefined;
   };
 
-  const handleAddProvider = () => {
+  const handleAddProvider = async () => {
     const providerId = normalizeProviderId(providerDraft.providerId);
     if (!providerId || parseModelIds(providerDraft.modelIds).length === 0) {
       return;
@@ -133,7 +176,7 @@ export function LlmPresetsPane() {
       providerDraft.baseUrl.trim() || !knownConnection
         ? providerDraft.protocol
         : knownConnection.protocol;
-    const firstModelRef = addModels(
+    const prepared = prepareModels(
       {
         id: providerId,
         baseUrl,
@@ -142,24 +185,30 @@ export function LlmPresetsPane() {
       providerDraft.modelIds,
       providerDraft.reasoningDefaults,
     );
+    if (!prepared) return;
     const currentSlots = getSlotConfig();
     const nextSlots = bindFirstProviderModel(
       currentSlots,
       profiles,
-      firstModelRef,
+      prepared.firstModelRef,
       state.presets,
       Object.keys(state.llmConfig?.slots ?? {}),
     );
-    if (nextSlots !== currentSlots) setSlotConfig(nextSlots);
+    if (!(await commit(prepared.profiles, nextSlots))) return;
     setSelectedProviderId(providerId);
     setMobileDetailsOpen(true);
     setProviderDraft(EMPTY_PROVIDER_DRAFT);
     setProviderDialogOpen(false);
   };
 
-  const handleAddModels = () => {
+  const handleAddModels = async () => {
     if (!selectedProvider) return;
-    addModels(selectedProvider, modelIdsDraft, modelReasoningDraft);
+    const prepared = prepareModels(
+      selectedProvider,
+      modelIdsDraft,
+      modelReasoningDraft,
+    );
+    if (!prepared || !(await commit(prepared.profiles))) return;
     setModelReasoningDraft({});
     setModelIdsDraft("");
     setModelDialogOpen(false);
@@ -168,7 +217,7 @@ export function LlmPresetsPane() {
   const patchLocalProfile = (patch: Partial<ProviderModelProfile>) => {
     if (!selectedProvider?.localProfile) return;
     const selectedId = normalizeProviderId(selectedProvider.id);
-    commit(
+    void commit(
       profiles.map((profile) =>
         normalizeProviderId(profile.id) === selectedId
           ? { ...profile, ...patch, id: selectedId }
@@ -198,7 +247,7 @@ export function LlmPresetsPane() {
       modelName: name,
       reasoningEffort: model.reasoningEffort,
     });
-    commit(result.profiles);
+    void commit(result.profiles);
   };
 
   const handleExport = () => {
@@ -216,34 +265,52 @@ export function LlmPresetsPane() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    setImportFailed(false);
-    const reader = new FileReader();
-    reader.onerror = () => setImportFailed(true);
-    reader.onload = () => {
-      try {
-        const raw: unknown = JSON.parse(String(reader.result));
-        const imported = parseProviderImport(raw);
-        const byId = new Map(
-          normalizeProviderProfiles(profiles).map((profile) => [
-            profile.id,
-            profile,
-          ]),
-        );
-        for (const profile of imported) byId.set(profile.id, profile);
-        commit(normalizeProviderProfiles([...byId.values()]));
-      } catch {
-        setImportFailed(true);
-      }
-    };
-    reader.readAsText(file);
-    if (fileRef.current) fileRef.current.value = "";
+    event.target.value = "";
+    const generation = ++importGeneration.current;
+    const base = new Map(
+      structuredClone(getProviderProfiles()).map((profile) => [
+        profile.id,
+        profile,
+      ]),
+    );
+    const ownsRead = () =>
+      mounted.current && importGeneration.current === generation;
+    setImportError(null);
+    let imported: ProviderModelProfile[];
+    try {
+      const text = await file.text();
+      if (!ownsRead()) return;
+      imported = parseProviderImport(JSON.parse(text));
+    } catch {
+      if (ownsRead()) setImportError(t("settings.importInvalid"));
+      return;
+    }
+    const current = new Map(
+      normalizeProviderProfiles(getProviderProfiles()).map((profile) => [
+        profile.id,
+        profile,
+      ]),
+    );
+    if (
+      pendingSave.current ||
+      imported.some(
+        (profile) =>
+          !sameSettingValue(current.get(profile.id), base.get(profile.id)) &&
+          !sameSettingValue(current.get(profile.id), profile),
+      )
+    ) {
+      setImportError(t("settings.providerImportChanged"));
+      return;
+    }
+    for (const profile of imported) current.set(profile.id, profile);
+    await commit(normalizeProviderProfiles([...current.values()]));
   };
 
   return (
-    <div className="space-y-3">
+    <fieldset disabled={saving} className="min-w-0 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">
@@ -310,7 +377,7 @@ export function LlmPresetsPane() {
               }}
               onDeleteLocalProvider={() => {
                 setMobileDetailsOpen(false);
-                commit(
+                void commit(
                   profiles.filter(
                     (profile) =>
                       normalizeProviderId(profile.id) !==
@@ -330,9 +397,9 @@ export function LlmPresetsPane() {
         </main>
       </div>
 
-      {importFailed && (
+      {(importError || saveError) && (
         <p role="alert" className="text-xs text-destructive">
-          {t("settings.importInvalid")}
+          {importError || saveError}
         </p>
       )}
       <div className="flex gap-2">
@@ -366,24 +433,32 @@ export function LlmPresetsPane() {
 
       <ProviderDialog
         open={providerDialogOpen}
+        busy={saving}
+        error={saveError}
         draft={providerDraft}
-        onOpenChange={setProviderDialogOpen}
+        onOpenChange={(open) => {
+          if (!pendingSave.current) setProviderDialogOpen(open);
+        }}
         onDraftChange={setProviderDraft}
         onSubmit={handleAddProvider}
       />
       {selectedProvider && (
         <ModelDialog
           open={modelDialogOpen}
+          busy={saving}
+          error={saveError}
           providerId={selectedProvider.id}
           protocol={selectedProvider.protocol}
           reasoningDefaults={modelReasoningDraft}
           onReasoningChange={setModelReasoningDraft}
           value={modelIdsDraft}
-          onOpenChange={setModelDialogOpen}
+          onOpenChange={(open) => {
+            if (!pendingSave.current) setModelDialogOpen(open);
+          }}
           onChange={setModelIdsDraft}
           onSubmit={handleAddModels}
         />
       )}
-    </div>
+    </fieldset>
   );
 }

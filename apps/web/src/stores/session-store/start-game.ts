@@ -17,34 +17,8 @@ interface StartGameOptions {
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
   world: api.WorldRecord;
-  presets: readonly api.PresetSummary[];
-  llmConfig: api.LlmConfigResponse | null;
   plugins?: string[];
   loreOverride?: string;
-}
-
-function selectPresetId(
-  presets: readonly api.PresetSummary[],
-  llmConfig: api.LlmConfigResponse | null,
-): string | undefined {
-  const slotConfig = api.getSlotConfig();
-  const configuredSlotIds = llmConfig?.configured
-    ? Object.keys(llmConfig.slots)
-    : [];
-  const primarySlotId = configuredSlotIds[0];
-  const primaryPresetId = primarySlotId
-    ? (slotConfig[primarySlotId]?.modelRef ??
-      slotConfig[primarySlotId]?.presetId ??
-      `slot-${primarySlotId}`)
-    : undefined;
-  const defaultPresetId =
-    slotConfig.default?.modelRef ?? slotConfig.default?.presetId;
-  return (
-    primaryPresetId ??
-    defaultPresetId ??
-    presets.find((preset) => preset.isDefault)?.id ??
-    presets[0]?.id
-  );
 }
 
 async function hydrateInitialSnapshot(
@@ -94,8 +68,6 @@ export async function startGameSession({
   sessionIdRef,
   sessionGenerationRef,
   world,
-  presets,
-  llmConfig,
   plugins,
   loreOverride,
 }: StartGameOptions): Promise<void> {
@@ -110,7 +82,6 @@ export async function startGameSession({
   try {
     const session = await ds.createSession(
       world.id,
-      selectPresetId(presets, llmConfig),
       undefined,
       plugins,
       world.locale ?? i18n.language,

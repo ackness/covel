@@ -1,5 +1,5 @@
 import { SESSION_SCOPED_TABLES } from "../table-registry.js";
-import { mergeSessionPatch, normalizeSessionRecord } from "../types.js";
+import { mergeSessionPatch } from "../types.js";
 import { SessionAlreadyExistsError } from "../errors.js";
 import {
   deleteArrayRowsBySession,
@@ -15,12 +15,11 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
       if (state.sessions.has(session.id)) {
         throw new SessionAlreadyExistsError(session.id);
       }
-      state.sessions.set(session.id, normalizeSessionRecord(session));
+      state.sessions.set(session.id, session);
     },
 
     async getSession(id) {
-      const session = state.sessions.get(id);
-      return session ? normalizeSessionRecord(session) : null;
+      return state.sessions.get(id) ?? null;
     },
 
     async updateSession(id, patch) {
@@ -30,7 +29,7 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listSessions() {
-      return [...state.sessions.values()].map(normalizeSessionRecord);
+      return [...state.sessions.values()];
     },
 
     async deleteSession(id) {

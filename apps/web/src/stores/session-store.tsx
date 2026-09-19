@@ -73,7 +73,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     workspace,
   });
   usePersistExecutionStepsEffect(state, ds);
-  useMessageUiSpecHydrationEffect(sessionId, dispatch);
+  useMessageUiSpecHydrationEffect(
+    sessionId,
+    dispatch,
+    refs.sessionGenerationRef,
+  );
   useSessionSubscription({
     sessionId,
     dispatch,
@@ -81,6 +85,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     sessionIdRef: refs.sessionIdRef,
     stateRef: refs.stateRef,
     activeTurnIdRef: refs.lastBackfilledTurnIdRef,
+    sessionGenerationRef: refs.sessionGenerationRef,
   });
 
   // Two providers: the actions value is referentially stable across streaming

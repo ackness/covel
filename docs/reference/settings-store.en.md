@@ -6,7 +6,7 @@
 
 ## Schema normalization
 
-Registered non-secret settings expose the schema's parsed result during hydration, dynamic registration, `set()`, import, refresh, and rollback after a failed write. Nested `.default()` values and string trimming appear in `get()`, exports, and subscriber notifications; explicit writes persist the parsed result. Unregistered keys retain their original values.
+Registered non-secret settings expose the schema's parsed result during hydration, dynamic registration, `set()`, `setMany()`, import, refresh, and rollback after a failed write. Nested `.default()` values and string trimming appear in `get()`, exports, and subscriber notifications; explicit writes persist the parsed result. Unregistered keys retain their original values.
 
 Normalization during hydration or refresh does not independently trigger a save. Revision conflict checks still compare the original backend-confirmed snapshots, so filling defaults is not mistaken for a remote edit. Setting schemas must accept their own persisted output and normalize idempotently to support reloads, repeated registration, and synchronization.
 
@@ -72,3 +72,17 @@ Initial session selection, manual refresh, and automatic refresh load session da
 `llm.providers` is the sole model-profile store. Startup and reads do not migrate or fall back to `llm.customPresets`; old navigation aliases and unused preset-write APIs have been removed. Recreate affected development model configurations and credentials through the current provider UI. Existing obsolete entries are not automatically deleted.
 
 Each connection uses `keys.<profile.id>`. Profiles and their flattened request overlays contain no API keys. A connection does not borrow another connection's or provider family's key, and server-managed secret markers are never sent as API keys. Server presets continue using their own provider keys. The flattened `customPresets` request field remains part of the current server routing contract.
+
+## Model save and import lifetimes
+
+Connection IDs and model `ref` values must each be unique across all profiles. Settings registration and provider-file import share this validation; conflicts reject the batch without silently merging or rewriting references. The same model ID may have multiple configurations with distinct refs.
+
+`SettingsStoreApi.setMany(entries)` validates all ordinary settings before persisting one mutation. Invalid fields and secret keys reject the entire batch before writing. All dependent keys participate in revision conflict checks; persistence failure cannot commit only part of the batch. Secrets remain outside this atomicity guarantee.
+
+`setProviderProfiles(profiles, slotConfig?)` returns a Promise and saves profiles with role bindings together. Removing the last model retains its empty connection and key, while removing bindings to that model. Empty connections remain editable and round-trip through provider export/import. Explicit connection removal waits for the ordinary settings save before clearing captured keys; later connection recreation or credential changes in the same store invalidate stale cleanup. Cleanup failures return `unclearedProviderIds` and produce diagnostics without secret values plus UI feedback, without pretending the committed settings rolled back. The independent secret channel does not yet provide cross-window CAS or a transaction spanning both channels.
+
+Creation dialogs close only after persistence succeeds. Pending saves disable repeat submissions; failures retain input for retry. Import reads have request ownership: newer files supersede older reads, and unmounted panes discard results. Unrelated connection edits during reading are merged; edits to the same connection cause a conflict message and preserve current changes.
+
+Inline endpoint and model-name edits publish confirmed values only after persistence succeeds. Blur normalizes surrounding whitespace so a successful local save is not mistaken for an external edit. Persistence failure retains the editable draft.
+
+General settings import validates all selected ordinary keys before writing either channel. An invalid selected key rejects the batch instead of being skipped while dependent keys are saved. Ordinary settings and secrets still use separate persistence channels.

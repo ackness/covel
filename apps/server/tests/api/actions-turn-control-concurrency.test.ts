@@ -229,7 +229,6 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      presetId: null,
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
 

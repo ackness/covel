@@ -55,6 +55,7 @@ function setup() {
     createSession: vi.fn(async () => session),
     loadSubmittedBlocks: vi.fn(async () => ({ ids: [], values: {} })),
     loadExecutionSteps: vi.fn(async () => []),
+    listMessagesPage: vi.fn(),
     deleteSession: vi.fn(async () => undefined),
   };
   const workspace = {
@@ -87,6 +88,7 @@ beforeEach(() => {
   api.getSessionView.mockResolvedValue({
     session,
     messages: [],
+    messagesCursor: "latest-cursor",
     characters: [],
     gameState: {},
     characterSchema: null,
@@ -198,6 +200,62 @@ describe("session navigation lifecycle", () => {
       expect(handleSseEvent).not.toHaveBeenCalled();
     },
   );
+
+  it("does not rewind pagination when a duplicate older request settles late", async () => {
+    const { result, ds } = setup();
+    await act(async () => {
+      await result.current.actions.resumeSession(session);
+    });
+    const stale = deferred<unknown>();
+    ds.listMessagesPage.mockReturnValueOnce(stale.promise);
+    const delayed = result.current.actions.loadOlderMessages();
+    ds.listMessagesPage.mockResolvedValueOnce({
+      items: [],
+      nextCursor: "middle-cursor",
+    });
+    await act(async () => {
+      await result.current.actions.loadOlderMessages();
+    });
+    ds.listMessagesPage.mockResolvedValueOnce({ items: [], nextCursor: null });
+    await act(async () => {
+      await result.current.actions.loadOlderMessages();
+    });
+    await act(async () => {
+      stale.resolve({ items: [], nextCursor: "middle-cursor" });
+      await delayed;
+    });
+    expect(result.current.state.olderMessagesCursor).toBeNull();
+  });
+
+  it("drops history from a previous visit to the same session", async () => {
+    const { result, ds } = setup();
+    await act(async () => {
+      await result.current.actions.resumeSession(session);
+    });
+    const response = deferred<unknown>();
+    ds.listMessagesPage.mockReturnValueOnce(response.promise);
+    const loading = result.current.actions.loadOlderMessages();
+    act(() => result.current.actions.backToWorldSelect());
+    await act(async () => {
+      await result.current.actions.resumeSession(session);
+    });
+    await act(async () => {
+      response.resolve({
+        items: [
+          {
+            id: "obsolete-history",
+            role: "assistant",
+            content: "old",
+            createdAt: session.createdAt,
+          },
+        ],
+        nextCursor: null,
+      });
+      await loading;
+    });
+    expect(result.current.state.messages).toEqual([]);
+    expect(result.current.state.olderMessagesCursor).toBe("latest-cursor");
+  });
 
   it("does not let a slow session lookup replace a newer selection", async () => {
     const { result, ds, workspace } = setup();

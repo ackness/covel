@@ -16,10 +16,7 @@ export type { WorldRecord } from "./records/world-records.js";
 export { normalizeWorldRecord } from "./records/world-records.js";
 
 export type { SessionRecord } from "./records/session-records.js";
-export {
-  normalizeSessionRecord,
-  mergeSessionPatch,
-} from "./records/session-records.js";
+export { mergeSessionPatch } from "./records/session-records.js";
 
 export type {
   TurnResultRecord,
@@ -156,7 +153,6 @@ export interface SessionStore {
         SessionRecord,
         | "status"
         | "activePlugins"
-        | "presetId"
         | "locale"
         | "updatedAt"
         | "metadata"

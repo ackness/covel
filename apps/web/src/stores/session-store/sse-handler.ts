@@ -594,7 +594,7 @@ export function createSseEventHandler(
         break;
       }
       case "plugin-data.changed": {
-        reducePluginDataChanged(deps.dispatch, payload);
+        reducePluginDataChanged(deps.dispatch, payload, envelope.sessionId);
         break;
       }
       case "character.upserted": {

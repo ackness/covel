@@ -31,13 +31,7 @@ for (const scenario of ["edit", "delete"] as const) {
             createdAt: "2026-01-01T00:00:00Z",
           });
           if (scenario === "delete")
-            await service.createSession(
-              worldId,
-              undefined,
-              sessionId,
-              [],
-              "en-US",
-            );
+            await service.createSession(worldId, sessionId, [], "en-US");
           const gate = Promise.withResolvers<void>();
           const probe = window as unknown as {
             worldOperationStarted?: boolean;
@@ -98,7 +92,6 @@ for (const scenario of ["edit", "delete"] as const) {
                 })
               : getDataService().createSession(
                   worldId,
-                  undefined,
                   `${sessionId}-new`,
                   [],
                   "en-US",

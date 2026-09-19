@@ -47,7 +47,6 @@ const sessionState = z.looseObject({
   setupRuntimes: z.record(z.string(), setupRuntimeState),
   locale: nonEmptyString,
   activePlugins: z.array(z.string()),
-  presetId: z.string().optional(),
   runtimeModelOverrides: z.record(z.string(), z.string()).optional(),
 });
 const snapshotSession = sessionState.extend({

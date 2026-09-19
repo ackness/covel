@@ -10,6 +10,7 @@ export interface TurnCommitOutcome {
   readonly committed: boolean;
   readonly failedProposalCount: number;
   readonly snapshotFailed: boolean;
+  readonly error?: string;
 }
 
 export interface ManualTurnSummary {

@@ -362,7 +362,6 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               setupRuntimes: snapshotSession.setupRuntimes,
               locale: snapshotSession.locale,
               activePlugins: childActivePlugins,
-              presetId: snapshotSession.presetId,
               runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
               metadata: {
                 ...(snapshotSession.loreOverride !== undefined
