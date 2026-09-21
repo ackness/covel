@@ -297,13 +297,10 @@ export function StageView(props: StageViewProps): ReactElement {
     [storyText],
   );
   const allRead = Boolean(storyKey && readStoryKey === storyKey);
-  // Keep the submitted decision visible, disabled and with progress feedback,
-  // until the next narrative actually has text. This avoids a blank dialog
-  // flash while the streaming placeholder exists but has no first delta yet.
-  const waitingForNarrative =
-    executing && storyText.trim().length === 0 && readStoryKey !== undefined;
-  const choicesVisible = allRead || waitingForNarrative;
-  const dialogVisible = !choicesVisible && storyText.trim().length > 0;
+  // Hide the previous decision, including plugin surfaces, as soon as a turn
+  // starts. Keep already-read narration hidden while waiting for the new story.
+  const choicesVisible = !executing && allRead;
+  const dialogVisible = !allRead && storyText.trim().length > 0;
 
   return (
     <div
@@ -369,10 +366,8 @@ export function StageView(props: StageViewProps): ReactElement {
         onSendMessage={onSendMessage}
       />
 
-      {/* Initial generation has no previous decision panel to carry forward.
-          Surface a quiet status pill until the first narrative delta arrives;
-          subsequent turns show the disabled decision panel as feedback. */}
-      {executing && !choicesVisible && storyText.trim().length === 0 && (
+      {/* Progress replaces the decision panel until unread narration arrives. */}
+      {executing && !dialogVisible && (
         <div
           className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
           data-testid="stage-thinking"

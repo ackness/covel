@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   seedAppSettings,
   selectWorldByText,
@@ -248,7 +248,7 @@ test.describe("Stage view mode", () => {
       ).toBeTruthy();
     }
   });
-  test("plugin-owned stage UI renders evaluation probabilities and rejects stale results", async ({
+  test("plugin-owned stage UI hides during submission and rejects stale results", async ({
     page,
   }) => {
     const sessionId = await enterFreshHarukaSession(page);
@@ -419,6 +419,23 @@ test.describe("Stage view mode", () => {
         }),
       ).toBe(true);
       await page.screenshot({ path: "debugs/e2e-logs/jev-plugin-stage.png" });
+
+      const action = Promise.withResolvers<Route>();
+      await page.route("**/api/actions", (route) => action.resolve(route));
+      const panel = page.getByTestId("stage-choices");
+      await panel
+        .getByRole("button", { name: "Explore the classroom", exact: true })
+        .click();
+      const pending = await action.promise;
+      // No response or new narration yet: hide the whole previous decision,
+      // including plugin-owned HTML, without replaying the already-read story.
+      await expect(panel).toHaveCount(0);
+      await expect(host).toHaveCount(0);
+      await expect(page.getByTestId("stage-dialog")).toHaveCount(0);
+      await expect(page.getByTestId("stage-thinking")).toBeVisible();
+      await pending.fulfill({ contentType: "text/event-stream", body: "" });
+      await expect(panel).toBeVisible();
+
       turnId = "new-turn";
       await page.reload();
       await expect(frame.getByText("75%", { exact: true })).toHaveCount(0);
