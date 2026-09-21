@@ -154,6 +154,8 @@ export function createMiscApiRoutes(
             : fallbackPresetId
           : undefined;
       slotsInfo[slotId] = {
+        baseUrl:
+          preset.baseUrl ?? ai.config.providers[preset.provider]?.baseUrl,
         provider: preset.provider,
         model: preset.model,
         protocol: preset.protocol ?? "openai-chat-v1",

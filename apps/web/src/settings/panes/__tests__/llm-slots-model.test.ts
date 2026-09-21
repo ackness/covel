@@ -122,7 +122,7 @@ describe("llm slots model", () => {
       { plugin: { presetId: "existing" } },
       ["plugin", "image", "vector"],
       [
-        { id: "image", provider: "other" },
+        { id: "image", provider: "other", capability: { output: ["image"] } },
         { id: "slot-vector", provider: "not-vector" },
         { id: "provider-vector", provider: "vector" },
       ],
@@ -253,5 +253,47 @@ describe("llm slots model", () => {
         serverSlot: { provider: "deepseek" },
       }),
     ).toEqual({ plugin: { presetId: "slot-plugin" } });
+  });
+});
+
+describe("model capability compatibility", () => {
+  const presets = [
+    { id: "chat", provider: "router", protocol: "openai-chat-v1" },
+    { id: "judge", provider: "router", protocol: "openrouter-decisions-v1" },
+    { id: "image", provider: "router", capability: { output: ["image"] } },
+  ];
+  it("filters a mixed provider by the role's required capability", () => {
+    expect(
+      createProviderScopedModelChoices({
+        provider: "router",
+        presets,
+        tag: "text",
+      }).presets.map((p) => p.id),
+    ).toEqual(["chat"]);
+    expect(
+      createProviderScopedModelChoices({
+        provider: "router",
+        presets,
+        tag: "evaluation",
+      }).presets.map((p) => p.id),
+    ).toEqual(["judge"]);
+    expect(
+      createProviderScopedModelChoices({
+        provider: "router",
+        presets,
+        tag: "image",
+      }).presets.map((p) => p.id),
+    ).toEqual(["image"]);
+  });
+  it("never picks the first incompatible model when switching providers", () => {
+    expect(
+      bindSlotToProvider({
+        slotId: "intent",
+        provider: "router",
+        tag: "evaluation",
+        slotConfig: {},
+        presets,
+      }),
+    ).toEqual({ intent: { presetId: "judge" } });
   });
 });

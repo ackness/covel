@@ -1,3 +1,4 @@
+import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
@@ -68,6 +69,30 @@ export function LlmSlotCard({
     (preset) => candidateKey(preset) === selectedKey,
   );
   const missingBinding = !!selectedKey && !selectedPreset;
+  const roleTag = modelRoleTag(
+    slotId,
+    serverSlot?.tag,
+    selectedPreset
+      ? {
+          ...selectedPreset,
+          ...(capOverride?.output
+            ? { capability: { output: capOverride.output } }
+            : {}),
+        }
+      : undefined,
+  );
+  const supportsRole = (preset: (typeof allPresets)[number]) =>
+    isRoleModelCompatible(
+      {
+        ...preset,
+        ...(capOverride?.output
+          ? { capability: { output: capOverride.output } }
+          : {}),
+      },
+      roleTag,
+    );
+  const incompatibleBinding = !!selectedPreset && !supportsRole(selectedPreset);
+  const compatiblePresets = allPresets.filter(supportsRole);
   const target = resolveEffectiveModelTarget(
     selectedPreset,
     missingBinding ? undefined : serverSlot,
@@ -86,19 +111,20 @@ export function LlmSlotCard({
   const providerChoices = Array.from(
     new Set(
       [
-        ...allPresets.map((preset) => preset.provider),
+        ...compatiblePresets.map((preset) => preset.provider),
         effectiveProvider,
         serverSlot?.provider,
       ].filter(Boolean),
     ),
   );
-  const modelChoices = missingBinding
-    ? { presets: allPresets, includesServerBase: !!serverSlot }
-    : createProviderScopedModelChoices({
-        provider: effectiveProvider,
-        presets: allPresets,
-        serverSlot,
-      });
+  const modelChoices =
+    missingBinding || incompatibleBinding
+      ? { presets: compatiblePresets, includesServerBase: !!serverSlot }
+      : createProviderScopedModelChoices({
+          provider: effectiveProvider,
+          presets: compatiblePresets,
+          serverSlot,
+        });
   const isRequired = !isConfigured && slotId === "default";
   const isVirtualSlot = isDiscovered && !serverSlot;
   const hasCapOverride = !!capOverride;
@@ -112,6 +138,7 @@ export function LlmSlotCard({
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{slotId}</span>
+        <Badge variant="outline">{roleTag}</Badge>
         <div className="flex items-center gap-1">
           {isRequired && (
             <Badge variant="default" className="text-[10px]">
@@ -152,7 +179,9 @@ export function LlmSlotCard({
               {t("settings.overrideApplied")}
             </Badge>
           )}
-          {((selectedPreset && serverSlot) || missingBinding) && (
+          {((selectedPreset && serverSlot) ||
+            missingBinding ||
+            incompatibleBinding) && (
             <Button
               variant="ghost"
               size="sm"
@@ -178,11 +207,12 @@ export function LlmSlotCard({
         </div>
       </div>
 
-      {missingBinding && (
+      {(missingBinding || incompatibleBinding) && (
         <p role="alert" className="text-xs text-destructive">
           {t(
-            "settings.modelBindingMissing",
-            "The selected model is unavailable. Choose another model or reset this role.",
+            incompatibleBinding
+              ? "settings.modelBindingIncompatible"
+              : "settings.modelBindingMissing",
           )}
         </p>
       )}
@@ -200,7 +230,7 @@ export function LlmSlotCard({
                   slotId,
                   provider: event.target.value,
                   slotConfig,
-                  presets: allPresets,
+                  presets: compatiblePresets,
                   serverSlot,
                 }),
               );
@@ -225,7 +255,7 @@ export function LlmSlotCard({
           </span>
           <select
             value={
-              selectedPreset || missingBinding
+              selectedPreset || missingBinding || incompatibleBinding
                 ? selectedKey
                 : modelChoices.includesServerBase
                   ? "__base"
@@ -239,7 +269,7 @@ export function LlmSlotCard({
                 commitSlot(updated);
                 return;
               }
-              const candidate = allPresets.find(
+              const candidate = compatiblePresets.find(
                 (preset) => candidateKey(preset) === value,
               );
               if (!candidate) return;
@@ -252,11 +282,12 @@ export function LlmSlotCard({
             }}
             className="w-full bg-background border border-border px-3 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary"
           >
-            {missingBinding && (
+            {(missingBinding || incompatibleBinding) && (
               <option value={selectedKey} disabled>
                 {t(
-                  "settings.modelBindingMissing",
-                  "The selected model is unavailable. Choose another model or reset this role.",
+                  incompatibleBinding
+                    ? "settings.modelBindingIncompatible"
+                    : "settings.modelBindingMissing",
                 )}
               </option>
             )}
@@ -289,18 +320,21 @@ export function LlmSlotCard({
           {t("settings.modelLabel", "Model")}: {effectiveModel || "—"}
         </span>
         <span>
-          {selectedPreset
-            ? selectedPreset.isCustom
-              ? t("settings.localModel", "Local model")
-              : t("settings.configuredModel", "Configured model")
-            : t("settings.protocolLabel", {
-                protocol: (effectiveProtocol || "").replace("-v1", "") || "—",
-                defaultValue: "Protocol: {{protocol}}",
-              })}
+          {t("settings.protocolLabel", {
+            protocol: effectiveProtocol,
+            defaultValue: "Protocol: {{protocol}}",
+          })}
         </span>
       </div>
 
-      {effectiveModel && (
+      <p className="text-[11px] text-muted-foreground break-all">
+        {selectedPreset?.isCustom
+          ? t("settings.localModel")
+          : t("settings.fromLlmToml")}
+        {target.baseUrl ? ` · ${target.baseUrl}` : ""}
+      </p>
+
+      {effectiveModel && !incompatibleBinding && (
         <ResolvedCapability
           lookup={lookup}
           provider={effectiveProvider}
@@ -309,7 +343,7 @@ export function LlmSlotCard({
         />
       )}
 
-      {effectiveModel && (
+      {effectiveModel && !incompatibleBinding && (
         <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
@@ -343,7 +377,7 @@ export function LlmSlotCard({
           onUpdate={onUpdateCapability}
         />
       )}
-      {effectiveModel && (serverSlot?.tag ?? "text") === "text" && (
+      {effectiveModel && !incompatibleBinding && roleTag === "text" && (
         <div className="space-y-2 border-t border-border pt-2">
           <Button
             variant="outline"

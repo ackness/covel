@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { useSession } from "@/stores/session-store.js";
+import { isRoleModelCompatible } from "@/lib/model-role.js";
 import { ReasoningEffortCard } from "./llm-reasoning-effort-card.js";
 import { pruneInvalidReasoningEffortOverride } from "./llm-reasoning-effort.js";
 
@@ -165,6 +166,10 @@ export function LlmAdvancedPane({
     effectiveTarget.baseCapability,
     getCapabilityOverrides()[selectedSlot],
   );
+  const supportsTextGeneration = isRoleModelCompatible(
+    { ...effectiveTarget, capability },
+    "text",
+  );
   const overrideCount =
     Object.values(current).filter((value) => value !== undefined).length +
     [
@@ -287,50 +292,56 @@ export function LlmAdvancedPane({
         </div>
       )}
 
-      <fieldset
-        disabled={!selectedSlot}
-        className="grid grid-cols-1 gap-3 md:grid-cols-2"
-      >
-        <ModelTokenLimits
-          key={`limits:${selectedSlot}`}
-          capability={capability}
-          override={getCapabilityOverrides()[selectedSlot]}
-          onUpdate={(patch) => {
-            const overrides = getCapabilityOverrides();
-            setCapabilityOverrides({
-              ...overrides,
-              [selectedSlot]: { ...overrides[selectedSlot], ...patch },
-            });
-          }}
-        />
-        <MaxOutputTokensCard
-          override={current.maxOutputTokens}
-          defaultValue={effectiveTarget.parameterDefaults?.maxOutputTokens}
-          key={selectedSlot}
-          modelLimit={capability?.maxOutputTokens}
-          contextWindow={capability?.contextWindow}
-          onChange={(value) => setField("maxOutputTokens", value)}
-        />
-        {PARAMETER_DEFINITIONS.map((definition) => (
-          <ParameterCard
-            key={definition.field}
-            definition={{
-              ...definition,
-              defaultValue:
-                effectiveTarget.parameterDefaults?.[definition.field] ??
-                definition.defaultValue,
+      {supportsTextGeneration ? (
+        <fieldset
+          disabled={!selectedSlot}
+          className="grid grid-cols-1 gap-3 md:grid-cols-2"
+        >
+          <ModelTokenLimits
+            key={`limits:${selectedSlot}`}
+            capability={capability}
+            override={getCapabilityOverrides()[selectedSlot]}
+            onUpdate={(patch) => {
+              const overrides = getCapabilityOverrides();
+              setCapabilityOverrides({
+                ...overrides,
+                [selectedSlot]: { ...overrides[selectedSlot], ...patch },
+              });
             }}
-            override={current[definition.field]}
-            onChange={(value) => setField(definition.field, value)}
           />
-        ))}
-        <ReasoningEffortCard
-          profile={reasoningProfile}
-          defaultOverride={effectiveTarget.parameterDefaults?.reasoningEffort}
-          override={current.reasoningEffort}
-          onChange={(value) => setField("reasoningEffort", value)}
-        />
-      </fieldset>
+          <MaxOutputTokensCard
+            override={current.maxOutputTokens}
+            defaultValue={effectiveTarget.parameterDefaults?.maxOutputTokens}
+            key={selectedSlot}
+            modelLimit={capability?.maxOutputTokens}
+            contextWindow={capability?.contextWindow}
+            onChange={(value) => setField("maxOutputTokens", value)}
+          />
+          {PARAMETER_DEFINITIONS.map((definition) => (
+            <ParameterCard
+              key={definition.field}
+              definition={{
+                ...definition,
+                defaultValue:
+                  effectiveTarget.parameterDefaults?.[definition.field] ??
+                  definition.defaultValue,
+              }}
+              override={current[definition.field]}
+              onChange={(value) => setField(definition.field, value)}
+            />
+          ))}
+          <ReasoningEffortCard
+            profile={reasoningProfile}
+            defaultOverride={effectiveTarget.parameterDefaults?.reasoningEffort}
+            override={current.reasoningEffort}
+            onChange={(value) => setField("reasoningEffort", value)}
+          />
+        </fieldset>
+      ) : (
+        <p role="status" className="text-xs text-muted-foreground">
+          {t("settings.noTextGenerationParameters")}
+        </p>
+      )}
 
       <Button
         variant="outline"

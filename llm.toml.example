@@ -19,7 +19,7 @@
 #   fallback - optional target slot name; enable the target and its key
 #   tag      - text, image, evaluation, or an explicit custom tag
 #
-# Image/evaluation outputs infer their matching tag; otherwise it is text.
+# Outputs infer text, image, speech, embedding, or evaluation capability tags.
 # Fallbacks must have the same tag and support the requested operation.
 # One provider can serve chat, images, embeddings, and evaluations through
 # different slot protocols. Slots with the same provider share its key.
@@ -82,6 +82,8 @@ fallback = "story"
 # evaluation thresholds need a fixed model version.
 # https://docs.typesafe.ai/models
 #
+# Evaluation is a model capability, not a required slot name. You can name
+# roles intent, risk-check, or npc-choice and reuse one evaluation model.
 # Evaluation slots return Choice / Score / Boolean results through the
 # provider gateway.evaluate() API. They cannot replace text generation.
 # Configuring them does not automatically add evaluations to gameplay;

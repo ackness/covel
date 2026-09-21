@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveProviderSlot } from "../model-slot-helpers.js";
+import {
+  resolveDeclaredSlot,
+  isDeclaredSlotMissing,
+  resolveProviderSlot,
+} from "../model-slot-helpers.js";
 
 // The configured slots in this scenario: the user has `gpt-image` but NOT the
 // plugin's manifest default `openai-image`.
@@ -71,4 +75,29 @@ describe("resolveProviderSlot", () => {
     expect(r.missing).toBe(false);
     expect(r.isOverridden).toBe(false);
   });
+});
+
+it("marks unavailable bindings as missing without silently changing the default", () => {
+  const slots = [
+    {
+      slotId: "story",
+      label: "story",
+      tag: "text",
+      presetId: "bad",
+      preset: null,
+      isAvailable: false,
+    },
+    {
+      slotId: "plugin",
+      label: "plugin",
+      tag: "text",
+      presetId: "ok",
+      preset: null,
+      isAvailable: true,
+    },
+  ];
+  expect(resolveDeclaredSlot(slots, "story")).toBeNull();
+  expect(resolveDeclaredSlot(slots, "default")).toBeNull();
+  expect(isDeclaredSlotMissing(slots, "story")).toBe(true);
+  expect(resolveDeclaredSlot(slots, "plugin")?.slotId).toBe("plugin");
 });

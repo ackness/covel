@@ -190,3 +190,163 @@ test("same-named local and server models remain distinct in role selection and p
   await expect(storyModel).toHaveValue(`preset:${id}`);
   await expect(pluginModel).toHaveValue(`model:${id}`);
 });
+
+test("role choices respect model capabilities and show each configuration's actual connection", async ({
+  page,
+}) => {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": ONBOARDING_VERSION,
+    "ui.locale": "en-US",
+    "llm.providers": [
+      {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://local.example/v1",
+        protocol: "openai-chat-v1",
+        models: [
+          { ref: "chat", modelId: "chat-model", name: "Local chat" },
+          {
+            ref: "judge",
+            modelId: "typesafe/jev-1.13",
+            name: "Local judge",
+            protocol: "openrouter-decisions-v1",
+          },
+        ],
+      },
+    ],
+    "llm.slotConfig": {
+      story: { modelRef: "judge" },
+      intent: { modelRef: "judge" },
+    },
+  });
+  const textModel = {
+    provider: "fixture",
+    model: "base-chat",
+    protocol: "openai-chat-v1",
+    baseUrl: "https://server.example/v1",
+    capability: { input: ["text"], output: ["text"] },
+  };
+  const evaluationModel = {
+    ...textModel,
+    model: "typesafe/jev-1.13",
+    protocol: "openrouter-decisions-v1",
+    capability: { input: ["text"], output: ["evaluation"] },
+  };
+  await page.route("**/api/presets", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            ...textModel,
+            id: "slot-story",
+            name: "Configured chat",
+            enabled: true,
+            isDefault: true,
+            scope: "server",
+          },
+          {
+            ...evaluationModel,
+            id: "slot-intent",
+            name: "Configured judge",
+            enabled: true,
+            isDefault: false,
+            scope: "server",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/llm-config", (route) =>
+    route.fulfill({
+      json: {
+        configured: true,
+        providers: ["fixture"],
+        slots: {
+          story: { ...textModel, tag: "text" },
+          intent: { ...evaluationModel, tag: "evaluation" },
+        },
+      },
+    }),
+  );
+  await page.route("**/api/model-db/lookup**", (route) => {
+    const evaluation = route
+      .request()
+      .url()
+      .includes("openrouter-decisions-v1");
+    return route.fulfill({
+      json: {
+        found: false,
+        source: "protocol-default",
+        pricingKind: "unknown",
+        candidates: [],
+        reasoning: null,
+        capability: {
+          input: ["text"],
+          output: [evaluation ? "evaluation" : "text"],
+        },
+      },
+    });
+  });
+  await page.goto("/session");
+  await page
+    .getByRole("button", { name: /Configure Providers & Models/i })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("button", { name: "Model Roles", exact: true })
+    .click();
+  const story = dialog.getByRole("group", { name: "story", exact: true });
+  await expect(story.getByRole("alert")).toContainText(
+    "does not support this role",
+  );
+  const storyPicker = story.getByRole("combobox", {
+    name: "Model configuration",
+    exact: true,
+  });
+  await expect(
+    storyPicker.getByRole("option", { name: "Local judge", exact: true }),
+  ).toHaveCount(0);
+  await storyPicker.selectOption({ label: "Local chat" });
+  await expect(story.getByRole("alert")).toHaveCount(0);
+  await expect(story.getByText(/https:\/\/local.example\/v1/)).toBeVisible();
+  const intent = dialog.getByRole("group", { name: "intent", exact: true });
+  const intentPicker = intent.getByRole("combobox", {
+    name: "Model configuration",
+    exact: true,
+  });
+  await expect(
+    intentPicker.getByRole("option", { name: "Local chat", exact: true }),
+  ).toHaveCount(0);
+  await expect(intentPicker).toHaveValue("model:judge");
+  await expect(intent.getByText("evaluation", { exact: true })).toBeVisible();
+  await expect(
+    intent.getByRole("button", { name: /Generation parameters/ }),
+  ).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Generation", exact: true }).click();
+  await dialog
+    .getByRole("combobox", { name: "Select Slot", exact: true })
+    .selectOption("intent");
+  await expect(dialog.getByRole("status")).toContainText(
+    "This model does not generate text",
+  );
+  await expect(dialog.getByRole("slider")).toHaveCount(0);
+  await dialog
+    .getByRole("button", { name: "Providers & Models", exact: true })
+    .click();
+  await dialog.getByRole("button", { name: /fixture.*4 models/ }).click();
+  await expect(
+    dialog.getByText("Connection edits apply to local models.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    dialog
+      .getByRole("group", { name: "Configured chat", exact: true })
+      .getByText(/https:\/\/server.example\/v1/),
+  ).toBeVisible();
+  await expect(
+    dialog
+      .getByRole("group", { name: "Local judge", exact: true })
+      .getByText(/https:\/\/local.example\/v1/),
+  ).toBeVisible();
+});

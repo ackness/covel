@@ -2,6 +2,8 @@
 
 Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批量返回分类、评分和布尔概率。它使用现有 provider、preset、slot、密钥绑定、请求记录与生命周期钩子。原生支持 TypeSafe System One、OpenRouter Decisions 和 Vercel AI Gateway Evaluation，不依赖任何供应商 SDK 或 AI SDK。协议由配置选择，不通过服务商名称或模型 ID 判断。
 
+`evaluation` 表示模型能力类型，不限定用途名称。可定义 `[covel.intent]`、`[covel.risk-check]` 等用途并绑定同一个评估模型；调用时通过 `presetId` 选择用途。设置中的文本用途会过滤评估模型，服务端也拒绝不兼容的显式绑定。
+
 ## 配置与调用
 
 设置 → 服务商与模型：像其他模型一样填写 Provider、Base URL、API Key 和模型 ID。Provider 的协议作为默认值；添加模型时或模型行内可单独选择协议，同一连接可同时包含聊天模型与评估模型。模型级协议覆盖会随保存、复制、导入导出和请求 overlay 保留。删除覆盖（选择“使用服务商协议”）后恢复继承。评估模型作为首个模型添加时，不自动绑定剧情或插件文本用途。

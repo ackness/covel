@@ -70,6 +70,42 @@ beforeEach(async () => {
 });
 
 describe("PluginListPanel runtime model overrides", () => {
+  it("shows an unavailable default without displaying another role as its model", () => {
+    render(
+      <PluginListPanel
+        plugins={[fixturePlugin]}
+        sessionId={session.id}
+        runtimeModelOverrides={{ "fixture/runtime": "default" }}
+        resolvedSlots={[
+          {
+            slotId: "story",
+            presetId: "bad",
+            preset: null,
+            label: "story",
+            tag: "text",
+            isAvailable: false,
+          },
+          {
+            slotId: "text",
+            presetId: "ok",
+            preset: null,
+            label: "text",
+            tag: "text",
+            serverModel: "other-model",
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Customize plugins and advanced settings",
+      }),
+    );
+    fireEvent.click(screen.getByText("Fixture"));
+    expect(screen.getByRole("status").textContent).toContain("default");
+    expect(screen.getByRole("status").textContent).not.toContain("other-model");
+  });
+
   it("persists the latest full map and rolls back a failed latest change", async () => {
     let resolveFirst!: (session: SessionRecord) => void;
     api.updateSession
@@ -90,6 +126,14 @@ describe("PluginListPanel runtime model overrides", () => {
         sessionId={session.id}
         runtimeModelOverrides={{ "fixture/runtime": "text" }}
         resolvedSlots={[
+          {
+            slotId: "broken",
+            presetId: "bad",
+            preset: null,
+            label: "broken",
+            tag: "text",
+            isAvailable: false,
+          },
           {
             slotId: "text",
             presetId: "",
@@ -122,6 +166,7 @@ describe("PluginListPanel runtime model overrides", () => {
     );
     fireEvent.click(screen.getByText("Fixture"));
     const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(screen.queryByRole("option", { name: /^broken$/ })).toBeNull();
     fireEvent.change(select, { target: { value: "fast" } });
     await waitFor(() => expect(api.updateSession).toHaveBeenCalledTimes(1));
     fireEvent.change(select, { target: { value: "quality" } });

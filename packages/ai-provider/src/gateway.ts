@@ -108,10 +108,33 @@ export function createGateway(deps: GatewayDependencies) {
   function resolveTextTargets(
     presetId: string | undefined,
     options: GatewayOptions | undefined,
+    requestedId?: string,
   ): ResolvedTarget[] {
-    return options?.allowFallback === false
-      ? [deps.presetRegistry.resolveTextTarget({ presetId })]
-      : deps.presetRegistry.resolveTextTargetChain({ presetId });
+    const primary = deps.presetRegistry.resolveTextTarget({ presetId });
+    if (options?.allowFallback === false) return [primary];
+
+    // Fallback belongs to the requested role, independent of its selected model.
+    // Resolve each fallback role through this request's bindings as well.
+    const roles = Object.values(deps.slotRegistry?.listSlots() ?? {});
+    const baseId = requestedId
+      ? deps.slotRegistry?.resolveSlot(requestedId)
+      : undefined;
+    const policy = deps.presetRegistry.resolveTextTargetChain({
+      presetId: baseId ?? presetId,
+    });
+    const seen = new Set([primary.preset?.id]);
+    const targets = [primary];
+    for (const fallback of policy.slice(1)) {
+      const role = roles.find((slot) => slot.presetId === fallback.preset?.id);
+      const id = role
+        ? resolveSlotOrPassthrough(role.slotId, role.tag, options)
+        : fallback.preset?.id;
+      const target = deps.presetRegistry.resolveTextTarget({ presetId: id });
+      if (seen.has(target.preset?.id)) continue;
+      seen.add(target.preset?.id);
+      targets.push(target);
+    }
+    return targets;
   }
 
   async function evaluate<const Q extends EvaluationQuestions>(
@@ -123,7 +146,8 @@ export function createGateway(deps: GatewayDependencies) {
         presetId: input.presetId ?? "evaluation",
         mode: "evaluate",
         fallbackTag: "evaluation",
-        resolveTargets: (presetId) => resolveTextTargets(presetId, options),
+        resolveTargets: (presetId) =>
+          resolveTextTargets(presetId, options, input.presetId ?? "evaluation"),
         execute: async (target, resolved) => {
           options?.signal?.throwIfAborted();
           const modes =
@@ -177,7 +201,8 @@ export function createGateway(deps: GatewayDependencies) {
         presetId: input.presetId,
         mode: "text",
         fallbackTag: "text",
-        resolveTargets: (presetId) => resolveTextTargets(presetId, options),
+        resolveTargets: (presetId) =>
+          resolveTextTargets(presetId, options, input.presetId),
         execute: async (target, resolved) => {
           const result = await resolved.adapter.generateText(
             configWithSignal(resolved.config, options, {
@@ -227,7 +252,8 @@ export function createGateway(deps: GatewayDependencies) {
         // resolver has no separate "object" tag.
         mode: "object",
         fallbackTag: "text",
-        resolveTargets: (presetId) => resolveTextTargets(presetId, options),
+        resolveTargets: (presetId) =>
+          resolveTextTargets(presetId, options, input.presetId),
         execute: async (target, resolved) => {
           const result = await resolved.adapter.generateObject(
             configWithSignal(resolved.config, options, {
@@ -294,6 +320,7 @@ export function createGateway(deps: GatewayDependencies) {
     const targets = resolveTextTargets(
       resolveSlotOrPassthrough(input.presetId, "text", options),
       options,
+      input.presetId,
     ).map((target, index) =>
       applyRequestCapabilityOverlay(
         target,

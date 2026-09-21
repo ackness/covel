@@ -1,4 +1,4 @@
-import type { LlmModelBinding } from "@covel/shared";
+import { modelOutputTag, type LlmModelBinding } from "@covel/shared";
 /**
  * Per-request overlay for the preset registry.
  *
@@ -221,11 +221,7 @@ export function supportedModesForCapability(
 }
 
 export function tagForCapability(capability: ModelCapability): string {
-  if (capability.output.includes("evaluation")) return "evaluation";
-  if (capability.output.includes("image")) return "image";
-  if (capability.output.includes("audio")) return "speech";
-  if (capability.output.includes("embedding")) return "embedding";
-  return "text";
+  return modelOutputTag(capability.output);
 }
 
 /**

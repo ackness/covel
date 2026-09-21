@@ -141,7 +141,9 @@ export function useRuntimeBindings(
     const defaults = autoAssignRuntimeBindings(
       bindings,
       runtimeTargets,
-      resolvedSlots.filter((slot) => slot.tag === "text"),
+      resolvedSlots.filter(
+        (slot) => slot.tag === "text" && slot.isAvailable !== false,
+      ),
     );
     if (Object.keys(defaults).length === 0) return;
 
@@ -158,9 +160,13 @@ export function useRuntimeBindings(
 
   const compatibleSlots = useCallback(
     (tag: string): ResolvedSlot[] => {
-      const byTag = resolvedSlots.filter((s) => s.tag === tag);
+      const byTag = resolvedSlots.filter(
+        (s) => s.tag === tag && s.isAvailable !== false,
+      );
       if (byTag.length > 0) return byTag;
-      const byName = resolvedSlots.filter((s) => s.slotId === tag);
+      const byName = resolvedSlots.filter(
+        (s) => s.slotId === tag && s.isAvailable !== false,
+      );
       return byName;
     },
     [resolvedSlots],
@@ -170,12 +176,11 @@ export function useRuntimeBindings(
     if (!runtimesReady) return false;
     return entries.every((e) => {
       const effectiveSlotName = e.slotName || e.defaultSlot;
-      return resolvedSlots.some(
-        (slot) =>
-          slot.tag === "text" &&
-          (effectiveSlotName === "default" ||
-            slot.slotId === effectiveSlotName),
-      );
+      const slot =
+        effectiveSlotName === "default"
+          ? resolvedSlots[0]
+          : resolvedSlots.find((slot) => slot.slotId === effectiveSlotName);
+      return slot?.tag === "text" && slot.isAvailable !== false;
     });
   }, [entries, resolvedSlots, runtimesReady]);
 
@@ -197,7 +202,9 @@ export function useRuntimeBindings(
       const next = autoAssignRuntimeBindings(
         prev,
         runtimeTargets,
-        resolvedSlots.filter((slot) => slot.tag === "text"),
+        resolvedSlots.filter(
+          (slot) => slot.tag === "text" && slot.isAvailable !== false,
+        ),
       );
       if (sessionId) persist(sessionId, next);
       return next;

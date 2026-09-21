@@ -8,6 +8,7 @@ import {
 } from "@/services/api.js";
 
 export interface EffectiveModelTarget {
+  baseUrl?: string;
   provider: string;
   model: string;
   protocol: string;
@@ -18,6 +19,7 @@ export interface EffectiveModelTarget {
 export function resolveEffectiveModelTarget(
   boundModel:
     | {
+        baseUrl?: string;
         provider: string;
         model: string;
         protocol?: string;
@@ -32,6 +34,7 @@ export function resolveEffectiveModelTarget(
   const provider = target?.provider ?? "";
   return {
     provider,
+    baseUrl: target?.baseUrl,
     model: target?.model ?? "",
     protocol:
       target?.protocol ??

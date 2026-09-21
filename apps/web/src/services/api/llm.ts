@@ -46,6 +46,7 @@ export interface ModelCapabilityInfo {
 }
 
 export interface LlmSlotInfo {
+  baseUrl?: string;
   provider: string;
   model: string;
   protocol: string;

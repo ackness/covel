@@ -17,6 +17,7 @@ const modelSettings = vi.hoisted(() => ({
     provider: string;
     baseUrl: string;
     model: string;
+    protocol?: string;
     reasoningEffort?: "disabled" | "automatic";
   }>,
 }));
@@ -29,6 +30,9 @@ vi.mock("@/settings/use-settings.js", () => ({
 }));
 
 vi.mock("@/services/api.js", () => ({
+  lookupModelCapabilityDetails: vi.fn(async () => {
+    throw new Error("No catalogue in this fixture");
+  }),
   getSlotConfig: () => modelSettings.slotConfig,
   getCustomPresets: () => modelSettings.customPresets,
   slotBindingId: (
@@ -181,5 +185,34 @@ describe("useSlotConfig", () => {
     expect(formatSlotLabel(result.current.resolvedSlots[0])).toBe(
       "anthropic · claude-new",
     );
+  });
+});
+
+describe("role capability classification", () => {
+  it("classifies arbitrary evaluation roles and excludes incompatible core bindings", () => {
+    modelSettings.slotConfig = {
+      "npc-choice": { modelRef: "judge" },
+      story: { modelRef: "judge" },
+    };
+    modelSettings.customPresets = [
+      {
+        ...preset("judge", "openrouter", "typesafe/jev-1.13"),
+        protocol: "openrouter-decisions-v1",
+      },
+    ];
+    modelSettings.values.set("llm.slotConfig", modelSettings.slotConfig);
+    const { result } = renderHook(() => useSlotConfig([]));
+    expect(result.current.resolvedSlots).toEqual([
+      expect.objectContaining({
+        slotId: "npc-choice",
+        tag: "evaluation",
+        isAvailable: true,
+      }),
+      expect.objectContaining({
+        slotId: "story",
+        tag: "text",
+        isAvailable: false,
+      }),
+    ]);
   });
 });

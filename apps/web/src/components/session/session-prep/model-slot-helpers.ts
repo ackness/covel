@@ -4,16 +4,18 @@ export function resolveDeclaredSlot(
   resolvedSlots: readonly ResolvedSlot[],
   slotId: string,
 ): ResolvedSlot | null {
-  if (slotId === "default") return resolvedSlots[0] ?? null;
-  return resolvedSlots.find((slot) => slot.slotId === slotId) ?? null;
+  const slot =
+    slotId === "default"
+      ? resolvedSlots[0]
+      : resolvedSlots.find((slot) => slot.slotId === slotId);
+  return slot?.isAvailable === false ? null : (slot ?? null);
 }
 
 export function isDeclaredSlotMissing(
   resolvedSlots: readonly ResolvedSlot[],
   slotId: string,
 ): boolean {
-  if (slotId === "default") return resolvedSlots.length === 0;
-  return !resolvedSlots.some((slot) => slot.slotId === slotId);
+  return resolveDeclaredSlot(resolvedSlots, slotId) === null;
 }
 
 export interface ProviderSlotState {

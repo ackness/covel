@@ -56,11 +56,16 @@ export function ProviderDetails({
             <h4 className="truncate font-mono text-base font-semibold">
               {provider.id}
             </h4>
-            <Badge variant="outline" className="text-[9px]">
-              {isServerProvider
-                ? t("settings.fromLlmToml", "llm.toml")
-                : t("settings.localProvider", "Local")}
-            </Badge>
+            {isServerProvider && (
+              <Badge variant="outline" className="text-[9px]">
+                {t("settings.fromLlmToml", "llm.toml")}
+              </Badge>
+            )}
+            {localProfile && (
+              <Badge variant="outline" className="text-[9px]">
+                {t("settings.localProvider", "Local")}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 text-[10px] text-muted-foreground">
             {t("settings.modelIdOpaqueHint")}
@@ -85,6 +90,9 @@ export function ProviderDetails({
         showPresetTests={false}
       />
 
+      <p className="text-[11px] text-muted-foreground">
+        {t("settings.providerConnectionScope")}
+      </p>
       <div className="grid grid-cols-1 gap-2">
         <label className="space-y-1">
           <span className="text-[10px] text-muted-foreground">
@@ -143,6 +151,7 @@ export function ProviderDetails({
               modelId={model.model}
               name={model.name}
               presetId={model.id}
+              baseUrl={model.baseUrl}
               capability={model.capability}
               source="server"
             />
@@ -165,6 +174,7 @@ export function ProviderDetails({
               modelId={model.modelId}
               name={model.name}
               presetId={model.ref}
+              baseUrl={localProfile.baseUrl}
               source="local"
               reasoningEffort={model.reasoningEffort}
               onNameChange={(name) =>
@@ -203,6 +213,7 @@ function ProviderModelRow({
   provider,
   protocol,
   modelProtocol,
+  baseUrl,
   onProtocolChange,
   modelId,
   name,
@@ -217,6 +228,7 @@ function ProviderModelRow({
 }: {
   provider: string;
   protocol: string;
+  baseUrl?: string;
   modelProtocol?: string;
   onProtocolChange?: (value: string | undefined) => void;
   modelId: string;
@@ -251,6 +263,10 @@ function ProviderModelRow({
               {modelId}
             </div>
           )}
+          <p className="font-mono text-[10px] text-muted-foreground break-all">
+            {protocol}
+            {baseUrl ? ` · ${baseUrl}` : ""}
+          </p>
           <ModelCapabilitySummary
             provider={provider}
             modelId={modelId}

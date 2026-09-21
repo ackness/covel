@@ -42,6 +42,9 @@ export function ProviderSlotSetting({
     override,
     isMissing: isMissingDeclaredSlot,
   });
+  const availableSlots = resolvedSlots.filter(
+    (slot) => slot.isAvailable !== false,
+  );
   const label = resolveI18n(setting.label, i18n.language) || setting.key;
   const change = async (next: string) => {
     if (next) await setValue(next);
@@ -77,12 +80,12 @@ export function ProviderSlotSetting({
           {t("plugin.useRuntimeDefault", { slot: defaultSlot ?? "default" })}
         </option>
         {override &&
-          !resolvedSlots.some((slot) => slot.slotId === override) && (
+          !availableSlots.some((slot) => slot.slotId === override) && (
             <option value={override}>
               {t("plugin.runtimeModelMissing", { slot: override })}
             </option>
           )}
-        {resolvedSlots.map((slot) => (
+        {availableSlots.map((slot) => (
           <option key={slot.slotId} value={slot.slotId}>
             {formatSlotBindingLabel(slot)}
           </option>

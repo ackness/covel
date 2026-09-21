@@ -12,6 +12,7 @@
  * entry for a new `ProviderProtocol` member is a *compile error*.
  */
 
+import { protocolOutputModalities } from "@covel/shared";
 import { createEvaluationAdapter } from "./adapters/evaluation.js";
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
 import { createOpenAiChatAdapter } from "./adapters/openai-chat.js";
@@ -67,7 +68,7 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
     cacheStrategy: "none",
     capabilityDefaults: {
       input: ["text"],
-      output: ["evaluation"],
+      output: protocolOutputModalities("typesafe-systemone-v1"),
       features: [],
     },
   },
@@ -76,7 +77,7 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
     cacheStrategy: "none",
     capabilityDefaults: {
       input: ["text"],
-      output: ["evaluation"],
+      output: protocolOutputModalities("openrouter-decisions-v1"),
       features: [],
     },
   },
@@ -85,7 +86,7 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
     cacheStrategy: "none",
     capabilityDefaults: {
       input: ["text"],
-      output: ["evaluation"],
+      output: protocolOutputModalities("vercel-evaluation-v4"),
       features: [],
     },
   },
