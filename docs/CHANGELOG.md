@@ -16,6 +16,7 @@ This release adds configurable evaluation models and public plugin services, kee
 ### Fixed
 
 - **Model roles respect provider capabilities.** Text, image, and evaluation bindings use consistent capability checks in settings, preparation, session overrides, connection probes, and runtime dispatch. Clearing a role restores its current configured default; evaluation protocol selection is consistent across provider editors.
+- **DeepSeek Flash tool requests honor thinking mode.** The current `deepseek-flash` model supports reasoning controls without a model-database entry. Default and explicit thinking requests omit incompatible forced tool choices, while non-thinking plugin tasks retain their required tools.
 - **Opening allocation preserves default character creation (#77).** Identity/personality creation runs first, allocation appears in the same character-creation turn, and accepted points update the existing player. Worlds without allocatable attributes skip allocation. Restart and retry markers preserve the accepted allocation.
 - **Stage decisions wait for execution to finish.** Quick replies and plugin recommendations stay hidden during the active turn and return with the committed result, preventing actions based on an earlier scene.
 - **Demo plugins stay disabled by default.** `role:demo` packages do not enter default selections through broad tags, capabilities, or a world without selection policy. Players and explicit world/pack declarations can still enable them. Jev demo no longer carries the automatic dialogue-mode tag.

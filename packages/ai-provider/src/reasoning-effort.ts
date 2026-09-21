@@ -62,7 +62,7 @@ export function resolveReasoningEffortProfile(
   if (family === "deepseek") {
     if (
       !advertisesReasoning &&
-      !/deepseek-(?:v4|chat|reasoner|r1)/.test(model)
+      !/deepseek-(?:v4|flash|chat|reasoner|r1)/.test(model)
     ) {
       return null;
     }
