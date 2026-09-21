@@ -171,9 +171,9 @@ ui:
 `/api/ui-specs` 聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`），spec 是**不可信的插件输入**：
 
 - `specVersion` 可省略（按 v1 处理）。声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`，见 `apps/server/src/routes/misc-api/ui-spec-schema.ts`）会被拒绝，旧服务端遇到新插件包时显式报错而非渲染坏面板。
-- 每个 spec 必须声明 `view`（对象），否则校验失败。
+- 每个 spec 必须声明 `view`（对象）或 `webview`（HTML 文档），两者互斥，否则校验失败。
 - `view` 会递归校验 `component` / `type`、`children`、命名 `slots`、`repeat` 与 `on` / `watch` action binding 包络。组件名必须来自共享的 `PLUGIN_UI_COMPONENT_NAMES`；未知组件在服务端即产生带路径的诊断。`props` 和 directive 表达式保持开放，由组件和 json-render 在运行时解析，以便插件扩展数据形状。
-- loader 用 `_componentPath` 保留非 JSON 声明的位置，以便 API 返回具体诊断；它不是有效 UI spec，也不是 Web 插件执行入口。含该字段的 spec 会被剔除，即使同时声明了 `view`。需要自定义能力时，应组合 catalog 组件并绑定 framework action；不要依赖浏览器动态执行插件 `.tsx` / `.js`。同一插件的其它合法 JSON spec 继续显示。
+- loader 用 `_componentPath` 保留非 JSON 声明的位置，以便 API 返回具体诊断；它不是有效 UI spec，也不是 Web 插件执行入口。含该字段的 spec 会被剔除，即使同时声明了 `view`。需要自定义组件时，可声明 `webview.entry` 并提供独立 HTML；也可组合 catalog 组件并绑定 framework action。浏览器不直接导入插件 `.tsx` / `.js` 模块。同一插件的其它合法 JSON spec 继续显示。
 - **单个坏 spec 不污染整个响应**：校验失败的 spec 从对应 slot 中剔除，并在响应顶层 `diagnostics[]` 中给出具体诊断（`{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`）——指明哪个插件、哪个字段、什么问题，而非泛泛的 "Invalid panel spec"。
 - 前端（`right-panel.tsx`）在 dev 模式下把这些诊断打到 console；`plugin-panel.tsx` 的本地兜底消息也会带上 spec 名与具体原因（缺 `view` / `view` 非对象 / 转换失败）。
 
@@ -509,3 +509,7 @@ Story messages precede same-turn plugin message surfaces even when streaming or 
 The story composer can submit queued selections without additional text. Both the main send button and the selection bar combine queued actions with typed text. Rejected interaction RPCs keep the form editable and never fall back to sending its fields as an unvalidated story message.
 
 Responsive panel resize callbacks use the supplied dimensions, avoiding imperative constraint queries during panel registration changes. Typography uses active theme tokens for both light and dark prose.
+
+## 插件自带组件与舞台挂载
+
+JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用隔离容器与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。

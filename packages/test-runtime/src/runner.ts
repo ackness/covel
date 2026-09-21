@@ -129,7 +129,7 @@ export async function runRuntimeDebug(
   const store = createMemoryStore();
   const mediaStore = options.mediaStore ?? createMemoryMediaStore();
 
-  const { discovery, manifests, loadedCache, entryTools } =
+  const { discovery, manifests, loadedCache, entryTools, services } =
     await loadRuntimeBundle({
       pluginsDir,
       pluginId,
@@ -177,6 +177,7 @@ export async function runRuntimeDebug(
   const deps = {
     loadRuntime: async (manifest) => loadedCache.get(manifest.name),
     llm: liveAdapters?.llm ?? llm,
+    services,
     gateway: liveAdapters?.gateway ?? makeGateway(options),
     utils: PLUGIN_UTILS,
     mediaStore,

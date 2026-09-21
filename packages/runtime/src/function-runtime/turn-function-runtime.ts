@@ -371,6 +371,16 @@ export async function executeFunctionRuntime({
       ? makeRevocableCapability(progressHandle, isRevoked, "progress")
       : undefined,
   };
+  const serviceClient = deps.services?.createClient({
+    sessionId: input.sessionId,
+    pluginId: manifest.pluginId,
+    signal: handlerAbort.signal,
+    gateway: revocable.gateway,
+    utils: revocable.utils,
+  });
+  const services = serviceClient
+    ? makeRevocableCapability(serviceClient, isRevoked, "services")
+    : undefined;
   // ponytail: revocation is checked at call entry, so an effect already
   // in flight when the deadline fires still lands. Closing that needs the
   // deadline signal threaded into every primitive (or worker isolation) —
@@ -397,6 +407,7 @@ export async function executeFunctionRuntime({
       locale: input.locale,
       store: revocable.store,
       tools: runtimeTools.tools,
+      ...(services ? { services } : {}),
       ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
       ...(exportSlots && Object.keys(exportSlots).length > 0
         ? { exports: exportSlots }

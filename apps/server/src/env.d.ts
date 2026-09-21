@@ -171,6 +171,8 @@ declare module "hono" {
      * entry). Optional so hand-built test DI need not wire it.
      */
     hasPendingPluginEntry?: (pluginId: string) => boolean;
+    /** Public services exported by active, approved plugin entries. */
+    pluginServices?: import("@covel/runtime").PluginServiceRegistry;
     /**
      * Session event directory (unified event emission layer, plan task 4/5).
      * Threaded into `TurnExecutorDeps.eventDirectory` at each `executeTurn`

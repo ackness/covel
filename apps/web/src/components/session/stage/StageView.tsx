@@ -37,6 +37,7 @@ import { StageBackdrop } from "./StageBackdrop.js";
 import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
+import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import { resolveStageParagraphSpeakers } from "./stage-dialogue-selectors.js";
@@ -273,6 +274,23 @@ export function StageView(props: StageViewProps): ReactElement {
       ),
     [promptsNamespace, storyTurnId, props.executionSteps, messages],
   );
+  const stageTurnIds = useMemo(() => {
+    const resolveTurn = pluginMessageTurnResolver(
+      props.executionSteps,
+      messages,
+    );
+    return [
+      ...new Set(
+        [
+          storyTurnId,
+          ...props.executionSteps.map((step) => step.turnId),
+        ].filter(
+          (id): id is string =>
+            typeof id === "string" && resolveTurn(id) === storyTurnId,
+        ),
+      ),
+    ];
+  }, [storyTurnId, props.executionSteps, messages]);
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
   const fallbackRecap = useMemo(
     () => deriveDecisionRecapFallback(storyText),
@@ -328,6 +346,19 @@ export function StageView(props: StageViewProps): ReactElement {
         />
       )}
       <StageChoices
+        extensions={(choices) => (
+          <StagePluginPanels
+            sessionId={session.id}
+            activePluginIds={sessionPlugins
+              .filter((plugin) => plugin.active)
+              .map((plugin) => plugin.id)}
+            choices={choices.map(({ id, label }) => ({ id, text: label }))}
+            turnIds={stageTurnIds}
+            turnId={storyTurnId}
+            executing={executing}
+            onSendMessage={onSendMessage}
+          />
+        )}
         visible={choicesVisible}
         executing={executing}
         interactionChoices={interactionChoices}

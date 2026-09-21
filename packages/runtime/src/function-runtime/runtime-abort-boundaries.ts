@@ -1,6 +1,8 @@
 import type {
   PluginRuntimeGateway,
   PluginRuntimeUtils,
+  PluginEvaluationInput,
+  EvaluationQuestions,
 } from "@covel/shared/plugin-runtime";
 import { combineAbortSignals } from "../turn-executor/turn-control.js";
 
@@ -36,6 +38,13 @@ export function withDefaultGatewaySignal(
     },
   };
 
+  if (gateway.evaluate) {
+    const evaluate = gateway.evaluate.bind(gateway);
+    facade.evaluate = <const Q extends EvaluationQuestions>(
+      input: PluginEvaluationInput<Q>,
+    ) =>
+      evaluate<Q>({ ...input, signal: signalFor(defaultSignal, input.signal) });
+  }
   if (gateway.generateImage) {
     const generateImage = gateway.generateImage.bind(gateway);
     facade.generateImage = (input) =>

@@ -1,0 +1,17 @@
+{
+  "name": "@covel/plugin-jev-choice-demo",
+  "version": "0.0.37",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@covel/shared": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@covel/plugin-loader": "workspace:*",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font:
+          13px/1.5 system-ui,
+          sans-serif;
+        color: #d5e6e7;
+      }
+      body {
+        margin: 0;
+        background: transparent;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+      h3 {
+        margin: 0;
+        font-size: 13px;
+        color: #6ac9d0;
+      }
+      small,
+      #status {
+        color: #91a5ad;
+      }
+      #list {
+        display: grid;
+        gap: 6px;
+      }
+      .option {
+        border: 1px solid #354951;
+        border-radius: 5px;
+        padding: 8px 10px;
+      }
+      .option.selected {
+        border-color: #52bbc5;
+        background: #21474c50;
+      }
+      .line {
+        display: flex;
+        align-items: start;
+        gap: 10px;
+      }
+      .text {
+        flex: 1;
+      }
+      .score {
+        color: #6dd1d9;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      progress {
+        width: 100%;
+        height: 4px;
+        display: block;
+        margin-top: 6px;
+        accent-color: #62ced5;
+      }
+      #note {
+        margin: 8px 0 0;
+        font-size: 11px;
+        color: #82969d;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h3 id="title"></h3>
+      <small id="model"></small>
+    </header>
+    <p id="status" role="status"></p>
+    <div id="list"></div>
+    <p id="note"></p>
+    <script>
+      const el = (id) => document.getElementById(id);
+      window.covel.subscribe(
+        ({ data = {}, context = {}, locale = "zh", locked = false }) => {
+          const zh = locale.startsWith("zh");
+          el("title").textContent = zh
+            ? "Jev · 选项推荐 Demo"
+            : "Jev · Choice recommendation demo";
+          el("note").textContent = zh
+            ? "模型对候选选项的推荐分布，不代表行动成功率；不会自动替你选择。"
+            : "Model preference across candidates, not action success odds. Your choice stays yours.";
+          el("list").replaceChildren();
+          el("model").textContent = "";
+          const record = data.current;
+          const currentOptions = (context.choices || []).filter((choice) =>
+            choice.id.startsWith("prompt:"),
+          );
+          const stale =
+            context.surface === "stage" &&
+            (!context.turnIds?.includes(record?.turnId) ||
+              currentOptions.length !== record?.options?.length ||
+              record.options.some(
+                (option) =>
+                  !currentOptions.some(
+                    (current) =>
+                      current.id === option.id && current.text === option.text,
+                  ),
+              ));
+          if (!record || locked || stale) {
+            el("status").textContent = zh
+              ? "等待当前回合的评估结果…"
+              : "Waiting for this turn's evaluation…";
+            return;
+          }
+          if (record.status !== "ready") {
+            const reasons = zh
+              ? {
+                  unconfigured: "请在模型设置中绑定 evaluation 用途。",
+                  unsupported: "当前宿主未提供评估能力。",
+                  failed: "本次评估不可用，可继续选择行动。",
+                }
+              : {
+                  unconfigured: "Bind an evaluation model role in settings.",
+                  unsupported: "Evaluation is unavailable in this host.",
+                  failed:
+                    "Evaluation unavailable. You can still choose an action.",
+                };
+            el("status").textContent = reasons[record.reason] || reasons.failed;
+            return;
+          }
+          el("model").textContent = record.model;
+          el("status").textContent = "";
+          const percent = new Intl.NumberFormat(locale, {
+            style: "percent",
+            maximumFractionDigits: 1,
+          });
+          for (const option of record.options) {
+            const row = document.createElement("div");
+            row.className =
+              "option" + (option.id === record.selectedId ? " selected" : "");
+            const line = document.createElement("div");
+            line.className = "line";
+            const label = document.createElement("span");
+            label.className = "text";
+            label.textContent = option.text;
+            const score = document.createElement("span");
+            score.className = "score";
+            score.textContent =
+              typeof option.probability === "number"
+                ? percent.format(option.probability)
+                : option.id === record.selectedId
+                  ? zh
+                    ? "推荐"
+                    : "Recommended"
+                  : "—";
+            line.append(label, score);
+            row.append(line);
+            if (typeof option.probability === "number") {
+              const bar = document.createElement("progress");
+              bar.max = 1;
+              bar.value = option.probability;
+              bar.setAttribute("aria-label", option.text);
+              row.append(bar);
+            }
+            el("list").append(row);
+          }
+        },
+      );
+    </script>
+  </body>
+</html>

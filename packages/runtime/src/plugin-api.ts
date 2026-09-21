@@ -69,6 +69,13 @@ export interface PluginRpcOptions {
  * Initialization failures discard the batch and permit a later activation retry.
  */
 export interface PluginAPI {
+  /** Publish a reusable function; callers receive validated values, never private plugin state. */
+  registerService<I, O>(
+    definition: import("@covel/shared/plugin-runtime").PluginServiceDefinition<
+      I,
+      O
+    >,
+  ): void;
   readonly pluginId: string;
   readonly toolkit: PluginToolkit;
   /** SSRF-guarded fetch helpers for wire implementations. */

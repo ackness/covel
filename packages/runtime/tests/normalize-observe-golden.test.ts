@@ -125,6 +125,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "codex",
       "core-quest",
       "inventory",
+      "jev-choice-demo",
       "npc-graph/extractor",
     ]);
   });

@@ -87,7 +87,7 @@ fallback = "story"
 # Evaluation slots return Choice / Score / Boolean results through the
 # provider gateway.evaluate() API. They cannot replace text generation.
 # Configuring them does not automatically add evaluations to gameplay;
-# the plugin runtime's ctx.gateway does not yet expose evaluate().
+# enable an evaluation consumer such as the optional jev-choice-demo plugin.
 # See docs/reference/evaluation.md for requests and integration boundaries.
 #
 # [covel.evaluation]

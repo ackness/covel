@@ -26,6 +26,7 @@ import {
 import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
 import {
+  PluginServiceRegistry,
   createHookPipeline,
   createModelResolver,
   planTurnDetachment,
@@ -497,6 +498,27 @@ async function assembleApi(
     );
   };
 
+  const services = new PluginServiceRegistry({
+    async ensure(sessionId, pluginId) {
+      const session = await store.getSession(sessionId);
+      if (!session?.activePlugins.includes(pluginId))
+        throw new Error(`Plugin is not active: ${pluginId}`);
+      await ensurePluginEntry(pluginId, sessionId);
+    },
+    async list(sessionId) {
+      const session = await store.getSession(sessionId);
+      const admitted: string[] = [];
+      for (const pluginId of session?.activePlugins ?? []) {
+        try {
+          await ensurePluginEntry(pluginId, sessionId);
+          admitted.push(pluginId);
+        } catch {
+          // Unapproved or failed entries are not available service providers.
+        }
+      }
+      return admitted;
+    },
+  });
   const hookPipeline = createHookPipeline();
 
   // Unified plugin server entries (`entry` frontmatter field) — needs the
@@ -514,6 +536,7 @@ async function assembleApi(
       rpcRegistry,
       isCommunityServerCodeApproved,
       isCommunityHookApproved,
+      services,
     }));
   ensurePluginEntry = pluginEntries.ensurePluginEntry;
 
@@ -634,6 +657,7 @@ async function assembleApi(
           loadRuntime: (manifest, locale) =>
             loadRuntimeFn(manifest, locale, job.sessionId),
           llm: config.llmAdapter,
+          services,
           ...(config.pluginGateway ? { gateway: config.pluginGateway } : {}),
           ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
           getPluginSource,
@@ -721,6 +745,7 @@ async function assembleApi(
     c.set("storeBackend", config.storeBackend);
     c.set("eventBus", eventBus);
     c.set("pluginRegistry", registry);
+    c.set("pluginServices", services);
     c.set("llmAdapter", config.llmAdapter);
     if (config.pluginGateway) {
       c.set("pluginGateway", config.pluginGateway);

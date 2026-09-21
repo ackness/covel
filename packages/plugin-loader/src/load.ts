@@ -1,3 +1,4 @@
+import { loadPluginUiSpec } from "./ui-spec.js";
 /**
  * Progressive plugin loading — three levels of detail.
  */
@@ -346,8 +347,7 @@ async function loadUiSpecs(
       const fullPath = path.resolve(runtimeDir, relPath);
       await assertInsideRoot(pluginRoot, fullPath, "UI spec");
       if (fullPath.endsWith(".json")) {
-        const content = await fs.readFile(fullPath, "utf-8");
-        specs.push(JSON.parse(content) as Record<string, unknown>);
+        specs.push(await loadPluginUiSpec(pluginRoot, fullPath));
       } else {
         // Preserve unsupported declarations for per-spec API diagnostics.
         // The Web client does not dynamically load plugin component files.

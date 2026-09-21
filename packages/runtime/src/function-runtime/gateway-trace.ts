@@ -13,7 +13,11 @@
  * separately for the user-visible thinking panel and DEBUG.
  */
 
-import type { PluginRuntimeGateway } from "@covel/shared/plugin-runtime";
+import type {
+  PluginRuntimeGateway,
+  PluginEvaluationInput,
+  EvaluationQuestions,
+} from "@covel/shared/plugin-runtime";
 import type { LLMUsageSummary } from "@covel/shared";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { summarizeTraceError } from "./trace-error.js";
@@ -65,15 +69,15 @@ export function withGatewayTrace(
 ): PluginRuntimeGateway {
   async function traced<
     R extends {
-      finishReason: string;
+      finishReason?: string;
       reasoningContent?: string;
       usage: LLMUsageSummary;
       model?: string;
       provider?: string;
     },
   >(
-    method: "generateText" | "generateObject",
-    summary: ReturnType<typeof summarizeInput>,
+    method: "generateText" | "generateObject" | "evaluate",
+    summary: Record<string, unknown>,
     call: () => Promise<R>,
   ): Promise<R> {
     const start = Date.now();
@@ -83,7 +87,7 @@ export function withGatewayTrace(
       await emitter.emit("gateway.responded", {
         ...ctx,
         method,
-        finishReason: result.finishReason,
+        ...(result.finishReason ? { finishReason: result.finishReason } : {}),
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
           : {}),
@@ -122,6 +126,22 @@ export function withGatewayTrace(
       return gateway.resolveSlot(input);
     },
   };
+
+  if (gateway.evaluate) {
+    const evaluate = gateway.evaluate.bind(gateway);
+    facade.evaluate = <const Q extends EvaluationQuestions>(
+      input: PluginEvaluationInput<Q>,
+    ) =>
+      traced(
+        "evaluate",
+        {
+          ...(input.presetId ? { presetId: input.presetId } : {}),
+          questionCount: Object.keys(input.questions).length,
+          stateChars: JSON.stringify(input.state).length,
+        },
+        () => evaluate<Q>(input),
+      );
+  }
 
   if (gateway.synthesizeSpeech) {
     const synthesizeSpeech = gateway.synthesizeSpeech.bind(gateway);

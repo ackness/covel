@@ -1,3 +1,4 @@
+import { defaultModelRoleTag } from "@covel/shared";
 import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
 import { useTranslation } from "react-i18next";
@@ -81,7 +82,9 @@ export function LlmSlotCard({
         }
       : undefined,
   );
+  const requiredTag = serverSlot?.tag ?? defaultModelRoleTag(slotId);
   const supportsRole = (preset: (typeof allPresets)[number]) =>
+    !requiredTag ||
     isRoleModelCompatible(
       {
         ...preset,
@@ -89,7 +92,7 @@ export function LlmSlotCard({
           ? { capability: { output: capOverride.output } }
           : {}),
       },
-      roleTag,
+      requiredTag,
     );
   const incompatibleBinding = !!selectedPreset && !supportsRole(selectedPreset);
   const compatiblePresets = allPresets.filter(supportsRole);
@@ -138,7 +141,9 @@ export function LlmSlotCard({
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{slotId}</span>
-        <Badge variant="outline">{roleTag}</Badge>
+        {(requiredTag || selectedPreset) && (
+          <Badge variant="outline">{roleTag}</Badge>
+        )}
         <div className="flex items-center gap-1">
           {isRequired && (
             <Badge variant="default" className="text-[10px]">

@@ -17,6 +17,9 @@
 import type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
+  PluginEvaluationInput,
+  EvaluationQuestions,
+  EvaluationResult,
 } from "@covel/shared/plugin-runtime";
 import type { LLMUsageSummary } from "@covel/shared";
 import type { ZodType } from "zod";
@@ -46,6 +49,11 @@ interface FullGatewayOptions {
  * only the three methods we adapt for plugins.
  */
 export interface FullGatewayLike {
+  evaluate?<const Q extends EvaluationQuestions>(
+    input: Omit<PluginEvaluationInput<Q>, "signal">,
+    options?: FullGatewayOptions,
+  ): Promise<EvaluationResult<Q> & { provider?: string }>;
+
   generateText(
     input: {
       presetId?: string;
@@ -304,6 +312,24 @@ export function createPluginRuntimeGateway(
       };
     },
   };
+
+  if (gateway.evaluate) {
+    const evaluate = gateway.evaluate.bind(gateway);
+    facade.evaluate = <const Q extends EvaluationQuestions>(
+      input: PluginEvaluationInput<Q>,
+    ) =>
+      evaluate<Q>(
+        {
+          presetId: input.presetId,
+          state: input.state,
+          questions: input.questions,
+        },
+        {
+          ...commonOptions(),
+          ...(input.signal ? { signal: input.signal } : {}),
+        },
+      );
+  }
 
   // Only exposed when the underlying gateway has an image wire registered
   // (audit D2/7) — `ctx.images` degrades to "unavailable" rather than

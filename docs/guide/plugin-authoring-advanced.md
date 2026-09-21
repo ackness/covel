@@ -68,7 +68,7 @@ import type {
 
 ```typescript
 import type {
-  PluginAPI, // entry 工厂接收的 facade（registerTool / on / registerRpc / registerWires）
+  PluginAPI, // entry 工厂接收的 facade（registerTool / on / registerRpc / registerService / registerWires）
   PluginToolkit, // covel.toolkit 注入包 { tool, z, shortId, shortIdBatch, withPendingProposals }
   PluginEntryFactory, // entry 模块 default export 的签名
   PluginHookOptions, // covel.on 的 options
@@ -910,3 +910,7 @@ const narrative = ctx.inputs?.narrative?.value as string | undefined;
 - 想写交互 UI 面板的 json-render spec？ → [插件 UI 与 runtime 指南](./plugin-ui-runtime-guidelines.md)
 - 想跑 runtime cases、HTTP E2E 或真实 LLM 验证？ → [插件测试指南](./plugin-testing.md) · [E2E plugin verify](./e2e-plugin-verify.md)
 - 想回到入口？ → [插件开发指南 · 索引](./plugin-authoring.md)
+
+## 公共服务、Evaluation 与自带组件
+
+function runtime 支持 `ctx.gateway.evaluate` 和 `ctx.services.discover/call`；entry 通过 `covel.registerService` 导出公共函数。任意插件可自带独立 HTML 组件，通过 `webview.entry` 和通用挂载点接入 UI。参见 [插件扩展契约](../reference/plugin-extensions.md) 与 [Jev Demo](../../plugins/jev-choice-demo/README.md)，避免把业务输出 DTO 或组件加入框架。

@@ -98,7 +98,7 @@ const risk = result.answers.risk.score;
 
 使用已支持 wire 的供应商只需配置自己的 provider、base URL、模型和对应协议。不同 wire 的供应商实现 `ModelProviderAdapter.evaluate`，在协议注册表加入适配器与 `evaluation` 能力默认值，并更新协议枚举和配置入口。现有 provider 注册接口允许替换适配器；gateway 无须按服务商或插件 ID 分支。供应商特有的数量限制、字段命名及统计信息留在协议边界。
 
-当前范围是 provider/gateway 与模型配置、连通测试。插件运行时的 `ctx.gateway` 尚未公开 `evaluate`，本轮未改变游戏流程；引入实际玩法时再扩展插件服务契约和调用方。
+function runtime 已公开 `ctx.gateway.evaluate({ presetId, state, questions, signal })`，继承请求配置、取消和 gateway trace。可选的 [Jev 推荐 Demo](../../plugins/jev-choice-demo/README.md) 通过插件公共服务调用它，并自带概率展示 UI；默认玩法不自动启用。全新 wire 也可通过 [插件服务](plugin-extensions.md#模型与新协议) 封装，无须先扩展框架的标准协议枚举；需要作为框架原生协议时再使用上面的适配器入口。
 
 ## Covel 接入评估
 

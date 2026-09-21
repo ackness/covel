@@ -2128,3 +2128,7 @@ tools:
 世界时间通过内置 core-plugin 提供，使用 capability 输入绑定和普通事务化 plugin-data，无内核插件 ID 分支。历法、粗粒度时段与倒流/随机 prompt 见 [World time](./world-time.md)。
 
 图片 handler 的共享流程现在从 `@covel/plugin-handlers-utils/image-generation` 导入 `runImageGeneration`；基础字符串、proposal 与取消辅助函数继续从根入口导入。
+
+## 通用服务与自定义 UI
+
+`entry` 可通过 `covel.registerService` 导出经输入输出校验的公共函数；function runtime 通过 `ctx.services.discover/call` 组合其他活跃插件。`ctx.gateway.evaluate` 已公开评估能力。插件可以使用独立 HTML `webview` 自带组件，并声明在 panel/stage 挂载，无须给框架增加业务 capability。注册、权限、取消、数据归属与示例见 [插件扩展契约](plugin-extensions.md)。
