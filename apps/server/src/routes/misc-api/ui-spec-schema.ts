@@ -123,6 +123,16 @@ const uiSpecSchema = z
       .optional(),
     emptyState: z.object({ message: i18nTextSchema.optional() }).optional(),
     alwaysRender: z.boolean().optional(),
+    surfaces: z
+      .array(z.enum(["panel", "stage"]))
+      .min(1)
+      .optional(),
+    webview: z
+      .object({
+        html: z.string().min(1).max(524288),
+        height: z.number().int().min(80).max(800).optional(),
+      })
+      .optional(),
     view: uiViewNodeSchema.optional(),
     _componentPath: z.string().min(1).optional(),
   })
@@ -136,11 +146,17 @@ const uiSpecSchema = z
         message:
           "custom component files are not supported; declare a JSON UI spec with a `view` object",
       });
-    } else if (!hasView) {
+    } else if (hasView && spec.webview) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["webview"],
+        message: "Declare either view or webview",
+      });
+    } else if (!hasView && !spec.webview) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["view"],
-        message: "spec must declare a `view` object (json-render)",
+        message: "spec must declare a `view` object or `webview` document",
       });
     }
   });

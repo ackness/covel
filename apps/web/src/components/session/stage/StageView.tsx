@@ -37,6 +37,7 @@ import { StageBackdrop } from "./StageBackdrop.js";
 import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
+import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import { resolveStageParagraphSpeakers } from "./stage-dialogue-selectors.js";
@@ -273,19 +274,33 @@ export function StageView(props: StageViewProps): ReactElement {
       ),
     [promptsNamespace, storyTurnId, props.executionSteps, messages],
   );
+  const stageTurnIds = useMemo(() => {
+    const resolveTurn = pluginMessageTurnResolver(
+      props.executionSteps,
+      messages,
+    );
+    return [
+      ...new Set(
+        [
+          storyTurnId,
+          ...props.executionSteps.map((step) => step.turnId),
+        ].filter(
+          (id): id is string =>
+            typeof id === "string" && resolveTurn(id) === storyTurnId,
+        ),
+      ),
+    ];
+  }, [storyTurnId, props.executionSteps, messages]);
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
   const fallbackRecap = useMemo(
     () => deriveDecisionRecapFallback(storyText),
     [storyText],
   );
   const allRead = Boolean(storyKey && readStoryKey === storyKey);
-  // Keep the submitted decision visible, disabled and with progress feedback,
-  // until the next narrative actually has text. This avoids a blank dialog
-  // flash while the streaming placeholder exists but has no first delta yet.
-  const waitingForNarrative =
-    executing && storyText.trim().length === 0 && readStoryKey !== undefined;
-  const choicesVisible = allRead || waitingForNarrative;
-  const dialogVisible = !choicesVisible && storyText.trim().length > 0;
+  // Hide the previous decision, including plugin surfaces, as soon as a turn
+  // starts. Keep already-read narration hidden while waiting for the new story.
+  const choicesVisible = !executing && allRead;
+  const dialogVisible = !allRead && storyText.trim().length > 0;
 
   return (
     <div
@@ -328,6 +343,19 @@ export function StageView(props: StageViewProps): ReactElement {
         />
       )}
       <StageChoices
+        extensions={(choices) => (
+          <StagePluginPanels
+            sessionId={session.id}
+            activePluginIds={sessionPlugins
+              .filter((plugin) => plugin.active)
+              .map((plugin) => plugin.id)}
+            choices={choices.map(({ id, label }) => ({ id, text: label }))}
+            turnIds={stageTurnIds}
+            turnId={storyTurnId}
+            executing={executing}
+            onSendMessage={onSendMessage}
+          />
+        )}
         visible={choicesVisible}
         executing={executing}
         interactionChoices={interactionChoices}
@@ -338,10 +366,8 @@ export function StageView(props: StageViewProps): ReactElement {
         onSendMessage={onSendMessage}
       />
 
-      {/* Initial generation has no previous decision panel to carry forward.
-          Surface a quiet status pill until the first narrative delta arrives;
-          subsequent turns show the disabled decision panel as feedback. */}
-      {executing && !choicesVisible && storyText.trim().length === 0 && (
+      {/* Progress replaces the decision panel until unread narration arrives. */}
+      {executing && !dialogVisible && (
         <div
           className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
           data-testid="stage-thinking"

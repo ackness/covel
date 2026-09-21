@@ -31,6 +31,9 @@ export const PROVIDER_PROTOCOLS = [
   "openai-chat-v1",
   "openai-responses-v1",
   "anthropic-messages-v1",
+  "typesafe-systemone-v1",
+  "openrouter-decisions-v1",
+  "vercel-evaluation-v4",
 ] as const;
 
 export type ProviderProtocol = (typeof PROVIDER_PROTOCOLS)[number];
@@ -38,7 +41,14 @@ export type ProviderProtocol = (typeof PROVIDER_PROTOCOLS)[number];
 // ── Operation Mode ─────────────────────────────────────────────────
 
 export type OperationMode =
-  "text" | "object" | "stream" | "embed" | "image" | "speech" | "transcription";
+  | "text"
+  | "object"
+  | "stream"
+  | "embed"
+  | "image"
+  | "speech"
+  | "transcription"
+  | "evaluate";
 
 // ── Model Capability ──────────────────────────────────────────────
 
@@ -46,7 +56,8 @@ export type OperationMode =
 export type InputModality = "text" | "image" | "audio" | "video" | "file";
 
 /** What a model can produce as output. */
-export type OutputModality = "text" | "image" | "audio" | "video" | "embedding";
+export type OutputModality =
+  "text" | "image" | "audio" | "video" | "embedding" | "evaluation";
 
 /** Feature flags for model capabilities beyond basic I/O. */
 export type ModelFeature =
@@ -137,6 +148,7 @@ export type CacheStrategy = "anthropic-explicit" | "auto-prefix" | "none";
 // ── Provider Config ────────────────────────────────────────────────
 
 export interface ProviderConfig {
+  protocol?: ProviderProtocol;
   /** Framework observation only; never populated from provider/user metadata. */
   requestObservation?: {
     provider: string;

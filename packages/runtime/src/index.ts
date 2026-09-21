@@ -1,3 +1,4 @@
+export { PluginServiceRegistry } from "./plugin-services.js";
 // ── Trigger Router ───────────────────────────────────────────────
 export { shouldTrigger } from "./trigger/trigger.js";
 

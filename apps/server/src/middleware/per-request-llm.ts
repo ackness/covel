@@ -77,6 +77,7 @@ const OUTPUT_MODALITIES = new Set([
   "audio",
   "video",
   "embedding",
+  "evaluation",
 ]);
 const MODEL_FEATURES = new Set([
   "function_calling",

@@ -95,7 +95,7 @@ summaryFocus:
 
 agent manifest 可声明 `llm.reasoningEffort: disabled` 和 `llm.toolChoice: { name: submit-facts }`。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
 
-provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，DeepSeek v4 thinking 继续省略不兼容的 `tool_choice`，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
+provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，DeepSeek thinking 请求省略不兼容的 `tool_choice`。`deepseek-flash` 和 V4 模型未指定开关时也按默认开启思考处理；显式关闭后保留插件的工具选择偏好。此行为遵循 [DeepSeek Chat Completions 的工具选择限制](https://api-docs.deepseek.com/api/create-chat-completion/)，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
 
 ## 4. Template 变量
 

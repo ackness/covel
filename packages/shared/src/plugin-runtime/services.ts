@@ -1,16 +1,26 @@
 import type { LLMUsageSummary, MediaRef } from "../index.js";
 import type { FunctionHandlerContext } from "./handler.js";
+import type {
+  EvaluationParams,
+  EvaluationQuestions,
+  EvaluationResult,
+} from "../evaluation.js";
+
+export type PluginEvaluationInput<
+  Q extends EvaluationQuestions = EvaluationQuestions,
+> = Omit<EvaluationParams<Q>, "model"> & {
+  readonly presetId?: string;
+  readonly signal?: AbortSignal;
+};
 
 /**
  * Minimal gateway facade exposed to function-runtime handlers and guards.
  *
  * This is a narrow, structural projection of `@covel/ai-provider`'s full
  * `Gateway` surface. Only the calls plugins actually need are exposed —
- * `generateText` (chat completions), `generateObject` (structured output)
- * and `resolveSlot` (provider configuration for plugin-owned wires).
- * Image, audio, embeddings, speech, transcription, and streaming helpers are
- * intentionally absent; plugins that need wire-level control should resolve a
- * slot, use the vetted utilities, and store media through `ctx.media`.
+ * text/object generation, evaluation, media operations and slot resolution.
+ * Novel operations can live in plugin services and reuse `resolveSlot` plus
+ * vetted HTTP utilities without adding a method to this facade.
  *
  * `presetId` is a slot name (e.g. `default`, `image`, `fast`). `undefined`
  * resolves to the framework default for the relevant modality. API keys /
@@ -21,6 +31,11 @@ import type { FunctionHandlerContext } from "./handler.js";
  * keep plugin execution independent of the loader and provider implementations.
  */
 export interface PluginRuntimeGateway {
+  /** Evaluate a closed set of questions; available when the host supports evaluation models. */
+  evaluate?<const Q extends EvaluationQuestions>(
+    input: PluginEvaluationInput<Q>,
+  ): Promise<EvaluationResult<Q> & { provider?: string }>;
+
   generateText(input: {
     readonly presetId?: string;
     readonly prompt?: string;
@@ -68,7 +83,7 @@ export interface PluginRuntimeGateway {
    * audio, custom HTTP-based providers). The framework still picks the
    * right preset, applies request-scoped key/url overrides, and hands
    * back `{ baseUrl, apiKey, model, metadata, … }` — your handler then
-   * uses any SDK or raw fetch you like.
+   * implements its protocol with the vetted HTTP utilities.
    *
    * Use this for wire-level control (custom polling, novel response shape,
    * vendor-specific params, or non-text modalities).

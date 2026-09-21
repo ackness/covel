@@ -33,6 +33,7 @@ export function buildTurnExecutorDeps(
     llm: c.get("llmAdapter"),
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(gateway ? { gateway } : {}),
+    ...(c.get("pluginServices") ? { services: c.get("pluginServices") } : {}),
     ...(utils ? { utils } : {}),
     ...(getPluginSource ? { getPluginSource } : {}),
     ...(mediaStore ? { mediaStore } : {}),

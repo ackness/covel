@@ -84,6 +84,7 @@ export interface AgentLoopDeps {
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
+  readonly services?: import("../plugin-services.js").PluginServiceRegistry;
   /** Optional store used by the orchestration harness and function runtimes. */
   readonly store?: DataStore;
   /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */

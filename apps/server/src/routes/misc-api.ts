@@ -154,6 +154,8 @@ export function createMiscApiRoutes(
             : fallbackPresetId
           : undefined;
       slotsInfo[slotId] = {
+        baseUrl:
+          preset.baseUrl ?? ai.config.providers[preset.provider]?.baseUrl,
         provider: preset.provider,
         model: preset.model,
         protocol: preset.protocol ?? "openai-chat-v1",
@@ -367,32 +369,54 @@ export function createMiscApiRoutes(
       }
     }, 30_000);
 
+    const gatewayOptions: import("@covel/ai-provider").GatewayOptions = {
+      apiKeys,
+      signal: abort.signal,
+      allowFallback: false,
+      envApiKeys: providerApiKeysFromEnv(),
+      slotOverrides: requestedSlot
+        ? {
+            ...slotConfig,
+            // Pin the resolved target while retaining the original slot's
+            // parameter/capability keys and its local/server namespace.
+            slotBindings: {
+              [requestedSlot]: explicitBinding ?? { presetId: preset.id },
+            },
+          }
+        : { ...slotConfig, slotBindings: undefined },
+      capabilityOverridePolicy:
+        readRuntimeEnv().deploymentTier === "self" ? "full" : "restrict-only",
+    };
     try {
+      if (preset.supportedModes.includes("evaluate")) {
+        const result = await ai.gateway.evaluate(
+          {
+            presetId: requestedSlot ?? preset.id,
+            state: "Connection test",
+            questions: {
+              connected: {
+                type: "boolean",
+                instructions: "Is this a connection test?",
+              },
+            },
+          },
+          gatewayOptions,
+        );
+        clearTimeout(timeout);
+        cleanupTransient();
+        return c.json({
+          ok: true,
+          latencyMs: Date.now() - startedAt,
+          usage: result.usage,
+          testedTarget,
+        });
+      }
       for await (const event of ai.gateway.streamText(
         {
           presetId: requestedSlot ?? preset.id,
           messages: [{ role: "user", content: "hi" }],
         },
-        {
-          apiKeys,
-          signal: abort.signal,
-          allowFallback: false,
-          envApiKeys: providerApiKeysFromEnv(),
-          slotOverrides: requestedSlot
-            ? {
-                ...slotConfig,
-                // Pin the resolved target while retaining the original slot's
-                // parameter/capability keys and its local/server namespace.
-                slotBindings: {
-                  [requestedSlot]: explicitBinding ?? { presetId: preset.id },
-                },
-              }
-            : { ...slotConfig, slotBindings: undefined },
-          capabilityOverridePolicy:
-            readRuntimeEnv().deploymentTier === "self"
-              ? "full"
-              : "restrict-only",
-        },
+        gatewayOptions,
       )) {
         if (event.type === "text-delta" && event.textDelta.length > 0) {
           if (ttfbMs === null) ttfbMs = Date.now() - startedAt;

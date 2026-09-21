@@ -1,6 +1,14 @@
+export type {
+  PluginServiceClient,
+  PluginServiceContext,
+  PluginServiceDefinition,
+  PluginServiceDescriptor,
+} from "./plugin-services.js";
+
 /** Execution contracts only; no discovery, filesystem or provider implementation. */
 export type {
   PluginRuntimeGateway,
+  PluginEvaluationInput,
   ResolvedSlotForPlugin,
   PluginRuntimeUtils,
   IngestUrlOptions,
@@ -14,6 +22,13 @@ export type {
   SpeechContext,
   AssetProgressInput,
 } from "./services.js";
+export type {
+  EvaluationQuestions,
+  EvaluationResult,
+  EvaluationValue,
+  EvaluationQuestion,
+  EvaluationAnswer,
+} from "../evaluation.js";
 export type {
   FunctionHandlerContext,
   FunctionStoreView,

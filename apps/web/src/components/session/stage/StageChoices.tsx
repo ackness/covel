@@ -5,7 +5,12 @@
  */
 import { clsx } from "clsx";
 import { ChevronDown, Loader2, Send } from "lucide-react";
-import { useState, type KeyboardEvent, type ReactElement } from "react";
+import {
+  useState,
+  type KeyboardEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   mergeChoices,
@@ -14,6 +19,7 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageChoicesProps {
+  readonly extensions?: (choices: readonly StageChoiceItem[]) => ReactNode;
   readonly visible: boolean;
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
@@ -40,6 +46,7 @@ const TWO_COLUMN_GROUP_SIZE = 4;
 const CATEGORY_HUES = 4;
 
 export function StageChoices({
+  extensions,
   visible,
   executing,
   interactionChoices,
@@ -216,6 +223,7 @@ export function StageChoices({
               </div>
             </div>
           )}
+          {extensions?.(items)}
         </div>
 
         <div className="flex shrink-0 items-end gap-2 border-t border-border/50 px-3 py-2.5">

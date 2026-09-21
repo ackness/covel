@@ -6,6 +6,40 @@ import {
 } from "../provider-model-profiles.js";
 
 describe("provider model profiles", () => {
+  it("routes per-model protocols while sharing a provider connection", () => {
+    const input = {
+      providerId: "router",
+      baseUrl: "https://router.example/api/v1",
+      protocol: "openai-chat-v1",
+      modelId: "opaque/model",
+    };
+    const chat = upsertProviderModel([], input, () => "chat");
+    const evaluation = upsertProviderModel(
+      chat.profiles,
+      { ...input, modelProtocol: "openrouter-decisions-v1" },
+      () => "evaluation",
+    );
+    const repeat = upsertProviderModel(
+      evaluation.profiles,
+      { ...input, modelProtocol: "openrouter-decisions-v1" },
+      () => "unexpected",
+    );
+    expect(repeat.modelRef).toBe("evaluation");
+    expect(flattenProviderProfiles(repeat.profiles)).toEqual([
+      expect.objectContaining({
+        id: "chat",
+        provider: "router",
+        baseUrl: input.baseUrl,
+        protocol: "openai-chat-v1",
+      }),
+      expect.objectContaining({
+        id: "evaluation",
+        provider: "router",
+        baseUrl: input.baseUrl,
+        protocol: "openrouter-decisions-v1",
+      }),
+    ]);
+  });
   it("keeps same-ID configurations independently addressable and exact additions idempotent", () => {
     const input = {
       providerId: "fixture",

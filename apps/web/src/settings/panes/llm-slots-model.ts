@@ -1,3 +1,5 @@
+import { defaultModelRoleTag } from "@covel/shared";
+import { isRoleModelCompatible, type RoleModel } from "@/lib/model-role.js";
 import type {
   PluginSummary,
   PresetSummary,
@@ -15,7 +17,7 @@ const DEFAULT_LLM_SLOT_IDS = [
   "default",
 ] as const;
 
-export interface LlmSlotPresetCandidate {
+export interface LlmSlotPresetCandidate extends RoleModel {
   readonly id: string;
   readonly provider: string;
   readonly model?: string;
@@ -26,6 +28,7 @@ export function createProviderScopedModelChoices<
   T extends LlmSlotPresetCandidate,
 >(args: {
   readonly provider: string;
+  readonly tag?: string;
   readonly presets: readonly T[];
   readonly serverSlot?: {
     readonly provider: string;
@@ -39,7 +42,11 @@ export function createProviderScopedModelChoices<
     !!args.serverSlot && args.serverSlot.provider === args.provider;
   return {
     // API IDs are not configuration identities: two presets can differ in reasoning.
-    presets: args.presets.filter((preset) => preset.provider === args.provider),
+    presets: args.presets.filter(
+      (preset) =>
+        preset.provider === args.provider &&
+        (!args.tag || isRoleModelCompatible(preset, args.tag)),
+    ),
     includesServerBase,
   };
 }
@@ -47,6 +54,7 @@ export function createProviderScopedModelChoices<
 export function bindSlotToProvider(args: {
   readonly slotId: string;
   readonly provider: string;
+  readonly tag?: string;
   readonly slotConfig: Readonly<Record<string, SlotConfigEntry>>;
   readonly presets: readonly LlmSlotPresetCandidate[];
   readonly serverSlot?: { readonly provider: string } | null;
@@ -58,7 +66,9 @@ export function bindSlotToProvider(args: {
   }
 
   const first = args.presets.find(
-    (preset) => preset.provider === args.provider,
+    (preset) =>
+      preset.provider === args.provider &&
+      (!args.tag || isRoleModelCompatible(preset, args.tag)),
   );
   if (!first) return { ...args.slotConfig };
   return {
@@ -114,11 +124,16 @@ export function autoBindDiscoveredSlots(
   slotConfig: Record<string, SlotConfigEntry>,
   discoveredSlotIds: readonly string[],
   presets: readonly LlmSlotPresetCandidate[],
+  slotTags: Readonly<Record<string, string>> = {},
 ): Record<string, SlotConfigEntry> {
   const next = { ...slotConfig };
   for (const slotId of discoveredSlotIds) {
     if (slotId === "default" || slotBindingId(next[slotId])) continue;
-    const candidate = findAutoBindPreset(slotId, presets);
+    const tag = slotTags[slotId] ?? defaultModelRoleTag(slotId);
+    const candidate = findAutoBindPreset(
+      slotId,
+      presets.filter((preset) => !tag || isRoleModelCompatible(preset, tag)),
+    );
     if (candidate) {
       next[slotId] = candidate.isCustom
         ? { modelRef: candidate.id }

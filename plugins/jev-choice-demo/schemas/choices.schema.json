@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["scene", "recap", "decision", "prompts"],
+  "properties": {
+    "scene": { "type": "string" },
+    "recap": { "type": "string" },
+    "decision": { "type": "string" },
+    "prompts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

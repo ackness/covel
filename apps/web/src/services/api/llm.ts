@@ -9,7 +9,8 @@ import { ApiError, request, requestResponse } from "./request.js";
 // -- LLM Config -------------------------------------------------
 
 export type InputModality = "text" | "image" | "audio" | "video" | "file";
-export type OutputModality = "text" | "image" | "audio" | "embedding";
+export type OutputModality =
+  "text" | "image" | "audio" | "embedding" | "evaluation";
 export type ModelFeature =
   | "function_calling"
   | "structured_output"
@@ -45,6 +46,7 @@ export interface ModelCapabilityInfo {
 }
 
 export interface LlmSlotInfo {
+  baseUrl?: string;
   provider: string;
   model: string;
   protocol: string;

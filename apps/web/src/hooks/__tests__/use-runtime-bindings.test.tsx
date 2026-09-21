@@ -52,6 +52,24 @@ const slots: ResolvedSlot[] = [
 const savedBindings = { "fixture-package/runtime": "custom" };
 
 describe("useRuntimeBindings hydration", () => {
+  it("keeps an unavailable default unresolved when another text role is available", () => {
+    const resolvedSlots = [{ ...slots[0]!, isAvailable: false }, slots[1]!];
+    const bindings = { "fixture-package/runtime": "default" };
+    const { result } = renderHook(() =>
+      useRuntimeBindings(
+        "prep:world-1",
+        plugins,
+        resolvedSlots,
+        undefined,
+        bindings,
+      ),
+    );
+    expect(result.current.allBound).toBe(false);
+    expect(
+      result.current.compatibleSlots("text").map((slot) => slot.slotId),
+    ).toEqual(["custom"]);
+  });
+
   it("does not auto-bind an agent to an image-only role or treat it as ready", () => {
     const onPersist = vi.fn();
     const imageSlots: ResolvedSlot[] = [{ ...slots[0]!, tag: "image" }];

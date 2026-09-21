@@ -34,7 +34,9 @@ export interface UISlotSpec {
   groupOrder?: number;
   dataSource?: { namespace: string };
   emptyState?: { message: unknown };
-  view: Record<string, unknown>;
+  view?: Record<string, unknown>;
+  webview?: { html: string; height?: number };
+  surfaces?: readonly ("panel" | "stage")[];
 }
 
 export interface UISlotEntry {

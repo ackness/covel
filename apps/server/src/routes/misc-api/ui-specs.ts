@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { loadPluginUiSpec } from "@covel/plugin-loader";
 import path from "node:path";
 import type {
   LoadedRuntime,
@@ -82,11 +83,7 @@ async function loadSlot(
     const filePath = path.resolve(runtimeDirectory, declaredPath);
     await assertInsidePluginRoot(pluginRoot, filePath);
     if (filePath.endsWith(".json")) {
-      specs.push(
-        JSON.parse(await fs.readFile(filePath, "utf-8")) as Readonly<
-          Record<string, unknown>
-        >,
-      );
+      specs.push(await loadPluginUiSpec(pluginRoot, filePath));
     } else {
       // The validator reports this unsupported declaration without hiding siblings.
       specs.push({ _componentPath: declaredPath });

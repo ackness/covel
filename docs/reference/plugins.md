@@ -71,6 +71,8 @@
 - `pluginPolicy`：描述场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `packs`。写在顶层的同名三组字段会在世界加载时并入 `pluginPolicy`。
 - `worldData`：可选，指向 `data/world.data.yaml`；当前会读取本地 YAML/JSON/Markdown/Text/Media source，生成轻量 `WorldRecord.metadata.worldData` 摘要，投影 `world:metadata.dimensions`，并在 session 创建时导入 `plugin:*/*`、`plugin:*/*+lorebook`、`lorebook`、`characters`、`media` + `indexTo`。
 
+带 `role:demo` 标签的演示插件默认关闭，不通过 `preferTags`、`requireCapabilities` 或无策略世界的全选规则自动启用。玩家仍可手动选择；世界或组合包显式列入 required/recommended（组合包的 optional 列表也算推荐）时可以启用，已选插件的 `requires` 关系照常展开。
+
 第三方插件可以把插件数据声明为 `schema: plugin://<pluginId>/<namespace>` 与 `to: plugin:<pluginId>/<namespace>`。完整格式见 [World Data](world-data.md)。
 
 内置组合包由服务端提供：`traditional-story`、`dialogue-mode`、`low-cost`。`GET /api/worlds/:id/plugin-plan` 把内置组合包、世界自定义组合包、标签和能力约束解析为默认插件集合；`defaultPluginIds` 使用与会话相同的 `requires`、`conflicts` 和可信 builtin core 替换规则。准备页遵守解析结果，不把已被替代的 core 插件重新选中或锁定。世界可以用 `pluginPolicy.preset` 引用，也可以在 `pluginPolicy.packs` 自定义组合包。对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-stage`、`scene-prompts`、`character-blueprint`、`character-presence`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。`scene-stage` 由 `chat-mode-narrator` 的 `relations.requires` 强制拉起（同 `scene-cast`），即便玩家在准备页手动关闭也会被服务端展开逻辑重新加回——世界包引用 `plugin:scene-stage/scenes` 的 worldData source 因此总能解析到已激活插件。
@@ -99,7 +101,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 | `narrative` | `narrator` · `chat-mode-narrator`                                                                                                                                                                               | 主叙事生成器（互斥，二选一激活）                                                                                                                                      |
 | `post-turn` | 第一层：`world-ir` · `guide` · `char-creator/character-tracker` · `scene-prompts` · `mimo-tts/auto-narrate` · `branch-reply`；第二层：`codex` · `core-quest` · `affinity` · `inventory` · `npc-graph/extractor` | 第一层从 `narrative-engine` 取本轮叙事；第二层以必需 typed input 消费 `world-ir-provider`。同层无依赖者并行，WorldIR 失败只 skip 第二层，不回滚叙事和其他第一层插件。 |
 
-`setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（`needs` 既是同一 pass 内的 DAG 边、也是同回合门控），并通过 `input.inject` 读取 schema-gen output 的 `worldSchema`。DAG 顺序只保证上游结果可见；未提交的 proposal store write 要到 finalizer transaction 后才可读取，因此同轮数据传递必须使用 runtime output/inputs。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。
+`setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（`needs` 既是同一 pass 内的 DAG 边、也是同回合门控），并通过 `input.inject` 读取 schema-gen output 的 `worldSchema`。DAG 顺序只保证上游结果可见；未提交的 proposal store write 要到 finalizer transaction 后才可读取，因此同轮数据传递必须使用 runtime output/inputs。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。`tabletop-rules/creation` 用同一机制追加在创角之后：弱排序 `after: [world-data-provider, character-creation]` 加可选 `inputs.playerId` 绑定读取创角 provider 的同轮 `playerId` 输出——不声明 `character-creation` capability、不替换默认创角，而是在其创建的角色上追加开局配点表单。
 
 所有插件单声明 `stage` + `needs`/`after`，无例外；`event` / `manual` runtime 不设 `stage`。
 
@@ -1741,7 +1743,7 @@ capabilities: [narrative, world-data-provider]
 
 runtime 可声明 `fallbackFor: character-creation`（值必须同时出现在 `capabilities`）。启用另一个同能力的非 fallback runtime 时，只排除默认 runtime，保留同包其他 runtime 和 UI；无需把整个核心插件禁用。替代者必须使用相同 stage，多个替代者或多个默认实现会报错（即使默认实现当前被替代者隐藏），避免同时展示两套创角流程。禁用替代插件后默认 runtime 自动恢复；启用、创建会话和禁用都会在持久化前检查剩余组合。社区插件仍须正常安装、启用和授权，安装本身不会替换任何能力。此机制不改变 `relations.conflicts` 的包级语义。
 
-`tabletop-rules` 是可选参考实现：`creation` 提供配点创角，`check` 按已接受提交 ID 持久化 d20 检定。规则配置、预算和属性归插件所有；框架不定义职业、配点或战斗规则。官方叙事插件通过 `tabletop-check` capability 的可选 input binding 消费已结算结果。包可独立安装，测试以不同 ID `tabletop-probe` 按 community 来源运行。
+`tabletop-rules` 是可选参考实现：`creation` 在角色创建之后追加开局配点（不替换默认创角 runtime；世界无可配点属性且未导入规则时静默跳过，游戏中途启用只初始化规则），`check` 按已接受提交 ID 持久化 d20 检定、无规则时保持惰性。规则配置、预算和属性归插件所有；框架不定义职业、配点或战斗规则。官方叙事插件通过 `tabletop-check` capability 的可选 input binding 消费已结算结果。包可独立安装，测试以不同 ID `tabletop-probe` 按 community 来源运行。
 
 ### 确定性函数与表单校验
 
@@ -2128,3 +2130,7 @@ tools:
 世界时间通过内置 core-plugin 提供，使用 capability 输入绑定和普通事务化 plugin-data，无内核插件 ID 分支。历法、粗粒度时段与倒流/随机 prompt 见 [World time](./world-time.md)。
 
 图片 handler 的共享流程现在从 `@covel/plugin-handlers-utils/image-generation` 导入 `runImageGeneration`；基础字符串、proposal 与取消辅助函数继续从根入口导入。
+
+## 通用服务与自定义 UI
+
+`entry` 可通过 `covel.registerService` 导出经输入输出校验的公共函数；function runtime 通过 `ctx.services.discover/call` 组合其他活跃插件。`ctx.gateway.evaluate` 已公开评估能力。插件可以使用独立 HTML `webview` 自带组件，并声明在 panel/stage 挂载，无须给框架增加业务 capability。注册、权限、取消、数据归属与示例见 [插件扩展契约](plugin-extensions.md)。

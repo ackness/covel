@@ -1,3 +1,4 @@
+import { useModelCapabilities } from "@/hooks/use-model-capabilities.js";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, Info, Loader2, RotateCw } from "lucide-react";
@@ -79,9 +80,9 @@ export function LlmSlotsPane() {
   }, []);
 
   const customPresets = getCustomPresets();
-  const allPresets = collectLlmSlotPresetCandidates(
-    state.presets,
-    customPresets,
+  const allPresets = useModelCapabilities(
+    collectLlmSlotPresetCandidates(state.presets, customPresets),
+    modelDbInfo?.updatedAt ?? undefined,
   );
 
   const { slots, configuredSlots, discoveredSlotIds } = useLlmSlotIds();
@@ -120,7 +121,14 @@ export function LlmSlotsPane() {
 
   const autoBindDiscoveredSlots = () => {
     commitSlot(
-      resolveAutoBindDiscoveredSlots(slotConfig, discoveredSlotIds, allPresets),
+      resolveAutoBindDiscoveredSlots(
+        slotConfig,
+        discoveredSlotIds,
+        allPresets,
+        Object.fromEntries(
+          Object.entries(llm?.slots ?? {}).map(([id, slot]) => [id, slot.tag]),
+        ),
+      ),
     );
   };
 

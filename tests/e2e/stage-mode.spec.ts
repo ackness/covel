@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   seedAppSettings,
   selectWorldByText,
@@ -245,6 +246,204 @@ test.describe("Stage view mode", () => {
         cleanup.ok(),
         "stage mobile test session cleanup failed",
       ).toBeTruthy();
+    }
+  });
+  test("plugin-owned stage UI hides during submission and rejects stale results", async ({
+    page,
+  }) => {
+    const sessionId = await enterFreshHarukaSession(page);
+    const apiPath = `/api/sessions/${encodeURIComponent(sessionId)}`;
+    const mask = `**${apiPath}`;
+    const [session, snapshot, directory] = await Promise.all([
+      page.request.get(apiPath).then((r) => r.json()),
+      page.request.get(`${apiPath}/view`).then((r) => r.json()),
+      page.request.get(`${apiPath}/plugins`).then((r) => r.json()),
+    ]);
+    let turnId = "demo-turn";
+    const html = readFileSync(
+      new URL(
+        "../../plugins/jev-choice-demo/ui/recommendations.html",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    try {
+      await page.route(mask, (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({
+              json: {
+                ...session,
+                phase: "playing",
+                activePlugins: [...session.activePlugins, "jev-choice-demo"],
+              },
+            })
+          : route.fallback(),
+      );
+      await page.route(`${mask}/plugins`, (route) =>
+        route.fulfill({
+          json: {
+            ...directory,
+            items: directory.items.map((item: { id: string }) =>
+              item.id === "jev-choice-demo" ? { ...item, active: true } : item,
+            ),
+          },
+        }),
+      );
+      await page.route(`${mask}/view`, (route) =>
+        route.fulfill({
+          json: {
+            ...snapshot,
+            session: {
+              ...snapshot.session,
+              phase: "playing",
+            },
+            messages: [
+              {
+                id: "demo-story",
+                kind: "story",
+                role: "assistant",
+                turnId,
+                content: "A friend offers a school tour.",
+                createdAt: "2026-01-01T00:00:00Z",
+              },
+            ],
+          },
+        }),
+      );
+      await page.route("**/api/ui-specs?**", (route) =>
+        route.fulfill({
+          json: {
+            right: [
+              {
+                pluginId: "jev-choice-demo",
+                specs: [
+                  {
+                    id: "recommendations",
+                    label: "Jev Demo",
+                    surfaces: ["stage"],
+                    dataSource: { namespace: "recommendations" },
+                    webview: { html, height: 300 },
+                  },
+                ],
+              },
+            ],
+            message: [],
+            left: [],
+          },
+        }),
+      );
+      await page.route(`${mask}/plugin-data/scene-prompts{,/**}`, (route) =>
+        route.fulfill({
+          json: {
+            items: Object.entries({
+              __turnId: "demo-turn",
+              scene: "School tour",
+              decision: "Where next?",
+              prompt1Text: "Ask about the library",
+              prompt2Text: "Explore the classroom",
+            }).map(([key, value]) => ({
+              namespace: "message",
+              key,
+              value,
+              updatedAt: "2026-01-01T00:00:00Z",
+            })),
+          },
+        }),
+      );
+      await page.route(`${mask}/plugin-data/jev-choice-demo{,/**}`, (route) =>
+        route.fulfill({
+          json: {
+            items: [
+              {
+                namespace: "recommendations",
+                key: "current",
+                updatedAt: "2026-01-01T00:00:00Z",
+                value: {
+                  turnId: "demo-turn",
+                  status: "ready",
+                  model: "fixture/jev",
+                  selectedId: "prompt:2",
+                  options: [
+                    {
+                      id: "prompt:1",
+                      text: "Ask about the library",
+                      probability: 0.25,
+                    },
+                    {
+                      id: "prompt:2",
+                      text: "Explore the classroom",
+                      probability: 0.75,
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await page.reload();
+      const host = page.getByTestId("stage-plugin-panels");
+      await expect(host).toBeVisible();
+      const frame = host.frameLocator("iframe");
+      await expect(frame.getByText("75%", { exact: true })).toBeVisible();
+      await expect(frame.getByText("25%", { exact: true })).toBeVisible();
+      await expect(host.locator("iframe")).toHaveAttribute(
+        "sandbox",
+        "allow-scripts",
+      );
+      const content = await host.locator("iframe").elementHandle();
+      const child = await content!.contentFrame();
+      expect(
+        await child!.evaluate(() => {
+          try {
+            void parent.document.body;
+            return false;
+          } catch {
+            return true;
+          }
+        }),
+      ).toBe(true);
+      expect(
+        await child!.evaluate(async () => {
+          const bridge = (
+            window as unknown as {
+              covel: { invoke(action: string): Promise<unknown> };
+            }
+          ).covel;
+          try {
+            await bridge.invoke("arbitraryHostFunction");
+            return false;
+          } catch {
+            return true;
+          }
+        }),
+      ).toBe(true);
+      await page.screenshot({ path: "debugs/e2e-logs/jev-plugin-stage.png" });
+
+      const action = Promise.withResolvers<Route>();
+      await page.route("**/api/actions", (route) => action.resolve(route));
+      const panel = page.getByTestId("stage-choices");
+      await panel
+        .getByRole("button", { name: "Explore the classroom", exact: true })
+        .click();
+      const pending = await action.promise;
+      // No response or new narration yet: hide the whole previous decision,
+      // including plugin-owned HTML, without replaying the already-read story.
+      await expect(panel).toHaveCount(0);
+      await expect(host).toHaveCount(0);
+      await expect(page.getByTestId("stage-dialog")).toHaveCount(0);
+      await expect(page.getByTestId("stage-thinking")).toBeVisible();
+      await pending.fulfill({ contentType: "text/event-stream", body: "" });
+      await expect(panel).toBeVisible();
+
+      turnId = "new-turn";
+      await page.reload();
+      await expect(frame.getByText("75%", { exact: true })).toHaveCount(0);
+      await expect(frame.locator("#status")).toContainText(/等待|Waiting/);
+    } finally {
+      await page.goto("about:blank");
+      await page.unrouteAll({ behavior: "wait" });
+      expect((await page.request.delete(apiPath)).ok()).toBeTruthy();
     }
   });
 });

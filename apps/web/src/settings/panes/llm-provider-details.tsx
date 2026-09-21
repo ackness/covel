@@ -56,11 +56,16 @@ export function ProviderDetails({
             <h4 className="truncate font-mono text-base font-semibold">
               {provider.id}
             </h4>
-            <Badge variant="outline" className="text-[9px]">
-              {isServerProvider
-                ? t("settings.fromLlmToml", "llm.toml")
-                : t("settings.localProvider", "Local")}
-            </Badge>
+            {isServerProvider && (
+              <Badge variant="outline" className="text-[9px]">
+                {t("settings.fromLlmToml", "llm.toml")}
+              </Badge>
+            )}
+            {localProfile && (
+              <Badge variant="outline" className="text-[9px]">
+                {t("settings.localProvider", "Local")}
+              </Badge>
+            )}
           </div>
           <p className="mt-1 text-[10px] text-muted-foreground">
             {t("settings.modelIdOpaqueHint")}
@@ -85,6 +90,9 @@ export function ProviderDetails({
         showPresetTests={false}
       />
 
+      <p className="text-[11px] text-muted-foreground">
+        {t("settings.providerConnectionScope")}
+      </p>
       <div className="grid grid-cols-1 gap-2">
         <label className="space-y-1">
           <span className="text-[10px] text-muted-foreground">
@@ -103,16 +111,12 @@ export function ProviderDetails({
           />
         </label>
         {baseUrl.conflict && <SettingsDraftConflict onReload={baseUrl.reset} />}
-        <label className="space-y-1">
-          <span className="text-[10px] text-muted-foreground">
-            {t("settings.protocol", "API protocol")}
-          </span>
-          <ProtocolSelect
-            value={localProfile?.protocol ?? provider.protocol}
-            disabled={!localProfile}
-            onChange={(protocol) => onPatchLocalProfile({ protocol })}
-          />
-        </label>
+        <ProtocolSelect
+          provider={provider.provider}
+          value={localProfile?.protocol ?? provider.protocol}
+          disabled={!localProfile}
+          onChange={(protocol) => onPatchLocalProfile({ protocol })}
+        />
       </div>
 
       <section className="space-y-2">
@@ -143,6 +147,7 @@ export function ProviderDetails({
               modelId={model.model}
               name={model.name}
               presetId={model.id}
+              baseUrl={model.baseUrl}
               capability={model.capability}
               source="server"
             />
@@ -151,10 +156,22 @@ export function ProviderDetails({
             <ProviderModelRow
               key={model.ref}
               provider={provider.provider}
-              protocol={localProfile.protocol ?? provider.protocol}
+              protocol={
+                model.protocol ?? localProfile.protocol ?? provider.protocol
+              }
+              modelProtocol={model.protocol}
+              providerProtocol={localProfile.protocol ?? provider.protocol}
+              onProtocolChange={(protocol) =>
+                onPatchLocalProfile({
+                  models: localProfile.models.map((entry) =>
+                    entry.ref === model.ref ? { ...entry, protocol } : entry,
+                  ),
+                })
+              }
               modelId={model.modelId}
               name={model.name}
               presetId={model.ref}
+              baseUrl={localProfile.baseUrl}
               source="local"
               reasoningEffort={model.reasoningEffort}
               onNameChange={(name) =>
@@ -192,6 +209,10 @@ export function ProviderDetails({
 function ProviderModelRow({
   provider,
   protocol,
+  modelProtocol,
+  providerProtocol,
+  baseUrl,
+  onProtocolChange,
   modelId,
   name,
   presetId,
@@ -205,6 +226,10 @@ function ProviderModelRow({
 }: {
   provider: string;
   protocol: string;
+  baseUrl?: string;
+  modelProtocol?: string;
+  providerProtocol?: string;
+  onProtocolChange?: (value: string | undefined) => void;
   modelId: string;
   name?: string;
   presetId: string;
@@ -237,6 +262,10 @@ function ProviderModelRow({
               {modelId}
             </div>
           )}
+          <p className="font-mono text-[10px] text-muted-foreground break-all">
+            {protocol}
+            {baseUrl ? ` · ${baseUrl}` : ""}
+          </p>
           <ModelCapabilitySummary
             provider={provider}
             modelId={modelId}
@@ -271,6 +300,15 @@ function ProviderModelRow({
           </Button>
         )}
       </div>
+      {onProtocolChange && (
+        <ProtocolSelect
+          provider={provider}
+          inheritedProtocol={providerProtocol}
+          value={modelProtocol ?? ""}
+          onChange={(value) => onProtocolChange(value || undefined)}
+          inheritLabel={t("settings.inheritProviderProtocol")}
+        />
+      )}
       {onReasoningChange && (
         <details className="rounded border border-border p-2">
           <summary className="cursor-pointer text-xs text-muted-foreground">
@@ -359,6 +397,9 @@ function ModelCapabilitySummary({
                 defaultValue: "Model limits unknown",
               })}
       </span>
+      {capability?.output.includes("evaluation") && (
+        <span>{t("settings.modalOutEvaluation")}</span>
+      )}
       {supportsImage && (
         <span>{t("settings.modalInImage", "Image input")}</span>
       )}

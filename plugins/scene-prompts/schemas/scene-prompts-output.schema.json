@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["scene", "recap", "decision", "prompts"],
+  "properties": {
+    "scene": { "type": "string", "minLength": 1 },
+    "recap": { "type": "string", "minLength": 1 },
+    "decision": { "type": "string", "minLength": 1 },
+    "prompts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["text", "kind"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["observe", "ask", "act", "social"] }
+        }
+      }
+    }
+  }
+}

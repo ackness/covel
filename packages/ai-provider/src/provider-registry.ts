@@ -158,7 +158,13 @@ export function createProviderRegistry(options?: {
         ? { defaults: builtinDefaults }
         : { requestScoped: true });
 
-    const protocol = resolveProtocol(target);
+    const protocol = resolveProtocol({
+      ...target,
+      protocol:
+        target.protocol ??
+        registered.defaults?.protocol ??
+        builtinDefaults?.protocol,
+    });
     const protocolRoute = registered.protocols?.[protocol];
     const adapter =
       protocolRoute?.adapter ?? registered.adapter ?? builtinAdapter(protocol);

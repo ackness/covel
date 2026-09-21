@@ -53,9 +53,15 @@ function RuntimeModelBinding({
     runtimeModelOverrides,
     onChange,
   });
-  const slots = resolvedSlots.filter((slot) => slot.tag === "text");
+  const slots = resolvedSlots.filter(
+    (slot) => slot.tag === "text" && slot.isAvailable !== false,
+  );
   const declaredSlot = runtime.model ?? "default";
-  const effectiveSlot = resolveDeclaredSlot(slots, boundSlot || declaredSlot);
+  const resolvedSlot = resolveDeclaredSlot(
+    resolvedSlots,
+    boundSlot || declaredSlot,
+  );
+  const effectiveSlot = resolvedSlot?.tag === "text" ? resolvedSlot : null;
   const missingOverride =
     boundSlot && !slots.some((slot) => slot.slotId === boundSlot);
   return (

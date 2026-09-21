@@ -1,4 +1,8 @@
 import type { ReasoningEffort } from "@/services/api.js";
+import {
+  getBuiltinProviderConnection,
+  protocolOutputModalities,
+} from "@covel/shared";
 import { ImportedModelReasoning } from "./model-reasoning-settings.js";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
@@ -60,6 +64,8 @@ export function ProviderDialog({
             className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
           />
           <ProtocolSelect
+            provider={draft.providerId}
+            inheritLabel={t("settings.providerProtocolDefault")}
             value={draft.protocol}
             onChange={(protocol) => onDraftChange({ ...draft, protocol })}
           />
@@ -102,7 +108,10 @@ export function ModelDialog({
   busy,
   error,
   providerId,
+  provider,
   protocol,
+  modelProtocol,
+  onProtocolChange,
   reasoningDefaults,
   onReasoningChange,
   value,
@@ -114,7 +123,10 @@ export function ModelDialog({
   busy: boolean;
   error: string | null;
   providerId: string;
+  provider?: string;
   protocol?: string;
+  modelProtocol: string;
+  onProtocolChange: (value: string) => void;
   reasoningDefaults: Record<string, ReasoningEffort | undefined>;
   onReasoningChange: (
     values: Record<string, ReasoningEffort | undefined>,
@@ -141,10 +153,17 @@ export function ModelDialog({
         </DialogHeader>
         <fieldset disabled={busy} className="min-w-0 space-y-3">
           <ModelIdsTextarea value={value} onChange={onChange} />
+          <ProtocolSelect
+            provider={provider ?? providerId}
+            inheritedProtocol={protocol}
+            value={modelProtocol}
+            onChange={onProtocolChange}
+            inheritLabel={t("settings.inheritProviderProtocol")}
+          />
           <ImportedModelReasoning
             modelIds={value}
             provider={providerId}
-            protocol={protocol}
+            protocol={modelProtocol || protocol}
             values={reasoningDefaults}
             onChange={onReasoningChange}
           />
@@ -200,21 +219,72 @@ export function ProtocolSelect({
   value,
   onChange,
   disabled = false,
+  inheritLabel,
+  provider,
+  inheritedProtocol,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  inheritLabel?: string;
+  provider?: string;
+  inheritedProtocol?: string;
 }) {
+  const { t } = useTranslation();
+  const evaluation = protocolOutputModalities(value).includes("evaluation");
+  const selectEvaluation = () =>
+    inheritedProtocol &&
+    protocolOutputModalities(inheritedProtocol).includes("evaluation")
+      ? inheritedProtocol
+      : (getBuiltinProviderConnection(provider ?? "")?.evaluationProtocol ??
+        "typesafe-systemone-v1");
+  const selectClassName =
+    "w-full border border-border bg-background px-2 py-1.5 text-xs outline-none disabled:bg-muted/30 disabled:text-muted-foreground focus:ring-1 focus:ring-primary";
   return (
-    <select
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      className="w-full border border-border bg-background px-2 py-1.5 text-xs outline-none disabled:bg-muted/30 disabled:text-muted-foreground focus:ring-1 focus:ring-primary"
-    >
-      <option value="openai-chat-v1">OpenAI Chat</option>
-      <option value="openai-responses-v1">OpenAI Responses</option>
-      <option value="anthropic-messages-v1">Anthropic Messages</option>
-    </select>
+    <div className="space-y-2">
+      <label className="block space-y-1 text-xs">
+        <span>{t("settings.protocol")}</span>
+        <select
+          value={evaluation ? "evaluation" : value}
+          disabled={disabled}
+          onChange={(event) =>
+            onChange(
+              event.target.value === "evaluation"
+                ? selectEvaluation()
+                : event.target.value,
+            )
+          }
+          className={selectClassName}
+        >
+          {inheritLabel && <option value="">{inheritLabel}</option>}
+          <option value="openai-chat-v1">OpenAI Chat</option>
+          <option value="openai-responses-v1">OpenAI Responses</option>
+          <option value="anthropic-messages-v1">Anthropic Messages</option>
+          <option value="evaluation">{t("settings.evaluationProtocol")}</option>
+        </select>
+      </label>
+      {evaluation && (
+        <div className="space-y-1 border-l border-border pl-3">
+          <label className="block space-y-1 text-xs">
+            <span>{t("settings.evaluationApi")}</span>
+            <select
+              value={value}
+              disabled={disabled}
+              onChange={(event) => onChange(event.target.value)}
+              className={selectClassName}
+            >
+              <option value="typesafe-systemone-v1">TypeSafe System One</option>
+              <option value="openrouter-decisions-v1">
+                OpenRouter Decisions
+              </option>
+              <option value="vercel-evaluation-v4">Vercel AI Gateway</option>
+            </select>
+          </label>
+          <p className="text-[10px] text-muted-foreground">
+            {t("settings.evaluationApiHint")}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RuntimeManifest } from "@covel/shared";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
-import type { PluginAPI } from "@covel/runtime";
+import { PluginServiceRegistry, type PluginAPI } from "@covel/runtime";
 import {
   discoverPlugins,
   loadPluginManifest,
@@ -30,6 +30,7 @@ export interface RuntimeLoadResult {
   readonly loadedCache: Map<string, LoadedRuntime>;
   /** Tools the plugin's `entry` module registered, if it declares one. */
   readonly entryTools: readonly ToolModule[];
+  readonly services: PluginServiceRegistry;
 }
 
 export function expandPath(input: string): string {
@@ -127,7 +128,14 @@ export async function loadRuntimeBundle(args: {
     rawManifests,
     locale: args.locale,
   });
-  const entryTools = await loadEntryTools(discovery, manifests);
+  const services = new PluginServiceRegistry({
+    list: async () => [discovery.id],
+    ensure: async (_sessionId, pluginId) => {
+      if (pluginId !== discovery.id)
+        throw new Error("The isolated harness only loads the target plugin");
+    },
+  });
+  const entryTools = await loadEntryTools(discovery, manifests, services);
   return {
     discovery,
     rawManifests,
@@ -135,6 +143,7 @@ export async function loadRuntimeBundle(args: {
     target,
     loadedCache,
     entryTools,
+    services,
   };
 }
 
@@ -150,6 +159,7 @@ export async function loadRuntimeBundle(args: {
 export async function loadEntryTools(
   discovery: PluginDiscoveryResult,
   manifests: readonly RuntimeManifest[],
+  services?: PluginServiceRegistry,
 ): Promise<readonly ToolModule[]> {
   const entryPaths = new Set(
     manifests.flatMap((manifest) => (manifest.entry ? [manifest.entry] : [])),
@@ -181,6 +191,9 @@ export async function loadEntryTools(
     http: { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
     registerTool(toolModule: ToolModule) {
       registered.push(toolModule);
+    },
+    registerService(definition) {
+      services?.register(discovery.id, definition);
     },
     on() {},
     registerRpc() {},

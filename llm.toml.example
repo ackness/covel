@@ -1,176 +1,257 @@
-# ── Covel LLM Configuration ──────────────────────────────────────
+# -- Covel LLM Configuration -------------------------------------
 #
-# Copy this file to `llm.toml` and edit to match your provider setup.
-# API keys go in `.env.llm` (not here).
+# Copy this file to `llm.toml`. API keys belong in `.env.llm` (desktop:
+# `keys.env`), never in this file. Model IDs checked on 2026-09-21.
+# The two active slots below use DEEPSEEK_API_KEY and DASHSCOPE_API_KEY.
+# Uncomment optional slots as needed and configure their provider keys.
 #
-# Each [covel.<name>] defines a model slot.
-# Slot names are user-defined (e.g., "story", "utility", "image").
-# Each slot has a `tag` (auto-inferred from output modalities if omitted):
-#   - "text"  — text generation models (default)
-#   - "image" — image generation models
-#
-# Tags determine compatibility: a runtime requiring "text" can only
-# use slots tagged "text". Cross-tag fallback is forbidden.
-#
-# Players assign slots to runtimes before starting a game.
+# Each [covel.<name>] defines a model slot. The first slot is the default.
+# Players assign text slots to runtimes before starting a game.
 #
 # Fields:
-#   provider   — provider identifier, maps to {PROVIDER}_API_KEY in .env.llm
-#   model      — opaque model ID passed to the provider API unchanged
-#   baseUrl    — API endpoint URL
-#   protocol   — "openai-chat-v1" | "openai-responses-v1" | "anthropic-messages-v1"
-#   fallback   — (optional) slot name to fall back to on failure (same tag only)
-#   tag        — (optional) capability tag, auto-inferred from output modalities
+#   provider - connection identifier; maps to {PROVIDER}_API_KEY
+#   model    - opaque model ID, including any namespace, sent unchanged
+#   baseUrl  - provider or compatible proxy URL; configurable per slot
+#   protocol - wire format, independent of provider name and model ID:
+#              openai-chat-v1, openai-responses-v1, anthropic-messages-v1,
+#              typesafe-systemone-v1, openrouter-decisions-v1,
+#              vercel-evaluation-v4
+#   fallback - optional target slot name; enable the target and its key
+#   tag      - text, image, evaluation, or an explicit custom tag
 #
-# One provider can expose multiple IDs, including namespaced forms such as
-# "openai/gpt-5.6-sol" or "deepseek/deepseek-v4-flash". Keep the provider
-# identifier separate; Covel never removes the namespace from outbound calls.
-#
-# You can also use environment variables in values, e.g.:
-#   baseUrl = "${DEEPSEEK_BASE_URL}"
+# Outputs infer text, image, speech, embedding, or evaluation capability tags.
+# Fallbacks must have the same tag and support the requested operation.
+# One provider can serve chat, images, embeddings, and evaluations through
+# different slot protocols. Slots with the same provider share its key.
+# Keep namespaced model IDs intact; gateways use their own model catalogs.
+# Environment interpolation is supported, e.g. baseUrl = "${MY_API_BASE}".
 
-# ── Text Slots ──────────────────────────────────────────────────
+# -- Default: direct providers with text fallback -----------------
+# Official model catalogs:
+# https://api-docs.deepseek.com/zh-cn/
+# https://help.aliyun.com/en/model-studio/qwen3-8-flash
 
 [covel.story]
 provider = "deepseek"
-model    = "deepseek-v4-flash"
+model    = "deepseek-flash"
 baseUrl  = "https://api.deepseek.com"
 protocol = "openai-chat-v1"
-# 可选：DeepSeek V4 支持 "high" / "max"；留空使用服务商默认值。
-# reasoning_effort = "high"
+# deepseek-flash currently selects DeepSeek V4.1 Flash.
+# Omit thinking controls to use the provider's defaults.
 # thinking = { type = "enabled" }
 
 [covel.utility]
 provider = "dashscope"
-model    = "qwen3.6-flash"
+model    = "qwen3.8-flash"
 baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 protocol = "openai-chat-v1"
 fallback = "story"
 
-# ── Image Slot (optional) ───────────────────────────────────────
+# -- Optional: separate models by workload ------------------------
+# `plugin` handles plugin calls, `fast` handles context compaction,
+# and `memory` handles memory extraction. These share DASHSCOPE_API_KEY.
+# Change individual model IDs to tune cost/quality without moving keys.
+# Each falls back to utility, then story; keep fallback chains acyclic.
 #
+# [covel.plugin]
+# provider = "dashscope"
+# model    = "qwen3.8-flash"
+# baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# protocol = "openai-chat-v1"
+# fallback = "utility"
+#
+# [covel.fast]
+# provider = "dashscope"
+# model    = "qwen3.8-flash"
+# baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# protocol = "openai-chat-v1"
+# reasoning_effort = "disabled"
+# fallback = "utility"
+#
+# [covel.memory]
+# provider = "dashscope"
+# model    = "qwen3.8-flash"
+# baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# protocol = "openai-chat-v1"
+# reasoning_effort = "disabled"
+# fallback = "utility"
+
+# -- Optional: Jev via the official TypeSafe provider --------------
+# Key: TYPESAFE_API_KEY. Direct TypeSafe System One API, no gateway needed.
+# jev-latest currently points to jev-1.13.0; use the versioned ID when
+# evaluation thresholds need a fixed model version.
+# https://docs.typesafe.ai/models
+#
+# Evaluation is a model capability, not a required slot name. You can name
+# roles intent, risk-check, or npc-choice and reuse one evaluation model.
+# Evaluation slots return Choice / Score / Boolean results through the
+# provider gateway.evaluate() API. They cannot replace text generation.
+# Configuring them does not automatically add evaluations to gameplay;
+# enable an evaluation consumer such as the optional jev-choice-demo plugin.
+# See docs/reference/evaluation.md for requests and integration boundaries.
+#
+# [covel.evaluation]
+# provider = "typesafe"
+# model    = "jev-latest"
+# baseUrl  = "https://api.typesafe.ai/v1"
+# protocol = "typesafe-systemone-v1"
+# tag      = "evaluation"
+# output   = ["evaluation"]
+# # Optional: also enable router-evaluation below and its provider key.
+# # fallback = "router-evaluation"
+
+# -- Optional: OpenRouter chat + Jev on one connection -------------
+# Both slots share OPENROUTER_API_KEY and baseUrl, with per-model protocols.
+# Text alternative: deepseek/deepseek-v4.1-flash.
+# Jev uses the Decisions API, not /chat/completions. The adapter derives
+# /api/alpha/decisions from the configured baseUrl.
+# https://openrouter.ai/docs/cookbook/building-agents/gate-tool-calls-with-jev
+#
+# [covel.router-text]
+# provider = "openrouter"
+# model    = "qwen/qwen3.8-flash"
+# baseUrl  = "https://openrouter.ai/api/v1"
+# protocol = "openai-chat-v1"
+# fallback = "utility"
+#
+# [covel.router-evaluation]
+# provider = "openrouter"
+# model    = "typesafe/jev-1.13"
+# baseUrl  = "https://openrouter.ai/api/v1"
+# protocol = "openrouter-decisions-v1"
+# tag      = "evaluation"
+# output   = ["evaluation"]
+
+# -- Optional: Vercel AI Gateway chat + Jev on one connection ------
+# Put the AI Gateway key in VERCEL_API_KEY for provider = "vercel".
+# Both slots share the same connection; the evaluation adapter derives
+# /v4/ai/evaluation-model from baseUrl. IDs differ from OpenRouter's IDs.
+# Text alternative: deepseek/deepseek-v4.1-flash.
+# https://ai-gateway.vercel.sh/v1/models
+#
+# [covel.vercel-text]
+# provider = "vercel"
+# model    = "alibaba/qwen3.8-flash"
+# baseUrl  = "https://ai-gateway.vercel.sh/v1"
+# protocol = "openai-chat-v1"
+# fallback = "utility"
+#
+# [covel.vercel-evaluation]
+# provider = "vercel"
+# model    = "typesafe-ai/jev"
+# baseUrl  = "https://ai-gateway.vercel.sh/v1"
+# protocol = "vercel-evaluation-v4"
+# tag      = "evaluation"
+# output   = ["evaluation"]
+
+# -- Optional: other direct text providers ------------------------
+# Keys: OPENAI_API_KEY / ANTHROPIC_API_KEY. Assign these slots in settings,
+# or copy their fields into story to change the default narrative model.
+# https://developers.openai.com/api/docs/models/gpt-6-astra
+# https://platform.claude.com/docs/en/models/sonnet-5/whats-new-sonnet-5
+#
+# [covel.openai-text]
+# provider = "openai"
+# model    = "gpt-6-astra"
+# baseUrl  = "https://api.openai.com/v1"
+# protocol = "openai-responses-v1"
+# fallback = "story"
+#
+# [covel.anthropic-text]
+# provider = "anthropic"
+# model    = "claude-sonnet-5"
+# baseUrl  = "https://api.anthropic.com"
+# protocol = "anthropic-messages-v1"
+# fallback = "story"
+
+# -- Optional: image generation -----------------------------------
 # `providerRequestMetadata.imageWire` selects the image API format:
-#   "dashscope-wan" — DashScope WAN async task API (wan2.x models, Chinese prompts)
-#   "openai-images" — OpenAI-compatible Images API (gpt-image models)
-# Default when omitted: "openai-images". The slot's `protocol` still describes
-# its text protocol; image generation uses the selected image wire instead.
-# Both image wires are built in.
+#   dashscope-wan: native DashScope Wan / Qwen Image APIs
+#   openai-images: OpenAI-compatible Images API (default)
+# The slot's protocol describes its text wire; image requests use imageWire.
+# Enable the desired slot and assign it to the image-generation workload.
+# https://help.aliyun.com/en/model-studio/image-model/
+# https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst
 #
-# Option A: DashScope WAN (async task API, Chinese prompts recommended)
+# DashScope Wan: async task API, DASHSCOPE_API_KEY.
 # [covel.image]
-# provider  = "dashscope"
-# model     = "wan2.7-image-pro"
-# baseUrl   = "https://dashscope.aliyuncs.com"
-# protocol  = "openai-chat-v1"
-# tag       = "image"
-# output    = ["image"]
+# provider = "dashscope"
+# model    = "wan2.7-image-pro"
+# baseUrl  = "https://dashscope.aliyuncs.com"
+# protocol = "openai-chat-v1"
+# tag      = "image"
+# output   = ["image"]
 # providerRequestMetadata = { imageWire = "dashscope-wan" }
 #
-# Option B: OpenAI Images API (English prompts recommended)
-# [covel.image]
-# provider  = "openai"
-# model     = "gpt-image-1.5"
-# baseUrl   = "https://api.openai.com/v1"
-# protocol  = "openai-chat-v1"
-# tag       = "image"
-# output    = ["image"]
-# # providerRequestMetadata = { imageWire = "openai-images" } # Default; optional
+# OpenAI Images API: OPENAI_API_KEY.
+# [covel.image-openai]
+# provider = "openai"
+# model    = "gpt-image-2.5-sunburst"
+# baseUrl  = "https://api.openai.com/v1"
+# protocol = "openai-chat-v1"
+# tag      = "image"
+# output   = ["image"]
+# providerRequestMetadata = { imageWire = "openai-images" }
 
-# ── Embedding Slots (RAG / Graph-RAG) ────────────────────────────
+# -- Optional: embeddings for RAG / Graph-RAG ----------------------
+# Pick one embedding slot to start. The first slot with embedding output
+# becomes the embed-default target; additional slots remain addressable.
+# An explicit embedding tag keeps text and embedding fallbacks separate.
 #
-# RAG plugins (e.g. core-npc-graph) need an embedding model. Without an
-# embed slot here, vector storage stays empty and those plugins silently
-# fall back to structured retrieval (BFS on the knowledge graph).
+# On the first session turn, the server probes the output dimension and
+# locks the session to that vector model. Dimensions need no configuration.
+# Changing the default model affects new sessions; existing sessions keep
+# their locked model and per-model vector table. SQLite bundles sqlite-vec;
+# the PostgreSQL docker-compose setup includes pgvector.
+# Without an embedding slot, RAG plugins use structured retrieval only.
 #
-# How it works:
-#   - Slot is identified by `output = ["embedding"]`.
-#   - First such slot becomes the `embed-default` target for gateway.embed().
-#   - On a session's first turn the server probes the model once
-#     (gateway.embed("…")) to detect its output dimension, registers a
-#     `vector_models` entry, and locks the session to that model. Per-model
-#     physical vector tables (`vec_mem_m{id}`) are created on demand —
-#     you do not need to specify dimensions in this file.
-#   - Switching the slot to a different model creates a new vector table
-#     for new sessions; existing sessions continue using their locked
-#     model. Switching back continues writing into the original table.
-#   - `embeddingFormat` selects the request body shape:
-#       "openai"              — standard {input: string[]} (default)
-#       "nemotron-multimodal" — NVIDIA Nemotron {input: [{content: [...]}]}
-#
-# ── RAG Quick Start ──────────────────────────────────────────────
-# Pick ONE of the examples below and uncomment it. After that:
-#   - SQLite backend: sqlite-vec is bundled, RAG works out-of-the-box.
-#   - PG backend: docker-compose uses pgvector image — also out-of-the-box.
-#
-# Example A: local Ollama (recommended for offline / private dev)
-# Prereqs: `ollama pull nomic-embed-text-v2-moe && ollama serve`
-# Output dimension: 768 (probed automatically — no config needed)
-#
+# Local Ollama: pull nomic-embed-text-v2-moe, then start ollama serve.
+# No provider key required; 768 dimensions.
+# https://ollama.com/library/nomic-embed-text-v2-moe
 # [covel.embed-default]
 # provider = "ollama"
 # model    = "nomic-embed-text-v2-moe"
 # baseUrl  = "http://localhost:11434/v1"
 # protocol = "openai-chat-v1"
+# tag      = "embedding"
 # output   = ["embedding"]
-# # embeddingFormat = "openai"   # ← default, can omit
 #
-# Example B: OpenAI text-embedding-3-small (paid, no local setup)
-# Output dimension: 1536
-#
-# [covel.embed-default]
+# OpenAI hosted text embeddings: OPENAI_API_KEY; 1536 dimensions.
+# https://developers.openai.com/api/docs/models/text-embedding-3-small
+# [covel.embed-openai]
 # provider = "openai"
 # model    = "text-embedding-3-small"
 # baseUrl  = "https://api.openai.com/v1"
 # protocol = "openai-chat-v1"
+# tag      = "embedding"
 # output   = ["embedding"]
 #
-# Example C: OpenRouter NVIDIA Nemotron multimodal (vision embedding, 2048d)
-# Works for text-only too; accepts image_url content parts when Phase 2
-# multimodal values land.
-#
+# OpenRouter Nemotron: OPENROUTER_API_KEY; 2048 dimensions.
+# This free endpoint logs inputs/outputs; use only non-sensitive test data.
+# The model supports images; current runtime embedding calls supply text.
+# https://openrouter.ai/nvidia/llama-nemotron-embed-vl-1b-v2:free
 # [covel.embed-multimodal]
 # provider = "openrouter"
 # model    = "nvidia/llama-nemotron-embed-vl-1b-v2:free"
 # baseUrl  = "https://openrouter.ai/api/v1"
 # protocol = "openai-chat-v1"
+# tag      = "embedding"
 # output   = ["embedding"]
 # input    = ["text", "image"]
 # embeddingFormat = "nemotron-multimodal"
+# # Otherwise embeddingFormat defaults to "openai" ({input: string[]}).
 
-# ── Capability Override (optional) ───────────────────────────────
+# -- Optional: capability overrides for a newer model -------------
+# Capabilities come from the bundled model catalog or protocol defaults.
+# Override fields when a new model is missing or the catalog is outdated.
+# Overrides describe supported capabilities; they do not add wire support.
+# Input image means vision; output image means image generation.
 #
-# Model capabilities (input/output modalities, features, token limits,
-# pricing) are auto-inferred from the bundled model database.
-# Override any field if the auto-detection is wrong or for custom/private models.
-#
-# NOTE: "image" in input = vision (can see images), NOT image generation.
-#       "image" in output = image generation. Same logic for audio/video.
-#
-# [covel.multimodal]
+# [covel.vision]
 # provider = "dashscope"
-# model    = "qwen-omni-turbo"
+# model    = "qwen3.8-flash"
 # baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 # protocol = "openai-chat-v1"
-# input    = ["text", "image", "audio", "video"]
-# output   = ["text", "audio"]
-# features = ["function_calling", "streaming", "vision"]
-# contextWindow   = 131072
-# maxOutputTokens = 8192
-#
-# [covel.multimodal.pricing]
-# inputPerMToken  = 0.6
-# outputPerMToken = 1.5
-
-# ── Examples for other providers ─────────────────────────────────
-#
-# [covel.story]
-# provider = "openai"
-# model    = "gpt-5.4"
-# baseUrl  = "https://api.openai.com/v1"
-# protocol = "openai-chat-v1"
-#
-# [covel.story]
-# provider = "anthropic"
-# model    = "claude-sonnet-4-6"
-# baseUrl  = "https://api.anthropic.com"
-# protocol = "anthropic-messages-v1"
+# input    = ["text", "image"]
+# output   = ["text"]
+# features = ["function_calling", "structured_output", "streaming", "reasoning", "vision"]

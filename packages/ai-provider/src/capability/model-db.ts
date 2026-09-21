@@ -418,7 +418,9 @@ function deriveOutput(
   const explicit = raw.supported_output_modalities as string[] | undefined;
   if (explicit?.length)
     return explicit.filter((s): s is OutputModality =>
-      ["text", "image", "audio", "video", "embedding"].includes(s),
+      ["text", "image", "audio", "video", "embedding", "evaluation"].includes(
+        s,
+      ),
     );
 
   switch (mode) {

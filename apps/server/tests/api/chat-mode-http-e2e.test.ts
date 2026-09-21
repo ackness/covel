@@ -96,11 +96,6 @@ class ChatModeMockLLM implements LLMAdapter {
               ],
             }),
           },
-          {
-            id: `tc-done-${this.scenePromptCalls}`,
-            name: "runtime-done",
-            arguments: JSON.stringify({ reason: "scene prompts ready" }),
-          },
         ],
         finishReason: "tool_calls",
         usage: { inputTokens: 120, outputTokens: 40 },

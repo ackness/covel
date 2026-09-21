@@ -70,6 +70,18 @@ export {
   type SlotDefinition,
 } from "./config/llm-schema.js";
 
+// Evaluation
+export type {
+  EvaluationJson,
+  EvaluationValue,
+  EvaluationQuestion,
+  EvaluationQuestions,
+  EvaluationAnswer,
+  EvaluationParams,
+  EvaluationResult,
+} from "./evaluation/types.js";
+export { createEvaluationAdapter } from "./adapters/evaluation.js";
+
 // Adapters
 export type { ModelProviderAdapter } from "./adapters/adapter.js";
 export { createOpenAiChatAdapter } from "./adapters/openai-chat.js";

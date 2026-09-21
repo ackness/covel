@@ -21,6 +21,8 @@ import type {
  * The handler receives this context and returns a Record<string, unknown> output.
  */
 export interface FunctionHandlerContext {
+  /** Public, schema-validated services exported by active plugins. */
+  readonly services?: import("./plugin-services.js").PluginServiceClient;
   readonly sessionId: string;
   readonly turnId: string;
   /** Plugin ID this handler belongs to (derived from manifest). */
