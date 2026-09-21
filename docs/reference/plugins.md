@@ -101,7 +101,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 | `narrative` | `narrator` · `chat-mode-narrator`                                                                                                                                                                               | 主叙事生成器（互斥，二选一激活）                                                                                                                                      |
 | `post-turn` | 第一层：`world-ir` · `guide` · `char-creator/character-tracker` · `scene-prompts` · `mimo-tts/auto-narrate` · `branch-reply`；第二层：`codex` · `core-quest` · `affinity` · `inventory` · `npc-graph/extractor` | 第一层从 `narrative-engine` 取本轮叙事；第二层以必需 typed input 消费 `world-ir-provider`。同层无依赖者并行，WorldIR 失败只 skip 第二层，不回滚叙事和其他第一层插件。 |
 
-`setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（`needs` 既是同一 pass 内的 DAG 边、也是同回合门控），并通过 `input.inject` 读取 schema-gen output 的 `worldSchema`。DAG 顺序只保证上游结果可见；未提交的 proposal store write 要到 finalizer transaction 后才可读取，因此同轮数据传递必须使用 runtime output/inputs。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。
+`setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（`needs` 既是同一 pass 内的 DAG 边、也是同回合门控），并通过 `input.inject` 读取 schema-gen output 的 `worldSchema`。DAG 顺序只保证上游结果可见；未提交的 proposal store write 要到 finalizer transaction 后才可读取，因此同轮数据传递必须使用 runtime output/inputs。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。`tabletop-rules/creation` 用同一机制追加在创角之后：弱排序 `after: [world-data-provider, character-creation]` 加可选 `inputs.playerId` 绑定读取创角 provider 的同轮 `playerId` 输出——不声明 `character-creation` capability、不替换默认创角，而是在其创建的角色上追加开局配点表单。
 
 所有插件单声明 `stage` + `needs`/`after`，无例外；`event` / `manual` runtime 不设 `stage`。
 
@@ -1743,7 +1743,7 @@ capabilities: [narrative, world-data-provider]
 
 runtime 可声明 `fallbackFor: character-creation`（值必须同时出现在 `capabilities`）。启用另一个同能力的非 fallback runtime 时，只排除默认 runtime，保留同包其他 runtime 和 UI；无需把整个核心插件禁用。替代者必须使用相同 stage，多个替代者或多个默认实现会报错（即使默认实现当前被替代者隐藏），避免同时展示两套创角流程。禁用替代插件后默认 runtime 自动恢复；启用、创建会话和禁用都会在持久化前检查剩余组合。社区插件仍须正常安装、启用和授权，安装本身不会替换任何能力。此机制不改变 `relations.conflicts` 的包级语义。
 
-`tabletop-rules` 是可选参考实现：`creation` 提供配点创角，`check` 按已接受提交 ID 持久化 d20 检定。规则配置、预算和属性归插件所有；框架不定义职业、配点或战斗规则。官方叙事插件通过 `tabletop-check` capability 的可选 input binding 消费已结算结果。包可独立安装，测试以不同 ID `tabletop-probe` 按 community 来源运行。
+`tabletop-rules` 是可选参考实现：`creation` 在角色创建之后追加开局配点（不替换默认创角 runtime；世界无可配点属性且未导入规则时静默跳过，游戏中途启用只初始化规则），`check` 按已接受提交 ID 持久化 d20 检定、无规则时保持惰性。规则配置、预算和属性归插件所有；框架不定义职业、配点或战斗规则。官方叙事插件通过 `tabletop-check` capability 的可选 input binding 消费已结算结果。包可独立安装，测试以不同 ID `tabletop-probe` 按 community 来源运行。
 
 ### 确定性函数与表单校验
 
