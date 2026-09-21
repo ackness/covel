@@ -111,16 +111,12 @@ export function ProviderDetails({
           />
         </label>
         {baseUrl.conflict && <SettingsDraftConflict onReload={baseUrl.reset} />}
-        <label className="space-y-1">
-          <span className="text-[10px] text-muted-foreground">
-            {t("settings.protocol", "API protocol")}
-          </span>
-          <ProtocolSelect
-            value={localProfile?.protocol ?? provider.protocol}
-            disabled={!localProfile}
-            onChange={(protocol) => onPatchLocalProfile({ protocol })}
-          />
-        </label>
+        <ProtocolSelect
+          provider={provider.provider}
+          value={localProfile?.protocol ?? provider.protocol}
+          disabled={!localProfile}
+          onChange={(protocol) => onPatchLocalProfile({ protocol })}
+        />
       </div>
 
       <section className="space-y-2">
@@ -164,6 +160,7 @@ export function ProviderDetails({
                 model.protocol ?? localProfile.protocol ?? provider.protocol
               }
               modelProtocol={model.protocol}
+              providerProtocol={localProfile.protocol ?? provider.protocol}
               onProtocolChange={(protocol) =>
                 onPatchLocalProfile({
                   models: localProfile.models.map((entry) =>
@@ -213,6 +210,7 @@ function ProviderModelRow({
   provider,
   protocol,
   modelProtocol,
+  providerProtocol,
   baseUrl,
   onProtocolChange,
   modelId,
@@ -230,6 +228,7 @@ function ProviderModelRow({
   protocol: string;
   baseUrl?: string;
   modelProtocol?: string;
+  providerProtocol?: string;
   onProtocolChange?: (value: string | undefined) => void;
   modelId: string;
   name?: string;
@@ -302,14 +301,13 @@ function ProviderModelRow({
         )}
       </div>
       {onProtocolChange && (
-        <label className="block space-y-1 text-xs">
-          <span>{t("settings.protocol")}</span>
-          <ProtocolSelect
-            value={modelProtocol ?? ""}
-            onChange={(value) => onProtocolChange(value || undefined)}
-            inheritLabel={t("settings.inheritProviderProtocol")}
-          />
-        </label>
+        <ProtocolSelect
+          provider={provider}
+          inheritedProtocol={providerProtocol}
+          value={modelProtocol ?? ""}
+          onChange={(value) => onProtocolChange(value || undefined)}
+          inheritLabel={t("settings.inheritProviderProtocol")}
+        />
       )}
       {onReasoningChange && (
         <details className="rounded border border-border p-2">

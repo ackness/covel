@@ -9,6 +9,8 @@ export type BuiltinProviderProtocol =
 export interface BuiltinProviderConnection {
   readonly baseUrl: string;
   readonly protocol: BuiltinProviderProtocol;
+  /** Suggested evaluation wire when configuring a model in the settings UI. */
+  readonly evaluationProtocol?: BuiltinProviderProtocol;
 }
 
 /** Canonical public endpoints used when a first-run profile omits baseUrl. */
@@ -16,14 +18,17 @@ export const BUILTIN_PROVIDER_CONNECTIONS = {
   openrouter: {
     baseUrl: "https://openrouter.ai/api/v1",
     protocol: "openai-chat-v1",
+    evaluationProtocol: "openrouter-decisions-v1",
   },
   vercel: {
     baseUrl: "https://ai-gateway.vercel.sh/v1",
     protocol: "openai-chat-v1",
+    evaluationProtocol: "vercel-evaluation-v4",
   },
   typesafe: {
     baseUrl: "https://api.typesafe.ai/v1",
     protocol: "typesafe-systemone-v1",
+    evaluationProtocol: "typesafe-systemone-v1",
   },
   deepseek: {
     baseUrl: "https://api.deepseek.com",

@@ -8,13 +8,17 @@ Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批�
 
 设置 → 服务商与模型：像其他模型一样填写 Provider、Base URL、API Key 和模型 ID。Provider 的协议作为默认值；添加模型时或模型行内可单独选择协议，同一连接可同时包含聊天模型与评估模型。模型级协议覆盖会随保存、复制、导入导出和请求 overlay 保留。删除覆盖（选择“使用服务商协议”）后恢复继承。评估模型作为首个模型添加时，不自动绑定剧情或插件文本用途。
 
+设置页将三种评估接口统一收在 **Evaluation（评估）** 下，选中后显示“评估接口”。TypeSafe、OpenRouter 和 Vercel 内置连接预选各自的接口；自定义连接可手动选择所兼容的接口，代理地址不影响协议选择。模型已有明确协议时按已保存配置显示，选择“使用服务商协议”则继续继承连接配置。
+
+这遵循 AI SDK 的分层方式：[EvaluationModelV4](https://github.com/vercel/ai/blob/main/packages/provider/src/evaluation-model/v4/evaluation-model-v4.ts) 统一评估模型契约，各服务商适配自己的 HTTP 格式。`Evaluation` 是界面分类；TOML、保存数据和请求 overlay 仍使用下表的明确 wire 协议，不新增通过模型名称、地址或连接名称猜测协议的运行时逻辑。
+
 | Provider 示例 | Base URL                          | 模型 ID 示例        | 评估模型的协议            |
 | ------------- | --------------------------------- | ------------------- | ------------------------- |
 | `typesafe`    | `https://api.typesafe.ai/v1`      | `jev-latest`        | `typesafe-systemone-v1`   |
 | `openrouter`  | `https://openrouter.ai/api/v1`    | `typesafe/jev-1.13` | `openrouter-decisions-v1` |
 | `vercel`      | `https://ai-gateway.vercel.sh/v1` | `typesafe-ai/jev`   | `vercel-evaluation-v4`    |
 
-`openrouter`、`vercel` 内置连接默认使用 OpenAI Chat，Jev 模型选择表中评估协议即可。表格只是当前服务商示例；Provider 名称、Base URL 和模型 ID 均可自定义，兼容相同 wire 的代理或其他模型可以直接使用。
+`openrouter`、`vercel` 内置连接默认使用 OpenAI Chat，Jev 模型选择 Evaluation 即预选表中的评估接口，仍可手动调整。表格只是当前服务商示例；Provider 名称、Base URL 和模型 ID 均可自定义，兼容相同 wire 的代理或其他模型可以直接使用。
 
 OpenRouter 请求路径为 `/api/alpha/decisions`，接受根地址、`/api/v1` 或 `/api/alpha` 作为 base。Vercel 请求路径为 `/v4/ai/evaluation-model`，接受根地址、`/v1` 或 `/v4/ai` 作为 base。适配器仅替换这些已知末尾路径，保留主机和自定义代理前缀，例如 `https://proxy.example/router/api/v1` 对应 `https://proxy.example/router/api/alpha/decisions`。Vercel 用 `ai-model-id` header 传模型 ID，并发送其原生协议版本和 API Key 认证头；其请求 body 中 Boolean 类型保持 `boolean`。
 

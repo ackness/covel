@@ -34,7 +34,12 @@ test("TypeSafe models retain their native protocol across save and reload", asyn
     exact: true,
   });
   await create.getByPlaceholder("Provider ID, e.g. openai").fill("typesafe");
-  await create.getByRole("combobox").selectOption("typesafe-systemone-v1");
+  await create
+    .getByRole("combobox", { name: "API protocol", exact: true })
+    .selectOption("evaluation");
+  await expect(
+    create.getByRole("combobox", { name: "Evaluation API", exact: true }),
+  ).toHaveValue("typesafe-systemone-v1");
   await create
     .getByRole("textbox", { name: /^Model IDs(?:\s|$)/ })
     .fill("jev-latest");
@@ -210,6 +215,12 @@ for (const { provider, model, protocol, baseUrl } of [
     protocol: "vercel-evaluation-v4",
     baseUrl: "https://ai-gateway.vercel.sh/v1",
   },
+  {
+    provider: "evaluation-proxy",
+    model: "custom-judge",
+    protocol: "vercel-evaluation-v4",
+    baseUrl: "https://proxy.example/gateway/v1",
+  },
 ]) {
   test(`${provider} shares its connection between chat and evaluation models`, async ({
     page,
@@ -224,6 +235,7 @@ for (const { provider, model, protocol, baseUrl } of [
       exact: true,
     });
     await create.getByPlaceholder("Provider ID, e.g. openai").fill(provider);
+    await create.getByPlaceholder("Base URL (optional)").fill(baseUrl);
     await create
       .getByRole("textbox", { name: /^Model IDs(?:\s|$)/ })
       .fill("synthetic-chat");
@@ -238,7 +250,15 @@ for (const { provider, model, protocol, baseUrl } of [
     await add.getByRole("textbox", { name: /^Model IDs(?:\s|$)/ }).fill(model);
     await add
       .getByRole("combobox", { name: "API protocol", exact: true })
-      .selectOption(protocol);
+      .selectOption("evaluation");
+    if (provider === "evaluation-proxy") {
+      await add
+        .getByRole("combobox", { name: "Evaluation API", exact: true })
+        .selectOption(protocol);
+    }
+    await expect(
+      add.getByRole("combobox", { name: "Evaluation API", exact: true }),
+    ).toHaveValue(protocol);
     await add
       .getByRole("button", { name: "Add 1 models", exact: true })
       .click();
@@ -255,6 +275,9 @@ for (const { provider, model, protocol, baseUrl } of [
     const row = settings.getByRole("group", { name: model, exact: true });
     await expect(
       row.getByRole("combobox", { name: "API protocol", exact: true }),
+    ).toHaveValue("evaluation");
+    await expect(
+      row.getByRole("combobox", { name: "Evaluation API", exact: true }),
     ).toHaveValue(protocol);
     // Exercise the same request overlay consumed by server-side ping routing.
     await page.route("**/api/ai/ping", (route) =>

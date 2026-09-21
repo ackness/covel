@@ -458,6 +458,7 @@ export function LlmPresetsPane() {
           busy={saving}
           error={saveError}
           providerId={selectedProvider.id}
+          provider={selectedProvider.provider}
           protocol={selectedProvider.protocol}
           modelProtocol={modelProtocolDraft}
           onProtocolChange={setModelProtocolDraft}
