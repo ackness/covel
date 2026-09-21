@@ -17,6 +17,13 @@ export function label(value, locale) {
   );
 }
 
+/**
+ * Resolve the point-buy rules. World-authored configuration wins and is
+ * validated strictly (authoring errors must fail loudly); without it the
+ * rules are derived from the world schema's bounded integer `abilities`
+ * attributes. Returns null when neither source yields an allocatable
+ * attribute so callers can skip allocation silently.
+ */
 export function creationRules(schema, configured, locale) {
   if (configured) {
     const error = validateRules(configured);
@@ -58,10 +65,7 @@ export function creationRules(schema, configured, locale) {
       base: attribute.defaultValue,
       max: attribute.max,
     }));
-  if (!attributes.length)
-    throw new Error(
-      "This world needs tabletop-rules/rules/creation configuration with allocatable attributes.",
-    );
+  if (!attributes.length) return null;
   const rules = {
     budget: Math.min(
       4,
@@ -121,15 +125,14 @@ export function validateRules(rules) {
     return "Point budget exceeds attribute capacity";
 }
 
+/**
+ * Validate an allocation-only submission: every attribute must be an integer
+ * within its range and the budget must be spent exactly. The character name
+ * belongs to the character-creation form, not to point allocation.
+ */
 export function validateAllocation(values, rules) {
   const invalid = validateRules(rules);
   if (invalid) return invalid;
-  if (
-    typeof values.characterName !== "string" ||
-    !values.characterName.trim() ||
-    values.characterName.trim().length > 100
-  )
-    return "Character name must contain 1-100 characters";
   let spent = 0;
   for (const attribute of rules.attributes) {
     const value = values[attribute.id];

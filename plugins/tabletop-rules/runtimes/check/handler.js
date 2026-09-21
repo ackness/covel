@@ -2,15 +2,30 @@ import { randomInt } from "node:crypto";
 import { pickLocaleText } from "../../lib/rules.js";
 
 export default async function (ctx) {
+  const rules =
+    ctx.inputs?.rules?.value ?? (await ctx.pluginData.get("setup", "rules"));
+  if (!rules?.attributes?.length) {
+    // The world has no point-buy rules (allocation was skipped): stay inert
+    // instead of failing every turn.
+    if (ctx.manualPayload?.openForm === true) {
+      throw new Error(
+        pickLocaleText(
+          ctx.locale,
+          "本世界没有可配点属性，无法发起检定。",
+          "This world has no point-buy attributes; checks are unavailable.",
+        ),
+      );
+    }
+    return {
+      outcome: "success",
+      value: { receipt: null },
+    };
+  }
   const { characters } = await ctx.tools.call("list-characters", {
     type: "player",
   });
   const player = characters[0];
   if (!player) throw new Error("Create a player character before rolling");
-  const rules =
-    ctx.inputs?.rules?.value ?? (await ctx.pluginData.get("setup", "rules"));
-  if (!rules?.attributes?.length)
-    throw new Error("Point-buy rules are unavailable");
   if (ctx.manualPayload?.openForm === true) return openForm(ctx, rules);
   const sourceTurn = ctx.execution?.sourceTurnId ?? ctx.turnId;
   const previous = await ctx.pluginData.get("turn-checks", sourceTurn);

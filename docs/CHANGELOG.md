@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Opening point allocation now cooperates with character creation.** `tabletop-rules/creation` no longer replaces the default character-creation runtime: the identity/personality opening form runs as usual, and the allocation form layers onto the created character in the same turn (the player id travels through an optional `inputs.playerId` capability binding), applying points via `update-character` after submission. Worlds without allocatable attributes and without imported rules skip allocation silently instead of failing setup, and the check runtime stays inert without rules instead of erroring every turn.
+
+### Fixed
+
+- **The third-party tabletop test fixture runs without Windows symlink privileges.** The narrator `node_modules` link in the isolated installation uses a junction, which non-elevated shells can create.
+
 ## [0.0.37] - 2026-09-19
 
 This release adds world-owned clocks and reusable reasoning configurations, repairs character and memory integration, and makes execution, recovery, and browser persistence consistent across framework entry points.
