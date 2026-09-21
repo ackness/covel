@@ -76,7 +76,7 @@ describe("normalize golden (bundled plugin set)", () => {
     }
   });
 
-  it("orders the setup stage by declared edges (pregame → schema-gen → player-init)", async () => {
+  it("orders the setup stage by declared edges (pregame → schema-gen → player-init → tabletop allocation)", async () => {
     const manifests = await loadAllManifests();
     const defaults = manifests.filter((m) => m.pluginId !== "tabletop-rules");
     const setup = resolveRuntimeProviders(defaults).filter(isSetupRuntime);
@@ -90,11 +90,15 @@ describe("normalize golden (bundled plugin set)", () => {
       ["world-init/schema-gen"],
       ["char-creator/player-init"],
     ]);
+    // tabletop-rules/creation no longer provides `character-creation`, so the
+    // default creator stays active; its weak `after` edges order allocation
+    // after both the schema and character-creation providers.
     expect(
       levelsOf(resolveRuntimeProviders(manifests).filter(isSetupRuntime)),
     ).toEqual([
       ["pregame", "scene-stage/seed"],
       ["world-init/schema-gen"],
+      ["char-creator/player-init"],
       ["tabletop-rules/creation"],
     ]);
   });

@@ -174,28 +174,53 @@ describe("tabletop package installed as a third-party ZIP", () => {
     root = await mkdtemp(path.join(tmpdir(), "covel-tabletop-"));
     await mkdir(path.join(root, "builtin/core-fixture"), { recursive: true });
     await mkdir(path.join(root, "user"));
-    // Exercise partial replacement without executing an LLM-driven default creator.
+    // Exercise coexistence: the default creator stays active and the tabletop
+    // allocation layers on top of its player instead of replacing it.
     await writeFile(
       path.join(root, "builtin/core-fixture/PLUGIN.md"),
       "---\nname: core-fixture\ndescription: Core fixture\npluginType: core-plugin\n---\n",
     );
-    for (const [name, declaration] of [
+    for (const [name, declaration, handler] of [
       [
         "create",
         "stage: setup\ntrigger: { type: auto }\ncapabilities: [character-creation]\nfallbackFor: character-creation",
+        `export default async function (ctx) {
+  const characters = await ctx.store.listCharacters(ctx.sessionId);
+  const existing = Array.isArray(characters)
+    ? characters.find((character) => character.type === "player")
+    : undefined;
+  if (existing) {
+    return { outcome: "success", completion: "done", value: { playerId: existing.id } };
+  }
+  const now = new Date().toISOString();
+  await ctx.store.upsertCharacter({
+    id: "fixture-player",
+    sessionId: ctx.sessionId,
+    name: "Lin",
+    type: "player",
+    description: "Fixture default creator player",
+    fields: { tideReading: 1, stealth: 1, diplomacy: 1, combat: 1 },
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { outcome: "success", completion: "done", value: { playerId: "fixture-player" } };
+}
+`,
       ],
-      ["track", "trigger: { type: manual }"],
-    ]) {
+      [
+        "track",
+        "trigger: { type: manual }",
+        'export default async function () { return { outcome: "success" }; }\n',
+      ],
+    ] as const) {
       const dir = path.join(root, "builtin/core-fixture/runtimes", name!);
       await mkdir(dir, { recursive: true });
       await writeFile(
         path.join(dir, "PLUGIN.md"),
         `---\nname: core-fixture/${name}\ndescription: Test default\npluginType: core-plugin\nruntimeType: function\nhandler: ./handler.js\n${declaration}\n---\n`,
       );
-      await writeFile(
-        path.join(dir, "handler.js"),
-        "export default async function () { throw new Error('Default creator must be replaced'); }\n",
-      );
+      await writeFile(path.join(dir, "handler.js"), handler);
     }
     const world = parseYaml(
       await readFile(path.join(project, "worlds/mistport/world.yaml"), "utf8"),
@@ -217,10 +242,12 @@ describe("tabletop package installed as a third-party ZIP", () => {
       { recursive: true, filter: (source) => !source.includes("node_modules") },
     );
     // Builtin plugin dependencies are staged by the desktop/server distribution.
+    // Junction: directory symlinks need Windows symlink privileges, junctions
+    // do not (the type flag is ignored on POSIX).
     await symlink(
       path.join(project, "plugins/narrator/node_modules"),
       path.join(root, "builtin/narrator/node_modules"),
-      "dir",
+      "junction",
     );
     vi.stubEnv("COVEL_USER_PLUGINS_DIR", path.join(root, "user"));
     vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-tabletop-token");
@@ -335,7 +362,14 @@ sources:
       error: expect.stringContaining("world schema"),
     });
     expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
-    expect(await store.listCharacters(sessionId)).toHaveLength(0);
+    // The coexisting default creator made its player, but the plugin never
+    // presented a form nor touched its fields.
+    expect(await store.listCharacters(sessionId)).toEqual([
+      expect.objectContaining({
+        id: "fixture-player",
+        fields: { tideReading: 1, stealth: 1, diplomacy: 1, combat: 1 },
+      }),
+    ]);
     // The provider completed before creation failed. Retrying must use its
     // committed schema, not rely on a same-execution input that is now absent.
     await store.deletePluginData(sessionId, pluginId, "rules", "creation");
@@ -378,7 +412,7 @@ sources:
     expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(0);
     await action("start_session", {});
     expect((await latestForm()).form.interactionId).toBe(
-      `${pluginId}-character`,
+      `${pluginId}-allocation`,
     );
   });
 
@@ -399,11 +433,33 @@ sources:
       });
       const before = await store.listCharacters(sessionId);
       await store.updateSession(sessionId, { phase });
-      await action(
-        phase === "setup" ? "start_session" : "send_message",
-        phase === "setup" ? {} : { content: "Continue" },
-      );
-      expect(await store.listCharacters(sessionId)).toEqual(before);
+      if (phase === "setup") {
+        // Opening flow: allocation layers onto the existing player — the form
+        // appears, and submitting patches fields without recreating the record.
+        await action("start_session", {});
+        const allocation = await latestForm();
+        expect(allocation.form.interactionId).toBe(`${pluginId}-allocation`);
+        const accepted = await submit(allocation, {
+          tideReading: 4,
+          combat: 2,
+        });
+        expect(accepted.status, await accepted.clone().text()).toBe(200);
+        await action("send_message", { content: "Begin" });
+        const after = (await store.listCharacters(sessionId))[0]!;
+        expect(after.id).toBe("existing-player");
+        expect(after.createdAt).toBe(before[0]!.createdAt);
+        expect(after.fields).toMatchObject({
+          tideReading: 4,
+          stealth: 2,
+          diplomacy: 2,
+          combat: 2,
+        });
+      } else {
+        // Late enable during play: rules initialize, the player is untouched
+        // and no form is re-asked.
+        await action("send_message", { content: "Continue" });
+        expect(await store.listCharacters(sessionId)).toEqual(before);
+      }
       expect(
         (await store.getPluginData(sessionId, pluginId, "setup", "rules"))
           ?.value,
@@ -422,7 +478,7 @@ sources:
   it("reauthorizes a restored form directly without toggling its plugin", async () => {
     await action("start_session", {});
     const creation = await latestForm();
-    const values = { characterName: "Ada", tideReading: 4, combat: 2 };
+    const values = { tideReading: 4, combat: 2 };
     await restart();
     const approval = await submit(creation, values);
     expect(approval.status, await approval.clone().text()).toBe(202);
@@ -470,14 +526,12 @@ sources:
     const creation = await latestForm();
     const fields = creation.form.fields as Array<{ name: string }>;
     expect(fields.map((field) => field.name)).toEqual([
-      "characterName",
       "tideReading",
       "stealth",
       "diplomacy",
       "combat",
     ]);
     const accepted = await submit(creation, {
-      characterName: "Lin",
       tideReading: 2,
       stealth: 2,
       diplomacy: 2,
@@ -491,17 +545,21 @@ sources:
     });
   });
 
-  it("validates before acceptance, creates once, persists checks across restart/retry, and restores the default on removal", async () => {
+  it("validates before acceptance, applies once, persists checks across restart/retry, and keeps the default creator active", async () => {
+    // Coexistence: the default creator runs alongside the allocation runtime
+    // instead of being suppressed by the tabletop capability.
     expect(
       boot.registry.getActiveRuntimes(sessionId).map((runtime) => runtime.name),
     ).toEqual(
-      expect.arrayContaining([`${pluginId}/creation`, "core-fixture/track"]),
+      expect.arrayContaining([
+        `${pluginId}/creation`,
+        "core-fixture/create",
+        "core-fixture/track",
+      ]),
     );
-    expect(
-      boot.registry.getActiveRuntimes(sessionId).map((runtime) => runtime.name),
-    ).not.toContain("core-fixture/create");
     await action("start_session", {});
     const creation = await latestForm();
+    expect(creation.form.interactionId).toBe(`${pluginId}-allocation`);
     expect(creation.form).toMatchObject({
       validation: { name: "point-buy" },
       fields: expect.arrayContaining([
@@ -516,19 +574,27 @@ sources:
       ]),
     });
     for (const values of [
-      { characterName: "Ada", tideReading: 4, combat: 4 },
-      { characterName: "Ada", tideReading: 6, combat: 0 },
-      { characterName: "Ada", tideReading: 3.5, combat: 2.5 },
-      { characterName: "Ada", tideReading: "", combat: 5 },
+      { tideReading: 4, combat: 4 },
+      { tideReading: 6, combat: 0 },
+      { tideReading: 3.5, combat: 2.5 },
+      { tideReading: "", combat: 5 },
+      { characterName: "Ada", tideReading: 4, combat: 2 },
     ]) {
       const rejected = await submit(creation, values);
       expect(rejected.status, await rejected.text()).toBe(400);
       expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
-      expect(await store.listCharacters(sessionId)).toHaveLength(0);
     }
+    // Rejections never reach the character: the default creator's fields stay
+    // at their schema defaults until a valid allocation commits.
+    expect(await store.listCharacters(sessionId)).toEqual([
+      expect.objectContaining({
+        id: "fixture-player",
+        fields: { tideReading: 1, stealth: 1, diplomacy: 1, combat: 1 },
+      }),
+    ]);
     await restart();
     await enable();
-    const values = { characterName: "Ada", tideReading: 4, combat: 2 };
+    const values = { tideReading: 4, combat: 2 };
     const accepted = await submit(creation, values);
     expect(accepted.status, await accepted.text()).toBe(200);
     expect((await submit(creation, values)).status).toBe(200);
@@ -537,7 +603,7 @@ sources:
     await action("send_message", { content: "Begin" });
     expect(await store.listCharacters(sessionId)).toEqual([
       expect.objectContaining({
-        name: "Ada",
+        name: "Lin",
         fields: expect.objectContaining({ tideReading: 4, combat: 2 }),
       }),
     ]);
@@ -611,6 +677,9 @@ sources:
     );
     expect(disabled.status, await disabled.text()).toBe(200);
     expect((await submit(creation, values)).status).toBe(400);
+    expect(
+      boot.registry.getActiveRuntimes(sessionId).map((runtime) => runtime.name),
+    ).not.toContain(`${pluginId}/creation`);
     expect(
       boot.registry.getActiveRuntimes(sessionId).map((runtime) => runtime.name),
     ).toContain("core-fixture/create");
