@@ -107,6 +107,56 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     });
   });
 
+  it.each([
+    {},
+    { pluginPolicy: { preferTags: ["mode:dialogue"] } },
+    { pluginPolicy: { requireCapabilities: ["choice-recommendations"] } },
+  ])("keeps demos optional for automatic selection: %j", async (metadata) => {
+    const demo = entry("choice-demo", "plugin", ["role:demo", "mode:dialogue"]);
+    registry.register({
+      ...demo,
+      summary: { ...demo.summary, capabilities: ["choice-recommendations"] },
+    });
+    await store.createWorld({
+      id: "demo-world",
+      name: "Demo world",
+      description: "",
+      metadata,
+      createdAt: new Date().toISOString(),
+    });
+    const response = await app.request("/api/worlds/demo-world/plugin-plan");
+    const plan = (await response.json()) as WorldPluginPlan;
+    expect(plan.defaultPluginIds).not.toContain("choice-demo");
+    expect(resolveSessionPlugins(["choice-demo"], registry)).toContain(
+      "choice-demo",
+    );
+  });
+
+  it.each([
+    { recommendedPlugins: ["choice-demo"] },
+    { requiredPlugins: ["choice-demo"] },
+    {
+      pluginPolicy: {
+        preset: "demo",
+        packs: [{ id: "demo", optionalPlugins: ["choice-demo"] }],
+      },
+    },
+  ])("honors explicit demo selection: %j", async (metadata) => {
+    registry.register(entry("choice-demo", "plugin", ["role:demo"]));
+    await store.createWorld({
+      id: "explicit-demo-world",
+      name: "Explicit demo world",
+      description: "",
+      metadata,
+      createdAt: new Date().toISOString(),
+    });
+    const response = await app.request(
+      "/api/worlds/explicit-demo-world/plugin-plan",
+    );
+    const plan = (await response.json()) as WorldPluginPlan;
+    expect(plan.defaultPluginIds).toContain("choice-demo");
+  });
+
   it("preserves legacy metadata selection without a nested plugin policy", async () => {
     await store.createWorld({
       id: "legacy-world",

@@ -71,6 +71,8 @@
 - `pluginPolicy`：描述场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `packs`。写在顶层的同名三组字段会在世界加载时并入 `pluginPolicy`。
 - `worldData`：可选，指向 `data/world.data.yaml`；当前会读取本地 YAML/JSON/Markdown/Text/Media source，生成轻量 `WorldRecord.metadata.worldData` 摘要，投影 `world:metadata.dimensions`，并在 session 创建时导入 `plugin:*/*`、`plugin:*/*+lorebook`、`lorebook`、`characters`、`media` + `indexTo`。
 
+带 `role:demo` 标签的演示插件默认关闭，不通过 `preferTags`、`requireCapabilities` 或无策略世界的全选规则自动启用。玩家仍可手动选择；世界或组合包显式列入 required/recommended（组合包的 optional 列表也算推荐）时可以启用，已选插件的 `requires` 关系照常展开。
+
 第三方插件可以把插件数据声明为 `schema: plugin://<pluginId>/<namespace>` 与 `to: plugin:<pluginId>/<namespace>`。完整格式见 [World Data](world-data.md)。
 
 内置组合包由服务端提供：`traditional-story`、`dialogue-mode`、`low-cost`。`GET /api/worlds/:id/plugin-plan` 把内置组合包、世界自定义组合包、标签和能力约束解析为默认插件集合；`defaultPluginIds` 使用与会话相同的 `requires`、`conflicts` 和可信 builtin core 替换规则。准备页遵守解析结果，不把已被替代的 core 插件重新选中或锁定。世界可以用 `pluginPolicy.preset` 引用，也可以在 `pluginPolicy.packs` 自定义组合包。对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-stage`、`scene-prompts`、`character-blueprint`、`character-presence`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。`scene-stage` 由 `chat-mode-narrator` 的 `relations.requires` 强制拉起（同 `scene-cast`），即便玩家在准备页手动关闭也会被服务端展开逻辑重新加回——世界包引用 `plugin:scene-stage/scenes` 的 worldData source 因此总能解析到已激活插件。

@@ -13,7 +13,7 @@ ui:
 stage: post-turn
 outputKind: system
 capabilities: [choice-recommendations]
-tags: [role:demo, cost:llm, mode:dialogue]
+tags: [role:demo, cost:llm]
 timeoutMs: 15000
 trigger: { type: scheduled, interval: 1 }
 inputs:
