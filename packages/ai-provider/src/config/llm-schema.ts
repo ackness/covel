@@ -1,11 +1,8 @@
 import { z } from "zod";
+import { PROVIDER_PROTOCOLS } from "../types.js";
 import { REASONING_EFFORT_VALUES } from "../reasoning-effort.js";
 
-const providerProtocolSchema = z.enum([
-  "openai-chat-v1",
-  "openai-responses-v1",
-  "anthropic-messages-v1",
-]);
+const providerProtocolSchema = z.enum(PROVIDER_PROTOCOLS);
 
 const inputModalitySchema = z.enum(["text", "image", "audio", "video", "file"]);
 const outputModalitySchema = z.enum([
@@ -14,6 +11,7 @@ const outputModalitySchema = z.enum([
   "audio",
   "video",
   "embedding",
+  "evaluation",
 ]);
 const modelFeatureSchema = z.enum([
   "function_calling",

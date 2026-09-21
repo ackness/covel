@@ -1,6 +1,8 @@
 import { providerKeyToId, type ReasoningEffort } from "@covel/shared";
 
 export interface ProviderModelEntry {
+  /** Overrides the connection protocol for this model configuration. */
+  protocol?: string;
   reasoningEffort?: ReasoningEffort;
   /** Stable internal reference used by slot bindings and request overlays. */
   ref: string;
@@ -50,12 +52,15 @@ export function flattenProviderProfiles(
         provider: profile.id,
         baseUrl: profile.baseUrl,
         model: model.modelId.trim(),
-        ...(profile.protocol ? { protocol: profile.protocol } : {}),
+        ...((model.protocol ?? profile.protocol)
+          ? { protocol: model.protocol ?? profile.protocol }
+          : {}),
       })),
   );
 }
 
 export interface UpsertProviderModelInput {
+  modelProtocol?: string;
   reasoningEffort?: ReasoningEffort;
   providerId: string;
   providerName?: string;
@@ -94,6 +99,7 @@ export function upsertProviderModel(
     (model) =>
       model.modelId === modelId &&
       model.reasoningEffort === input.reasoningEffort &&
+      model.protocol === input.modelProtocol &&
       (model.name?.trim() || modelId) === (input.modelName?.trim() || modelId),
   );
   if (existingModel) {
@@ -102,6 +108,7 @@ export function upsertProviderModel(
 
   const modelRef = createRef();
   const model: ProviderModelEntry = {
+    ...(input.modelProtocol ? { protocol: input.modelProtocol } : {}),
     ...(input.reasoningEffort
       ? { reasoningEffort: input.reasoningEffort }
       : {}),

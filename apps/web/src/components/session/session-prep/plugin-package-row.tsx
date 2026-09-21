@@ -72,7 +72,9 @@ export function PluginPackageRow({
   const pluginBindings = bindingState.entries.filter(
     (entry) => entry.pluginId === pkg.id,
   );
-  const textSlots = resolvedSlots.filter((slot) => slot.tag === "text");
+  const textSlots = resolvedSlots.filter(
+    (slot) => slot.tag === "text" && slot.isAvailable !== false,
+  );
   const providerSlotSettings = pkg.userSettings.filter(
     (setting) => setting.type === "slot",
   );

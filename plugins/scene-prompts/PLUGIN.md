@@ -23,6 +23,8 @@ requireToolUse: true
 # The successful generator call is the complete result. Avoid a second LLM
 # request whose only purpose would be to emit runtime-done.
 completeAfterTools: [generate-scene-prompts]
+output:
+  schema: ./schemas/scene-prompts-output.schema.json
 # Discovered by the stage choices layer via this capability (not a hardcoded
 # plugin id — framework↔plugin isolation rule). A third-party plugin declaring
 # `scene-prompts` transparently replaces this one as the stage's prompt source.

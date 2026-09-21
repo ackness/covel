@@ -49,6 +49,7 @@ export interface BootstrapPluginEntriesParams {
   readonly pluginToolAccess: Map<string, Set<string>>;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
+  readonly services?: import("@covel/runtime").PluginServiceRegistry;
   /** Fail-closed session authorization for community server code. */
   readonly isCommunityServerCodeApproved?: (
     sessionId: string | undefined,

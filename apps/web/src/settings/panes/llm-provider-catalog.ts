@@ -33,7 +33,7 @@ export interface ProviderDraft {
 export const EMPTY_PROVIDER_DRAFT: ProviderDraft = {
   providerId: "",
   baseUrl: "",
-  protocol: "openai-chat-v1",
+  protocol: "",
   modelIds: "",
 };
 
@@ -171,6 +171,9 @@ const SUPPORTED_PROVIDER_PROTOCOLS = new Set([
   "openai-chat-v1",
   "openai-responses-v1",
   "anthropic-messages-v1",
+  "typesafe-systemone-v1",
+  "openrouter-decisions-v1",
+  "vercel-evaluation-v4",
 ]);
 
 /**
@@ -215,6 +218,10 @@ export function sanitizeImportedProfile(
           ref,
           modelId,
           ...(name ? { name } : {}),
+          ...(typeof model.protocol === "string" &&
+          SUPPORTED_PROVIDER_PROTOCOLS.has(model.protocol)
+            ? { protocol: model.protocol }
+            : {}),
           ...(isReasoningEffort(model.reasoningEffort)
             ? { reasoningEffort: model.reasoningEffort }
             : {}),

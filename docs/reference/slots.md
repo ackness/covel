@@ -2,25 +2,50 @@
 
 Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途”。`llm.toml` 里每个 `[covel.<slot>]` 小节定义一个具名用途，插件任务按 slot 名或 tag 解析到具体服务商和模型。开发环境读仓库根 `llm.toml`，桌面端读 `~/.covel/llm.toml`（设置内可热重载）。`llm.toml` 缺失时，服务器使用内置的 DeepSeek `story` 用途和 `deepseek-v4-flash`。
 
+评估模型使用 `output = ["evaluation"]`、`tag = "evaluation"` 和 `gateway.evaluate()`。TypeSafe、OpenRouter 和 Vercel 的评估模型使用各自的原生协议，配置与能力边界见 [模型评估](evaluation.md)。
+
+## 配置分层与前端对应
+
+模型能力类型与用途名称分开：`evaluation` 是模型能力，`intent`、`risk-check`、`npc-choice` 是可自定义的用途。多个用途可以选择同一个评估模型；`evaluation` 只是 `gateway.evaluate()` 省略用途时使用的约定名称。供应商、模型 ID 或用途名称不决定协议。
+
+| 层次           | 前端位置           | 持久化与生效范围                                                          |
+| -------------- | ------------------ | ------------------------------------------------------------------------- |
+| 连接与模型     | 服务商与模型       | TOML 提供基础模型；`llm.providers` 保存本地连接及模型，模型可覆盖连接协议 |
+| 用途与模型绑定 | 用途分配           | `[covel.<name>]` 定义基础用途；`llm.slotConfig` 的本地选择优先            |
+| 用途参数与能力 | 生成参数、编辑能力 | `llm.paramOverrides` / `llm.capabilityOverrides` 随请求覆盖               |
+| 任务选择用途   | 会话模型分配       | `runtimeModelOverrides` 只保存任务到用途的映射                            |
+
+桌面设置保存在 `settings.json`，网页设置保存在当前浏览器；它们不回写 TOML。重新加载 TOML 保留本地绑定及参数，重置用途绑定后恢复文件中的模型。参数与能力仍有各自的重置入口。
+
+服务商页面按连接 ID 归组模型，API Key 和价格倍率共享。TOML 模型保留各自文件中的地址与协议，本地模型使用本地连接地址及模型协议覆盖；修改本地连接不会修改同组的 TOML 模型。模型行和用途卡片显示生效地址、协议及配置来源。
+
+用途选择器按所需输出能力过滤模型，同一 OpenRouter / Vercel 连接中的聊天与评估模型不会混选。已保存的无效绑定显示错误并从会话可用用途中排除，不静默改绑。服务端也校验显式绑定；内置文本用途不能绑定评估模型。自定义用途从 TOML 的 tag 或所选模型输出推导能力，不要求使用固定名称。
+
+生成参数页按实际模型能力展示参数。评估等非文本输出模型不显示温度、输出 token 和思考参数，仍可重置此前保存的参数覆盖。
+
+### 备用策略归属用途
+
+`fallback` 属于 TOML 用途。前端为 `utility` 换模型后，原来的 `utility -> story` 备用关系仍然生效，`story` 也使用本次请求选择的模型。不会借用新选模型所属其它用途的备用关系。重复目标去重，基础备用链的循环防护保持有效；`allowFallback: false` 仍只调用主目标。此规则适用于原本支持备用链的文本、结构化输出、流式输出和评估调用，不为图片、语音、embedding 新增重试机制。
+
 ## Slot 字段（`[covel.<slot>]`）
 
 Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
-| 字段                                | 必填 | 说明                                                                                             |
-| ----------------------------------- | ---- | ------------------------------------------------------------------------------------------------ |
-| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                               |
-| `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                     |
-| `baseUrl`                           | ✅   | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）                                 |
-| `protocol`                          | ✅   | `openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1`                               |
-| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription`。缺省从 output 模态推断    |
-| `fallback`                          | —    | 失败时回落的 slot 名                                                                             |
-| `input` / `output`                  | —    | 模态覆盖（缺省自动检测，见下）。`output` 支持 `text` / `image` / `audio` / `video` / `embedding` |
-| `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                           |
-| `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                   |
-| `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                 |
-| `thinking` / `reasoning_effort`     | —    | 思考模式与强度；按目标协议转换为对应请求字段                                                     |
-| `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                 |
-| `providerRequestMetadata`           | —    | 自由 KV，合入该 slot 每次请求体（per-call metadata 优先）。媒体 wire 路由键也放这里，见下        |
+| 字段                                | 必填 | 说明                                                                                                                                              |
+| ----------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                                                                                |
+| `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                      |
+| `baseUrl`                           | ✅   | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）                                                                                  |
+| `protocol`                          | ✅   | `openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1` / `typesafe-systemone-v1` / `openrouter-decisions-v1` / `vercel-evaluation-v4` |
+| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `evaluation`。缺省从 output 模态推断                                      |
+| `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                              |
+| `input` / `output`                  | —    | 模态覆盖（缺省自动检测，见下）。`output` 支持 `text` / `image` / `audio` / `video` / `embedding` / `evaluation`                                   |
+| `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                                                                            |
+| `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                                                                    |
+| `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                                                                  |
+| `thinking` / `reasoning_effort`     | —    | 思考模式与强度；按目标协议转换为对应请求字段                                                                                                      |
+| `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                                                                  |
+| `providerRequestMetadata`           | —    | 生成请求的自由 KV（per-call 优先）；评估请求不使用。媒体 wire 路由键也放这里，见下                                                                |
 
 ## Slot 解析链
 

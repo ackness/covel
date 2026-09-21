@@ -105,7 +105,7 @@ function serializeOpenAiChatContent(content: TextMessageContent): unknown {
   });
 }
 
-function isDeepSeekV4ThinkingRequest(
+function isDeepSeekThinkingRequest(
   model: string,
   context: ModelRequestContext | undefined,
   body: Record<string, unknown>,
@@ -123,15 +123,18 @@ function isDeepSeekV4ThinkingRequest(
     models.some((candidate) =>
       /(?:^|[-_/])deepseek(?:[-_/]|$)/.test(candidate),
     );
-  const isV4 = models.some((candidate) =>
-    /(?:^|[-_/])v4(?:[-._/]|$)/.test(candidate),
+  const defaultsToThinking = models.some((candidate) =>
+    /(?:^|[-_/])deepseek-(?:v4(?:[-._/]|$)|flash(?:[-_/]|$))/.test(candidate),
   );
   const thinking = body.thinking;
-  const thinkingEnabled =
+  const thinkingType =
     thinking !== null &&
     typeof thinking === "object" &&
-    (thinking as Record<string, unknown>).type === "enabled";
-  return isDeepSeek && isV4 && thinkingEnabled;
+    (thinking as Record<string, unknown>).type;
+  return (
+    isDeepSeek &&
+    (thinkingType === "enabled" || (!thinkingType && defaultsToThinking))
+  );
 }
 
 function attachOpenAiTools(
@@ -143,7 +146,7 @@ function attachOpenAiTools(
 ): void {
   if (!tools || tools.length === 0) return;
   body.tools = tools;
-  if (!isDeepSeekV4ThinkingRequest(model, context, body)) {
+  if (!isDeepSeekThinkingRequest(model, context, body)) {
     body.tool_choice ??= defaultToolChoice(defaults, body, "chat");
   }
 }

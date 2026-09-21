@@ -6,6 +6,12 @@ import {
 } from "../src/index.js";
 
 describe("reasoning effort profiles", () => {
+  it("recognizes deepseek-flash without a model-database entry", () => {
+    expect(
+      resolveReasoningEffortProfile("deepseek-flash", "deepseek"),
+    ).toMatchObject({ family: "deepseek", defaultValue: "high" });
+  });
+
   it("uses the namespaced model family before the transport provider", () => {
     expect(
       resolveReasoningEffortProfile(

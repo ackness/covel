@@ -44,6 +44,8 @@ import { covelDirectives } from "@/lib/json-render-directives.js";
 import { X } from "lucide-react";
 import { PluginJsonRenderDevtools } from "./json-render-devtools.js";
 
+import { PluginWebview } from "./plugin-webview.js";
+
 export type PluginPanelStateCache = Map<string, StateStore>;
 
 export interface PluginPanelProps {
@@ -53,10 +55,11 @@ export interface PluginPanelProps {
   onAction?: (actionName: string, params?: Record<string, unknown>) => void;
   handlers?: Record<
     string,
-    (params: Record<string, unknown>) => Promise<void> | void
+    (params: Record<string, unknown>) => Promise<unknown> | unknown
   >;
   stateOverride?: Record<string, unknown>;
   interactionLocked?: boolean;
+  surfaceContext?: Readonly<Record<string, unknown>>;
   enableDevtools?: boolean;
 }
 
@@ -72,6 +75,7 @@ export function PluginPanel({
   handlers: explicitHandlers,
   stateOverride,
   interactionLocked = false,
+  surfaceContext,
   enableDevtools = false,
 }: PluginPanelProps) {
   const { t, i18n } = useTranslation();
@@ -158,12 +162,13 @@ export function PluginPanel({
 
   const flatSpec = useMemo(() => {
     try {
+      if (spec.webview) return null;
       return pluginPanelViewToSpec(spec.view);
     } catch (e) {
       console.warn("[PluginPanel] Failed to convert spec:", e);
       return null;
     }
-  }, [spec.view]);
+  }, [spec.view, spec.webview]);
 
   const sessionId = sessionState.session?.id;
 
@@ -190,11 +195,14 @@ export function PluginPanel({
   // dropping the click. Community-trust plugins (including every third-party
   // plugin under `~/.covel/plugins/`) hit this path on first click.
   const defaultHandlers = useMemo<
-    Record<string, (params: Record<string, unknown>) => Promise<void> | void>
+    Record<
+      string,
+      (params: Record<string, unknown>) => Promise<unknown> | unknown
+    >
   >(() => {
     const handlers: Record<
       string,
-      (params: Record<string, unknown>) => Promise<void> | void
+      (params: Record<string, unknown>) => Promise<unknown> | unknown
     > = {
       invokeRuntime: async (params: Record<string, unknown>) => {
         if (!sessionId) return;
@@ -232,8 +240,10 @@ export function PluginPanel({
                 params.expectsBackgroundFollower === true,
             });
           }
+          return res;
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
+          if (spec.webview) throw err;
         } finally {
           markInvoking(`runtime:${runtimeId}`, false);
         }
@@ -271,8 +281,10 @@ export function PluginPanel({
               runtimeId: action,
             });
           }
+          return res;
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
+          if (spec.webview) throw err;
         } finally {
           markInvoking(`action:${action}`, false);
         }
@@ -334,8 +346,10 @@ export function PluginPanel({
               });
             }
           }
+          return response;
         } catch (err) {
           emitToast("error", err instanceof Error ? err.message : String(err));
+          if (spec.webview) throw err;
         } finally {
           markInvoking(`command:${built.command}`, false);
         }
@@ -350,11 +364,50 @@ export function PluginPanel({
       };
     }
     return handlers;
-  }, [i18n.language, pluginId, sessionId, onAction, markInvoking, t]);
+  }, [
+    i18n.language,
+    pluginId,
+    sessionId,
+    onAction,
+    markInvoking,
+    t,
+    spec.webview,
+  ]);
 
   const handlers = explicitHandlers
     ? { ...defaultHandlers, ...explicitHandlers }
     : defaultHandlers;
+
+  if (spec.webview && typeof spec.webview === "object") {
+    const webview = spec.webview as { html?: unknown; height?: number };
+    if (typeof webview.html === "string") {
+      const allowed = Object.fromEntries(
+        [
+          "invokeRuntime",
+          "invokePluginAction",
+          "invokeCommand",
+          ...Object.keys(explicitHandlers ?? {}),
+        ]
+          .filter((name) => typeof handlers[name] === "function")
+          .map((name) => [name, handlers[name]!]),
+      );
+      return (
+        <PluginWebview
+          title={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
+          html={webview.html}
+          height={webview.height}
+          locked={interactionLocked}
+          handlers={allowed}
+          state={{
+            data,
+            locale: activeLocale,
+            locked: interactionLocked,
+            context: surfaceContext ?? {},
+          }}
+        />
+      );
+    }
+  }
 
   if (!flatSpec) {
     // Name the offending spec and the concrete reason instead of a generic
@@ -477,7 +530,14 @@ export function PluginPanel({
         <JSONUIProvider
           registry={covelRegistry}
           store={stateStore}
-          handlers={handlers}
+          handlers={Object.fromEntries(
+            Object.entries(handlers).map(([name, handler]) => [
+              name,
+              async (params: Record<string, unknown>) => {
+                await handler(params);
+              },
+            ]),
+          )}
           directives={covelDirectives}
         >
           <Renderer spec={flatSpec} registry={covelRegistry} />

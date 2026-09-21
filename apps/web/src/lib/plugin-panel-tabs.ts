@@ -108,6 +108,7 @@ export function aggregateSpecsIntoGroups(
 
   for (const entry of slotEntries) {
     for (const spec of entry.specs) {
+      if (spec.surfaces && !spec.surfaces.includes("panel")) continue;
       const specId = spec.id ?? `${entry.pluginId}-${counter++}`;
       const groupKey = spec.group ?? `${entry.pluginId}::${specId}`;
 

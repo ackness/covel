@@ -1,5 +1,13 @@
 {
   "models": {
+    "jev-1.13.0": {
+      "input": ["text"],
+      "output": ["evaluation"],
+      "features": [],
+      "contextWindow": 64000,
+      "maxOutputTokens": 0,
+      "pricing": { "inputPerMToken": 0.042, "outputPerMToken": 0 }
+    },
     "gpt-4o": {
       "input": ["text", "image", "audio", "file"],
       "output": ["text"],
@@ -745,6 +753,8 @@
     }
   },
   "aliases": {
+    "jev-latest": "jev-1.13.0",
+    "jev-preview": "jev-1.13.0",
     "gpt-4o-2024-11-20": "gpt-4o",
     "gpt-4o-2024-08-06": "gpt-4o",
     "gpt-4o-2024-05-13": "gpt-4o",

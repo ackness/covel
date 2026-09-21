@@ -52,7 +52,7 @@ function rejectRedirect(response: Response, url: string): Response {
 
 export async function postJson(
   config: ProviderConfig,
-  path: string,
+  path: string | { append: string },
   body: Record<string, unknown>,
   signal?: AbortSignal,
   overrideHeaders?: Record<string, string>,
@@ -66,7 +66,15 @@ export async function postJson(
     ...overrideHeaders,
   };
 
-  const url = buildProviderUrl(config.baseUrl, path);
+  const url =
+    typeof path === "string"
+      ? buildProviderUrl(config.baseUrl, path)
+      : (() => {
+          const endpoint = new URL(config.baseUrl);
+          endpoint.pathname =
+            endpoint.pathname.replace(/\/+$/, "") + path.append;
+          return endpoint.toString();
+        })();
   const serializedBody = JSON.stringify(body);
   const effectiveSignal = signal ?? config.signal;
 

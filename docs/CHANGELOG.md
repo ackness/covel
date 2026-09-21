@@ -4,13 +4,30 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
-### Changed
+## [0.0.38] - 2026-09-21
 
-- **Opening point allocation now cooperates with character creation.** `tabletop-rules/creation` no longer replaces the default character-creation runtime: the identity/personality opening form runs as usual, and the allocation form layers onto the created character in the same turn (the player id travels through an optional `inputs.playerId` capability binding), applying points via `update-character` after submission. Worlds without allocatable attributes and without imported rules skip allocation silently instead of failing setup, and the check runtime stays inert without rules instead of erroring every turn.
+This release adds configurable evaluation models and public plugin services, keeps the Jev recommendation demo optional, and fixes opening character allocation and stage interaction timing.
+
+### Added
+
+- **Evaluation models support configurable providers and protocols.** TypeSafe Jev, OpenRouter decisions, Vercel evaluation, and supported structured-output providers share typed evaluation questions, normalized results, cancellation, and request tracing. Provider endpoints, models, and role bindings remain configurable.
+- **Plugins expose public services and custom HTML panels.** Function runtimes can discover and call declared services through scoped host contracts. Plugin-owned UI can render in sidebars and stage decision areas with validated resources and session/turn context. The Jev choice demo demonstrates this flow without selecting or sending player actions.
 
 ### Fixed
 
-- **The third-party tabletop test fixture runs without Windows symlink privileges.** The narrator `node_modules` link in the isolated installation uses a junction, which non-elevated shells can create.
+- **Model roles respect provider capabilities.** Text, image, and evaluation bindings use consistent capability checks in settings, preparation, session overrides, connection probes, and runtime dispatch. Clearing a role restores its current configured default; evaluation protocol selection is consistent across provider editors.
+- **DeepSeek Flash tool requests honor thinking mode.** The current `deepseek-flash` model supports reasoning controls without a model-database entry. Default and explicit thinking requests omit incompatible forced tool choices, while non-thinking plugin tasks retain their required tools.
+- **Opening allocation preserves default character creation (#77).** Identity/personality creation runs first, allocation appears in the same character-creation turn, and accepted points update the existing player. Worlds without allocatable attributes skip allocation. Restart and retry markers preserve the accepted allocation.
+- **Stage decisions wait for execution to finish.** Quick replies and plugin recommendations stay hidden during the active turn and return with the committed result, preventing actions based on an earlier scene.
+- **Demo plugins stay disabled by default.** `role:demo` packages do not enter default selections through broad tags, capabilities, or a world without selection policy. Players and explicit world/pack declarations can still enable them. Jev demo no longer carries the automatic dialogue-mode tag.
+- The third-party tabletop installation fixture uses Windows-compatible directory junctions for staged dependencies.
+
+### Upgrade notes
+
+- Update the server, Web client, desktop shell, and framework packages together. Custom hosts should follow the current evaluation, plugin-service, and UI contracts in `docs/reference/`. No database migration is introduced.
+- The Jev demo requires an explicitly configured evaluation role and manual or world-authored activation; ordinary gameplay does not require it. Recommendation probabilities describe candidate preference, not action success.
+- Recreate unfinished development sessions using the previous tabletop-only character form; its form identity and setup markers are not migrated. Completed character data is retained.
+- macOS Apple Silicon and Windows x64 artifacts are unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings; platform builds do not imply a complete interactive Windows playthrough.
 
 ## [0.0.37] - 2026-09-19
 
@@ -1276,7 +1293,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.37...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.38...HEAD
+[0.0.38]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.38
 [0.0.37]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.37
 [0.0.36]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.36
 [0.0.31]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.31

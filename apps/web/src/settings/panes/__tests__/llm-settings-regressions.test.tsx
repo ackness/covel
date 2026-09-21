@@ -130,6 +130,48 @@ describe("LLM settings regressions", () => {
     apiMocks.setSlotConfig.mockReset();
   });
 
+  it("allows evaluation models for a newly discovered custom role without imposing text capability", () => {
+    const commitSlot = vi.fn();
+    render(
+      <LlmSlotCard
+        slotId="npc-choice"
+        slotConfig={{}}
+        serverSlot={undefined}
+        allPresets={collectLlmSlotPresetCandidates(
+          [],
+          [
+            {
+              id: "jev-config",
+              name: "Jev",
+              provider: "typesafe",
+              model: "jev-latest",
+              protocol: "typesafe-systemone-v1",
+            },
+          ],
+        )}
+        capOverride={undefined}
+        isConfigured
+        isFirst={false}
+        isDiscovered
+        isEditing={false}
+        commitSlot={commitSlot}
+        onToggleEditing={() => undefined}
+        onResetCapability={() => undefined}
+        onUpdateCapability={() => undefined}
+      />,
+    );
+    const provider = screen.getByRole("combobox", {
+      name: "Provider",
+    }) as HTMLSelectElement;
+    expect([...provider.options].map((option) => option.value)).toContain(
+      "typesafe",
+    );
+    fireEvent.change(provider, { target: { value: "typesafe" } });
+    expect(commitSlot).toHaveBeenCalledWith({
+      "npc-choice": { modelRef: "jev-config" },
+    });
+  });
+
   it("keeps a missing local binding visible for deliberate reselection or reset", () => {
     const commitSlot = vi.fn();
     const serverSlot = {

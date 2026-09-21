@@ -18,7 +18,7 @@ import {
   resolveCapability,
   type ManualCapabilityOverride,
 } from "../capability/index.js";
-import { readEnvString } from "@covel/shared";
+import { modelOutputTag, readEnvString } from "@covel/shared";
 
 /** Fallback context window when the capability DB does not report one. */
 const DEFAULT_EMBED_CONTEXT_WINDOW = 8_192;
@@ -122,7 +122,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
     const supportedModes = deriveSupportedModes(capability.output);
 
     // Derive tag: explicit > inferred from output modalities
-    const tag = def.tag ?? inferTag(capability.output);
+    const tag = def.tag ?? modelOutputTag(capability.output);
 
     const presetId = `slot-${slotName}`;
     const fallbackIds = def.fallback ? [`slot-${def.fallback}`] : [];
@@ -184,6 +184,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
  * - image output → image
  * - audio output → speech
  * - embedding output → embed
+ * - evaluation output → evaluate
  */
 function deriveSupportedModes(
   outputModalities: readonly string[],
@@ -200,21 +201,15 @@ function deriveSupportedModes(
       case "audio":
         modes.push("speech");
         break;
+      case "evaluation":
+        modes.push("evaluate");
+        break;
       case "embedding":
         modes.push("embed");
         break;
     }
   }
   return modes.length > 0 ? modes : ["text", "object", "stream"];
-}
-
-/**
- * Infer slot tag from output modalities.
- * If any output is "image", tag is "image". Otherwise "text".
- */
-function inferTag(outputModalities: readonly string[]): string {
-  if (outputModalities.includes("image")) return "image";
-  return "text";
 }
 
 /**

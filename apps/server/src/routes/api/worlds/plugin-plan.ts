@@ -104,11 +104,14 @@ function defaultPluginIds(
   for (const id of selectedPack?.excludedPluginIds ?? []) excluded.add(id);
 
   for (const plugin of plugins) {
-    if (policy.preferredTags.some((tag) => plugin.tags.includes(tag))) {
-      recommended.add(plugin.id);
-    }
     if (policy.avoidedTags.some((tag) => plugin.tags.includes(tag))) {
       excluded.add(plugin.id);
+    }
+    // Demo packages require an explicit selection, not a broad tag or
+    // capability match. World and pack declarations can still opt them in.
+    if (plugin.tags.includes("role:demo")) continue;
+    if (policy.preferredTags.some((tag) => plugin.tags.includes(tag))) {
+      recommended.add(plugin.id);
     }
     if (
       policy.requiredCapabilities.some((capability) =>
@@ -136,6 +139,7 @@ function defaultPluginIds(
       if (required.has(plugin.id)) return true;
       if (excluded.has(plugin.id)) return false;
       if (locked) return true;
+      if (plugin.tags.includes("role:demo")) return recommended.has(plugin.id);
       return hasPolicy ? recommended.has(plugin.id) : true;
     })
     .map((plugin) => plugin.id);

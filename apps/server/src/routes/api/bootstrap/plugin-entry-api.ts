@@ -61,6 +61,13 @@ export function buildEntryApi(
     pluginId,
     toolkit,
     http,
+    registerService(definition) {
+      if (!params.services)
+        throw new Error("Plugin service registry is unavailable");
+      batch.stage(() =>
+        batch.track(params.services!.register(pluginId, definition)),
+      );
+    },
     registerTool(toolModule) {
       batch.stage(() => {
         if (!isToolModule(toolModule)) {

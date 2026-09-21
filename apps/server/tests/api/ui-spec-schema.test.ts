@@ -1,6 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { loadPluginUiSpec } from "@covel/plugin-loader";
 import { partitionSlotSpecs } from "../../src/routes/misc-api/ui-spec-schema.js";
 
 function partition(specs: Record<string, unknown>[]) {
@@ -132,7 +133,7 @@ describe("plugin UI spec validation", () => {
     expect(result.diagnostics[0]?.issues[0]?.path).toBe("_componentPath");
   });
 
-  it("accepts every bundled plugin UI spec", () => {
+  it("accepts every bundled plugin UI spec", async () => {
     const pluginsDirectory = resolve(
       import.meta.dirname,
       "../../../../plugins",
@@ -149,16 +150,17 @@ describe("plugin UI spec validation", () => {
       });
 
     expect(uiFiles.length).toBeGreaterThan(0);
-    const diagnostics = uiFiles.flatMap((file) => {
-      const spec = JSON.parse(readFileSync(file, "utf8")) as Record<
-        string,
-        unknown
-      >;
-      return partition([spec]).diagnostics.map((diagnostic) => ({
-        file,
-        issues: diagnostic.issues,
-      }));
-    });
+    const diagnostics = (
+      await Promise.all(
+        uiFiles.map(async (file) => {
+          const spec = await loadPluginUiSpec(pluginsDirectory, file);
+          return partition([spec]).diagnostics.map((diagnostic) => ({
+            file,
+            issues: diagnostic.issues,
+          }));
+        }),
+      )
+    ).flat();
 
     expect(diagnostics).toEqual([]);
   });

@@ -1,4 +1,11 @@
-import { resolveLlmTokenLimits, type LLMProviderRequest } from "@covel/shared";
+import {
+  defaultModelRoleTag,
+  protocolOutputModalities,
+  supportsModelRole,
+  resolveLlmTokenLimits,
+  type LLMProviderRequest,
+} from "@covel/shared";
+import { AiProviderError } from "./errors.js";
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
@@ -71,7 +78,7 @@ export interface GatewayOptions {
   parameterOverrides?: ModelParameterOverrides;
   /** Abort signal for cancellation (e.g. budget timeout). */
   signal?: AbortSignal;
-  /** Allow configured text/object/stream fallback targets; defaults to true. */
+  /** Allow configured text/object/stream/evaluate fallback targets; defaults to true. */
   allowFallback?: boolean;
   /** Synchronously observes every concrete provider/model attempt. */
   onTargetAttempt?: (target: { provider: string; model: string }) => void;
@@ -142,11 +149,35 @@ export function createGatewaySlotResolution(
 
     const binding = options?.slotOverrides?.slotBindings?.[presetId];
     if (binding) {
-      return resolveModelBinding(
+      const resolvedId = resolveModelBinding(
         binding,
         options?.slotOverrides,
         (id) => deps.presetRegistry.hasPreset?.(id) ?? false,
       );
+      const target = applyRequestCapabilityOverlay(
+        deps.presetRegistry.resolveTextTarget({ presetId: resolvedId }),
+        presetId,
+        options?.slotOverrides,
+        options?.capabilityOverridePolicy ?? "restrict-only",
+        true,
+      );
+      const tag =
+        deps.slotRegistry?.getSlotTag(presetId) ??
+        defaultModelRoleTag(presetId);
+      const protocolOutput = protocolOutputModalities(target.preset?.protocol);
+      const output = protocolOutput.includes("evaluation")
+        ? protocolOutput
+        : (target.preset?.capability?.output ?? protocolOutput);
+      if (!supportsModelRole(output, tag)) {
+        throw new AiProviderError({
+          code: "CONFIG_ERROR",
+          message: `Model "${targetModel(target)}" cannot serve role "${presetId}" (${tag}).`,
+          provider: targetProvider(target),
+          model: targetModel(target),
+          retriable: false,
+        });
+      }
+      return resolvedId;
     }
     const overlayId = resolveOverlayPresetId(
       presetId,

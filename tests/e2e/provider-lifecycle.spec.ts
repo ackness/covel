@@ -21,6 +21,49 @@ async function savedEntries(page: Page) {
   );
 }
 
+test("TypeSafe models retain their native protocol across save and reload", async ({
+  page,
+}) => {
+  const settings = await openProviderSettings(page);
+  await settings
+    .getByRole("button", { name: "Add provider", exact: true })
+    .first()
+    .click();
+  const create = page.getByRole("dialog", {
+    name: "Add provider",
+    exact: true,
+  });
+  await create.getByPlaceholder("Provider ID, e.g. openai").fill("typesafe");
+  await create
+    .getByRole("combobox", { name: "API protocol", exact: true })
+    .selectOption("evaluation");
+  await expect(
+    create.getByRole("combobox", { name: "Evaluation API", exact: true }),
+  ).toHaveValue("typesafe-systemone-v1");
+  await create
+    .getByRole("textbox", { name: /^Model IDs(?:\s|$)/ })
+    .fill("jev-latest");
+  await create
+    .getByRole("button", { name: "Add provider", exact: true })
+    .click();
+  await expect(create).toHaveCount(0);
+  const profile = (await savedEntries(page))["llm.providers"].find(
+    (item: { id: string }) => item.id === "typesafe",
+  );
+  expect(profile).toMatchObject({
+    baseUrl: "https://api.typesafe.ai/v1",
+    protocol: "typesafe-systemone-v1",
+    models: [{ modelId: "jev-latest" }],
+  });
+  expect((await savedEntries(page))["llm.slotConfig"]?.story).toBeUndefined();
+  await page.reload();
+  expect(
+    (await savedEntries(page))["llm.providers"].find(
+      (item: { id: string }) => item.id === "typesafe",
+    ),
+  ).toEqual(profile);
+});
+
 test("failed provider creation keeps its draft and deleting its last model retains the connection", async ({
   page,
 }) => {
@@ -158,3 +201,105 @@ test("an import finishing after a connection edit reports a conflict and preserv
     "https://edited.example/v1",
   );
 });
+
+for (const { provider, model, protocol, baseUrl } of [
+  {
+    provider: "openrouter",
+    model: "typesafe/jev-1.13",
+    protocol: "openrouter-decisions-v1",
+    baseUrl: "https://openrouter.ai/api/v1",
+  },
+  {
+    provider: "vercel",
+    model: "typesafe-ai/jev",
+    protocol: "vercel-evaluation-v4",
+    baseUrl: "https://ai-gateway.vercel.sh/v1",
+  },
+  {
+    provider: "evaluation-proxy",
+    model: "custom-judge",
+    protocol: "vercel-evaluation-v4",
+    baseUrl: "https://proxy.example/gateway/v1",
+  },
+]) {
+  test(`${provider} shares its connection between chat and evaluation models`, async ({
+    page,
+  }) => {
+    const settings = await openProviderSettings(page);
+    await settings
+      .getByRole("button", { name: "Add provider", exact: true })
+      .first()
+      .click();
+    const create = page.getByRole("dialog", {
+      name: "Add provider",
+      exact: true,
+    });
+    await create.getByPlaceholder("Provider ID, e.g. openai").fill(provider);
+    await create.getByPlaceholder("Base URL (optional)").fill(baseUrl);
+    await create
+      .getByRole("textbox", { name: /^Model IDs(?:\s|$)/ })
+      .fill("synthetic-chat");
+    await create
+      .getByRole("button", { name: "Add provider", exact: true })
+      .click();
+    await expect(create).toHaveCount(0);
+    await settings
+      .getByRole("button", { name: "Add model", exact: true })
+      .click();
+    const add = page.getByRole("dialog", { name: "Add model", exact: true });
+    await add.getByRole("textbox", { name: /^Model IDs(?:\s|$)/ }).fill(model);
+    await add
+      .getByRole("combobox", { name: "API protocol", exact: true })
+      .selectOption("evaluation");
+    if (provider === "evaluation-proxy") {
+      await add
+        .getByRole("combobox", { name: "Evaluation API", exact: true })
+        .selectOption(protocol);
+    }
+    await expect(
+      add.getByRole("combobox", { name: "Evaluation API", exact: true }),
+    ).toHaveValue(protocol);
+    await add
+      .getByRole("button", { name: "Add 1 models", exact: true })
+      .click();
+    await expect(add).toHaveCount(0);
+    const profiles = (await savedEntries(page))["llm.providers"];
+    const profile = profiles.find(
+      (item: { id: string }) => item.id === provider,
+    );
+    expect(profile).toMatchObject({
+      baseUrl,
+      protocol: "openai-chat-v1",
+      models: [{ modelId: "synthetic-chat" }, { modelId: model, protocol }],
+    });
+    const row = settings.getByRole("group", { name: model, exact: true });
+    await expect(
+      row.getByRole("combobox", { name: "API protocol", exact: true }),
+    ).toHaveValue("evaluation");
+    await expect(
+      row.getByRole("combobox", { name: "Evaluation API", exact: true }),
+    ).toHaveValue(protocol);
+    // Exercise the same request overlay consumed by server-side ping routing.
+    await page.route("**/api/ai/ping", (route) =>
+      route.fulfill({ json: { ok: true, latencyMs: 1 } }),
+    );
+    const request = page.waitForRequest("**/api/ai/ping");
+    await row.getByRole("button", { name: /Ping/ }).click();
+    const overlay = JSON.parse(
+      Buffer.from(
+        (await request).headers()["x-slot-config"]!,
+        "base64",
+      ).toString("utf8"),
+    );
+    expect(overlay.customPresets).toContainEqual(
+      expect.objectContaining({
+        provider,
+        baseUrl,
+        model,
+        protocol,
+      }),
+    );
+    await page.reload();
+    expect((await savedEntries(page))["llm.providers"]).toEqual(profiles);
+  });
+}

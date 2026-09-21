@@ -1,3 +1,5 @@
+import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
+import { useModelCapabilities } from "./use-model-capabilities.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
 import { useState, useMemo, useCallback } from "react";
 import { useSetting } from "@/settings/use-settings.js";
@@ -17,7 +19,9 @@ export interface ResolvedSlot {
   preset: PresetSummary | null;
   /** i18n key like "session.slotDefault" for known slots, raw slotId otherwise. */
   label: string;
-  /** Capability tag ("text" | "image") — used for runtime binding compatibility. */
+  /** Whether the effective binding exists and supports the role. */
+  isAvailable?: boolean;
+  /** Capability tag used for runtime binding compatibility. */
   tag: string;
   /** Server-configured model for this slot (from llm.toml). */
   serverModel?: string;
@@ -50,11 +54,6 @@ export function formatSlotModelLabel(slot: ResolvedSlot): string | undefined {
         reasoningEffort: slot.reasoningEffort ?? slot.preset?.reasoningEffort,
       })
     : undefined;
-}
-
-function inferClientSlotTag(slotId: string): string {
-  if (slotId === "image") return "image";
-  return "text";
 }
 
 /**
@@ -90,6 +89,17 @@ export function useSlotConfig(
   const [slotConfigSnapshot] =
     useSetting<Record<string, SlotConfigEntry>>("llm.slotConfig");
   const [providerProfilesSnapshot] = useSetting<unknown>("llm.providers");
+  const [capabilityOverrides] = useSetting<
+    Record<string, { output?: string[] }>
+  >("llm.capabilityOverrides");
+  const roleModel = (model: PresetSummary, slotId: string) => ({
+    ...model,
+    ...(capabilityOverrides?.[slotId]?.output
+      ? { capability: { output: capabilityOverrides[slotId].output! } }
+      : {}),
+  });
+  const roleCompatible = (model: PresetSummary, tag: string, slotId: string) =>
+    isRoleModelCompatible(roleModel(model, slotId), tag);
   const [parameterOverrides] =
     useSetting<Record<string, ModelParameterOverrides>>("llm.paramOverrides");
 
@@ -105,12 +115,13 @@ export function useSlotConfig(
     [providerProfilesSnapshot, version],
   );
 
-  const localPresets = useMemo(() => {
+  const unresolvedLocalPresets = useMemo(() => {
     return customPresets.map((p): PresetSummary => ({
       id: p.id,
       name: p.name,
       provider: p.provider,
       model: p.model,
+      baseUrl: p.baseUrl,
       reasoningEffort: p.reasoningEffort,
       protocol: p.protocol,
       enabled: true,
@@ -118,6 +129,7 @@ export function useSlotConfig(
       scope: "custom",
     }));
   }, [customPresets]);
+  const localPresets = useModelCapabilities(unresolvedLocalPresets);
   const allPresets = useMemo(
     () => [...serverPresets, ...localPresets],
     [serverPresets, localPresets],
@@ -139,7 +151,14 @@ export function useSlotConfig(
       if (bindingId) {
         return findBinding(entry) ?? null;
       }
-      return serverPresets.find((p) => p.isDefault) ?? serverPresets[0] ?? null;
+      return (
+        serverPresets.find(
+          (p) => p.slotBindings?.includes(slotId) || p.id === `slot-${slotId}`,
+        ) ??
+        serverPresets.find((p) => p.isDefault) ??
+        serverPresets[0] ??
+        null
+      );
     },
     [slotConfig, findBinding, serverPresets],
   );
@@ -176,7 +195,15 @@ export function useSlotConfig(
           presetId,
           preset,
           label: slotId,
-          tag: slotInfo.tag ?? "text",
+          tag: modelRoleTag(slotId, slotInfo.tag, preset ?? slotInfo),
+          isAvailable:
+            !presetId ||
+            (!!preset &&
+              roleCompatible(
+                preset,
+                modelRoleTag(slotId, slotInfo.tag, slotInfo),
+                slotId,
+              )),
           serverModel: presetId && !preset ? undefined : slotInfo.model,
           serverProvider: presetId && !preset ? undefined : slotInfo.provider,
         });
@@ -194,7 +221,18 @@ export function useSlotConfig(
         presetId,
         preset,
         label: slotId,
-        tag: inferClientSlotTag(slotId),
+        tag: modelRoleTag(
+          slotId,
+          undefined,
+          preset ? roleModel(preset, slotId) : undefined,
+        ),
+        isAvailable:
+          !!preset &&
+          roleCompatible(
+            preset,
+            modelRoleTag(slotId, undefined, roleModel(preset, slotId)),
+            slotId,
+          ),
         serverModel: preset?.model,
         serverProvider: preset?.provider,
       });
@@ -211,7 +249,8 @@ export function useSlotConfig(
           presetId: defaultPreset.id,
           preset: defaultPreset,
           label: "default",
-          tag: inferClientSlotTag("default"),
+          tag: modelRoleTag("default"),
+          isAvailable: isRoleModelCompatible(defaultPreset, "text"),
           serverModel: defaultPreset.model,
           serverProvider: defaultPreset.provider,
         });
@@ -228,7 +267,14 @@ export function useSlotConfig(
           ? undefined
           : llmConfig?.slots[slot.slotId]?.parameterOverrides?.reasoningEffort),
     }));
-  }, [slotConfig, findBinding, serverPresets, llmConfig, parameterOverrides]);
+  }, [
+    slotConfig,
+    findBinding,
+    serverPresets,
+    llmConfig,
+    parameterOverrides,
+    capabilityOverrides,
+  ]);
 
   return { slotConfig, resolvedSlots, allPresets, resolveSlot, refresh };
 }

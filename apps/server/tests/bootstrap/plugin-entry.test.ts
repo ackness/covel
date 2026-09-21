@@ -711,3 +711,38 @@ export default async function (covel) {
     expect(hasPendingEntry("entry-pending-a")).toBe(false);
   });
 });
+
+it("publishes services atomically and removes them when the entry closes", async () => {
+  const { PluginServiceRegistry } = await import("@covel/runtime");
+  const services = new PluginServiceRegistry({
+    list: async () => ["service-entry"],
+    ensure: async () => {},
+  });
+  const fixture = writePlugin(
+    "service-entry",
+    `export default function(covel) {
+    const schema = covel.toolkit.z.object({ value: covel.toolkit.z.number() });
+    covel.registerService({ name: "double", contract: "fixture/double@1", input: schema, output: schema,
+      handler: (input) => ({ value: input.value * 2 }) });
+  }`,
+  );
+  const entries = await createBootstrapPluginEntries({
+    ...makeParams([fixture]),
+    services,
+  });
+  const client = services.createClient({
+    sessionId: "service-session",
+    pluginId: "consumer",
+    signal: new AbortController().signal,
+  });
+  expect(
+    await client.call({
+      pluginId: "service-entry",
+      name: "double",
+      contract: "fixture/double@1",
+      input: { value: 3 },
+    }),
+  ).toEqual({ value: 6 });
+  await entries.close();
+  expect(await client.discover("fixture/double@1")).toEqual([]);
+});

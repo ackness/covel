@@ -131,7 +131,7 @@ export async function handleTargetFailure(args: {
 
   const normalized = targetFailure(error, target);
 
-  if (!canFallback || !shouldFallback(normalized)) {
+  if (options?.signal?.aborted || !canFallback || !shouldFallback(normalized)) {
     throw normalized;
   }
 

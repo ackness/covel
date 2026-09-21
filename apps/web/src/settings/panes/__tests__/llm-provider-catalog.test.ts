@@ -19,12 +19,14 @@ describe("provider catalogue", () => {
       models: [
         {
           ref: "off",
+          protocol: "vercel-evaluation-v4",
           name: "Quick",
           modelId: "qwen3.8-flash",
           reasoningEffort: "disabled",
         },
         {
           ref: "on",
+          protocol: "openrouter-decisions-v1",
           name: "Story",
           modelId: "qwen3.8-flash",
           reasoningEffort: "automatic",

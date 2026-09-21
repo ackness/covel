@@ -1,3 +1,4 @@
+export { loadPluginUiSpec } from "./ui-spec.js";
 // ── Parsers ──────────────────────────────────────────────────────
 export { parsePluginMd } from "./parse-plugin-md.js";
 

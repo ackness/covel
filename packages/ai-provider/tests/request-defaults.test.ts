@@ -155,6 +155,12 @@ describe("runtime request defaults", () => {
       reasoning: { enable_thinking: false },
     },
     {
+      create: createOpenAiChatAdapter,
+      model: "deepseek-flash",
+      choice: { type: "function", function: { name: "submit-facts" } },
+      reasoning: { thinking: { type: "disabled" } },
+    },
+    {
       create: createOpenAiResponsesAdapter,
       model: "gpt-5.4",
       choice: { type: "function", name: "submit-facts" },

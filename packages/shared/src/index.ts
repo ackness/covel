@@ -1,7 +1,22 @@
 // ── Types ─────────────────────────────────────────────────────────
 export * from "./types/index.js";
+export type {
+  EvaluationJson,
+  EvaluationValue,
+  EvaluationQuestion,
+  EvaluationQuestions,
+  EvaluationAnswer,
+  EvaluationParams,
+  EvaluationResult,
+} from "./evaluation.js";
 export { llmModelBindingSchema } from "./model-binding.js";
 export type { LlmModelBinding } from "./model-binding.js";
+export {
+  defaultModelRoleTag,
+  modelOutputTag,
+  protocolOutputModalities,
+  supportsModelRole,
+} from "./model-capabilities.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
 
