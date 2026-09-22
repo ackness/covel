@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stage dialog waits for the closing click on the last paragraph.** A turn's narration used to jump straight from the typewriter to the decision panel (recap + choices) the moment the last paragraph finished revealing on an ended stream, pulling the text out from under the reader. The final paragraph now pauses like every other one and finishes on the player's click; auto-play advances it on the usual dwell timer. An empty trailing paragraph (trailing `\n\n` artifact) still resolves directly, and stories present at mount remain treated as already read.
+
 ## [0.0.38] - 2026-09-21
 
 This release adds configurable evaluation models and public plugin services, keeps the Jev recommendation demo optional, and fixes opening character allocation and stage interaction timing.

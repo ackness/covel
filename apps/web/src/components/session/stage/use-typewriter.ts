@@ -7,7 +7,10 @@
  * and forwards `streamEnd`/`reset`.
  *
  * State machine: idle -[feed]-> typing -[reach segment boundary]-> pause
- * -[advance]-> typing -> ... -> done (last segment fully shown + streamEnd).
+ * -[advance]-> typing -> ... -> pause (last segment fully shown + streamEnd)
+ * -[advance]-> done. The final paragraph always waits for the reader's
+ * closing click (auto-play's dwell timer routes through `advance` too) —
+ * never auto-jumps to the decision panel.
  * Segments are delimited by "\n\n" (3+ newlines collapse to one break).
  * `skip` instantly reveals the rest of the *current* segment only — it
  * never swallows an unread segment.
@@ -119,13 +122,28 @@ function applyReveal(
     return { ...state, shownLen, visible, status: "pause" };
   }
   if (state.streamEnded) {
-    return { ...state, shownLen, visible, status: "done" };
+    // Final paragraph fully shown: pause for the reader's closing click
+    // instead of jumping straight to the decision panel. An empty last
+    // segment (trailing "\n\n" split artifact) resolves to done directly —
+    // a blank pause would demand a pointless extra click.
+    return {
+      ...state,
+      shownLen,
+      visible,
+      status: segment.length > 0 ? "pause" : "done",
+    };
   }
   return { ...state, shownLen, visible };
 }
 
 function applyAdvance(state: TypewriterState): TypewriterState {
   if (state.status !== "pause") return state;
+  // The closing click on the last paragraph of an ended stream finishes
+  // the turn (auto-play's dwell timer routes through here too).
+  const segments = splitStageParagraphs(state.buffer);
+  if (state.streamEnded && state.segmentIndex === segments.length - 1) {
+    return { ...state, status: "done" };
+  }
   const next: TypewriterState = {
     ...state,
     status: "typing",
@@ -150,7 +168,13 @@ function applyStreamEnd(state: TypewriterState): TypewriterState {
   const caughtUp = state.shownLen >= segment.length;
 
   return isLastSegment && caughtUp
-    ? { ...state, streamEnded: true, status: "done" }
+    ? {
+        ...state,
+        streamEnded: true,
+        // Caught up on the final paragraph: pause for the closing click
+        // (empty trailing segment → done directly, see applyReveal).
+        status: segment.length > 0 ? "pause" : "done",
+      }
     : { ...state, streamEnded: true };
 }
 
