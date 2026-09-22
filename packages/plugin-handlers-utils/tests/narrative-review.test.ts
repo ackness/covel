@@ -25,6 +25,23 @@ describe("narrative perspective review", () => {
     );
     expect(perspectiveError("她忘我地端详迷你潮灯。", "third")).toBeUndefined();
   });
+
+  it("an unclosed trailing quote validates its tail without un-hiding closed dialogue", () => {
+    // Regression: a story whose last dialogue line was left unclosed used to
+    // make outsideDialogue return the raw text, so the 我 inside the properly
+    // closed 「我是班长…」 quotes was flagged as a narration perspective
+    // violation. The false correction then let the retry patch shrink the
+    // committed story to the model's lone closing quote.
+    const story =
+      "她望着你。\n\n「我是班长。」她翻开册子，\n\n「坐吧——正好在整理稿件，你想从哪看";
+    expect(perspectiveError(story, "second")).toBeUndefined();
+    expect(outsideDialogue(story)).toContain("你想从哪看");
+    expect(outsideDialogue(story)).not.toContain("我是班长");
+    // A real violation inside the unclosed tail is still caught.
+    expect(perspectiveError("她望着你，「我看着海。", "second")).toContain(
+      "second",
+    );
+  });
   it("leaves other runtimes and dialogue pronouns alone", () => {
     const review = createNarrativeReview("community-story");
     const ctx = { getOwnSettings: () => ({ narrativePerson: "first" }) };
