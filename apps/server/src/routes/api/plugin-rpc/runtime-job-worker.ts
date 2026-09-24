@@ -88,7 +88,7 @@ export interface RuntimeJobWorker {
 
 export class RuntimeJobNoLongerCurrentError extends Error {
   constructor() {
-    super("detached runtime job is no longer current at the commit barrier");
+    super("detached runtime job is no longer current");
     this.name = "RuntimeJobNoLongerCurrentError";
   }
 }
@@ -297,6 +297,9 @@ export function createRuntimeJobWorker(args: {
     let renewalTimer: ReturnType<typeof setTimeout> | undefined;
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     let stopRenewing = false;
+    // Distinguishes "rejected before the commit barrier" (stale input,
+    // pre-execution validation) from "rejected at the commit barrier".
+    let commitBarrierReached = false;
     const executionAbort = new AbortController();
     let renewalTask: Promise<void> | undefined;
     let deadlineTask: Promise<void> | undefined;
@@ -411,6 +414,9 @@ export function createRuntimeJobWorker(args: {
           executionAbort.signal.throwIfAborted();
           await stopLeaseRenewal();
           executionAbort.signal.throwIfAborted();
+          // Mark the barrier before the CAS so a rejection here is durable
+          // as "commit-barrier-rejected" rather than "pre-execution-rejected".
+          commitBarrierReached = true;
           const committing = await transition(
             current,
             ["running"],
@@ -467,7 +473,9 @@ export function createRuntimeJobWorker(args: {
           reason: shuttingDown
             ? "worker-shutdown"
             : stale
-              ? "commit-barrier-rejected"
+              ? commitBarrierReached
+                ? "commit-barrier-rejected"
+                : "pre-execution-rejected"
               : "execution-failed",
           error: errorMessage(error),
         },

@@ -18,6 +18,7 @@ import {
   transitionRuntimeJob,
 } from "../../src/routes/api/plugin-rpc/jobs.js";
 import {
+  RuntimeJobNoLongerCurrentError,
   appendRuntimeJobStatus,
   createRuntimeJobWorker,
   makeRuntimeJobStatusRecord,
@@ -349,6 +350,48 @@ describe.each([
             error: "synthetic transaction rollback",
           });
         }
+      } finally {
+        await worker.close();
+        await eventBus.close();
+      }
+    },
+  );
+
+  it.each(["pre-execution", "commit-barrier"] as const)(
+    "records a distinct durable reason when a stale rejection happens %s",
+    async (phase) => {
+      await createRuntimeJob(store, job());
+      const eventBus = createEventBus();
+      const worker = createRuntimeJobWorker({
+        tryWithCommitLock,
+        store,
+        eventBus,
+        execute: async (_job, control) => {
+          if (phase === "pre-execution") {
+            // Mirrors the bootstrap pre-checks that run before any provider
+            // call or commit attempt.
+            throw new RuntimeJobNoLongerCurrentError();
+          }
+          // Cross the commit barrier, then lose currency while the job is
+          // still committing (lease-loss abort / in-lock revalidation).
+          await control.beforeCommit({
+            backgroundTurnId: "atomic-turn",
+            backgroundExecutionId: "atomic-execution",
+          });
+          throw new RuntimeJobNoLongerCurrentError();
+        },
+      });
+      try {
+        worker.wake();
+        await vi.waitFor(async () => {
+          await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+            status: "stale",
+            reason:
+              phase === "pre-execution"
+                ? "pre-execution-rejected"
+                : "commit-barrier-rejected",
+          });
+        });
       } finally {
         await worker.close();
         await eventBus.close();
