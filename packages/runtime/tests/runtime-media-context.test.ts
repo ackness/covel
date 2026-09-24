@@ -99,20 +99,43 @@ function createStore(): MediaStoreLike & {
 
 const TEST_OWNER = { sessionId: "sess-test", pluginId: "plugin-test" } as const;
 
+interface RecordedFetch {
+  readonly url: string;
+  readonly redirect: string | undefined;
+}
+
+/**
+ * Test double that mirrors the production injection
+ * (`@covel/ai-provider` `plugin-utils.fetchWithRetry`): undici is always driven
+ * with `redirect: "manual"`, and a 3xx is handed back to the caller ONLY when
+ * the caller explicitly asked for `redirect: "manual"`. Otherwise it fails
+ * closed with the SSRF error. Keeping the double faithful is what makes the
+ * redirect-hop assertions below mean the same thing in CI as in production.
+ */
 function createUtils(
   responses: Record<string, Response>,
   blockedUrls: readonly string[] = [],
-): PluginRuntimeUtils {
+): PluginRuntimeUtils & { readonly calls: RecordedFetch[] } {
+  const calls: RecordedFetch[] = [];
   return {
+    calls,
     validateBaseUrl(url) {
       return blockedUrls.includes(url)
         ? { ok: false, reason: "blocked by test policy" }
         : { ok: true };
     },
-    async fetchWithRetry(input) {
+    async fetchWithRetry(input, init) {
       const url = input.toString();
+      calls.push({ url, redirect: init?.redirect });
       const response = responses[url];
       if (!response) throw new Error(`unexpected fetch: ${url}`);
+      const isRedirect = response.status >= 300 && response.status < 400;
+      if (isRedirect && init?.redirect !== "manual") {
+        throw new Error(
+          `baseUrl rejected by SSRF policy: refusing to follow redirect ` +
+            `(HTTP ${response.status}) from "${url}".`,
+        );
+      }
       return response;
     },
   };
@@ -311,21 +334,36 @@ describe("createRuntimeMediaContext", () => {
       media.ingestUrl("https://ok.example.test/start"),
     ).rejects.toThrow(/URL rejected/);
     expect(store.puts).toHaveLength(0);
+    // The hop was requested with the explicit opt-in that makes the real
+    // implementation return the 3xx instead of throwing.
+    expect(utils.calls).toEqual([
+      { url: "https://ok.example.test/start", redirect: "manual" },
+    ]);
   });
 
   it("uses a separate guarded fetch for every redirect hop", async () => {
     const store = createStore();
+    let hop = 0;
     const fetchWithRetry = vi
       .fn<PluginRuntimeUtils["fetchWithRetry"]>()
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 302,
-          headers: { location: "https://cdn.example.test/image.png" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(pngBytes(), { headers: { "content-type": "image/png" } }),
-      );
+      .mockImplementation(async (_input, init) => {
+        // Production semantics: without the explicit `redirect: "manual"`
+        // opt-in a 3xx is an SSRF failure, never a followed redirect.
+        if (init?.redirect !== "manual") {
+          throw new Error(
+            "baseUrl rejected by SSRF policy: refusing to follow redirect",
+          );
+        }
+        hop += 1;
+        return hop === 1
+          ? new Response(null, {
+              status: 302,
+              headers: { location: "https://cdn.example.test/image.png" },
+            })
+          : new Response(pngBytes(), {
+              headers: { "content-type": "image/png" },
+            });
+      });
     const utils: PluginRuntimeUtils = {
       validateBaseUrl: () => ({ ok: true }),
       fetchWithRetry,
@@ -341,6 +379,52 @@ describe("createRuntimeMediaContext", () => {
       "https://origin.example.test/start",
       "https://cdn.example.test/image.png",
     ]);
+    // Every hop opts into receiving the raw 3xx so it can be re-validated.
+    expect(fetchWithRetry.mock.calls.map(([, init]) => init?.redirect)).toEqual(
+      ["manual", "manual"],
+    );
+  });
+
+  it("fails closed when the injected fetch refuses to expose the 3xx", async () => {
+    const store = createStore();
+    // A utils implementation that ignores `redirect: "manual"` and reports the
+    // pre-redirect failure mode must not be turned into a silent success.
+    const utils: PluginRuntimeUtils = {
+      validateBaseUrl: () => ({ ok: true }),
+      fetchWithRetry: async () => {
+        throw new Error(
+          "baseUrl rejected by SSRF policy: refusing to follow redirect (HTTP 302)",
+        );
+      },
+    };
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
+
+    await expect(
+      media.ingestUrl("https://origin.example.test/start"),
+    ).rejects.toThrow(/refusing to follow redirect/);
+    expect(store.puts).toHaveLength(0);
+  });
+
+  it("rejects a fetch implementation that silently followed a redirect", async () => {
+    const store = createStore();
+    const followed = new Response(pngBytes(), {
+      headers: { "content-type": "image/png" },
+    });
+    // `Response.url` is read-only; model an implementation that auto-followed
+    // by overriding it the way a real fetch response reports the final URL.
+    Object.defineProperty(followed, "url", {
+      value: "https://evil.example.test/internal.png",
+    });
+    const utils: PluginRuntimeUtils = {
+      validateBaseUrl: () => ({ ok: true }),
+      fetchWithRetry: async () => followed,
+    };
+    const media = createRuntimeMediaContext(store, utils, TEST_OWNER);
+
+    await expect(
+      media.ingestUrl("https://origin.example.test/start"),
+    ).rejects.toThrow(/unvalidated redirect/);
+    expect(store.puts).toHaveLength(0);
   });
 
   it("enforces maxBytes while reading the response body", async () => {
