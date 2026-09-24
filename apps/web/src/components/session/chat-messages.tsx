@@ -1,4 +1,5 @@
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import { resolveI18nSentinel } from "./execution-runtime-status.js";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ArrowDown, Loader2, MessageSquare } from "lucide-react";
@@ -264,20 +265,28 @@ export function ChatMessages({
             {/* Render messages with per-turn execution timelines inline */}
             {renderedRows}
 
-            {executionError && (
-              <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">
-                <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-destructive">
-                    {t("common.error", "Error")}
-                  </p>
-                  <ActionableErrorNotice
-                    error={executionError}
-                    layout="panel"
-                  />
-                </div>
-              </div>
-            )}
+            {executionError &&
+              (() => {
+                const resolved = resolveI18nSentinel(executionError, t);
+                return (
+                  <div className="flex items-start gap-2 border border-destructive/50 bg-destructive/5 p-4 text-sm">
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-destructive">
+                        {t("common.error", "Error")}
+                      </p>
+                      {resolved !== executionError ? (
+                        <p className="text-destructive">{resolved}</p>
+                      ) : (
+                        <ActionableErrorNotice
+                          error={executionError}
+                          layout="panel"
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
             <div ref={messagesEndRef} />
           </div>

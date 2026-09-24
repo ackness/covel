@@ -484,7 +484,9 @@ export function createSseEventHandler(
         break;
       }
       case "execution.completed": {
-        const committed = payload.committed !== false;
+        // committed is a required boolean on the wire; treat missing/other
+        // values as uncommitted so optimistic output doesn't linger silently.
+        const committed = payload.committed === true;
         if (turnId)
           deps.dispatch({
             type: "SET_TURN_ATTEMPT_STATUS",
@@ -672,7 +674,10 @@ export function createSseEventHandler(
         }
         deps.dispatch({
           type: "SET_EXECUTION_ERROR",
-          error: (payload.message as string) ?? "Execution failed",
+          error:
+            payload.code === "session_busy"
+              ? "__i18n:session.reasonSessionBusy__"
+              : ((payload.message as string) ?? "Execution failed"),
         });
         deps.dispatch({ type: "SET_EXECUTING", value: false });
         deps.dispatch({

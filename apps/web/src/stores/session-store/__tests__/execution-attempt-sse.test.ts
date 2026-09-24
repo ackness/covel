@@ -124,6 +124,17 @@ describe("SSE retry commit settlement", () => {
       ).toBe(committed);
     },
   );
+  it.each([undefined, "true"])(
+    "treats a missing/non-boolean committed flag as uncommitted, committed=%s",
+    (committed) => {
+      const h = harness(false);
+      h.send("runtime.started", {});
+      h.send("runtime.completed", { status: "success" });
+      h.send("execution.completed", { committed });
+      expect(h.getState().executionSteps[1].attemptStatus).toBe("failed");
+      expect(h.getState().executionError).toBe("Execution commit failed");
+    },
+  );
   it("shows the selected task during preparation before runtime.started", () => {
     const h = harness();
     h.send("execution.started", { runtimeCount: 1 });
@@ -173,5 +184,22 @@ describe("SSE retry commit settlement", () => {
       projectExecutionTurns([], h.getState().executionSteps).turns[0].steps[0]
         .status,
     ).toBe("failed");
+  });
+
+  it("maps error.occurred code session_busy to an i18n sentinel execution error", () => {
+    const h = harness();
+    h.send("error.occurred", {
+      message: "Session is busy, please retry",
+      code: "session_busy",
+    });
+    expect(h.getState().executionError).toBe(
+      "__i18n:session.reasonSessionBusy__",
+    );
+  });
+
+  it("keeps the raw message when error.occurred carries no code", () => {
+    const h = harness();
+    h.send("error.occurred", { message: "Unable to save" });
+    expect(h.getState().executionError).toBe("Unable to save");
   });
 });

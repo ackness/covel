@@ -179,6 +179,11 @@ export interface CharacterUpsertedPayload {
 
 export interface ErrorOccurredPayload {
   readonly message: string;
+  /**
+   * Optional stable error code (e.g. `"session_busy"`) that clients may use
+   * for i18n/retry semantics. When absent, clients display `message` as-is.
+   */
+  readonly code?: string;
 }
 
 export interface TurnSuspendedPayload {

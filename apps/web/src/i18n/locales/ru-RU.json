@@ -292,6 +292,7 @@
     "importDimensions": "Импорт параметров",
     "dimensionsImported": "Импорт выполнен",
     "reasonConnectionClosed": "Соединение закрыто, но серверная часть не сообщила о завершении",
+    "reasonSessionBusy": "Сессия занята, повторите попытку позже",
     "selectionsReady": "Готово вариантов: {{count}}",
     "confirmSelections": "Отправить выбранное",
     "viewParsed": "Структура",
