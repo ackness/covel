@@ -14,15 +14,11 @@ import type {
   DeferredRuntimeJob,
   RuntimeManifest,
   RuntimeResult,
-  SetupRuntimeState,
+  SchedulingDiagnostic,
   TurnInput,
   TurnResult,
 } from "@covel/shared";
-import {
-  isSetupRuntime,
-  mirrorSetupDone,
-  resolveSetupGeneration,
-} from "@covel/shared";
+import { isSetupRuntime, resolveSetupGeneration } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
@@ -45,13 +41,8 @@ import {
   makeSkippedResult,
   retainPreGameRuntimes,
 } from "./turn-executor-helpers.js";
-import {
-  classifySetupResult,
-  collectSetupRan,
-  detectSetupSessionCycles,
-  initialDoneSetup,
-  makePluginSetupReady,
-} from "./setup-run.js";
+import { collectSetupRan, detectSetupSessionCycles } from "./setup-run.js";
+import { SetupCompletionTracker } from "./setup-completion-tracker.js";
 import {
   buildHookSettings,
   snapshotUserSettings,
@@ -71,7 +62,6 @@ import {
 } from "./execution-context.js";
 import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
 import { planTurnDetachment } from "../schedule/turn-completion.js";
-import { markPreGameCompletion } from "./pre-game-completion.js";
 import {
   loadCoreMemoryBlocks,
   loadSessionSummaries,
@@ -302,11 +292,25 @@ async function executeTurnImpl(
   }
 
   let sessionMeta = sessionState.sessionMeta;
-  // Setup-band mirror frozen at execution start — drives setup scheduling (by
-  // pending/blocked, not turn cadence), the attempt-ledger generation, and the
-  // implicit per-plugin session gate below.
-  let setupRuntimesSnapshot = sessionState.setupRuntimes;
   const activeSetupRuntimes = activeRuntimes.filter(isSetupRuntime);
+  const { preGameRuntimes, isPreGamePending } = getPreGameRuntimeState(
+    activeRuntimes,
+    sessionState.phase,
+  );
+  // Single owner of setup-completion state for this execution: the setup-band
+  // mirror frozen at execution start (drives setup scheduling by
+  // pending/blocked rather than turn cadence, the attempt-ledger generation,
+  // and the implicit per-plugin session gate), the live done-set, the
+  // newly-done delta, the all-done flag, and the observed flag gating
+  // `TurnResult.setupCompletion`. See setup-completion-tracker.ts.
+  const setupTracker = new SetupCompletionTracker({
+    activeSetupRuntimes,
+    setupRuntimes: sessionState.setupRuntimes,
+    preGameRuntimes,
+    isPreGamePending,
+    isManualTrigger: input.manualTrigger !== undefined,
+  });
+  const pluginSetupReady = setupTracker.pluginSetupReady;
 
   // Setup session-gate SCC: a `needs(scope: session)` cycle among pending setup
   // runtimes can never resolve (a session-scope need reads a PERSISTED done
@@ -314,28 +318,13 @@ async function executeTurnImpl(
   // so real plugins (none declare such an edge) pay nothing.
   {
     const pendingSetup = activeSetupRuntimes.filter((rt) => {
-      const st = setupRuntimesSnapshot[rt.name]?.state;
+      const st = setupTracker.mirror[rt.name]?.state;
       return st !== "done" && st !== "blocked";
     });
     const cycles = detectSetupSessionCycles(pendingSetup);
     if (cycles.size > 0 && !isTargeted) {
       const now = new Date().toISOString();
-      const patched: Record<string, SetupRuntimeState> = {
-        ...setupRuntimesSnapshot,
-      };
-      for (const [name, path] of cycles) {
-        const manifest = activeSetupRuntimes.find((r) => r.name === name);
-        const prev = setupRuntimesSnapshot[name];
-        patched[name] = {
-          state: "blocked",
-          pluginVersion: manifest?.version ?? "0.0.0",
-          generation: prev?.generation ?? 1,
-          attempts: prev?.attempts ?? 0,
-          reason: `setup-session-cycle: ${path.join(" → ")}`,
-          blockedAt: now,
-        };
-      }
-      setupRuntimesSnapshot = patched;
+      const patched = setupTracker.blockSessionCycles(cycles, now);
       if (deps.store) {
         await deps.store.updateSession(input.sessionId, {
           setupRuntimes: patched,
@@ -344,26 +333,11 @@ async function executeTurnImpl(
       }
     }
   }
-  // Live done-set the session gate reads. Seeded from committed state; the
-  // late-setup pass adds runtimes that complete within THIS turn so their
-  // plugin's main runtimes unblock in the same turn.
-  const liveDoneSetup = initialDoneSetup(
-    activeSetupRuntimes,
-    setupRuntimesSnapshot,
-  );
-  const pluginSetupReady = makePluginSetupReady(
-    activeSetupRuntimes,
-    liveDoneSetup,
-  );
   const projectedPromptHistory = await buildProjectedPromptHistory({
     input,
     deps,
     messageHistory,
   });
-  const { preGameRuntimes, isPreGamePending } = getPreGameRuntimeState(
-    activeRuntimes,
-    sessionState.phase,
-  );
   const { manualTarget, manualTargets, triggered, abortReason } =
     selectTriggeredRuntimes({
       activeRuntimes,
@@ -371,7 +345,7 @@ async function executeTurnImpl(
       manualRuntimeIds: batchRuntimeIds,
       messageHistory: triggerMessageHistory,
       runtimeTriggerCounts,
-      setupRuntimes: setupRuntimesSnapshot,
+      setupRuntimes: setupTracker.mirror,
       sessionId: input.sessionId,
       turnNumber,
       logicalTurn,
@@ -438,24 +412,29 @@ async function executeTurnImpl(
   // only emits diagnostics (no behaviour change); `strict` splits conflicting
   // pairs into serial sub-levels. Single-runtime groups (manual trigger) are a
   // no-op.
+  const emitHazardDiagnostics = (
+    diagnostics: readonly SchedulingDiagnostic[],
+  ): void => {
+    for (const d of diagnostics) {
+      console.warn(`[covel:warn] [turn-executor] ${d.message}`);
+      emitSubEvent(
+        deps.eventBus,
+        "runtime",
+        "scheduling.hazard",
+        input.sessionId,
+        {
+          code: d.code,
+          message: d.message,
+          ...(d.data !== undefined ? { data: d.data } : {}),
+        },
+      );
+    }
+  };
   const { groups, diagnostics: hazardDiagnostics } = applyHazardPolicy(
     scheduledGroups,
     resolveEffectsPolicy(),
   );
-  for (const d of hazardDiagnostics) {
-    console.warn(`[covel:warn] [turn-executor] ${d.message}`);
-    emitSubEvent(
-      deps.eventBus,
-      "runtime",
-      "scheduling.hazard",
-      input.sessionId,
-      {
-        code: d.code,
-        message: d.message,
-        ...(d.data !== undefined ? { data: d.data } : {}),
-      },
-    );
-  }
+  emitHazardDiagnostics(hazardDiagnostics);
   const detachmentPlan =
     input.detachedStage || scopedRecovery
       ? { eligibleRuntimeIds: new Set<string>(), diagnostics: [] }
@@ -585,49 +564,6 @@ async function executeTurnImpl(
     retrySeeds.set(seed.runtimeId, seed);
   }
 
-  // Setup-completion delta accumulated across the (idempotent) completion
-  // passes below, handed to the finalizer so the session-clock write (setup
-  // mirror + phase flip) lands in the commit transaction. `allSetupDone` tracks
-  // the last observed value — once every setup runtime is resolved it stays true.
-  const setupNewlyDone: Record<string, SetupRuntimeState> = {};
-  let setupAllDone = false;
-  let observedSetupCompletion = false;
-
-  // Add every setup runtime that reported done this turn to the live done-set,
-  // so a plugin whose setup just completed unblocks its main runtimes within
-  // the same turn (the late-setup → main-loop catch-up in the playing band).
-  // Idempotent.
-  const syncLiveDoneSetup = (): void => {
-    for (const rt of activeSetupRuntimes) {
-      if (liveDoneSetup.has(rt.name)) continue;
-      const result = completedResults.get(rt.name);
-      if (result && classifySetupResult(result).doneSignal) {
-        liveDoneSetup.add(rt.name);
-      }
-    }
-  };
-
-  const recordPreGameCompletion = (): boolean => {
-    const result = markPreGameCompletion({
-      completedResults,
-      isPreGamePending,
-      isManualTrigger: input.manualTrigger !== undefined,
-      preGameRuntimes,
-      setupRuntimes: setupRuntimesSnapshot,
-    });
-    if (isPreGamePending && !input.manualTrigger) {
-      observedSetupCompletion = true;
-      Object.assign(setupNewlyDone, result.newlyDone);
-      setupRuntimesSnapshot = {
-        ...setupRuntimesSnapshot,
-        ...result.newlyDone,
-      };
-      setupAllDone = result.allDone;
-    }
-    syncLiveDoneSetup();
-    return result.allDone;
-  };
-
   // Manual-trigger turns can carry an optional `triggerEvent` payload — used
   // by the plugin-rpc background follower path so a deferred follower runtime
   // receives the same `ctx.triggerEvent` shape it would have seen during the
@@ -676,12 +612,13 @@ async function executeTurnImpl(
       ...(identity ? { runId: identity.runId } : {}),
       executionStartedAt,
       pluginSetupReady,
-      setupRuntimeDone: (runtimeId) => liveDoneSetup.has(runtimeId),
+      setupRuntimeDone: (runtimeId) =>
+        setupTracker.isSetupRuntimeDone(runtimeId),
       ...(isSetupRuntime(manifest)
         ? {
             setupGeneration: resolveSetupGeneration(
               manifest.version,
-              setupRuntimesSnapshot[manifest.name],
+              setupTracker.mirror[manifest.name],
             ),
           }
         : {}),
@@ -696,10 +633,14 @@ async function executeTurnImpl(
   // PROPOSALS, so nothing proposal-shaped is committed.
   //
   // The builtin character tools and core-memory update tool both return
-  // proposals, so their writes are discarded with the aborted result. Trusted
-  // plugin-data deletion remains a deliberately documented direct-write escape
-  // hatch, but no production runtime uses it; any future caller must add a
-  // delete proposal before relying on rollback semantics.
+  // proposals, so their writes are discarded with the aborted result. Plugin
+  // data writes — including deletes (`set(key, null)`) — are proposal-backed on
+  // every execution path as well: handlers write through the per-execution
+  // write buffer (function-runtime/turn-function-runtime.ts) and deletes use
+  // their own proposal in the same transaction
+  // (function-runtime/plugin-handler-helpers.ts), so an abort discards them
+  // too. Unbuffered direct writes exist only in the standalone test-runtime
+  // API, never inside executeTurn.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
   const executionAborted = (): boolean =>
@@ -736,7 +677,35 @@ async function executeTurnImpl(
   if (!isPreGamePending && !isTargeted && !executionAborted()) {
     const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
     const lateSetupPlan = scheduleByDag(lateSetup);
-    for (const group of lateSetupPlan.groups) {
+    // Same-layer effects hazard policy as the main groups (01 §7): late-setup
+    // runs parallel groups too, so it must not bypass conflict diagnostics or
+    // the strict policy's serial sub-levels.
+    const { groups: lateSetupGroups, diagnostics: lateSetupHazards } =
+      applyHazardPolicy(lateSetupPlan.groups, resolveEffectsPolicy());
+    emitHazardDiagnostics(lateSetupHazards);
+    // planTurnDetachment does not filter by stage, so a setup runtime declaring
+    // `turnCompletion: detached` can be marked eligible. The late-setup channel
+    // has no deferred-job path (enqueueing happens only in the main group loop
+    // below), so it deliberately IGNORES the declaration and runs such
+    // runtimes in the foreground — with a diagnostic so the deviation from the
+    // manifest is observable instead of silent.
+    for (const manifest of lateSetup) {
+      if (!detachmentPlan.eligibleRuntimeIds.has(manifest.name)) continue;
+      const message = `setup runtime "${manifest.name}" declares turnCompletion: detached, but the late-setup channel runs it in the foreground (no deferred job path)`;
+      console.warn(`[covel:warn] [turn-executor] ${message}`);
+      emitSubEvent(
+        deps.eventBus,
+        "runtime",
+        "scheduling.hazard",
+        input.sessionId,
+        {
+          code: "detached-setup-runtime-foreground",
+          message,
+          data: { runtimeId: manifest.name },
+        },
+      );
+    }
+    for (const group of lateSetupGroups) {
       if (executionAborted()) break;
       const results = await executeParallel(
         group.runtimes,
@@ -746,7 +715,7 @@ async function executeTurnImpl(
       for (const [name, result] of results) completedResults.set(name, result);
     }
     emitCyclicSkips(lateSetupPlan.cyclic ?? []);
-    syncLiveDoneSetup();
+    setupTracker.syncLiveDone(completedResults);
   }
 
   for (const group of groups) {
@@ -806,7 +775,7 @@ async function executeTurnImpl(
   // player-visible gap: after this execution commits it chains one main-loop
   // turn on the same request (opening continuation), so the opening narrative
   // still arrives without an extra player message.
-  if (isPreGamePending) recordPreGameCompletion();
+  if (isPreGamePending) setupTracker.recordPreGameCompletion(completedResults);
 
   // Drop retry seeds BEFORE the event fan-out and the finalizer: seeds are
   // inject/needs context for the retried runtime only. runEventChain collects
@@ -833,7 +802,7 @@ async function executeTurnImpl(
           // Fan-out is the only place an `event` runtime can trigger, so its
           // throttle gates only work if the real history reaches them. The setup
           // mirror prevents a completed setup runtime from re-firing.
-          setupRuntimes: setupRuntimesSnapshot,
+          setupRuntimes: setupTracker.mirror,
           runtimeTriggerCounts,
           runtimeTurnsSinceLastTrigger: new Map(
             activeRuntimes.map((rt) => [
@@ -884,30 +853,20 @@ async function executeTurnImpl(
   // the event chain and finalize reading a fresh Pre-Game / setup-completion
   // state; this one captures completion signals produced by event-chain
   // followers.
-  recordPreGameCompletion();
+  setupTracker.recordPreGameCompletion(completedResults);
 
   // Ledger entries for every setup runtime that ran this execution (both bands
   // + late-setup), handed to the finalizer for attempt terminalisation and the
-  // pending/blocked mirror. Also derive done mirrors for any late-setup
-  // completion that markPreGameCompletion did not observe (playing band).
+  // pending/blocked mirror. The tracker fold also derives done mirrors for any
+  // late-setup completion that recordPreGameCompletion did not observe
+  // (playing band) and gates `setupCompletion` on observed setup activity.
   const setupRan = collectSetupRan({
     activeRuntimes,
     completedResults,
-    setupRuntimes: setupRuntimesSnapshot,
+    setupRuntimes: setupTracker.mirror,
     executionId: executionContext.executionId,
   });
-  for (const r of setupRan) {
-    if (r.doneSignal && !(r.runtimeId in setupNewlyDone)) {
-      const previous = setupRuntimesSnapshot[r.runtimeId];
-      setupNewlyDone[r.runtimeId] = mirrorSetupDone(
-        r.pluginVersion,
-        r.startedAt,
-        r.generation,
-        previous?.generation === r.generation ? previous.attempts + 1 : 1,
-      );
-    }
-  }
-  if (setupRan.length > 0) observedSetupCompletion = true;
+  setupTracker.foldSetupRan(setupRan);
 
   const canPublishDeferredJobs =
     !executionAborted() &&
@@ -927,19 +886,13 @@ async function executeTurnImpl(
     nestedRuntimeResults,
   });
 
+  const setupCompletion = setupTracker.setupCompletion;
   const turnResult: TurnResult = {
     ...baseResult,
     // Surface the setup delta so the commit-owning caller folds it into the
     // session-clock write (phase flip + setup mirror) atomically with commit.
     // Only present on the non-manual setup path that actually observed it.
-    ...(observedSetupCompletion
-      ? {
-          setupCompletion: {
-            newlyDone: setupNewlyDone,
-            allSetupDone: setupAllDone,
-          },
-        }
-      : {}),
+    ...(setupCompletion ? { setupCompletion } : {}),
     // Setup attempts to settle (ledger terminalise + pending/blocked mirror)
     // outside the commit transaction. The commit-owning caller forwards this to
     // finalizeExecution.
