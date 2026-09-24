@@ -149,8 +149,7 @@ async function setupBasicSession() {
     rootC,
   );
 
-  registry.activate("plugin-a", "sess-1");
-  registry.activate("plugin-b", "sess-1");
+  registry.syncSessionActivations("sess-1", ["plugin-a", "plugin-b"]);
   // plugin-c never activated in sess-1 — must be excluded from its directory.
 
   const directory = createEventDirectory({
@@ -223,7 +222,7 @@ describe("event directory", () => {
       }),
       root,
     );
-    registry.activate("plugin-enum", "sess-enum");
+    registry.syncSessionActivations("sess-enum", ["plugin-enum"]);
 
     const directory = createEventDirectory({
       registry,
@@ -287,7 +286,7 @@ describe("event directory", () => {
       }),
       root,
     );
-    registry.activate("plugin-x", "sess-x");
+    registry.syncSessionActivations("sess-x", ["plugin-x"]);
 
     const directory = createEventDirectory({
       registry,
@@ -351,8 +350,7 @@ describe("event directory", () => {
       rootE,
     );
 
-    registry.activate("plugin-a", "sess-2");
-    registry.activate("plugin-e", "sess-2");
+    registry.syncSessionActivations("sess-2", ["plugin-a", "plugin-e"]);
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const directory = createEventDirectory({
@@ -426,8 +424,7 @@ describe("event directory", () => {
       rootE,
     );
 
-    registry.activate("plugin-a", "sess-2");
-    registry.activate("plugin-e", "sess-2");
+    registry.syncSessionActivations("sess-2", ["plugin-a", "plugin-e"]);
 
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const directory = createEventDirectory({

@@ -104,7 +104,7 @@ describe("E2E: Narrator game flow", () => {
     store = result.store;
 
     // Activate narrator for all sessions globally
-    result.registry.activate("narrator", "__global__");
+    result.registry.syncSessionActivations("__global__", ["narrator"]);
   });
 
   async function markPreGameComplete(sessionId: string) {

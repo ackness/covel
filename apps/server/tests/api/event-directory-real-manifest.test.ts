@@ -37,7 +37,7 @@ async function setupSceneStageDirectory() {
     loadedRuntimes: new Map(),
     status: "registered",
   });
-  registry.activate(discovery.id, SESSION_ID);
+  registry.syncSessionActivations(SESSION_ID, [discovery.id]);
 
   const directory = createEventDirectory({
     registry,

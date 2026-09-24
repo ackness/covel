@@ -83,7 +83,7 @@ describe("Plugin Data REST API routes", () => {
     store = createMemoryStore();
     registry = createPluginRegistry();
     registerPlugin(registry, pluginId);
-    registry.activate(pluginId, sessionId);
+    registry.syncSessionActivations(sessionId, [pluginId]);
     app = buildApp(store, registry);
 
     await store.createSession({
@@ -134,7 +134,7 @@ describe("Plugin Data REST API routes", () => {
   });
 
   it("authorizes writes from persisted activations after a server restart", async () => {
-    registry.clearSession(sessionId);
+    registry.syncSessionActivations(sessionId, []);
 
     const res = await app.request(
       `/api/sessions/${sessionId}/plugin-data/${pluginId}/settings/theme`,
@@ -301,8 +301,7 @@ describe("Plugin Data write guards", () => {
     registry = createPluginRegistry();
     registerPlugin(registry, pluginId);
     registerPlugin(registry, corePluginId, "core-plugin");
-    registry.activate(pluginId, sessionId);
-    registry.activate(corePluginId, sessionId);
+    registry.syncSessionActivations(sessionId, [pluginId, corePluginId]);
     app = buildApp(store, registry);
 
     await store.createSession({

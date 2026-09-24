@@ -171,16 +171,17 @@ export function registerSessionPluginRoutes(
           400,
         );
       }
-      await store.updateSession(id, {
-        activePlugins: active,
-        updatedAt: new Date().toISOString(),
+      // Single mutation point: persist the authoritative activePlugins set
+      // first; the registry mirror only reconciles after the store write
+      // succeeds (a rejected write leaves memory untouched).
+      await pluginRegistry.applyPersistedActivations(id, active, async () => {
+        await store.updateSession(id, {
+          activePlugins: active,
+          updatedAt: new Date().toISOString(),
+        });
       });
-      for (const activePluginId of active) {
-        pluginRegistry.activate(activePluginId, id);
-      }
       for (const previousPluginId of session.activePlugins) {
         if (!active.includes(previousPluginId)) {
-          pluginRegistry.deactivate(previousPluginId, id);
           c.get("rpcApprovalGate").revoke(id, previousPluginId);
         }
       }
@@ -245,12 +246,15 @@ export function registerSessionPluginRoutes(
           400,
         );
       }
-      await store.updateSession(id, {
-        activePlugins: active,
-        metadata: rotateSessionApprovalScope(session, pluginId),
-        updatedAt: new Date().toISOString(),
+      // Single mutation point: the scope rotation and activePlugins write
+      // land durably before the registry mirror drops the plugin.
+      await pluginRegistry.applyPersistedActivations(id, active, async () => {
+        await store.updateSession(id, {
+          activePlugins: active,
+          metadata: rotateSessionApprovalScope(session, pluginId),
+          updatedAt: new Date().toISOString(),
+        });
       });
-      pluginRegistry.deactivate(pluginId, id);
       c.get("rpcApprovalGate").revoke(id, pluginId);
       return c.json(okBody({ activePluginIds: active }));
     });

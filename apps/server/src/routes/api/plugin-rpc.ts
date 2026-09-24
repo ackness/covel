@@ -187,13 +187,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const prepareToolsForSession = c.get("prepareToolsForSession");
 
     // Reconcile the process-local registry from the persisted session
-    // snapshot. Besides restart recovery, this removes stale activations
-    // after a plugin is disabled through another request or server instance.
-    const sessionPlugins = session.activePlugins as
-      readonly string[] | undefined;
-    pluginRegistry.syncSessionActivations(sessionId, sessionPlugins ?? []);
-
-    const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+    // snapshot under the session lock. Besides restart recovery, this removes
+    // stale activations after a plugin is disabled through another request or
+    // server instance. The lock matters: `syncSessionActivations` writes
+    // shared in-memory state, and syncing from the lock-free snapshot read
+    // above could resurrect a plugin that a concurrent enable/disable writer
+    // has just persisted and deactivated (lost update). Under the lock the
+    // fresh read is linearised against those writers, keeping this a pure
+    // read-repair. A session deleted in the meantime reconciles to the empty
+    // set, so the runtime lookup below fails closed with `runtime_not_active`.
+    const activeRuntimes = await sessionLock.withLock(sessionId, async () => {
+      const live = await store.getSession(sessionId);
+      const livePlugins = live?.activePlugins as readonly string[] | undefined;
+      pluginRegistry.syncSessionActivations(sessionId, livePlugins ?? []);
+      return pluginRegistry.getActiveRuntimes(sessionId);
+    });
     const target = activeRuntimes.find((rt) => rt.name === body.runtimeId);
     if (!target) {
       return c.json(
