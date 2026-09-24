@@ -39,9 +39,15 @@ import {
   PLAYER_ABORT_REASON,
   assertJsonValue,
   getRuntimeSpec,
+  readRuntimeEnv,
 } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
-import { errorBody } from "../../api-error.js";
+import {
+  errorBody,
+  SESSION_BUSY_CODE,
+  SESSION_BUSY_MESSAGE,
+} from "../../api-error.js";
+import { SessionLockTimeoutError } from "../../lib/session-lock.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
@@ -1068,7 +1074,33 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           })
           .catch(() => {});
       }
-      await writeEvent("error.occurred", { message }).catch(() => {});
+      // This stream is already open (HTTP 200), so the global error
+      // handler's coded 503 mapping cannot apply — replicate its wire
+      // semantics here. Raw error text can carry internals (the PG lock
+      // timeout names the session id and lock-pool hints; store/driver
+      // failures carry paths or SQL fragments), so a lost lock race goes out
+      // as the same fixed message + `session_busy` code the JSON path uses,
+      // and every other error only carries the raw message in dev. Full
+      // detail stays in the server log and, for a started turn, in the
+      // `turn.failed` trace event above.
+      const lockBusy = err instanceof SessionLockTimeoutError;
+      if (lockBusy) {
+        console.warn(
+          `[actions] session lock timeout for ${sessionId}: ${message}`,
+        );
+      } else {
+        console.error(
+          `[actions] turn failed for ${sessionId}: ${message}`,
+          err,
+        );
+      }
+      const isDev = readRuntimeEnv().nodeEnv !== "production";
+      await writeEvent(
+        "error.occurred",
+        lockBusy
+          ? { message: SESSION_BUSY_MESSAGE, code: SESSION_BUSY_CODE }
+          : { message: isDev ? message : "Internal server error" },
+      ).catch(() => {});
     } finally {
       releaseTurnControl?.();
       eventBusUnsubscribe?.();

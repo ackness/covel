@@ -153,6 +153,17 @@ export function redactSensitiveQueryParamsInText(text: string): string {
 }
 
 /**
+ * Single wire representation of "lost the race for the session lock".
+ * Shared by the JSON error handler below and the actions SSE stream
+ * (`routes/api/actions.ts`), which cannot return a coded 503 once its stream
+ * is open and therefore emits the same fixed message + code inside its
+ * `error.occurred` payload. The raw `SessionLockTimeoutError` message names
+ * the session and lock-pool internals, so it must never cross the wire.
+ */
+export const SESSION_BUSY_MESSAGE = "Session is busy, please retry";
+export const SESSION_BUSY_CODE = "session_busy";
+
+/**
  * Global `app.onError` handler factory. Logs every unhandled error WITH request
  * context (method + full URL, sensitive query params redacted) under
  * `logPrefix` so any 500 is greppable, then returns the standard envelope —
@@ -180,7 +191,7 @@ export function makeErrorHandler(
         `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
       );
       return c.json(
-        errorBody("Session is busy, please retry", { code: "session_busy" }),
+        errorBody(SESSION_BUSY_MESSAGE, { code: SESSION_BUSY_CODE }),
         503,
       );
     }
