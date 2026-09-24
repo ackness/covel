@@ -19,9 +19,14 @@ interface Caller {
 
 /**
  * A service may compute with the caller's model access, but `resolveSlot`
- * must not hand it key material: request-scoped keys and auth-bearing
- * headers belong to the caller's own runtime context. Model calls still work
- * — they flow through the gateway, which never exposes credentials.
+ * must not hand it key material. Rebuild the result as the declared
+ * `ResolvedSlotForPlugin` shape rather than blacklisting fields: `apiKey`
+ * and auth-bearing `headers` are credential material, and the runtime
+ * result also carries undeclared extras (`capability`,
+ * `parameterOverrides`) that a lent context has no contract for.
+ * `metadata` stays — it is declared plugin-facing configuration, not a
+ * credential channel. Model calls still work through generateText /
+ * evaluate, which never expose credentials.
  */
 function lendGateway(
   gateway: PluginServiceContext["gateway"],
@@ -32,8 +37,17 @@ function lendGateway(
     resolveSlot: (input) => {
       const resolved = gateway.resolveSlot(input);
       if (!resolved) return resolved;
-      const { apiKey: _apiKey, headers: _headers, ...rest } = resolved;
-      return rest;
+      return {
+        presetId: resolved.presetId,
+        provider: resolved.provider,
+        protocol: resolved.protocol,
+        ...(resolved.baseUrl !== undefined
+          ? { baseUrl: resolved.baseUrl }
+          : {}),
+        model: resolved.model,
+        tag: resolved.tag,
+        metadata: resolved.metadata,
+      };
     },
   };
 }

@@ -281,7 +281,10 @@ describe("[P2] provider keys raw exposure", () => {
   it("returns masked keys to a bearer token without desktop mode", async () => {
     // A self-host that set the token only for install/admin APIs is not a
     // desktop shell — raw key material must not cross the HTTP boundary.
+    // COVEL_HOME is a plain path setting (docker-compose sets it), not proof
+    // of a desktop shell.
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
+    process.env.COVEL_HOME = "/tmp/covel-home-fixture";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
     const app = new Hono();
     app.route(

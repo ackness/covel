@@ -209,12 +209,13 @@ export function createMiscApiRoutes(
     if (denied) return denied;
     const env = readRuntimeEnv();
     // Raw keys are a desktop-shell contract: the bearer token alone is not
-    // enough. A self-host that set COVEL_DESKTOP_REST_TOKEN only to guard the
-    // install/config APIs — without opting into desktop mode — gets the
-    // masked listing like any other caller.
+    // enough, and COVEL_HOME is not proof — it is a plain path setting that
+    // docker-compose and .env.example both document for ordinary self-hosts.
+    // Only the explicit desktop flag (Electron sidecar or the documented
+    // COVEL_DESKTOP_REST=1 opt-in) plus the token unlocks raw key material.
     const provided = bearerToken(c);
     const allowRawKeys =
-      (env.desktopRest || !!env.covelHome) &&
+      env.desktopRest &&
       !!env.desktopRestToken &&
       provided !== undefined &&
       safeEqual(provided, env.desktopRestToken);

@@ -132,7 +132,10 @@ describe("public plugin services", () => {
       headers: { authorization: "Bearer sk-secret" },
       model: "model",
       tag: "text",
-      metadata: {},
+      metadata: { embeddingFormat: "base64" },
+      // Undeclared extras the runtime result actually carries.
+      capability: "evaluation",
+      parameterOverrides: { maxOutputTokens: 0 },
     };
     const gateway = { resolveSlot: () => resolved } as never;
     const client = registry.createClient({
@@ -173,9 +176,15 @@ describe("public plugin services", () => {
 
     expect(seen).toHaveLength(2);
     for (const slot of seen) {
-      expect(slot).toMatchObject({ presetId: "preset", model: "model" });
+      expect(slot).toMatchObject({
+        presetId: "preset",
+        model: "model",
+        metadata: { embeddingFormat: "base64" },
+      });
       expect(slot).not.toHaveProperty("apiKey");
       expect(slot).not.toHaveProperty("headers");
+      expect(slot).not.toHaveProperty("capability");
+      expect(slot).not.toHaveProperty("parameterOverrides");
     }
     // The caller's own facade is untouched — only the lent view strips.
     expect(resolved.apiKey).toBe("sk-secret");
