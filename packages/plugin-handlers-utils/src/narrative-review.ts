@@ -43,6 +43,11 @@ export function outsideDialogue(text: string): string {
   };
   const stack: string[] = [];
   let result = "";
+  // Outermost unmatched opener: the tail from there is validated as
+  // narration, while dialogue that closed properly stays stripped.
+  // Returning the raw text instead would un-hide closed dialogue and let
+  // its pronouns be flagged as narration (false perspective violations).
+  let openStart = -1;
   for (let i = 0; i < text.length; i++) {
     const char = text[i]!;
     // Apostrophes in contractions/possessives do not start or end speech.
@@ -53,16 +58,18 @@ export function outsideDialogue(text: string): string {
     if (!apostrophe && char === stack.at(-1)) {
       stack.pop();
       result += " ";
+      if (!stack.length) openStart = -1;
     } else if (
       !apostrophe &&
       pairs[char] &&
       (char !== "'" || !/\p{L}/u.test(text[i - 1] ?? ""))
     ) {
+      if (!stack.length) openStart = i;
       stack.push(pairs[char]!);
     } else if (!stack.length) result += char;
   }
-  // An unclosed quote cannot hide the remainder from validation.
-  return stack.length ? text : result;
+  // An unclosed quote cannot hide its remainder from validation.
+  return openStart >= 0 ? result + text.slice(openStart) : result;
 }
 
 export function perspectiveError(

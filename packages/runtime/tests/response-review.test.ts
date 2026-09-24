@@ -125,6 +125,7 @@ describe("plugin response validation", () => {
     expect(generate).toHaveBeenCalledTimes(2);
     const retry = generate.mock.calls[1]![0].messages;
     expect(retry.at(-1)?.content).toContain("Use the selected perspective");
+    expect(retry.at(-1)?.content).toContain("resend the complete response");
     expect(retry.flatMap((message) => message.toolCalls ?? [])).toEqual([]);
     expect(result.runtimeResults[0]).toMatchObject({
       status: "success",

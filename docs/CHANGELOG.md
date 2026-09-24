@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stage dialog waits for the closing click on the last paragraph.** A turn's narration used to jump straight from the typewriter to the decision panel (recap + choices) the moment the last paragraph finished revealing on an ended stream, pulling the text out from under the reader. The final paragraph now pauses like every other one and finishes on the player's click; auto-play advances it on the usual dwell timer. An empty trailing paragraph (trailing `\n\n` artifact) still resolves directly, and stories present at mount remain treated as already read.
+- **Narrative review no longer flags quoted speech behind an unclosed quote.** A story whose final dialogue line was left unclosed (truncated model output) made the perspective check fall back to the raw text and flag pronouns inside properly closed dialogue — e.g. 「我是班长…」 — as a narration violation. The resulting corrective retry could then shrink the committed story to the model's one-character patch (a lone `」`). The check now keeps closed dialogue stripped and validates only the unclosed tail as narration, and correction retries are instructed to resend the complete response so a patch fragment cannot replace the whole draft. Sessions that already committed a degenerate story need a new turn to recover.
+
 ## [0.0.38] - 2026-09-21
 
 This release adds configurable evaluation models and public plugin services, keeps the Jev recommendation demo optional, and fixes opening character allocation and stage interaction timing.

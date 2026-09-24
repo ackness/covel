@@ -29,7 +29,7 @@ export function createResponseReviewer(
     }
     transcript.push({
       role: "system",
-      content: `The draft was not accepted. Correct it before finishing. Do not describe the correction process.\n${reviewed.correction}`,
+      content: `The draft was not accepted. Correct it and resend the complete response — the rejected draft will not be executed or committed. Do not describe the correction process.\n${reviewed.correction}`,
     });
     return undefined;
   };
