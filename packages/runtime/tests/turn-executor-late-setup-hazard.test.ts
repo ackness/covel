@@ -15,7 +15,7 @@ import { createMemoryStore } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/ll-adapter.js";
+import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
