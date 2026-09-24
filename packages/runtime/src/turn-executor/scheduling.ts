@@ -304,12 +304,19 @@ function runDag(runtimes: readonly RuntimeManifest[]): ScheduleResult {
 }
 
 /**
+ * Not-found sentinel returned by `countPlayerMessagesSinceRuntime` when the
+ * runtime has no trigger record in the (uncompacted) message history. Large
+ * enough to satisfy any `turnInterval` gate — erring toward triggering.
+ */
+export const NEVER_TRIGGERED_SENTINEL = 999;
+
+/**
  * `messageHistory` is the uncompacted suffix of the session timeline. If a
  * runtime's last trigger was compacted away, the backward scan misses it and
- * returns the not-found sentinel (999) — erring toward triggering, which is
- * safe: the compactor's protect window keeps recent turns raw, so any message
- * old enough to be compacted is at least a protect-window's worth of player
- * turns in the past.
+ * returns the not-found sentinel (`NEVER_TRIGGERED_SENTINEL`) — erring toward
+ * triggering, which is safe: the compactor's protect window keeps recent
+ * turns raw, so any message old enough to be compacted is at least a
+ * protect-window's worth of player turns in the past.
  */
 export function countPlayerMessagesSinceRuntime(
   messageHistory: readonly TurnMessageRecord[],
@@ -324,7 +331,7 @@ export function countPlayerMessagesSinceRuntime(
     }
   }
 
-  if (lastRuntimeMsgIdx < 0) return 999;
+  if (lastRuntimeMsgIdx < 0) return NEVER_TRIGGERED_SENTINEL;
 
   return messageHistory
     .slice(lastRuntimeMsgIdx)

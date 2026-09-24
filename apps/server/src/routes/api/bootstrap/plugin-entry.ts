@@ -33,6 +33,33 @@ import type { ToolModule } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { EntryRegistrationBatch } from "./entry-registration-batch.js";
 
+/**
+ * Validate that `target` is inside `root` after resolving symlinks.
+ * Mirrors `assertInsideRoot` in @covel/plugin-loader (load.ts): fs.realpath
+ * defeats symlink-based path traversal; falls back to a lexical check when
+ * the target does not exist on disk.
+ */
+async function assertInsideRoot(root: string, target: string): Promise<void> {
+  let realRoot: string;
+  let realTarget: string;
+  try {
+    realRoot = await fsSync.promises.realpath(root);
+  } catch {
+    realRoot = path.resolve(root);
+  }
+  try {
+    realTarget = await fsSync.promises.realpath(target);
+  } catch {
+    // Target doesn't exist — fall back to lexical check (a non-existent path
+    // cannot be imported anyway).
+    realTarget = path.resolve(target);
+  }
+  const rel = path.relative(realRoot, realTarget);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error("entry path escapes the plugin root");
+  }
+}
+
 // `PluginAPI` / `PluginToolkit` (and the related option types) are the
 // Public Plugin API — they live in @covel/runtime so plugin authors can
 // import them. `buildEntryApi` is annotated `: PluginAPI`, so this
@@ -124,10 +151,7 @@ export async function createBootstrapPluginEntries(
       for (const entryPath of definition.entryPaths) {
         currentEntry = entryPath;
         const fullPath = path.resolve(definition.pluginRoot, entryPath);
-        const rel = path.relative(definition.pluginRoot, fullPath);
-        if (rel.startsWith("..") || path.isAbsolute(rel)) {
-          throw new Error("entry path escapes the plugin root");
-        }
+        await assertInsideRoot(definition.pluginRoot, fullPath);
         if (!fsSync.existsSync(fullPath)) {
           throw new Error(`entry file not found: ${entryPath}`);
         }

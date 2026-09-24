@@ -1371,7 +1371,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 只接受 `failed/timed_out/cancelled/stale/orphaned`，并要求 session 仍为 active。显式重试保留冻结的原始输入和稳定设置，刷新当前 session incarnation、插件 approval scope、locale 与 runtime model overrides，创建**新的** `jobId` 和 queued status；原终态不变。成功以 `202` 直接返回新 job 资源，不可重试返回 `409`、`code: "runtime_job_not_retryable"`。未 claim 的普通 queued 作业可在重启后继续执行，但框架不会自动 replay 失败类终态，以免重复调用已经计费但未成功落库的 provider 工作。
 
-作业由 CAS claim + renewable lease 驱动，默认 worker 并发为 4，同一 `(session, plugin, runtime)` 串行。`maxQueueMs` 约束排队时间，`maxExecutionMs` 约束 claim 后控制面执行时间；重启后会继续 claim 合法 queued 作业，过期排队项置为 `timed_out`、过期在途 lease 置为 `orphaned`。提交前再次检查 session active/incarnation、插件 approval scope/version 和实际 proposal effects；session/plugin 身份检查失败落 `stale`（`reason: commit-barrier-rejected`），effect 或领域提交失败落 `failed`，两者都不会写入领域状态。
+作业由 CAS claim + renewable lease 驱动，默认 worker 并发为 4，同一 `(session, plugin, runtime)` 串行。`maxQueueMs` 约束排队时间，`maxExecutionMs` 约束 claim 后控制面执行时间；重启后会继续 claim 合法 queued 作业，过期排队项置为 `timed_out`、过期在途 lease 置为 `orphaned`。提交前再次检查 session active/incarnation、插件 approval scope/version 和实际 proposal effects；执行前校验或提交屏障处的 session/plugin 身份检查失败落 `stale`（执行前被拒记 `reason: pre-execution-rejected`，到达提交屏障后被拒记 `reason: commit-barrier-rejected`），effect 或领域提交失败落 `failed`，两者都不会写入领域状态。
 
 ---
 
@@ -1671,6 +1671,11 @@ Function handler 以 `HandlerResult.success.effects.assetGenerations[]` 返回�
 ```
 
 Provider-specific wire responses such as OpenAI `b64_json`, SDK `base64`, or expiring remote image URLs are transient handler inputs. The handler must call `ctx.media.put()` for bytes/base64 or `ctx.media.ingestUrl()` for remote URLs before returning, then expose the generated media through `assetGenerations[].ref` and ref-only business records.
+
+`ctx.media.ingestUrl()` 的出站契约：
+
+- **重定向**：底层 `utils.fetchWithRetry` 从不自动跟随重定向（undici 始终以 `redirect: "manual"` 驱动）。ingest 显式传入 `redirect: "manual"`，因此拿到原始 3xx 响应，并对每一个 `Location` 逐跳重新执行 `validateBaseUrl`（SSRF 策略）与 `permissions.http` 判定；超过 `maxRedirects`（默认 5）即失败。插件自己调用 `ctx.utils.fetchWithRetry` 时，缺省（或 `redirect: "follow"` / `"error"`）遇到 3xx 会 fail-closed 抛错；只有显式 `redirect: "manual"` 才会把 3xx 交回调用方，由调用方负责校验每一跳。
+- **权限**：`ctx.media` 与 `ctx.utils` 使用同一个 `permissions.http` 强制面。community runtime 通过 `ingestUrl`（含 `ctx.images.generate` / `ctx.speech.*` 返回的远程 URL 落库路径）访问未声明的 origin 会被拒绝（`http permission denied: …`），即使该 URL 只出现在 provider 响应里；因此图片 CDN 等 origin 必须写进 `permissions.http`。builtin/trusted runtime 不强制该白名单，SSRF 策略对两者始终生效。
 
 For plugins with `capabilities: ["image-generation"]`, a successful completed runtime must return at least one valid `assetGenerations[]` entry in `HandlerResult.success.effects`. `pluginData` records in the `images` namespace must store `ref` records; completed outputs with old `url`, `base64`, or `dataUrl` image fields are reported as runtime errors.
 

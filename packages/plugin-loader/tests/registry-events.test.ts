@@ -37,12 +37,16 @@ describe("PluginRegistry EventBus Bridge", () => {
     registry = createPluginRegistry({ eventBus });
   });
 
-  it("should emit plugin.activated event on activate()", () => {
+  it("should emit plugin.activated event on applyPersistedActivations()", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
 
     registry.register(makeEntry("alpha"));
-    registry.activate("alpha", "session-1");
+    await registry.applyPersistedActivations(
+      "session-1",
+      ["alpha"],
+      async () => {},
+    );
 
     const activated = events.find((e) => e.type === "plugin.activated");
     expect(activated).toBeDefined();
@@ -53,13 +57,17 @@ describe("PluginRegistry EventBus Bridge", () => {
     );
   });
 
-  it("should emit plugin.deactivated event on deactivate()", () => {
+  it("should emit plugin.deactivated event when the persisted set drops a plugin", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
 
     registry.register(makeEntry("alpha"));
-    registry.activate("alpha", "session-1");
-    registry.deactivate("alpha", "session-1");
+    await registry.applyPersistedActivations(
+      "session-1",
+      ["alpha"],
+      async () => {},
+    );
+    await registry.applyPersistedActivations("session-1", [], async () => {});
 
     const deactivated = events.find((e) => e.type === "plugin.deactivated");
     expect(deactivated).toBeDefined();
@@ -70,15 +78,23 @@ describe("PluginRegistry EventBus Bridge", () => {
     );
   });
 
-  it("emits lifecycle events only for actual activation changes", () => {
+  it("emits lifecycle events only for actual activation changes", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((event) => events.push(event));
     registry.register(makeEntry("alpha"));
 
-    registry.activate("alpha", "session-1");
-    registry.activate("alpha", "session-1");
-    registry.deactivate("alpha", "session-1");
-    registry.deactivate("alpha", "session-1");
+    await registry.applyPersistedActivations(
+      "session-1",
+      ["alpha"],
+      async () => {},
+    );
+    await registry.applyPersistedActivations(
+      "session-1",
+      ["alpha"],
+      async () => {},
+    );
+    await registry.applyPersistedActivations("session-1", [], async () => {});
+    await registry.applyPersistedActivations("session-1", [], async () => {});
 
     expect(events.map((event) => event.type)).toEqual([
       "plugin.activated",
@@ -86,11 +102,19 @@ describe("PluginRegistry EventBus Bridge", () => {
     ]);
   });
 
-  it("should work without eventBus (backward compat)", () => {
+  it("should work without eventBus (backward compat)", async () => {
     const noEventBusRegistry = createPluginRegistry();
     noEventBusRegistry.register(makeEntry("beta"));
-    noEventBusRegistry.activate("beta", "session-1");
-    noEventBusRegistry.deactivate("beta", "session-1");
+    await noEventBusRegistry.applyPersistedActivations(
+      "session-1",
+      ["beta"],
+      async () => {},
+    );
+    await noEventBusRegistry.applyPersistedActivations(
+      "session-1",
+      [],
+      async () => {},
+    );
     // No errors thrown
     expect(noEventBusRegistry.get("beta")).toBeDefined();
   });

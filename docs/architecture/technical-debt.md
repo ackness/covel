@@ -45,5 +45,21 @@ rg -n "ponytail:" apps packages plugins
 | ----------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
 | `plugins/cost-gate/hooks/budget.js` | A cumulative token cap eventually blocks a long legitimate session | Playthroughs justify a per-turn or sliding-window budget |
 
-The current source has 15 markers. This ledger follows current source comments;
+## Oversized modules
+
+Non-test files past the 800-line review guideline (AGENTS.md). Split only when
+responsibilities or maintenance cost justify the change — length alone is not
+a defect. Re-measure with `wc -l` before acting; line counts drift.
+
+| File                                                      | Lines |
+| --------------------------------------------------------- | ----: |
+| `apps/server/src/routes/api/actions.ts`                   |  1078 |
+| `packages/shared/src/schemas/plugin-schemas.ts`           |  1034 |
+| `packages/shared/src/types/plugin.ts`                     |  1029 |
+| `packages/runtime/src/turn-executor/turn-executor.ts`     |   972 |
+| `apps/server/src/routes/api/bootstrap.ts`                 |   880 |
+| `apps/web/src/services/data-service/local.ts`             |   878 |
+| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` |   820 |
+
+The current source has 14 markers. This ledger follows current source comments;
 historical counts and line numbers are not current contracts.

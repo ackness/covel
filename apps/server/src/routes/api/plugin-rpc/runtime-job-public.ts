@@ -7,6 +7,8 @@ const PUBLIC_REASON_MESSAGES = {
   "queue-deadline-exceeded": "Runtime job timed out while waiting to execute.",
   "commit-barrier-rejected":
     "Runtime job stopped because its session or plugin state changed.",
+  "pre-execution-rejected":
+    "Runtime job stopped because its session or plugin state changed.",
   "worker-shutdown": "Runtime job was cancelled because its worker shut down.",
   "cancelled-by-user": "Runtime job was cancelled by the user.",
   "lease-expired":

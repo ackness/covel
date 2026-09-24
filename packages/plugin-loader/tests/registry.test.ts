@@ -309,32 +309,69 @@ describe("PluginRegistry", () => {
     });
   });
 
-  describe("activate", () => {
-    it("should activate a plugin for a session", () => {
+  describe("applyPersistedActivations", () => {
+    it("should activate a persisted plugin for a session", async () => {
       const entry = makeEntry("alpha");
       registry.register(entry);
 
-      registry.activate("alpha", "session-1");
+      await registry.applyPersistedActivations(
+        "session-1",
+        ["alpha"],
+        async () => {},
+      );
 
       // After activation, the entry should still be retrievable
-      const result = registry.get("alpha");
-      expect(result).toBeDefined();
+      expect(registry.get("alpha")).toBeDefined();
+      expect(registry.getActivePlugins("session-1")).toEqual(["alpha"]);
     });
-  });
 
-  describe("deactivate", () => {
-    it("should deactivate a plugin for a session", () => {
+    it("should deactivate plugins missing from the persisted set", async () => {
       registry.register(makeEntry("alpha"));
-      registry.activate("alpha", "session-1");
-      registry.deactivate("alpha", "session-1");
+      await registry.applyPersistedActivations(
+        "session-1",
+        ["alpha"],
+        async () => {},
+      );
+      await registry.applyPersistedActivations("session-1", [], async () => {});
 
       // Plugin should still be in the registry
       expect(registry.get("alpha")).toBeDefined();
+      expect(registry.getActivePlugins("session-1")).toEqual([]);
+    });
+
+    it("persists first and leaves memory untouched when the write fails", async () => {
+      registry.register(makeEntry("alpha"));
+      registry.register(makeEntry("beta"));
+      await registry.applyPersistedActivations(
+        "session-1",
+        ["alpha"],
+        async () => {},
+      );
+
+      await expect(
+        registry.applyPersistedActivations("session-1", ["beta"], async () => {
+          throw new Error("store unavailable");
+        }),
+      ).rejects.toThrow("store unavailable");
+
+      expect(registry.getActivePlugins("session-1")).toEqual(["alpha"]);
+    });
+
+    it("ignores plugin ids that are not registered", async () => {
+      registry.register(makeEntry("alpha"));
+
+      await registry.applyPersistedActivations(
+        "session-1",
+        ["alpha", "missing"],
+        async () => {},
+      );
+
+      expect(registry.getActivePlugins("session-1")).toEqual(["alpha"]);
     });
   });
 
-  describe("clearSession", () => {
-    it("removes every activation without affecting registered plugins", () => {
+  describe("session deletion (empty persisted set)", () => {
+    it("removes every activation without affecting registered plugins", async () => {
       registry.register(
         makeEntry("alpha", {
           manifest: makeParsedPluginMd("alpha/runtime", 500),
@@ -345,15 +382,22 @@ describe("PluginRegistry", () => {
           manifest: makeParsedPluginMd("beta/runtime", 600),
         }),
       );
-      registry.activate("alpha", "session-1");
-      registry.activate("beta", "session-1");
+      await registry.applyPersistedActivations(
+        "session-1",
+        ["alpha", "beta"],
+        async () => {},
+      );
       expect(registry.getActiveRuntimes("session-1")).toHaveLength(2);
 
-      registry.clearSession("session-1");
+      await registry.applyPersistedActivations("session-1", [], async () => {});
 
       expect(registry.getActiveRuntimes("session-1")).toEqual([]);
       expect(registry.get("alpha")).toBeDefined();
-      expect(registry.activate("alpha", "session-1")).toBe(true);
+      await registry.applyPersistedActivations(
+        "session-1",
+        ["alpha"],
+        async () => {},
+      );
       expect(registry.getActiveRuntimes("session-1")).toHaveLength(1);
     });
   });
@@ -370,8 +414,8 @@ describe("PluginRegistry", () => {
           manifest: makeParsedPluginMd("beta/runtime", 600),
         }),
       );
-      registry.activate("alpha", "session-1");
-      registry.activate("alpha", "session-2");
+      registry.syncSessionActivations("session-1", ["alpha"]);
+      registry.syncSessionActivations("session-2", ["alpha"]);
 
       registry.syncSessionActivations("session-1", ["beta", "missing"]);
 
@@ -423,7 +467,7 @@ describe("PluginRegistry", () => {
           loadedRuntimes: new Map(),
         }),
       );
-      registry.activate("image-plugin", "session-capability");
+      registry.syncSessionActivations("session-capability", ["image-plugin"]);
 
       expect(
         registry.findPluginByCapability(
@@ -447,7 +491,7 @@ describe("PluginRegistry", () => {
           loadedRuntimes: new Map([["artifact-only/runtime", loadedOnly]]),
         }),
       );
-      registry.activate("artifact-only", "session-artifact");
+      registry.syncSessionActivations("session-artifact", ["artifact-only"]);
 
       expect(
         registry.findPluginByCapability(
@@ -473,14 +517,18 @@ describe("PluginRegistry", () => {
     });
   });
 
-  describe("onChange fires on activate", () => {
-    it("should notify handler with plugin-activated event including sessionId", () => {
+  describe("onChange fires on applyPersistedActivations", () => {
+    it("should notify handler with plugin-activated event including sessionId", async () => {
       registry.register(makeEntry("alpha"));
 
       const handler = vi.fn<(event: RegistryChangeEvent) => void>();
       registry.onChange(handler);
 
-      registry.activate("alpha", "session-1");
+      await registry.applyPersistedActivations(
+        "session-1",
+        ["alpha"],
+        async () => {},
+      );
 
       expect(handler).toHaveBeenCalledTimes(1);
       expect(handler).toHaveBeenCalledWith({
@@ -523,9 +571,7 @@ describe("PluginRegistry", () => {
       registry.register(entryHigh);
       registry.register(entryMid);
 
-      registry.activate("low", "session-1");
-      registry.activate("high", "session-1");
-      registry.activate("mid", "session-1");
+      registry.syncSessionActivations("session-1", ["low", "high", "mid"]);
 
       const runtimes = registry.getActiveRuntimes("session-1");
 
@@ -544,8 +590,7 @@ describe("PluginRegistry", () => {
       registry.register(
         makeEntry("a", { manifest: makeParsedPluginMd("alpha-runtime", 800) }),
       );
-      registry.activate("z", "session-2");
-      registry.activate("a", "session-2");
+      registry.syncSessionActivations("session-2", ["z", "a"]);
 
       const runtimes = registry.getActiveRuntimes("session-2");
       expect(runtimes.map((r) => r.name)).toEqual([

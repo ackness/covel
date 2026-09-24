@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
+import { safeEqual } from "./api/session/session-guard.js";
 
 /** Extract the token from an `Authorization: Bearer <token>` header. */
 export function bearerToken(c: Context): string | undefined {
@@ -17,7 +18,7 @@ export function makeDesktopRestTokenGuard(): MiddlewareHandler {
     const expected = readRuntimeEnv().desktopRestToken;
     if (!expected) return next();
     const provided = bearerToken(c);
-    if (!provided || provided !== expected) {
+    if (!provided || !safeEqual(provided, expected)) {
       return c.json(
         errorBody("Desktop REST token missing or invalid", {
           code: "desktop_rest_token_invalid",
@@ -41,7 +42,7 @@ export function makeInstallApiGuard(): MiddlewareHandler {
     const env = readRuntimeEnv();
     if (env.desktopRestToken) {
       const provided = bearerToken(c);
-      if (!provided || provided !== env.desktopRestToken) {
+      if (!provided || !safeEqual(provided, env.desktopRestToken)) {
         return c.json(
           errorBody("Desktop REST token missing or invalid", {
             code: "desktop_rest_token_invalid",

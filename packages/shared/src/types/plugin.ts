@@ -257,6 +257,12 @@ export type FrameworkRuntimeCapabilityTag =
  *
  * Plugins may still declare arbitrary custom capability tags beyond this set;
  * this list only enumerates the tags the framework discovers and dispatches on.
+ *
+ * Note: some tag literals (`scene-stage`, `scene-cast`, `scene-prompts`,
+ * `character-presence`, …) are spelled identically to bundled plugin directory
+ * names under `plugins/`. That is a coincidence of naming, not a hardcoded
+ * plugin id — the framework matches on the capability tag, so any third-party
+ * plugin declaring the same tag is an equivalent replacement.
  */
 export const FRAMEWORK_KNOWN_CAPABILITIES: readonly string[] = Object.freeze([
   ...Object.values(FrameworkCapability),

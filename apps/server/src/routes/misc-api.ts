@@ -21,6 +21,7 @@ import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
 import {
   checkHostedOperator,
   checkSessionOwner,
+  safeEqual,
 } from "./api/session/session-guard.js";
 import { errorBody } from "../api-error.js";
 import { modelParameters } from "./misc-api/model-parameters.js";
@@ -189,7 +190,11 @@ export function createMiscApiRoutes(
   // file parsed (a broken file falls back to the default, reported via `error`).
   app.post("/api/llm-config/reload", (c) => {
     const env = readRuntimeEnv();
-    if (env.desktopRestToken && bearerToken(c) !== env.desktopRestToken) {
+    const provided = bearerToken(c);
+    if (
+      env.desktopRestToken &&
+      (!provided || !safeEqual(provided, env.desktopRestToken))
+    ) {
       return c.json(errorBody("Unauthorized", { code: "unauthorized" }), 401);
     }
     return c.json(reloadAiStack(ai));
@@ -203,8 +208,17 @@ export function createMiscApiRoutes(
     const denied = checkHostedOperator(c);
     if (denied) return denied;
     const env = readRuntimeEnv();
+    // Raw keys are a desktop-shell contract: the bearer token alone is not
+    // enough, and COVEL_HOME is not proof — it is a plain path setting that
+    // docker-compose and .env.example both document for ordinary self-hosts.
+    // Only the explicit desktop flag (Electron sidecar or the documented
+    // COVEL_DESKTOP_REST=1 opt-in) plus the token unlocks raw key material.
+    const provided = bearerToken(c);
     const allowRawKeys =
-      !!env.desktopRestToken && bearerToken(c) === env.desktopRestToken;
+      env.desktopRest &&
+      !!env.desktopRestToken &&
+      provided !== undefined &&
+      safeEqual(provided, env.desktopRestToken);
     const configuredKeys = providerApiKeysFromEnv();
     const providers: Record<string, { configured: boolean; masked: string }> =
       {};

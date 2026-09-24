@@ -438,7 +438,7 @@ describe("Resume Routes", () => {
       await createSuspension(store);
       await store.updateSession("sess-1", { activePlugins: [] });
       const deps = makeDefaultDeps(store);
-      deps.pluginRegistry.activate("test-plugin", "sess-1");
+      deps.pluginRegistry.syncSessionActivations("sess-1", ["test-plugin"]);
       const app = createTestApp(deps);
 
       const res = await app.request(

@@ -136,8 +136,9 @@ export interface FinalizeExecutionArgs {
   /**
    * Session-clock write folded into the same transaction: logical-turn
    * counting (from `executionContext`) plus the setup-band mirror / phase flip
-   * (from `setupCompletion`). Only the player action path supplies it; manual /
-   * background / resume finalizes omit it and leave the clock untouched. A
+   * (from `setupCompletion`). The player action path and the final sibling
+   * resume supply it; manual / background / detached finalizes omit it and
+   * leave the clock untouched. A
    * proposal failure rolls the clock write back with the domain writes.
    */
   readonly sessionClock?: SessionClockUpdate;
@@ -261,7 +262,7 @@ async function terminalizeExecutionJobs(
       { pluginId: string; runtimeId: string; jobIds: Set<string> }
     >();
     for (const record of reported) {
-      const key = `${record.pluginId} ${record.runtimeId}`;
+      const key = `${record.pluginId}\u0000${record.runtimeId}`;
       const group = groups.get(key) ?? {
         pluginId: record.pluginId,
         runtimeId: record.runtimeId,

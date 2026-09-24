@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.39] - 2026-09-24
+
+This release hardens security boundaries (token comparison, provider-key gating, plugin-service slot lending), fixes media ingest redirect handling and `permissions.http` enforcement, makes session plugin activations persist-first, and repairs stage/dialogue display issues.
+
+### Security
+
+- **Token and provider-key boundaries hardened.** `COVEL_DESKTOP_REST_TOKEN` is compared through constant-time `safeEqual`; raw `/api/provider-keys` listings require a real desktop deployment (`COVEL_DESKTOP_REST`, not merely `COVEL_HOME` + token); boot warns loudly when `COVEL_BIND_HOST` is non-loopback while session-owner auth is unenforced; `apiKey`/`headers` are stripped from `resolveSlot` results lent through plugin service calls, including nested hops; evaluation adapter `baseUrl` rewrites are idempotent.
+- **Actions SSE errors are sanitized.** Lock timeouts now map to a coded `session_busy` payload instead of leaking session ids and lock-pool internals; other errors only include raw messages in dev.
+- **PLUGIN.md entry paths are realpath-contained.** A symlinked entry pointing outside the plugin root now fails activation instead of escaping the lexical `path.relative` check.
+
+### Fixed
+
+- **Media ingest redirect contract repaired.** `fetchWithRetry` honors an explicit `redirect:"manual"` opt-in (returning the raw 3xx for per-hop revalidation) while remaining fail-closed by default — previously it threw on any 3xx, making the media ingest redirect loop dead code and breaking `ctx.images.generate` for providers that return redirecting URLs. `ctx.media.ingestUrl` now obeys the same `permissions.http` allowlist as `ctx.utils.fetchWithRetry` (community fail-closed; builtin unchanged).
+- **Missing `committed` flag treated as uncommitted.** `execution.completed` SSE handling now requires `committed === true` in both branches; a missing/non-boolean field settles the attempt as failed instead of leaving optimistic output lingering. `ErrorOccurredPayload` gains an optional `code` field, and `session_busy` renders through the i18n sentinel in zh-CN/en-US/ru-RU.
+- **Stale job rejections are distinguished.** Pre-execution validation failures record `pre-execution-rejected`; rejections at/after the running→committing CAS record `commit-barrier-rejected`. The public reason whitelist maps both to the same converged message.
+- **Lorebook prompt positions unified and strict.** `PersonaPromptPosition` is the canonical shared type; `normalizeLorebookCoordinate` no longer accepts the undocumented `before-memory` alias or silently downgrades unknown values — it warns and applies the documented default.
+- **Session plugin activations are persist-first.** All activation mutations go through `applyPersistedActivations`: the persist callback establishes durable state first and a rejected persist leaves memory untouched. `syncSessionActivations` is reclassified as lock-scoped read-repair; the manual-trigger sync is linearised inside `sessionLock.withLock`.
+- **Stage dialog waits for the closing click on the last paragraph.** A turn's narration used to jump straight from the typewriter to the decision panel (recap + choices) the moment the last paragraph finished revealing on an ended stream, pulling the text out from under the reader. The final paragraph now pauses like every other one and finishes on the player's click; auto-play advances it on the usual dwell timer. An empty trailing paragraph (trailing `\n\n` artifact) still resolves directly, and stories present at mount remain treated as already read.
+- **Narrative review no longer flags quoted speech behind an unclosed quote.** A story whose final dialogue line was left unclosed (truncated model output) made the perspective check fall back to the raw text and flag pronouns inside properly closed dialogue — e.g. 「我是班长…」 — as a narration violation. The resulting corrective retry could then shrink the committed story to the model's one-character patch (a lone `」`). The check now keeps closed dialogue stripped and validates only the unclosed tail as narration, and correction retries are instructed to resend the complete response so a patch fragment cannot replace the whole draft. Sessions that already committed a degenerate story need a new turn to recover.
+
+### Changed
+
+- **`SetupCompletionTracker` extracted from the turn executor.** The setup-completion state previously scattered across five mutable cells is now owned by one tracker; the late-setup channel runs groups through `applyHazardPolicy` like main groups, and a setup runtime declaring `turnCompletion: detached` runs in the foreground with a diagnostic instead of silently deviating.
+- **Runtime loader and dual-authorization gate extracted from bootstrap.** `createRuntimeLoader()` in `bootstrap/runtime-loader.ts` owns `loadRuntimeFn` plus the community server-code + runtime dual-grant check; fail-closed behavior is identical.
+- **Bare NUL bytes replaced in composite keys.** `finalize-execution.ts` and `vector-recall-search.ts` now use the `\u0000` escape like the other separator sites, so `file(1)`/grep/diff tooling no longer treats them as binary.
+
+### Upgrade notes
+
+- Update the server, Web client, desktop shell, and framework packages together. `ErrorOccurredPayload.code` is additive; `normalizeLorebookCoordinate` rejects the undocumented `before-memory` alias (use `before_plugin`/`after_plugin` per the contract). No database migration is introduced.
+- macOS Apple Silicon and Windows x64 artifacts are unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
+
 ## [0.0.38] - 2026-09-21
 
 This release adds configurable evaluation models and public plugin services, keeps the Jev recommendation demo optional, and fixes opening character allocation and stage interaction timing.

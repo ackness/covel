@@ -290,6 +290,7 @@
     "importDimensions": "导入维度",
     "dimensionsImported": "导入成功",
     "reasonConnectionClosed": "连接结束但后端未上报结束",
+    "reasonSessionBusy": "会话繁忙，请稍后重试",
     "selectionsReady": "已选择 {{count}} 项",
     "confirmSelections": "发送选择",
     "viewParsed": "解析",

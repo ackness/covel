@@ -211,8 +211,23 @@ export async function executeFunctionRuntime({
         ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
       })
     : undefined;
+  const isTrustedSource = isTrustedPluginSource(deps, manifest);
+  // Community HTTP fail-closed: a community plugin may only reach an
+  // origin+method declared under permissions.http; trusted plugins pass through
+  // unchanged (SSRF still enforced inside fetchWithRetry either way). Built
+  // BEFORE the media/images/speech handles so `ctx.media.ingestUrl` (and every
+  // URL a gateway result asks us to ingest) is subject to the same allowlist as
+  // `ctx.utils.fetchWithRetry`, and BEFORE the trace wrapper so a denied call
+  // never emits a spurious calling event; enforcement is not trace-gated.
+  const permissionedUtils = runtimeUtils
+    ? enforceHttpPermissions(runtimeUtils, {
+        isCommunity: !isTrustedSource,
+        httpPermissions: manifest.permissions?.http ?? [],
+        runtimeId: manifest.name,
+      })
+    : undefined;
   const mediaHandle = deps.mediaStore
-    ? createRuntimeMediaContext(deps.mediaStore, runtimeUtils, {
+    ? createRuntimeMediaContext(deps.mediaStore, permissionedUtils, {
         sessionId: input.sessionId,
         pluginId: manifest.pluginId,
       })
@@ -258,25 +273,12 @@ export async function executeFunctionRuntime({
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
         )
       : undefined;
-  const isTrustedSource = isTrustedPluginSource(deps, manifest);
   const handlerStore = deps.store
     ? isTrustedSource
       ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer)
       : createFunctionStoreView(deps.store, helperCtx, writeBuffer)
     : undefined;
 
-  // Community HTTP fail-closed: a community plugin may only reach an
-  // origin+method declared under permissions.http; trusted plugins pass through
-  // unchanged (SSRF still enforced inside fetchWithRetry either way). Applied
-  // BEFORE the trace wrapper so a denied call never emits a spurious calling
-  // event, and independent of the emitter so enforcement is not trace-gated.
-  const permissionedUtils = runtimeUtils
-    ? enforceHttpPermissions(runtimeUtils, {
-        isCommunity: !isTrustedSource,
-        httpPermissions: manifest.permissions?.http ?? [],
-        runtimeId: manifest.name,
-      })
-    : undefined;
   // Trace plugin-owned provider HTTP calls (ctx.utils.fetchWithRetry — the wire
   // image plugins use) when an emitter is present; raw passthrough otherwise.
   const tracedUtils =

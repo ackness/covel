@@ -62,6 +62,13 @@ const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
 
 export function createRuntimeMediaContext(
   mediaStore: MediaStoreLike,
+  /**
+   * Outbound HTTP surface used by `ingestUrl`. Callers that run community
+   * (untrusted) plugin code MUST pass the `permissions.http`-enforcing facade
+   * (`enforceHttpPermissions`) here, not the raw runtime utils: `ingestUrl` is
+   * an outbound request channel and has to obey the same allowlist as
+   * `ctx.utils.fetchWithRetry`. `undefined` disables `ingestUrl` only.
+   */
   utils: PluginRuntimeUtils | undefined,
   options: CreateRuntimeMediaContextOptions,
 ): MediaContext {
@@ -217,6 +224,19 @@ function normalizeAndValidateUrl(
   return parsed;
 }
 
+/**
+ * Follow redirects hop-by-hop, re-validating every `Location` against the
+ * injected `utils.validateBaseUrl` (SSRF policy) — and, when the caller is a
+ * community runtime, against `permissions.http` (the utils handed to this
+ * context are the permission-enforcing facade).
+ *
+ * Contract with `utils.fetchWithRetry`: it never auto-follows redirects. An
+ * explicit `redirect: "manual"` makes the production implementation
+ * (`@covel/ai-provider` `plugin-utils.fetchWithRetry`) return the raw 3xx
+ * `Response` so this loop can inspect `Location`; without that opt-in it
+ * fails closed and throws. `response.url` is cross-checked to detect an
+ * injected implementation that silently followed a redirect for us.
+ */
 async function fetchWithValidatedRedirects(
   utils: PluginRuntimeUtils,
   startUrl: URL,
@@ -237,6 +257,7 @@ async function fetchWithValidatedRedirects(
       maxRetries: 2,
       signal: opts.signal,
     });
+    assertNoSilentRedirect(response, currentUrl);
     if (!REDIRECT_STATUS.has(response.status))
       return { response, finalUrl: currentUrl };
 
@@ -255,6 +276,27 @@ async function fetchWithValidatedRedirects(
   throw new Error(
     `media ingest exceeded redirect limit (${opts.maxRedirects})`,
   );
+}
+
+/**
+ * Guard against a `utils` implementation that ignores `redirect: "manual"`
+ * and follows hops internally: the final `response.url` would then point at an
+ * origin this loop never validated. Synthetic responses (tests) have an empty
+ * `url`, so the check only applies when the implementation reports one.
+ */
+function assertNoSilentRedirect(response: Response, expectedUrl: URL): void {
+  if (!response.url) return;
+  let actual: URL;
+  try {
+    actual = new URL(response.url);
+  } catch {
+    return;
+  }
+  if (actual.href !== expectedUrl.href) {
+    throw new Error(
+      `media ingest URL followed an unvalidated redirect to ${actual.toString()}`,
+    );
+  }
 }
 
 async function readResponseBytes(

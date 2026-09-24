@@ -49,8 +49,19 @@ export async function deleteSessionWithLifecycle(
   );
   const sessionLock = c.get("sessionLock");
   const pluginRegistry = c.get("pluginRegistry");
-  const clearProcessLocalState = (): void => {
-    pluginRegistry.clearSession(id);
+  const clearProcessLocalState = async (): Promise<void> => {
+    // Single mutation point: the registry mirror is dropped only after the
+    // durable deletion is confirmed, so a failed store delete can never clear
+    // activations out of order. Both call sites have just established the
+    // deletion (deleteSession resolved, or a fresh read returned null); the
+    // persist callback re-verifies it.
+    await pluginRegistry.applyPersistedActivations(id, [], async () => {
+      if (await store.getSession(id)) {
+        throw new Error(
+          `Session "${id}" is still persisted; refusing to clear activations`,
+        );
+      }
+    });
     c.get("rpcApprovalGate")?.revoke(id);
     c.get("clearSessionToolOverrides")?.(id);
     c.get("clearBrowserWorkspace")?.(id);
@@ -246,7 +257,7 @@ export async function deleteSessionWithLifecycle(
       } catch (error) {
         const live = await store.getSession(id);
         if (!live) {
-          clearProcessLocalState();
+          await clearProcessLocalState();
           return c.json(okBody());
         }
         if (
@@ -275,7 +286,7 @@ export async function deleteSessionWithLifecycle(
         throw error;
       }
 
-      clearProcessLocalState();
+      await clearProcessLocalState();
       return c.json(okBody());
     });
   };

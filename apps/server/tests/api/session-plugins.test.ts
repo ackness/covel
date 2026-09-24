@@ -274,7 +274,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
   describe("GET plugin projection", () => {
     it("filters unapproved plugins without mutating session or registry state", async () => {
       const updateSession = vi.spyOn(store, "updateSession");
-      const deactivate = vi.spyOn(registry, "deactivate");
+      const applyActivations = vi.spyOn(registry, "applyPersistedActivations");
 
       const response = await app.request(`/api/sessions/${SESSION_ID}/plugins`);
 
@@ -289,7 +289,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         body.items.find((item) => item.id === "optional-plugin")?.active,
       ).toBe(false);
       expect(updateSession).not.toHaveBeenCalled();
-      expect(deactivate).not.toHaveBeenCalled();
+      expect(applyActivations).not.toHaveBeenCalled();
       expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([
         "narrator",
         "optional-plugin",
@@ -845,22 +845,22 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           source: "builtin",
         }),
       );
-      const activate = vi.spyOn(registry, "activate");
+      const applySpy = vi.spyOn(registry, "applyPersistedActivations");
       vi.spyOn(store, "updateSession").mockRejectedValueOnce(
         new Error("simulated persistence failure"),
       );
 
       const response = await app.request(
         `/api/sessions/${SESSION_ID}/plugins/persist-failure-plugin`,
-        {
-          method: "PUT",
-        },
+        { method: "PUT" },
       );
 
       expect(response.status).toBe(500);
-      expect(activate).not.toHaveBeenCalledWith(
+      // The mutation path ran, but its persist-first contract kept the
+      // in-memory mirror unchanged when the store write failed.
+      expect(applySpy).toHaveBeenCalledTimes(1);
+      expect(registry.getActivePlugins(SESSION_ID)).not.toContain(
         "persist-failure-plugin",
-        SESSION_ID,
       );
       expect((await store.getSession(SESSION_ID))?.activePlugins).not.toContain(
         "persist-failure-plugin",
@@ -937,7 +937,12 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     });
 
     it("keeps the registry unchanged when disabling fails to persist", async () => {
-      const deactivate = vi.spyOn(registry, "deactivate");
+      // Seed the mirror the way a successful enable/create would leave it.
+      registry.syncSessionActivations(SESSION_ID, [
+        "narrator",
+        "optional-plugin",
+      ]);
+      const applyActivations = vi.spyOn(registry, "applyPersistedActivations");
       vi.spyOn(store, "updateSession").mockRejectedValueOnce(
         new Error("simulated persistence failure"),
       );
@@ -950,9 +955,11 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       );
 
       expect(response.status).toBe(500);
-      expect(deactivate).not.toHaveBeenCalledWith(
+      // The mutation path ran, but its persist-first contract kept the
+      // in-memory mirror unchanged when the store write failed.
+      expect(applyActivations).toHaveBeenCalledTimes(1);
+      expect(registry.getActivePlugins(SESSION_ID)).toContain(
         "optional-plugin",
-        SESSION_ID,
       );
       expect((await store.getSession(SESSION_ID))?.activePlugins).toContain(
         "optional-plugin",

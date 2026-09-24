@@ -118,6 +118,9 @@ describe("stage decision lifecycle", () => {
       ],
     };
     rerender(<StageView {...props} />);
+    // Click through the paragraphs; the last one also waits for a closing
+    // click before the dialog hands over to the decision panel.
+    fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
     fireEvent.click(screen.getByRole("button", { name: "点击继续对话" }));
     expect(screen.queryByTestId("stage-dialog")).toBeNull();
     expect(screen.queryByTestId("stage-choices")).toBeNull();

@@ -380,11 +380,16 @@ sessionRoutes.post("/", async (c) => {
       throw err;
     }
 
-    for (const pluginId of plugins) {
-      if (typeof pluginId === "string" && pluginRegistry.get(pluginId)) {
-        pluginRegistry.activate(pluginId, id);
+    // Single mutation point: the authoritative activePlugins set was already
+    // committed by the scoped createSession transaction above (a failed media
+    // finalisation deletes the row again before reaching this line), so the
+    // persist callback only re-verifies the durable state before the
+    // process-local mirror is reconciled.
+    await pluginRegistry.applyPersistedActivations(id, plugins, async () => {
+      if (!(await store.getSession(id))) {
+        throw new Error(`Session "${id}" vanished before plugin activation`);
       }
-    }
+    });
 
     // The create transaction and world-media finalisation can be lengthy.
     // Start the lifecycle lease only when the hook is actually about to run,

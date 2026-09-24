@@ -157,6 +157,15 @@ export interface PluginRegistryOptions {
   readonly eventBus?: EventBus;
 }
 
+/**
+ * Read-only contract note: a session's authoritative activation set is its
+ * persisted `session.activePlugins` record. The registry's `sessionActivations`
+ * map is a process-local mirror of that record, and every mutation of the
+ * mirror must be ordered *after* the durable write — see
+ * `applyPersistedActivations` (the single sanctioned mutation path) and
+ * `syncSessionActivations` (read-repair from a snapshot taken under the
+ * session lock).
+ */
 export interface PluginRegistry {
   /** Register a plugin. */
   register(entry: PluginRegistryEntry): void;
@@ -170,17 +179,39 @@ export interface PluginRegistry {
   /** Get active runtimes sorted by (stage, name). */
   getActiveRuntimes(sessionId: string): readonly RuntimeManifest[];
 
-  /** Activate a plugin for a session. Returns false if pluginId is not registered. */
-  activate(pluginId: string, sessionId: string): boolean;
+  /** Read-only view of a session's in-memory activation set. */
+  getActivePlugins(sessionId: string): readonly string[];
 
-  /** Deactivate a plugin for a session. Returns false if pluginId is not registered. */
-  deactivate(pluginId: string, sessionId: string): boolean;
+  /**
+   * Single sanctioned mutation path for a session's activation set.
+   *
+   * `persist` must first establish the authoritative durable state — write
+   * the session's `activePlugins`, delete the session row, or verify that an
+   * earlier durable write landed (e.g. a create transaction). Only after it
+   * resolves is the process-local mirror reconciled to `pluginIds` and the
+   * per-plugin `plugin-activated` / `plugin-deactivated` lifecycle events are
+   * emitted for the actual delta. A rejected `persist` propagates and leaves
+   * memory untouched, so the mirror can never run ahead of the store and
+   * callers cannot "forget to write the database first".
+   *
+   * Unknown plugin IDs are filtered out (same rule as `syncSessionActivations`).
+   * Passing an empty set drops the session's activations entirely — this also
+   * covers deleted sessions.
+   */
+  applyPersistedActivations(
+    sessionId: string,
+    pluginIds: readonly string[],
+    persist: () => Promise<void>,
+  ): Promise<void>;
 
-  /** Reconcile a session's in-memory activations with a complete persisted snapshot. */
+  /**
+   * Read-repair only: reconcile a session's in-memory activations with a
+   * complete persisted snapshot that was just read under the session lock
+   * (restart recovery / cross-instance staleness). Emits no lifecycle events.
+   * Must not be used to apply a mutation — every change to the authoritative
+   * set goes through `applyPersistedActivations`, which persists first.
+   */
   syncSessionActivations(sessionId: string, pluginIds: readonly string[]): void;
-
-  /** Drop every in-memory activation owned by a deleted session. */
-  clearSession(sessionId: string): void;
 
   /**
    * Find the plugin package ID of an active plugin that declares a given capability.
@@ -203,6 +234,9 @@ export function createPluginRegistry(
   options?: PluginRegistryOptions,
 ): PluginRegistry {
   const entries = new Map<string, PluginRegistryEntry>();
+  // Process-local mirror of each session's persisted `activePlugins`.
+  // Only `applyPersistedActivations` (persist-first mutation) and
+  // `syncSessionActivations` (locked read-repair) may write to it.
   const sessionActivations = new Map<string, Set<string>>();
   const listeners = new Set<(event: RegistryChangeEvent) => void>();
   const eventBus = options?.eventBus;
@@ -253,32 +287,39 @@ export function createPluginRegistry(
       return entries.get(id);
     },
 
-    activate(pluginId: string, sessionId: string): boolean {
-      if (!entries.has(pluginId)) {
-        return false;
-      }
-      let sessionSet = sessionActivations.get(sessionId);
-      if (sessionSet === undefined) {
-        sessionSet = new Set();
-        sessionActivations.set(sessionId, sessionSet);
-      }
-      if (sessionSet.has(pluginId)) return true;
-      sessionSet.add(pluginId);
-      emit({ type: "plugin-activated", pluginId, sessionId });
-      emitToEventBus("plugin.activated", sessionId, { pluginId, sessionId });
-      return true;
+    getActivePlugins(sessionId: string): readonly string[] {
+      return [...(sessionActivations.get(sessionId) ?? [])];
     },
 
-    deactivate(pluginId: string, sessionId: string): boolean {
-      if (!entries.has(pluginId)) {
-        return false;
+    async applyPersistedActivations(
+      sessionId: string,
+      pluginIds: readonly string[],
+      persist: () => Promise<void>,
+    ): Promise<void> {
+      // Durable state first: a failed persist must never be reflected here.
+      await persist();
+      const previous = sessionActivations.get(sessionId);
+      const desired = new Set(
+        pluginIds.filter((pluginId) => entries.has(pluginId)),
+      );
+      if (desired.size === 0) {
+        sessionActivations.delete(sessionId);
+      } else {
+        sessionActivations.set(sessionId, desired);
       }
-      const sessionSet = sessionActivations.get(sessionId);
-      if (sessionSet === undefined || !sessionSet.delete(pluginId)) return true;
-      if (sessionSet.size === 0) sessionActivations.delete(sessionId);
-      emit({ type: "plugin-deactivated", pluginId, sessionId });
-      emitToEventBus("plugin.deactivated", sessionId, { pluginId, sessionId });
-      return true;
+      for (const pluginId of desired) {
+        if (previous?.has(pluginId)) continue;
+        emit({ type: "plugin-activated", pluginId, sessionId });
+        emitToEventBus("plugin.activated", sessionId, { pluginId, sessionId });
+      }
+      for (const pluginId of previous ?? []) {
+        if (desired.has(pluginId)) continue;
+        emit({ type: "plugin-deactivated", pluginId, sessionId });
+        emitToEventBus("plugin.deactivated", sessionId, {
+          pluginId,
+          sessionId,
+        });
+      }
     },
 
     syncSessionActivations(
@@ -293,10 +334,6 @@ export function createPluginRegistry(
       } else {
         sessionActivations.set(sessionId, desired);
       }
-    },
-
-    clearSession(sessionId: string): void {
-      sessionActivations.delete(sessionId);
     },
 
     onChange(handler: (event: RegistryChangeEvent) => void): () => void {

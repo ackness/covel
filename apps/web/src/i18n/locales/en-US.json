@@ -290,6 +290,7 @@
     "importDimensions": "Import Dimensions",
     "dimensionsImported": "Imported successfully",
     "reasonConnectionClosed": "Connection closed but backend did not report completion",
+    "reasonSessionBusy": "Session is busy, please retry",
     "selectionsReady": "{{count}} selection(s) ready",
     "confirmSelections": "Send selections",
     "viewParsed": "Parsed",

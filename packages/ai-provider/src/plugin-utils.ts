@@ -87,12 +87,25 @@ export interface FetchWithRetryOptions {
  *
  * Plugins should call this for their own wire requests instead of bare
  * `fetch` so retry policy stays consistent across the framework.
+ *
+ * Redirect contract (fail-closed by default):
+ * - Undici is ALWAYS driven with `redirect: "manual"`, so a 3xx is never
+ *   auto-followed to an unvalidated `Location` (SSRF/DNS-rebinding guard).
+ * - `init.redirect === "manual"` is the caller's explicit opt-in to receive
+ *   the raw 3xx `Response` (status + `Location` header intact) and to
+ *   re-validate every hop itself. The framework's media ingest uses this:
+ *   each `Location` goes through `validateBaseUrl` before the next request.
+ * - Any other value (`"follow"`, `"error"`, or omitted) throws on a 3xx.
+ *   Callers that need redirect following must therefore opt in per call;
+ *   there is no permissive default.
  */
 export async function fetchWithRetry(
   input: string | URL,
   init: RequestInit & FetchWithRetryOptions = {},
 ): Promise<Response> {
-  const { maxRetries = 3, signal, ...rest } = init;
+  const { maxRetries = 3, signal, redirect, ...rest } = init;
+  // Only an explicit `manual` hands 3xx responses back to the caller.
+  const returnRedirects = redirect === "manual";
 
   const url = new URL(input.toString());
   const verdict = validateBaseUrlForPlugin(url.toString());
@@ -109,9 +122,9 @@ export async function fetchWithRetry(
     try {
       // Only the initial URL is SSRF-checked; a redirect Location is not, and
       // undici skips the pinning lookup for an IP-literal host. Follow the core
-      // provider path: force manual redirect handling and fail closed on a 3xx
-      // so a `302 Location: http://169.254.169.254/…` can't reach internal
-      // hosts. `redirect` is placed after `...rest` to override any caller value.
+      // provider path: force manual redirect handling so a `302 Location:
+      // http://169.254.169.254/…` can't reach internal hosts, then fail closed
+      // on a 3xx unless the caller opted into validating hops itself.
       const response = await fetchWithDispatcher(
         input,
         {
@@ -121,7 +134,7 @@ export async function fetchWithRetry(
         },
         dispatcher,
       );
-      if (response.status >= 300 && response.status < 400) {
+      if (!returnRedirects && response.status >= 300 && response.status < 400) {
         await response.body?.cancel().catch(() => {});
         throw new Error(
           `baseUrl rejected by SSRF policy: refusing to follow redirect (HTTP ${response.status}) from "${url}".`,

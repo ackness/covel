@@ -631,7 +631,10 @@ describe("Session lifecycle hooks", () => {
       await build();
     registerCommunityPlugin(pluginRegistry);
     const id = await createSession(app);
-    pluginRegistry.activate("community-plugin", id);
+    pluginRegistry.syncSessionActivations(id, [
+      ...pluginRegistry.getActivePlugins(id),
+      "community-plugin",
+    ]);
     grantSessionApproval(rpcApprovalGate, id);
     const pending = rpcApprovalGate.evaluate({
       sessionId: id,
@@ -670,7 +673,10 @@ describe("Session lifecycle hooks", () => {
     } = await build();
     registerCommunityPlugin(pluginRegistry);
     const id = await createSession(app);
-    pluginRegistry.activate("community-plugin", id);
+    pluginRegistry.syncSessionActivations(id, [
+      ...pluginRegistry.getActivePlugins(id),
+      "community-plugin",
+    ]);
     grantSessionApproval(rpcApprovalGate, id);
     vi.spyOn(store, "deleteSession").mockRejectedValueOnce(
       new Error("database unavailable"),
@@ -754,7 +760,10 @@ describe("Session lifecycle hooks", () => {
     } = await build();
     registerCommunityPlugin(pluginRegistry);
     const id = await createSession(app);
-    pluginRegistry.activate("community-plugin", id);
+    pluginRegistry.syncSessionActivations(id, [
+      ...pluginRegistry.getActivePlugins(id),
+      "community-plugin",
+    ]);
     grantSessionApproval(rpcApprovalGate, id);
     const originalDelete = store.deleteSession.bind(store);
     vi.spyOn(store, "deleteSession").mockImplementationOnce(

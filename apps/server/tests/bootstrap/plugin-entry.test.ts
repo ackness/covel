@@ -388,6 +388,54 @@ export default function (covel) {
     ).toBeUndefined();
   });
 
+  it("rejects an entry path that escapes the plugin root through a symlink", async () => {
+    const outsideDir = path.join(tmpRoot, "entry-escape-target");
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(outsideDir, "evil.mjs"),
+      `export default function (covel) { covel.registerRpc("escaped", async () => true); }`,
+    );
+    const pluginId = "entry-symlink-escape";
+    const rootPath = path.join(tmpRoot, pluginId);
+    fs.mkdirSync(path.join(rootPath, "server"), { recursive: true });
+    fs.symlinkSync(
+      path.join(outsideDir, "evil.mjs"),
+      path.join(rootPath, "server", "index.mjs"),
+    );
+    const manifest = {
+      name: pluginId,
+      pluginId,
+      description: pluginId,
+      entry: "server/index.mjs",
+    } as unknown as RuntimeManifest;
+    const params = makeParams([]);
+    params.discoveryMap.set(pluginId, {
+      id: pluginId,
+      rootPath,
+      isMultiRuntime: false,
+      pluginMdPaths: [path.join(rootPath, "PLUGIN.md")],
+      source: "community",
+    });
+    params.manifestCache.set(pluginId, [
+      { manifest, promptTemplate: "", rawFrontmatter: {} },
+    ]);
+
+    const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
+    const failure = await ensurePluginEntry(pluginId, "session").then(
+      () => {
+        throw new Error("expected activation to fail");
+      },
+      (error: unknown) => error as Error,
+    );
+    expect(failure.message).toContain("failed to activate entry");
+    expect((failure.cause as Error).message).toContain(
+      "escapes the plugin root",
+    );
+    expect(
+      params.rpcRegistry.getPluginAction(pluginId, "escaped"),
+    ).toBeUndefined();
+  });
+
   it("supports async entry factories", async () => {
     const p = writePlugin(
       "entry-async-a",

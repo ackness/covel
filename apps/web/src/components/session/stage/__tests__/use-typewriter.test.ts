@@ -82,11 +82,15 @@ describe("typewriterReduce", () => {
     // No streamEnd yet and no further segment — stays "typing" (waiting).
     expect(skipped.status).toBe("typing");
 
+    // Stream over, paragraph fully shown — still pause for the closing
+    // click instead of auto-jumping to the decision panel.
     const ended = typewriterReduce(skipped, { type: "streamEnd" });
-    expect(ended.status).toBe("done");
+    expect(ended.status).toBe("pause");
+    const done = typewriterReduce(ended, { type: "advance" });
+    expect(done.status).toBe("done");
   });
 
-  it("4. running out of queued text before streamEnd waits in typing (not done); streamEnd then completes it", () => {
+  it("4. running out of queued text before streamEnd waits in typing (not done); streamEnd pauses, the closing click completes", () => {
     const s1 = typewriterReduce(typewriterInit(), {
       type: "feed",
       text: "还在写",
@@ -101,8 +105,10 @@ describe("typewriterReduce", () => {
     expect(stillWaiting.status).toBe("typing");
 
     const finished = typewriterReduce(stillWaiting, { type: "streamEnd" });
-    expect(finished.status).toBe("done");
+    expect(finished.status).toBe("pause");
     expect(finished.visible).toBe("还在写");
+    const done = typewriterReduce(finished, { type: "advance" });
+    expect(done.status).toBe("done");
   });
 
   it("5. skip only affects the current segment — a second click (pause) does not swallow the next one", () => {
@@ -171,11 +177,34 @@ describe("typewriterReduce", () => {
       type: "feed",
       text: "唯一段",
     });
-    const done = typewriterReduce(ticksUntilPause(singleSegment), {
+    const ended = typewriterReduce(ticksUntilPause(singleSegment), {
       type: "streamEnd",
     });
+    expect(ended.status).toBe("pause");
+    const done = typewriterReduce(ended, { type: "advance" });
     expect(done.status).toBe("done");
     expect(typewriterReduce(done, { type: "advance" })).toEqual(done);
+  });
+
+  it("an empty trailing segment skips the closing pause (no blank dead click)", () => {
+    const s1 = typewriterReduce(typewriterInit(), {
+      type: "feed",
+      text: "第一段。\n\n第二段。\n\n",
+    });
+    const s2 = ticksUntilPause(s1);
+    expect(s2.visible).toBe("第一段。");
+    expect(s2.status).toBe("pause");
+
+    const s3 = typewriterReduce(s2, { type: "streamEnd" });
+    const s4 = ticksUntilPause(typewriterReduce(s3, { type: "advance" }));
+    expect(s4.visible).toBe("第二段。");
+    // The trailing "" split artifact keeps this a mid-pause, not the last.
+    expect(s4.status).toBe("pause");
+
+    // Advancing into the empty last segment resolves straight to done —
+    // no blank pause demanding an extra click.
+    const s5 = ticksUntilPause(typewriterReduce(s4, { type: "advance" }));
+    expect(s5.status).toBe("done");
   });
 
   it("7. reducedMotion shows a fed segment fully at once but still pauses at the boundary", () => {
@@ -205,8 +234,8 @@ describe("useTypewriter (hook wiring)", () => {
     // The turnId change fires `reset`, which clears the internal streamEnded
     // flag. Because the streamEnded PROP never changes (level-true throughout),
     // the streamEnd effect must still re-sync it — otherwise the last segment
-    // never resolves to "done", onAllRead never fires, and the stage choice
-    // overlay / composer stay gated forever.
+    // never pauses for its closing click, "done" is unreachable, onAllRead
+    // never fires, and the stage choice overlay / composer stay gated forever.
     const { result, rerender } = renderHook(
       ({ text, ended, turnId }) =>
         useTypewriter(text, ended, { turnId, reducedMotion: true }),
@@ -224,6 +253,11 @@ describe("useTypewriter (hook wiring)", () => {
     expect(result.current.visible).toBe("第一段。");
 
     act(() => result.current.advance());
+    // reducedMotion reveals the last paragraph instantly, but the turn
+    // pauses for the closing click instead of auto-finishing.
+    expect(result.current.status).toBe("pause");
+    expect(result.current.visible).toBe("第二段。");
+    act(() => result.current.advance());
     expect(result.current.status).toBe("done");
   });
 
@@ -237,11 +271,13 @@ describe("useTypewriter (hook wiring)", () => {
         useTypewriter(text, true, { turnId, reducedMotion: true }),
       { initialProps: { text: "同一段话。", turnId: "turn-1" } },
     );
-    expect(result.current.status).toBe("done");
+    expect(result.current.status).toBe("pause");
     expect(result.current.visible).toBe("同一段话。");
 
     rerender({ text: "同一段话。", turnId: "turn-2" });
     expect(result.current.visible).toBe("同一段话。");
+    expect(result.current.status).toBe("pause");
+    act(() => result.current.advance());
     expect(result.current.status).toBe("done");
   });
 

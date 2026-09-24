@@ -257,8 +257,11 @@ export function rotateSessionApprovalScope(
  * Constant-time string comparison. Both inputs are re-hashed to fixed-length
  * digests so `timingSafeEqual` never throws on length mismatch and the
  * comparison leaks neither content nor length.
+ *
+ * Exported so every comparison of `COVEL_DESKTOP_REST_TOKEN` (privileged-auth,
+ * misc-api) shares one constant-time path instead of `!==` per call site.
  */
-function safeEqual(a: string, b: string): boolean {
+export function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(
     createHash("sha256").update(a).digest(),
     createHash("sha256").update(b).digest(),

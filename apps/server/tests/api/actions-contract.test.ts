@@ -23,7 +23,11 @@ import {
   type LoadedRuntime,
 } from "@covel/plugin-loader";
 import { actionRoutes } from "../../src/routes/api/actions.js";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  SessionLockTimeoutError,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
 
 function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
@@ -72,6 +76,7 @@ describe("POST /api/actions — action type contract ", () => {
   let app: Hono;
   let loadedByName: Map<string, LoadedRuntime>;
   let hookPipeline: ReturnType<typeof createHookPipeline>;
+  let sessionLock: SessionLock;
   const sessionId = "sess-contract";
   const NARRATOR_ID = "fake-narrator";
   const SIDE_ID = "fake-side";
@@ -117,7 +122,7 @@ describe("POST /api/actions — action type contract ", () => {
 
     const eventBus = createEventBus(store);
     const { llm } = makeFakeLLM("A fake reply.");
-    const sessionLock = createInProcessSessionLock();
+    sessionLock = createInProcessSessionLock();
 
     app = new Hono();
     app.use("*", async (c, next) => {
@@ -437,7 +442,7 @@ describe("POST /api/actions — action type contract ", () => {
   });
 
   it("reconciles stale in-memory activations with the persisted session", async () => {
-    registry.activate(NARRATOR_ID, sessionId);
+    registry.syncSessionActivations(sessionId, [NARRATOR_ID]);
     await store.updateSession(sessionId, { activePlugins: [SIDE_ID] });
 
     const res = await app.request("/api/actions", {
@@ -611,5 +616,49 @@ describe("POST /api/actions — action type contract ", () => {
       (r.runtimeResults as { runtimeId: string }[]).map((rr) => rr.runtimeId),
     );
     expect(ranRuntimeIds).toContain(NARRATOR_ID);
+  });
+
+  it("maps a session lock timeout to a coded session_busy SSE event without leaking internals", async () => {
+    // Simulate the PG advisory lock losing a race: its raw error text names
+    // the session id and lock-pool internals.
+    const throwBusy = async (): Promise<never> => {
+      throw new SessionLockTimeoutError(
+        `[pg-session-lock] failed to acquire lock for session ${sessionId} within 30000ms (lock pool exhausted?)`,
+      );
+    };
+    sessionLock = { withLock: throwBusy, withLocks: throwBusy };
+
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-lock-busy",
+        type: "send_message",
+        sessionId,
+        payload: { content: "Continue" },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    const envelopes = text
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map(
+        (line) =>
+          JSON.parse(line.slice(6)) as {
+            type: string;
+            payload: Record<string, unknown>;
+          },
+      );
+    const errors = envelopes.filter((event) => event.type === "error.occurred");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.payload).toMatchObject({
+      message: "Session is busy, please retry",
+      code: "session_busy",
+    });
+    // The fixed wire text replaces the raw message regardless of NODE_ENV,
+    // so no internal detail may appear anywhere in the stream.
+    expect(text).not.toContain("lock pool exhausted");
+    expect(text).not.toContain("pg-session-lock");
   });
 });
