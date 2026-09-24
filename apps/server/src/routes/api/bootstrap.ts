@@ -5,15 +5,11 @@ import {
   type PluginBackgroundQueue,
 } from "./plugin-rpc/background-queue.js";
 import { Hono, type MiddlewareHandler } from "hono";
-import type { RuntimeManifest } from "@covel/shared";
 import { readRuntimeEnv } from "@covel/shared";
 import {
-  loadRuntime as loadRuntimeFromDisk,
   loadPluginLlmConfig,
   deriveBuiltinPluginIds,
-  getPluginTrustInfo,
   type PluginRegistry,
-  type LoadedRuntime,
   type PluginLlmConfig,
   type PluginRuntimeGateway,
   type PluginRuntimeUtils,
@@ -95,6 +91,7 @@ import {
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
 import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
+import { createRuntimeLoader } from "./bootstrap/runtime-loader.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { requestLlmServices } from "./bootstrap/request-llm-services.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
@@ -361,75 +358,19 @@ async function assembleApi(
 
   const resolveModel = createModelResolver({ pluginLlmConfigs });
 
-  // Unified plugin entries are created after the tool/hook/rpc registries
-  // exist (below); loadRuntimeFn needs the activation seam earlier, so it
-  // late-binds through this holder.
-  //
-  // ORDERING CONSTRAINT: `createBootstrapPluginEntries` (which assigns the
-  // real function to this holder) MUST stay after step 6b's eager UI-spec
-  // runtime loads. Those loads call `loadRuntimeFn` → `ensurePluginEntry`;
-  // while this is still the no-op, a community plugin's UI-spec load does NOT
-  // run its entry. Moving entry creation earlier would execute community
-  // entry code at boot — before any approval gate — which is exactly what the
-  // deferred-activation design prevents.
-  let ensurePluginEntry: (
-    pluginId: string,
-    sessionId?: string,
-  ) => Promise<void> = async () => {};
-
-  // loadRuntime resolver (locale-aware: loads PLUGIN.en.md when locale is "en-US")
-  const loadRuntimeFn = async (
-    manifest: RuntimeManifest,
-    locale?: string,
-    sessionId?: string,
-  ): Promise<LoadedRuntime | undefined> => {
-    for (const [pluginId, discovery] of discoveryMap) {
-      const manifests = manifestCache.get(pluginId);
-      if (manifests?.some((m) => m.manifest.name === manifest.name)) {
-        const trust = getPluginTrustInfo(pluginId, discovery.source);
-        // Loading a community runtime executes the plugin's server
-        // code (entry / handler import) AND runs that specific runtime, so
-        // BOTH grants are required — the exact server-code grant and the
-        // exact `runtime:<name>` grant. The old OR let a single runtime
-        // approval unlock the whole plugin's server code (and vice versa),
-        // collapsing the two-phase consent the UI presents.
-        if (!trust.autoLoad) {
-          const approvalSession = sessionId
-            ? await store.getSession(sessionId)
-            : undefined;
-          if (!sessionId || !approvalSession) {
-            throw new Error(
-              `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires a live session approval scope`,
-            );
-          }
-          const approvalScope = sessionApprovalScope(approvalSession, pluginId);
-          if (
-            !rpcApprovalGate.hasGrant(
-              sessionId,
-              pluginId,
-              COMMUNITY_SERVER_CODE_ACTION,
-              approvalScope,
-            ) ||
-            !rpcApprovalGate.hasGrant(
-              sessionId,
-              pluginId,
-              `runtime:${manifest.name}`,
-              approvalScope,
-            )
-          ) {
-            throw new Error(
-              `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval (server-code AND runtime grants)`,
-            );
-          }
-        }
-        // The entry check is the fail-closed approval boundary. Keep it ahead
-        // of every other community import, including the runtime handler.
-        await ensurePluginEntry(pluginId, sessionId);
-        return loadRuntimeFromDisk(discovery, manifest.name, locale);
-      }
-    }
-    return undefined;
-  };
+  // Runtime loader + community dual-authorization gate, extracted to
+  // bootstrap/runtime-loader.ts. It forward-references two things built
+  // further down: the rpc approval gate (lazy getter) and the real
+  // `ensurePluginEntry` (late-bound no-op seam, assigned via
+  // `bindPluginEntry` after `createBootstrapPluginEntries` resolves). See
+  // the ORDERING CONSTRAINT in runtime-loader.ts for the full contract.
+  const runtimeLoader = createRuntimeLoader({
+    discoveryMap,
+    manifestCache,
+    store,
+    getApprovalGate: () => rpcApprovalGate,
+  });
+  const loadRuntimeFn = runtimeLoader.loadRuntimeFn;
 
   // 6. Create ToolExecutor with builtin + plugin local tools + approval.
   //    Wiring extracted into `setupPluginTools` (bootstrap/tools.ts). It builds
@@ -503,14 +444,14 @@ async function assembleApi(
       const session = await store.getSession(sessionId);
       if (!session?.activePlugins.includes(pluginId))
         throw new Error(`Plugin is not active: ${pluginId}`);
-      await ensurePluginEntry(pluginId, sessionId);
+      await runtimeLoader.ensurePluginEntry(pluginId, sessionId);
     },
     async list(sessionId) {
       const session = await store.getSession(sessionId);
       const admitted: string[] = [];
       for (const pluginId of session?.activePlugins ?? []) {
         try {
-          await ensurePluginEntry(pluginId, sessionId);
+          await runtimeLoader.ensurePluginEntry(pluginId, sessionId);
           admitted.push(pluginId);
         } catch {
           // Unapproved or failed entries are not available service providers.
@@ -538,7 +479,7 @@ async function assembleApi(
       isCommunityHookApproved,
       services,
     }));
-  ensurePluginEntry = pluginEntries.ensurePluginEntry;
+  runtimeLoader.bindPluginEntry(pluginEntries.ensurePluginEntry);
 
   // Community activation seam: running the plugin's `entry` module is what
   // registers its tools, hooks, rpc actions and wires.
@@ -804,7 +745,7 @@ async function assembleApi(
     ),
   );
 
-  // 9. Mount routes — all under /api/ prefix
+  // 10. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
   app.route("/api/sessions", sessionRoutes);
   app.route("/api/sessions", stateRoutes);
