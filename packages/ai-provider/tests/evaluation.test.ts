@@ -442,6 +442,25 @@ describe("evaluation protocols on shared provider connections", () => {
       "https://gateway.example/proxy/v4/ai/evaluation-model",
       "future/model",
     ],
+    // A base that already points at the evaluation endpoint stays idempotent.
+    [
+      "openrouter-decisions-v1",
+      "https://proxy.example/router/api/alpha/decisions",
+      "https://proxy.example/router/api/alpha/decisions",
+      "typesafe/jev-1.13",
+    ],
+    [
+      "vercel-evaluation-v4",
+      "https://proxy.example/gw/v4/ai/evaluation-model",
+      "https://proxy.example/gw/v4/ai/evaluation-model",
+      "typesafe-ai/jev",
+    ],
+    [
+      "typesafe-systemone-v1",
+      "https://proxy.example/rt/v1/systemone",
+      "https://proxy.example/rt/v1/systemone",
+      "jev-latest",
+    ],
   ] as const)(
     "routes %s via %s without rewriting %s",
     async (protocol, baseUrl, endpoint, model) => {

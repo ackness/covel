@@ -37,6 +37,11 @@ const BRIDGE = `
 })();`;
 
 export function pluginWebviewDocument(html: string): string {
+  // 'unsafe-inline' is load-bearing: plugin documents are arbitrary inline
+  // HTML delivered via srcDoc, so nonce/hash CSP cannot work without
+  // rewriting plugin markup. The real boundary is the iframe sandbox (opaque
+  // origin, no parent storage) plus connect-src 'none' — plugin script may
+  // run but cannot make network calls or reach host state.
   return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><script>${BRIDGE}</script>${html}`;
 }
 

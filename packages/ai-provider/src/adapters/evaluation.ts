@@ -93,16 +93,32 @@ export function createEvaluationAdapter(
     };
     let baseUrl = config.baseUrl;
     let path: string | { append: string } = "/v1/systemone";
-    if (baseUrl && protocol !== "typesafe-systemone-v1") {
+    if (baseUrl && protocol === "typesafe-systemone-v1") {
+      // A base that already includes the endpoint stays idempotent — without
+      // this strip, buildProviderUrl would append `/v1/systemone` again.
       const url = new URL(baseUrl);
-      // Accept the shared chat base or the evaluation API base, preserving proxy prefixes.
       url.pathname = url.pathname
         .replace(/\/+$/, "")
-        .replace(vercel ? /\/(?:v1|v4\/ai)$/ : /\/api(?:\/(?:v1|alpha))?$/, "");
+        .replace(/\/(?:v1\/)?systemone$/, "");
       baseUrl = url.toString();
-      path = {
-        append: vercel ? "/v4/ai/evaluation-model" : "/api/alpha/decisions",
-      };
+    } else if (baseUrl) {
+      const url = new URL(baseUrl);
+      const evalPath = vercel
+        ? "/v4/ai/evaluation-model"
+        : "/api/alpha/decisions";
+      // Accept the shared chat base or the evaluation API base, preserving
+      // proxy prefixes. Strip the eval endpoint itself first so a base that
+      // already points at it does not get the path appended twice.
+      let pathname = url.pathname.replace(/\/+$/, "");
+      if (pathname.endsWith(evalPath)) {
+        pathname = pathname.slice(0, -evalPath.length);
+      }
+      url.pathname = pathname.replace(
+        vercel ? /\/(?:v1|v4\/ai)$/ : /\/api(?:\/(?:v1|alpha))?$/,
+        "",
+      );
+      baseUrl = url.toString();
+      path = { append: evalPath };
     }
     const response = await postJson(
       { ...config, baseUrl },

@@ -213,6 +213,8 @@ describe("[P2] provider keys raw exposure", () => {
   beforeEach(() => {
     savedEnv = {
       COVEL_DESKTOP_REST_TOKEN: process.env.COVEL_DESKTOP_REST_TOKEN,
+      COVEL_DESKTOP_REST: process.env.COVEL_DESKTOP_REST,
+      COVEL_HOME: process.env.COVEL_HOME,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
       QWEN_API_KEY: process.env.QWEN_API_KEY,
       DEPLOYMENT_TIER: process.env.DEPLOYMENT_TIER,
@@ -276,7 +278,37 @@ describe("[P2] provider keys raw exposure", () => {
     expect(await res.text()).not.toContain("sk-op");
   });
 
+  it("returns masked keys to a bearer token without desktop mode", async () => {
+    // A self-host that set the token only for install/admin APIs is not a
+    // desktop shell — raw key material must not cross the HTTP boundary.
+    process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
+    process.env.OPENAI_API_KEY = "sk-openai-secret";
+    const app = new Hono();
+    app.route(
+      "/",
+      createMiscApiRoutes(
+        makeAiStackStub(),
+        createPluginRegistry(),
+        createMemoryStore(),
+      ),
+    );
+
+    const res = await app.request("http://localhost/api/provider-keys", {
+      headers: { Authorization: "Bearer desktop-token" },
+    });
+    const body = (await res.json()) as {
+      keys: Record<string, string>;
+      providers: Record<string, { configured: boolean; masked: string }>;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.keys).toEqual({});
+    expect(body.providers.openai).toMatchObject({ configured: true });
+    expect(JSON.stringify(body)).not.toContain("sk-openai-secret");
+  });
+
   it("returns raw keys with the desktop bearer token", async () => {
+    process.env.COVEL_DESKTOP_REST = "1";
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
     process.env.QWEN_API_KEY = "sk-qwen-secret";

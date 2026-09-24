@@ -114,4 +114,70 @@ describe("public plugin services", () => {
     await expect(client.call(request)).rejects.toThrow("cancelled");
     await expect(client.call(request)).rejects.toThrow("cancelled");
   });
+
+  it("lends the gateway with slot secrets stripped, including nested hops", async () => {
+    const active = new Set(["consumer", "provider", "inner"]);
+    const registry = new PluginServiceRegistry({
+      list: async () => [...active],
+      ensure: async (_sessionId: string, pluginId: string) => {
+        if (!active.has(pluginId)) throw new Error("Plugin not authorized");
+      },
+    });
+    const resolved = {
+      presetId: "preset",
+      provider: "prov",
+      protocol: "proto",
+      baseUrl: "https://api.example",
+      apiKey: "sk-secret",
+      headers: { authorization: "Bearer sk-secret" },
+      model: "model",
+      tag: "text",
+      metadata: {},
+    };
+    const gateway = { resolveSlot: () => resolved } as never;
+    const client = registry.createClient({
+      sessionId: "test",
+      pluginId: "consumer",
+      signal: new AbortController().signal,
+      gateway,
+    });
+    const seen: unknown[] = [];
+    registry.register("inner", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (_v, ctx) => {
+        seen.push(ctx.gateway?.resolveSlot({}));
+        return { value: 1 };
+      },
+    });
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: async (_v, ctx) => {
+        seen.push(ctx.gateway?.resolveSlot({}));
+        await ctx.services.call({
+          pluginId: "inner",
+          name: "rank",
+          contract: request.contract,
+          input: { value: 1 },
+        });
+        return { value: 2 };
+      },
+    });
+
+    await client.call(request);
+
+    expect(seen).toHaveLength(2);
+    for (const slot of seen) {
+      expect(slot).toMatchObject({ presetId: "preset", model: "model" });
+      expect(slot).not.toHaveProperty("apiKey");
+      expect(slot).not.toHaveProperty("headers");
+    }
+    // The caller's own facade is untouched — only the lent view strips.
+    expect(resolved.apiKey).toBe("sk-secret");
+  });
 });

@@ -21,6 +21,7 @@ import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
 import {
   checkHostedOperator,
   checkSessionOwner,
+  safeEqual,
 } from "./api/session/session-guard.js";
 import { errorBody } from "../api-error.js";
 import { modelParameters } from "./misc-api/model-parameters.js";
@@ -189,7 +190,11 @@ export function createMiscApiRoutes(
   // file parsed (a broken file falls back to the default, reported via `error`).
   app.post("/api/llm-config/reload", (c) => {
     const env = readRuntimeEnv();
-    if (env.desktopRestToken && bearerToken(c) !== env.desktopRestToken) {
+    const provided = bearerToken(c);
+    if (
+      env.desktopRestToken &&
+      (!provided || !safeEqual(provided, env.desktopRestToken))
+    ) {
       return c.json(errorBody("Unauthorized", { code: "unauthorized" }), 401);
     }
     return c.json(reloadAiStack(ai));
@@ -203,8 +208,16 @@ export function createMiscApiRoutes(
     const denied = checkHostedOperator(c);
     if (denied) return denied;
     const env = readRuntimeEnv();
+    // Raw keys are a desktop-shell contract: the bearer token alone is not
+    // enough. A self-host that set COVEL_DESKTOP_REST_TOKEN only to guard the
+    // install/config APIs — without opting into desktop mode — gets the
+    // masked listing like any other caller.
+    const provided = bearerToken(c);
     const allowRawKeys =
-      !!env.desktopRestToken && bearerToken(c) === env.desktopRestToken;
+      (env.desktopRest || !!env.covelHome) &&
+      !!env.desktopRestToken &&
+      provided !== undefined &&
+      safeEqual(provided, env.desktopRestToken);
     const configuredKeys = providerApiKeysFromEnv();
     const providers: Record<string, { configured: boolean; masked: string }> =
       {};

@@ -20,7 +20,7 @@ Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批�
 
 `openrouter`、`vercel` 内置连接默认使用 OpenAI Chat，Jev 模型选择 Evaluation 即预选表中的评估接口，仍可手动调整。表格只是当前服务商示例；Provider 名称、Base URL 和模型 ID 均可自定义，兼容相同 wire 的代理或其他模型可以直接使用。
 
-OpenRouter 请求路径为 `/api/alpha/decisions`，接受根地址、`/api/v1` 或 `/api/alpha` 作为 base。Vercel 请求路径为 `/v4/ai/evaluation-model`，接受根地址、`/v1` 或 `/v4/ai` 作为 base。适配器仅替换这些已知末尾路径，保留主机和自定义代理前缀，例如 `https://proxy.example/router/api/v1` 对应 `https://proxy.example/router/api/alpha/decisions`。Vercel 用 `ai-model-id` header 传模型 ID，并发送其原生协议版本和 API Key 认证头；其请求 body 中 Boolean 类型保持 `boolean`。
+OpenRouter 请求路径为 `/api/alpha/decisions`，接受根地址、`/api/v1`、`/api/alpha` 或评估端点本身作为 base。Vercel 请求路径为 `/v4/ai/evaluation-model`，接受根地址、`/v1`、`/v4/ai` 或评估端点本身作为 base；TypeSafe 同理接受 `/v1/systemone`。适配器仅替换这些已知末尾路径，保留主机和自定义代理前缀，例如 `https://proxy.example/router/api/v1` 对应 `https://proxy.example/router/api/alpha/decisions`。Vercel 用 `ai-model-id` header 传模型 ID，并发送其原生协议版本和 API Key 认证头；其请求 body 中 Boolean 类型保持 `boolean`。
 
 服务端 TOML 示例：
 

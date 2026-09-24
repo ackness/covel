@@ -17,6 +17,27 @@ interface Caller {
   readonly utils?: PluginServiceContext["utils"];
 }
 
+/**
+ * A service may compute with the caller's model access, but `resolveSlot`
+ * must not hand it key material: request-scoped keys and auth-bearing
+ * headers belong to the caller's own runtime context. Model calls still work
+ * — they flow through the gateway, which never exposes credentials.
+ */
+function lendGateway(
+  gateway: PluginServiceContext["gateway"],
+): PluginServiceContext["gateway"] {
+  if (!gateway) return gateway;
+  return {
+    ...gateway,
+    resolveSlot: (input) => {
+      const resolved = gateway.resolveSlot(input);
+      if (!resolved) return resolved;
+      const { apiKey: _apiKey, headers: _headers, ...rest } = resolved;
+      return rest;
+    },
+  };
+}
+
 /** Scoped to one host instance; activation owns registration disposal. */
 export class PluginServiceRegistry {
   private readonly entries = new Map<string, Entry>();
@@ -97,12 +118,18 @@ export class PluginServiceRegistry {
         if (!entry || entry.contract !== contract)
           throw new Error(`Plugin service unavailable: ${key} (${contract})`);
         // Never lend the caller's store, settings, tools or proposal buffer.
+        // The lent gateway strips slot secrets, and the nested client carries
+        // the stripped facade so deeper hops cannot recover key material.
+        const gateway = lendGateway(caller.gateway);
         return entry.invoke(input, {
           callerPluginId: caller.pluginId,
           signal: caller.signal,
-          gateway: caller.gateway,
+          gateway,
           utils: caller.utils,
-          services: this.createClient({ ...caller, pluginId }, [...path, key]),
+          services: this.createClient({ ...caller, pluginId, gateway }, [
+            ...path,
+            key,
+          ]),
         });
       },
     };
