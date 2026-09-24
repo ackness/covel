@@ -767,7 +767,8 @@ export interface StoreLifecycle {
 // ── DataStore interface ──────────────────────────────────────────
 //
 // Cross-composition of the domain sub-interfaces above. The member set is
-// identical to the previous flat declaration (82 members across 21 domains);
+// identical to the previous flat declaration (96 method members across 19
+// data domains plus TransactionalStore and StoreLifecycle);
 // `extends` simply names the seams. Downstream consumers keep importing
 // `DataStore` with no shape change, and `StoreTransaction` (below) keeps
 // working because every omitted key still resolves through these bases.
