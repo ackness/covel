@@ -1,0 +1,13 @@
+{
+  "name": "@covel/plugin-anti-ai-flavor",
+  "version": "0.0.35",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}
