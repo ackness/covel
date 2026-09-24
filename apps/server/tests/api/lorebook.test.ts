@@ -44,7 +44,7 @@ function makeEntry(
     keys: [],
     content: `content for ${id}`,
     strategy: "constant",
-    position: "before-memory",
+    position: "before_plugin",
     insertionOrder: 100,
     enabled: true,
     createdAt: now,

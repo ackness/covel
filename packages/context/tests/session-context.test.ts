@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createMemoryStore } from "@covel/store";
 import type {
   DataStore,
@@ -90,7 +90,7 @@ function makeLorebookEntry(
     keys: [],
     content: "lorebook content",
     strategy: "constant",
-    position: "after_char_defs",
+    position: "after_plugin",
     insertionOrder: 100,
     enabled: true,
     createdAt: ts(),
@@ -497,6 +497,75 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
       depth: 2,
       content: "[World Rule: 封印门]\n封印门只回应血脉、月光和旧誓。",
     });
+  });
+
+  it("rejects unrecognized positions with a warning and applies the documented default", async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession());
+    await store.upsertLorebookEntries([
+      makeLorebookEntry({
+        id: "legacy-alias",
+        content: "position uses the removed before-memory alias",
+        position: "before-memory",
+        insertionOrder: 10,
+      }),
+      makeLorebookEntry({
+        id: "typo-position",
+        content: "position uses at-depth instead of at_depth",
+        position: "at-depth",
+        insertionOrder: 20,
+      }),
+    ]);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+        locale: "zh-CN",
+        turnNumber: 4,
+      });
+      const bySource = new Map(
+        snapshot.contributions.map((contribution) => [
+          contribution.sourceId,
+          contribution,
+        ]),
+      );
+      // No undocumented alias, no silent downgrade: the entry still renders at
+      // the documented default position, but the mistake is diagnosed.
+      expect(bySource.get("legacy-alias")?.position).toBe("after_plugin");
+      expect(bySource.get("typo-position")?.position).toBe("after_plugin");
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'unrecognized lorebook position "before-memory"',
+        ),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('unrecognized lorebook position "at-depth"'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not warn for recognized lorebook positions", async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession());
+    await store.upsertLorebookEntries([
+      makeLorebookEntry({ id: "ok", position: "before_plugin" }),
+    ]);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
+        locale: "zh-CN",
+        turnNumber: 4,
+      });
+      expect(
+        snapshot.contributions.find((c) => c.sourceId === "ok")?.position,
+      ).toBe("before_plugin");
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

@@ -9,6 +9,7 @@ import type {
   RuntimeResult,
   TurnInput,
   InputSlot,
+  PlayerIdentityCoordinate,
   RuntimeActivation,
 } from "@covel/shared";
 import type { SessionContextStore } from "./session-context-store.js";
@@ -310,6 +311,27 @@ export interface LorebookEntryView {
 }
 
 /**
+ * Persona-side prompt position (`seg3_prepend` / `seg3_append` / `at_depth`).
+ * Derived from the shared {@link PlayerIdentityCoordinate} single source of
+ * truth — do not re-declare the literal union here.
+ */
+export type PersonaPromptPosition = PlayerIdentityCoordinate["position"];
+
+/**
+ * Lorebook-side prompt position: lore renders before the PLUGIN.md segment,
+ * after it, or injected at a specific depth in the message history.
+ */
+export type LorebookPromptPosition =
+  "before_plugin" | "after_plugin" | "at_depth";
+
+/**
+ * Every prompt position a {@link ContextContribution} may target — the union
+ * of the persona-side and lorebook-side positions. Single named type shared
+ * by the snapshot loader, the contribution aggregator, and the assembler.
+ */
+export type PromptPosition = PersonaPromptPosition | LorebookPromptPosition;
+
+/**
  * Player persona descriptor.
  *
  * Loaded by `buildSessionContextSnapshot` from the persona-provider plugin's
@@ -331,7 +353,7 @@ export interface PersonaProfile {
    *   `(position, depth)` slot — lower numbers render first.
    */
   readonly promptCoordinate?: {
-    readonly position: "seg3_prepend" | "seg3_append" | "at_depth";
+    readonly position: PersonaPromptPosition;
     readonly depth?: number;
     readonly order?: number;
   };
@@ -390,12 +412,7 @@ export interface ContextContribution {
   /** personaId (persona) / lorebook entry id (world). */
   readonly sourceId: string;
   readonly content: string;
-  readonly position?:
-    | "before_plugin"
-    | "after_plugin"
-    | "at_depth"
-    | "seg3_prepend"
-    | "seg3_append";
+  readonly position?: PromptPosition;
   readonly depth?: number;
   /** insertionOrder synonym. */
   readonly order?: number;

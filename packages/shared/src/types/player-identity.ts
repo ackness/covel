@@ -1,7 +1,17 @@
 import type { CharacterUpsertPayload } from "./proposal.js";
 
+/**
+ * Canonical persona-side prompt position union.
+ *
+ * Single source of truth: `@covel/context` derives its `PersonaPromptPosition`
+ * / `PromptPosition` aliases from `PlayerIdentityCoordinate["position"]`
+ * instead of re-declaring the literals. `depth` is only meaningful for
+ * `at_depth`; `order` breaks ties within the same `(position, depth)` slot.
+ */
+export type PersonaPromptPosition = "seg3_prepend" | "seg3_append" | "at_depth";
+
 export interface PlayerIdentityCoordinate {
-  readonly position: "seg3_prepend" | "seg3_append" | "at_depth";
+  readonly position: PersonaPromptPosition;
   readonly depth?: number;
   readonly order?: number;
 }

@@ -26,6 +26,7 @@ import type {
   ContextContribution,
   CoreMemoryBlockView,
   LorebookEntryView,
+  LorebookPromptPosition,
   PersonaProfile,
   SessionContextSnapshot,
   SummaryRecord,
@@ -383,7 +384,7 @@ function compileLorebookContributions(
         sourceType: "world",
         sourceId: record.id,
         content: formatLorebookContributionContent(record, extra.title),
-        position: coordinate.position,
+        position: coordinate.position ?? DEFAULT_LOREBOOK_POSITION,
         ...(coordinate.depth !== undefined ? { depth: coordinate.depth } : {}),
         order: record.insertionOrder,
         debugTrace: {
@@ -443,32 +444,57 @@ function normalizeLorebookExtra(value: unknown): NormalizedLorebookExtra {
   };
 }
 
+/**
+ * Documented default lore position, applied only when a record carries no
+ * recognizable position (see {@link normalizeLorebookCoordinate}).
+ */
+const DEFAULT_LOREBOOK_POSITION: LorebookPromptPosition = "after_plugin";
+
 function normalizeLorebookCoordinate(
   recordPosition: string,
   extraCoordinate: NormalizedLorebookExtra["coordinate"],
 ): {
-  readonly position: "before_plugin" | "after_plugin" | "at_depth";
+  readonly position?: LorebookPromptPosition;
   readonly depth?: number;
 } {
   const candidate =
     typeof extraCoordinate?.position === "string"
       ? extraCoordinate.position
       : recordPosition;
-  const position =
-    candidate === "before_plugin" || candidate === "before-memory"
-      ? "before_plugin"
-      : candidate === "at_depth"
-        ? "at_depth"
-        : "after_plugin";
+  // Strict rejection, mirroring `normalizePersonaCoordinate`: no undocumented
+  // aliases and no silent downgrade. An unrecognized value yields `undefined`
+  // plus a warning; the caller applies the documented default so the mistake
+  // is diagnosable instead of quietly relocating the lore.
+  const position = parseLorebookPosition(candidate);
+  if (position === undefined) {
+    console.warn(
+      `[session-context] unrecognized lorebook position "${candidate}"; ` +
+        `defaulting to "${DEFAULT_LOREBOOK_POSITION}". Expected one of: ` +
+        `before_plugin, after_plugin, at_depth.`,
+    );
+  }
   const depth =
     typeof extraCoordinate?.depth === "number" &&
     Number.isFinite(extraCoordinate.depth)
       ? Math.max(0, Math.round(extraCoordinate.depth))
       : undefined;
   return {
-    position,
+    ...(position !== undefined ? { position } : {}),
     ...(position === "at_depth" && depth !== undefined ? { depth } : {}),
   };
+}
+
+function parseLorebookPosition(
+  value: string,
+): LorebookPromptPosition | undefined {
+  if (
+    value !== "before_plugin" &&
+    value !== "after_plugin" &&
+    value !== "at_depth"
+  ) {
+    return undefined;
+  }
+  return value;
 }
 
 function formatLorebookContributionContent(

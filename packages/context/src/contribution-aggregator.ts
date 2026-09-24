@@ -18,6 +18,8 @@ import type {
   ContextBuildParams,
   ContextContribution,
   LLMMessage,
+  LorebookPromptPosition,
+  PersonaPromptPosition,
 } from "./types.js";
 import type {
   RenderedAuthorsNote,
@@ -35,7 +37,7 @@ export function activeContributions(
 
 export function renderSystemPersonaContributions(
   contributions: readonly ContextContribution[],
-  position: "seg3_prepend" | "seg3_append",
+  position: Exclude<PersonaPromptPosition, "at_depth">,
 ): string {
   const lines = contributions
     .filter(
@@ -56,7 +58,7 @@ export function renderSystemPersonaContributions(
 
 export function renderSystemLoreContributions(
   contributions: readonly ContextContribution[],
-  position: "before_plugin" | "after_plugin",
+  position: Exclude<LorebookPromptPosition, "at_depth">,
 ): string {
   const lines = contributions
     .filter(
