@@ -1,3 +1,6 @@
+import path from "node:path";
+import { withPackageMutation } from "../install/package-files.js";
+import { cancelPackageUpdate } from "../install/package-updates.js";
 import { randomUUID } from "node:crypto";
 import type { Context } from "hono";
 import { errorBody, okBody } from "../../../api-error.js";
@@ -86,7 +89,18 @@ export async function deleteWorldWithLifecycle(c: Context): Promise<Response> {
       // cannot authorize a partial cascade. Resolve it again at the final removal.
       if (world.metadata?.source === "generated-file") {
         try {
-          await resolveGeneratedWorldPackage(world, c.get("worldsDirs") ?? []);
+          const worldPath = await resolveGeneratedWorldPackage(
+            world,
+            c.get("worldsDirs") ?? [],
+          );
+          if (world.metadata.packageManaged) {
+            const root = path.dirname(worldPath);
+            await withPackageMutation(
+              id,
+              () => cancelPackageUpdate(root, id),
+              root,
+            );
+          }
         } catch (error) {
           if (!(error instanceof WorldPackageResolutionError)) throw error;
           return c.json(

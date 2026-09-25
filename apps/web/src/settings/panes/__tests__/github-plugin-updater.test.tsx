@@ -10,7 +10,7 @@ import type {
   GithubPluginUpdatePreview,
   PluginInstallation,
 } from "@covel/shared";
-import { GithubPluginUpdater } from "../GithubPluginUpdater.js";
+import { GithubPackageUpdater } from "../GithubPackageUpdater.js";
 import i18n from "@/i18n";
 const source = {
   repository: "https://github.com/example/plugins",
@@ -49,7 +49,7 @@ afterEach(() => {
 });
 function mount(current = installation, updated = vi.fn(), cancelled = vi.fn()) {
   return render(
-    <GithubPluginUpdater
+    <GithubPackageUpdater
       installation={current}
       disabled={false}
       onBusyChange={() => undefined}
@@ -85,7 +85,7 @@ it("shows exact version and file changes, requires fresh consent after URL edits
     `${source.repository}/compare/${source.commit}...${preview.source.commit}`,
   );
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.change(screen.getByLabelText(/Plugin version URL/), {
+  fireEvent.change(screen.getByLabelText(/Package version URL/), {
     target: { value: `${source.repository}/tree/v2/plugins/note` },
   });
   expect(screen.queryByRole("button", { name: "Confirm update" })).toBeNull();

@@ -57,7 +57,14 @@ export function registerSessionPluginRoutes(
         lockedGuard.session,
       );
       return c.json({
-        items: buildAvailablePluginList(active, pluginRegistry),
+        items: buildAvailablePluginList(active, pluginRegistry).map(
+          (plugin) => ({
+            ...plugin,
+            approvalRequired:
+              !plugin.active &&
+              lockedGuard.session.activePlugins.includes(plugin.id),
+          }),
+        ),
         commands: buildSessionCommandList(active, pluginRegistry),
       });
     });

@@ -3,13 +3,13 @@ import path from "node:path";
 import { z } from "zod";
 import { pluginInstallIdSchema } from "@covel/shared";
 import {
-  assertPluginDirectory,
-  pluginReceiptSchema,
+  assertPackageDirectory,
+  packageReceiptSchema,
   readRegularFile,
-  readUnmodifiedPlugin,
-  withPluginMutation,
-  type PluginReceipt,
-} from "./plugin-files.js";
+  readUnmodifiedPackage,
+  withPackageMutation,
+  type PackageReceipt,
+} from "./package-files.js";
 import {
   httpError,
   materializeEntries,
@@ -17,10 +17,10 @@ import {
 } from "./shared.js";
 
 const planSchema = z
-  .object({ previous: pluginReceiptSchema, next: pluginReceiptSchema })
+  .object({ previous: packageReceiptSchema, next: packageReceiptSchema })
   .strict();
 const updatesDir = ".covel-updates";
-export const pendingPluginPath = (root: string, id: string) =>
+export const pendingPackagePath = (root: string, id: string) =>
   path.join(root, updatesDir, pluginInstallIdSchema.parse(id));
 const exists = (filename: string) =>
   lstat(filename).then(
@@ -32,9 +32,9 @@ const exists = (filename: string) =>
   );
 
 async function readPlan(root: string, id: string) {
-  const directory = pendingPluginPath(root, id);
-  await assertPluginDirectory(path.dirname(directory));
-  await assertPluginDirectory(directory);
+  const directory = pendingPackagePath(root, id);
+  await assertPackageDirectory(path.dirname(directory));
+  await assertPackageDirectory(directory);
   return planSchema.parse(
     JSON.parse(
       (
@@ -44,30 +44,30 @@ async function readPlan(root: string, id: string) {
   );
 }
 
-export async function pendingPluginUpdate(root: string, id: string) {
-  if (!(await exists(pendingPluginPath(root, id)))) return null;
+export async function pendingPackageUpdate(root: string, id: string) {
+  if (!(await exists(pendingPackagePath(root, id)))) return null;
   const plan = await readPlan(root, id);
-  const errorPath = path.join(pendingPluginPath(root, id), "error.txt");
+  const errorPath = path.join(pendingPackagePath(root, id), "error.txt");
   const error = (await exists(errorPath))
     ? (await readRegularFile(errorPath, 16 * 1024)).toString("utf8")
     : null;
   return { version: plan.next.version, source: plan.next.source, error };
 }
 
-export async function queuePluginUpdate(
+export async function queuePackageUpdate(
   root: string,
   id: string,
-  previous: PluginReceipt,
-  next: PluginReceipt,
+  previous: PackageReceipt,
+  next: PackageReceipt,
   entries: readonly ExtractedEntry[],
 ) {
-  await withPluginMutation(
+  await withPackageMutation(
     id,
     async () => {
-      await readUnmodifiedPlugin(path.join(root, id), previous);
+      await readUnmodifiedPackage(path.join(root, id), previous);
       const parent = path.join(root, updatesDir);
-      if (await exists(parent)) await assertPluginDirectory(parent);
-      await materializeEntries(pendingPluginPath(root, id), [
+      if (await exists(parent)) await assertPackageDirectory(parent);
+      await materializeEntries(pendingPackagePath(root, id), [
         {
           relativePath: "plan.json",
           content: Buffer.from(JSON.stringify({ previous, next })),
@@ -84,8 +84,8 @@ export async function queuePluginUpdate(
 
 // Caller holds the same mutation lock as uninstall. Never remove a recovery
 // backup: that means a startup transaction was interrupted and must recover.
-export async function cancelPluginUpdate(root: string, id: string) {
-  const directory = pendingPluginPath(root, id);
+export async function cancelPackageUpdate(root: string, id: string) {
+  const directory = pendingPackagePath(root, id);
   if (!(await exists(directory))) return;
   await readPlan(root, id);
   if (await exists(path.join(directory, "previous")))
@@ -98,10 +98,13 @@ export async function cancelPluginUpdate(root: string, id: string) {
 
 // Run before plugin discovery/imports. Running backends keep all old files;
 // fresh process approval gates cannot inherit the previous code's grants.
-export async function applyPendingPluginUpdates(root: string): Promise<void> {
+export async function applyPendingPackageUpdates(
+  root: string,
+  beforeApply?: (id: string) => Promise<void>,
+): Promise<void> {
   const parent = path.join(root, updatesDir);
   if (!(await exists(parent))) return;
-  await assertPluginDirectory(parent);
+  await assertPackageDirectory(parent);
   for (const entry of await readdir(parent, { withFileTypes: true })) {
     if (
       !entry.isDirectory() ||
@@ -109,12 +112,12 @@ export async function applyPendingPluginUpdates(root: string): Promise<void> {
     )
       continue;
     const id = entry.name;
-    const directory = pendingPluginPath(root, id);
+    const directory = pendingPackagePath(root, id);
     const target = path.join(root, id);
     const backup = path.join(directory, "previous");
     const candidate = path.join(directory, "package");
     try {
-      await withPluginMutation(
+      await withPackageMutation(
         id,
         async () => {
           const plan = await readPlan(root, id);
@@ -122,14 +125,15 @@ export async function applyPendingPluginUpdates(root: string): Promise<void> {
             if (await exists(target)) {
               // Crash after promotion, before cleanup: recognize only the exact
               // approved package. Ambiguous state must retain both directories.
-              await readUnmodifiedPlugin(target, plan.next);
+              await readUnmodifiedPackage(target, plan.next);
               await rm(directory, { recursive: true });
               return;
             }
             await rename(backup, target);
           }
-          await readUnmodifiedPlugin(target, plan.previous);
-          await readUnmodifiedPlugin(candidate, plan.next);
+          await beforeApply?.(id);
+          await readUnmodifiedPackage(target, plan.previous);
+          await readUnmodifiedPackage(candidate, plan.next);
           await rename(target, backup);
           try {
             await rename(candidate, target);
@@ -145,11 +149,11 @@ export async function applyPendingPluginUpdates(root: string): Promise<void> {
       const message =
         error instanceof Error
           ? error.message
-          : "Unable to apply plugin update";
-      console.warn(`[plugin-update] ${id}: ${message}`);
+          : "Unable to apply package update";
+      console.warn(`[package-update] ${id}: ${message}`);
       // If restoration failed, do not boot with a missing/ambiguous package.
       if (await exists(backup))
-        throw new Error(`Plugin update recovery requires attention: ${id}`, {
+        throw new Error(`Package update recovery requires attention: ${id}`, {
           cause: error,
         });
       await writeFile(

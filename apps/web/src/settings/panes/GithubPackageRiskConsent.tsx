@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
 
-export function GithubPluginRiskConsent({
+export function GithubPackageRiskConsent({
+  kind = "plugin",
   hasServerCode,
   accepted,
   disabled,
   onChange,
 }: {
+  kind?: "plugin" | "world";
   hasServerCode: boolean;
   accepted: boolean;
   disabled: boolean;
@@ -17,12 +19,20 @@ export function GithubPluginRiskConsent({
       <p className="font-semibold">{t("settings.github.riskTitle")}</p>
       <p>
         {t(
-          hasServerCode
-            ? "settings.github.codeRisk"
-            : "settings.github.contentRisk",
+          kind === "world"
+            ? "settings.worldGithub.risk"
+            : hasServerCode
+              ? "settings.github.codeRisk"
+              : "settings.github.contentRisk",
         )}
       </p>
-      <p>{t("settings.github.targetRisk")}</p>
+      <p>
+        {t(
+          kind === "world"
+            ? "settings.worldGithub.updateRisk"
+            : "settings.github.targetRisk",
+        )}
+      </p>
       <p>{t("settings.github.indexRisk")}</p>
       <label className="flex items-start gap-2">
         <input

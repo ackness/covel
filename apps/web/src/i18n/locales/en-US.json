@@ -776,8 +776,8 @@
     "reset": "Reset",
     "packages": {
       "navLabel": "Install & manage",
-      "title": "Install & manage plugins",
-      "description": "Plugin changes take effect after a backend restart. World ZIP imports are also available below.",
+      "title": "Plugin and world packages",
+      "description": "Install plugins and worlds from GitHub or ZIP. Plugin changes and staged updates take effect after backend restart.",
       "pluginLabel": "Plugin package",
       "pluginHint": ".zip containing PLUGIN.md (or runtimes/<sub>/PLUGIN.md) + package.json",
       "worldLabel": "World package",
@@ -793,7 +793,7 @@
       "uninstalling": "Removing…",
       "uninstalledRestart": "Uninstalled {{id}} — restart required",
       "uninstallFailed": "Uninstall failed",
-      "restartHint": "Plugin files changed. Restart the backend to apply installation or removal; execution still requires session authorization.",
+      "restartHint": "Package files changed. Restart the backend to apply installation or removal; execution still requires session authorization.",
       "restartNow": "Restart now",
       "reloadFailed": "Reload failed"
     },
@@ -1024,14 +1024,14 @@
       "check": "Check for updates",
       "working": "Checking / downloading…",
       "chooseVersion": "Choose another version",
-      "url": "Plugin version URL (same repository and directory)",
+      "url": "Package version URL (same repository and directory)",
       "pinned": "This installation is pinned to a tag or commit. To update, choose a version URL explicitly.",
       "tracking": "Updates follow {{ref}}.",
       "defaultBranch": "the default branch",
-      "current": "This plugin is up to date.",
+      "current": "This package is up to date.",
       "compare": "Compare commits on GitHub (whole repository)",
       "files": "Files: +{{added}} added, ~{{modified}} modified, −{{removed}} removed",
-      "explain": "The confirmed update is downloaded now and replaces the plugin at the next backend restart. Stored settings and plugin data are retained. Local package edits block replacement. Code execution requires fresh approval after restart.",
+      "explain": "The confirmed update is downloaded now and replaces the package at the next backend restart. Stored settings and package data are retained. Local package edits block replacement. Code execution requires fresh approval after restart.",
       "confirm": "Confirm update",
       "pending": "Update {{version}} is ready; restart the backend to apply it.",
       "cancel": "Cancel pending update",
@@ -1058,6 +1058,19 @@
       "failed": "Unable to install this plugin.",
       "pending": "Installed; restart the backend to load this plugin.",
       "zipRisk": "I trust the ZIP plugin I am about to import. Its code may access backend files, environment variables and network after execution approval. Installation targets the connected backend, and is not a security audit."
+    },
+    "worldGithub": {
+      "title": "Install a world from GitHub",
+      "browse": "Browse community worlds",
+      "description": "Paste a public GitHub repository or world directory URL. Downloads use your configured proxy.",
+      "choose": "Choose a world",
+      "multiple": "A repository can contain several worlds. Select and install each separately.",
+      "risk": "Worlds contain third-party prompts, settings and media. Review their content and plugin requirements before playing. World installation does not install or authorize plugins, or run repository scripts.",
+      "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Existing saves are not automatically synchronized; use world-data sync separately.",
+      "installed": "Installed world packages",
+      "inspect": "Preview world",
+      "inspecting": "Previewing world…",
+      "url": "World GitHub URL"
     }
   },
   "appearance": {
@@ -1455,7 +1468,9 @@
       "deny": "Deny",
       "denied": "Denied {{action}}",
       "submitFailed": "Approval submission failed: {{error}}",
-      "unexpectedRequired": "Still got approval-required after grant — please check the approval backend"
+      "unexpectedRequired": "Still got approval-required after grant — please check the approval backend",
+      "required": "Your selected community plugins need authorization for this server session. They remain paused until approved.",
+      "review": "Authorize {{pluginId}}"
     },
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",

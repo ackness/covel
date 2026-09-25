@@ -1,24 +1,42 @@
-import { GithubPluginRiskConsent } from "./GithubPluginRiskConsent.js";
+import { GithubPackageRiskConsent } from "./GithubPackageRiskConsent.js";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { GithubPluginPreview } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import {
-  previewGithubPlugins,
-  installGithubPlugin,
+  previewGithubPackages,
+  installGithubPackage,
   type InstallResult,
 } from "@/services/api.js";
 
-export function GithubPluginInstaller({
+export function GithubPackageInstaller({
+  kind = "plugin",
   onInstalled,
   disabled = false,
   onBusyChange,
 }: {
+  kind?: "plugin" | "world";
   onInstalled: (result: InstallResult, preview: GithubPluginPreview) => void;
   disabled?: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
-  const { t } = useTranslation();
+  const { t: translate } = useTranslation();
+  const t = (key: string) =>
+    translate(
+      kind === "world" &&
+        [
+          "title",
+          "browse",
+          "description",
+          "choose",
+          "multiple",
+          "inspect",
+          "inspecting",
+          "url",
+        ].some((suffix) => key === `settings.github.${suffix}`)
+        ? key.replace("settings.github.", "settings.worldGithub.")
+        : key,
+    );
   const [url, setUrl] = useState("");
   const [items, setItems] = useState<GithubPluginPreview[]>([]);
   const [selected, setSelected] = useState(0);
@@ -38,7 +56,11 @@ export function GithubPluginInstaller({
     setAccepted(false);
     setError(null);
     try {
-      const result = await previewGithubPlugins(url.trim(), controller.signal);
+      const result = await previewGithubPackages(
+        url.trim(),
+        controller.signal,
+        kind,
+      );
       if (!controller.signal.aborted) {
         setItems(result.items);
         setSelected(0);
@@ -63,7 +85,7 @@ export function GithubPluginInstaller({
     onBusyChange(true);
     setError(null);
     try {
-      const result = await installGithubPlugin(preview.token);
+      const result = await installGithubPackage(preview.token, kind);
       onInstalled(result, preview);
       setItems((current) =>
         current.filter((item) => item.token !== preview.token),
@@ -86,7 +108,7 @@ export function GithubPluginInstaller({
         <h3 className="text-sm font-semibold">{t("settings.github.title")}</h3>
         <a
           className="text-xs underline"
-          href="https://github.com/covel-ai/covel-plugins"
+          href={`https://github.com/covel-ai/covel-${kind === "world" ? "worlds" : "plugins"}`}
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -103,15 +125,18 @@ export function GithubPluginInstaller({
           void inspect();
         }}
       >
-        <label className="min-w-0 flex-1 text-xs" htmlFor="github-plugin-url">
+        <label
+          className="min-w-0 flex-1 text-xs"
+          htmlFor={`github-${kind}-url`}
+        >
           {t("settings.github.url")}
           <input
-            id="github-plugin-url"
+            id={`github-${kind}-url`}
             type="url"
             required
             value={url}
             disabled={disabled || !!busy}
-            placeholder="https://github.com/author/plugin"
+            placeholder={`https://github.com/author/${kind}`}
             className="mt-1 w-full rounded border border-border bg-transparent p-2 text-sm"
             onChange={(event) => {
               setUrl(event.target.value);
@@ -195,7 +220,8 @@ export function GithubPluginInstaller({
             </p>
             <p className="font-mono">{preview.source.commit}</p>
           </div>
-          <GithubPluginRiskConsent
+          <GithubPackageRiskConsent
+            kind={kind}
             hasServerCode={preview.hasServerCode}
             accepted={accepted}
             disabled={disabled || !!busy}

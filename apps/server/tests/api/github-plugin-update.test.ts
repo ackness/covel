@@ -15,9 +15,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import { installRoutes } from "../../src/routes/api/install.js";
 import {
-  applyPendingPluginUpdates,
-  pendingPluginPath,
-} from "../../src/routes/api/install/plugin-updates.js";
+  applyPendingPackageUpdates,
+  pendingPackagePath,
+} from "../../src/routes/api/install/package-updates.js";
 import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
 import { configureOutboundProxy } from "@covel/ai-provider";
 
@@ -343,7 +343,7 @@ it("rechecks local edits at startup and supports cancelling the failed queued up
   await queue();
   const file = path.join(root, "example-note/server.js");
   await writeFile(file, "Later local edit");
-  await applyPendingPluginUpdates(root);
+  await applyPendingPackageUpdates(root);
   expect(await readFile(file, "utf8")).toBe("Later local edit");
   const list = await (await request("plugins", undefined, "GET")).json();
   expect(list.items[0].pendingUpdate.error).toContain("modified locally");
@@ -369,12 +369,12 @@ it("restores the old package when promotion fails, then retries safely", async (
       });
     await actual.rename(from, to);
   });
-  await applyPendingPluginUpdates(root);
+  await applyPendingPackageUpdates(root);
   expect(
     await readFile(path.join(root, "example-note/package.json"), "utf8"),
   ).toContain("1.0.0");
   vi.mocked(rename).mockImplementation(actual.rename);
-  await applyPendingPluginUpdates(root);
+  await applyPendingPackageUpdates(root);
   expect(
     await readFile(path.join(root, "example-note/package.json"), "utf8"),
   ).toContain("1.1.0");
@@ -386,7 +386,7 @@ it.each(["before-promotion", "after-promotion"])(
     await install();
     head = second;
     await queue();
-    const directory = pendingPluginPath(root, "example-note");
+    const directory = pendingPackagePath(root, "example-note");
     await rename(
       path.join(root, "example-note"),
       path.join(directory, "previous"),
@@ -396,7 +396,7 @@ it.each(["before-promotion", "after-promotion"])(
         path.join(directory, "package"),
         path.join(root, "example-note"),
       );
-    await applyPendingPluginUpdates(root);
+    await applyPendingPackageUpdates(root);
     expect(
       await readFile(path.join(root, "example-note/package.json"), "utf8"),
     ).toContain("1.1.0");
@@ -460,7 +460,7 @@ it("admits only one concurrent update transaction", async () => {
   expect(responses.map((response) => response.status).sort()).toEqual([
     201, 409,
   ]);
-  await applyPendingPluginUpdates(root);
+  await applyPendingPackageUpdates(root);
   expect(
     await readFile(path.join(root, "example-note/package.json"), "utf8"),
   ).toContain("1.1.0");

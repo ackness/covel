@@ -172,7 +172,7 @@ export async function downloadGithubEntries(
   }));
 }
 
-export function selectPluginEntries(
+export function selectPackageEntries(
   entries: readonly ExtractedEntry[],
   directory: string,
 ): ExtractedEntry[] {
@@ -186,7 +186,7 @@ export function findPluginDirectories(
   entries: readonly ExtractedEntry[],
   directory: string,
 ): string[] {
-  const selected = selectPluginEntries(entries, directory);
+  const selected = selectPackageEntries(entries, directory);
   const files = new Set(selected.map((e) => e.relativePath));
   const isPlugin = (prefix: string) =>
     files.has(`${prefix}package.json`) &&

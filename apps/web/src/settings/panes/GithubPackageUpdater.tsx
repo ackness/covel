@@ -6,20 +6,22 @@ import type {
 } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import {
-  cancelGithubPluginUpdate,
-  checkGithubPluginUpdate,
-  updateGithubPlugin,
+  cancelGithubPackageUpdate,
+  checkGithubPackageUpdate,
+  updateGithubPackage,
   type InstallResult,
 } from "@/services/api.js";
-import { GithubPluginRiskConsent } from "./GithubPluginRiskConsent.js";
+import { GithubPackageRiskConsent } from "./GithubPackageRiskConsent.js";
 
-export function GithubPluginUpdater({
+export function GithubPackageUpdater({
+  kind = "plugin",
   installation,
   disabled,
   onBusyChange,
   onUpdated,
   onCancelled,
 }: {
+  kind?: "plugin" | "world";
   installation: PluginInstallation;
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
@@ -64,10 +66,11 @@ export function GithubPluginUpdater({
     setAccepted(false);
     setStatus(null);
     controller.current = new AbortController();
-    const result = await checkGithubPluginUpdate(
+    const result = await checkGithubPackageUpdate(
       installation.id,
       url.trim() || undefined,
       controller.current.signal,
+      kind,
     );
     if (controller.current.signal.aborted) return;
     if (result.status === "available") setPreview(result.preview);
@@ -105,7 +108,7 @@ export function GithubPluginUpdater({
             disabled={disabled || busy}
             onClick={() =>
               void run(async () => {
-                await cancelGithubPluginUpdate(installation.id);
+                await cancelGithubPackageUpdate(installation.id, kind);
                 onCancelled();
               })
             }
@@ -202,7 +205,8 @@ export function GithubPluginUpdater({
                 </ul>
               </details>
               <p>{t("settings.pluginUpdate.explain")}</p>
-              <GithubPluginRiskConsent
+              <GithubPackageRiskConsent
+                kind={kind}
                 hasServerCode={preview.hasServerCode}
                 accepted={accepted}
                 disabled={disabled || busy}
@@ -213,7 +217,10 @@ export function GithubPluginUpdater({
                 disabled={disabled || busy || !accepted}
                 onClick={() =>
                   void run(async () => {
-                    const result = await updateGithubPlugin(preview.token);
+                    const result = await updateGithubPackage(
+                      preview.token,
+                      kind,
+                    );
                     setPreview(null);
                     setAccepted(false);
                     onUpdated(result);

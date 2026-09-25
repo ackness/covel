@@ -6,14 +6,14 @@ import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import {
   installPackage,
-  listPluginInstallations,
+  listPackageInstallations,
   listInstalledPlugins,
   uninstallPlugin,
   type InstallKind,
   type InstallResult,
 } from "@/services/api.js";
-import { GithubPluginUpdater } from "./GithubPluginUpdater.js";
-import { GithubPluginInstaller } from "./GithubPluginInstaller.js";
+import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
+import { GithubPackageInstaller } from "./GithubPackageInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 
 interface ToastState {
@@ -36,6 +36,9 @@ export function PackagesPane() {
   const [installations, setInstallations] = useState<
     PluginInstallation[] | null
   >(null);
+  const [worldInstallations, setWorldInstallations] = useState<
+    PluginInstallation[]
+  >([]);
   const [githubBusy, setGithubBusy] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [zipAccepted, setZipAccepted] = useState(false);
@@ -44,11 +47,13 @@ export function PackagesPane() {
 
   const refreshInstalled = useCallback(async () => {
     try {
-      const [plugins, disk] = await Promise.all([
+      const [plugins, disk, worlds] = await Promise.all([
         listInstalledPlugins({ silentErrors: true }),
-        listPluginInstallations().catch(() => null),
+        listPackageInstallations().catch(() => null),
+        listPackageInstallations("world").catch(() => []),
       ]);
       setInstallations(disk);
+      setWorldInstallations(worlds);
       // Only third-party (non-builtin) plugins can be uninstalled.
       setInstalled(plugins.filter((plugin) => plugin.source !== "builtin"));
     } catch {
@@ -166,7 +171,8 @@ export function PackagesPane() {
       )}
 
       {(lastResult?.restartRequired ||
-        installations?.some((item) => item.pendingUpdate)) && (
+        installations?.some((item) => item.pendingUpdate) ||
+        worldInstallations.some((item) => item.pendingUpdate)) && (
         <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
           <div className="flex-1">{t("settings.packages.restartHint")}</div>
           {hasElectronIpc() && (
@@ -195,8 +201,8 @@ export function PackagesPane() {
         </div>
       )}
 
-      <GithubPluginInstaller
-        disabled={!!busy || !!removing || updateBusy}
+      <GithubPackageInstaller
+        disabled={!!busy || !!removing || updateBusy || githubBusy}
         onBusyChange={setGithubBusy}
         onInstalled={(result) => {
           setLastResult(result);
@@ -223,6 +229,16 @@ export function PackagesPane() {
           !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
         }
         onFile={(f) => uploadZip("plugin", f)}
+      />
+
+      <GithubPackageInstaller
+        kind="world"
+        disabled={!!busy || !!removing || updateBusy || githubBusy}
+        onBusyChange={setGithubBusy}
+        onInstalled={(result) => {
+          setLastResult(result);
+          void refreshInstalled();
+        }}
       />
 
       <DropZone
@@ -284,8 +300,34 @@ export function PackagesPane() {
                       : t("settings.packages.uninstall", "Uninstall")}
                   </Button>
                 </div>
-                <GithubPluginUpdater
+                <GithubPackageUpdater
                   installation={p}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                  onBusyChange={setUpdateBusy}
+                  onUpdated={() => void refreshInstalled()}
+                  onCancelled={() => void refreshInstalled()}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {worldInstallations.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            {t("settings.worldGithub.installed")}
+          </h3>
+          <ul className="divide-y divide-border rounded border border-border">
+            {worldInstallations.map((item) => (
+              <li key={item.id} className="space-y-2 p-3 text-xs">
+                <p className="font-semibold">
+                  {item.id}
+                  {item.version ? ` · ${item.version}` : ""}
+                </p>
+                <GithubPackageUpdater
+                  kind="world"
+                  installation={item}
                   disabled={!!busy || !!removing || githubBusy || updateBusy}
                   onBusyChange={setUpdateBusy}
                   onUpdated={() => void refreshInstalled()}

@@ -11,7 +11,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { errorBody } from "../../../api-error.js";
-import { withPluginMutation } from "./plugin-files.js";
+import { withPackageMutation } from "./package-files.js";
 import { validatePluginBundle } from "./plugin-bundle.js";
 import {
   collectUpload,
@@ -51,7 +51,7 @@ pluginInstallRoutes.post("/plugin", async (c) => {
     const root = resolveUserResourceDirs().plugins;
 
     const finalDir = path.join(root, summary.pluginId);
-    await withPluginMutation(summary.pluginId, () =>
+    await withPackageMutation(summary.pluginId, () =>
       materializeEntries(finalDir, entries),
     );
 

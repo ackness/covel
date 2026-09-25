@@ -3,7 +3,7 @@ import type { PluginInstallation } from "@covel/shared";
 import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
 
 for (const width of [1280, 390]) {
-  test(`plugin update preview, consent, pending status and cancellation at ${width}px`, async ({
+  test(`world update preview, consent, pending status and cancellation at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -14,7 +14,7 @@ for (const width of [1280, 390]) {
     const source = {
       repository: "https://github.com/example/plugins",
       commit: "a".repeat(40),
-      path: "plugins/note",
+      path: "worlds/note",
       digest: "b".repeat(64),
       tracking: { kind: "branch" as const, ref: "main" },
     };
@@ -24,7 +24,7 @@ for (const width of [1280, 390]) {
       digest: "d".repeat(64),
     };
     let pending: PluginInstallation["pendingUpdate"] = null;
-    await page.route("**/api/install/plugins", (route) =>
+    await page.route("**/api/install/worlds", (route) =>
       route.fulfill({
         json: {
           items: [
@@ -38,7 +38,7 @@ for (const width of [1280, 390]) {
         },
       }),
     );
-    await page.route("**/api/install/plugin/github/update/preview", (route) => {
+    await page.route("**/api/install/world/github/update/preview", (route) => {
       expect(route.request().postDataJSON()).toEqual({ id: "example-note" });
       return route.fulfill({
         json: {
@@ -47,12 +47,12 @@ for (const width of [1280, 390]) {
             id: "example-note",
             version: "1.1.0",
             description: "Updated plugin",
-            hasServerCode: true,
+            hasServerCode: false,
             source: nextSource,
             previous: { version: "1.0.0", source },
             changes: {
               added: ["new.txt"],
-              modified: ["server.js"],
+              modified: ["world.yaml"],
               removed: [],
             },
             token: "update-token",
@@ -61,7 +61,7 @@ for (const width of [1280, 390]) {
         },
       });
     });
-    await page.route("**/api/install/plugin/github/update", (route) => {
+    await page.route("**/api/install/world/github/update", (route) => {
       expect(route.request().postDataJSON()).toEqual({
         token: "update-token",
         acceptRisk: true,
@@ -71,14 +71,14 @@ for (const width of [1280, 390]) {
         status: 201,
         json: {
           ok: true,
-          kind: "plugin",
+          kind: "world",
           id: "example-note",
           restartRequired: true,
         },
       });
     });
     await page.route(
-      "**/api/install/plugin/github/update/example-note",
+      "**/api/install/world/github/update/example-note",
       (route) => {
         expect(route.request().method()).toBe("DELETE");
         pending = null;
@@ -117,7 +117,7 @@ for (const width of [1280, 390]) {
       .getByText("Files: +1 added, ~1 modified, −0 removed", { exact: true })
       .click();
     await expect(
-      dialog.getByText("~ server.js", { exact: true }),
+      dialog.getByText("~ world.yaml", { exact: true }),
     ).toBeVisible();
     await dialog
       .getByRole("checkbox", {

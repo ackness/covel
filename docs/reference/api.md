@@ -458,7 +458,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 插件与世界安装（Install）
 
-支持 `.zip` 包导入插件/世界，以及 GitHub 链接安装插件（详见 [插件目录与安装](./plugin-installation.md)）。GitHub 解析与下载遵循现有网络代理设置。基础鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。所有安装管理接口在 demo/commercial 层级必须持有 operator token，启用安装 API 不会绕过该检查。世界安装还遵循全局世界写入鉴权：生产 MemoryStore（含 self）及 hosted 层级必须持有 operator token，启用安装 API 不会绕过该检查。
+支持 `.zip` 包导入插件/世界，以及 GitHub 链接安装插件和世界包（世界包见 [世界目录与安装](./world-installation.md)，插件详见 [插件目录与安装](./plugin-installation.md)）。GitHub 解析与下载遵循现有网络代理设置。基础鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。所有安装管理接口在 demo/commercial 层级必须持有 operator token，启用安装 API 不会绕过该检查。世界安装还遵循全局世界写入鉴权：生产 MemoryStore（含 self）及 hosted 层级必须持有 operator token，启用安装 API 不会绕过该检查。
 
 | 方法 | 路径                                 | 描述                                                                                                                                                                  |
 | ---- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -3517,3 +3517,7 @@ its `appdata` volume; desktop paths remain controlled by the shell.
 ingestion and vector recall/archival search. Keyword memory remains available,
 and existing embeddings are preserved. This does not disable explicit provider
 embedding requests outside the memory subsystem.
+
+### 社区插件待授权状态
+
+创建会话保留玩家选择的社区插件 ID。`GET /api/sessions/:id/plugins` 的条目增加可选 `approvalRequired`：已选择但缺少当前会话执行授权时为 true，`active` 仍为 false。前端应明确显示暂停状态并调用现有 enable/approval 接口重新授权，而非把它视为玩家取消选择。授权不会跨服务进程重启。

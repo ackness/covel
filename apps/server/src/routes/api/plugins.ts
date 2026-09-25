@@ -13,8 +13,8 @@ import {
   buildPluginSummary,
 } from "../../lib/plugin-descriptor.js";
 import { errorBody, listBody, okBody } from "../../api-error.js";
-import { withPluginMutation } from "./install/plugin-files.js";
-import { cancelPluginUpdate } from "./install/plugin-updates.js";
+import { withPackageMutation } from "./install/package-files.js";
+import { cancelPackageUpdate } from "./install/package-updates.js";
 import { errorResponse } from "./install/shared.js";
 import { makeInstallApiGuard } from "../privileged-auth.js";
 
@@ -82,8 +82,8 @@ pluginRoutes.delete("/:id", makeInstallApiGuard(), async (c) => {
   }
 
   try {
-    await withPluginMutation(id, async () => {
-      await cancelPluginUpdate(root, id);
+    await withPackageMutation(id, async () => {
+      await cancelPackageUpdate(root, id);
       await rm(finalDir, { recursive: true, force: true });
     });
   } catch (error) {

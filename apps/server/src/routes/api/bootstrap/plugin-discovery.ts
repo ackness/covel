@@ -1,4 +1,4 @@
-import { applyPendingPluginUpdates } from "../install/plugin-updates.js";
+import { applyPendingPackageUpdates } from "../install/package-updates.js";
 import { validateRuntimeManifestSemantics } from "@covel/shared";
 import path from "node:path";
 import type { EventBus } from "@covel/events";
@@ -33,7 +33,7 @@ export async function discoverAndRegisterPlugins(
       ? config.pluginsDirs
       : [config.pluginsDir];
   for (const directory of pluginsDirs.slice(1)) {
-    await applyPendingPluginUpdates(directory);
+    await applyPendingPackageUpdates(directory);
   }
   const discoveries = await discoverPluginsMulti(
     pluginsDirs,

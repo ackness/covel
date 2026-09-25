@@ -776,8 +776,8 @@
     "reset": "已重置",
     "packages": {
       "navLabel": "安装与管理",
-      "title": "插件安装与管理",
-      "description": "插件变更在重启后端后生效，也可在下方导入世界 ZIP 包。",
+      "title": "插件与世界包管理",
+      "description": "从 GitHub 或 ZIP 安装插件及世界包。插件变更和待更新资源包在重启后端后生效。",
       "pluginLabel": "插件包",
       "pluginHint": ".zip，需包含 PLUGIN.md（或 runtimes/<sub>/PLUGIN.md）+ package.json",
       "worldLabel": "世界包",
@@ -793,7 +793,7 @@
       "uninstalling": "卸载中…",
       "uninstalledRestart": "已卸载 {{id}}（需重启服务生效）",
       "uninstallFailed": "卸载失败",
-      "restartHint": "插件文件已变更，请重启后端以应用安装或卸载。执行插件仍需会话授权。",
+      "restartHint": "资源包文件已变更，请重启后端以应用安装或卸载。执行插件仍需会话授权。",
       "restartNow": "立即重启",
       "reloadFailed": "重新加载失败"
     },
@@ -1024,14 +1024,14 @@
       "check": "检查更新",
       "working": "检查 / 下载中…",
       "chooseVersion": "选择其他版本",
-      "url": "插件版本链接（同一仓库和目录）",
+      "url": "资源包版本链接（同一仓库和目录）",
       "pinned": "此安装已锁定 tag 或 commit。如需更新，请明确指定新版本链接。",
       "tracking": "更新跟踪{{ref}}。",
       "defaultBranch": "默认分支",
-      "current": "此插件已是最新内容。",
+      "current": "此资源包已是最新内容。",
       "compare": "在 GitHub 查看提交对比（整个仓库）",
       "files": "文件变更：新增 {{added}}，修改 {{modified}}，删除 {{removed}}",
-      "explain": "确认后先下载暂存，下次重启后端时替换插件。独立存储的设置和插件数据会保留；本地修改过插件文件时会阻止替换。重启后执行代码需要重新授权。",
+      "explain": "确认后先下载暂存，下次重启后端时替换资源包。独立存储的设置和资源包数据会保留；本地修改过资源包文件时会阻止替换。重启后执行代码需要重新授权。",
       "confirm": "确认更新",
       "pending": "更新 {{version}} 已暂存，重启后端后生效。",
       "cancel": "取消待重启更新",
@@ -1058,6 +1058,19 @@
       "failed": "无法安装此插件。",
       "pending": "已安装，重启后端后加载。",
       "zipRisk": "我信任即将导入的 ZIP 插件。批准执行后，其代码可能访问后端文件、环境变量和网络。插件安装到当前连接的后端，文件检查不代表安全审计。"
+    },
+    "worldGithub": {
+      "title": "从 GitHub 安装世界包",
+      "browse": "浏览社区世界",
+      "description": "输入公开 GitHub 仓库或世界目录链接，下载使用设置中配置的代理。",
+      "choose": "选择世界包",
+      "multiple": "仓库可以包含多个世界包，请分别选择并安装。",
+      "risk": "世界包包含第三方提示词、设置与媒体。开始游戏前请检查内容及所需插件。安装世界不会自动安装或授权插件，也不会执行仓库脚本。",
+      "updateRisk": "更新将在后端重启时应用，本地编辑过的世界不会被覆盖。已有存档不会自动同步，请另行使用世界数据同步功能。",
+      "installed": "已安装的世界包",
+      "inspect": "预览世界包",
+      "inspecting": "正在预览世界包…",
+      "url": "世界包 GitHub 链接"
     }
   },
   "appearance": {
@@ -1455,7 +1468,9 @@
       "deny": "拒绝",
       "denied": "已拒绝 {{action}}",
       "submitFailed": "审批提交失败：{{error}}",
-      "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端"
+      "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端",
+      "required": "已选择的社区插件需要在本次服务启动后授权，批准前暂停运行。",
+      "review": "授权 {{pluginId}}"
     },
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",

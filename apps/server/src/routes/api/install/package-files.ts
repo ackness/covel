@@ -8,18 +8,18 @@ import { digestEntries } from "./github-source.js";
 import { httpError, LIMITS, type ExtractedEntry } from "./shared.js";
 
 export const receiptFile = ".covel-install.json";
-export const pluginReceiptSchema = z
+export const packageReceiptSchema = z
   .object({
     source: githubPluginSourceSchema,
     version: z.string().nullable(),
     installedAt: z.iso.datetime(),
   })
   .strict();
-export type PluginReceipt = z.infer<typeof pluginReceiptSchema>;
+export type PackageReceipt = z.infer<typeof packageReceiptSchema>;
 const mutations = new Set<string>();
 
 // Install, queue/cancel update, and uninstall share one admission boundary.
-export async function withPluginMutation<T>(
+export async function withPackageMutation<T>(
   id: string,
   action: () => Promise<T>,
   root = resolveUserResourceDirs().plugins,
@@ -29,7 +29,7 @@ export async function withPluginMutation<T>(
   if (mutations.has(key))
     throw httpError(
       409,
-      "Another operation is changing this plugin; try again",
+      "Another operation is changing this package; try again",
     );
   mutations.add(key);
   try {
@@ -52,29 +52,29 @@ export async function readRegularFile(
     if (!stat.isFile() || stat.size > maxBytes)
       throw httpError(
         409,
-        "Plugin files contain an unsupported file or exceed the size limit",
+        "Package files contain an unsupported file or exceed the size limit",
       );
     const content = await handle.readFile();
     if (content.length > maxBytes)
-      throw httpError(409, "Plugin file exceeds the size limit");
+      throw httpError(409, "Package file exceeds the size limit");
     return content;
   } finally {
     await handle.close();
   }
 }
 
-export async function assertPluginDirectory(directory: string) {
+export async function assertPackageDirectory(directory: string) {
   const stat = await lstat(directory);
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw httpError(
       409,
-      "Linked or non-directory plugin paths cannot be updated",
+      "Linked or non-directory package paths cannot be updated",
     );
 }
 
-export async function readReceipt(directory: string): Promise<PluginReceipt> {
-  await assertPluginDirectory(directory);
-  return pluginReceiptSchema.parse(
+export async function readReceipt(directory: string): Promise<PackageReceipt> {
+  await assertPackageDirectory(directory);
+  return packageReceiptSchema.parse(
     JSON.parse(
       (
         await readRegularFile(path.join(directory, receiptFile), 16 * 1024)
@@ -85,10 +85,10 @@ export async function readReceipt(directory: string): Promise<PluginReceipt> {
 
 // Read without importing modules. Detect local edits, extra data, links, and
 // deleted files before an update can replace any package directory.
-export async function readPluginFiles(
+export async function readPackageFiles(
   directory: string,
 ): Promise<ExtractedEntry[]> {
-  await assertPluginDirectory(directory);
+  await assertPackageDirectory(directory);
   const entries: ExtractedEntry[] = [];
   let bytes = 0;
   let count = 0;
@@ -97,18 +97,18 @@ export async function readPluginFiles(
       withFileTypes: true,
     })) {
       if (++count > LIMITS.maxEntries)
-        throw httpError(409, "Plugin contains too many local files");
+        throw httpError(409, "Package contains too many local files");
       const name = relative ? `${relative}/${entry.name}` : entry.name;
       if (name === receiptFile) continue;
       const absolute = path.join(directory, name);
       if (entry.isDirectory()) {
-        await assertPluginDirectory(absolute);
+        await assertPackageDirectory(absolute);
         await visit(name);
       } else {
         if (!entry.isFile())
           throw httpError(
             409,
-            "Plugin contains linked or unsupported local files",
+            "Package contains linked or unsupported local files",
           );
         const content = await readRegularFile(
           absolute,
@@ -123,18 +123,18 @@ export async function readPluginFiles(
   return entries;
 }
 
-export async function readUnmodifiedPlugin(
+export async function readUnmodifiedPackage(
   directory: string,
-  expected?: PluginReceipt,
+  expected?: PackageReceipt,
 ) {
   const receipt = await readReceipt(directory);
   if (expected && JSON.stringify(receipt) !== JSON.stringify(expected))
-    throw httpError(409, "Installed plugin changed; check for updates again");
-  const entries = await readPluginFiles(directory);
+    throw httpError(409, "Installed package changed; check for updates again");
+  const entries = await readPackageFiles(directory);
   if (digestEntries(entries) !== receipt.source.digest)
     throw httpError(
       409,
-      "Plugin files were modified locally; back up and resolve local changes before updating",
+      "Package files were modified locally; back up and resolve local changes before updating",
     );
   return { receipt, entries };
 }

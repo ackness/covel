@@ -306,3 +306,52 @@ describe("plugin operations in the current visit", () => {
     expect(result.current.state.executionError).toBe("Current visit failed");
   });
 });
+
+it("requests authorization once per visit for a restored selection and keeps denial visible", async () => {
+  const { result } = setup();
+  api.enableSessionPlugin.mockResolvedValue(approval);
+  confirmation.requestConfirm.mockResolvedValue(false);
+  await act(async () => {
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [{ ...plugin, active: false, approvalRequired: true }],
+    });
+  });
+  expect(confirmation.requestConfirm).toHaveBeenCalledTimes(1);
+  expect(result.current.state.sessionPlugins[0]?.approvalRequired).toBe(true);
+  await act(async () => {
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [{ ...plugin, active: false, approvalRequired: true }],
+    });
+  });
+  expect(confirmation.requestConfirm).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    await result.current.actions.toggleSessionPlugin(plugin.id, false);
+  });
+  expect(result.current.state.sessionPlugins[0]?.approvalRequired).toBe(false);
+});
+
+it("activates the selected community plugin after explicit approval on entry", async () => {
+  const { result } = setup();
+  api.enableSessionPlugin
+    .mockResolvedValueOnce(approval)
+    .mockResolvedValueOnce(enabled);
+  await act(async () => {
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [{ ...plugin, active: false, approvalRequired: true }],
+    });
+  });
+  expect(confirmation.requestConfirm).toHaveBeenCalledTimes(1);
+  expect(api.resolveApproval).toHaveBeenCalledWith(
+    approval.approvalId,
+    "allow",
+    "session",
+    session.id,
+  );
+  expect(result.current.state.sessionPlugins[0]).toMatchObject({
+    active: true,
+    approvalRequired: false,
+  });
+});

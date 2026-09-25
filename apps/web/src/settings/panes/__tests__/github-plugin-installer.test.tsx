@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { GithubPluginInstaller } from "../GithubPluginInstaller.js";
+import { GithubPackageInstaller } from "../GithubPackageInstaller.js";
 import i18n from "@/i18n";
 
 const preview = {
@@ -62,7 +62,7 @@ it("installs selected packages successively without previewing again and require
   });
   vi.stubGlobal("fetch", fetchMock);
   render(
-    <GithubPluginInstaller
+    <GithubPackageInstaller
       onInstalled={installed}
       onBusyChange={() => undefined}
     />,
@@ -111,7 +111,7 @@ it("invalidates the preview when the URL changes", async () => {
     vi.fn(async () => Response.json({ items: [preview] })),
   );
   render(
-    <GithubPluginInstaller
+    <GithubPackageInstaller
       onInstalled={() => undefined}
       onBusyChange={() => undefined}
     />,
@@ -142,7 +142,7 @@ it("cancels inspection without presenting a stale result", async () => {
     ),
   );
   render(
-    <GithubPluginInstaller
+    <GithubPackageInstaller
       onInstalled={() => undefined}
       onBusyChange={() => undefined}
     />,
@@ -181,7 +181,7 @@ it("retains remaining packages after a failed installation and clears the error 
     ),
   );
   render(
-    <GithubPluginInstaller
+    <GithubPackageInstaller
       onInstalled={installed}
       onBusyChange={() => undefined}
     />,
@@ -207,4 +207,46 @@ it("retains remaining packages after a failed installation and clears the error 
       }) as HTMLButtonElement
     ).disabled,
   ).toBe(true);
+});
+
+it("uses world endpoints and explains separate plugin authorization", async () => {
+  const installed = vi.fn();
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/install/world/github/preview")
+      return Response.json({
+        items: [{ ...preview, id: "island", hasServerCode: false }],
+      });
+    expect(url).toBe("/api/install/world/github");
+    return Response.json({
+      ok: true,
+      kind: "world",
+      id: "island",
+      restartRequired: false,
+    });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <GithubPackageInstaller
+      kind="world"
+      onInstalled={installed}
+      onBusyChange={() => undefined}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("World GitHub URL"), {
+    target: { value: "https://github.com/example/worlds" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview world" }));
+  expect(
+    await screen.findByText(
+      /World installation does not install or authorize plugins/,
+    ),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm installation" }));
+  await waitFor(() =>
+    expect(installed).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "world", restartRequired: false }),
+      expect.anything(),
+    ),
+  );
 });

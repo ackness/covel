@@ -9,18 +9,23 @@ import {
   readPluginFrontmatter,
   validatePluginBundle,
 } from "./plugin-bundle.js";
-import { pluginReceiptSchema } from "./plugin-files.js";
+import { packageReceiptSchema } from "./package-files.js";
 
 const signingKey = randomBytes(32);
 export const previewLifetime = 15 * 60_000;
 const pluginSchema = githubPluginPreviewSchema.omit({ token: true });
 const signedSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("install"), plugin: pluginSchema }).strict(),
   z
     .object({
-      action: z.literal("update"),
+      action: z.enum(["install", "world-install"]),
       plugin: pluginSchema,
-      previous: pluginReceiptSchema,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.enum(["update", "world-update"]),
+      plugin: pluginSchema,
+      previous: packageReceiptSchema,
     })
     .strict(),
 ]);

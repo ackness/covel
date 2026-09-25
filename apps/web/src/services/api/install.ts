@@ -36,8 +36,12 @@ export function installPackage(
   });
 }
 
-export async function previewGithubPlugins(url: string, signal?: AbortSignal) {
-  return request("/api/install/plugin/github/preview", {
+export async function previewGithubPackages(
+  url: string,
+  signal?: AbortSignal,
+  kind: InstallKind = "plugin",
+) {
+  return request(`/api/install/${kind}/github/preview`, {
     method: "POST",
     headers: getDesktopRestAuthHeaders(),
     body: JSON.stringify({ url }),
@@ -48,8 +52,11 @@ export async function previewGithubPlugins(url: string, signal?: AbortSignal) {
   });
 }
 
-export function installGithubPlugin(token: string): Promise<InstallResult> {
-  return request("/api/install/plugin/github", {
+export function installGithubPackage(
+  token: string,
+  kind: InstallKind = "plugin",
+): Promise<InstallResult> {
+  return request(`/api/install/${kind}/github`, {
     method: "POST",
     headers: getDesktopRestAuthHeaders(),
     body: JSON.stringify({ token, acceptRisk: true }),
@@ -58,22 +65,26 @@ export function installGithubPlugin(token: string): Promise<InstallResult> {
   });
 }
 
-export async function listPluginInstallations() {
-  const result = await request("/api/install/plugins", {
-    headers: getDesktopRestAuthHeaders(),
-    operatorAuth: true,
-    schema: pluginInstallationsSchema,
-    silentErrors: true,
-  });
+export async function listPackageInstallations(kind: InstallKind = "plugin") {
+  const result = await request(
+    `/api/install/${kind === "world" ? "worlds" : "plugins"}`,
+    {
+      headers: getDesktopRestAuthHeaders(),
+      operatorAuth: true,
+      schema: pluginInstallationsSchema,
+      silentErrors: true,
+    },
+  );
   return result.items;
 }
 
-export function checkGithubPluginUpdate(
+export function checkGithubPackageUpdate(
   id: string,
   url?: string,
   signal?: AbortSignal,
+  kind: InstallKind = "plugin",
 ) {
-  return request("/api/install/plugin/github/update/preview", {
+  return request(`/api/install/${kind}/github/update/preview`, {
     method: "POST",
     headers: getDesktopRestAuthHeaders(),
     operatorAuth: true,
@@ -83,8 +94,11 @@ export function checkGithubPluginUpdate(
     schema: githubPluginUpdateCheckSchema,
   });
 }
-export function updateGithubPlugin(token: string): Promise<InstallResult> {
-  return request("/api/install/plugin/github/update", {
+export function updateGithubPackage(
+  token: string,
+  kind: InstallKind = "plugin",
+): Promise<InstallResult> {
+  return request(`/api/install/${kind}/github/update`, {
     method: "POST",
     headers: getDesktopRestAuthHeaders(),
     operatorAuth: true,
@@ -92,9 +106,12 @@ export function updateGithubPlugin(token: string): Promise<InstallResult> {
     schema: installResultSchema,
   });
 }
-export function cancelGithubPluginUpdate(id: string) {
+export function cancelGithubPackageUpdate(
+  id: string,
+  kind: InstallKind = "plugin",
+) {
   return request(
-    `/api/install/plugin/github/update/${encodeURIComponent(id)}`,
+    `/api/install/${kind}/github/update/${encodeURIComponent(id)}`,
     {
       method: "DELETE",
       headers: getDesktopRestAuthHeaders(),

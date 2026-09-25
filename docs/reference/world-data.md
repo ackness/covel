@@ -753,3 +753,5 @@ sources:
 - remote、SQLite source、CUE、RO-Crate、复杂 JSON Patch override 属于后续阶段。
 
 世界时间是正式的 `time` 维度，支持内联、`dimensionSources.time` 和 `world:metadata.dimensions` 数据源。字段、倒流/随机规则及会话快照语义见 [World time](./world-time.md)。
+
+GitHub 世界包目录、多世界选择、代理下载和更新流程见 [世界目录与安装](./world-installation.md)。
