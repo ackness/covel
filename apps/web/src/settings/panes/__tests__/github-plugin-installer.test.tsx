@@ -31,7 +31,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("requires consent, resets consent when the package changes and installs only the selected preview", async () => {
+it("installs selected packages successively without previewing again and requires consent for each", async () => {
   const installed = vi.fn();
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith("/preview"))
@@ -46,14 +46,16 @@ it("requires consent, resets consent when the package changes and installs only 
           },
         ],
       });
+    const next =
+      installed.mock.calls.length === 0 ? "second-preview" : "signed-preview";
     expect(JSON.parse(String(init?.body))).toEqual({
-      token: "second-preview",
+      token: next,
       acceptRisk: true,
     });
     return Response.json({
       ok: true,
       kind: "plugin",
-      id: "second-note",
+      id: next === "second-preview" ? "second-note" : "example-note",
       restartRequired: true,
     });
   });
@@ -87,10 +89,19 @@ it("requires consent, resets consent when the package changes and installs only 
       expect.objectContaining({ token: "second-preview" }),
     ),
   );
+  expect(screen.queryByRole("combobox")).toBeNull();
+  expect(screen.getByText("example-note · 1.0.0")).toBeTruthy();
+  expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
+    false,
+  );
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(button);
+  await waitFor(() => expect(installed).toHaveBeenCalledTimes(2));
   expect(
     screen.queryByRole("button", { name: "Confirm installation" }),
   ).toBeNull();
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
 it("invalidates the preview when the URL changes", async () => {
@@ -146,4 +157,53 @@ it("cancels inspection without presenting a stale result", async () => {
   expect(
     screen.queryByRole("button", { name: "Confirm installation" }),
   ).toBeNull();
+});
+
+it("retains remaining packages after a failed installation and clears the error on selection", async () => {
+  const installed = vi.fn();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      url.endsWith("/preview")
+        ? Response.json({
+            items: [
+              preview,
+              {
+                ...preview,
+                id: "other-note",
+                token: "other-token",
+                source: { ...preview.source, path: "examples/other" },
+              },
+            ],
+          })
+        : Response.json({ error: "Already installed" }, { status: 409 }),
+    ),
+  );
+  render(
+    <GithubPluginInstaller
+      onInstalled={installed}
+      onBusyChange={() => undefined}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("GitHub URL"), {
+    target: { value: preview.source.repository },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview plugin" }));
+  fireEvent.click(await screen.findByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm installation" }));
+  expect(await screen.findByRole("alert")).toBeTruthy();
+  expect(installed).not.toHaveBeenCalled();
+  expect(screen.getAllByRole("option")).toHaveLength(2);
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "1" } });
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
+    false,
+  );
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Confirm installation",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
 });

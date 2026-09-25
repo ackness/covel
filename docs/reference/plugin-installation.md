@@ -25,6 +25,10 @@
 
 支持仓库根链接、tag/commit/branch 的 tree 链接和插件子目录链接。普通仓库链接通过 GitHub API 解析默认分支的当前 commit；tree 链接解析指定 ref。含 `/` 的 ref 需要在对应 URL 段写为 `%2F`，或改用 commit SHA。仓库转移产生重定向时，需粘贴新的规范地址。
 
+多插件仓库会递归发现所选目录中的插件包，例如 `plugins/` 和 `examples/`，忽略隐藏目录与 `node_modules`。粘贴 `https://github.com/covel-ai/covel-plugins` 可列出全部可安装包；`https://github.com/covel-ai/covel-plugins/tree/main/plugins` 仅列出功能插件；继续指定 `plugins/mimo-tts` 则直接预览该插件。若所选目录本身就是插件包，按一个完整包处理，其 `runtimes/` 不拆分安装。一次最多预览 20 个插件，超出时应指定更具体的目录。
+
+设置页显示插件 ID 与仓库内路径，逐个选择、审阅风险并安装。成功后仅移除已安装项，保留其余预览，每个插件都需要重新确认风险；失败保留列表供重试或选择其他插件，已安装的包不回滚。每次安装重新下载同一固定 commit 的归档，但只提取所选插件目录，不复制其他插件或仓库根工具。预览过期需要重新预览。全部所需插件安装后可统一重启后端。
+
 GitHub API 解析和归档下载统一使用现有 outbound 网络层，实时遵循设置中的直连、系统代理、HTTP(S) 或 SOCKS5 配置，不另建代理设置。明确指定 HTTP/SOCKS 代理失败会报错，不静默直连；系统代理按系统解析的路由顺序工作，包括系统明确返回的 DIRECT。
 
 只下载公开 GitHub 源码归档，不使用用户 GitHub 凭证。首期不自动下载 Release 附件，不接受任意 URL、私有仓库或 GitHub Enterprise。已构建的 Release ZIP 可手动下载后导入。

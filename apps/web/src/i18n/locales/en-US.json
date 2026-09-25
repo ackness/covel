@@ -1029,6 +1029,7 @@
       "inspecting": "Inspecting…",
       "cancel": "Cancel",
       "choose": "Choose a plugin",
+      "multiple": "Repository links discover packages in plugins/, examples/, and other subdirectories. Select and install each package separately; remaining packages stay available after installation.",
       "riskTitle": "Review before installing",
       "codeRisk": "This package contains code. When execution is approved, third-party code runs in the Covel backend without a process sandbox and may access its files, environment variables, and network. Declared permissions do not fully isolate arbitrary JavaScript.",
       "contentRisk": "Plugin content can change model behavior, data sent to providers, and API costs. File inspection is not a security audit.",

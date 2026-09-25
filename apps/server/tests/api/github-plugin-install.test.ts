@@ -359,25 +359,80 @@ describe("GitHub plugin installation", () => {
     ).toContain("example-note/two");
   });
 
-  it("offers multiple packages without merging their contents", async () => {
-    archive = await zip(
-      Object.fromEntries(
+  it("discovers repository or folder packages and installs them independently", async () => {
+    archive = await zip({
+      "package.json": JSON.stringify({
+        private: true,
+        devDependencies: { build: "1" },
+      }),
+      "README.md": "Repository tooling must not be installed",
+      ...Object.fromEntries(
         Object.entries(fixture).flatMap(([name, content]) => [
           [`plugins/first/${name}`, content],
           [
             `plugins/second/${name}`,
             content.replaceAll("example-note", "second-note"),
           ],
+          [
+            `examples/demo/${name}`,
+            content.replaceAll("example-note", "demo-note"),
+          ],
+          [`node_modules/ignored/${name}`, content],
+          [`.hidden/ignored/${name}`, content],
         ]),
       ),
-    );
+    });
     const response = await request("plugin/github/preview", { url: repo });
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.items.map((i: GithubPluginPreview) => i.id)).toEqual([
-      "example-note",
-      "second-note",
+    const { items } = (await response.json()) as {
+      items: GithubPluginPreview[];
+    };
+    expect(items.map((item) => [item.id, item.source.path])).toEqual([
+      ["demo-note", "examples/demo"],
+      ["example-note", "plugins/first"],
+      ["second-note", "plugins/second"],
     ]);
+    const folder = await request("plugin/github/preview", {
+      url: `${repo}/tree/v1/plugins`,
+    });
+    expect(folder.status).toBe(200);
+    expect(
+      (await folder.json()).items.map((item: GithubPluginPreview) => item.id),
+    ).toEqual(["example-note", "second-note"]);
+    expect((await preview(`${repo}/tree/v1/examples/demo`)).id).toBe(
+      "demo-note",
+    );
+    expect(await readdir(root)).toEqual([]);
+    for (const [index, item] of items.entries()) {
+      expect(
+        (
+          await request("plugin/github", {
+            token: item.token,
+            acceptRisk: true,
+          })
+        ).status,
+      ).toBe(201);
+      expect((await readdir(root)).sort()).toEqual(
+        items
+          .slice(0, index + 1)
+          .map((installed) => installed.id)
+          .sort(),
+      );
+      const files = await readdir(path.join(root, item.id));
+      expect(files.sort()).toEqual([
+        ".covel-install.json",
+        "PLUGIN.md",
+        "package.json",
+        "server",
+      ]);
+      expect(
+        await readFile(path.join(root, item.id, "PLUGIN.md"), "utf8"),
+      ).toContain(`name: ${item.id}`);
+      const receipt = JSON.parse(
+        await readFile(path.join(root, item.id, ".covel-install.json"), "utf8"),
+      );
+      expect(receipt.source.path).toBe(item.source.path);
+    }
   });
 
   it.each([

@@ -64,7 +64,10 @@ export function GithubPluginInstaller({
     try {
       const result = await installGithubPlugin(preview.token);
       onInstalled(result, preview);
-      setItems([]);
+      setItems((current) =>
+        current.filter((item) => item.token !== preview.token),
+      );
+      setSelected(0);
       setAccepted(false);
     } catch (err) {
       setError(
@@ -148,16 +151,20 @@ export function GithubPluginInstaller({
       )}
       {preview && (
         <div className="space-y-3 text-xs">
+          <p className="text-muted-foreground">
+            {t("settings.github.multiple")}
+          </p>
           {items.length > 1 && (
             <label className="block">
               {t("settings.github.choose")}
               <select
                 className="mt-1 w-full rounded border border-border bg-background p-2"
                 value={selected}
-                disabled={!!busy}
+                disabled={disabled || !!busy}
                 onChange={(event) => {
                   setSelected(Number(event.target.value));
                   setAccepted(false);
+                  setError(null);
                 }}
               >
                 {items.map((item, i) => (
@@ -203,7 +210,7 @@ export function GithubPluginInstaller({
                 type="checkbox"
                 className="mt-0.5"
                 checked={accepted}
-                disabled={!!busy}
+                disabled={disabled || !!busy}
                 onChange={(event) => setAccepted(event.target.checked)}
               />
               {t("settings.github.accept")}

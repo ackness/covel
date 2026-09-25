@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { ONBOARDING_VERSION, seedBrowserSettings } from "./helpers/player.js";
 
 for (const width of [1280, 390]) {
-  test(`GitHub plugin installation requires consent and displays pending installation at ${width}px`, async ({
+  test(`Multi-package GitHub installation requires consent for each package at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -11,50 +11,61 @@ for (const width of [1280, 390]) {
       "ui.locale": "en-US",
     });
     const source = {
-      repository: "https://github.com/example/plugin",
+      repository: "https://github.com/example/plugins",
       commit: "a".repeat(40),
-      path: "",
+      path: "plugins/note",
       digest: "b".repeat(64),
     };
-    let installed = false;
+    const previews = [
+      {
+        id: "example-note",
+        description: "Synthetic plugin",
+        version: "1.0.0",
+        hasServerCode: true,
+        source,
+        token: "first-token",
+        expiresAt: Date.now() + 900_000,
+      },
+      {
+        id: "example-demo",
+        description: "Synthetic demo",
+        version: "1.0.0",
+        hasServerCode: true,
+        source: { ...source, path: "examples/demo" },
+        token: "second-token",
+        expiresAt: Date.now() + 900_000,
+      },
+    ];
+    const installed: typeof previews = [];
+    let previewRequests = 0;
     await page.route("**/api/install/plugins", (route) =>
       route.fulfill({
         json: {
-          items: installed
-            ? [{ id: "example-note", version: "1.0.0", source }]
-            : [],
+          items: installed.map(({ id, version, source }) => ({
+            id,
+            version,
+            source,
+          })),
         },
       }),
     );
-    await page.route("**/api/install/plugin/github/preview", (route) =>
-      route.fulfill({
-        json: {
-          items: [
-            {
-              id: "example-note",
-              description: "Synthetic plugin",
-              version: "1.0.0",
-              hasServerCode: true,
-              source,
-              token: "preview-token",
-              expiresAt: Date.now() + 900_000,
-            },
-          ],
-        },
-      }),
-    );
+    await page.route("**/api/install/plugin/github/preview", (route) => {
+      previewRequests++;
+      return route.fulfill({ json: { items: previews } });
+    });
     await page.route("**/api/install/plugin/github", async (route) => {
+      const expected = installed.length === 0 ? previews[1]! : previews[0]!;
       expect(route.request().postDataJSON()).toEqual({
-        token: "preview-token",
+        token: expected.token,
         acceptRisk: true,
       });
-      installed = true;
+      installed.push(expected);
       await route.fulfill({
         status: 201,
         json: {
           ok: true,
           kind: "plugin",
-          id: "example-note",
+          id: expected.id,
           restartRequired: true,
         },
       });
@@ -84,7 +95,13 @@ for (const width of [1280, 390]) {
     });
     await expect(install).toBeDisabled();
     await expect(dialog.getByText(/without a process sandbox/)).toBeVisible();
-    expect(installed).toBe(false);
+    expect(installed).toHaveLength(0);
+    const choice = dialog.getByRole("combobox", { name: "Choose a plugin" });
+    await expect(choice.getByRole("option")).toHaveText([
+      "example-note (plugins/note)",
+      "example-demo (examples/demo)",
+    ]);
+    await choice.selectOption("1");
     await dialog
       .getByRole("checkbox", {
         name: "I understand the risks and trust this source.",
@@ -96,7 +113,26 @@ for (const width of [1280, 390]) {
     ).toBeVisible();
     await expect(
       dialog.getByRole("button", { name: "Uninstall", exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      dialog.getByText("example-note · 1.0.0", { exact: true }),
     ).toBeVisible();
+    await expect(install).toBeDisabled();
+    const consent = dialog.getByRole("checkbox", {
+      name: "I understand the risks and trust this source.",
+    });
+    await expect(consent).not.toBeChecked();
+    await consent.check();
+    await install.click();
+    await expect(
+      dialog.getByRole("button", { name: "Uninstall", exact: true }),
+    ).toHaveCount(2);
+    await expect(install).toHaveCount(0);
+    expect(previewRequests).toBe(1);
+    expect(installed.map((item) => item.id)).toEqual([
+      "example-demo",
+      "example-note",
+    ]);
     await expect(dialog.getByText(/Plugin files changed/)).toBeVisible();
     expect(
       await dialog.evaluate(
