@@ -125,6 +125,54 @@ English prompt body.
       expect(loaded.promptTemplate).toContain("中文提示词。");
     }
   });
+
+  it.each(["en-US", "ru-RU"])(
+    "loads a minimal translation with canonical required fields and defaults (%s)",
+    async (locale) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await fs.writeFile(
+        path.join(dir, "PLUGIN.en.md"),
+        "---\nname: demo\n---\n\nEnglish prompt body.\n",
+      );
+      const loaded = await loadRuntime(
+        {
+          id: "demo",
+          rootPath: dir,
+          pluginMdPaths: [path.join(dir, "PLUGIN.md")],
+          isMultiRuntime: false,
+        } as PluginDiscoveryResult,
+        "demo",
+        locale,
+      );
+
+      expect(loaded.manifest.description).toBe("中文描述");
+      expect(loaded.manifest.stage).toBe("narrative");
+      expect(loaded.manifest.capabilities).toEqual(["narrative"]);
+      expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+      expect(loaded.promptTemplate).toContain("English prompt body.");
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    },
+  );
+
+  it("validates translated prose after inheriting the canonical contract", async () => {
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.en.md"),
+      "---\nname: demo\ndescription: 42\n---\nEnglish prompt.\n",
+    );
+    await expect(
+      loadRuntime(
+        {
+          id: "demo",
+          rootPath: dir,
+          pluginMdPaths: [path.join(dir, "PLUGIN.md")],
+          isMultiRuntime: false,
+        } as PluginDiscoveryResult,
+        "demo",
+        "en-US",
+      ),
+    ).rejects.toThrow("description");
+  });
 });
 
 describe("reconcileLocalizedManifest omitted fields", () => {

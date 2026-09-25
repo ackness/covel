@@ -16,6 +16,7 @@ This release adds community plugin and world directories, GitHub installation an
 
 ### Fixed
 
+- **Localized runtime manifests inherit before validation.** Minimal `PLUGIN.<locale>.md` translations retain required fields and execution settings from `PLUGIN.md`, avoiding failed world-time advancement in English worlds. Translated prose remains validated, and translations cannot override execution contracts.
 - **Community plugin selections survive creation and restart (#84).** Sessions retain the selected plugin IDs while execution remains gated by current authorization. Opening a session requests missing approval; declining keeps a visible paused state and an explicit retry action. A backend restart requires fresh approval without silently discarding the selection.
 
 ### Changed
