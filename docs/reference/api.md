@@ -456,14 +456,17 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
 | GET    | `/api/plugin-flows`           | 框架编排的 pre-game 流程预览数据（插件列表 + 分段步骤），供准备页可视化                                                                                                                                                                                 |
 
-### 拖拽导入（Install）
+### 插件与世界安装（Install）
 
-`.zip` 包拖拽导入插件/世界。基础鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。世界安装还遵循全局世界写入鉴权：生产 MemoryStore（含 self）及 hosted 层级必须持有 operator token，启用安装 API 不会绕过该检查。
+支持 `.zip` 包导入插件/世界，以及 GitHub 链接安装插件（详见 [插件目录与安装](./plugin-installation.md)）。GitHub 解析与下载遵循现有网络代理设置。基础鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。所有安装管理接口在 demo/commercial 层级必须持有 operator token，启用安装 API 不会绕过该检查。世界安装还遵循全局世界写入鉴权：生产 MemoryStore（含 self）及 hosted 层级必须持有 operator token，启用安装 API 不会绕过该检查。
 
-| 方法 | 路径                  | 描述                                                                                                                                                                  |
-| ---- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST | `/api/install/plugin` | multipart 字段 `file`：接受根级 `PLUGIN.md`+`package.json` 或多 runtime 布局的 `.zip`，解压到用户插件目录，返回 `201 { ok, kind:"plugin", id, restartRequired:true }` |
-| POST | `/api/install/world`  | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `201 { ok, kind:"world", id, restartRequired:false }`                     |
+| 方法 | 路径                                 | 描述                                                                                                                                                                  |
+| ---- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST | `/api/install/plugin`                | multipart 字段 `file`：接受根级 `PLUGIN.md`+`package.json` 或多 runtime 布局的 `.zip`，解压到用户插件目录，返回 `201 { ok, kind:"plugin", id, restartRequired:true }` |
+| POST | `/api/install/world`                 | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `201 { ok, kind:"world", id, restartRequired:false }`                     |
+| POST | `/api/install/plugin/github/preview` | `{ url }`：解析公开 GitHub 仓库或子目录，返回固定提交、摘要与签名预览；不安装或执行插件                                                                               |
+| POST | `/api/install/plugin/github`         | `{ token, acceptRisk: true }`：校验已确认的预览并安装，返回 `201 { ok, kind: "plugin", id, restartRequired: true }`                                                   |
+| GET  | `/api/install/plugins`               | 列出用户插件目录中的包及可用的来源记录，包含尚未重启加载的插件                                                                                                        |
 
 > **canonical 插件身份**：插件的唯一身份是 manifest 根 `name`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `name: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID；`@covel/plugin-narrator` + `name: narrator` 会命中 reserved 并返回 409。启动 discovery 同样硬性校验目录名 == manifest 根 name，不一致的插件注册为 `status: "error"`、不加载任何 runtime/tool/hook/wire。
 

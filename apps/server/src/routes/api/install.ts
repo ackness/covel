@@ -18,9 +18,14 @@ import { Hono } from "hono";
 import { makeInstallApiGuard } from "../privileged-auth.js";
 import { pluginInstallRoutes } from "./install/plugin.js";
 import { worldInstallRoutes } from "./install/worlds.js";
+import { githubPluginRoutes } from "./install/github-plugin.js";
+
+import { installedPluginRoutes } from "./install/installed-plugins.js";
 
 export const installRoutes = new Hono();
 installRoutes.use("*", makeInstallApiGuard());
 
 installRoutes.route("/", pluginInstallRoutes);
+installRoutes.route("/", installedPluginRoutes);
+installRoutes.route("/", githubPluginRoutes);
 installRoutes.route("/", worldInstallRoutes);

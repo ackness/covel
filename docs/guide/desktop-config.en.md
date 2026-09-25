@@ -68,7 +68,7 @@ Legacy files without `schema_version` are read as v1. The desktop UI and REST en
 
 Manual edits require a Covel restart; saving under **Settings → Desktop → Network Proxy** applies immediately. `direct` bypasses proxies, `system` follows Electron's OS proxy resolution, `http` accepts HTTP(S) URLs, and `socks` accepts SOCKS5 URLs. A missing scheme is normalized to `http://` or `socks5://`. URLs may include `user:password@host`, so the file is tightened to mode `0600` when proxy settings are saved.
 
-The proxy covers framework-owned LLM calls, GitHub model-database updates, and desktop app version checks. Third-party plugin `fetchWithRetry` remains direct with strict DNS/SSRF pinning.
+The proxy covers framework-owned LLM calls, GitHub model-database updates, GitHub plugin metadata and archive downloads, and desktop app version checks. Third-party plugin `fetchWithRetry` remains direct with strict DNS/SSRF pinning.
 
 ## New-version prompt
 

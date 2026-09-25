@@ -87,6 +87,19 @@ function sanitizeRelativePath(raw: string, targetRoot: string): string | null {
   if (normalized.startsWith("/")) return null;
   // Reject absolute paths & drive letters.
   if (path.isAbsolute(normalized) || /^[a-z]:/i.test(normalized)) return null;
+  if (
+    normalized
+      .split("/")
+      .some(
+        (part) =>
+          !part ||
+          part === "." ||
+          part === ".." ||
+          /[<>:"|?*]/.test(part) ||
+          /[. ]$/.test(part),
+      )
+  )
+    return null;
 
   const resolved = path.resolve(targetRoot, normalized);
   const rel = path.relative(targetRoot, resolved);
@@ -108,6 +121,7 @@ export async function readAllEntries(
 
       const zf = zipfile as ZipFile;
       const entries: ExtractedEntry[] = [];
+      const paths = new Set<string>();
       let entryCount = 0;
       let totalUncompressed = 0;
       let settled = false;
@@ -169,6 +183,12 @@ export async function readAllEntries(
         }
 
         const uncompressed = Number(entry.uncompressedSize ?? 0);
+        const key = safeRel.toLowerCase();
+        if (paths.has(key)) {
+          fail(400, `duplicate archive path: ${safeRel}`);
+          return;
+        }
+        paths.add(key);
         if (!Number.isFinite(uncompressed) || uncompressed < 0) {
           fail(400, `invalid uncompressed size for ${safeRel}`);
           return;

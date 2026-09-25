@@ -2134,3 +2134,7 @@ tools:
 ## 通用服务与自定义 UI
 
 `entry` 可通过 `covel.registerService` 导出经输入输出校验的公共函数；function runtime 通过 `ctx.services.discover/call` 组合其他活跃插件。`ctx.gateway.evaluate` 已公开评估能力。插件可以使用独立 HTML `webview` 自带组件，并声明在 panel/stage 挂载，无须给框架增加业务 capability。注册、权限、取消、数据归属与示例见 [插件扩展契约](plugin-extensions.md)。
+
+## 外部插件目录与安装
+
+核心插件、官方扩展、社区插件的分类、设置页 GitHub 安装和运行信任边界见 [插件目录与安装](./plugin-installation.md)。

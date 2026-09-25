@@ -65,7 +65,7 @@ function navigationLabels(locale: string) {
     ],
     appearance: t("settings.appearanceNavLabel", "Appearance"),
     operatorAccess: t("settings.operatorAccessNavLabel", "Operator Access"),
-    packages: t("settings.packages.navLabel", "Import Packages"),
+    packages: t("settings.packages.navLabel", "Install & manage"),
   };
 }
 
@@ -137,24 +137,29 @@ export function buildNavTree(
         bucket.push(e);
         byPlugin.set(e.pluginId, bucket);
       }
-      if (byPlugin.size > 0) {
+      nodes.push({
+        id: "plugin",
+        label: labels.groups.plugin,
+        kind: "group",
+        children: [],
+      });
+      nodes.push({
+        id: PACKAGES_NODE_ID,
+        label: labels.packages,
+        kind: "subgroup",
+        parentId: "plugin",
+        children: [],
+      });
+      for (const [pluginId, pluginEntries] of byPlugin) {
         nodes.push({
-          id: "plugin",
-          label: labels.groups.plugin,
-          kind: "group",
-          children: [],
+          id: `plugin.${pluginId}`,
+          label:
+            resolveI18nText(opts.pluginDisplayNames?.[pluginId], locale) ??
+            pluginId,
+          kind: "plugin",
+          parentId: "plugin",
+          children: pluginEntries,
         });
-        for (const [pluginId, pluginEntries] of byPlugin) {
-          nodes.push({
-            id: `plugin.${pluginId}`,
-            label:
-              resolveI18nText(opts.pluginDisplayNames?.[pluginId], locale) ??
-              pluginId,
-            kind: "plugin",
-            parentId: "plugin",
-            children: pluginEntries,
-          });
-        }
       }
     } else if (group === "desktop") {
       if (opts.includeDesktop) {
@@ -206,13 +211,6 @@ export function buildNavTree(
   nodes.push({
     id: OPERATOR_ACCESS_NODE_ID,
     label: labels.operatorAccess,
-    kind: "group",
-    children: [],
-  });
-  // Virtual node for package import (UI-only, no registered SettingEntry).
-  nodes.push({
-    id: PACKAGES_NODE_ID,
-    label: labels.packages,
     kind: "group",
     children: [],
   });

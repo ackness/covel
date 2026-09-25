@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
-import { safeEqual } from "./api/session/session-guard.js";
+import { checkHostedOperator, safeEqual } from "./api/session/session-guard.js";
 
 /** Extract the token from an `Authorization: Bearer <token>` header. */
 export function bearerToken(c: Context): string | undefined {
@@ -39,6 +39,8 @@ export function makeDesktopRestTokenGuard(): MiddlewareHandler {
  */
 export function makeInstallApiGuard(): MiddlewareHandler {
   return async (c: Context, next) => {
+    const denied = checkHostedOperator(c);
+    if (denied) return denied;
     const env = readRuntimeEnv();
     if (env.desktopRestToken) {
       const provided = bearerToken(c);

@@ -786,6 +786,8 @@ export default async function handler(ctx) {
 
 ## 7. 发布和分享
 
+官方目录与投稿规范见 [covel-ai/covel-plugins](https://github.com/covel-ai/covel-plugins)。GitHub 链接安装、发布物要求、风险提示和 HTTP 契约见 [插件目录与安装](../reference/plugin-installation.md)。第三方插件保持独立仓库，通过索引 PR 收录。官方维护的外部扩展也遵循 community 授权规则。
+
 ### 插件来源
 
 | 来源        | 标识          | 加载方式           |
