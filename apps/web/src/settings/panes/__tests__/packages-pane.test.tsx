@@ -41,6 +41,18 @@ describe("PackagesPane installed plugin management", () => {
     const fetchMock = vi
       .fn()
       .mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url === "/api/install/worlds") return Response.json({ items: [] });
+        if (url === "/api/install/plugins")
+          return Response.json({
+            items: [
+              {
+                id: "broken-plugin",
+                version: null,
+                source: null,
+                pendingUpdate: null,
+              },
+            ],
+          });
         if (url === "/api/plugins" && !init?.method) {
           return Response.json({
             items: [

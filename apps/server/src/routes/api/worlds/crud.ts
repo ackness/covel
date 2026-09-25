@@ -116,7 +116,12 @@ worldCrudRoutes.patch("/:id", async (c) => {
       lore: body.lore ?? existing.lore,
       tags: body.tags ?? existing.tags,
       locale: body.locale ?? existing.locale,
-      metadata: metadataResult.metadata,
+      metadata: {
+        ...metadataResult.metadata,
+        ...(existing.metadata?.packageManaged
+          ? { packageManaged: true, packageModified: true }
+          : {}),
+      },
       dimensions: metadataResult.metadata
         ?.dimensions as WorldRecord["dimensions"],
       updatedAt: now,

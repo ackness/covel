@@ -307,3 +307,20 @@ export {
 
 export { REASONING_EFFORT_VALUES, isReasoningEffort } from "./reasoning.js";
 export type { ReasoningEffort } from "./reasoning.js";
+export {
+  githubPluginPreviewRequestSchema,
+  githubPluginInstallRequestSchema,
+  githubPluginSourceSchema,
+  githubPluginTrackingSchema,
+  pluginInstallIdSchema,
+  githubPluginUpdateCheckRequestSchema,
+  githubPluginUpdatePreviewSchema,
+  githubPluginUpdateCheckSchema,
+  type GithubPluginUpdatePreview,
+  githubPluginPreviewSchema,
+  githubPluginPreviewsSchema,
+  pluginInstallationSchema,
+  pluginInstallationsSchema,
+  type PluginInstallation,
+  type GithubPluginPreview,
+} from "./schemas/plugin-install.js";

@@ -137,6 +137,15 @@ export function SessionPluginItem({
         />
       </div>
 
+      {plugin.approvalRequired && (
+        <p
+          role="status"
+          className="px-2.5 pb-2 text-xs text-amber-700 dark:text-amber-300"
+        >
+          {t("plugin.approval.required")}
+        </p>
+      )}
+
       {advanced && (
         <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2">
           <RuntimeStageBadges runtimes={plugin.runtimes} />

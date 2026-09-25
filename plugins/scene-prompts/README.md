@@ -22,4 +22,4 @@
 
 ## 供其他插件消费的输出
 
-`output.schema` 公开当轮 `{ scene, recap, decision, prompts }` 工具结果。消费者通过 `inputs` 绑定 `scene-prompts` capability 和自己的 `accepts` schema，即可在当前执行中读取结果与来源，无须读取本插件内部数据。示例为 [Jev 选项推荐 Demo](../jev-choice-demo/README.md)。
+`output.schema` 公开当轮 `{ scene, recap, decision, prompts }` 工具结果。消费者通过 `inputs` 绑定 `scene-prompts` capability 和自己的 `accepts` schema，即可在当前执行中读取结果与来源，无须读取本插件内部数据。示例为 [Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。

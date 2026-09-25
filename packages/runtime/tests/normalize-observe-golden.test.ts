@@ -119,7 +119,6 @@ describe("normalize golden (bundled plugin set)", () => {
       "branch-reply",
       "char-creator/character-tracker",
       "guide",
-      "mimo-tts/auto-narrate",
       "scene-prompts",
       "world-ir",
       "world-time/advance",
@@ -129,7 +128,6 @@ describe("normalize golden (bundled plugin set)", () => {
       "codex",
       "core-quest",
       "inventory",
-      "jev-choice-demo",
       "npc-graph/extractor",
     ]);
   });
@@ -176,11 +174,7 @@ describe("normalize golden (bundled plugin set)", () => {
 
     // Raw-text post-turn consumers still bind directly to the narrative
     // engine. They remain independent of the structured extraction branch.
-    for (const id of [
-      "guide",
-      "char-creator/character-tracker",
-      "mimo-tts/auto-narrate",
-    ]) {
+    for (const id of ["guide", "char-creator/character-tracker"]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBe("post-turn");
       expect(spec.deps.needs).toEqual([{ capability: "narrative-engine" }]);

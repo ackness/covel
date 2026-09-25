@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Stage bridge fixture</title>
+  </head>
+  <body>
+    <p id="status"></p>
+    <div id="list"></div>
+    <script>
+      window.covel.subscribe(({ data = {}, context = {}, locked = false }) => {
+        const list = document.getElementById("list");
+        const status = document.getElementById("status");
+        list.replaceChildren();
+        const record = data.current;
+        if (!record || locked || !context.turnIds?.includes(record.turnId)) {
+          status.textContent = "Waiting for the current turn";
+          return;
+        }
+        status.textContent = "";
+        for (const option of record.options) {
+          const score = document.createElement("span");
+          score.textContent = new Intl.NumberFormat("en", {
+            style: "percent",
+          }).format(option.probability);
+          list.append(score);
+        }
+      });
+    </script>
+  </body>
+</html>

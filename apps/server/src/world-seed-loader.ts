@@ -15,6 +15,7 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
+import { readReceipt } from "./routes/api/install/package-files.js";
 import type { SessionLock } from "./lib/session-lock.js";
 import { isWorldDeleting, worldOperationLockId } from "./world-lifecycle.js";
 import { access, readFile, readdir } from "node:fs/promises";
@@ -225,6 +226,7 @@ export async function loadSingleWorld(
   worldDir: string,
   options?: {
     source?: string;
+    covelHome?: string;
     storage?: Record<string, unknown>;
   },
 ): Promise<WorldRecord | null> {
@@ -290,8 +292,20 @@ export async function loadSingleWorld(
     ? (manifest.characterAttributes as unknown[])
     : undefined;
 
+  const packageReceipt = await readReceipt(worldDir).catch(() => null);
   const baseMetadata: Record<string, unknown> = {
-    source: options?.source ?? "file",
+    ...(packageReceipt
+      ? {
+          packageManaged: true,
+          storage: {
+            scope: "server",
+            backend: "file",
+            path: path.dirname(worldDir),
+            durable: true,
+          },
+        }
+      : {}),
+    source: options?.source ?? (packageReceipt ? "generated-file" : "file"),
     ...(options?.storage ? { storage: options.storage } : {}),
     dimensions:
       Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
@@ -307,6 +321,7 @@ export async function loadSingleWorld(
   };
   const worldData = await loadWorldDataSummary({
     worldRoot: worldDir,
+    covelHome: options?.covelHome,
     worldId,
     worldDataPath,
     metadata: baseMetadata,
@@ -470,6 +485,9 @@ export function preserveWorldProvenance(
   existing: WorldRecord | undefined,
 ): WorldRecord {
   if (!existing) return record;
+  // Editor changes live in the store; a package refresh must not erase them.
+  if (existing.metadata?.packageManaged && existing.metadata.packageModified)
+    return existing;
   const { source, storage } = existing.metadata ?? {};
   return {
     ...record,

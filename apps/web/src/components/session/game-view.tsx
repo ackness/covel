@@ -481,6 +481,28 @@ export function GameView({
             </div>
           )}
 
+          {sessionPlugins.some((plugin) => plugin.approvalRequired) && (
+            <div
+              role="status"
+              className="relative z-10 flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs"
+            >
+              <span>{t("plugin.approval.required")}</span>
+              {sessionPlugins
+                .filter((plugin) => plugin.approvalRequired)
+                .map((plugin) => (
+                  <button
+                    key={plugin.id}
+                    type="button"
+                    className="underline"
+                    disabled={executing}
+                    onClick={() => void onTogglePlugin(plugin.id, true)}
+                  >
+                    {t("plugin.approval.review", { pluginId: plugin.id })}
+                  </button>
+                ))}
+            </div>
+          )}
+
           {/* Messages */}
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}

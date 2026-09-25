@@ -35,7 +35,7 @@ it("routes current composite settings and plugin groups to their panes", () => {
     "llm.slots",
   );
   expect(resolveSettingsNode(tree, "ui.appearance")?.id).toBe("appearance");
-  expect(resolveSettingsNode(tree, "plugin")?.id).toBe("plugin.fixture");
+  expect(resolveSettingsNode(tree, "plugin")?.id).toBe("packages");
   expect(resolveSettingsNode(tree, "ui.onboardedVersion")).toBeUndefined();
 });
 

@@ -10,6 +10,7 @@ import {
   runtimeManifestInputSchema,
 } from "@covel/shared";
 import type { ParsedPluginMd } from "./types.js";
+import { reconcileLocalizedManifest } from "./localized-manifest.js";
 
 // ── Diagnostic helpers ────────────────────────────────────────────
 
@@ -258,18 +259,24 @@ const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
  *
  * @param content - Raw file content (YAML frontmatter + Markdown body)
  * @param filePath - File path for error reporting
+ * @param canonicalFrontmatter - Validated canonical source for a locale variant
  * @returns Parsed manifest and prompt template
  * @throws {Error} When frontmatter is missing or invalid
  */
 export function parsePluginMd(
   content: string,
   filePath: string,
+  canonicalFrontmatter?: Readonly<Record<string, unknown>>,
 ): ParsedPluginMd {
   const { data, content: body } = matter(content);
 
   let manifest;
   try {
-    let dataToValidate = data;
+    // Inherit before validation and defaults: translations may omit required
+    // fields, and schema defaults must not replace omitted canonical values.
+    let dataToValidate = canonicalFrontmatter
+      ? reconcileLocalizedManifest(canonicalFrontmatter, data, filePath)
+      : data;
 
     // Optional decorative / structural metadata fields parsed leniently in
     // declaration order. A malformed decorative declaration drops only that

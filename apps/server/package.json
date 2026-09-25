@@ -1,6 +1,6 @@
 {
   "name": "@covel/server",
-  "version": "0.0.39",
+  "version": "0.0.40",
   "private": true,
   "type": "module",
   "files": [
@@ -38,7 +38,6 @@
     "@hono/node-server": "^2.1.1",
     "@types/yauzl": "^3.4.0",
     "ajv": "^8.20.0",
-    "gray-matter": "^4.0.3",
     "hono": "4.13.3",
     "postgres": "^3.4.9",
     "tsx": "4.23.12",

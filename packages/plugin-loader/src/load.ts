@@ -35,7 +35,6 @@ import type {
   AgentGuard,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
-import { reconcileLocalizedManifest } from "./localized-manifest.js";
 
 /**
  * Resolve a locale-aware PLUGIN.md path.
@@ -99,33 +98,25 @@ async function resolveLocalizedPluginMd(
  * The prompt body comes from the locale variant (that is the point of having
  * one); the manifest is reconciled against the canonical PLUGIN.md so a
  * translation cannot change the runtime's execution contract — see
- * {@link reconcileLocalizedManifest}.
+ * parsePluginMd's canonical-frontmatter reconciliation.
  */
 async function parsePluginMdForLocale(
   dir: string,
   locale?: string,
 ): Promise<ParsedPluginMd> {
   const localizedPath = await resolveLocalizedPluginMd(dir, locale);
-  const parsed = parsePluginMd(
-    await fs.readFile(localizedPath, "utf-8"),
-    localizedPath,
-  );
-
   const basePath = path.join(dir, "PLUGIN.md");
-  if (localizedPath === basePath) return parsed;
-
   const canonical = parsePluginMd(
     await fs.readFile(basePath, "utf-8"),
     basePath,
   );
-  return {
-    ...parsed,
-    manifest: reconcileLocalizedManifest(
-      canonical.manifest,
-      parsed.manifest,
-      localizedPath,
-    ),
-  };
+  if (localizedPath === basePath) return canonical;
+
+  return parsePluginMd(
+    await fs.readFile(localizedPath, "utf-8"),
+    localizedPath,
+    canonical.rawFrontmatter,
+  );
 }
 
 /**

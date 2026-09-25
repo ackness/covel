@@ -13,6 +13,9 @@ import {
   buildPluginSummary,
 } from "../../lib/plugin-descriptor.js";
 import { errorBody, listBody, okBody } from "../../api-error.js";
+import { withPackageMutation } from "./install/package-files.js";
+import { cancelPackageUpdate } from "./install/package-updates.js";
+import { errorResponse } from "./install/shared.js";
 import { makeInstallApiGuard } from "../privileged-auth.js";
 
 type Env = {
@@ -78,6 +81,14 @@ pluginRoutes.delete("/:id", makeInstallApiGuard(), async (c) => {
     return c.json(errorBody(`plugin "${id}" is not installed`), 404);
   }
 
-  await rm(finalDir, { recursive: true, force: true });
+  try {
+    await withPackageMutation(id, async () => {
+      await cancelPackageUpdate(root, id);
+      await rm(finalDir, { recursive: true, force: true });
+    });
+  } catch (error) {
+    const { status, body } = errorResponse(error);
+    return c.json(body, status as 400 | 409 | 500);
+  }
   return c.json(okBody({ id, restartRequired: true }));
 });

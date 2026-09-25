@@ -32,6 +32,8 @@ import {
   type SessionLock,
 } from "./lib/session-lock.js";
 import { createPgAdvisorySessionLock } from "./lib/pg-session-lock.js";
+import { applyPendingPackageUpdates } from "./routes/api/install/package-updates.js";
+import { isWorldDeleting } from "./world-lifecycle.js";
 import { seedAndReconcileWorlds } from "./world-seed-reconcile.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
 import { createModelDbRoutes } from "./routes/model-db.js";
@@ -330,6 +332,13 @@ async function initializeServer(): Promise<void> {
       memoryIngestLock,
     }));
 
+    await applyPendingPackageUpdates(userDirs.worlds, async (id) => {
+      const world = await store.getWorld(id);
+      if (world && (world.metadata?.packageModified || isWorldDeleting(world)))
+        throw new Error(
+          "World was edited or is being deleted; queued update was not applied",
+        );
+    });
     await seedAndReconcileWorlds(store, worldsDirs, sessionLock);
 
     // ── World file watcher (hot-reload) ─────────────────────────────

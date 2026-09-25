@@ -47,7 +47,7 @@ describe("operator access settings navigation", () => {
       nodes.find((node) => node.id === OPERATOR_ACCESS_NODE_ID)?.label,
     ).toBe("Доступ оператора");
     expect(nodes.find((node) => node.id === "packages")?.label).toBe(
-      "Импорт пакетов",
+      "Установка и управление",
     );
   });
 

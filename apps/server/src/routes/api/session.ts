@@ -221,13 +221,17 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
+  const selectedPlugins = resolveSessionPlugins(
+    parsedCreate.requestedPlugins,
+    pluginRegistry,
+  );
   const plugins = approvedActivePlugins(
-    resolveSessionPlugins(parsedCreate.requestedPlugins, pluginRegistry),
+    selectedPlugins,
     pluginRegistry,
     c.get("rpcApprovalGate"),
   );
   try {
-    validateSessionRuntimeProviders(plugins, pluginRegistry);
+    validateSessionRuntimeProviders(selectedPlugins, pluginRegistry);
   } catch (error) {
     return c.json(
       errorBody(
@@ -277,7 +281,8 @@ sessionRoutes.post("/", async (c) => {
     phase,
     completedPlayerTurns: 0,
     setupRuntimes: {},
-    activePlugins: plugins,
+    // Persist selection; execution and lifecycle hooks use only live grants.
+    activePlugins: selectedPlugins,
     createdAt: now,
     updatedAt: now,
     metadata: {
@@ -294,7 +299,7 @@ sessionRoutes.post("/", async (c) => {
   const startScope = await loadSessionHookScope({
     store,
     pluginRegistry,
-    session,
+    session: { ...session, activePlugins: plugins },
     userSettings: decodedUserSettings.settings,
   });
 

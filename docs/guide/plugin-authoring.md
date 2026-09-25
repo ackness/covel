@@ -193,7 +193,7 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 完整注册表（含 stage 分带、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 
-> **手动按钮 / 后台任务 / 多 runtime 协作**：可参考内置 `scene-stage`、`mimo-tts`，或查看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例（注意：该样例的图像生成部分示范的是 `resolveSlot` 自管 wire 这条逃生口路径；新插件写**图像生成**本身请优先看 [plugin-authoring-advanced.md 第 6 节的 `ctx.images`](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)）。
+> **手动按钮 / 后台任务 / 多 runtime 协作**：可参考内置 `scene-stage`、[官方社区插件 MiMo TTS](https://github.com/covel-ai/covel-plugins/tree/main/plugins/mimo-tts)，或查看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例（注意：该样例的图像生成部分示范的是 `resolveSlot` 自管 wire 这条逃生口路径；新插件写**图像生成**本身请优先看 [plugin-authoring-advanced.md 第 6 节的 `ctx.images`](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)）。
 
 ### C. Hook 组合行为
 

@@ -139,6 +139,8 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
 }
 
 export interface SessionPlugin extends PluginSummary {
+  /** Selected by the player but paused until this process receives approval. */
+  readonly approvalRequired?: boolean;
   readonly active: boolean;
   readonly locked: boolean;
 }

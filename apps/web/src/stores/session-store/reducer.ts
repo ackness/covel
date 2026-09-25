@@ -552,11 +552,17 @@ export function reducer(
       const plugin = state.sessionPlugins.find(
         (item) => item.id === action.pluginId,
       );
-      if (!plugin || plugin.active === action.active) return state;
+      if (
+        !plugin ||
+        (plugin.active === action.active && !plugin.approvalRequired)
+      )
+        return state;
       return {
         ...state,
         sessionPlugins: state.sessionPlugins.map((p) =>
-          p.id === action.pluginId ? { ...p, active: action.active } : p,
+          p.id === action.pluginId
+            ? { ...p, active: action.active, approvalRequired: false }
+            : p,
         ),
       };
     }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -649,6 +649,39 @@ export function useBuildSessionActions({
     },
     [dispatch, workspace, sessionIdRef, sessionGenerationRef],
   );
+
+  // Prompt once per visit for persisted selections whose process-local grant
+  // expired. Denial keeps the selection visible for a later explicit retry.
+  const approvalVisit = useRef<{ generation: number; attempted: Set<string> }>({
+    generation: -1,
+    attempted: new Set(),
+  });
+  useEffect(() => {
+    const generation = sessionGenerationRef.current;
+    if (approvalVisit.current.generation !== generation) {
+      approvalVisit.current = { generation, attempted: new Set() };
+    }
+    if (!state.session || state.executing) return;
+    const pending = state.sessionPlugins.filter(
+      (plugin) =>
+        plugin.approvalRequired &&
+        !approvalVisit.current.attempted.has(plugin.id),
+    );
+    for (const plugin of pending)
+      approvalVisit.current.attempted.add(plugin.id);
+    void (async () => {
+      for (const plugin of pending) {
+        if (sessionGenerationRef.current !== generation) return;
+        await toggleSessionPlugin(plugin.id, true);
+      }
+    })();
+  }, [
+    state.session,
+    state.sessionPlugins,
+    state.executing,
+    sessionGenerationRef,
+    toggleSessionPlugin,
+  ]);
 
   const upsertInteractionDraft = useCallback(
     (draft: PendingInteractionDraft) => {

@@ -6,12 +6,15 @@ import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import {
   installPackage,
+  listPackageInstallations,
   listInstalledPlugins,
   uninstallPlugin,
   type InstallKind,
   type InstallResult,
 } from "@/services/api.js";
-import type { PluginSummary } from "@covel/shared";
+import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
+import { GithubPackageInstaller } from "./GithubPackageInstaller.js";
+import type { PluginInstallation, PluginSummary } from "@covel/shared";
 
 interface ToastState {
   message: string;
@@ -30,12 +33,27 @@ export function PackagesPane() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
   const [installed, setInstalled] = useState<PluginSummary[]>([]);
+  const [installations, setInstallations] = useState<
+    PluginInstallation[] | null
+  >(null);
+  const [worldInstallations, setWorldInstallations] = useState<
+    PluginInstallation[]
+  >([]);
+  const [githubBusy, setGithubBusy] = useState(false);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [zipAccepted, setZipAccepted] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
 
   const refreshInstalled = useCallback(async () => {
     try {
-      const plugins = await listInstalledPlugins({ silentErrors: true });
+      const [plugins, disk, worlds] = await Promise.all([
+        listInstalledPlugins({ silentErrors: true }),
+        listPackageInstallations().catch(() => null),
+        listPackageInstallations("world").catch(() => []),
+      ]);
+      setInstallations(disk);
+      setWorldInstallations(worlds);
       // Only third-party (non-builtin) plugins can be uninstalled.
       setInstalled(plugins.filter((plugin) => plugin.source !== "builtin"));
     } catch {
@@ -64,6 +82,7 @@ export function PackagesPane() {
     try {
       const result = await installPackage(kind, file);
       setLastResult(result);
+      await refreshInstalled();
       flash({
         message: result.restartRequired
           ? t("settings.packages.installedRestart", { id: result.id })
@@ -116,6 +135,16 @@ export function PackagesPane() {
     }, 4000);
   }
 
+  const rows =
+    installations === null
+      ? installed.map((plugin) => ({
+          id: plugin.id,
+          version: plugin.version ?? null,
+          source: null,
+          pendingUpdate: null,
+        }))
+      : installations;
+
   return (
     <div className="space-y-5">
       <header className="space-y-1">
@@ -141,7 +170,9 @@ export function PackagesPane() {
         </div>
       )}
 
-      {lastResult?.restartRequired && (
+      {(lastResult?.restartRequired ||
+        installations?.some((item) => item.pendingUpdate) ||
+        worldInstallations.some((item) => item.pendingUpdate)) && (
         <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
           <div className="flex-1">{t("settings.packages.restartHint")}</div>
           {hasElectronIpc() && (
@@ -170,13 +201,44 @@ export function PackagesPane() {
         </div>
       )}
 
+      <GithubPackageInstaller
+        disabled={!!busy || !!removing || updateBusy || githubBusy}
+        onBusyChange={setGithubBusy}
+        onInstalled={(result) => {
+          setLastResult(result);
+          void refreshInstalled();
+        }}
+      />
+
+      <label className="flex items-start gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={zipAccepted}
+          disabled={!!busy || githubBusy || updateBusy}
+          onChange={(event) => setZipAccepted(event.target.checked)}
+        />
+        {t("settings.github.zipRisk")}
+      </label>
       <DropZone
         kind="plugin"
         icon={<Puzzle className="w-5 h-5" />}
         label={t("settings.packages.pluginLabel")}
         hint={t("settings.packages.pluginHint")}
         busy={busy === "plugin"}
+        disabled={
+          !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
+        }
         onFile={(f) => uploadZip("plugin", f)}
+      />
+
+      <GithubPackageInstaller
+        kind="world"
+        disabled={!!busy || !!removing || updateBusy || githubBusy}
+        onBusyChange={setGithubBusy}
+        onInstalled={(result) => {
+          setLastResult(result);
+          void refreshInstalled();
+        }}
       />
 
       <DropZone
@@ -185,39 +247,92 @@ export function PackagesPane() {
         label={t("settings.packages.worldLabel")}
         hint={t("settings.packages.worldHint")}
         busy={busy === "world"}
+        disabled={githubBusy || !!busy || updateBusy || !!removing}
         onFile={(f) => uploadZip("world", f)}
       />
 
-      {installed.length > 0 && (
+      {rows.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-semibold text-muted-foreground">
             {t("settings.packages.installedTitle", "Installed plugins")}
           </h3>
           <ul className="divide-y divide-border border border-border rounded">
-            {installed.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center justify-between gap-3 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="text-xs font-medium truncate">
-                    {text(p.displayName) || p.id}
+            {rows.map((p) => (
+              <li key={p.id} className="space-y-3 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium truncate">
+                      {text(
+                        installed.find((plugin) => plugin.id === p.id)
+                          ?.displayName,
+                      ) || p.id}
+                    </div>
+                    <div className="text-[10px] font-mono text-muted-foreground truncate">
+                      {p.id}
+                      {p.version ? ` · ${p.version}` : ""}
+                    </div>
+                    {p.source && (
+                      <a
+                        className="block text-xs underline wrap-break-word"
+                        href={`${p.source.repository}/tree/${p.source.commit}/${p.source.path}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {p.source.repository.replace("https://github.com/", "")}{" "}
+                        · {p.source.commit.slice(0, 12)}
+                      </a>
+                    )}
+                    {!installed.some((plugin) => plugin.id === p.id) && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.github.pending")}
+                      </p>
+                    )}
                   </div>
-                  <div className="text-[10px] font-mono text-muted-foreground truncate">
-                    {p.id}
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs shrink-0 text-destructive border-destructive/30 hover:border-destructive"
+                    disabled={!!removing || !!busy || githubBusy || updateBusy}
+                    onClick={() => void uninstall(p.id)}
+                  >
+                    {removing === p.id
+                      ? t("settings.packages.uninstalling", "Removing…")
+                      : t("settings.packages.uninstall", "Uninstall")}
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs shrink-0 text-destructive border-destructive/30 hover:border-destructive"
-                  disabled={removing === p.id}
-                  onClick={() => void uninstall(p.id)}
-                >
-                  {removing === p.id
-                    ? t("settings.packages.uninstalling", "Removing…")
-                    : t("settings.packages.uninstall", "Uninstall")}
-                </Button>
+                <GithubPackageUpdater
+                  installation={p}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                  onBusyChange={setUpdateBusy}
+                  onUpdated={() => void refreshInstalled()}
+                  onCancelled={() => void refreshInstalled()}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {worldInstallations.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            {t("settings.worldGithub.installed")}
+          </h3>
+          <ul className="divide-y divide-border rounded border border-border">
+            {worldInstallations.map((item) => (
+              <li key={item.id} className="space-y-2 p-3 text-xs">
+                <p className="font-semibold">
+                  {item.id}
+                  {item.version ? ` · ${item.version}` : ""}
+                </p>
+                <GithubPackageUpdater
+                  kind="world"
+                  installation={item}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                  onBusyChange={setUpdateBusy}
+                  onUpdated={() => void refreshInstalled()}
+                  onCancelled={() => void refreshInstalled()}
+                />
               </li>
             ))}
           </ul>
@@ -240,10 +355,19 @@ interface DropZoneProps {
   label: string;
   hint: string;
   busy: boolean;
+  disabled?: boolean;
   onFile: (file: File) => void;
 }
 
-function DropZone({ kind, icon, label, hint, busy, onFile }: DropZoneProps) {
+function DropZone({
+  kind,
+  icon,
+  label,
+  hint,
+  busy,
+  disabled = false,
+  onFile,
+}: DropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [active, setActive] = useState(false);
   const { t } = useTranslation();
@@ -255,7 +379,7 @@ function DropZone({ kind, icon, label, hint, busy, onFile }: DropZoneProps) {
         (active
           ? "border-primary bg-primary/5"
           : "border-border hover:border-primary/60 hover:bg-muted/30") +
-        (busy ? " pointer-events-none opacity-60" : "")
+        (disabled ? " opacity-60" : "")
       }
       onDragEnter={(e) => {
         e.preventDefault();
@@ -273,7 +397,7 @@ function DropZone({ kind, icon, label, hint, busy, onFile }: DropZoneProps) {
         e.preventDefault();
         setActive(false);
         const file = e.dataTransfer.files?.[0];
-        if (file) onFile(file);
+        if (file && !disabled) onFile(file);
       }}
     >
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -285,7 +409,7 @@ function DropZone({ kind, icon, label, hint, busy, onFile }: DropZoneProps) {
         size="sm"
         variant="outline"
         type="button"
-        disabled={busy}
+        disabled={disabled}
         onClick={(e) => {
           e.preventDefault();
           inputRef.current?.click();
@@ -299,11 +423,12 @@ function DropZone({ kind, icon, label, hint, busy, onFile }: DropZoneProps) {
       <input
         ref={inputRef}
         type="file"
+        disabled={disabled}
         accept=".zip,application/zip"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) onFile(file);
+          if (file && !disabled) onFile(file);
           if (inputRef.current) inputRef.current.value = "";
         }}
         data-testid={`install-${kind}-file-input`}

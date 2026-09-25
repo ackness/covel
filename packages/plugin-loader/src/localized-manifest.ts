@@ -16,8 +16,6 @@
  * breaking the plugin or silently changing its contract.
  */
 
-import type { RuntimeManifest } from "@covel/shared";
-
 /**
  * Keys whose values are prose meant for humans/LLMs. Matched at any depth, so
  * nested `description` / `label` fields (userSettings, events, dataSchemas,
@@ -106,18 +104,13 @@ function reconcileValue(
  * fields come from the translation, everything else from the canonical file.
  * Structural differences are warned about once, naming each drifted field path.
  */
-export function reconcileLocalizedManifest(
-  canonical: RuntimeManifest,
-  localized: RuntimeManifest,
+export function reconcileLocalizedManifest<T extends object>(
+  canonical: T,
+  localized: object,
   localizedPath: string,
-): RuntimeManifest {
+): T {
   const drift: string[] = [];
-  const merged = reconcileValue(
-    canonical,
-    localized,
-    "",
-    drift,
-  ) as RuntimeManifest;
+  const merged = reconcileValue(canonical, localized, "", drift) as T;
 
   if (drift.length > 0) {
     console.warn(

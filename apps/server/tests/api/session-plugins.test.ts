@@ -90,6 +90,89 @@ describe("Session plugin routes (real sessionRoutes)", () => {
   let rpcApprovalGate: RpcApprovalGate;
   const SESSION_ID = "sess-1";
 
+  it("preserves community selection on create and exposes approval after restart", async () => {
+    const activated = vi.fn(async () => {});
+    app = createTestApp(registry, store, rpcApprovalGate, activated);
+    const response = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "selected-community",
+        plugins: ["optional-plugin"],
+      }),
+    });
+    expect(response.status).toBe(201);
+    const session = (await store.getSession("selected-community"))!;
+    expect(session.activePlugins).toContain("optional-plugin");
+    expect(activated).not.toHaveBeenCalled();
+    const list = async () =>
+      (
+        await (
+          await app.request("/api/sessions/selected-community/plugins")
+        ).json()
+      ).items;
+    expect(await list()).toContainEqual(
+      expect.objectContaining({
+        id: "optional-plugin",
+        active: false,
+        approvalRequired: true,
+      }),
+    );
+    const pending = await (
+      await app.request(
+        "/api/sessions/selected-community/plugins/optional-plugin",
+        { method: "PUT" },
+      )
+    ).json();
+    rpcApprovalGate.decide(
+      {
+        approvalId: pending.approvalId,
+        decision: "allow",
+        scope: "session",
+        decidedAt: new Date().toISOString(),
+      },
+      sessionApprovalScope(session, "optional-plugin"),
+    );
+    expect(
+      (
+        await app.request(
+          "/api/sessions/selected-community/plugins/optional-plugin",
+          { method: "PUT" },
+        )
+      ).status,
+    ).toBe(200);
+    expect(await list()).toContainEqual(
+      expect.objectContaining({
+        id: "optional-plugin",
+        active: true,
+        approvalRequired: false,
+      }),
+    );
+    app = createTestApp(registry, store, createRpcApprovalGate(), activated);
+    expect(await list()).toContainEqual(
+      expect.objectContaining({
+        id: "optional-plugin",
+        active: false,
+        approvalRequired: true,
+      }),
+    );
+    expect(
+      (
+        await app.request(
+          "/api/sessions/selected-community/plugins/optional-plugin",
+          { method: "DELETE" },
+        )
+      ).status,
+    ).toBe(200);
+    expect(await list()).toContainEqual(
+      expect.objectContaining({
+        id: "optional-plugin",
+        active: false,
+        approvalRequired: false,
+      }),
+    );
+  });
+
   beforeEach(async () => {
     registry = createPluginRegistry();
     store = createMemoryStore();
@@ -313,13 +396,13 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).toEqual(
         expect.arrayContaining(["narrator", "pregame"]),
       );
-      expect(body.activePlugins).not.toContain("optional-plugin");
+      expect(body.activePlugins).toContain("optional-plugin");
 
       const session = await store.getSession("sess-core-create");
       expect(session?.activePlugins).toEqual(
         expect.arrayContaining(["narrator", "pregame"]),
       );
-      expect(session?.activePlugins).not.toContain("optional-plugin");
+      expect(session?.activePlugins).toContain("optional-plugin");
     });
 
     it("uses chat-mode-narrator instead of the default narrator when requested", async () => {
@@ -342,7 +425,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).toContain("player-identity");
       expect(body.activePlugins).toContain("living-world-rules");
       expect(body.activePlugins).toContain("branch-reply");
-      expect(body.activePlugins).not.toContain("optional-plugin");
+      expect(body.activePlugins).toContain("optional-plugin");
       expect(body.activePlugins).not.toContain("narrator");
 
       const session = await store.getSession("sess-chat-create");

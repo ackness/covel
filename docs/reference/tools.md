@@ -1,5 +1,7 @@
 # 工具注册表
 
+文中的 DashScope / OpenAI 生图和 MiMo TTS 由 [官方社区插件仓库](https://github.com/covel-ai/covel-plugins) 提供，需安装并在会话中授权后才会注册对应工具和 UI。
+
 > 所有可供 agent runtime 通过 Function Calling 调用的工具。作者声明分为 builtin（框架内置）和 plugin（插件 entry 注册）两类；`tools.local` 路径声明已移除。下文表格和审批规则中的 `local` 是执行器仍在使用的**内部来源标签**，指 entry 注册成功的 plugin tool，不是 manifest 字段。
 
 ---

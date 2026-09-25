@@ -10,7 +10,7 @@ import { worldOperationLockId } from "../../../world-lifecycle.js";
 import path from "node:path";
 import { rm } from "node:fs/promises";
 import { loadSingleWorld } from "../../../world-seed-loader.js";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { parse as parseYaml } from "yaml";
 import { errorBody } from "../../../api-error.js";
@@ -43,7 +43,7 @@ function findWorldYaml(
   return entries.find((e) => e.relativePath === "world.yaml") ?? null;
 }
 
-function validateWorldBundle(
+export function validateWorldBundle(
   entries: readonly ExtractedEntry[],
 ): WorldManifestSummary {
   const yamlEntry = findWorldYaml(entries);
@@ -97,39 +97,7 @@ worldInstallRoutes.post("/world", async (c) => {
     );
     const summary = validateWorldBundle(entries);
 
-    const root = resolveUserResourceDirs().worlds;
-
-    const finalDir = path.join(root, summary.worldId);
-    await materializeEntries(finalDir, entries);
-    try {
-      const record = await loadSingleWorld(finalDir, {
-        source: "generated-file",
-        storage: {
-          scope: "server",
-          backend: "file",
-          path: root,
-          durable: true,
-        },
-      });
-      if (!record) throw httpError(400, "Installed world could not be loaded");
-      const created = await c
-        .get("sessionLock")
-        .withLock(worldOperationLockId(record.id), () =>
-          c.get("store").createWorld(record),
-        )
-        .catch(() => {
-          throw httpError(
-            500,
-            "World activation failed; please retry the upload",
-          );
-        });
-      if (!created) throw httpError(409, "World already exists");
-    } catch (err) {
-      // Only remove the directory created by this request so a failed
-      // activation can be retried without colliding with a partial install.
-      await rm(finalDir, { recursive: true, force: true });
-      throw err;
-    }
+    await activateWorldPackage(c, summary.worldId, entries);
 
     return c.json(
       {
@@ -145,3 +113,45 @@ worldInstallRoutes.post("/world", async (c) => {
     return c.json(body, status as 400 | 409 | 413 | 500);
   }
 });
+
+/** Install files and the database record under the world's existing write lock. */
+export async function activateWorldPackage(
+  c: Context,
+  id: string,
+  entries: readonly ExtractedEntry[],
+) {
+  const root = resolveUserResourceDirs().worlds;
+  const finalDir = path.join(root, id);
+  await c.get("sessionLock").withLock(worldOperationLockId(id), async () => {
+    if (await c.get("store").getWorld(id))
+      throw httpError(409, "World already exists");
+    await materializeEntries(finalDir, entries);
+    try {
+      const record = await loadSingleWorld(finalDir, {
+        source: "generated-file",
+        storage: {
+          scope: "server",
+          backend: "file",
+          path: root,
+          durable: true,
+        },
+      });
+      if (!record) throw httpError(400, "Installed world could not be loaded");
+      if (
+        !(await c
+          .get("store")
+          .createWorld(record)
+          .catch(() => {
+            throw httpError(
+              500,
+              "World activation failed; please retry the upload",
+            );
+          }))
+      )
+        throw httpError(409, "World already exists");
+    } catch (error) {
+      await rm(finalDir, { recursive: true, force: true });
+      throw error;
+    }
+  });
+}
