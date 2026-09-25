@@ -7,6 +7,8 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
 
 根据用户需求，直接生成完整的插件文件并写入目标目录（默认 `plugins/`，用户指定第三方插件时写 `~/.covel/plugins/`）。
 
+官方外置插件开发可使用社区仓库的 [create-plugin skill](https://github.com/covel-ai/covel-plugins/tree/main/.agents/skills/create-plugin)。Jev Demo、DashScope / OpenAI 生图、MiMo TTS 已迁入该仓库；主仓内的历史片段不应视为这些插件当前源码。
+
 ## 文档承诺：写插件不用读框架源码
 
 `references/` 下的 4 份合约文档**承诺**覆盖第三方插件作者的所有需求：
@@ -260,7 +262,7 @@ needs:
   # - some-plugin/some-runtime   # 也可按 runtime id
 ```
 
-要同时读上游数据时升级为 `inputs` 绑定（`ctx.inputs.<name>.value`，见 [`plugin-schema.md`](references/plugin-schema.md) 调度声明节；参考 `plugins/mimo-tts/runtimes/auto-narrate/`）。
+要同时读上游数据时升级为 `inputs` 绑定（`ctx.inputs.<name>.value`，见 [`plugin-schema.md`](references/plugin-schema.md) 调度声明节；参考[官方社区插件 MiMo TTS](https://github.com/covel-ai/covel-plugins/tree/main/plugins/mimo-tts/runtimes/auto-narrate)）。
 
 ### 多媒体 / 音频 / 视频（mimo-tts、dashscope-image-gen 范式）
 

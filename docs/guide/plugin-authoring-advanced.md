@@ -712,7 +712,7 @@ effects:
 - durable 记录位于框架保留的 `_runtime_jobs`，使用 CAS lease 和 `queued → claimed → running → committing → succeeded` 状态机，失败终态包括 `failed / timed_out / cancelled / stale / orphaned`。进程重启会继续执行未过期且从未 claim 的 queued 作业；超时队列和过期在途 lease 会进入失败终态，绝不自动重放可能已经计费的工作。
 - 入队时 `/api/actions` 与持久订阅都会收到 `runtime.deferred`；之后 `job-status.updated.data.originTurnId` 把 running、成功、失败或取消状态归属回原始 turn。插件不得直接读写 `_runtime_jobs`。
 
-第一份内置参考实现是 `plugins/mimo-tts/runtimes/auto-narrate/PLUGIN.md`。完整安全边界和字段表见 [plugins.md #turnCompletion](../reference/plugins.md#turncompletion调度-runtime-的回合完成屏障)。
+官方社区插件参考实现是 [MiMo TTS](https://github.com/covel-ai/covel-plugins/tree/main/plugins/mimo-tts)。完整安全边界和字段表见 [plugins.md #turnCompletion](../reference/plugins.md#turncompletion调度-runtime-的回合完成屏障)。
 
 ### 完整示例: 两段式图像生成插件
 
@@ -915,4 +915,4 @@ const narrative = ctx.inputs?.narrative?.value as string | undefined;
 
 ## 公共服务、Evaluation 与自带组件
 
-function runtime 支持 `ctx.gateway.evaluate` 和 `ctx.services.discover/call`；entry 通过 `covel.registerService` 导出公共函数。任意插件可自带独立 HTML 组件，通过 `webview.entry` 和通用挂载点接入 UI。参见 [插件扩展契约](../reference/plugin-extensions.md) 与 [Jev Demo](../../plugins/jev-choice-demo/README.md)，避免把业务输出 DTO 或组件加入框架。
+function runtime 支持 `ctx.gateway.evaluate` 和 `ctx.services.discover/call`；entry 通过 `covel.registerService` 导出公共函数。任意插件可自带独立 HTML 组件，通过 `webview.entry` 和通用挂载点接入 UI。参见 [插件扩展契约](../reference/plugin-extensions.md) 与 [Jev Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)，避免把业务输出 DTO 或组件加入框架。

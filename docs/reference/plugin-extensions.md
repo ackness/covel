@@ -1,6 +1,6 @@
 # 插件扩展边界与通信
 
-插件通过公开契约组织模型调用、函数与 UI。框架提供发现、授权、调度、校验、取消和挂载；业务数据结构、算法、供应商 wire 与组件实现留在插件包内。参考完整例子：[Jev 选项推荐 Demo](../../plugins/jev-choice-demo/README.md)。
+插件通过公开契约组织模型调用、函数与 UI。框架提供发现、授权、调度、校验、取消和挂载；业务数据结构、算法、供应商 wire 与组件实现留在插件包内。参考完整例子：[Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。
 
 ## 选择通信方式
 

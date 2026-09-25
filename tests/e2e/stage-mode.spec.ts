@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { SessionPlugin } from "@covel/shared";
 import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   seedAppSettings,
@@ -261,10 +262,7 @@ test.describe("Stage view mode", () => {
     ]);
     let turnId = "demo-turn";
     const html = readFileSync(
-      new URL(
-        "../../plugins/jev-choice-demo/ui/recommendations.html",
-        import.meta.url,
-      ),
+      new URL("./test-assets/stage-recommendations.html", import.meta.url),
       "utf8",
     );
     try {
@@ -274,7 +272,10 @@ test.describe("Stage view mode", () => {
               json: {
                 ...session,
                 phase: "playing",
-                activePlugins: [...session.activePlugins, "jev-choice-demo"],
+                activePlugins: [
+                  ...session.activePlugins,
+                  "stage-evaluation-fixture",
+                ],
               },
             })
           : route.fallback(),
@@ -283,9 +284,25 @@ test.describe("Stage view mode", () => {
         route.fulfill({
           json: {
             ...directory,
-            items: directory.items.map((item: { id: string }) =>
-              item.id === "jev-choice-demo" ? { ...item, active: true } : item,
-            ),
+            items: [
+              ...directory.items,
+              {
+                id: "stage-evaluation-fixture",
+                displayName: "Evaluation Fixture",
+                description: "Synthetic stage bridge consumer",
+                pluginType: "plugin",
+                active: true,
+                locked: false,
+                source: "community",
+                status: "registered",
+                runtimeCount: 0,
+                runtimes: [],
+                tools: [],
+                userSettings: [],
+                capabilities: [],
+                tags: ["role:demo"],
+              } satisfies SessionPlugin,
+            ],
           },
         }),
       );
@@ -315,11 +332,11 @@ test.describe("Stage view mode", () => {
           json: {
             right: [
               {
-                pluginId: "jev-choice-demo",
+                pluginId: "stage-evaluation-fixture",
                 specs: [
                   {
                     id: "recommendations",
-                    label: "Jev Demo",
+                    label: "Evaluation Fixture",
                     surfaces: ["stage"],
                     dataSource: { namespace: "recommendations" },
                     webview: { html, height: 300 },
@@ -350,36 +367,38 @@ test.describe("Stage view mode", () => {
           },
         }),
       );
-      await page.route(`${mask}/plugin-data/jev-choice-demo{,/**}`, (route) =>
-        route.fulfill({
-          json: {
-            items: [
-              {
-                namespace: "recommendations",
-                key: "current",
-                updatedAt: "2026-01-01T00:00:00Z",
-                value: {
-                  turnId: "demo-turn",
-                  status: "ready",
-                  model: "fixture/jev",
-                  selectedId: "prompt:2",
-                  options: [
-                    {
-                      id: "prompt:1",
-                      text: "Ask about the library",
-                      probability: 0.25,
-                    },
-                    {
-                      id: "prompt:2",
-                      text: "Explore the classroom",
-                      probability: 0.75,
-                    },
-                  ],
+      await page.route(
+        `${mask}/plugin-data/stage-evaluation-fixture{,/**}`,
+        (route) =>
+          route.fulfill({
+            json: {
+              items: [
+                {
+                  namespace: "recommendations",
+                  key: "current",
+                  updatedAt: "2026-01-01T00:00:00Z",
+                  value: {
+                    turnId: "demo-turn",
+                    status: "ready",
+                    model: "fixture/jev",
+                    selectedId: "prompt:2",
+                    options: [
+                      {
+                        id: "prompt:1",
+                        text: "Ask about the library",
+                        probability: 0.25,
+                      },
+                      {
+                        id: "prompt:2",
+                        text: "Explore the classroom",
+                        probability: 0.75,
+                      },
+                    ],
+                  },
                 },
-              },
-            ],
-          },
-        }),
+              ],
+            },
+          }),
       );
       await page.reload();
       const host = page.getByTestId("stage-plugin-panels");
@@ -418,7 +437,7 @@ test.describe("Stage view mode", () => {
           }
         }),
       ).toBe(true);
-      await page.screenshot({ path: "debugs/e2e-logs/jev-plugin-stage.png" });
+      await page.screenshot({ path: "debugs/e2e-logs/plugin-stage.png" });
 
       const action = Promise.withResolvers<Route>();
       await page.route("**/api/actions", (route) => action.resolve(route));

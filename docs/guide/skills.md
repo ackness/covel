@@ -4,6 +4,8 @@ Covel 仓库 `.claude/skills/` 目录下的每个子目录都是一个**独立�
 
 > **重点**：skills 是纯文档资产。Covel server 既不读取也不执行 `.claude/skills/`；它们只对外部 IDE 代理有意义。
 
+官方社区仓库另提供适配独立插件开发的 [`.agents/skills/create-plugin`](https://github.com/covel-ai/covel-plugins/tree/main/.agents/skills/create-plugin)，包含完整入口、Agent 展示元信息和作者参考。该技能的示例和验证命令以社区仓库布局为准。
+
 ## 目录结构
 
 ```

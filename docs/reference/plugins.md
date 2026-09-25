@@ -1,6 +1,6 @@
 # 插件注册表
 
-> 所有已实现的 Covel 插件。本页当前以 `plugins/**/PLUGIN.md` 与对应 `handler.js / tools/*.js` 的实现为准。
+> 核心插件以主仓 `plugins/**/PLUGIN.md` 为准；Jev 示例与图像、TTS 可选插件由 [官方社区仓库](https://github.com/covel-ai/covel-plugins) 维护，需单独安装、重启并授权。下文媒体章节保留契约示例，具体配置以社区插件 README 为准。
 
 ## 目录
 
@@ -1019,7 +1019,7 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 
 **Quick use**：右侧「生成图片」按钮 → prompt agent 整理当前剧情为画面需求（单场景或多格漫画）→ 经 `image.generate.requested` 事件唤醒后台 follower 调 DashScope 万相（wan2.x）出图，落画廊 + `asset.generate`。
 
-**路径**: `plugins/dashscope-image-gen/`
+**官方社区插件**: [源码与安装说明](https://github.com/covel-ai/covel-plugins/tree/main/plugins/dashscope-image-gen)（不再内置）
 
 多 runtime 插件（结构同 [scene-stage](#scene-stage)）：
 
@@ -1064,7 +1064,7 @@ Prompt agent 不再直接拼 `{ topic, data }` JSON 信封：文本模式把字�
 
 **Quick use**：与 [dashscope-image-gen](#dashscope-image-gen) 同构的两段式插图管线，走 OpenAI 兼容 Images API（gpt-image 系或任何 OpenAI 兼容第三方）；事件 topic 为 `openai-image.generate.requested`，两插件可并存不串线。
 
-**路径**: `plugins/openai-image-gen/`
+**官方社区插件**: [源码与安装说明](https://github.com/covel-ai/covel-plugins/tree/main/plugins/openai-image-gen)（不再内置）
 
 结构与 dashscope-image-gen 一致（`execution: background` 的 manual prompt agent + background event follower）。Prompt agent 按模式调用 `submit-openai-image-text-prompt` 或 `submit-openai-image-structured-prompt`；工具负责写 prompt 并发射固定事件，模型不构造事件信封。差异点：
 
@@ -1083,7 +1083,7 @@ Prompt agent 不再直接拼 `{ topic, data }` JSON 信封：文本模式把字�
 
 **Quick use**：把叙事引擎的输出用小米 MiMo TTS 朗读出来——每回合自动产出音轨（可关），右侧 Tab 是 playlist；每条剧情消息下有「朗读」按钮手动重读。
 
-**路径**: `plugins/mimo-tts/`
+**官方社区插件**: [源码与安装说明](https://github.com/covel-ai/covel-plugins/tree/main/plugins/mimo-tts)（不再内置）
 
 多 runtime 插件；根 `PLUGIN.md` 声明 `entry: ./server/index.js`，entry 经 `covel.registerWires()` 注册 MiMo speech wire（`mimo-tts/mimo`，`api-key` header + OpenAI 风格 `chat/completions`；slot 侧 `providerRequestMetadata.speechWire = "mimo-tts/mimo"` 启用）。
 
@@ -1694,7 +1694,7 @@ worker 在提交屏障和终态转换前停止并等待自己已开始的续租�
 
 领域 proposal、journal 与 job 的 `succeeded/result` 在同一 `finalizeExecution` 事务中提交；业务失败或完成 CAS 失败会使整个事务回滚。事务后 Hook、状态通知或 executor 返回失败不降低已持久化的成功状态；漏发的公开状态由现有终态对账补齐，不再次执行 provider。恢复由 worker 首次唤醒与后续 30 秒维护间隔驱动，失败后 1 秒重试；满并发时仍执行维护。`committing` 任务必须先非阻塞取得 session 提交锁，锁忙则跳过，防止停止续租但仍在提交的任务被误判。自定义 `SessionLock` 必须提供与 `withLock` 共用互斥域的 `tryWithLock`，不具备该能力时宿主启动明确失败并回收已分配资源。worker 关闭会停止维护调度并等待在途扫描、锁回调和执行任务。
 
-内置首个 opt-in 是 `mimo-tts/auto-narrate`。涉及世界状态、角色、任务、记忆或被其他 runtime 消费的 post-turn runtime 应继续使用 `await`。
+官方社区插件中的 opt-in 是 `mimo-tts/auto-narrate`。涉及世界状态、角色、任务、记忆或被其他 runtime 消费的 post-turn runtime 应继续使用 `await`。
 
 ### capabilities
 

@@ -27,15 +27,20 @@ import { processRuntimeResult } from "../src/session/session-kernel.js";
 
 const root = path.resolve(import.meta.dirname, "../../../plugins");
 describe("plugin-owned evaluation integration", () => {
-  it("passes real scene-prompts tool output into the demo, calls its service, and commits its own data", async () => {
-    const discoveries = await discoverPlugins(root);
+  it("passes real scene-prompts tool output into a synthetic consumer, calls its service, and commits its own data", async () => {
+    const discoveries = [
+      ...(await discoverPlugins(root)),
+      ...(await discoverPlugins(
+        path.join(import.meta.dirname, "test-plugins"),
+      )),
+    ];
     const loaded = new Map<string, LoadedRuntime>();
     const services = new PluginServiceRegistry({
-      list: async () => ["jev-choice-demo"],
+      list: async () => ["evaluation-consumer"],
       ensure: async () => {},
     });
     const tools = new Map<string, ToolModule>();
-    for (const id of ["scene-prompts", "jev-choice-demo"]) {
+    for (const id of ["scene-prompts", "evaluation-consumer"]) {
       const discovery = discoveries.find((d) => d.id === id)!;
       const [parsed] = await loadPluginManifest(discovery);
       const runtime = await loadRuntime(discovery, parsed!.manifest.name);
@@ -87,7 +92,7 @@ describe("plugin-owned evaluation integration", () => {
       ],
     };
     const evaluate = vi.fn(async () => ({
-      model: "fixture/jev",
+      model: "fixture/evaluation",
       provider: "fixture",
       answers: {
         recommendation: {
@@ -143,7 +148,7 @@ describe("plugin-owned evaluation integration", () => {
       },
     );
     const demo = result.runtimeResults.find(
-      (r) => r.runtimeId === "jev-choice-demo",
+      (r) => r.runtimeId === "evaluation-consumer",
     );
     expect(
       result.runtimeResults.map((r) => ({
@@ -159,7 +164,7 @@ describe("plugin-owned evaluation integration", () => {
           status: "success",
         }),
         expect.objectContaining({
-          runtimeId: "jev-choice-demo",
+          runtimeId: "evaluation-consumer",
           status: "success",
         }),
       ]),
@@ -168,7 +173,7 @@ describe("plugin-owned evaluation integration", () => {
     await processRuntimeResult(demo!, store, "demo-test", "system");
     const record = await store.getPluginData(
       "demo-test",
-      "jev-choice-demo",
+      "evaluation-consumer",
       "recommendations",
       "current",
     );
