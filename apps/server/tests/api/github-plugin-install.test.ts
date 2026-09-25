@@ -85,6 +85,8 @@ beforeEach(async () => {
       url === "https://api.github.com/repos/example/plugins/commits?per_page=1"
     )
       return Response.json([{ sha }]);
+    if (url === "https://api.github.com/repos/example/plugins/branches/v1")
+      return new Response(null, { status: 404 });
     if (url === "https://api.github.com/repos/example/plugins/commits/v1")
       return Response.json({ sha });
     if (url === `https://codeload.github.com/example/plugins/zip/${sha}`)

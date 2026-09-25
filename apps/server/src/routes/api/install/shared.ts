@@ -7,7 +7,7 @@
  *   - Absolute paths, path traversal (..), symlinks, and entries with control chars
  *     are rejected.
  *   - Size + entry-count caps (see `LIMITS`) guard against zip bombs.
- *   - Target directory must not already exist (409) — upgrades require manual removal.
+ *   - Target directory must not already exist (409); updates stage a separate startup transaction.
  */
 
 import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";

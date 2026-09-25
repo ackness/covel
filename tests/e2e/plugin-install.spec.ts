@@ -15,6 +15,7 @@ for (const width of [1280, 390]) {
       commit: "a".repeat(40),
       path: "plugins/note",
       digest: "b".repeat(64),
+      tracking: { kind: "default-branch" },
     };
     const previews = [
       {
@@ -45,6 +46,7 @@ for (const width of [1280, 390]) {
             id,
             version,
             source,
+            pendingUpdate: null,
           })),
         },
       }),

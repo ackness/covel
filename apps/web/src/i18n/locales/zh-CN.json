@@ -1020,6 +1020,23 @@
     "reasoningPrecedenceHint": "用途覆盖优先于模型默认；未设置时按任务决定。选择服务商默认会跳过任务的思考建议。",
     "reasoningCurrentValue": "当前设置",
     "reasoningUnsupported": "当前模型不支持已保存的档位，请选择可用档位或恢复默认。",
+    "pluginUpdate": {
+      "check": "检查更新",
+      "working": "检查 / 下载中…",
+      "chooseVersion": "选择其他版本",
+      "url": "插件版本链接（同一仓库和目录）",
+      "pinned": "此安装已锁定 tag 或 commit。如需更新，请明确指定新版本链接。",
+      "tracking": "更新跟踪{{ref}}。",
+      "defaultBranch": "默认分支",
+      "current": "此插件已是最新内容。",
+      "compare": "在 GitHub 查看提交对比（整个仓库）",
+      "files": "文件变更：新增 {{added}}，修改 {{modified}}，删除 {{removed}}",
+      "explain": "确认后先下载暂存，下次重启后端时替换插件。独立存储的设置和插件数据会保留；本地修改过插件文件时会阻止替换。重启后执行代码需要重新授权。",
+      "confirm": "确认更新",
+      "pending": "更新 {{version}} 已暂存，重启后端后生效。",
+      "cancel": "取消待重启更新",
+      "untracked": "没有可用的 GitHub 安装记录，无法自动检查更新。"
+    },
     "github": {
       "title": "从 GitHub 安装",
       "browse": "浏览社区插件",

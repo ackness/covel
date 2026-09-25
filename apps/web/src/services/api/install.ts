@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   githubPluginPreviewsSchema,
+  githubPluginUpdateCheckSchema,
   pluginInstallationsSchema,
 } from "@covel/shared";
 import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge.js";
@@ -65,4 +66,40 @@ export async function listPluginInstallations() {
     silentErrors: true,
   });
   return result.items;
+}
+
+export function checkGithubPluginUpdate(
+  id: string,
+  url?: string,
+  signal?: AbortSignal,
+) {
+  return request("/api/install/plugin/github/update/preview", {
+    method: "POST",
+    headers: getDesktopRestAuthHeaders(),
+    operatorAuth: true,
+    body: JSON.stringify({ id, ...(url ? { url } : {}) }),
+    signal,
+    silentErrors: true,
+    schema: githubPluginUpdateCheckSchema,
+  });
+}
+export function updateGithubPlugin(token: string): Promise<InstallResult> {
+  return request("/api/install/plugin/github/update", {
+    method: "POST",
+    headers: getDesktopRestAuthHeaders(),
+    operatorAuth: true,
+    body: JSON.stringify({ token, acceptRisk: true }),
+    schema: installResultSchema,
+  });
+}
+export function cancelGithubPluginUpdate(id: string) {
+  return request(
+    `/api/install/plugin/github/update/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: getDesktopRestAuthHeaders(),
+      operatorAuth: true,
+      schema: z.object({ ok: z.literal(true) }).strict(),
+    },
+  );
 }

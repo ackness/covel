@@ -1020,6 +1020,23 @@
     "reasoningPrecedenceHint": "Role overrides take priority over model defaults, then task defaults. Provider default skips the task reasoning preference.",
     "reasoningCurrentValue": "Current setting",
     "reasoningUnsupported": "The saved level is not supported by this model. Choose an available level or restore the default.",
+    "pluginUpdate": {
+      "check": "Check for updates",
+      "working": "Checking / downloading…",
+      "chooseVersion": "Choose another version",
+      "url": "Plugin version URL (same repository and directory)",
+      "pinned": "This installation is pinned to a tag or commit. To update, choose a version URL explicitly.",
+      "tracking": "Updates follow {{ref}}.",
+      "defaultBranch": "the default branch",
+      "current": "This plugin is up to date.",
+      "compare": "Compare commits on GitHub (whole repository)",
+      "files": "Files: +{{added}} added, ~{{modified}} modified, −{{removed}} removed",
+      "explain": "The confirmed update is downloaded now and replaces the plugin at the next backend restart. Stored settings and plugin data are retained. Local package edits block replacement. Code execution requires fresh approval after restart.",
+      "confirm": "Confirm update",
+      "pending": "Update {{version}} is ready; restart the backend to apply it.",
+      "cancel": "Cancel pending update",
+      "untracked": "No usable GitHub installation record. Automatic update checking is unavailable."
+    },
     "github": {
       "title": "Install from GitHub",
       "browse": "Browse community plugins",

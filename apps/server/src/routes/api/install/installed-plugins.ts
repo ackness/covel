@@ -1,14 +1,10 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
-import { z } from "zod";
-import { githubPluginSourceSchema } from "@covel/shared";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
+import { readReceipt } from "./plugin-files.js";
+import { pendingPluginUpdate } from "./plugin-updates.js";
 
-const receiptSchema = z.object({
-  source: githubPluginSourceSchema,
-  version: z.string().nullable(),
-});
 export const installedPluginRoutes = new Hono();
 
 // The boot registry cannot show pending installs or removals. Read directory
@@ -26,16 +22,15 @@ installedPluginRoutes.get("/plugins", async (c) => {
           dir.isDirectory() && /^[a-z0-9][a-z0-9-_]{0,63}$/i.test(dir.name),
       )
       .map(async (dir) => {
-        const receipt = await readFile(
-          path.join(root, dir.name, ".covel-install.json"),
-          "utf8",
-        )
-          .then((text) => receiptSchema.parse(JSON.parse(text)))
-          .catch(() => null);
+        const receipt = await readReceipt(path.join(root, dir.name)).catch(
+          () => null,
+        );
+        const pendingUpdate = await pendingPluginUpdate(root, dir.name);
         return {
           id: dir.name,
           version: receipt?.version ?? null,
           source: receipt?.source ?? null,
+          pendingUpdate,
         };
       }),
   );

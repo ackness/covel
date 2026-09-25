@@ -11,7 +11,7 @@
  *   - Zip-slip protection, absolute/traversal/symlink rejection.
  *   - Size + entry-count + expansion-ratio caps (zip bombs).
  *   - Manifests must validate via shared Zod schemas before any files are written.
- *   - Target directory must not already exist (409) — upgrades require manual removal.
+ *   - Target directory must not already exist (409) — updates use a separate consent and startup replacement flow.
  */
 
 import { Hono } from "hono";
@@ -20,6 +20,7 @@ import { pluginInstallRoutes } from "./install/plugin.js";
 import { worldInstallRoutes } from "./install/worlds.js";
 import { githubPluginRoutes } from "./install/github-plugin.js";
 
+import { githubUpdateRoutes } from "./install/github-updates.js";
 import { installedPluginRoutes } from "./install/installed-plugins.js";
 
 export const installRoutes = new Hono();
@@ -28,4 +29,5 @@ installRoutes.use("*", makeInstallApiGuard());
 installRoutes.route("/", pluginInstallRoutes);
 installRoutes.route("/", installedPluginRoutes);
 installRoutes.route("/", githubPluginRoutes);
+installRoutes.route("/", githubUpdateRoutes);
 installRoutes.route("/", worldInstallRoutes);

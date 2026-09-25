@@ -12,6 +12,7 @@ import {
   type InstallKind,
   type InstallResult,
 } from "@/services/api.js";
+import { GithubPluginUpdater } from "./GithubPluginUpdater.js";
 import { GithubPluginInstaller } from "./GithubPluginInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 
@@ -36,6 +37,7 @@ export function PackagesPane() {
     PluginInstallation[] | null
   >(null);
   const [githubBusy, setGithubBusy] = useState(false);
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [zipAccepted, setZipAccepted] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
@@ -134,6 +136,7 @@ export function PackagesPane() {
           id: plugin.id,
           version: plugin.version ?? null,
           source: null,
+          pendingUpdate: null,
         }))
       : installations;
 
@@ -162,7 +165,8 @@ export function PackagesPane() {
         </div>
       )}
 
-      {lastResult?.restartRequired && (
+      {(lastResult?.restartRequired ||
+        installations?.some((item) => item.pendingUpdate)) && (
         <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
           <div className="flex-1">{t("settings.packages.restartHint")}</div>
           {hasElectronIpc() && (
@@ -192,7 +196,7 @@ export function PackagesPane() {
       )}
 
       <GithubPluginInstaller
-        disabled={!!busy || !!removing}
+        disabled={!!busy || !!removing || updateBusy}
         onBusyChange={setGithubBusy}
         onInstalled={(result) => {
           setLastResult(result);
@@ -204,7 +208,7 @@ export function PackagesPane() {
         <input
           type="checkbox"
           checked={zipAccepted}
-          disabled={!!busy || githubBusy}
+          disabled={!!busy || githubBusy || updateBusy}
           onChange={(event) => setZipAccepted(event.target.checked)}
         />
         {t("settings.github.zipRisk")}
@@ -215,7 +219,9 @@ export function PackagesPane() {
         label={t("settings.packages.pluginLabel")}
         hint={t("settings.packages.pluginHint")}
         busy={busy === "plugin"}
-        disabled={!zipAccepted || githubBusy || !!busy}
+        disabled={
+          !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
+        }
         onFile={(f) => uploadZip("plugin", f)}
       />
 
@@ -225,7 +231,7 @@ export function PackagesPane() {
         label={t("settings.packages.worldLabel")}
         hint={t("settings.packages.worldHint")}
         busy={busy === "world"}
-        disabled={githubBusy || !!busy}
+        disabled={githubBusy || !!busy || updateBusy || !!removing}
         onFile={(f) => uploadZip("world", f)}
       />
 
@@ -236,49 +242,55 @@ export function PackagesPane() {
           </h3>
           <ul className="divide-y divide-border border border-border rounded">
             {rows.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center justify-between gap-3 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="text-xs font-medium truncate">
-                    {text(
-                      installed.find((plugin) => plugin.id === p.id)
-                        ?.displayName,
-                    ) || p.id}
+              <li key={p.id} className="space-y-3 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium truncate">
+                      {text(
+                        installed.find((plugin) => plugin.id === p.id)
+                          ?.displayName,
+                      ) || p.id}
+                    </div>
+                    <div className="text-[10px] font-mono text-muted-foreground truncate">
+                      {p.id}
+                      {p.version ? ` · ${p.version}` : ""}
+                    </div>
+                    {p.source && (
+                      <a
+                        className="block text-xs underline wrap-break-word"
+                        href={`${p.source.repository}/tree/${p.source.commit}/${p.source.path}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {p.source.repository.replace("https://github.com/", "")}{" "}
+                        · {p.source.commit.slice(0, 12)}
+                      </a>
+                    )}
+                    {!installed.some((plugin) => plugin.id === p.id) && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("settings.github.pending")}
+                      </p>
+                    )}
                   </div>
-                  <div className="text-[10px] font-mono text-muted-foreground truncate">
-                    {p.id}
-                    {p.version ? ` · ${p.version}` : ""}
-                  </div>
-                  {p.source && (
-                    <a
-                      className="block text-xs underline wrap-break-word"
-                      href={`${p.source.repository}/tree/${p.source.commit}/${p.source.path}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {p.source.repository.replace("https://github.com/", "")} ·{" "}
-                      {p.source.commit.slice(0, 12)}
-                    </a>
-                  )}
-                  {!installed.some((plugin) => plugin.id === p.id) && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("settings.github.pending")}
-                    </p>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs shrink-0 text-destructive border-destructive/30 hover:border-destructive"
+                    disabled={!!removing || !!busy || githubBusy || updateBusy}
+                    onClick={() => void uninstall(p.id)}
+                  >
+                    {removing === p.id
+                      ? t("settings.packages.uninstalling", "Removing…")
+                      : t("settings.packages.uninstall", "Uninstall")}
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs shrink-0 text-destructive border-destructive/30 hover:border-destructive"
-                  disabled={!!removing || !!busy || githubBusy}
-                  onClick={() => void uninstall(p.id)}
-                >
-                  {removing === p.id
-                    ? t("settings.packages.uninstalling", "Removing…")
-                    : t("settings.packages.uninstall", "Uninstall")}
-                </Button>
+                <GithubPluginUpdater
+                  installation={p}
+                  disabled={!!busy || !!removing || githubBusy || updateBusy}
+                  onBusyChange={setUpdateBusy}
+                  onUpdated={() => void refreshInstalled()}
+                  onCancelled={() => void refreshInstalled()}
+                />
               </li>
             ))}
           </ul>

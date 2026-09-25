@@ -19,6 +19,7 @@ const preview = {
     commit: "a".repeat(40),
     path: "plugins/note",
     digest: "b".repeat(64),
+    tracking: { kind: "default-branch" },
   },
   token: "signed-preview",
   expiresAt: Date.now() + 900_000,

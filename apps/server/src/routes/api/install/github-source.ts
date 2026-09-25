@@ -234,3 +234,50 @@ export function digestEntries(entries: readonly ExtractedEntry[]): string {
   }
   return hash.digest("hex");
 }
+
+// A tree URL can refer to a branch, tag, or commit. Resolve branches explicitly
+// so a later update never silently follows a tag that has moved.
+export async function resolveGithubRevision(
+  location: GithubLocation,
+  signal?: AbortSignal,
+) {
+  if (!location.ref)
+    return {
+      commit: await resolveGithubCommit(location, signal),
+      tracking: { kind: "default-branch" as const },
+    };
+  if (!/^[a-f0-9]{40}$/i.test(location.ref)) {
+    try {
+      const branch = z
+        .object({
+          commit: z.object({ sha: z.string().regex(/^[a-f0-9]{40}$/) }),
+        })
+        .parse(
+          JSON.parse(
+            (
+              await download(
+                `https://api.github.com/repos/${location.owner}/${location.repo}/branches/${encodeURIComponent(location.ref)}`,
+                1024 * 1024,
+                signal,
+              )
+            ).toString("utf8"),
+          ),
+        );
+      return {
+        commit: branch.commit.sha,
+        tracking: { kind: "branch" as const, ref: location.ref },
+      };
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !("httpStatus" in error) ||
+        error.httpStatus !== 404
+      )
+        throw error;
+    }
+  }
+  return {
+    commit: await resolveGithubCommit(location, signal),
+    tracking: { kind: "pinned" as const, ref: location.ref },
+  };
+}
