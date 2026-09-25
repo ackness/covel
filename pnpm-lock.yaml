@@ -134,9 +134,6 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
-      gray-matter:
-        specifier: ^4.0.3
-        version: 4.0.3
       hono:
         specifier: 4.13.3
         version: 4.13.3

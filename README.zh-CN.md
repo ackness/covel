@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.39-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.39)
+[![Version](https://img.shields.io/badge/version-v0.0.40-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.40)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,11 +13,11 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **发布版本：v0.0.39**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
+> **发布版本：v0.0.40**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
 
 ## 亮点
 
-- 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。走到没画过的新地点时，背景图会在会话中按需生成。
+- 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。从[插件目录](https://github.com/covel-ai/covel-plugins)安装生图插件后，可在游玩中按需生成新背景。
 - ⚙️ **可组合的插件 runtime** —— 在一条能力驱动的管线中组合 LLM agent、确定性函数、UI 面板、数据 schema、事件和生命周期 hook。
 - 🎲 **内置 RPG 玩法** —— 预掷骰判定（可视化回执）、自动跟踪的任务日志、玩家可直接操作的行囊、逐 NPC 好感度。全部是可选插件；世界包可以预置任务、开局装备与初始好感。
 - 🧩 **插件保持可替换** —— 内核通过 `capabilities` 和 `outputKind` 发现能力，框架代码不按具体插件 ID 分支。
@@ -53,7 +53,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | -------------------- | ------------------------------------------ | ----------------------------------------------------- |
 | **Agent runtime**    | 用模型完成叙事或结构化抽取                 | `narrator`、`codex`、`core-quest`                     |
 | **Function runtime** | 执行确定性、零 token 的游戏逻辑            | `pregame`、`dice-check/roller`、`scene-cast`          |
-| **混合插件包**       | 组合确定性检索与 agent 抽取                | `npc-graph`、`dice-check`、图像生成插件               |
+| **混合插件包**       | 组合确定性检索与 agent 抽取                | `npc-graph`、`dice-check`                             |
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `cost-gate`、`story-guard`、`director`                |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`、`character-presence` |
 
@@ -141,6 +141,15 @@ worlds/my-world/data/rules/core.ja.yaml
 
 配置、密钥、SQLite、自定义世界和日志默认都在 `~/.covel/`；如果 `config.toml` 重定向了 `data_root`，数据也会位于那个独立目录。升级前请阅读[桌面配置指南](./docs/guide/desktop-config.md)和[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
 
+### 获取插件与世界包
+
+- **[插件目录](https://github.com/covel-ai/covel-plugins)** —— 官方生图、TTS 插件、Jev Demo 与开发示例，社区插件单独收录。
+- **[世界目录](https://github.com/covel-ai/covel-worlds)** —— 官方世界示例与社区世界列表，方便发现新的故事设定。
+
+两个目录默认展示英文，并提供中文及其他已有译文的快速链接。在 **设置 → 安装与管理** 粘贴 GitHub 仓库或资源包目录链接，预览内容、选择资源包并确认风险。同一个仓库的多个资源包可以分别安装，下载遵循已配置的代理。插件安装后需要重启后端并在会话中授权；新安装的世界包立即可用。
+
+点击已安装资源包旁的 **检查更新** 可查看变化，确认的更新在重启后端后生效；本地修改会阻止覆盖。详见[插件安装说明](./docs/reference/plugin-installation.md)和[世界包安装说明](./docs/reference/world-installation.md)。
+
 ### 从源码运行
 
 ```bash
@@ -170,7 +179,7 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 - **`/create-world`** —— 生成并校验 `world.yaml`、`WORLD.md` 与 WorldData 文件。桌面版世界包放入 `<data_root>/worlds/`（默认 `~/.covel/data/worlds/`）；源码运行使用 `COVEL_USER_WORLDS_DIR`，默认使用 `$COVEL_HOME/worlds/`（未设置时为 `~/.covel/worlds/`）。
 - **`/create-plugin`** —— 按能力需求搭建 runtime manifest、handler、schema、工具、UI 与测试的正确组合。
 
-插件与世界包的官方分享社区在路线图上 —— 目前可通过 Gist 或 fork 分享。
+欢迎向 [covel-plugins](https://github.com/covel-ai/covel-plugins) 或 [covel-worlds](https://github.com/covel-ai/covel-worlds) 提交目录条目 PR，展示自己的作品。资源包可以保留在作者仓库中，提交方式见对应目录的贡献指南。
 
 ## 开发
 
@@ -183,7 +192,7 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 ## 路线图
 
 - Linux / Intel Mac 构建（macOS arm64 与 Windows x64 已发布）
-- 插件与世界包的官方分享社区
+- 插件与世界目录的网页版本
 - 桌面应用内置插件市场
 
 ## 贡献与许可

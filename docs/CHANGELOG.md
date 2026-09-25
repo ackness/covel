@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-09-25
+
+This release adds community plugin and world directories, GitHub installation and reviewed updates, and restores community plugin selections across session creation and backend restarts.
+
+### Added
+
+- **Install plugins and worlds from GitHub.** Settings accepts public repository or package-directory URLs, previews each package and its exact commit, and requires explicit risk confirmation. Repositories containing several packages support separate, successive installations. GitHub requests use the configured network proxy; installation never runs dependency managers or repository build scripts.
+- **Review package updates before applying them.** Installed packages record their repository, directory, commit and content digest. Players can check tracked branches or choose a tag/commit explicitly, review changed files, and stage or cancel an update. Updates apply at backend restart with content revalidation and file recovery; local package edits and world-editor changes block replacement.
+- **Official resource directories.** [covel-plugins](https://github.com/covel-ai/covel-plugins) and [covel-worlds](https://github.com/covel-ai/covel-worlds) provide English-default READMEs, translation links, official examples and separate community listings accepting PRs. Both application READMEs link directly to the directories and explain installation.
+
+### Fixed
+
+- **Community plugin selections survive creation and restart (#84).** Sessions retain the selected plugin IDs while execution remains gated by current authorization. Opening a session requests missing approval; declining keeps a visible paused state and an explicit retry action. A backend restart requires fresh approval without silently discarding the selection.
+
+### Changed
+
+- Jev Choice Demo, OpenAI/DashScope image generation and MiMo TTS are distributed through `covel-plugins` instead of the application bundle. The official packages follow the current manifest, runtime and permission contracts and include standalone authoring examples.
+
+### Upgrade notes
+
+- Update the server, Web client, desktop shell and framework packages together. Existing users of the moved plugins should install their official packages from the directory, restart the backend and authorize them in the relevant session. Preserve any customized plugin directories before replacing old copies; independently stored settings, plugin data and media are retained. No database migration is introduced.
+- Packages installed manually or without a current GitHub installation receipt must be reinstalled through the GitHub flow to enable update checks. Updates are checked on request, not installed automatically. World updates do not rewrite existing saves or automatically synchronize their world data.
+- Directory inclusion is not a security audit. Community code executes in the backend without process sandbox isolation after authorization; worlds can contain third-party prompts and media.
+- macOS Apple Silicon and Windows x64 artifacts are unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
+
 ## [0.0.39] - 2026-09-24
 
 This release hardens security boundaries (token comparison, provider-key gating, plugin-service slot lending), fixes media ingest redirect handling and `permissions.http` enforcement, makes session plugin activations persist-first, and repairs stage/dialogue display issues.

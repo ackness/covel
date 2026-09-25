@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.39-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.39)
+[![Version](https://img.shields.io/badge/version-v0.0.40-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.40)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,11 +13,11 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Release version: v0.0.39**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
+> **Release version: v0.0.40**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
 
 ## Highlights
 
-- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops for brand-new locations are generated on demand, mid-session.
+- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Install an image-generation plugin from the [plugin directory](https://github.com/covel-ai/covel-plugins) to generate new backdrops during play.
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
 - 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
 - 🧩 **Plugins stay replaceable** — the kernel discovers `capabilities` and `outputKind`; framework code does not branch on concrete plugin IDs.
@@ -53,7 +53,7 @@ A plugin is not necessarily one autonomous agent. It may contain one runtime, se
 | ------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
 | **Agent runtime**         | Uses a model for narration or structured extraction                        | `narrator`, `codex`, `core-quest`                     |
 | **Function runtime**      | Runs deterministic, zero-token game logic                                  | `pregame`, `dice-check/roller`, `scene-cast`          |
-| **Mixed package**         | Combines deterministic retrieval with agent extraction                     | `npc-graph`, `dice-check`, image-generation plugins   |
+| **Mixed package**         | Combines deterministic retrieval with agent extraction                     | `npc-graph`, `dice-check`                             |
 | **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `cost-gate`, `story-guard`, `director`                |
 | **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`, `character-presence` |
 
@@ -143,6 +143,15 @@ You can skip the guide to browse worlds, but configure a model before generating
 
 Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs). If `config.toml` redirects `data_root`, that separate directory also holds data. See the [desktop config guide](./docs/guide/desktop-config.en.md) and [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) before upgrading.
 
+### Get plugins and worlds
+
+- **[Plugin directory](https://github.com/covel-ai/covel-plugins)** — official image-generation and TTS plugins, the Jev demo, authoring examples, and a separate community list.
+- **[World directory](https://github.com/covel-ai/covel-worlds)** — official world examples and a separate community list of playable settings.
+
+Both directories open in English and link to Chinese and other available translations. In **Settings → Install & manage**, paste a repository or package-directory GitHub URL, preview the contents, select a package, and confirm the risks. Repositories with multiple packages let you install each separately; downloads use your configured proxy. Plugins require a backend restart and session authorization; newly installed worlds are available immediately.
+
+Use **Check for updates** beside an installed package to review changes. Confirmed updates take effect after backend restart; local edits block replacement. See the [plugin installation guide](./docs/reference/plugin-installation.md) and [world installation guide](./docs/reference/world-installation.md).
+
 ### Run from source
 
 ```bash
@@ -172,7 +181,7 @@ Repository authors can also use the bundled helpers:
 - **`/create-world`** — generate and validate `world.yaml`, `WORLD.md`, and WorldData files. Desktop packs go in `<data_root>/worlds/` (default `~/.covel/data/worlds/`); source runs use `COVEL_USER_WORLDS_DIR`, defaulting to `$COVEL_HOME/worlds/` (otherwise `~/.covel/worlds/`).
 - **`/create-plugin`** — scaffold the right combination of runtime manifests, handlers, schemas, tools, UI, and tests for a capability package.
 
-An official hub for sharing plugins and world packs is on the roadmap — for now, share via Gist or fork.
+Share your work by submitting a directory-entry PR to [covel-plugins](https://github.com/covel-ai/covel-plugins) or [covel-worlds](https://github.com/covel-ai/covel-worlds). Packages can stay in your own repository; follow the contribution guide in the matching directory.
 
 ## Develop
 
@@ -185,7 +194,7 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 ## Roadmap
 
 - Linux / Intel Mac builds (macOS arm64 and Windows x64 already ship)
-- Official community hub for plugins and world packs
+- Web catalog for the plugin and world directories
 - Plugin marketplace inside the desktop app
 
 ## Contributing & license
