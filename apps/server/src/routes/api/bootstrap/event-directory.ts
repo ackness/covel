@@ -38,7 +38,7 @@ export interface EventDirectory {
 
 export interface EventDirectoryDeps {
   readonly registry: {
-    getActiveRuntimes(sessionId: string): readonly RuntimeManifest[];
+    getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[];
   };
   /** pluginId → absolute plugin root path. `undefined` when unresolvable. */
   readonly resolvePluginDir: (pluginId: string) => string | undefined;
@@ -88,7 +88,9 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
     sessionId: string,
   ): ReadonlyMap<string, ResolvedEventEntry> {
     const byTopic = new Map<string, ResolvedEventEntry>();
-    for (const manifest of deps.registry.getActiveRuntimes(sessionId)) {
+    for (const manifest of deps.registry.getActivePluginDeclarations(
+      sessionId,
+    )) {
       if (!manifest.events || manifest.events.length === 0) continue;
       const pluginDir = deps.resolvePluginDir(manifest.pluginId);
       for (const decl of manifest.events) {
@@ -109,7 +111,7 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
               );
             }
           }
-          continue; // first-wins (getActiveRuntimes is (stage, name)-sorted)
+          continue; // first-wins (getActivePluginDeclarations is (stage, name)-sorted)
         }
         byTopic.set(decl.topic, {
           pluginId: manifest.pluginId,

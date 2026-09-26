@@ -23,15 +23,21 @@ import { pathToFileURL } from "node:url";
 import {
   getPluginTrustInfo,
   loadPluginEntryDefinition,
+  pluginDeclarations,
   type PluginEntryDefinition,
   type ParsedPluginMd,
   type PluginDiscoveryResult,
+  type PluginRegistry,
 } from "@covel/plugin-loader";
-import { type HookPipeline, type PluginRpcRegistry } from "@covel/runtime";
+import {
+  PluginEntryScope,
+  type HookPipeline,
+  type PluginRpcRegistry,
+} from "@covel/runtime";
 import type { DataStore } from "@covel/store";
-import type { ToolModule } from "@covel/tools";
+import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
-import { EntryRegistrationBatch } from "./entry-registration-batch.js";
+import { PluginRegistrationError } from "./plugin-registration-error.js";
 
 /**
  * Validate that `target` is inside `root` after resolving symlinks.
@@ -69,11 +75,10 @@ async function assertInsideRoot(root: string, target: string): Promise<void> {
 export interface BootstrapPluginEntriesParams {
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
+  /** Expose activation failures through the existing plugin discovery DTO. */
+  readonly pluginRegistry?: PluginRegistry;
   readonly store: DataStore;
-  readonly toolMap: Map<string, ToolModule>;
-  readonly localToolNames: Set<string>;
-  /** Mutable: entry-registered tool names are discovered at invocation time. */
-  readonly pluginToolAccess: Map<string, Set<string>>;
+  readonly tools: ToolRegistry;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
   readonly services?: import("@covel/runtime").PluginServiceRegistry;
@@ -112,26 +117,35 @@ export async function createBootstrapPluginEntries(
 ): Promise<BootstrapPluginEntries> {
   const { discoveryMap, manifestCache, isCommunityServerCodeApproved } = params;
   const entryDefinitions = new Map<string, PluginEntryDefinition>();
-  const registrations: EntryRegistrationBatch[] = [];
+  const scopes = new Set<PluginEntryScope>();
   const admissions = new Set<Promise<void>>();
   let closed = false;
   let closing: Promise<void> | undefined;
+
+  const reportActivation = (pluginId: string, error?: string): void => {
+    const entry = params.pluginRegistry?.get(pluginId);
+    if (!entry) return;
+    const { error: _previousError, ...definition } = entry;
+    params.pluginRegistry!.register({
+      ...definition,
+      // Valid declarations remain available to command/UI discovery so the
+      // next invocation can retry activation. Only discovery rejects a package.
+      ...(error ? { error } : {}),
+    });
+  };
 
   // Compile entry declarations once. Both the approval/pending path and actual
   // activation consume this exact definition, so metadata-only multi-runtime
   // roots cannot be visible to one path and absent from the other.
   for (const [pluginId, discovery] of discoveryMap) {
+    const registryEntry = params.pluginRegistry?.get(pluginId);
     const definition = await loadPluginEntryDefinition(
       discovery,
-      manifestCache.get(pluginId) ?? [],
+      registryEntry
+        ? pluginDeclarations(registryEntry)
+        : (manifestCache.get(pluginId) ?? []),
     );
     entryDefinitions.set(pluginId, definition);
-    if (definition.rootManifestIssue) {
-      console.warn(
-        `[plugin-entry] ${path.relative(process.cwd(), definition.rootManifestIssue.path)}: failed to parse root PLUGIN.md for entry —`,
-        definition.rootManifestIssue.message,
-      );
-    }
   }
 
   const invokeEntryForPlugin = async (pluginId: string): Promise<void> => {
@@ -140,22 +154,22 @@ export async function createBootstrapPluginEntries(
     const definition = entryDefinitions.get(pluginId);
     if (!definition || definition.entryPaths.length === 0) return;
 
-    const pluginRelPath = path.relative(
-      process.cwd(),
-      path.join(definition.pluginRoot, "PLUGIN.md"),
-    );
-    const batch = new EntryRegistrationBatch();
-    const api = buildEntryApi(params, pluginId, pluginRelPath, batch);
+    const batch = new PluginEntryScope();
+    scopes.add(batch);
+    const api = buildEntryApi(params, pluginId, batch);
     let currentEntry = "";
     try {
       for (const entryPath of definition.entryPaths) {
+        batch.signal.throwIfAborted();
         currentEntry = entryPath;
         const fullPath = path.resolve(definition.pluginRoot, entryPath);
         await assertInsideRoot(definition.pluginRoot, fullPath);
+        batch.signal.throwIfAborted();
         if (!fsSync.existsSync(fullPath)) {
           throw new Error(`entry file not found: ${entryPath}`);
         }
         const mod = await import(pathToFileURL(fullPath).href);
+        batch.signal.throwIfAborted();
         const factory: unknown = mod.default;
         if (typeof factory !== "function") {
           throw new Error(
@@ -166,16 +180,24 @@ export async function createBootstrapPluginEntries(
       }
       if (closed) throw new Error("plugin entries are closed");
       batch.commit();
-      registrations.push(batch);
+      reportActivation(pluginId);
     } catch (error) {
+      const diagnostic =
+        error instanceof PluginRegistrationError
+          ? `[${error.code}] ${error.message}`
+          : "Entry activation failed; check the server log for details.";
       const failure = new Error(
-        `[plugin-entry] ${pluginRelPath}: failed to activate entry "${currentEntry}"`,
+        `[plugin-entry] ${pluginId}: failed to activate entry "${currentEntry}": ${diagnostic}`,
         { cause: error },
       );
       try {
-        batch.rollback();
+        await batch.dispose(error);
+        scopes.delete(batch);
       } catch (rollbackError) {
         throw new AggregateError([failure, rollbackError], failure.message);
+      } finally {
+        // Failed cleanup stays owned so host shutdown also reports it.
+        reportActivation(pluginId, diagnostic);
       }
       throw failure;
     }
@@ -262,16 +284,20 @@ export async function createBootstrapPluginEntries(
       closing = Promise.resolve().then(async () => {
         await Promise.allSettled(admissions);
         const errors: unknown[] = [];
-        for (const batch of registrations.splice(0).reverse()) {
+        for (const batch of [...scopes].reverse()) {
           try {
-            batch.dispose();
+            await batch.dispose();
           } catch (error) {
             errors.push(error);
+          } finally {
+            scopes.delete(batch);
           }
         }
         if (errors.length)
           throw new AggregateError(errors, "plugin entry cleanup failed");
       });
+      // Publish closing before synchronous abort listeners can re-enter close.
+      for (const scope of scopes) scope.abort();
       return closing;
     },
   };

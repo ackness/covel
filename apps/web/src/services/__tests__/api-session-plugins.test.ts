@@ -118,6 +118,17 @@ describe("session plugin API", () => {
 });
 
 describe("plugin discovery API", () => {
+  it("keeps retryable plugins available while exposing activation diagnostics", async () => {
+    const item = plugin({
+      error: "[plugin_registration_invalid] registerTool: collision",
+    });
+    mockFetchOnce({ items: [item] });
+    await expect(getPluginCatalog()).resolves.toEqual({
+      items: [item],
+      loadErrors: [{ pluginId: item.id, errors: [item.error] }],
+    });
+  });
+
   it("uses one canonical plugin descriptor and exposes load failures separately", async () => {
     mockFetchOnce({
       items: [

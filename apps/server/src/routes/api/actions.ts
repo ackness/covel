@@ -23,7 +23,6 @@ import {
   collectExecutionJournal,
   collectExecutionSuspensions,
   commitExecution,
-  buildHookSettings,
   snapshotUserSettings,
 } from "@covel/runtime";
 import type {
@@ -79,6 +78,7 @@ import {
 import { validateActionRequest } from "./actions/request.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
+import { buildSessionHookScope } from "./session/hook-scope.js";
 import {
   prepareRuntimeRetry,
   settleRuntimeRetry,
@@ -599,7 +599,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ),
           );
 
-          const hookSettings = buildHookSettings(activeRuntimes, userSettings);
+          const hookScope = buildSessionHookScope({
+            pluginRegistry,
+            activePluginIds: effectiveSession.activePlugins,
+            userSettings,
+          });
 
           const turnInput = {
             sessionId,
@@ -642,6 +646,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // it through the read-only execution endpoint until finalization.
           const result = await executeTurn(turnInput, activeRuntimes, {
             ...buildTurnExecutorDeps(c, capabilityPluginIds),
+            hookScope,
             // The main turn path never passed the eventBus, so every
             // `emitSubEvent` inside the executor — including the
             // completion barrier's `turn.completed` — silently no-opped on
@@ -759,7 +764,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ? { ...result.executionContext, countPolicy: "none" }
               : result.executionContext,
             runtimes: activeRuntimes,
-            hookSettings,
+            activePluginIds: hookScope.activePluginIds,
+            hookSettings: hookScope.settings,
             results: finalizableResults,
             journalMessages: collectExecutionJournal(result),
             suspensions: collectExecutionSuspensions(result),
@@ -959,6 +965,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // already persisted the live locale.
           session: { ...followerSession, locale: effectiveLocale },
           activeRuntimes,
+          pluginRegistry,
           approvalScopes,
           deps: buildTurnExecutorDeps(c, capabilityPluginIds),
           ...(hookPipeline ? { hookPipeline } : {}),

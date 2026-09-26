@@ -1,4 +1,9 @@
-import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
+import {
+  pluginDeclarations,
+  resolvePluginDeclarations,
+  type PluginRegistry,
+  type PluginRegistryEntry,
+} from "@covel/plugin-loader";
 import {
   getRuntimeSpec,
   parseSlashCommandInvocation,
@@ -16,6 +21,19 @@ import type { SessionRecord } from "@covel/store";
 
 export const FRAMEWORK_SLASH_COMMANDS: readonly SessionSlashCommand[] = [
   {
+    id: "framework:plugins",
+    pluginId: "framework",
+    source: "framework",
+    sourceLabel: { zh: "框架", en: "Framework" },
+    name: "plugins",
+    description: {
+      zh: "查看插件注册能力与最近的服务调用",
+      en: "Inspect plugin registrations and recent service calls",
+    },
+    arguments: [{ name: "pluginId", type: "string" }],
+    action: "slash-plugins",
+  },
+  {
     id: "framework:debug",
     pluginId: "framework",
     source: "framework",
@@ -31,50 +49,11 @@ export const FRAMEWORK_SLASH_COMMANDS: readonly SessionSlashCommand[] = [
   },
 ];
 
-function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, item: unknown) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item as Record<string, unknown>).sort(([a], [b]) =>
-            a.localeCompare(b),
-          ),
-        )
-      : item,
-  );
-}
-
-function entryManifests(
-  entry: PluginRegistryEntry,
-): readonly RuntimeManifest[] {
-  if (entry.manifests) return entry.manifests.map((parsed) => parsed.manifest);
-  return entry.manifest ? [entry.manifest.manifest] : [];
-}
-
-/** Merge a plugin's runtime declarations by command name. */
+/** Resolve command contributions from the package and its runtimes. */
 export function mergePluginCommands(
   entry: PluginRegistryEntry,
 ): readonly SlashCommandSpec[] {
-  const merged = new Map<
-    string,
-    { readonly command: SlashCommandSpec; readonly runtimeId: string }
-  >();
-  for (const manifest of entryManifests(entry)) {
-    for (const command of manifest.commands ?? []) {
-      const existing = merged.get(command.name);
-      if (!existing) {
-        merged.set(command.name, { command, runtimeId: manifest.name });
-        continue;
-      }
-      if (stableJson(existing.command) !== stableJson(command)) {
-        console.warn(
-          `[slash-command] ${entry.id}: /${command.name} is declared differently by ` +
-            `"${existing.runtimeId}" and "${manifest.name}"; ` +
-            `"${existing.runtimeId}" wins`,
-        );
-      }
-    }
-  }
-  return [...merged.values()].map(({ command }) => command);
+  return resolvePluginDeclarations(pluginDeclarations(entry)).commands;
 }
 
 /** Build the only command directory a session client is allowed to execute. */

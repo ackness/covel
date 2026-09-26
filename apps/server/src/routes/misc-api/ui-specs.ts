@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { loadPluginUiSpec } from "@covel/plugin-loader";
+import { loadPluginUiSpec, pluginDeclarations } from "@covel/plugin-loader";
 import path from "node:path";
 import type {
   LoadedRuntime,
@@ -8,10 +8,7 @@ import type {
 } from "@covel/plugin-loader";
 import type { DataStore, SessionRecord } from "@covel/store";
 import type { RuntimeManifest } from "@covel/shared";
-import {
-  pluginManifestRecords,
-  pluginRuntimeDirectory,
-} from "./registry-projection.js";
+import { pluginRuntimeDirectory } from "./registry-projection.js";
 import { type UiSlotName } from "./shared.js";
 import { partitionSlotSpecs, type UiSpecDiagnostic } from "./ui-spec-schema.js";
 
@@ -118,7 +115,7 @@ async function projectRegistryUiSpecs(
     if (entry.status === "error") continue;
     const runtimes: RuntimeSlotSpecs[] = [];
 
-    for (const { manifest } of pluginManifestRecords(entry)) {
+    for (const { manifest } of pluginDeclarations(entry)) {
       if (!manifest.ui) continue;
       const loaded = entry.loadedRuntimes.get(manifest.name);
       const uiSpecs =

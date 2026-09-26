@@ -15,6 +15,7 @@ import { isSetupRuntime } from "@covel/shared";
 import {
   discoverPlugins,
   loadPluginManifest,
+  loadPluginDefinition,
   normalizeRuntimeManifest,
   resolveRuntimeProviders,
 } from "@covel/plugin-loader";
@@ -264,14 +265,13 @@ describe("normalize golden (bundled plugin set)", () => {
     const manifests = await loadAllManifests();
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
-    // director / story-guard / cost-gate are hook-only; memory is UI-only.
-    // None declares a runtime shape, so normalize applies the default `auto`
-    // trigger but derives NO stage — the UI-only idiom the scheduler drops.
+    const discoveries = await discoverPlugins(PLUGINS_DIR);
     for (const id of ["director", "story-guard", "cost-gate", "memory"]) {
-      const spec = requireSpec(specs, id);
-      expect(spec.stage, `${id}: stage`).toBeUndefined();
-      expect(spec.declaredTrigger.type, `${id}: trigger`).toBe("auto");
-      expect(isSetupRuntime(manifestOf(manifests, id))).toBe(false);
+      expect(specs.has(id), `${id}: no synthetic runtime`).toBe(false);
+      const discovery = discoveries.find((entry) => entry.id === id)!;
+      const definition = await loadPluginDefinition(discovery);
+      expect(definition.manifests).toEqual([]);
+      expect(definition.packageManifest?.manifest.pluginId).toBe(id);
     }
   });
 

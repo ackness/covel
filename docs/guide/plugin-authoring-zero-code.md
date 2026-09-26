@@ -554,7 +554,7 @@ userSettings:
 
 `default` 指向的槽由插件自己传给 `ctx.images.generate({ presetId })` / `ctx.speech.generate()` 等接口。框架**按 `type` 发现**这个设置，与 `key` 叫什么无关。
 
-> **多 runtime 插件注意**：`userSettings` 的存储键是 `plugin.<pluginId>.<key>`——**插件级**，不是 runtime 级。两个 runtime 声明同一个 `key` 就共用同一个值：完全相同的声明会自动去重（一个共享旋钮重复写在每个读它的 runtime 上，是正常写法），声明不一致则只有一个生效、另一个被丢弃，`pnpm validate:plugin <插件目录>` 会报错。
+> **多 runtime 插件注意**：`userSettings` 的存储键是 `plugin.<pluginId>.<key>`——**插件级**，不是 runtime 级。两个 runtime 声明同一个 `key` 就共用同一个值：完全相同的声明会自动去重（一个共享旋钮重复写在每个读它的 runtime 上，是正常写法），声明不一致则整个插件加载失败，安装预检与 `pnpm validate:plugin <插件目录>` 同样报错。共享设置可集中在根 `PLUGIN.md`。
 
 **世界可预置默认值**：世界包能在 `world.yaml` 顶层用 `pluginSettings` 给这些 `userSettings` 设世界级默认（玩家仍可覆盖）。解析链是 `玩家覆盖 → 世界默认 → 这里声明的 default`。见 [world-data.md](../reference/world-data.md#插件配置默认值pluginsettings)。
 

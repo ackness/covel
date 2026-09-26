@@ -806,7 +806,7 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 
 **路径**: `plugins/scene-stage/`
 
-多 runtime 插件。根 `PLUGIN.md` 只是插件级元信息（名称/描述/关联），不是可执行 runtime；四个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema`、`dataSchemas.*.schema` 与 `worldProjections.*.handler` 仍按[插件根目录相对路径](#dataschemas)解析，因此四个 runtime 共享插件根的 `schemas/` 和 projection handler；只有 runtime 的 `handler` 与 `ui.*` 相对各自 runtime 目录。`stage/current` 记录的构造集中在 `lib/stage-data.js`（`buildStageRecord` / `makeStageProposal`），resolver 与 seed 共用，避免两个写入方在字段上漂移。
+多 runtime 插件。根 `PLUGIN.md` 提供插件级元信息与共享声明，不参与 runtime 调度；四个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema`、`dataSchemas.*.schema` 与 `worldProjections.*.handler` 仍按[插件根目录相对路径](#dataschemas)解析，因此四个 runtime 共享插件根的 `schemas/` 和 projection handler；只有 runtime 的 `handler` 与 `ui.*` 相对各自 runtime 目录。`stage/current` 记录的构造集中在 `lib/stage-data.js`（`buildStageRecord` / `makeStageProposal`），resolver 与 seed 共用，避免两个写入方在字段上漂移。
 
 ### scene-stage/resolver
 
@@ -1222,6 +1222,12 @@ entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一�
 
 多 runtime 插件的根 `PLUGIN.md` 虽不作为 runtime 调度，但其中的 `entry` 会在启动时与各 runtime 声明合并为一个插件级定义；审批预检与实际激活读取同一份定义，避免根 entry 在延迟加载路径中丢失。
 
+根 `PLUGIN.md` 可以声明包级 `ui`、`userSettings`、`dataSchemas`、`worldProjections`、`commands`、`events`、`memoryBlocks` 和 `entry`。子 runtime 也可贡献这些声明；相同键的内容一致则去重，不一致则整个包加载失败，并报告双方来源。安装预检和 CLI 使用同一冲突规则。
+
+包声明与可执行 runtime 分开记录。单根清单没有 `trigger`、`runtimeType`、`handler`、`model`、`stage` 或其他执行字段时，插件的 runtime 数量为 0；它仍可提供面板、命令、Hook、设置和事件契约。多 runtime 根不能声明执行字段，执行逻辑应放到 `runtimes/<name>/PLUGIN.md`。仅 `capabilities`、`outputKind` 或 Markdown 正文不会产生 runtime。根的 capability 可参与插件能力发现，但不会被复制为 runtime 的调度能力。
+
+所有真实 runtime 读取同一份合并后的 `userSettings` 与 `dataSchemas`，包括实际加载的 function/agent 和执行调度分析。根 UI 路径相对插件根，runtime UI 路径相对各自清单目录；UI 保留声明来源，不复制到每个 runtime。包版本取根清单。纯声明插件不需要虚构 `trigger: { type: manual }`。
+
 ```js
 // server/index.js
 export default function (covel) {
@@ -1247,11 +1253,12 @@ export default function (covel) {
 - 插件来源由目录角色决定；内置目录缺失时仍保留其位置，用户目录中的插件继续要求 community 审批。
 - **来源门控**与 local tools 一致：builtin 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
 - builtin entry 启动失败后保持待激活，首次 RPC 可按真实发现来源重试，无需社区插件审批或管理员凭据。待激活的 community 或来源缺失的插件仍必须经过原有服务器代码和动作审批；托管环境仍要求管理员凭据。
-- **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册与名称冲突保留警告跳过行为。
-- **宿主清理**：成功注册的撤销函数由 API 宿主持有。宿主停止请求与后台接单，排空已接纳的 HTTP/SSE 业务、runtime 与记忆任务后，关闭 entry 激活入口，等待已经接纳的审批检查和工厂结束，再逆序撤销工具、Hook、RPC、表单校验器及 wire。关闭期间结束的工厂不能再发布注册；后续启动失败同样撤销已发布的批次。插件自行发起的 I/O 或后台任务不属于这项注册清理保证。
+- **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册、未知 Hook 和名称冲突都会让整批激活失败，不再跳过。工具名在插件内唯一，不同插件可注册同名工具；框架工具名（包括可选 memory 工具和虚拟 `search-tools`）始终保留；RPC action 名在插件内唯一，wire 按 `<pluginId>/<wireId>` 隔离。
+- **激活诊断**：失败插件在 `GET /api/plugins` 和详情中返回 `error`，可识别的注册错误包含 `plugin_registration_invalid`、注册 API 名和具体原因。任意插件执行异常的详情只写服务端日志，不作为公开诊断返回。激活失败保留有效清单的 `registered` 状态及命令、面板入口，后续调用仍可重试，成功后清除错误；清单发现失败才使用 `status: "error"`。插件目录同时展示激活诊断和有效插件，保留启停入口。
+- **宿主清理**：成功注册的撤销函数由 API 宿主持有。宿主停止请求与后台接单，排空已接纳的 HTTP/SSE 业务、runtime 与记忆任务后，关闭 entry 激活入口并取消 `covel.signal`，等待已经接纳的审批检查和工厂结束，再逆序撤销工具、Hook、RPC、服务、表单校验器及 wire，并等待 `covel.onDispose()` 登记的清理函数。关闭期间不会开始后续 entry 工厂或发布注册；后续启动失败同样清理已取得资源。回调失败会汇总报告，不阻止其他清理。
 - entry 抛错、非函数导出、缺失文件或路径逃逸均视为激活失败。builtin 启动时记录失败并继续其它插件；`ensurePluginEntry` 调用方收到错误，失败不记作已加载，后续调用可以重试。并发激活共享一次尝试，成功后才去重。
-- 注册 API 仅在工厂执行期间有效；工厂必须 await 自己的初始化，返回后再注册会抛错。回滚只涵盖框架托管注册，不撤销模块顶层 I/O、外部请求或插件自行启动的任务；会话停用不卸载进程共享注册。
-- 底层 Hook、RPC 与媒体 wire registry 的注册返回幂等撤销函数，仅清理该注册实例；旧句柄不会删除同名后继注册。PluginAPI 继续返回 `void`，批次由框架管理。
+- 注册 API 仅在工厂执行期间有效；工厂必须 await 自己的初始化，返回后再注册会抛错。通过 `covel.onDispose()` 登记的资源在初始化失败与宿主关闭时同样清理，异步初始化应传递 `covel.signal`。模块顶层 I/O、未登记资源及忽略取消的任务不在清理保证内；会话停用不卸载进程共享注册。完整语义见 [Entry 资源生命周期](plugin-extensions.md#entry-资源生命周期)。
+- 底层 Hook、RPC 与媒体 wire registry 的注册返回幂等撤销函数，仅清理该注册实例；旧句柄不会删除同名后继注册。PluginAPI 的注册方法继续返回 `void`，批次由框架管理。
 - **agent runtime 暴露给 LLM 的工具**仍需在各 runtime manifest 声明：entry 注册的工具用 `tools.plugin`（名字列表）声明可见性，替代旧 `tools.local` 的路径列表：
 
 ```yaml
@@ -1389,7 +1396,7 @@ dataSchemas:
 | `schema`           | `string`  | 插件根目录相对 JSON Schema 路径        |
 | `description`      | `string`  | 面向作者的简短说明                     |
 
-多 runtime 插件可以在多个 runtime 的 `PLUGIN.md` 中声明同一 namespace；声明完全一致时合并到插件级 registry，冲突时插件注册失败。第三方 world 包引用该 namespace 时使用：
+多 runtime 插件可以在根和各 runtime 的 `PLUGIN.md` 中声明同一 namespace；声明完全一致时合并到插件级 registry，冲突时插件注册失败。第三方 world 包引用该 namespace 时使用：
 
 ```yaml
 schema: plugin://social-sim/relationships
@@ -1442,7 +1449,7 @@ events:
 | `description` | `I18nText` | 必填   | 目录展示用说明，按 session locale 解析                                                                                                                                                                                                                                                                                                       |
 | `advertise`   | `boolean`  | `true` | `false` 时该 topic 为**内部信令**：不出现在 `<available-events>` 目录里，且**不进 `emit-event` 白名单**——只能由声明它的插件自己的函数 runtime 经 `HandlerResult.success.effects.events` 发射（或由 `trigger: { type: event, topic }` 触发消费方），agent 无法经 `emit-event` 直发。适合两个插件间不希望被通用叙事 runtime 随手调用的内部信令 |
 
-同一 session 内若两个不同插件声明了同一 `topic` 但 `schema` 路径不同，服务端按插件激活优先级顺序**首胜**（保留先声明者的 schema）并 `console.warn` 一次（同一 `(session, topic)` 不重复告警）。
+同一 session 内若两个不同插件声明了同一 `topic` 但 `schema` 路径不同，服务端按声明的 `(stage, name)` 排序**首胜**（无 stage 的包声明排在最后）（保留先声明者的 schema）并 `console.warn` 一次（同一 `(session, topic)` 不重复告警）。
 
 顶层 `advertiseEvents: true` 让该 runtime 在 prompt 段 5 收到当前会话已声明事件（`advertise !== false` 的那些）的目录文本（`<available-events>` 块，含 topic、locale 描述、必填字段摘要与压缩后的 payload JSON Schema，包括嵌套 union、局部 `$ref` 和 `$defs`；仅省略 schema 根级的标题、描述及元数据，保留属性定义）；要真正发射还需要在 `tools.builtin` 里加 `emit-event`。两者职责分离：`advertiseEvents` 只控制"是否看得到目录"，`tools.builtin: [emit-event]` 才控制"能不能调用"。
 
@@ -2008,7 +2015,7 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### Manifest 加载失败的边界
 
-`pnpm validate:plugin` 先用 loader 解析 `PLUGIN.md`，再对**原始 frontmatter** 执行 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层提供 YAML/字段的行号诊断，authoring 层报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。loader 对非法可选 note 字段的警告和省略不能绕过作者校验：原始 `authorsNote` / `postHistory` 有误仍会失败。合法 I18nText 展示字段、无调度的 Hook/UI-only 声明及 multi-runtime 根元数据都保留；不要求这些声明虚构 `stage`。传入插件目录时，还会检查跨 runtime 的插件级 `userSettings` 冲突。CLI 只验证当前作者合同，没有跳过严格校验的模式。
+`pnpm validate:plugin` 先用 loader 解析 `PLUGIN.md`，再对**原始 frontmatter** 执行 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层提供 YAML/字段的行号诊断，authoring 层报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。loader 对非法可选 note 字段的警告和省略不能绕过作者校验：原始 `authorsNote` / `postHistory` 有误仍会失败。合法 I18nText 展示字段、无调度的 Hook/UI-only 声明及 multi-runtime 根元数据都保留；不要求这些声明虚构 `stage`。传入插件目录、根 `PLUGIN.md` 或 `runtimes/<id>/PLUGIN.md` 时，均收集整个所属包，检查根与各 runtime 的设置、数据 schema、projection、命令、事件和 memory block 冲突及共享声明引用；重叠的输入路径只校验一次。CLI 只验证当前作者合同，没有跳过严格校验的模式。
 
 这条 CLI 检查只验证 manifest 与跨 runtime 声明，不执行 `entry`、handler 或 LLM。要验证 runtime 行为，应使用 `pnpm test:runtime`；要验证 server、SSE 和审批链路，应使用 HTTP E2E。
 

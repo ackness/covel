@@ -4,6 +4,7 @@ import {
   registerTranscriptionWire,
   type WireModuleShape,
 } from "@covel/ai-provider";
+import { PluginRegistrationError } from "./plugin-registration-error.js";
 
 export type { WireModuleShape } from "@covel/ai-provider";
 
@@ -20,7 +21,6 @@ function hasWireShape(value: unknown, method: string): value is { id: string } {
 /** Register entry-provided wires under the `<pluginId>/<wireId>` namespace. */
 export function registerNamespaced(
   pluginId: string,
-  pluginRelPath: string,
   mod: WireModuleShape,
   onRegistered: (dispose: () => void) => void = () => {},
 ): void {
@@ -39,12 +39,18 @@ export function registerNamespaced(
   ];
 
   for (const group of groups) {
+    if (group.wires !== undefined && !Array.isArray(group.wires)) {
+      throw new PluginRegistrationError(
+        "registerWires",
+        `${group.method} wires must be an array`,
+      );
+    }
     for (const wire of group.wires ?? []) {
       if (!hasWireShape(wire, group.method)) {
-        console.warn(
-          `[plugin-wires] ${pluginRelPath}: skipping malformed wire entry — expected { id: string, ${group.method}: fn }`,
+        throw new PluginRegistrationError(
+          "registerWires",
+          `expected { id: string, ${group.method}: function }`,
         );
-        continue;
       }
       const namespaced = { ...wire, id: `${pluginId}/${wire.id}` };
       try {
@@ -52,10 +58,10 @@ export function registerNamespaced(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (/already registered/.test(message)) {
-          console.warn(
-            `[plugin-wires] ${pluginRelPath}: wire "${namespaced.id}" already registered — skipping`,
+          throw new PluginRegistrationError(
+            "registerWires",
+            `wire "${namespaced.id}" is already registered`,
           );
-          continue;
         }
         throw err;
       }

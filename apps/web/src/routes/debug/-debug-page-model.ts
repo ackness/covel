@@ -5,7 +5,7 @@ import {
   type EventCategory,
 } from "./-debug-helpers.js";
 
-export type DebugView = "traces" | "data" | "cost";
+export type DebugView = "traces" | "data" | "cost" | "plugins";
 
 export interface VisibleTurn {
   turn: api.TurnTrace;

@@ -5,7 +5,8 @@ import type { EventBus } from "@covel/events";
 import {
   createPluginRegistry,
   discoverPluginsMulti,
-  loadPluginManifest,
+  loadPluginDefinition,
+  pluginDeclarations,
   loadPluginSummary,
   type ParsedPluginMd,
   type PluginDiscoveryResult,
@@ -49,12 +50,21 @@ export async function discoverAndRegisterPlugins(
 
   for (const discovery of discoveries) {
     try {
-      const summary = await loadPluginSummary(discovery);
-      const manifests = await loadPluginManifest(discovery);
+      const definition = await loadPluginDefinition(discovery);
+      const { packageManifest, manifests } = definition;
+      const summary = {
+        ...(await loadPluginSummary(discovery, undefined, definition)),
+        runtimeCount: manifests.length,
+      };
+      const declarations = pluginDeclarations(definition);
 
-      for (const parsed of manifests) {
+      for (const parsed of declarations) {
         for (const diagnostic of validateRuntimeManifestSemantics(
           parsed.manifest,
+        ).filter(
+          (diagnostic) =>
+            manifests.includes(parsed) ||
+            diagnostic.code !== "schedulable-missing-stage",
         )) {
           console.warn(`[bootstrap] ${diagnostic.message}`);
         }
@@ -84,7 +94,7 @@ export async function discoverAndRegisterPlugins(
       discoveryMap.set(discovery.id, discovery);
       manifestCache.set(discovery.id, manifests);
 
-      // Register with all manifests (first is primary for getActiveRuntimes).
+      // Package declarations and executable runtimes have separate identities.
       // `source` comes from `discoverPluginsMulti`: bundled first-dir plugins
       // keep their prefix-derived trust, everything else is clamped to
       // `'community'` — so a third-party plugin can't self-assign a higher
@@ -100,6 +110,7 @@ export async function discoverAndRegisterPlugins(
           ]),
         ),
         manifest: manifests[0],
+        packageManifest,
         manifests,
         loadedRuntimes: new Map(),
         status: "registered",

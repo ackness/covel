@@ -18,7 +18,7 @@ export function DebugToolbar({
 
   return (
     <div className="ui-rail flex shrink-0 flex-col gap-2 border-b border-(--rule-color) p-2 sm:min-h-12 sm:flex-row sm:items-center sm:px-4">
-      <div className="grid shrink-0 grid-cols-3 gap-1 sm:flex sm:border-r sm:border-(--rule-color) sm:pr-3">
+      <div className="grid shrink-0 grid-cols-4 gap-1 sm:flex sm:border-r sm:border-(--rule-color) sm:pr-3">
         <button
           onClick={() => onDebugViewChange("traces")}
           aria-pressed={debugView === "traces"}
@@ -51,6 +51,17 @@ export function DebugToolbar({
           }`}
         >
           {t("debugger.cost.tab", "Cost")}
+        </button>
+        <button
+          onClick={() => onDebugViewChange("plugins")}
+          aria-pressed={debugView === "plugins"}
+          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
+            debugView === "plugins"
+              ? "border-primary/40 bg-primary/10 text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {t("debugger.plugins.tab", "Plugins")}
         </button>
       </div>
       {debugView === "traces" && (

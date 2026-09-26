@@ -67,20 +67,15 @@ const session = {
 } as SessionRecord;
 
 describe("session slash command directory", () => {
-  it("merges runtime declarations by name and warns on divergence", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const commands = mergePluginCommands(
-      entry([
-        manifest("inspector/story"),
-        manifest("inspector/other", "Other"),
-      ]),
-    );
-    expect(commands).toHaveLength(1);
-    expect(commands[0]?.description).toBe("Inspect");
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("declared differently"),
-    );
-    warn.mockRestore();
+  it("rejects conflicting command declarations instead of choosing by load order", () => {
+    expect(() =>
+      mergePluginCommands(
+        entry([
+          manifest("inspector/story"),
+          manifest("inspector/other", "Other"),
+        ]),
+      ),
+    ).toThrow(/Conflicting commands.*inspector\/story.*inspector\/other/);
   });
 
   it("returns framework commands plus commands from active plugins only", () => {
@@ -89,12 +84,12 @@ describe("session slash command directory", () => {
 
     expect(
       buildSessionCommandList([], registry).map((command) => command.id),
-    ).toEqual(["framework:debug"]);
+    ).toEqual(["framework:plugins", "framework:debug"]);
     expect(
       buildSessionCommandList(["inspector"], registry).map(
         (command) => command.id,
       ),
-    ).toEqual(["framework:debug", "inspector:inspect"]);
+    ).toEqual(["framework:plugins", "framework:debug", "inspector:inspect"]);
   });
 });
 

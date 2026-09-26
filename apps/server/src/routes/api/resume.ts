@@ -37,7 +37,6 @@ import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
   commitExecution,
   resumeSuspendedRuntime,
-  buildHookSettings,
   snapshotUserSettings,
   createTurnEmitter,
   runWithHookScope,
@@ -64,6 +63,7 @@ import {
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
 import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
+import { buildSessionHookScope } from "./session/hook-scope.js";
 
 type Env = {
   Variables: {
@@ -326,9 +326,6 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           404,
         );
       }
-      const activePluginIds = new Set(
-        activeRuntimes.map((runtime) => runtime.pluginId),
-      );
       const world = liveSession.worldId
         ? await store.getWorld(liveSession.worldId)
         : null;
@@ -338,169 +335,171 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           decodedUserSettings.settings,
         ),
       );
-      const hookSettings = buildHookSettings(activeRuntimes, userSettings);
-      return runWithHookScope(
-        { activePluginIds, settings: hookSettings },
-        async () => {
-          // Claim while holding the same lifecycle lock as resume execution and
-          // suspension abandonment. This closes the delete/claim race.
-          c.get("requestWork")?.signal.throwIfAborted();
-          const claimed = await store.claimSuspension(suspensionId);
-          if (!claimed) {
-            return c.json(errorBody("Suspension already resolved"), 409);
-          }
-          claimAcquired = true;
+      const hookScope = buildSessionHookScope({
+        pluginRegistry,
+        activePluginIds: liveSession.activePlugins,
+        userSettings,
+      });
+      return runWithHookScope(hookScope, async () => {
+        // Claim while holding the same lifecycle lock as resume execution and
+        // suspension abandonment. This closes the delete/claim race.
+        c.get("requestWork")?.signal.throwIfAborted();
+        const claimed = await store.claimSuspension(suspensionId);
+        if (!claimed) {
+          return c.json(errorBody("Suspension already resolved"), 409);
+        }
+        claimAcquired = true;
 
-          // Refresh per-session character-tool overrides only after the live
-          // incarnation and activation set have been accepted.
-          await prepareToolsForSession?.(sessionId);
+        // Refresh per-session character-tool overrides only after the live
+        // incarnation and activation set have been accepted.
+        await prepareToolsForSession?.(sessionId);
 
-          const resumeDeps = buildResumeTurnExecutorDeps(c, emitter);
-          const result = await resumeSuspendedRuntime(
-            liveSuspension,
-            data,
-            effectiveManifest!,
-            resumeDeps,
-            { userSettings },
+        const resumeDeps = {
+          ...buildResumeTurnExecutorDeps(c, emitter),
+          hookScope,
+        };
+        const result = await resumeSuspendedRuntime(
+          liveSuspension,
+          data,
+          effectiveManifest!,
+          resumeDeps,
+          { userSettings },
+        );
+
+        if (result.status !== "success" || !result.output) {
+          await releaseClaim();
+          return c.json(
+            {
+              ...errorBody(
+                `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
+              ),
+              result,
+            },
+            500,
           );
+        }
 
-          if (result.status !== "success" || !result.output) {
-            await releaseClaim();
-            return c.json(
-              {
-                ...errorBody(
-                  `Resume failed: ${result.error ?? `runtime ended with status ${result.status}`}`,
-                ),
-                result,
-              },
-              500,
-            );
-          }
+        const inheritedExecution =
+          liveSuspension.pendingContinuation.executionContext;
+        const hasUnresolvedSibling = inheritedExecution.logicalTurnId
+          ? (await store.listSuspensions(sessionId)).some(
+              (candidate) =>
+                candidate.id !== liveSuspension.id &&
+                candidate.resolvedAt === undefined &&
+                candidate.pendingContinuation.executionContext.logicalTurnId ===
+                  inheritedExecution.logicalTurnId,
+            )
+          : false;
+        const resumeExecutionContext: ExecutionContext = {
+          ...inheritedExecution,
+          executionId: result.runId,
+          origin: "resume",
+          // Parallel runtimes may suspend under the same logical turn. Only
+          // the final unresolved continuation owns completion.
+          ...(hasUnresolvedSibling ? { countPolicy: "none" } : {}),
+        };
 
-          const inheritedExecution =
-            liveSuspension.pendingContinuation.executionContext;
-          const hasUnresolvedSibling = inheritedExecution.logicalTurnId
-            ? (await store.listSuspensions(sessionId)).some(
-                (candidate) =>
-                  candidate.id !== liveSuspension.id &&
-                  candidate.resolvedAt === undefined &&
-                  candidate.pendingContinuation.executionContext
-                    .logicalTurnId === inheritedExecution.logicalTurnId,
-              )
-            : false;
-          const resumeExecutionContext: ExecutionContext = {
-            ...inheritedExecution,
-            executionId: result.runId,
-            origin: "resume",
-            // Parallel runtimes may suspend under the same logical turn. Only
-            // the final unresolved continuation owns completion.
-            ...(hasUnresolvedSibling ? { countPolicy: "none" } : {}),
-          };
-
-          // Atomic finalize: proposal commit + assistant turn message + resolved
-          // marker land in ONE transaction via the shared finalize primitive (the
-          // runtime no longer writes them — see turn-resume.ts). Any proposal
-          // failure or store error rolls back ALL of it; the claim is released so
-          // the suspension stays retryable. Resume persists no
-          // turn_results row of its own, so `turnIds` is empty (nothing to settle).
-          const finalizeResume = async (
-            s: import("@covel/store").StoreTransaction,
-          ): Promise<void> => {
-            const out = result.output as Record<string, unknown>;
-            const narrativeContent =
-              typeof out.narrativeOutput === "string"
-                ? out.narrativeOutput
-                : typeof out.content === "string"
-                  ? out.content
-                  : JSON.stringify(result.output);
-            const interactionsArr = out.interactions as unknown[] | undefined;
-            const pendingInput =
-              interactionsArr && interactionsArr.length > 0
-                ? interactionsArr
-                : undefined;
-            const ui = out.ui as unknown[] | undefined;
-            await s.appendTurnMessage({
-              id: crypto.randomUUID(),
-              sessionId,
-              turnId: suspension.turnId,
-              sourceType: "runtime",
-              sourcePluginId: effectiveManifest!.pluginId,
-              sourceRuntimeId: effectiveManifest!.name,
-              role: "assistant",
-              name: effectiveManifest!.name,
-              content: narrativeContent,
-              order: stageMessageOrder(
-                getRuntimeSpec(effectiveManifest!).stage,
-              ),
-              pendingInput,
-              ui,
-              createdAt: new Date().toISOString(),
-            });
-            await s.markSuspensionResolved(suspension.id);
-          };
-
-          // finalize owns the transaction, the commit barrier (buffered fan-out
-          // flushed only after commit, dropped on rollback), and the hook scope.
-          const outcome = await commitExecution({
-            signal: c.get("requestWork")?.signal,
-            completion: {
-              kind: "resume",
-              turnId: suspension.turnId,
-              suspensionId: suspension.id,
-              pluginId: effectiveManifest.pluginId,
-              runtimeId: effectiveManifest.name,
-            },
-            memorySystem: resumeDeps.memorySystem,
-            capabilityPluginIds: resumeDeps.capabilityPluginIds,
-            loadOutputSchema: async () =>
-              (
-                await resumeDeps.loadRuntime(
-                  effectiveManifest,
-                  liveSession.locale,
-                  sessionId,
-                )
-              )?.outputSchema,
-            mediaStore: resumeDeps.mediaStore,
-            onFinalized: (outcome) => {
-              if (outcome.status === "committed") claimAcquired = false;
-            },
-            store,
+        // Atomic finalize: proposal commit + assistant turn message + resolved
+        // marker land in ONE transaction via the shared finalize primitive (the
+        // runtime no longer writes them — see turn-resume.ts). Any proposal
+        // failure or store error rolls back ALL of it; the claim is released so
+        // the suspension stays retryable. Resume persists no
+        // turn_results row of its own, so `turnIds` is empty (nothing to settle).
+        const finalizeResume = async (
+          s: import("@covel/store").StoreTransaction,
+        ): Promise<void> => {
+          const out = result.output as Record<string, unknown>;
+          const narrativeContent =
+            typeof out.narrativeOutput === "string"
+              ? out.narrativeOutput
+              : typeof out.content === "string"
+                ? out.content
+                : JSON.stringify(result.output);
+          const interactionsArr = out.interactions as unknown[] | undefined;
+          const pendingInput =
+            interactionsArr && interactionsArr.length > 0
+              ? interactionsArr
+              : undefined;
+          const ui = out.ui as unknown[] | undefined;
+          await s.appendTurnMessage({
+            id: crypto.randomUUID(),
             sessionId,
-            executionContext: resumeExecutionContext,
-            // The original suspended execution deliberately did not complete
-            // its logical player turn. The final sibling resume counts it in the
-            // same transaction as its proposals.
-            sessionClock: { now: new Date().toISOString() },
-            runtimes: [effectiveManifest!],
-            results: [result],
-            turnIds: [],
-            activePluginIds,
-            hookSettings,
-            ...(hookPipeline ? { hookPipeline } : {}),
-            ...(eventBus ? { eventBus } : {}),
-            emitter,
-            extraInTx: finalizeResume,
+            turnId: suspension.turnId,
+            sourceType: "runtime",
+            sourcePluginId: effectiveManifest!.pluginId,
+            sourceRuntimeId: effectiveManifest!.name,
+            role: "assistant",
+            name: effectiveManifest!.name,
+            content: narrativeContent,
+            order: stageMessageOrder(getRuntimeSpec(effectiveManifest!).stage),
+            pendingInput,
+            ui,
+            createdAt: new Date().toISOString(),
           });
+          await s.markSuspensionResolved(suspension.id);
+        };
 
-          if (outcome.status !== "committed") {
-            await releaseClaim();
-            const detail =
-              outcome.error ??
-              outcome.failedProposals
-                .map((fp) => `${fp.proposal.type}: ${fp.error}`)
-                .join("; ");
-            return c.json(
-              errorBody(
-                `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`,
-              ),
-              500,
-            );
-          }
-          const events = outcome.events;
+        // finalize owns the transaction, the commit barrier (buffered fan-out
+        // flushed only after commit, dropped on rollback), and the hook scope.
+        const outcome = await commitExecution({
+          signal: c.get("requestWork")?.signal,
+          completion: {
+            kind: "resume",
+            turnId: suspension.turnId,
+            suspensionId: suspension.id,
+            pluginId: effectiveManifest.pluginId,
+            runtimeId: effectiveManifest.name,
+          },
+          memorySystem: resumeDeps.memorySystem,
+          capabilityPluginIds: resumeDeps.capabilityPluginIds,
+          loadOutputSchema: async () =>
+            (
+              await resumeDeps.loadRuntime(
+                effectiveManifest,
+                liveSession.locale,
+                sessionId,
+              )
+            )?.outputSchema,
+          mediaStore: resumeDeps.mediaStore,
+          onFinalized: (outcome) => {
+            if (outcome.status === "committed") claimAcquired = false;
+          },
+          store,
+          sessionId,
+          executionContext: resumeExecutionContext,
+          // The original suspended execution deliberately did not complete
+          // its logical player turn. The final sibling resume counts it in the
+          // same transaction as its proposals.
+          sessionClock: { now: new Date().toISOString() },
+          runtimes: [effectiveManifest!],
+          results: [result],
+          turnIds: [],
+          activePluginIds: hookScope.activePluginIds,
+          hookSettings: hookScope.settings,
+          ...(hookPipeline ? { hookPipeline } : {}),
+          ...(eventBus ? { eventBus } : {}),
+          emitter,
+          extraInTx: finalizeResume,
+        });
 
-          return c.json({ result, events });
-        },
-      );
+        if (outcome.status !== "committed") {
+          await releaseClaim();
+          const detail =
+            outcome.error ??
+            outcome.failedProposals
+              .map((fp) => `${fp.proposal.type}: ${fp.error}`)
+              .join("; ");
+          return c.json(
+            errorBody(
+              `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`,
+            ),
+            500,
+          );
+        }
+        const events = outcome.events;
+
+        return c.json({ result, events });
+      });
     });
   } catch (err: unknown) {
     // Release the claim so legitimate retries can attempt again. The

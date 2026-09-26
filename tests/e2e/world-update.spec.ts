@@ -98,7 +98,14 @@ for (const width of [1280, 390]) {
       await dialog
         .getByRole("button", { name: "Install & manage", exact: true })
         .click();
-    await dialog.getByRole("button", { name: "Check for updates" }).click();
+    const installedWorld = dialog
+      .getByRole("heading", { name: "Installed world packages", exact: true })
+      .locator("..")
+      .getByRole("listitem")
+      .filter({ hasText: "example-note · 1.0.0" });
+    await installedWorld
+      .getByRole("button", { name: "Check for updates", exact: true })
+      .click();
     await expect(dialog.getByText("1.0.0 → 1.1.0")).toBeVisible();
     await expect(
       dialog.getByRole("link", {
@@ -141,12 +148,20 @@ for (const width of [1280, 390]) {
       dialog.getByText("example-note · 1.0.0", { exact: true }),
     ).toBeVisible();
     await expect(dialog.getByText(/Package files changed/)).toBeVisible();
-    await dialog.getByRole("button", { name: "Cancel pending update" }).click();
+    await installedWorld
+      .getByRole("button", { name: "Cancel pending update", exact: true })
+      .click();
     await expect(
-      dialog.getByRole("button", { name: "Check for updates" }),
+      installedWorld.getByRole("button", {
+        name: "Check for updates",
+        exact: true,
+      }),
     ).toBeVisible();
     await expect(
-      dialog.getByRole("button", { name: "Cancel pending update" }),
+      installedWorld.getByRole("button", {
+        name: "Cancel pending update",
+        exact: true,
+      }),
     ).toHaveCount(0);
     await expect(dialog.getByText(/Package files changed/)).toHaveCount(0);
   });

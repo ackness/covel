@@ -1,4 +1,6 @@
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ChevronsUp,
@@ -20,9 +22,21 @@ import { SessionDataView } from "./-session-data-view.js";
 import { SessionSidebar } from "./-session-sidebar.js";
 import { TraceTimeline } from "./-trace-timeline.js";
 import { traceEventIdentity } from "./-debug-helpers.js";
+import { PluginDiagnosticsPanel } from "./-plugin-diagnostics-panel.js";
+import type { DebugView } from "./-debug-page-model.js";
 
-export function DebugRoutePage({ sid }: { sid?: string }) {
+export function DebugRoutePage({
+  sid,
+  view,
+  pluginId,
+}: {
+  sid?: string;
+  view?: DebugView;
+  pluginId?: string;
+}) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [pluginRefreshSignal, setPluginRefreshSignal] = useState(0);
   const {
     sessions,
     selectedSessionId,
@@ -56,7 +70,35 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
     setDebugView,
     toggleTurn,
     toggleRuntime,
-  } = useDebugPageData(sid);
+  } = useDebugPageData(sid, view, pluginId);
+
+  useEffect(() => {
+    setDebugView(view ?? "traces");
+  }, [view, setDebugView]);
+
+  const changeView = (nextView: DebugView) => {
+    setDebugView(nextView);
+    void navigate({
+      to: "/debug",
+      search: {
+        sid: selectedSessionId ?? undefined,
+        view: nextView === "traces" ? undefined : nextView,
+        pluginId: nextView === "plugins" ? pluginId : undefined,
+      },
+    });
+  };
+
+  const changePluginFilter = (nextPluginId?: string) => {
+    void navigate({
+      to: "/debug",
+      search: {
+        sid: selectedSessionId ?? undefined,
+        view: "plugins",
+        pluginId: nextPluginId,
+      },
+      replace: true,
+    });
+  };
 
   return (
     <div className="flex h-full w-full flex-col border-t border-(--rule-color) overflow-hidden">
@@ -161,7 +203,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             variant="ghost"
             size="sm"
             className="h-8 px-2.5 text-xs text-muted-foreground"
-            onClick={refresh}
+            onClick={() => {
+              void refresh();
+              if (debugView === "plugins")
+                setPluginRefreshSignal((value) => value + 1);
+            }}
             disabled={loading || refreshing || snapshotLoading}
             aria-label={t("debugger.refresh")}
             title={t("debugger.refresh")}
@@ -227,12 +273,22 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
           <DebugToolbar
             debugView={debugView}
             filterCategory={filterCategory}
-            onDebugViewChange={setDebugView}
+            onDebugViewChange={changeView}
             onFilterCategoryChange={setFilterCategory}
           />
 
           <div className="relative flex flex-1 min-h-0 overflow-hidden">
-            {debugView === "data" ? (
+            {debugView === "plugins" ? (
+              <PluginDiagnosticsPanel
+                sessionId={
+                  sid && sid !== selectedSessionId ? null : selectedSessionId
+                }
+                pluginId={pluginId}
+                autoRefresh={autoRefresh}
+                refreshSignal={pluginRefreshSignal}
+                onPluginFilterChange={changePluginFilter}
+              />
+            ) : debugView === "data" ? (
               <SessionDataView
                 selectedSessionId={selectedSessionId}
                 snapshotData={snapshotData}

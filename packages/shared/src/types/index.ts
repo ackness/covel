@@ -457,3 +457,8 @@ export {
   PLUGIN_UI_COMPONENT_NAMES,
   type PluginUiComponentName,
 } from "./plugin-ui.js";
+export type {
+  PluginDiagnostic,
+  PluginServiceCallDiagnostic,
+  PluginDiagnosticsSnapshot,
+} from "./plugin-diagnostics.js";

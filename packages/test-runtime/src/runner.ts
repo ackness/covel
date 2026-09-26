@@ -14,11 +14,11 @@ import {
 } from "@covel/runtime";
 import {
   builtinUITools,
+  ToolRegistry,
   createCharacterTools,
   createPluginDataTools,
   runtimeDoneTool,
   suspendTool,
-  type ToolModule,
 } from "@covel/tools";
 import {
   evaluateExpectations,
@@ -128,182 +128,224 @@ export async function runRuntimeDebug(
   const locale = options.locale ?? DEFAULT_LOCALE;
   const store = createMemoryStore();
   const mediaStore = options.mediaStore ?? createMemoryMediaStore();
+  let bundle: Awaited<ReturnType<typeof loadRuntimeBundle>> | undefined;
+  let toolExecutor: ReturnType<typeof createToolExecutor> | undefined;
+  let primaryError: unknown;
+  let failed = false;
 
-  const { discovery, manifests, loadedCache, entryTools, services } =
-    await loadRuntimeBundle({
+  try {
+    const {
+      manifests,
+      loadedCache,
+      entryTools,
+      services,
+      pluginIds,
+      discoveries,
+    } = (bundle = await loadRuntimeBundle({
       pluginsDir,
       pluginId,
       runtimeId,
       locale,
       ignoreUpstreams: options.ignoreUpstreams,
+      withPlugins: options.withPlugins,
+      store,
+    }));
+
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: sessionId,
+      locale,
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: [...pluginIds],
+      createdAt: now,
+      updatedAt: now,
     });
 
-  const now = new Date().toISOString();
-  await store.createSession({
-    id: sessionId,
-    locale,
-    status: "active",
-    phase: "playing",
-    completedPlayerTurns: 0,
-    setupRuntimes: {},
-    activePlugins: [pluginId],
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  const toolMap = new Map<string, ToolModule>();
-  for (const t of builtinUITools) toolMap.set(t.name, t);
-  toolMap.set(suspendTool.name, suspendTool);
-  toolMap.set(runtimeDoneTool.name, runtimeDoneTool);
-  for (const t of createPluginDataTools(store)) toolMap.set(t.name, t);
-  for (const t of createCharacterTools(store, {
-    findWorldDataPluginId: () => pluginId,
-  })) {
-    toolMap.set(t.name, t);
-  }
-  // Entry-registered plugin tools last: a name collision means the plugin is
-  // shadowing a framework tool, which the server bootstrap rejects — surface
-  // it here rather than silently running a different implementation.
-  for (const t of entryTools) {
-    if (toolMap.has(t.name)) {
-      throw new Error(
-        `entry registered tool "${t.name}", which collides with a framework tool`,
-      );
+    const tools = new ToolRegistry();
+    for (const t of builtinUITools) tools.registerBuiltin(t);
+    tools.registerBuiltin(suspendTool);
+    tools.registerBuiltin(runtimeDoneTool);
+    for (const t of createPluginDataTools(store)) tools.registerBuiltin(t);
+    for (const t of createCharacterTools(store, {
+      findWorldDataPluginId: () => pluginId,
+    })) {
+      tools.registerBuiltin(t);
     }
-    toolMap.set(t.name, t);
-  }
-  const llm = buildMockLlm(options);
-  const liveAdapters = options.mode === "live" ? makeLiveAdapters() : undefined;
-  const deps = {
-    loadRuntime: async (manifest) => loadedCache.get(manifest.name),
-    llm: liveAdapters?.llm ?? llm,
-    services,
-    gateway: liveAdapters?.gateway ?? makeGateway(options),
-    utils: PLUGIN_UTILS,
-    mediaStore,
-    getPluginSource: () => discovery.source,
-    store,
-    toolExecutor: createToolExecutor({
-      findTool: (name) => toolMap.get(name),
+    for (const { pluginId: ownerId, tool } of entryTools) {
+      tools.registerPlugin(ownerId, tool);
+    }
+    const llm = buildMockLlm(options);
+    const liveAdapters =
+      options.mode === "live" ? makeLiveAdapters() : undefined;
+    const deps = {
+      loadRuntime: async (manifest) => loadedCache.get(manifest.name),
+      llm: liveAdapters?.llm ?? llm,
+      services,
+      gateway: liveAdapters?.gateway ?? makeGateway(options),
+      utils: PLUGIN_UTILS,
+      mediaStore,
+      getPluginSource: (id) => discoveries.get(id)?.source,
       store,
-    }),
-  } satisfies TurnExecutorDeps;
-  const userSettings = snapshotUserSettings(
-    options.userSettings ? { [pluginId]: options.userSettings } : undefined,
-  );
-  const result = await executeTurn(
-    {
-      sessionId,
-      turnId,
-      playerMessage: options.message ?? "",
-      origin: "manual",
-      locale,
-      manualTrigger: {
-        runtimeId,
-        ...(options.payload ? { payload: options.payload } : {}),
-      },
-      userSettings,
-    } satisfies TurnInput,
-    manifests,
-    deps,
-  );
-
-  const commit = await commitDebugExecution({
-    turn: result,
-    manifests,
-    deps,
-    locale,
-    userSettings,
-    detached: false,
-  });
-  const committedFollowers =
-    commit.status === "committed" ? (result.deferredFollowers ?? []) : [];
-
-  const jobs: Array<{
-    jobId: string;
-    runtimeId: string;
-    pluginId: string;
-    status: "done" | "failed";
-  }> = [];
-  const followerResults: RuntimeResult[] = [];
-  const pendingDeferredFollowers: RunRuntimeDebugResult["pendingDeferredFollowers"][number][] =
-    [];
-  for (const follower of committedFollowers) {
-    const job = await runDeferredFollower({
-      follower,
-      sessionId,
-      locale,
+      toolExecutor: (toolExecutor = createToolExecutor({
+        findTool: (name, context) => tools.find(name, context.pluginId),
+        getToolSource: (name) => tools.source(name),
+        store,
+      })),
+    } satisfies TurnExecutorDeps;
+    const userSettings = snapshotUserSettings(
+      options.userSettings ? { [pluginId]: options.userSettings } : undefined,
+    );
+    const result = await executeTurn(
+      {
+        sessionId,
+        turnId,
+        playerMessage: options.message ?? "",
+        origin: "manual",
+        locale,
+        manualTrigger: {
+          runtimeId,
+          ...(options.payload ? { payload: options.payload } : {}),
+        },
+        userSettings,
+      } satisfies TurnInput,
       manifests,
       deps,
-      ...(userSettings?.[pluginId]
-        ? { userSettings: userSettings[pluginId] }
-        : {}),
-    });
-    jobs.push({
-      jobId: job.jobId,
-      runtimeId: job.runtimeId,
-      pluginId: job.pluginId,
-      status: job.status,
-    });
-    followerResults.push(...job.runtimeResults);
-    pendingDeferredFollowers.push(...job.deferredFollowers);
-  }
-
-  if (
-    options.expectsBackgroundFollower === true &&
-    commit.status === "committed" &&
-    committedFollowers.length === 0
-  ) {
-    jobs.push(
-      await writeExpectedFollowerFailureJob({
-        store,
-        sessionId,
-        pluginId,
-        runtimeId,
-        turnId,
-        runtimeResults: result.runtimeResults,
-      }),
     );
+
+    const commit = await commitDebugExecution({
+      turn: result,
+      manifests,
+      deps,
+      locale,
+      userSettings,
+      detached: false,
+    });
+    const committedFollowers =
+      commit.status === "committed" ? (result.deferredFollowers ?? []) : [];
+
+    const jobs: Array<{
+      jobId: string;
+      runtimeId: string;
+      pluginId: string;
+      status: "done" | "failed";
+    }> = [];
+    const followerResults: RuntimeResult[] = [];
+    const pendingDeferredFollowers: RunRuntimeDebugResult["pendingDeferredFollowers"][number][] =
+      [];
+    for (const follower of committedFollowers) {
+      const job = await runDeferredFollower({
+        follower,
+        sessionId,
+        locale,
+        manifests,
+        deps,
+        ...(userSettings?.[follower.pluginId]
+          ? { userSettings: userSettings[follower.pluginId] }
+          : {}),
+      });
+      jobs.push({
+        jobId: job.jobId,
+        runtimeId: job.runtimeId,
+        pluginId: job.pluginId,
+        status: job.status,
+      });
+      followerResults.push(...job.runtimeResults);
+      pendingDeferredFollowers.push(...job.deferredFollowers);
+    }
+
+    if (
+      options.expectsBackgroundFollower === true &&
+      commit.status === "committed" &&
+      committedFollowers.length === 0
+    ) {
+      jobs.push(
+        await writeExpectedFollowerFailureJob({
+          store,
+          sessionId,
+          pluginId,
+          runtimeId,
+          turnId,
+          runtimeResults: result.runtimeResults,
+        }),
+      );
+    }
+
+    const pluginData = await listPluginDataByNamespace(
+      store,
+      sessionId,
+      pluginId,
+    );
+    const logs = pluginData._logs ?? [];
+    const allRuntimeResults = [
+      ...result.runtimeResults,
+      ...(result.nestedRuntimeResults ?? []),
+      ...followerResults,
+    ];
+    const baseResult = {
+      status: "ok" as const,
+      mode: options.mode ?? ("mock" as const),
+      ...(options.caseName ? { caseName: options.caseName } : {}),
+      sessionId,
+      turnId,
+      pluginId,
+      runtimeId,
+      runtimeResults: allRuntimeResults,
+      commitStatus: commit.status,
+      ...(commit.status === "failed"
+        ? {
+            commitError:
+              commit.error ??
+              commit.failedProposals[0]?.error ??
+              "Execution commit failed",
+          }
+        : {}),
+      jobs,
+      deferredFollowers: committedFollowers,
+      pendingDeferredFollowers,
+      pluginData,
+      logs,
+      llmCalls: serializeLlmCalls(llm.calls, options.showPrompts === true),
+    };
+
+    return baseResult;
+  } catch (error) {
+    failed = true;
+    primaryError = error;
+    throw error;
+  } finally {
+    const errors: unknown[] = [];
+    for (const close of [
+      () => toolExecutor?.close(),
+      () => bundle?.close(),
+      () => store.close(),
+    ]) {
+      try {
+        await close();
+      } catch (error) {
+        errors.push(
+          ...(error instanceof AggregateError ? error.errors : [error]),
+        );
+      }
+    }
+    if (errors.length > 0) {
+      if (failed) {
+        throw new AggregateError(
+          [primaryError, ...errors],
+          primaryError instanceof Error
+            ? primaryError.message
+            : "Runtime debug failed",
+          { cause: primaryError },
+        );
+      }
+      throw new AggregateError(
+        errors,
+        "Failed to close runtime debug resources",
+      );
+    }
   }
-
-  const pluginData = await listPluginDataByNamespace(
-    store,
-    sessionId,
-    pluginId,
-  );
-  const logs = pluginData._logs ?? [];
-  const allRuntimeResults = [
-    ...result.runtimeResults,
-    ...(result.nestedRuntimeResults ?? []),
-    ...followerResults,
-  ];
-  const baseResult = {
-    status: "ok" as const,
-    mode: options.mode ?? ("mock" as const),
-    ...(options.caseName ? { caseName: options.caseName } : {}),
-    sessionId,
-    turnId,
-    pluginId,
-    runtimeId,
-    runtimeResults: allRuntimeResults,
-    commitStatus: commit.status,
-    ...(commit.status === "failed"
-      ? {
-          commitError:
-            commit.error ??
-            commit.failedProposals[0]?.error ??
-            "Execution commit failed",
-        }
-      : {}),
-    jobs,
-    deferredFollowers: committedFollowers,
-    pendingDeferredFollowers,
-    pluginData,
-    logs,
-    llmCalls: serializeLlmCalls(llm.calls, options.showPrompts === true),
-  };
-
-  return baseResult;
 }
 
 export async function runRuntimeCases(

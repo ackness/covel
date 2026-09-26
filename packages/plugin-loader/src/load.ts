@@ -6,25 +6,18 @@ import { loadPluginUiSpec } from "./ui-spec.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import matter from "gray-matter";
 import {
   DEFAULT_FALLBACK_LOCALE,
   DEFAULT_LOCALE,
   canonicalizeLocale,
   localeLookupCandidates,
   localeRegistry,
-  pluginRelationsSchema,
   hasIllegalDetachedContract,
   normalizeLocale,
   WORLD_IR_V1_JSON_SCHEMA,
   WORLD_IR_V1_SCHEMA_URI,
 } from "@covel/shared";
-import type {
-  PluginRelations,
-  PluginTag,
-  PluginType,
-  RuntimeManifest,
-} from "@covel/shared";
+import type { RuntimeManifest } from "@covel/shared";
 import type {
   PluginDiscoveryResult,
   PluginSummary,
@@ -35,6 +28,15 @@ import type {
   AgentGuard,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
+import {
+  hasRuntimeDeclaration,
+  multiRuntimeRootDiagnostics,
+} from "./root-manifest-diagnostics.js";
+import {
+  pluginDeclarations,
+  resolvePluginRuntimeManifest,
+  validatePluginDeclarations,
+} from "./declarations.js";
 
 /**
  * Resolve a locale-aware PLUGIN.md path.
@@ -169,57 +171,31 @@ async function fileExists(p: string): Promise<boolean> {
 export async function loadPluginSummary(
   discovery: PluginDiscoveryResult,
   locale?: string,
+  definition?: PluginDefinition,
 ): Promise<PluginSummary> {
-  // For multi-runtime, prefer root PLUGIN.md; fall back to first runtime's PLUGIN.md
-  let summaryPath = await resolveLocalizedPluginMd(discovery.rootPath, locale);
-  const hasRootSummary = await fileExists(summaryPath);
-  if (!hasRootSummary) {
-    // Root PLUGIN.md doesn't exist (multi-runtime) — use first runtime's PLUGIN.md
-    const fallbackDir = path.dirname(discovery.pluginMdPaths[0]);
-    summaryPath = await resolveLocalizedPluginMd(fallbackDir, locale);
+  const loaded = definition ?? (await loadPluginDefinition(discovery, locale));
+  {
+    const root = loaded.packageManifest;
+    const data = root?.rawFrontmatter;
+    const manifest = root?.manifest;
+    const description = data?.description;
+    return {
+      id: discovery.id,
+      name: manifest?.name ?? discovery.id,
+      ...(manifest?.displayName ? { displayName: manifest.displayName } : {}),
+      description:
+        typeof description === "string" ||
+        (description &&
+          typeof description === "object" &&
+          !Array.isArray(description))
+          ? (description as PluginSummary["description"])
+          : (manifest?.description ?? ""),
+      pluginType: manifest?.pluginType ?? "plugin",
+      runtimeCount: loaded.manifests.length,
+      ...(manifest?.tags ? { tags: manifest.tags } : {}),
+      ...(manifest?.relations ? { relations: manifest.relations } : {}),
+    };
   }
-
-  const content = await fs.readFile(summaryPath, "utf-8");
-  const { data } = matter(content);
-
-  // Support I18nText: string or { "zh-CN": "...", "en-US": "..." } (reject arrays)
-  const isI18n = (v: unknown): v is string | Record<string, string> =>
-    typeof v === "string" ||
-    (typeof v === "object" && v !== null && !Array.isArray(v));
-  // `name` / `displayName` are gated on the root summary while `description` /
-  // `tags` / `relations` below are not, and that asymmetry is deliberate: the
-  // fallback file is `runtimes/<first>/PLUGIN.md`, where `name` is the runtime
-  // id (`pluginId/subName`) and `displayName` names that one runtime. Either
-  // would be wrong as the PLUGIN's identity, so fall back to the directory id
-  // instead. The other fields degrade gracefully — a sub-runtime's description
-  // beats an empty string, and plugin-catalog re-aggregates tags across every
-  // runtime anyway. Consequence: a multi-runtime plugin with no root PLUGIN.md
-  // cannot declare a friendly plugin name at all (it also loses `entry` /
-  // `wires`), which is why the authoring docs ask for a root PLUGIN.md.
-  const name = hasRootSummary
-    ? isI18n(data.name)
-      ? data.name
-      : discovery.id
-    : discovery.id;
-  const displayName =
-    hasRootSummary && isI18n(data.displayName) ? data.displayName : undefined;
-  const description = isI18n(data.description) ? data.description : "";
-  const pluginType: PluginType =
-    data.pluginType === "core-plugin" ? "core-plugin" : "plugin";
-
-  const tags = stringArray(data.tags);
-  const relations = parseSummaryRelations(data.relations);
-
-  return {
-    id: discovery.id,
-    name,
-    ...(displayName ? { displayName } : {}),
-    description,
-    pluginType,
-    runtimeCount: discovery.pluginMdPaths.length,
-    ...(tags.length > 0 ? { tags: tags as PluginTag[] } : {}),
-    ...(relations ? { relations } : {}),
-  };
 }
 
 /**
@@ -228,88 +204,101 @@ export async function loadPluginSummary(
  *
  * @param locale - Optional locale for loading localized PLUGIN.md
  */
+export interface PluginDefinition {
+  readonly packageManifest?: ParsedPluginMd;
+  readonly manifests: readonly ParsedPluginMd[];
+}
+
+export async function loadPluginDefinition(
+  discovery: PluginDiscoveryResult,
+  locale?: string,
+): Promise<PluginDefinition> {
+  const rootPath = path.join(discovery.rootPath, "PLUGIN.md");
+  const packageManifest = (await fileExists(rootPath))
+    ? await parsePluginMdForLocale(discovery.rootPath, locale)
+    : undefined;
+  const manifests: ParsedPluginMd[] = [];
+  if (discovery.isMultiRuntime) {
+    if (packageManifest) {
+      const diagnostics = multiRuntimeRootDiagnostics(packageManifest.manifest);
+      if (diagnostics.length)
+        throw new Error(
+          `${rootPath}: ${diagnostics.map((d) => `${d.path}: ${d.message}`).join("; ")}`,
+        );
+    }
+    for (const mdPath of discovery.pluginMdPaths) {
+      const parsed = await parsePluginMdForLocale(path.dirname(mdPath), locale);
+      if (hasRuntimeDeclaration(parsed.manifest)) manifests.push(parsed);
+      else
+        throw new Error(
+          `${mdPath}: runtime declaration requires execution fields; move package-only declarations to the root PLUGIN.md`,
+        );
+    }
+  } else if (
+    packageManifest &&
+    hasRuntimeDeclaration(packageManifest.manifest)
+  ) {
+    manifests.push(packageManifest);
+  }
+  const definition = {
+    ...(packageManifest ? { packageManifest } : {}),
+    manifests,
+  };
+  validatePluginDeclarations([
+    ...(packageManifest ? [packageManifest] : []),
+    ...manifests,
+  ]);
+  return definition;
+}
+
 export async function loadPluginManifest(
   discovery: PluginDiscoveryResult,
   locale?: string,
 ): Promise<readonly ParsedPluginMd[]> {
-  const results: ParsedPluginMd[] = [];
-
-  for (const mdPath of discovery.pluginMdPaths) {
-    // Resolve localized version if available
-    const parsed = await parsePluginMdForLocale(path.dirname(mdPath), locale);
-    results.push(parsed);
-  }
-
-  return results;
+  return (await loadPluginDefinition(discovery, locale)).manifests;
 }
 
-/**
- * Compile the declaration-time server entry definition for a plugin package.
- *
- * Runtime manifests come from the caller's already-loaded definition cache.
- * Multi-runtime discovery intentionally excludes the metadata-only root
- * PLUGIN.md, so this function reads that root exactly once and folds its entry
- * into the same immutable result. Consumers use this result for both pending
- * approval checks and activation, ensuring the two paths cannot disagree.
- */
+/** Compile already parsed declarations without importing code or re-reading files. */
 export async function loadPluginEntryDefinition(
   discovery: PluginDiscoveryResult,
-  runtimeManifests: readonly ParsedPluginMd[],
+  declarations: readonly ParsedPluginMd[],
 ): Promise<PluginEntryDefinition> {
-  const entryPaths = new Set<string>();
-  for (const parsed of runtimeManifests) {
-    if (parsed.manifest.entry) entryPaths.add(parsed.manifest.entry);
-  }
-
-  let rootManifestIssue: PluginEntryDefinition["rootManifestIssue"];
-  if (discovery.isMultiRuntime) {
-    const rootManifestPath = path.join(discovery.rootPath, "PLUGIN.md");
-    if (await fileExists(rootManifestPath)) {
-      try {
-        const root = await parsePluginMdForLocale(discovery.rootPath);
-        if (root.manifest.entry) entryPaths.add(root.manifest.entry);
-      } catch (error) {
-        rootManifestIssue = {
-          path: rootManifestPath,
-          message: error instanceof Error ? error.message : String(error),
-        };
-      }
-    }
-  }
-
   return {
     pluginId: discovery.id,
     pluginRoot: discovery.rootPath,
-    entryPaths: [...entryPaths],
-    ...(rootManifestIssue ? { rootManifestIssue } : {}),
+    entryPaths: [
+      ...new Set(
+        declarations.flatMap(({ manifest }) =>
+          manifest.entry ? [manifest.entry] : [],
+        ),
+      ),
+    ],
   };
 }
 
 /**
  * Resolve the directory for a given runtime name within a discovery result.
  */
-function resolveRuntimeDir(
+async function resolveRuntimeDir(
   discovery: PluginDiscoveryResult,
   runtimeName: string,
-): string {
-  if (!discovery.isMultiRuntime) {
-    return discovery.rootPath;
-  }
-  // runtimeName may be 'pluginId/subName' — extract the subName for directory resolution
-  const slashIdx = runtimeName.indexOf("/");
-  const subName = slashIdx >= 0 ? runtimeName.slice(slashIdx + 1) : runtimeName;
-  return path.join(discovery.rootPath, "runtimes", subName);
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
-function parseSummaryRelations(value: unknown): PluginRelations | undefined {
-  const parsed = pluginRelationsSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+  definition: PluginDefinition,
+  includePackage = false,
+): Promise<string> {
+  const records = includePackage
+    ? pluginDeclarations(definition)
+    : definition.manifests;
+  const record = records.find(({ manifest }) => manifest.name === runtimeName);
+  if (!record?.sourcePath)
+    throw new Error(
+      `Runtime declaration "${runtimeName}" has no discovered source path`,
+    );
+  await assertInsideRoot(
+    discovery.rootPath,
+    record.sourcePath,
+    "Runtime manifest",
+  );
+  return path.dirname(record.sourcePath);
 }
 
 /**
@@ -486,8 +475,16 @@ export async function loadRuntimeUi(
   discovery: PluginDiscoveryResult,
   runtimeName: string,
   locale?: string,
+  definition?: PluginDefinition,
 ): Promise<Pick<LoadedRuntime, "manifest" | "uiSpecs">> {
-  const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
+  const snapshot =
+    definition ?? (await loadPluginDefinition(discovery, locale));
+  const runtimeDir = await resolveRuntimeDir(
+    discovery,
+    runtimeName,
+    snapshot,
+    true,
+  );
   const parsed = await parsePluginMdForLocale(runtimeDir, locale);
   const uiSpecs = await loadUiSpecs(
     runtimeDir,
@@ -507,8 +504,11 @@ export async function loadRuntime(
   discovery: PluginDiscoveryResult,
   runtimeName: string,
   locale?: string,
+  definition?: PluginDefinition,
 ): Promise<LoadedRuntime> {
-  const runtimeDir = resolveRuntimeDir(discovery, runtimeName);
+  const snapshot =
+    definition ?? (await loadPluginDefinition(discovery, locale));
+  const runtimeDir = await resolveRuntimeDir(discovery, runtimeName, snapshot);
   const parsed = await parsePluginMdForLocale(runtimeDir, locale);
 
   // Deterministic loader rejection (01 §4): a recurrently-detached spec that
@@ -583,7 +583,7 @@ export async function loadRuntime(
   );
 
   return {
-    manifest: parsed.manifest,
+    manifest: resolvePluginRuntimeManifest(snapshot, parsed.manifest),
     promptTemplate: parsed.promptTemplate,
     outputSchema,
     ...(inputSchema ? { inputSchema } : {}),

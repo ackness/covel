@@ -135,6 +135,17 @@ export function GameView({
         void navigate({ to: "/debug", search: { sid: session.id } });
         return;
       }
+      if (action.type === "open-plugin-diagnostics") {
+        void navigate({
+          to: "/debug",
+          search: {
+            sid: session.id,
+            view: "plugins",
+            pluginId: action.pluginId,
+          },
+        });
+        return;
+      }
       if (
         action.type === "open-plugin-panel" &&
         action.pluginId &&

@@ -2,6 +2,9 @@
 
 import {
   getPluginTrustInfo,
+  pluginDeclarations,
+  resolvePluginDeclarations,
+  resolvePluginRuntimeManifest,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import { deriveEffects } from "@covel/runtime";
@@ -55,18 +58,6 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
   };
 }
 
-function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, item: unknown) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item as Record<string, unknown>).sort(([a], [b]) =>
-            a.localeCompare(b),
-          ),
-        )
-      : item,
-  );
-}
-
 function mergeRelations(
   manifests: readonly RuntimeManifest[],
   summaryRelations?: PluginSummary["relations"],
@@ -110,35 +101,27 @@ export function mergePluginUserSettings(
   pluginId: string,
   manifests: readonly RuntimeManifest[],
 ): PluginUserSettingSpec[] {
-  const merged = new Map<
-    string,
-    { spec: PluginUserSettingSpec; runtimeId: string }
-  >();
-  for (const manifest of manifests) {
-    for (const spec of manifest.userSettings ?? []) {
-      const existing = merged.get(spec.key);
-      if (!existing) {
-        merged.set(spec.key, { spec: { ...spec }, runtimeId: manifest.name });
-        continue;
-      }
-      if (stableJson(existing.spec) !== stableJson(spec)) {
-        console.warn(
-          `[plugin-descriptor] plugin.${pluginId}.${spec.key} differs between ` +
-            `"${existing.runtimeId}" and "${manifest.name}"; keeping "${existing.runtimeId}"`,
-        );
-      }
-    }
-  }
-  return [...merged.values()].map(({ spec }) => spec);
+  return [
+    ...resolvePluginDeclarations(
+      manifests.map((manifest) => ({
+        manifest: { ...manifest, pluginId },
+        promptTemplate: "",
+        rawFrontmatter: {},
+      })),
+    ).userSettings,
+  ];
 }
 
 export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
   const manifests = pluginManifestRecords(entry).map(
     ({ manifest }) => manifest,
   );
+  const declarations = pluginDeclarations(entry).map(
+    ({ manifest }) => manifest,
+  );
   const runtimes = manifests.map(runtimeSummary);
   const source = getPluginTrustInfo(entry.id, entry.source).source;
-  const relations = mergeRelations(manifests, entry.summary.relations);
+  const relations = mergeRelations(declarations, entry.summary.relations);
   const tools = manifests.flatMap((manifest) => [
     ...(manifest.tools?.builtin ?? []).map((id) => ({
       id,
@@ -160,19 +143,21 @@ export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
     source,
     status: entry.status,
     ...(entry.error ? { error: entry.error } : {}),
-    runtimeCount: entry.summary.runtimeCount,
-    ...(manifests[0]?.version ? { version: manifests[0].version } : {}),
+    runtimeCount: runtimes.length,
+    ...((entry.packageManifest?.manifest ?? manifests[0])?.version
+      ? { version: (entry.packageManifest?.manifest ?? manifests[0])!.version }
+      : {}),
     capabilities: uniqueSorted(
-      runtimes.flatMap((runtime) => runtime.capabilities),
+      declarations.flatMap((manifest) => manifest.capabilities ?? []),
     ),
     tags: uniqueSorted([
       ...(entry.summary.tags ?? []),
-      ...runtimes.flatMap((runtime) => runtime.tags),
+      ...declarations.flatMap((manifest) => manifest.tags ?? []),
     ]),
     ...(relations ? { relations } : {}),
     runtimes,
     tools,
-    userSettings: mergePluginUserSettings(entry.id, manifests),
+    userSettings: mergePluginUserSettings(entry.id, declarations),
   };
 }
 
@@ -224,8 +209,17 @@ function runtimeContract(manifest: RuntimeManifest): RuntimePluginContract {
 export function buildPluginDetail(entry: PluginRegistryEntry): PluginDetail {
   const summary = buildPluginSummary(entry);
   const runtimes = pluginManifestRecords(entry).map(({ manifest }) =>
-    runtimeContract(manifest),
+    runtimeContract(resolvePluginRuntimeManifest(entry, manifest)),
   );
+  const declarations = pluginDeclarations(entry);
+  const runtimeIds = new Set(runtimes.map((runtime) => runtime.id));
+  const uiDeclarations = (slot: "right" | "message" | "left") =>
+    declarations.flatMap(({ manifest }) =>
+      (manifest.ui?.[slot] ?? []).map((path) => ({
+        ...(runtimeIds.has(manifest.name) ? { runtimeId: manifest.name } : {}),
+        path,
+      })),
+    );
   const dataSchemas = Object.fromEntries(
     Object.entries(entry.dataSchemas ?? {}).map(([namespace, declaration]) => [
       namespace,
@@ -261,15 +255,9 @@ export function buildPluginDetail(entry: PluginRegistryEntry): PluginDetail {
       ...runtimes.flatMap((runtime) => runtime.writablePluginDataNamespaces),
     ]),
     ui: {
-      right: runtimes.flatMap((runtime) =>
-        runtime.ui.right.map((path) => ({ runtimeId: runtime.id, path })),
-      ),
-      message: runtimes.flatMap((runtime) =>
-        runtime.ui.message.map((path) => ({ runtimeId: runtime.id, path })),
-      ),
-      left: runtimes.flatMap((runtime) =>
-        runtime.ui.left.map((path) => ({ runtimeId: runtime.id, path })),
-      ),
+      right: uiDeclarations("right"),
+      message: uiDeclarations("message"),
+      left: uiDeclarations("left"),
     },
     runtimes,
   };

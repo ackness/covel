@@ -135,16 +135,16 @@ export async function executeTurn(
 ): Promise<TurnResult> {
   // Publish the session's active plugin set so the global HookPipeline only
   // fires hooks of plugins active in this session (see hooks/hook-scope.ts).
-  const activePluginIds = new Set<string>(
-    activeRuntimes.map((r) => r.pluginId),
-  );
   // Capture a turn-level, per-plugin read-only settings snapshot alongside the
   // active set, so hooks can read their own plugin's `userSettings` via
   // `HookContext.getOwnSettings`. Purely additive: when no plugin declares
   // settings the snapshot is empty and behaviour is unchanged.
   const userSettings = snapshotUserSettings(input.userSettings);
-  const settings = buildHookSettings(activeRuntimes, userSettings);
-  return runWithHookScope({ activePluginIds, settings }, () =>
+  const hookScope = deps.hookScope ?? {
+    activePluginIds: new Set(activeRuntimes.map((r) => r.pluginId)),
+    settings: buildHookSettings(activeRuntimes, userSettings),
+  };
+  return runWithHookScope(hookScope, () =>
     executeTurnImpl({ ...input, userSettings }, activeRuntimes, deps, options),
   );
 }

@@ -1,6 +1,6 @@
 # Third-party Plugin Lifecycle Probe
 
-这是一个可独立导入的第三方插件包，位于 `tests/third-party/`，不会作为内置插件随产品加载。无 npm 依赖，不需要构建；ZIP 根目录包含 `package.json`、`PLUGIN.md` 和全部运行资源。
+这是一个可独立导入的第三方插件包，位于 `tests/third-party/`，不会作为内置插件随产品加载。无 npm 依赖，不需要构建；ZIP 根目录包含 `package.json`、`PLUGIN.md` 和全部运行资源。`service-provider-probe` 是第二个独立安装的测试包，用来验证插件间服务调用。
 
 ## 打包与自动测试
 
@@ -9,6 +9,7 @@
 ```sh
 pnpm pack:test-plugin
 pnpm test:plugin-lifecycle
+pnpm --filter @covel/server exec vitest run tests/api/third-party-plugin-lifecycle.test.ts
 pnpm --filter @covel/desktop smoke:restart
 ```
 
@@ -23,13 +24,29 @@ ZIP 输出到 `test-results/lifecycle-probe.zip`。测试将该 ZIP 通过真实
 | 同步函数 runtime、缓冲写入、失败回滚                     | `lifecycle-probe/note`                        |
 | 后台函数 runtime、异步作业                               | `lifecycle-probe/background`                  |
 | Agent runtime、提示词设置注入、本地工具、proposal 提交   | `lifecycle-probe/agent`                       |
-| 插件服务入口、按会话记录 TurnStart hook 次数             | `server/index.js`                             |
+| 插件入口、按会话记录 TurnStart hook 次数                 | `server/index.js`                             |
 | 独立 RPC 与逐项审批                                      | `probe-status`                                |
+| 面板与输入框共用的只读 `/probe` 命令                     | `PLUGIN.md`、`runtimes/note/ui/panel.json`    |
+| 按 payload 指定提供者的跨插件服务调用                    | `lib/record.js`、`service-provider-probe`     |
 | 插件自有数据与 JSON Schema                               | `notes` namespace、`schemas/note.schema.json` |
 | text、integer、toggle、select 设置                       | `label`、`count`、`enabled`、`voice`          |
 | 多 runtime 包中的侧栏 UI、中英文标签、运行按钮与记录列表 | `runtimes/note/ui/panel.json`                 |
 
 自动回归覆盖无凭据拒绝、安装、重复导入、重启发现、启用审批、运行审批、设置覆盖、工具执行、后台落库、RPC/hook、失败回滚、禁用与审批撤销、卸载、重启清除发现结果和重新安装。卸载保留会话数据；重新安装后仍需重新审批。
+
+组合测试会把两个 ZIP 经真实安装 API 导入、重启并逐个启用。`/probe` 和面板的状态按钮复用 `probe-status` 只读 RPC；`lifecycle-probe/note` 在手动 payload 带 `providerPluginId` 时，先按 `probe/note-format@1` 发现指定提供者，再调用其 `format-note` 服务，将结果写入自己的 `notes` namespace。普通记录不带该字段，原有行为不变。测试还检查提供者未启用和禁用后的调用失败、不产生记录，且命令和手动 runtime 都不推进玩家回合或调用 LLM。服务调用只发生在 function runtime，命令 RPC 不直接取得跨插件服务。
+
+服务调用设置 1500 ms 的局部预算；超时或调用失败时，记录不会提交。entry 还展示资源生命周期：`SessionEnd` 移除该会话的临时计数，`onDispose` 在宿主关闭时清空整个计数缓存。
+
+手动触发组合记录的 payload 示例：
+
+```json
+{
+  "key": "composed",
+  "text": "Service result",
+  "providerPluginId": "service-provider-probe"
+}
+```
 
 ## 桌面端手动验证
 
