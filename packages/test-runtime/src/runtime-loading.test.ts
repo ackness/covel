@@ -3,11 +3,15 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
+import { loadPluginDefinition } from "@covel/plugin-loader";
+import { PluginServiceRegistry } from "@covel/runtime";
+import { z } from "@covel/tools";
 
 import {
   expandPath,
   defaultPluginsDir,
   loadEntryTools,
+  loadRuntimeBundle,
   pluginIdFromRuntime,
   prepareRuntimeManifests,
 } from "./runtime-loading.js";
@@ -100,14 +104,21 @@ describe("test-runtime runtime loading helpers", () => {
         ].join("\n"),
       );
 
+      const discovery = {
+        id: "plugin",
+        rootPath,
+        isMultiRuntime: true,
+        pluginMdPaths: [path.join(rootPath, "runtimes/main/PLUGIN.md")],
+      };
+      await fs.mkdir(path.join(rootPath, "runtimes/main"), { recursive: true });
+      await fs.writeFile(
+        discovery.pluginMdPaths[0]!,
+        "---\nname: plugin/main\ndescription: Main\ntrigger: {type: manual}\n---\n",
+        "utf8",
+      );
       const tools = await loadEntryTools(
-        {
-          id: "plugin",
-          rootPath,
-          isMultiRuntime: true,
-          pluginMdPaths: [path.join(rootPath, "runtimes/main/PLUGIN.md")],
-        },
-        [manifest()],
+        discovery,
+        await loadPluginDefinition(discovery),
       );
 
       expect(tools.map((entry) => entry.name)).toEqual(["root-tool"]);
@@ -115,4 +126,222 @@ describe("test-runtime runtime loading helpers", () => {
       await fs.rm(rootPath, { recursive: true, force: true });
     }
   });
+  it("shares package declarations with runtimes whose logical IDs differ from their directories", async () => {
+    const pluginsDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "covel-harness-package-"),
+    );
+    const root = path.join(pluginsDir, "probe");
+    try {
+      await fs.mkdir(path.join(root, "runtimes/main"), { recursive: true });
+      await fs.writeFile(
+        path.join(root, "PLUGIN.md"),
+        `---
+name: probe
+description: Package
+userSettings:
+  - key: mode
+    type: text
+    label: Mode
+    default: brief
+dataSchemas:
+  notes:
+    schema: ./schemas/notes.json
+    schemaVersion: 1
+    acceptsWorldData: false
+---
+`,
+        "utf8",
+      );
+      await fs.mkdir(path.join(root, "schemas"));
+      await fs.writeFile(
+        path.join(root, "schemas/notes.json"),
+        '{"type":"object"}',
+        "utf8",
+      );
+      await fs.writeFile(
+        path.join(root, "runtimes/main/PLUGIN.md"),
+        `---
+name: probe/logical
+description: Main
+runtimeType: function
+handler: ./handler.js
+trigger: {type: manual}
+---
+`,
+        "utf8",
+      );
+      await fs.writeFile(
+        path.join(root, "runtimes/main/handler.js"),
+        'export default async () => ({outcome: "success", value: {}});',
+        "utf8",
+      );
+      const bundle = await loadRuntimeBundle({
+        pluginsDir,
+        pluginId: "probe",
+        runtimeId: "probe/logical",
+        locale: "zh-CN",
+      });
+      expect(bundle.target.userSettings?.[0]?.default).toBe("brief");
+      expect(bundle.target.dataSchemas?.notes.schema).toBe(
+        "./schemas/notes.json",
+      );
+      expect(
+        bundle.loadedCache.get("probe/logical")?.manifest.userSettings,
+      ).toEqual(bundle.target.userSettings);
+      expect(
+        bundle.loadedCache.get("probe/logical")?.manifest.dataSchemas,
+      ).toEqual(bundle.target.dataSchemas);
+    } finally {
+      await fs.rm(pluginsDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["create-form", "memory-search", "search-tools", "duplicate"])(
+    "rejects invalid %s registration even when its factory catches errors",
+    async (name) => {
+      const root = await fs.mkdtemp(
+        path.join(os.tmpdir(), "covel-harness-tools-"),
+      );
+      try {
+        await fs.writeFile(
+          path.join(root, "PLUGIN.md"),
+          "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+          "utf8",
+        );
+        const registration = `covel.registerTool(covel.toolkit.tool({ name: "${name}", description: "Fixture", parameters: covel.toolkit.z.object({}), execute: async () => ({}) }));`;
+        await fs.writeFile(
+          path.join(root, "entry.js"),
+          `export default (covel) => { try { ${registration} ${name === "duplicate" ? registration : ""} } catch {} };`,
+          "utf8",
+        );
+        const discovery = {
+          id: "probe",
+          rootPath: root,
+          isMultiRuntime: false,
+          pluginMdPaths: [path.join(root, "PLUGIN.md")],
+        };
+        await expect(
+          loadEntryTools(discovery, await loadPluginDefinition(discovery)),
+        ).rejects.toThrow(
+          name === "duplicate" ? "already registered" : "reserved",
+        );
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("rejects an entry symlink outside the plugin root before importing it", async () => {
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "covel-harness-symlink-"),
+    );
+    const root = path.join(directory, "plugin");
+    try {
+      await fs.mkdir(root);
+      await fs.writeFile(
+        path.join(root, "PLUGIN.md"),
+        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+        "utf8",
+      );
+      await fs.writeFile(
+        path.join(directory, "external.js"),
+        'throw new Error("external entry executed");',
+        "utf8",
+      );
+      await fs.symlink(
+        path.join(directory, "external.js"),
+        path.join(root, "entry.js"),
+      );
+      const discovery = {
+        id: "probe",
+        rootPath: root,
+        isMultiRuntime: false,
+        pluginMdPaths: [path.join(root, "PLUGIN.md")],
+      };
+      await expect(
+        loadEntryTools(discovery, await loadPluginDefinition(discovery)),
+      ).rejects.toThrow("entry path escapes plugin root");
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["factory", "tool", "service", "success"])(
+    "publishes services atomically when activation ends with %s",
+    async (outcome) => {
+      const root = await fs.mkdtemp(
+        path.join(os.tmpdir(), "covel-harness-services-"),
+      );
+      const services = new PluginServiceRegistry({
+        list: async () => ["probe", "other"],
+        ensure: async () => {},
+      });
+      services.register("other", {
+        name: "existing",
+        contract: "test/v1",
+        input: z.object({}),
+        output: z.object({}),
+        handler: async () => ({}),
+      });
+      const client = services.createClient({
+        sessionId: "s",
+        pluginId: "probe",
+        signal: new AbortController().signal,
+      });
+      try {
+        await fs.writeFile(
+          path.join(root, "PLUGIN.md"),
+          "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+          "utf8",
+        );
+        const registration =
+          'covel.registerService({ name: "pending", contract: "test/v1", input: covel.toolkit.z.object({}), output: covel.toolkit.z.object({}), handler: async () => ({}) });';
+        const ending =
+          outcome === "factory"
+            ? 'throw new Error("factory failed");'
+            : outcome === "tool"
+              ? 'covel.registerTool(covel.toolkit.tool({ name: "memory-search", description: "Invalid", parameters: covel.toolkit.z.object({}), execute: async () => ({}) }));'
+              : outcome === "service"
+                ? registration
+                : "";
+        await fs.writeFile(
+          path.join(root, "entry.js"),
+          `export default covel => { ${registration} ${ending} };`,
+          "utf8",
+        );
+        const discovery = {
+          id: "probe",
+          rootPath: root,
+          isMultiRuntime: false,
+          pluginMdPaths: [path.join(root, "PLUGIN.md")],
+        };
+        const activation = loadEntryTools(
+          discovery,
+          await loadPluginDefinition(discovery),
+          services,
+        );
+        if (outcome === "success")
+          await expect(activation).resolves.toEqual([]);
+        else
+          await expect(activation).rejects.toThrow(
+            outcome === "factory"
+              ? "factory failed"
+              : outcome === "tool"
+                ? "reserved"
+                : "Duplicate plugin service",
+          );
+        expect(
+          (await client.discover("test/v1")).map(
+            ({ pluginId, name }) => `${pluginId}/${name}`,
+          ),
+        ).toEqual(
+          outcome === "success"
+            ? ["other/existing", "probe/pending"]
+            : ["other/existing"],
+        );
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 });

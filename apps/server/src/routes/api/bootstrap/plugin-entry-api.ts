@@ -7,7 +7,6 @@ import {
   shortIdBatch,
   tool,
   withPendingProposals,
-  type ToolModule,
 } from "@covel/tools";
 import { z } from "zod";
 import type { BootstrapPluginEntriesParams } from "./plugin-entry.js";
@@ -16,13 +15,40 @@ import { registerNamespaced } from "./plugin-wires.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
 
 const HOOK_EVENT_SET: ReadonlySet<string> = new Set(HOOK_EVENTS);
+const hookOptionsSchema = z
+  .object({
+    match: z
+      .custom(
+        (value) => typeof value === "function",
+        "expected a predicate function",
+      )
+      .optional(),
+    timeoutMs: z.number().finite().positive().optional(),
+    enforce: z.enum(["pre", "normal", "post"]).optional(),
+  })
+  .strict();
+const rpcOptionsSchema = z
+  .object({
+    description: z.string().optional(),
+    trustLevel: z.enum(["builtin", "community"]).optional(),
+  })
+  .strict();
 
-function isToolModule(value: unknown): value is ToolModule {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    (value as Record<string, unknown>)._type === "covel-tool"
-  );
+function validateOptions(
+  schema: z.ZodType,
+  operation: string,
+  options: unknown,
+): void {
+  const result = schema.safeParse(options === undefined ? {} : options);
+  if (!result.success)
+    throw new PluginRegistrationError(
+      operation,
+      result.error.issues
+        .map(
+          (issue) => `${issue.path.join(".") || "options"}: ${issue.message}`,
+        )
+        .join("; "),
+    );
 }
 
 export function buildEntryApi(
@@ -33,9 +59,7 @@ export function buildEntryApi(
   const {
     discoveryMap,
     store,
-    toolMap,
-    localToolNames,
-    pluginToolAccess,
+    tools,
     hookPipeline,
     rpcRegistry,
     isCommunityHookApproved,
@@ -70,51 +94,19 @@ export function buildEntryApi(
     },
     registerTool(toolModule) {
       batch.stage(() => {
-        if (!isToolModule(toolModule)) {
+        try {
+          batch.track(tools.registerPlugin(pluginId, toolModule));
+        } catch (error) {
           throw new PluginRegistrationError(
             "registerTool",
-            "expected a ToolModule built with covel.toolkit.tool()",
+            error instanceof Error ? error.message : String(error),
           );
         }
-        // Reject collisions: a duplicate name would silently replace the
-        // existing implementation globally — for a builtin name, `findTool`
-        // resolves via builtinToolNames first and every runtime would get
-        // the replacement, bypassing the plugin access boundary.
-        if (toolMap.has(toolModule.name)) {
-          throw new PluginRegistrationError(
-            "registerTool",
-            `tool "${toolModule.name}" collides with an existing tool; use a plugin-prefixed name`,
-          );
-        }
-        toolMap.set(toolModule.name, toolModule);
-        const wasLocal = localToolNames.has(toolModule.name);
-        localToolNames.add(toolModule.name);
-        const hadAccessSet = pluginToolAccess.has(pluginId);
-        let allowed = pluginToolAccess.get(pluginId);
-        if (!allowed) {
-          allowed = new Set();
-          pluginToolAccess.set(pluginId, allowed);
-        }
-        const hadAccess = allowed.has(toolModule.name);
-        allowed.add(toolModule.name);
-        const access = allowed;
-        batch.track(() => {
-          if (toolMap.get(toolModule.name) !== toolModule) return;
-          toolMap.delete(toolModule.name);
-          if (!wasLocal) localToolNames.delete(toolModule.name);
-          if (!hadAccess) access.delete(toolModule.name);
-          if (
-            !hadAccessSet &&
-            access.size === 0 &&
-            pluginToolAccess.get(pluginId) === access
-          ) {
-            pluginToolAccess.delete(pluginId);
-          }
-        });
       });
     },
     on(event, handler, options) {
       batch.stage(() => {
+        validateOptions(hookOptionsSchema, "on", options);
         if (!HOOK_EVENT_SET.has(event)) {
           throw new PluginRegistrationError(
             "on",
@@ -155,6 +147,7 @@ export function buildEntryApi(
     },
     registerRpc(action, handler, options) {
       batch.stage(() => {
+        validateOptions(rpcOptionsSchema, "registerRpc", options);
         if (
           typeof action !== "string" ||
           !action.trim() ||
@@ -183,7 +176,11 @@ export function buildEntryApi(
       });
     },
     registerFormValidator(name, validator) {
-      if (!name || typeof validator !== "function")
+      if (
+        typeof name !== "string" ||
+        !name.trim() ||
+        typeof validator !== "function"
+      )
         throw new PluginRegistrationError(
           "registerFormValidator",
           "expected a name and validator function",

@@ -18,6 +18,10 @@
 
 UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，handler 后续失败不会自动回滚。多条记录必须一起成功或失败时，用 `invokeRuntime` 触发 `trigger.type: manual` 的 function runtime：`ctx.pluginData` 写入和领域 effects 进入同一次 proposal 提交。该 function handler 不需要 LLM，手动触发本身也不会运行叙事 runtime；声明的事件下游仍按调度契约执行。`invokeCommand` 适用于 manifest 声明的玩家命令，不能用 `invokePluginAction` 绕过命令校验与审计。参见 [RPC 通道](api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](plugins.md#handler-store-and-commit-ownership)。
 
+插件工具在 `entry` 工厂中通过 `covel.registerTool()` 注册，名字在插件内唯一；不同插件同名不会互相覆盖。工具调用只解析调用方插件的实现和框架内置工具，跨插件公共调用使用下文的 services。
+
+只有 `entry`、Hook 或 UI 的包可以没有 runtime。它的 Hook 仍按会话已启用的插件集合执行，`ctx.getOwnSettings()` 读取包级 `userSettings` 默认值与本次世界、玩家覆盖值；没有 runtime 不会丢失这些默认值，也不会凭空调度一个 runtime。执行与提交各使用明确的会话 Hook scope；嵌入式 `executeTurn` 调用方如需包含零 runtime 包，应在 `TurnExecutorDeps.hookScope` 传入其 `activePluginIds` 和已解析的 `settings`，并在 `commitExecution` 传入相同边界。宿主从持久会话激活集合构造 scope，社区 Hook 每次调用仍检查当前 server-code 授权。
+
 ## 公共函数注册与调用
 
 服务在已有 `entry` 工厂运行期间注册。注册与工具、hook、RPC 一起原子发布，失败回滚，关闭宿主时解除注册。服务名在所属插件内唯一；`contract` 是插件作者定义的公开契约标识，建议显式携带版本。不兼容修改使用新的契约，不添加开发数据迁移。

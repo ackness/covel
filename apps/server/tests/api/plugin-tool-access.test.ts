@@ -1,78 +1,71 @@
 import { describe, expect, it } from "vitest";
-import type { ParsedPluginMd } from "@covel/plugin-loader";
-import type { RuntimeManifest } from "@covel/shared";
-import { buildPluginToolAccess } from "../../src/routes/api/bootstrap/plugin-tool-access.js";
+import { createPluginRegistry } from "@covel/plugin-loader";
+import { createMemoryStore } from "@covel/store";
+import { tool, z } from "@covel/tools";
+import { setupPluginTools } from "../../src/routes/api/bootstrap/tools.js";
 
-function parsedManifest(
-  patch: Partial<RuntimeManifest> & Pick<RuntimeManifest, "name">,
-): ParsedPluginMd {
-  return {
-    manifest: {
-      pluginId: patch.name.split("/")[0] ?? patch.name,
-      description: "test runtime",
-      ...patch,
-    } as RuntimeManifest,
-    promptTemplate: "",
-    rawFrontmatter: {},
-  };
-}
-
-describe("buildPluginToolAccess", () => {
-  it("seeds from builtin names only — a `tools.plugin` declaration grants nothing until registration succeeds", () => {
-    // Granting from the declaration alone would let a plugin reach another
-    // plugin's same-named tool through the global toolMap; `registerTool`
-    // grants the name only when its own registration wins.
-    const access = buildPluginToolAccess(
-      new Map([
-        [
-          "plugin-a",
-          [
-            parsedManifest({
-              name: "plugin-a/main",
-              tools: {
-                builtin: ["plugin-data-get"],
-                plugin: ["entry-declared-tool"],
-              },
-            }),
-          ],
-        ],
-      ]),
-    );
-
-    expect([...(access.get("plugin-a") ?? [])].sort()).toEqual([
-      "plugin-data-get",
-    ]);
-  });
-
-  it("unions builtin declarations across a plugin's runtimes", () => {
-    const access = buildPluginToolAccess(
-      new Map([
-        [
-          "multi",
-          [
-            parsedManifest({
-              name: "multi/one",
-              tools: { builtin: ["plugin-data-get"] },
-            }),
-            parsedManifest({
-              name: "multi/two",
-              tools: { builtin: ["plugin-data-set", "plugin-data-get"] },
-            }),
-          ],
-        ],
-      ]),
-    );
-
-    expect([...(access.get("multi") ?? [])].sort()).toEqual([
-      "plugin-data-get",
-      "plugin-data-set",
-    ]);
-  });
-
-  it("gives a plugin with no tool declarations an empty allowlist, not a missing entry", () => {
-    const access = buildPluginToolAccess(
-      new Map([["bare", [parsedManifest({ name: "bare/main" })]]]),
-    );
-    expect(access.get("bare")).toEqual(new Set());
+describe("plugin-scoped tools", () => {
+  it("advertises and executes the caller's implementation without cross-plugin fallback", async () => {
+    const { tools, toolExecutor } = await setupPluginTools({
+      store: createMemoryStore(),
+      registry: createPluginRegistry(),
+      discoveryMap: new Map(),
+      manifestCache: new Map(),
+      llmAdapter: {} as never,
+      eventDirectory: { get: () => undefined, list: () => [] } as never,
+    });
+    try {
+      for (const pluginId of ["alpha", "beta"]) {
+        tools.registerPlugin(
+          pluginId,
+          tool({
+            name: "lookup",
+            description: pluginId,
+            parameters: z.object({}),
+            execute: async () => ({ owner: pluginId }),
+          }),
+        );
+      }
+      for (const pluginId of ["alpha", "beta", "missing"]) {
+        const context = {
+          pluginId,
+          runtimeId: `${pluginId}/main`,
+          sessionId: "s",
+          turnId: "t",
+          authorizedToolNames: new Set(["lookup", "beta/lookup"]),
+        };
+        if (pluginId !== "missing") {
+          expect(toolExecutor.getToolInfo("lookup", context)).toEqual(
+            expect.objectContaining({ name: "lookup", description: pluginId }),
+          );
+        } else {
+          expect(toolExecutor.getToolInfo("lookup", context)).toBeUndefined();
+        }
+        const result = await toolExecutor.execute(
+          { toolCallId: pluginId, name: "lookup", arguments: "{}" },
+          context,
+        );
+        expect(result.success).toBe(pluginId !== "missing");
+        if (result.success)
+          expect(result.parsedResult).toEqual({ owner: pluginId });
+        expect(
+          toolExecutor.getToolInfo("beta/lookup", context),
+        ).toBeUndefined();
+      }
+      const denied = await toolExecutor.execute(
+        { toolCallId: "undeclared", name: "lookup", arguments: "{}" },
+        {
+          pluginId: "alpha",
+          runtimeId: "alpha/other",
+          sessionId: "s",
+          turnId: "t",
+          authorizedToolNames: new Set(),
+        },
+      );
+      expect(denied.success).toBe(false);
+      expect(denied.result).toContain("UNAUTHORIZED");
+    } finally {
+      await toolExecutor.close();
+    }
   });
 });

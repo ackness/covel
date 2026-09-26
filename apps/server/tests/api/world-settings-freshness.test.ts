@@ -9,8 +9,56 @@ import {
   makeSession,
   makeWorld,
 } from "../../../../packages/store/src/contract/test-fixtures.js";
-import { loadSessionHookScope } from "../../src/routes/api/session/hook-scope.js";
+import {
+  buildSessionHookScope,
+  loadSessionHookScope,
+} from "../../src/routes/api/session/hook-scope.js";
 import { createBootstrapMemorySystem } from "../../src/routes/api/bootstrap/memory.js";
+
+it("resolves hook settings for an active package with no runtimes", () => {
+  const pluginId = "entry-only";
+  const registry = createPluginRegistry();
+  registry.register({
+    id: pluginId,
+    source: "builtin",
+    status: "registered",
+    loadedRuntimes: new Map(),
+    summary: {
+      id: pluginId,
+      name: pluginId,
+      description: "Hook-only package",
+      pluginType: "plugin",
+      runtimeCount: 0,
+    },
+    manifests: [],
+    packageManifest: {
+      manifest: {
+        name: pluginId,
+        pluginId,
+        description: "Hook-only package",
+        userSettings: [
+          { key: "budget", type: "number", label: "Budget", default: 10 },
+        ],
+      },
+      promptTemplate: "",
+      rawFrontmatter: {},
+    },
+  });
+  const scope = buildSessionHookScope({
+    pluginRegistry: registry,
+    activePluginIds: [pluginId],
+    userSettings: { [pluginId]: { budget: 4 } },
+  });
+  expect([...scope.activePluginIds]).toEqual([pluginId]);
+  expect(scope.settings?.[pluginId]).toEqual({ budget: 4 });
+  expect(Object.isFrozen(scope.settings?.[pluginId])).toBe(true);
+  expect(
+    buildSessionHookScope({
+      pluginRegistry: registry,
+      activePluginIds: [],
+    }).settings?.[pluginId],
+  ).toBeUndefined();
+});
 
 describe.each(["memory", "sqlite"])(
   "world settings freshness on %s",

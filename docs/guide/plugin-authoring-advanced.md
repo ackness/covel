@@ -236,25 +236,19 @@ plugins/my-combat/
 
 ### 插件级字段的合并规则
 
-PLUGIN.md 只有一套 frontmatter schema，但其中 9 个字段是**按插件消费**而非按 runtime 消费的。多 runtime 插件重复声明它们时，各字段的处理方式并不统一——单一真相是 `@covel/shared` 的 `PLUGIN_SCOPED_FIELDS` 常量（`packages/shared/src/types/plugin.ts`），类型系统强制每个插件级字段都必须在那里登记合并规则：
+根 `PLUGIN.md` 可提供共享声明，子 runtime 也可贡献声明。框架在发现插件时统一校验；执行调度只使用真正的 runtime。字段归属参考 `@covel/shared` 的 `PLUGIN_SCOPED_FIELDS`。
 
-| 字段           | 多 runtime 声明时              | 冲突处理                         |
-| -------------- | ------------------------------ | -------------------------------- |
-| `entry`        | 全部执行（路径去重，含根）     | 无——都注册到同一个 pluginId      |
-| `wires`        | 全部加载                       | wire id 冲突由 wire registry 定  |
-| `tags`         | 合并去重                       | 无                               |
-| `relations`    | session 解析时合并所有 runtime | 无                               |
-| `userSettings` | 按 `key` 合并                  | **不一致则 warn，先声明的赢**    |
-| `dataSchemas`  | 按 namespace 合并              | **不一致直接抛错，插件注册失败** |
-| `events`       | 按 `topic` 合并                | 先声明的赢（跨插件冲突才 warn）  |
-| `memoryBlocks` | 按 `label` 跨**所有插件**合并  | 信任级高的赢，同级先声明的赢     |
-| `displayName`  | **只读根 PLUGIN.md**           | 不适用                           |
+| 字段                              | 同一插件的合并规则                  | 冲突处理                                         |
+| --------------------------------- | ----------------------------------- | ------------------------------------------------ |
+| `entry`                           | 根与子 runtime 的路径去重后全部执行 | 注册失败会回滚整批                               |
+| `ui`                              | 保留声明目录，汇总面板              | 通过现有 UI 校验报告错误                         |
+| `userSettings`、`commands`        | 按设置 key、命令 name 合并          | 不一致则插件加载失败                             |
+| `dataSchemas`、`worldProjections` | 按 namespace、projection id 合并    | 不一致则插件加载失败                             |
+| `events`、`memoryBlocks`          | 按 topic、label 合并                | 同插件不一致则加载失败；跨插件保留现有优先级规则 |
+| `tags`、`relations`               | 集合合并                            | 去重                                             |
+| `displayName`、`version`          | 包展示信息优先取根                  | runtime 的展示信息属于各自 runtime               |
 
-要点：
-
-- `entry` / `wires` 惯例上写在根 PLUGIN.md，但**不是**只能写一处——两个 runtime 声明不同路径时两个都会加载。
-- `userSettings` 的存储键是 `plugin.<pluginId>.<key>`，两个 runtime 声明同一 key 就共用一个值，所以声明必须逐字相同。`pnpm validate:plugin <插件目录>` 会检查这一条。
-- `displayName` 无法在 runtime 上声明——runtime 的 displayName 描述的是那个 runtime，不是插件。
+共享设置的存储键仍为 `plugin.<pluginId>.<key>`。所有 runtime 使用同一份默认值与 schema；包级 UI 不会因 runtime 数量增加而重复。`entry` 可通过 `covel.registerWires()` 注册媒体能力，清单没有独立的 `wires` 字段。
 
 `PluginManifest` 类型反映了这种结构：
 

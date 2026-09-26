@@ -7,13 +7,17 @@ import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { PluginServiceRegistry, type PluginAPI } from "@covel/runtime";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
+  loadPluginEntryDefinition,
+  pluginDeclarations,
+  resolvePluginRuntimeManifest,
+  type PluginDefinition,
   loadRuntime,
-  parsePluginMd,
   type LoadedRuntime,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import {
+  ToolRegistry,
   shortId,
   shortIdBatch,
   tool,
@@ -66,7 +70,10 @@ export async function discoverPlugin(
 export async function loadRuntimeManifests(
   discovery: PluginDiscoveryResult,
 ): Promise<readonly RuntimeManifest[]> {
-  return (await loadPluginManifest(discovery)).map((item) => item.manifest);
+  const definition = await loadPluginDefinition(discovery);
+  return definition.manifests.map(({ manifest }) =>
+    resolvePluginRuntimeManifest(definition, manifest),
+  );
 }
 
 export function prepareRuntimeManifests(args: {
@@ -96,14 +103,21 @@ export function prepareRuntimeManifests(args: {
 export async function loadRuntimeCache(args: {
   readonly discovery: PluginDiscoveryResult;
   readonly rawManifests: readonly RuntimeManifest[];
+  readonly definition: PluginDefinition;
   readonly locale: string;
 }): Promise<Map<string, LoadedRuntime>> {
   const loadedCache = new Map<string, LoadedRuntime>();
   for (const manifest of args.rawManifests) {
-    loadedCache.set(
+    const loaded = await loadRuntime(
+      args.discovery,
       manifest.name,
-      await loadRuntime(args.discovery, manifest.name, args.locale),
+      args.locale,
+      args.definition,
     );
+    loadedCache.set(manifest.name, {
+      ...loaded,
+      manifest: resolvePluginRuntimeManifest(args.definition, loaded.manifest),
+    });
   }
   return loadedCache;
 }
@@ -116,7 +130,10 @@ export async function loadRuntimeBundle(args: {
   readonly ignoreUpstreams?: boolean;
 }): Promise<RuntimeLoadResult> {
   const discovery = await discoverPlugin(args.pluginsDir, args.pluginId);
-  const rawManifests = await loadRuntimeManifests(discovery);
+  const definition = await loadPluginDefinition(discovery);
+  const rawManifests = definition.manifests.map(({ manifest }) =>
+    resolvePluginRuntimeManifest(definition, manifest),
+  );
   const { manifests, target } = prepareRuntimeManifests({
     rawManifests,
     runtimeId: args.runtimeId,
@@ -125,6 +142,7 @@ export async function loadRuntimeBundle(args: {
   });
   const loadedCache = await loadRuntimeCache({
     discovery,
+    definition,
     rawManifests,
     locale: args.locale,
   });
@@ -135,7 +153,7 @@ export async function loadRuntimeBundle(args: {
         throw new Error("The isolated harness only loads the target plugin");
     },
   });
-  const entryTools = await loadEntryTools(discovery, manifests, services);
+  const entryTools = await loadEntryTools(discovery, definition, services);
   return {
     discovery,
     rawManifests,
@@ -150,35 +168,27 @@ export async function loadRuntimeBundle(args: {
 /**
  * Run the plugin's `entry` module and collect the tools it registers.
  *
- * The harness only needs the tool surface, so the `PluginAPI` it passes
- * implements `registerTool` and no-ops the rest: hooks, RPC actions and media
- * wires are server-bootstrap concerns that a single-runtime harness turn never
+ * The harness publishes tools and services after all entry factories succeed.
+ * Hooks, RPC actions and media wires are server-bootstrap concerns that a
+ * single-runtime harness turn never
  * reaches. An entry that registers one of those still runs to completion — it
  * just has no observable effect here.
  */
 export async function loadEntryTools(
   discovery: PluginDiscoveryResult,
-  manifests: readonly RuntimeManifest[],
+  definition: PluginDefinition,
   services?: PluginServiceRegistry,
 ): Promise<readonly ToolModule[]> {
-  const entryPaths = new Set(
-    manifests.flatMap((manifest) => (manifest.entry ? [manifest.entry] : [])),
+  const { entryPaths } = await loadPluginEntryDefinition(
+    discovery,
+    pluginDeclarations(definition),
   );
-  // Multi-runtime discovery intentionally excludes the metadata-only root
-  // PLUGIN.md from `manifests`. Production bootstrap reads it separately so
-  // root-declared entry tools are registered; the test harness must do the
-  // same or it silently tests a different tool registry than production.
-  const rootManifestPath = path.join(discovery.rootPath, "PLUGIN.md");
-  if (fs.existsSync(rootManifestPath)) {
-    const rootEntry = parsePluginMd(
-      fs.readFileSync(rootManifestPath, "utf8"),
-      rootManifestPath,
-    ).manifest.entry;
-    if (rootEntry) entryPaths.add(rootEntry);
-  }
-  if (entryPaths.size === 0) return [];
+  if (entryPaths.length === 0) return [];
 
-  const registered: ToolModule[] = [];
+  const tools = new ToolRegistry();
+  const pendingRegistrations: Array<() => () => void> = [];
+  const disposers: Array<() => void> = [];
+  let registrationOpen = true;
   const covel: PluginAPI = {
     pluginId: discovery.id,
     toolkit: {
@@ -190,10 +200,19 @@ export async function loadEntryTools(
     },
     http: { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
     registerTool(toolModule: ToolModule) {
-      registered.push(toolModule);
+      if (!registrationOpen)
+        throw new Error("plugin entry registration is closed");
+      pendingRegistrations.push(() =>
+        tools.registerPlugin(discovery.id, toolModule),
+      );
     },
     registerService(definition) {
-      services?.register(discovery.id, definition);
+      if (!registrationOpen)
+        throw new Error("plugin entry registration is closed");
+      if (!services) throw new Error("Plugin service registry is unavailable");
+      pendingRegistrations.push(() =>
+        services.register(discovery.id, definition),
+      );
     },
     on() {},
     registerRpc() {},
@@ -201,24 +220,41 @@ export async function loadEntryTools(
     registerWires() {},
   };
 
-  for (const entryPath of entryPaths) {
-    const fullPath = path.resolve(discovery.rootPath, entryPath);
-    const rel = path.relative(discovery.rootPath, fullPath);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) {
-      throw new Error(`entry path escapes plugin root: ${entryPath}`);
-    }
-    if (!fs.existsSync(fullPath)) {
-      throw new Error(`entry file not found: ${fullPath}`);
-    }
+  try {
+    const realRoot = await fs.promises.realpath(discovery.rootPath);
+    for (const entryPath of entryPaths) {
+      const fullPath = path.resolve(discovery.rootPath, entryPath);
+      const rel = path.relative(discovery.rootPath, fullPath);
+      if (rel.startsWith("..") || path.isAbsolute(rel)) {
+        throw new Error(`entry path escapes plugin root: ${entryPath}`);
+      }
+      if (!fs.existsSync(fullPath)) {
+        throw new Error(`entry file not found: ${fullPath}`);
+      }
+      const realPath = await fs.promises.realpath(fullPath);
+      const realRel = path.relative(realRoot, realPath);
+      if (realRel.startsWith("..") || path.isAbsolute(realRel)) {
+        throw new Error(`entry path escapes plugin root: ${entryPath}`);
+      }
 
-    const mod = await import(pathToFileURL(fullPath).href);
-    const factory = mod.default;
-    if (typeof factory !== "function") {
-      throw new Error(
-        `entry module must default-export a function: ${fullPath}`,
-      );
+      const mod = await import(pathToFileURL(realPath).href);
+      const factory = mod.default;
+      if (typeof factory !== "function") {
+        throw new Error(
+          `entry module must default-export a function: ${fullPath}`,
+        );
+      }
+      await factory(covel);
     }
-    await factory(covel);
+    // Match production publication: invalid declarations fail the activation
+    // after factories return, even if plugin code catches registration errors.
+    registrationOpen = false;
+    for (const register of pendingRegistrations) disposers.push(register());
+  } catch (error) {
+    for (const dispose of disposers.reverse()) dispose();
+    throw error;
+  } finally {
+    registrationOpen = false;
   }
-  return registered;
+  return [...(tools.pluginTools.get(discovery.id)?.values() ?? [])];
 }

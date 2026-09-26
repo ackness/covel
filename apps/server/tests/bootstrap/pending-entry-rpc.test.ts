@@ -1,3 +1,4 @@
+import { ToolRegistry } from "@covel/tools";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -97,9 +98,7 @@ it.each(
         discoveryMap: new Map([[pluginId, discovery]]),
         manifestCache: new Map([[pluginId, [parsed]]]),
         store,
-        toolMap: new Map(),
-        localToolNames: new Set(),
-        pluginToolAccess: new Map(),
+        tools: new ToolRegistry(),
         hookPipeline: createHookPipeline(),
         rpcRegistry: registry,
       });

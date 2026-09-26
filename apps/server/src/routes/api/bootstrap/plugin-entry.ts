@@ -23,6 +23,7 @@ import { pathToFileURL } from "node:url";
 import {
   getPluginTrustInfo,
   loadPluginEntryDefinition,
+  pluginDeclarations,
   type PluginEntryDefinition,
   type ParsedPluginMd,
   type PluginDiscoveryResult,
@@ -30,7 +31,7 @@ import {
 } from "@covel/plugin-loader";
 import { type HookPipeline, type PluginRpcRegistry } from "@covel/runtime";
 import type { DataStore } from "@covel/store";
-import type { ToolModule } from "@covel/tools";
+import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { EntryRegistrationBatch } from "./entry-registration-batch.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
@@ -74,10 +75,7 @@ export interface BootstrapPluginEntriesParams {
   /** Expose activation failures through the existing plugin discovery DTO. */
   readonly pluginRegistry?: PluginRegistry;
   readonly store: DataStore;
-  readonly toolMap: Map<string, ToolModule>;
-  readonly localToolNames: Set<string>;
-  /** Mutable: entry-registered tool names are discovered at invocation time. */
-  readonly pluginToolAccess: Map<string, Set<string>>;
+  readonly tools: ToolRegistry;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
   readonly services?: import("@covel/runtime").PluginServiceRegistry;
@@ -137,17 +135,14 @@ export async function createBootstrapPluginEntries(
   // activation consume this exact definition, so metadata-only multi-runtime
   // roots cannot be visible to one path and absent from the other.
   for (const [pluginId, discovery] of discoveryMap) {
+    const registryEntry = params.pluginRegistry?.get(pluginId);
     const definition = await loadPluginEntryDefinition(
       discovery,
-      manifestCache.get(pluginId) ?? [],
+      registryEntry
+        ? pluginDeclarations(registryEntry)
+        : (manifestCache.get(pluginId) ?? []),
     );
     entryDefinitions.set(pluginId, definition);
-    if (definition.rootManifestIssue) {
-      console.warn(
-        `[plugin-entry] ${path.relative(process.cwd(), definition.rootManifestIssue.path)}: failed to parse root PLUGIN.md for entry —`,
-        definition.rootManifestIssue.message,
-      );
-    }
   }
 
   const invokeEntryForPlugin = async (pluginId: string): Promise<void> => {

@@ -8,6 +8,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import {
   loadPluginLlmConfig,
+  pluginDeclarations,
   deriveBuiltinPluginIds,
   type PluginRegistry,
   type PluginLlmConfig,
@@ -365,6 +366,7 @@ async function assembleApi(
   // `bindPluginEntry` after `createBootstrapPluginEntries` resolves). See
   // the ORDERING CONSTRAINT in runtime-loader.ts for the full contract.
   const runtimeLoader = createRuntimeLoader({
+    pluginRegistry: registry,
     discoveryMap,
     manifestCache,
     store,
@@ -375,16 +377,13 @@ async function assembleApi(
   // 6. Create ToolExecutor with builtin + plugin local tools + approval.
   //    Wiring extracted into `setupPluginTools` (bootstrap/tools.ts). It builds
   //    the framework tool registry, per-session character-tool overrides, and
-  //    the approval-gated executor. `toolMap` / `builtinToolNames` remain
+  //    the approval-gated executor. the registry remains
   //    mutable here so the memory system can register its tools below.
   const {
-    toolMap,
-    builtinToolNames,
-    localToolNames,
+    tools,
     toolExecutor,
     prepareToolsForSession,
     clearSessionToolOverrides,
-    pluginToolAccess,
   } = await setupPluginTools({
     store,
     registry,
@@ -471,9 +470,7 @@ async function assembleApi(
       manifestCache,
       pluginRegistry: registry,
       store,
-      toolMap,
-      localToolNames,
-      pluginToolAccess,
+      tools,
       hookPipeline,
       rpcRegistry,
       isCommunityServerCodeApproved,
@@ -506,7 +503,11 @@ async function assembleApi(
 
   // 8. Create memory system (Letta-style three-tier memory)
   const bootstrapMemory = createBootstrapMemorySystem({
-    manifestCache,
+    manifestCache: new Map(
+      [...registry.getAll()]
+        .filter(([, entry]) => entry.status !== "error")
+        .map(([id, entry]) => [id, pluginDeclarations(entry)]),
+    ),
     store,
     llmAdapter: config.llmAdapter,
     ...(config.vectorBackend !== "none" && config.memoryEmbed
@@ -531,8 +532,7 @@ async function assembleApi(
   });
   if (bootstrapMemory) {
     for (const t of bootstrapMemory.tools) {
-      toolMap.set(t.name, t);
-      builtinToolNames.add(t.name);
+      tools.registerBuiltin(t);
     }
   }
 
@@ -581,6 +581,7 @@ async function assembleApi(
       }
 
       const runner = createPluginRpcRuntimeTurnRunner({
+        pluginRegistry: registry,
         store,
         eventBus,
         sessionLock,
@@ -730,7 +731,7 @@ async function assembleApi(
     if (config.mediaStore) {
       c.set("mediaStore", config.mediaStore);
     }
-    c.set("builtinToolNames", [...builtinToolNames].sort());
+    c.set("builtinToolNames", [...tools.builtinTools.keys()].sort());
     await next();
     const staleRead = await verifyResolvedSessionRead(c);
     if (staleRead) c.res = staleRead;

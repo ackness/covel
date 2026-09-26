@@ -20,8 +20,13 @@
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { validatePluginDeclarations } from "../src/declarations.js";
+import type { ParsedPluginMd } from "../src/types.js";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
-import { multiRuntimeRootDiagnostics } from "../src/root-manifest-diagnostics.js";
+import {
+  hasRuntimeDeclaration,
+  multiRuntimeRootDiagnostics,
+} from "../src/root-manifest-diagnostics.js";
 import { runtimeManifestAuthoringSchema } from "@covel/shared";
 
 const args = process.argv.slice(2);
@@ -38,7 +43,15 @@ function collectManifestFiles(path: string): string[] {
     process.exitCode = 1;
     return [];
   }
-  if (statSync(path).isFile()) return [path];
+  if (statSync(path).isFile()) {
+    if (
+      basename(path) === "PLUGIN.md" &&
+      existsSync(join(dirname(path), "runtimes"))
+    ) {
+      return collectManifestFiles(dirname(path));
+    }
+    return [path];
+  }
   const files: string[] = [];
   const rootMd = join(path, "PLUGIN.md");
   if (existsSync(rootMd)) files.push(rootMd);
@@ -56,7 +69,7 @@ function collectManifestFiles(path: string): string[] {
   return files;
 }
 
-function validateFile(filePath: string): Record<string, unknown> | null {
+function validateFile(filePath: string): ParsedPluginMd | null {
   const content = readFileSync(filePath, "utf-8");
 
   let parsed: ReturnType<typeof parsePluginMd>;
@@ -106,80 +119,33 @@ function validateFile(filePath: string): Record<string, unknown> | null {
     }
     return null;
   }
-  console.log(`✓ ${filePath}`);
-  return parsed.manifest as unknown as Record<string, unknown>;
-}
-
-// ── Cross-runtime (plugin-scope) checks ───────────────────────────
-
-interface CheckedManifest {
-  readonly file: string;
-  readonly manifest: Record<string, unknown>;
-}
-
-/** Key-order-independent serialisation, so field ordering is not a difference. */
-function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, val: unknown) =>
-    val && typeof val === "object" && !Array.isArray(val)
-      ? Object.fromEntries(
-          Object.entries(val as Record<string, unknown>).sort(([a], [b]) =>
-            a.localeCompare(b),
-          ),
-        )
-      : val,
-  );
-}
-
-// `entry` / `wires` are deliberately NOT checked here. They look like
-// single-declaration fields — the manifest comments long said "declare on ONE
-// runtime per plugin" — but the loaders collect every declared path into a Set
-// and run all of them, so a second declaration is additive, not dropped. See
-// `PLUGIN_SCOPED_FIELDS` in @covel/shared for each field's real merge rule.
-
-/**
- * `userSettings` are stored under the plugin-scoped key
- * `plugin.<pluginId>.<key>`, so two runtimes declaring the same key share one
- * value. Identical declarations are fine (the server dedupes them); diverging
- * ones mean only one wins, and which one depends on manifest load order.
- */
-function checkUserSettingCollisions(
-  checked: readonly CheckedManifest[],
-): boolean {
-  const seen = new Map<string, { file: string; json: string }>();
-  let ok = true;
-  for (const { file, manifest } of checked) {
-    const specs = manifest.userSettings;
-    if (!Array.isArray(specs)) continue;
-    for (const spec of specs as Array<Record<string, unknown>>) {
-      const key = String(spec.key);
-      const json = stableJson(spec);
-      const prior = seen.get(key);
-      if (!prior) {
-        seen.set(key, { file, json });
-        continue;
-      }
-      if (prior.json === json) continue;
-      ok = false;
-      console.error(
-        `✗ userSettings key "${key}" is declared differently by two runtimes — both map to one stored value`,
-      );
-      console.error(`  - ${prior.file}`);
-      console.error(`  - ${file}`);
-      console.error(
-        `  Fix: declare the key on one runtime, or make both declarations identical.`,
-      );
-    }
+  if (
+    basename(dirname(dirname(filePath))) === "runtimes" &&
+    !hasRuntimeDeclaration(parsed.manifest)
+  ) {
+    console.error(
+      `✗ ${filePath}: runtime declaration requires execution fields; move package-only declarations to the root PLUGIN.md`,
+    );
+    return null;
   }
-  return ok;
+  console.log(`✓ ${filePath}`);
+  return parsed;
 }
 
+// Package and runtime-local contributions share one conflict contract.
 for (const path of paths) {
-  const checked: CheckedManifest[] = [];
+  const checked: ParsedPluginMd[] = [];
   for (const file of collectManifestFiles(path)) {
-    const manifest = validateFile(file);
-    if (manifest) checked.push({ file, manifest });
+    const parsed = validateFile(file);
+    if (parsed) checked.push(parsed);
     else process.exitCode = 1;
   }
-  if (checked.length < 2) continue;
-  if (!checkUserSettingCollisions(checked)) process.exitCode = 1;
+  try {
+    validatePluginDeclarations(checked);
+  } catch (error) {
+    console.error(
+      `✗ ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exitCode = 1;
+  }
 }

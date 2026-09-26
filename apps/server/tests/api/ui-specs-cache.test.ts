@@ -188,6 +188,7 @@ describe("GET /api/ui-specs — registry snapshot", () => {
     registry.register({
       ...entry,
       rootPath: alias,
+      packageManifest: parsed,
       manifest: parsed,
       manifests: [parsed],
     });

@@ -5,6 +5,8 @@ import path from "node:path";
 import { getSpeechWire } from "@covel/ai-provider";
 import {
   createPluginRegistry,
+  loadPluginDefinition,
+  loadPluginSummary,
   type ParsedPluginMd,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
@@ -16,7 +18,7 @@ import {
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
-import type { ToolModule } from "@covel/tools";
+import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
 
 let tmpRoot: string;
@@ -73,6 +75,7 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
         pluginType: "plugin",
         runtimeCount: 0,
       },
+      manifests: [entry.parsed],
       status: "registered",
       loadedRuntimes: new Map(),
       source: entry.discovery.source,
@@ -83,9 +86,7 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
     discoveryMap: new Map(entries.map((e) => [e.discovery.id, e.discovery])),
     manifestCache: new Map(entries.map((e) => [e.discovery.id, [e.parsed]])),
     store: createMemoryStore(),
-    toolMap: new Map<string, ToolModule>(),
-    localToolNames: new Set<string>(),
-    pluginToolAccess: new Map<string, Set<string>>(),
+    tools: new ToolRegistry(),
     hookPipeline: createHookPipeline(),
     rpcRegistry: createPluginRpcRegistry(),
     isCommunityServerCodeApproved: () => true,
@@ -133,9 +134,7 @@ describe("createBootstrapPluginEntries", () => {
     expect(entries.close()).toBe(closing);
     await closing;
     expect(getSpeechWire("entry-host-lifecycle/entry-tts")).toBeNull();
-    expect(params.toolMap.size).toBe(0);
-    expect(params.localToolNames.size).toBe(0);
-    expect(params.pluginToolAccess.size).toBe(0);
+    expect(params.tools.pluginTools.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
     expect(closeStore).not.toHaveBeenCalled();
     await expect(
@@ -179,7 +178,7 @@ describe("createBootstrapPluginEntries", () => {
       approval.resolve(true);
       await Promise.all([rejected, closing]);
     }
-    expect(params.toolMap.size).toBe(0);
+    expect(params.tools.pluginTools.size).toBe(0);
     expect(getSpeechWire("entry-closing-approval/entry-tts")).toBeNull();
   });
 
@@ -231,12 +230,9 @@ describe("createBootstrapPluginEntries", () => {
 
     await createBootstrapPluginEntries(params);
 
-    // Tool: in the tool map, marked local, and in the plugin's access set.
-    expect(params.toolMap.has("entry-tool")).toBe(true);
-    expect(params.localToolNames.has("entry-tool")).toBe(true);
-    expect(params.pluginToolAccess.get("entry-full-a")?.has("entry-tool")).toBe(
-      true,
-    );
+    // Tools are owned by the registering plugin.
+    expect(params.tools.find("entry-tool", "entry-full-a")).toBeDefined();
+    expect(params.tools.find("entry-tool", "other")).toBeUndefined();
 
     // Hook: fires through the pipeline.
     const result = await params.hookPipeline.run("TurnStart", hookCtx, {});
@@ -258,7 +254,7 @@ describe("createBootstrapPluginEntries", () => {
   it("runs a MULTI-runtime plugin's entry declared on the metadata-only root PLUGIN.md", async () => {
     // Regression: discover.ts lists only runtime PLUGIN.mds for a multi-runtime
     // plugin, so an `entry` on the metadata-only root PLUGIN.md is absent from
-    // manifestCache — the entry must be read from the root directly, otherwise
+    // manifestCache — the package declaration must be retained in the registry, otherwise
     // the plugin's local tools never register (npc-graph's graph tools case).
     const pluginId = "multi-root-entry";
     const rootPath = path.join(tmpRoot, pluginId);
@@ -299,13 +295,25 @@ describe("createBootstrapPluginEntries", () => {
     params.manifestCache.set(pluginId, [
       { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
     ]);
+    const discovery = params.discoveryMap.get(pluginId)!;
+    fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
+    fs.writeFileSync(
+      discovery.pluginMdPaths[0]!,
+      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+    );
+    const definition = await loadPluginDefinition(discovery);
+    params.pluginRegistry.register({
+      id: pluginId,
+      summary: await loadPluginSummary(discovery),
+      ...definition,
+      status: "registered",
+      loadedRuntimes: new Map(),
+      source: discovery.source,
+    });
 
     await createBootstrapPluginEntries(params);
 
-    expect(params.toolMap.has("root-entry-tool")).toBe(true);
-    expect(params.pluginToolAccess.get(pluginId)?.has("root-entry-tool")).toBe(
-      true,
-    );
+    expect(params.tools.find("root-entry-tool", pluginId)).toBeDefined();
   });
 
   it("reports and activates a community MULTI-runtime root-only entry consistently", async () => {
@@ -339,6 +347,21 @@ describe("createBootstrapPluginEntries", () => {
     params.manifestCache.set(pluginId, [
       { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
     ]);
+    const discovery = params.discoveryMap.get(pluginId)!;
+    fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
+    fs.writeFileSync(
+      discovery.pluginMdPaths[0]!,
+      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+    );
+    const definition = await loadPluginDefinition(discovery);
+    params.pluginRegistry.register({
+      id: pluginId,
+      summary: await loadPluginSummary(discovery),
+      ...definition,
+      status: "registered",
+      loadedRuntimes: new Map(),
+      source: discovery.source,
+    });
 
     const { ensurePluginEntry, hasPendingEntry } =
       await createBootstrapPluginEntries(params);
@@ -378,14 +401,20 @@ export default function (covel) {
     const params = makeParams([p]);
 
     const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
-    expect(params.toolMap.has("community-tool-1")).toBe(false);
+    expect(
+      Boolean(params.tools.find("community-tool-1", "entry-community-a")),
+    ).toBe(false);
 
     await ensurePluginEntry("entry-community-a");
-    expect(params.toolMap.has("community-tool-1")).toBe(true);
+    expect(
+      Boolean(params.tools.find("community-tool-1", "entry-community-a")),
+    ).toBe(true);
 
     // Second ensure is a no-op — the factory must not run twice.
     await ensurePluginEntry("entry-community-a");
-    expect(params.toolMap.has("community-tool-2")).toBe(false);
+    expect(
+      Boolean(params.tools.find("community-tool-2", "entry-community-a")),
+    ).toBe(false);
   });
 
   it("rejects community entry activation without a session grant", async () => {
@@ -496,9 +525,17 @@ export default async function (covel) {
       p.parsed,
       {
         ...p.parsed,
-        manifest: { ...p.parsed.manifest, entry: "server/second.mjs" },
+        manifest: {
+          ...p.parsed.manifest,
+          name: "entry-retry-batch/second",
+          entry: "server/second.mjs",
+        },
       },
     ]);
+    params.pluginRegistry.register({
+      ...params.pluginRegistry.get(p.discovery.id)!,
+      manifests: params.manifestCache.get(p.discovery.id),
+    });
     const entries = await createBootstrapPluginEntries(params);
     const attempts = await Promise.allSettled([
       entries.ensurePluginEntry(p.discovery.id),
@@ -564,7 +601,7 @@ export default async function (covel) {
     const params = makeParams([notFn]);
     const entries = await createBootstrapPluginEntries(params);
 
-    expect(params.toolMap.size).toBe(0);
+    expect(params.tools.pluginTools.size).toBe(0);
     expect(entries.hasPendingEntry(notFn.discovery.id)).toBe(true);
     expect(params.pluginRegistry.get(notFn.discovery.id)?.error).toBeDefined();
     warn.mockRestore();
@@ -576,6 +613,11 @@ export default async function (covel) {
       call: 'covel.registerTool({ name: "raw-object" });',
       operation: "registerTool",
     },
+    ...["create-form", "memory-search", "search-tools"].map((toolName) => ({
+      name: `reserved-${toolName}`,
+      call: `covel.registerTool(covel.toolkit.tool({ name: "${toolName}", description: "reserved", parameters: covel.toolkit.z.object({}), execute: async () => ({}) }));`,
+      operation: "registerTool",
+    })),
     {
       name: "hook-event",
       call: 'covel.on("NotARealEvent", async () => ({}));',
@@ -586,6 +628,25 @@ export default async function (covel) {
       call: 'covel.on("TurnStart", null);',
       operation: "on",
     },
+    ...[
+      ['{ match: "yes" }', "hook-predicate"],
+      ["{ timeoutMs: -1 }", "hook-timeout"],
+      ['{ enforce: "unknown" }', "hook-enforce"],
+      ["null", "hook-options"],
+    ].map(([options, name]) => ({
+      name,
+      call: `covel.on("TurnStart", async () => ({}), ${options});`,
+      operation: "on",
+    })),
+    ...[
+      ['{ trustLevel: "unknown" }', "rpc-trust"],
+      ['{ trustLevel: "" }', "rpc-empty-trust"],
+      ["null", "rpc-options"],
+    ].map(([options, name]) => ({
+      name,
+      call: `covel.registerRpc("invalid-options", async () => true, ${options});`,
+      operation: "registerRpc",
+    })),
     {
       name: "rpc-handler",
       call: 'covel.registerRpc("broken", null);',
@@ -637,9 +698,7 @@ export default async function (covel) {
           },
         });
         expect(entries.hasPendingEntry(pluginId)).toBe(true);
-        expect(params.toolMap.size).toBe(0);
-        expect(params.localToolNames.size).toBe(0);
-        expect(params.pluginToolAccess.size).toBe(0);
+        expect(params.tools.pluginTools.size).toBe(0);
         expect(params.rpcRegistry.list()).toEqual([]);
         expect(getSpeechWire(`${pluginId}/entry-tts`)).toBeNull();
         expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual(
@@ -657,7 +716,7 @@ export default async function (covel) {
     },
   );
 
-  it("rejects registerTool name collisions instead of overwriting", async () => {
+  it("registers the same local tool name independently for different plugins", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const first = writePlugin(
       "entry-collide-a",
@@ -690,24 +749,16 @@ export default (covel) => {
 `,
     );
     const params = makeParams([first, second]);
-    // Simulate a builtin already occupying a name — entry must not replace it.
-    const builtinTool = {
-      _type: "covel-tool",
-      name: "shared-name",
-    } as unknown as ToolModule;
-    params.toolMap.set("shared-name", builtinTool);
-
-    await createBootstrapPluginEntries(params);
-
-    // Original registration untouched; neither collider got access.
-    expect(params.toolMap.get("shared-name")).toBe(builtinTool);
-    expect(params.localToolNames.has("shared-name")).toBe(false);
-    expect(
-      params.pluginToolAccess.get("entry-collide-a")?.has("shared-name"),
-    ).toBeFalsy();
-    expect(
-      warn.mock.calls.filter((c) => String(c[0]).includes("collides")),
-    ).toHaveLength(2);
+    const entries = await createBootstrapPluginEntries(params);
+    const firstTool = params.tools.find("shared-name", "entry-collide-a");
+    const secondTool = params.tools.find("shared-name", "entry-collide-b");
+    expect(firstTool?.description).toBe("first wins");
+    expect(secondTool?.description).toBe("would hijack");
+    expect(firstTool).not.toBe(secondTool);
+    expect(params.tools.find("shared-name", "unregistered")).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    await entries.close();
+    expect(params.tools.pluginTools.size).toBe(0);
     warn.mockRestore();
   });
 
@@ -757,7 +808,7 @@ export default function (covel) {
       await entries.ensurePluginEntry(pluginId);
       const executor = createToolExecutor({
         store: params.store,
-        findTool: () => params.toolMap.get("read-state"),
+        findTool: (name, context) => params.tools.find(name, context.pluginId),
       });
       const results = await Promise.all(
         ["s1", "s2"].map((sessionId) =>
@@ -829,8 +880,12 @@ export default async function (covel) {
       ensurePluginEntry("entry-inflight-a"),
     ]);
 
-    expect(params.toolMap.has("inflight-tool-1")).toBe(true);
-    expect(params.toolMap.has("inflight-tool-2")).toBe(false);
+    expect(
+      Boolean(params.tools.find("inflight-tool-1", "entry-inflight-a")),
+    ).toBe(true);
+    expect(
+      Boolean(params.tools.find("inflight-tool-2", "entry-inflight-a")),
+    ).toBe(false);
   });
 
   it("hasPendingEntry: true for a deferred community entry, false once activated", async () => {

@@ -6,6 +6,8 @@
 
 要从按钮写入插件数据时，先选入口：`invokePluginAction` 的 RPC action 写入即时生效，后续失败不回滚已成功的写入；多条记录需要一起成功或失败时，用 `invokeRuntime` 触发 manual function runtime，让写入随 proposal 原子提交。function handler 直接运行 JS，不需要 LLM；手动触发不会自动运行叙事 runtime。详见[进阶指南的 RPC action](./plugin-authoring-agent.md#4-暴露-rpc-action)和[高级指南的手动触发](./plugin-authoring-advanced.md#手动触发-前端--rpc--函数-runtime)。
 
+只提供面板、命令、设置或 entry Hook 时，在根 `PLUGIN.md` 声明即可，无需添加 runtime 或 LLM。需要确定性执行或 agent 执行时，再声明执行字段或增加子 runtime。多 runtime 的公共设置、schema 和 UI 可集中在根清单；同一键的不同定义会在加载时直接报错。
+
 ## 三条路径
 
 | 路径                                 | 面向的人                       | 前置要求                                                             | 你将产出什么                                                                                             | 文档                                                             |

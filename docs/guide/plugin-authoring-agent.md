@@ -137,7 +137,7 @@ export default function (covel) {
 }
 ```
 
-在 PLUGIN.md frontmatter 中声明 entry，并用 `tools.plugin`（工具**名字**列表）声明该 runtime 的 LLM 可见哪些 entry 注册的工具：
+在 PLUGIN.md frontmatter 中声明 entry，并用 `tools.plugin`（工具**名字**列表）声明该 runtime 可以调用哪些 entry 注册的工具。名字在本插件内唯一，不同插件可同名；框架工具名始终保留。LLM 与 `ctx.tools.call` 使用同一个本地名字，不需要插件前缀：
 
 ```yaml
 entry: ./server/index.js

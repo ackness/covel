@@ -146,7 +146,7 @@ handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明�
 ### 失败定位与验证
 
 - 工具不在 LLM 清单：检查运行时是否声明了正确的 `tools.builtin` 或
-  `tools.plugin` 名称；plugin 工具还必须确认 entry 成功加载且未发生全局重名。
+  `tools.plugin` 名称；plugin 工具还必须确认 entry 成功加载且未发生插件内重名或占用框架保留名。
 - `UNAUTHORIZED`：最终工具名不在该 runtime 的授权集合，或 hook 替换后的名称
   越界；先查 runtime manifest 与 trace 中的最终 tool name。
 - `VALIDATION_ERROR`：查看错误响应/工具结果的 `details`，其中包含字段路径和
@@ -196,8 +196,7 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 - plugin tool 在插件 `entry` 模块（frontmatter `entry` 字段，基于插件根目录解析）里用 `covel.registerTool()` 注册。旧的 `tools.local` 路径声明已移除，声明即加载失败
 - bootstrap 会校验 entry 路径边界，并只加载位于插件目录内的文件
-- plugin tool 访问权限按 `pluginId` 隔离，且**只在注册成功时授予**：`tools.plugin` 的 manifest 声明只控制 runtime 的 LLM 可见面，本身不授予执行权——声明了未注册（或注册被碰撞跳过）的名字时，该名字对声明插件解析失败，不会命中其他插件的同名实现
-- 工具名全局唯一：与 builtin 或其他插件已注册的工具重名时，注册会被拒绝（warn + skip），不会静默覆盖已有实现，声明方也不会因此获得已有实现的调用权
+- plugin tool 以 `(pluginId, name)` 注册；不同插件可以使用同一个本地名字，同插件重名和框架保留名会使整个注册批次失败并回滚。`tools.plugin` 的声明不会注册实现：执行还必须通过该 runtime 的工具白名单和调用插件的注册表，未注册名字不会命中其他插件的同名实现。LLM、`ctx.tools.call`、`tools.defer` 均使用原来的本地名字；跨插件公共能力使用 `ctx.services`
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
 
@@ -498,7 +497,7 @@ interface UIRenderPart {
 
 - `resumeSchema` 必须可被 `JSON.stringify` —— pendingContinuation 是要落盘的
 - 同一 runtime 同一时刻只能有一个未解决的 suspension（resume 路由通过 `runtimeId + sessionId` 查找）
-- 注册位置：`bootstrap.ts` 中 `toolMap.set(suspendTool.name, suspendTool)` + `builtinToolNames.add(...)`，所有 agent runtime 自动可用
+- 注册位置：`bootstrap/tools.ts` 中 `tools.registerBuiltin(suspendTool)`，所有 agent runtime 自动可用
 
 ---
 
@@ -515,7 +514,7 @@ interface UIRenderPart {
 
 **注意事项**：
 
-- 与 `suspend` / `runtime-done` 同为 loop 层 sentinel：调用被 agent loop 拦截，**永不进入 ToolExecutor**，也不注册在全局 toolMap
+- 调用由 agent loop 直接处理，**不进入 ToolExecutor**，也不注册在工具注册表；其名字仍属于框架保留名
 - 检索池严格限定为该 runtime 自己声明且被延迟的白名单，schema 通过 `getToolInfo(name, context)` 获取——沿用 builtin/local 访问边界，无权工具既搜不到也不会泄露
 - 打分为零依赖 BM25（k1=1.2 / b=0.75），CJK 文本按字符二元组切分，语料 = 工具名 + 描述 + 参数 schema 的字段名/字段描述
 - description 会向 LLM 通告延迟池的数量与来源插件，模型据此知道有未预载工具可搜
@@ -1159,7 +1158,7 @@ tools:
     - my-tool-name
 ```
 
-> `tools.local`（路径列表）**已移除**：声明它会让整个 manifest 加载失败。`tools.plugin` 只控制 LLM 可见面，执行权来自注册成功本身——声明了未注册的名字时该名字解析失败，不会命中其他插件的同名实现。
+> `tools.local`（路径列表）**已移除**：声明它会让整个 manifest 加载失败。`tools.plugin` 是该 runtime 的工具白名单，执行还要求本插件注册成功——声明了未注册的名字时该名字解析失败，不会命中其他插件的同名实现。
 
 ## Proposal 类型
 

@@ -7,12 +7,12 @@
  * tools, and assembles the approval-gated `ToolExecutor`.
  *
  * Extracted from `bootstrap.ts` to keep the composition root readable. All
- * closures capture the same `store` / `registry` the bootstrap builds; the
- * behaviour is byte-for-byte the previous inline wiring.
+ * closures capture the same `store` / `registry` the bootstrap builds.
  */
 
 import {
   builtinUITools,
+  ToolRegistry,
   createPluginDataTools,
   createCharacterTools,
   buildSessionCharacterWriteTools,
@@ -37,7 +37,6 @@ import type {
   PluginDiscoveryResult,
   ParsedPluginMd,
 } from "@covel/plugin-loader";
-import { buildPluginToolAccess } from "./plugin-tool-access.js";
 import type { EventDirectory } from "./event-directory.js";
 
 export interface SetupPluginToolsParams {
@@ -50,59 +49,45 @@ export interface SetupPluginToolsParams {
 }
 
 export interface PluginToolsResult {
-  readonly toolMap: Map<string, ToolModule>;
-  readonly builtinToolNames: Set<string>;
-  readonly localToolNames: Set<string>;
+  readonly tools: ToolRegistry;
   readonly toolExecutor: ManagedToolExecutor;
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
   /** Drop the per-session tool override cache entry. Called on session
    *  end/delete so the map does not grow for the lifetime of the process. */
   readonly clearSessionToolOverrides: (sessionId: string) => void;
-  /** Mutable — the unified `entry` registration path (plugin-entry.ts) adds
-   *  entry-registered tool names at invocation time. */
-  readonly pluginToolAccess: Map<string, Set<string>>;
 }
 
 export async function setupPluginTools(
   params: SetupPluginToolsParams,
 ): Promise<PluginToolsResult> {
-  const { store, registry, discoveryMap, manifestCache, eventDirectory } =
-    params;
-
-  const builtinToolNames = new Set<string>();
-  const localToolNames = new Set<string>();
-  const toolMap = new Map<string, ToolModule>();
+  const { store, registry, eventDirectory } = params;
+  const tools = new ToolRegistry();
 
   for (const t of builtinUITools) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
+    tools.registerBuiltin(t);
   }
 
   // Register suspend tool. The sentinel becomes a normal tool result returned
   // to the LLM when no suspension handler consumes it.
-  toolMap.set(suspendTool.name, suspendTool);
-  builtinToolNames.add(suspendTool.name);
+  tools.registerBuiltin(suspendTool);
 
   // Register runtime-done tool. Framework contract: agent runtimes call this
   // immediately after completing their business tool calls to exit without
   // burning an extra LLM round-trip on a terminator message. The completion
   // preamble in buildFrameworkPreamble instructs every runtime how to use it.
-  toolMap.set(runtimeDoneTool.name, runtimeDoneTool);
-  builtinToolNames.add(runtimeDoneTool.name);
+  tools.registerBuiltin(runtimeDoneTool);
 
   // Register plugin-data tools. Reads overlay pending proposals; the Session
   // Kernel owns committed writes and their events.
   for (const t of createPluginDataTools(store)) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
+    tools.registerBuiltin(t);
   }
 
   // Register emit-event tool — validates against the session event directory
   // (aggregated `events` contracts of active plugins) and routes through the
   // emitted-events result channel, never an `event.emit` pendingProposal.
   const emitEventTool = createEmitEventTool({ directory: eventDirectory });
-  toolMap.set(emitEventTool.name, emitEventTool);
-  builtinToolNames.add(emitEventTool.name);
+  tools.registerBuiltin(emitEventTool);
 
   // Register character management tools (writes characters table + mirrors to plugin-data).
   // `findWorldDataPluginId` lets create/update-character locate the schema
@@ -118,8 +103,7 @@ export async function setupPluginTools(
       ),
   };
   for (const t of createCharacterTools(store, characterToolDeps)) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
+    tools.registerBuiltin(t);
   }
 
   // ── Per-session tool overrides (Phase 2) ──────────────────────
@@ -129,7 +113,7 @@ export async function setupPluginTools(
   // against the current stored schema. Preparation refreshes the per-session
   // tools before execution so changes in worlds cannot leak between sessions. The
   // `findTool` resolver below checks this cache before falling back to the
-  // generic toolMap. Action handlers call `prepareToolsForSession` before
+  // generic tool registry. Action handlers call `prepareToolsForSession` before
   // every `executeTurn` so the LLM always gets the freshest schema.
   const sessionToolOverrides = new Map<string, Map<string, ToolModule>>();
   const SESSION_OVERRIDABLE_TOOLS = new Set([
@@ -195,11 +179,8 @@ export async function setupPluginTools(
         FrameworkCapability.WorldDataProvider,
       ),
   })) {
-    toolMap.set(t.name, t);
-    builtinToolNames.add(t.name);
+    tools.registerBuiltin(t);
   }
-
-  const pluginToolAccess = buildPluginToolAccess(manifestCache);
 
   // Approval: whitelist builtin + known local tools, deny unknown third-party
   const approvalRules: PermissionRule[] = [
@@ -218,29 +199,17 @@ export async function setupPluginTools(
         const override = sessionToolOverrides.get(context.sessionId)?.get(name);
         if (override) return override;
       }
-      // Builtin tools are always accessible
-      if (builtinToolNames.has(name)) return toolMap.get(name);
-      // Local tools require the calling plugin to be authorized.
-      const allowed = pluginToolAccess.get(context.pluginId);
-      if (!allowed?.has(name)) return undefined; // Cross-plugin call blocked
-      return toolMap.get(name);
+      return tools.find(name, context.pluginId);
     },
     store,
     approval,
-    getToolSource: (name) => {
-      if (builtinToolNames.has(name)) return "builtin";
-      if (localToolNames.has(name)) return "local";
-      return "third-party";
-    },
+    getToolSource: (name) => tools.source(name),
   });
 
   return {
-    toolMap,
-    builtinToolNames,
-    localToolNames,
+    tools,
     toolExecutor,
     prepareToolsForSession,
     clearSessionToolOverrides,
-    pluginToolAccess,
   };
 }

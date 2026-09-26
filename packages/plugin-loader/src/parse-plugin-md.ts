@@ -327,6 +327,7 @@ export function parsePluginMd(
   }
 
   return {
+    sourcePath: filePath,
     manifest,
     promptTemplate: body,
     rawFrontmatter: { ...data } as Readonly<Record<string, unknown>>,

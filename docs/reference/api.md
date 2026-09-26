@@ -2005,6 +2005,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 获取单个插件的完整 `PluginDetail`。它包含列表项的全部字段，并增加 `dataSchemas`、`worldProjections`、`declaredPluginDataNamespaces`、聚合 UI slot 和完整 `runtimes[]` 开发契约；不再提供重复的 `/contract` 子资源。
 
+插件详情的 `ui.right/message/left` 每项保留 `path`；只有 runtime 所属 UI 才包含 `runtimeId`，包根 UI 省略该字段。纯声明插件的 `runtimeCount` 为 0、`runtimes` 为空，仍出现在插件目录及会话插件列表。
+
 **参数:**
 
 | 参数 | 位置 | 说明                     |

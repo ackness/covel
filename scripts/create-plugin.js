@@ -319,6 +319,7 @@ function runCustomMultiRuntime(runtimes) {
     if (
       entry === "runtimes" ||
       entry === "tests" ||
+      entry === "PLUGIN.md" ||
       entry === "README.md" ||
       entry === "node_modules"
     ) {
@@ -337,6 +338,13 @@ function runCustomMultiRuntime(runtimes) {
       );
     }
   }
+
+  // Custom runtimes do not include the demo's note panel.
+  writeFileSync(
+    join(targetDir, "PLUGIN.md"),
+    `---\nname: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\npluginType: plugin\n---\n`,
+    "utf-8",
+  );
 
   writeFileSync(
     join(targetDir, "README.md"),

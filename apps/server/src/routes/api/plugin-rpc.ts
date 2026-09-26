@@ -340,6 +340,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const turnId = crypto.randomUUID();
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
+      pluginRegistry,
       store,
       eventBus,
       sessionLock,

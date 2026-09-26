@@ -14,6 +14,12 @@ import {
 import { resolveRuntimeProviders } from "./runtime-providers.js";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistryEntry, RegistryChangeEvent } from "./types.js";
+import {
+  pluginDeclarations,
+  pluginRuntimeManifests,
+  resolvePluginRuntimeManifest,
+  resolvePluginDeclarations,
+} from "./declarations.js";
 
 /**
  * Complete declaration-time runtime definitions for a registry entry.
@@ -23,10 +29,9 @@ import type { PluginRegistryEntry, RegistryChangeEvent } from "./types.js";
 function declaredRuntimeManifests(
   entry: PluginRegistryEntry,
 ): readonly RuntimeManifest[] {
-  if (entry.manifests && entry.manifests.length > 0) {
-    return entry.manifests.map((parsed) => parsed.manifest);
-  }
-  return entry.manifest ? [entry.manifest.manifest] : [];
+  return pluginRuntimeManifests(entry).map((parsed) =>
+    resolvePluginRuntimeManifest(entry, parsed.manifest),
+  );
 }
 
 function isSameDataSchema(
@@ -51,7 +56,7 @@ function mergeDataSchemas(
 
   const merged: Record<string, PluginDataSchemaDecl> = {};
 
-  for (const manifest of declaredRuntimeManifests(entry)) {
+  for (const { manifest } of pluginDeclarations(entry)) {
     const schemas = manifest.dataSchemas;
     if (!schemas) continue;
     for (const [namespace, schema] of Object.entries(schemas)) {
@@ -103,7 +108,7 @@ function mergeWorldProjections(
 
   const merged: Record<string, WorldProjectionDecl> = {};
 
-  for (const manifest of declaredRuntimeManifests(entry)) {
+  for (const { manifest } of pluginDeclarations(entry)) {
     const projections = manifest.worldProjections;
     if (!projections) continue;
     for (const [projectionId, projection] of Object.entries(projections)) {
@@ -178,6 +183,8 @@ export interface PluginRegistry {
 
   /** Get active runtimes sorted by (stage, name). */
   getActiveRuntimes(sessionId: string): readonly RuntimeManifest[];
+  /** Active package and runtime-local source declarations, including zero-runtime packages. */
+  getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[];
 
   /** Read-only view of a session's in-memory activation set. */
   getActivePlugins(sessionId: string): readonly string[];
@@ -266,6 +273,7 @@ export function createPluginRegistry(
 
   return {
     register(entry: PluginRegistryEntry): void {
+      resolvePluginDeclarations(pluginDeclarations(entry));
       const dataSchemas = mergeDataSchemas(entry);
       const worldProjections = mergeWorldProjections(entry);
       validateWorldProjectionTargets(entry.id, dataSchemas, worldProjections);
@@ -350,6 +358,20 @@ export function createPluginRegistry(
       const sessionSet = sessionActivations.get(sessionId);
       if (sessionSet === undefined || sessionSet.size === 0) return undefined;
 
+      for (const pluginId of sessionSet) {
+        const entry = entries.get(pluginId);
+        const root = entry?.packageManifest;
+        if (
+          entry &&
+          root &&
+          !pluginRuntimeManifests(entry).some(
+            (runtime) => runtime.manifest.name === root.manifest.name,
+          ) &&
+          root.manifest.capabilities?.includes(capability)
+        )
+          return pluginId;
+      }
+
       const active = [...sessionSet].flatMap((pluginId) => {
         const entry = entries.get(pluginId);
         return entry
@@ -362,6 +384,22 @@ export function createPluginRegistry(
       return resolveRuntimeProviders(active).find((manifest) =>
         manifest.capabilities?.includes(capability),
       )?.pluginId;
+    },
+
+    getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[] {
+      return [...(sessionActivations.get(sessionId) ?? [])]
+        .flatMap((id) => {
+          const entry = entries.get(id);
+          return entry
+            ? pluginDeclarations(entry).map(({ manifest }) => manifest)
+            : [];
+        })
+        .sort(
+          (a, b) =>
+            stageRank(getRuntimeSpec(a).stage) -
+              stageRank(getRuntimeSpec(b).stage) ||
+            a.name.localeCompare(b.name),
+        );
     },
 
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {

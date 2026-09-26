@@ -103,7 +103,7 @@ describe("manifest authoring CLI", () => {
   });
 
   it.each(["directory", "file"])(
-    "rejects ignored multi-runtime root declarations via a %s argument",
+    "accepts shared multi-runtime root declarations via a %s argument",
     async (argumentKind) => {
       const root = await fixture(
         [
@@ -117,17 +117,13 @@ describe("manifest authoring CLI", () => {
       );
       await writeManifest(
         path.join(root, "runtimes/panel"),
-        "name: probe/panel\ndescription: Panel\nui: {right: [./panel.json]}",
+        "name: probe/panel\ndescription: Panel\nstage: narrative\nui: {right: [./panel.json]}",
       );
       const result = validate(
         argumentKind === "file" ? path.join(root, "PLUGIN.md") : root,
       );
-      expect(result.status).toBe(1);
-      expect(result.stderr).toContain("(multi-runtime root)");
-      for (const field of ["ui", "userSettings", "dataSchemas"]) {
-        expect(result.stderr).toContain(`- ${field}:`);
-      }
-      expect(result.stderr).toContain("runtimes/<name>/PLUGIN.md");
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stderr).not.toContain("(multi-runtime root)");
     },
   );
 
@@ -138,6 +134,47 @@ describe("manifest authoring CLI", () => {
     await mkdir(path.join(root, "runtimes"));
     const result = validate(root);
     expect(result.status, result.stderr).toBe(0);
+  });
+
+  it("rejects execution fields on a multi-runtime package root", async () => {
+    const root = await fixture(
+      "name: probe\ndescription: Probe\nstage: narrative",
+    );
+    await writeManifest(
+      path.join(root, "runtimes/run"),
+      "name: probe/run\ndescription: Run\nstage: narrative",
+    );
+    const result = validate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('stage: "stage" is an execution field');
+  });
+
+  it("rejects conflicting package and runtime settings with source paths", async () => {
+    const root = await fixture(
+      "name: probe\ndescription: Probe\nuserSettings: [{key: limit, type: number, label: Limit, default: 1}]",
+    );
+    await writeManifest(
+      path.join(root, "runtimes/run"),
+      "name: probe/run\ndescription: Run\nstage: narrative\nuserSettings: [{key: limit, type: number, label: Limit, default: 2}]",
+    );
+    const result = validate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Conflicting userSettings");
+    expect(result.stderr).toContain(path.join(root, "PLUGIN.md"));
+    expect(result.stderr).toContain(path.join(root, "runtimes/run/PLUGIN.md"));
+  });
+
+  it("rejects package-only declarations in a runtime directory", async () => {
+    const root = await fixture("name: probe\ndescription: Probe");
+    await writeManifest(
+      path.join(root, "runtimes/panel"),
+      "name: probe/panel\ndescription: Panel\nui: {right: [./panel.json]}",
+    );
+    const result = validate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "runtime declaration requires execution fields",
+    );
   });
 
   it("has no flag that bypasses the current authoring contract", async () => {

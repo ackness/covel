@@ -14,11 +14,11 @@ import {
 } from "@covel/runtime";
 import {
   builtinUITools,
+  ToolRegistry,
   createCharacterTools,
   createPluginDataTools,
   runtimeDoneTool,
   suspendTool,
-  type ToolModule,
 } from "@covel/tools";
 import {
   evaluateExpectations,
@@ -151,27 +151,17 @@ export async function runRuntimeDebug(
     updatedAt: now,
   });
 
-  const toolMap = new Map<string, ToolModule>();
-  for (const t of builtinUITools) toolMap.set(t.name, t);
-  toolMap.set(suspendTool.name, suspendTool);
-  toolMap.set(runtimeDoneTool.name, runtimeDoneTool);
-  for (const t of createPluginDataTools(store)) toolMap.set(t.name, t);
+  const tools = new ToolRegistry();
+  for (const t of builtinUITools) tools.registerBuiltin(t);
+  tools.registerBuiltin(suspendTool);
+  tools.registerBuiltin(runtimeDoneTool);
+  for (const t of createPluginDataTools(store)) tools.registerBuiltin(t);
   for (const t of createCharacterTools(store, {
     findWorldDataPluginId: () => pluginId,
   })) {
-    toolMap.set(t.name, t);
+    tools.registerBuiltin(t);
   }
-  // Entry-registered plugin tools last: a name collision means the plugin is
-  // shadowing a framework tool, which the server bootstrap rejects — surface
-  // it here rather than silently running a different implementation.
-  for (const t of entryTools) {
-    if (toolMap.has(t.name)) {
-      throw new Error(
-        `entry registered tool "${t.name}", which collides with a framework tool`,
-      );
-    }
-    toolMap.set(t.name, t);
-  }
+  for (const module of entryTools) tools.registerPlugin(pluginId, module);
   const llm = buildMockLlm(options);
   const liveAdapters = options.mode === "live" ? makeLiveAdapters() : undefined;
   const deps = {
@@ -184,7 +174,8 @@ export async function runRuntimeDebug(
     getPluginSource: () => discovery.source,
     store,
     toolExecutor: createToolExecutor({
-      findTool: (name) => toolMap.get(name),
+      findTool: (name, context) => tools.find(name, context.pluginId),
+      getToolSource: (name) => tools.source(name),
       store,
     }),
   } satisfies TurnExecutorDeps;
