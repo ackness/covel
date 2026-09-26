@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import { loadPluginDefinition } from "@covel/plugin-loader";
 import { PluginServiceRegistry } from "@covel/runtime";
+import { createMemoryStore } from "@covel/store/memory";
 import { z } from "@covel/tools";
 
 import {
@@ -69,6 +70,72 @@ describe("test-runtime runtime loading helpers", () => {
         pluginId: "plugin",
       }),
     ).toThrow('runtime "plugin/missing" not found in plugin "plugin"');
+  });
+
+  it("admits services only for selected packages active in the same session", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: "selected-session",
+      locale: "zh-CN",
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: ["lifecycle-probe"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const bundle = await loadRuntimeBundle({
+      pluginsDir: path.resolve(
+        import.meta.dirname,
+        "../../../tests/third-party",
+      ),
+      pluginId: "lifecycle-probe",
+      runtimeId: "lifecycle-probe/note",
+      locale: "zh-CN",
+      withPlugins: ["service-provider-probe"],
+      store,
+    });
+    try {
+      const client = bundle.services.createClient({
+        sessionId: "selected-session",
+        pluginId: "lifecycle-probe",
+        signal: new AbortController().signal,
+      });
+      expect(await client.discover("probe/note-format@1")).toEqual([]);
+      await expect(
+        client.call({
+          pluginId: "service-provider-probe",
+          name: "format-note",
+          contract: "probe/note-format@1",
+          input: { text: "hello" },
+        }),
+      ).rejects.toThrow('plugin "service-provider-probe" is not active');
+      await store.updateSession("selected-session", {
+        activePlugins: ["lifecycle-probe", "service-provider-probe"],
+      });
+      expect(await client.discover("probe/note-format@1")).toMatchObject([
+        { pluginId: "service-provider-probe", name: "format-note" },
+      ]);
+      await store.updateSession("selected-session", {
+        activePlugins: ["service-provider-probe"],
+      });
+      await expect(client.discover("probe/note-format@1")).rejects.toThrow(
+        'plugin "lifecycle-probe" is not active',
+      );
+      const otherSession = bundle.services.createClient({
+        sessionId: "missing-session",
+        pluginId: "lifecycle-probe",
+        signal: new AbortController().signal,
+      });
+      await expect(
+        otherSession.discover("probe/note-format@1"),
+      ).rejects.toThrow('session "missing-session" not found');
+    } finally {
+      await bundle.close();
+      await store.close();
+    }
   });
 
   it("loads entry tools declared only by a multi-runtime root manifest", async () => {

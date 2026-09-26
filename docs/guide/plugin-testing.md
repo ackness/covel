@@ -116,7 +116,7 @@ pnpm vitest run plugins/<id>/tests
 
 初始执行和首层 deferred follower 均使用生产 `executeTurn` 和 `commitExecution`，复用声明设置的默认值、工具权限、写缓冲、超时与能力撤销。每次执行的顶层和递归结果、对话 journal、suspensions 在一次事务内提交；失败写入不会留在 plugin-data，提交失败也不会启动该次执行产生的 followers。报告的 `commitStatus` / `commitError` 表示初始执行的提交结果。提交失败、runtime 失败或 job 失败都会使单次 CLI 退出非零，包括 `skipped` follower 和 `--expects-background-follower` 检测到任务缺失。case 可以明确期待某个 runtime 的失败；只有对应 runtime 的失败 job 随该预期被接受，提交失败和其它意外失败仍使 case 失败。
 
-工具仍是隔离调试环境：entry 只实际注册 tools，Hook、RPC、form validator 和 media wire 的注册不在此处运行。CLI 执行初始 turn 及它产生的首层后台 followers，不运行长期队列；首层 follower 再产生的任务列在 `pendingDeferredFollowers`，需用真实 server 验证其后续调度。`runtimeResults` 包含已经执行的递归与同步 event 结果。follower 的 `failed` / `skipped` 对应失败 job；成功提交的 `suspended` 保留暂停结果和 suspension，但 job 为 `done`，表示本次后台调用已结束，不表示暂停交互已恢复。真实 provider、审批、恢复和多跳调度仍由 HTTP/浏览器测试覆盖。
+工具仍是隔离调试环境：entry 实际注册 tools 和 services，Hook、RPC、form validator 和 media wire 的注册不在此处运行。CLI 执行初始 turn 及它产生的首层后台 followers，不运行长期队列；首层 follower 再产生的任务列在 `pendingDeferredFollowers`，需用真实 server 验证其后续调度。`runtimeResults` 包含已经执行的递归与同步 event 结果。follower 的 `failed` / `skipped` 对应失败 job；成功提交的 `suspended` 保留暂停结果和 suspension，但 job 为 `done`，表示本次后台调用已结束，不表示暂停交互已恢复。真实 provider、审批、恢复和多跳调度仍由 HTTP/浏览器测试覆盖。
 
 源码入口：
 
@@ -130,9 +130,11 @@ pnpm vitest run plugins/<id>/tests
 - `<pluginId>`：读取插件根目录下的 `tests/runtime-cases.json` 或 `covel.test.json`，执行声明的 cases。
 - `<pluginId>/<runtimeId>`：直接手动触发某个 runtime，适合临时调试。
 
-harness 会执行插件的 `entry` 模块并注册它导出的工具，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。hook / RPC / wire 的注册会被接受但不生效——它们属于 server bootstrap 的职责，单 runtime 的 harness 回合走不到。
+harness 会执行选定插件的 `entry` 模块并注册它导出的工具和服务，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。hook / RPC / wire 的注册会被接受但不生效——它们属于 server bootstrap 的职责，单 runtime 的 harness 回合走不到。
 
-harness 只加载被测插件，所以跨插件的 `needs`（如 `{ capability: narrative-engine }`）必然不满足、runtime 会被 gate 跳过。case 里加 `"ignoreUpstreams": true` 可以绕过（等价于 CLI 的 `--ignore-upstreams`）。
+harness 默认只加载被测插件。使用可重复的 `--with-plugin <id>` 显式加入协作插件；API `runRuntimeDebug` 和 case 均使用 `withPlugins: string[]`，case 的列表覆盖 CLI 列表。它们从同一个 `--plugins-dir` 查找，重复 ID 去重，缺失包在 entry 执行前报错。选定包均加入测试会话，工具按所属插件隔离，服务仅允许选定且当前会话仍活跃的插件调用；退出及初始化失败时逆序清理入口资源。CLI 会执行这些包的服务端代码，应只选择信任的本地包，生产审批仍需通过 HTTP 测试验证。
+
+只有指定目标被改为初始手动触发，加入协作插件不会自动运行其全部 runtime；声明的事件下游仍可执行。跨插件 `needs` 需要实际的上游结果，单纯加载包并不制造结果。仅调试不依赖上游的路径时，可以用 case `"ignoreUpstreams": true` 或 CLI `--ignore-upstreams`。报告的 `pluginData` 仍只包含被测插件。
 
 常用命令：
 
@@ -146,6 +148,13 @@ pnpm test:runtime -- my-plugin --pretty
 # 直接调试一个 runtime
 pnpm test:runtime -- my-plugin/manual-runtime \
   --payload '{"debug":true}' \
+  --pretty
+
+# Run the repository's two-package service example without an LLM.
+pnpm test:runtime -- lifecycle-probe/note \
+  --plugins-dir tests/third-party \
+  --with-plugin service-provider-probe \
+  --payload '{"text":"Hello","providerPluginId":"service-provider-probe"}' \
   --pretty
 
 # 使用真实 provider 跑一个 case

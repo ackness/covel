@@ -21,6 +21,19 @@ import type { SessionRecord } from "@covel/store";
 
 export const FRAMEWORK_SLASH_COMMANDS: readonly SessionSlashCommand[] = [
   {
+    id: "framework:plugins",
+    pluginId: "framework",
+    source: "framework",
+    sourceLabel: { zh: "框架", en: "Framework" },
+    name: "plugins",
+    description: {
+      zh: "查看插件注册能力与最近的服务调用",
+      en: "Inspect plugin registrations and recent service calls",
+    },
+    arguments: [{ name: "pluginId", type: "string" }],
+    action: "slash-plugins",
+  },
+  {
     id: "framework:debug",
     pluginId: "framework",
     source: "framework",

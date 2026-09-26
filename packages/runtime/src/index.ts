@@ -254,3 +254,4 @@ export type {
   ValidatePluginForm,
 } from "./rpc/form-validator.js";
 export { PluginEntryScope } from "./plugin-entry-scope.js";
+export type { PluginServiceCallEvent } from "./plugin-services.js";

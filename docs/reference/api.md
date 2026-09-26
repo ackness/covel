@@ -1606,10 +1606,11 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 
 **框架默认 action:**
 
-| Action        | 说明                                                                           |
-| ------------- | ------------------------------------------------------------------------------ |
-| `submit-form` | 绑定已提交 interaction，校验并幂等持久化玩家输入，再按 `{{字段}}` 填充自然语言 |
-| `slash-debug` | 读取 `/debug` 声明的 session/runtime/model 上下文并让客户端打开当前会话调试页  |
+| Action          | 说明                                                                                   |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `submit-form`   | 绑定已提交 interaction，校验并幂等持久化玩家输入，再按 `{{字段}}` 填充自然语言         |
+| `slash-debug`   | 读取 `/debug` 声明的 session/runtime/model 上下文并让客户端打开当前会话调试页          |
+| `slash-plugins` | 仅接受 `framework:plugins` command 上下文，打开当前会话的插件诊断视图，可带 `pluginId` |
 
 **响应 200 — action 级:**
 
@@ -2126,6 +2127,15 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ```json
 {
   "commands": [
+    {
+      "id": "framework:plugins",
+      "pluginId": "framework",
+      "source": "framework",
+      "name": "plugins",
+      "description": { "zh": "查看插件注册能力与最近的服务调用" },
+      "arguments": [{ "name": "pluginId", "type": "string" }],
+      "action": "slash-plugins"
+    },
     {
       "id": "framework:debug",
       "pluginId": "framework",
@@ -3525,3 +3535,21 @@ embedding requests outside the memory subsystem.
 ### 社区插件待授权状态
 
 创建会话保留玩家选择的社区插件 ID。`GET /api/sessions/:id/plugins` 的条目增加可选 `approvalRequired`：已选择但缺少当前会话执行授权时为 true，`active` 仍为 false。前端应明确显示暂停状态并调用现有 enable/approval 接口重新授权，而非把它视为玩家取消选择。授权不会跨服务进程重启。
+
+### GET /api/sessions/:id/plugin-diagnostics
+
+只读插件注册快照与当前会话实例最近的服务调用；复用会话归属鉴权和响应阶段的会话实例检查。`pluginId` 可选，按精确包 ID 筛选插件，并包含它作为调用方或提供方的记录；未知插件返回 404，非法查询返回 400。响应带 `Cache-Control: no-store`。读取不会激活 entry 或执行插件代码。
+
+返回 `PluginDiagnosticsSnapshot`（`@covel/shared`）：
+
+- `sessionId`、`capturedAt`：所属会话与快照时间。
+- `plugins[]`：`pluginId`、`source`（`builtin` / `community`）、`active`、`state`、`runtimeIds`、`registrations`、`commands`。
+- `state`：`ready`、`inactive`、`approval-required`、`entry-pending`、`activation-error`、`load-error`。失败状态不携带原始异常。
+- `registrations`：工具名 `tools[]`、Hook `{ id, event }[]`、RPC action 名 `actions[]`、服务 `{ name, contract }[]`。仅返回当前会话活跃且已批准、无加载/激活错误的包的实际注册项；其余包为空。
+- `commands[]`：声明的 `{ name, action, registered }`，`registered` 表示 action 是否在上述注册表中，不代替执行时权限检查。
+- `calls[]`：`callId`、可选 `parentCallId` / `turnId` / `runtimeId`、`callerPluginId`、`providerPluginId`、`name`、`contract`、`completedAt`、`durationMs`、`outcome`（`success` / `timeout` / `cancelled` / `error`）、可选固定分类 `errorCode`。
+- `history`：`{ "scope": "process", "limit": 100 }`。全进程最多保留 500 条已完成调用，按当前会话实例筛选后倒序返回最多 100 条；不跨进程共享或持久化。
+
+调用方准入成功前的失败不写入该会话历史。记录不含输入、输出、原始错误、凭据或私有会话范围；同 ID 重建会话与旧历史隔离。未匹配已注册描述符的请求使用 `<unavailable>` 作为服务标识，避免复制任意请求内容；可显示的诊断字符串最多 256 个 UTF-16 单元，截断时以 `...[truncated]` 标记，内部会话匹配仍使用完整身份。此窗口用于开发诊断，不是完整审计日志。
+
+框架目录包含 `/plugins [pluginId]`，ID `framework:plugins`，action `slash-plugins`，参数为可选字符串 `pluginId`。使用 `POST /api/sessions/:id/plugin-rpc` 的 `kind: "command"` 执行，返回 `result.clientAction: { type: "open-plugin-diagnostics", pluginId? }`；无参数时查看全部安装包。普通 action 请求不能替代此命令上下文。Web 客户端打开 `/debug` 的 `view=plugins`，保留当前 `sid` 和可选 `pluginId`。调试页的 `view` 支持 `traces` / `data` / `cost` / `plugins`，缺省为 `traces`；插件筛选只在 `plugins` 视图生效。命令不触发玩家回合或模型调用。

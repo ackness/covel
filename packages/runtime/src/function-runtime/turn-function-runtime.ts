@@ -375,6 +375,8 @@ export async function executeFunctionRuntime({
   };
   const serviceClient = deps.services?.createClient({
     sessionId: input.sessionId,
+    turnId: input.turnId,
+    runtimeId: manifest.name,
     pluginId: manifest.pluginId,
     signal: handlerAbort.signal,
     gateway: revocable.gateway,

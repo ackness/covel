@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RuntimeManifest } from "@covel/shared";
+import type { DataStore } from "@covel/store";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import {
   PluginEntryScope,
@@ -35,9 +36,11 @@ export interface RuntimeLoadResult {
   readonly rawManifests: readonly RuntimeManifest[];
   readonly manifests: readonly RuntimeManifest[];
   readonly target: RuntimeManifest;
+  readonly pluginIds: readonly string[];
+  readonly discoveries: ReadonlyMap<string, PluginDiscoveryResult>;
   readonly loadedCache: Map<string, LoadedRuntime>;
-  /** Tools the plugin's `entry` module registered, if it declares one. */
-  readonly entryTools: readonly ToolModule[];
+  /** Tools registered by the selected packages' entry modules. */
+  readonly entryTools: readonly { pluginId: string; tool: ToolModule }[];
   readonly services: PluginServiceRegistry;
   close(): Promise<void>;
 }
@@ -133,11 +136,47 @@ export async function loadRuntimeBundle(args: {
   readonly runtimeId: string;
   readonly locale: string;
   readonly ignoreUpstreams?: boolean;
+  readonly withPlugins?: readonly string[];
+  readonly store?: Pick<DataStore, "getSession">;
 }): Promise<RuntimeLoadResult> {
-  const discovery = await discoverPlugin(args.pluginsDir, args.pluginId);
-  const definition = await loadPluginDefinition(discovery);
-  const rawManifests = definition.manifests.map(({ manifest }) =>
-    resolvePluginRuntimeManifest(definition, manifest),
+  const pluginIds = [args.pluginId];
+  for (const id of args.withPlugins ?? []) {
+    if (
+      typeof id !== "string" ||
+      !id.trim() ||
+      id !== id.trim() ||
+      id.includes("/")
+    ) {
+      throw new Error(`invalid support plugin id: ${String(id)}`);
+    }
+    if (!pluginIds.includes(id)) pluginIds.push(id);
+  }
+  // Resolve every selected package and the target before any entry factory runs.
+  const discoveries = new Map<string, PluginDiscoveryResult>();
+  const definitions = new Map<string, PluginDefinition>();
+  for (const id of pluginIds) {
+    const discovery = await discoverPlugin(args.pluginsDir, id);
+    discoveries.set(id, discovery);
+    definitions.set(id, await loadPluginDefinition(discovery));
+  }
+  const discovery = discoveries.get(args.pluginId)!;
+  const targetDefinition = definitions.get(args.pluginId)!;
+  const targetManifests = targetDefinition.manifests.map(({ manifest }) =>
+    resolvePluginRuntimeManifest(targetDefinition, manifest),
+  );
+  if (!targetManifests.some((manifest) => manifest.name === args.runtimeId)) {
+    throw new Error(
+      `runtime "${args.runtimeId}" not found in plugin "${args.pluginId}"`,
+    );
+  }
+  const rawManifests = pluginIds.flatMap((id) =>
+    id === args.pluginId
+      ? targetManifests
+      : definitions
+          .get(id)!
+          .manifests.map(({ manifest }) =>
+            resolvePluginRuntimeManifest(definitions.get(id)!, manifest),
+          ),
   );
   const { manifests, target } = prepareRuntimeManifests({
     rawManifests,
@@ -145,29 +184,95 @@ export async function loadRuntimeBundle(args: {
     pluginId: args.pluginId,
     ignoreUpstreams: args.ignoreUpstreams,
   });
-  const loadedCache = await loadRuntimeCache({
-    discovery,
-    definition,
-    rawManifests,
-    locale: args.locale,
-  });
+  const loadedCache = new Map<string, LoadedRuntime>();
+  for (const id of pluginIds) {
+    const definition = definitions.get(id)!;
+    const cache = await loadRuntimeCache({
+      discovery: discoveries.get(id)!,
+      definition,
+      rawManifests: definition.manifests.map(({ manifest }) =>
+        resolvePluginRuntimeManifest(definition, manifest),
+      ),
+      locale: args.locale,
+    });
+    for (const [name, loaded] of cache) loadedCache.set(name, loaded);
+  }
+  const selected = new Set(pluginIds);
+  const sessionPlugins = async (sessionId: string) => {
+    if (!args.store) return pluginIds;
+    const session = await args.store.getSession(sessionId);
+    if (!session) throw new Error(`session "${sessionId}" not found`);
+    return session.activePlugins.filter((id) => selected.has(id));
+  };
   const services = new PluginServiceRegistry({
-    list: async () => [discovery.id],
-    ensure: async (_sessionId, pluginId) => {
-      if (pluginId !== discovery.id)
-        throw new Error("The isolated harness only loads the target plugin");
+    list: sessionPlugins,
+    ensure: async (sessionId, pluginId) => {
+      if (
+        !selected.has(pluginId) ||
+        !(await sessionPlugins(sessionId)).includes(pluginId)
+      ) {
+        throw new Error(
+          `plugin "${pluginId}" is not active in session "${sessionId}"`,
+        );
+      }
     },
   });
-  const entry = await loadEntryTools(discovery, definition, services);
+  const entries: Awaited<ReturnType<typeof loadEntryTools>>[] = [];
+  const entryTools: { pluginId: string; tool: ToolModule }[] = [];
+  const close = async () => {
+    const errors: unknown[] = [];
+    for (const entry of [...entries].reverse()) {
+      try {
+        await entry.close();
+      } catch (error) {
+        errors.push(
+          ...(error instanceof AggregateError ? error.errors : [error]),
+        );
+      }
+    }
+    if (errors.length)
+      throw new AggregateError(errors, "Failed to close plugin entries");
+  };
+  try {
+    for (const id of pluginIds) {
+      const entry = await loadEntryTools(
+        discoveries.get(id)!,
+        definitions.get(id)!,
+        services,
+      );
+      entries.push(entry);
+      entryTools.push(...entry.tools.map((tool) => ({ pluginId: id, tool })));
+    }
+  } catch (error) {
+    try {
+      await close();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [
+          error,
+          ...(cleanupError instanceof AggregateError
+            ? cleanupError.errors
+            : [cleanupError]),
+        ],
+        error instanceof Error
+          ? error.message
+          : "Plugin entry activation failed",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
   return {
     discovery,
     rawManifests,
     manifests,
     target,
+    pluginIds,
+    discoveries,
     loadedCache,
-    entryTools: entry.tools,
+    entryTools,
     services,
-    close: entry.close,
+    close,
   };
 }
 

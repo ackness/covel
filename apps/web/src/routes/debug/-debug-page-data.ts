@@ -18,7 +18,11 @@ import {
   type DebugView,
 } from "./-debug-page-model.js";
 
-export function useDebugPageData(sid: string | undefined) {
+export function useDebugPageData(
+  sid: string | undefined,
+  view?: DebugView,
+  pluginId?: string,
+) {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<api.SessionRecord[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
@@ -68,9 +72,17 @@ export function useDebugPageData(sid: string | undefined) {
   const selectSession = useCallback(
     (id: string) => {
       setSelectedSessionId(id);
-      navigate({ to: "/debug", search: { sid: id }, replace: true });
+      navigate({
+        to: "/debug",
+        search: {
+          sid: id,
+          view,
+          pluginId: view === "plugins" ? pluginId : undefined,
+        },
+        replace: true,
+      });
     },
-    [navigate],
+    [navigate, view, pluginId],
   );
 
   const openSelectedSession = useCallback(() => {

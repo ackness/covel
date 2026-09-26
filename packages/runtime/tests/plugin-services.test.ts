@@ -1,16 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
-import { PluginServiceRegistry } from "../src/plugin-services.js";
+import {
+  PluginServiceRegistry,
+  type PluginServiceCallEvent,
+} from "../src/plugin-services.js";
 
-function fixture() {
+function fixture(onCallCompleted?: (event: PluginServiceCallEvent) => void) {
   const active = new Set(["consumer", "provider"]);
+  const events: PluginServiceCallEvent[] = [];
   const ensure = vi.fn(async (_sessionId: string, pluginId: string) => {
     if (!active.has(pluginId)) throw new Error("Plugin not authorized");
   });
   const registry = new PluginServiceRegistry({
     list: async () => [...active],
     ensure,
+    onCallCompleted: (event) => {
+      events.push(event);
+      onCallCompleted?.(event);
+    },
   });
   const abort = new AbortController();
   const client = registry.createClient({
@@ -18,7 +26,7 @@ function fixture() {
     pluginId: "consumer",
     signal: abort.signal,
   });
-  return { registry, client, abort, active, ensure };
+  return { registry, client, abort, active, ensure, events };
 }
 const request = {
   pluginId: "provider",
@@ -31,8 +39,305 @@ const schema = z.object({ value: z.number() });
 describe("public plugin services", () => {
   afterEach(() => vi.useRealTimers());
 
+  it("provides detached host snapshots of actual registrations", async () => {
+    const { registry, client, active } = fixture();
+    const dispose = registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      description: "Ranks values",
+      input: schema,
+      output: schema,
+      handler: (input) => input,
+    });
+    active.delete("provider");
+    expect(await client.discover(request.contract)).toEqual([]);
+    const snapshot = registry.list();
+    expect(snapshot).toEqual([
+      {
+        pluginId: "provider",
+        name: "rank",
+        contract: request.contract,
+        description: "Ranks values",
+      },
+    ]);
+    Object.assign(snapshot[0]!, { name: "mutated", contract: "mutated" });
+    expect(registry.list()[0]).toMatchObject({
+      name: "rank",
+      contract: request.contract,
+    });
+    active.add("provider");
+    await expect(client.call(request)).resolves.toEqual(request.input);
+    dispose();
+    expect(registry.list()).toEqual([]);
+  });
+
+  it("correlates nested calls and identifies each immediate caller", async () => {
+    const { registry, client, active, events } = fixture();
+    active.add("inner");
+    registry.register("inner", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input, context) => {
+        expect(context.callerPluginId).toBe("provider");
+        expect(context.services).not.toHaveProperty("list");
+        return input;
+      },
+    });
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: async (_input, context) =>
+        (await context.services.call({ ...request, pluginId: "inner" })) as {
+          value: number;
+        },
+    });
+    await client.call(request);
+    expect(events).toHaveLength(2);
+    const [inner, outer] = events;
+    expect(outer).toMatchObject({
+      sessionId: "test",
+      callerPluginId: "consumer",
+      providerPluginId: "provider",
+      outcome: "success",
+    });
+    expect(outer).not.toHaveProperty("parentCallId");
+    expect(outer).not.toHaveProperty("errorCode");
+    expect(inner).toMatchObject({
+      sessionId: "test",
+      parentCallId: outer!.callId,
+      callerPluginId: "provider",
+      providerPluginId: "inner",
+      name: "rank",
+      contract: request.contract,
+      outcome: "success",
+    });
+    expect(inner!.callId).not.toBe(outer!.callId);
+    expect(outer!.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("emits fixed error codes without retaining sensitive values", async () => {
+    const { registry, client, active, events } = fixture();
+    const secret = "sensitive-provider-output-and-credentials";
+    const dispose = registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: z.unknown(),
+      output: z.unknown(),
+      handler: () => {
+        throw new Error(secret);
+      },
+    });
+    await expect(client.call(request, { timeoutMs: 0 })).rejects.toThrow();
+    active.delete("provider");
+    await expect(client.call(request)).rejects.toThrow();
+    active.add("provider");
+    await expect(
+      client.call({ ...request, contract: "missing@1" }),
+    ).rejects.toThrow();
+    await expect(
+      client.call({ ...request, input: { secret } }),
+    ).rejects.toThrow(secret);
+    dispose();
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: async (_input, context) =>
+        (await context.services.call(request)) as { value: number },
+    });
+    await expect(client.call(request)).rejects.toThrow("cycle");
+    expect(events.map((event) => event.errorCode)).toEqual([
+      "invalid-options",
+      "admission-error",
+      "unavailable",
+      "invocation-error",
+      "cycle-or-depth-limit",
+      "invocation-error",
+    ]);
+    expect(events.every((event) => event.outcome === "error")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain(secret);
+    for (const event of events) {
+      expect(event).not.toHaveProperty("input");
+      expect(event).not.toHaveProperty("output");
+      expect(event).not.toHaveProperty("error");
+      expect(event).not.toHaveProperty("gateway");
+    }
+  });
+
+  it("reports only registered or admitted service identities", async () => {
+    const { registry, client, active, events } = fixture();
+    const secret = "sensitive-user-content";
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input) => input,
+    });
+    active.delete("provider");
+    await expect(client.call(request)).rejects.toThrow("Plugin not authorized");
+    expect(events[0]).toMatchObject({
+      providerPluginId: "provider",
+      name: "rank",
+      contract: request.contract,
+      errorCode: "admission-error",
+    });
+
+    active.add("provider");
+    await expect(
+      client.call({ ...request, name: secret, contract: secret }),
+    ).rejects.toThrow("unavailable");
+    expect(events[1]).toMatchObject({
+      providerPluginId: "provider",
+      name: "<unavailable>",
+      contract: "<unavailable>",
+    });
+
+    await expect(
+      client.call({
+        ...request,
+        pluginId: secret,
+        name: secret,
+        contract: secret,
+      }),
+    ).rejects.toThrow("Plugin not authorized");
+    expect(events[2]).toMatchObject({
+      providerPluginId: "<unavailable>",
+      name: "<unavailable>",
+      contract: "<unavailable>",
+    });
+    expect(JSON.stringify(events)).not.toContain(secret);
+  });
+
+  it("keeps host correlation and admission scope private across nested calls", async () => {
+    const events: PluginServiceCallEvent[] = [];
+    let scope = "original-incarnation";
+    const registry = new PluginServiceRegistry({
+      list: async () => ["consumer", "provider"],
+      ensure: async () => scope,
+      onCallCompleted: (event) => events.push(event),
+    });
+    const client = registry.createClient({
+      sessionId: "test",
+      turnId: "turn-1",
+      runtimeId: "consumer-runtime",
+      pluginId: "consumer",
+      signal: new AbortController().signal,
+    });
+    registry.register("provider", {
+      name: "inner",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input, context) => {
+        expect(context).not.toHaveProperty("diagnosticScope");
+        expect(context).not.toHaveProperty("turnId");
+        return input;
+      },
+    });
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: async (_input, context) => {
+        scope = "replacement-incarnation";
+        return (await context.services.call({ ...request, name: "inner" })) as {
+          value: number;
+        };
+      },
+    });
+    await client.call(request);
+    expect(events).toHaveLength(2);
+    for (const event of events)
+      expect(event).toMatchObject({
+        diagnosticScope: "original-incarnation",
+        turnId: "turn-1",
+        runtimeId: "consumer-runtime",
+      });
+    await expect(
+      client.call(request, { signal: AbortSignal.abort() }),
+    ).rejects.toThrow();
+    expect(events[2]).toMatchObject({ outcome: "cancelled" });
+    expect(events[2]).not.toHaveProperty("diagnosticScope");
+  });
+
+  it("snapshots diagnostic identity before the caller can mutate a request", async () => {
+    const { registry, client, events } = fixture();
+    const mutableRequest = { ...request };
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input) => {
+        Object.assign(mutableRequest, {
+          pluginId: { secret: "sensitive-input" },
+          name: "mutated",
+        });
+        return input;
+      },
+    });
+    await client.call(mutableRequest);
+    expect(events[0]).toMatchObject({
+      providerPluginId: "provider",
+      name: "rank",
+    });
+    expect(JSON.stringify(events)).not.toContain("sensitive-input");
+  });
+
+  it("isolates observer failures from successful and failed calls", async () => {
+    const { registry, client, events } = fixture(() => {
+      throw new Error("observer unavailable");
+    });
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input) => input,
+    });
+    await expect(client.call(request)).resolves.toEqual(request.input);
+    await expect(client.call({ ...request, name: "missing" })).rejects.toThrow(
+      "unavailable",
+    );
+    expect(events.map((event) => event.outcome)).toEqual(["success", "error"]);
+  });
+
+  it("does not wait for or propagate an async observer rejection", async () => {
+    let rejectObservation!: (error: Error) => void;
+    const registry = new PluginServiceRegistry({
+      list: async () => ["consumer", "provider"],
+      ensure: async () => {},
+      onCallCompleted: () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectObservation = reject;
+        }),
+    });
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input) => input,
+    });
+    const client = registry.createClient({
+      sessionId: "test",
+      pluginId: "consumer",
+      signal: new AbortController().signal,
+    });
+    await expect(client.call(request)).resolves.toEqual(request.input);
+    rejectObservation(new Error("observer unavailable"));
+    await Promise.resolve();
+  });
+
   it("cancels an uncooperative call promptly while the caller can continue", async () => {
-    const { registry, client, abort } = fixture();
+    const { registry, client, abort, events } = fixture();
     let rejectWork!: (error: Error) => void;
     let serviceSignal!: AbortSignal;
     registry.register("provider", {
@@ -68,11 +373,17 @@ describe("public plugin services", () => {
     // A provider that ignores cancellation may still reject later.
     rejectWork(new Error("late provider failure"));
     await Promise.resolve();
+    expect(events.map((event) => event.outcome)).toEqual([
+      "cancelled",
+      "success",
+    ]);
+    expect(events[0]!.errorCode).toBe("cancelled");
+    expect(JSON.stringify(events)).not.toContain("cancel one call");
   });
 
   it("applies a call deadline to nested calls and lent gateway and HTTP work", async () => {
     vi.useFakeTimers();
-    const { registry, abort } = fixture();
+    const { registry, abort, events } = fixture();
     const signals: AbortSignal[] = [];
     const generateText = vi.fn(async (input) => {
       signals.push(input.signal);
@@ -129,6 +440,9 @@ describe("public plugin services", () => {
     expect(signals.every((signal) => signal.aborted)).toBe(true);
     expect(abort.signal.aborted).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
+    expect(events).toHaveLength(2);
+    expect(events.every((event) => event.outcome === "timeout")).toBe(true);
+    expect(events.every((event) => event.errorCode === "timeout")).toBe(true);
   });
 
   it("stops waiting for admission and never invokes a provider after cancellation", async () => {
@@ -139,9 +453,11 @@ describe("public plugin services", () => {
           admit = resolve;
         }),
     );
+    const events: PluginServiceCallEvent[] = [];
     const registry = new PluginServiceRegistry({
       list: async () => [],
       ensure,
+      onCallCompleted: (event) => events.push(event),
     });
     const abort = new AbortController();
     const client = registry.createClient({
@@ -166,6 +482,11 @@ describe("public plugin services", () => {
     await Promise.resolve();
     expect(ensure).toHaveBeenCalledTimes(1);
     expect(handler).not.toHaveBeenCalled();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      outcome: "cancelled",
+      errorCode: "cancelled",
+    });
   });
 
   it("cleans up call resources on success and failure and rejects retained contexts", async () => {

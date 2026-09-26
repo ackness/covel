@@ -134,14 +134,22 @@ export async function runRuntimeDebug(
   let failed = false;
 
   try {
-    const { discovery, manifests, loadedCache, entryTools, services } =
-      (bundle = await loadRuntimeBundle({
-        pluginsDir,
-        pluginId,
-        runtimeId,
-        locale,
-        ignoreUpstreams: options.ignoreUpstreams,
-      }));
+    const {
+      manifests,
+      loadedCache,
+      entryTools,
+      services,
+      pluginIds,
+      discoveries,
+    } = (bundle = await loadRuntimeBundle({
+      pluginsDir,
+      pluginId,
+      runtimeId,
+      locale,
+      ignoreUpstreams: options.ignoreUpstreams,
+      withPlugins: options.withPlugins,
+      store,
+    }));
 
     const now = new Date().toISOString();
     await store.createSession({
@@ -151,7 +159,7 @@ export async function runRuntimeDebug(
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: {},
-      activePlugins: [pluginId],
+      activePlugins: [...pluginIds],
       createdAt: now,
       updatedAt: now,
     });
@@ -166,7 +174,9 @@ export async function runRuntimeDebug(
     })) {
       tools.registerBuiltin(t);
     }
-    for (const module of entryTools) tools.registerPlugin(pluginId, module);
+    for (const { pluginId: ownerId, tool } of entryTools) {
+      tools.registerPlugin(ownerId, tool);
+    }
     const llm = buildMockLlm(options);
     const liveAdapters =
       options.mode === "live" ? makeLiveAdapters() : undefined;
@@ -177,7 +187,7 @@ export async function runRuntimeDebug(
       gateway: liveAdapters?.gateway ?? makeGateway(options),
       utils: PLUGIN_UTILS,
       mediaStore,
-      getPluginSource: () => discovery.source,
+      getPluginSource: (id) => discoveries.get(id)?.source,
       store,
       toolExecutor: (toolExecutor = createToolExecutor({
         findTool: (name, context) => tools.find(name, context.pluginId),

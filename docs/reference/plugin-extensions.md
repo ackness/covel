@@ -145,3 +145,13 @@ const response = await window.covel.invoke("invokePluginAction", {
 桥接只接受宿主显式提供的动作：默认是 `invokeRuntime`、`invokePluginAction`、`invokeCommand`，自动绑定当前插件；舞台另提供 `sendMessage({ text })`。不可通过 params 改写 pluginId 来调用其他插件。需要组合其他插件时，从自己的 runtime 使用 `ctx.services` 或事件，不通过浏览器读取对方私有数据。
 
 动作返回现有 RPC 响应；后台 `accepted` 表示任务已接收，不代表完成。桥接通信和调用异常以不含服务端内部详情的错误返回。每个挂载实例独立连接，卸载时关闭；插件不能获取宿主中的任意函数。
+
+## 开发时查看注册与调用
+
+在会话输入 `/plugins` 打开调试页的插件视图，或输入 `/plugins my-plugin` 同时筛选该包及其作为调用方或提供方的服务记录。命令由框架命令目录提供，可搜索、自动补全并走现有 command RPC 校验和追踪，不消耗玩家回合，也不调用 LLM。`/debug` 和 `/trace` 继续打开原调试入口。
+
+插件视图展示安装来源、当前会话的启用与授权状态、runtime ID、实际注册的工具、Hook、RPC action、服务及声明的 slash command。`registered` 只表示命令 action 已注册，实际执行仍检查命令参数、会话和对应 action 的权限。未启用或未授权的包不会展示为当前可用的注册能力。查询只读宿主注册表，不触发 entry、服务发现或插件代码；加载失败和激活失败显示固定状态，具体错误从服务端日志排查。
+
+最近服务调用只保存在当前 server 进程内，全局最多 500 条，每次返回当前会话实例最近 100 条，可按插件筛选。记录调用关系、所属 runtime/turn、耗时、成功/失败/超时/取消与固定错误分类，不记录参数、结果、原始异常或会话私有标识。未取得调用方准入范围的调用不进入会话历史；删除后同 ID 重建的会话无法读取旧记录。重启或请求落到其他进程时不会共享历史，因此该窗口不能用于持久审计或用量统计。未匹配服务的请求使用 `<unavailable>` 标识，超长诊断字符串截断至 256 个 UTF-16 单元并标记 `...[truncated]`。页面支持手动与自动刷新，切换会话会重新查询。
+
+接口见 [插件诊断 API](api.md#get-apisessionsidplugin-diagnostics)。本地组合调试使用 [test-runtime 的 --with-plugin](../guide/plugin-testing.md#coveltest-runtime)，然后用真实 server 验证审批、slash、Hook 和 UI。

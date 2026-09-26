@@ -10,6 +10,8 @@ export interface RunRuntimeDebugOptions {
   readonly target?: string;
   readonly runtimeId?: string;
   readonly pluginId?: string;
+  /** Additional plugin packages made available to this isolated run. */
+  readonly withPlugins?: readonly string[];
   readonly pluginsDir?: string;
   readonly sessionId?: string;
   readonly locale?: string;

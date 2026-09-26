@@ -351,6 +351,72 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     ).toBe(201);
     await restart();
     expect(boot.registry.get(providerPluginId)?.manifests).toHaveLength(0);
+    const before = await request(`${sessionPath}/plugin-diagnostics`, "GET");
+    expect(before.status).toBe(200);
+    expect(before.headers.get("Cache-Control")).toBe("no-store");
+    expect(await before.json()).toMatchObject({
+      plugins: expect.arrayContaining([
+        expect.objectContaining({
+          pluginId: providerPluginId,
+          state: "inactive",
+          registrations: { tools: [], hooks: [], actions: [], services: [] },
+        }),
+      ]),
+      calls: [],
+    });
+    expect(boot.registry.get(pluginId)?.loadedRuntimes.size).toBe(0);
+    expect(
+      (await boot.app.request(`${sessionPath}/plugin-diagnostics`)).status,
+    ).toBe(401);
+    expect(
+      (
+        await request(
+          `${sessionPath}/plugin-diagnostics?pluginId=missing`,
+          "GET",
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await request(`${sessionPath}/plugin-diagnostics?extra=1`, "GET"))
+        .status,
+    ).toBe(400);
+    expect(
+      (await request("/api/sessions/missing/plugin-diagnostics", "GET")).status,
+    ).toBe(404);
+    for (const input of ["/plugins", `/plugins ${providerPluginId}`]) {
+      const command = await request(`${sessionPath}/plugin-rpc`, "POST", {
+        kind: "command",
+        commandId: "framework:plugins",
+        input,
+      });
+      expect(command.status, await command.clone().text()).toBe(200);
+      const expected =
+        input === "/plugins" ? {} : { pluginId: providerPluginId };
+      expect((await command.json()).result.clientAction).toEqual({
+        type: "open-plugin-diagnostics",
+        ...expected,
+      });
+    }
+    expect(
+      (
+        await request(`${sessionPath}/plugin-rpc`, "POST", {
+          kind: "command",
+          commandId: "framework:plugins",
+          input: "/plugins missing",
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(`${sessionPath}/plugin-rpc`, "POST", {
+          kind: "action",
+          pluginId: "framework",
+          action: "slash-plugins",
+          payload: {},
+        })
+      ).status,
+    ).toBe(400);
+    expect(generate).not.toHaveBeenCalled();
     await enable();
 
     const ui = await buildUiSpecsResponse({
@@ -416,6 +482,43 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     expect(await readNote("composed")).toMatchObject({
       text: "[formatted] Service result",
     });
+    const diagnostics = await request(
+      `${sessionPath}/plugin-diagnostics?pluginId=${providerPluginId}`,
+      "GET",
+    );
+    const snapshot = await diagnostics.json();
+    expect(snapshot).toMatchObject({
+      sessionId,
+      plugins: [
+        {
+          pluginId: providerPluginId,
+          state: "ready",
+          runtimeIds: [],
+          registrations: {
+            services: [
+              { name: "format-note", contract: "probe/note-format@1" },
+            ],
+          },
+        },
+      ],
+      calls: [
+        expect.objectContaining({
+          callerPluginId: pluginId,
+          providerPluginId,
+          name: "format-note",
+          outcome: "success",
+          runtimeId: `${pluginId}/note`,
+          turnId: expect.any(String),
+        }),
+      ],
+      history: { scope: "process", limit: 100 },
+    });
+    expect(JSON.stringify(snapshot)).not.toContain("Service result");
+    expect(JSON.stringify(snapshot)).not.toContain("diagnosticScope");
+    const currentSession = await store.getSession(sessionId);
+    expect(JSON.stringify(snapshot)).not.toContain(
+      currentSession?.metadata?.sessionIncarnationNonce,
+    );
 
     expect(
       (await request(`${sessionPath}/plugins/${providerPluginId}`, "DELETE"))

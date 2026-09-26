@@ -84,12 +84,12 @@ describe("session slash command directory", () => {
 
     expect(
       buildSessionCommandList([], registry).map((command) => command.id),
-    ).toEqual(["framework:debug"]);
+    ).toEqual(["framework:plugins", "framework:debug"]);
     expect(
       buildSessionCommandList(["inspector"], registry).map(
         (command) => command.id,
       ),
-    ).toEqual(["framework:debug", "inspector:inspect"]);
+    ).toEqual(["framework:plugins", "framework:debug", "inspector:inspect"]);
   });
 });
 

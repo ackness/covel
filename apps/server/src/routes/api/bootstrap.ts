@@ -60,6 +60,10 @@ import { workingMemoryRoutes } from "./working-memory.js";
 import { installRoutes } from "./install.js";
 import { aiRoutes } from "./ai.js";
 import { traceRoutes } from "./traces.js";
+import {
+  createPluginDiagnostics,
+  RecentPluginServiceCalls,
+} from "./plugin-diagnostics.js";
 import { mediaRoutes } from "./media.js";
 import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
@@ -438,12 +442,15 @@ async function assembleApi(
     );
   };
 
+  const serviceCalls = new RecentPluginServiceCalls();
   const services = new PluginServiceRegistry({
+    onCallCompleted: (event) => serviceCalls.record(event),
     async ensure(sessionId, pluginId) {
       const session = await store.getSession(sessionId);
       if (!session?.activePlugins.includes(pluginId))
         throw new Error(`Plugin is not active: ${pluginId}`);
       await runtimeLoader.ensurePluginEntry(pluginId, sessionId);
+      return sessionIncarnationIdentity(session);
     },
     async list(sessionId) {
       const session = await store.getSession(sessionId);
@@ -478,6 +485,22 @@ async function assembleApi(
       services,
     }));
   runtimeLoader.bindPluginEntry(pluginEntries.ensurePluginEntry);
+  const pluginDiagnostics = createPluginDiagnostics({
+    registry,
+    tools,
+    hooks: hookPipeline,
+    rpc: rpcRegistry,
+    services,
+    calls: serviceCalls,
+    hasPendingEntry: pluginEntries.hasPendingEntry,
+    isServerCodeApproved: (session, pluginId) =>
+      rpcApprovalGate.hasGrant(
+        session.id,
+        pluginId,
+        COMMUNITY_SERVER_CODE_ACTION,
+        sessionApprovalScope(session, pluginId),
+      ),
+  });
 
   // Community activation seam: running the plugin's `entry` module is what
   // registers its tools, hooks, rpc actions and wires.
@@ -787,6 +810,7 @@ async function assembleApi(
   app.route("/api/ai", aiRoutes);
   app.route("/api/actions", actionRoutes);
   app.route("/api/traces", traceRoutes);
+  app.route("/api/sessions", pluginDiagnostics.routes);
   app.route("/api/media", mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
   // Start maintenance only after assembly succeeds. These scans remain

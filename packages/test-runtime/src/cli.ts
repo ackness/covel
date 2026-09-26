@@ -7,6 +7,7 @@ interface CliOptions {
   target?: string;
   runtimeId?: string;
   pluginId?: string;
+  withPlugins?: string[];
   pluginsDir?: string;
   sessionId?: string;
   locale?: string;
@@ -32,6 +33,7 @@ const HELP = `Usage:
 
 Options:
   --plugin <id>              Plugin id. Defaults to runtimeId prefix.
+  --with-plugin <id>         Load an additional plugin package (repeatable).
   --plugins-dir <path>       Plugin directory. Defaults to COVEL_USER_PLUGINS_DIR,
                             then <COVEL_HOME>/plugins, then ~/.covel/plugins.
   --session <id>             Session id. Defaults to debug-<timestamp>.
@@ -90,6 +92,9 @@ function parseArgs(argv: readonly string[]): CliOptions {
         process.exit(0);
       case "--plugin":
         options.pluginId = next();
+        break;
+      case "--with-plugin":
+        (options.withPlugins ??= []).push(next());
         break;
       case "--plugins-dir":
         options.pluginsDir = next();
