@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -319,4 +319,56 @@ describe("runtime debug host integration", () => {
     expect(cli.status, cli.stderr).toBe(1);
     expect(JSON.parse(cli.stdout).commitStatus).toBe("failed");
   }, 15_000);
+
+  it("releases entry resources after repeated runs and a runner failure", async () => {
+    const { root, pluginRoot } = await pluginFixture();
+    const marker = path.join(pluginRoot, "closed.txt");
+    await writeFile(
+      path.join(pluginRoot, "PLUGIN.md"),
+      "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(pluginRoot, "entry.js"),
+      `let activations = 0;
+      export default covel => {
+        activations++;
+        const activation = activations;
+        covel.onDispose(async () => {
+          await (await import("node:fs/promises")).appendFile(${JSON.stringify(marker)}, String(covel.signal.aborted) + "\\n");
+          if (activation === 3) throw new Error("cleanup failed");
+        });
+      };`,
+      "utf8",
+    );
+    await runtimeFixture(
+      pluginRoot,
+      "root",
+      'return {outcome: "success", value: null};',
+    );
+
+    for (let i = 0; i < 2; i++) {
+      await runRuntimeDebug({ runtimeId: "probe/root", pluginsDir: root });
+    }
+    const failure = await runRuntimeDebug({
+      runtimeId: "probe/root",
+      pluginsDir: root,
+      userSettings: { invalid: () => {} },
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure).toMatchObject({
+      cause: expect.objectContaining({ name: "DataCloneError" }),
+      errors: [
+        expect.objectContaining({ name: "DataCloneError" }),
+        expect.objectContaining({ message: "cleanup failed" }),
+      ],
+    });
+    expect((failure as AggregateError).message).toBe(
+      ((failure as AggregateError).cause as Error).message,
+    );
+    expect(await readFile(marker, "utf8")).toBe("true\ntrue\ntrue\n");
+  });
 });

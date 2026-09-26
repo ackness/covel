@@ -7,12 +7,12 @@ import {
 import { createHookPipeline, createPluginRpcRegistry } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store";
 import { ToolRegistry, type ToolModule } from "@covel/tools";
-import { EntryRegistrationBatch } from "../../src/routes/api/bootstrap/entry-registration-batch.js";
+import { PluginEntryScope } from "@covel/runtime";
 import { buildEntryApi } from "../../src/routes/api/bootstrap/plugin-entry-api.js";
 import type { BootstrapPluginEntriesParams } from "../../src/routes/api/bootstrap/plugin-entry.js";
 
 function fixture() {
-  const batch = new EntryRegistrationBatch();
+  const batch = new PluginEntryScope();
   const params: BootstrapPluginEntriesParams = {
     discoveryMap: new Map(),
     manifestCache: new Map(),
@@ -65,7 +65,7 @@ describe("entry publication", () => {
     expect(() => api.registerRpc("late", async () => true)).toThrow(
       "registration is closed",
     );
-    batch.dispose();
+    await batch.dispose();
     expect(params.tools.pluginTools.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
     expect(
@@ -73,7 +73,7 @@ describe("entry publication", () => {
     ).toBeUndefined();
     await params.hookPipeline.run("TurnStart", ctx, {});
     expect(hook).toHaveBeenCalledOnce();
-    expect(() => batch.dispose()).not.toThrow();
+    await expect(batch.dispose()).resolves.toBeUndefined();
   });
 
   it("rolls back a failed publication across tools, hooks, RPC, and every wire kind", async () => {
@@ -101,8 +101,8 @@ describe("entry publication", () => {
       throw new Error("publication failed");
     });
     expect(() => batch.commit()).toThrow("publication failed");
-    batch.rollback();
-    batch.rollback();
+    await batch.dispose();
+    await batch.dispose();
     expect([...params.tools.pluginTools.get("other")!.values()]).toEqual([
       existing,
     ]);
@@ -117,7 +117,7 @@ describe("entry publication", () => {
     expect(getTranscriptionWire("batch-fixture/rollback")).toBeNull();
   });
 
-  it("continues reverse-order cleanup after a disposer fails and closes failed APIs", () => {
+  it("continues reverse-order cleanup after a disposer fails and closes failed APIs", async () => {
     const { batch, api } = fixture();
     const order: number[] = [];
     batch.track(() => order.push(1));
@@ -126,9 +126,9 @@ describe("entry publication", () => {
       throw new Error("cleanup failed");
     });
     batch.track(() => order.push(3));
-    expect(() => batch.rollback()).toThrow(AggregateError);
+    await expect(batch.dispose()).rejects.toThrow(AggregateError);
     expect(order).toEqual([3, 2, 1]);
-    expect(() => batch.rollback()).not.toThrow();
+    await expect(batch.dispose()).rejects.toThrow(AggregateError);
     expect(() => api.registerRpc("late", async () => true)).toThrow(
       "registration is closed",
     );

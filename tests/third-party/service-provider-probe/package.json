@@ -1,0 +1,7 @@
+{
+  "name": "service-provider-probe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Entry-only service provider for third-party composition tests"
+}

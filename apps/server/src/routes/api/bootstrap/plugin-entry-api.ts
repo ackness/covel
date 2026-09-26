@@ -1,6 +1,10 @@
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import type { PluginAPI, PluginToolkit } from "@covel/runtime";
+import type {
+  PluginAPI,
+  PluginToolkit,
+  PluginEntryScope,
+} from "@covel/runtime";
 import { HOOK_EVENTS, type RpcTrustLevel } from "@covel/shared";
 import {
   shortId,
@@ -10,7 +14,6 @@ import {
 } from "@covel/tools";
 import { z } from "zod";
 import type { BootstrapPluginEntriesParams } from "./plugin-entry.js";
-import type { EntryRegistrationBatch } from "./entry-registration-batch.js";
 import { registerNamespaced } from "./plugin-wires.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
 
@@ -54,7 +57,7 @@ function validateOptions(
 export function buildEntryApi(
   params: BootstrapPluginEntriesParams,
   pluginId: string,
-  batch: EntryRegistrationBatch,
+  batch: PluginEntryScope,
 ): PluginAPI {
   const {
     discoveryMap,
@@ -83,14 +86,25 @@ export function buildEntryApi(
 
   return {
     pluginId,
+    signal: batch.signal,
+    onDispose(cleanup) {
+      batch.onDispose(cleanup);
+    },
     toolkit,
     http,
     registerService(definition) {
       if (!params.services)
         throw new Error("Plugin service registry is unavailable");
-      batch.stage(() =>
-        batch.track(params.services!.register(pluginId, definition)),
-      );
+      batch.stage(() => {
+        try {
+          batch.track(params.services!.register(pluginId, definition));
+        } catch (error) {
+          throw new PluginRegistrationError(
+            "registerService",
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      });
     },
     registerTool(toolModule) {
       batch.stage(() => {

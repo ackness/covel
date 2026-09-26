@@ -124,6 +124,118 @@ export default function (covel) {
 const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
 describe("createBootstrapPluginEntries", () => {
+  it.each([false, true])(
+    "closes pending factories without starting later entries, cleanupFailure=%s",
+    async (cleanupFailure) => {
+      const state = {
+        started: Promise.withResolvers<void>(),
+        cleaned: false,
+        lateStarted: false,
+        cleanupFailure,
+        signal: undefined as AbortSignal | undefined,
+      };
+      const globals = globalThis as Record<string, unknown>;
+      globals.__covelEntryAbort = state;
+      const pluginId = `entry-abort-${cleanupFailure}`;
+      const plugin = writePlugin(
+        pluginId,
+        `
+      export default async function(api) {
+        const state = globalThis.__covelEntryAbort;
+        state.signal = api.signal;
+        api.onDispose(async () => {
+          await Promise.resolve();
+          state.cleaned = true;
+          if (state.cleanupFailure) throw new Error("resource cleanup failed");
+        });
+        api.registerRpc("pending", async () => true);
+        state.started.resolve();
+        await new Promise(resolve => api.signal.addEventListener("abort", resolve, { once: true }));
+      }
+    `,
+        { source: "community" },
+      );
+      const params = makeParams([plugin]);
+      const second = {
+        ...plugin.parsed,
+        manifest: {
+          ...plugin.parsed.manifest,
+          name: `${pluginId}/second`,
+          entry: "server/second.mjs",
+        },
+      };
+      fs.writeFileSync(
+        path.join(plugin.discovery.rootPath, "server/second.mjs"),
+        "export default api => { globalThis.__covelEntryAbort.lateStarted = true; };",
+      );
+      params.pluginRegistry.register({
+        ...params.pluginRegistry.get(pluginId)!,
+        manifests: [plugin.parsed, second],
+      });
+      const entries = await createBootstrapPluginEntries(params);
+      try {
+        const activation = entries.ensurePluginEntry(pluginId, "session");
+        const rejected =
+          expect(activation).rejects.toThrow("failed to activate");
+        await state.started.promise;
+        const closing = entries.close();
+        if (cleanupFailure)
+          await expect(closing).rejects.toThrow("plugin entry cleanup failed");
+        else await closing;
+        await rejected;
+        expect(state.signal?.aborted).toBe(true);
+        expect(state.cleaned).toBe(true);
+        expect(state.lateStarted).toBe(false);
+        expect(params.rpcRegistry.list()).toEqual([]);
+      } finally {
+        await entries.close().catch(() => {});
+        delete globals.__covelEntryAbort;
+      }
+    },
+  );
+
+  it("cleans a failed activation before retrying with a fresh signal", async () => {
+    const state = { signals: [] as AbortSignal[], cleanups: 0 };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelEntryRetryResources = state;
+    const plugin = writePlugin(
+      "entry-retry-resources",
+      `
+      export default function(api) {
+        const state = globalThis.__covelEntryRetryResources;
+        state.signals.push(api.signal);
+        api.onDispose(async () => { state.cleanups += 1; });
+        api.registerRpc("ready", async () => true);
+        if (state.signals.length === 1) throw new Error("first initialization failed");
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries(params);
+    try {
+      await expect(
+        entries.ensurePluginEntry("entry-retry-resources", "s"),
+      ).rejects.toThrow("failed to activate");
+      expect(state.cleanups).toBe(1);
+      expect(state.signals[0]!.aborted).toBe(true);
+      expect(params.rpcRegistry.list()).toEqual([]);
+      await entries.ensurePluginEntry("entry-retry-resources", "s");
+      expect(state.signals[1]!.aborted).toBe(false);
+      expect(state.signals[1]).not.toBe(state.signals[0]);
+      expect(
+        params.rpcRegistry.getPluginAction("entry-retry-resources", "ready"),
+      ).toBeDefined();
+      await entries.close();
+      expect(state.cleanups).toBe(2);
+      expect(state.signals[1]!.aborted).toBe(true);
+      expect(params.rpcRegistry.list()).toEqual([]);
+    } finally {
+      await entries.close();
+      delete globals.__covelEntryRetryResources;
+    }
+  });
+
   it("unregisters successful entries so a fresh host can register the same wires", async () => {
     const plugin = writePlugin("entry-host-lifecycle", FULL_ENTRY_SRC);
     const params = makeParams([plugin]);
@@ -947,4 +1059,35 @@ it("publishes services atomically and removes them when the entry closes", async
   ).toEqual({ value: 6 });
   await entries.close();
   expect(await client.discover("fixture/double@1")).toEqual([]);
+});
+
+it("reports malformed services as registration errors and rolls back earlier capabilities", async () => {
+  const { PluginServiceRegistry } = await import("@covel/runtime");
+  const services = new PluginServiceRegistry({
+    list: async () => ["invalid-service-entry"],
+    ensure: async () => {},
+  });
+  const fixture = writePlugin(
+    "invalid-service-entry",
+    `
+    export default function(covel) {
+      covel.registerRpc("pending", async () => true);
+      covel.registerService({ name: "broken", contract: "fixture/broken@1" });
+    }
+  `,
+    { source: "community" },
+  );
+  const params = makeParams([fixture]);
+  const entries = await createBootstrapPluginEntries({ ...params, services });
+  try {
+    await expect(
+      entries.ensurePluginEntry("invalid-service-entry", "s"),
+    ).rejects.toThrow("[plugin_registration_invalid] registerService:");
+    expect(params.pluginRegistry.get("invalid-service-entry")?.error).toContain(
+      "registerService:",
+    );
+    expect(params.rpcRegistry.list()).toEqual([]);
+  } finally {
+    await entries.close();
+  }
 });

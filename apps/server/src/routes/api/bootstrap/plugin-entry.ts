@@ -29,11 +29,14 @@ import {
   type PluginDiscoveryResult,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import { type HookPipeline, type PluginRpcRegistry } from "@covel/runtime";
+import {
+  PluginEntryScope,
+  type HookPipeline,
+  type PluginRpcRegistry,
+} from "@covel/runtime";
 import type { DataStore } from "@covel/store";
 import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
-import { EntryRegistrationBatch } from "./entry-registration-batch.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
 
 /**
@@ -114,7 +117,7 @@ export async function createBootstrapPluginEntries(
 ): Promise<BootstrapPluginEntries> {
   const { discoveryMap, manifestCache, isCommunityServerCodeApproved } = params;
   const entryDefinitions = new Map<string, PluginEntryDefinition>();
-  const registrations: EntryRegistrationBatch[] = [];
+  const scopes = new Set<PluginEntryScope>();
   const admissions = new Set<Promise<void>>();
   let closed = false;
   let closing: Promise<void> | undefined;
@@ -151,18 +154,22 @@ export async function createBootstrapPluginEntries(
     const definition = entryDefinitions.get(pluginId);
     if (!definition || definition.entryPaths.length === 0) return;
 
-    const batch = new EntryRegistrationBatch();
+    const batch = new PluginEntryScope();
+    scopes.add(batch);
     const api = buildEntryApi(params, pluginId, batch);
     let currentEntry = "";
     try {
       for (const entryPath of definition.entryPaths) {
+        batch.signal.throwIfAborted();
         currentEntry = entryPath;
         const fullPath = path.resolve(definition.pluginRoot, entryPath);
         await assertInsideRoot(definition.pluginRoot, fullPath);
+        batch.signal.throwIfAborted();
         if (!fsSync.existsSync(fullPath)) {
           throw new Error(`entry file not found: ${entryPath}`);
         }
         const mod = await import(pathToFileURL(fullPath).href);
+        batch.signal.throwIfAborted();
         const factory: unknown = mod.default;
         if (typeof factory !== "function") {
           throw new Error(
@@ -173,7 +180,6 @@ export async function createBootstrapPluginEntries(
       }
       if (closed) throw new Error("plugin entries are closed");
       batch.commit();
-      registrations.push(batch);
       reportActivation(pluginId);
     } catch (error) {
       const diagnostic =
@@ -185,10 +191,12 @@ export async function createBootstrapPluginEntries(
         { cause: error },
       );
       try {
-        batch.rollback();
+        await batch.dispose(error);
+        scopes.delete(batch);
       } catch (rollbackError) {
         throw new AggregateError([failure, rollbackError], failure.message);
       } finally {
+        // Failed cleanup stays owned so host shutdown also reports it.
         reportActivation(pluginId, diagnostic);
       }
       throw failure;
@@ -276,16 +284,20 @@ export async function createBootstrapPluginEntries(
       closing = Promise.resolve().then(async () => {
         await Promise.allSettled(admissions);
         const errors: unknown[] = [];
-        for (const batch of registrations.splice(0).reverse()) {
+        for (const batch of [...scopes].reverse()) {
           try {
-            batch.dispose();
+            await batch.dispose();
           } catch (error) {
             errors.push(error);
+          } finally {
+            scopes.delete(batch);
           }
         }
         if (errors.length)
           throw new AggregateError(errors, "plugin entry cleanup failed");
       });
+      // Publish closing before synchronous abort listeners can re-enter close.
+      for (const scope of scopes) scope.abort();
       return closing;
     },
   };

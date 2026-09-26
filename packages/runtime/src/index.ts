@@ -253,3 +253,4 @@ export type {
   FormValidator,
   ValidatePluginForm,
 } from "./rpc/form-validator.js";
+export { PluginEntryScope } from "./plugin-entry-scope.js";

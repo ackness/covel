@@ -4,6 +4,10 @@ import type {
   PluginServiceDefinition,
   PluginServiceDescriptor,
 } from "@covel/shared/plugin-runtime";
+import {
+  withDefaultGatewaySignal,
+  withDefaultUtilsSignal,
+} from "./function-runtime/runtime-abort-boundaries.js";
 
 interface Entry extends PluginServiceDescriptor {
   invoke(input: unknown, context: PluginServiceContext): Promise<unknown>;
@@ -15,6 +19,76 @@ interface Caller {
   readonly signal: AbortSignal;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
+}
+
+async function runCall(
+  parentSignal: AbortSignal,
+  options: Parameters<PluginServiceClient["call"]>[1],
+  invoke: (signal: AbortSignal) => Promise<unknown>,
+): Promise<unknown> {
+  if (options !== undefined && (!options || typeof options !== "object"))
+    throw new TypeError("Service call options must be an object");
+  const timeoutMs = options?.timeoutMs;
+  if (
+    timeoutMs !== undefined &&
+    (typeof timeoutMs !== "number" ||
+      !Number.isFinite(timeoutMs) ||
+      timeoutMs <= 0 ||
+      timeoutMs > 2_147_483_647)
+  )
+    throw new TypeError(
+      "Service timeoutMs must be positive and at most 2147483647",
+    );
+  if (options?.signal !== undefined && !(options.signal instanceof AbortSignal))
+    throw new TypeError("Service signal must be an AbortSignal");
+
+  const controller = new AbortController();
+  const cleanups: (() => void)[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    for (const signal of new Set([parentSignal, options?.signal])) {
+      if (!signal) continue;
+      const relay = () => controller.abort(signal.reason);
+      if (signal.aborted) relay();
+      else {
+        signal.addEventListener("abort", relay, { once: true });
+        cleanups.push(() => signal.removeEventListener("abort", relay));
+      }
+    }
+    controller.signal.throwIfAborted();
+    if (timeoutMs !== undefined)
+      timer = setTimeout(
+        () =>
+          controller.abort(
+            new DOMException("Plugin service call timed out", "TimeoutError"),
+          ),
+        timeoutMs,
+      );
+    const aborted = new Promise<never>((_resolve, reject) => {
+      const onAbort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+      cleanups.push(() =>
+        controller.signal.removeEventListener("abort", onAbort),
+      );
+    });
+    // Observe losing work so a late rejection cannot become unhandled.
+    return await Promise.race([invoke(controller.signal), aborted]);
+  } finally {
+    clearTimeout(timer);
+    for (const cleanup of cleanups) cleanup();
+    // A retained service context cannot outlive this call and spend the
+    // caller's remaining budget after the caller has already moved on.
+    controller.abort(new Error("Plugin service call completed"));
+  }
+}
+
+function isParser(value: unknown): value is { parse(value: unknown): unknown } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "parse" in value &&
+    typeof value.parse === "function",
+  );
 }
 
 /**
@@ -69,11 +143,25 @@ export class PluginServiceRegistry {
     definition: PluginServiceDefinition<I, O>,
   ): () => void {
     if (
+      !definition ||
+      typeof definition !== "object" ||
+      typeof definition.name !== "string" ||
       !/^[a-zA-Z0-9][\w.-]*$/.test(definition.name) ||
+      typeof definition.contract !== "string" ||
       !definition.contract.trim()
     ) {
       throw new Error("Service requires a valid name and a versioned contract");
     }
+    if (
+      !isParser(definition.input) ||
+      !isParser(definition.output) ||
+      typeof definition.handler !== "function" ||
+      (definition.description !== undefined &&
+        typeof definition.description !== "string")
+    )
+      throw new TypeError(
+        "Service requires input/output parsers, a handler, and an optional string description",
+      );
     const key = `${pluginId}/${definition.name}`;
     if (this.entries.has(key))
       throw new Error(`Duplicate plugin service: ${key}`);
@@ -84,6 +172,7 @@ export class PluginServiceRegistry {
       description: definition.description,
       invoke: async (input, context) => {
         const parsed = definition.input.parse(structuredClone(input));
+        context.signal.throwIfAborted();
         const result = await definition.handler(parsed, context);
         context.signal.throwIfAborted();
         return structuredClone(definition.output.parse(result));
@@ -119,33 +208,40 @@ export class PluginServiceRegistry {
             `${a.pluginId}/${a.name}`.localeCompare(`${b.pluginId}/${b.name}`),
           );
       },
-      call: async (request) => {
-        caller.signal.throwIfAborted();
-        const { pluginId, name, contract, input } = request;
-        const key = `${pluginId}/${name}`;
-        if (path.includes(key) || path.length >= 8)
-          throw new Error(`Plugin service call cycle or depth limit: ${key}`);
-        await this.admission.ensure(caller.sessionId, caller.pluginId);
-        await this.admission.ensure(caller.sessionId, pluginId);
-        caller.signal.throwIfAborted();
-        const entry = this.entries.get(key);
-        if (!entry || entry.contract !== contract)
-          throw new Error(`Plugin service unavailable: ${key} (${contract})`);
-        // Never lend the caller's store, settings, tools or proposal buffer.
-        // The lent gateway strips slot secrets, and the nested client carries
-        // the stripped facade so deeper hops cannot recover key material.
-        const gateway = lendGateway(caller.gateway);
-        return entry.invoke(input, {
-          callerPluginId: caller.pluginId,
-          signal: caller.signal,
-          gateway,
-          utils: caller.utils,
-          services: this.createClient({ ...caller, pluginId, gateway }, [
-            ...path,
-            key,
-          ]),
-        });
-      },
+      call: async (request, options) =>
+        runCall(caller.signal, options, async (signal) => {
+          signal.throwIfAborted();
+          const { pluginId, name, contract, input } = request;
+          const key = `${pluginId}/${name}`;
+          if (path.includes(key) || path.length >= 8)
+            throw new Error(`Plugin service call cycle or depth limit: ${key}`);
+          await this.admission.ensure(caller.sessionId, caller.pluginId);
+          signal.throwIfAborted();
+          await this.admission.ensure(caller.sessionId, pluginId);
+          signal.throwIfAborted();
+          const entry = this.entries.get(key);
+          if (!entry || entry.contract !== contract)
+            throw new Error(`Plugin service unavailable: ${key} (${contract})`);
+          // Never lend the caller's store, settings, tools or proposal buffer.
+          // The lent gateway strips slot secrets, and the nested client carries
+          // the stripped facade so deeper hops cannot recover key material.
+          const gateway = caller.gateway
+            ? withDefaultGatewaySignal(lendGateway(caller.gateway)!, signal)
+            : undefined;
+          const utils = caller.utils
+            ? withDefaultUtilsSignal(caller.utils, signal)
+            : undefined;
+          return entry.invoke(input, {
+            callerPluginId: caller.pluginId,
+            signal,
+            gateway,
+            utils,
+            services: this.createClient(
+              { ...caller, pluginId, signal, gateway, utils },
+              [...path, key],
+            ),
+          });
+        }),
     };
   }
 }

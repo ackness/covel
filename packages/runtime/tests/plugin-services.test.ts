@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 
 function fixture() {
@@ -28,6 +29,218 @@ const request = {
 const schema = z.object({ value: z.number() });
 
 describe("public plugin services", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("cancels an uncooperative call promptly while the caller can continue", async () => {
+    const { registry, client, abort } = fixture();
+    let rejectWork!: (error: Error) => void;
+    let serviceSignal!: AbortSignal;
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (_input, context) => {
+        serviceSignal = context.signal;
+        return new Promise((_resolve, reject) => {
+          rejectWork = reject;
+        });
+      },
+    });
+    registry.register("provider", {
+      name: "fallback",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input) => input,
+    });
+    const local = new AbortController();
+    const call = client.call(request, { signal: local.signal });
+    const rejected = expect(call).rejects.toThrow("cancel one call");
+    await vi.waitFor(() => expect(serviceSignal).toBeDefined());
+    local.abort(new Error("cancel one call"));
+    await rejected;
+    expect(serviceSignal.aborted).toBe(true);
+    expect(abort.signal.aborted).toBe(false);
+    expect(await client.call({ ...request, name: "fallback" })).toEqual(
+      request.input,
+    );
+    // A provider that ignores cancellation may still reject later.
+    rejectWork(new Error("late provider failure"));
+    await Promise.resolve();
+  });
+
+  it("applies a call deadline to nested calls and lent gateway and HTTP work", async () => {
+    vi.useFakeTimers();
+    const { registry, abort } = fixture();
+    const signals: AbortSignal[] = [];
+    const generateText = vi.fn(async (input) => {
+      signals.push(input.signal);
+      return {};
+    });
+    const fetchWithRetry = vi.fn(async (_input, init) => {
+      signals.push(init.signal);
+      return new Response();
+    });
+    const client = registry.createClient({
+      sessionId: "test",
+      pluginId: "consumer",
+      signal: abort.signal,
+      gateway: {
+        generateText,
+        generateObject: vi.fn(),
+        resolveSlot: vi.fn(),
+      } as never,
+      utils: { fetchWithRetry, validateBaseUrl: vi.fn() },
+    });
+    registry.register("provider", {
+      name: "inner",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: async (_input, context) => {
+        signals.push(context.signal);
+        await context.gateway!.generateText({} as never);
+        await context.utils!.fetchWithRetry("https://example.com");
+        return new Promise(() => {});
+      },
+    });
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: async (_input, context) => {
+        signals.push(context.signal);
+        return (await context.services.call({ ...request, name: "inner" })) as {
+          value: number;
+        };
+      },
+    });
+    const call = client.call(request, { timeoutMs: 10 });
+    const rejected = expect(call).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(signals).toHaveLength(4);
+    expect(signals.every((signal) => !signal.aborted)).toBe(true);
+    await vi.advanceTimersByTimeAsync(10);
+    await rejected;
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    expect(abort.signal.aborted).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops waiting for admission and never invokes a provider after cancellation", async () => {
+    let admit!: () => void;
+    const ensure = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          admit = resolve;
+        }),
+    );
+    const registry = new PluginServiceRegistry({
+      list: async () => [],
+      ensure,
+    });
+    const abort = new AbortController();
+    const client = registry.createClient({
+      sessionId: "test",
+      pluginId: "consumer",
+      signal: abort.signal,
+    });
+    const handler = vi.fn((input) => input);
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler,
+    });
+    const call = client.call(request);
+    const rejected = expect(call).rejects.toThrow("parent cancelled");
+    abort.abort(new Error("parent cancelled"));
+    await rejected;
+    admit();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("cleans up call resources on success and failure and rejects retained contexts", async () => {
+    vi.useFakeTimers();
+    const { registry, client, abort } = fixture();
+    const remove = vi.spyOn(abort.signal, "removeEventListener");
+    let retained!: PluginServiceContext;
+    registry.register("provider", {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input, context) => {
+        retained = context;
+        return input;
+      },
+    });
+    expect(await client.call(request, { timeoutMs: 100 })).toEqual(
+      request.input,
+    );
+    expect(retained.signal.aborted).toBe(true);
+    await expect(retained.services.call(request)).rejects.toThrow("completed");
+    await expect(
+      client.call({ ...request, input: null }, { timeoutMs: 100 }),
+    ).rejects.toThrow();
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("rejects invalid or pre-cancelled call controls before admission", async () => {
+    const { client, ensure } = fixture();
+    for (const timeoutMs of [0, -1, NaN, Infinity, 2_147_483_648, "10"]) {
+      await expect(
+        client.call(request, { timeoutMs: timeoutMs as number }),
+      ).rejects.toThrow("timeoutMs");
+    }
+    await expect(
+      client.call(request, { signal: {} as AbortSignal }),
+    ).rejects.toThrow("AbortSignal");
+    await expect(client.call(request, null as never)).rejects.toThrow(
+      "options",
+    );
+    await expect(
+      client.call(request, {
+        signal: AbortSignal.abort(new Error("already cancelled")),
+      }),
+    ).rejects.toThrow("already cancelled");
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed JavaScript service definitions during registration", () => {
+    const { registry } = fixture();
+    const valid = {
+      name: "rank",
+      contract: request.contract,
+      input: schema,
+      output: schema,
+      handler: (input: unknown) => input,
+    };
+    for (const definition of [
+      null,
+      { ...valid, name: 1 },
+      { ...valid, contract: 1 },
+      { ...valid, input: {} },
+      { ...valid, output: {} },
+      { ...valid, handler: 1 },
+      { ...valid, description: 1 },
+    ]) {
+      expect(() => registry.register("provider", definition as never)).toThrow(
+        "Service requires",
+      );
+    }
+    expect(() => registry.register("provider", valid)).not.toThrow();
+  });
+
   it("discovers contracts, validates both boundaries, and isolates object ownership", async () => {
     const { registry, client } = fixture();
     const value = { value: 4 };

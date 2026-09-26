@@ -4,7 +4,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RuntimeManifest } from "@covel/shared";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
-import { PluginServiceRegistry, type PluginAPI } from "@covel/runtime";
+import {
+  PluginEntryScope,
+  PluginServiceRegistry,
+  type PluginAPI,
+} from "@covel/runtime";
 import {
   discoverPlugins,
   loadPluginDefinition,
@@ -35,6 +39,7 @@ export interface RuntimeLoadResult {
   /** Tools the plugin's `entry` module registered, if it declares one. */
   readonly entryTools: readonly ToolModule[];
   readonly services: PluginServiceRegistry;
+  close(): Promise<void>;
 }
 
 export function expandPath(input: string): string {
@@ -153,15 +158,16 @@ export async function loadRuntimeBundle(args: {
         throw new Error("The isolated harness only loads the target plugin");
     },
   });
-  const entryTools = await loadEntryTools(discovery, definition, services);
+  const entry = await loadEntryTools(discovery, definition, services);
   return {
     discovery,
     rawManifests,
     manifests,
     target,
     loadedCache,
-    entryTools,
+    entryTools: entry.tools,
     services,
+    close: entry.close,
   };
 }
 
@@ -178,19 +184,21 @@ export async function loadEntryTools(
   discovery: PluginDiscoveryResult,
   definition: PluginDefinition,
   services?: PluginServiceRegistry,
-): Promise<readonly ToolModule[]> {
+): Promise<{ tools: readonly ToolModule[]; close(): Promise<void> }> {
   const { entryPaths } = await loadPluginEntryDefinition(
     discovery,
     pluginDeclarations(definition),
   );
-  if (entryPaths.length === 0) return [];
+  if (entryPaths.length === 0) return { tools: [], close: async () => {} };
 
   const tools = new ToolRegistry();
-  const pendingRegistrations: Array<() => () => void> = [];
-  const disposers: Array<() => void> = [];
-  let registrationOpen = true;
+  const scope = new PluginEntryScope();
   const covel: PluginAPI = {
     pluginId: discovery.id,
+    signal: scope.signal,
+    onDispose(callback) {
+      scope.onDispose(callback);
+    },
     toolkit: {
       tool,
       z,
@@ -200,19 +208,15 @@ export async function loadEntryTools(
     },
     http: { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
     registerTool(toolModule: ToolModule) {
-      if (!registrationOpen)
-        throw new Error("plugin entry registration is closed");
-      pendingRegistrations.push(() =>
-        tools.registerPlugin(discovery.id, toolModule),
-      );
+      scope.stage(() => {
+        scope.track(tools.registerPlugin(discovery.id, toolModule));
+      });
     },
     registerService(definition) {
-      if (!registrationOpen)
-        throw new Error("plugin entry registration is closed");
       if (!services) throw new Error("Plugin service registry is unavailable");
-      pendingRegistrations.push(() =>
-        services.register(discovery.id, definition),
-      );
+      scope.stage(() => {
+        scope.track(services.register(discovery.id, definition));
+      });
     },
     on() {},
     registerRpc() {},
@@ -248,13 +252,29 @@ export async function loadEntryTools(
     }
     // Match production publication: invalid declarations fail the activation
     // after factories return, even if plugin code catches registration errors.
-    registrationOpen = false;
-    for (const register of pendingRegistrations) disposers.push(register());
+    scope.commit();
   } catch (error) {
-    for (const dispose of disposers.reverse()) dispose();
+    scope.abort(error);
+    try {
+      await scope.dispose(error);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [
+          error,
+          ...(cleanupError instanceof AggregateError
+            ? cleanupError.errors
+            : [cleanupError]),
+        ],
+        error instanceof Error
+          ? error.message
+          : "Plugin entry activation failed",
+        { cause: error },
+      );
+    }
     throw error;
-  } finally {
-    registrationOpen = false;
   }
-  return [...(tools.pluginTools.get(discovery.id)?.values() ?? [])];
+  return {
+    tools: [...(tools.pluginTools.get(discovery.id)?.values() ?? [])],
+    close: () => scope.dispose(),
+  };
 }

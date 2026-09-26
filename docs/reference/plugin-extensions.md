@@ -1,6 +1,6 @@
 # 插件扩展边界与通信
 
-插件通过公开契约组织模型调用、函数与 UI。框架提供发现、授权、调度、校验、取消和挂载；业务数据结构、算法、供应商 wire 与组件实现留在插件包内。参考完整例子：[Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。
+插件通过公开契约组织模型调用、函数与 UI。框架提供发现、授权、调度、校验、取消和挂载；业务数据结构、算法、供应商 wire 与组件实现留在插件包内。仓库中的 [Lifecycle Probe](../../tests/third-party/lifecycle-probe/README.md) 和 [Service Provider Probe](../../tests/third-party/service-provider-probe/README.md) 组成可独立安装的双插件样例，覆盖命令、面板、手动函数、数据提交和服务协作。另有 [Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。
 
 ## 选择通信方式
 
@@ -21,6 +21,27 @@ UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，ha
 插件工具在 `entry` 工厂中通过 `covel.registerTool()` 注册，名字在插件内唯一；不同插件同名不会互相覆盖。工具调用只解析调用方插件的实现和框架内置工具，跨插件公共调用使用下文的 services。
 
 只有 `entry`、Hook 或 UI 的包可以没有 runtime。它的 Hook 仍按会话已启用的插件集合执行，`ctx.getOwnSettings()` 读取包级 `userSettings` 默认值与本次世界、玩家覆盖值；没有 runtime 不会丢失这些默认值，也不会凭空调度一个 runtime。执行与提交各使用明确的会话 Hook scope；嵌入式 `executeTurn` 调用方如需包含零 runtime 包，应在 `TurnExecutorDeps.hookScope` 传入其 `activePluginIds` 和已解析的 `settings`，并在 `commitExecution` 传入相同边界。宿主从持久会话激活集合构造 scope，社区 Hook 每次调用仍检查当前 server-code 授权。
+
+## Entry 资源生命周期
+
+`covel.signal` 对应本次插件激活。初始化失败或宿主关闭时信号取消；`covel.onDispose(callback)` 在工厂执行期间登记同步或异步清理函数，适合关闭订阅、连接、计时器和共享缓存。资源取得后应立即登记清理，再执行下一步可能失败的初始化。
+
+```js
+export default function (covel) {
+  const cache = new Map();
+  const timer = setInterval(() => cache.clear(), 60_000);
+  covel.onDispose(() => {
+    clearInterval(timer);
+    cache.clear();
+  });
+  // Pass covel.signal to asynchronous initialization and shared resource work.
+  // Register services, tools or RPC handlers here.
+}
+```
+
+关闭先取消信号、停止接收新注册，再撤销已发布的能力，最后逆序等待清理函数。一个清理失败不阻止其他清理；错误会汇总报告，重复关闭不会再次执行回调。初始化失败同样清理已取得资源，重试使用新的 signal。测试运行器执行完成或失败后也会关闭入口资源。
+
+entry 在宿主内按插件激活一次，**不属于某个会话**。禁用一个会话中的插件不会销毁其他会话共用的 entry；会话数据仍使用调用上下文和插件数据存储，不放到共享模块闭包中。单次任务使用 `ctx.signal`，需要会话结束通知时使用 `SessionEnd` Hook。此接口依靠插件配合取消和完成清理，不能强制终止忽略信号的 JS，也不提供热卸载或独立后台调度器。
 
 ## 公共函数注册与调用
 
@@ -52,6 +73,22 @@ const value = await ctx.services.call({
   input: { candidates: ["Visit the library", "Explore the classroom"] },
 });
 ```
+
+可以为一次服务调用设置比 runtime 更短的预算，或单独取消它：
+
+```js
+const value = await ctx.services.call(
+  {
+    pluginId: configuredProviderId,
+    name: "rank",
+    contract: "my-plugin/rank@1",
+    input: { candidates: ["Visit the library", "Explore the classroom"] },
+  },
+  { timeoutMs: 1500, signal: ctx.signal },
+);
+```
+
+`timeoutMs` 为正有限毫秒数，最大 `2147483647`，包含准入等待和实际执行；超时抛出 `name: "TimeoutError"` 的异常，局部取消保留取消原因。父 runtime 取消同样有效，单次调用的超时或取消不会取消父 runtime，调用方可捕获错误后选择备用提供者。嵌套服务及 gateway/HTTP 继承该调用信号。调用结束即关闭其上下文，不能保存它以在返回后继续发起工作。未配合取消的异步代码可能继续运行，但调用方及时结束等待，迟到结果不作为成功结果返回。
 
 调用前重新检查调用方、供应方是否仍活跃，以及社区服务端代码是否获准运行。发现接口不会激活未获准运行的社区代码。注册在进程中存在不等于当前会话可调用。
 

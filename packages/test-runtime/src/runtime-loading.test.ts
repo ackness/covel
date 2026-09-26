@@ -116,12 +116,13 @@ describe("test-runtime runtime loading helpers", () => {
         "---\nname: plugin/main\ndescription: Main\ntrigger: {type: manual}\n---\n",
         "utf8",
       );
-      const tools = await loadEntryTools(
+      const entry = await loadEntryTools(
         discovery,
         await loadPluginDefinition(discovery),
       );
 
-      expect(tools.map((entry) => entry.name)).toEqual(["root-tool"]);
+      expect(entry.tools.map((tool) => tool.name)).toEqual(["root-tool"]);
+      await entry.close();
     } finally {
       await fs.rm(rootPath, { recursive: true, force: true });
     }
@@ -191,6 +192,7 @@ trigger: {type: manual}
       expect(
         bundle.loadedCache.get("probe/logical")?.manifest.dataSchemas,
       ).toEqual(bundle.target.dataSchemas);
+      await bundle.close();
     } finally {
       await fs.rm(pluginsDir, { recursive: true, force: true });
     }
@@ -320,9 +322,16 @@ trigger: {type: manual}
           await loadPluginDefinition(discovery),
           services,
         );
-        if (outcome === "success")
-          await expect(activation).resolves.toEqual([]);
-        else
+        if (outcome === "success") {
+          const entry = await activation;
+          expect(entry.tools).toEqual([]);
+          expect(
+            (await client.discover("test/v1")).map(
+              ({ pluginId, name }) => `${pluginId}/${name}`,
+            ),
+          ).toEqual(["other/existing", "probe/pending"]);
+          await entry.close();
+        } else
           await expect(activation).rejects.toThrow(
             outcome === "factory"
               ? "factory failed"
@@ -334,14 +343,110 @@ trigger: {type: manual}
           (await client.discover("test/v1")).map(
             ({ pluginId, name }) => `${pluginId}/${name}`,
           ),
-        ).toEqual(
-          outcome === "success"
-            ? ["other/existing", "probe/pending"]
-            : ["other/existing"],
-        );
+        ).toEqual(["other/existing"]);
       } finally {
         await fs.rm(root, { recursive: true, force: true });
       }
     },
   );
+
+  it("closes a successful entry, unregisters services immediately, and awaits async cleanup", async () => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "covel-harness-dispose-"),
+    );
+    const marker = path.join(root, "disposed.txt");
+    try {
+      await fs.writeFile(
+        path.join(root, "PLUGIN.md"),
+        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+      );
+      await fs.writeFile(
+        path.join(root, "entry.js"),
+        `export default covel => {
+          covel.registerService({ name: "active", contract: "test/v1", input: covel.toolkit.z.object({}), output: covel.toolkit.z.object({}), handler: async () => ({}) });
+          covel.onDispose(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            await (await import("node:fs/promises")).writeFile(${JSON.stringify(marker)}, String(covel.signal.aborted));
+          });
+        };`,
+      );
+      const discovery = {
+        id: "probe",
+        rootPath: root,
+        isMultiRuntime: false,
+        pluginMdPaths: [path.join(root, "PLUGIN.md")],
+      };
+      const services = new PluginServiceRegistry({
+        list: async () => ["probe"],
+        ensure: async () => {},
+      });
+      const client = services.createClient({
+        sessionId: "s",
+        pluginId: "probe",
+        signal: new AbortController().signal,
+      });
+      const entry = await loadEntryTools(
+        discovery,
+        await loadPluginDefinition(discovery),
+        services,
+      );
+      expect(await client.discover("test/v1")).toHaveLength(1);
+      const closing = entry.close();
+      expect(await client.discover("test/v1")).toEqual([]);
+      await closing;
+      await entry.close();
+      expect(await fs.readFile(marker, "utf8")).toBe("true");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("runs async cleanup and retains both factory and cleanup errors", async () => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "covel-harness-failed-dispose-"),
+    );
+    const marker = path.join(root, "disposed.txt");
+    try {
+      await fs.writeFile(
+        path.join(root, "PLUGIN.md"),
+        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+      );
+      await fs.writeFile(
+        path.join(root, "entry.js"),
+        `export default covel => {
+          covel.onDispose(async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            await (await import("node:fs/promises")).writeFile(${JSON.stringify(marker)}, String(covel.signal.aborted));
+            throw new Error("cleanup failed");
+          });
+          throw new Error("factory failed");
+        };`,
+      );
+      const discovery = {
+        id: "probe",
+        rootPath: root,
+        isMultiRuntime: false,
+        pluginMdPaths: [path.join(root, "PLUGIN.md")],
+      };
+      const failure = await loadEntryTools(
+        discovery,
+        await loadPluginDefinition(discovery),
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(failure).toMatchObject({
+        message: "factory failed",
+        cause: expect.objectContaining({ message: "factory failed" }),
+        errors: [
+          expect.objectContaining({ message: "factory failed" }),
+          expect.objectContaining({ message: "cleanup failed" }),
+        ],
+      });
+      expect(await fs.readFile(marker, "utf8")).toBe("true");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });

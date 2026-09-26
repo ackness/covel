@@ -2,6 +2,7 @@ import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store";
@@ -13,6 +14,13 @@ import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 import { buildThirdPartyPluginZip } from "../helpers/third-party-package.js";
 
 const pluginId = "lifecycle-probe";
+const providerPluginId = "service-provider-probe";
+const providerRoot = fileURLToPath(
+  new URL(
+    "../../../../tests/third-party/service-provider-probe/",
+    import.meta.url,
+  ),
+);
 const sessionId = "fixture-session";
 const token = "synthetic-install-token";
 const auth = { Authorization: `Bearer ${token}` };
@@ -52,12 +60,16 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     });
   }
 
-  async function install(headers: Record<string, string> = auth) {
+  async function installPackage(
+    packageZip: Buffer,
+    filename: string,
+    headers: Record<string, string> = auth,
+  ) {
     const body = new FormData();
     body.append(
       "file",
-      new Blob([zip], { type: "application/zip" }),
-      "probe.zip",
+      new Blob([packageZip], { type: "application/zip" }),
+      filename,
     );
     return boot.app.request("/api/install/plugin", {
       method: "POST",
@@ -65,6 +77,9 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       body,
     });
   }
+
+  const install = (headers: Record<string, string> = auth) =>
+    installPackage(zip, "probe.zip", headers);
 
   async function request(
     url: string,
@@ -94,8 +109,8 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     expect(decision.status, JSON.stringify(await decision.json())).toBe(200);
   }
 
-  async function enable() {
-    const url = `${sessionPath}/plugins/${pluginId}`;
+  async function enable(id = pluginId) {
+    const url = `${sessionPath}/plugins/${id}`;
     await allow(await request(url, "PUT"));
     expect((await request(url, "PUT")).status).toBe(200);
   }
@@ -326,5 +341,101 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     expect(boot.registry.get(pluginId)?.source).toBe("community");
     await enable();
     expect(await readNote("note")).toMatchObject({ label: "override" });
+  });
+
+  it("composes a panel, command, data and another plugin's service outside dialogue turns", async () => {
+    expect((await install()).status).toBe(201);
+    const providerZip = await buildThirdPartyPluginZip(providerRoot);
+    expect(
+      (await installPackage(providerZip, "service-provider-probe.zip")).status,
+    ).toBe(201);
+    await restart();
+    expect(boot.registry.get(providerPluginId)?.manifests).toHaveLength(0);
+    await enable();
+
+    const ui = await buildUiSpecsResponse({
+      registry: boot.registry,
+      store: boot.store,
+      sessionId,
+    });
+    const panel = ui.right.find((item) => item.pluginId === pluginId);
+    expect(JSON.stringify(panel)).toContain('"action":"invokeCommand"');
+    expect(JSON.stringify(panel)).toContain('"namespace":"notes"');
+    const directory = await request(`${sessionPath}/plugins`, "GET");
+    expect((await directory.json()).commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: `${pluginId}:probe`, name: "probe" }),
+      ]),
+    );
+    const command = await approvedRpc({
+      kind: "command",
+      commandId: `${pluginId}:probe`,
+      args: {},
+    });
+    expect(command.status, JSON.stringify(await command.clone().json())).toBe(
+      200,
+    );
+    expect(await command.json()).toMatchObject({
+      result: {
+        ok: true,
+        message: expect.stringContaining("Probe status:"),
+        pluginId,
+        hookStarts: expect.any(Number),
+      },
+    });
+
+    const unavailable = await approvedRpc(
+      runtimeBody("note", {
+        key: "unavailable",
+        text: "Before provider activation",
+        providerPluginId,
+      }),
+    );
+    expect(unavailable.status).toBe(200);
+    expect(await unavailable.json()).toMatchObject({
+      runtimeResults: [expect.objectContaining({ status: "failed" })],
+    });
+    expect(
+      await store.getPluginData(sessionId, pluginId, "notes", "unavailable"),
+    ).toBeNull();
+
+    await enable(providerPluginId);
+    const composed = await approvedRpc(
+      runtimeBody("note", {
+        key: "composed",
+        text: "Service result",
+        providerPluginId,
+      }),
+    );
+    expect(composed.status, JSON.stringify(await composed.clone().json())).toBe(
+      200,
+    );
+    expect(await composed.json()).toMatchObject({
+      runtimeResults: [expect.objectContaining({ status: "success" })],
+    });
+    expect(await readNote("composed")).toMatchObject({
+      text: "[formatted] Service result",
+    });
+
+    expect(
+      (await request(`${sessionPath}/plugins/${providerPluginId}`, "DELETE"))
+        .status,
+    ).toBe(200);
+    const disabled = await approvedRpc(
+      runtimeBody("note", {
+        key: "disabled",
+        text: "After provider deactivation",
+        providerPluginId,
+      }),
+    );
+    expect(disabled.status).toBe(200);
+    expect(await disabled.json()).toMatchObject({
+      runtimeResults: [expect.objectContaining({ status: "failed" })],
+    });
+    expect(
+      await store.getPluginData(sessionId, pluginId, "notes", "disabled"),
+    ).toBeNull();
+    expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(0);
+    expect(generate).not.toHaveBeenCalled();
   });
 });
