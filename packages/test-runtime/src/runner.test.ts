@@ -430,6 +430,69 @@ describe("runtime debug host integration", () => {
     ]);
   });
 
+  it("passes user settings only to followers owned by that plugin", async () => {
+    const { root, pluginRoot } = await pluginFixture();
+    await writeFile(
+      path.join(pluginRoot, "PLUGIN.md"),
+      "---\nname: probe\ndescription: Probe\nuserSettings:\n  - key: count\n    type: number\n    label: Count\n    default: 1\n---\n",
+      "utf8",
+    );
+    await runtimeFixture(
+      pluginRoot,
+      "root",
+      'return {outcome: "success", effects: {events: [{topic: "root.ready", data: {}}]}};',
+    );
+    await runtimeFixture(
+      pluginRoot,
+      "follower",
+      'return {outcome: "success", value: {count: ctx.userSettings.count}};',
+      "trigger: {type: event, topic: root.ready}\nexecution: background",
+    );
+
+    const supportRoot = path.join(root, "support");
+    await mkdir(path.join(supportRoot, "runtimes", "follower"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(supportRoot, "package.json"),
+      '{"type":"module"}',
+      "utf8",
+    );
+    await writeFile(
+      path.join(supportRoot, "PLUGIN.md"),
+      "---\nname: support\ndescription: Support\nuserSettings:\n  - key: count\n    type: number\n    label: Count\n    default: 10\n---\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(supportRoot, "runtimes", "follower", "PLUGIN.md"),
+      "---\nname: support/follower\ndescription: Support follower\nruntimeType: function\nhandler: ./handler.js\ntrigger: {type: event, topic: root.ready}\nexecution: background\n---\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(supportRoot, "runtimes", "follower", "handler.js"),
+      'export default async function(ctx) { return {outcome: "success", value: {count: ctx.userSettings.count}}; }\n',
+      "utf8",
+    );
+
+    const report = await runRuntimeDebug({
+      runtimeId: "probe/root",
+      pluginsDir: root,
+      withPlugins: ["support"],
+      userSettings: { count: 99 },
+    });
+    expect(report.jobs).toMatchObject([
+      { runtimeId: "probe/follower", status: "done" },
+      { runtimeId: "support/follower", status: "done" },
+    ]);
+    expect(
+      Object.fromEntries(
+        report.runtimeResults
+          .filter(({ runtimeId }) => runtimeId.endsWith("/follower"))
+          .map(({ runtimeId, output }) => [runtimeId, output?.count]),
+      ),
+    ).toEqual({ "probe/follower": 99, "support/follower": 10 });
+  });
+
   it("rolls back the root and nested writes and does not run followers when a proposal fails", async () => {
     const { root, pluginRoot } = await pluginFixture();
     await runtimeFixture(

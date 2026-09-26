@@ -51,7 +51,9 @@ export function PluginDiagnosticsPanel({
       const nextController = new AbortController();
       controller.current = nextController;
       const requestEpoch = ++epoch.current;
-      setLoaded(null);
+      // Keep the current view mounted while revalidating so polling preserves
+      // layout and scroll position. A different session/filter never reuses it.
+      setLoaded((previous) => (previous?.key === key ? previous : null));
       setStatus({ key, value: "loading" });
       try {
         const value = await getPluginDiagnostics(
@@ -107,6 +109,7 @@ export function PluginDiagnosticsPanel({
     <section
       className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-5"
       aria-label={t("debugger.plugins.tab", "Plugins")}
+      aria-busy={currentStatus === "loading"}
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -135,7 +138,7 @@ export function PluginDiagnosticsPanel({
         </div>
       </div>
 
-      {currentStatus === "loading" && (
+      {currentStatus === "loading" && !snapshot && (
         <p role="status" className="text-sm text-muted-foreground">
           {t("debugger.plugins.loading", "Loading plugin diagnostics…")}
         </p>

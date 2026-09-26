@@ -34,3 +34,46 @@ test("/plugins opens session diagnostics with an optional plugin filter", async 
     await fixture.dispose();
   }
 });
+
+test("plugin polling preserves the scroll position of the loaded list", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const fixture = await createRecoveryFixture(page, "completed");
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let reads = 0;
+  await page.route(
+    `**/api/sessions/${fixture.id}/plugin-diagnostics`,
+    async (route) => {
+      reads += 1;
+      if (reads === 2) await refreshGate;
+      await route.continue();
+    },
+  );
+  try {
+    await page.goto(`/debug?sid=${fixture.id}&view=plugins`);
+    const panel = page.getByRole("region", { name: "插件", exact: true });
+    await expect(panel).toHaveAttribute("aria-busy", "false");
+    await page.getByRole("button", { name: "自动", exact: true }).click();
+    const scrollTop = await panel.evaluate((element) => {
+      element.scrollTop = 1200;
+      return element.scrollTop;
+    });
+    expect(scrollTop).toBeGreaterThan(0);
+    await expect(panel).toHaveAttribute("aria-busy", "true");
+    expect(await panel.evaluate((element) => element.scrollTop)).toBe(
+      scrollTop,
+    );
+    releaseRefresh();
+    await expect(panel).toHaveAttribute("aria-busy", "false");
+    expect(await panel.evaluate((element) => element.scrollTop)).toBe(
+      scrollTop,
+    );
+  } finally {
+    releaseRefresh();
+    await fixture.dispose();
+  }
+});

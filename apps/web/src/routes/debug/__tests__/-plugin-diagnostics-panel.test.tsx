@@ -111,7 +111,7 @@ describe("plugin diagnostics panel", () => {
     );
     expect(await screen.findByText("private")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: /Refresh|刷新/ }));
-    expect(screen.queryByText("private")).toBeNull();
+    expect(screen.getByText("private")).toBeDefined();
     rerender(<PluginDiagnosticsPanel {...props("session-b")} />);
     expect(screen.queryByText("private")).toBeNull();
     expect(await screen.findByText("public")).toBeDefined();
@@ -129,8 +129,8 @@ describe("plugin diagnostics panel", () => {
     render(<PluginDiagnosticsPanel {...props("session-a")} />);
     expect(await screen.findByText("private")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: /Refresh|刷新/ }));
-    expect(screen.queryByText("private")).toBeNull();
     expect(await screen.findByRole("alert")).toBeDefined();
+    expect(screen.queryByText("private")).toBeNull();
     expect(screen.queryByText("owner token expired")).toBeNull();
   });
 
@@ -140,7 +140,7 @@ describe("plugin diagnostics panel", () => {
     );
     const initial = props("session-a");
     const { rerender } = render(<PluginDiagnosticsPanel {...initial} />);
-    expect(await screen.findByText("first")).toBeDefined();
+    const firstCard = await screen.findByText("first");
 
     let resolveSlow!: (value: PluginDiagnosticsSnapshot) => void;
     mocks.getPluginDiagnostics.mockImplementationOnce(
@@ -157,15 +157,65 @@ describe("plugin diagnostics panel", () => {
       rerender(<PluginDiagnosticsPanel {...initial} autoRefresh />);
       await act(async () => vi.advanceTimersByTimeAsync(9000));
       expect(mocks.getPluginDiagnostics).toHaveBeenCalledTimes(2);
-      expect(screen.queryByText("first")).toBeNull();
+      expect(screen.getByText("first")).toBe(firstCard);
+      expect(screen.getByRole("region").getAttribute("aria-busy")).toBe("true");
+      expect(screen.queryByRole("status")).toBeNull();
 
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: /Refresh|刷新/ }));
       });
       expect(mocks.getPluginDiagnostics).toHaveBeenCalledTimes(3);
       expect(screen.getByText("fresh")).toBeDefined();
+      expect(screen.getByRole("region").getAttribute("aria-busy")).toBe(
+        "false",
+      );
       await act(async () => resolveSlow(snapshot("session-a", "stale")));
       expect(screen.queryByText("stale")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("hides the previous filter while loading and clears it after polling fails", async () => {
+    mocks.getPluginDiagnostics.mockResolvedValueOnce(
+      snapshot("session-a", "first"),
+    );
+    const initial = props("session-a");
+    const { rerender } = render(<PluginDiagnosticsPanel {...initial} />);
+    expect(await screen.findByText("first")).toBeDefined();
+
+    let resolveFiltered!: (value: PluginDiagnosticsSnapshot) => void;
+    mocks.getPluginDiagnostics.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFiltered = resolve;
+        }),
+    );
+    rerender(
+      <PluginDiagnosticsPanel {...props("session-a", "second")} autoRefresh />,
+    );
+    expect(screen.queryByText("first")).toBeNull();
+    expect(screen.getByRole("status")).toBeDefined();
+    await act(async () => resolveFiltered(snapshot("session-a", "second")));
+    expect(screen.getByText("map/runtime")).toBeDefined();
+
+    mocks.getPluginDiagnostics.mockRejectedValueOnce(
+      new Error("owner token expired"),
+    );
+    vi.useFakeTimers();
+    try {
+      // Recreate the interval under fake timers.
+      rerender(<PluginDiagnosticsPanel {...props("session-a", "second")} />);
+      rerender(
+        <PluginDiagnosticsPanel
+          {...props("session-a", "second")}
+          autoRefresh
+        />,
+      );
+      await act(async () => vi.advanceTimersByTimeAsync(3000));
+      expect(screen.getByRole("alert")).toBeDefined();
+      expect(screen.queryByText("map/runtime")).toBeNull();
+      expect(screen.queryByText("owner token expired")).toBeNull();
     } finally {
       vi.useRealTimers();
     }

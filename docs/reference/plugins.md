@@ -2015,7 +2015,7 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### Manifest 加载失败的边界
 
-`pnpm validate:plugin` 先用 loader 解析 `PLUGIN.md`，再对**原始 frontmatter** 执行 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层提供 YAML/字段的行号诊断，authoring 层报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。loader 对非法可选 note 字段的警告和省略不能绕过作者校验：原始 `authorsNote` / `postHistory` 有误仍会失败。合法 I18nText 展示字段、无调度的 Hook/UI-only 声明及 multi-runtime 根元数据都保留；不要求这些声明虚构 `stage`。传入插件目录时，还会检查根与各 runtime 的设置、数据 schema、projection、命令、事件和 memory block 冲突。CLI 只验证当前作者合同，没有跳过严格校验的模式。
+`pnpm validate:plugin` 先用 loader 解析 `PLUGIN.md`，再对**原始 frontmatter** 执行 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层提供 YAML/字段的行号诊断，authoring 层报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。loader 对非法可选 note 字段的警告和省略不能绕过作者校验：原始 `authorsNote` / `postHistory` 有误仍会失败。合法 I18nText 展示字段、无调度的 Hook/UI-only 声明及 multi-runtime 根元数据都保留；不要求这些声明虚构 `stage`。传入插件目录、根 `PLUGIN.md` 或 `runtimes/<id>/PLUGIN.md` 时，均收集整个所属包，检查根与各 runtime 的设置、数据 schema、projection、命令、事件和 memory block 冲突及共享声明引用；重叠的输入路径只校验一次。CLI 只验证当前作者合同，没有跳过严格校验的模式。
 
 这条 CLI 检查只验证 manifest 与跨 runtime 声明，不执行 `entry`、handler 或 LLM。要验证 runtime 行为，应使用 `pnpm test:runtime`；要验证 server、SSE 和审批链路，应使用 HTTP E2E。
 

@@ -19,7 +19,7 @@
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { validatePluginDeclarations } from "../src/declarations.js";
 import type { ParsedPluginMd } from "../src/types.js";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
@@ -44,11 +44,14 @@ function collectManifestFiles(path: string): string[] {
     return [];
   }
   if (statSync(path).isFile()) {
-    if (
-      basename(path) === "PLUGIN.md" &&
-      existsSync(join(dirname(path), "runtimes"))
-    ) {
-      return collectManifestFiles(dirname(path));
+    if (basename(path) === "PLUGIN.md") {
+      const parent = dirname(path);
+      if (basename(dirname(parent)) === "runtimes") {
+        return collectManifestFiles(dirname(dirname(parent)));
+      }
+      if (existsSync(join(parent, "runtimes"))) {
+        return collectManifestFiles(parent);
+      }
     }
     return [path];
   }
@@ -133,9 +136,18 @@ function validateFile(filePath: string): ParsedPluginMd | null {
 }
 
 // Package and runtime-local contributions share one conflict contract.
+const seenContexts = new Set<string>();
 for (const path of paths) {
+  const files = collectManifestFiles(path);
+  if (files.length === 0) continue;
+  const context = files
+    .map((file) => resolve(file))
+    .sort()
+    .join("\0");
+  if (seenContexts.has(context)) continue;
+  seenContexts.add(context);
   const checked: ParsedPluginMd[] = [];
-  for (const file of collectManifestFiles(path)) {
+  for (const file of files) {
     const parsed = validateFile(file);
     if (parsed) checked.push(parsed);
     else process.exitCode = 1;

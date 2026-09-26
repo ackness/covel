@@ -242,8 +242,8 @@ export async function runRuntimeDebug(
         locale,
         manifests,
         deps,
-        ...(userSettings?.[pluginId]
-          ? { userSettings: userSettings[pluginId] }
+        ...(userSettings?.[follower.pluginId]
+          ? { userSettings: userSettings[follower.pluginId] }
           : {}),
       });
       jobs.push({
