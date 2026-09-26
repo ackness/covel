@@ -469,6 +469,7 @@ async function assembleApi(
     await createBootstrapPluginEntries({
       discoveryMap,
       manifestCache,
+      pluginRegistry: registry,
       store,
       toolMap,
       localToolNames,

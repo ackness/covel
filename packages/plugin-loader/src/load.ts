@@ -35,6 +35,7 @@ import type {
   AgentGuard,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
+import { multiRuntimeRootDiagnostics } from "./root-manifest-diagnostics.js";
 
 /**
  * Resolve a locale-aware PLUGIN.md path.
@@ -267,6 +268,13 @@ export async function loadPluginEntryDefinition(
     if (await fileExists(rootManifestPath)) {
       try {
         const root = await parsePluginMdForLocale(discovery.rootPath);
+        for (const diagnostic of multiRuntimeRootDiagnostics(
+          root.rawFrontmatter,
+        )) {
+          console.warn(
+            `[plugin-loader] ${rootManifestPath}: ${diagnostic.path}: ${diagnostic.message}`,
+          );
+        }
         if (root.manifest.entry) entryPaths.add(root.manifest.entry);
       } catch (error) {
         rootManifestIssue = {

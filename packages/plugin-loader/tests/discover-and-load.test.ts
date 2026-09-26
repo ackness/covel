@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -6,6 +6,7 @@ import { discoverPlugins } from "../src/discover.js";
 import {
   loadPluginSummary,
   loadPluginManifest,
+  loadPluginEntryDefinition,
   loadRuntime,
 } from "../src/load.js";
 
@@ -38,7 +39,47 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+describe("multi-runtime root diagnostics", () => {
+  it("warns about ignored declarations while preserving root entry activation", async () => {
+    const rootPath = path.join(tmpDir, "test-plugin");
+    const runtimePath = path.join(rootPath, "runtimes", "panel");
+    await fs.mkdir(runtimePath, { recursive: true });
+    await fs.writeFile(
+      path.join(rootPath, "PLUGIN.md"),
+      makeFrontmatter({
+        entry: "./server/index.js",
+        ui: { right: ["./panel.json"] },
+        userSettings: [],
+        dataSchemas: {},
+      }),
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(runtimePath, "PLUGIN.md"),
+      makeFrontmatter({ name: "test-plugin/panel" }),
+      "utf8",
+    );
+    const [discovery] = await discoverPlugins(tmpDir);
+    const manifests = await loadPluginManifest(discovery!);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const definition = await loadPluginEntryDefinition(discovery!, manifests);
+
+    expect(definition.entryPaths).toEqual(["./server/index.js"]);
+    expect(definition.rootManifestIssue).toBeUndefined();
+    expect(manifests.map(({ manifest }) => manifest.name)).toEqual([
+      "test-plugin/panel",
+    ]);
+    expect(warn).toHaveBeenCalledTimes(3);
+    for (const field of ["ui", "userSettings", "dataSchemas"]) {
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(`PLUGIN.md: ${field}:`),
+      );
+    }
+  });
 });
 
 // ── discoverPlugins ─────────────────────────────────────────────

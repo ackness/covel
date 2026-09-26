@@ -10,11 +10,13 @@
 | 消费已提交的历史结果             | `output.recordAs` + `input.inject` runtime-export         | 读取本次执行开始前的快照                                               |
 | 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger | 由调度和提交链路管理；不是内存中任意广播                               |
 | 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services`                  | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务                  |
-| 执行领域写入                     | 已声明工具、handler effects / `ctx.pluginData`            | 走调用方的 proposal/commit 边界，不直接写别的插件                      |
-| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`  | 复用现有 RPC、会话归属与审批；后台任务结果通过数据订阅显示             |
+| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`            | 走 runtime 的 proposal/commit 边界，不直接写别的插件                   |
+| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`  | 复用现有 RPC、会话归属与审批；写入边界见下文                           |
 | 自由绘制 UI                      | JSON `view` 或 HTML `webview`                             | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作               |
 
 `ctx.services` 当前向 function runtime 开放。Agent 可通过插件自己的 function runtime 取得服务结果，再通过 `inputs` 接收，或继续使用已注册本地工具。它不会自动把全部公共服务暴露给每个 Agent。
+
+UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，handler 后续失败不会自动回滚。多条记录必须一起成功或失败时，用 `invokeRuntime` 触发 `trigger.type: manual` 的 function runtime：`ctx.pluginData` 写入和领域 effects 进入同一次 proposal 提交。该 function handler 不需要 LLM，手动触发本身也不会运行叙事 runtime；声明的事件下游仍按调度契约执行。`invokeCommand` 适用于 manifest 声明的玩家命令，不能用 `invokePluginAction` 绕过命令校验与审计。参见 [RPC 通道](api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](plugins.md#handler-store-and-commit-ownership)。
 
 ## 公共函数注册与调用
 

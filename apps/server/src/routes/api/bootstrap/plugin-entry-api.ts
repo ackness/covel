@@ -13,6 +13,7 @@ import { z } from "zod";
 import type { BootstrapPluginEntriesParams } from "./plugin-entry.js";
 import type { EntryRegistrationBatch } from "./entry-registration-batch.js";
 import { registerNamespaced } from "./plugin-wires.js";
+import { PluginRegistrationError } from "./plugin-registration-error.js";
 
 const HOOK_EVENT_SET: ReadonlySet<string> = new Set(HOOK_EVENTS);
 
@@ -27,7 +28,6 @@ function isToolModule(value: unknown): value is ToolModule {
 export function buildEntryApi(
   params: BootstrapPluginEntriesParams,
   pluginId: string,
-  pluginRelPath: string,
   batch: EntryRegistrationBatch,
 ): PluginAPI {
   const {
@@ -71,20 +71,20 @@ export function buildEntryApi(
     registerTool(toolModule) {
       batch.stage(() => {
         if (!isToolModule(toolModule)) {
-          console.warn(
-            `[plugin-entry] ${pluginRelPath}: registerTool() expects a ToolModule built with covel.toolkit.tool() — skipping`,
+          throw new PluginRegistrationError(
+            "registerTool",
+            "expected a ToolModule built with covel.toolkit.tool()",
           );
-          return;
         }
         // Reject collisions: a duplicate name would silently replace the
         // existing implementation globally — for a builtin name, `findTool`
         // resolves via builtinToolNames first and every runtime would get
         // the replacement, bypassing the plugin access boundary.
         if (toolMap.has(toolModule.name)) {
-          console.warn(
-            `[plugin-entry] ${pluginRelPath}: registerTool("${toolModule.name}") collides with an existing tool — skipping`,
+          throw new PluginRegistrationError(
+            "registerTool",
+            `tool "${toolModule.name}" collides with an existing tool; use a plugin-prefixed name`,
           );
-          return;
         }
         toolMap.set(toolModule.name, toolModule);
         const wasLocal = localToolNames.has(toolModule.name);
@@ -116,16 +116,16 @@ export function buildEntryApi(
     on(event, handler, options) {
       batch.stage(() => {
         if (!HOOK_EVENT_SET.has(event)) {
-          console.warn(
-            `[plugin-entry] ${pluginRelPath}: unknown hook event "${event}" — skipping`,
+          throw new PluginRegistrationError(
+            "on",
+            `unknown hook event "${event}"`,
           );
-          return;
         }
         if (typeof handler !== "function") {
-          console.warn(
-            `[plugin-entry] ${pluginRelPath}: on("${event}") expects a handler function — skipping`,
+          throw new PluginRegistrationError(
+            "on",
+            `hook "${event}" expects a handler function`,
           );
-          return;
         }
         hookSeq += 1;
         const sessionGuardedHandler: typeof handler = async (ctx, payload) => {
@@ -155,33 +155,39 @@ export function buildEntryApi(
     },
     registerRpc(action, handler, options) {
       batch.stage(() => {
-        if (typeof handler !== "function") {
-          console.warn(
-            `[plugin-entry] ${pluginRelPath}: registerRpc("${action}") expects a handler function — skipping`,
-          );
-          return;
-        }
-        try {
-          batch.track(
-            rpcRegistry.registerPluginHandler(
-              pluginId,
-              action,
-              handler,
-              options ?? {},
-              pluginTrust,
-            ),
-          );
-        } catch (err) {
-          console.warn(
-            `[plugin-entry] ${pluginRelPath}: registerRpc("${action}") failed —`,
-            err instanceof Error ? err.message : err,
+        if (
+          typeof action !== "string" ||
+          !action.trim() ||
+          typeof handler !== "function"
+        ) {
+          throw new PluginRegistrationError(
+            "registerRpc",
+            "expected a non-empty action name and a handler function",
           );
         }
+        if (rpcRegistry.getPluginAction(pluginId, action)) {
+          throw new PluginRegistrationError(
+            "registerRpc",
+            `action "${action}" is already registered in this plugin`,
+          );
+        }
+        batch.track(
+          rpcRegistry.registerPluginHandler(
+            pluginId,
+            action,
+            handler,
+            options ?? {},
+            pluginTrust,
+          ),
+        );
       });
     },
     registerFormValidator(name, validator) {
       if (!name || typeof validator !== "function")
-        throw new Error("Invalid form validator registration");
+        throw new PluginRegistrationError(
+          "registerFormValidator",
+          "expected a name and validator function",
+        );
       batch.stage(() => {
         batch.track(
           rpcRegistry.registerFormValidator(pluginId, name, async (request) => {
@@ -207,15 +213,13 @@ export function buildEntryApi(
     },
     registerWires(wires) {
       batch.stage(() => {
-        if (!wires || typeof wires !== "object") {
-          console.warn(
-            `[plugin-entry] ${pluginRelPath}: registerWires() expects { image?, speech?, transcription? } — skipping`,
+        if (!wires || typeof wires !== "object" || Array.isArray(wires)) {
+          throw new PluginRegistrationError(
+            "registerWires",
+            "expected { image?, speech?, transcription? }",
           );
-          return;
         }
-        registerNamespaced(pluginId, pluginRelPath, wires, (dispose) =>
-          batch.track(dispose),
-        );
+        registerNamespaced(pluginId, wires, (dispose) => batch.track(dispose));
       });
     },
   };

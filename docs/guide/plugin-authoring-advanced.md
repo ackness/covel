@@ -591,6 +591,8 @@ providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 
 典型的"玩家点按钮 → 触发插件 runtime"链路:
 
+多条记录要作为一次状态变更时，选 manual function runtime：`ctx.pluginData.set/delete` 写入执行 buffer，与返回的领域 effects 一起经 proposal 提交；任一提交失败会回滚本次领域写入。function handler 不需要 LLM，手动触发也不会自动运行叙事 runtime；显式声明的事件下游仍会执行。`invokePluginAction` 调用的 RPC action 则逐次即时写入，后续 handler 失败不回滚先前成功的写入。可参考 [`tabletop-rules/check` 的双记录写入](../../plugins/tabletop-rules/runtimes/check/handler.js)。
+
 1. 插件在 `ui/xxx.json` 里声明一个按钮,`on.click.action: "invokeRuntime"`,`params.runtimeId: "my-plugin/worker"`。**不需要**写任何 React 代码 —— `PluginPanel` 框架已经注册了 `invokeRuntime` 默认 handler。
 2. 用户点击后,前端发 `POST /api/sessions/:id/plugin-rpc` `{ pluginId, runtimeId, payload }`。
 3. 框架把 `payload` 注入到 `TurnInput.manualTrigger`,`executeTurn` 只跑目标 runtime 及其事件下游。

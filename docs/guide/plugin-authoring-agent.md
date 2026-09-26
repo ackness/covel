@@ -335,7 +335,7 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 - 不能以 `framework-` 开头(保留命名空间)
 - builtin 插件的 entry 在启动时执行,action 立即可用;community 插件延迟到审批通过 / 首次激活时执行 entry。handler 抛错由框架捕获并返回 500
 - payload 可以是任意 JSON,推荐在 handler 内自己用 zod 校验
-- RPC handler 的 `store` 是绑定当前 session/plugin 的能力视图，不暴露完整 DataStore；写入即时生效，后续异常不自动回滚。需要事务提案的状态变更通过 runtime 执行。
+- RPC handler 的 `store` 是绑定当前 session/plugin 的能力视图，不暴露完整 DataStore；写入即时生效，后续异常不自动回滚。多条记录必须一起成功或失败时，用 `invokeRuntime` 触发 manual function runtime，让 `ctx.pluginData` 写入经 proposal 原子提交。function handler 不需要 LLM，手动触发不会自动运行叙事 runtime。参见[手动触发示例](./plugin-authoring-advanced.md#手动触发-前端--rpc--函数-runtime)。
 
 **框架默认 action(无需声明,所有插件可直接调):**
 

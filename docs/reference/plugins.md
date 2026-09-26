@@ -1222,6 +1222,8 @@ entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一�
 
 多 runtime 插件的根 `PLUGIN.md` 虽不作为 runtime 调度，但其中的 `entry` 会在启动时与各 runtime 声明合并为一个插件级定义；审批预检与实际激活读取同一份定义，避免根 entry 在延迟加载路径中丢失。
 
+根清单上的 `ui`、`userSettings`、`dataSchemas` 不参与 runtime 声明聚合，必须放在 `runtimes/<name>/PLUGIN.md`。启动时会逐字段警告；`pnpm validate:plugin` 将这些被忽略的声明视为错误并退出 1。单 runtime 的根清单不受此限制。
+
 ```js
 // server/index.js
 export default function (covel) {
@@ -1247,7 +1249,8 @@ export default function (covel) {
 - 插件来源由目录角色决定；内置目录缺失时仍保留其位置，用户目录中的插件继续要求 community 审批。
 - **来源门控**与 local tools 一致：builtin 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
 - builtin entry 启动失败后保持待激活，首次 RPC 可按真实发现来源重试，无需社区插件审批或管理员凭据。待激活的 community 或来源缺失的插件仍必须经过原有服务器代码和动作审批；托管环境仍要求管理员凭据。
-- **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册与名称冲突保留警告跳过行为。
+- **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册、未知 Hook 和名称冲突都会让整批激活失败，不再跳过。工具名当前仍须全局唯一，建议使用插件前缀；RPC action 名在插件内唯一，wire 按 `<pluginId>/<wireId>` 隔离。
+- **激活诊断**：失败插件在 `GET /api/plugins` 和详情中返回 `error`，可识别的注册错误包含 `plugin_registration_invalid`、注册 API 名和具体原因。任意插件执行异常的详情只写服务端日志，不作为公开诊断返回。激活失败保留有效清单的 `registered` 状态及命令、面板入口，后续调用仍可重试，成功后清除错误；清单发现失败才使用 `status: "error"`。插件目录同时展示激活诊断和有效插件，保留启停入口。
 - **宿主清理**：成功注册的撤销函数由 API 宿主持有。宿主停止请求与后台接单，排空已接纳的 HTTP/SSE 业务、runtime 与记忆任务后，关闭 entry 激活入口，等待已经接纳的审批检查和工厂结束，再逆序撤销工具、Hook、RPC、表单校验器及 wire。关闭期间结束的工厂不能再发布注册；后续启动失败同样撤销已发布的批次。插件自行发起的 I/O 或后台任务不属于这项注册清理保证。
 - entry 抛错、非函数导出、缺失文件或路径逃逸均视为激活失败。builtin 启动时记录失败并继续其它插件；`ensurePluginEntry` 调用方收到错误，失败不记作已加载，后续调用可以重试。并发激活共享一次尝试，成功后才去重。
 - 注册 API 仅在工厂执行期间有效；工厂必须 await 自己的初始化，返回后再注册会抛错。回滚只涵盖框架托管注册，不撤销模块顶层 I/O、外部请求或插件自行启动的任务；会话停用不卸载进程共享注册。

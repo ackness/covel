@@ -19,8 +19,9 @@
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { parsePluginMd } from "../src/parse-plugin-md.js";
+import { multiRuntimeRootDiagnostics } from "../src/root-manifest-diagnostics.js";
 import { runtimeManifestAuthoringSchema } from "@covel/shared";
 
 const args = process.argv.slice(2);
@@ -80,6 +81,28 @@ function validateFile(filePath: string): Record<string, unknown> | null {
       console.error(
         `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`,
       );
+    }
+    return null;
+  }
+  // A file argument must receive the same package-layout check as a directory.
+  // An empty runtimes/ directory still uses the single-runtime root contract.
+  const runtimesDir = join(dirname(filePath), "runtimes");
+  const isMultiRuntimeRoot =
+    basename(filePath) === "PLUGIN.md" &&
+    existsSync(runtimesDir) &&
+    statSync(runtimesDir).isDirectory() &&
+    readdirSync(runtimesDir, { withFileTypes: true }).some(
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(join(runtimesDir, entry.name, "PLUGIN.md")),
+    );
+  const diagnostics = isMultiRuntimeRoot
+    ? multiRuntimeRootDiagnostics(parsed.rawFrontmatter)
+    : [];
+  if (diagnostics.length > 0) {
+    console.error(`✗ ${filePath} (multi-runtime root)`);
+    for (const diagnostic of diagnostics) {
+      console.error(`  - ${diagnostic.path}: ${diagnostic.message}`);
     }
     return null;
   }

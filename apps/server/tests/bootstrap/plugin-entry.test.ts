@@ -3,9 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getSpeechWire } from "@covel/ai-provider";
-import type {
-  ParsedPluginMd,
-  PluginDiscoveryResult,
+import {
+  createPluginRegistry,
+  type ParsedPluginMd,
+  type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import {
   createHookPipeline,
@@ -61,7 +62,24 @@ function writePlugin(
 }
 
 function makeParams(entries: ReturnType<typeof writePlugin>[]) {
+  const pluginRegistry = createPluginRegistry();
+  for (const entry of entries) {
+    pluginRegistry.register({
+      id: entry.discovery.id,
+      summary: {
+        id: entry.discovery.id,
+        name: entry.discovery.id,
+        description: "Fixture",
+        pluginType: "plugin",
+        runtimeCount: 0,
+      },
+      status: "registered",
+      loadedRuntimes: new Map(),
+      source: entry.discovery.source,
+    });
+  }
   return {
+    pluginRegistry,
     discoveryMap: new Map(entries.map((e) => [e.discovery.id, e.discovery])),
     manifestCache: new Map(entries.map((e) => [e.discovery.id, [e.parsed]])),
     store: createMemoryStore(),
@@ -488,12 +506,20 @@ export default async function (covel) {
     ]);
     expect(attempts.map((r) => r.status)).toEqual(["rejected", "rejected"]);
     expect(entries.hasPendingEntry(p.discovery.id)).toBe(true);
+    expect(params.pluginRegistry.get(p.discovery.id)).toMatchObject({
+      status: "registered",
+      error: "Entry activation failed; check the server log for details.",
+    });
     expect(params.rpcRegistry.list()).toEqual([]);
     expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual({
       action: "continue",
     });
     await entries.ensurePluginEntry(p.discovery.id);
     expect(entries.hasPendingEntry(p.discovery.id)).toBe(false);
+    expect(params.pluginRegistry.get(p.discovery.id)?.status).toBe(
+      "registered",
+    );
+    expect(params.pluginRegistry.get(p.discovery.id)?.error).toBeUndefined();
     const entry = params.rpcRegistry.getPluginAction(p.discovery.id, "count");
     expect(
       await entry?.handler(
@@ -529,34 +555,107 @@ export default async function (covel) {
     warn.mockRestore();
   });
 
-  it("warn-skips non-function default exports, unknown hook events, and non-ToolModule registrations", async () => {
+  it("keeps non-function default exports pending without publishing registrations", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const notFn = writePlugin(
       "entry-notfn-a",
       `export default { nope: true };`,
     );
-    const badCalls = writePlugin(
-      "entry-badcalls-a",
-      `
-export default (covel) => {
-  covel.on("NotARealEvent", async () => ({ action: "continue" }));
-  covel.registerTool({ name: "raw-object" });
-};
-`,
-    );
-    const params = makeParams([notFn, badCalls]);
-
-    await createBootstrapPluginEntries(params);
+    const params = makeParams([notFn]);
+    const entries = await createBootstrapPluginEntries(params);
 
     expect(params.toolMap.size).toBe(0);
-    expect(
-      warn.mock.calls.some((c) => String(c[0]).includes("NotARealEvent")),
-    ).toBe(true);
-    expect(
-      warn.mock.calls.some((c) => String(c[0]).includes("registerTool")),
-    ).toBe(true);
+    expect(entries.hasPendingEntry(notFn.discovery.id)).toBe(true);
+    expect(params.pluginRegistry.get(notFn.discovery.id)?.error).toBeDefined();
     warn.mockRestore();
   });
+
+  it.each([
+    {
+      name: "tool",
+      call: 'covel.registerTool({ name: "raw-object" });',
+      operation: "registerTool",
+    },
+    {
+      name: "hook-event",
+      call: 'covel.on("NotARealEvent", async () => ({}));',
+      operation: "on",
+    },
+    {
+      name: "hook-handler",
+      call: 'covel.on("TurnStart", null);',
+      operation: "on",
+    },
+    {
+      name: "rpc-handler",
+      call: 'covel.registerRpc("broken", null);',
+      operation: "registerRpc",
+    },
+    {
+      name: "rpc-duplicate",
+      call: 'covel.registerRpc("entry-action", async () => true);',
+      operation: "registerRpc",
+    },
+    {
+      name: "wire-module",
+      call: "covel.registerWires(null);",
+      operation: "registerWires",
+    },
+    {
+      name: "wire-shape",
+      call: 'covel.registerWires({ speech: [{ id: "invalid" }] });',
+      operation: "registerWires",
+    },
+    {
+      name: "wire-group",
+      call: "covel.registerWires({ speech: {} });",
+      operation: "registerWires",
+    },
+    {
+      name: "wire-duplicate",
+      call: 'covel.registerWires({ speech: [{ id: "entry-tts", async synthesize() {} }] });',
+      operation: "registerWires",
+    },
+  ])(
+    "rolls back the complete batch and reports invalid $name registrations",
+    async ({ name, call, operation }) => {
+      const pluginId = `entry-invalid-${name}`;
+      const source = FULL_ENTRY_SRC.replace(
+        'action: "continue"',
+        'action: "abort", reason: "leaked hook"',
+      ).replace(/\n}\n$/, `\n  ${call}\n}\n`);
+      const plugin = writePlugin(pluginId, source, { source: "community" });
+      const params = makeParams([plugin]);
+      const entries = await createBootstrapPluginEntries(params);
+      try {
+        await expect(
+          entries.ensurePluginEntry(pluginId, "s1"),
+        ).rejects.toMatchObject({
+          cause: {
+            code: "plugin_registration_invalid",
+            registration: operation,
+          },
+        });
+        expect(entries.hasPendingEntry(pluginId)).toBe(true);
+        expect(params.toolMap.size).toBe(0);
+        expect(params.localToolNames.size).toBe(0);
+        expect(params.pluginToolAccess.size).toBe(0);
+        expect(params.rpcRegistry.list()).toEqual([]);
+        expect(getSpeechWire(`${pluginId}/entry-tts`)).toBeNull();
+        expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual(
+          { action: "continue" },
+        );
+        expect(params.pluginRegistry.get(pluginId)).toMatchObject({
+          status: "registered",
+          error: expect.stringContaining(
+            `[plugin_registration_invalid] ${operation}:`,
+          ),
+        });
+      } finally {
+        await entries.close();
+      }
+    },
+  );
 
   it("rejects registerTool name collisions instead of overwriting", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

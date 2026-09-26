@@ -74,7 +74,9 @@ describe("manifest authoring CLI", () => {
   });
 
   it("accepts metadata roots and validates every runtime in a package", async () => {
-    const root = await fixture("name: probe\ndescription: Metadata");
+    const root = await fixture(
+      "name: probe\ndescription: Metadata\nentry: ./server/index.js",
+    );
     await writeManifest(
       path.join(root, "runtimes/note"),
       [
@@ -98,6 +100,44 @@ describe("manifest authoring CLI", () => {
     const result = validate(root);
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.match(/✓/g)).toHaveLength(3);
+  });
+
+  it.each(["directory", "file"])(
+    "rejects ignored multi-runtime root declarations via a %s argument",
+    async (argumentKind) => {
+      const root = await fixture(
+        [
+          "name: probe",
+          "description: Metadata",
+          "entry: ./server/index.js",
+          "ui: {right: [./ui/panel.json]}",
+          "userSettings: []",
+          "dataSchemas: {}",
+        ].join("\n"),
+      );
+      await writeManifest(
+        path.join(root, "runtimes/panel"),
+        "name: probe/panel\ndescription: Panel\nui: {right: [./panel.json]}",
+      );
+      const result = validate(
+        argumentKind === "file" ? path.join(root, "PLUGIN.md") : root,
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("(multi-runtime root)");
+      for (const field of ["ui", "userSettings", "dataSchemas"]) {
+        expect(result.stderr).toContain(`- ${field}:`);
+      }
+      expect(result.stderr).toContain("runtimes/<name>/PLUGIN.md");
+    },
+  );
+
+  it("keeps single-runtime declarations valid with an empty runtimes directory", async () => {
+    const root = await fixture(
+      "name: probe\ndescription: Probe\nui: {right: [./panel.json]}\nuserSettings: []\ndataSchemas: {}",
+    );
+    await mkdir(path.join(root, "runtimes"));
+    const result = validate(root);
+    expect(result.status, result.stderr).toBe(0);
   });
 
   it("has no flag that bypasses the current authoring contract", async () => {

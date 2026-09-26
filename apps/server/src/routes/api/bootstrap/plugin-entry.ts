@@ -26,12 +26,14 @@ import {
   type PluginEntryDefinition,
   type ParsedPluginMd,
   type PluginDiscoveryResult,
+  type PluginRegistry,
 } from "@covel/plugin-loader";
 import { type HookPipeline, type PluginRpcRegistry } from "@covel/runtime";
 import type { DataStore } from "@covel/store";
 import type { ToolModule } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { EntryRegistrationBatch } from "./entry-registration-batch.js";
+import { PluginRegistrationError } from "./plugin-registration-error.js";
 
 /**
  * Validate that `target` is inside `root` after resolving symlinks.
@@ -69,6 +71,8 @@ async function assertInsideRoot(root: string, target: string): Promise<void> {
 export interface BootstrapPluginEntriesParams {
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
+  /** Expose activation failures through the existing plugin discovery DTO. */
+  readonly pluginRegistry?: PluginRegistry;
   readonly store: DataStore;
   readonly toolMap: Map<string, ToolModule>;
   readonly localToolNames: Set<string>;
@@ -117,6 +121,18 @@ export async function createBootstrapPluginEntries(
   let closed = false;
   let closing: Promise<void> | undefined;
 
+  const reportActivation = (pluginId: string, error?: string): void => {
+    const entry = params.pluginRegistry?.get(pluginId);
+    if (!entry) return;
+    const { error: _previousError, ...definition } = entry;
+    params.pluginRegistry!.register({
+      ...definition,
+      // Valid declarations remain available to command/UI discovery so the
+      // next invocation can retry activation. Only discovery rejects a package.
+      ...(error ? { error } : {}),
+    });
+  };
+
   // Compile entry declarations once. Both the approval/pending path and actual
   // activation consume this exact definition, so metadata-only multi-runtime
   // roots cannot be visible to one path and absent from the other.
@@ -140,12 +156,8 @@ export async function createBootstrapPluginEntries(
     const definition = entryDefinitions.get(pluginId);
     if (!definition || definition.entryPaths.length === 0) return;
 
-    const pluginRelPath = path.relative(
-      process.cwd(),
-      path.join(definition.pluginRoot, "PLUGIN.md"),
-    );
     const batch = new EntryRegistrationBatch();
-    const api = buildEntryApi(params, pluginId, pluginRelPath, batch);
+    const api = buildEntryApi(params, pluginId, batch);
     let currentEntry = "";
     try {
       for (const entryPath of definition.entryPaths) {
@@ -167,15 +179,22 @@ export async function createBootstrapPluginEntries(
       if (closed) throw new Error("plugin entries are closed");
       batch.commit();
       registrations.push(batch);
+      reportActivation(pluginId);
     } catch (error) {
+      const diagnostic =
+        error instanceof PluginRegistrationError
+          ? `[${error.code}] ${error.message}`
+          : "Entry activation failed; check the server log for details.";
       const failure = new Error(
-        `[plugin-entry] ${pluginRelPath}: failed to activate entry "${currentEntry}"`,
+        `[plugin-entry] ${pluginId}: failed to activate entry "${currentEntry}": ${diagnostic}`,
         { cause: error },
       );
       try {
         batch.rollback();
       } catch (rollbackError) {
         throw new AggregateError([failure, rollbackError], failure.message);
+      } finally {
+        reportActivation(pluginId, diagnostic);
       }
       throw failure;
     }

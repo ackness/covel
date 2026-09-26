@@ -4,6 +4,8 @@
 
 这份指南按三个难度层次拆成三份文档。先决定自己属于哪条路径，再从对应的文档开始读。
 
+要从按钮写入插件数据时，先选入口：`invokePluginAction` 的 RPC action 写入即时生效，后续失败不回滚已成功的写入；多条记录需要一起成功或失败时，用 `invokeRuntime` 触发 manual function runtime，让写入随 proposal 原子提交。function handler 直接运行 JS，不需要 LLM；手动触发不会自动运行叙事 runtime。详见[进阶指南的 RPC action](./plugin-authoring-agent.md#4-暴露-rpc-action)和[高级指南的手动触发](./plugin-authoring-advanced.md#手动触发-前端--rpc--函数-runtime)。
+
 ## 三条路径
 
 | 路径                                 | 面向的人                       | 前置要求                                                             | 你将产出什么                                                                                             | 文档                                                             |

@@ -24,12 +24,7 @@ function fixture() {
     rpcRegistry: createPluginRpcRegistry(),
     isCommunityHookApproved: () => true,
   };
-  const api = buildEntryApi(
-    params,
-    "batch-fixture",
-    "plugins/batch-fixture/PLUGIN.md",
-    batch,
-  );
+  const api = buildEntryApi(params, "batch-fixture", batch);
   return { batch, params, api };
 }
 
