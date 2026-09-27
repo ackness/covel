@@ -1773,6 +1773,7 @@
       "hooks": "Хуки",
       "actions": "Действия",
       "services": "Сервисы",
+      "extensions": "Расширения",
       "commands": "Команды",
       "registered": "зарегистрирована",
       "unregistered": "не зарегистрирована"

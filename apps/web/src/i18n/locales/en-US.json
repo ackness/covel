@@ -1771,6 +1771,7 @@
       "hooks": "Hooks",
       "actions": "Actions",
       "services": "Services",
+      "extensions": "Extensions",
       "commands": "Commands",
       "registered": "registered",
       "unregistered": "unregistered"

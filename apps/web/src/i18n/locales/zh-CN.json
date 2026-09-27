@@ -1771,6 +1771,7 @@
       "hooks": "钩子",
       "actions": "动作",
       "services": "服务",
+      "extensions": "扩展",
       "commands": "命令",
       "registered": "已注册",
       "unregistered": "未注册"
