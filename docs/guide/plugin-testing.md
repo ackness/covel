@@ -41,7 +41,9 @@ runtime；`--ignore-upstreams` 可隔离该门控，但不会替你生成所需�
 
 ## 可操作的组合示例
 
-[可组合记录工作台](../../examples/composable-notes/README.md) 提供三个独立安装包：HTML 面板和手动任务组成工作台，两个零 runtime 服务包提供可替换的文本处理。`pnpm pack:notes-example` 生成 ZIP，`pnpm test:notes-example` 验证计算行为和真实安装、审批、服务切换、禁用后拒绝写入；无需模型密钥。
+[官方记录工作台 demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/notes-workbench) 及两个处理服务由插件仓库维护，属于按需安装的开发示例，不是核心插件。安装、宿主版本要求和测试步骤以其 README 为准。
+
+主仓库使用 `tests/third-party/lifecycle-probe`、`service-provider-probe` 验证安装、审批、服务发现、调用和禁用边界，使用 `tests/e2e/plugin-webview-actions.spec.ts` 验证包级 HTML 的手动 runtime 桥接。主仓库检查不依赖插件仓库的本地路径或在线下载。
 
 ## 独立第三方包与玩家流程
 
