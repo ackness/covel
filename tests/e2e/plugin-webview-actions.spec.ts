@@ -4,10 +4,31 @@ import { createRecoveryFixture } from "./execution-recovery-fixtures.js";
 // Keep the host transport test independent of externally maintained demos.
 const html = `<!doctype html><html><body>
   <button id="run" disabled>Run fixture</button>
+  <textarea id="draft" aria-label="Draft"></textarea>
+  <button id="oversize">Oversize draft</button><button id="clear">Clear draft</button>
+  <pre id="cache-result"></pre>
   <pre id="state"></pre><pre id="result"></pre>
   <script>
     const run = document.getElementById("run");
+    let hydrated = false;
+    const draft = document.getElementById("draft");
+    const cacheResult = document.getElementById("cache-result");
+    async function cache(value) {
+      try {
+        await window.covel.invoke("setUiState", { value });
+        cacheResult.textContent = "cached";
+      } catch (error) {
+        cacheResult.textContent = error.message;
+      }
+    }
+    draft.oninput = () => cache({ text: draft.value });
+    document.getElementById("oversize").onclick = () => cache({ text: "x".repeat(33000) });
+    document.getElementById("clear").onclick = () => cache(null);
     window.covel.subscribe((state) => {
+      if (state.locale && !hydrated) {
+        hydrated = true;
+        draft.value = state.uiState?.text ?? "";
+      }
       run.disabled = !state.locale || state.locked;
       document.getElementById("state").textContent = JSON.stringify(state.data);
     });
@@ -73,11 +94,15 @@ test("package webview receives runtime outcomes and sanitized transport errors",
               pluginId,
               specs: [
                 {
-                  id: "fixture-panel",
-                  label: "Webview Fixture",
+                  label: { en: "Webview Fixture", zh: "Webview Fixture" },
                   icon: "book-open",
                   alwaysRender: true,
                   dataSource: { namespace: "fixture" },
+                  webview: { html, height: 300 },
+                },
+                {
+                  label: { en: "Other Fixture", zh: "Other Fixture" },
+                  alwaysRender: true,
                   webview: { html, height: 300 },
                 },
               ],
@@ -135,6 +160,27 @@ test("package webview receives runtime outcomes and sanitized transport errors",
       JSON.stringify({ current: { value: "fixture state" } }),
     );
     expect(requests).toHaveLength(0);
+    await frame
+      .getByRole("textbox", { name: "Draft" })
+      .fill("Retained draft 草稿");
+    await expect(frame.locator("#cache-result")).toHaveText("cached");
+    await frame.getByRole("button", { name: "Oversize draft" }).click();
+    await expect(frame.locator("#cache-result")).toHaveText(
+      "Plugin UI action failed",
+    );
+    await page.getByRole("tab", { name: "Other Fixture", exact: true }).click();
+    await expect(page.locator('iframe[title="Webview Fixture"]')).toHaveCount(
+      0,
+    );
+    const other = page.frameLocator('iframe[title="Other Fixture"]');
+    await expect(other.getByRole("textbox", { name: "Draft" })).toHaveValue("");
+    await page
+      .getByRole("tab", { name: "Webview Fixture", exact: true })
+      .click();
+    await expect(frame.getByRole("textbox", { name: "Draft" })).toHaveValue(
+      "Retained draft 草稿",
+    );
+    expect(requests).toHaveLength(0);
     await frame.getByRole("button", { name: "Run fixture" }).click();
     await expect(frame.locator("#result")).toContainText(
       '"value":"fixture output"',
@@ -158,6 +204,13 @@ test("package webview receives runtime outcomes and sanitized transport errors",
       "Plugin UI action failed",
     );
     expect(requests).toHaveLength(3);
+    await frame.getByRole("button", { name: "Clear draft" }).click();
+    await expect(frame.locator("#cache-result")).toHaveText("cached");
+    await page.getByRole("tab", { name: "Other Fixture", exact: true }).click();
+    await page
+      .getByRole("tab", { name: "Webview Fixture", exact: true })
+      .click();
+    await expect(frame.getByRole("textbox", { name: "Draft" })).toHaveValue("");
   } finally {
     await fixture.dispose();
   }

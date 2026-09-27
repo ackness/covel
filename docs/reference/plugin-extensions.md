@@ -129,7 +129,7 @@ HTML 使用 `sandbox="allow-scripts"` 的独立 origin，没有宿主 DOM、cook
 
 ```js
 const unsubscribe = window.covel.subscribe(
-  ({ data, locale, locked, context }) => {
+  ({ data, locale, locked, context, uiState }) => {
     // Render with textContent or your UI framework's escaping.
   },
 );
@@ -142,9 +142,11 @@ const response = await window.covel.invoke("invokePluginAction", {
 
 `data` 是本插件声明 namespace 的数据；更新和删除均随宿主数据源传入。`context` 在舞台包含 `{ surface: "stage", turnId, turnIds, choices }`；`turnIds` 包含归属当前叙事的已提交重试，`choices` 为当前 `{ id, text }[]`。插件可核对回合及当前选项，隐藏过期结果。`locked` 为交互锁；宿主也会拒绝锁定时发来的动作。
 
-桥接只接受宿主显式提供的动作：默认是 `invokeRuntime`、`invokePluginAction`、`invokeCommand`，自动绑定当前插件；舞台另提供 `sendMessage({ text })`。不可通过 params 改写 pluginId 来调用其他插件。需要组合其他插件时，从自己的 runtime 使用 `ctx.services` 或事件，不通过浏览器读取对方私有数据。
+桥接只接受宿主显式提供的动作：执行类动作默认是 `invokeRuntime`、`invokePluginAction`、`invokeCommand`，自动绑定当前插件；舞台另提供 `sendMessage({ text })`。不可通过 params 改写 pluginId 来调用其他插件。需要组合其他插件时，从自己的 runtime 使用 `ctx.services` 或事件，不通过浏览器读取对方私有数据。
 
-动作返回现有 RPC 响应；后台 `accepted` 表示任务已接收，不代表完成。桥接通信和调用异常以不含服务端内部详情的错误返回。每个挂载实例独立连接，卸载时关闭；插件不能获取宿主中的任意函数。
+`uiState` 是当前面板的临时 JSON 状态，初始为 `null`。使用 `await window.covel.invoke("setUiState", { value: { draft: "..." } })` 整体替换，传 `value: null` 清空；成功返回 `{ status: "ok" }`。对象编码为 JSON 后最多 32 KiB（UTF-8），非法值或超限会拒绝且保留旧值。它与 `data` 隔离，不写服务端、不调用 runtime。侧栏按会话、插件及面板隔离缓存，切换标签后可恢复；建议为需要恢复草稿的面板声明稳定 `id`，无 `id` 面板使用包内顺序生成身份。离开会话、销毁侧栏宿主或刷新页面会丢失。不提供缓存宿主的其他位置只保留到面板卸载。插件应在首次收到宿主状态时恢复草稿，避免后续状态推送覆盖正在输入的内容。此动作同样受交互锁约束。
+
+执行动作返回现有 RPC 响应；后台 `accepted` 表示任务已接收，不代表完成。桥接通信和调用异常以不含服务端内部详情的错误返回。每个挂载实例独立连接，卸载时关闭；插件不能获取宿主中的任意函数。
 
 ## 可安装的组合示例
 

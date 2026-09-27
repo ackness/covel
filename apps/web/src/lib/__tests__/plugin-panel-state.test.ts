@@ -3,9 +3,39 @@ import {
   buildPluginPanelInitialState,
   expandIndexedState,
   flattenStateForPluginPanel,
+  parsePluginUiState,
 } from "../plugin-panel-state.js";
 
 describe("plugin-panel state helpers", () => {
+  it("copies JSON drafts and permits clearing the cache", () => {
+    const draft = { text: "草稿", selection: [1, true, null] };
+    const copy = parsePluginUiState(draft);
+    expect(copy).toEqual(draft);
+    expect(copy).not.toBe(draft);
+    expect(copy?.selection).not.toBe(draft.selection);
+    expect(parsePluginUiState(null)).toBeNull();
+    expect(parsePluginUiState({ text: "\u0000".repeat(4000) })).toBeTruthy();
+  });
+
+  it("bounds encoded UTF-8 bytes and rejects invalid drafts", () => {
+    expect(() => parsePluginUiState({ text: "中".repeat(11000) })).toThrow(
+      "32 KiB",
+    );
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    for (const value of [
+      undefined,
+      [],
+      "text",
+      { value: undefined },
+      { value: NaN },
+      { value: new Map() },
+      cyclic,
+    ]) {
+      expect(() => parsePluginUiState(value)).toThrow();
+    }
+  });
+
   it("builds json-render initial state with entries and invoking status", () => {
     const state = buildPluginPanelInitialState(
       {
