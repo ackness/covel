@@ -27,6 +27,7 @@ import {
 } from "@covel/runtime";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
+import { hasServerRuntimeJobCredentials } from "./runtime-job-readiness.js";
 import {
   createInProcessSessionLock,
   type SessionLock,
@@ -317,6 +318,8 @@ async function initializeServer(): Promise<void> {
       worldsDirs,
       covelHome: env.covelHome,
       llmAdapter,
+      canRunRuntimeJobWithServerServices: ({ model }) =>
+        hasServerRuntimeJobCredentials(ai.gateway, model, apiKeys),
       pluginGateway,
       pluginUtils,
       store,

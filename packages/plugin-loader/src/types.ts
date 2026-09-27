@@ -32,7 +32,6 @@ export type {
 import type {
   PluginDataSchemaDecl,
   WorldProjectionDecl,
-  PluginRelations,
   PluginTag,
   PluginType,
   RuntimeManifest,
@@ -41,6 +40,11 @@ import type {
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
 
 export interface ParsedPluginMd {
+  readonly contractSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  readonly plugin?: import("@covel/shared").PluginManifest;
+  readonly runtime?: import("@covel/shared").RuntimeAuthoringManifest;
   /** Declaration source for diagnostics; absent in hand-built test fixtures. */
   readonly sourcePath?: string;
   /** Validated manifest from YAML frontmatter. */
@@ -80,6 +84,16 @@ export interface PluginDiscoveryResult {
  * which executable runtime artifacts happen to be loaded.
  */
 export interface PluginEntryDefinition {
+  readonly contributions: NonNullable<
+    import("@covel/shared").PluginManifest["contributes"]
+  >;
+  readonly staticPromptSegments: NonNullable<
+    NonNullable<import("@covel/shared").PluginManifest["contributes"]>["prompt"]
+  >;
+  readonly staticPromptVariants?: Readonly<
+    Record<string, PluginEntryDefinition["staticPromptSegments"]>
+  >;
+  readonly extensions: readonly import("@covel/shared").ExtensionDeclaration[];
   readonly pluginId: string;
   readonly pluginRoot: string;
   /** Plugin-root-relative entry module paths, deduplicated in declaration order. */
@@ -105,7 +119,6 @@ export interface PluginSummary {
   readonly pluginType: PluginType;
   readonly runtimeCount: number;
   readonly tags?: readonly PluginTag[];
-  readonly relations?: PluginRelations;
 }
 
 // ── Plugin registry ──────────────────────────────────────────────

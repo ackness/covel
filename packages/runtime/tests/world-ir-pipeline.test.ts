@@ -119,8 +119,8 @@ async function runPipeline(worldIrContent: string) {
     trigger: { type: "auto" },
     inputs: {
       worldIR: {
-        from: { capability: "world-ir-provider", cardinality: "one" },
-        accepts: "covel://world/ir/v1",
+        from: { capability: "world-ir-provider@1", cardinality: "one" },
+        accepts: "contract:world-ir@1",
         required: true,
       },
     },

@@ -23,10 +23,7 @@ vi.mock("../StageSprites.js", () => ({ StageSprites: () => null }));
 vi.mock("../StagePluginPanels.js", () => ({
   StagePluginPanels: () => <div data-testid="plugin-extension" />,
 }));
-vi.mock("../use-stage-data.js", () => ({
-  useStageData: () => ({}),
-  useStageNamespace: () => ({}),
-}));
+vi.mock("@/stores/ui-slot-store.js", () => ({ useUiSlots: () => [] }));
 
 afterEach(() => {
   cleanup();

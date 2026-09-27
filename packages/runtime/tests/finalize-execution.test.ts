@@ -31,7 +31,7 @@ interface RuntimeManifestLite {
 }
 
 function makeRuntime(name: string, outputKind = "plugin"): RuntimeManifestLite {
-  return { name, pluginId: name, outputKind, capabilities: [] };
+  return { name, pluginId: name, outputKind, outputContract: undefined };
 }
 
 function makeResult(runtimeId: string, output: ResultOutput) {

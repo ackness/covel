@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { TFunction } from "i18next";
-import { FrameworkCapability, FrameworkRuntimeCapability } from "@covel/shared";
+import { mediaImageFlowSchema } from "@covel/shared";
+import { request } from "@/services/api/request.js";
 import type { PluginRpcRequest } from "@covel/shared";
 import type { SessionPlugin } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -43,20 +44,36 @@ export function useImageGeneration({
 }: UseImageGenerationArgs): UseImageGenerationResult {
   const [generatingImage, setGeneratingImage] = useState(false);
 
-  const imageGenEntry = useMemo<ImageGenEntry | null>(() => {
-    for (const p of sessionPlugins) {
-      if (!p.active) continue;
-      if (!p.capabilities?.includes(FrameworkCapability.ImageGeneration))
-        continue;
-      const entry = p.runtimes?.find(
-        (r) =>
-          r.trigger?.type === "manual" &&
-          r.capabilities?.includes(FrameworkRuntimeCapability.ImagePrompt),
-      );
-      if (entry) return { pluginId: p.id, runtimeId: entry.id };
-    }
-    return null;
-  }, [sessionPlugins]);
+  const [imageGenEntry, setImageGenEntry] = useState<ImageGenEntry | null>(
+    null,
+  );
+  useEffect(() => {
+    let live = true;
+    setImageGenEntry(null);
+    if (!sessionId) return;
+    void request<{ flow: unknown }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/media/image-flow`,
+    )
+      .then(({ flow }) => {
+        const parsed = mediaImageFlowSchema.safeParse(flow);
+        if (
+          live &&
+          parsed.success &&
+          parsed.data.pluginId &&
+          sessionPlugins.some((p) => p.id === parsed.data.pluginId && p.active)
+        )
+          setImageGenEntry({
+            pluginId: parsed.data.pluginId,
+            runtimeId: parsed.data.entryRuntimeId,
+          });
+      })
+      .catch(() => {
+        if (live) setImageGenEntry(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [sessionId, sessionPlugins]);
 
   // Use plugin-rpc rather than `triggerEvent`. Firing a kernel event would
   // create a fresh turn just to route the topic; plugin-rpc invokes the entry

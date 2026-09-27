@@ -1,3 +1,9 @@
+import { resolveMediaImageFlow } from "./media-image-flow.js";
+import { listRuntimeJobs } from "./plugin-rpc/jobs.js";
+import {
+  withSettledExecutionLock,
+  requestJobServices,
+} from "./plugin-rpc/settled-request.js";
 /**
  * Actions route — SSE bridge between frontend action protocol and turn executor.
  *
@@ -57,10 +63,6 @@ import {
   type StagedRuntimeJobPayload,
 } from "./plugin-rpc/runtime-job-worker.js";
 import {
-  resolveTurnCapabilityPluginIds,
-  type TurnCapabilityPluginIds,
-} from "./turn-capabilities.js";
-import {
   decodePluginUserSettingsHeader,
   mergePluginUserSettings,
   readWorldPluginSettings,
@@ -106,7 +108,6 @@ type Env = {
     mediaStore?: MediaStore;
     hookPipeline?: HookPipeline;
     ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
-    memorySystem?: NonNullable<TurnExecutorDeps["memorySystem"]>;
   };
 };
 
@@ -119,7 +120,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const eventBus = c.get("eventBus");
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
-  const memorySystem = c.get("memorySystem");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
   const runtimeJobWorker = c.get("runtimeJobWorker");
 
@@ -243,15 +243,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // registry before its ABA check rejects.
   let activeRuntimes: readonly RuntimeManifest[] = [];
 
-  // Framework-capability plugin ids discovered by capability — never by id.
-  // Single source of truth in resolveTurnCapabilityPluginIds.
-  let capabilityPluginIds: TurnCapabilityPluginIds = {
-    worldDataPluginId: undefined,
-    personaPluginId: undefined,
-    promptHistoryRewriterPluginId: undefined,
-  };
-
   return streamOwnedSSE(c, async (stream) => {
+    const credentialKeys: import("./plugin-rpc/runtime-job-credentials.js").RuntimeJobCredentialKey[] =
+      [];
     let seq = 0;
     const traceId = crypto.randomUUID();
     // The turn currently writing to this stream. The opening-continuation
@@ -370,7 +364,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         followerSession,
         approvalScopes,
         queuedRuntimeJobs,
-      } = await sessionLock.withLock(sessionId, async () => {
+      } = await withSettledExecutionLock(c, sessionId, async () => {
         c.get("requestWork")?.signal.throwIfAborted();
         // This execution now owns the session — events on the bus
         // from here on belong to this turn.
@@ -447,10 +441,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               runtime.name,
               runtime.outputKind ?? "plugin",
             ]),
-          );
-          capabilityPluginIds = resolveTurnCapabilityPluginIds(
-            pluginRegistry,
-            sessionId,
           );
 
           let effectiveSession = liveSession;
@@ -645,7 +635,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // transport does not cancel this turn; a refreshed client observes
           // it through the read-only execution endpoint until finalization.
           const result = await executeTurn(turnInput, activeRuntimes, {
-            ...buildTurnExecutorDeps(c, capabilityPluginIds),
+            ...buildTurnExecutorDeps(c),
             hookScope,
             // The main turn path never passed the eventBus, so every
             // `emitSubEvent` inside the executor — including the
@@ -697,7 +687,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 await writeEvent(eventType, { ...info });
               }
             },
-            ...(memorySystem ? { memorySystem } : {}),
             // Player mid-turn steering + abort.
             turnControl,
           });
@@ -725,13 +714,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly status: JobStatusRecord;
           }> = [];
           const outcome = await commitExecution({
+            imageFlowRuntimeIds: (
+              await resolveMediaImageFlow(
+                store,
+                c.get("pluginExtensions"),
+                sessionId,
+              )
+            )?.assetRuntimeIds,
             completion: {
               kind: "turn",
               turnId: result.turnId,
               durationMs: result.durationMs,
             },
-            memorySystem,
-            capabilityPluginIds,
             onFinalized: async (outcome) => {
               commitStatusSettled = true;
               for (const evt of outcome.events) {
@@ -824,6 +818,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                           sourceRuntimeId: descriptor.runtimeId,
                         },
                         payload: jobPayload,
+                        ...(policy.settle
+                          ? {
+                              settle: policy.settle,
+                              maxSettleWaitMs: policy.maxSettleWaitMs,
+                            }
+                          : {}),
                         ...(policy.maxQueueMs !== undefined
                           ? { maxQueueMs: policy.maxQueueMs }
                           : {}),
@@ -838,6 +838,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                         );
                       }
                       queuedRuntimeJobs.push({ job, status });
+                      const credentialKey = {
+                        jobId: job.jobId,
+                        sessionId,
+                        expectedSessionIncarnation:
+                          jobPayload.expectedSessionIncarnation,
+                      };
+                      const services = requestJobServices(c);
+                      if (services) {
+                        c.get("runtimeJobCredentials")?.register(
+                          credentialKey,
+                          services,
+                          policy.maxQueueMs,
+                        );
+                        credentialKeys.push(credentialKey);
+                      }
                     }
                   },
                 }
@@ -956,6 +971,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // a rolled-back turn operates on state that no longer exists.
       if (committed && result.deferredFollowers?.length) {
         const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
+          resolveImageFlowRuntimeIds: async () =>
+            (
+              await resolveMediaImageFlow(
+                store,
+                c.get("pluginExtensions"),
+                sessionId,
+              )
+            )?.assetRuntimeIds,
+          withSettledLock: (fn) => withSettledExecutionLock(c, sessionId, fn),
+          withSnapshot: (fn) =>
+            c.get("withPluginSnapshot")?.(sessionId, fn) ?? fn(),
           store,
           eventBus,
           sessionLock,
@@ -967,7 +993,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           activeRuntimes,
           pluginRegistry,
           approvalScopes,
-          deps: buildTurnExecutorDeps(c, capabilityPluginIds),
+          deps: buildTurnExecutorDeps(c),
           ...(hookPipeline ? { hookPipeline } : {}),
         });
         const jobRunner = createPluginRpcJobRunner({
@@ -1111,6 +1137,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     } finally {
       releaseTurnControl?.();
       eventBusUnsubscribe?.();
+      try {
+        if (credentialKeys.length > 0) {
+          const queuedIds = new Set(
+            (await listRuntimeJobs(store, { sessionId }))
+              .filter((job) => job.status === "queued")
+              .map((job) => job.jobId),
+          );
+          for (const key of credentialKeys)
+            if (!queuedIds.has(key.jobId))
+              c.get("runtimeJobCredentials")?.discard(key);
+        }
+      } catch (error) {
+        // A transient read failure must not leak the turn lock. Handoffs have a TTL.
+        console.warn("[actions] credential handoff cleanup failed", error);
+      }
       await writeChain;
     }
   });

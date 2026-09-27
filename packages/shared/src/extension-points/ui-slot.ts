@@ -1,0 +1,161 @@
+import { z } from "zod";
+import { defineExtensionPoint } from "./index.js";
+import { mediaRefSchema } from "../types/media.js";
+import { i18nTextSchema } from "../schemas/world.js";
+
+const visualRequestSchema = z.strictObject({
+  variantId: z.string().optional(),
+  outfit: z.string().optional(),
+  expression: z.string().optional(),
+  pose: z.string().optional(),
+});
+const framingSchema = z.strictObject({
+  scale: z.number().min(0.5).max(2).optional(),
+  offsetX: z.number().min(-100).max(100).optional(),
+  offsetY: z.number().min(-100).max(100).optional(),
+});
+export const characterVisualSchema = z.strictObject({
+  characterId: z.string().min(1),
+  displayName: z.string().optional(),
+  avatar: mediaRefSchema.optional(),
+  sprite: mediaRefSchema.optional(),
+  visuals: z
+    .strictObject({
+      defaultVariant: z.string().optional(),
+      variants: z
+        .array(
+          z.strictObject({
+            id: z.string().min(1),
+            outfit: z.string().optional(),
+            expression: z.string().optional(),
+            pose: z.string().optional(),
+            sprite: mediaRefSchema,
+            stage: framingSchema.optional(),
+          }),
+        )
+        .max(64),
+    })
+    .optional(),
+});
+export const characterVisualCollectionSchema = z.strictObject({
+  characters: z.array(characterVisualSchema).max(1024),
+});
+export const stageBackdropSchema = z.strictObject({
+  sceneId: z.string().optional(),
+  name: z.string().optional(),
+  ref: mediaRefSchema.optional(),
+  pending: z.boolean(),
+  variant: z.enum(["day", "night"]).optional(),
+  label: i18nTextSchema.optional(),
+  preload: z.array(mediaRefSchema).optional(),
+});
+export const stageCastSchema = z.strictObject({
+  actors: z
+    .array(
+      z.strictObject({
+        characterId: z.string().min(1),
+        displayName: z.string().min(1),
+        type: z.string().optional(),
+        description: z.string().optional(),
+        active: z.boolean().optional(),
+        exiting: z.boolean().optional(),
+        visual: visualRequestSchema.optional(),
+        position: z
+          .enum(["left", "center-left", "center", "center-right", "right"])
+          .optional(),
+        transition: z
+          .enum(["none", "fade", "slide-left", "slide-right", "dissolve"])
+          .optional(),
+      }),
+    )
+    .max(64),
+  retainWhenEmpty: z.boolean(),
+});
+export const stageDialogueSchema = z.strictObject({
+  turnId: z.string().optional(),
+  paragraphSpeakers: z.array(z.string().nullable()).max(80),
+});
+export const stageChoicesSchema = z.strictObject({
+  turnId: z.string().optional(),
+  scene: i18nTextSchema.optional(),
+  recap: i18nTextSchema.optional(),
+  decision: i18nTextSchema.optional(),
+  choices: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        text: z.string(),
+        label: i18nTextSchema.optional(),
+      }),
+    )
+    .max(64),
+});
+export const uiSlotValueSchemas = {
+  "stage.backdrop@1": stageBackdropSchema,
+  "stage.cast@1": stageCastSchema,
+  "stage.dialogue@1": stageDialogueSchema,
+  "stage.choices@1": stageChoicesSchema,
+  "character.visual@1": characterVisualSchema,
+} as const;
+export const uiSlotNameSchema = z.enum([
+  "stage.backdrop@1",
+  "stage.cast@1",
+  "stage.dialogue@1",
+  "stage.choices@1",
+  "character.visual@1",
+]);
+export type UiSlotName = z.infer<typeof uiSlotNameSchema>;
+export type StageBackdropModel = z.infer<typeof stageBackdropSchema>;
+export type StageCastModel = z.infer<typeof stageCastSchema>;
+export type StageDialogueModel = z.infer<typeof stageDialogueSchema>;
+export type StageChoicesModel = z.infer<typeof stageChoicesSchema>;
+export type CharacterVisualModel = z.infer<typeof characterVisualSchema>;
+const valueSchema = z.union([
+  stageBackdropSchema,
+  stageCastSchema,
+  stageDialogueSchema,
+  stageChoicesSchema,
+  characterVisualSchema,
+  characterVisualCollectionSchema,
+  z.null(),
+]);
+export type UiSlotValue = z.infer<typeof valueSchema>;
+export const uiSlotSnapshotSchema = z.strictObject({
+  slot: uiSlotNameSchema,
+  key: z.string().optional(),
+  value: valueSchema,
+  revision: z.string().min(1),
+});
+export type UiSlotSnapshot = z.infer<typeof uiSlotSnapshotSchema>;
+export const uiSlotInputSchema = z.strictObject({
+  slot: uiSlotNameSchema,
+  key: z.string().optional(),
+  previous: valueSchema,
+  events: z.array(
+    z.strictObject({
+      topic: z.string(),
+      data: z.record(z.string(), z.unknown()),
+      turnId: z.string(),
+      pluginId: z.string().optional(),
+    }),
+  ),
+});
+export type UiSlotProjectionInput = z.infer<typeof uiSlotInputSchema>;
+export const uiSlotV1 = defineExtensionPoint({
+  id: "ui.slot@1",
+  mode: "pipeline",
+  input: uiSlotInputSchema,
+  output: valueSchema,
+  timeoutMs: 500,
+  onError: "skip",
+  matchesProvider: (input, provider) => input.slot === provider.slot,
+  initialOutput: (input) => input.previous,
+  attributeOutput: (value, provider) => {
+    if (value === null) return null;
+    const slot = uiSlotNameSchema.parse(provider.slot);
+    return slot === "character.visual@1"
+      ? characterVisualCollectionSchema.parse(value)
+      : uiSlotValueSchemas[slot].parse(value);
+  },
+  nextInput: (input, output) => ({ ...input, previous: output }),
+});

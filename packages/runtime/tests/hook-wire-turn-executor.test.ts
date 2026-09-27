@@ -12,6 +12,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import { PluginServiceRegistry } from "../src/plugin-services.js";
+import { PluginExtensionHost } from "../src/plugin-extensions.js";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -538,7 +540,7 @@ describe("Turn executor hook wire-in", () => {
       expect(compactor.run.mock.calls[0]?.[1]).toContain("Say something.");
     });
 
-    it("compacts the capability-projected history seen by agent prompts", async () => {
+    it("compacts extension-projected history seen by agent prompts", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
       const store = await createMainLoopStore("sess-hook-wire");
@@ -571,12 +573,28 @@ describe("Turn executor hook wire-in", () => {
       const compactor = {
         run: vi.fn().mockResolvedValue({ compacted: false }),
       };
+      const services = new PluginServiceRegistry({
+        list: async () => ["history-rewriter"],
+        ensure: async () => {},
+      });
+      const extensions = new PluginExtensionHost(services);
+      extensions.register(
+        "history-rewriter",
+        { point: "prompt.history-transform@1", id: "rewrite" },
+        {
+          handler: async (input: { messages: Array<{ content: string }> }) => ({
+            messages: input.messages.map((message) =>
+              message.content === "original rejected branch"
+                ? { ...message, content: "accepted branch" }
+                : message,
+            ),
+          }),
+        },
+      );
       const deps: TurnExecutorDeps = {
         ...(await makeDeps(llm, pipeline, store)),
         compactor,
-        capabilityPluginIds: {
-          promptHistoryRewriterPluginId: "history-rewriter",
-        },
+        extensions,
       };
 
       await executeTurn(makeTurnInput(), [makeManifest()], deps);

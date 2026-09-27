@@ -95,11 +95,7 @@ export function bufferPluginDataDelete(
   });
 }
 
-/**
- * Buffer a character upsert. No `mirrorPluginId` is set: trusted guards drive
- * their own plugin-data mirror through a separate `setPluginData` call (which
- * also buffers), so setting a mirror here would double-write the snapshot.
- */
+/** Buffer a character write for the kernel commit boundary. */
 export function bufferCharacterUpsert(
   buffer: ExecutionWriteBuffer,
   ctx: HandlerHelperContext,

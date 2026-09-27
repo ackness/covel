@@ -1,13 +1,13 @@
+import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import type { Hono } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { errorBody, okBody } from "../../../api-error.js";
 import {
-  approvedActivePlugins,
   buildAvailablePluginList,
-  isRequiredCorePlugin,
-  resolveEnabledSessionPlugins,
-  validateSessionRuntimeProviders,
+  readSessionPluginSelection,
+  resolveSessionPluginPlan,
+  authorizedSessionPluginIds,
 } from "./plugins.js";
 import { buildSessionCommandList } from "./commands.js";
 import {
@@ -29,7 +29,7 @@ export function registerSessionPluginRoutes(
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
     const expectedIncarnation = sessionIncarnationIdentity(guard.session);
-    return c.get("sessionLock").withLock(id, async () => {
+    return withSettledSessionLock(c, id, async () => {
       const lockedGuard = await resolveSessionParam(c);
       if (!lockedGuard.ok) return lockedGuard.response;
       if (
@@ -50,21 +50,23 @@ export function registerSessionPluginRoutes(
           409,
         );
       }
-      const active = approvedActivePlugins(
-        lockedGuard.session.activePlugins,
+      const selection = readSessionPluginSelection(lockedGuard.session);
+      const plan = resolveSessionPluginPlan(
+        selection.requested,
         pluginRegistry,
-        c.get("rpcApprovalGate"),
-        lockedGuard.session,
+        {
+          excluded: selection.excluded,
+          authorized: authorizedSessionPluginIds(
+            pluginRegistry,
+            c.get("rpcApprovalGate"),
+            lockedGuard.session,
+          ),
+        },
       );
+      const active = plan.active;
       return c.json({
-        items: buildAvailablePluginList(active, pluginRegistry).map(
-          (plugin) => ({
-            ...plugin,
-            approvalRequired:
-              !plugin.active &&
-              lockedGuard.session.activePlugins.includes(plugin.id),
-          }),
-        ),
+        items: buildAvailablePluginList(active, pluginRegistry, plan),
+        resolution: plan,
         commands: buildSessionCommandList(active, pluginRegistry),
       });
     });
@@ -124,7 +126,7 @@ export function registerSessionPluginRoutes(
     }
 
     await c.get("activatePluginServerCode")?.(pluginId, id);
-    return c.get("sessionLock").withLock(id, async () => {
+    return withSettledSessionLock(c, id, async () => {
       const lockedGuard = await resolveSessionParam(c);
       if (!lockedGuard.ok) return lockedGuard.response;
       const session = lockedGuard.session;
@@ -161,29 +163,34 @@ export function registerSessionPluginRoutes(
         );
       }
 
-      const active = resolveEnabledSessionPlugins(
-        session.activePlugins,
+      const selection = readSessionPluginSelection(session);
+      const requested = [
         pluginId,
-        pluginRegistry,
-      );
-      try {
-        validateSessionRuntimeProviders(active, pluginRegistry);
-      } catch (error) {
-        return c.json(
-          errorBody(
-            error instanceof Error
-              ? error.message
-              : "Invalid runtime providers",
-          ),
-          400,
-        );
-      }
+        ...selection.requested.filter((id) => id !== pluginId),
+      ];
+      const excluded = selection.excluded.filter((id) => id !== pluginId);
+      const plan = resolveSessionPluginPlan(requested, pluginRegistry, {
+        excluded,
+        authorized: authorizedSessionPluginIds(
+          pluginRegistry,
+          c.get("rpcApprovalGate"),
+          session,
+        ),
+      });
+      const rejected = plan.rejected.find((item) => item.pluginId === pluginId);
+      if (rejected)
+        return c.json(errorBody(rejected.reason, { code: rejected.code }), 409);
+      const active = plan.active;
       // Single mutation point: persist the authoritative activePlugins set
       // first; the registry mirror only reconciles after the store write
       // succeeds (a rejected write leaves memory untouched).
       await pluginRegistry.applyPersistedActivations(id, active, async () => {
         await store.updateSession(id, {
           activePlugins: active,
+          metadata: {
+            ...session.metadata,
+            pluginSelection: { requested, excluded },
+          },
           updatedAt: new Date().toISOString(),
         });
       });
@@ -192,7 +199,8 @@ export function registerSessionPluginRoutes(
           c.get("rpcApprovalGate").revoke(id, previousPluginId);
         }
       }
-      return c.json(okBody({ activePluginIds: active }));
+      c.get("uiSlots")?.invalidateSession(id);
+      return c.json(okBody({ activePluginIds: active, resolution: plan }));
     });
   });
 
@@ -204,17 +212,7 @@ export function registerSessionPluginRoutes(
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
     const expectedIncarnation = sessionIncarnationIdentity(guard.session);
-    const entry = pluginRegistry.get(pluginId);
-    if (entry && isRequiredCorePlugin(entry)) {
-      return c.json(
-        errorBody(`Cannot disable core plugin "${pluginId}"`, {
-          code: "core_plugin_required",
-        }),
-        403,
-      );
-    }
-
-    return c.get("sessionLock").withLock(id, async () => {
+    return withSettledSessionLock(c, id, async () => {
       const lockedGuard = await resolveSessionParam(c);
       if (!lockedGuard.ok) return lockedGuard.response;
       const session = lockedGuard.session;
@@ -240,30 +238,33 @@ export function registerSessionPluginRoutes(
         );
       }
 
-      const active = session.activePlugins.filter((item) => item !== pluginId);
-      try {
-        validateSessionRuntimeProviders(active, pluginRegistry);
-      } catch (error) {
-        return c.json(
-          errorBody(
-            error instanceof Error
-              ? error.message
-              : "Invalid runtime providers",
-          ),
-          400,
-        );
-      }
+      const selection = readSessionPluginSelection(session);
+      const requested = selection.requested.filter((id) => id !== pluginId);
+      const excluded = [...new Set([...selection.excluded, pluginId])];
+      const plan = resolveSessionPluginPlan(requested, pluginRegistry, {
+        excluded,
+        authorized: authorizedSessionPluginIds(
+          pluginRegistry,
+          c.get("rpcApprovalGate"),
+          session,
+        ),
+      });
+      const active = plan.active;
       // Single mutation point: the scope rotation and activePlugins write
       // land durably before the registry mirror drops the plugin.
       await pluginRegistry.applyPersistedActivations(id, active, async () => {
         await store.updateSession(id, {
           activePlugins: active,
-          metadata: rotateSessionApprovalScope(session, pluginId),
+          metadata: {
+            ...rotateSessionApprovalScope(session, pluginId),
+            pluginSelection: { requested, excluded },
+          },
           updatedAt: new Date().toISOString(),
         });
       });
       c.get("rpcApprovalGate").revoke(id, pluginId);
-      return c.json(okBody({ activePluginIds: active }));
+      c.get("uiSlots")?.invalidateSession(id);
+      return c.json(okBody({ activePluginIds: active, resolution: plan }));
     });
   });
 }

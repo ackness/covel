@@ -168,13 +168,8 @@ export function advanceTime(definition, tick, request, turnId) {
   return { tick: safe(tick + delta), delta };
 }
 
-export async function loadTime(store, sessionId, pluginId, locale) {
-  const stored = await store.getPluginData(
-    sessionId,
-    pluginId,
-    "clock",
-    "current",
-  );
+export async function loadTime(store, locale) {
+  const stored = await store.getPluginData("clock", "current");
   if (stored) {
     const state = stored.value;
     if (
@@ -191,8 +186,8 @@ export async function loadTime(store, sessionId, pluginId, locale) {
       locale,
     };
   }
-  const session = await store.getSession(sessionId);
-  const world = session?.worldId ? await store.getWorld(session.worldId) : null;
+  const session = await store.getSession();
+  const world = session?.worldId ? await store.getWorld() : null;
   const declared = world?.metadata?.dimensions?.time ?? world?.dimensions?.time;
   const definition = worldTimeSchema.parse(declared ?? DEFAULT_TIME);
   const tick = initialTick(definition);

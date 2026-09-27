@@ -10,7 +10,7 @@ import type { CharacterStore } from "../src/builtin/character-tools.js";
 const stubStore: CharacterStore = {
   upsertCharacter: async () => {},
   listCharacters: async () => [],
-  setPluginData: async () => {},
+  getCharacterSchema: async () => null,
 };
 
 const sampleSchema: CharacterAttributeSchema = {
@@ -128,7 +128,10 @@ describe("buildFieldsZodFromSchema", () => {
 
 describe("buildSessionCharacterWriteTools", () => {
   it("advertises session bounds, enums and nested constraints without world prose", () => {
-    const tools = buildSessionCharacterWriteTools(stubStore, {}, sampleSchema);
+    const tools = buildSessionCharacterWriteTools(stubStore, {
+      ...sampleSchema,
+      types: ["npc", "companion"],
+    });
     for (const tool of tools) {
       expect(tool.description).toContain(
         '"hp":{"type":"number","min":0,"max":100}',
@@ -138,33 +141,29 @@ describe("buildSessionCharacterWriteTools", () => {
       expect(tool.description).not.toContain("当前生命值");
       expect(tool.description).not.toContain("defaultValue");
     }
-    const otherTools = buildSessionCharacterWriteTools(
-      stubStore,
-      {},
-      {
-        version: 1,
-        attributes: [
-          {
-            id: "trust",
-            name: "Trust",
-            type: "number",
-            category: "social",
-            min: -5,
-            max: 5,
-          },
-        ],
-      },
-    );
+    const otherTools = buildSessionCharacterWriteTools(stubStore, {
+      version: 1,
+      types: ["npc", "companion"],
+      attributes: [
+        {
+          id: "trust",
+          name: "Trust",
+          type: "number",
+          category: "social",
+          min: -5,
+          max: 5,
+        },
+      ],
+    });
     expect(otherTools[2].description).toContain('"min":-5');
     expect(otherTools[2].description).not.toContain('"hp"');
   });
 
   it("keeps create-character fields compact instead of duplicating the session schema", () => {
-    const [createTool] = buildSessionCharacterWriteTools(
-      stubStore,
-      {},
-      sampleSchema,
-    );
+    const [createTool] = buildSessionCharacterWriteTools(stubStore, {
+      ...sampleSchema,
+      types: ["npc", "companion"],
+    });
     expect(createTool.name).toBe("create-character");
     const schema = createTool.jsonSchema as Record<string, unknown>;
     const props = schema.properties as Record<string, Record<string, unknown>>;
@@ -189,11 +188,10 @@ describe("buildSessionCharacterWriteTools", () => {
   });
 
   it("keeps update-character fields compact as well", () => {
-    const [, updateTool] = buildSessionCharacterWriteTools(
-      stubStore,
-      {},
-      sampleSchema,
-    );
+    const [, updateTool] = buildSessionCharacterWriteTools(stubStore, {
+      ...sampleSchema,
+      types: ["npc", "companion"],
+    });
     expect(updateTool.name).toBe("update-character");
     const schema = updateTool.jsonSchema as Record<string, unknown>;
     const props = schema.properties as Record<string, Record<string, unknown>>;

@@ -118,7 +118,7 @@ describe("createTrustedHandlerStore with a write buffer", () => {
         });
       }
       const trusted = createTrustedHandlerStore(store, CTX, buffer);
-      const before = (await trusted.listCharacters(CTX.sessionId))[0]!;
+      const before = (await trusted.listCharacters())[0]!;
       expect(await store.listCharacters(CTX.sessionId)).toEqual([initial]);
       const result = await processRuntimeResult(
         {
@@ -203,12 +203,7 @@ describe("createTrustedHandlerStore with a write buffer", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await trusted.deletePluginData(
-      "other-session",
-      "other-plugin",
-      "schema",
-      "obsolete",
-    );
+    await trusted.deletePluginData("schema", "obsolete");
 
     // Nothing landed in the store.
     expect(
@@ -259,22 +254,13 @@ describe("createTrustedHandlerStore with a write buffer", () => {
       updatedAt: now,
     });
 
-    const row = await trusted.getPluginData(
-      CTX.sessionId,
-      CTX.pluginId,
-      "schema",
-      "k",
-    );
+    const row = await trusted.getPluginData("schema", "k");
     expect(row?.value).toEqual({ hi: true });
 
-    const list = await trusted.listPluginData(
-      CTX.sessionId,
-      CTX.pluginId,
-      "schema",
-    );
+    const list = await trusted.listPluginData("schema");
     expect(list.map((r) => r.key)).toContain("k");
 
-    const chars = await trusted.listCharacters(CTX.sessionId);
+    const chars = await trusted.listCharacters();
     expect(chars.map((c) => c.id)).toContain("char-1");
   });
 
@@ -304,23 +290,14 @@ describe("createTrustedHandlerStore with a write buffer", () => {
     }));
 
     await trusted.setPluginDataBatch(rows);
-    expect(
-      await trusted.listPluginData(CTX.sessionId, CTX.pluginId),
-    ).toMatchObject(
+    expect(await trusted.listPluginData()).toMatchObject(
       rows.map(({ namespace, key, value }) => ({ namespace, key, value })),
     );
 
     await store.setPluginDataBatch(rows);
     buffer.length = 0;
-    await trusted.deletePluginData(
-      CTX.sessionId,
-      CTX.pluginId,
-      "a\u0000b",
-      "c",
-    );
-    expect(await trusted.listPluginData(CTX.sessionId, CTX.pluginId)).toEqual([
-      rows[0],
-    ]);
+    await trusted.deletePluginData("a\u0000b", "c");
+    expect(await trusted.listPluginData()).toEqual([rows[0]]);
     expect(await store.listPluginData(CTX.sessionId, CTX.pluginId)).toEqual(
       rows,
     );

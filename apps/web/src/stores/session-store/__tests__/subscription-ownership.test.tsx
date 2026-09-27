@@ -260,6 +260,7 @@ it("coalesces committed state notices during a snapshot read without replaying t
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(options.stateRef.current.gameState).toEqual({
+    characterSchema: null,
     ...current.gameState,
     characters: current.characters,
   });
@@ -292,6 +293,7 @@ it("refreshes once when a state commit follows snapshot publication but other re
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(options.stateRef.current.gameState).toEqual({
+    characterSchema: null,
     stats: { hp: 9, mp: 3 },
     weather: { sky: "clear" },
     characters: [],
@@ -353,6 +355,7 @@ it("does not duplicate action-stream patch history when the subscription observe
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(options.stateRef.current.gameState).toEqual({
+    characterSchema: null,
     ...current.gameState,
     characters: [],
   });

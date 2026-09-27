@@ -1,3 +1,4 @@
+import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
@@ -9,17 +10,14 @@ import type {
   InputSlot,
 } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
-import { DEFAULT_LOCALE } from "@covel/shared";
+import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   buildContext,
   buildContextAsync,
   needsAsyncBuild,
 } from "@covel/context";
-import type {
-  CoreMemoryBlockView,
-  SessionContextSnapshot,
-} from "@covel/context";
+import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
@@ -44,6 +42,7 @@ export interface AgentCompactionRefresh {
 }
 
 export interface ExecuteAgentRuntimeOptions {
+  readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -76,9 +75,7 @@ export interface ExecuteAgentRuntimeOptions {
   readonly prepareCompactedContext?: (
     systemPromptPreview: string,
   ) => Promise<AgentCompactionRefresh>;
-  readonly workingMemory:
-    readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
-  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
+
   readonly sessionContext: SessionContextSnapshot | undefined;
   /** Canonical activation — rendered into the reserved prompt segment. */
   readonly activation?: RuntimeActivation;
@@ -93,6 +90,7 @@ export interface ExecuteAgentRuntimeOptions {
 }
 
 export async function executeAgentRuntime({
+  upstreamProposals = [],
   manifest,
   input,
   loaded,
@@ -105,8 +103,6 @@ export async function executeAgentRuntime({
   hookPipeline,
   sessionSummaries,
   prepareCompactedContext,
-  workingMemory,
-  coreMemoryBlocks,
   sessionContext,
   activation,
   inputs,
@@ -162,16 +158,18 @@ export async function executeAgentRuntime({
         )
       : undefined;
 
-  const assembleContext = () => {
+  const assembleContext = async () => {
+    const promptSegments =
+      (
+        await deps.extensionExecution?.run(promptSegmentV1, {
+          turnId: input.turnId,
+          playerMessage: input.playerMessage,
+        })
+      )?.flat() ?? [];
     const buildParams = {
+      promptSegments,
       promptTemplate: loaded.promptTemplate,
       manifest,
-      // Segments 9/10 (Author's Note + Post-History) read authorsNote/postHistory
-      // from activeManifests. Use the locale-resolved `loaded.manifest` (parsed
-      // from PLUGIN.<locale>.md) so an en session gets the localized notes, while
-      // `manifest` (the canonical registry manifest) still drives inject/execution
-      // semantics — avoids any PLUGIN.en.md frontmatter drift leaking into scheduling.
-      activeManifests: [loaded.manifest],
       turnInput: input,
       completedResults,
       messageHistory: filterRuntimeHistory(
@@ -180,8 +178,6 @@ export async function executeAgentRuntime({
       ),
       sessionMeta,
       summaries: effectiveSessionSummaries,
-      workingMemory: workingMemory ?? [],
-      coreMemoryBlocks: coreMemoryBlocks ?? [],
       // Thread the unified snapshot into context building so templates can
       // read structured session data via `world`, `session`, and `player`.
       ...(sessionContext ? { sessionContext } : {}),
@@ -252,7 +248,12 @@ export async function executeAgentRuntime({
     ...shapedContext.messages,
   ];
 
+  const worldBase = deps.store
+    ? await createWorldModelView(deps.store, input.sessionId, upstreamProposals)
+    : undefined;
   const toolLoop = await runAgentToolLoop({
+    worldBase,
+    upstreamProposals,
     manifest,
     input,
     ...(sessionMeta?.turnNumber !== undefined

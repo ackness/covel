@@ -20,7 +20,6 @@ rg -n "ponytail:" apps packages plugins
 | `packages/runtime/src/retry/llm-slots.ts`                        | LLM providers share one process-wide concurrency cap                                            | Independent providers need separate capacity                                           |
 | `packages/events/src/event-bus.ts`                               | Receive-ordering state has a FIFO cap; evicted streams must restart at sequence 1               | Multi-pod traffic justifies LRU/TTL state                                              |
 | `packages/store/src/media-store/filter.ts`                       | Metadata filtering scans `listAssets()`                                                         | Per-session media volume justifies SQL predicate pushdown                              |
-| `packages/tools/src/builtin/memory-tools.ts`                     | `working_memory.set` does not mirror into plugin data                                           | A caller needs a transaction-safe panel mirror                                         |
 
 ## Server
 

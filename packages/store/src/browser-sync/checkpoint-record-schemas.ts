@@ -1,4 +1,8 @@
-import { isJsonValue, type JsonValue } from "@covel/shared";
+import {
+  isJsonValue,
+  lorebookOwnerSchema,
+  type JsonValue,
+} from "@covel/shared";
 import { z } from "zod";
 
 export const nonEmptyString = z
@@ -61,15 +65,8 @@ export const pluginData = createdRow.extend({
   value: jsonValue,
   updatedAt: timestamp,
 });
-export const workingMemory = sessionRow.extend({
-  key: z.string(),
-  scope: z.enum(["player", "story", "shared"]),
-  value: jsonValue,
-  schemaRef: z.string().optional(),
-  updatedAt: timestamp,
-});
 export const lorebookEntries = createdRow.extend({
-  pluginId: z.string(),
+  owner: lorebookOwnerSchema,
   keys: z.array(z.string()),
   content: z.string(),
   strategy: z.enum(["constant", "selective"]),
@@ -190,7 +187,6 @@ export const checkpointRecordArrays = {
   ),
   characters: z.array(characters),
   pluginData: z.array(pluginData),
-  workingMemory: z.array(workingMemory),
   lorebookEntries: z.array(lorebookEntries),
   sessionSummaries: z.array(sessionSummaries),
   playerInputs: z.array(

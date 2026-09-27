@@ -50,6 +50,7 @@ describe("plugin-owned evaluation integration", () => {
           .href
       );
       entry.default({
+        provideExtension() {},
         toolkit: { tool, z, shortId, shortIdBatch, withPendingProposals },
         registerTool: (value: ToolModule) => tools.set(value.name, value),
         registerService: (
@@ -64,7 +65,7 @@ describe("plugin-owned evaluation integration", () => {
       stage: "narrative",
       runtimeType: "function",
       outputKind: "story",
-      capabilities: ["narrative-engine"],
+      outputContract: "narrative-engine@1",
       trigger: { type: "auto" },
     };
     loaded.set(narrator.name, {

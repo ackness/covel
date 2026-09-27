@@ -13,7 +13,6 @@ import {
   buildSessionHookScope,
   loadSessionHookScope,
 } from "../../src/routes/api/session/hook-scope.js";
-import { createBootstrapMemorySystem } from "../../src/routes/api/bootstrap/memory.js";
 
 it("resolves hook settings for an active package with no runtimes", () => {
   const pluginId = "entry-only";
@@ -164,55 +163,6 @@ describe.each(["memory", "sqlite"])(
       );
       await expect(scope(store)).rejects.toThrow("Synthetic read failure");
       expect(await tone(store)).toBe("before");
-    });
-
-    it("refreshes memory schemas per operation and keeps bootstrap stores isolated", async () => {
-      vi.spyOn(console, "log").mockImplementation(() => {});
-      const withBlock = (label: string) =>
-        makeWorld({
-          id: worldId,
-          metadata: {
-            memoryBlocks: [
-              {
-                label,
-                displayName: label,
-                icon: "Info",
-                extractionHint: "Synthetic hint",
-              },
-            ],
-          },
-        });
-      const managers = stores.map(
-        (store) =>
-          createBootstrapMemorySystem({
-            store,
-            manifestCache: new Map(),
-            llmAdapter: {
-              generate: async () => {
-                throw new Error("Unexpected LLM call");
-              },
-            },
-            preferredMemorySlot: "memory",
-            resolveModel: () => "synthetic",
-          })!.memorySystem.manager,
-      );
-      for (const store of stores) {
-        await store.createSession(makeSession({ id: "session", worldId }));
-      }
-      await stores[0]!.upsertWorld(withBlock("clues"));
-      await stores[1]!.upsertWorld(withBlock("suspects"));
-      const labels = async (index: number) =>
-        (await managers[index]!.loadBlocks("session")).map(
-          (block) => block.label,
-        );
-      expect(await labels(0)).toContain("clues");
-      expect(await labels(1)).toContain("suspects");
-      expect(await labels(1)).not.toContain("clues");
-      await stores[0]!.upsertWorld(withBlock("evidence"));
-      expect(await labels(0)).toContain("evidence");
-      expect(await labels(0)).not.toContain("clues");
-      await stores[0]!.deleteWorld(worldId);
-      expect(await labels(0)).not.toContain("evidence");
     });
   },
 );

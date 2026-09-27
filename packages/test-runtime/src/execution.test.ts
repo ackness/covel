@@ -98,7 +98,6 @@ function manifest(patch: Partial<RuntimeManifest> = {}): RuntimeManifest {
     handler: "handler.js",
     trigger: { type: "event", topic: "test.ready" },
     outputKind: "plugin",
-    capabilities: [],
     ...patch,
   };
 }

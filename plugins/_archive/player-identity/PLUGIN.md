@@ -1,24 +1,29 @@
 ---
-name: player-identity
+id: player-identity
+kind: plugin
 displayName:
   zh: 玩家身份
   en: Player Identity
 description:
   zh: 让你在游玩中调整主角的口吻、目标和行事边界。
-  en: Lets you adjust your hero's voice, goals, and boundaries during play.
-pluginType: plugin
-runtimeType: function
-outputKind: system
-handler: ./handler.js
-trigger:
-  type: manual
-capabilities:
-  - player-identity
-  - persona-provider
+  en: "Lets you adjust your hero's voice, goals, and boundaries during play."
 tags:
-  - role:character
-  - data:characters
-  - cost:function
+  - "data:characters"
+  - "cost:function"
+provides:
+  - player-identity@1
+  - persona-provider@1
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+  io:
+    output:
+      contract: player-identity@1
+    visibility: system
+  function:
+    handler: ./handler.js
 ---
 
 # Player Identity

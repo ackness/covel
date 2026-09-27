@@ -178,12 +178,12 @@ describe("tabletop package installed as a third-party ZIP", () => {
     // allocation layers on top of its player instead of replacing it.
     await writeFile(
       path.join(root, "builtin/core-fixture/PLUGIN.md"),
-      "---\nname: core-fixture\ndescription: Core fixture\npluginType: core-plugin\n---\n",
+      "---\nid: core-fixture\nkind: core\ndescription: Core fixture\nentry: ./entry.mjs\nprovides: [character-creation@1, world-data-provider@1]\ncontributes:\n  tools: [set-schema]\n---\n",
     );
     for (const [name, declaration, handler] of [
       [
         "create",
-        "stage: setup\ntrigger: { type: auto }\ncapabilities: [character-creation]\nfallbackFor: character-creation",
+        "schedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: character-creation@1}",
         `export default async function (ctx) {
   const characters = await ctx.store.listCharacters(ctx.sessionId);
   const existing = Array.isArray(characters)
@@ -210,31 +210,39 @@ describe("tabletop package installed as a third-party ZIP", () => {
       ],
       [
         "track",
-        "trigger: { type: manual }",
+        "schedule:\n  trigger: { type: manual }",
         'export default async function () { return { outcome: "success" }; }\n',
       ],
     ] as const) {
       const dir = path.join(root, "builtin/core-fixture/runtimes", name!);
       await mkdir(dir, { recursive: true });
       await writeFile(
-        path.join(dir, "PLUGIN.md"),
-        `---\nname: core-fixture/${name}\ndescription: Test default\npluginType: core-plugin\nruntimeType: function\nhandler: ./handler.js\n${declaration}\n---\n`,
+        path.join(dir, "RUNTIME.md"),
+        `---\ntype: function\ndescription: Test default\nfunction:\n  handler: ./handler.js\n${declaration}\n---\n`,
       );
       await writeFile(path.join(dir, "handler.js"), handler);
     }
     const world = parseYaml(
       await readFile(path.join(project, "worlds/mistport/world.yaml"), "utf8"),
     );
-    const schema = { version: 1, attributes: world.characterAttributes };
+    const schema = { version: 1, attributes: world.characterSchema.attributes };
     const providerDir = path.join(root, "builtin/core-fixture/runtimes/schema");
     await mkdir(providerDir, { recursive: true });
     await writeFile(
-      path.join(providerDir, "PLUGIN.md"),
-      "---\nname: core-fixture/schema\ndescription: Schema provider\npluginType: core-plugin\nruntimeType: function\nhandler: ./handler.js\nstage: setup\ntrigger: { type: auto }\ncapabilities: [world-data-provider]\n---\n",
+      path.join(providerDir, "RUNTIME.md"),
+      "---\ntype: function\ndescription: Schema provider\nfunction:\n  handler: ./handler.js\n  tools:\n    plugin: [set-schema]\nschedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: world-data-provider@1}\n---\n",
     );
     await writeFile(
       path.join(providerDir, "handler.js"),
-      `export default async function () { const worldSchema = ${JSON.stringify(schema)}; return { outcome: "success", completion: "done", value: { worldSchema }, effects: { pluginData: [{ namespace: "schema", key: "character-attributes", value: worldSchema }] } }; }`,
+      `export default async function (ctx) { await ctx.tools.call("set-schema", {}); return {outcome: "success", completion: "done"}; }`,
+    );
+    await writeFile(
+      path.join(root, "builtin/core-fixture/entry.mjs"),
+      `
+      export default function(api) {
+        api.registerTool(api.toolkit.tool({name: "set-schema", description: "Set fixture schema", parameters: api.toolkit.z.object({}), execute: (_args, ctx) => api.toolkit.withPendingProposals({}, [{id: crypto.randomUUID(), type: "character.schema.set", sessionId: ctx.sessionId, turnId: ctx.turnId, source: {pluginId: ctx.pluginId, runtimeId: ctx.runtimeId}, timestamp: new Date().toISOString(), payload: ${JSON.stringify({ types: ["npc", "companion"], attributes: schema.attributes })}}])}));
+      }
+    `,
     );
     await cp(
       path.join(project, "plugins/narrator"),
@@ -301,8 +309,8 @@ sources:
   tabletop:
     kind: json
     path: rules.json
-    schema: plugin://${pluginId}/rules
-    to: plugin:${pluginId}/rules
+    schema: contract:${pluginId}.rules.initial@1
+    to: contract:${pluginId}.rules.initial@1
     key: id
 `,
     );

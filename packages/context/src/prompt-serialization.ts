@@ -1,8 +1,9 @@
 import { PROMPT_CACHE_BREAKPOINT_MARKER } from "@covel/shared";
 
 export interface SerializablePromptSegments {
+  readonly stableExtensions?: string;
+  readonly turnExtensions?: string;
   readonly frameworkPreamble: string;
-  readonly workingMemory: string;
   readonly pluginInstructions: string;
   readonly worldInfoBeforePlugin: string;
   readonly upstreamInjects: string;
@@ -43,6 +44,8 @@ export function serializeSystemPrompt(
   if (segments.pluginInstructions) {
     parts.push(segments.pluginInstructions + markerForCacheable);
   }
+  if (segments.stableExtensions)
+    parts.push(segments.stableExtensions + markerForCacheable);
   if (segments.worldInfoBeforePlugin) {
     parts.push(segments.worldInfoBeforePlugin);
   }
@@ -52,7 +55,7 @@ export function serializeSystemPrompt(
   }
   // Last, and deliberately outside every cacheable region: it differs each
   // turn, so anything after a breakpoint placed here could never be reused.
-  if (segments.workingMemory) parts.push(segments.workingMemory);
+  if (segments.turnExtensions) parts.push(segments.turnExtensions);
 
   return parts.join("\n\n");
 }

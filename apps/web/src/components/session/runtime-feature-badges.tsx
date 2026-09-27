@@ -14,7 +14,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { FrameworkCapability, FrameworkRuntimeCapability } from "@covel/shared";
 import { Badge } from "@/components/ui/badge.js";
 
 export interface RuntimeFeatureMetadata {
@@ -48,20 +47,6 @@ export interface RuntimeFeature {
   readonly icon: LucideIcon;
   readonly tone: "neutral" | "blue" | "amber" | "violet" | "emerald";
 }
-
-const MEDIA_CAPABILITIES = new Set<string>([
-  FrameworkCapability.ImageGeneration,
-  FrameworkRuntimeCapability.ImagePrompt,
-  FrameworkRuntimeCapability.ImageGenerator,
-  "tts",
-  "narrative-audio",
-]);
-
-const DATA_CAPABILITIES = new Set<string>([
-  FrameworkCapability.WorldDataProvider,
-  FrameworkCapability.MemoryPanel,
-  "world-ir-provider",
-]);
 
 function triggerFeature(
   triggerType: string | undefined,
@@ -113,17 +98,7 @@ function feature(
 function outputFeature(
   runtime: RuntimeFeatureMetadata,
 ): RuntimeFeature | undefined {
-  const capabilities = new Set(runtime.capabilities ?? []);
-  if ([...capabilities].some((item) => MEDIA_CAPABILITIES.has(item))) {
-    return feature("media", "Image", "violet");
-  }
-  if ([...capabilities].some((item) => DATA_CAPABILITIES.has(item))) {
-    return feature("data", "Database", "emerald");
-  }
-  if (
-    runtime.outputKind === "story" ||
-    capabilities.has(FrameworkCapability.Narrative)
-  ) {
+  if (runtime.outputKind === "story") {
     return feature("narrative", "BookOpen", "blue");
   }
   if (runtime.outputKind === "system") {

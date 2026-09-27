@@ -1,3 +1,4 @@
+import { createWorldModelView } from "./world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import type {
   RuntimeManifest,
@@ -9,7 +10,6 @@ import type {
   ExecutionContext,
   InputSlot,
 } from "@covel/shared";
-import { validateWorldIRV1, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type { SuspensionRecord } from "@covel/store";
@@ -59,6 +59,7 @@ import {
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
 
 export interface ExecuteFunctionRuntimeOptions {
+  readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -109,6 +110,7 @@ export interface ExecuteFunctionRuntimeOptions {
 }
 
 export async function executeFunctionRuntime({
+  upstreamProposals = [],
   manifest,
   input,
   loaded,
@@ -273,9 +275,18 @@ export async function executeFunctionRuntime({
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
         )
       : undefined;
+  const world = deps.store
+    ? await createWorldModelView(
+        deps.store,
+        input.sessionId,
+        upstreamProposals,
+        writeBuffer,
+        () => handlerAbort.signal.throwIfAborted(),
+      )
+    : undefined;
   const handlerStore = deps.store
     ? isTrustedSource
-      ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer)
+      ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer, world)
       : createFunctionStoreView(deps.store, helperCtx, writeBuffer)
     : undefined;
 
@@ -305,6 +316,8 @@ export async function executeFunctionRuntime({
     context: helperCtx,
     deps: { ...deps, hookPipeline },
     buffer: writeBuffer,
+    world,
+    upstreamProposals,
     inputs,
     signal: handlerAbort.signal,
     assertLive: () => {
@@ -408,8 +421,13 @@ export async function executeFunctionRuntime({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
+      session: {
+        lastPlayerInput:
+          input.detachedStage?.turnDigest?.playerMessage ?? input.playerMessage,
+      },
       locale: input.locale,
       store: revocable.store,
+      world,
       tools: runtimeTools.tools,
       ...(services ? { services } : {}),
       ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
@@ -581,21 +599,8 @@ export async function executeFunctionRuntime({
       handlerOutcome.value,
       loaded.outputSchema,
     );
-    const semanticValidation =
-      validation.valid && loaded.outputSchema.$id === WORLD_IR_V1_SCHEMA_URI
-        ? validateWorldIRV1(handlerOutcome.value)
-        : undefined;
-    if (
-      !validation.valid ||
-      (semanticValidation && !semanticValidation.valid)
-    ) {
-      const errors = !validation.valid
-        ? (validation.errors ?? ["unknown schema validation error"])
-        : semanticValidation && !semanticValidation.valid
-          ? semanticValidation.errors.map(
-              (error) => `${error.path}: ${error.message}`,
-            )
-          : ["unknown semantic validation error"];
+    if (!validation.valid) {
+      const errors = validation.errors ?? ["unknown schema validation error"];
       const detail = errors.slice(0, 5).join("; ");
       envelopeSchemaError = `output-schema-invalid: ${detail}`;
     }

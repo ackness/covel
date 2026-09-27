@@ -69,7 +69,7 @@ I18nText 字段（`label` / `content` / `placeholder` / `title` / `message`）�
 | `action` | `params` | 行为 |
 |---|---|---|
 | `invokeRuntime` | `{ runtimeId: string, payload?: object }` | POST `/api/sessions/:id/plugin-rpc` `{ pluginId, runtimeId, payload }` 触发本插件指定 runtime。**最常用**——任何"按钮触发后台任务"都用这个 |
-| `invokePluginAction` | `{ action: string, payload?: object }` | 触发本插件 PLUGIN.md `rpc:` 里声明的 action handler |
+| `invokePluginAction` | `{ action: string, payload?: object }` | 触发本插件 PLUGIN.md `contributes.actions` 里声明的 action handler |
 | `draftMessage` | `{ text: string, selectionGroup?: string }` | 把 text 暂存为 composer 草稿（玩家可以再编辑后发送） |
 | `selectChoice` | 选项相关参数 | 在多选场景里选中一项 |
 | `submitForm` | （从所属 Form 上下文自动取） | 提交所属 `Form` 块 |
@@ -102,8 +102,8 @@ I18nText 字段（`label` / `content` / `placeholder` / `title` / `message`）�
 | `Image` | 图片，从 MediaRef 解析 | `ref`: MediaRef, `alt`, `aspectRatio` (default `1/1`), `rounded`: `none`/`sm`/`md`/`lg`, `fit`: `cover`/`contain` |
 | `Media` | **通用多媒体**——按 mime 自动渲染图/音/视频/下载链接 | `ref`: MediaRef, `as`: `auto`/`image`/`audio`/`video`, `alt`, `aspectRatio`, `rounded`, `fit` |
 | `AudioPlayer` | **音频专用**——theme 适配自绘播放器：play/pause、可拖动进度条、时间显示、速度选择 (0.75–2×)、下载按钮。优先用它而不是 `Media as="audio"`，因为后者是浏览器原生 chrome 不读 theme | `ref`: MediaRef, `alt`: string (也用作 download filename 的 stem), `downloadName`: string, `className` |
-| `ImageGallery` | 框架自带画廊（专门给图像生成插件用） | `pluginId`: string |
-| `ImageJobs` | 框架自带 jobs 视图（async 任务进度） | `pluginId`: string |
+| `MediaGallery` | 通用媒体行展示 | `items`, `idField`, `refField`, optional title/status/error/duration fields, `fields`, `rerunAction` |
+| `JobList` | 通用任务行展示 | `items`, field selectors for ID/status/message/error/duration, `fields`, optional `rerunAction`/`relatedMedia` |
 
 ### Data
 
@@ -332,3 +332,12 @@ I18nText 字段（`label` / `content` / `placeholder` / `title` / `message`）�
 - 用 `JsonView` 兜底：渲染 dataSource 取到的数据但 binding 没绑对时 `{ "component": "JsonView", "props": { "value": { "$state": "/entries" } } }` 一眼能看到状态
 - I18nText 不渲染中文 → 检查是不是写成裸字符串了，框架要求中文必须包对象
 - repeat 不出条目 → 检查 `dataSource.namespace` 拼写、检查 plugin-data 表里实际 namespace 名
+
+
+## Generic data components
+
+Root `contributes.ui` declares panel specs. A panel's `dataSource.namespace` reads only its owning plugin; `items: {"$state":"/entries"}` passes rows shaped `{key,value}` to generic components. Select fields such as `idField: "key"`, `refField: "value.ref"`, and `statusField: "value.status"`. `fields` is an array of `{path,label?}`. No generic component discovers or fetches a private plugin namespace.
+
+A `rerunAction` explicitly supplies `{pluginId,runtimeId,payload,label?}`. Payload values can select row data, e.g. `{prompt:{from:"item.value.prompt"}}`. `JobList.relatedMedia` takes a supplied media collection with `itemField`, `matchField`, and ref/id/title selectors. It never independently reads gallery data. `CandidateList` accepts candidates and explicit accept/regenerate actions; `EntryList` accepts items and title/description/date selectors.
+
+Validate the props against current `packages/shared/src/schemas/catalog.ts`. Use exact owning plugin IDs in actions and bindings; cross-plugin data belongs in a declared kernel projection or public contract. UI slot projections declare `ui.slot@1` providers and read frozen snapshots. Preview records are scoped to their turn and clear at terminal execution events.

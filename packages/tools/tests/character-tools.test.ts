@@ -16,10 +16,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Proposal } from "@covel/shared";
 import { getPendingProposals } from "../src/result.js";
-import {
-  createCharacterTools,
-  mirrorCharacterToPluginData,
-} from "../src/builtin/character-tools.js";
+import { createCharacterTools } from "../src/builtin/character-tools.js";
 import type { ToolModule, ToolExecutionContext } from "../src/types.js";
 
 interface CharacterLike {
@@ -53,6 +50,7 @@ function createMockStore() {
   return {
     characters,
     pluginData,
+    getCharacterSchema: async () => null,
     upsertCharacter(record: CharacterLike) {
       const idx = characters.findIndex((c) => c.id === record.id);
       if (idx >= 0) characters[idx] = record;
@@ -81,7 +79,7 @@ type MockStore = ReturnType<typeof createMockStore>;
 
 /**
  * Apply buffered `character.upsert` proposals to the mock store exactly like
- * the real commit handler (character write + mirror to each mirrorPluginId).
+ * the real commit handler.
  */
 function commitCharacterProposals(
   store: MockStore,
@@ -120,31 +118,6 @@ function commitCharacterProposals(
       createdAt: live?.createdAt ?? pl.createdAt ?? ts,
       updatedAt: ts,
     });
-    const mirrors = [
-      ...(pl.mirrorPluginId ? [pl.mirrorPluginId] : []),
-      ...(pl.mirrorPluginIds ?? []),
-    ].filter((id, i, all) => all.indexOf(id) === i);
-    for (const mid of mirrors) {
-      store.setPluginData({
-        id: crypto.randomUUID(),
-        sessionId: p.sessionId,
-        pluginId: mid,
-        namespace: "characters",
-        key: pl.id,
-        value: {
-          id: pl.id,
-          name: live?.name ?? pl.name,
-          type: live?.type ?? pl.type ?? "npc",
-          description: pl.description ?? live?.description,
-          fields: live ? { ...liveFields, ...patch } : pl.fields,
-          version: live ? live.version + 1 : (pl.version ?? 1),
-          createdAt: live?.createdAt ?? pl.createdAt ?? ts,
-          updatedAt: ts,
-        },
-        createdAt: ts,
-        updatedAt: ts,
-      });
-    }
   }
 }
 
@@ -210,172 +183,64 @@ describe("builtin character tools", () => {
     ]);
   });
 
-  it("reads only the current session's resolved character schema without writes", async () => {
-    const schema = {
-      version: 1,
-      attributes: [{ id: "combat", name: "Combat", type: "number" }],
+  it("reads the current session schema and overlays pending schema changes", async () => {
+    const pendingSchema = {
+      types: ["npc", "companion"],
+      attributes: [
+        {
+          id: "power",
+          name: "Power",
+          type: "number" as const,
+          category: "stats" as const,
+          max: 5,
+          defaultValue: 3,
+        },
+      ],
     };
-    const getPluginData = vi.fn(async (sid: string, pid: string) =>
-      sid === "sess-1" && pid === "custom-provider"
-        ? { value: schema, updatedAt: "2026-01-01T00:00:00Z" }
-        : null,
-    );
-    const scopedTools = createCharacterTools(
-      Object.assign(store, { getPluginData }),
-      {
-        findWorldDataPluginId: () => "custom-provider",
-      },
-    );
-    const caller = new Loop(scopedTools, store, "community-creator");
-    expect(await caller.call("get-character-schema", {})).toMatchObject({
-      schema,
+    loop.pending.push({
+      id: "schema",
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      source: { pluginId: "world-init", runtimeId: "schema" },
+      timestamp: "2026-08-25T00:00:00.000Z",
+      type: "character.schema.set",
+      payload: pendingSchema,
     });
-    expect(getPluginData).toHaveBeenCalledWith(
-      "sess-1",
-      "custom-provider",
-      "schema",
-      "character-attributes",
-    );
-    expect(caller.pending).toEqual([]);
-    expect(
-      await new Loop(
-        scopedTools,
-        store,
-        "community-creator",
-        "other-session",
-      ).call("get-character-schema", {}),
-    ).toMatchObject({ schema: null });
     expect(await loop.call("get-character-schema", {})).toMatchObject({
-      schema: null,
+      schema: { ...pendingSchema, version: 1 },
     });
+    const created = await loop.call("create-character", {
+      name: "Alex",
+      type: "player",
+    });
+    expect(loop.pending.at(-1)).toMatchObject({
+      type: "character.upsert",
+      payload: { fields: { power: 3 } },
+    });
+    await expect(
+      loop.call("update-character", {
+        id: created.characterId,
+        fields: { power: 6 },
+      }),
+    ).rejects.toThrow(/power/);
+    expect(store.characters).toEqual([]);
   });
 
-  it.each(["set", "batch", "delete"] as const)(
-    "uses the provider's pending schema %s for reads and character writes",
-    async (operation) => {
-      const storedSchema = {
-        version: 1,
-        attributes: [
-          { id: "power", name: "Power", type: "number", defaultValue: 1 },
-        ],
-      };
-      const pendingSchema = {
-        version: 1,
-        attributes: [
-          {
-            id: "power",
-            name: "Power",
-            type: "number",
-            max: 5,
-            defaultValue: 3,
-          },
-        ],
-      };
-      const getPluginData = vi.fn(async () => ({
-        value: storedSchema,
-        updatedAt: "stored-time",
-      }));
-      const caller = new Loop(
-        createCharacterTools(Object.assign(store, { getPluginData }), {
-          findWorldDataPluginId: () => "custom-provider",
-        }),
-        store,
-      );
-      const base = {
-        id: "pending-schema",
-        sessionId: "sess-1",
-        turnId: "turn-1",
-        source: {
-          pluginId: "custom-provider",
-          runtimeId: "custom-provider/runtime",
-        },
-        timestamp: "2026-08-25T00:00:00.000Z",
-      };
-      const payload = {
-        namespace: "schema",
-        key: "character-attributes",
-        value: pendingSchema,
-      };
-      const set: Proposal = { ...base, type: "plugin.data", payload };
-      const remove: Proposal = {
-        ...base,
-        type: "plugin.data.delete",
-        payload: { namespace: payload.namespace, key: payload.key },
-      };
-      caller.pending =
-        operation === "set"
-          ? [remove, set]
-          : operation === "batch"
-            ? [
-                {
-                  ...base,
-                  type: "plugin.data.batch",
-                  payload: { items: [payload] },
-                },
-              ]
-            : [set, remove];
-      caller.pending.push(
-        {
-          ...set,
-          sessionId: "other-session",
-          payload: { ...payload, value: storedSchema },
-        },
-        {
-          ...remove,
-          source: {
-            pluginId: "other-provider",
-            runtimeId: "other-provider/runtime",
-          },
-        },
-      );
-      expect(await caller.call("get-character-schema", {})).toMatchObject({
-        schema: operation === "delete" ? null : pendingSchema,
-      });
-      const created = await caller.call("create-character", {
-        name: "Alex",
-        type: "player",
-      });
-      const create = caller.pending.at(-1);
-      expect(create).toMatchObject({
-        type: "character.upsert",
-        payload: { fields: operation === "delete" ? {} : { power: 3 } },
-      });
-      if (operation !== "delete") {
-        await expect(
-          caller.call("update-character", {
-            id: created.characterId,
-            fields: { power: 6 },
-          }),
-        ).rejects.toThrow(/power/);
-        expect(caller.pending.at(-1)).toBe(create);
-      }
-      expect(getPluginData).not.toHaveBeenCalled();
-      expect(store.characters).toEqual([]);
-      expect(store.pluginData).toEqual([]);
-    },
-  );
-
-  it("propagates schema read failures before creating a character proposal", async () => {
+  it("propagates schema storage failures before exposing a proposal", async () => {
     const caller = new Loop(
       createCharacterTools(
         Object.assign(store, {
-          getPluginData: async () => {
+          getCharacterSchema: async () => {
             throw new Error("schema store unavailable");
           },
         }),
-        { findWorldDataPluginId: () => "custom-provider" },
       ),
       store,
     );
     await expect(
-      caller.call("create-character", {
-        name: "Alex",
-        type: "player",
-        fields: { power: "invalid" },
-      }),
+      caller.call("create-character", { name: "Alex", type: "player" }),
     ).rejects.toThrow("schema store unavailable");
     expect(caller.pending).toEqual([]);
-    expect(store.characters).toEqual([]);
   });
 
   it("ignores pending characters from a different session", async () => {
@@ -395,30 +260,26 @@ describe("builtin character tools", () => {
 
   it("rejects invalid create/update fields before exposing any proposal", async () => {
     const schemaStore = Object.assign(store, {
-      getPluginData: async () => ({
-        value: {
-          version: 1,
-          attributes: [
-            {
-              id: "systems",
-              name: "Systems",
-              type: "number",
-              category: "abilities",
-              min: 0,
-              max: 5,
-              defaultValue: 2,
-            },
-          ],
-        },
+      getCharacterSchema: async () => ({
+        sessionId: "sess-1",
+        version: 1,
+        types: ["npc", "companion"],
+        attributes: [
+          {
+            id: "systems",
+            name: "Systems",
+            type: "number" as const,
+            category: "abilities" as const,
+            min: 0,
+            max: 5,
+            defaultValue: 2,
+          },
+        ],
+        createdAt: "2026-09-05T00:00:00Z",
         updatedAt: "2026-09-05T00:00:00Z",
       }),
     });
-    loop = new Loop(
-      createCharacterTools(schemaStore, {
-        findWorldDataPluginId: () => "schema-source",
-      }),
-      store,
-    );
+    loop = new Loop(createCharacterTools(schemaStore), store);
     await expect(
       loop.call("create-character", {
         name: "Alex",
@@ -441,48 +302,6 @@ describe("builtin character tools", () => {
     expect(loop.pending).toHaveLength(0);
     expect((await store.listCharacters("sess-1"))[0]?.fields).toEqual({
       systems: 2,
-    });
-  });
-
-  it("mirror helper upserts one plugin-data row keyed by character id", async () => {
-    const character = {
-      id: "char-player-1",
-      name: "柳无痕",
-      type: "player",
-      description: "外门弟子",
-      fields: { hp: 100 },
-      version: 1,
-      createdAt: "2026-04-25T00:00:00.000Z",
-      updatedAt: "2026-04-25T00:00:00.000Z",
-    };
-
-    await mirrorCharacterToPluginData(
-      store,
-      "sess-1",
-      "char-creator",
-      character,
-    );
-    await mirrorCharacterToPluginData(store, "sess-1", "char-creator", {
-      ...character,
-      fields: { hp: 90 },
-      version: 2,
-      updatedAt: "2026-04-25T00:01:00.000Z",
-    });
-
-    expect(store.pluginData).toHaveLength(1);
-    expect(store.pluginData[0]).toMatchObject({
-      id: "char-mirror-char-player-1",
-      sessionId: "sess-1",
-      pluginId: "char-creator",
-      namespace: "characters",
-      key: "char-player-1",
-    });
-    expect(store.pluginData[0].value).toMatchObject({
-      id: "char-player-1",
-      name: "柳无痕",
-      type: "player",
-      fields: { hp: 90 },
-      version: 2,
     });
   });
 
@@ -564,30 +383,6 @@ describe("builtin character tools", () => {
       expect(char.description).toBe("外门弟子，灵识敏锐");
       expect(char.fields).toEqual({ hp: 100, level: 1, lingGen: "水灵根" });
       expect(char.version).toBe(1);
-    });
-
-    it("mirrors character to plugin-data for panel reactivity (on commit)", async () => {
-      const result = await loop.call(
-        "create-character",
-        { name: "Alice", type: "npc" },
-        "char-creator",
-      );
-      const charId = (result as { characterId: string }).characterId;
-
-      // Mirror rides on the proposal's mirrorPluginId — no direct write.
-      expect(store.pluginData).toHaveLength(0);
-      expect(
-        (loop.pending[0].payload as { mirrorPluginId?: string }).mirrorPluginId,
-      ).toBe("char-creator");
-
-      loop.commit();
-      expect(store.pluginData).toHaveLength(1);
-      const mirror = store.pluginData[0];
-      expect(mirror.pluginId).toBe("char-creator");
-      expect(mirror.namespace).toBe("characters");
-      expect(mirror.key).toBe(charId);
-      expect((mirror.value as { name: string }).name).toBe("Alice");
-      expect((mirror.value as { type: string }).type).toBe("npc");
     });
 
     it("validates type field and rejects invalid values", async () => {
@@ -748,23 +543,6 @@ describe("builtin character tools", () => {
       loop.commit();
       const char = store.characters.find((c) => c.id === charId)!;
       expect(char.description).toBe("药王谷谷主，已故");
-    });
-
-    it("re-mirrors updated character to plugin-data on commit", async () => {
-      const created = await loop.call("create-character", {
-        name: "X",
-        type: "npc",
-      });
-      const charId = (created as { characterId: string }).characterId;
-
-      await loop.call("update-character", { id: charId, fields: { hp: 20 } });
-
-      loop.commit();
-      const mirror = store.pluginData.find(
-        (r) => r.namespace === "characters" && r.key === charId,
-      );
-      expect(mirror).toBeDefined();
-      expect((mirror!.value as { fields: { hp: number } }).fields.hp).toBe(20);
     });
 
     it("returns notFound when id does not exist", async () => {

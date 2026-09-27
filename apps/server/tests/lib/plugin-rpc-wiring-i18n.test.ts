@@ -4,12 +4,13 @@ import { createBootstrapPluginRpc } from "../../src/routes/api/bootstrap/plugin-
 
 describe("bootstrap plugin RPC locale skeleton", () => {
   async function debugMessage(locale: string): Promise<string> {
-    const { rpcExecutor } = createBootstrapPluginRpc();
+    const store = createMemoryStore();
+    const { rpcExecutor } = createBootstrapPluginRpc(store);
     const dispatched = await rpcExecutor.dispatch(
       { pluginId: "framework", action: "slash-debug", payload: {} },
       {
         sessionId: "sess-locale",
-        store: createMemoryStore(),
+        store,
         locale,
       },
     );

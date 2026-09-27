@@ -1,161 +1,133 @@
 # Prompt 结构参考
 
-Covel 用单一路径组装 runtime context：`buildContext()` / `buildContextAsync()` 都委托给 `packages/context/src/prompt-assembler.ts` 的 segment-based assembler。没有版本切换开关，也没有第二条组装路径。
+`buildContext()` 与 `buildContextAsync()` 都使用 `packages/context/src/prompt-assembler.ts`。插件正文、声明输入、世界书和扩展段在这里组装为 `systemPrompt` 与 `messages`；记忆内容和历史摘要策略由插件提供。
 
-## 1. 构建入口
+## 1. 构建入口与历史流水线
 
-| 入口                            | 用途                                                                        |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| `buildContext(params)`          | 同步组装普通 runtime context。                                              |
-| `buildContextAsync(params)`     | 语义相同，额外解析 `input.inject[].kind === "plugin-data"`，需要 store IO。 |
-| `needsAsyncBuild({ manifest })` | 由调用方判断是否需要 async 路径。                                           |
+| 入口                            | 用途                                                       |
+| ------------------------------- | ---------------------------------------------------------- |
+| `buildContext(params)`          | 同步组装 context。                                         |
+| `buildContextAsync(params)`     | 额外读取 runtime 的 `io.selfData` 声明所对应的本插件数据。 |
+| `needsAsyncBuild({ manifest })` | 根据编译后的输入声明选择入口。                             |
 
-`ContextBuildParams` 中的 `estimator + contextBudget` 决定是否执行 history pruning。没有这两个参数时，assembler 只做组装，不做 token 预算裁剪。
+一次执行的历史处理顺序如下：
 
-## 2. 段位图
+1. 读取 canonical `turn_messages` 中未压缩的后缀和全量消息统计。当前玩家输入先保留在 execution journal，提交成功后才落库。
+2. 对历史副本运行 `prompt.history-transform@1` pipeline。每个 provider 接收前一个 provider 的结果；该投影不改写 canonical 消息，也不改变调度计数。
+3. 按当前 runtime 过滤其他插件的结构化历史输出，组装实际 system prompt，并合并已持久化摘要。
+4. 首个 agent 以这个 system prompt 估算压缩需求。同一 turn 的 agent 共用一次压缩屏障；成功后重载历史与摘要，重新投影并组装 context。
+5. 执行 `PostContextAssembly`，应用预算；每次 `PreLLMCall` 后再按实际请求校验预算。
+
+`history.compact@1` 是 single 扩展点。框架负责阈值、返回值校验及摘要与消息标记的原子持久化；默认 `history-compaction` 插件负责选择连续历史前缀、调用摘要模型和限制摘要长度。当前默认策略保护最近两个用户回合和最后五条消息，将旧摘要与新前缀合并为单块滚动摘要，预算为 context window 的 4%，最少 128、最多 1024 estimated tokens。
+
+框架只接受同一 session 中连续未压缩前缀的消息 ID，拒绝跳过、重排或引用外部消息的结果。摘要以 `user` 角色、经过 XML 转义的 `<compacted_history>` 数据信封进入上下文。原始消息仍留在日志中；压缩只替换 prompt 中的表示。
+
+## 2. 段位与排序
 
 ```text
-system prompt（编号是段的身份，下面是实际渲染顺序）
-  [1] Framework Preamble
-  [3] Plugin Instructions
-  [4] WorldInfo: before-plugin
-  [5] Injects from upstream
-  [6] WorldInfo: after-plugin
-  [2] Core Memory + Working Memory   ← 每回合都变，排在全部稳定块之后
+systemPrompt
+  Framework Preamble
+  当前 runtime 的本地化正文
+  stable / session 扩展段
+  WorldInfo: before-plugin
+  声明输入、导出、事件目录与 activation 数据块
+  WorldInfo: after-plugin
+  turn 扩展段
 
 messages
-  [7] Message history after summary substitution and pruning
-  [8] WorldInfo / persona at-depth contributions
-  [9] Author's Note
-  [10] Post-History Instructions
+  pre-history 非 system 扩展消息
+  摘要替换后的历史
+  当前玩家输入
+  按 depth 插入的世界书和扩展消息
+  post-history 扩展消息
 ```
 
-| #   | 名称                         | 来源                                                                                                                                                                                | 输出位置        |
-| --- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| 1   | Framework Preamble           | locale、运行框架约束                                                                                                                                                                | `systemPrompt`  |
-| 2   | Core Memory + Working Memory | session context snapshot                                                                                                                                                            | `systemPrompt`  |
-| 3   | Plugin Instructions          | `PLUGIN.md` 正文 + persona contributions                                                                                                                                            | `systemPrompt`  |
-| 4   | WorldInfo before-plugin      | session context contributions                                                                                                                                                       | `systemPrompt`  |
-| 5   | Upstream Injects             | `manifest.input.inject`；`manifest.advertiseEvents: true` 时追加 `<available-events>` 事件目录（opt-in，见 [plugins.md](./plugins.md#events-声明与-advertiseevents统一事件发射层)） | `systemPrompt`  |
-| 6   | WorldInfo after-plugin       | session context contributions                                                                                                                                                       | `systemPrompt`  |
-| 7   | Message history              | store 中的 turn messages + compactor summaries                                                                                                                                      | `messages`      |
-| 8   | At-depth contributions       | session context contributions                                                                                                                                                       | `messages`      |
-| 9   | Author's Note                | 当前执行 runtime 的 `authorsNote`                                                                                                                                                   | `messages`      |
-| 10  | Post-History Instructions    | 当前执行 runtime 的 `postHistory`                                                                                                                                                   | `messages` 末尾 |
+空段跳过；system 段以空行连接。`position: system` 与默认 system 角色的 `pre-history` 段进入 system prompt。`pre-history` 的 user/assistant 段进入历史之前，`post-history` 段追加到 messages 末尾，`{ depth: n }` 按相对消息深度插入。
 
-空段会被跳过，非空 system 段用 `\n\n` 拼接成 `AssembledContext.systemPrompt`。运行时仍消费一个 `systemPrompt: string` 与一个 `messages` 数组。
+扩展段先按 `audience` 过滤，再依次按 `volatility`（stable、session、turn）、`order`、provider plugin ID 和段 ID 排序。`audience: self` 覆盖提供插件的全部 runtime；`story` 匹配故事输出；`{ contract: "narrative-engine@1" }` 匹配 runtime 的输出契约。
 
-**段 2 按编号排在前面，但渲染在最后**——它是唯一每回合都变的 system 段。夹在段 1 与段 3 之间时，它会让下游的一切每回合失效：段 3 通常是整个 prompt 里最大的块，仅仅因为它前面几行记忆变了就要重新计费。两种缓存模型都吃这个亏——显式 `cache_control` 段必须整段字节不变才可复用，自动前缀缓存则在第一个不同的字节处就断掉。放到最后还有一个附带好处：本回合最新的状态离对话最近，模型对它的权重最高。
+## 3. 插件扩展段
 
-段 7 里替换被压缩历史的 compactor summary 以 **`user` 角色的 `<compacted_history>` 数据信封**进入 `messages`，内容做 XML 转义。summary 是模型自己写的、会持久化、之后每回合都重新注入的文本；用 `system` 身份注入等于给一次提示注入开了一条跨回合、自我放大的通道。信封化后它只是"早先回合的故事记录"，与 core memory 的处理方式一致。
-
-压缩阈值使用本回合第一个 agent **实际组装出的 system prompt** 估算，而不是空占位。压缩成功后，同一个 runtime 会重载 uncompacted messages 与 session summaries 并重建 context，因此新摘要从当前 provider 调用起就可见。一次 turn 只执行一次该压缩屏障，避免并行 runtime 重复摘要。多轮压缩采用单块滚动摘要：每次把旧摘要与新前缀合并，原子替换旧摘要并重标记全部已压缩消息。摘要预算为 context window 的 4%，下限 128、上限 1024 estimated tokens；即使 provider 忽略输出上限，持久化前也会截断，因此摘要数量和注入成本不会随会话时长无界增长。
-
-预算有三道边界：初次 context assembly、`PostContextAssembly` 之后、以及 tool loop 每次 `PreLLMCall` 之后。最后一道按实际 messages、工具/响应 schema、tool result、steering 和 retry 扰动重新估算；prune marker 本身也计费。所有 `<compacted_history>` 信封和当前用户回合在历史裁剪阶段都受保护；compactor 选择待摘要历史时仍独立保护最近两个用户回合和最后五条消息。这样小窗口下由 durable summary 承接旧回合，硬裁剪不会因为重复保护原始历史而失去可满足性。当前批次的 tool message 不能删除（否则破坏 provider 的 tool-call 配对）；当读取工具的结果使下一次调用溢出时，模型回读文本会先保留首尾并加入明确截断标记，完整 parsed result 仍保留在 runtime toolCalls 与 trace 中。如果工具配对和固定 schema 仍挤占空间，单次调用可进一步首尾截取 `<compacted_history>`，但数据库中的完整滚动摘要不会修改，下一轮会恢复。完成这些裁剪后仍超限才拒绝 provider 请求。配置的 response reserve 同时作为每次请求的 `maxOutputTokens`，OpenAI-compatible wire 映射为 `max_tokens`。
-
-## 3. 插件扩展点
-
-`PostContextAssembly` 除组装后的 `systemPrompt` / `messages` 外，还收到只读 `promptTemplate`（本地化后的原始模板，尚未替换变量）、`inputSlots`（权威已解析输入）及 `characters`（已有角色规范 ID、姓名、类型和可选简介）。这些源字段不接受 hook replacement；只可改写最终 prompt/messages。工具的 `ToolExecutionContext.inputSlots` 使用同一数据视图。显式 typed inputs 保留其 cardinality、value/items 和 provenance；legacy `input.inject` 的 runtime 来源只投影本 runtime 明确声明的 field，以去掉尖括号的 alias 为键。未声明上游字段不会暴露，typed slot 同名时优先。这不改变 legacy 调度或 skipped guard 的注入语义。
-
-挂起时冻结 `inputSlots` 到 `pendingContinuation`，恢复工具调用继续使用原输入；旧存档缺少该可选字段仍可读取。`world-ir` 通过自身 hook 用任务模板、当前完整 narrative/source 及角色姓名构建专用提取请求，不再把历史剧情和全部记忆重复注入。叙事作为用户消息中的 JSON 数据传入，不能解释成新指令；其他 runtime 的 prompt 保持原装配策略。
-
-插件可以在 `PLUGIN.md` frontmatter 声明 `authorsNote` 和 `postHistory`：
+固定指令写在根 `PLUGIN.md` 的 `contributes.prompt` 中。宿主自动注册静态段，作者无需重复声明扩展点。静态段面向本插件，加载时连同 root locale 变体一起冻结，执行时按 locale 选择。它们不再做模板插值；需要模板变量的 runtime 私有指令写在该 runtime 正文中。
 
 ```yaml
----
-name: narrator
-
-authorsNote:
-  content: |
-    请以第三人称叙述，但在关键转折时给出角色的内心独白。
-    当前导演目标: {{ story.flags.currentGoal }}
-  depth: 4
-  role: system
-
-postHistory:
-  content: |
-    输出必须包含 <narrative> 标签和 <choices> 标签。
-  role: system
-
-summaryFocus:
-  - "主角的情绪线"
-  - "当前目标进度"
----
+contributes:
+  prompt:
+    - id: narrative-style
+      content: Keep the narrator's perspective consistent.
+      position: pre-history
+      role: system
 ```
 
-合并规则：
+动态内容通过 `prompt.segment@1` 提供。根清单声明 `contributes.extensions`，entry 调用 `provideExtension`，handler 返回段数组：
 
-- **作用域是「当前执行的 runtime 自己」**，不聚合 session 内其他插件。`postHistory` 是 runtime 的私有工作指令（它的工具流程、终止契约），跨插件聚合会把一个插件的内部指令塞进另一个插件的 system prompt——既是插件隔离泄露，也让无关插件能操纵一个作者从未选择接受它的 runtime。`ContextBuildParams.activeManifests` 参数保留复数形态是因为 builder 本身通用，调用方若确实需要可以自行传入一组；框架的回合路径只传当前 runtime 的（locale 解析后的）manifest。
-- 传入多个 manifest 时按 `(stage, name)` 排序合并（早 stage 在前，同 stage 按 `name` 定序）。
-- 相同 `(role, depth)` 的 `authorsNote` 用空行合并成一条消息。
-- 不同 depth 的 `authorsNote` 分别插入到对应历史位置。
-- `postHistory` 按 role 分组，相同 role 合并后追加到消息末尾。
+```js
+api.provideExtension("prompt.segment@1", "status", {
+  async handler(input, ctx) {
+    const record = await ctx.pluginData.get("status", "current");
+    return record
+      ? [
+          {
+            id: "current-status",
+            content: JSON.stringify(record.value),
+            position: "pre-history",
+            audience: "self",
+            volatility: "turn",
+          },
+        ]
+      : [];
+  },
+});
+```
+
+provider 获得当前执行的 locale、只读世界视图和自身数据访问能力。相同扩展点输入在一次执行内复用结果；provider 不能依赖某个正在调用它的 runtime 身份来返回不同内容。`providerPluginId` 由宿主添加，插件不能伪造归属。
+
+`memory` 插件通过此扩展点把自身 `blocks` 数据渲染为回合段，块定义经 `memory.block-definitions@1` 服务收集。内核不读取某个记忆插件的私有 namespace，也不提供 Core Memory、Working Memory 或 persona 专用段。世界结构补充由 `session.world-context@1` 返回 `schema` / `entries`；世界书仍使用领域记录的 prompt position。
+
+`PostContextAssembly` 仍可改写最终 `systemPrompt` / `messages`。它收到的原始本地化 `promptTemplate`、已解析 `inputSlots` 和角色摘要是只读来源；这些来源不接受 hook replacement。挂起时输入槽冻结进 continuation，恢复使用同一输入。
 
 ### Runtime LLM 请求默认值
 
-agent manifest 可声明 `llm.reasoningEffort: disabled` 和 `llm.toolChoice: { name: submit-facts }`。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
+runtime 的 `agent` 分组可声明 `llm.reasoningEffort: disabled` 和 `llm.toolChoice: { name: submit-facts }`。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
 
 provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，DeepSeek thinking 请求省略不兼容的 `tool_choice`。`deepseek-flash` 和 V4 模型未指定开关时也按默认开启思考处理；显式关闭后保留插件的工具选择偏好。此行为遵循 [DeepSeek Chat Completions 的工具选择限制](https://api-docs.deepseek.com/api/create-chat-completion/)，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
 
-## 4. Template 变量
+## 4. Template 变量与数据边界
 
-`PLUGIN.md` 正文、`authorsNote.content`、`postHistory.content` 支持 `{{ variable }}` 插值。变量来自 `assemblePromptVariables()`：
+根内联 runtime 的 `PLUGIN.md` 正文，或子 runtime 的 `RUNTIME.md` 正文，支持 `{{ variable }}` 插值。常用变量包括：
 
-- `{{ player.message }}`：当前玩家输入。
-- `{{ player.lastFormValues }}`：最近一次 player 表单提交，JSON 字符串。
-- `{{ session.id }}` / `{{ session.turnNumber }}`。
-- `{{ inputs.<pluginId>.<runtimeId>.<field> }}`：上游 runtime 输出。
-- `{{ world.* }}`：由 session context snapshot 的 `world` 视图提供，例如短字段 `world.name`、`world.description`、`world.tags`，以及完整字段 `world.lore`、`world.schema`、`world.entries`、`world.dimensions`。长运行 agent 应把短字段常驻 prompt，并用 `world-dimension-get` 按需读取精确结构化事实；每轮内联完整 lore 会让小窗口 slot 在尚未加入历史前就耗尽预算。
-- `{{ userSettings.* }}`：玩家配置的插件设置。
+- `player.message`、`player.lastFormValues`。
+- `session.id`、`session.turnNumber`。
+- `inputs.<pluginId>.<runtimeId>.<field>`。
+- `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。
+- `userSettings.*`，由根 `contributes.settings` 默认值和玩家配置合成。
 
-Working Memory 与 Core Memory 通过 session context snapshot 进入段 2；插件模板也可以通过已有变量读取需要暴露的字段。
+世界扩展视图通过公共扩展点提供；插件不能从其他插件的私有数据中拼装它。较长世界内容应按当前任务选取，避免每轮内联全部 lore。`world-dimension-get` 是 `world-init` 自有工具，不是内核通用工具。
 
-启用 context budget 时，Core Memory 的合计渲染上限为可用输入额度的 15%（最少 256、最多 2048 estimated tokens）。框架对所有非空块使用公平的单块上限，保留每个块的标签和 XML 信封，并仅截断过长内容；因此世界包增加自定义 memory blocks 不会让每次调用的 system prompt 无界增长。数据库中的完整块不受影响。
+声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。
 
-**段 5 的 inject 内容不参与插值**。inject 块承载的是上游 runtime 输出或 plugin-data——也就是模型写的、玩家写的**数据**。这些数据在生成 inject 块时已经做过 XML 转义，但转义不处理 `{}`；如果再跑一遍插值，数据里出现的 `{{ ... }}` 会被展开，且展开结果原样插入、绕过转义，等于把玩家输入重新带回 system prompt。模板只在插件自己的 PLUGIN.md 正文上解释一次，inject 一律当数据处理。插件作者需要在 inject 里做条件逻辑时，应该在上游 runtime 输出成品文本，而不是输出模板。
+## 5. Token 预算与缓存
 
-## 5. Prompt Cache 标记
+有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。当前用户回合和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
 
-`serializeSystemPrompt(segments, true)` 默认在可缓存 system 段后插入内部 PUA sentinel (`\uE000`)：
+`serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；turn 扩展段放在最后一个缓存边界之后，不设置断点。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
 
-1. 段 1：Framework Preamble
-2. 段 3：Plugin Instructions
-3. 段 6：WorldInfo after-plugin
+稳定内容排在前面可以保留相同前缀。`volatility` 仅决定排序和缓存边界，不保证内容永远不变，也不取消执行内的扩展结果复用。
 
-Anthropic adapter 会把 sentinel 转成 `cache_control: { type: "ephemeral" }` 的 text block。OpenAI-compatible providers 不读取 sentinel，依赖 provider 的自动前缀匹配。
+## 6. 外置模板与本地化
 
-段 2（Core/Working Memory）**不锚定断点，并且排在最后一个 sentinel 之后**。因此 systemPrompt 不再以 sentinel 结尾，Anthropic adapter 把这段尾巴视为 open tail 而不给它 `cache_control`（见 `packages/ai-provider/src/adapters/anthropic-messages.ts` 的 `hasOpenTail`）。断点总数仍是 3，未逼近 `MAX_CACHE_BREAKPOINTS`。
+共享 `prompts/server` 当前保存世界生成与 lore 修复模板。历史摘要模板由 `plugins/history-compaction/prompts/server` 持有，插件通过自己的 `createPromptLoader(root)` 加载。修改 `COVEL_PROMPTS_DIR` 只替换默认共享 prompt root，不会接管插件的独立目录。
 
-## 6. `prompts/server`
-
-`prompts/server` 是服务端外置 prompt 模板目录，当前使用路径：
-
-- `compactor.<locale>.md`：`packages/context/src/compactor.ts` 通过 `loadPrompt("server", "compactor", locale)` 加载；当前含 `zh` / `en` / `ru`，`compactor.md` 是 canonical English fallback。
-- `generate-world.<locale>.md`：`packages/create/src/prompts.ts` 通过 `loadPrompt("server", "generate-world", locale)` 加载；仓库当前只有 canonical `generate-world.md`，贡献者可按需加入 locale 变体。
-- `repair-world-lore.<locale>.md`：世界生成后的定向 lore 修复模板，默认使用 canonical `repair-world-lore.md`。
-
-模板都按 exact locale → script 兼容的 primary language → English locale/language → canonical 文件解析。`zh-Hant` 不会命中简体中文的 `zh` 文件。
-
-Prompt 根目录由 `COVEL_PROMPTS_DIR` 覆盖；未设置时 `prompts-loader` 会从包路径向上查找仓库根目录下的 `prompts/`。覆盖值替换整个 prompt root，不是按文件叠加；自维护目录必须包含应用会加载的 canonical 文件。locale 会在进入文件路径前统一 canonicalize，非法值不会参与路径查找。
-
-需要在同一进程使用多套模板时，从 `@covel/context` 调用 `createPromptLoader(root)`，并注入 `CompactorDeps.loadPrompt` 或 `CreateWorldOptions.loadPrompt`。加载器在创建时解析目录，每次调用重新读取模板，支持修改即时生效；locale fallback 限于该目录，不会混入进程默认目录。世界生成的主请求、重试及定向修复都使用本次调用的加载器。也可以提供相同签名的 `PromptLoader` 函数，从宿主资源服务读取模板：
-
-```ts
-type PromptLoader = (
-  dir: string,
-  name: string,
-  locale?: string,
-) => Promise<string>;
-```
-
-未注入时保留现有目录发现和 locale 行为。`setPromptsRoot(root | null)` 只修改默认加载器的进程级状态，不影响已创建的独立加载器；多实例宿主和并发测试应使用依赖注入。
+共享加载器按 exact locale、兼容 script 的 primary language、English、canonical 文件依次解析；非法 locale 不进入路径查找，`zh-Hant` 不命中简体 `zh`。独立 loader 只在自己的目录内回退。`CreateWorldOptions.loadPrompt` 可注入宿主 loader；运行中的插件清单、本地化正文和静态扩展段则遵守已捕获的 registry generation。
 
 ## 7. 相关实现
 
-- `packages/context/src/context-builder.ts`：公共入口，负责保持 `buildContext` API 稳定。
-- `packages/context/src/prompt-assembler.ts`：segment-based context assembler。
-- `packages/context/src/prompt-internals.ts`：插值、inject、变量对象、memory 渲染。
-- `packages/context/src/prompt-serialization.ts`：system 段拼接与 prompt-cache sentinel。
-- `packages/context/src/budget.ts`：message history token 预算裁剪。
-- `packages/context/src/compactor.ts`：长 session 摘要与 summary substitution。
-- `packages/context/src/session-context.ts`：session-level context snapshot 构建。
+- `packages/runtime/src/turn-executor/session-state.ts`：canonical 历史加载与扩展投影。
+- `packages/runtime/src/agent-loop/turn-agent-runtime.ts`：扩展段收集、压缩屏障和 agent context。
+- `packages/context/src/prompt-assembler.ts`、`extension-segments.ts`：段组装、受众过滤与排序。
+- `packages/context/src/prompt-serialization.ts`：system 段和缓存标记。
+- `packages/context/src/history-budget.ts`：压缩准入与原子持久化。
+- `plugins/history-compaction/server/strategy.ts`：默认摘要策略。
+- `packages/context/src/session-context.ts`：世界与世界书视图。
+
+扩展声明与调用边界见 [插件扩展参考](./plugin-extensions.md)，作者格式见 [插件参考](./plugins.md)。

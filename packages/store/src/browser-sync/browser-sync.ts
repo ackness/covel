@@ -2,6 +2,7 @@ import { isJsonValue } from "@covel/shared";
 import { checkpointDomainsSchema } from "./checkpoint-domains-schema.js";
 import type {
   CharacterRecord,
+  CharacterSchemaRecord,
   EventRecord,
   InteractionRecordRow,
   LorebookEntryRecord,
@@ -23,7 +24,6 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   TurnResultRecord,
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
   JobStatusRecord,
@@ -75,9 +75,9 @@ export interface BrowserCheckpoint {
   readonly interactions: ReadonlyArray<InteractionRecordRow>;
   readonly events: ReadonlyArray<EventRecord>;
   readonly traceEvents: ReadonlyArray<TraceEventRecord>;
+  readonly characterSchema: CharacterSchemaRecord | null;
   readonly characters: ReadonlyArray<CharacterRecord>;
   readonly pluginData: ReadonlyArray<PluginDataRecord>;
-  readonly workingMemory: ReadonlyArray<WorkingMemoryRecord>;
   readonly lorebookEntries: ReadonlyArray<LorebookEntryRecord>;
   readonly sessionSummaries: ReadonlyArray<SessionSummaryRecord>;
   readonly playerInputs: ReadonlyArray<PlayerInputRecord>;

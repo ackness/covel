@@ -14,7 +14,7 @@
   },
   "view": {
     "component": "CardList",
-    "repeat": { "statePath": "/character-attributes/attributes", "key": "id" },
+    "repeat": { "statePath": "/attributes", "key": "id" },
     "children": [
       {
         "component": "Card",

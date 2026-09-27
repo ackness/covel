@@ -13,7 +13,7 @@
  * saveAutoSnapshot); this route module exposes the manual/fork surfaces.
  *
  * Fork strategy: COPY. We rebuild the child session by persisting the
- * snapshot's characters / state entries / plugin data / working memory
+ * snapshot's characters / state entries / plugin data
  * into the new sessionId. Model and display messages use their respective
  * captured boundaries — past those boundaries the child starts fresh.
  * Copying (rather than referencing) keeps cross-session semantics clean
@@ -36,12 +36,10 @@ import type {
   PluginDataRecord,
   SessionSummaryRecord,
   SuspensionRecord,
-  WorkingMemoryRecord,
   TurnMessageRecord,
 } from "@covel/store";
 import { buildSnapshotPayload } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import { CHARACTER_NAMESPACE } from "@covel/tools";
 import type { EventBus } from "@covel/events";
 import { errorBody, parseJsonBody } from "../../api-error.js";
 import {
@@ -336,7 +334,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         const now = nowIso;
 
         // Scoped transaction: the entire child rebuild (session + characters + state
-        // + plugin data + working memory + suspensions + messages + fork snapshot)
+        // + plugin data + suspensions + messages + fork snapshot)
         // commits atomically through the tx-bound view. A thrown error auto-rolls-
         // back, so a partial fork can never persist. The out-of-band SSE emits and
         // the 201 response are deferred until after the transaction commits.
@@ -408,42 +406,14 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               await tx.upsertStateEntry(record);
             }
 
-            // Copy plugin data. The character-mirror namespace keys each row by the
-            // character id and stores the character (value.id = same id). Characters
-            // were re-minted above, so remap those rows' key + value.id to the child
-            // ids — otherwise the mirror references characters that don't exist in
-            // the child, desyncing UI panels and duplicating on the next update.
             const pluginDataBatch: PluginDataRecord[] =
-              snapshot.payload.pluginData.map((pd) => {
-                const base: PluginDataRecord = {
-                  ...pd,
-                  id: randomUUID(),
-                  sessionId: childSessionId,
-                };
-                if (pd.namespace !== CHARACTER_NAMESPACE) return base;
-                const newId = characterIdMap.get(pd.key);
-                if (!newId) return base;
-                const value =
-                  base.value && typeof base.value === "object"
-                    ? {
-                        ...(base.value as Record<string, unknown>),
-                        id: newId,
-                      }
-                    : base.value;
-                return { ...base, key: newId, value };
-              });
-            if (pluginDataBatch.length > 0) {
-              await tx.setPluginDataBatch(pluginDataBatch);
-            }
-
-            // Copy working memory
-            for (const wm of snapshot.payload.workingMemory) {
-              const record: WorkingMemoryRecord = {
-                ...wm,
+              snapshot.payload.pluginData.map((pd) => ({
+                ...pd,
                 id: randomUUID(),
                 sessionId: childSessionId,
-              };
-              await tx.upsertWorkingMemory(record);
+              }));
+            if (pluginDataBatch.length > 0) {
+              await tx.setPluginDataBatch(pluginDataBatch);
             }
 
             // Copy unresolved suspensions (audit 2026-04-20 finding 7.3). Each
@@ -467,6 +437,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             // child's world-entries prompt injection came back empty.
             // (sessionId, id) is the composite key, so keeping the original id
             // is safe.
+            if (snapshot.payload.characterSchema) {
+              await tx.upsertCharacterSchema({
+                ...snapshot.payload.characterSchema,
+                sessionId: childSessionId,
+              });
+            }
             if (snapshot.payload.lorebookEntries.length > 0) {
               await tx.upsertLorebookEntries(
                 snapshot.payload.lorebookEntries.map((lb) => ({

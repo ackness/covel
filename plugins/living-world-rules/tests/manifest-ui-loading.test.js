@@ -30,7 +30,7 @@ describe("living-world-rules manifest and UI loading", () => {
       },
       worldProjections: {
         "rules-from-world-ir": {
-          from: "covel://world/ir/v1",
+          from: "contract:world-ir@1",
           handler: "./server/project-world-ir.js",
           outputs: {
             rules: { namespace: "rules", key: "id" },
@@ -38,8 +38,8 @@ describe("living-world-rules manifest and UI loading", () => {
         },
       },
     });
-    expect(parsed.manifest.capabilities).toEqual(
-      expect.arrayContaining(["living-world-rules", "world-info"]),
+    expect(parsed.plugin.provides).toEqual(
+      expect.arrayContaining(["living-world-rules@1", "world-info@1"]),
     );
   });
 

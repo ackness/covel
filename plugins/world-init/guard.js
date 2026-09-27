@@ -1,3 +1,5 @@
+import { withPendingProposals } from "@covel/tools";
+import { makeProposal } from "@covel/plugin-handlers-utils";
 import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
 import { resolveI18nText } from "@covel/shared";
 
@@ -29,7 +31,7 @@ function deriveSchema(dimensions, locale) {
   /** @type {Array<Record<string, unknown>>} */
   // Attribute name/description are I18nText ({ "zh-CN", "en-US" }) so the
   // display layer resolves them per session locale (character-schema.ts types
-  // them as I18nText). Worlds with declared characterAttributes override this.
+  // them as I18nText). Worlds with declared characterSchema override this.
   const attrs = [
     {
       id: "hp",
@@ -171,189 +173,64 @@ function deriveSchema(dimensions, locale) {
   return attrs;
 }
 
-/**
- * Shape consumed by SessionContext's `world.schema` and by player-init's
- * same-turn runtime injection. Keeping one canonical view prevents the setup
- * DAG from depending on an uncommitted plugin-data read.
- *
- * @param {Array<Record<string, unknown>>} attributes
- */
-function worldSchemaView(attributes) {
-  return {
-    "character-attributes": { version: 1, attributes },
-  };
-}
-
-/** @param {Array<{key: string, value: unknown}>} records */
-function worldSchemaViewFromRecords(records) {
-  return Object.fromEntries(
-    records.map((record) => [record.key, record.value]),
-  );
-}
-
+/** Reuse the authoritative schema or derive one from authored dimensions. */
 export default async function guard(ctx) {
-  const { sessionId, store, pluginId, locale } = ctx;
-  const s = /** @type {any} */ (store);
-
-  try {
-    // 1. Check current session's plugin_data
-    const existing = await s.listPluginData(sessionId, pluginId, "schema");
-
-    if (existing && existing.length > 0) {
-      const entries = await s.listPluginData(sessionId, pluginId, "entries");
-      if ((entries?.length ?? 0) > 0) {
-        return {
-          skip: true,
-          initialized: true,
-          schemaCount: existing.length,
-          entryCount: entries?.length ?? 0,
-          worldSchema: worldSchemaViewFromRecords(existing),
-          narrativeOutput: pick(
-            locale,
-            `[系统] 世界维度数据已加载（${existing.length} 个 schema, ${entries?.length ?? 0} 个词条）`,
-            `[System] World dimension data loaded (${existing.length} schema, ${entries?.length ?? 0} entries)`,
-          ),
-          preGameDone: true,
-        };
-      }
-    }
-
-    // Resolve the world once for the remaining paths.
-    const session = await s.getSession(sessionId);
-    const worldId = session?.worldId;
-    const world = worldId ? await s.getWorld(worldId) : undefined;
-
-    // 2a. A world that DECLARES character attributes is authoritative: write
-    //     them verbatim (+ import dimension entries) and skip — even when an
-    //     older session of this world exists, whose schema may predate the
-    //     declaration. No LLM, and no cross-session reuse of a stale schema, so
-    //     editing `world.yaml characterAttributes` takes effect on new sessions.
-    const declaredAttributes =
-      world?.metadata?.characterAttributes ?? world?.metadata?.schemas;
-    if (Array.isArray(declaredAttributes) && declaredAttributes.length > 0) {
-      const now = new Date().toISOString();
-      const dimensions = /** @type {Record<string, unknown> | undefined} */ (
-        world?.metadata?.dimensions
-      );
-      const entryRecords =
-        dimensions && Object.keys(dimensions).length > 0
-          ? Object.entries(dimensions).map(([key, value]) => ({
-              id: crypto.randomUUID(),
-              sessionId,
-              pluginId,
-              namespace: "entries",
-              key,
-              value,
-              createdAt: now,
-              updatedAt: now,
-            }))
-          : [];
-      if (entryRecords.length > 0) {
-        await s.setPluginDataBatch(entryRecords);
-      }
-      await s.setPluginData({
-        id: crypto.randomUUID(),
-        sessionId,
-        pluginId,
-        namespace: "schema",
-        key: "character-attributes",
-        value: { version: 1, attributes: declaredAttributes },
-        createdAt: now,
-        updatedAt: now,
-      });
-      return {
-        skip: true,
-        initialized: true,
-        importedDimensions: entryRecords.length > 0,
-        entryCount: entryRecords.length,
-        schemaCount: declaredAttributes.length,
-        worldSchema: worldSchemaView(declaredAttributes),
-        narrativeOutput: pick(
-          locale,
-          `[系统] 从世界包导入角色属性 Schema（${declaredAttributes.length} 个属性${entryRecords.length ? `，${entryRecords.length} 个维度词条` : ""}）`,
-          `[System] Imported character attribute schema from world package (${declaredAttributes.length} attributes${entryRecords.length ? `, ${entryRecords.length} dimension entries` : ""})`,
-        ),
-        preGameDone: true,
-      };
-    }
-
-    // NOTE: there used to be a step 2b here that scanned every OTHER session
-    // of the same world, picked whichever had the most plugin-data rows, and
-    // copied its whole `schema` + `entries` namespaces into this session. It
-    // was a cache for worlds that declare neither character attributes nor
-    // dimensions (step 3 / the LLM path below), saving one schema-gen call.
-    //
-    // It is gone because session plugin-data is not a trustworthy source: the
-    // generic `PUT /plugin-data` route lets a session owner write any active
-    // plugin's namespace, so the "best" source session could carry
-    // player-authored values — and on hosted tiers those sessions can belong
-    // to a different user entirely, making this a cross-user read. Copying it
-    // in would both leak and poison. Worlds that declare attributes (2a) or
-    // ship dimensions (3) never reached this branch anyway; the only cost is
-    // one schema-gen call per session on a world that supplies neither.
-
-    // 3. World has pre-built dimensions but no declared attributes: import
-    //    entries + derive a generic schema from world data, then skip the LLM.
-    //    (The declared-attributes case is handled authoritatively in 2a above.)
-    if (worldId && world) {
-      const dimensions = /** @type {Record<string, unknown> | undefined} */ (
-        world?.metadata?.dimensions
-      );
-
-      if (dimensions && Object.keys(dimensions).length > 0) {
-        const now = new Date().toISOString();
-
-        // Import all dimension keys as plugin_data entries
-        const entryRecords = Object.entries(dimensions).map(([key, value]) => ({
-          id: crypto.randomUUID(),
-          sessionId,
-          pluginId,
-          namespace: "entries",
-          key,
-          value,
-          createdAt: now,
-          updatedAt: now,
-        }));
-        await s.setPluginDataBatch(entryRecords);
-
-        // No declared attributes (2a would have returned) — infer generic
-        // attributes from world data so no LLM call is needed.
-        const attributes = deriveSchema(dimensions, locale);
-
-        await s.setPluginData({
-          id: crypto.randomUUID(),
-          sessionId,
-          pluginId,
-          namespace: "schema",
-          key: "character-attributes",
-          value: { version: 1, attributes },
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        return {
-          skip: true,
-          initialized: true,
-          importedDimensions: true,
-          entryCount: entryRecords.length,
-          schemaCount: attributes.length,
-          worldSchema: worldSchemaView(attributes),
-          narrativeOutput: pick(
-            locale,
-            `[系统] 从世界包全量导入：${entryRecords.length} 个维度词条，${attributes.length} 个角色属性`,
-            `[System] Full import from world package: ${entryRecords.length} dimension entries, ${attributes.length} character attributes`,
-          ),
-          preGameDone: true,
-        };
-      }
-    }
-
-    // 4. Nothing found — LLM generation needed
-    return { skip: false, initialized: false };
-  } catch (err) {
-    await ctx.logger?.warn?.("world-init guard error", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return { skip: false, error: String(err) };
+  const { locale } = ctx;
+  const existing = ctx.world.characterSchema;
+  const entries = await ctx.store.listPluginData("entries");
+  if (existing && entries.length > 0) {
+    return {
+      skip: true,
+      initialized: true,
+      preGameDone: true,
+      schemaCount: existing.attributes.length,
+      entryCount: entries.length,
+      worldSchema: existing,
+      narrativeOutput: pick(
+        locale,
+        "[系统] 世界资料已加载",
+        "[System] World data loaded",
+      ),
+    };
   }
+  const world = ctx.world.worldRecord;
+  const dimensions = world?.dimensions ?? world?.metadata?.dimensions;
+  const declared = world?.metadata?.characterSchema;
+  const attributes =
+    existing?.attributes ??
+    declared?.attributes ??
+    (dimensions ? deriveSchema(dimensions, locale) : null);
+  if (!attributes) return { skip: false, initialized: false };
+  const schema = {
+    types: existing?.types ?? declared?.types ?? ["npc", "companion"],
+    attributes,
+  };
+  const now = new Date().toISOString();
+  const proposals = [];
+  if (!existing)
+    proposals.push(makeProposal(ctx, now, "character.schema.set", schema));
+  const items = Object.entries(dimensions ?? {}).map(([key, value]) => ({
+    namespace: "entries",
+    key,
+    value,
+  }));
+  if (items.length)
+    proposals.push(makeProposal(ctx, now, "plugin.data.batch", { items }));
+  return withPendingProposals(
+    {
+      skip: true,
+      initialized: true,
+      importedDimensions: items.length > 0,
+      preGameDone: true,
+      schemaCount: attributes.length,
+      entryCount: items.length,
+      worldSchema: schema,
+      narrativeOutput: pick(
+        locale,
+        `[系统] 世界资料已加载（${attributes.length} 个属性）`,
+        `[System] World data loaded (${attributes.length} attributes)`,
+      ),
+    },
+    proposals,
+  );
 }

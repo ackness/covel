@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
   loadPluginManifest,
+  loadPluginDefinition,
   loadRuntime,
   parsePluginMd,
 } from "@covel/plugin-loader";
@@ -72,7 +73,7 @@ describe("scene-prompts manifest and UI loading", () => {
       inputs: {
         narrative: {
           from: {
-            capability: "narrative-engine",
+            capability: "narrative-engine@1",
             cardinality: "one",
           },
           select: "/narrativeOutput",
@@ -115,7 +116,10 @@ describe("scene-prompts manifest and UI loading", () => {
     expect(loaded.promptTemplate).toContain("<runtime-inputs>");
     expect(loaded.promptTemplate).toContain("`recap`");
     expect(loaded.promptTemplate).toContain("`decision`");
-    const localizedPostHistory = JSON.stringify(loaded.manifest.postHistory);
+    const localizedPostHistory = JSON.stringify(
+      (await loadPluginDefinition(discovery!, "en-US")).plugin.contributes
+        ?.prompt,
+    );
     expect(localizedPostHistory).toContain("Do not call `runtime-done`");
     expect(localizedPostHistory).not.toContain(
       "immediately call `runtime-done`",

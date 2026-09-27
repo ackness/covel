@@ -3,13 +3,11 @@ import { Ajv, type AnySchema, type ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import {
   formatValidationErrors,
-  validateWorldIRV1,
   validateDimensions,
-  WORLD_IR_V1_SCHEMA_URI,
   type PluginDataSchemaDecl,
 } from "@covel/shared";
 import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
-import { sha256Hex } from "./digest.js";
+import { canonicalJson, sha256Hex } from "./digest.js";
 import { resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
@@ -35,7 +33,7 @@ const validatorCache = new Map<
 >();
 
 export interface WorldDataSchemaRegistryDeps {
-  readonly registry?: Pick<PluginRegistry, "get">;
+  readonly registry?: Pick<PluginRegistry, "get" | "getAll">;
 }
 
 export interface PluginWorldDataSchemaRef {
@@ -53,11 +51,6 @@ export interface BuiltinDimensionsWorldDataSchemaRef {
   readonly uri: "covel://world/dimensions";
 }
 
-export interface BuiltinWorldIRV1SchemaRef {
-  readonly kind: "builtin";
-  readonly uri: typeof WORLD_IR_V1_SCHEMA_URI;
-}
-
 export interface LocalWorldDataSchemaRef {
   readonly kind: "local";
   readonly uri: string;
@@ -67,7 +60,6 @@ export interface LocalWorldDataSchemaRef {
 
 export type WorldDataSchemaRef =
   | BuiltinDimensionsWorldDataSchemaRef
-  | BuiltinWorldIRV1SchemaRef
   | PluginWorldDataSchemaRef
   | LocalWorldDataSchemaRef;
 
@@ -116,7 +108,7 @@ async function loadJsonSchemaValidator(options: {
   return validate;
 }
 
-async function resolvePluginSchema(
+export async function resolvePluginSchema(
   uri: string,
   pluginId: string,
   namespace: string,
@@ -182,18 +174,56 @@ export async function resolveWorldDataSchema(options: {
   if (uri === "covel://world/dimensions") {
     return { kind: "builtin", uri };
   }
-  if (uri === WORLD_IR_V1_SCHEMA_URI) {
-    return { kind: "builtin", uri };
-  }
 
-  const pluginRef = parsePluginSchemaUri(uri);
-  if (pluginRef) {
-    return resolvePluginSchema(
+  if (uri.startsWith("plugin:"))
+    return {
+      level: "error",
+      schema: uri,
+      message: "World schema references must use contracts, not plugin IDs",
+    };
+  if (uri.startsWith("contract:")) {
+    const contract = uri.slice("contract:".length);
+    let selected: { path: string; canonical: string } | undefined;
+    for (const [, entry] of options.deps?.registry?.getAll() ?? []) {
+      const declaration = entry.packageManifest?.plugin?.contracts?.[contract];
+      if (!declaration || !entry.rootPath) continue;
+      const schemaPath = await resolveContainedPath(
+        entry.rootPath,
+        declaration.schema,
+        { rejectSymlinks: true },
+      );
+      if (!schemaPath)
+        return {
+          level: "error",
+          schema: uri,
+          message: `Invalid schema path for contract "${contract}"`,
+        };
+      const canonical = canonicalJson(
+        JSON.parse(await readFile(schemaPath, "utf-8")),
+      );
+      if (selected && selected.canonical !== canonical)
+        return {
+          level: "error",
+          schema: uri,
+          message: `Conflicting schemas for contract "${contract}"`,
+        };
+      selected = { path: schemaPath, canonical };
+    }
+    if (!selected)
+      return {
+        level: "error",
+        schema: uri,
+        message: `No schema declared for contract "${contract}"`,
+      };
+    return {
+      kind: "local",
       uri,
-      pluginRef.pluginId,
-      pluginRef.namespace,
-      options.deps,
-    );
+      path: selected.path,
+      validate: await loadJsonSchemaValidator({
+        cacheKey: uri,
+        path: selected.path,
+      }),
+    };
   }
 
   const schemaRoot =
@@ -224,19 +254,13 @@ export function validateWorldDataSchemaValue(options: {
   readonly label?: string;
 }): WorldDataDiagnostic | null {
   if (options.schema.kind === "builtin") {
-    const validation =
-      options.schema.uri === WORLD_IR_V1_SCHEMA_URI
-        ? validateWorldIRV1(options.value)
-        : validateDimensions(options.value);
+    const validation = validateDimensions(options.value);
     if (validation.valid) return null;
     return {
       level: "error",
       sourceId: options.source.id,
       schema: options.schema.uri,
-      message:
-        options.schema.uri === WORLD_IR_V1_SCHEMA_URI
-          ? `invalid WorldIRV1:\n${formatValidationErrors(validation.errors ?? [])}`
-          : `invalid world dimensions:\n${formatValidationErrors(validation.errors ?? [])}`,
+      message: `invalid world dimensions:\n${formatValidationErrors(validation.errors ?? [])}`,
     };
   }
 

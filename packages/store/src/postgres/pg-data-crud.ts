@@ -21,7 +21,6 @@ export function createPgDataCrud(getDb: () => PgDb): PgDataCrud {
     runner: createPgSqlRunner(getDb),
     tables: {
       pluginData: schema.pluginData,
-      workingMemory: schema.workingMemory,
       worldDataImportLedger: schema.worldDataImportLedger,
       lorebookEntries: schema.lorebookEntries,
     },

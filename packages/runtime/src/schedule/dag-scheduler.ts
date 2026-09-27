@@ -133,7 +133,7 @@ function buildCapabilityProviders(
 ): Map<string, string[]> {
   const capabilityProviders = new Map<string, string[]>();
   for (const rt of runtimes) {
-    for (const cap of rt.capabilities ?? []) {
+    for (const cap of rt.outputContract ? [rt.outputContract] : []) {
       const list = capabilityProviders.get(cap) ?? [];
       list.push(rt.name);
       capabilityProviders.set(cap, list);

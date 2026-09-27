@@ -319,7 +319,7 @@ describe("main-loop dependency-cycle SCC", () => {
         handler: "./h.js",
         trigger: { type: "auto" },
         outputKind: "plugin",
-        capabilities: [],
+        outputContract: undefined,
         ...extra,
       }) as RuntimeManifest;
 
@@ -481,8 +481,8 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
   });
 
   it("capability gate with cardinality 'all' waits for every provider", () => {
-    const p1 = setupRt("p1/setup", { capabilities: ["world-seed"] });
-    const p2 = setupRt("p2/setup", { capabilities: ["world-seed"] });
+    const p1 = setupRt("p1/setup", { outputContract: "world-seed" });
+    const p2 = setupRt("p2/setup", { outputContract: "world-seed" });
     const consumer = setupRt("cons/setup", {
       needs: [
         { capability: "world-seed", cardinality: "all", scope: "session" },
@@ -506,8 +506,8 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
   });
 
   it("capability gate with default cardinality 'one' opens on any done provider", () => {
-    const p1 = setupRt("p1/setup", { capabilities: ["world-seed"] });
-    const p2 = setupRt("p2/setup", { capabilities: ["world-seed"] });
+    const p1 = setupRt("p1/setup", { outputContract: "world-seed" });
+    const p2 = setupRt("p2/setup", { outputContract: "world-seed" });
     const consumer = setupRt("cons/setup", {
       needs: [{ capability: "world-seed", scope: "session" }],
     });

@@ -2,5 +2,15 @@
   "name": "@covel/plugin-memory",
   "version": "0.0.35",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@covel/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11",
+    "zod": "^4.4.3"
+  }
 }

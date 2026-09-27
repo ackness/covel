@@ -1,14 +1,16 @@
-import { resolveRequestContextBudget, type LLMAdapter } from "@covel/runtime";
-import { resolveLlmTokenLimits } from "@covel/shared";
+import {
+  resolveRequestContextBudget,
+  type PluginExtensionHost,
+  type LLMAdapter,
+} from "@covel/runtime";
+import { historyCompactV1, resolveLlmTokenLimits } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   estimateTokens,
   maybeCompact,
   type BudgetOptions,
-  type CompactorLLMAdapter,
   type CompactorRunner,
 } from "@covel/context";
-import type { ParsedPluginMd } from "@covel/plugin-loader";
 
 interface BudgetSourceParams {
   /** Explicit deployment ceiling, independent of other configured models. */
@@ -16,7 +18,7 @@ interface BudgetSourceParams {
 }
 
 export interface CreateBootstrapCompactorRunnerParams extends BudgetSourceParams {
-  readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
+  readonly extensions: PluginExtensionHost;
   readonly store: DataStore;
   readonly llmAdapter: LLMAdapter;
 }
@@ -24,16 +26,7 @@ export interface CreateBootstrapCompactorRunnerParams extends BudgetSourceParams
 export function createBootstrapCompactorRunner(
   params: CreateBootstrapCompactorRunnerParams,
 ): CompactorRunner {
-  const { manifestCache, store, llmAdapter } = params;
-  const allSummaryFocus = new Set<string>();
-  for (const [, manifests] of manifestCache) {
-    for (const parsed of manifests) {
-      for (const section of parsed.manifest.summaryFocus ?? []) {
-        allSummaryFocus.add(section);
-      }
-    }
-  }
-  const focusSections: readonly string[] = [...allSummaryFocus];
+  const { extensions, store, llmAdapter } = params;
 
   return {
     async run(sessionId, systemPromptPreview, messages, locale, traceId) {
@@ -46,22 +39,41 @@ export function createBootstrapCompactorRunner(
         llmAdapter,
         "fast",
       );
-      const fastSlotLlm: CompactorLLMAdapter = {
-        async complete(input) {
-          const response = await llmAdapter.generate({
-            model: "fast",
-            maxOutputTokens: budget.reservedForResponse,
-            messages: [
-              { role: "system", content: input.systemPrompt },
-              ...input.messages.map((m) => ({
-                role: m.role as "user",
-                content: m.content,
-              })),
-            ],
-          });
-          return { content: response.content ?? "" };
+      const execution = extensions.createExecution({
+        sessionId,
+        locale: locale ?? "zh-CN",
+        signal: new AbortController().signal,
+        pluginData: await store.listPluginDataSessionScope(sessionId),
+        gateway: {
+          resolveSlot: () => null,
+          generateObject: async () => {
+            throw new Error(
+              "Object generation is not available in history compaction",
+            );
+          },
+          generateText: async (input) => {
+            const response = await llmAdapter.generate({
+              model: input.presetId ?? "fast",
+              maxOutputTokens: budget.reservedForResponse,
+              messages: [
+                ...(input.system
+                  ? [{ role: "system" as const, content: input.system }]
+                  : []),
+                ...(input.messages ?? []),
+                ...(input.prompt
+                  ? [{ role: "user" as const, content: input.prompt }]
+                  : []),
+              ],
+              signal: input.signal,
+            });
+            return {
+              text: response.content ?? "",
+              finishReason: response.finishReason ?? "stop",
+              usage: response.usage ?? { inputTokens: 0, outputTokens: 0 },
+            };
+          },
         },
-      };
+      });
       return await maybeCompact(
         sessionId,
         systemPromptPreview,
@@ -69,12 +81,11 @@ export function createBootstrapCompactorRunner(
         {
           store,
           estimator: estimateTokens,
-          fastSlotLlm,
+          compact: (input) => execution.run(historyCompactV1, input),
           contextWindow:
             budget.maxInputTokens - (budget.reservedForResponse ?? 0),
         },
         {
-          focusSections,
           ...(locale ? { locale } : {}),
           ...(traceId ? { traceId } : {}),
         },

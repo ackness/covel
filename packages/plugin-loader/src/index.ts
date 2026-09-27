@@ -1,6 +1,6 @@
 export { loadPluginUiSpec } from "./ui-spec.js";
 // ── Parsers ──────────────────────────────────────────────────────
-export { parsePluginMd } from "./parse-plugin-md.js";
+export { parsePluginMd, parseRuntimeMd } from "./parse-plugin-md.js";
 
 // ── Discovery & Loading ──────────────────────────────────────────
 export { discoverPlugins, discoverPluginsMulti } from "./discover.js";
@@ -76,3 +76,5 @@ export type {
 } from "./types.js";
 
 export { resolveRuntimeProviders } from "./runtime-providers.js";
+
+export { compileRuntimeManifest } from "./compile-manifest.js";

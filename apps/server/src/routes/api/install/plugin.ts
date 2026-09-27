@@ -2,7 +2,7 @@
  * Plugin install route.
  *
  * POST /api/install/plugin — multipart (field `file`), accepts a.zip containing
- *   either a root-level PLUGIN.md + package.json, or runtimes/<sub>/PLUGIN.md
+ *   a root-level PLUGIN.md + package.json, with optional runtimes/<sub>/RUNTIME.md
  *   entries (multi-runtime layout). Extracts to the user plugins dir and
  *   returns `{ ok, id, restartRequired: true }`.
  */

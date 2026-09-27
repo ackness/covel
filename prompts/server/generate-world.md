@@ -40,19 +40,11 @@ summary: <1-2 sentence summary>
 defaultLocale: "{{ locale }}"
 supportedLocales: ["{{ locale }}"]
 tags: [<you decide genre tags>]
-requiredPlugins: [] # list plugin IDs the world depends on (if any)
-recommendedPlugins: [] # list plugin IDs that enhance the world (if any)
 pluginPolicy:
-  preset: traditional-story # MUST match the Creation Brief experience preset
-  preferTags: [] # optional plugin catalogue tags such as mode:dialogue
-
-# Include only when the Creation Brief requests genre memory.
-memoryBlocks:
-  - label: <unique snake_case label>
-    displayName: <short display name>
-    extractionHint: <what the memory agent must keep current>
-    icon: <optional Lucide icon name>
-    maxChars: 2400
+  presetId: traditional-story # MUST match the Creation Brief experience preset
+  preferredTags: [] # optional plugin catalogue tags such as mode:dialogue
+  requested: [] # selected plugin IDs
+  recommended: [] # optional plugin IDs
 
 # Set to stage only for dialogue-mode; omit for traditional-story.
 defaultViewMode: stage
@@ -133,10 +125,16 @@ Anchor the lore around one core anomaly or pressure mechanism that makes this wo
 ## WORLD_PACKAGE_YAML
 
 This section carries optional text content that ships with the world package.
-Always include all three top-level arrays. Use `[]` when the Creation Brief says
+Always include all four top-level arrays. Use `[]` when the Creation Brief says
 OMIT. Never add other top-level fields.
 
 ```yaml
+memoryDefinitions:
+  - label: <unique snake_case label>
+    displayName: <short display name>
+    extractionHint: <what the memory plugin must keep current>
+    icon: <optional Lucide icon name>
+    maxChars: 2400
 characters:
   - schemaVersion: 1
     id: <stable ASCII id>

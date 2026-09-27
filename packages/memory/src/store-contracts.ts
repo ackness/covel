@@ -7,19 +7,6 @@ export type ArchivalStore = Pick<
   "listSessionLorebookEntries" | "listCharacters"
 >;
 
-export interface CoreMemoryStore extends Pick<
-  DataStore,
-  | "getWorkingMemory"
-  | "listWorkingMemory"
-  | "upsertWorkingMemory"
-  | "setPluginData"
-> {
-  /** A batch of authoritative block writes must remain atomic. */
-  withTransaction<T>(
-    fn: (tx: Pick<DataStore, "upsertWorkingMemory">) => Promise<T>,
-  ): Promise<T>;
-}
-
 export interface VectorIngestStore
   extends
     ArchivalStore,
@@ -28,5 +15,4 @@ export interface VectorIngestStore
       "getSession" | "listTurnMessagesAfter" | "getPluginData" | "setPluginData"
     > {}
 
-export interface MemoryStore
-  extends CoreMemoryStore, RecallStore, VectorIngestStore {}
+export interface MemoryStore extends RecallStore, VectorIngestStore {}

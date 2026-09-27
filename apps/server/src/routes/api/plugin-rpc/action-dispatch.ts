@@ -1,3 +1,4 @@
+import { withSettledExecutionLock } from "./settled-request.js";
 import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import {
@@ -336,10 +337,10 @@ export async function dispatchPluginAction(
         // Framework defaults own transactions; plugin actions receive only the
         // documented immediate-write RPC capability, including builtins.
         const entry = executor.lookupEntry(pluginId, action);
-        const rpcStore =
-          entry.pluginId === undefined
-            ? store
-            : createRpcHandlerStoreView(store, { sessionId, pluginId });
+        const rpcStore = createRpcHandlerStoreView(store, {
+          sessionId,
+          pluginId,
+        });
         return executor.dispatch(
           {
             pluginId,
@@ -392,7 +393,7 @@ export async function dispatchPluginAction(
     };
     const actionSessionLock = c.get("sessionLock");
     const dispatchResult = actionSessionLock
-      ? await actionSessionLock.withLock(sessionId, dispatchAction)
+      ? await withSettledExecutionLock(c, sessionId, dispatchAction)
       : await dispatchAction();
     if (dispatchResult instanceof Response) return dispatchResult;
     return c.json({

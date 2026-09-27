@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   createPluginRegistry,
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
 } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import {
@@ -20,6 +20,7 @@ import {
   registry,
   VALID_WORLD_IR,
   WORLD_IR_SCHEMA,
+  worldIrEntry,
 } from "./world-data-projection-fixtures.js";
 
 describe("world data projections", () => {
@@ -32,8 +33,11 @@ describe("world data projections", () => {
       (candidate) => candidate.id === "living-world-rules",
     );
     expect(discovery).toBeDefined();
-    const manifests = await loadPluginManifest(discovery!);
+    const { manifests, packageManifest } = await loadPluginDefinition(
+      discovery!,
+    );
     const pluginRegistry = createPluginRegistry();
+    pluginRegistry.register(worldIrEntry());
     pluginRegistry.register({
       id: discovery!.id,
       source: "builtin",
@@ -47,6 +51,7 @@ describe("world data projections", () => {
       },
       manifest: manifests[0],
       manifests,
+      packageManifest,
       loadedRuntimes: new Map(),
       status: "registered",
     });

@@ -30,6 +30,7 @@ import type {
 import type { SqlRunner } from "./sql-runner.js";
 import type {
   CharacterRecord,
+  CharacterSchemaRecord,
   CursorPageOpts,
   DataStore,
   EventRecord,
@@ -54,6 +55,7 @@ export interface SqlSessionContentTables {
   readonly events: EventsTable;
   readonly messages: MessagesTable;
   readonly characters: CharactersTable;
+  readonly characterSchemas: Table & { sessionId: Column };
 }
 
 export interface SqlSessionContentDeps {
@@ -62,7 +64,11 @@ export interface SqlSessionContentDeps {
   readonly json: JsonReader;
   readonly values: Pick<
     InsertValueBuilders,
-    "eventInsert" | "messageInsert" | "characterInsert" | "characterUpdate"
+    | "eventInsert"
+    | "messageInsert"
+    | "characterInsert"
+    | "characterUpdate"
+    | "characterSchemaInsert"
   >;
 }
 
@@ -74,6 +80,8 @@ export type SqlSessionContentRecords = Pick<
   | "addMessage"
   | "listMessages"
   | "listMessagesPage"
+  | "getCharacterSchema"
+  | "upsertCharacterSchema"
   | "upsertCharacter"
   | "listCharacters"
   | "deleteCharacter"
@@ -83,7 +91,7 @@ export function createSqlSessionContentRecords(
   deps: SqlSessionContentDeps,
 ): SqlSessionContentRecords {
   const { runner, tables, json, values } = deps;
-  const { events, messages, characters } = tables;
+  const { events, messages, characters, characterSchemas } = tables;
 
   return {
     async saveEvent(record: EventRecord): Promise<void> {
@@ -148,6 +156,40 @@ export function createSqlSessionContentRecords(
         limit: opts.limit,
       });
       return rows.reverse().map((row) => toMessageRecord(row, json));
+    },
+
+    async getCharacterSchema(
+      sessionId: string,
+    ): Promise<CharacterSchemaRecord | null> {
+      const rows = await runner.select<
+        Omit<CharacterSchemaRecord, "types" | "attributes"> & {
+          types: unknown;
+          attributes: unknown;
+        }
+      >(characterSchemas, {
+        where: eq(characterSchemas.sessionId, sessionId),
+        limit: 1,
+      });
+      const row = rows[0];
+      return row
+        ? {
+            ...row,
+            types: json.readRequired(
+              row.types,
+            ) as CharacterSchemaRecord["types"],
+            attributes: json.readRequired(
+              row.attributes,
+            ) as CharacterSchemaRecord["attributes"],
+          }
+        : null;
+    },
+
+    async upsertCharacterSchema(record: CharacterSchemaRecord): Promise<void> {
+      const value = values.characterSchemaInsert(record);
+      await runner.insert(characterSchemas, value, {
+        target: [characterSchemas.sessionId],
+        set: value,
+      });
     },
 
     async upsertCharacter(record: CharacterRecord): Promise<void> {

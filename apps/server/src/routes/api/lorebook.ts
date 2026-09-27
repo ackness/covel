@@ -27,13 +27,12 @@ type Env = {
 
 export const lorebookRoutes = new Hono<Env>();
 
-const entryBodySchema = z.object({
+const entryBodySchema = z.strictObject({
   id: z
     .string()
     .min(1)
     .max(160)
     .regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/),
-  pluginId: z.string().min(1).max(128).optional(),
   content: z.string().min(1).max(65_536),
   keys: z.array(z.string().max(128)).max(64).optional(),
   strategy: z.enum(["constant", "selective"]).optional(),
@@ -79,6 +78,13 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
     expectedSession: guard.session,
     allowedStatuses: ["active"],
     mutate: async () => {
+      const existing = await store.getLorebookEntry(
+        sessionId,
+        { kind: "player" },
+        entry.id,
+      );
+      if (existing)
+        return c.json(errorBody("Lorebook entry already exists"), 409);
       await store.upsertLorebookEntries([entry]);
       return c.json(entry, 201);
     },
@@ -110,8 +116,10 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
     expectedSession: guard.session,
     allowedStatuses: ["active"],
     mutate: async () => {
-      const existing = (await store.listSessionLorebookEntries(sessionId)).find(
-        (e) => e.id === entryId,
+      const existing = await store.getLorebookEntry(
+        sessionId,
+        { kind: "player" },
+        entryId,
       );
       const now = new Date().toISOString();
       const entry = toLorebookRecord(
@@ -119,7 +127,7 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
         parsed.data,
         existing?.createdAt ?? now,
         now,
-        existing,
+        existing ?? undefined,
       );
       await store.upsertLorebookEntries([entry]);
       return c.json(entry);
@@ -155,8 +163,10 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
     expectedSession: guard.session,
     allowedStatuses: ["active"],
     mutate: async () => {
-      const existing = (await store.listSessionLorebookEntries(sessionId)).find(
-        (e) => e.id === entryId,
+      const existing = await store.getLorebookEntry(
+        sessionId,
+        { kind: "player" },
+        entryId,
       );
       if (!existing) return c.json(errorBody("Lorebook entry not found"), 404);
       await store.upsertLorebookEntries([
@@ -187,11 +197,13 @@ lorebookRoutes.delete("/:id/lorebook/:entryId", async (c) => {
     expectedSession: guard.session,
     allowedStatuses: ["active"],
     mutate: async () => {
-      const existing = (await store.listSessionLorebookEntries(sessionId)).find(
-        (e) => e.id === entryId,
+      const existing = await store.getLorebookEntry(
+        sessionId,
+        { kind: "player" },
+        entryId,
       );
       if (!existing) return c.json(errorBody("Lorebook entry not found"), 404);
-      await store.deleteLorebookEntry(sessionId, entryId);
+      await store.deleteLorebookEntry(sessionId, { kind: "player" }, entryId);
       return c.json(okBody());
     },
   });
@@ -203,7 +215,6 @@ function toLorebookRecord(
   createdAt: string,
   updatedAt: string,
   existing?: {
-    readonly pluginId: string;
     readonly keys: readonly string[];
     readonly strategy: "constant" | "selective";
     readonly position: string;
@@ -215,7 +226,7 @@ function toLorebookRecord(
   return {
     id: body.id,
     sessionId,
-    pluginId: body.pluginId ?? existing?.pluginId ?? "manual-lorebook",
+    owner: { kind: "player" } as const,
     keys: body.keys ?? existing?.keys ?? [],
     content: body.content,
     strategy: body.strategy ?? existing?.strategy ?? "constant",

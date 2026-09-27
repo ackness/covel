@@ -42,7 +42,7 @@ function files(version: string) {
       type: "module",
     }),
     "plugins/note/PLUGIN.md":
-      "---\nname: example-note\npluginType: plugin\ndescription: Update fixture\noutputKind: system\nentry: ./server.js\n---\n",
+      "---\nid: example-note\nkind: plugin\ndescription: Update fixture\nentry: ./server.js\n---\n",
     "plugins/note/server.js": `throw new Error("Unapproved ${version} code executed");`,
     "README.md": "Repository description",
   };

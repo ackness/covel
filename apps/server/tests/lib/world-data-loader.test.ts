@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -112,10 +112,10 @@ summary: World with plugin policy
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
 pluginPolicy:
-  preset: dialogue-mode
-  preferTags:
+  presetId: dialogue-mode
+  preferredTags:
     - mode:dialogue
-  avoidTags:
+  avoidedTags:
     - mode:traditional-story
 `,
     );
@@ -124,9 +124,9 @@ pluginPolicy:
     const record = await loadSingleWorld(root);
 
     expect(record?.metadata?.pluginPolicy).toEqual({
-      preset: "dialogue-mode",
-      preferTags: ["mode:dialogue"],
-      avoidTags: ["mode:traditional-story"],
+      presetId: "dialogue-mode",
+      preferredTags: ["mode:dialogue"],
+      avoidedTags: ["mode:traditional-story"],
     });
   });
 
@@ -158,49 +158,18 @@ pluginSettings:
     });
   });
 
-  it("passes world memoryBlocks into world metadata", async () => {
+  it.each([
+    "memoryBlocks: []",
+    "requiredPlugins: []",
+    "recommendedPlugins: []",
+    "characterBlueprintSources: []",
+  ])("rejects removed world manifest field %s", async (removed) => {
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1.0"
-id: detective-world
-name: Detective World
-summary: World declaring genre-specific memory blocks
-defaultLocale: zh-CN
-supportedLocales: [zh-CN]
-memoryBlocks:
-  - label: clues
-    displayName: { zh-CN: 线索, en-US: Clues }
-    extractionHint: { zh-CN: 已发现的线索, en-US: Discovered clues }
-    icon: Search
-  - label: suspects
-    displayName: { zh-CN: 嫌疑人, en-US: Suspects }
-    extractionHint: { zh-CN: 嫌疑人及动机, en-US: Suspects and motives }
-`,
+      `schemaVersion: "1"\nid: current-world\nname: Current\nsummary: Strict world contract\ndefaultLocale: en-US\n${removed}\n`,
     );
-    await writeFile(path.join(root, "WORLD.md"), "# Detective World");
-
-    const record = await loadSingleWorld(root);
-
-    expect(record?.metadata?.memoryBlocks).toEqual([
-      {
-        label: "clues",
-        displayName: { "zh-CN": "线索", "en-US": "Clues" },
-        extractionHint: {
-          "zh-CN": "已发现的线索",
-          "en-US": "Discovered clues",
-        },
-        icon: "Search",
-      },
-      {
-        label: "suspects",
-        displayName: { "zh-CN": "嫌疑人", "en-US": "Suspects" },
-        extractionHint: {
-          "zh-CN": "嫌疑人及动机",
-          "en-US": "Suspects and motives",
-        },
-      },
-    ]);
+    expect(await loadSingleWorld(root)).toBeNull();
   });
 
   it("passes defaultViewMode from world.yaml into world metadata", async () => {
@@ -240,62 +209,6 @@ supportedLocales: [zh-CN]
     const record = await loadSingleWorld(root);
 
     expect(record?.metadata?.defaultViewMode).toBeUndefined();
-  });
-
-  it("folds deprecated top-level selection into pluginPolicy (deduped union)", async () => {
-    const root = await makeTempWorld();
-    await writeFile(
-      path.join(root, "world.yaml"),
-      `schemaVersion: "1.0"
-id: fold-world
-name: Fold World
-summary: Top-level selection folds into pluginPolicy
-defaultLocale: zh-CN
-supportedLocales: [zh-CN]
-requiredPlugins: [pregame, world-init]
-excludedPlugins: [narrator]
-pluginPolicy:
-  preset: dialogue-mode
-  requiredPlugins: [world-init, char-creator]
-`,
-    );
-    await writeFile(path.join(root, "WORLD.md"), "# Fold World");
-
-    const record = await loadSingleWorld(root);
-
-    expect(record?.metadata?.pluginPolicy).toEqual({
-      preset: "dialogue-mode",
-      requiredPlugins: ["world-init", "char-creator", "pregame"],
-      excludedPlugins: ["narrator"],
-    });
-    // No separate top-level copies remain in metadata — pluginPolicy is the
-    // single source of truth.
-    expect(record?.metadata?.requiredPlugins).toBeUndefined();
-    expect(record?.metadata?.recommendedPlugins).toBeUndefined();
-    expect(record?.metadata?.excludedPlugins).toBeUndefined();
-  });
-
-  it("creates pluginPolicy from top-level-only selection (no pluginPolicy block)", async () => {
-    const root = await makeTempWorld();
-    await writeFile(
-      path.join(root, "world.yaml"),
-      `schemaVersion: "1.0"
-id: legacy-world
-name: Legacy World
-summary: Only top-level requiredPlugins, no pluginPolicy
-defaultLocale: zh-CN
-supportedLocales: [zh-CN]
-requiredPlugins: [pregame, world-init, char-creator]
-`,
-    );
-    await writeFile(path.join(root, "WORLD.md"), "# Legacy World");
-
-    const record = await loadSingleWorld(root);
-
-    expect(record?.metadata?.pluginPolicy).toEqual({
-      requiredPlugins: ["pregame", "world-init", "char-creator"],
-    });
-    expect(record?.metadata?.requiredPlugins).toBeUndefined();
   });
 
   it("builds a lightweight metadata summary and projects world metadata", async () => {
@@ -661,7 +574,7 @@ sources:
     kind: media
     path: media
     to: media
-    indexTo: plugin:character-presence/assets+lorebook
+    indexTo: contract:character.portrait-assets@1+lorebook
     key: filename
 `,
     );
@@ -719,53 +632,6 @@ sources:
     });
   });
 
-  it("does not eager-load legacy character blueprints when worldData is declared", async () => {
-    const root = await makeTempWorld();
-    await mkdir(path.join(root, "data"), { recursive: true });
-    await mkdir(path.join(root, "characters"), { recursive: true });
-    await writeFile(
-      path.join(root, "world.yaml"),
-      `schemaVersion: "1"
-id: demo-world
-name: Demo
-summary: Demo world
-defaultLocale: zh-CN
-worldData: data/world.data.yaml
-characterBlueprintSources:
-  - characters/main-cast.json
-`,
-    );
-    await writeFile(
-      path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
-  dimensions:
-    kind: yaml
-    path: data/dimensions.yaml
-    schema: covel://world/dimensions
-    to: world:metadata.dimensions
-`,
-    );
-    await writeFile(
-      path.join(root, "data/dimensions.yaml"),
-      "tone:\n  genres: [测试]\n  contentRating: teen\n",
-    );
-    await writeFile(
-      path.join(root, "characters/main-cast.json"),
-      JSON.stringify([
-        { schemaVersion: 1, id: "mio", name: "Mio", role: "npc" },
-      ]),
-    );
-
-    const record = await loadSingleWorld(root);
-
-    expect(record?.metadata?.characterBlueprints).toBeUndefined();
-    expect(record?.metadata?.worldData).toMatchObject({
-      schemaVersion: 1,
-      sources: [{ id: "dimensions", target: "world:metadata.dimensions" }],
-    });
-  });
-
   it("loads bundled worlds through worldData descriptors", async () => {
     const worldsRoot = path.resolve(import.meta.dirname, "../../../../worlds");
     for (const worldId of ["haruka-academy", "mistport"]) {
@@ -791,7 +657,7 @@ sources:
         sources: expect.arrayContaining([
           expect.objectContaining({
             id: ruleSourceId,
-            target: "plugin:living-world-rules/rules+lorebook",
+            target: "contract:world.rules@1+lorebook",
           }),
         ]),
       });
@@ -805,7 +671,7 @@ sources:
       sources: expect.arrayContaining([
         expect.objectContaining({
           id: "cast",
-          target: "plugin:character-blueprint/blueprints",
+          target: "contract:character.blueprints@1",
         }),
       ]),
     });
@@ -814,7 +680,7 @@ sources:
     const memoryBlocksByWorld = {
       mistport: ["clues", "commitments", "relics", "tides"],
       "haruka-academy": [
-        "campusSchedule",
+        "campus_schedule",
         "festival",
         "promises",
         "relationships",
@@ -823,9 +689,17 @@ sources:
     } as const;
     for (const [worldId, labels] of Object.entries(memoryBlocksByWorld)) {
       const record = await loadSingleWorld(path.join(worldsRoot, worldId));
-      const blocks = (record?.metadata?.memoryBlocks ?? []) as {
-        label: string;
-      }[];
+      expect(record?.metadata?.worldData).toMatchObject({
+        sources: expect.arrayContaining([
+          expect.objectContaining({ target: "contract:memory.blocks@1" }),
+        ]),
+      });
+      const { blocks } = JSON.parse(
+        await readFile(
+          path.join(worldsRoot, worldId, "data/memory-blocks.json"),
+          "utf8",
+        ),
+      ) as { blocks: { label: string }[] };
       expect(blocks.map((b) => b.label).sort()).toEqual([...labels].sort());
     }
   });
@@ -837,6 +711,8 @@ sources:
     expect(
       parseWorldDataTarget("world:metadata.characterBlueprints"),
     ).toBeNull();
-    expect(parseWorldDataTarget("plugin:plugin-id/runtime-id/ns")).toBeNull();
+    expect(
+      parseWorldDataTarget("contract:plugin-id.runtime-id@1/ns"),
+    ).toBeNull();
   });
 });

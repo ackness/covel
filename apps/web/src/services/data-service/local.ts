@@ -2,10 +2,8 @@ import {
   DEFAULT_LOCALE,
   worldDimensionsSchema,
   worldWireRecordSchema,
-  characterBlueprintToCharacterUpsert,
   decodePageCursor,
   encodePageCursor,
-  type CharacterBlueprint,
   type CursorPage,
 } from "@covel/shared";
 import type {
@@ -101,51 +99,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizePortableCharacterBlueprint(
-  value: unknown,
-): CharacterBlueprint | null {
-  if (!isRecord(value) || value.schemaVersion !== 1) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
-  if (typeof value.name !== "string" || value.name.length === 0) return null;
-  return value as unknown as CharacterBlueprint;
-}
-
 function portableWorldContent(
   session: StoreSessionRecord,
   world: StoreWorldRecord | null,
   now: string,
 ): Pick<BrowserCheckpoint, "characters" | "lorebookEntries"> {
   const metadata = isRecord(world?.metadata) ? world.metadata : {};
-  const rawCharacters = Array.isArray(metadata.characterBlueprints)
-    ? metadata.characterBlueprints.slice(0, 64)
+  const rawCharacters = Array.isArray(metadata.embeddedCharacters)
+    ? metadata.embeddedCharacters.slice(0, 64)
     : [];
   const characters = rawCharacters.flatMap((value) => {
-    const blueprint = normalizePortableCharacterBlueprint(value);
-    if (!blueprint) return [];
-    const baseId =
-      typeof blueprint.instantiate?.characterId === "string" &&
-      blueprint.instantiate.characterId.length > 0
-        ? blueprint.instantiate.characterId
-        : `char-${blueprint.id}`;
-    const scopedId = `${session.id}-${baseId}`;
-    const characterId =
-      scopedId.length <= 180 ? scopedId : `${session.id}-${blueprint.id}`;
-    const upsert = characterBlueprintToCharacterUpsert(blueprint, {
-      now,
-      characterId,
-    });
+    if (
+      !isRecord(value) ||
+      typeof value.id !== "string" ||
+      typeof value.name !== "string"
+    )
+      return [];
     return [
       {
-        id: upsert.id,
+        id: `${session.id}-${value.id}`,
         sessionId: session.id,
-        name: upsert.name,
-        type: upsert.type ?? "npc",
-        ...(upsert.description !== undefined
-          ? { description: upsert.description }
+        name: value.name,
+        type: typeof value.type === "string" ? value.type : "npc",
+        ...(typeof value.description === "string"
+          ? { description: value.description }
           : {}),
-        ...(upsert.fields !== undefined ? { fields: upsert.fields } : {}),
-        version: upsert.version ?? 1,
-        createdAt: upsert.createdAt ?? now,
+        ...(isRecord(value.fields) ? { fields: value.fields } : {}),
+        version: 1,
+        createdAt: now,
         updatedAt: now,
       },
     ];
@@ -176,7 +157,7 @@ function portableWorldContent(
       {
         id: value.id,
         sessionId: session.id,
-        pluginId: "world-data",
+        owner: { kind: "world" } as const,
         keys,
         content: value.content,
         strategy:
@@ -221,8 +202,8 @@ function initialCheckpoint(
     events: [],
     traceEvents: [],
     characters: portableContent.characters,
+    characterSchema: null,
     pluginData: [],
-    workingMemory: [],
     lorebookEntries: portableContent.lorebookEntries,
     sessionSummaries: [],
     playerInputs: [],
@@ -494,6 +475,7 @@ export class LocalDataService implements DataService {
     _plugins?: string[],
     locale?: string,
     loreOverride?: string,
+    excludedPlugins?: string[],
   ): Promise<SessionRecord> {
     worldWireRecordSchema.shape.lore.parse(loreOverride);
     const vault = await this.ready();
@@ -519,7 +501,13 @@ export class LocalDataService implements DataService {
       setupRuntimes: {},
       locale: locale ?? DEFAULT_LOCALE,
       activePlugins: _plugins ?? [],
-      metadata: loreOverride !== undefined ? { loreOverride } : {},
+      metadata: {
+        ...(loreOverride !== undefined ? { loreOverride } : {}),
+        pluginSelection: {
+          requested: _plugins ?? [],
+          excluded: excludedPlugins ?? [],
+        },
+      },
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -803,6 +791,19 @@ export class LocalDataService implements DataService {
         typeof checkpoint.session.metadata?.loreOverride === "string"
           ? checkpoint.session.metadata.loreOverride
           : undefined,
+        Array.isArray(
+          (
+            checkpoint.session.metadata?.pluginSelection as {
+              excluded?: unknown;
+            }
+          )?.excluded,
+        )
+          ? (
+              checkpoint.session.metadata!.pluginSelection as {
+                excluded: string[];
+              }
+            ).excluded
+          : [],
       );
       // Only a never-hydrated local session needs the server to resolve its
       // initial setup band. When rebuilding an ephemeral mirror after a server

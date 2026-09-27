@@ -29,12 +29,7 @@ import type {
   InputSource,
   TurnInput,
 } from "@covel/shared";
-import {
-  getRuntimeSpec,
-  hasIllegalDetachedContract,
-  validateWorldIRV1,
-  WORLD_IR_V1_SCHEMA_URI,
-} from "@covel/shared";
+import { getRuntimeSpec, hasIllegalDetachedContract } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 
 export { hasIllegalDetachedContract };
@@ -51,19 +46,7 @@ function validateAcceptedValue(
   value: unknown,
   schema: Schema,
 ): { readonly valid: boolean; readonly errors?: readonly string[] } {
-  const structural = validateOutput(value, schema);
-  if (!structural.valid || schema.$id !== WORLD_IR_V1_SCHEMA_URI) {
-    return structural;
-  }
-  const semantic = validateWorldIRV1(value);
-  return semantic.valid
-    ? { valid: true }
-    : {
-        valid: false,
-        errors: semantic.errors.map(
-          (error) => `${error.path}: ${error.message}`,
-        ),
-      };
+  return validateOutput(value, schema);
 }
 
 /** Machine-readable skip reasons a binding gate can emit. */
@@ -214,7 +197,7 @@ function providersFor(
   }
   const cap = binding.from.capability;
   return {
-    providers: activeRuntimes.filter((r) => r.capabilities?.includes(cap)),
+    providers: activeRuntimes.filter((r) => r.outputContract === cap),
     cardinality: binding.from.cardinality ?? "one",
   };
 }

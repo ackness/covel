@@ -3,7 +3,7 @@ export default async function handler(ctx) {
   const result = await ctx.services.call({
     pluginId: ctx.pluginId,
     name: "evaluate",
-    contract: "test/evaluation@1",
+    contract: "test.evaluation@1",
     input: {
       state: { narrative: ctx.inputs.narrative.value },
       options: choices.value.prompts.map((prompt, index) => ({

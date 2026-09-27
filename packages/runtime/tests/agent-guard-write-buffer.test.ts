@@ -40,14 +40,14 @@ const guardRuntime = {
   guard: "./guard.js",
   trigger: { type: "auto" },
   outputKind: "plugin",
-  capabilities: [],
+  outputContract: undefined,
 } as RuntimeManifest;
 
 const siblingRuntime = {
   name: "p/writer",
   pluginId: "p",
   outputKind: "plugin",
-  capabilities: [],
+  outputContract: undefined,
 } as unknown as RuntimeManifest;
 
 async function seedSetupSession(): Promise<DataStore> {

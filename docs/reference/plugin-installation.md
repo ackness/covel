@@ -4,7 +4,7 @@
 
 ## 分类与信任
 
-核心插件随 Covel 内置；官方扩展和社区插件按需安装。维护者标签和功能分类只用于展示，不参与权限判定。现有 `pluginType` 表达插件角色，`source: builtin | community` 由发现目录决定。外部安装的官方插件也属于 `community`，不自动启用、不跳过会话代码授权。
+核心插件随 Covel 内置；官方扩展和社区插件按需安装。维护者标签和功能分类只用于展示，不参与权限判定。根声明的 `kind: core | plugin` 表达插件角色，`source: builtin | community` 由发现目录决定。外部安装的官方插件也属于 `community`，不自动启用、不跳过会话代码授权。
 
 服务端 JavaScript 不是进程沙箱。公共 API 的权限检查无法完整限制任意第三方 JavaScript 对进程文件、环境变量和网络的访问。目录收录、源码摘要和静态清单检查均不等于安全审计。
 
@@ -19,7 +19,7 @@
 
 安装写入当前连接的后端，而非固定写入浏览器所在机器。桌面实例写入本机；远程部署写入服务器。安装、预览、安装记录查询和卸载复用安装 API 权限门控，demo/commercial 部署必须使用运营者令牌。生产自托管实例仍需桌面令牌或 `COVEL_INSTALL_API_ENABLED=1`。
 
-本地 ZIP 导入保持可用，界面要求先确认代码风险。GitHub 安装记录和磁盘目录独立于启动时的 registry，因此新安装、失败插件和待卸载插件在重启前仍可管理。安装和卸载都需要重启；不提供热更新或后台自动更新；普通安装不覆盖同 ID 目录，更新走独立确认流程。
+本地 ZIP 导入保持可用，界面要求先确认代码风险。GitHub 安装记录和磁盘目录独立于启动时的 registry，因此新安装、失败插件和待卸载插件在重启前仍可管理。安装和卸载都需要重启；已加载的社区插件在开发模式支持[单插件热重载](plugin-extensions.md#开发时单插件热重载)，不提供后台自动更新；普通安装不覆盖同 ID 目录，更新走独立确认流程。
 
 ## GitHub 输入与发布物
 
@@ -33,7 +33,7 @@ GitHub API 解析和归档下载统一使用现有 outbound 网络层，实时�
 
 只下载公开 GitHub 源码归档，不使用用户 GitHub 凭证。首期不自动下载 Release 附件，不接受任意 URL、私有仓库或 GitHub Enterprise。已构建的 Release ZIP 可手动下载后导入。
 
-插件包目录必须有 `package.json` 和根 `PLUGIN.md`，或 `runtimes/<sub>/PLUGIN.md`。使用规范插件 ID，不能覆盖内置 ID。清单及语言变体只接受普通 YAML frontmatter，拒绝可执行语言标记。安装器不会执行脚本、包管理器、编译器或插件模块；GitHub 安装要求运行文件自包含，package.json 不声明 dependencies、optionalDependencies、peerDependencies，开发依赖不受此限制。需要构建时，作者应在独立发布目录提供已构建、自包含的文件。
+插件包目录必须同时有 `package.json` 和根 `PLUGIN.md`。根声明使用 `{ id, kind, contributes, runtime? }`；多运行时包把执行声明放在 `runtimes/<sub>/RUNTIME.md`，子声明使用 `{ type, schedule, io, agent/function }`，不再重复插件身份。根 `runtime` 与子目录运行时不能同时声明，旧平铺字段、缺根声明或子目录 `PLUGIN.md` 均拒绝安装。使用规范插件 ID，不能覆盖内置 ID。清单及语言变体只接受普通 YAML frontmatter，拒绝可执行语言标记。安装器不会执行脚本、包管理器、编译器或插件模块；GitHub 安装要求运行文件自包含，package.json 不声明 dependencies、optionalDependencies、peerDependencies，开发依赖不受此限制。需要构建时，作者应在独立发布目录提供已构建、自包含的文件。
 
 GitHub 源码归档带的一层外目录会被移除，再提取指定插件目录。普通上传 ZIP 仍要求包文件位于 ZIP 顶层。归档限制复用安装器：压缩文件 20 MiB、最多 2000 条目、解压 200 MiB、膨胀比最多 100。这些限制应用于整个 GitHub 归档；大型 monorepo 应使用精简发布仓库或本地 ZIP。拒绝符号链接、路径逃逸和大小写冲突的重复文件路径。
 

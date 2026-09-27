@@ -27,18 +27,24 @@ const stubAi = {
 
 function manifest(name: string, specPath: string): string {
   return `---
-name: ${name}
+id: ${name}
+kind: plugin
 description: ${name}
-pluginType: plugin
-runtimeType: function
-handler: ./handler.js
-outputKind: plugin
-execution: sync
-trigger:
-  type: manual
-ui:
-  right:
-    - ${specPath}
+contributes:
+  ui:
+    right:
+      - ${specPath}
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+    manual:
+      execution: sync
+  io:
+    visibility: plugin
+  function:
+    handler: ./handler.js
 ---
 `;
 }

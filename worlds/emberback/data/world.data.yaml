@@ -14,51 +14,61 @@ sources:
   cast:
     kind: json
     path: characters/main-cast.json
-    schema: plugin://character-blueprint/blueprints
-    to: plugin:character-blueprint/blueprints
+    schema: contract:character.blueprints@1
+    to: contract:character.blueprints@1
     key: id
-    effects:
-      - characters
     after: dimensions
   portraits:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
     after: cast
   presence:
     kind: json
     path: media/presence.json
-    schema: plugin://character-presence/presence
-    to: plugin:character-presence/presence
+    schema: contract:character.portraits@1
+    to: contract:character.portraits@1
     key: characterId
     after: portraits
   rules:
     kind: yaml
     path: data/rules/emberback-rules.yaml
-    schema: plugin://living-world-rules/rules
-    to: plugin:living-world-rules/rules+lorebook
+    schema: contract:world.rules@1
+    to: contract:world.rules@1+lorebook
     key: id
     after: dimensions
   quests:
     kind: yaml
     path: data/quests.yaml
-    schema: plugin://core-quest/quests
-    to: plugin:core-quest/quests
+    schema: contract:quests@1
+    to: contract:quests@1
     key: id
     after: dimensions
   items:
     kind: yaml
     path: data/items.yaml
-    schema: plugin://inventory/items
-    to: plugin:inventory/items
+    schema: contract:inventory.items@1
+    to: contract:inventory.items@1
     key: id
     after: dimensions
   affinity:
     kind: yaml
     path: data/affinity.yaml
-    schema: plugin://affinity/affinity
-    to: plugin:affinity/affinity
+    schema: contract:character.affinity@1
+    to: contract:character.affinity@1
     key: id
     after: dimensions
+  characters:
+    kind: json
+    path: characters/characters.json
+    to: characters
+    key: id
+    after: cast
+  memoryBlocks:
+    kind: json
+    path: data/memory-blocks.json
+    to: contract:memory.blocks@1
+    schema: contract:memory.blocks@1
+    key: id

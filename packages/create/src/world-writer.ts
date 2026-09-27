@@ -64,11 +64,17 @@ export async function writeWorldDataFiles(
     inline && typeof inline === "object" && Object.keys(inline).length > 0,
   );
   const characters = packageContent?.characters ?? [];
+  const memoryDefinitions = packageContent?.memoryDefinitions ?? [];
   const lorebook = [
     ...(packageContent?.lorebook ?? []),
     ...(packageContent?.rules ?? []),
   ];
-  if (!hasDimensions && characters.length === 0 && lorebook.length === 0) {
+  if (
+    !hasDimensions &&
+    characters.length === 0 &&
+    lorebook.length === 0 &&
+    memoryDefinitions.length === 0
+  ) {
     return [];
   }
 
@@ -111,10 +117,6 @@ export async function writeWorldDataFiles(
       key: "id",
       ...(hasDimensions ? { after: "dimensions" } : {}),
     };
-    // Keep a portable fallback for store-only/browser worlds. File-backed
-    // worlds import `cast` through worldData and therefore never execute the
-    // fallback, avoiding duplicate characters.
-    manifest.characterBlueprintSources = [charactersPath];
   }
 
   if (lorebook.length > 0) {
@@ -131,6 +133,23 @@ export async function writeWorldDataFiles(
       to: "lorebook",
       key: "id",
       ...(hasDimensions ? { after: "dimensions" } : {}),
+    };
+  }
+
+  if (memoryDefinitions.length > 0) {
+    const memoryPath = "data/memory-blocks.json";
+    await writeFile(
+      path.join(worldDir, memoryPath),
+      `${JSON.stringify({ id: "world", blocks: memoryDefinitions }, null, 2)}\n`,
+      "utf8",
+    );
+    written.push(memoryPath);
+    sources.memoryDefinitions = {
+      kind: "json",
+      path: memoryPath,
+      schema: "contract:memory.blocks@1",
+      to: "contract:memory.blocks@1",
+      key: "id",
     };
   }
 

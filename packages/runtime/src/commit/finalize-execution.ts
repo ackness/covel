@@ -68,13 +68,7 @@ import { storyOutputError } from "../agent-loop/story-output.js";
  */
 type FinalizeManifest = Pick<
   RuntimeManifest,
-  | "name"
-  | "pluginId"
-  | "outputKind"
-  | "capabilities"
-  | "version"
-  | "output"
-  | "userSettings"
+  "name" | "pluginId" | "outputKind" | "version" | "output" | "userSettings"
 >;
 
 /** The loose runtime-result shape `processRuntimeResult` accepts (top-level or nested). */
@@ -98,6 +92,7 @@ export interface FinalizeExecutionArgs {
    * scope. Callers pass the session's active runtimes.
    */
   readonly runtimes: readonly FinalizeManifest[];
+  readonly imageFlowRuntimeIds?: readonly string[];
   /** Flattened results to commit: top-level plus nested recursiveCall results. */
   readonly results: readonly FinalizableResult[];
   /** Conversation entries committed atomically with this execution. */
@@ -317,10 +312,8 @@ export async function finalizeExecution(
     needsSessionClockWrite(executionContext, sessionClock);
 
   const outputKindByRuntime = new Map<string, string>();
-  const capabilitiesByRuntime = new Map<string, readonly string[]>();
   for (const rt of runtimes) {
     outputKindByRuntime.set(rt.name, rt.outputKind ?? "plugin");
-    capabilitiesByRuntime.set(rt.name, rt.capabilities ?? []);
   }
   const activePluginIds =
     args.activePluginIds ?? new Set(runtimes.map((rt) => rt.pluginId));
@@ -385,7 +378,7 @@ export async function finalizeExecution(
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(eventBus ? { eventBus } : {}),
     ...(emitter ? { emitter } : {}),
-    capabilities: capabilitiesByRuntime.get(result.runtimeId) ?? [],
+    enforceImageFlow: args.imageFlowRuntimeIds?.includes(result.runtimeId),
     // A scoped retry repairs existing content unless it actually commits a
     // replacement story. Do not confuse this anchor with logical-turn counting.
     ...(executionContext.sourceTurnId &&

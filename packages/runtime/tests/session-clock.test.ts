@@ -34,7 +34,7 @@ async function seedSession(
 }
 
 function makeRuntime(name: string, outputKind = "plugin") {
-  return { name, pluginId: name, outputKind, capabilities: [] as const };
+  return { name, pluginId: name, outputKind, outputContract: undefined };
 }
 
 function statePatchResult(field: string, value: unknown) {

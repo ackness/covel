@@ -99,7 +99,6 @@ describe("POST /api/actions — turn commit barrier", () => {
   let registry: PluginRegistry;
   let app: Hono;
   let busEvents: SubscriptionEvent[];
-  let memoryCalls: Array<{ busTypesAtCall: string[] }>;
   let hookPipeline: ReturnType<typeof createHookPipeline>;
 
   beforeEach(async () => {
@@ -142,26 +141,6 @@ describe("POST /api/actions — turn commit barrier", () => {
     busEvents = [];
     eventBus.onEmit((e) => busEvents.push(e));
 
-    // Memory system mock — records the bus events visible at ingestion time,
-    // so tests can prove ingestion ran after the snapshot (commit barrier).
-    memoryCalls = [];
-    const memorySystem = {
-      manager: {
-        loadBlocks: async () => [
-          { label: "persona", content: "seed", updatedAt: "2024-01-01" },
-        ],
-        initializeDefaults: async () => {},
-      },
-      updater: {
-        updateAfterTurn: async () => {
-          memoryCalls.push({
-            busTypesAtCall: busEvents.map((e) => e.type as string),
-          });
-          return { updated: true, blocksChanged: [] };
-        },
-      },
-    };
-
     const { llm } = makeFakeLLM("A committed narrative line.");
     const sessionLock = createInProcessSessionLock();
     const loaded = makeFakeLoadedRuntime({ name: RUNTIME_ID });
@@ -179,7 +158,6 @@ describe("POST /api/actions — turn commit barrier", () => {
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);
-      c.set("memorySystem", memorySystem);
       c.set("hookPipeline", hookPipeline);
       await next();
     });
@@ -315,21 +293,6 @@ describe("POST /api/actions — turn commit barrier", () => {
         budget: entry.sessionId === secondId ? 4 : 10,
       });
     }
-  });
-
-  it("gates post-turn memory ingestion behind commit + snapshot (R-06/R-09)", async () => {
-    const envelopes = await runTurn();
-    expect(envelopes.map((e) => e.type)).not.toContain("error.occurred");
-
-    // completeTurn() schedules ingestion fire-and-forget — let it settle.
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(memoryCalls).toHaveLength(1);
-    // At ingestion time the auto snapshot had already been captured, i.e. the
-    // barrier fired after commit + snapshot, not during execution.
-    expect(memoryCalls[0].busTypesAtCall).toContain("state.snapshot.created");
-
-    const snapshots = await store.listSnapshots(SESSION_ID);
-    expect(snapshots.length).toBeGreaterThan(0);
   });
 
   it("persists every trace row of the turn under the single SSE traceId (R-14)", async () => {

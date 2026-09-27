@@ -66,7 +66,6 @@ describe.each(["memory", "sqlite"])(
         body: JSON.stringify({
           id: "same-id",
           plugins: [],
-          incarnation: "forged",
         }),
       });
       expect(created.status).toBe(201);

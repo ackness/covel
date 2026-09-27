@@ -8,13 +8,13 @@
  *   node scripts/create-plugin.js <plugin-name> -t <target-dir>                     # 自定义目标目录
  *   node scripts/create-plugin.js <plugin-name> -r <runtime-spec>                   # 自定义 runtime 列表
  *   node scripts/create-plugin.js <plugin-name> -r foo:function,bar:agent           # 多 runtime + 类型
- *   node scripts/create-plugin.js <plugin-name> --with-tools                        # 旧：单 runtime + tools/（仓库内）
+ *   node scripts/create-plugin.js <plugin-name> --with-tools                        # 单 runtime + tools/（仓库内）
  *
  * 选项：
  *   -t, --target <dir>    Override COVEL_USER_PLUGINS_DIR / COVEL_HOME/plugins / ~/.covel/plugins
  *   -r, --runtimes <list> 用逗号分隔的 runtime 列表，每项为 name 或 name:type
  *                         type ∈ { function, agent }（默认 agent）
- *   --with-tools          旧式单 runtime 带 tools/，目标固定为 <repo>/plugins/
+ *   --with-tools          内联单 runtime 带 tools/，目标固定为 <repo>/plugins/
  *
  * 示例：
  *   node scripts/create-plugin.js session-notes
@@ -105,7 +105,7 @@ if (!/^[a-z][a-z0-9-]*$/.test(pluginName)) {
 
 if (withTools && (targetArg || runtimesArg)) {
   console.error(
-    "错误：--with-tools 是旧式单 runtime 模式，不能与 -t / -r 同用。",
+    "错误：--with-tools 是内联单 runtime 模式，不能与 -t / -r 同用。",
   );
   process.exit(1);
 }
@@ -113,7 +113,7 @@ if (withTools && (targetArg || runtimesArg)) {
 // ── 模式选择 ──────────────────────────────────────────────────────
 
 const mode = withTools
-  ? "legacy-with-tools"
+  ? "with-tools"
   : runtimesArg
     ? "custom-multi-runtime"
     : "demo-multi-runtime";
@@ -197,11 +197,11 @@ console.log(`目标：${targetDir}`);
 console.log(`模式：${mode}\n`);
 
 switch (mode) {
-  case "legacy-with-tools":
-    runLegacyTemplate("plugin-with-tools");
+  case "with-tools":
+    runTemplate("plugin-with-tools");
     break;
   case "demo-multi-runtime":
-    runLegacyTemplate("plugin-multi-runtime");
+    runTemplate("plugin-multi-runtime");
     break;
   case "custom-multi-runtime":
     runCustomMultiRuntime(parseRuntimeSpec(runtimesArg));
@@ -212,7 +212,7 @@ console.log("已生成文件：");
 listFiles(targetDir);
 
 console.log("\n下一步：");
-if (mode === "legacy-with-tools") {
+if (mode === "with-tools") {
   console.log(
     `  1. 编辑 ${relative(process.cwd(), targetDir)}/README.md，填写给开发者看的插件说明`,
   );
@@ -232,14 +232,14 @@ if (mode === "legacy-with-tools") {
     `  1. 检查 ${relative(process.cwd(), targetDir)}/README.md，填写给开发者看的插件说明`,
   );
   console.log(
-    `  2. 检查 ${relative(process.cwd(), targetDir)}/runtimes/<name>/PLUGIN.md，按需修改`,
+    `  2. 检查 ${relative(process.cwd(), targetDir)}/runtimes/<name>/RUNTIME.md，按需修改`,
   );
   if (mode === "demo-multi-runtime") {
     console.log("  3. 默认包含 note (function) + analyst (agent) 两个 runtime");
     console.log("  4. 启动框架后侧栏会出现插件记录面板，按按钮验证");
   } else {
     console.log(
-      "  3. 函数 runtime 编辑 handler.js，agent runtime 编辑 PLUGIN.md 提示词",
+      "  3. 函数 runtime 编辑 handler.js，agent runtime 编辑 RUNTIME.md 提示词",
     );
   }
   if (targetBaseDir !== DEFAULT_TARGET) {
@@ -260,7 +260,7 @@ console.log(`\n插件创建完成！路径：${targetDir}\n`);
 
 // ── 实现 ──────────────────────────────────────────────────────────
 
-function runLegacyTemplate(templateName) {
+function runTemplate(templateName) {
   const templateDir = resolve(ROOT, "templates", templateName);
   if (!existsSync(templateDir)) {
     console.error(`错误：找不到模板目录 → templates/${templateName}/`);
@@ -342,7 +342,7 @@ function runCustomMultiRuntime(runtimes) {
   // Custom runtimes do not include the demo's note panel.
   writeFileSync(
     join(targetDir, "PLUGIN.md"),
-    `---\nname: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\npluginType: plugin\n---\n`,
+    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\n---\n`,
     "utf-8",
   );
 
@@ -363,7 +363,7 @@ function runCustomMultiRuntime(runtimes) {
     mkdirSync(rtDir, { recursive: true });
     if (rt.type === "function") {
       writeFileSync(
-        join(rtDir, "PLUGIN.md"),
+        join(rtDir, "RUNTIME.md"),
         renderFunctionStubManifest(rt.name),
         "utf-8",
       );
@@ -374,7 +374,7 @@ function runCustomMultiRuntime(runtimes) {
       );
     } else {
       writeFileSync(
-        join(rtDir, "PLUGIN.md"),
+        join(rtDir, "RUNTIME.md"),
         renderAgentStubManifest(rt.name),
         "utf-8",
       );
@@ -384,18 +384,17 @@ function runCustomMultiRuntime(runtimes) {
 
 function renderFunctionStubManifest(runtimeName) {
   return `---
-name: ${pluginName}/${runtimeName}
+type: function
 description:
-  zh: ${runtimeName} 函数 runtime —— 请填写它的职责。
-  en: ${runtimeName} function runtime — replace with the real responsibility.
-pluginType: plugin
-runtimeType: function
-handler: ./handler.js
-outputKind: plugin
-capabilities: [manual-invoke]
-execution: sync
-trigger:
-  type: manual
+  zh: ${runtimeName} 函数 runtime，请填写它的职责。
+  en: ${runtimeName} function runtime, replace with the real responsibility.
+schedule:
+  trigger: { type: manual }
+  manual: { execution: sync }
+io:
+  visibility: plugin
+function:
+  handler: ./handler.js
 ---
 `;
 }
@@ -444,35 +443,29 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
 
 function renderAgentStubManifest(runtimeName) {
   return `---
-name: ${pluginName}/${runtimeName}
+type: agent
 description:
-  zh: ${runtimeName} agent runtime —— 请填写它的职责。
-  en: ${runtimeName} agent runtime — replace with the real responsibility.
-pluginType: plugin
-model: plugin
-outputKind: plugin
-capabilities: [manual-invoke]
-execution: sync
-timeoutMs: 60000
-callTimeoutMs: 45000
-firstTokenTimeoutMs: 30000
-maxRetries: 1
-trigger:
-  type: manual
-tools:
-  builtin:
-    - plugin-data-set
-input:
-  inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: plugin-data
-      namespace: notes
-      as: "<existing-notes>"
+  zh: ${runtimeName} agent runtime，请填写它的职责。
+  en: ${runtimeName} agent runtime, replace with the real responsibility.
+schedule:
+  trigger: { type: manual }
+  manual: { execution: sync }
+io:
+  visibility: plugin
+  selfData:
+    - namespace: notes
+      as: existing-notes
       format: summary
       maxEntries: 50
+agent:
+  model: plugin
+  tools:
+    builtin: [plugin-data-set]
+  loop:
+    timeoutMs: 60000
+    callTimeoutMs: 45000
+    firstTokenTimeoutMs: 30000
+    maxRetries: 1
 ---
 
 你是 ${pluginName} 插件的 ${runtimeName} runtime。你的职责是把本轮剧情里和插件目标相关的信息整理成一条可维护的插件记录。
@@ -510,7 +503,8 @@ input:
 function renderCustomReadme(runtimes) {
   const lines = runtimes
     .map(
-      (rt) => `- \`${rt.name}\` (${rt.type}) — 请在对应 PLUGIN.md 中填写职责。`,
+      (rt) =>
+        `- \`${rt.name}\` (${rt.type}) — 请在对应 RUNTIME.md 中填写职责。`,
     )
     .join("\n");
   return `# ${pluginName}
@@ -524,7 +518,7 @@ ${lines}
 ## 开发
 
 1. 修改 \`README.md\`，维护给人类和开发者看的说明。
-2. 修改 \`runtimes/<name>/PLUGIN.md\`，维护 runtime 元信息和模型指令。
+2. 修改 \`runtimes/<name>/RUNTIME.md\`，维护 runtime 元信息和模型指令。
 3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
 4. Run \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
 `;
@@ -608,7 +602,7 @@ function printUsage() {
     "  node scripts/create-plugin.js <plugin-name> -r foo:function  # 自定义 runtime",
   );
   console.log(
-    "  node scripts/create-plugin.js <plugin-name> --with-tools     # 旧式单 runtime",
+    "  node scripts/create-plugin.js <plugin-name> --with-tools     # 内联单 runtime",
   );
   console.log("");
   console.log("选项：");
@@ -620,6 +614,6 @@ function printUsage() {
   );
   console.log("                        type ∈ { function, agent }，默认 agent");
   console.log(
-    "  --with-tools          旧式单 runtime + tools/，目标固定为 <repo>/plugins/",
+    "  --with-tools          内联单 runtime + tools/，目标固定为 <repo>/plugins/",
   );
 }

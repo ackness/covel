@@ -160,6 +160,10 @@ export interface RuntimeJobValue {
   readonly enqueuedAt: string;
   readonly updatedAt: string;
   readonly attempt: number;
+  /** Monotonic enqueue order within the session/plugin queue. */
+  readonly sequence: number;
+  readonly settle?: "before-next-execution";
+  readonly maxSettleWaitMs?: number;
   readonly maxQueueMs?: number;
   readonly maxExecutionMs?: number;
   readonly deadlineAt?: string;
@@ -187,7 +191,8 @@ type RuntimeJobStore = Pick<
   | "listPluginData"
   | "listPluginDataSessionScope"
   | "listSessions"
->;
+> &
+  Partial<Pick<DataStore, "withTransaction">>;
 
 export interface CreateRuntimeJobArgs {
   readonly jobId: string;
@@ -201,6 +206,9 @@ export interface CreateRuntimeJobArgs {
   readonly maxExecutionMs?: number;
   readonly deadlineAt?: string;
   readonly maxQueuedPerSession?: number;
+  readonly settle?: "before-next-execution";
+  readonly maxSettleWaitMs?: number;
+  readonly retryOfJobId?: string;
 }
 
 export interface TransitionRuntimeJobArgs {
@@ -218,6 +226,20 @@ export interface TransitionRuntimeJobArgs {
   readonly result?: unknown;
   readonly error?: string;
   readonly reason?: string;
+}
+
+export class RuntimeJobSupersededError extends Error {
+  constructor() {
+    super("settling job retry would overwrite a later source execution");
+    this.name = "RuntimeJobSupersededError";
+  }
+}
+
+export class RuntimeJobQueueChangedError extends Error {
+  constructor() {
+    super("runtime job queue changed during enqueue; retry the transaction");
+    this.name = "RuntimeJobQueueChangedError";
+  }
 }
 
 export class RuntimeJobQueueFullError extends Error {
@@ -325,6 +347,8 @@ function fromRuntimeJobRow(row: PluginDataRecord): RuntimeJobRecord | null {
     typeof value.enqueuedAt !== "string" ||
     typeof value.updatedAt !== "string" ||
     typeof value.attempt !== "number" ||
+    !Number.isSafeInteger(value.sequence) ||
+    (value.sequence ?? 0) < 1 ||
     !value.origin ||
     typeof value.origin.sourceTurnId !== "string"
   ) {
@@ -351,6 +375,9 @@ export async function createRuntimeJob(
   store: RuntimeJobStore,
   args: CreateRuntimeJobArgs,
 ): Promise<RuntimeJobRecord> {
+  if (store.withTransaction) {
+    return store.withTransaction((tx) => createRuntimeJob(tx, args));
+  }
   const maxQueued = args.maxQueuedPerSession ?? DEFAULT_RUNTIME_JOB_QUEUE_LIMIT;
   if (!Number.isSafeInteger(maxQueued) || maxQueued < 1) {
     throw new RangeError("maxQueuedPerSession must be a positive safe integer");
@@ -360,6 +387,16 @@ export async function createRuntimeJob(
   }
   if (args.maxExecutionMs !== undefined && args.maxExecutionMs <= 0) {
     throw new RangeError("maxExecutionMs must be positive");
+  }
+  if (
+    args.maxSettleWaitMs !== undefined &&
+    (!args.settle ||
+      !Number.isSafeInteger(args.maxSettleWaitMs) ||
+      args.maxSettleWaitMs <= 0)
+  ) {
+    throw new RangeError(
+      "maxSettleWaitMs requires settle and must be positive",
+    );
   }
   const duplicate = await getRuntimeJob(store, args);
   if (duplicate) return duplicate;
@@ -371,7 +408,61 @@ export async function createRuntimeJob(
     throw new RuntimeJobQueueFullError(args.sessionId, maxQueued);
   }
 
+  const prior = await listRuntimeJobs(store, {
+    sessionId: args.sessionId,
+    pluginId: args.pluginId,
+  });
+  if (args.settle && args.retryOfJobId) {
+    const source = prior.find((job) => job.jobId === args.retryOfJobId);
+    if (
+      !source ||
+      prior.some(
+        (job) =>
+          job.runtimeId === args.runtimeId && job.sequence > source.sequence,
+      )
+    )
+      throw new RuntimeJobSupersededError();
+  }
   const enqueuedAt = args.enqueuedAt ?? new Date().toISOString();
+  // The counter CAS serializes concurrent PostgreSQL enqueue transactions.
+  // Source-turn callers already hold the session lock; a conflicting direct
+  // caller fails its transaction instead of publishing an ambiguous order.
+  const counterNamespace = "_runtime_job_control";
+  const counter = await store.getPluginData(
+    args.sessionId,
+    args.pluginId,
+    counterNamespace,
+    "sequence",
+  );
+  const counterValue = counter?.value as { sequence?: unknown } | undefined;
+  const previousSequence =
+    typeof counterValue?.sequence === "number" ? counterValue.sequence : 0;
+  const sequence =
+    prior.reduce(
+      (latest, job) => Math.max(latest, job.sequence),
+      previousSequence,
+    ) + 1;
+  if (!Number.isSafeInteger(sequence))
+    throw new RangeError("runtime job sequence exhausted");
+  const counterUpdatedAt = counter
+    ? nextRevision(counter.updatedAt, enqueuedAt)
+    : enqueuedAt;
+  if (
+    !(await store.compareAndSetPluginData(
+      {
+        id: `${args.sessionId}:${args.pluginId}:${counterNamespace}:sequence`,
+        sessionId: args.sessionId,
+        pluginId: args.pluginId,
+        namespace: counterNamespace,
+        key: "sequence",
+        value: { sequence },
+        createdAt: counter?.createdAt ?? enqueuedAt,
+        updatedAt: counterUpdatedAt,
+      },
+      counter?.updatedAt ?? null,
+    ))
+  )
+    throw new RuntimeJobQueueChangedError();
   const record: RuntimeJobRecord = {
     schemaVersion: RUNTIME_JOB_SCHEMA_VERSION,
     jobId: args.jobId,
@@ -384,6 +475,11 @@ export async function createRuntimeJob(
     enqueuedAt,
     updatedAt: enqueuedAt,
     attempt: 0,
+    sequence,
+    ...(args.settle ? { settle: args.settle } : {}),
+    ...(args.maxSettleWaitMs !== undefined
+      ? { maxSettleWaitMs: args.maxSettleWaitMs }
+      : {}),
     ...(args.maxQueueMs !== undefined ? { maxQueueMs: args.maxQueueMs } : {}),
     ...(args.maxExecutionMs !== undefined
       ? { maxExecutionMs: args.maxExecutionMs }
@@ -445,10 +541,26 @@ export async function listRuntimeJobs(
     .filter((job) => !statuses || statuses.has(job.status))
     .sort(
       (a, b) =>
+        a.sequence - b.sequence ||
         a.enqueuedAt.localeCompare(b.enqueuedAt) ||
         a.jobId.localeCompare(b.jobId),
     );
   return args.limit === undefined ? jobs : jobs.slice(0, args.limit);
+}
+
+export async function listSettlingRuntimeJobs(
+  store: Parameters<typeof listRuntimeJobs>[0] &
+    Pick<import("@covel/store").DataStore, "getSession">,
+  sessionId: string,
+): Promise<readonly RuntimeJobRecord[]> {
+  const session = await store.getSession(sessionId);
+  if (!session) return [];
+  return (await listRuntimeJobs(store, { sessionId })).filter(
+    (job) =>
+      session.activePlugins.includes(job.pluginId) &&
+      job.settle === "before-next-execution" &&
+      !TERMINAL_RUNTIME_JOB_STATUSES.has(job.status),
+  );
 }
 
 export async function transitionRuntimeJob(
@@ -512,11 +624,27 @@ export async function claimRuntimeJob(
     readonly now?: string;
   },
 ): Promise<RuntimeJobRecord | null> {
+  if (store.withTransaction) {
+    return store.withTransaction((tx) => claimRuntimeJob(tx, args));
+  }
   if (!Number.isSafeInteger(args.leaseMs) || args.leaseMs <= 0) {
     throw new RangeError("leaseMs must be a positive safe integer");
   }
   const existing = await getRuntimeJob(store, args);
   if (!existing || existing.status !== "queued") return null;
+  const predecessors = await listRuntimeJobs(store, {
+    sessionId: args.sessionId,
+    pluginId: args.pluginId,
+  });
+  if (
+    predecessors.some(
+      (job) =>
+        job.runtimeId === existing.runtimeId &&
+        job.sequence < existing.sequence &&
+        !TERMINAL_RUNTIME_JOB_STATUSES.has(job.status),
+    )
+  )
+    return null;
   const now = args.now ?? new Date().toISOString();
   const nowMs = Date.parse(now);
   const queueDeadline =
@@ -609,6 +737,8 @@ export async function claimNextRuntimeJob(
     readonly afterSessionId?: string;
     readonly sessionId?: string;
     readonly excludeRuntimeKeys?: ReadonlySet<string>;
+    /** Missing request services keep a job queued, without consuming an attempt. */
+    readonly canClaim?: (job: RuntimeJobRecord) => boolean | Promise<boolean>;
   },
 ): Promise<ClaimedRuntimeJob | null> {
   const sessionIds = args.sessionId
@@ -635,6 +765,7 @@ export async function claimNextRuntimeJob(
       ) {
         continue;
       }
+      if (args.canClaim && !(await args.canClaim(candidate))) continue;
       const claimed = await claimRuntimeJob(store, {
         sessionId,
         pluginId: candidate.pluginId,

@@ -1,17 +1,15 @@
 export type ParsedWorldDataTarget =
   | { readonly kind: "world-metadata"; readonly path: readonly string[] }
   | {
-      readonly kind: "plugin-data";
-      readonly pluginId: string;
-      readonly namespace: string;
+      readonly kind: "contract-data";
+      readonly contract: string;
       readonly lorebook: boolean;
     }
   | { readonly kind: "lorebook" }
   | { readonly kind: "characters" }
   | { readonly kind: "media" };
 
-const PLUGIN_ID_RE = /^[a-z][a-z0-9-]*$/;
-const NAMESPACE_RE = /^[a-z][a-zA-Z0-9_-]{0,63}$/;
+const CONTRACT_RE = /^[a-z][a-z0-9.-]*@[1-9][0-9]*$/;
 const METADATA_PATH_RE = /^[a-zA-Z0-9_.-]+$/;
 const FORBIDDEN_METADATA_SEGMENTS = new Set([
   "__proto__",
@@ -40,21 +38,13 @@ export function parseWorldDataTarget(
     return { kind: "world-metadata", path: segments };
   }
 
-  if (value.startsWith("plugin:")) {
-    let rest = value.slice("plugin:".length);
-    let lorebook = false;
-    if (rest.endsWith("+lorebook")) {
-      lorebook = true;
-      rest = rest.slice(0, -"+lorebook".length);
-    }
-    const slash = rest.lastIndexOf("/");
-    if (slash <= 0 || slash === rest.length - 1) return null;
-    const pluginId = rest.slice(0, slash);
-    const namespace = rest.slice(slash + 1);
-    if (!PLUGIN_ID_RE.test(pluginId) || !NAMESPACE_RE.test(namespace)) {
-      return null;
-    }
-    return { kind: "plugin-data", pluginId, namespace, lorebook };
+  if (value.startsWith("contract:")) {
+    let contract = value.slice("contract:".length);
+    const lorebook = contract.endsWith("+lorebook");
+    if (lorebook) contract = contract.slice(0, -"+lorebook".length);
+    return CONTRACT_RE.test(contract)
+      ? { kind: "contract-data", contract, lorebook }
+      : null;
   }
 
   return null;
@@ -62,8 +52,9 @@ export function parseWorldDataTarget(
 
 export function parseWorldDataIndexTarget(
   value: string,
-): Extract<ParsedWorldDataTarget, { kind: "plugin-data" }> | null {
+): Extract<ParsedWorldDataTarget, { kind: "contract-data" }> | null {
   const parsed = parseWorldDataTarget(value);
-  if (!parsed || parsed.kind !== "plugin-data" || parsed.lorebook) return null;
+  if (!parsed || parsed.kind !== "contract-data" || parsed.lorebook)
+    return null;
   return parsed;
 }

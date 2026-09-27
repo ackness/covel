@@ -113,12 +113,7 @@ export async function currentHashForLedger(options: {
   ledger: WorldDataImportLedgerRecord;
 }): Promise<string | null> {
   const { store, sessionId, ledger } = options;
-  if (
-    ledger.target.startsWith("plugin:") &&
-    ledger.pluginId &&
-    ledger.namespace &&
-    ledger.key
-  ) {
+  if (ledger.pluginId && ledger.namespace && ledger.key) {
     const record = await store.getPluginData(
       sessionId,
       ledger.pluginId,
@@ -137,7 +132,7 @@ export async function currentHashForLedger(options: {
   }
   if (ledger.key) {
     const record = (await store.listSessionLorebookEntries(sessionId)).find(
-      (entry) => entry.id === ledger.key,
+      (entry) => entry.owner.kind === "world" && entry.id === ledger.key,
     );
     return record
       ? sha256Hex(canonicalJson(stableLorebookValue(record)))
@@ -161,12 +156,7 @@ export async function deleteLedgerTarget(options: {
   onMediaUnref?: (mediaId: string) => void;
 }): Promise<void> {
   const { store, sessionId, ledger } = options;
-  if (
-    ledger.target.startsWith("plugin:") &&
-    ledger.pluginId &&
-    ledger.namespace &&
-    ledger.key
-  ) {
+  if (ledger.pluginId && ledger.namespace && ledger.key) {
     const existing = await store.getPluginData(
       sessionId,
       ledger.pluginId,
@@ -192,7 +182,7 @@ export async function deleteLedgerTarget(options: {
     return;
   }
   if (ledger.key) {
-    await store.deleteLorebookEntry(sessionId, ledger.key);
+    await store.deleteLorebookEntry(sessionId, { kind: "world" }, ledger.key);
   }
 }
 

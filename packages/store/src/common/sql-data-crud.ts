@@ -1,3 +1,5 @@
+import type { LorebookOwner } from "@covel/shared";
+import { lorebookOwnerKey } from "./lorebook-owner.js";
 /**
  * Backend-agnostic plugin-data / working-memory / world-data-ledger / lorebook
  * queries, shared by the PostgreSQL and SQLite backends.
@@ -18,14 +20,11 @@ import type { JsonReader } from "./mappers.js";
 import {
   toLorebookEntryRecord,
   toPluginDataRecord,
-  toWorkingMemoryRecord,
   toWorldDataImportLedgerRecord,
 } from "./mappers.js";
-import { compareWorkingMemoryEntries } from "../records/memory-records.js";
 import type { PluginDataRow } from "./mappers/plugin-mappers.js";
 import type {
   LorebookEntryRow,
-  WorkingMemoryRow,
   WorldDataLedgerRow,
 } from "./mappers/memory-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
@@ -34,7 +33,6 @@ import type {
   LorebookEntryRecord,
   PaginationOpts,
   PluginDataRecord,
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
 } from "../types.js";
 
@@ -48,17 +46,13 @@ type PluginDataTable = Table & {
   createdAt: Column;
   id: Column;
 };
-type WorkingMemoryTable = Table & {
-  sessionId: Column;
-  scope: Column;
-  key: Column;
-};
 type WorldDataLedgerTable = Table & {
   sessionId: Column;
   importedAt: Column;
   id: Column;
 };
 type LorebookEntriesTable = Table & {
+  owner: Column;
   sessionId: Column;
   insertionOrder: Column;
   id: Column;
@@ -66,7 +60,6 @@ type LorebookEntriesTable = Table & {
 
 export interface SqlDataCrudTables {
   readonly pluginData: PluginDataTable;
-  readonly workingMemory: WorkingMemoryTable;
   readonly worldDataImportLedger: WorldDataLedgerTable;
   readonly lorebookEntries: LorebookEntriesTable;
 }
@@ -79,8 +72,6 @@ export interface SqlDataCrudDeps {
     InsertValueBuilders,
     | "pluginDataInsert"
     | "pluginDataUpdate"
-    | "workingMemoryInsert"
-    | "workingMemoryUpdate"
     | "worldDataLedgerInsert"
     | "worldDataLedgerUpdate"
     | "lorebookEntryInsert"
@@ -97,22 +88,18 @@ export type SqlDataCrud = Pick<
   | "listPluginData"
   | "listPluginDataSessionScope"
   | "deletePluginData"
-  | "upsertWorkingMemory"
-  | "getWorkingMemory"
-  | "listWorkingMemory"
-  | "deleteWorkingMemory"
   | "saveWorldDataImportLedgerBatch"
   | "listWorldDataImportLedger"
   | "deleteWorldDataImportLedger"
   | "upsertLorebookEntries"
   | "listSessionLorebookEntries"
+  | "getLorebookEntry"
   | "deleteLorebookEntry"
 >;
 
 export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
   const { runner, tables, json, values } = deps;
-  const { pluginData, workingMemory, worldDataImportLedger, lorebookEntries } =
-    tables;
+  const { pluginData, worldDataImportLedger, lorebookEntries } = tables;
 
   return {
     async setPluginData(record: PluginDataRecord): Promise<void> {
@@ -256,61 +243,6 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
       );
     },
 
-    async upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void> {
-      await runner.insert(workingMemory, values.workingMemoryInsert(record), {
-        target: [
-          workingMemory.sessionId,
-          workingMemory.scope,
-          workingMemory.key,
-        ],
-        set: values.workingMemoryUpdate(record),
-      });
-    },
-
-    async getWorkingMemory(
-      sessionId: string,
-      scope: WorkingMemoryRecord["scope"],
-      key: string,
-    ): Promise<WorkingMemoryRecord | null> {
-      const row = await runner.selectFirst<WorkingMemoryRow>(workingMemory, {
-        where: and(
-          eq(workingMemory.sessionId, sessionId),
-          eq(workingMemory.scope, scope),
-          eq(workingMemory.key, key),
-        ),
-      });
-      return row ? toWorkingMemoryRecord(row, json) : null;
-    },
-
-    async listWorkingMemory(
-      sessionId: string,
-    ): Promise<readonly WorkingMemoryRecord[]> {
-      const rows = await runner.select<WorkingMemoryRow>(workingMemory, {
-        where: eq(workingMemory.sessionId, sessionId),
-      });
-      // Sort in JS with the shared comparator (semantic scope order) so the
-      // result matches Memory/IDB exactly — raw `asc(scope)` is alphabetical
-      // ([player, shared, story]) and would diverge from the other backends.
-      return rows
-        .map((row) => toWorkingMemoryRecord(row, json))
-        .sort(compareWorkingMemoryEntries);
-    },
-
-    async deleteWorkingMemory(
-      sessionId: string,
-      scope: WorkingMemoryRecord["scope"],
-      key: string,
-    ): Promise<void> {
-      await runner.delete(
-        workingMemory,
-        and(
-          eq(workingMemory.sessionId, sessionId),
-          eq(workingMemory.scope, scope),
-          eq(workingMemory.key, key),
-        ),
-      );
-    },
-
     async saveWorldDataImportLedgerBatch(
       records: readonly WorldDataImportLedgerRecord[],
     ): Promise<void> {
@@ -367,7 +299,11 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
           lorebookEntries,
           values.lorebookEntryInsert(record),
           {
-            target: [lorebookEntries.sessionId, lorebookEntries.id],
+            target: [
+              lorebookEntries.sessionId,
+              lorebookEntries.owner,
+              lorebookEntries.id,
+            ],
             set: values.lorebookEntryUpdate(record),
           },
         );
@@ -379,17 +315,42 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
     ): Promise<readonly LorebookEntryRecord[]> {
       const rows = await runner.select<LorebookEntryRow>(lorebookEntries, {
         where: eq(lorebookEntries.sessionId, sessionId),
-        orderBy: [asc(lorebookEntries.insertionOrder), asc(lorebookEntries.id)],
+        orderBy: [
+          asc(lorebookEntries.insertionOrder),
+          asc(lorebookEntries.id),
+          asc(lorebookEntries.owner),
+        ],
       });
       return rows.map((row) => toLorebookEntryRecord(row, json));
     },
 
-    async deleteLorebookEntry(sessionId: string, id: string): Promise<void> {
+    async getLorebookEntry(
+      sessionId: string,
+      owner: LorebookOwner,
+      id: string,
+    ) {
+      const rows = await runner.select<LorebookEntryRow>(lorebookEntries, {
+        where: and(
+          eq(lorebookEntries.sessionId, sessionId),
+          eq(lorebookEntries.owner, lorebookOwnerKey(owner)),
+          eq(lorebookEntries.id, id),
+        ),
+        limit: 1,
+      });
+      return rows[0] ? toLorebookEntryRecord(rows[0], json) : null;
+    },
+
+    async deleteLorebookEntry(
+      sessionId: string,
+      owner: LorebookOwner,
+      id: string,
+    ): Promise<void> {
       await runner.delete(
         lorebookEntries,
         and(
           eq(lorebookEntries.sessionId, sessionId),
           eq(lorebookEntries.id, id),
+          eq(lorebookEntries.owner, lorebookOwnerKey(owner)),
         ),
       );
     },

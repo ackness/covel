@@ -1,3 +1,4 @@
+import { readFileSync as readContractFile } from "node:fs";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * affinity plugin tests.
@@ -481,13 +482,25 @@ describe("affinity plugin manifest", () => {
   /** @type {import('@covel/shared').RuntimeManifest} */
   let manifest;
   let loaded;
+  let declaration;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const discovery = discoveries.find((d) => d.id === "affinity");
     const manifests = await loadPluginManifest(discovery);
     manifest = manifests[0].manifest;
-    loaded = await loadRuntime(discovery, manifest.name);
+    declaration = manifests[0].plugin;
+    loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
+      "world-ir@1": JSON.parse(
+        readContractFile(
+          new URL(
+            "../../world-ir/schemas/world-ir.schema.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ),
+    });
   });
 
   it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
@@ -497,13 +510,13 @@ describe("affinity plugin manifest", () => {
     expect(manifest.trigger?.type).toBe("auto");
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider", cardinality: "one" },
-      accepts: "covel://world/ir/v1",
+      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      accepts: "contract:world-ir@1",
       required: true,
     });
-    expect(manifest.relations?.requires).toContain("world-ir");
+    expect(declaration.requires).toContain("world-ir-provider@1");
     // Agent runtime — no `runtimeType` field means default 'agent'
-    expect(manifest.runtimeType).toBeUndefined();
+    expect(manifest.runtimeType).toBe("agent");
     expect(manifest.handler).toBeUndefined();
   });
 

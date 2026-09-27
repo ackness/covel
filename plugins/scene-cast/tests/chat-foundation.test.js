@@ -47,7 +47,7 @@ describe("chat foundation manifests", () => {
       stage: "pre-turn",
       outputKind: "system",
     });
-    expect(sceneCast.capabilities).toContain("scene-cast");
+    expect(sceneCast.outputContract).toBe("scene-cast@1");
     expect(sceneCast.trigger).toMatchObject({ type: "scheduled", interval: 1 });
     expect(loadedSceneCast.handler).toBeTypeOf("function");
     expect(loadedSceneCast.uiSpecs.right).toHaveLength(1);
@@ -61,27 +61,21 @@ describe("chat foundation manifests", () => {
       outputKind: "story",
       model: "story",
     });
-    expect(chatNarrator.capabilities).toEqual(
-      expect.arrayContaining(["narrative", "chat-mode"]),
-    );
-    expect(chatNarrator.input.inject[0]).toMatchObject({
-      kind: "runtime",
-      from: "scene-cast",
-      field: "activeCastContext",
-      as: "<active-cast>",
+    expect(chatNarrator.outputContract).toBe("narrative-engine@1");
+    expect(chatNarrator.inputs["active-cast"]).toMatchObject({
+      from: { runtime: "scene-cast" },
+      select: "/activeCastContext",
+      required: false,
     });
-    expect(chatNarrator.summaryFocus).toEqual([
-      "character-intent",
-      "relationship-change",
-      "emotional-hook",
-    ]);
     // The body must NOT inline-interpolate the cast context — that would
     // double-inject (once inline, once via the input.inject segment-5 append).
     // The body references the <active-cast> tag; segment 5 fills it once.
     expect(loadedChatNarrator.promptTemplate).not.toContain(
       "{{ inputs.scene-cast.scene-cast.activeCastContext }}",
     );
-    expect(loadedChatNarrator.promptTemplate).toContain("<active-cast>");
+    expect(loadedChatNarrator.promptTemplate).toContain(
+      "runtime-inputs.active-cast.value",
+    );
   });
 
   it("schedules scene-cast before chat-mode-narrator in the DAG runtime layer", () => {

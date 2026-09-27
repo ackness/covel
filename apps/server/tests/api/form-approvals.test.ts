@@ -59,7 +59,7 @@ describe("form provider authorization", () => {
       updatedAt: now,
     });
     const plugins = createPluginRegistry();
-    rpc = createBootstrapPluginRpc();
+    rpc = createBootstrapPluginRpc(store);
     for (const [order, id] of providers.entries()) {
       const loaded = makeFakeLoadedRuntime({ name: id });
       const parsed = {

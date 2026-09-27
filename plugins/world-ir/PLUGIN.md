@@ -1,54 +1,69 @@
 ---
-name: world-ir
+id: world-ir
+kind: plugin
 displayName:
   zh: 世界事实提取
   en: World Fact Extraction
 description:
   zh: 从本轮故事中提取人物、关系、事件和线索，供图鉴、任务等功能复用。
-  en: Extracts people, relationships, events, and clues from each story turn for codex, quest, and other features.
-pluginType: plugin
-entry: ./server/index.js
-stage: post-turn
-outputKind: system
-model: plugin
-llm:
-  reasoningEffort: disabled
-  toolChoice: { name: submit-world-facts }
-timeoutMs: 120000
-# A provider-level timeout retry previously consumed the full 120-second runtime
-# budget before the model could correct invalid tool arguments. One 60-second
-# provider attempt leaves the second agent step available for schema repair.
-maxRetries: 0
-callTimeoutMs: 60000
-requireToolUse: true
-completeAfterTools: [submit-world-facts]
-capabilities: [world-ir-provider]
+  en: >-
+    Extracts people, relationships, events, and clues from each story turn for
+    codex, quest, and other features.
 tags:
-  - role:world-ir
-  - data:world-ir
-  - cost:llm
-trigger:
-  type: auto
-inputs:
-  narrative:
-    from:
-      capability: narrative-engine
-      cardinality: one
-    select: "/narrativeOutput"
-    accepts: ./schemas/narrative-output.schema.json
-    required: true
-output:
-  schema: covel://world/ir/v1
-  recordAs: world-ir-v1
-tools:
-  plugin:
+  - "data:world-ir"
+  - "cost:llm"
+provides:
+  - world-ir-provider@1
+contracts:
+  world-ir@1:
+    schema: ./schemas/world-ir.schema.json
+entry: ./server/index.js
+contributes:
+  tools:
     - submit-world-facts
-relations:
-  provides:
-    - world-ir-provider
-effects:
-  reads:
-    - narrative:*
+  hooks:
+    - event: PostContextAssembly
+      enforce: normal
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+  io:
+    inputs:
+      narrative:
+        from:
+          contract: narrative-engine@1
+          cardinality: one
+        select: /narrativeOutput
+        accepts: ./schemas/narrative-output.schema.json
+        required: true
+    output:
+      schema: "contract:world-ir@1"
+      recordAs: world-ir-v1
+      contract: world-ir-provider@1
+    visibility: system
+  agent:
+    model: plugin
+    llm:
+      reasoningEffort: disabled
+      toolChoice:
+        name: submit-world-facts
+    tools:
+      plugin:
+        - submit-world-facts
+    loop:
+      timeoutMs: 120000
+      callTimeoutMs: 60000
+      maxRetries: 0
+      completion:
+        require: tool-use
+        afterTools:
+          - submit-world-facts
+  effects:
+    reads:
+      - "narrative:*"
 ---
 
 你是 Covel 的通用叙事事实抽取 agent。你只做一件事：读取本轮叙事，并调用一次 `submit-world-facts`。工具参数就是本轮的最终结构化事实；不要输出 JSON 文本、Markdown 或其他说明，也不要调用其他工具。

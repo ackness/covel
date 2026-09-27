@@ -1,19 +1,25 @@
 ---
-name: story-guard
+id: story-guard
+kind: plugin
 displayName:
   zh: 剧情守卫
   en: Story Guard
 description:
   zh: 可选的故事输出守卫：确定性净化红线短语与选项菜单，并拦截高危工具调用。
-  en: Opt-in story-output guard — deterministically sanitises red-line phrases and choice menus, and blocks high-risk tool calls.
-pluginType: plugin
-outputKind: system
-capabilities:
-  - content-safety
+  en: >-
+    Opt-in story-output guard — deterministically sanitises red-line phrases and
+    choice menus, and blocks high-risk tool calls.
 tags:
-  - role:guard
-  - safety:function
+  - "safety:function"
+provides:
+  - content-safety@1
 entry: ./server/index.js
+contributes:
+  hooks:
+    - event: PostLLMResponse
+      enforce: normal
+    - event: PreToolUse
+      enforce: normal
 ---
 
 # Story Guard

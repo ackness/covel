@@ -1,16 +1,17 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { JSONUIProvider } from "@json-render/react";
 import { covelRegistry } from "../catalog.js";
-import {
-  __clearAllPluginDataForTest,
-  loadPluginData,
-  setActiveSession,
-} from "../../stores/plugin-data-store.js";
+const view = vi.hoisted(() => ({ schema: null as unknown }));
+vi.mock("@/stores/session-store.js", () => ({
+  useSession: () => ({
+    state: { gameState: { characterSchema: view.schema } },
+  }),
+}));
 
 afterEach(() => {
   cleanup();
-  __clearAllPluginDataForTest();
+  view.schema = null;
 });
 
 function renderCharacterFields(value: unknown) {
@@ -31,69 +32,65 @@ function renderCharacterFields(value: unknown) {
 }
 
 function loadCharacterAttributeSchema() {
-  setActiveSession("session-character-fields");
-  loadPluginData("fixture-provider", "schema", [
-    {
-      key: "character-attributes",
-      value: {
-        attributes: [
+  view.schema = {
+    version: 1,
+    types: ["npc"],
+    attributes: [
+      {
+        id: "name",
+        name: "Display Name",
+        type: "string",
+        category: "bio",
+      },
+      {
+        id: "hp",
+        name: "HP",
+        type: "number",
+        min: 0,
+        max: 20,
+        category: "stats",
+      },
+      {
+        id: "mood",
+        name: "Mood",
+        type: "enum",
+        category: "social",
+      },
+      {
+        id: "traits",
+        name: "Traits",
+        type: "array",
+        category: "abilities",
+      },
+      {
+        id: "profile",
+        name: "Profile",
+        type: "object",
+        category: "bio",
+        subSchema: [
           {
-            id: "name",
-            name: "Display Name",
-            type: "string",
-            category: "bio",
-          },
-          {
-            id: "hp",
-            name: "HP",
+            id: "age",
+            name: "Age",
             type: "number",
-            min: 0,
-            max: 20,
-            category: "stats",
-          },
-          {
-            id: "mood",
-            name: "Mood",
-            type: "enum",
-            category: "social",
-          },
-          {
-            id: "traits",
-            name: "Traits",
-            type: "array",
-            category: "abilities",
-          },
-          {
-            id: "profile",
-            name: "Profile",
-            type: "object",
             category: "bio",
-            subSchema: [
-              {
-                id: "age",
-                name: "Age",
-                type: "number",
-                category: "bio",
-              },
-            ],
-          },
-          {
-            id: "inventory",
-            name: "Inventory",
-            type: "map",
-            category: "equipment",
-          },
-          {
-            id: "courage",
-            name: "Courage",
-            type: "number",
-            defaultValue: 3,
-            category: "stats",
           },
         ],
       },
-    },
-  ]);
+      {
+        id: "inventory",
+        name: "Inventory",
+        type: "map",
+        category: "equipment",
+      },
+      {
+        id: "courage",
+        name: "Courage",
+        type: "number",
+        defaultValue: 3,
+        category: "stats",
+      },
+    ],
+  };
 }
 
 describe("CharacterFieldsView", () => {
@@ -131,7 +128,7 @@ describe("CharacterFieldsView", () => {
     expect(screen.getByText("runtime")).toBeDefined();
   });
 
-  it("discovers schema data from any provider plugin", () => {
+  it("uses the committed World Model schema", () => {
     loadCharacterAttributeSchema();
 
     renderCharacterFields({ name: "Nia" });

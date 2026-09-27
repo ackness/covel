@@ -8,48 +8,46 @@
 
 ## 概览
 
-| 工具名                                | 来源    | 所属插件            | 审批策略   | 描述                                                                                      |
-| ------------------------------------- | ------- | ------------------- | ---------- | ----------------------------------------------------------------------------------------- |
-| create-form                           | builtin | —                   | auto-allow | 创建玩家表单                                                                              |
-| create-choices                        | builtin | —                   | auto-allow | 创建选项列表                                                                              |
-| create-notification                   | builtin | —                   | auto-allow | 显示通知消息                                                                              |
-| render-ui                             | builtin | —                   | auto-allow | 渲染带独立 part 状态的 UI 块                                                              |
-| plugin-data-set                       | builtin | —                   | auto-allow | 写入插件持久化数据（单条）                                                                |
-| plugin-data-set-batch                 | builtin | —                   | auto-allow | 批量写入插件持久化数据                                                                    |
-| plugin-data-get                       | builtin | —                   | auto-allow | 读取当前插件持久化数据                                                                    |
-| plugin-data-list                      | builtin | —                   | auto-allow | 列出当前插件持久化数据                                                                    |
-| **create-character**                  | builtin | —                   | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data                   |
-| **update-character**                  | builtin | —                   | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                                  |
-| **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                        |
-| **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                     |
-| **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                                |
-| **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                         |
-| **world-dimension-get**               | builtin | —                   | auto-allow | 按需读取当前 session 世界的结构化维度字段                                                 |
-| **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema          |
-| **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                |
-| **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                          |
-| **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具       |
-| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)                 |
-| **memory-get-block**                  | builtin | —                   | auto-allow | 按标签读取核心记忆块；接受世界/插件 `memoryBlocks` 声明的自定义标签                       |
-| **memory-update-block**               | builtin | —                   | auto-allow | 按标签完整替换核心记忆块；支持自定义标签，无 capability 门控——列入 `tools.builtin` 即可用 |
-| initialize-world                      | local   | world-init          | auto-allow | 原子提交角色属性 Schema 与世界词条                                                        |
-| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部 schema 写入原语                                            |
-| set-world-entries-batch               | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部词条写入原语                                                |
-| submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `covel://world/ir/v1`                              |
-| sync-codex-entries                    | local   | codex               | auto-allow | 原子批量提交本轮图鉴新增与补充                                                            |
-| unlock-codex-entries                  | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部新增原语                                                  |
-| update-codex-entry                    | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部更新原语                                                  |
-| generate-guide                        | local   | guide               | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`            |
-| upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                        |
-| list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                       |
-| generate-scene-prompts                | local   | scene-prompts       | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                              |
-| upsert-quests                         | local   | core-quest          | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）             |
-| update-affinity                       | local   | affinity            | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）         |
-| update-inventory                      | local   | inventory           | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）               |
-| submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                             |
-| submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                           |
-| submit-openai-image-text-prompt       | local   | openai-image-gen    | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件                                     |
-| submit-openai-image-structured-prompt | local   | openai-image-gen    | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件                                   |
+| 工具名                                | 来源    | 所属插件            | 审批策略   | 描述                                                                                |
+| ------------------------------------- | ------- | ------------------- | ---------- | ----------------------------------------------------------------------------------- |
+| create-form                           | builtin | —                   | auto-allow | 创建玩家表单                                                                        |
+| create-choices                        | builtin | —                   | auto-allow | 创建选项列表                                                                        |
+| create-notification                   | builtin | —                   | auto-allow | 显示通知消息                                                                        |
+| render-ui                             | builtin | —                   | auto-allow | 渲染带独立 part 状态的 UI 块                                                        |
+| plugin-data-set                       | builtin | —                   | auto-allow | 写入插件持久化数据（单条）                                                          |
+| plugin-data-set-batch                 | builtin | —                   | auto-allow | 批量写入插件持久化数据                                                              |
+| plugin-data-get                       | builtin | —                   | auto-allow | 读取当前插件持久化数据                                                              |
+| plugin-data-list                      | builtin | —                   | auto-allow | 列出当前插件持久化数据                                                              |
+| **create-character**                  | builtin | —                   | auto-allow | 创建世界模型角色，类型按 schema 校验，写入 characters                               |
+| **update-character**                  | builtin | —                   | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                            |
+| **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                  |
+| **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                               |
+| **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                          |
+| **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                   |
+| **world-dimension-get**               | local   | world-init          | auto-allow | 按需读取当前 session 世界的结构化维度字段                                           |
+| **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema    |
+| **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
+| **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
+| **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
+| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)           |
+| initialize-world                      | local   | world-init          | auto-allow | 原子提交角色属性 Schema 与世界词条                                                  |
+| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部 schema 写入原语                                      |
+| set-world-entries-batch               | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部词条写入原语                                          |
+| submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1`                        |
+| sync-codex-entries                    | local   | codex               | auto-allow | 原子批量提交本轮图鉴新增与补充                                                      |
+| unlock-codex-entries                  | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部新增原语                                            |
+| update-codex-entry                    | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部更新原语                                            |
+| generate-guide                        | local   | guide               | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`      |
+| upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
+| list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                 |
+| generate-scene-prompts                | local   | scene-prompts       | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
+| upsert-quests                         | local   | core-quest          | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）       |
+| update-affinity                       | local   | affinity            | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
+| update-inventory                      | local   | inventory           | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
+| submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                       |
+| submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                     |
+| submit-openai-image-text-prompt       | local   | openai-image-gen    | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件                               |
+| submit-openai-image-structured-prompt | local   | openai-image-gen    | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件                             |
 
 ---
 
@@ -66,7 +64,7 @@
 ### 一个可复制的最小插件
 
 下面的例子只依赖当前公开的 `entry`、`covel.toolkit.tool()` 和
-`tools.plugin` 契约。`PLUGIN.md` 的 `name` / `description` 是必需字段；
+`agent.tools.plugin` / `function.tools.plugin` 契约。`PLUGIN.md` 的 `id` / `kind` / `description` 是必需字段；
 `entry` 必须是插件根目录内的相对 `.js` 路径。运行时的 `tools.plugin` 只
 让 LLM 看到工具，真正的实现必须先由 entry 调用 `registerTool()` 注册。
 
@@ -92,16 +90,20 @@ plugins/echo-demo/
 ```yaml
 # PLUGIN.md
 ---
-name: echo-demo
+id: echo-demo
+kind: plugin
 description: Echoes one short value for a smoke test.
-runtimeType: agent
-maxSteps: 2
-trigger:
-  type: manual
 entry: ./server/index.js
-tools:
-  plugin:
-    - echo-value
+contributes:
+  tools: [echo-value]
+runtime:
+  type: agent
+  schedule:
+    trigger: { type: manual }
+  agent:
+    loop: { maxSteps: 2 }
+    tools:
+      plugin: [echo-value]
 ---
 When manually triggered, read `payload.value` from the `<runtime-activation>`
 block, call `echo-value` once, then call `runtime-done`.
@@ -378,24 +380,17 @@ interface UIRenderPart {
 
 ---
 
-### memory-get-block / memory-update-block
+### 插件记忆与向量搜索
 
-核心记忆块存储在当前会话的 `working_memory[scope="story"]` 中，按 `label` 对应的 key 共享。`memory-update-block` 返回完整替换文本的 `working_memory.set` proposal，不直接落库。`memory-get-block` 先读取本次执行中当前会话、相同 scope 和 key 的最后一条 pending proposal，再回退到已提交数据；该共享数据不按来源插件过滤。
+`memory-search` 是框架的 recall/archival 搜索工具。核心记忆块由 `memory` 插件的 `blocks` namespace 持久化，后台提取通过普通 `plugin.data` proposals 提交，并由 `prompt.segment@1` 提供提示词段。框架工具不直接读写其他插件的块数据。
 
-`memory-update-block` 的内容限制为 1–2000 字符，提交时另受工作记忆存储配额约束。此通用工具不会执行 MemoryManager 的按标签截断，也不会更新插件面板的 plugin-data 镜像。
-
----
+其他插件可以提供 `memory.block-definitions@1` 只读服务以贡献块定义。世界包通过 `contract:memory.blocks@1` 导入 `{id:"world",blocks:[...]}`，接收插件在 `contributes.data` 声明 accepts；标签采用小写 snake_case，内容长度与提取策略由记忆插件管理。
 
 ### world-dimension-get
 
 按需读取当前 session 绑定世界的结构化维度数据。适合 world 信息字段很多、但 LLM 只需要少量精确字段时使用。
 
-读取顺序：
-
-1. 优先读当前 session 中 `world-data-provider` 插件写入的 `plugin_data[namespace="entries"]`
-2. 若该维度不存在，则回退到 `world.metadata.dimensions`
-
-第一步先按顺序叠加本次执行内当前会话、已解析的数据提供者的 pending 写入和删除。删除维度的会话副本后会回退到世界 metadata；其他会话或其他插件的 proposal 不参与读取。
+此工具由 `world-init` 的 entry 注册，只读取自身 `entries` namespace，叠加自身尚未提交的写入和删除；没有会话覆盖时读取 `ctx.world.worldRecord.metadata.dimensions`。其他插件通过公开的 `world.dimensions@1` 服务查询世界维度，不读取该插件的私有 store。
 
 | 参数        | 类型                        | 必需 | 描述                                                  |
 | ----------- | --------------------------- | ---- | ----------------------------------------------------- |
@@ -550,7 +545,7 @@ interface UIRenderPart {
 
 已声明属性的类型、范围、enum 与嵌套结构在产生写入 proposal **之前**强制校验；非法字符串、null 或非有限数值不能替代数值属性。`create-character` 合并缺省值后校验；`update-character` 校验本次 patch，允许逐字段修复既有旧数据。未声明键仍保留并返回 warning。`mergeSchemaDefaults` 与 `assertCharacterFields` 向插件提供相同边界，失败抛出 `CharacterFieldValidationError`。
 
-`get-character-schema`、创建时填充默认值和创建/更新时校验均先读取本次执行中当前会话、当前 world-data provider 的 pending schema 操作。删除 schema 后不再使用存储中的旧规则。底层 schema 读取异常会使工具失败，不会静默跳过校验；未配置 provider 或 schema 尚不存在时仍允许无 schema 的角色。角色列表、读取和去重只合并当前会话的 pending 角色。
+`get-character-schema`、默认值填充与角色写入校验都读取会话的 World Model。视图按执行顺序合并已提交记录、成功上游的 domain proposals 和本 runtime 的 pending proposals；无效 schema/角色写入不会进入可读视图。每个会话最多一个 player，其他类型来自 schema 的 `types`。角色记录不镜像到插件私有数据。
 
 角色读取按提案顺序应用更新，与提交复用 `materializeCharacterUpsert`：带 `expectedVersion` 的更新浅合并对象字段，保留未修改字段，每次递增当前版本；空字符串描述可清空旧描述，非对象字段值整体替换。整个 `fields` 为 `null` 表示清空属性，读取时统一为 `undefined`；对象内的 `null` 值保持不变。不带 `expectedVersion` 的 upsert 是完整替换，不继承被省略的旧字段。底层 `CharacterStore.upsertCharacter` 保存完整快照（包括传入的创建时间），Memory、SQLite、PostgreSQL 使用相同语义。提交时仍执行版本和参数校验，pending 视图不代表已经提交成功。
 
@@ -659,7 +654,7 @@ Characters in session (3 total, sorted by frequency then recency):
 
 ### get-character-schema
 
-参数为 `{}`，返回 `{ schema: CharacterAttributeSchema | null, _text }`。框架按当前会话的活跃 `world-data-provider` capability 定位 provider，读取其已提交的 `schema/character-attributes`。没有 provider 或 schema 尚不可用时返回 `null`。工具不写数据，不接受其他会话或插件 ID。
+参数为 `{}`，返回 `{ schema: CharacterSchemaRecord | null, _text }`。schema 属于会话 World Model，包含 `version/types/attributes`；不存在时返回 `null`。读取包括已验证的 pending domain proposals，不根据插件私有 `schema` 数据推断。工具不写数据，不接受其他会话或插件 ID。
 
 第三方创角插件可以优先使用本次执行的 schema input binding；恢复旧会话时，通过本工具读取此前已完成的 setup 结果。无需读取其他插件的私有数据，也无需依赖官方 provider 名称。
 
@@ -704,7 +699,7 @@ Attributes:
 ### Plugin tool 的推荐使用方式
 
 - 文件放在插件自己的 `tools/` 或 runtime 子目录下
-- 在 `entry` 模块（`server/index.js`）里 `covel.registerTool(makeMyTool(covel.toolkit))` 注册；使用工具的 runtime 在 `PLUGIN.md` 里用 `tools.plugin` 按名字声明（旧 `tools.local` 路径字段已移除，声明会导致加载失败）
+- 在 `entry` 模块（`server/index.js`）里 `covel.registerTool(makeMyTool(covel.toolkit))` 注册；使用工具的 runtime 在 `RUNTIME.md` 的 `agent.tools.plugin` 或 `function.tools.plugin` 按名字声明（旧 `tools.local` 路径字段已移除，声明会导致加载失败）
 - 为每个 plugin tool 提供独立测试
 - 持久化写入优先返回 `withPendingProposals(...)`，让 commit chain 接管落盘
 - 通过 plugin tool 封装插件自己的数据 schema 和批量写入逻辑
@@ -713,7 +708,7 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/initialize-world.js`)
 
-开局一次性提交角色属性 schema 和世界参考词条。工具组合下方两个低层原语，并把它们产生的 `plugin.data`、`plugin.data.batch` 与 `lorebook.upsert` proposals 作为一个结果返回；任一部分校验或执行失败时都不会向 finalizer 暴露半套写入。
+开局一次性提交角色属性 schema 和世界参考词条。工具组合下方两个低层原语，并把它们产生的 `character.schema.set`、`plugin.data.batch` 与 `lorebook.upsert` proposals 作为一个结果返回；任一部分校验或执行失败时都不会向 finalizer 暴露半套写入。
 
 | 参数         | 类型           | 必需 | 描述                                                                          |
 | ------------ | -------------- | ---- | ----------------------------------------------------------------------------- |
@@ -722,7 +717,7 @@ Attributes:
 
 **输出**: `{ success, attributeCount, categories, count, keys, worldSchema, preGameDone: true }`
 
-`worldSchema` 同时作为 `world-init/schema-gen` 的 runtime output 交给同一 setup execution 中的 `char-creator/player-init`，避免下游读取尚未提交的 store。该 runtime 声明 `requireToolUse: true`、`completeAfterTools: [initialize-world]` 和 `output.schema`，因此模型只需生成一次工具参数；工具成功后框架直接把结果过 schema gate 并结束。
+`worldSchema` 同时作为 `world-init/schema-gen` 的 runtime output 交给同一 setup execution 中的 `char-creator/player-init`，避免下游读取尚未提交的 store。该 runtime 声明 `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`，因此模型只需生成一次工具参数；工具成功后框架直接把结果过 schema gate 并结束。
 
 **使用者**: `world-init/schema-gen`
 
@@ -732,7 +727,7 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/set-world-schema.js`)
 
-定义世界角色属性 Schema。一次调用传入所有属性定义，存储到 `plugin_data` 的 `schema/character-attributes`。
+定义世界角色类型和属性，返回 `character.schema.set` proposal 写入会话 World Model。payload 为 `{types,attributes}`，版本由内核递增；不写入插件私有 schema namespace。
 
 | 参数       | 类型           | 必需 | 描述                          |
 | ---------- | -------------- | ---- | ----------------------------- |
@@ -766,7 +761,7 @@ Attributes:
 
 批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等）。
 
-写入 session lorebook（`store.upsertLorebookEntries`）：每个词条成为一条 `constant` lorebook row，id 稳定化为 `world-entry:<key>`，`insertionOrder` 按批次递增（100, 200, …）。下一轮 prompt 通过 session context snapshot 的 `world.entries` 读取这些词条。
+返回 `lorebook.upsert` proposal，每个词条成为一条 `constant` lorebook row，owner 绑定来源插件，id 稳定化为 `world-entry:<key>`，`insertionOrder` 按批次递增（100, 200, …）。世界文件导入的词条使用独立的 world owner；两者不会覆盖。
 
 | 参数    | 类型         | 必需 | 描述                      |
 | ------- | ------------ | ---- | ------------------------- |
@@ -789,7 +784,7 @@ Attributes:
 
 **所属**: world-ir (`plugins/world-ir/tools/submit-world-facts.js`)
 
-通过 Function Calling 参数提交完整 `covel://world/ir/v1`。参数 schema 直接复用 `worldIRV1Schema`，并在 Zod 的 `superRefine` 中执行 `validateWorldIRV1` 语义校验，因此模型能在工具参数路径上看到全局 ID 重复、实体引用缺失、深度或节点预算等错误并只修正相应字段。完整数据形状见 [world-data.md · WorldIR 与插件投影](./world-data.md#worldir-与插件投影)。
+通过 Function Calling 参数提交完整 `contract:world-ir@1`。参数 schema 直接复用 `worldIRV1Schema`，并在 Zod 的 `superRefine` 中执行 `validateWorldIRV1` 语义校验，因此模型能在工具参数路径上看到全局 ID 重复、实体引用缺失、深度或节点预算等错误并只修正相应字段。完整数据形状见 [world-data.md · WorldIR 与插件投影](./world-data.md#worldir-与插件投影)。
 
 | 参数                                               | 必需 | 描述                                                              |
 | -------------------------------------------------- | ---- | ----------------------------------------------------------------- |
@@ -797,7 +792,7 @@ Attributes:
 | `summary`                                          | ✓    | 本轮事实摘要                                                      |
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
-工具原样返回校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `covel://world/ir/v1` output schema gate。
+工具原样返回校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
 
 这里的 `events` 是 WorldIR **事实数组**，不是领域事件信封。只有形如 `{ topic, data? }` 且 `topic` 为字符串的条目才会被 output normalizer 转成 `event.emit`；普通 WorldIR event 不会再触发 `event.emit: topic must be a non-empty string`。
 
@@ -1152,17 +1147,18 @@ export default function (covel) {
 ```
 
 ```yaml
-# 使用该工具的 runtime 的 PLUGIN.md
-tools:
-  plugin: # entry 注册的工具名（不是文件路径）
-    - my-tool-name
+# RUNTIME.md；根 PLUGIN.md 同时声明 contributes.tools: [my-tool-name]
+type: agent
+agent:
+  tools:
+    plugin: [my-tool-name]
 ```
 
 > `tools.local`（路径列表）**已移除**：声明它会让整个 manifest 加载失败。`tools.plugin` 是该 runtime 的工具白名单，执行还要求本插件注册成功——声明了未注册的名字时该名字解析失败，不会命中其他插件的同名实现。
 
 ## Proposal 类型
 
-Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。`ProposalType` 由单一真相源 `ProposalPayloadMap` 派生，commit handler 注册表（`satisfies CommitHandlerMap`）与 discovery 广告（`PROPOSAL_TYPES`）均与之编译期对齐——新增 proposal 类型只改 `ProposalPayloadMap` 一处，漏注册 handler 即编译失败。当前已注册类型：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；从未实装的 `narrative.template`、`record.upsert` 也已移除——它们曾被声明并对外广告但无 commit handler，提交即以 `unknown proposal type` 失败。）
+Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。`ProposalType` 由单一真相源 `ProposalPayloadMap` 派生，commit handler 注册表（`satisfies CommitHandlerMap`）与 discovery 广告（`PROPOSAL_TYPES`）均与之编译期对齐——新增 proposal 类型只改 `ProposalPayloadMap` 一处，漏注册 handler 即编译失败。当前已注册类型：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`character.schema.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；从未实装的 `narrative.template`、`record.upsert` 也已移除——它们曾被声明并对外广告但无 commit handler，提交即以 `unknown proposal type` 失败。）
 
 ### `ui.render`
 
@@ -1194,40 +1190,17 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 | version         | number  |      | 版本号，默认 `1`                                                                                      |
 | expectedVersion | number  |      | 更新 proposal 读取到的版本；提交时把 `fields` 作为 shallow patch 合并到最新角色并从 live version 递增 |
 | createdAt       | string  |      | 创建时间，缺省为提交时间                                                                              |
-| mirrorPluginId  | string  |      | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅                       |
 
 `update-character` 自动填写 `expectedVersion`。同一 stage 的并行 runtime 即使都从 v1 开始，提交时也会按顺序重读 live 角色并合并互不冲突的 fields patch，避免后提交者丢失先提交者的新字段；同一字段发生冲突时仍由后提交的 patch 覆盖。
 
-### `working_memory.set`
+### `character.schema.set`
 
-写入 session 级工作记忆。commit handler 把 payload 持久化到 `working_memory` 表，并发出一个名为 `working_memory.changed` 的事件。该事件作为 commit event **直接写入 action stream**（不走 eventBus 转发，故 `COVEL_EVENT_META` 里 `forwardToActionStream: false`），前端 SSE handler 收到后**刻意不渲染**——工作记忆的变化经 `state.changed` 反映到 UI。它必须是 `CovelEvent` 联合成员，否则每次 commit 都会撞上前端的 `assertNeverEvent` 穷尽性守卫。详见 [`protocol.md`](protocol.md)。
+原子更新会话角色 schema。payload 为 `{types: string[], attributes: AttributeDef[]}`，不接受 `version`；内核从当前记录递增版本并保存时间戳。写入必须与会话已有角色兼容：未知角色类型、不符合属性约束或多个 player 均使提交失败。
 
-**Payload (`WorkingMemorySetPayload`):**
+执行内的 `ctx.world.characterSchema` 和 `ctx.world.characters` 使用与 commit 相同的 materializer 校验成功上游及自身 pending proposals。提交成功发出 `character-schema.changed {schema}`，客户端据此刷新角色字段定义。
 
-| 字段      | 类型    | 必需 | 描述                                        |
-| --------- | ------- | ---- | ------------------------------------------- |
-| scope     | enum    | ✓    | `player` / `story` / `shared`               |
-| key       | string  | ✓    | 条目主键，按 `(sessionId, scope, key)` 唯一 |
-| value     | unknown | ✓    | 任意可序列化 JSON 值                        |
-| schemaRef | string  |      | 可选 schema 引用，仅作为元数据持久化        |
+### `lorebook.upsert`
 
-**写入路径：**
+payload 为 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabled?,extra?}]}`。`strategy` 为 `constant` 或 `selective`。owner 由提案来源固定为 `{kind:"plugin",pluginId}`；插件不能声明 world/player owner 或覆盖其他插件的词条。
 
-- runtime 端：通过 `Proposal` 输出 `{ type: 'working_memory.set', payload: { scope, key, value, schemaRef? } }`
-- HTTP 端：`PUT /api/sessions/:id/working-memory/:scope/:key` 直接调 store，不经 commit chain（详见 `docs/reference/api.md`）
-
-**存储配额：** 工作记忆常驻每回合 prompt，因此除渲染端的截断（60 条 / 每条 600 字符）外还实施存储配额：单条 value 序列化后上限 8000 字符，单 session 上限 200 条。超限时写入失败并返回错误，**已存在的 key 仍可更新**——只拒绝新 key，避免淘汰 session 正依赖的条目（core memory blocks 也存在这里）。配额定义在 `packages/shared/src/utils/working-memory-quota.ts`，由 commit handler 与 REST `PUT` 路由共同实施（两条写入路径共享同一份常量与语义）。批量状态应写 plugin-data，它不常驻 prompt。
-
-**KernelEvent 输出：**
-
-```json
-{
-  "type": "working_memory.changed",
-  "sessionId": "<id>",
-  "turnId": "<id>",
-  "source": { "pluginId": "...", "runtimeId": "..." },
-  "payload": { "scope": "player", "key": "mood" }
-}
-```
-
-`working_memory.set` 提交要求适配器同时提供 `upsertWorkingMemory` 和 `listWorkingMemory`；缺少查询能力时拒绝写入，不跳过会话条目配额。
+持久身份为 `(sessionId, owner, id)`。世界导入写 world owner，玩家管理 API 写 player owner；相同 id 在不同 owner 下独立存在。更新自身词条保留 createdAt。

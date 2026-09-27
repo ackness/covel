@@ -6,7 +6,7 @@
 
 - `PLUGIN.md`：手动函数 runtime、world-data schema 和 WorldIR projection 声明。
 - `handler.js`：校验规则、保存规则，并发出 lorebook proposal。
-- `server/project-world-ir.js`：把 `covel://world/ir/v1` 中 `type: rule` 的 statements 纯转换为 `rules` 记录。
+- `server/project-world-ir.js`：把 `contract:world-ir@1` 中 `type: rule` 的 statements 纯转换为 `rules` 记录。
 - `schemas/rules.schema.json`：世界规则导入 schema。
 - `ui/living-world-rules-panel.json`：右侧规则列表面板。
 

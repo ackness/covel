@@ -21,7 +21,7 @@
 
 ## L1 — Schema 校验
 
-用仓库自带的校验脚本，别手搓——它一次跑完两道校验（loader compat 解析 + strict authoring schema），传插件目录时会自动遍历 `runtimes/*/PLUGIN.md`：
+用仓库自带的校验脚本，别手搓——它一次跑完两道校验（strict package/runtime authoring schema），传插件目录时会自动遍历 `runtimes/*/RUNTIME.md`：
 
 ```bash
 pnpm validate:plugin plugins/<id>          # 整个插件（含全部子 runtime）
@@ -47,7 +47,7 @@ Fix: `tools.local` was removed — register the tool in the plugin's `entry`
 适用对象：
 
 - `tools/*.js` / `tools/*.ts`
-- `runtimeType: function` 的 `handler.js`
+- `type: function` 的 `handler.js`
 - `hooks/*.js`
 - provider wire helper（建议放 `lib/*.js`）
 - trigger / guard helper

@@ -237,6 +237,15 @@ export const messages = sqliteTable(
 
 // ── Characters ──────────────────────────────────────────────────
 
+export const characterSchemas = sqliteTable("character_schemas", {
+  sessionId: text("session_id").primaryKey(),
+  version: integer("version").notNull(),
+  types: text("types").notNull(),
+  attributes: text("attributes").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const characters = sqliteTable(
   "characters",
   {
@@ -445,29 +454,6 @@ export const playerInputs = sqliteTable(
 
 // ── Working Memory ────────────────────────────────────
 
-export const workingMemory = sqliteTable(
-  "working_memory",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    key: text("key").notNull(),
-    scope: text("scope").notNull(), // 'player' | 'story' | 'shared'
-    value: text("value").notNull(), // JSON
-    schemaRef: text("schema_ref"),
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("working_memory_session_id_idx").on(table.sessionId),
-    uniqueIndex("working_memory_unique_idx").on(
-      table.sessionId,
-      table.scope,
-      table.key,
-    ),
-  ],
-);
-
-// ── Media Assets (content-addressable bytes) ───────────────────
-
 export const mediaAssets = sqliteTable(
   "media_assets",
   {
@@ -515,7 +501,7 @@ export const lorebookEntries = sqliteTable(
   {
     id: text("id").notNull(),
     sessionId: text("session_id").notNull(),
-    pluginId: text("plugin_id").notNull(),
+    owner: text("owner").notNull(),
     keys: text("keys").notNull(), // JSON string[]
     content: text("content").notNull(),
     strategy: text("strategy").notNull(), // 'constant' | 'selective'
@@ -527,9 +513,9 @@ export const lorebookEntries = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.sessionId, table.id] }),
+    primaryKey({ columns: [table.sessionId, table.owner, table.id] }),
     index("lorebook_entries_session_id_idx").on(table.sessionId),
-    index("lorebook_entries_plugin_id_idx").on(table.sessionId, table.pluginId),
+    index("lorebook_entries_owner_idx").on(table.sessionId, table.owner),
   ],
 );
 

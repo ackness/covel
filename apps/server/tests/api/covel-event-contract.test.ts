@@ -33,6 +33,7 @@ describe("CovelEvent contract", () => {
     const expected = [
       "asset.progress",
       "block.emitted",
+      "character-schema.changed",
       "character.upserted",
       "domain-event.previewed",
       "gateway.calling",
@@ -53,6 +54,9 @@ describe("CovelEvent contract", () => {
       "turn.resumed",
       "turn.suspended",
       "ui.rendered",
+      "ui.slot.changed",
+      "ui.slot.cleared",
+      "ui.slot.preview",
       "world.dimensions.changed",
     ];
     expect([...FORWARDED_EVENT_TYPES].sort()).toEqual(expected);
@@ -113,18 +117,6 @@ describe("CovelEvent contract", () => {
     const advertised = [...framework.protocol.events].sort();
     const union = Object.keys(COVEL_EVENT_META).sort();
     expect(advertised).toEqual(union);
-  });
-
-  it("working_memory.changed is a CovelEvent union member (H1 drift fix)", () => {
-    // Emitted as a commit event and written straight onto the action stream;
-    // was previously absent from the union → hit the frontend assertNeverEvent
-    // guard on every working_memory.set commit.
-    const wm: CovelEventType = "working_memory.changed";
-    expect(COVEL_EVENT_META[wm]).toBeDefined();
-    // Commit-direct delivery, not eventBus-forwarded → stays out of the
-    // forwarding whitelist.
-    expect(COVEL_EVENT_META[wm].forwardToActionStream).toBe(false);
-    expect(FORWARDED_EVENT_TYPES.has(wm)).toBe(false);
   });
 
   it("forwards speculative domain event previews to the active action stream", () => {

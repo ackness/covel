@@ -54,26 +54,23 @@ async function run(secondResponse, ...corrections) {
     createdAt: now,
     updatedAt: now,
   });
-  await store.setPluginData({
+  await store.upsertCharacterSchema({
     sessionId,
-    pluginId: "schema-source",
-    namespace: "schema",
-    key: "character-attributes",
-    value: {
-      version: 1,
-      attributes: [
-        {
-          id: "systems",
-          name: "Systems",
-          type: "number",
-          category: "abilities",
-          min: 0,
-          max: 5,
-          defaultValue: 2,
-        },
-      ],
-    },
+    version: 1,
+    types: ["npc", "companion"],
+    createdAt: now,
     updatedAt: now,
+    attributes: [
+      {
+        id: "systems",
+        name: "Systems",
+        type: "number",
+        category: "abilities",
+        min: 0,
+        max: 5,
+        defaultValue: 2,
+      },
+    ],
   });
   // Reuse the CLI harness's real manifest/prompt loader, with a seeded
   // upstream result so the isolated tracker needs no narrative model call.
@@ -93,12 +90,10 @@ async function run(secondResponse, ...corrections) {
     ],
   });
   const tools = new Map(
-    [
-      ...createCharacterTools(store, {
-        findWorldDataPluginId: () => "schema-source",
-      }),
-      runtimeDoneTool,
-    ].map((tool) => [tool.name, tool]),
+    [...createCharacterTools(store, {}), runtimeDoneTool].map((tool) => [
+      tool.name,
+      tool,
+    ]),
   );
   const toolResults = [];
   const hookPipeline = createHookPipeline();

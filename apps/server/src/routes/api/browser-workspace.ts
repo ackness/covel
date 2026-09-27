@@ -300,6 +300,12 @@ export function createBrowserWorkspaceRoutes(
               }
               throw error;
             }
+            c.get("pluginRegistry")?.syncSessionActivations(
+              sessionId,
+              checkpoint.session.activePlugins,
+            );
+            c.get("uiSlots")?.clearSession(sessionId);
+            c.get("uiSlots")?.invalidateSession(sessionId);
             cache.set(sessionId, {
               incarnation,
               revision: checkpoint.revision,

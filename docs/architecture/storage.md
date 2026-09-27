@@ -145,7 +145,7 @@ documents sharing the browser origin and vault, not unrelated browsers or origin
 
 `BrowserCheckpoint` includes every domain needed to resume a session: session
 and world records, message/execution journals, events/traces, characters,
-plugin data, memory/lorebook data, interactions, suspensions, snapshots, and
+plugin data, character schemas, owned lorebook entries, interactions, suspensions, snapshots, and
 lifecycle ledgers. The current-only envelope is schema v2; it rejects missing
 session clock fields, non-canonical execution origins/statuses, old snapshot
 payloads, and schema v1 checkpoints at the storage boundary.
@@ -364,10 +364,12 @@ metadata must not supply an override the snapshot did not capture. See [snapshot
 
 ## Record Identity
 
-World dimensions are normalized at the shared record boundary. Character and
-lorebook IDs are session-local, with durable
-identity `(sessionId, id)` in MemoryStore, SQLite, PostgreSQL, and browser
-checkpoints. Browser persistence therefore shares domain shapes without sharing
+World dimensions are normalized at the shared record boundary. Character identity
+is `(sessionId, id)`. Lorebook identity also includes its owner: world, player, or
+a specific plugin. A plugin can modify only its own lore entries, including when
+another owner uses the same entry ID. Each session has an authoritative
+`characterSchema` with open character types and validated attributes. These
+identities are preserved by MemoryStore, SQLite, PostgreSQL, and browser checkpoints. Browser persistence therefore shares domain shapes without sharing
 server table layouts or backend-specific CRUD implementations.
 
 Model routing uses slot settings, request overrides and session
@@ -379,7 +381,7 @@ as well as update across MemoryStore, SQLite and PostgreSQL.
 
 ## Current Snapshot Contract
 
-Snapshot payload schema v3 requires `stateSchemas`, `runtimeExports`,
+Snapshot payload schema v3 requires `characterSchema` (object or null), `stateSchemas`, `runtimeExports`,
 `sessionSummaries`, `compactedMessageSummaryIds` and `displayMessagesBoundary`.
 Empty arrays/maps and a null chat boundary are explicit captured values. Missing
 fields are invalid, including older development payloads carrying the same version.
@@ -392,3 +394,7 @@ export validates stored fork ownership without repairing historical parent-scope
 
 Development caches containing the former flat state-patch shape must be recreated;
 no compatibility reader or cache migration is provided.
+
+The plugin-extension migration removes the working-memory table and character
+plugin mirrors. Memory blocks are ordinary plugin-owned data. Recreate affected
+development sessions, snapshots and browser checkpoints; old data is not migrated.

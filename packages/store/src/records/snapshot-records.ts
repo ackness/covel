@@ -12,11 +12,11 @@ import type {
 import type {
   LorebookEntryRecord,
   SessionSummaryRecord,
-  WorkingMemoryRecord,
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
 import type {
+  CharacterSchemaRecord,
   ExecutionContext,
   InputSlot,
   RuntimeExportRecord,
@@ -44,6 +44,7 @@ export interface SnapshotPayload {
   readonly schemaVersion: 3;
   readonly session: SnapshotSessionState;
   readonly turnId: string;
+  readonly characterSchema: CharacterSchemaRecord | null;
   readonly characters: readonly CharacterRecord[];
   readonly stateEntries: readonly StateEntryRecord[];
   /** Frozen table definitions. Empty means no captured tables. */
@@ -51,7 +52,6 @@ export interface SnapshotPayload {
   /** Latest visible revision of every export series at capture time. */
   readonly runtimeExports: readonly RuntimeExportRecord[];
   readonly pluginData: readonly PluginDataRecord[];
-  readonly workingMemory: readonly WorkingMemoryRecord[];
   /**
    * Compaction summaries referenced by messages at or before
    * {@link messagesCursor}.

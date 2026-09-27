@@ -44,6 +44,7 @@ export interface PluginRuntimeGateway {
       readonly role: "system" | "user" | "assistant";
       readonly content: string;
     }[];
+    readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly signal?: AbortSignal;
   }): Promise<{
@@ -64,6 +65,7 @@ export interface PluginRuntimeGateway {
       readonly role: "system" | "user" | "assistant";
       readonly content: string;
     }[];
+    readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly signal?: AbortSignal;
   }): Promise<{

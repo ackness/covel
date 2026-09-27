@@ -25,35 +25,46 @@ const stubAi = {
 } as unknown as Parameters<typeof createMiscApiRoutes>[0];
 
 const BUNDLED_PLUGIN_MANIFEST = `---
-name: bundled-greeter
+id: bundled-greeter
+kind: plugin
 description: Bundled plugin
-pluginType: plugin
-stage: post-turn
-runtimeType: function
-handler: ./handler.js
-outputKind: plugin
-trigger:
-  type: scheduled
-  interval: 1
-ui:
-  right:
-    - ./ui/panel.json
+contributes:
+  ui:
+    right:
+      - ./ui/panel.json
+runtime:
+  type: function
+  schedule:
+    stage: post-turn
+    trigger:
+      type: scheduled
+      interval: 1
+  io:
+    visibility: plugin
+  function:
+    handler: ./handler.js
 ---
 `;
 
 const USER_PLUGIN_MANIFEST = `---
-name: user-imagebox
+id: user-imagebox
+kind: plugin
 description: User plugin
-pluginType: plugin
-runtimeType: function
-handler: ./handler.js
-outputKind: plugin
-execution: sync
-trigger:
-  type: manual
-ui:
-  right:
-    - ./ui/button.json
+contributes:
+  ui:
+    right:
+      - ./ui/button.json
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+    manual:
+      execution: sync
+  io:
+    visibility: plugin
+  function:
+    handler: ./handler.js
 ---
 `;
 

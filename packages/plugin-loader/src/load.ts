@@ -1,3 +1,4 @@
+import { resolvePluginDeclarations } from "./declarations.js";
 import { loadPluginUiSpec } from "./ui-spec.js";
 /**
  * Progressive plugin loading — three levels of detail.
@@ -14,10 +15,8 @@ import {
   localeRegistry,
   hasIllegalDetachedContract,
   normalizeLocale,
-  WORLD_IR_V1_JSON_SCHEMA,
-  WORLD_IR_V1_SCHEMA_URI,
 } from "@covel/shared";
-import type { RuntimeManifest } from "@covel/shared";
+import type { PluginManifest, RuntimeManifest } from "@covel/shared";
 import type {
   PluginDiscoveryResult,
   PluginSummary,
@@ -27,11 +26,7 @@ import type {
   FunctionHandler,
   AgentGuard,
 } from "./types.js";
-import { parsePluginMd } from "./parse-plugin-md.js";
-import {
-  hasRuntimeDeclaration,
-  multiRuntimeRootDiagnostics,
-} from "./root-manifest-diagnostics.js";
+import { parsePluginMd, parseRuntimeMd } from "./parse-plugin-md.js";
 import {
   pluginDeclarations,
   resolvePluginRuntimeManifest,
@@ -50,9 +45,9 @@ import {
  * The registered default locale and its explicit aliases use PLUGIN.md before
  * English so the historical canonical prompt remains unchanged for zh-CN.
  */
-function localeVariantNames(locale: string): string[] {
+function localeVariantNames(locale: string, stem = "PLUGIN"): string[] {
   return localeLookupCandidates(locale).map(
-    (candidate) => `PLUGIN.${candidate}.md`,
+    (candidate) => `${stem}.${candidate}.md`,
   );
 }
 
@@ -71,12 +66,13 @@ function isDefaultLocaleOrAlias(locale: string): boolean {
 async function resolveLocalizedPluginMd(
   dir: string,
   locale?: string,
+  stem = "PLUGIN",
 ): Promise<string> {
-  const base = path.join(dir, "PLUGIN.md");
+  const base = path.join(dir, `${stem}.md`);
   const canonicalLocale = canonicalizeLocale(locale);
   if (!canonicalLocale) return base;
 
-  const requestedNames = localeVariantNames(canonicalLocale);
+  const requestedNames = localeVariantNames(canonicalLocale, stem);
   for (const name of requestedNames) {
     const candidate = path.join(dir, name);
     if (await fileExists(candidate)) return candidate;
@@ -85,7 +81,7 @@ async function resolveLocalizedPluginMd(
   if (isDefaultLocaleOrAlias(canonicalLocale)) return base;
 
   const fallbackLocale = canonicalizeLocale(DEFAULT_FALLBACK_LOCALE)!;
-  for (const name of localeVariantNames(fallbackLocale)) {
+  for (const name of localeVariantNames(fallbackLocale, stem)) {
     if (requestedNames.includes(name)) continue;
     const candidate = path.join(dir, name);
     if (await fileExists(candidate)) return candidate;
@@ -105,20 +101,27 @@ async function resolveLocalizedPluginMd(
 async function parsePluginMdForLocale(
   dir: string,
   locale?: string,
+  plugin?: PluginManifest,
 ): Promise<ParsedPluginMd> {
-  const localizedPath = await resolveLocalizedPluginMd(dir, locale);
-  const basePath = path.join(dir, "PLUGIN.md");
-  const canonical = parsePluginMd(
-    await fs.readFile(basePath, "utf-8"),
-    basePath,
-  );
-  if (localizedPath === basePath) return canonical;
-
-  return parsePluginMd(
-    await fs.readFile(localizedPath, "utf-8"),
-    localizedPath,
-    canonical.rawFrontmatter,
-  );
+  const stem = plugin ? "RUNTIME" : "PLUGIN";
+  const localizedPath = await resolveLocalizedPluginMd(dir, locale, stem);
+  const basePath = path.join(dir, `${stem}.md`);
+  const parse = (
+    content: string,
+    file: string,
+    canonical?: Readonly<Record<string, unknown>>,
+  ) =>
+    plugin
+      ? parseRuntimeMd(content, file, plugin, canonical)
+      : parsePluginMd(content, file, canonical);
+  const canonical = parse(await fs.readFile(basePath, "utf-8"), basePath);
+  return localizedPath === basePath
+    ? canonical
+    : parse(
+        await fs.readFile(localizedPath, "utf-8"),
+        localizedPath,
+        canonical.rawFrontmatter,
+      );
 }
 
 /**
@@ -193,7 +196,6 @@ export async function loadPluginSummary(
       pluginType: manifest?.pluginType ?? "plugin",
       runtimeCount: loaded.manifests.length,
       ...(manifest?.tags ? { tags: manifest.tags } : {}),
-      ...(manifest?.relations ? { relations: manifest.relations } : {}),
     };
   }
 }
@@ -205,6 +207,7 @@ export async function loadPluginSummary(
  * @param locale - Optional locale for loading localized PLUGIN.md
  */
 export interface PluginDefinition {
+  readonly plugin: PluginManifest;
   readonly packageManifest?: ParsedPluginMd;
   readonly manifests: readonly ParsedPluginMd[];
 }
@@ -214,39 +217,73 @@ export async function loadPluginDefinition(
   locale?: string,
 ): Promise<PluginDefinition> {
   const rootPath = path.join(discovery.rootPath, "PLUGIN.md");
-  const packageManifest = (await fileExists(rootPath))
-    ? await parsePluginMdForLocale(discovery.rootPath, locale)
-    : undefined;
+  const parsedPackage = await parsePluginMdForLocale(
+    discovery.rootPath,
+    locale,
+  );
+  const contractSchemas: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const [contract, declaration] of Object.entries(
+    parsedPackage.plugin!.contracts ?? {},
+  )) {
+    const schemaPath = path.resolve(discovery.rootPath, declaration.schema);
+    await assertInsideRoot(discovery.rootPath, schemaPath, "Contract schema");
+    contractSchemas[contract] = JSON.parse(
+      await fs.readFile(schemaPath, "utf-8"),
+    ) as Record<string, unknown>;
+  }
+  for (const [namespace, declaration] of Object.entries(
+    parsedPackage.plugin!.contributes?.data ?? {},
+  )) {
+    for (const contract of declaration.accepts ?? []) {
+      const declared = parsedPackage.plugin!.contracts?.[contract];
+      if (
+        !declared ||
+        path.resolve(discovery.rootPath, declared.schema) !==
+          path.resolve(discovery.rootPath, declaration.schema)
+      )
+        throw new Error(
+          `${rootPath}: data namespace ${namespace} must use its accepted contract ${contract} schema`,
+        );
+    }
+  }
+  const packageManifest = { ...parsedPackage, contractSchemas };
+  const plugin = packageManifest.plugin!;
+  if (plugin.id !== discovery.id)
+    throw new Error(
+      `${rootPath}: id must match plugin directory ${discovery.id}`,
+    );
+  if (discovery.isMultiRuntime && plugin.runtime)
+    throw new Error(`${rootPath}: inline runtime and runtimes/ cannot coexist`);
   const manifests: ParsedPluginMd[] = [];
   if (discovery.isMultiRuntime) {
-    if (packageManifest) {
-      const diagnostics = multiRuntimeRootDiagnostics(packageManifest.manifest);
-      if (diagnostics.length)
-        throw new Error(
-          `${rootPath}: ${diagnostics.map((d) => `${d.path}: ${d.message}`).join("; ")}`,
-        );
-    }
-    for (const mdPath of discovery.pluginMdPaths) {
-      const parsed = await parsePluginMdForLocale(path.dirname(mdPath), locale);
-      if (hasRuntimeDeclaration(parsed.manifest)) manifests.push(parsed);
-      else
-        throw new Error(
-          `${mdPath}: runtime declaration requires execution fields; move package-only declarations to the root PLUGIN.md`,
-        );
-    }
-  } else if (
-    packageManifest &&
-    hasRuntimeDeclaration(packageManifest.manifest)
-  ) {
-    manifests.push(packageManifest);
+    for (const mdPath of discovery.pluginMdPaths)
+      manifests.push(
+        await parsePluginMdForLocale(path.dirname(mdPath), locale, plugin),
+      );
+  } else if (plugin.runtime) manifests.push(packageManifest);
+  const provided = new Set(
+    (plugin.provides ?? []).map((p) =>
+      typeof p === "string" ? p : p.contract,
+    ),
+  );
+  const outputs = new Set<string>();
+  for (const parsed of manifests) {
+    const contract = parsed.runtime?.io?.output?.contract;
+    if (!contract) continue;
+    if (!provided.has(contract))
+      throw new Error(
+        `${parsed.sourcePath}: output contract ${contract} is not declared in root provides`,
+      );
+    if (outputs.has(contract))
+      throw new Error(
+        `${parsed.sourcePath}: ambiguous output contract ${contract}; only one runtime may provide it`,
+      );
+    outputs.add(contract);
   }
-  const definition = {
-    ...(packageManifest ? { packageManifest } : {}),
-    manifests,
-  };
+  const definition = { plugin, packageManifest, manifests };
   validatePluginDeclarations([
-    ...(packageManifest ? [packageManifest] : []),
-    ...manifests,
+    packageManifest,
+    ...manifests.filter((m) => m !== packageManifest),
   ]);
   return definition;
 }
@@ -258,12 +295,36 @@ export async function loadPluginManifest(
   return (await loadPluginDefinition(discovery, locale)).manifests;
 }
 
-/** Compile already parsed declarations without importing code or re-reading files. */
+/** Freeze entry metadata and root prompt translations before execution. */
 export async function loadPluginEntryDefinition(
   discovery: PluginDiscoveryResult,
   declarations: readonly ParsedPluginMd[],
 ): Promise<PluginEntryDefinition> {
+  const staticPromptVariants: Record<
+    string,
+    PluginEntryDefinition["staticPromptSegments"]
+  > = {};
+  for (const filename of await fs.readdir(discovery.rootPath)) {
+    const match = /^PLUGIN\.(.+)\.md$/.exec(filename);
+    const locale = match && canonicalizeLocale(match[1]);
+    if (!locale) continue;
+    const file = path.join(discovery.rootPath, filename);
+    await assertInsideRoot(
+      discovery.rootPath,
+      file,
+      "Localized plugin manifest",
+    );
+    const localized = await parsePluginMdForLocale(discovery.rootPath, locale);
+    staticPromptVariants[locale] = localized.plugin?.contributes?.prompt ?? [];
+  }
   return {
+    staticPromptVariants,
+    contributions:
+      declarations.find((record) => record.plugin)?.plugin?.contributes ?? {},
+    staticPromptSegments:
+      declarations.find((record) => record.plugin)?.plugin?.contributes
+        ?.prompt ?? [],
+    extensions: resolvePluginDeclarations(declarations).extensions,
     pluginId: discovery.id,
     pluginRoot: discovery.rootPath,
     entryPaths: [
@@ -308,6 +369,7 @@ async function resolveRuntimeDir(
 async function loadUiSpecs(
   runtimeDir: string,
   pluginRoot: string,
+  pluginId: string,
   ui:
     | {
         right?: readonly string[];
@@ -327,7 +389,7 @@ async function loadUiSpecs(
       const fullPath = path.resolve(runtimeDir, relPath);
       await assertInsideRoot(pluginRoot, fullPath, "UI spec");
       if (fullPath.endsWith(".json")) {
-        specs.push(await loadPluginUiSpec(pluginRoot, fullPath));
+        specs.push(await loadPluginUiSpec(pluginRoot, fullPath, pluginId));
       } else {
         // Preserve unsupported declarations for per-spec API diagnostics.
         // The Web client does not dynamically load plugin component files.
@@ -358,11 +420,11 @@ async function loadOutputSchema(
   runtimeDir: string,
   pluginRoot: string,
   declaredPath: string | undefined,
+  contracts: ContractSchemas,
 ): Promise<Readonly<Record<string, unknown>> | undefined> {
   if (declaredPath) {
-    if (declaredPath === WORLD_IR_V1_SCHEMA_URI) {
-      return WORLD_IR_V1_JSON_SCHEMA;
-    }
+    if (declaredPath.startsWith("contract:"))
+      return requireContractSchema(declaredPath, contracts);
     const fullPath = path.resolve(runtimeDir, declaredPath);
     await assertInsideRoot(pluginRoot, fullPath, "Output schema");
     if (!(await fileExists(fullPath))) {
@@ -397,10 +459,10 @@ async function loadDeclaredSchema(
   pluginRoot: string,
   declaredPath: string,
   label: string,
+  contracts: ContractSchemas,
 ): Promise<Readonly<Record<string, unknown>> | undefined> {
-  if (declaredPath === WORLD_IR_V1_SCHEMA_URI) {
-    return WORLD_IR_V1_JSON_SCHEMA;
-  }
+  if (declaredPath.startsWith("contract:"))
+    return requireContractSchema(declaredPath, contracts);
   const fullPath = path.resolve(runtimeDir, declaredPath);
   await assertInsideRoot(pluginRoot, fullPath, label);
   if (!(await fileExists(fullPath))) {
@@ -424,6 +486,7 @@ async function loadBindingAcceptsSchemas(
   runtimeDir: string,
   pluginRoot: string,
   inputs: RuntimeManifest["inputs"],
+  contracts: ContractSchemas,
 ): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
   if (!inputs) return undefined;
   const out: Record<string, Readonly<Record<string, unknown>>> = {};
@@ -434,6 +497,7 @@ async function loadBindingAcceptsSchemas(
       pluginRoot,
       binding.accepts,
       `binding accepts schema (${name})`,
+      contracts,
     );
     if (schema) out[name] = schema;
   }
@@ -449,6 +513,7 @@ async function loadExportAcceptsSchemas(
   runtimeDir: string,
   pluginRoot: string,
   inject: NonNullable<RuntimeManifest["input"]>["inject"],
+  contracts: ContractSchemas,
 ): Promise<Record<string, Readonly<Record<string, unknown>>> | undefined> {
   if (!inject) return undefined;
   const out: Record<string, Readonly<Record<string, unknown>>> = {};
@@ -459,6 +524,7 @@ async function loadExportAcceptsSchemas(
       pluginRoot,
       decl.accepts,
       `export accepts schema (${decl.name})`,
+      contracts,
     );
     if (schema) out[decl.name] = schema;
   }
@@ -485,10 +551,13 @@ export async function loadRuntimeUi(
     snapshot,
     true,
   );
-  const parsed = await parsePluginMdForLocale(runtimeDir, locale);
+  const parsed = pluginDeclarations(snapshot).find(
+    (record) => record.manifest.name === runtimeName,
+  )!;
   const uiSpecs = await loadUiSpecs(
     runtimeDir,
     discovery.rootPath,
+    discovery.id,
     parsed.manifest.ui,
   );
   return { manifest: parsed.manifest, uiSpecs };
@@ -505,11 +574,19 @@ export async function loadRuntime(
   runtimeName: string,
   locale?: string,
   definition?: PluginDefinition,
+  resolvedContracts: ContractSchemas = {},
+  generation?: string,
 ): Promise<LoadedRuntime> {
   const snapshot =
     definition ?? (await loadPluginDefinition(discovery, locale));
   const runtimeDir = await resolveRuntimeDir(discovery, runtimeName, snapshot);
-  const parsed = await parsePluginMdForLocale(runtimeDir, locale);
+  const contracts = {
+    ...resolvedContracts,
+    ...snapshot.packageManifest?.contractSchemas,
+  };
+  const parsed = snapshot.manifests.find(
+    (record) => record.manifest.name === runtimeName,
+  )!;
 
   // Deterministic loader rejection (01 §4): a recurrently-detached spec that
   // still declares turn bindings can never satisfy them.
@@ -524,6 +601,7 @@ export async function loadRuntime(
     runtimeDir,
     discovery.rootPath,
     parsed.manifest.output?.schema,
+    contracts,
   );
 
   const inputSchema = parsed.manifest.input?.schema
@@ -532,6 +610,7 @@ export async function loadRuntime(
         discovery.rootPath,
         parsed.manifest.input.schema,
         "input schema",
+        contracts,
       )
     : undefined;
 
@@ -539,12 +618,14 @@ export async function loadRuntime(
     runtimeDir,
     discovery.rootPath,
     parsed.manifest.inputs,
+    contracts,
   );
 
   const exportAcceptsSchemas = await loadExportAcceptsSchemas(
     runtimeDir,
     discovery.rootPath,
     parsed.manifest.input?.inject,
+    contracts,
   );
 
   // Load function handler for runtimeType: 'function'
@@ -552,7 +633,9 @@ export async function loadRuntime(
   if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
     const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
     await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
-    const mod = await import(pathToFileURL(handlerPath).href);
+    const url = pathToFileURL(handlerPath);
+    if (generation) url.searchParams.set("generation", generation);
+    const mod = await import(url.href);
     if (typeof mod.default !== "function") {
       throw new Error(
         `Handler module "${parsed.manifest.handler}" does not export a default function (got ${typeof mod.default})`,
@@ -566,7 +649,9 @@ export async function loadRuntime(
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
     await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
-    const mod = await import(pathToFileURL(guardPath).href);
+    const url = pathToFileURL(guardPath);
+    if (generation) url.searchParams.set("generation", generation);
+    const mod = await import(url.href);
     if (typeof mod.default !== "function") {
       throw new Error(
         `Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,
@@ -579,6 +664,7 @@ export async function loadRuntime(
   const uiSpecs = await loadUiSpecs(
     runtimeDir,
     discovery.rootPath,
+    discovery.id,
     parsed.manifest.ui,
   );
 
@@ -593,4 +679,16 @@ export async function loadRuntime(
     guard,
     uiSpecs,
   };
+}
+
+type ContractSchemas = Readonly<
+  Record<string, Readonly<Record<string, unknown>>>
+>;
+function requireContractSchema(
+  uri: string,
+  contracts: ContractSchemas,
+): Readonly<Record<string, unknown>> {
+  const schema = contracts[uri.slice("contract:".length)];
+  if (!schema) throw new Error(`Unresolved schema contract: ${uri}`);
+  return schema;
 }

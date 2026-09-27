@@ -3,13 +3,9 @@ import type {
   SetupRuntimeState,
   TurnInput,
 } from "@covel/shared";
-import { isSetupRuntime } from "@covel/shared";
-import { applyBranchReplyAcceptedCandidates } from "@covel/context";
-import type { CoreMemoryBlockView } from "@covel/context";
+import { isSetupRuntime, promptHistoryTransformV1 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
-import { getTurnExecutionSignal } from "./turn-control.js";
-import { awaitPendingMemory } from "./memory-barrier.js";
 
 export interface TurnSessionCharacter {
   readonly id?: string;
@@ -24,21 +20,6 @@ export interface TurnSessionMeta {
   readonly characters: readonly TurnSessionCharacter[];
   readonly lastFormValues: Record<string, unknown> | undefined;
 }
-
-/**
- * Runtime-local name for the authoritative core-memory block view.
- *
- * Aliases `@covel/context`'s {@link CoreMemoryBlockView} so the whole turn
- * pipeline threads a single named type — crucially one that carries the
- * schema-driven `displayName` (attached by `@covel/memory`'s manager) all the
- * way to `renderCoreMemory`. Previously this was a narrowed
- * `{ label; content; updatedAt }` shape, which erased `displayName` from the
- * type at the source: the value only survived by object reference, and any
- * explicit `.map()` reconstruction would silently drop it with no type error.
- * Keeping the name re-exported (rather than inlined) means `session-context.ts`
- * and `post-turn-memory.ts` keep their existing import unchanged.
- */
-export type CoreMemoryBlock = CoreMemoryBlockView;
 
 export interface LoadedTurnSessionState {
   readonly messageHistory: readonly TurnMessageRecord[];
@@ -62,12 +43,6 @@ export async function loadTurnSessionState(args: {
   readonly shouldAppendPlayerMessage: boolean;
 }): Promise<LoadedTurnSessionState> {
   const { input, deps, shouldAppendPlayerMessage } = args;
-
-  await awaitPendingMemory(
-    deps.memorySystem?.updater,
-    input.sessionId,
-    getTurnExecutionSignal(deps.turnControl),
-  );
 
   // Bounded per-turn reads: counts come from a store-side aggregate over the
   // FULL log, while the in-memory history is only the uncompacted suffix —
@@ -168,24 +143,12 @@ export async function buildProjectedPromptHistory(args: {
     (msg) => !(msg.turnId === input.turnId && msg.sourceType === "player"),
   );
 
-  // Prompt-history rewriter is discovered by the `prompt-history-rewriter`
-  // capability (resolved server-side). When no such plugin is active for the
-  // session, the projected history passes through unchanged — the framework
-  // never assumes a specific plugin id.
-  const rewriterPluginId =
-    deps.capabilityPluginIds?.promptHistoryRewriterPluginId;
-  if (!deps.store || !rewriterPluginId) return promptHistory;
-
-  try {
-    const rewriterTurns = await deps.store.listPluginData(
-      input.sessionId,
-      rewriterPluginId,
-      "turns",
-    );
-    return applyBranchReplyAcceptedCandidates(promptHistory, rewriterTurns);
-  } catch {
-    return promptHistory;
-  }
+  if (!deps.extensionExecution) return promptHistory;
+  const result = await deps.extensionExecution.run(promptHistoryTransformV1, {
+    messages: promptHistory,
+    turnId: input.turnId,
+  });
+  return result.messages;
 }
 
 /**

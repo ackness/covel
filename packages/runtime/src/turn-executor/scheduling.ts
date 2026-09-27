@@ -119,8 +119,8 @@ function setupSessionGateSatisfied(
         return false;
       }
     } else {
-      const providers = activeSetupRuntimes.filter((r) =>
-        r.capabilities?.includes(need.capability),
+      const providers = activeSetupRuntimes.filter(
+        (r) => r.outputContract === need.capability,
       );
       if (providers.length === 0) {
         warnUnsatisfiable(`capability "${need.capability}"`);

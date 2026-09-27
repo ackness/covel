@@ -14,7 +14,7 @@ export async function record(ctx, kind) {
     ) {
       throw new Error("providerPluginId must be a nonempty plugin ID");
     }
-    const contract = "probe/note-format@1";
+    const contract = "probe.note-format@1";
     const provider = (await ctx.services.discover(contract)).find(
       (service) =>
         service.pluginId === payload.providerPluginId &&

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * Plugin RPC registry.
  *
@@ -122,6 +123,8 @@ export interface RpcRegistryEntry {
 }
 
 export interface PluginRpcRegistry {
+  withSnapshot<T>(fn: () => T): T;
+  replacePlugin<T>(pluginId: string, publish: () => T): T;
   registerFormValidator(
     pluginId: string,
     name: string,
@@ -167,7 +170,43 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
   const pluginEntries = new Map<string, RpcRegistryEntry>(); // key = `${pluginId}::${action}`
   const frameworkEntries = new Map<string, RpcRegistryEntry>();
 
+  const snapshots = new AsyncLocalStorage<{
+    entries: Map<string, RpcRegistryEntry>;
+    validators: Map<string, ValidatePluginForm>;
+  }>();
   return {
+    withSnapshot(fn) {
+      return snapshots.getStore()
+        ? fn()
+        : snapshots.run(
+            {
+              entries: new Map(pluginEntries),
+              validators: new Map(formValidators),
+            },
+            fn,
+          );
+    },
+    replacePlugin(pluginId, publish) {
+      const entries = [...pluginEntries].filter(
+        ([, entry]) => entry.pluginId === pluginId,
+      );
+      const validators = [...formValidators].filter(([key]) =>
+        key.startsWith(`${pluginId}::`),
+      );
+      for (const [key] of entries) pluginEntries.delete(key);
+      for (const [key] of validators) formValidators.delete(key);
+      try {
+        return publish();
+      } catch (error) {
+        for (const [key, entry] of pluginEntries)
+          if (entry.pluginId === pluginId) pluginEntries.delete(key);
+        for (const key of formValidators.keys())
+          if (key.startsWith(`${pluginId}::`)) formValidators.delete(key);
+        for (const [key, entry] of entries) pluginEntries.set(key, entry);
+        for (const [key, entry] of validators) formValidators.set(key, entry);
+        throw error;
+      }
+    },
     registerFormValidator(pluginId, name, validator) {
       const key = `${pluginId}::${name}`;
       if (formValidators.has(key))
@@ -178,7 +217,9 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
       };
     },
     getFormValidator(pluginId, name) {
-      return formValidators.get(`${pluginId}::${name}`);
+      return (snapshots.getStore()?.validators ?? formValidators).get(
+        `${pluginId}::${name}`,
+      );
     },
     registerPluginHandler(pluginId, action, handler, options, pluginTrust) {
       const key = `${pluginId}::${action}`;
@@ -210,7 +251,9 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
     },
 
     getPluginAction(pluginId, action) {
-      return pluginEntries.get(`${pluginId}::${action}`);
+      return (snapshots.getStore()?.entries ?? pluginEntries).get(
+        `${pluginId}::${action}`,
+      );
     },
 
     getFrameworkDefault(action) {

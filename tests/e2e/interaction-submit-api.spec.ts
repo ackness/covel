@@ -101,7 +101,7 @@ async function seedCommittedInteractions(
           traceEvents: [],
           characters: [],
           pluginData: [],
-          workingMemory: [],
+          characterSchema: null,
           lorebookEntries: [],
           sessionSummaries: [],
           playerInputs: [],

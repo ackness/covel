@@ -2,16 +2,13 @@ import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import { resolveI18nText } from "@covel/shared";
-import { useCharacterAttributeSchema } from "@/stores/plugin-data-store.js";
+import { useSession } from "@/stores/session-store.js";
 import { renderJsonValue } from "./core-renderers.js";
 import { resolveIcon } from "./helpers.js";
 
 // ── CharacterFieldsView ─────────────────────────────────────────
 //
-// Schema-aware renderer for a character's `fields` object. The
-// world-data-provider plugin publishes the schema under the well-known
-// `(*, 'schema', 'character-attributes')` path; the hook scans plugin ids so
-// the catalog does not hardcode a provider.
+// Field labels and constraints come from the session World Model.
 
 type AttributeFieldType =
   "string" | "number" | "boolean" | "enum" | "array" | "object" | "map";
@@ -279,7 +276,8 @@ function AttributeRow({ attr, value }: { attr: AttrDefLite; value: unknown }) {
 export const CharacterFieldsView: ComponentRenderer = ({ element }) => {
   const { t } = useTranslation();
   const raw = element.props?.value;
-  const schema = useCharacterAttributeSchema() as {
+  const { state } = useSession();
+  const schema = state.gameState.characterSchema as {
     attributes?: readonly AttrDefLite[];
   } | null;
 

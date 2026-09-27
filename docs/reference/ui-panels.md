@@ -515,3 +515,30 @@ Responsive panel resize callbacks use the supplied dimensions, avoiding imperati
 ## 插件自带组件与舞台挂载
 
 JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用隔离容器与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。
+
+## Kernel UI slots
+
+Plugins declare `contributes.extensions` providers for `ui.slot@1` and register
+handlers from their server entry. `slot` selects `stage.backdrop@1`,
+`stage.cast@1`, `stage.dialogue@1`, `stage.choices@1`, or `character.visual@1`.
+Providers compose in declared order, then plugin/provider ID order. Handlers
+receive `{ slot, previous, events }`, own scoped `ctx.pluginData`, and the kernel
+`ctx.world` view. The host validates each provider output against its slot model.
+A failing provider is skipped; it cannot replace the previous valid value.
+
+`watch` lists the provider's own namespaces. Their commits invalidate projections
+with a 50 ms debounce. `preview` lists validated domain-event topics that the
+provider can project before commit. Previews are ephemeral, scoped to the turn,
+and discarded on completion, failure, or cancellation. They never replace the
+committed cache. Late results after a terminal event are discarded.
+
+Character visual providers return `{ characters: CharacterVisualModel[] }`,
+including imported art before characters are created. Providers normalize IDs;
+the host emits one keyed `character.visual@1` snapshot per `characterId`.
+Front-end consumers join exact keys and do not infer plugin namespaces or ID
+suffixes. The stage, avatar, portrait gallery, and cast list read these slots.
+
+Panel data bindings and action `pluginId` fields may reference only the owning
+plugin. The loader rejects foreign or dynamic plugin targets. Use kernel slots
+or World Model for data shared between plugins. A component that reads kernel
+data before its namespace has records must set `alwaysRender: true`.

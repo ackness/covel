@@ -4,6 +4,7 @@ import type {
 } from "@covel/shared";
 import type {
   GeneratedWorldCharacter,
+  GeneratedMemoryDefinition,
   GeneratedWorldLorebookEntry,
   GeneratedWorldPackageContent,
 } from "./types.js";
@@ -191,6 +192,49 @@ export function normalizeGeneratedPackage(
     errors.push("WORLD_PACKAGE_YAML must include at least 3 rules");
   }
 
+  const memoryDefinitions: GeneratedMemoryDefinition[] = [];
+  if (requested.has("memory")) {
+    for (const [index, block] of (Array.isArray(root.memoryDefinitions)
+      ? root.memoryDefinitions
+      : []
+    ).entries()) {
+      if (
+        !isRecord(block) ||
+        typeof block.label !== "string" ||
+        !/^[a-z][a-z0-9_]*$/.test(block.label) ||
+        typeof block.displayName !== "string" ||
+        !block.displayName.trim() ||
+        typeof block.extractionHint !== "string" ||
+        !block.extractionHint.trim() ||
+        (block.maxChars !== undefined &&
+          (!Number.isInteger(block.maxChars) || Number(block.maxChars) <= 0))
+      ) {
+        errors.push(
+          `memoryDefinitions[${index}] must contain a label, displayName and extractionHint, with optional positive maxChars`,
+        );
+        continue;
+      }
+      memoryDefinitions.push({
+        label: block.label,
+        displayName: block.displayName,
+        extractionHint: block.extractionHint,
+        ...(typeof block.icon === "string" ? { icon: block.icon } : {}),
+        ...(typeof block.maxChars === "number"
+          ? { maxChars: block.maxChars }
+          : {}),
+      });
+    }
+    if (memoryDefinitions.length < 2 || memoryDefinitions.length > 4)
+      errors.push(
+        "WORLD_PACKAGE_YAML must include 2-4 genre memoryDefinitions",
+      );
+    if (
+      new Set(memoryDefinitions.map((block) => block.label)).size !==
+      memoryDefinitions.length
+    )
+      errors.push("memoryDefinitions labels must be unique");
+  }
+
   const duplicateCharacterIds = duplicateIds(characters);
   if (duplicateCharacterIds.length > 0) {
     errors.push(`duplicate character ids: ${duplicateCharacterIds.join(", ")}`);
@@ -201,7 +245,7 @@ export function normalizeGeneratedPackage(
   }
 
   return {
-    content: { characters, lorebook, rules },
+    content: { characters, lorebook, rules, memoryDefinitions },
     errors,
   };
 }
@@ -215,7 +259,7 @@ export function applyCreationBriefToManifest(
   const policy = isRecord(manifest.pluginPolicy)
     ? manifest.pluginPolicy
     : (manifest.pluginPolicy = {});
-  policy.preset = brief.experienceMode ?? "traditional-story";
+  policy.presetId = brief.experienceMode ?? "traditional-story";
   if (brief.experienceMode === "dialogue-mode") {
     manifest.defaultViewMode = "stage";
   } else {
@@ -223,15 +267,6 @@ export function applyCreationBriefToManifest(
   }
 
   const requested = requestedKinds(brief);
-  if (!requested.has("memory")) {
-    delete manifest.memoryBlocks;
-  } else if (
-    !Array.isArray(manifest.memoryBlocks) ||
-    manifest.memoryBlocks.length < 2
-  ) {
-    errors.push("world.yaml must include at least 2 genre memoryBlocks");
-  }
-
   if (requested.has("opening-kit")) {
     const dimensions = isRecord(manifest.dimensions)
       ? manifest.dimensions

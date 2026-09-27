@@ -1,4 +1,4 @@
-import { validateWorldIRV1, worldIRV1Schema } from "@covel/shared";
+import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
 
 function validationPath(path) {
   if (path === "(root)") return [];

@@ -44,10 +44,7 @@ export function applyPluginPackSelection(
 ): Set<string> {
   const available = new Set(plugins.map((plugin) => plugin.id));
   const next = new Set(current);
-  for (const pluginId of pack.excludedPluginIds) {
-    if (!lockedPluginIds.has(pluginId)) next.delete(pluginId);
-  }
-  for (const pluginId of [...pack.pluginIds, ...pack.optionalPluginIds]) {
+  for (const pluginId of pack.requested) {
     if (available.has(pluginId)) next.add(pluginId);
   }
   for (const pluginId of lockedPluginIds) next.add(pluginId);
@@ -74,7 +71,7 @@ function groupIdForPackage(pkg: PluginSummary): string {
   if (tags.has("role:character")) return "characters";
   if (tags.has("role:memory") || tags.has("role:retrieval")) return "memory";
   if (tags.has("role:guide") || tags.has("role:quick-reply")) return "guidance";
-  if (pkg.pluginType === "core-plugin") return "core";
+  if (pkg.kind === "core") return "core";
   return "utility";
 }
 
@@ -134,7 +131,7 @@ export function filterPlugins(
       i18nAllText(pkg.displayName),
       i18nAllText(pkg.description),
       ...(pkg.tags ?? []),
-      ...(pkg.capabilities ?? []),
+      ...pkg.provides.map((p) => (typeof p === "string" ? p : p.contract)),
     ]
       .join(" ")
       .toLocaleLowerCase();
@@ -154,24 +151,20 @@ export function recommendationReason(
   },
 ): string | null {
   const policy = plan?.policy;
-  if (policy?.requiredPluginIds.includes(pkg.id)) {
+  if (policy?.requested.includes(pkg.id)) {
     return labels.requiredByWorld;
   }
-  if (selectedPack?.pluginIds.includes(pkg.id)) {
+  if (selectedPack?.requested.includes(pkg.id)) {
     return textValue(selectedPack.label, labels.locale);
   }
-  if (selectedPack?.optionalPluginIds.includes(pkg.id)) {
+  if (selectedPack?.recommended.includes(pkg.id)) {
     return labels.packOptional;
   }
-  if (policy?.recommendedPluginIds.includes(pkg.id)) {
+  if (policy?.recommended.includes(pkg.id)) {
     return labels.recommendedByWorld;
   }
   const tags = new Set(pkg.tags ?? []);
   const matchedTag = policy?.preferredTags.find((tag) => tags.has(tag));
   if (matchedTag) return matchedTag;
-  const capabilities = new Set(pkg.capabilities ?? []);
-  const matchedCapability = policy?.requiredCapabilities.find((capability) =>
-    capabilities.has(capability),
-  );
-  return matchedCapability ?? null;
+  return null;
 }

@@ -31,49 +31,56 @@ async function write(relative: string, value: string) {
 }
 
 const root = `---
-name: inspector
+id: inspector
+kind: plugin
 description: Shared plugin declarations
 version: 1.2.3
-capabilities: [fixture-panel]
+provides: [fixture-panel@1]
 entry: ./entry.mjs
-ui:
-  right: [./panel.json]
-userSettings:
-  - key: mode
-    type: text
-    label: Mode
-    default: shared
-dataSchemas:
-  records:
-    schemaVersion: 1
+contracts:
+  fixture.records@1:
     schema: ./record.json
-    acceptsWorldData: true
-worldProjections:
-  initial:
-    from: geography
-    handler: ./project.mjs
-    outputs:
-      primary:
-        namespace: records
-        key: initial
-commands:
-  - name: inspect
-    description: Inspect
-    action: inspect
-events:
-  - topic: inspector.changed
-    description: A record changed
-    schema: ./record.json
-    advertise: true
+contributes:
+  actions: [inspect]
+  ui:
+    right: [./panel.json]
+  settings:
+    - key: mode
+      type: text
+      label: Mode
+      default: shared
+  data:
+    records:
+      version: 1
+      schema: ./record.json
+      accepts: [fixture.records@1]
+  worldProjections:
+    initial:
+      from: geography
+      handler: ./project.mjs
+      outputs:
+        primary:
+          namespace: records
+          key: initial
+  commands:
+    - name: inspect
+      description: Inspect
+      action: inspect
+  events:
+    - topic: inspector.changed
+      description: A record changed
+      schema: ./record.json
+      advertise: true
 ---
 `;
 const child = `---
-name: inspector/check
 description: Check shared context
-runtimeType: function
-handler: ./handler.mjs
-trigger:
-  type: manual
+type: function
+function:
+  handler: ./handler.mjs
+schedule:
+  trigger:
+    type: manual
 ---
 `;
 
@@ -99,7 +106,7 @@ async function seed(withRuntime: boolean) {
     }),
   );
   if (withRuntime) {
-    await write("runtimes/implementation/PLUGIN.md", child);
+    await write("runtimes/implementation/RUNTIME.md", child);
     await write(
       "runtimes/implementation/handler.mjs",
       "export default async ctx => ({ effects: [], data: ctx.userSettings });",
@@ -122,11 +129,15 @@ describe("package declarations across framework consumers", () => {
       const entry = registry.get("inspector")!;
       expect(entry.error).toBeUndefined();
       expect(entry.status).toBe("registered");
-      registry.syncSessionActivations("s1", ["inspector"]);
+      await registry.applyPersistedActivations(
+        "s1",
+        ["inspector"],
+        async () => {},
+      );
       const runtimes = registry.getActiveRuntimes("s1");
       expect(runtimes).toHaveLength(withRuntime ? 1 : 0);
-      expect(registry.findPluginByCapability("s1", "fixture-panel")).toBe(
-        "inspector",
+      expect(entry.packageManifest?.plugin?.provides).toContain(
+        "fixture-panel@1",
       );
       const detail = buildPluginDetail(entry);
       expect(detail).toMatchObject({
@@ -170,9 +181,7 @@ describe("package declarations across framework consumers", () => {
           rpcRegistry.getPluginAction("inspector", "inspect"),
         ).toBeDefined();
         if (withRuntime) {
-          expect(runtimes[0]!.capabilities ?? []).not.toContain(
-            "fixture-panel",
-          );
+          expect(runtimes[0]!.outputContract).toBeUndefined();
           expect(runtimes[0]!.userSettings?.[0]?.default).toBe("shared");
           expect(runtimes[0]!.dataSchemas?.records).toBeDefined();
           const loader = createRuntimeLoader({
@@ -251,15 +260,15 @@ describe("package declarations across framework consumers", () => {
       },
       { relativePath: "PLUGIN.md", content: Buffer.from(root) },
       {
-        relativePath: "runtimes/implementation/PLUGIN.md",
+        relativePath: "runtimes/implementation/RUNTIME.md",
         content: Buffer.from(conflict),
       },
     ];
     expect(() => validatePluginBundle(bundle, new Set())).toThrow(
-      /Conflicting userSettings/,
+      /userSettings|Unrecognized/,
     );
     await write("PLUGIN.md", root);
-    await write("runtimes/implementation/PLUGIN.md", conflict);
+    await write("runtimes/implementation/RUNTIME.md", conflict);
     const store = createMemoryStore();
     const { registry, discoveryMap, manifestCache } =
       await discoverAndRegisterPlugins({

@@ -29,7 +29,7 @@ describe("ExecutionFlowPreview turn completion", () => {
         segmentId: "post-turn" as const,
         trigger: { type: "auto" },
         runtimeType: "function",
-        capabilities: ["tts"],
+        outputContract: "speech@1",
         turnCompletion: { mode: "detached" as const },
       },
       {
@@ -61,7 +61,7 @@ describe("ExecutionFlowPreview turn completion", () => {
         "Runs in the background without blocking the foreground flow",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Media")).toBeTruthy();
+    expect(screen.getByText("Function")).toBeTruthy();
     expect(screen.getAllByText(/auto-narrate|guide/)).toHaveLength(2);
   });
 });

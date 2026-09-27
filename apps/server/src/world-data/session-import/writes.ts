@@ -1,3 +1,4 @@
+import { validateWorldModel } from "@covel/shared";
 import { randomUUID } from "node:crypto";
 import type {
   LorebookEntryRecord,
@@ -39,7 +40,11 @@ async function existingKeySet(options: {
       const entries = await options.store.listSessionLorebookEntries(
         options.sessionId,
       );
-      if (entries.some((entry) => entry.id === write.id)) {
+      if (
+        entries.some(
+          (entry) => entry.owner.kind === "world" && entry.id === write.id,
+        )
+      ) {
         existing.add(pluginWriteIdentity(write)!);
       }
     } else if (write.kind === "character") {
@@ -83,7 +88,7 @@ function toLorebookRecord(
   return {
     id: write.id,
     sessionId,
-    pluginId: write.pluginId,
+    owner: { kind: "world" },
     keys: Array.isArray(value.keys)
       ? value.keys.filter((key): key is string => typeof key === "string")
       : [],
@@ -196,6 +201,20 @@ export async function writeImportPlan(options: {
       await options.store.upsertLorebookEntries(lorebookRecords);
     }
 
+    const characterWrites = materializedWrites.filter(
+      (write): write is PlannedWrite & { kind: "character" } =>
+        write.kind === "character",
+    );
+    if (characterWrites.length > 0) {
+      const [characters, characterSchema] = await Promise.all([
+        options.store.listCharacters(options.sessionId),
+        options.store.getCharacterSchema(options.sessionId),
+      ]);
+      const merged = new Map(characters.map((record) => [record.id, record]));
+      for (const write of characterWrites)
+        merged.set(write.record.id, write.record);
+      validateWorldModel({ characters: [...merged.values()], characterSchema });
+    }
     for (const write of materializedWrites) {
       if (write.kind === "character") {
         await options.store.upsertCharacter(write.record);

@@ -37,7 +37,6 @@ const BUILTIN_WRITE: Readonly<Record<string, EffectResource>> = {
   "create-character": "characters:*",
   "update-character": "characters:*",
   "sync-characters": "characters:*",
-  "memory-update-block": "working-memory:*",
   "render-ui": "ui:*",
   "create-notification": "ui:*",
   "create-form": "interaction:*",
@@ -49,7 +48,6 @@ const BUILTIN_READ: Readonly<Record<string, EffectResource>> = {
   "list-characters": "characters:*",
   "get-character": "characters:*",
   "sync-characters": "characters:*",
-  "world-dimension-get": "state:*",
 };
 
 /**

@@ -1,26 +1,35 @@
 ---
-name: "{{pluginName}}"
+id: "{{pluginName}}"
+kind: plugin
 description:
   zh: "{{pluginDescriptionZh}}"
   en: "{{pluginDescriptionEn}}"
-pluginType: plugin
-stage: post-turn
-needs:
-  - capability: narrative-engine
-model: plugin
-outputKind: system
-trigger:
-  type: auto
 entry: ./server/index.js
-tools:
-  plugin:
+requires: [narrative-engine@1]
+contributes:
+  tools:
     - record-note
-input:
-  inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+    needs:
+      - contract: narrative-engine@1
+  io:
+    inputs:
+      narrator-output:
+        from:
+          contract: narrative-engine@1
+        select: /narrativeOutput
+        required: false
+    visibility: system
+  agent:
+    model: plugin
+    tools:
+      plugin:
+        - record-note
 ---
 
 你是 {{pluginName}} 插件的 agent runtime。你的职责是从本轮叙事中提取和插件目标相关的持久化记录。
@@ -31,7 +40,7 @@ input:
 
 ## 叙事内容
 
-`<narrator-output>` 中包含本轮 narrator 生成的叙事文本，可能为空。
+`runtime-inputs.narrator-output.value` 中包含本轮 narrator 生成的叙事文本，可能为空。
 
 ## 工具使用
 

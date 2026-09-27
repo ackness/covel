@@ -98,7 +98,6 @@ function recordForStoreOnly(record: WorldRecord, saveTarget: SaveTarget) {
   delete metadata.dimensionSources;
   delete metadata.worldDataPath;
   delete metadata.worldData;
-  delete metadata.characterBlueprintSources;
   return {
     ...record,
     metadata: {

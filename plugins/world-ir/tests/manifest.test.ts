@@ -5,7 +5,7 @@ import {
   loadPluginManifest,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { validateWorldIRV1 } from "@covel/shared";
+import { validateWorldIRV1 } from "../schemas/world-ir.js";
 
 describe("world-ir plugin contract", () => {
   it("declares a typed narrative input and validated reusable output", async () => {
@@ -17,7 +17,7 @@ describe("world-ir plugin contract", () => {
 
     const [parsed] = await loadPluginManifest(discovery!);
     const loaded = await loadRuntime(discovery!, "world-ir");
-    expect(parsed?.manifest.capabilities).toContain("world-ir-provider");
+    expect(parsed?.manifest.outputContract).toBe("world-ir-provider@1");
     expect(parsed?.manifest.displayName).toEqual({
       zh: "世界事实提取",
       en: "World Fact Extraction",
@@ -29,16 +29,16 @@ describe("world-ir plugin contract", () => {
     expect(parsed?.manifest.maxRetries).toBe(0);
     expect(parsed?.manifest.callTimeoutMs).toBe(60_000);
     expect(parsed?.manifest.inputs?.narrative).toEqual({
-      from: { capability: "narrative-engine", cardinality: "one" },
+      from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       accepts: "./schemas/narrative-output.schema.json",
       required: true,
     });
     expect(parsed?.manifest.output).toEqual({
-      schema: "covel://world/ir/v1",
+      schema: "contract:world-ir@1",
       recordAs: "world-ir-v1",
     });
-    expect(loaded?.outputSchema?.$id).toBe("covel://world/ir/v1");
+    expect(loaded?.outputSchema?.$id).toBe("contract:world-ir@1");
   });
 
   it("emits the same envelope accepted by the shared WorldIR validator", () => {

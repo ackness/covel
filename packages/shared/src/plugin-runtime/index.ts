@@ -1,4 +1,11 @@
 export type {
+  PluginExtensionContext,
+  PluginExtensionDefinition,
+  ExtensionPluginDataRecord,
+} from "../extension-points/index.js";
+export type { WorldModelView } from "../proposals/world-model.js";
+
+export type {
   PluginServiceClient,
   PluginServiceContext,
   PluginServiceDefinition,

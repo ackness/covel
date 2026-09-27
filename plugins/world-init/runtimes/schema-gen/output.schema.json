@@ -14,8 +14,14 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "success": { "type": "boolean", "const": true },
-    "attributeCount": { "type": "integer", "minimum": 15 },
+    "success": {
+      "type": "boolean",
+      "const": true
+    },
+    "attributeCount": {
+      "type": "integer",
+      "minimum": 15
+    },
     "categories": {
       "type": "array",
       "minItems": 5,
@@ -25,32 +31,41 @@
         "enum": ["stats", "bio", "abilities", "equipment", "social"]
       }
     },
-    "count": { "type": "integer", "minimum": 5 },
+    "count": {
+      "type": "integer",
+      "minimum": 5
+    },
     "keys": {
       "type": "array",
       "minItems": 5,
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "worldSchema": {
       "type": "object",
-      "required": ["character-attributes"],
+      "required": ["types", "attributes"],
       "additionalProperties": false,
       "properties": {
-        "character-attributes": {
-          "type": "object",
-          "required": ["version", "attributes"],
-          "additionalProperties": false,
-          "properties": {
-            "version": { "type": "integer", "const": 1 },
-            "attributes": {
-              "type": "array",
-              "minItems": 15,
-              "items": { "type": "object" }
-            }
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "attributes": {
+          "type": "array",
+          "minItems": 15,
+          "items": {
+            "type": "object"
           }
         }
       }
     },
-    "preGameDone": { "type": "boolean", "const": true }
+    "preGameDone": {
+      "type": "boolean",
+      "const": true
+    }
   }
 }

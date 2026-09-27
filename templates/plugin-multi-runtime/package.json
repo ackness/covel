@@ -7,10 +7,5 @@
   "packageManager": "{{packageManager}}",
   "scripts": {
     "preinstall": "node ./scripts/require-pnpm.mjs"
-  },
-  "covel": {
-    "capabilities": [
-      "manual-invoke"
-    ]
   }
 }

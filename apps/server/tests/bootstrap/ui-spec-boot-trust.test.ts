@@ -40,16 +40,21 @@ function writeUiPlugin(
   fs.writeFileSync(
     path.join(root, "PLUGIN.md"),
     `---
-name: ${pluginId}
+id: ${pluginId}
+kind: plugin
 description: boot trust fixture
-runtimeType: function
-handler: ./server/handler.mjs
 ${importFlags.entry ? "entry: ./server/entry.mjs" : ""}
-trigger:
-  type: manual
-ui:
-  right:
-    - ./ui/panel.json
+runtime:
+  type: function
+  function:
+    handler: ./server/handler.mjs
+  schedule:
+    trigger:
+      type: manual
+contributes:
+  ui:
+    right:
+      - ./ui/panel.json
 ---
 
 Fixture prompt.

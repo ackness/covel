@@ -1,28 +1,11 @@
-/**
- * Unified Memory System facade.
- *
- * Creates and wires all three memory tiers into a single object that the
- * server bootstrap injects into the turn executor. (Compaction lives in
- * `@covel/context`'s `maybeCompact` — this package never compacted in
- * production.)
- */
-
 import type {
-  CoreMemoryConfig,
-  MemoryLLMAdapter,
-  MemoryManager,
   MemorySystem,
   MemorySystemDeps,
-  MemoryUpdater,
-  MemoryUpdaterConfig,
   RecallSearcher,
   ArchivalSearcher,
 } from "./types.js";
-import { createMemoryManager } from "./core-memory.js";
-import { createMemoryUpdater } from "./updater.js";
 import { createKeywordRecallSearcher } from "./recall-search.js";
 import { createKeywordArchivalSearcher } from "./archival-search.js";
-import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 import { supportsVector } from "@covel/store/vector";
 import { createVectorRecallSearcher } from "./vector-recall-search.js";
 import { createVectorArchivalSearcher } from "./vector-archival-search.js";
@@ -33,57 +16,8 @@ import {
 } from "./vector-ingest.js";
 import { trackMemoryBackgroundTask } from "./background-tasks.js";
 
-export interface CreateMemorySystemOptions {
-  readonly coreMemory?: CoreMemoryConfig;
-  readonly updater?: MemoryUpdaterConfig;
-}
-
-/**
- * Create a fully wired memory system.
- *
- * Model slot resolution for the updater:
- *   explicit option → canonical "memory" slot → gateway default.
- * The host can supply a per-update model through its request-scoped updater
- * wrapper. See {@link resolveModelSlot} for the system's default resolution.
- *
- * Recall and archival default to **keyword** searchers (see recall-search.ts /
- * archival-search.ts). When `deps.embed` is injected and the store supports
- * vectors, they upgrade to **semantic (vector)** search with a per-session
- * keyword fallback, and {@link MemorySystem.ingest} becomes a real embed-on-
- * write path (see vector-ingest.ts). Both are constructed behind the
- * {@link RecallSearcher} / {@link ArchivalSearcher} interfaces, so callers are
- * unaffected by which implementation is wired.
- */
-export function createMemorySystem(
-  deps: MemorySystemDeps,
-  options?: CreateMemorySystemOptions,
-): MemorySystem {
-  const { store, llm, resolveSlot } = deps;
-
-  const explicitModelSlot = options?.updater?.modelSlot;
-  const modelSlot = explicitModelSlot ?? resolveModelSlot(resolveSlot);
-
-  // Single source of truth for the block schema across manager/updater so
-  // post-turn extraction and rendering agree.
-  const blocks = options?.coreMemory?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
-
-  const manager: MemoryManager = createMemoryManager(store, {
-    ...options?.coreMemory,
-    blocks,
-  });
-
-  const updaterInstance = createMemoryUpdater(manager, llm, {
-    ...options?.updater,
-    blocks,
-    // The per-session block resolver lives on the coreMemory config (single
-    // source); thread it onto the updater so post-turn extraction agrees with
-    // the manager on which world-declared blocks exist for the session.
-    ...(options?.coreMemory?.resolveBlocks
-      ? { resolveBlocks: options.coreMemory.resolveBlocks }
-      : {}),
-    modelSlot,
-  });
-
+export function createMemorySystem(deps: MemorySystemDeps): MemorySystem {
+  const { store } = deps;
   // Searcher selection. Keyword search is always built — it is the dependency-
   // free default and the per-session fallback. When an `embed` function is
   // injected AND the store has a vector capability, recall/archival upgrade to
@@ -126,8 +60,6 @@ export function createMemorySystem(
   }
 
   return {
-    manager,
-    updater: updaterInstance,
     recall,
     archival,
 
@@ -138,24 +70,4 @@ export function createMemorySystem(
       });
     },
   };
-}
-
-/**
- * Canonical memory model slot name. The only slot this package probes by name —
- * all other slot routing is the bootstrap layer's responsibility, not the
- * memory package's.
- */
-const MEMORY_SLOT = "memory";
-
-/**
- * Resolve the system's default updater slot when no explicit option is set.
- * The canonical `"memory"` slot is used when configured; otherwise `undefined`
- * lets the gateway select its default. Request-scoped update inputs can
- * override this choice without changing the shared memory system.
- */
-function resolveModelSlot(
-  resolveSlot?: (slot: string) => string | undefined,
-): string | undefined {
-  if (!resolveSlot) return undefined;
-  return resolveSlot(MEMORY_SLOT) ? MEMORY_SLOT : undefined;
 }

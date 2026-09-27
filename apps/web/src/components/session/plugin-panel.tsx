@@ -27,10 +27,7 @@ import {
   postPluginRpcWithApproval,
 } from "./plugin-rpc-ui.js";
 import { compactJobId } from "@/lib/job-ui.js";
-import {
-  pluginPanelViewToSpec,
-  specUsesComponent,
-} from "@/lib/plugin-panel-spec.js";
+import { pluginPanelViewToSpec } from "@/lib/plugin-panel-spec.js";
 import {
   buildPluginPanelInitialState,
   flattenStateForPluginPanel,
@@ -464,18 +461,8 @@ export function PluginPanel({
     );
   }
 
-  // Empty state: namespace has no data yet.
-  // Specs can opt out by setting `alwaysRender: true` when they render content
-  // sourced from elsewhere (e.g. a framework-registered component reading from
-  // session context instead of plugin_data). Framework-owned helper components
-  // (`ImageGallery` / `ImageJobs`) also read directly from live stores, so they
-  // must render even before their namespace has rows; otherwise a just-started
-  // image job is hidden until a refresh/hydration path repaints the panel.
-  const alwaysRender =
-    spec.alwaysRender === true ||
-    specUsesComponent(spec.view, "ImageGallery") ||
-    specUsesComponent(spec.view, "ImageJobs") ||
-    specUsesComponent(spec.view, "PortraitGallery");
+  // Components that consume kernel data opt into rendering before plugin records exist.
+  const alwaysRender = spec.alwaysRender === true;
   const isEmpty = !alwaysRender && Object.keys(data).length === 0;
   if (isEmpty) {
     const emptySpec = spec.emptyState as Record<string, unknown> | undefined;

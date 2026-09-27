@@ -113,7 +113,6 @@ export type {
   TurnMessageRecord,
   TurnMessageStats,
   PlayerInputRecord,
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   SessionSummaryRecord,

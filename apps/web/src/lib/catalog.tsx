@@ -36,10 +36,7 @@ import {
   TagList,
   Text,
 } from "./catalog/core-renderers.js";
-import {
-  CharacterBlueprintList,
-  SceneCastList,
-} from "./catalog/character-renderers.js";
+import { EntryList, SceneCastList } from "./catalog/character-renderers.js";
 import { CharacterFieldsView } from "./catalog/character-fields-renderer.js";
 import { CharacterAvatar } from "./catalog/character-avatar-renderer.js";
 import {
@@ -63,13 +60,13 @@ import {
 import {
   AudioPlayerCatalogComponent,
   ImageComponent,
-  ImageGallery,
-  ImageJobs,
+  MediaGallery,
+  JobList,
   MediaCatalogComponent,
   PortraitGallery,
   Source,
 } from "./catalog/media-renderers.js";
-import { BranchReplyCandidates } from "./catalog/branch-reply-renderer.js";
+import { CandidateList } from "./catalog/branch-reply-renderer.js";
 import {
   AssetRenderCatalog,
   AssetTurnSidebarCatalog,
@@ -115,12 +112,12 @@ const covelComponents = {
   Icon,
   TagList,
   Source,
-  BranchReplyCandidates,
+  CandidateList,
   Image: ImageComponent,
   Media: MediaCatalogComponent,
   AudioPlayer: AudioPlayerCatalogComponent,
-  ImageGallery,
-  ImageJobs,
+  MediaGallery,
+  JobList,
   PortraitGallery,
   // Data
   Card,
@@ -131,7 +128,7 @@ const covelComponents = {
   Accordion,
   Section,
   JsonView,
-  CharacterBlueprintList,
+  EntryList,
   SceneCastList,
   CharacterFieldsView,
   CharacterAvatar,

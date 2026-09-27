@@ -324,6 +324,12 @@ function PluginCard({
           )}
         />
         <Capability
+          label={t("debugger.plugins.extensions", "Extensions")}
+          values={(registrations.extensions ?? []).map(
+            (extension) => `${extension.id} (${extension.point})`,
+          )}
+        />
+        <Capability
           label={t("debugger.plugins.commands", "Commands")}
           values={plugin.commands.map(
             (command) =>

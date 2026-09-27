@@ -32,6 +32,7 @@ export function createPgSessionContentRecords(
         events: schema.events,
         messages: schema.messages,
         characters: schema.characters,
+        characterSchemas: schema.characterSchemas,
       },
     }),
   };

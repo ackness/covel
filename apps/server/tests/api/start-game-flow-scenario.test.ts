@@ -13,7 +13,7 @@ import {
 import {
   createPluginRpcRegistry,
   createRpcExecutor,
-  submitFormHandler,
+  createSubmitFormHandler,
   type LLMAdapter,
   type LLMResponse,
 } from "@covel/runtime";
@@ -230,7 +230,10 @@ function makeApp(
   const eventBus = createEventBus(store);
   const sessionLock = createInProcessSessionLock();
   const rpcRegistry = createPluginRpcRegistry();
-  rpcRegistry.registerFrameworkDefault("submit-form", submitFormHandler);
+  rpcRegistry.registerFrameworkDefault(
+    "submit-form",
+    createSubmitFormHandler(undefined, store),
+  );
   const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
   const rpcApprovalGate = createRpcApprovalGate();
 

@@ -1,3 +1,6 @@
+import type { LorebookOwner } from "@covel/shared";
+import { lorebookOwnerKey } from "./lorebook-owner.js";
+
 export function stateEntryKey(
   sessionId: string,
   tableName: string,
@@ -15,16 +18,12 @@ export function pluginDataKey(
   return JSON.stringify([sessionId, pluginId, namespace, key]);
 }
 
-export function workingMemoryKey(
+export function lorebookEntryKey(
   sessionId: string,
-  scope: string,
-  key: string,
+  owner: LorebookOwner,
+  id: string,
 ): string {
-  return JSON.stringify([sessionId, scope, key]);
-}
-
-export function lorebookEntryKey(sessionId: string, id: string): string {
-  return JSON.stringify([sessionId, id]);
+  return JSON.stringify([sessionId, lorebookOwnerKey(owner), id]);
 }
 
 export function characterKey(sessionId: string, id: string): string {

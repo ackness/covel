@@ -66,6 +66,13 @@ export async function emitCommittedProposal(
       proposalId: proposal.id,
       asset: view,
     });
+  } else if (proposal.type === "character.schema.set" && result.event) {
+    await emitter.emit("character-schema.changed", {
+      runtimeId: proposal.source.runtimeId,
+      pluginId: proposal.source.pluginId,
+      proposalId: proposal.id,
+      schema: result.event.payload.schema,
+    });
   } else if (proposal.type === "character.upsert" && result.event) {
     await emitter.emit("character.upserted", {
       runtimeId: proposal.source.runtimeId,

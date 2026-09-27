@@ -179,7 +179,7 @@ describe("scene-stage: scene.set → resolver → stage/current (E → B integra
         store,
         SESSION_ID,
         resolverManifest.outputKind,
-        { capabilities: resolverManifest.capabilities },
+        {},
       );
       return resolverResult!;
     };

@@ -127,14 +127,14 @@ describe("npc-graph manifests", () => {
     expect(extractor.completeAfterTools).toEqual(["upsert-npc-graph"]);
     expect(extractor.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(extractor.maxRetries).toBe(0);
-    expect(extractor.capabilities).toContain("npc-graph");
+    expect(extractor.outputContract).toBe("npc-graph@1");
     expect(extractor.tools?.plugin).toEqual(["upsert-npc-graph"]);
     expect(extractor.trigger?.type).toBe("scheduled");
     expect(extractor.trigger?.interval).toBe(1);
     expect(extractor.needs).toBeUndefined();
     expect(extractor.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider", cardinality: "one" },
-      accepts: "covel://world/ir/v1",
+      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      accepts: "contract:world-ir@1",
       required: true,
     });
   });
@@ -170,7 +170,7 @@ describe("npc-graph manifests", () => {
     expect(retriever.handler).toBe("./handler.js");
     // Narrator-prep layer — pre-turn stage runs before the narrative stage.
     expect(retriever.stage).toBe("pre-turn");
-    expect(retriever.capabilities).toContain("graph-rag");
+    expect(retriever.outputContract).toBe("graph-rag@1");
   });
 });
 

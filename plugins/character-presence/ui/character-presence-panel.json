@@ -15,13 +15,26 @@
     "en": "Portraits"
   },
   "groupOrder": 150,
-  "dataSource": { "namespace": "presence" },
+  "dataSource": {
+    "namespace": "presence"
+  },
   "alwaysRender": true,
   "view": {
     "component": "PortraitGallery",
     "props": {
-      "pluginId": "character-presence",
-      "runtimeId": "character-presence"
+      "replaceAction": {
+        "pluginId": "character-presence",
+        "runtimeId": "character-presence",
+        "payload": {
+          "action": "replacePortrait",
+          "characterId": {
+            "from": "item.characterId"
+          },
+          "ref": {
+            "from": "upload"
+          }
+        }
+      }
     }
   }
 }

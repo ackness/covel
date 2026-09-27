@@ -41,9 +41,9 @@ export type RpcTrustLevel = "builtin" | "community";
  */
 export interface RpcHandlerStore {
   // ── Sessions ─────
-  getSession(id: string): Promise<unknown>;
+  getSession(): Promise<unknown>;
   // ── Turn messages ─────
-  listTurnMessages(sessionId: string): Promise<
+  listTurnMessages(): Promise<
     ReadonlyArray<{
       readonly turnId: string;
       readonly content: string;
@@ -55,7 +55,6 @@ export interface RpcHandlerStore {
   // ── Player input persistence ─────
   savePlayerInput(input: {
     readonly id: string;
-    readonly sessionId: string;
     readonly turnId: string;
     readonly formId: string;
     readonly values: Record<string, unknown>;
@@ -63,23 +62,14 @@ export interface RpcHandlerStore {
   }): Promise<void>;
   // ── Plugin data KV ─────
   setPluginData?(record: {
-    readonly sessionId: string;
-    readonly pluginId: string;
     readonly namespace: string;
     readonly key: string;
     readonly value: unknown;
-    readonly createdAt: string;
-    readonly updatedAt: string;
+    readonly createdAt?: string;
+    readonly updatedAt?: string;
   }): Promise<void>;
-  getPluginData?(
-    sessionId: string,
-    pluginId: string,
-    namespace: string,
-    key: string,
-  ): Promise<unknown>;
+  getPluginData?(namespace: string, key: string): Promise<unknown>;
   listPluginData?(
-    sessionId: string,
-    pluginId: string,
     namespace: string,
   ): Promise<ReadonlyArray<{ key: string; value: unknown }>>;
 }
@@ -167,7 +157,7 @@ export interface RpcCommandRuntimeEnvironment {
   readonly runtimeType: string;
   readonly outputKind: string;
   readonly stage?: string;
-  readonly capabilities: readonly string[];
+  readonly outputContract?: string;
   /** Present only when the command declared the `models` context scope. */
   readonly model?: {
     readonly slot: string;

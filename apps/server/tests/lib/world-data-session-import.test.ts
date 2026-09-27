@@ -7,7 +7,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import {
   createPluginRegistry,
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
 } from "@covel/plugin-loader";
 import {
   createMemoryMediaStore,
@@ -24,6 +24,12 @@ import {
 } from "../../src/world-data/session-import.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
+
+import {
+  makePackageManifest,
+  registry as registryEntries,
+} from "./world-data-projection-fixtures.js";
+import type { PluginRegistryEntry } from "@covel/plugin-loader";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 
@@ -107,25 +113,29 @@ async function addSession(
 }
 
 function registry(entries: Record<string, readonly string[]>) {
-  return {
-    get(pluginId: string) {
-      const namespaces = entries[pluginId];
-      if (!namespaces) return undefined;
-      return {
-        id: pluginId,
-        dataSchemas: Object.fromEntries(
-          namespaces.map((namespace) => [
-            namespace,
-            {
-              namespace,
-              schemaVersion: 1,
-              acceptsWorldData: true,
-            },
-          ]),
-        ),
-      } as any;
-    },
-  };
+  return registryEntries(
+    Object.entries(entries).map(([id, namespaces]): PluginRegistryEntry => ({
+      id,
+      rootPath: "",
+      source: "builtin",
+      summary: {
+        id,
+        name: id,
+        description: "",
+        pluginType: "plugin",
+        runtimeCount: 0,
+      },
+      packageManifest: makePackageManifest(id, namespaces, "."),
+      dataSchemas: Object.fromEntries(
+        namespaces.map((namespace) => [
+          namespace,
+          { namespace, schemaVersion: 1, acceptsWorldData: true },
+        ]),
+      ),
+      loadedRuntimes: new Map(),
+      status: "registered",
+    })),
+  );
 }
 
 function registryWithSchema(entries: {
@@ -134,27 +144,38 @@ function registryWithSchema(entries: {
     readonly namespaces: readonly string[];
   };
 }) {
-  return {
-    get(pluginId: string) {
-      const entry = entries[pluginId];
-      if (!entry) return undefined;
-      return {
-        id: pluginId,
-        rootPath: entry.rootPath,
-        dataSchemas: Object.fromEntries(
-          entry.namespaces.map((namespace) => [
+  return registryEntries(
+    Object.entries(entries).map(([id, entry]): PluginRegistryEntry => ({
+      id,
+      rootPath: entry.rootPath,
+      source: "builtin",
+      summary: {
+        id,
+        name: id,
+        description: "",
+        pluginType: "plugin",
+        runtimeCount: 0,
+      },
+      packageManifest: makePackageManifest(
+        id,
+        entry.namespaces,
+        entry.rootPath,
+      ),
+      dataSchemas: Object.fromEntries(
+        entry.namespaces.map((namespace) => [
+          namespace,
+          {
             namespace,
-            {
-              namespace,
-              schemaVersion: 1,
-              acceptsWorldData: true,
-              schema: `./schemas/${namespace}.schema.json`,
-            },
-          ]),
-        ),
-      } as any;
-    },
-  };
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: `./schemas/${namespace}.schema.json`,
+          },
+        ]),
+      ),
+      loadedRuntimes: new Map(),
+      status: "registered",
+    })),
+  );
 }
 
 async function builtinPluginRegistry() {
@@ -163,7 +184,8 @@ async function builtinPluginRegistry() {
   const registry = createPluginRegistry();
 
   for (const discovery of discoveries) {
-    const manifests = await loadPluginManifest(discovery);
+    const { manifests, packageManifest } =
+      await loadPluginDefinition(discovery);
     registry.register({
       id: discovery.id,
       summary: {
@@ -176,6 +198,7 @@ async function builtinPluginRegistry() {
       rootPath: discovery.rootPath,
       manifest: manifests[0],
       manifests,
+      packageManifest,
       loadedRuntimes: new Map(),
       status: "registered",
     });
@@ -196,8 +219,9 @@ describe("world data session importer", () => {
     const compiledSchemaPaths = new Set<string>();
 
     for (const discovery of discoveries) {
-      const manifests = await loadPluginManifest(discovery);
-      for (const parsed of manifests) {
+      const { manifests, packageManifest } =
+        await loadPluginDefinition(discovery);
+      for (const parsed of [packageManifest]) {
         for (const [namespace, decl] of Object.entries(
           parsed.manifest.dataSchemas ?? {},
         )) {
@@ -217,15 +241,14 @@ describe("world data session importer", () => {
 
     expect(compiled.sort()).toEqual([
       "affinity/affinity",
-      "char-creator/characters",
-      "char-creator/characters",
       "character-blueprint/blueprints",
-      "character-blueprint/characters",
       "character-presence/assets",
       "character-presence/presence",
       "core-quest/quests",
       "inventory/items",
       "living-world-rules/rules",
+      "memory/blocks",
+      "memory/definitions",
       "scene-stage/assets",
       "scene-stage/scenes",
       "tabletop-rules/rules",
@@ -239,7 +262,7 @@ sources:
   facts:
     kind: json
     path: data/facts.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: {
@@ -279,7 +302,7 @@ sources:
   facts:
     kind: json
     path: data/facts.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: {
@@ -323,7 +346,7 @@ sources:
   facts:
     kind: json
     path: data/facts.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: {
@@ -361,7 +384,7 @@ sources:
   facts:
     kind: json
     path: data/facts.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       // Only the zh default exists — an en-US session must fall back to it,
@@ -400,7 +423,7 @@ sources:
   facts:
     kind: json
     path: data/facts.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: {
@@ -437,7 +460,7 @@ sources:
   facts:
     kind: json
     path: data/fact.json
-    to: plugin:missing-plugin/facts
+    to: contract:missing-plugin.facts@1
     key: id
 `,
       files: { "data/fact.json": JSON.stringify({ id: "one" }) },
@@ -456,7 +479,7 @@ sources:
           registry: registry({}),
         },
       }),
-    ).rejects.toThrow(/not registered/);
+    ).rejects.toThrow(/No registered receiver/);
   });
 
   it("skips sources targeting plugins outside final activePlugins (warning, not a session-blocking error)", async () => {
@@ -466,7 +489,7 @@ sources:
   facts:
     kind: json
     path: data/fact.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: { "data/fact.json": JSON.stringify({ id: "one" }) },
@@ -490,7 +513,7 @@ sources:
     expect(result.written).toBe(0);
     expect(
       result.diagnostics.some(
-        (d) => d.level === "warning" && /not active/.test(d.message),
+        (d) => d.level === "warning" && /No active receiver/.test(d.message),
       ),
     ).toBe(true);
     expect(result.diagnostics.some((d) => d.level === "error")).toBe(false);
@@ -519,7 +542,7 @@ sources:
   facts:
     kind: json
     path: data/fact.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: { "data/fact.json": JSON.stringify({ id: "one" }) },
@@ -573,7 +596,7 @@ sources:
   facts:
     kind: json
     path: data/fact.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: { "data/fact.json": JSON.stringify({ id: "one" }) },
@@ -600,7 +623,7 @@ sources:
     ).toEqual([]);
   });
 
-  it("rejects mismatched plugin schema and plugin target namespaces", async () => {
+  it("accepts an independently declared compatible source schema and receiver contract", async () => {
     const pluginRoot = await mkdtemp(
       path.join(tmpdir(), "covel-schema-plugin-"),
     );
@@ -615,8 +638,8 @@ sources:
   facts:
     kind: json
     path: data/fact.json
-    schema: plugin://a/ns
-    to: plugin:b/ns
+    schema: contract:a.ns@1
+    to: contract:b.ns@1
     key: id
 `,
       files: { "data/fact.json": JSON.stringify({ id: "one" }) },
@@ -638,7 +661,7 @@ sources:
           }),
         },
       }),
-    ).rejects.toThrow(/incompatible with target/);
+    ).resolves.toMatchObject({ written: 1 });
   });
 
   it("validates and rejects source values with world-local schema paths", async () => {
@@ -648,7 +671,7 @@ sources:
     kind: json
     path: data/facts.json
     schema: schemas/fact.schema.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `;
     const schema = JSON.stringify({
@@ -718,7 +741,7 @@ sources:
     kind: json
     path: data/fact.json
     schema: schemas/fact.schema.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `;
     const { worldsDir, worldId } = await makeWorld({
@@ -767,7 +790,7 @@ sources:
     kind: json
     path: data/fact.json
     schema: schemas/fact.schema.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `;
     const initialSchema = {
@@ -852,7 +875,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: {
@@ -899,7 +922,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: {
@@ -967,14 +990,14 @@ sources:
     ).toBeTruthy();
   });
 
-  it("uses active character dataSchemas as character effect mirror targets", async () => {
+  it("writes character effects to the domain without mirroring to active plugin namespaces", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
   cast:
     kind: json
     path: data/cast.json
-    to: plugin:character-blueprint/blueprints
+    to: contract:character.blueprints@1
     key: id
     effects:
       - characters
@@ -1005,28 +1028,26 @@ sources:
       },
     });
 
-    expect(result.written).toBe(4);
+    expect(result.written).toBe(2);
+    expect(await store.listCharacters("sess-1")).toMatchObject([
+      { id: "sess-1-mio", name: "Mio" },
+    ]);
     expect(
-      await store.getPluginData(
-        "sess-1",
-        "third-party-cast",
-        "characters",
-        "sess-1-char-mio",
-      ),
-    ).toBeTruthy();
+      await store.listPluginData("sess-1", "third-party-cast", "characters"),
+    ).toEqual([]);
     expect(
       await store.listPluginData("sess-1", "char-creator", "characters"),
     ).toEqual([]);
   });
 
-  it("creates character effects from concise plugin-data character records", async () => {
+  it("creates character domain effects from concise contract records", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
   cast:
     kind: json
     path: data/cast.json
-    to: plugin:world-cast/cast
+    to: contract:world-cast.cast@1
     key: id
     effects:
       - characters
@@ -1063,10 +1084,10 @@ sources:
       },
     });
 
-    expect(result.written).toBe(4);
+    expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
       {
-        id: "mio",
+        id: "sess-1-mio",
         name: "Mio",
         type: "npc",
         description: "Keeps the archive keys.",
@@ -1074,22 +1095,65 @@ sources:
       },
     ]);
     expect(
-      await store.getPluginData("sess-1", "char-creator", "characters", "mio"),
-    ).toMatchObject({
-      value: {
-        id: "mio",
-        name: "Mio",
-        sessionId: "sess-1",
+      await store.listPluginData("sess-1", "char-creator", "characters"),
+    ).toEqual([]);
+    expect(
+      await store.listPluginData("sess-1", "third-party-cast", "characters"),
+    ).toEqual([]);
+  });
+
+  it("uses persisted character IDs for skipExisting and sync ledger deletion", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  cast:
+    kind: json
+    path: data/cast.json
+    to: characters
+    key: id
+    merge: skipExisting
+`,
+      files: {
+        "data/cast.json": JSON.stringify([
+          { id: "npc", name: "Original", type: "npc" },
+        ]),
       },
     });
-    expect(
-      await store.getPluginData(
-        "sess-1",
-        "third-party-cast",
-        "characters",
-        "mio",
-      ),
-    ).toBeTruthy();
+    const store = await makeStore([]);
+    const options = {
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+    };
+    expect((await importWorldDataForSession(options)).written).toBe(1);
+    expect((await store.listWorldDataImportLedger("sess-1"))[0]?.key).toBe(
+      "sess-1-npc",
+    );
+    expect((await importWorldDataForSession(options)).skipped).toBe(1);
+    expect(await syncWorldDataForSession(options)).toMatchObject({
+      unchanged: 1,
+      conflicts: [],
+    });
+    const character = (await store.listCharacters("sess-1"))[0]!;
+    await store.upsertCharacter({ ...character, name: "Player edit" });
+    await writeFile(
+      path.join(worldRoot, "data/cast.json"),
+      JSON.stringify([{ id: "npc", name: "Source edit", type: "npc" }]),
+    );
+    expect((await importWorldDataForSession(options)).skipped).toBe(1);
+    expect((await store.listCharacters("sess-1"))[0]?.name).toBe("Player edit");
+    expect(await syncWorldDataForSession(options)).toMatchObject({
+      conflicts: [{ reason: "modified", key: "sess-1-npc" }],
+    });
+    await store.upsertCharacter(character);
+    await writeFile(path.join(worldRoot, "data/cast.json"), "[]");
+    expect(await syncWorldDataForSession(options)).toMatchObject({
+      deleted: 1,
+      conflicts: [],
+    });
+    expect(await store.listCharacters("sess-1")).toEqual([]);
   });
 
   it("skips existing rows with merge skipExisting", async () => {
@@ -1099,7 +1163,7 @@ sources:
   facts:
     kind: json
     path: data/fact.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
     merge: skipExisting
 `,
@@ -1144,7 +1208,7 @@ sources:
   rules:
     kind: yaml
     path: data/rules.yaml
-    to: plugin:world-rules/rules+lorebook
+    to: contract:world-rules.rules@1+lorebook
     key: id
 `,
       files: {
@@ -1177,8 +1241,8 @@ sources:
     ).toBeTruthy();
     expect(await store.listSessionLorebookEntries("sess-1")).toMatchObject([
       {
-        id: "world-rules:rules:rain-market",
-        pluginId: "world-rules",
+        id: "rules:rain-market",
+        owner: { kind: "world" },
         content: "Never reveal true names.",
         keys: ["rain", "market"],
         strategy: "selective",
@@ -1187,14 +1251,14 @@ sources:
     ]);
   });
 
-  it("keeps character-blueprint character effects and panel mirrors", async () => {
+  it("keeps imported blueprint records separate from character domain effects", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
   cast:
     kind: json
     path: data/cast.json
-    to: plugin:character-blueprint/blueprints
+    to: contract:character.blueprints@1
     key: id
     effects:
       - characters
@@ -1228,18 +1292,21 @@ sources:
       },
     });
 
-    expect(result.written).toBe(4);
+    expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
-      { id: "sess-1-char-mio", name: "Mio" },
+      { id: "sess-1-mio", name: "Mio" },
     ]);
     expect(
       await store.getPluginData(
         "sess-1",
-        "char-creator",
-        "characters",
-        "sess-1-char-mio",
+        "character-blueprint",
+        "blueprints",
+        "mio",
       ),
     ).toBeTruthy();
+    expect(
+      await store.listPluginData("sess-1", "char-creator", "characters"),
+    ).toEqual([]);
   });
 
   it("accepts concise world-authored character records for char-creator", async () => {
@@ -1266,7 +1333,7 @@ sources:
   cast:
     kind: json
     path: data/cast.json
-    to: plugin:char-creator/characters
+    to: contract:char-creator.characters@1
     key: id
 `,
       files: {
@@ -1309,7 +1376,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: {
@@ -1344,7 +1411,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: {
@@ -1368,7 +1435,7 @@ sources:
     expect(result.diagnostics.some((d) => d.level === "error")).toBe(false);
     expect(
       result.diagnostics.some(
-        (d) => d.level === "warning" && /indexTo plugin/.test(d.message),
+        (d) => d.level === "warning" && /No active receiver/.test(d.message),
       ),
     ).toBe(true);
     expect(
@@ -1384,7 +1451,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: {
@@ -1483,7 +1550,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: { "media/portraits/mio.png": "png-ish" },
@@ -1620,7 +1687,7 @@ sources: {}
     ).not.toHaveLength(0);
     expect(
       await store.listPluginData("sess-haruka", "char-creator", "characters"),
-    ).not.toHaveLength(0);
+    ).toHaveLength(0);
     expect(await store.listWorldDataImportLedger("sess-haruka")).toHaveLength(
       result.written,
     );
@@ -1826,7 +1893,7 @@ sources:
   facts:
     kind: json
     path: data/facts.json
-    to: plugin:world-notes/facts
+    to: contract:world-notes.facts@1
     key: id
 `,
       files: {

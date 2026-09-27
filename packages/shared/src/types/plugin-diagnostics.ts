@@ -16,6 +16,11 @@ export interface PluginDiagnostic {
     readonly tools: readonly string[];
     readonly hooks: readonly { readonly id: string; readonly event: string }[];
     readonly actions: readonly string[];
+    readonly extensions?: readonly {
+      readonly point: string;
+      readonly id: string;
+      readonly order?: number;
+    }[];
     readonly services: readonly {
       readonly name: string;
       readonly contract: string;

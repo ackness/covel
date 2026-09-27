@@ -14,14 +14,18 @@ function plugin(
   options: Partial<PluginSummary> = {},
 ): PluginSummary {
   return {
+    requires: [],
+    optional: [],
+    conflicts: [],
+    extensions: [],
     id,
     displayName: id,
     description: `${id} plugin`,
-    pluginType: "plugin",
+    kind: "plugin",
     source: "builtin",
-    status: "registered",
+    hostState: "approved",
     runtimeCount: 0,
-    capabilities: [],
+    provides: [],
     tags: [],
     runtimes: [],
     tools: [],
@@ -31,15 +35,15 @@ function plugin(
 }
 
 const plugins = [
-  plugin("pregame", { pluginType: "core-plugin", tags: ["role:pre-game"] }),
+  plugin("pregame", { kind: "core", tags: ["role:pre-game"] }),
   plugin("narrator", {
-    pluginType: "core-plugin",
+    kind: "core",
     tags: ["mode:traditional-story", "role:narrator"],
-    capabilities: ["narrative"],
+    provides: ["narrative"],
   }),
   plugin("chat-mode-narrator", {
     tags: ["mode:dialogue", "role:narrator"],
-    capabilities: ["narrative", "chat-mode"],
+    provides: ["narrative-engine@1", "chat-mode@1"],
   }),
   plugin("scene-cast", { tags: ["mode:dialogue"] }),
 ];
@@ -47,9 +51,8 @@ const plugins = [
 const dialoguePack: PluginPack = {
   id: "dialogue-mode",
   label: { "en-US": "Dialogue Mode", "zh-CN": "对话模式" },
-  pluginIds: ["chat-mode-narrator", "scene-cast"],
-  optionalPluginIds: [],
-  excludedPluginIds: ["narrator"],
+  requested: ["chat-mode-narrator", "scene-cast"],
+  recommended: [],
   tags: ["mode:dialogue"],
   source: "builtin",
 };
@@ -61,10 +64,8 @@ const plan: WorldPluginPlan = {
   policy: {
     preferredTags: ["mode:dialogue"],
     avoidedTags: [],
-    requiredCapabilities: [],
-    requiredPluginIds: ["pregame"],
-    recommendedPluginIds: ["chat-mode-narrator"],
-    excludedPluginIds: ["narrator"],
+    requested: ["pregame"],
+    recommended: ["chat-mode-narrator"],
   },
   defaultPluginIds: ["pregame", "chat-mode-narrator", "scene-cast"],
 };

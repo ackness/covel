@@ -80,6 +80,12 @@ export interface PluginAPI {
       O
     >,
   ): void;
+  /** Implement a kernel-owned point declared by this plugin's manifest. */
+  provideExtension<I = unknown, O = unknown>(
+    point: string,
+    id: string,
+    definition: import("@covel/shared").PluginExtensionDefinition<I, O>,
+  ): void;
   readonly pluginId: string;
   readonly toolkit: PluginToolkit;
   /** SSRF-guarded fetch helpers for wire implementations. */

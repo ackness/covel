@@ -183,3 +183,8 @@ export {
   type ModelLookupCandidate,
   type ModelMatchKind,
 } from "./capability/index.js";
+
+export {
+  withWireRegistrySnapshot,
+  replacePluginWires,
+} from "./wire-lifecycle.js";

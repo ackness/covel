@@ -107,7 +107,7 @@ function dependencyMatches(
 ): boolean {
   if (typeof dependency === "string") return dependency === candidate.name;
   if ("runtime" in dependency) return dependency.runtime === candidate.name;
-  return (candidate.capabilities ?? []).includes(dependency.capability);
+  return candidate.outputContract === dependency.capability;
 }
 
 function sourceMatches(
@@ -118,7 +118,7 @@ function sourceMatches(
 ): boolean {
   return "runtime" in source
     ? source.runtime === candidate.name
-    : (candidate.capabilities ?? []).includes(source.capability);
+    : candidate.outputContract === source.capability;
 }
 
 function consumerDependsOn(
@@ -146,6 +146,19 @@ function consumerDependsOn(
 }
 
 function intrinsicIneligibility(manifest: RuntimeManifest): string | undefined {
+  const settling =
+    getRuntimeSpec(manifest).turnCompletionPolicy.settle ===
+    "before-next-execution";
+  if (
+    settling &&
+    manifest.stage !== "post-turn" &&
+    manifest.stage !== "audit"
+  ) {
+    return "settling detached runtimes require post-turn or audit stage";
+  }
+  if (settling && manifest.outputKind === "story") {
+    return "settling detached runtimes cannot produce story output";
+  }
   if (manifest.runtimeType !== "function") {
     return "the first detached-stage contract only permits function runtimes";
   }
@@ -156,6 +169,7 @@ function intrinsicIneligibility(manifest: RuntimeManifest): string | undefined {
     return "event emission is not supported by detached stage runtimes";
   }
   if (
+    !settling &&
     (manifest.input?.inject ?? []).some(
       (inject) => inject.kind === "plugin-data",
     )
@@ -168,7 +182,9 @@ function intrinsicIneligibility(manifest: RuntimeManifest): string | undefined {
     return "detached stage runtimes must declare an explicit effects contract";
   }
   const unsafeRead = (declaredEffects.reads ?? []).find(
-    (effect) => !isSafeDetachedRead(effect),
+    (effect) =>
+      !isSafeDetachedRead(effect) &&
+      !(settling && effect.startsWith("plugin-data:self:")),
   );
   if (unsafeRead) {
     return `read effect ${unsafeRead} is not part of the frozen detached input`;

@@ -37,7 +37,7 @@ export async function getPluginCatalog(options?: {
 }): Promise<PluginCatalog> {
   const plugins = await listInstalledPlugins(options);
   return {
-    items: plugins.filter((plugin) => plugin.status !== "error"),
+    items: plugins.filter((plugin) => plugin.hostState !== "error"),
     loadErrors: plugins
       .filter(
         (plugin): plugin is PluginSummary & { error: string } =>
@@ -71,7 +71,7 @@ export interface PluginFlowStep {
   trigger: { type: string };
   runtimeType?: string;
   outputKind?: string;
-  capabilities?: readonly string[];
+  outputContract?: string;
   execution?: "sync" | "background";
   model?: string;
   turnCompletion: TurnCompletionSummary;
@@ -106,7 +106,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     trigger?: { type?: string };
     runtimeType?: string;
     outputKind?: string;
-    capabilities?: string[];
+    outputContract?: string;
     execution?: "sync" | "background";
     model?: string;
     turnCompletion?: TurnCompletionSummary;
@@ -130,7 +130,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
       trigger: { type: step.trigger?.type ?? "auto" },
       runtimeType: step.runtimeType,
       outputKind: step.outputKind,
-      capabilities: step.capabilities,
+      outputContract: step.outputContract,
       execution: step.execution,
       model: step.model,
       turnCompletion: normalizeTurnCompletion(step.turnCompletion),

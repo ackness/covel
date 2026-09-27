@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * In-memory plugin registry — manages plugin lifecycle and lookup.
  */
@@ -34,95 +35,25 @@ function declaredRuntimeManifests(
   );
 }
 
-function isSameDataSchema(
-  a: PluginDataSchemaDecl,
-  b: PluginDataSchemaDecl,
-): boolean {
-  return (
-    a.namespace === b.namespace &&
-    a.schemaVersion === b.schemaVersion &&
-    a.acceptsWorldData === b.acceptsWorldData &&
-    a.schema === b.schema &&
-    a.description === b.description
-  );
-}
-
 function mergeDataSchemas(
   entry: PluginRegistryEntry,
 ): Readonly<Record<string, PluginDataSchemaDecl>> | undefined {
-  if (entry.dataSchemas) {
-    return pluginDataSchemaMapSchema.parse(entry.dataSchemas);
-  }
-
-  const merged: Record<string, PluginDataSchemaDecl> = {};
-
-  for (const { manifest } of pluginDeclarations(entry)) {
-    const schemas = manifest.dataSchemas;
-    if (!schemas) continue;
-    for (const [namespace, schema] of Object.entries(schemas)) {
-      const normalized = { ...schema, namespace };
-      const existing = merged[namespace];
-      if (existing && !isSameDataSchema(existing, normalized)) {
-        throw new Error(
-          `Conflicting dataSchemas declaration for namespace "${namespace}" in plugin "${entry.id}"`,
-        );
-      }
-      merged[namespace] = normalized;
-    }
-  }
-
-  return Object.keys(merged).length > 0 ? merged : undefined;
+  const schemas =
+    entry.dataSchemas ??
+    resolvePluginDeclarations(pluginDeclarations(entry)).dataSchemas;
+  return Object.keys(schemas).length
+    ? pluginDataSchemaMapSchema.parse(schemas)
+    : undefined;
 }
-
-function isSameWorldProjection(
-  a: WorldProjectionDecl,
-  b: WorldProjectionDecl,
-): boolean {
-  if (a.from !== b.from || a.handler !== b.handler) return false;
-  const aOutputIds = Object.keys(a.outputs).sort();
-  const bOutputIds = Object.keys(b.outputs).sort();
-  if (
-    aOutputIds.length !== bOutputIds.length ||
-    aOutputIds.some((id, index) => id !== bOutputIds[index])
-  ) {
-    return false;
-  }
-  return aOutputIds.every((id) => {
-    const aOutput = a.outputs[id];
-    const bOutput = b.outputs[id];
-    return (
-      aOutput !== undefined &&
-      bOutput !== undefined &&
-      aOutput.namespace === bOutput.namespace &&
-      aOutput.key === bOutput.key
-    );
-  });
-}
-
 function mergeWorldProjections(
   entry: PluginRegistryEntry,
 ): Readonly<Record<string, WorldProjectionDecl>> | undefined {
-  if (entry.worldProjections) {
-    return worldProjectionMapSchema.parse(entry.worldProjections);
-  }
-
-  const merged: Record<string, WorldProjectionDecl> = {};
-
-  for (const { manifest } of pluginDeclarations(entry)) {
-    const projections = manifest.worldProjections;
-    if (!projections) continue;
-    for (const [projectionId, projection] of Object.entries(projections)) {
-      const existing = merged[projectionId];
-      if (existing && !isSameWorldProjection(existing, projection)) {
-        throw new Error(
-          `Conflicting worldProjections declaration for projection "${projectionId}" in plugin "${entry.id}"`,
-        );
-      }
-      merged[projectionId] = projection;
-    }
-  }
-
-  return Object.keys(merged).length > 0 ? merged : undefined;
+  const projections =
+    entry.worldProjections ??
+    resolvePluginDeclarations(pluginDeclarations(entry)).worldProjections;
+  return Object.keys(projections).length
+    ? worldProjectionMapSchema.parse(projections)
+    : undefined;
 }
 
 function validateWorldProjectionTargets(
@@ -172,6 +103,7 @@ export interface PluginRegistryOptions {
  * session lock).
  */
 export interface PluginRegistry {
+  withSnapshot<T>(fn: () => T): T;
   /** Register a plugin. */
   register(entry: PluginRegistryEntry): void;
 
@@ -220,16 +152,6 @@ export interface PluginRegistry {
    */
   syncSessionActivations(sessionId: string, pluginIds: readonly string[]): void;
 
-  /**
-   * Find the plugin package ID of an active plugin that declares a given capability.
-   * Searches all runtimes (including multi-runtime sub-entries) of active plugins.
-   * Returns the first match's plugin ID, or undefined if none found.
-   */
-  findPluginByCapability(
-    sessionId: string,
-    capability: string,
-  ): string | undefined;
-
   /** Subscribe to registry changes. Returns unsubscribe function. */
   onChange(handler: (event: RegistryChangeEvent) => void): () => void;
 }
@@ -241,6 +163,10 @@ export function createPluginRegistry(
   options?: PluginRegistryOptions,
 ): PluginRegistry {
   const entries = new Map<string, PluginRegistryEntry>();
+  const snapshots = new AsyncLocalStorage<
+    ReadonlyMap<string, PluginRegistryEntry>
+  >();
+  const readableEntries = () => snapshots.getStore() ?? entries;
   // Process-local mirror of each session's persisted `activePlugins`.
   // Only `applyPersistedActivations` (persist-first mutation) and
   // `syncSessionActivations` (locked read-repair) may write to it.
@@ -272,11 +198,24 @@ export function createPluginRegistry(
   }
 
   return {
+    withSnapshot(fn) {
+      return snapshots.getStore() ? fn() : snapshots.run(new Map(entries), fn);
+    },
     register(entry: PluginRegistryEntry): void {
       resolvePluginDeclarations(pluginDeclarations(entry));
       const dataSchemas = mergeDataSchemas(entry);
       const worldProjections = mergeWorldProjections(entry);
       validateWorldProjectionTargets(entry.id, dataSchemas, worldProjections);
+      for (const [id, other] of entries) {
+        if (id === entry.id) continue;
+        for (const [contract, schema] of Object.entries(
+          entry.packageManifest?.contractSchemas ?? {},
+        )) {
+          const existing = other.packageManifest?.contractSchemas?.[contract];
+          if (existing && canonicalSchema(existing) !== canonicalSchema(schema))
+            throw new Error(`Conflicting schema for contract ${contract}`);
+        }
+      }
       entries.set(entry.id, {
         ...entry,
         ...(dataSchemas ? { dataSchemas: deepFreezeJson(dataSchemas) } : {}),
@@ -288,11 +227,11 @@ export function createPluginRegistry(
     },
 
     getAll(): ReadonlyMap<string, PluginRegistryEntry> {
-      return new Map(entries);
+      return new Map(readableEntries());
     },
 
     get(id: string): PluginRegistryEntry | undefined {
-      return entries.get(id);
+      return readableEntries().get(id);
     },
 
     getActivePlugins(sessionId: string): readonly string[] {
@@ -351,45 +290,10 @@ export function createPluginRegistry(
       };
     },
 
-    findPluginByCapability(
-      sessionId: string,
-      capability: string,
-    ): string | undefined {
-      const sessionSet = sessionActivations.get(sessionId);
-      if (sessionSet === undefined || sessionSet.size === 0) return undefined;
-
-      for (const pluginId of sessionSet) {
-        const entry = entries.get(pluginId);
-        const root = entry?.packageManifest;
-        if (
-          entry &&
-          root &&
-          !pluginRuntimeManifests(entry).some(
-            (runtime) => runtime.manifest.name === root.manifest.name,
-          ) &&
-          root.manifest.capabilities?.includes(capability)
-        )
-          return pluginId;
-      }
-
-      const active = [...sessionSet].flatMap((pluginId) => {
-        const entry = entries.get(pluginId);
-        return entry
-          ? declaredRuntimeManifests(entry).map((manifest) => ({
-              ...manifest,
-              pluginId,
-            }))
-          : [];
-      });
-      return resolveRuntimeProviders(active).find((manifest) =>
-        manifest.capabilities?.includes(capability),
-      )?.pluginId;
-    },
-
     getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[] {
       return [...(sessionActivations.get(sessionId) ?? [])]
         .flatMap((id) => {
-          const entry = entries.get(id);
+          const entry = readableEntries().get(id);
           return entry
             ? pluginDeclarations(entry).map(({ manifest }) => manifest)
             : [];
@@ -411,7 +315,7 @@ export function createPluginRegistry(
       const manifests: RuntimeManifest[] = [];
 
       for (const pluginId of sessionSet) {
-        const entry = entries.get(pluginId);
+        const entry = readableEntries().get(pluginId);
         if (!entry) continue;
         manifests.push(...declaredRuntimeManifests(entry));
       }
@@ -426,4 +330,14 @@ export function createPluginRegistry(
       });
     },
   };
+}
+
+function canonicalSchema(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalSchema).join(",")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${canonicalSchema(v)}`)
+      .join(",")}}`;
+  return JSON.stringify(value);
 }

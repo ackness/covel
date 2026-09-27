@@ -33,7 +33,7 @@ async function pluginFixture() {
   );
   await writeFile(
     path.join(pluginRoot, "PLUGIN.md"),
-    "---\nname: probe\ndescription: Probe\n---\n",
+    "---\nid: probe\nkind: plugin\ndescription: Probe\n---\n",
     "utf8",
   );
   return { root, pluginRoot };
@@ -43,13 +43,14 @@ async function runtimeFixture(
   pluginRoot: string,
   name: string,
   handler: string,
-  extra = "trigger: {type: manual}",
+  extra = "schedule: {trigger: {type: manual}}",
+  functionOptions = "",
 ) {
   const directory = path.join(pluginRoot, "runtimes", name);
   await mkdir(directory, { recursive: true });
   await writeFile(
-    path.join(directory, "PLUGIN.md"),
-    `---\nname: probe/${name}\ndescription: Probe\nruntimeType: function\nhandler: ./handler.js\n${extra}\n---\n`,
+    path.join(directory, "RUNTIME.md"),
+    `---\ntype: function\ndescription: Probe\nfunction: {handler: ./handler.js${functionOptions}}\n${extra}\n---\n`,
     "utf8",
   );
   await writeFile(
@@ -193,7 +194,7 @@ describe("runtime debug host integration", () => {
     const marker = path.join(root, "disposed.txt");
     await writeFile(
       path.join(pluginRoot, "PLUGIN.md"),
-      "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+      "---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\n---\n",
       "utf8",
     );
     await writeFile(
@@ -227,7 +228,7 @@ describe("runtime debug host integration", () => {
     );
     await writeFile(
       path.join(support, "PLUGIN.md"),
-      "---\nname: support\ndescription: Support\nentry: ./entry.js\n---\n",
+      "---\nid: support\nkind: plugin\ndescription: Support\nentry: ./entry.js\n---\n",
       "utf8",
     );
     await writeFile(
@@ -256,7 +257,7 @@ describe("runtime debug host integration", () => {
       pluginRoot,
       "follower",
       'return {outcome: "failed", error: "expected provider failure"};',
-      "trigger: {type: event, topic: root.ready}\nexecution: background",
+      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
     );
     await mkdir(path.join(pluginRoot, "tests"));
     await writeFile(
@@ -308,7 +309,7 @@ describe("runtime debug host integration", () => {
           pluginRoot,
           "follower",
           'return {outcome: "skipped", skipReason: "nothing to do"};',
-          "trigger: {type: event, topic: root.ready}\nexecution: background",
+          "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
         );
       }
       await mkdir(path.join(pluginRoot, "tests"));
@@ -405,7 +406,8 @@ describe("runtime debug host integration", () => {
       await ctx.tools.call("plugin-data-set", {namespace: "notes", key: "follower", value: ctx.triggerEvent.data});
       return {outcome: "success", effects: {events: [{topic: "next.ready", data: {source: "follower"}}]}};
     `,
-      "trigger: {type: event, topic: root.ready}\nexecution: background\ntools: {builtin: [plugin-data-set]}",
+      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
+      ", tools: {builtin: [plugin-data-set]}",
     );
     await runtimeFixture(
       pluginRoot,
@@ -414,7 +416,7 @@ describe("runtime debug host integration", () => {
       await ctx.pluginData.set("notes", "next", {shouldNotRun: true});
       return {outcome: "success", value: null};
     `,
-      "trigger: {type: event, topic: next.ready}\nexecution: background",
+      "schedule: {trigger: {type: event, topic: next.ready}, manual: {execution: background}}",
     );
     const report = await runRuntimeDebug({
       runtimeId: "probe/root",
@@ -443,7 +445,7 @@ describe("runtime debug host integration", () => {
     const { root, pluginRoot } = await pluginFixture();
     await writeFile(
       path.join(pluginRoot, "PLUGIN.md"),
-      "---\nname: probe\ndescription: Probe\nuserSettings:\n  - key: count\n    type: number\n    label: Count\n    default: 1\n---\n",
+      "---\nid: probe\nkind: plugin\ndescription: Probe\ncontributes:\n  settings:\n    - key: count\n      type: number\n      label: Count\n      default: 1\n---\n",
       "utf8",
     );
     await runtimeFixture(
@@ -455,7 +457,7 @@ describe("runtime debug host integration", () => {
       pluginRoot,
       "follower",
       'return {outcome: "success", value: {count: ctx.userSettings.count}};',
-      "trigger: {type: event, topic: root.ready}\nexecution: background",
+      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
     );
     await runtimeFixture(
       pluginRoot,
@@ -474,12 +476,12 @@ describe("runtime debug host integration", () => {
     );
     await writeFile(
       path.join(supportRoot, "PLUGIN.md"),
-      "---\nname: support\ndescription: Support\nuserSettings:\n  - key: count\n    type: number\n    label: Count\n    default: 10\n---\n",
+      "---\nid: support\nkind: plugin\ndescription: Support\ncontributes:\n  settings:\n    - key: count\n      type: number\n      label: Count\n      default: 10\n---\n",
       "utf8",
     );
     await writeFile(
-      path.join(supportRoot, "runtimes", "follower", "PLUGIN.md"),
-      "---\nname: support/follower\ndescription: Support follower\nruntimeType: function\nhandler: ./handler.js\ntrigger: {type: event, topic: root.ready}\nexecution: background\n---\n",
+      path.join(supportRoot, "runtimes", "follower", "RUNTIME.md"),
+      "---\ntype: function\ndescription: Support follower\nfunction: {handler: ./handler.js}\nschedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}\n---\n",
       "utf8",
     );
     await writeFile(
@@ -517,7 +519,7 @@ describe("runtime debug host integration", () => {
       const { root, pluginRoot } = await pluginFixture();
       await writeFile(
         path.join(pluginRoot, "PLUGIN.md"),
-        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+        "---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\ncontributes: {tools: [wait-for-worker]}\n---\n",
         "utf8",
       );
       const entryPath = path.join(pluginRoot, "entry.js");
@@ -551,7 +553,8 @@ describe("runtime debug host integration", () => {
         pluginRoot,
         "root",
         'await ctx.tools.call("wait-for-worker", {}); return {outcome: "success", value: null};',
-        "trigger: {type: manual}\ntimeoutMs: 20\ntools: {plugin: [wait-for-worker]}",
+        "schedule: {trigger: {type: manual}}",
+        ", timeoutMs: 20, tools: {plugin: [wait-for-worker]}",
       );
       const entry = (await import(
         pathToFileURL(await realpath(entryPath)).href
@@ -630,7 +633,7 @@ describe("runtime debug host integration", () => {
       await ctx.pluginData.set("notes", "follower", {mustNotRun: true});
       return {outcome: "success", value: null};
     `,
-      "trigger: {type: event, topic: root.ready}\nexecution: background",
+      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
     );
     const report = await runRuntimeDebug({
       runtimeId: "probe/root",
@@ -684,7 +687,7 @@ describe("runtime debug host integration", () => {
     const marker = path.join(pluginRoot, "closed.txt");
     await writeFile(
       path.join(pluginRoot, "PLUGIN.md"),
-      "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+      "---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\n---\n",
       "utf8",
     );
     await writeFile(

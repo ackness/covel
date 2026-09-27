@@ -6,14 +6,18 @@ import { useRuntimeBindings } from "../use-runtime-bindings.js";
 
 const plugins: PluginSummary[] = [
   {
+    requires: [],
+    optional: [],
+    conflicts: [],
+    extensions: [],
     id: "fixture-package",
     displayName: "Fixture package",
     description: "Fixture package",
-    pluginType: "plugin",
+    kind: "plugin",
     source: "builtin",
-    status: "registered",
+    hostState: "approved",
     runtimeCount: 1,
-    capabilities: [],
+    provides: [],
     tags: [],
     runtimes: [
       {
@@ -24,7 +28,7 @@ const plugins: PluginSummary[] = [
         execution: "sync",
         turnCompletion: { mode: "await" },
         outputKind: "plugin",
-        capabilities: [],
+        outputContract: undefined,
         tags: [],
       },
     ],

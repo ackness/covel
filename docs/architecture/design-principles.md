@@ -31,7 +31,7 @@ Covel 的一切都从这条出发（CLAUDE.md 把它定为强制的 "Framework �
 - **agent runtime** —— 用自然语言把规则写进 `PLUGIN.md`，LLM 读规则 + 上下文，自己判断、自己叙述。适合要理解 / 裁量 / 生成文本的玩法（让 LLM 当裁判）。
 - **function runtime** —— 一段 JS handler，确定地读上下文 → 算 → 产出。适合要精确 / 公平 / 可复现 / 零成本的事（如掷骰的随机数——不能交给 LLM）。
 
-创作者常把这两种叫"模式"，但 Covel **没有 "hybrid" 原语**：所谓"混合"，是把两种 Runtime 拼起来的**组合**，靠两种粘合——**Tool**（agent 调用一个函数支撑的工具，稳定触发确定逻辑）和 **input.inject**（把一个 runtime 的产出喂进另一个的 Context）。这样 Kernel 只需两块积木，创作者却能表达任意"既有规则、又有叙事"的玩法。掷骰范例与具体写法见 [plugin-authoring-agent.md §0](../guide/plugin-authoring-agent.md)。
+创作者常把这两种叫"模式"，但 Covel **没有 "hybrid" 原语**：所谓"混合"，是把两种 Runtime 拼起来的**组合**，靠两种粘合——**Tool**（agent 调用一个函数支撑的工具，稳定触发确定逻辑）和 **io.inputs**（把一个 runtime 的产出喂进另一个的 Context）。这样 Kernel 只需两块积木，创作者却能表达任意"既有规则、又有叙事"的玩法。掷骰范例与具体写法见 [plugin-authoring-agent.md §0](../guide/plugin-authoring-agent.md)。
 
 > 术语提醒：这里的"写法 / 模式"指**执行方式**，与 glossary 的 **Trigger mode**（runtime 何时运行：auto / scheduled / manual / event）是两回事，不要混。
 

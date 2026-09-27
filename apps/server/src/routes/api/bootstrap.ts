@@ -1,3 +1,20 @@
+import { createPluginReloadRoutes } from "./plugin-reload.js";
+import {
+  mediaImageFlowRoutes,
+  resolveMediaImageFlow,
+} from "./media-image-flow.js";
+import { createUiSlotHost } from "../../ui-slots/host.js";
+import { uiSlotRoutes } from "./ui-slots.js";
+import {
+  createRuntimeJobCredentials,
+  type RuntimeJobServices,
+} from "./plugin-rpc/runtime-job-credentials.js";
+import { createSettledSessionLock } from "./plugin-rpc/settled-session-lock.js";
+import {
+  listSettlingRuntimeJobs,
+  type RuntimeJobRecord,
+} from "./plugin-rpc/jobs.js";
+import type { RuntimeJobExecutor } from "./plugin-rpc/runtime-job-worker.js";
 /** Wire the API dependency graph for production and tests. */
 
 import {
@@ -9,6 +26,8 @@ import { readRuntimeEnv } from "@covel/shared";
 import {
   loadPluginLlmConfig,
   pluginDeclarations,
+  pluginRuntimeManifests,
+  resolvePluginRuntimeManifest,
   deriveBuiltinPluginIds,
   type PluginRegistry,
   type PluginLlmConfig,
@@ -24,6 +43,7 @@ import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
 import {
   PluginServiceRegistry,
+  PluginExtensionHost,
   createHookPipeline,
   createModelResolver,
   planTurnDetachment,
@@ -56,7 +76,6 @@ import { sessionTurnRoutes } from "./session-turns.js";
 import { setupRuntimeControlRoutes } from "./setup-runtime-control.js";
 import { subscribeRoutes } from "./subscribe.js";
 import { pluginDataRoutes } from "./plugin-data.js";
-import { workingMemoryRoutes } from "./working-memory.js";
 import { installRoutes } from "./install.js";
 import { aiRoutes } from "./ai.js";
 import { traceRoutes } from "./traces.js";
@@ -77,7 +96,6 @@ import {
   type RuntimeJobWorker,
 } from "./plugin-rpc/runtime-job-worker.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
-import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { snapshotRoutes } from "./snapshots.js";
 import { lorebookRoutes } from "./lorebook.js";
 import { runtimeOutputRoutes } from "./runtime-outputs.js";
@@ -129,6 +147,11 @@ export interface ApiBootstrapConfig {
   readonly covelHome?: string;
   /** LLM adapter (real or mock). */
   readonly llmAdapter: LLMAdapter;
+  /** Explicit server credential readiness; absent means request services are required. */
+  readonly canRunRuntimeJobWithServerServices?: (input: {
+    readonly job: RuntimeJobRecord;
+    readonly model?: string;
+  }) => boolean;
   /**
    * Optional narrow gateway facade exposed to function-runtime handlers
    * via `FunctionHandlerContext.gateway`. The server composition root
@@ -401,7 +424,7 @@ async function assembleApi(
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
-    createBootstrapPluginRpc();
+    createBootstrapPluginRpc(store);
 
   // Entry import only honors the EXACT server-code grant. The old
   // no-action `hasGrant` matched any live grant for the plugin, so approving
@@ -466,6 +489,7 @@ async function assembleApi(
       return admitted;
     },
   });
+  const extensions = new PluginExtensionHost(services);
   const hookPipeline = createHookPipeline();
 
   // Unified plugin server entries (`entry` frontmatter field) — needs the
@@ -482,15 +506,23 @@ async function assembleApi(
       rpcRegistry,
       isCommunityServerCodeApproved,
       isCommunityHookApproved,
+      runtimeLoader,
+      onReload: async () => {
+        for (const session of await store.listSessions())
+          uiSlots.invalidateSession(session.id);
+      },
       services,
+      extensions,
     }));
   runtimeLoader.bindPluginEntry(pluginEntries.ensurePluginEntry);
+  pluginEntries.watch();
   const pluginDiagnostics = createPluginDiagnostics({
     registry,
     tools,
     hooks: hookPipeline,
     rpc: rpcRegistry,
     services,
+    extensions,
     calls: serviceCalls,
     hasPendingEntry: pluginEntries.hasPendingEntry,
     isServerCodeApproved: (session, pluginId) =>
@@ -517,7 +549,7 @@ async function assembleApi(
       ? { contextWindowOverride: runtimeEnv.compactorContextWindow }
       : {};
   const compactorRunner = createBootstrapCompactorRunner({
-    manifestCache,
+    extensions,
     store,
     llmAdapter: config.llmAdapter,
     ...budgetSource,
@@ -526,13 +558,7 @@ async function assembleApi(
 
   // 8. Create memory system (Letta-style three-tier memory)
   const bootstrapMemory = createBootstrapMemorySystem({
-    manifestCache: new Map(
-      [...registry.getAll()]
-        .filter(([, entry]) => entry.status !== "error")
-        .map(([id, entry]) => [id, pluginDeclarations(entry)]),
-    ),
     store,
-    llmAdapter: config.llmAdapter,
     ...(config.vectorBackend !== "none" && config.memoryEmbed
       ? { embed: config.memoryEmbed }
       : {}),
@@ -541,17 +567,6 @@ async function assembleApi(
         `memory-ingest:${JSON.stringify([sessionId])}`,
         task,
       ),
-    runCoreExclusive: (sessionId, task) =>
-      memoryIngestLock.withLock(
-        `memory-core:${JSON.stringify([sessionId])}`,
-        task,
-      ),
-    preferredMemorySlot: config.preferredMemorySlot,
-    resolveModel,
-    // Break memoryBlocks label collisions by trust tier (builtin > community),
-    // using the non-forgeable discovery source rather than load
-    // order — keeps a community plugin from shadowing a builtin default block.
-    getPluginSource,
   });
   if (bootstrapMemory) {
     for (const t of bootstrapMemory.tools) {
@@ -560,11 +575,10 @@ async function assembleApi(
   }
 
   const pluginBackgroundQueue = createPluginBackgroundQueue();
-  const runtimeJobWorker = createRuntimeJobWorker({
-    store,
-    eventBus,
-    tryWithCommitLock,
-    execute: async (job, control) => {
+  const runtimeJobCredentials = createRuntimeJobCredentials();
+  const executeRuntimeJob =
+    (requestServices: RuntimeJobServices): RuntimeJobExecutor =>
+    async (job, control) => {
       const payload = parseStagedRuntimeJobPayload(job.payload);
       if (
         !payload ||
@@ -609,6 +623,7 @@ async function assembleApi(
         eventBus,
         sessionLock,
         sessionId: job.sessionId,
+        withSnapshot: (fn) => pluginEntries.withSnapshot(job.sessionId, fn),
         session: {
           locale: payload.locale,
           ...(payload.runtimeModelOverrides
@@ -622,27 +637,26 @@ async function assembleApi(
         deps: {
           loadRuntime: (manifest, locale) =>
             loadRuntimeFn(manifest, locale, job.sessionId),
-          llm: config.llmAdapter,
+          llm: requestServices.llm,
           services,
-          ...(config.pluginGateway ? { gateway: config.pluginGateway } : {}),
+          extensions,
+          ...(requestServices.gateway
+            ? { gateway: requestServices.gateway }
+            : {}),
           ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
           getPluginSource,
           ...(config.mediaStore ? { mediaStore: config.mediaStore } : {}),
           toolExecutor,
           resolveModel,
-          compactor: compactorRunner,
+          compactor: requestServices.compactor ?? compactorRunner,
           estimator: estimateTokens,
           contextBudget: turnContextBudget,
-          ...(bootstrapMemory
-            ? { memorySystem: bootstrapMemory.memorySystem }
-            : {}),
-          capabilityPluginIds: resolveTurnCapabilityPluginIds(
-            registry,
-            job.sessionId,
-          ),
           eventDirectory,
         },
         hookPipeline,
+        resolveImageFlowRuntimeIds: async () =>
+          (await resolveMediaImageFlow(store, extensions, job.sessionId))
+            ?.assetRuntimeIds,
       });
       const backgroundTurnId = crypto.randomUUID();
       const outcome = await runner.runDetachedStage({
@@ -694,7 +708,79 @@ async function assembleApi(
           outcome.commit.error ?? "detached runtime proposals did not commit",
         );
       }
+    };
+  const runtimeJobWorker = createRuntimeJobWorker({
+    store,
+    eventBus,
+    tryWithCommitLock,
+    execute: executeRuntimeJob({
+      llm: config.llmAdapter,
+      gateway: config.pluginGateway,
+      compactor: compactorRunner,
+    }),
+    prepareExecution: (job) => {
+      const payload = parseStagedRuntimeJobPayload(job.payload);
+      if (!payload) return executeRuntimeJob({ llm: config.llmAdapter });
+      const key = {
+        jobId: job.jobId,
+        sessionId: job.sessionId,
+        expectedSessionIncarnation: payload.expectedSessionIncarnation,
+      };
+      const entry = registry.get(job.pluginId);
+      const parsed =
+        entry &&
+        pluginRuntimeManifests(entry).find(
+          ({ manifest }) => manifest.name === job.runtimeId,
+        );
+      const manifest =
+        entry && parsed
+          ? resolvePluginRuntimeManifest(entry, parsed.manifest)
+          : undefined;
+      const override =
+        manifest?.outputKind === "story" && payload.modelOverride
+          ? payload.modelOverride
+          : payload.runtimeModelOverrides?.[job.runtimeId];
+      const model = manifest ? resolveModel(manifest, override) : override;
+      let selectedServices = runtimeJobCredentials.peek(key);
+      if (selectedServices?.canRun) {
+        let ready = false;
+        try {
+          ready = selectedServices.canRun(model);
+        } catch {
+          /* Fail closed. */
+        }
+        if (!ready) {
+          // An unusable handoff must not block the next authenticated request.
+          runtimeJobCredentials.discard(key);
+          selectedServices = undefined;
+        }
+      }
+      if (!selectedServices) {
+        if (!config.canRunRuntimeJobWithServerServices?.({ job, model }))
+          return undefined;
+        selectedServices = {
+          llm: config.llmAdapter,
+          gateway: config.pluginGateway,
+          compactor: compactorRunner,
+        };
+      }
+      const execute = executeRuntimeJob(selectedServices);
+      return async (claimed, control) => {
+        runtimeJobCredentials.discard(key);
+        await execute(claimed, control);
+      };
     },
+  });
+  const uiSlots = createUiSlotHost({
+    store,
+    eventBus,
+    extensionHost: extensions,
+    services,
+  });
+  const settledSessionLock = createSettledSessionLock({
+    sessionLock,
+    listPendingJobs: (sessionId) => listSettlingRuntimeJobs(store, sessionId),
+    wake: () => runtimeJobWorker.wake(),
   });
 
   // 9. Create app with dependency injection middleware
@@ -712,6 +798,8 @@ async function assembleApi(
     c.set("eventBus", eventBus);
     c.set("pluginRegistry", registry);
     c.set("pluginServices", services);
+    c.set("pluginExtensions", extensions);
+    c.set("uiSlots", uiSlots);
     c.set("llmAdapter", config.llmAdapter);
     if (config.pluginGateway) {
       c.set("pluginGateway", config.pluginGateway);
@@ -734,6 +822,8 @@ async function assembleApi(
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("sessionLock", sessionLock);
     c.set("runtimeJobWorker", runtimeJobWorker);
+    c.set("runtimeJobCredentials", runtimeJobCredentials);
+    c.set("settledSessionLock", settledSessionLock);
     c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
@@ -741,6 +831,7 @@ async function assembleApi(
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
+    c.set("withPluginSnapshot", pluginEntries.withSnapshot);
     c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {
       c.set("worldsDirs", config.worldsDirs);
@@ -762,13 +853,7 @@ async function assembleApi(
 
   // Apply request overrides after base dependency injection, then rebind services.
   for (const mw of config.perRequestMiddleware ?? []) app.use("*", mw);
-  app.use(
-    "*",
-    requestLlmServices(
-      { manifestCache, store, ...budgetSource },
-      bootstrapMemory,
-    ),
-  );
+  app.use("*", requestLlmServices({ extensions, store, ...budgetSource }));
 
   // 10. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
@@ -777,7 +862,8 @@ async function assembleApi(
   app.route("/api/sessions", messageRoutes);
   app.route("/api/sessions", characterRoutes);
   app.route("/api/sessions", pluginDataRoutes);
-  app.route("/api/sessions", workingMemoryRoutes);
+  app.route("/api/sessions", uiSlotRoutes);
+  app.route("/api/sessions", mediaImageFlowRoutes);
   app.route("/api/sessions", resumeRoutes); // suspend/resume (resume + suspensions list/delete)
   app.route("/api/sessions", snapshotRoutes); // state snapshots + fork
   app.route("/api/sessions", lorebookRoutes); // session-level lorebook viewer
@@ -793,6 +879,7 @@ async function assembleApi(
     createBrowserWorkspaceRoutes(browserWorkspaceCache),
   );
   app.route("/api/approvals", approvalRoutes); // approval lookup + decision
+  app.route("/api/plugins", createPluginReloadRoutes(pluginEntries));
   app.route("/api/plugins", pluginRoutes);
   app.route("/api/framework", frameworkRoutes);
   app.route("/api/events", eventRoutes);
@@ -841,7 +928,11 @@ async function assembleApi(
     pluginBackgroundQueue,
     startupMaintenance,
     closeTools: () => toolExecutor.close(),
-    closePluginEntries: () => pluginEntries.close(),
+    closePluginEntries: async () => {
+      runtimeJobCredentials.clear();
+      await uiSlots.close();
+      await pluginEntries.close();
+    },
     prepareToolsForSession,
   };
 }

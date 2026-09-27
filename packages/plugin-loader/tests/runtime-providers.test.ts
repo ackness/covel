@@ -5,14 +5,14 @@ import { resolveRuntimeProviders } from "../src/runtime-providers.js";
 const creation = {
   name: "core/create",
   pluginId: "core",
-  capabilities: ["creation"],
-  fallbackFor: "creation",
+  outputContract: "creation@1",
+  defaultProvider: true,
 } as RuntimeManifest;
 const tracker = { name: "core/track", pluginId: "core" } as RuntimeManifest;
 const provider = {
   name: "external/create",
   pluginId: "external",
-  capabilities: ["creation"],
+  outputContract: "creation@1",
 } as RuntimeManifest;
 
 describe("runtime capability defaults", () => {
@@ -34,22 +34,25 @@ describe("runtime capability defaults", () => {
       tracker,
     ]);
   });
-  it("rejects competing providers instead of silently picking one", () => {
-    expect(() =>
-      resolveRuntimeProviders([
-        creation,
-        provider,
-        { ...provider, name: "another/create" },
-      ]),
-    ).toThrow("Multiple active providers");
+  it("keeps ordinary multiple providers for cardinality-all consumers", () => {
+    const another = {
+      ...provider,
+      name: "another/create",
+      pluginId: "another",
+    };
+    expect(resolveRuntimeProviders([creation, provider, another])).toEqual([
+      provider,
+      another,
+    ]);
   });
-  it("rejects competing defaults even while an explicit provider hides them", () => {
-    expect(() =>
-      resolveRuntimeProviders([
-        creation,
-        { ...creation, name: "other/create", pluginId: "other" },
-        provider,
-      ]),
-    ).toThrow("Multiple active providers");
+  it("keeps multiple defaults until the package resolver selects or replaces them", () => {
+    const other = { ...creation, name: "other/create", pluginId: "other" };
+    expect(resolveRuntimeProviders([creation, other])).toEqual([
+      creation,
+      other,
+    ]);
+    expect(resolveRuntimeProviders([creation, other, provider])).toEqual([
+      provider,
+    ]);
   });
 });

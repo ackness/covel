@@ -52,6 +52,7 @@ export interface DataService {
     plugins?: string[],
     locale?: string,
     loreOverride?: string,
+    excludedPlugins?: string[],
   ): Promise<SessionRecord>;
   updateSession(
     sessionId: string,

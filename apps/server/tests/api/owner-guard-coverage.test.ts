@@ -282,10 +282,10 @@ describe("commercial tier — owner guard on indirect session-scoped routes", ()
       const path = "/api/worlds/w1/sync-dimensions";
       const body = { sessionId: victim.id };
       expect((await post(path, body)).status).toBe(401);
-      // Owner passes the guard; 422 = no world-data-provider plugin active,
+      // Owner passes the guard; world dimension sync no longer needs a plugin.
       // proving the request advanced past authorization.
       expect((await post(path, body, bearer(victim.ownerToken))).status).toBe(
-        422,
+        200,
       );
     });
   });

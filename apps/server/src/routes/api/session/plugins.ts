@@ -1,7 +1,5 @@
 import {
   getPluginTrustInfo,
-  pluginDeclarations,
-  resolveRuntimeProviders,
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -10,105 +8,149 @@ import {
   type RpcApprovalGate,
 } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
-import { FrameworkCapability, resolvePluginSelection } from "@covel/shared";
-import type { SessionPlugin, SnapshotPluginStatus } from "@covel/shared";
+import {
+  resolveSessionPlugins,
+  sessionWorldContextV1,
+  historyCompactV1,
+  mediaImageFlowV1,
+  type SessionPlugin,
+  type SnapshotPluginStatus,
+  type SessionPluginResolution,
+} from "@covel/shared";
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
-import { pluginManifestRecords } from "../../misc-api/registry-projection.js";
 import { sessionApprovalScope } from "./session-guard.js";
 
-/** Reject ambiguous replacements before persisting a session's plugin selection. */
-export function validateSessionRuntimeProviders(
-  pluginIds: readonly string[],
-  registry: PluginRegistry,
-): void {
-  resolveRuntimeProviders(
-    pluginIds.flatMap((id) => {
-      const entry = registry.get(id);
-      return entry
-        ? pluginManifestRecords(entry).map((parsed) => parsed.manifest)
-        : [];
-    }),
-  );
+const singlePoints = new Set([
+  sessionWorldContextV1.id,
+  historyCompactV1.id,
+  mediaImageFlowV1.id,
+]);
+export function readSessionPluginSelection(session: SessionRecord): {
+  requested: string[];
+  excluded: string[];
+} {
+  const raw = session.metadata?.pluginSelection;
+  const selection =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const strings = (v: unknown) =>
+    Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
+  return {
+    requested: strings(selection.requested),
+    excluded: strings(selection.excluded),
+  };
 }
-
-/** Exclude community server code unless this session owns a live grant. */
+export function authorizedSessionPluginIds(
+  registry: PluginRegistry,
+  gate?: RpcApprovalGate,
+  session?: SessionRecord,
+): string[] {
+  return [...registry.getAll().values()]
+    .filter(
+      (entry) =>
+        getPluginTrustInfo(entry.id, entry.source).autoLoad ||
+        Boolean(
+          session &&
+          gate?.hasGrant(
+            session.id,
+            entry.id,
+            COMMUNITY_SERVER_CODE_ACTION,
+            sessionApprovalScope(session, entry.id),
+          ),
+        ),
+    )
+    .map((entry) => entry.id);
+}
+export function resolveSessionPluginPlan(
+  requested: readonly string[],
+  registry: PluginRegistry,
+  options: {
+    excluded?: readonly string[];
+    authorized?: readonly string[];
+  } = {},
+): SessionPluginResolution {
+  const authorized = new Set(
+    options.authorized ?? authorizedSessionPluginIds(registry),
+  );
+  return resolveSessionPlugins({
+    requested,
+    excluded: options.excluded,
+    plugins: [...registry.getAll().values()]
+      .filter((entry) => entry.status !== "error")
+      .map((entry) => {
+        const summary = buildPluginSummary(entry);
+        return {
+          id: entry.id,
+          kind: summary.kind,
+          source: summary.source,
+          authorized: authorized.has(entry.id),
+          provides: summary.provides,
+          requires: summary.requires,
+          optional: summary.optional,
+          conflicts: summary.conflicts,
+          singlePoints: summary.extensions
+            .filter((extension) => singlePoints.has(extension.point))
+            .map((extension) => extension.point),
+        };
+      }),
+  });
+}
+/** Resolve the entire authorized graph rather than filtering its providers afterward. */
 export function approvedActivePlugins(
   pluginIds: readonly string[],
   registry: PluginRegistry,
   gate: RpcApprovalGate | undefined,
   session?: SessionRecord,
 ): string[] {
-  return pluginIds.filter((pluginId) => {
-    const entry = registry.get(pluginId);
-    const trust = getPluginTrustInfo(pluginId, entry?.source);
-    return (
-      trust.autoLoad ||
-      Boolean(
-        session &&
-        gate?.hasGrant(
-          session.id,
-          pluginId,
-          COMMUNITY_SERVER_CODE_ACTION,
-          sessionApprovalScope(session, pluginId),
-        ),
-      )
-    );
-  });
+  return resolveSessionPluginPlan(pluginIds, registry, {
+    authorized: authorizedSessionPluginIds(registry, gate, session),
+    ...(session
+      ? { excluded: readSessionPluginSelection(session).excluded }
+      : {}),
+  }).active;
 }
-
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
-  const trust = getPluginTrustInfo(entry.id, entry.source);
-  return (
-    entry.summary.pluginType === "core-plugin" && trust.source === "builtin"
-  );
+  return entry.packageManifest?.plugin?.kind === "core";
 }
-
 export function unknownPluginIds(
   requestedPlugins: readonly string[],
-  pluginRegistry: PluginRegistry,
+  registry: PluginRegistry,
 ): string[] {
-  return requestedPlugins.filter((pid) => !pluginRegistry.get(pid));
+  return requestedPlugins.filter((id) => !registry.get(id));
 }
-
-export function resolveSessionPlugins(
-  requestedPlugins: readonly string[],
-  pluginRegistry: PluginRegistry,
-): string[] {
-  return resolvePluginSelection({
-    activePluginIds: requestedPlugins,
-    requestedPluginIds: requestedPlugins,
-    plugins: [...pluginRegistry.getAll().values()].map(buildPluginSummary),
-  });
-}
-
-export function resolveEnabledSessionPlugins(
-  currentPlugins: readonly string[],
-  pluginId: string,
-  pluginRegistry: PluginRegistry,
-): string[] {
-  return resolvePluginSelection({
-    activePluginIds: [...currentPlugins, pluginId],
-    requestedPluginIds: [pluginId],
-    plugins: [...pluginRegistry.getAll().values()].map(buildPluginSummary),
-  });
-}
-
 export function buildAvailablePluginList(
   active: readonly string[],
-  pluginRegistry: PluginRegistry,
+  registry: PluginRegistry,
+  plan?: SessionPluginResolution,
 ): SessionPlugin[] {
-  return [...pluginRegistry.getAll().values()].map((entry) => ({
-    ...buildPluginSummary(entry),
-    active: active.includes(entry.id),
-    locked: isRequiredCorePlugin(entry),
-  }));
+  return [...registry.getAll().values()].map((entry) => {
+    const rejection = plan?.rejected.find((item) => item.pluginId === entry.id);
+    const isActive = active.includes(entry.id);
+    return {
+      ...buildPluginSummary(entry),
+      active: isActive,
+      locked: false,
+      sessionState: isActive
+        ? "active"
+        : rejection?.code === "approval-required"
+          ? "approval-required"
+          : rejection
+            ? "rejected"
+            : "inactive",
+      ...(plan?.autoAdded.includes(entry.id) ? { autoAdded: true } : {}),
+      ...(rejection ? { rejection } : {}),
+      ...(rejection?.code === "approval-required"
+        ? { approvalRequired: true }
+        : {}),
+    };
+  });
 }
-
 export function buildSnapshotPluginList(
-  pluginRegistry: PluginRegistry,
+  registry: PluginRegistry,
   activeIds: ReadonlySet<string>,
 ): SnapshotPluginStatus[] {
-  return [...pluginRegistry.getAll().values()].map((entry) => {
+  return [...registry.getAll().values()].map((entry) => {
     const plugin = buildPluginSummary(entry);
     const stage = plugin.runtimes[0]?.stage;
     return {
@@ -118,22 +160,4 @@ export function buildSnapshotPluginList(
       ...(stage !== undefined ? { stage } : {}),
     };
   });
-}
-
-export function findWorldDataProviderPluginId(
-  activePlugins: readonly string[],
-  pluginRegistry: PluginRegistry,
-): string | undefined {
-  for (const pid of activePlugins) {
-    const entry = pluginRegistry.get(pid);
-    if (!entry) continue;
-    for (const { manifest } of pluginDeclarations(entry)) {
-      if (
-        manifest.capabilities?.includes(FrameworkCapability.WorldDataProvider)
-      ) {
-        return pid;
-      }
-    }
-  }
-  return undefined;
 }

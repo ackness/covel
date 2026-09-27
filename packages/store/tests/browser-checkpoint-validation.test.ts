@@ -35,7 +35,6 @@ import {
   makeTraceEvent,
   makeTurnMessage,
   makeTurnResult,
-  makeWorkingMemory,
   makeWorld,
   makeWorldDataImportLedger,
 } from "../src/contract/test-fixtures.js";
@@ -58,7 +57,6 @@ const snapshotRecords = {
   runtimeExports: [makeRuntimeExport()],
   stateEntries: [makeStateEntry()],
   pluginData: [pluginData],
-  workingMemory: [makeWorkingMemory()],
   sessionSummaries: [makeSessionSummary()],
   lorebookEntries: [makeLorebookEntry()],
   suspensions: [makeSuspension()],
@@ -75,7 +73,6 @@ const domainRecords = {
   traceEvents: [makeTraceEvent()],
   characters: [makeCharacter()],
   pluginData: [pluginData],
-  workingMemory: [makeWorkingMemory()],
   lorebookEntries: [makeLorebookEntry()],
   sessionSummaries: [makeSessionSummary()],
   playerInputs: [makePlayerInput()],
@@ -100,6 +97,7 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
     session: makeSession({ id: sessionId }),
     world: makeWorld({ id: "world-1" }),
     ...domainRecords,
+    characterSchema: null,
     state: stateRecords,
     revision: 1,
     actionId: "action-1",
@@ -108,6 +106,32 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
 ) as BrowserCheckpoint;
 
 describe("checkpoint record validation", () => {
+  it("rejects foreign schema ownership in checkpoints and nested snapshots", () => {
+    const schema = {
+      sessionId: "other",
+      version: 1,
+      types: ["npc"],
+      attributes: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    expect(() =>
+      validateBrowserCheckpoint({ ...checkpoint, characterSchema: schema }),
+    ).toThrow("characterSchema.sessionId must match");
+    const snapshot = checkpoint.snapshots[0]!;
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...checkpoint,
+        snapshots: [
+          {
+            ...snapshot,
+            payload: { ...snapshot.payload, characterSchema: schema },
+          },
+        ],
+      }),
+    ).toThrow("snapshots[0].payload.characterSchema.sessionId must match");
+  });
+
   it("preserves declared suspension inputs and rejects malformed provenance", () => {
     const inputSlots = {
       narrative: {

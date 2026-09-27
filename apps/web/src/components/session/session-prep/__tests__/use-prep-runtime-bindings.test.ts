@@ -14,14 +14,18 @@ vi.mock("@/services/api.js", () => ({
 }));
 
 const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
+  requires: [],
+  optional: [],
+  conflicts: [],
+  extensions: [],
   id,
   displayName: id,
   description: "",
-  pluginType: id === "core" ? "core-plugin" : "plugin",
+  kind: id === "core" ? "core" : "plugin",
   source: "builtin",
-  status: "registered",
+  hostState: "approved",
   runtimeCount: 1,
-  capabilities: [],
+  provides: [],
   tags: [],
   runtimes: [
     {
@@ -32,7 +36,7 @@ const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
       execution: "sync",
       turnCompletion: { mode: "await" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
       tags: [],
     },
   ],
@@ -46,10 +50,8 @@ const plan: WorldPluginPlan = {
   policy: {
     preferredTags: [],
     avoidedTags: [],
-    requiredCapabilities: [],
-    requiredPluginIds: [],
-    recommendedPluginIds: [],
-    excludedPluginIds: [],
+    requested: [],
+    recommended: [],
   },
   defaultPluginIds: ["core", "guide"],
 };

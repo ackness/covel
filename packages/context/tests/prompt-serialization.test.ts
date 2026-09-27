@@ -16,7 +16,7 @@ function makeSegments(
 ): Parameters<typeof serializeSystemPrompt>[0] {
   return {
     frameworkPreamble: "",
-    workingMemory: "",
+    turnExtensions: "",
     pluginInstructions: "",
     worldInfoBeforePlugin: "",
     upstreamInjects: "",
@@ -33,7 +33,7 @@ describe("serializeSystemPrompt", () => {
     const result = serializeSystemPrompt(
       makeSegments({
         frameworkPreamble: "framework",
-        workingMemory: "memory",
+        turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
         upstreamInjects: "injects",
@@ -64,7 +64,7 @@ describe("serializeSystemPrompt", () => {
     const result = serializeSystemPrompt(
       makeSegments({
         frameworkPreamble: "framework",
-        workingMemory: "memory",
+        turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
         upstreamInjects: "injects",
@@ -97,7 +97,7 @@ describe("serializeSystemPrompt", () => {
   it("does not emit cache markers for empty cacheable segments", () => {
     const result = serializeSystemPrompt(
       makeSegments({
-        workingMemory: "memory",
+        turnExtensions: "memory",
         pluginInstructions: "plugin",
       }),
       true,
@@ -128,7 +128,7 @@ describe("serializeSystemPrompt — cache-breakpoint budget contract", () => {
     const fullyPopulated = serializeSystemPrompt(
       makeSegments({
         frameworkPreamble: "framework",
-        workingMemory: "memory",
+        turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
         upstreamInjects: "injects",
@@ -150,7 +150,7 @@ describe("serializeSystemPrompt — cache-breakpoint budget contract", () => {
     const fullyPopulated = serializeSystemPrompt(
       makeSegments({
         frameworkPreamble: "framework",
-        workingMemory: "memory",
+        turnExtensions: "memory",
         pluginInstructions: "plugin",
         worldInfoBeforePlugin: "before",
         upstreamInjects: "injects",

@@ -40,7 +40,7 @@ function makeEntry(
   return {
     id,
     sessionId,
-    pluginId: "test-plugin",
+    owner: { kind: "player" },
     keys: [],
     content: `content for ${id}`,
     strategy: "constant",
@@ -134,7 +134,7 @@ describe("Lorebook API routes", () => {
       expect(body).toMatchObject({
         id: "manual-rule",
         sessionId: SESSION_ID,
-        pluginId: "manual-lorebook",
+        owner: { kind: "player" },
         content: "Manual rule content",
         keys: ["manual"],
         strategy: "selective",
@@ -163,7 +163,7 @@ describe("Lorebook API routes", () => {
     it("updates a session lorebook entry while preserving stable fields", async () => {
       await store.upsertLorebookEntries([
         makeEntry(SESSION_ID, "e1", {
-          pluginId: "owner-plugin",
+          owner: { kind: "player" },
           keys: ["old"],
           content: "old content",
           strategy: "selective",
@@ -187,7 +187,7 @@ describe("Lorebook API routes", () => {
       const body = await res.json<LorebookEntryRecord>();
       expect(body).toMatchObject({
         id: "e1",
-        pluginId: "owner-plugin",
+        owner: { kind: "player" },
         content: "new content",
         keys: ["new"],
         strategy: "selective",

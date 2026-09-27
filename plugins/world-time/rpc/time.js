@@ -4,12 +4,7 @@ import { describeTime } from "../clock.js";
 
 /** Read committed clock state without initializing or advancing the world. */
 export default async function time(_payload, ctx) {
-  const row = await ctx.store.getPluginData(
-    ctx.sessionId,
-    ctx.pluginId,
-    "clock",
-    "current",
-  );
+  const row = await ctx.store.getPluginData("clock", "current");
   if (!row) {
     return {
       ok: true,

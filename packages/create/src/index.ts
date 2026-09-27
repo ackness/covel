@@ -3,6 +3,7 @@ export type {
   CreateWorldOptions,
   CreateResult,
   GeneratedWorldCharacter,
+  GeneratedMemoryDefinition,
   GeneratedWorldLorebookEntry,
   GeneratedWorldPackageContent,
 } from "./types.js";

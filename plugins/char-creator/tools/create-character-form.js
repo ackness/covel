@@ -6,11 +6,7 @@ export default function ({ tool }, createFormTool) {
       "Create the opening character form. Collect characterName and optional declared string/enum attributes only; retain numeric and compound attribute defaults.",
     parameters: createFormTool.parametersSchema,
     execute: async (params, context) => {
-      const input = context.inputSlots?.["same-turn-world-schema"];
-      const schema =
-        input?.cardinality === "one"
-          ? input.value?.["character-attributes"]
-          : undefined;
+      const schema = context.world.characterSchema;
       const attributes = new Map(
         (schema?.attributes ?? []).map((attribute) => [
           attribute.id,

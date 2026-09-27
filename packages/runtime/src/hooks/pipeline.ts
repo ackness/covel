@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * HookPipeline — semantic hook execution engine.
  *
@@ -57,6 +58,37 @@ export class HookPipeline {
     Array<HookRegistration<unknown>>
   >();
 
+  private readonly snapshots = new AsyncLocalStorage<
+    Map<HookEvent, Array<HookRegistration<unknown>>>
+  >();
+  withSnapshot<T>(fn: () => T): T {
+    return this.snapshots.getStore()
+      ? fn()
+      : this.snapshots.run(
+          new Map(
+            [...this.registrations].map(([event, list]) => [event, [...list]]),
+          ),
+          fn,
+        );
+  }
+  replacePlugin<T>(pluginId: string, publish: () => T): T {
+    const previous = new Map(
+      [...this.registrations].map(([event, list]) => [event, [...list]]),
+    );
+    for (const [event, list] of this.registrations)
+      this.registrations.set(
+        event,
+        list.filter((entry) => entry.pluginId !== pluginId),
+      );
+    try {
+      return publish();
+    } catch (error) {
+      this.registrations.clear();
+      for (const [event, list] of previous) this.registrations.set(event, list);
+      throw error;
+    }
+  }
+
   register<P>(reg: HookRegistration<P>): () => void {
     const list = this.registrations.get(reg.event) ?? [];
     const entry = { ...reg } as HookRegistration<unknown>;
@@ -105,7 +137,8 @@ export class HookPipeline {
     payload: P,
     opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
-    const raw = this.registrations.get(event) ?? [];
+    const raw =
+      (this.snapshots.getStore() ?? this.registrations).get(event) ?? [];
     if (raw.length === 0) {
       return { action: "continue" };
     }

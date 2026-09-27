@@ -1,63 +1,31 @@
 import { describe, it, expect } from "vitest";
-import injectPreamble from "../hooks/inject-preamble.js";
+import entry from "../server/index.js";
 import { PREAMBLE_EN, PREAMBLE_ZH } from "../hooks/_preamble.js";
 
-const CTX = { sessionId: "sess-director-1" };
-
-describe("director / inject-preamble (PostContextAssembly)", () => {
-  it("appends the preamble to the story runtime's system prompt", async () => {
-    const r = await injectPreamble(CTX, {
-      outputKind: "story",
-      systemPrompt: "BASE_SYSTEM_PROMPT",
+describe("director prompt segment", () => {
+  function project(locale) {
+    let provider;
+    entry({
+      provideExtension(point, id, implementation) {
+        expect(point).toBe("prompt.segment@1");
+        expect(id).toBe("direction");
+        provider = implementation;
+      },
     });
-    expect(r.action).toBe("continue");
-    expect(r.replace.systemPrompt).toBe(
-      "BASE_SYSTEM_PROMPT" + "\n\n" + PREAMBLE_EN,
-    );
+    return provider.handler({}, { locale });
+  }
+  it("declares stable story-only guidance", () => {
+    expect(project()).toEqual([
+      {
+        id: "direction",
+        content: PREAMBLE_EN,
+        position: "system",
+        audience: "story",
+        volatility: "stable",
+      },
+    ]);
   });
-
-  it("localizes the preamble to the payload locale (zh-CN → Chinese note)", async () => {
-    const r = await injectPreamble(CTX, {
-      outputKind: "story",
-      systemPrompt: "BASE",
-      locale: "zh-CN",
-    });
-    expect(r.replace.systemPrompt).toBe("BASE" + "\n\n" + PREAMBLE_ZH);
-  });
-
-  it("preserves the original prompt verbatim as the prefix", async () => {
-    const base = "You are the narrator.\nFollow the world canon.";
-    const r = await injectPreamble(CTX, {
-      outputKind: "story",
-      systemPrompt: base,
-    });
-    expect(r.replace.systemPrompt.startsWith(base + "\n\n")).toBe(true);
-    expect(r.replace.systemPrompt.endsWith(PREAMBLE_EN)).toBe(true);
-  });
-
-  it("leaves plugin-kind runtimes untouched (no replace)", async () => {
-    const r = await injectPreamble(CTX, {
-      outputKind: "plugin",
-      systemPrompt: "CODEX_PROMPT",
-    });
-    expect(r).toEqual({ action: "continue" });
-  });
-
-  it("leaves system-kind runtimes untouched (no replace)", async () => {
-    const r = await injectPreamble(CTX, {
-      outputKind: "system",
-      systemPrompt: "SYSTEM_PROMPT",
-    });
-    expect(r).toEqual({ action: "continue" });
-  });
-
-  it("treats a missing outputKind as non-story (no replace)", async () => {
-    const r = await injectPreamble(CTX, { systemPrompt: "UNKNOWN_PROMPT" });
-    expect(r).toEqual({ action: "continue" });
-  });
-
-  it("does not throw when the payload is absent", async () => {
-    const r = await injectPreamble(CTX, undefined);
-    expect(r).toEqual({ action: "continue" });
+  it("localizes guidance from the execution locale", () => {
+    expect(project("zh-CN")[0].content).toBe(PREAMBLE_ZH);
   });
 });

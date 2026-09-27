@@ -2,10 +2,10 @@ import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
 import {
   CharacterFieldValidationError,
   mergeSchemaDefaults,
-  mirrorCharacterToPluginData,
 } from "@covel/tools";
 
-const CHARACTER_PLUGIN_ID = "char-creator";
+import { makeProposal } from "@covel/plugin-handlers-utils";
+import { withPendingProposals } from "@covel/tools";
 
 /**
  * guard.js — Pre-execution gate for player-init runtime.
@@ -31,7 +31,7 @@ export default async function guard(ctx) {
   const s = /** @type {any} */ (store);
 
   try {
-    const characters = await s.listCharacters(sessionId);
+    const characters = ctx.world.characters;
     const player = Array.isArray(characters)
       ? characters.find((c) => c.type === "player")
       : null;
@@ -43,7 +43,6 @@ export default async function guard(ctx) {
 
     // ── Branch 1: player already created — skip
     if (player) {
-      await mirrorPlayer(s, sessionId, player);
       await logger?.debug("player-init guard skipped existing player", {
         playerId: player.id,
       });
@@ -72,7 +71,7 @@ export default async function guard(ctx) {
           // what the character panel shows (the panel overlays defaults at
           // render time). Schema is discovered by its well-known namespace/key,
           // not by a hardcoded world-data plugin id.
-          const schema = await loadCharacterAttributesSchema(s, sessionId);
+          const schema = ctx.world.characterSchema;
           const fields = mergeSchemaDefaults(stripNameKeys(values), schema);
           const character = {
             id,
@@ -85,23 +84,35 @@ export default async function guard(ctx) {
             createdAt: now,
             updatedAt: now,
           };
-          await s.upsertCharacter(character);
-          await mirrorPlayer(s, sessionId, character);
+
           await logger?.info("player-init guard created submitted player", {
             playerId: id,
           });
-          return {
-            skip: true,
-            playerExists: true,
-            playerId: id,
-            playerName: name,
-            narrativeOutput: pick(
-              locale,
-              `[系统] 已创建角色 ${name}，冒险即将开始……`,
-              `[System] Character ${name} created — your adventure is about to begin…`,
-            ),
-            preGameDone: true,
-          };
+          return withPendingProposals(
+            {
+              skip: true,
+              playerExists: true,
+              playerId: id,
+              playerName: name,
+              narrativeOutput: pick(
+                locale,
+                `[系统] 已创建角色 ${name}，冒险即将开始……`,
+                `[System] Character ${name} created — your adventure is about to begin…`,
+              ),
+              preGameDone: true,
+            },
+            [
+              makeProposal(ctx, now, "character.upsert", {
+                id,
+                name,
+                type: "player",
+                description: character.description,
+                fields,
+                version: 1,
+                createdAt: now,
+              }),
+            ],
+          );
         } catch (err) {
           // A valid UI submission can still violate the world attribute types.
           // Preserve it for correction; never let an LLM silently reinterpret it.
@@ -132,38 +143,6 @@ export default async function guard(ctx) {
 }
 
 /**
- * Discover the session's character-attribute schema by its well-known
- * `(namespace='schema', key='character-attributes')` location, across all
- * pluginIds — so char-creator never hardcodes the world-data provider's id
- * (framework/plugin isolation). Returns null when unavailable.
- * @param {any} store
- * @param {string} sessionId
- * @returns {Promise<import('@covel/shared').CharacterAttributeSchema | null>}
- */
-async function loadCharacterAttributesSchema(store, sessionId) {
-  if (typeof store.listPluginDataSessionScope !== "function") return null;
-  try {
-    const rows = await store.listPluginDataSessionScope(sessionId);
-    const row = Array.isArray(rows)
-      ? rows.find(
-          (r) => r.namespace === "schema" && r.key === "character-attributes",
-        )
-      : null;
-    const value = row?.value;
-    if (
-      !value ||
-      typeof value !== "object" ||
-      !Array.isArray(/** @type {any} */ (value).attributes)
-    ) {
-      return null;
-    }
-    return /** @type {any} */ (value);
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Fetch the most recent player_inputs row for this session, or null.
  * @param {any} store
  * @param {string} sessionId
@@ -171,7 +150,7 @@ async function loadCharacterAttributesSchema(store, sessionId) {
 async function latestSubmission(store, sessionId) {
   if (typeof store.listPlayerInputs !== "function") return null;
   try {
-    const inputs = await store.listPlayerInputs(sessionId);
+    const inputs = await store.listPlayerInputs();
     if (!Array.isArray(inputs) || inputs.length === 0) return null;
     return inputs[inputs.length - 1];
   } catch {
@@ -222,32 +201,4 @@ function stripNameKeys(values) {
   const { characterName, name, 姓名, playerName, ...rest } =
     /** @type {any} */ (values);
   return rest;
-}
-
-/**
- * Mirror the player into plugin_data so the character panel can read it.
- * @param {any} store
- * @param {string} sessionId
- * @param {{
- *   id: string;
- *   name: string;
- *   type: string;
- *   description?: string;
- *   fields?: unknown;
- *   version: number;
- *   createdAt: string;
- *   updatedAt: string;
- * }} character
- */
-async function mirrorPlayer(store, sessionId, character) {
-  await mirrorCharacterToPluginData(store, sessionId, CHARACTER_PLUGIN_ID, {
-    id: character.id,
-    name: character.name,
-    type: character.type,
-    description: character.description,
-    fields: character.fields,
-    version: character.version,
-    createdAt: character.createdAt,
-    updatedAt: character.updatedAt,
-  });
 }

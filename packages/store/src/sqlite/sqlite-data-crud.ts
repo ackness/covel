@@ -21,7 +21,6 @@ export function createSqliteDataCrud(db: SqliteDb): SqliteDataCrud {
     runner: createSqliteSqlRunner(db),
     tables: {
       pluginData: schema.pluginData,
-      workingMemory: schema.workingMemory,
       worldDataImportLedger: schema.worldDataImportLedger,
       lorebookEntries: schema.lorebookEntries,
     },

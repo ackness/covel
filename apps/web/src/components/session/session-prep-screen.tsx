@@ -101,6 +101,8 @@ export function SessionPrepScreen({
     lockedPluginIds,
     selectedPluginSummaries,
     selectedPluginIds,
+    requestedPluginIds,
+    excludedPluginIds,
     selectedPluginIdSet,
     pluginPlan,
     pluginPlanLoading,
@@ -216,7 +218,7 @@ export function SessionPrepScreen({
           ...step,
           runtimeType: step.runtimeType ?? runtime.runtimeType,
           outputKind: step.outputKind ?? runtime.outputKind,
-          capabilities: step.capabilities ?? runtime.capabilities,
+          outputContract: step.outputContract ?? runtime.outputContract,
           execution: step.execution ?? runtime.execution,
           turnCompletion: step.turnCompletion ??
             runtime.turnCompletion ?? { mode: "await" },
@@ -247,7 +249,11 @@ export function SessionPrepScreen({
     if (isStarting || pluginPlanUnavailable || loreUnavailable) return;
     setIsStarting(true);
     try {
-      await onStart(startPluginsPayload(selectedPluginIds), lore.value);
+      await onStart(
+        startPluginsPayload(requestedPluginIds),
+        lore.value,
+        excludedPluginIds,
+      );
     } catch {
       // startGameSession stores the actionable message in session state; keep
       // this handler settled while the prep screen renders that message.
@@ -260,6 +266,8 @@ export function SessionPrepScreen({
     loreUnavailable,
     lore.value,
     selectedPluginIds,
+    requestedPluginIds,
+    excludedPluginIds,
     onStart,
   ]);
 

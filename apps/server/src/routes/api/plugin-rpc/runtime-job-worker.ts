@@ -61,6 +61,20 @@ export function parseStagedRuntimeJobPayload(
   ) {
     return undefined;
   }
+  const digest = descriptor.turnDigest;
+  if (
+    digest !== undefined &&
+    (!digest ||
+      typeof digest !== "object" ||
+      Array.isArray(digest) ||
+      typeof digest.turnId !== "string" ||
+      typeof digest.playerMessage !== "string" ||
+      typeof digest.narrativeText !== "string" ||
+      !Array.isArray(digest.toolCallSummaries) ||
+      digest.toolCallSummaries.some((item) => typeof item !== "string") ||
+      (digest.locale !== undefined && typeof digest.locale !== "string"))
+  )
+    return undefined;
   return payload as StagedRuntimeJobPayload;
 }
 
@@ -77,6 +91,11 @@ export interface RuntimeJobExecutionControl {
   /** Persist success in the same transaction as every domain write. */
   completeInTx(tx: StoreTransaction, result?: unknown): Promise<void>;
 }
+
+export type RuntimeJobExecutor = (
+  job: RuntimeJobRecord,
+  control: RuntimeJobExecutionControl,
+) => Promise<void>;
 
 export interface RuntimeJobWorker {
   /** Signal that newly committed queue rows may be available. */
@@ -229,10 +248,16 @@ export function createRuntimeJobWorker(args: {
   readonly store: DataStore;
   readonly eventBus: EventBus;
   readonly tryWithCommitLock: NonNullable<SessionLock["tryWithLock"]>;
-  readonly execute: (
+  readonly execute: RuntimeJobExecutor;
+  /**
+   * Capture request services before claiming. A missing executor leaves the
+   * job queued; a captured closure remains valid if the handoff TTL expires.
+   */
+  readonly prepareExecution?: (
     job: RuntimeJobRecord,
-    control: RuntimeJobExecutionControl,
-  ) => Promise<void>;
+  ) => RuntimeJobExecutor | undefined | Promise<RuntimeJobExecutor | undefined>;
+  /** Resolve credential readiness before claiming; never persist request secrets. */
+  readonly canExecute?: (job: RuntimeJobRecord) => boolean | Promise<boolean>;
   readonly concurrency?: number;
   readonly leaseMs?: number;
   readonly ownerId?: string;
@@ -292,7 +317,10 @@ export function createRuntimeJobWorker(args: {
     return changed;
   };
 
-  const runOne = async (claimed: RuntimeJobRecord): Promise<void> => {
+  const runOne = async (
+    claimed: RuntimeJobRecord,
+    execute: RuntimeJobExecutor,
+  ): Promise<void> => {
     let current = claimed;
     let renewalTimer: ReturnType<typeof setTimeout> | undefined;
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
@@ -400,7 +428,7 @@ export function createRuntimeJobWorker(args: {
         timeoutTimer.unref?.();
       }
 
-      const execution = args.execute(current, {
+      const execution = execute(current, {
         signal: executionAbort.signal,
         assertCurrent: async () => {
           executionAbort.signal.throwIfAborted();
@@ -557,11 +585,20 @@ export function createRuntimeJobWorker(args: {
     }
 
     while (!closed && activeCount < concurrency) {
+      let prepared: RuntimeJobExecutor | undefined;
       const claimed = await claimNextRuntimeJob(args.store, {
         ownerId,
         leaseMs,
         ...(sessionCursor ? { afterSessionId: sessionCursor } : {}),
         excludeRuntimeKeys: activeRuntimeKeys,
+        canClaim: async (job) => {
+          prepared = undefined;
+          if (args.canExecute && !(await args.canExecute(job))) return false;
+          prepared = args.prepareExecution
+            ? await args.prepareExecution(job)
+            : args.execute;
+          return prepared !== undefined;
+        },
       });
       if (!claimed) {
         if (!maintained) await reconcileTerminalJobs();
@@ -570,7 +607,7 @@ export function createRuntimeJobWorker(args: {
       sessionCursor = claimed.nextSessionCursor;
       activeCount++;
       activeRuntimeKeys.add(runtimeKey(claimed.job));
-      const task = runOne(claimed.job);
+      const task = runOne(claimed.job, prepared!);
       activeTasks.add(task);
       void task.then(() => activeTasks.delete(task));
     }

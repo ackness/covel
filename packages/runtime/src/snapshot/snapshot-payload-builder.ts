@@ -24,7 +24,6 @@ import type {
   CharacterRecord,
   StateEntryRecord,
   PluginDataRecord,
-  WorkingMemoryRecord,
   SessionSummaryRecord,
   LorebookEntryRecord,
   SuspensionRecord,
@@ -80,9 +79,6 @@ export async function buildSnapshotPayload(
     (row) => row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs",
   );
 
-  // Working memory
-  const workingMemory: readonly WorkingMemoryRecord[] =
-    await store.listWorkingMemory(sessionId);
   const runtimeExports = await store.listRuntimeExports(sessionId, {
     latestOnly: true,
   });
@@ -159,10 +155,10 @@ export async function buildSnapshotPayload(
         : {}),
     },
     characters,
+    characterSchema: await store.getCharacterSchema(sessionId),
     stateSchemas,
     stateEntries,
     pluginData,
-    workingMemory,
     runtimeExports,
     sessionSummaries,
     compactedMessageSummaryIds,

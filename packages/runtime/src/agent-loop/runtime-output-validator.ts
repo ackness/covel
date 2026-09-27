@@ -13,8 +13,6 @@
  */
 
 import {
-  validateWorldIRV1,
-  WORLD_IR_V1_SCHEMA_URI,
   type RuntimeManifest,
   type RuntimeResult,
   type TurnInput,
@@ -112,17 +110,9 @@ export function checkSchemaValidation(
     outputSchema,
   } = ctx;
   const validation = validateOutput(output, outputSchema);
-  const semanticValidation =
-    validation.valid && outputSchema.$id === WORLD_IR_V1_SCHEMA_URI
-      ? validateWorldIRV1(output)
-      : undefined;
   let validationErrors: readonly string[];
   if (!validation.valid) {
     validationErrors = validation.errors ?? ["unknown schema validation error"];
-  } else if (semanticValidation && !semanticValidation.valid) {
-    validationErrors = semanticValidation.errors.map(
-      (error) => `${error.path}: ${error.message}`,
-    );
   } else {
     return undefined;
   }

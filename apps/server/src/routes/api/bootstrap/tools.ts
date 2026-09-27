@@ -16,14 +16,11 @@ import {
   createPluginDataTools,
   createCharacterTools,
   buildSessionCharacterWriteTools,
-  createWorldDimensionTools,
   createEmitEventTool,
   suspendTool,
   runtimeDoneTool,
   type ToolModule,
-  type CharacterToolDeps,
 } from "@covel/tools";
-import { FrameworkCapability } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   createToolExecutor,
@@ -89,20 +86,7 @@ export async function setupPluginTools(
   const emitEventTool = createEmitEventTool({ directory: eventDirectory });
   tools.registerBuiltin(emitEventTool);
 
-  // Register character management tools (writes characters table + mirrors to plugin-data).
-  // `findWorldDataPluginId` lets create/update-character locate the schema
-  // produced by whichever plugin declares `capabilities: [world-data-provider]`
-  // (framework/plugin isolation — same pattern as world-dimension tools).
-  // When present, write tools append soft schema warnings to their `_text`
-  // output so the LLM can self-correct.
-  const characterToolDeps: CharacterToolDeps = {
-    findWorldDataPluginId: (sessionId) =>
-      registry.findPluginByCapability(
-        sessionId,
-        FrameworkCapability.WorldDataProvider,
-      ),
-  };
-  for (const t of createCharacterTools(store, characterToolDeps)) {
+  for (const t of createCharacterTools(store)) {
     tools.registerBuiltin(t);
   }
 
@@ -123,44 +107,14 @@ export async function setupPluginTools(
   ]);
 
   async function prepareToolsForSession(sessionId: string): Promise<void> {
-    if (typeof store.getPluginData !== "function") return;
-    const worldPluginId = characterToolDeps.findWorldDataPluginId?.(sessionId);
-    if (!worldPluginId) {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-    let row: { value: unknown; updatedAt: string } | null = null;
-    try {
-      row = await store.getPluginData(
-        sessionId,
-        worldPluginId,
-        "schema",
-        "character-attributes",
-      );
-    } catch {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-    const value = row?.value;
-    if (!value || typeof value !== "object") {
-      sessionToolOverrides.delete(sessionId);
-      return;
-    }
-    const schemaShape = value as { attributes?: unknown };
-    if (
-      !Array.isArray(schemaShape.attributes) ||
-      schemaShape.attributes.length === 0
-    ) {
+    const value = await store.getCharacterSchema(sessionId);
+    if (!value) {
       sessionToolOverrides.delete(sessionId);
       return;
     }
 
     const overrides = new Map<string, ToolModule>();
-    for (const t of buildSessionCharacterWriteTools(
-      store,
-      characterToolDeps,
-      value as Parameters<typeof buildSessionCharacterWriteTools>[2],
-    )) {
+    for (const t of buildSessionCharacterWriteTools(store, value)) {
       overrides.set(t.name, t);
     }
     sessionToolOverrides.set(sessionId, overrides);
@@ -168,18 +122,6 @@ export async function setupPluginTools(
 
   function clearSessionToolOverrides(sessionId: string): void {
     sessionToolOverrides.delete(sessionId);
-  }
-
-  // Register world-dimension query tools so agent runtimes can fetch only the
-  // fields they need instead of relying on bulk prompt injection.
-  for (const t of createWorldDimensionTools(store, {
-    findWorldDataPluginId: (sessionId) =>
-      registry.findPluginByCapability(
-        sessionId,
-        FrameworkCapability.WorldDataProvider,
-      ),
-  })) {
-    tools.registerBuiltin(t);
   }
 
   // Approval: whitelist builtin + known local tools, deny unknown third-party

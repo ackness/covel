@@ -25,18 +25,24 @@ const stubAi = {
 } as unknown as Parameters<typeof createMiscApiRoutes>[0];
 
 const MANIFEST = `---
-name: panel-plugin
+id: panel-plugin
+kind: plugin
 description: Panel plugin
-pluginType: plugin
-runtimeType: function
-handler: ./handler.js
-outputKind: plugin
-execution: sync
-trigger:
-  type: manual
-ui:
-  right:
-    - ./ui/panel.json
+contributes:
+  ui:
+    right:
+      - ./ui/panel.json
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+    manual:
+      execution: sync
+  io:
+    visibility: plugin
+  function:
+    handler: ./handler.js
 ---
 `;
 

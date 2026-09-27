@@ -66,20 +66,10 @@ export interface PlayerInputRecord {
   readonly createdAt: string;
 }
 
-export interface WorkingMemoryRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly key: string;
-  readonly scope: "player" | "story" | "shared";
-  readonly value: unknown;
-  readonly schemaRef?: string;
-  readonly updatedAt: string;
-}
-
 export interface LorebookEntryRecord {
   readonly id: string;
   readonly sessionId: string;
-  readonly pluginId: string;
+  readonly owner: import("@covel/shared").LorebookOwner;
   readonly keys: readonly string[];
   readonly content: string;
   readonly strategy: "constant" | "selective";

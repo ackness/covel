@@ -8,38 +8,27 @@ const context = {
   turnId: "t",
   runtimeId: "char-creator/player-init",
   pluginId: "char-creator",
-  inputSlots: {
-    "same-turn-world-schema": {
-      cardinality: "one",
-      source: {
-        pluginId: "world-init",
-        runtimeId: "world-init/schema-gen",
-        resultId: "schema-result",
-      },
-      value: {
-        "character-attributes": {
-          version: 1,
-          attributes: [
-            { id: "motive", name: "Motive", type: "string", category: "bio" },
-            {
-              id: "systems",
-              name: "Systems",
-              type: "number",
-              category: "abilities",
-              min: 0,
-              max: 5,
-              defaultValue: 2,
-            },
-            {
-              id: "occupation",
-              name: "Occupation",
-              type: "enum",
-              category: "bio",
-              options: ["engineer", "medic"],
-            },
-          ],
+  world: {
+    characterSchema: {
+      attributes: [
+        { id: "motive", name: "Motive", type: "string", category: "bio" },
+        {
+          id: "systems",
+          name: "Systems",
+          type: "number",
+          category: "abilities",
+          min: 0,
+          max: 5,
+          defaultValue: 2,
         },
-      },
+        {
+          id: "occupation",
+          name: "Occupation",
+          type: "enum",
+          category: "bio",
+          options: ["engineer", "medic"],
+        },
+      ],
     },
   },
 };

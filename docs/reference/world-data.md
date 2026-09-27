@@ -13,9 +13,11 @@ worlds/my-world/
 ├── data/
 │   ├── world.data.yaml
 │   ├── dimensions.yaml
+│   ├── memory-blocks.json            # 可选：题材记忆定义
 │   └── rules/                       # 可选：题材规则，导入 living-world-rules
 ├── characters/
-│   └── main-cast.json
+│   ├── main-cast.json                # 可选：character.blueprints@1 插件内容
+│   └── characters.json               # 通用领域角色记录
 └── media/
     ├── portraits.json               # 可选：立绘生成清单
     ├── portraits/                   # 可选：角色立绘
@@ -34,16 +36,16 @@ name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
 pluginPolicy:
-  preset: traditional-story
-  requiredPlugins:
+  presetId: traditional-story
+  requested:
     - pregame
     - world-init
     - char-creator
-  recommendedPlugins:
+  recommended:
     - character-blueprint
-  preferTags:
+  preferredTags:
     - mode:traditional-story
-  avoidTags:
+  avoidedTags:
     - mode:dialogue
 worldData: data/world.data.yaml
 defaultViewMode: stage
@@ -55,35 +57,33 @@ defaultViewMode: stage
 
 AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/lorebook.yaml`，并和 dimensions 一起写入 `data/world.data.yaml`。文件型世界在创建 session 时始终按 descriptor 导入。
 
-`server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口在临时目录完成同样的解析和校验后，把角色放入 `WorldRecord.metadata.characterBlueprints`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
+`server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口在临时目录完成同样的解析和校验后，把通用领域角色放入 `WorldRecord.metadata.embeddedCharacters`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
 
-### 两种完整内置示例
+### 三个完整内置示例
 
-世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内两个中文世界展示了两条互补路线：
+世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内三个世界展示了不同的数据组合：
 
-| 示例                    | 玩家体验                             | 主要能力                                                                                                                                                         | 适合参考的文件                                                                                                                    |
-| ----------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，行动与环境叙事为主     | 基于传统叙事的自定义 `mistport-investigation` 组合、按 locale 选择的世界观 / 角色 / 规则 / presence、题材记忆块、角色属性 schema、角色蓝图、立绘、潮汐与势力规则 | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                       |
-| `worlds/haruka-academy` | 校园群像恋爱，对话与视觉小说舞台为主 | `dialogue-mode` 策略、`defaultViewMode: stage`、关系数值、题材记忆块、角色蓝图、透明立绘 presence、地点对应的日 / 夜场景注册表、校园日程规则                     | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/scenes.json`、`media/scenes.registry.json` |
+| 示例                    | 玩家体验                                 | 主要能力                                                                                                                                                         | 适合参考的文件                                                                                                                    |
+| ----------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，行动与环境叙事为主         | 基于传统叙事的自定义 `mistport-investigation` 组合、按 locale 选择的世界观 / 角色 / 规则 / presence、题材记忆块、角色属性 schema、角色蓝图、立绘、潮汐与势力规则 | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                       |
+| `worlds/haruka-academy` | 校园群像恋爱，对话与视觉小说舞台为主     | `dialogue-mode` 策略、`defaultViewMode: stage`、关系数值、题材记忆块、角色蓝图、透明立绘 presence、地点对应的日 / 夜场景注册表、校园日程规则                     | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/scenes.json`、`media/scenes.registry.json` |
+| `worlds/emberback`      | 太阳风暴中的协作救援，RPG 资源与任务推进 | 领域角色、插件角色卡、记忆定义、规则、任务、物品和好感种子                                                                                                       | `data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/characters.json`                                         |
 
-两者都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
+三者都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
-`defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。目前仅 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）有效，其他值按 `parsed` 处理。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
+`defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。接受 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）或 `parsed`。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
-> **请把 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 写在 `pluginPolicy` 下**。写在顶层同样被接受，加载时**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源；但顶层无法表达 `preset` / `packs` / `preferTags` 等场景意图。
+`pluginPolicy` 只描述选择意图，不锁死核心插件。会话解析器依据插件包公开的 `provides/requires/optional/conflicts` contract 和授权状态生成最终激活集。
 
-`pluginPolicy` 字段：
+| 字段                            | 说明                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
+| `presetId`                      | 默认组合包 ID，可引用 `packs[].id` 或内置 preset                                        |
+| `preferredTags` / `avoidedTags` | 插件标签偏好                                                                            |
+| `requested`                     | 世界建议作为初始选择的插件 ID                                                           |
+| `recommended`                   | 额外推荐插件 ID                                                                         |
+| `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/tags/reason` |
 
-| 字段                  | 说明                                                                                                                         |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `preset`              | 默认选中的组合包 ID；可引用同一策略内的自定义 `packs[].id`，或内置的 `traditional-story`、`dialogue-mode`、`low-cost`。      |
-| `preferTags`          | 默认选中匹配这些插件 `tags` 的插件。                                                                                         |
-| `avoidTags`           | 默认关闭匹配这些插件 `tags` 的插件。                                                                                         |
-| `requireCapabilities` | 要求启用的机器能力标签。                                                                                                     |
-| `requiredPlugins`     | 额外锁定启用的插件。                                                                                                         |
-| `recommendedPlugins`  | 额外默认启用的插件。                                                                                                         |
-| `excludedPlugins`     | 额外默认关闭的插件。                                                                                                         |
-| `packs`               | 自定义组合包列表，每项可含 `id`、`label`、`description`、`plugins`、`optionalPlugins`、`excludedPlugins`、`tags`、`reason`。 |
+世界清单采用严格的当前 schema；不接受旧选择字段，也不会把顶层字段折叠为另一套格式。
 
 ### 启动加载与收敛（seed & reconcile）
 
@@ -132,28 +132,46 @@ pluginSettings:
     dialogueRatio: 70
 ```
 
-它是配置解析链的中间层：**玩家覆盖（`X-Plugin-User-Settings` header）→ 世界默认（`pluginSettings`）→ manifest 默认（`userSettings[].default`）**。玩家仍可在设置里覆盖每个值；未声明的 key 无害——runtime 只读插件真正声明过的 key。加载后写入 `WorldRecord.metadata.pluginSettings`，并在 `/api/actions` 回合边界与玩家 header 合并后注入 `TurnInput.userSettings`（供 agent 的 `{{ userSettings.* }}`、guard、hook 共用）。`pluginSettings` 只设默认值，不影响[插件选择](#world-package)（选择仍由 `pluginPolicy` 决定）。
+它是配置解析链的中间层：**玩家覆盖（`X-Plugin-User-Settings` header）→ 世界默认（`pluginSettings`）→ manifest 默认（`contributes.settings[].default`）**。玩家仍可在设置里覆盖每个值；未声明的 key 无害——runtime 只读插件真正声明过的 key。加载后写入 `WorldRecord.metadata.pluginSettings`，并在 `/api/actions` 回合边界与玩家 header 合并后注入 `TurnInput.userSettings`（供 agent 的 `{{ userSettings.* }}`、guard、hook 共用）。`pluginSettings` 只设默认值，不影响[插件选择](#world-package)（选择仍由 `pluginPolicy` 决定）。
 
-### 世界记忆块（`memoryBlocks`）
+### 世界记忆定义（`memory.blocks@1`）
 
-`world.yaml` 顶层可声明 `memoryBlocks`，让世界添加**题材特有的核心记忆维度**（如侦探世界的 `clues` / `suspects`），无需 fork 插件。字段形状与插件 `PLUGIN.md` 的 `memoryBlocks` 完全一致（`label` / `displayName` / `extractionHint` / `icon?` / `maxChars?`）：
+记忆定义通过普通 world-data contract 导入。`data/memory-blocks.json` 保存一个对象，`id` 固定为 `world`，不是裸数组：
 
-```yaml
-memoryBlocks:
-  - label: clues
-    displayName: { zh-CN: 线索, en-US: Clues }
-    extractionHint:
-      zh-CN: 已发现的线索、物证及其与嫌疑人的关联。
-      en-US: Discovered clues, evidence, and links to suspects.
-    icon: Search
-  - label: suspects
-    displayName: { zh-CN: 嫌疑人, en-US: Suspects }
-    extractionHint:
-      zh-CN: 已知嫌疑人、动机与可信度变化。
-      en-US: Known suspects, their motives, and credibility shifts.
+```json
+{
+  "id": "world",
+  "blocks": [
+    {
+      "label": "clues",
+      "displayName": { "zh-CN": "线索", "en-US": "Clues" },
+      "extractionHint": {
+        "zh-CN": "记录已发现的线索及关联。",
+        "en-US": "Track discovered clues and their connections."
+      },
+      "icon": "Search",
+      "maxChars": 1200
+    }
+  ]
+}
 ```
 
-加载后写入 `WorldRecord.metadata.memoryBlocks`。记忆系统**按 session 解析**块 schema：把该 session 所属世界的块**合并到**全局插件块之上——基础块（插件 / 框架默认）在标签冲突时优先（builtin 默认受保护），世界只**新增**未占用的标签。这样侦探世界的会话才会出现 `clues` / `suspects`，其它题材的会话不受影响。完整块字段见 [plugins.md #memoryblocks核心记忆块](plugins.md#memoryblocks核心记忆块)。
+对应 descriptor：
+
+```yaml
+schemaVersion: 1
+sources:
+  memory-definitions:
+    kind: json
+    path: data/memory-blocks.json
+    schema: contract:memory.blocks@1
+    to: contract:memory.blocks@1
+    key: id
+```
+
+`memory` 插件在 `contributes.data.definitions.accepts` 声明 `memory.blocks@1`，因此该对象导入其自身 `definitions/world` 记录。世界清单与世界 metadata 不承载记忆定义专用字段。提取结果保存在该插件的 `blocks` namespace，并经 `prompt.segment@1` 注入提示词。
+
+标签必须符合 `^[a-z][a-z0-9_]*$`，`displayName/extractionHint` 支持 I18nText，`maxChars` 为正整数。插件先加载固定的基础定义，再加载活跃插件的 `memory.block-definitions@1` 服务，最后加载世界定义；已占用标签保留先前定义。三个内置世界均采用此文件与 contract 结构。
 
 ## Descriptor
 
@@ -171,36 +189,36 @@ sources:
   cast:
     kind: json
     path: characters/main-cast.json
-    schema: plugin://character-blueprint/blueprints
-    to: plugin:character-blueprint/blueprints
+    schema: contract:character.blueprints@1
+    to: contract:character.blueprints@1
     key: id
-    effects:
-      - characters
     after: dimensions
+
+  characters:
+    kind: json
+    path: characters/characters.json
+    to: characters
+    key: id
+    after: cast
 ```
 
 字段：
 
-| 字段      | 必填 | 可选值 / 格式                                                                                                 | 说明                                                                                      |
-| --------- | ---- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `kind`    | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                                                   | source 读取器类型。                                                                       |
-| `path`    | yes  | 非空字符串                                                                                                    | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。 |
-| `schema`  | no   | `covel://world/dimensions`、`covel://world/ir/v1`、`plugin://<pluginId>/<namespace>`、或本地 JSON Schema path | 校验用 schema。`plugin://...` 是 schema URI。                                             |
-| `to`      | yes  | 见 [Target URI](#target-uri)                                                                                  | 写入目标 URI。`plugin:<id>/<namespace>` 是 target URI。                                   |
-| `key`     | no   | 简单字段名，例如 `id`、`characterId`、`filename`                                                              | 批量 source 的稳定 key。media 常用 `filename`。                                           |
-| `indexTo` | no\* | `plugin:<id>/<namespace>`                                                                                     | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。        |
-| `effects` | no   | `characters`、`projections`                                                                                   | 额外投影；`characters` 实例化角色，`projections` 调用已启用插件声明的纯投影。             |
-| `after`   | no   | source id 或 source id 数组                                                                                   | source 顺序依赖。source id 必须先声明且满足命名规则。                                     |
-| `enabled` | no   | boolean                                                                                                       | `false` 会跳过该 source。                                                                 |
-| `locale`  | no   | 长度至少 2 的字符串                                                                                           | source 对应的内容语言。                                                                   |
-| `merge`   | no   | `replace`、`skipExisting`                                                                                     | 写入冲突策略。                                                                            |
+| 字段      | 必填 | 可选值 / 格式                                                                | 说明                                                                                      |
+| --------- | ---- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `kind`    | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                  | source 读取器类型。                                                                       |
+| `path`    | yes  | 非空字符串                                                                   | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。 |
+| `schema`  | no   | `covel://world/dimensions`、`contract:<contractId>`、或本地 JSON Schema path | 校验用 schema。contract 的 JSON Schema 由已注册包声明。                                   |
+| `to`      | yes  | 见 [Target URI](#target-uri)                                                 | 写入目标 URI。contract target 解析为活跃接收方。                                          |
+| `key`     | no   | 简单字段名，例如 `id`、`characterId`、`filename`                             | 批量 source 的稳定 key。media 常用 `filename`。                                           |
+| `indexTo` | no\* | `contract:<contractId>`                                                      | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。        |
+| `effects` | no   | `characters`、`projections`                                                  | 额外投影；`characters` 实例化角色，`projections` 调用已启用插件声明的纯投影。             |
+| `after`   | no   | source id 或 source id 数组                                                  | source 顺序依赖。source id 必须先声明且满足命名规则。                                     |
+| `enabled` | no   | boolean                                                                      | `false` 会跳过该 source。                                                                 |
+| `locale`  | no   | 长度至少 2 的字符串                                                          | source 对应的内容语言。                                                                   |
+| `merge`   | no   | `replace`、`skipExisting`                                                    | 写入冲突策略。                                                                            |
 
-> **media source 必须同时声明 `key` 和 `indexTo`**，否则整条 source 静默失效：
->
-> - 缺 `key` → 每个文件产出一条 error 诊断（`media source "<id>" needs key: filename or a literal key`）并被跳过。
-> - 缺 `indexTo` → 规划阶段不产出任何 `media-index` write；而**媒体字节的落库正是挂在这种 write 上**（`session-import/media-handling.ts` 只对 `kind: "media-index"` 调 `mediaStore.put()`）。结果是字节从不进 MediaStore，后续按 sha256 引用它的 `MediaRef` 全部解析失败。
->
-> 声明的 `indexTo` 插件未被玩家启用是另一回事：那属于 warning 级降级，字节照常导入、只跳过索引写入。
+media source 应同时声明 `key: filename` 和 `indexTo: contract:<contractId>`。缺 key 会产生 error；缺 indexTo 无法生成媒体索引写入。当前媒体字节持久化随有效 media-index write 执行，因此没有活跃索引接收方时不会导入该 source 的字节。此时产生 warning，不阻断其他数据与投影；启用接收插件后可通过 sync 补导入。
 
 ### Locale 变体解析（`<name>.<locale>.<ext>`）
 
@@ -224,18 +242,18 @@ data/rules/tide-mystery.en.yaml
 
 当前支持：
 
-| URI                                | 阶段           | 说明                                                                                       |
-| ---------------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
-| `world:metadata.<path>`            | world load     | 写入 `WorldRecord.metadata` 子路径；当前 world-load MVP 只投影 `world:metadata.dimensions` |
-| `plugin:<id>/<namespace>`          | session create | 写入目标插件的 `plugin_data`                                                               |
-| `plugin:<id>/<namespace>+lorebook` | session create | 写入 `plugin_data`，并同步生成 session lorebook row                                        |
-| `lorebook`                         | session create | 直接写入 session lorebook                                                                  |
-| `characters`                       | session create | 直接 upsert session character                                                              |
-| `media` + `indexTo`                | session create | 导入媒体并把索引写入 `plugin_data`                                                         |
+| URI                              | 阶段           | 说明                                                                                       |
+| -------------------------------- | -------------- | ------------------------------------------------------------------------------------------ |
+| `world:metadata.<path>`          | world load     | 写入 `WorldRecord.metadata` 子路径；当前 world-load MVP 只投影 `world:metadata.dimensions` |
+| `contract:<contractId>`          | session create | 写入所有活跃接收方声明的自身 namespace                                                     |
+| `contract:<contractId>+lorebook` | session create | 写入 `plugin_data`，并同步生成 session lorebook row                                        |
+| `lorebook`                       | session create | 直接写入 session lorebook                                                                  |
+| `characters`                     | session create | 将通用角色记录写入会话 World Model                                                         |
+| `media` + `indexTo`              | session create | 导入媒体并把索引写入 `plugin_data`                                                         |
 
 ### Lorebook 按玩家消息选择性注入
 
-`to: lorebook` 会在创建 session 时把 source 的每个值写成 lorebook 记录。适合大型世界设定的最小 descriptor：
+`to: lorebook` 会在创建 session 时把 source 的每个值写成 `{kind:"world"}` owner 的 lorebook 记录。身份键为 `(sessionId, owner, id)`，不会覆盖 player 或 plugin owner 的同名词条。适合大型世界设定的最小 descriptor：
 
 ```yaml
 # world.yaml
@@ -274,39 +292,23 @@ sources:
 
 World Data 在 session 创建阶段导入。已有 session 需要通过本页的 `sync-data` 接口同步；先调用 `preflight` 可在写入前查看诊断。
 
-URI grammar：
+### Contract 解析与预检
 
-| Syntax                                   | 用途       | 规则                                                                                                                                |
-| ---------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `plugin:<pluginId>/<namespace>`          | target URI | `pluginId` 匹配 `^[a-z][a-z0-9-]*$`；`namespace` 匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。                                                |
-| `plugin:<pluginId>/<namespace>+lorebook` | target URI | 同时写 `plugin_data` 和 lorebook。                                                                                                  |
-| `plugin://<pluginId>/<namespace>`        | schema URI | 用于 `schema` 字段，指向插件 `dataSchemas.<namespace>`。                                                                            |
-| `covel://world/dimensions`               | schema URI | 内置 world dimensions schema。                                                                                                      |
-| `covel://world/ir/v1`                    | schema URI | 内置、严格、版本化的插件中立 WorldIR envelope。                                                                                     |
-| `world:metadata.<path>`                  | target URI | path 只允许字母、数字、`_`、`.`、`-`；禁止 `__proto__`、`constructor`、`prototype`；当前拒绝 `world:metadata.characterBlueprints`。 |
+`contract:<contractId>` 同时可用于 schema、target 和 media index。contract ID 匹配 `^[a-z][a-z0-9.-]*@[1-9][0-9]*$`，例如 `character.blueprints@1`。`+lorebook` 只用于 target，同时生成一份 world owner 的 lorebook 记录；多个接收方不会重复生成该领域记录。
 
-`plugin://...` 和 `plugin:...` 的用途不同：`schema` 说明“用哪个 schema 校验”，`to` 说明“写到哪里”。因此同一个 source 通常同时写：
+schema 引用从已注册插件根 `contracts.<id>.schema` 解析，文件位于该插件根内。target 则匹配根 `contributes.data.<namespace>.accepts`，稳定排序后写入每个活跃接收方。schema 与 target 是独立契约：源值先通过来源 schema，再通过每个接收 namespace 的 schema。
 
-```yaml
-schema: plugin://character-blueprint/blueprints
-to: plugin:character-blueprint/blueprints
-```
+- 没有任何注册接收方属于作者错误，产生 error。
+- 已注册但没有活跃接收方产生 warning，仅跳过该 contract 写入；其他领域 source 与独立 projection 继续处理。
+- 多个活跃接收方允许 fan-out；数据不因包目录布局绑定具体插件 ID。
+- 缺 schema、越界路径、文件读取失败或值校验失败产生 error，阻断导入。
+- world load 校验内置与本地 schema；contract schema 在 session import/preflight 时结合 registry 校验。
 
-`plugin:*/*` 与 `indexTo` 都会做 preflight：
-
-- 目标插件已注册。
-- 目标 namespace 在插件 `dataSchemas` 中声明。
-- `acceptsWorldData: true`。
-- `schema` 为 `plugin://<id>/<namespace>` 时必须和 `to: plugin:<id>/<namespace>` 兼容。
-- 插件包内 JSON Schema、world/override 本地 JSON Schema 或内置 schema 校验通过。
-
-以上为 **error 级**（作者错误，阻断导入）。**目标插件是否在本 session 最终启用插件列表中**是玩家选择的结果，不算作者错误：`to: plugin:*` 目标未激活时该 source 整体跳过（warning 级诊断）；`indexTo` 目标未激活时媒体字节照常导入，仅跳过索引写入（warning 级）。世界给可选插件携带数据因此是安全的——玩家取消勾选对应插件不会导致建会话失败。
-
-world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` schema 在 session import/preflight 阶段结合当前启用插件严格校验。
+`world:metadata.<path>` 拒绝原型污染路径段；当前 world-load 仅物化 `dimensions`，其他路径仅记录在 source summary。领域角色与 lorebook 使用专用 target。
 
 ## WorldIR 与插件投影
 
-`covel://world/ir/v1` 是插件中立的中间表示。它让 world 作者或上游抽取器只维护一份世界事实，再由各插件把相同输入转换成自己的 `dataSchemas` 记录。v1 envelope 顶层和每类记录都拒绝未知字段；插件专用扩展只能放在 `attributes` 中：
+`contract:world-ir@1` 引用 `world-ir` 插件发布的中立中间表示 schema。它让 world 作者或上游抽取器只维护一份世界事实，再由各插件把相同输入转换成自己的 `contributes.data` 记录。v1 envelope 顶层和每类记录都拒绝未知字段；插件专用扩展只能放在 `attributes` 中：
 
 ```yaml
 schemaVersion: 1
@@ -339,13 +341,13 @@ sources:
   worldIr:
     kind: yaml
     path: data/world.ir.yaml
-    schema: covel://world/ir/v1
+    schema: contract:world-ir@1
     to: world:metadata.worldIr
     effects:
       - projections
 ```
 
-导入器从 session 的最终启用插件中发现 `worldProjections`，按 `pluginId/projectionId` 稳定排序，并只执行 `from` 与 source schema 完全相同的声明。handler 接收：
+导入器从 session 的最终启用插件中发现 `contributes.worldProjections`，按 `pluginId/projectionId` 稳定排序，并只执行 `from` 与 source schema 完全相同的声明。handler 接收：
 
 ```ts
 {
@@ -360,7 +362,7 @@ sources:
 }
 ```
 
-handler 必须返回以声明的 output id 为 key 的对象；每个 output 值可以是一条记录或记录数组。框架拒绝额外 output、缺失 key 字段、越界 handler 路径以及不符合目标 `dataSchemas` JSON Schema 的结果。每条投影记录仍走普通 planned write、事务、ledger 和 `sync-data`，并记录 `projection:<pluginId>/<projectionId>` provenance。没有匹配的已启用 projection 时，source 产生零条投影写入，不视为错误。
+handler 必须返回以声明的 output id 为 key 的对象；每个 output 值可以是一条记录或记录数组。框架拒绝额外 output、缺失 key 字段、越界 handler 路径以及不符合目标 `contributes.data` JSON Schema 的结果。每条投影记录仍走普通 planned write、事务、ledger 和 `sync-data`，并记录 `projection:<pluginId>/<projectionId>` provenance。没有匹配的已启用 projection 时，source 产生零条投影写入，不视为错误。
 
 执行边界：
 
@@ -372,73 +374,69 @@ handler 必须返回以声明的 output id 为 key 的对象；每个 output 值
 - handler 文件 digest、projection/output 身份与实际 item 都进入 ledger 的 source digest；只改 handler 不改 world source 时，下一次 sync 仍会识别变化。执行前后 digest 不一致时会丢弃该次结果，避免热更新竞态写入错误 provenance。
 - session 创建会先在锁和数据库事务之外读取 source、运行 projection 并生成不可变 plan，再在事务内原子应用，避免插件工作占用事务。sync 同样在 session mutation lock 外完成 plan 和 projection Worker；dry-run 不取写锁，实际写入只在短锁内重新校验 world、locale、active plugin 与审批 scope，然后完成冲突扫描和事务应用。
 
-开发工具和 Agent 可通过 `GET /api/framework/capabilities` 发现 `projections` effect、WorldIR URI 及其规范 JSON Schema 文档，再通过 `GET /api/plugins/:id` 读取每个插件聚合后的 `worldProjections`。公开 discovery 只返回声明元数据，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
+开发工具和 Agent 可通过 `GET /api/framework/capabilities` 发现 `projections` effect 和 contract URI 语法，再通过 `GET /api/plugins/:id` 读取每个插件聚合后的 `worldProjections`。公开 discovery 只返回声明元数据，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
 
-静态 world-data projection 与实时 story 管线使用同一 `covel://world/ir/v1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine` 输出抽取一次，`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph/extractor` 再通过 typed input 并行消费。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。
+静态 world-data projection 与实时 story 管线使用同一 `contract:world-ir@1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine@1` 输出抽取一次，`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph/extractor` 再通过 typed input 并行消费。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。
 
-## World-Init Schema Fast Path
+## 世界角色 Schema
 
-`world-init` 的 guard（LLM 调用前的纯函数）按优先级决定角色属性 schema，命中即跳过 LLM。完整优先级见 [plugins.md #world-initschema-gen](plugins.md#world-initschema-gen)，要点：
-
-1. 当前 session 已有数据 → 复用。
-2. **世界声明的 `characterAttributes`（权威）** → 原样写入。
-3. 有 dimensions、无声明 → `deriveSchema(dimensions)` 推导通用属性（生命值、体力、货币、声望、能力阶层等）。
-4. 都没有 → 才由 `schema-gen` agent 用 LLM 生成。
-
-> **快路径不跨 session 复制**：guard 只看当前 session、世界声明与世界 dimensions，绝不从同世界的其他 session 拷贝 `schema` / `entries`。session plugin-data 不是可信来源：通用 `PUT /plugin-data` 允许会话持有者写任意已激活插件的 namespace，来源 session 可能携带玩家自造的值；在 hosted 层级这些 session 还可能属于**其他用户**，复制即同时构成泄露与投毒。代价是「既无声明属性、又无 dimensions」的世界每个 session 多一次 schema-gen 调用。
-
-### 在 `world.yaml` 声明 `characterAttributes`（推荐）
-
-高设定密度世界应**显式声明**角色属性，把世界独特机制写成稳定字段，而不是依赖 dimensions 推导或 LLM 临场生成。在 `world.yaml` 顶层（与 `pluginPolicy` 平级）声明 `characterAttributes` 数组（形状镜像 `AttributeDefinition`）：
+`world.yaml` 顶层声明 `characterSchema`，包含 `types` 与 `attributes`。`player` 是保留类型，不放进 `types`；会话最多有一个 player。
 
 ```yaml
-characterAttributes:
-  - id: affection # CharacterRecord.fields 的机器键，需与角色卡 attributes 的键一致
-    name: # 显示名，支持 I18nText（字符串或 { "zh-CN": …, "en-US": … }）
-      zh-CN: 好感度
-      en-US: Affection
-    type: number # string | number | boolean | enum | array | object | map
-    min: 0
-    max: 100
-    defaultValue: 0
-    category: social # stats | bio | abilities | equipment | social
-    description: # 可选，同样支持 I18nText
-      zh-CN: 对玩家的好感
-      en-US: Affection toward the player
+characterSchema:
+  types: [npc, companion]
+  attributes:
+    - id: affection
+      name: { zh-CN: 好感度, en-US: Affection }
+      type: number
+      min: 0
+      max: 100
+      defaultValue: 0
+      category: social
 ```
 
-- 加载后写入 `WorldRecord.metadata.characterAttributes`（读取时也接受同义键 `metadata.schemas`）。
-- guard 把它**原样**写成 session 的 `(world-init, schema, character-attributes)`，**权威优先**——因此编辑 `characterAttributes` 会在**新 session** 生效（已开局的旧 session 在 Pre-Game 时已锁定 schema，不会回溯更新）。
-- `name` / `description` 的 `I18nText` 由框架按 locale 解析：右栏 `CharacterFieldsView` 按当前界面语言显示，注入 prompt 的 `<world-schema>` 也会先解析成单一语言。
-- `id` 必须与角色卡（`character-blueprint`）`attributes` 里的键一致，否则字段会落到右栏的「其他」分组里显示原始键名。
+清单保存在世界 metadata 的同名字段中，会话初始化将其写入领域 schema。`character.schema.set` proposal 使用 `{types,attributes}`，版本由内核递增。工具、`ctx.world` 和最终提交共用校验规则；角色 `fields` 必须符合 schema，非 player 类型必须在声明中。
 
-自带世界 `mistport` / `haruka-academy` 已按此声明（见各自 `world.yaml`），可作模板。
+`world-init` guard 依次使用当前会话已有 schema、世界声明的 schema、由 dimensions 推导的属性；均不可用时才调用模型生成。不会从其他会话或其他插件的私有 schema 数据复制。世界声明变更影响新会话，已有会话通过领域操作显式修改 schema。
 
-## Character Blueprint Import
+## 领域角色与插件角色卡
 
-角色卡 source 示例：
+三个内置世界把两类内容分别交付：`characters/main-cast.json` 是可选的插件角色卡；`characters/characters.json` 是通用领域记录。
 
 ```yaml
+schemaVersion: 1
 sources:
   cast:
     kind: json
-    path: data/characters/cast.json
-    schema: plugin://character-blueprint/blueprints
-    to: plugin:character-blueprint/blueprints
+    path: characters/main-cast.json
+    schema: contract:character.blueprints@1
+    to: contract:character.blueprints@1
     key: id
-    effects:
-      - characters
+  characters:
+    kind: json
+    path: characters/characters.json
+    to: characters
+    key: id
+    after: cast
 ```
 
-`cast.json` 可以是一张角色卡对象，也可以是角色卡数组。创建 session 时，服务器会：
+领域文件示例：
 
-- 写入 `plugin_data[character-blueprint][blueprints]`
-- 根据 `effects: [characters]` 写入 `characters`
-- 镜像到当前 session 已启用、且声明 `dataSchemas.characters.acceptsWorldData: true` 的插件
+```json
+[
+  {
+    "id": "mio",
+    "name": "Mio",
+    "type": "npc",
+    "description": "A fellow student.",
+    "fields": { "affection": 20 }
+  }
+]
+```
 
-角色面板类第三方插件可以接收同一份角色记录。插件只要声明 `characters` namespace，并在 session 插件列表中启用，就会收到由 world data 实例化出的 CharacterRecord。
+导入器为领域 ID 加上会话前缀，如 `<sessionId>-mio`，写入 `characters` 并校验会话 schema。角色读写不镜像到任何插件 namespace；面板和运行器通过 `ctx.world.characters` 或领域 API 获取同一份记录。关闭角色卡接收插件只跳过卡片数据，不影响独立的领域角色 source。
 
-`effects: [characters]` 也接受简洁角色记录，例如 `{ "id": "mio", "name": "Mio", "type": "npc" }`。这种记录会直接生成 session character，并镜像到当前启用且声明 `dataSchemas.characters.acceptsWorldData: true` 的插件。
+`effects: [characters]` 仍可把同一 source 的通用 `{id,name,type,description,fields}` 值投影为领域角色，但不会解释插件角色卡中的 `persona/attributes/instantiate` 语义。世界作者应优先使用独立的 `to: characters` source，明确提供要进入领域模型的字段。
 
 ## Character Presence Portraits
 
@@ -450,20 +448,20 @@ sources:
     kind: media
     path: media/portraits # 一层目录，放 <id>.png
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
     after: cast
   presence:
     kind: json
     path: media/presence.json
-    schema: plugin://character-presence/presence
-    to: plugin:character-presence/presence
+    schema: contract:character.portraits@1
+    to: contract:character.portraits@1
     key: characterId
     after: portraits
 ```
 
 - `media` source 把 `media/portraits/` 下的图导入媒体库，按 **`sha256(内容)`** 寻址（与 `@covel/store` media-store 的 `sha256(bytes)` 一致），并把索引写进 `plugin_data[character-presence][assets]`。
-- `presence.json` 是 presence 记录数组，每条把 `characterId` 对应角色的 `avatar` / `sprite` 指向那张图。前端按实例化 `CharacterRecord.id` 的精确值或 `-<characterId>` 后缀匹配：角色卡声明 `instantiate.characterId` 时应使用该值（如 `npc-<id>`）；未声明时可使用角色卡 `id`（`emberback` 即采用此形式）：
+- `presence.json` 是 presence 记录数组，每条把 `characterId` 对应角色的 `avatar` / `sprite` 指向那张图。前端按实例化 `CharacterRecord.id` 的精确值或 `-<characterId>` 后缀匹配：使用 `characters/characters.json` 中的原始 `id`（如 `npc-kamishiro-mio`），它与导入后的会话前缀 ID 对应：
 
 ```json
 [
@@ -471,8 +469,16 @@ sources:
     "schemaVersion": 1,
     "characterId": "npc-kamishiro-mio",
     "displayName": "神代澪",
-    "avatar": { "id": "<sha256-of-png>", "mime": "image/png", "size": 2155557 },
-    "sprite": { "id": "<sha256-of-png>", "mime": "image/png", "size": 2155557 },
+    "avatar": {
+      "id": "0000000000000000000000000000000000000000000000000000000000000000",
+      "mime": "image/png",
+      "size": 2155557
+    },
+    "sprite": {
+      "id": "0000000000000000000000000000000000000000000000000000000000000000",
+      "mime": "image/png",
+      "size": 2155557
+    },
     "visuals": {
       "defaultVariant": "uniform-neutral",
       "variants": [
@@ -482,7 +488,7 @@ sources:
           "expression": "neutral",
           "pose": "default",
           "sprite": {
-            "id": "<sha256-of-png>",
+            "id": "0000000000000000000000000000000000000000000000000000000000000000",
             "mime": "image/png",
             "size": 2155557
           },
@@ -494,11 +500,11 @@ sources:
 ]
 ```
 
-`visuals` 是 schema v1 的可选增量字段，旧的 `avatar` / `sprite` 仍保持兼容。每个 variant 必须有唯一 `id` 和 `sprite`，可用安全键标注 `outfit`、`expression`、`pose`；`stage.scale`（0.5–2）和 `offsetX/offsetY`（-100–100，百分比）用于校正不同裁切源图的屏幕大小和基线。舞台按精确 variant id、语义组合、目录默认、旧 sprite/avatar 的顺序回退，所以剧情请求了尚未制作的表情时仍会显示角色，不会空白。`scripts/emit-presence.mjs` 默认给每个角色生成一个 `default/default/neutral/default` 变体；作者可在生成结果上继续添加服装和表情图。
+`visuals` 是可选的变体目录，`avatar` / `sprite` 是基础图像引用。每个 variant 必须有唯一 `id` 和 `sprite`，可用安全键标注 `outfit`、`expression`、`pose`；`stage.scale`（0.5–2）和 `offsetX/offsetY`（-100–100，百分比）用于校正不同裁切源图的屏幕大小和基线。舞台按精确 variant id、语义组合、目录默认、基础 sprite/avatar 的顺序回退，所以剧情请求了尚未制作的表情时仍会显示角色，不会空白。`scripts/emit-presence.mjs` 默认给每个角色生成一个 `default/default/neutral/default` 变体；作者可在生成结果上继续添加服装和表情图。
 
 `mediaRef.id` 必须是该图内容的 **64 位小写 sha256**——media source 导入后媒体库以同一 sha256 寻址，二者相等才能解析到资产。手算易错，仓库提供 `scripts/emit-presence.mjs <world>`，从 `media/portraits/` 自动生成 `presence.json`（**重生成立绘后必须重跑刷新哈希**）。
 
-preflight 要求：`character-presence` 的 `assets` / `presence` namespace 已声明 `acceptsWorldData: true`（builtin 默认满足）。要让立绘数据实际生效，把 `character-presence` 放进世界的 `recommendedPlugins`——若玩家取消勾选，presence source 跳过、媒体照常导入但索引写入跳过（warning，不阻断建会话）。媒体受 v1 限制：单文件 ≤ 20 MB、单 source ≤ 100 MB、扩展名 allowlist（含 `.png` / `.webp`）。
+preflight 要求对应 contract 的 schema 和接收声明已注册。`character-presence` 的 `assets/presence` 分别接受 `character.portrait-assets@1` 与 `character.portraits@1`。将接收插件放入 `pluginPolicy.recommended` 可供玩家选择；未启用时跳过其数据和媒体索引写入并产生 warning。媒体单文件上限 20 MB、单 source 上限 100 MB，扩展名使用 allowlist（含 `.png/.webp`）。
 
 实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 [角色立绘生成指南](../guide/world-portraits.md)。
 
@@ -524,19 +530,19 @@ sources:
     kind: media
     path: media/scenes
     to: media
-    indexTo: plugin:scene-stage/assets
+    indexTo: contract:stage.scene-assets@1
     key: filename
     after: dimensions
   scenesRegistry:
     kind: json
     path: media/scenes.registry.json
-    schema: plugin://scene-stage/scenes
-    to: plugin:scene-stage/scenes
+    schema: contract:stage.scenes@1
+    to: contract:stage.scenes@1
     key: registryId
     after: dimensions
 ```
 
-与 portraits 的差别只在于**注册表另走一条 source**：portraits 把每张图的索引直接喂给 `character-presence/assets`，而场景图除了 `scene-stage/assets` 的字节索引外，还需要 `scenes.registry.json` 整份导入 `scene-stage/scenes` 供解析 runtime 一次读全（`schemaVersion` 仍为 1：纯增字段，向后兼容）。实际写法见 `worlds/haruka-academy/data/world.data.yaml`。
+与 portraits 的差别只在于**注册表另走一条 source**：portraits 把每张图的索引直接喂给 `character-presence/assets`，而场景图除了 `scene-stage/assets` 的字节索引外，还需要 `scenes.registry.json` 整份导入 `scene-stage/scenes` 供解析 runtime 一次读全。实际写法见 `worlds/haruka-academy/data/world.data.yaml`。
 
 `scenes.registry.json`（`scripts/emit-scenes.mjs` 自动生成，`{schemaVersion, registryId, style, scenes:[{sceneId,name,locationRef?,day,night}]}`，`day`/`night` 是 sha256 `MediaRef`）整份文档作为**一行** plugin_data 导入：`registryId: "scene-registry"` 是自描述常量字段，同时充当 `key`——scene-stage 的解析 runtime 读一行即得 `style`（增量生成用的画风 prompt 片段）与 `scenes[]` 全量，不需要按条目遍历。`scenes.registry.json` 是生成产物，不要手编，重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希与 `style` 块。
 
@@ -546,7 +552,7 @@ sources:
 
 ## Third-Party Extension
 
-第三方库可以以 world 包或 override 包交付数据。插件作者推荐把数据契约写成 `plugin://<pluginId>/<namespace>` schema URI，再在 world 包里引用这个 schema。
+第三方库可以以 world 包或 override 包交付数据。插件作者应公开版本化 `contract:<contractId>` schema URI，再在 world 包里引用这个 schema。
 
 独立 world 包：
 
@@ -576,11 +582,9 @@ sources:
   cast-extra:
     kind: json
     path: data/characters/cast-extra.json
-    schema: plugin://character-blueprint/blueprints
-    to: plugin:character-blueprint/blueprints
+    schema: contract:character.blueprints@1
+    to: contract:character.blueprints@1
     key: id
-    effects:
-      - characters
     after: cast
 ```
 
@@ -595,8 +599,8 @@ sources:
   social-links:
     kind: yaml
     path: data/social/links.yaml
-    schema: plugin://social-sim/relationships
-    to: plugin:social-sim/relationships
+    schema: contract:social.relationships@1
+    to: contract:social.relationships@1
     key: id
     after:
       - cast
@@ -608,18 +612,24 @@ sources:
 2. 在 runtime 或工具中读取 `plugin_data[<pluginId>][<namespace>]`。
 3. 给 world 包作者提供最小可运行的 `data/world.data.yaml` 片段。
 
-插件需要在 `PLUGIN.md` frontmatter 声明 `dataSchemas`：
+插件需要在根 `PLUGIN.md` 同时发布 schema 与接收声明：
 
 ```yaml
-dataSchemas:
-  relationships:
-    schemaVersion: 1
-    acceptsWorldData: true
+id: social-sim
+kind: plugin
+description: Import relationship records.
+contracts:
+  social.relationships@1:
     schema: ./schemas/relationships.schema.json
-    description: Importable relationship records.
+contributes:
+  data:
+    relationships:
+      version: 1
+      accepts: [social.relationships@1]
+      schema: ./schemas/relationships.schema.json
 ```
 
-`schema` 是插件根目录相对路径，当前要求 JSON Schema 文件。多 runtime 插件可以在多个 runtime 的 `PLUGIN.md` 中声明同一 namespace；声明内容一致时会合并到 plugin-level registry，冲突时插件注册失败。session 自动导入会读取该 schema 并用 Ajv 校验每个 source item。
+schema 为插件根内的 JSON Schema 文件；接收声明只放在包根，不放进 `RUNTIME.md`。插件代码以 `ctx.pluginData.get(namespace,key)` / `list(namespace)` 读取自身数据，RPC 使用绑定当前会话和插件的 `ctx.store`。公共数据不依赖跨插件私有 store 访问。
 
 插件数据文件建议使用数组作为批量格式：
 
@@ -634,8 +644,8 @@ dataSchemas:
 对应的 schema URI：
 
 ```yaml
-schema: plugin://social-sim/relationships
-to: plugin:social-sim/relationships
+schema: contract:social.relationships@1
+to: contract:social.relationships@1
 key: id
 ```
 
@@ -645,11 +655,11 @@ key: id
 
 三个内置 RPG 插件接受世界包预置数据（完整成品示例见 `worlds/emberback/data/`）：
 
-| 插件         | schema URI                   | to                         | 记录形状                                                                                     |
-| ------------ | ---------------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| `core-quest` | `plugin://core-quest/quests` | `plugin:core-quest/quests` | `{ id, name, description, status?, objectives?: [{id?, text, done?}], giver?, reward? }`     |
-| `inventory`  | `plugin://inventory/items`   | `plugin:inventory/items`   | `{ id, name, quantity, description?, tags?: string[], equipped?: boolean }`                  |
-| `affinity`   | `plugin://affinity/affinity` | `plugin:affinity/affinity` | `{ id, name, score (int -100..100), notes? }`（tier/history 等派生字段由工具首次写入时补齐） |
+| 插件         | schema URI                      | to                              | 记录形状                                                                                     |
+| ------------ | ------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------- |
+| `core-quest` | `contract:quests@1`             | `contract:quests@1`             | `{ id, name, description, status?, objectives?: [{id?, text, done?}], giver?, reward? }`     |
+| `inventory`  | `contract:inventory.items@1`    | `contract:inventory.items@1`    | `{ id, name, quantity, description?, tags?: string[], equipped?: boolean }`                  |
+| `affinity`   | `contract:character.affinity@1` | `contract:character.affinity@1` | `{ id, name, score (int -100..100), notes? }`（tier/history 等派生字段由工具首次写入时补齐） |
 
 三者都用 `key: id`。任务预置后由 `core-quest` agent 只推进不重建；任务目标建议填写任务内稳定的 `id`，让后续推进即使略微改写 `text` 也能勾选同一目标。物品预置即开局行囊；好感预置给关键 NPC 一个非零起点（正负皆可）。
 
@@ -699,14 +709,11 @@ my-covel-pack/
             └── social/links.yaml
 ```
 
-`world.yaml` 用 `requiredPlugins`、`recommendedPlugins` 或 `pluginPolicy` 声明插件关系：
+`world.yaml` 通过 `pluginPolicy` 表达推荐组合：
 
 ```yaml
-recommendedPlugins:
-  - social-sim
 pluginPolicy:
-  recommendedPlugins:
-    - social-sim
+  recommended: [social-sim]
 worldData: data/world.data.yaml
 ```
 
@@ -728,8 +735,8 @@ sources:
   social-links:
     kind: yaml
     path: data/social/links.yaml
-    schema: plugin://social-sim/relationships
-    to: plugin:social-sim/relationships
+    schema: contract:social.relationships@1
+    to: contract:social.relationships@1
     key: id
     merge: skipExisting
 ```
@@ -738,8 +745,8 @@ sources:
 
 - source id 使用短名，例如 `cast`、`social-links`、`portraits`。
 - `path` 放在 `data/` 或 `media/` 下。
-- `schema` 使用稳定 URI，插件升级时保持兼容。
-- `to` 指向插件自己的 namespace。
+- `schema` 引用明确版本的 contract 或本地 JSON Schema。
+- `to` 使用公开数据 contract 或领域 target；插件 namespace 由接收声明解析。
 - `key` 指向数据对象中的稳定 id 字段。
 - 大文本放 markdown/text source，大结构化数据放 yaml/json source，多媒体放 media source。
 - world 包和 override 包都通过 containment 校验，路径保持在各自根目录内。

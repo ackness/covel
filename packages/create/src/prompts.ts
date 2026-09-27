@@ -76,7 +76,7 @@ function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
     return [
       "Experience preset: traditional-story.",
       "No optional package supplements were explicitly requested.",
-      "Return empty characters/lorebook/rules arrays.",
+      "Return empty characters/lorebook/rules/memoryDefinitions arrays.",
     ].join("\n");
   }
   const requested = new Set(brief.content ?? []);
@@ -100,7 +100,7 @@ function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
     requestedLine(
       requested,
       "memory",
-      "2-4 genre-specific memoryBlocks in world.yaml (do not repeat generic story/scene/player blocks).",
+      "2-4 genre-specific memoryDefinitions in WORLD_PACKAGE_YAML (do not repeat generic story/scene/player blocks).",
     ),
     requestedLine(
       requested,

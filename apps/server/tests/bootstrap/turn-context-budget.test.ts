@@ -1,5 +1,11 @@
+import registerCompaction from "../../../../plugins/history-compaction/server/index.js";
 import { describe, it, expect, vi } from "vitest";
-import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import {
+  PluginExtensionHost,
+  PluginServiceRegistry,
+  type LLMAdapter,
+  type LLMResponse,
+} from "@covel/runtime";
 import { createMemoryStore, type TurnMessageRecord } from "@covel/store";
 import {
   createBootstrapCompactorRunner,
@@ -49,13 +55,29 @@ describe("createBootstrapCompactorRunner", () => {
         sessionId: "session-1",
         turnId: `turn-${index}`,
         role: index % 2 === 0 ? "user" : "assistant",
+        sourceType: index % 2 === 0 ? "player" : "narrative",
+        order: index,
         content: "x".repeat(200),
         createdAt: new Date(index).toISOString(),
       }),
     );
 
+    const services = new PluginServiceRegistry({
+      list: async () => ["history-compaction"],
+      ensure: async () => {},
+    });
+    const extensions = new PluginExtensionHost(services);
+    registerCompaction({
+      provideExtension(point, id, implementation) {
+        extensions.register(
+          "history-compaction",
+          { point, id },
+          implementation,
+        );
+      },
+    });
     const runner = createBootstrapCompactorRunner({
-      manifestCache: new Map(),
+      extensions,
       store,
       llmAdapter,
     });

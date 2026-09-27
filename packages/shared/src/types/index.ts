@@ -82,15 +82,6 @@ export type {
   WorldPluginPlan,
 } from "./plugin-api.js";
 
-export type {
-  WorldIRJsonValue,
-  WorldIRV1,
-  WorldIRV1Entity,
-  WorldIRV1Relation,
-  WorldIRV1Event,
-  WorldIRV1Statement,
-} from "./world-ir.js";
-
 export {
   WORLD_EXPERIENCE_MODES,
   WORLD_PACKAGE_CONTENT_KINDS,
@@ -103,8 +94,6 @@ export type {
 
 export type {
   PluginType,
-  FrameworkCapabilityTag,
-  FrameworkRuntimeCapabilityTag,
   RuntimeType,
   TriggerType,
   TriggerConfig,
@@ -113,7 +102,6 @@ export type {
   InputInjectDecl,
   RuntimeInjectDecl,
   PluginDataInjectDecl,
-  InputToolDecl,
   InputConfig,
   OutputConfig,
   PluginDataSchemaDecl,
@@ -128,7 +116,6 @@ export type {
   SlashCommandSpec,
   SessionSlashCommand,
   ToolsConfig,
-  PluginRelations,
   PluginTag,
   UISlotType,
   UISpec,
@@ -137,20 +124,9 @@ export type {
   HookDeclaration,
   RuntimeManifest,
   PluginScopedManifestFields,
-  PluginScopedMergeKind,
-  PluginManifest,
-  AuthorsNoteDecl,
-  PostHistoryDecl,
-  MemoryBlockSchema,
 } from "./plugin.js";
 
-export {
-  FrameworkCapability,
-  FrameworkRuntimeCapability,
-  FRAMEWORK_KNOWN_CAPABILITIES,
-  PLUGIN_SCOPED_FIELDS,
-  SLASH_COMMAND_CONTEXT_SCOPES,
-} from "./plugin.js";
+export { SLASH_COMMAND_CONTEXT_SCOPES } from "./plugin.js";
 export { HOOK_EVENTS } from "./plugin.js";
 
 export type {
@@ -161,6 +137,7 @@ export type {
   RuntimeResult,
   RuntimeRetryScope,
   DeferredRuntimeJob,
+  TurnDigest,
   DetachedStageInput,
   TurnInput,
   TurnResult,
@@ -256,7 +233,7 @@ export type {
   PluginDataBatchPayload,
   PluginDataDeletePayload,
   CharacterUpsertPayload,
-  WorkingMemorySetPayload,
+  CharacterSchemaSetPayload,
   LorebookUpsertPayload,
   LorebookUpsertEntry,
   SessionEvent,
@@ -301,34 +278,6 @@ export type {
 } from "./character-schema.js";
 
 export type {
-  CharacterBlueprintRole,
-  CharacterBlueprintI18nText,
-  CharacterBlueprintPersona,
-  CharacterBlueprintDialogueExample,
-  CharacterBlueprintScenarioDefaults,
-  CharacterBlueprintRule,
-  CharacterBlueprintMediaRefs,
-  CharacterBlueprintInstantiation,
-  CharacterBlueprint,
-  CharacterBlueprintRecord,
-  CharacterBlueprintImportPayload,
-  CharacterBlueprintImportResult,
-} from "./character-blueprint.js";
-
-export { characterBlueprintToCharacterUpsert } from "./character-blueprint.js";
-
-export type {
-  PlayerIdentityCoordinate,
-  PlayerIdentityProfile,
-  PlayerIdentityRecord,
-  PlayerIdentityBinding,
-  PlayerIdentitySavePayload,
-  PlayerIdentitySaveResult,
-} from "./player-identity.js";
-
-export { playerIdentityToCharacterUpsert } from "./player-identity.js";
-
-export type {
   RuntimeOutput,
   RuntimeOutputResult,
   RuntimeOutputToolCall,
@@ -362,14 +311,6 @@ export type {
   RpcCommandSessionEnvironment,
   RpcCommandSource,
 } from "./rpc.js";
-
-export type {
-  NpcNodeType,
-  NpcNode,
-  NpcEdge,
-  NpcGraphOntology,
-  NpcGraphSubgraph,
-} from "./npc-graph.js";
 
 export type {
   I18nText,
@@ -462,3 +403,6 @@ export type {
   PluginServiceCallDiagnostic,
   PluginDiagnosticsSnapshot,
 } from "./plugin-diagnostics.js";
+
+export type { PluginManifest } from "./plugin-manifest.js";
+export type { RuntimeAuthoringManifest } from "./runtime-manifest.js";

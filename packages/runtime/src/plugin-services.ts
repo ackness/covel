@@ -1,16 +1,38 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   PluginServiceClient,
   PluginServiceContext,
   PluginServiceDefinition,
   PluginServiceDescriptor,
 } from "@covel/shared/plugin-runtime";
+import type {
+  ExtensionDeclaration,
+  ExtensionPoint,
+  ExtensionProviderDescriptor,
+  PluginExtensionContext,
+  PluginExtensionDefinition,
+} from "@covel/shared";
 import {
   withDefaultGatewaySignal,
   withDefaultUtilsSignal,
 } from "./function-runtime/runtime-abort-boundaries.js";
 
 interface Entry extends PluginServiceDescriptor {
+  readonly extension?: ExtensionDeclaration;
   invoke(input: unknown, context: PluginServiceContext): Promise<unknown>;
+}
+
+type ExtensionContextFields = Pick<
+  PluginExtensionContext,
+  "sessionId" | "locale" | "turnId" | "pluginData"
+>;
+
+export interface KernelServiceCaller extends Omit<Caller, "pluginId"> {
+  /** Host-only capability. Nested plugin service calls never inherit it. */
+  extensionContext(
+    pluginId: string,
+    signal: AbortSignal,
+  ): ExtensionContextFields;
 }
 
 interface Caller {
@@ -171,6 +193,29 @@ function lendGateway(
 /** Scoped to one host instance; activation owns registration disposal. */
 export class PluginServiceRegistry {
   private readonly entries = new Map<string, Entry>();
+  private readonly snapshots = new AsyncLocalStorage<Map<string, Entry>>();
+  private readEntries(): ReadonlyMap<string, Entry> {
+    return this.snapshots.getStore() ?? this.entries;
+  }
+  withSnapshot<T>(fn: () => T): T {
+    return this.snapshots.getStore()
+      ? fn()
+      : this.snapshots.run(new Map(this.entries), fn);
+  }
+  replacePlugin<T>(pluginId: string, publish: () => T): T {
+    const previous = [...this.entries].filter(
+      ([, entry]) => entry.pluginId === pluginId,
+    );
+    for (const [key] of previous) this.entries.delete(key);
+    try {
+      return publish();
+    } catch (error) {
+      for (const [key, entry] of this.entries)
+        if (entry.pluginId === pluginId) this.entries.delete(key);
+      for (const [key, entry] of previous) this.entries.set(key, entry);
+      throw error;
+    }
+  }
 
   constructor(
     private readonly admission: {
@@ -184,7 +229,7 @@ export class PluginServiceRegistry {
 
   /** Host diagnostics only: registered descriptors, without handlers or parsers. */
   list(): readonly PluginServiceDescriptor[] {
-    return [...this.entries.values()]
+    return [...this.readEntries().values()]
       .map(({ pluginId, name, contract, description }) => ({
         pluginId,
         name,
@@ -200,11 +245,81 @@ export class PluginServiceRegistry {
     pluginId: string,
     definition: PluginServiceDefinition<I, O>,
   ): () => void {
+    return this.registerDefinition(pluginId, definition);
+  }
+
+  registerExtension<I, O>(
+    pluginId: string,
+    point: ExtensionPoint<I, O>,
+    declaration: ExtensionDeclaration,
+    definition: PluginExtensionDefinition<I, O>,
+  ): () => void {
+    if (
+      point.id !== declaration.point ||
+      !/^[a-zA-Z0-9][\w.-]*$/.test(declaration.id)
+    )
+      throw new Error("Invalid extension declaration");
+    // A reserved service namespace prevents collisions with plugin services.
+    const name = `__extension.${point.id}.${declaration.id}`;
+    return this.registerDefinition(
+      pluginId,
+      {
+        name,
+        contract: point.id,
+        input: point.input,
+        output: point.output,
+        handler: (input, context) =>
+          definition.handler(input, context as PluginExtensionContext),
+      },
+      structuredClone(declaration),
+    );
+  }
+
+  listExtensions(): readonly ExtensionProviderDescriptor[] {
+    return [...this.readEntries().values()].flatMap((entry) =>
+      entry.extension
+        ? [
+            {
+              ...structuredClone(entry.extension),
+              pluginId: entry.pluginId,
+              name: entry.name,
+            },
+          ]
+        : [],
+    );
+  }
+
+  /** Kernel discovery uses the same active-and-approved admission list. */
+  async discoverExtensions(
+    sessionId: string,
+    point: string,
+  ): Promise<readonly ExtensionProviderDescriptor[]> {
+    const active = new Set(await this.admission.list(sessionId));
+    return this.listExtensions().filter(
+      (entry) => entry.point === point && active.has(entry.pluginId),
+    );
+  }
+
+  /** Only the host receives this client; plugin facades expose createClient. */
+  createKernelClient(caller: KernelServiceCaller): PluginServiceClient {
+    return this.createScopedClient(
+      { ...caller, pluginId: "__kernel" },
+      [],
+      undefined,
+      caller,
+    );
+  }
+
+  private registerDefinition<I, O>(
+    pluginId: string,
+    definition: PluginServiceDefinition<I, O>,
+    extension?: ExtensionDeclaration,
+  ): () => void {
     if (
       !definition ||
       typeof definition !== "object" ||
       typeof definition.name !== "string" ||
-      !/^[a-zA-Z0-9][\w.-]*$/.test(definition.name) ||
+      (!extension && !/^[a-zA-Z0-9][\w.-]*$/.test(definition.name)) ||
       typeof definition.contract !== "string" ||
       !definition.contract.trim()
     ) {
@@ -228,6 +343,7 @@ export class PluginServiceRegistry {
       name: definition.name,
       contract: definition.contract,
       description: definition.description,
+      extension,
       invoke: async (input, context) => {
         const parsed = definition.input.parse(structuredClone(input));
         context.signal.throwIfAborted();
@@ -247,15 +363,28 @@ export class PluginServiceRegistry {
     path: readonly string[] = [],
     parentState?: CallState,
   ): PluginServiceClient {
+    return this.createScopedClient(caller, path, parentState);
+  }
+
+  private createScopedClient(
+    caller: Caller,
+    path: readonly string[],
+    parentState?: CallState,
+    kernel?: KernelServiceCaller,
+  ): PluginServiceClient {
     return {
       discover: async (contract) => {
         caller.signal.throwIfAborted();
-        await this.admission.ensure(caller.sessionId, caller.pluginId);
+        if (!kernel)
+          await this.admission.ensure(caller.sessionId, caller.pluginId);
         const ids = new Set(await this.admission.list(caller.sessionId));
         caller.signal.throwIfAborted();
-        return [...this.entries.values()]
+        return [...this.readEntries().values()]
           .filter(
-            (entry) => ids.has(entry.pluginId) && entry.contract === contract,
+            (entry) =>
+              !entry.extension &&
+              ids.has(entry.pluginId) &&
+              entry.contract === contract,
           )
           .map(({ pluginId, name, contract, description }) => ({
             pluginId,
@@ -295,7 +424,7 @@ export class PluginServiceRegistry {
                 typeof pluginId === "string" &&
                 typeof name === "string" &&
                 typeof contract === "string"
-                  ? this.entries.get(key)
+                  ? this.readEntries().get(key)
                   : undefined;
               if (registered?.contract === contract) {
                 target = {
@@ -310,24 +439,38 @@ export class PluginServiceRegistry {
                   `Plugin service call cycle or depth limit: ${key}`,
                 );
               errorCode = "admission-error";
-              const diagnosticScope = await this.admission.ensure(
-                caller.sessionId,
-                caller.pluginId,
-              );
+              const diagnosticScope = kernel
+                ? undefined
+                : await this.admission.ensure(
+                    caller.sessionId,
+                    caller.pluginId,
+                  );
               state.diagnosticScope =
                 parentState?.diagnosticScope ??
                 (typeof diagnosticScope === "string"
                   ? diagnosticScope
                   : undefined);
               signal.throwIfAborted();
-              await this.admission.ensure(caller.sessionId, pluginId);
+              const providerScope = await this.admission.ensure(
+                caller.sessionId,
+                pluginId,
+              );
+              if (
+                state.diagnosticScope === undefined &&
+                typeof providerScope === "string"
+              )
+                state.diagnosticScope = providerScope;
               signal.throwIfAborted();
               if (typeof pluginId === "string") {
                 target = { ...target, providerPluginId: pluginId };
               }
-              const entry = this.entries.get(key);
+              const entry = this.readEntries().get(key);
               errorCode = "unavailable";
-              if (!entry || entry.contract !== contract)
+              if (
+                !entry ||
+                entry.contract !== contract ||
+                (entry.extension && !kernel)
+              )
                 throw new Error(
                   `Plugin service unavailable: ${key} (${contract})`,
                 );
@@ -347,6 +490,9 @@ export class PluginServiceRegistry {
                 : undefined;
               errorCode = "invocation-error";
               return entry.invoke(input, {
+                ...(entry.extension && kernel
+                  ? kernel.extensionContext(pluginId, signal)
+                  : {}),
                 callerPluginId: caller.pluginId,
                 signal,
                 gateway,

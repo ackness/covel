@@ -99,7 +99,7 @@ sources:
   facts:
     kind: json
     path: data/facts.json
-    to: plugin:world-notes/facts
+    to: contract:world.facts@1
     key: id
 `,
   );
@@ -134,7 +134,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
   );
@@ -316,7 +316,7 @@ describe("world routes", () => {
     expect(await store.getWorld("built-in-world")).not.toBeNull();
   });
 
-  it("POST /api/worlds/:id/sync-dimensions refreshes plugin_data and lorebook entries together", async () => {
+  it("POST /api/worlds/:id/sync-dimensions refreshes world-owned lorebook entries and preserves opaque plugin data", async () => {
     const now = new Date().toISOString();
     await store.upsertWorld({
       id: "world-2",
@@ -379,7 +379,7 @@ describe("world routes", () => {
       {
         id: "world-entry:geography",
         sessionId: "sess-1",
-        pluginId: "world-data-provider",
+        owner: { kind: "world" },
         keys: ["geography"],
         content: "[geography]\nold lore",
         strategy: "constant",
@@ -392,7 +392,7 @@ describe("world routes", () => {
       {
         id: "world-entry:obsolete",
         sessionId: "sess-1",
-        pluginId: "world-data-provider",
+        owner: { kind: "world" },
         keys: ["obsolete"],
         content: "[obsolete]\nold lore",
         strategy: "constant",
@@ -422,15 +422,19 @@ describe("world routes", () => {
       "entries",
     );
     expect(pluginData.map((record) => record.key).sort()).toEqual([
-      "factions",
       "geography",
+      "obsolete",
     ]);
     expect(
       pluginData.find((record) => record.key === "geography")?.value,
-    ).toEqual(makeDimensions("North", "Guild").geography);
+    ).toEqual({
+      regions: [
+        { name: "Old", description: "Old description", climate: "dry" },
+      ],
+    });
 
     const lorebookEntries = (await store.listSessionLorebookEntries("sess-1"))
-      .filter((entry) => entry.pluginId === "world-data-provider")
+      .filter((entry) => entry.owner.kind === "world")
       .sort((a, b) => a.id.localeCompare(b.id));
     expect(lorebookEntries.map((entry) => entry.id)).toEqual([
       "world-entry:factions",
@@ -459,11 +463,25 @@ describe("world routes", () => {
   it("POST /api/worlds/:id/world-data/preflight reports a read-only import plan", async () => {
     const { worldsDir } = await makeWorldDataFixture();
     const pluginRegistry = {
-      findPluginByCapability: () => undefined,
+      getAll() {
+        return new Map(
+          ["world-notes", "character-presence"].flatMap((id) => {
+            const entry = this.get(id);
+            return entry ? [[id, entry]] : [];
+          }),
+        );
+      },
       get: (pluginId: string) =>
         pluginId === "world-notes"
           ? {
               id: "world-notes",
+              packageManifest: {
+                plugin: {
+                  contributes: {
+                    data: { facts: { version: 1, accepts: ["world.facts@1"] } },
+                  },
+                },
+              },
               dataSchemas: {
                 facts: {
                   namespace: "facts",
@@ -499,7 +517,7 @@ describe("world routes", () => {
     );
     expect(body.targets).toMatchObject([
       {
-        target: "plugin:world-notes/facts",
+        target: "contract:world.facts@1",
         pluginId: "world-notes",
         namespace: "facts",
       },
@@ -513,11 +531,25 @@ describe("world routes", () => {
     const { worldsDir } = await makeWorldDataFixture();
     const now = new Date().toISOString();
     const pluginRegistry = {
-      findPluginByCapability: () => undefined,
+      getAll() {
+        return new Map(
+          ["world-notes", "character-presence"].flatMap((id) => {
+            const entry = this.get(id);
+            return entry ? [[id, entry]] : [];
+          }),
+        );
+      },
       get: (pluginId: string) =>
         pluginId === "world-notes"
           ? {
               id: "world-notes",
+              packageManifest: {
+                plugin: {
+                  contributes: {
+                    data: { facts: { version: 1, accepts: ["world.facts@1"] } },
+                  },
+                },
+              },
               dataSchemas: {
                 facts: {
                   namespace: "facts",
@@ -587,11 +619,25 @@ describe("world routes", () => {
     const { worldsDir } = await makeWorldDataFixture();
     const now = new Date().toISOString();
     const pluginRegistry = {
-      findPluginByCapability: () => undefined,
+      getAll() {
+        return new Map(
+          ["world-notes", "character-presence"].flatMap((id) => {
+            const entry = this.get(id);
+            return entry ? [[id, entry]] : [];
+          }),
+        );
+      },
       get: (pluginId: string) =>
         pluginId === "world-notes"
           ? {
               id: "world-notes",
+              packageManifest: {
+                plugin: {
+                  contributes: {
+                    data: { facts: { version: 1, accepts: ["world.facts@1"] } },
+                  },
+                },
+              },
               dataSchemas: {
                 facts: {
                   namespace: "facts",
@@ -649,7 +695,7 @@ describe("world routes", () => {
       deleted: 0,
       conflicts: [
         {
-          target: "plugin:world-notes/facts",
+          target: "contract:world.facts@1",
           key: "one",
           sourceId: "facts",
           reason: "modified",
@@ -666,11 +712,30 @@ describe("world routes", () => {
     const now = new Date().toISOString();
     const mediaStore = createMemoryMediaStore();
     const pluginRegistry = {
-      findPluginByCapability: () => undefined,
+      getAll() {
+        return new Map(
+          ["world-notes", "character-presence"].flatMap((id) => {
+            const entry = this.get(id);
+            return entry ? [[id, entry]] : [];
+          }),
+        );
+      },
       get: (pluginId: string) =>
         pluginId === "character-presence"
           ? {
               id: "character-presence",
+              packageManifest: {
+                plugin: {
+                  contributes: {
+                    data: {
+                      assets: {
+                        version: 1,
+                        accepts: ["character.portrait-assets@1"],
+                      },
+                    },
+                  },
+                },
+              },
               dataSchemas: {
                 assets: {
                   namespace: "assets",

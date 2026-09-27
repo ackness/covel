@@ -1,44 +1,56 @@
 ---
-name: living-world-rules
+id: living-world-rules
+kind: plugin
 displayName:
   zh: 世界规则
   en: World Rules
 description:
   zh: 让你添加会长期生效的世界规则，比如禁忌、风俗和特殊设定。
-  en: Lets you add lasting world rules, such as taboos, customs, and special setting details.
-pluginType: plugin
-runtimeType: function
-outputKind: system
-handler: ./handler.js
-trigger:
-  type: manual
-capabilities:
-  - living-world-rules
-  - world-info
+  en: >-
+    Lets you add lasting world rules, such as taboos, customs, and special
+    setting details.
 tags:
-  - role:world-rules
-  - data:world-data
-  - data:lorebook
-  - cost:function
-  - ui:right-panel
-  - ui:manual-action
-dataSchemas:
-  rules:
-    schemaVersion: 1
-    acceptsWorldData: true
+  - "data:world-data"
+  - "data:lorebook"
+  - "cost:function"
+  - "ui:right-panel"
+  - "ui:manual-action"
+provides:
+  - living-world-rules@1
+  - world-info@1
+contracts:
+  world.rules@1:
     schema: ./schemas/rules.schema.json
-    description: Importable world info rules that can also project to lorebook.
-worldProjections:
-  rules-from-world-ir:
-    from: covel://world/ir/v1
-    handler: ./server/project-world-ir.js
-    outputs:
-      rules:
-        namespace: rules
-        key: id
-ui:
-  right:
-    - ./ui/living-world-rules-panel.json
+contributes:
+  data:
+    rules:
+      schema: ./schemas/rules.schema.json
+      description: Importable world info rules that can also project to lorebook.
+      version: 1
+      accepts:
+        - world.rules@1
+  worldProjections:
+    rules-from-world-ir:
+      from: "contract:world-ir@1"
+      handler: ./server/project-world-ir.js
+      outputs:
+        rules:
+          namespace: rules
+          key: id
+  ui:
+    right:
+      - ./ui/living-world-rules-panel.json
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+  io:
+    output:
+      contract: living-world-rules@1
+    visibility: system
+  function:
+    handler: ./handler.js
 ---
 
 # Living World Rules

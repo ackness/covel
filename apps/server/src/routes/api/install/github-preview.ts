@@ -97,9 +97,7 @@ export function inspectBundle(
       "Plugin must ship self-contained runtime files without runtime dependencies; the installer never runs package managers or build scripts",
     );
   }
-  const manifest =
-    entries.find((e) => e.relativePath === "PLUGIN.md") ??
-    entries.find((e) => /^runtimes\/[^/]+\/PLUGIN\.md$/.test(e.relativePath))!;
+  const manifest = entries.find((e) => e.relativePath === "PLUGIN.md")!;
   const data = readPluginFrontmatter(manifest.content.toString("utf8"));
   const localized = z
     .record(z.string(), z.string())
@@ -123,14 +121,15 @@ export function inspectBundle(
         /\.(?:[cm]?js|tsx?|node|wasm)$/i.test(e.relativePath),
       ) ||
       entries
-        .filter((e) => e.relativePath.endsWith("PLUGIN.md"))
+        .filter((e) => /(?:PLUGIN|RUNTIME)\.md$/.test(e.relativePath))
         .some((e) => {
           const manifest = readPluginFrontmatter(e.content.toString("utf8"));
-          return !!(
+          const runtime = z
+            .record(z.string(), z.unknown())
+            .safeParse(manifest.runtime ?? manifest);
+          return Boolean(
             manifest.entry ||
-            manifest.handler ||
-            manifest.guard ||
-            manifest.tools
+            (runtime.success && (runtime.data.function || runtime.data.guard)),
           );
         }),
   };

@@ -91,6 +91,29 @@ function fixture() {
   ) {
     registry.register({
       id,
+      packageManifest: {
+        plugin: {
+          id,
+          kind: "plugin",
+          description: "private-description",
+          contributes: {
+            commands: [
+              { name: "inspect", action: "inspect-action" },
+              { name: "missing", action: "missing-action" },
+            ],
+          },
+        },
+        manifest: {
+          name: id,
+          description: "private-description",
+          commands: [
+            { name: "inspect", action: "inspect-action" },
+            { name: "missing", action: "missing-action" },
+          ],
+        },
+        promptTemplate: "",
+        rawFrontmatter: {},
+      },
       source: "builtin",
       summary: {
         id,
@@ -288,6 +311,7 @@ describe("plugin diagnostics snapshots", () => {
     disposeService();
     expect(diagnostics.snapshot(session()).plugins[0]!.registrations).toEqual({
       tools: [],
+      extensions: [],
       hooks: [],
       actions: [],
       services: [],

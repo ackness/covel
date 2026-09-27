@@ -10,7 +10,9 @@
   },
   "icon": "users-round",
   "groupOrder": 450,
-  "dataSource": { "namespace": "active-cast" },
+  "dataSource": {
+    "namespace": "active-cast"
+  },
   "emptyState": {
     "message": {
       "zh": "这一幕还没有角色登场。",
@@ -19,7 +21,9 @@
   },
   "view": {
     "component": "Stack",
-    "props": { "gap": "sm" },
+    "props": {
+      "gap": "sm"
+    },
     "children": [
       {
         "component": "Text",
@@ -34,10 +38,9 @@
       },
       {
         "component": "SceneCastList",
-        "props": {
-          "speakers": { "$state": "/current/speakers" }
-        }
+        "props": {}
       }
     ]
-  }
+  },
+  "alwaysRender": true
 }

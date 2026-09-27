@@ -87,6 +87,7 @@ export interface RuntimeRetryScope {
  * session state.
  */
 export interface DeferredRuntimeJob {
+  readonly turnDigest?: TurnDigest;
   readonly jobId: string;
   readonly runtimeId: string;
   readonly pluginId: string;
@@ -108,7 +109,17 @@ export type DetachedStageInput = Pick<
   | "sourceExecutionStartedAt"
   | "sourceLogicalTurnId"
   | "upstreamResults"
+  | "turnDigest"
 >;
+
+/** Frozen source-turn facts supplied by the kernel, independent of provider IDs. */
+export interface TurnDigest {
+  readonly turnId: string;
+  readonly playerMessage: string;
+  readonly narrativeText: string;
+  readonly toolCallSummaries: readonly string[];
+  readonly locale?: string;
+}
 
 // ── Turn input / result ──────────────────────────────────────────
 

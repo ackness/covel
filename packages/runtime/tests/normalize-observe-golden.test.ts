@@ -120,6 +120,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "branch-reply",
       "char-creator/character-tracker",
       "guide",
+      "memory/extract",
       "scene-prompts",
       "world-ir",
       "world-time/advance",
@@ -178,16 +179,16 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const id of ["guide", "char-creator/character-tracker"]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBe("post-turn");
-      expect(spec.deps.needs).toEqual([{ capability: "narrative-engine" }]);
+      expect(spec.deps.needs).toEqual([{ capability: "narrative-engine@1" }]);
     }
 
     const worldIr = requireSpec(specs, "world-ir");
     expect(worldIr.stage).toBe("post-turn");
-    expect(manifestOf(manifests, "world-ir").capabilities).toContain(
-      "world-ir-provider",
+    expect(manifestOf(manifests, "world-ir").outputContract).toBe(
+      "world-ir-provider@1",
     );
     expect(worldIr.bindings.narrative).toMatchObject({
-      from: { capability: "narrative-engine", cardinality: "one" },
+      from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       required: true,
     });
@@ -205,8 +206,8 @@ describe("normalize golden (bundled plugin set)", () => {
       expect(spec.stage).toBe("post-turn");
       expect(spec.deps.needs).toEqual([]);
       expect(spec.bindings.worldIR).toMatchObject({
-        from: { capability: "world-ir-provider", cardinality: "one" },
-        accepts: "covel://world/ir/v1",
+        from: { capability: "world-ir-provider@1", cardinality: "one" },
+        accepts: "contract:world-ir@1",
         required: true,
       });
     }
@@ -218,7 +219,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(scenePrompts.stage).toBe("post-turn");
     expect(scenePrompts.deps.needs).toEqual([]);
     expect(scenePrompts.bindings.narrative).toMatchObject({
-      from: { capability: "narrative-engine", cardinality: "one" },
+      from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       required: true,
     });
@@ -231,7 +232,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(branchReply.deps.needs).toEqual([]);
     expect(branchReply.bindings).toEqual({
       narrative: {
-        from: { capability: "narrative-engine", cardinality: "one" },
+        from: { capability: "narrative-engine@1", cardinality: "one" },
         select: "/narrativeOutput",
         required: false,
       },
@@ -266,7 +267,12 @@ describe("normalize golden (bundled plugin set)", () => {
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    for (const id of ["director", "story-guard", "cost-gate", "memory"]) {
+    for (const id of [
+      "director",
+      "story-guard",
+      "cost-gate",
+      "history-compaction",
+    ]) {
       expect(specs.has(id), `${id}: no synthetic runtime`).toBe(false);
       const discovery = discoveries.find((entry) => entry.id === id)!;
       const definition = await loadPluginDefinition(discovery);

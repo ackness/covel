@@ -96,7 +96,7 @@ for (const community of [false, true]) {
           ),
         );
         const attributes = [
-          ...(hasAbilities ? world.characterAttributes : []),
+          ...(hasAbilities ? world.characterSchema.attributes : []),
           {
             id: "persona",
             name: { "en-US": "Personality" },
@@ -111,7 +111,9 @@ for (const community of [false, true]) {
           name: "Opening Test World",
           description: "A synthetic opening world",
           createdAt: now,
-          metadata: { characterAttributes: attributes },
+          metadata: {
+            characterSchema: { types: ["npc", "companion"], attributes },
+          },
         });
         await store.createSession({
           id: sessionId,

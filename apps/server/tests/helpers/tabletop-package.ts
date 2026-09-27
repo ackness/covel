@@ -29,7 +29,10 @@ export async function buildTabletopProbeZip(): Promise<Buffer> {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
         const target = path.join(directory, entry.name);
         if (entry.isDirectory()) await renameManifests(target);
-        else if (entry.name === "PLUGIN.md" || entry.name.endsWith(".json")) {
+        else if (
+          /^(?:PLUGIN|RUNTIME)(?:\.[^.]+)?\.md$/.test(entry.name) ||
+          entry.name.endsWith(".json")
+        ) {
           await writeFile(
             target,
             (await readFile(target, "utf8")).replaceAll(

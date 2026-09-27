@@ -1,3 +1,5 @@
+import { buildTurnDigest } from "./turn-digest.js";
+import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   ExecutionContext,
@@ -10,10 +12,7 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
-import type {
-  CoreMemoryBlockView,
-  SessionContextSnapshot,
-} from "@covel/context";
+import type { SessionContextSnapshot } from "@covel/context";
 import { getRuntimeSpec, isSetupRuntime } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 import {
@@ -93,9 +92,7 @@ export interface RuntimeInvocation {
   readonly prepareCompactedContext?: (
     systemPromptPreview: string,
   ) => Promise<AgentCompactionRefresh>;
-  readonly workingMemory:
-    readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
-  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
+
   readonly sessionContext: SessionContextSnapshot | undefined;
   readonly triggerEvent:
     | {
@@ -161,8 +158,6 @@ export async function executeOneRuntime(
     hookPipeline,
     sessionSummaries,
     prepareCompactedContext,
-    workingMemory,
-    coreMemoryBlocks,
     sessionContext,
     triggerEvent,
     turnOptions,
@@ -367,7 +362,7 @@ export async function executeOneRuntime(
           continue;
         }
         const providers = activeRuntimes
-          .filter((r) => r.capabilities?.includes(entry.capability))
+          .filter((r) => r.outputContract === entry.capability)
           .map((r) => r.name);
         const satisfied =
           providers.length > 0 &&
@@ -548,7 +543,31 @@ export async function executeOneRuntime(
         binding.skipReason,
       );
     }
-    const inputSlots = binding.slots;
+    const inputSlots: Record<string, InputSlot> = { ...binding.slots };
+    for (const inject of manifest.input?.inject ?? []) {
+      if (inject.kind !== "kernel") continue;
+      if (input.detachedStage && !input.detachedStage.turnDigest)
+        throw new Error(
+          "Detached kernel input turn-digest@1 is missing its source snapshot",
+        );
+      const digest =
+        input.detachedStage?.turnDigest ??
+        buildTurnDigest(input, [...completedResults.values()], activeRuntimes);
+      inputSlots[inject.name] = {
+        cardinality: "one",
+        value: Object.freeze({
+          ...digest,
+          toolCallSummaries: Object.freeze([...digest.toolCallSummaries]),
+        }),
+        source: {
+          pluginId: "__kernel",
+          runtimeId: inject.from,
+          resultId:
+            input.detachedStage?.sourceExecutionId ??
+            executionContext.executionId,
+        },
+      };
+    }
 
     // ── Persistent export bindings (input.inject: runtime-export) ─
     // Cross-execution consumption of a producer's `recordAs` export, read at
@@ -603,8 +622,13 @@ export async function executeOneRuntime(
     );
     if (preRuntime) return preRuntime;
 
+    const upstreamProposals = collectUpstreamWorldProposals(
+      completedResults,
+      input.sessionId,
+    );
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
+        upstreamProposals,
         manifest,
         input,
         loaded,
@@ -625,6 +649,7 @@ export async function executeOneRuntime(
     }
 
     const guardResult = await executeAgentGuard({
+      upstreamProposals,
       manifest,
       input,
       loaded,
@@ -640,6 +665,7 @@ export async function executeOneRuntime(
     if (guardResult) return guardResult;
 
     return await executeAgentRuntime({
+      upstreamProposals,
       manifest,
       input,
       loaded,
@@ -652,8 +678,6 @@ export async function executeOneRuntime(
       hookPipeline,
       sessionSummaries,
       prepareCompactedContext,
-      workingMemory,
-      coreMemoryBlocks,
       sessionContext,
       activation,
       inputs: inputSlots,

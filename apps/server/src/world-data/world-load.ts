@@ -5,7 +5,6 @@ import { digestFile, sha256Hex } from "./digest.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { readWorldDataSource } from "./source-reader.js";
 import {
-  parsePluginSchemaUri,
   resolveWorldDataSchema,
   validateWorldDataSchemaValue,
 } from "./schema-registry.js";
@@ -57,7 +56,7 @@ async function validateSourceSchema(
   value: unknown,
 ): Promise<readonly WorldDataDiagnostic[]> {
   if (!source.descriptor.schema) return [];
-  if (parsePluginSchemaUri(source.descriptor.schema)) {
+  if (source.descriptor.schema.startsWith("contract:")) {
     return [];
   }
   const schema = await resolveWorldDataSchema({ source });
@@ -115,6 +114,14 @@ async function summarizeSource(
 
   diagnostics.push(...(await validateSourceSchema(source, read.value)));
   const digest = await digestFile(read.path);
+  if (parsedTarget?.kind === "characters" && Array.isArray(read.value)) {
+    metadata.embeddedCharacters = [
+      ...(Array.isArray(metadata.embeddedCharacters)
+        ? metadata.embeddedCharacters
+        : []),
+      ...read.value,
+    ];
+  }
   if (
     parsedTarget?.kind === "world-metadata" &&
     parsedTarget.path.join(".") === "dimensions" &&

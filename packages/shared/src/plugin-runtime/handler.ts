@@ -21,6 +21,9 @@ import type {
  * The handler receives this context and returns a Record<string, unknown> output.
  */
 export interface FunctionHandlerContext {
+  readonly session?: { readonly lastPlayerInput: string };
+  /** Committed world records plus validated execution-local proposals. */
+  readonly world?: import("../proposals/world-model.js").WorldModelView;
   /** Public, schema-validated services exported by active plugins. */
   readonly services?: import("./plugin-services.js").PluginServiceClient;
   readonly sessionId: string;
@@ -211,7 +214,7 @@ export interface FunctionStoreView {
     namespace: string,
   ): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;
   /** Read accepted inputs for this session; values remain immutable. */
-  listPlayerInputs(sessionId?: string): Promise<
+  listPlayerInputs(): Promise<
     readonly {
       readonly id: string;
       readonly formId: string;

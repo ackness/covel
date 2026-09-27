@@ -8,19 +8,24 @@ function sessionPlugin(
   locked = false,
 ): SessionPlugin {
   return {
+    requires: [],
+    optional: [],
+    conflicts: [],
+    extensions: [],
     id,
     displayName: id,
     description: `${id} plugin`,
-    pluginType: locked ? "core-plugin" : "plugin",
+    kind: locked ? "core" : "plugin",
     source: "builtin",
-    status: "registered",
+    hostState: "approved",
     runtimeCount: 0,
-    capabilities: [],
+    provides: [],
     tags: [],
     runtimes: [],
     tools: [],
     userSettings: [],
     active,
+    sessionState: active ? "active" : "inactive",
     locked,
   };
 }

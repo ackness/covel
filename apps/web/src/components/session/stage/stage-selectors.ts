@@ -1,9 +1,9 @@
 /**
  * Pure selectors for stage mode (viewMode: "stage"). No React, no store
  * subscriptions — callers (StageView etc.) read plugin-data namespaces via
- * `usePluginNamespace` and hand the raw records here.
+ * kernel UI slots and pass presentation models here.
  */
-import type { MediaRef } from "@covel/shared";
+import type { MediaRef, StageChoicesModel } from "@covel/shared";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { WorldVisual } from "@/lib/world-visuals.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
@@ -23,29 +23,12 @@ import {
 } from "./stage-direction-selectors.js";
 
 export {
-  applySceneSetPreview,
-  applyStageDirectionPreview,
   MAX_SPRITE_SLOTS,
-  resolveStageSpeakers,
   type SpritePosition,
   type StageCurrentRecord,
-  type StageDirectionActor,
-  type StageDirectionRecord,
-  type StageSceneRegistry,
   type StageSpeaker,
   type StageTransition,
 } from "./stage-direction-selectors.js";
-
-// ── Capability-driven plugin binding ────────────────────────────
-//
-// Stage layers bind to plugin-data by CAPABILITY, not by hardcoded plugin id
-// (framework↔plugin isolation rule — framework code must discover plugins via
-// declared capabilities). A plugin declares one of these capabilities in its
-// PLUGIN.md; the stage resolves the owning plugin id at runtime from the
-// session's active plugin list. The bundled plugins (scene-stage / scene-cast /
-// scene-prompts / character-presence) declare the matching capability, so
-// discovery resolves to them today; a third-party equivalent that declares the
-// same capability transparently replaces them without touching this code.
 
 /** Stable key for the story currently presented on stage. A turn id survives
  * the streaming-placeholder to durable-message swap; the message id covers
@@ -63,35 +46,6 @@ export function initialStageReadStoryKey(
   message: Pick<StreamMessage, "id" | "turnId"> | undefined,
 ): string | undefined {
   return message?.id.startsWith("stream_") ? undefined : stageStoryKey(message);
-}
-
-interface CapabilityCarrier {
-  readonly id: string;
-  readonly active?: boolean;
-  readonly capabilities?: readonly string[];
-}
-
-/**
- * Resolve the ACTIVE plugin id that declares `capability` from the session's
- * plugin list. Only an active plugin writes plugin-data, so binding a stage
- * layer to an inactive (or absent) provider yields a permanently empty layer —
- * return `undefined` in that case and let the caller disable the layer
- * gracefully rather than guessing the capability name as a plugin id.
- *
- * Deterministic when several active plugins declare the same capability: pick
- * the lexicographically smallest id, so the choice never depends on the
- * server's plugin-list ordering (stage layers are 1:1).
- */
-export function pluginIdForCapability(
-  plugins: readonly CapabilityCarrier[],
-  capability: string,
-): string | undefined {
-  let best: string | undefined;
-  for (const p of plugins) {
-    if (!p.active || !p.capabilities?.includes(capability)) continue;
-    if (best === undefined || p.id < best) best = p.id;
-  }
-  return best;
 }
 
 // ── Backdrop (scene-stage `stage/current`) ──────────────────────
@@ -117,10 +71,10 @@ export function resolveBackdrop(
   worldVisual: WorldVisual,
 ): StageBackdrop {
   if (!stageCurrent) return { kind: "hero", ref: worldVisual.image };
-  if (isMediaRef(stageCurrent.resolved)) {
-    return { kind: "scene", ref: stageCurrent.resolved };
+  if (isMediaRef(stageCurrent.ref)) {
+    return { kind: "scene", ref: stageCurrent.ref };
   }
-  if (stageCurrent.source === "pending") {
+  if (stageCurrent.pending) {
     return { kind: "previous-or-hero", pendingBadge: true };
   }
   return { kind: "hero", ref: worldVisual.image };
@@ -291,12 +245,7 @@ function findPresence(
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
   speakerId: string,
 ): PresenceRecord | undefined {
-  for (const value of Object.values(presenceMap)) {
-    const pid = value?.characterId;
-    if (!pid) continue;
-    if (speakerId === pid || speakerId.endsWith(`-${pid}`)) return value;
-  }
-  return undefined;
+  return presenceMap[speakerId];
 }
 
 /**
@@ -537,7 +486,6 @@ export interface MergedChoices {
   readonly twoColumn: boolean;
 }
 
-const MAX_PROMPT_SLOTS = 6;
 // Spec's "6 条以上双列" is read exclusively: ≤6 items stay single-column (still
 // visually acceptable), 7+ go two-column. `items.length > 6` below.
 const TWO_COLUMN_THRESHOLD = 6;
@@ -553,7 +501,7 @@ const TWO_COLUMN_THRESHOLD = 6;
  */
 export function mergeChoices(
   interactionChoices: readonly StageInteractionChoice[],
-  promptsNamespace: Readonly<Record<string, unknown>>,
+  suggestions: StageChoicesModel | undefined,
   locale: string,
 ): MergedChoices {
   const items: StageChoiceItem[] = [];
@@ -589,30 +537,28 @@ export function mergeChoices(
   }
 
   const promptItems: StageChoiceItem[] = [];
-  for (let n = 1; n <= MAX_PROMPT_SLOTS; n += 1) {
-    const text = promptsNamespace[`prompt${n}Text`];
-    if (typeof text !== "string" || text.trim().length === 0) continue;
+  for (const choice of suggestions?.choices ?? []) {
+    if (!choice.text.trim()) continue;
     const item: StageChoiceItem = {
       kind: "prompt",
-      id: `prompt:${n}`,
-      label: text.trim(),
-      description:
-        resolveI18n(promptsNamespace[`prompt${n}Label`], locale) || undefined,
+      id: choice.id,
+      label: choice.text.trim(),
+      description: resolveI18n(choice.label, locale) || undefined,
     };
     items.push(item);
     promptItems.push(item);
   }
 
-  const scene = resolveI18n(promptsNamespace.scene, locale).trim() || undefined;
-  const recap = resolveI18n(promptsNamespace.recap, locale).trim() || undefined;
+  const scene = resolveI18n(suggestions?.scene, locale).trim() || undefined;
+  const recap = resolveI18n(suggestions?.recap, locale).trim() || undefined;
   const generatedDecision =
-    resolveI18n(promptsNamespace.decision, locale).trim() || undefined;
+    resolveI18n(suggestions?.decision, locale).trim() || undefined;
   const decision =
     interactionPrompts.length === 1 ? interactionPrompts[0] : generatedDecision;
 
   if (promptItems.length > 0) {
     groups.push({
-      id: "scene-prompts",
+      id: "suggestions",
       prompt:
         interactionChoices.length > 0 && generatedDecision !== decision
           ? generatedDecision
@@ -639,17 +585,15 @@ export function mergeChoices(
  * unaffected (they don't live in this namespace).
  */
 export function filterStalePrompts(
-  promptsNamespace: Readonly<Record<string, unknown>>,
+  suggestions: StageChoicesModel | undefined,
   currentTurnId: string | undefined,
   resolveTurnId: (turnId: string) => string = (turnId) => turnId,
-): Readonly<Record<string, unknown>> {
-  const stamp = promptsNamespace.__turnId;
+): StageChoicesModel | undefined {
   if (
-    typeof stamp === "string" &&
+    suggestions?.turnId &&
     currentTurnId &&
-    resolveTurnId(stamp) !== currentTurnId
-  ) {
-    return {};
-  }
-  return promptsNamespace;
+    resolveTurnId(suggestions.turnId) !== currentTurnId
+  )
+    return undefined;
+  return suggestions;
 }

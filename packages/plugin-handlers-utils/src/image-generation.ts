@@ -12,7 +12,7 @@
  */
 
 import { abortSignalWithTimeout, optionalString } from "./index.js";
-import type { HandlerResult, JsonValue } from "@covel/shared";
+import type { ImageGenerationResult, JsonValue } from "./types.js";
 
 /** The slice of FunctionHandlerContext this trunk reads. */
 export interface ImageGenerationHandlerContext {
@@ -142,7 +142,7 @@ async function failureRecord(
   ctx: ImageGenerationHandlerContext,
   baseRecord: Record<string, JsonValue> & { imageId: string },
   message: string,
-): Promise<HandlerResult> {
+): Promise<ImageGenerationResult> {
   const record = {
     ...baseRecord,
     status: "failed",
@@ -179,7 +179,7 @@ async function failureRecord(
 export async function runImageGeneration(
   ctx: ImageGenerationHandlerContext,
   config: ImageGenerationPluginConfig,
-): Promise<HandlerResult> {
+): Promise<ImageGenerationResult> {
   if (!ctx.images) {
     return {
       outcome: "failed",

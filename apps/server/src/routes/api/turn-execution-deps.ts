@@ -1,10 +1,6 @@
 import { estimateTokens } from "@covel/context";
 import type { TurnExecutorDeps } from "@covel/runtime";
 import type { Context } from "hono";
-import {
-  resolveTurnCapabilityPluginIds,
-  type TurnCapabilityPluginIds,
-} from "./turn-capabilities.js";
 
 /**
  * Dependencies shared by player, manual, detached and resumed execution.
@@ -15,7 +11,6 @@ import {
  */
 export function buildTurnExecutorDeps(
   c: Context,
-  capabilityPluginIds: TurnCapabilityPluginIds,
 ): Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter"> {
   const gateway = c.get("pluginGateway");
   const utils = c.get("pluginUtils");
@@ -24,7 +19,6 @@ export function buildTurnExecutorDeps(
   const contextBudget = c.get("turnContextBudget");
   const eventDirectory = c.get("eventDirectory");
   const hookPipeline = c.get("hookPipeline");
-  const memorySystem = c.get("memorySystem");
   const executionSignal = c.get("requestWork")?.signal;
 
   return {
@@ -34,6 +28,9 @@ export function buildTurnExecutorDeps(
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(gateway ? { gateway } : {}),
     ...(c.get("pluginServices") ? { services: c.get("pluginServices") } : {}),
+    ...(c.get("pluginExtensions")
+      ? { extensions: c.get("pluginExtensions") }
+      : {}),
     ...(utils ? { utils } : {}),
     ...(getPluginSource ? { getPluginSource } : {}),
     ...(mediaStore ? { mediaStore } : {}),
@@ -41,9 +38,7 @@ export function buildTurnExecutorDeps(
     resolveModel: c.get("resolveModel"),
     compactor: c.get("compactorRunner"),
     ...(contextBudget ? { estimator: estimateTokens, contextBudget } : {}),
-    capabilityPluginIds,
     ...(eventDirectory ? { eventDirectory } : {}),
-    ...(memorySystem ? { memorySystem } : {}),
   };
 }
 
@@ -53,13 +48,7 @@ export function buildResumeTurnExecutorDeps(
   emitter: NonNullable<TurnExecutorDeps["emitter"]>,
 ): TurnExecutorDeps {
   return {
-    ...buildTurnExecutorDeps(
-      c,
-      resolveTurnCapabilityPluginIds(
-        c.get("pluginRegistry"),
-        emitter.sessionId,
-      ),
-    ),
+    ...buildTurnExecutorDeps(c),
     store: c.get("store"),
     ...(c.get("eventBus") ? { eventBus: c.get("eventBus") } : {}),
     emitter,

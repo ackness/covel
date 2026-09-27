@@ -144,7 +144,7 @@ describe("resolveExportBindings", () => {
     ({
       name,
       pluginId: name.split("/")[0],
-      capabilities: ["cfg-provider"],
+      outputContract: "cfg-provider",
     }) as RuntimeManifest;
   const binding = (
     over?: Partial<RuntimeExportBinding>,

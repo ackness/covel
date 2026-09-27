@@ -1,8 +1,6 @@
 import {
   COVEL_EVENT_META,
   PROPOSAL_TYPES,
-  WORLD_IR_V1_JSON_SCHEMA,
-  WORLD_IR_V1_SCHEMA_URI,
   inputInjectDeclSchema,
   outputKindSchema,
   triggerTypeSchema,
@@ -77,8 +75,8 @@ const DEFAULT_BUILTIN_TOOLS = [
 
 const WORLD_DATA_TARGET_URIS = [
   "world:metadata.<path>",
-  "plugin:<pluginId>/<namespace>",
-  "plugin:<pluginId>/<namespace>+lorebook",
+  "contract:<contractId>",
+  "contract:<contractId>+lorebook",
   "lorebook",
   "characters",
   "media",
@@ -86,8 +84,7 @@ const WORLD_DATA_TARGET_URIS = [
 
 const WORLD_DATA_SCHEMA_URIS = [
   "covel://world/dimensions",
-  WORLD_IR_V1_SCHEMA_URI,
-  "plugin://<pluginId>/<namespace>",
+  "contract:<contractId>",
   "<local-json-schema-path>",
 ] as const;
 
@@ -158,9 +155,7 @@ export function buildFrameworkCapabilities(
         effects: enumValues(worldDataEffectSchema),
         targetUris: WORLD_DATA_TARGET_URIS,
         schemaUris: WORLD_DATA_SCHEMA_URIS,
-        schemas: {
-          [WORLD_IR_V1_SCHEMA_URI]: WORLD_IR_V1_JSON_SCHEMA,
-        },
+        schemas: {},
       },
     },
   };

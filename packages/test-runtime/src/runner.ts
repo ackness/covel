@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import {
   DEFAULT_LOCALE,
-  FrameworkCapability,
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
@@ -140,6 +139,7 @@ export async function runRuntimeDebug(
       loadedCache,
       entryTools,
       services,
+      extensions,
       pluginIds,
       discoveries,
       registry,
@@ -172,13 +172,7 @@ export async function runRuntimeDebug(
     tools.registerBuiltin(suspendTool);
     tools.registerBuiltin(runtimeDoneTool);
     for (const t of createPluginDataTools(store)) tools.registerBuiltin(t);
-    for (const t of createCharacterTools(store, {
-      findWorldDataPluginId: (id) =>
-        registry.findPluginByCapability(
-          id,
-          FrameworkCapability.WorldDataProvider,
-        ),
-    })) {
+    for (const t of createCharacterTools(store)) {
       tools.registerBuiltin(t);
     }
     for (const { pluginId: ownerId, tool } of entryTools) {
@@ -191,6 +185,7 @@ export async function runRuntimeDebug(
       loadRuntime: async (manifest) => loadedCache.get(manifest.name),
       llm: liveAdapters?.llm ?? llm,
       services,
+      extensions,
       gateway: liveAdapters?.gateway ?? makeGateway(options),
       utils: PLUGIN_UTILS,
       mediaStore,

@@ -391,11 +391,13 @@ async function collectArchivalItems(
     const content = String(entry.content ?? "").trim();
     if (!content) continue;
     items.push({
-      vecKey: `lorebook:${entry.id}`,
+      vecKey: `lorebook:${JSON.stringify(entry.owner)}:${entry.id}`,
       displayKey: entry.keys?.[0] ?? entry.id,
       text: content,
       source: "lorebook",
-      ...(entry.pluginId ? { pluginId: entry.pluginId } : {}),
+      ...(entry.owner.kind === "plugin"
+        ? { pluginId: entry.owner.pluginId }
+        : {}),
     });
   }
 

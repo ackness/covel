@@ -63,6 +63,9 @@ describe("API bootstrap resource ownership", () => {
       close,
       ensurePluginEntry: async () => {},
       hasPendingEntry: () => false,
+      withSnapshot: async (_sessionId, fn) => fn(),
+      reload: async (pluginId) => ({ pluginId, generation: "fixture" }),
+      watch: () => {},
     });
     const failure = new Error("compactor configuration failed");
     vi.mocked(createBootstrapCompactorRunner).mockImplementationOnce(() => {

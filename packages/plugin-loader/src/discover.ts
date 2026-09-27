@@ -72,13 +72,20 @@ export async function discoverPlugins(
         if (!rtEntry.isDirectory()) {
           continue;
         }
-        const rtPluginMd = path.join(runtimesDir, rtEntry.name, "PLUGIN.md");
+        const oldPath = path.join(runtimesDir, rtEntry.name, "PLUGIN.md");
+        if (await fileExists(oldPath))
+          throw new Error(
+            `${oldPath}: runtime manifests must be named RUNTIME.md`,
+          );
+        const rtPluginMd = path.join(runtimesDir, rtEntry.name, "RUNTIME.md");
         if (await fileExists(rtPluginMd)) {
           pluginMdPaths.push(rtPluginMd);
         }
       }
 
-      if (pluginMdPaths.length > 0) {
+      if (!(await fileExists(pluginMdPath)))
+        throw new Error(`${rootPath}: a plugin root PLUGIN.md is required`);
+      {
         results.push({
           id: entry.name,
           rootPath,

@@ -55,14 +55,7 @@ function validatePluginAccess(
   return null;
 }
 
-/**
- * Core plugins own state the framework itself depends on (world dimension
- * schema, character records, memory blocks). The generic API is a player-facing
- * escape hatch for ordinary plugin state, so it must not be able to rewrite
- * those — a forged `world-init/schema` entry would redefine the world's
- * character attributes for every later turn. Core-plugin state changes go
- * through that plugin's own tools and the proposal pipeline.
- */
+/** Core plugin state is changed through its declared tools and proposal pipeline. */
 function corePluginWriteError(
   registry: PluginRegistry,
   pluginId: string,

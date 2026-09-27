@@ -28,7 +28,7 @@ export type EmbedFn = (
  * make it impossible to collide with a real plugin id (npm package names, from
  * which plugin ids derive, cannot begin with `_`).
  */
-export const MEMORY_VECTOR_PLUGIN_ID = "__memory__";
+export const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
 
 /** Namespace for embedded conversation-history (recall) vectors. */
 export const RECALL_NAMESPACE = "recall";

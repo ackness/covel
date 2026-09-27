@@ -17,9 +17,8 @@ import { createTransactionMethods } from "./transaction-methods.js";
 import { createVectorMethods } from "./vector-methods.js";
 import {
   createLorebookMethods,
-  createWorkingMemoryMethods,
   createWorldDataImportLedgerMethods,
-} from "./working-memory-methods.js";
+} from "./world-data-methods.js";
 import { createWorldMethods } from "./world-methods.js";
 import type { MemoryStore } from "./memory-types.js";
 import type { StoreTransaction } from "../types.js";
@@ -37,7 +36,6 @@ export function createMemoryStore(): MemoryStore {
     ...createRuntimeMethods(state),
     ...createPluginDataMethods(state),
     ...createWorldMethods(state),
-    ...createWorkingMemoryMethods(state),
     ...createWorldDataImportLedgerMethods(state),
     ...createLorebookMethods(state),
     ...createSuspensionMethods(state),

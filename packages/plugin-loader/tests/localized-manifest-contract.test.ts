@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadRuntime } from "../src/load.js";
+import {
+  loadRuntime,
+  loadPluginDefinition,
+  loadPluginEntryDefinition,
+} from "../src/load.js";
 import { reconcileLocalizedManifest } from "../src/localized-manifest.js";
 import type { PluginDiscoveryResult } from "../src/types.js";
 
@@ -15,32 +19,29 @@ describe("localized manifest / canonical manifest consistency", () => {
   let dir: string;
 
   const CANONICAL = `---
-name: demo
+id: demo
+kind: plugin
 description: 中文描述
-stage: narrative
-capabilities:
-  - narrative
-tools:
-  builtin:
-    - plugin-data-set
+provides: [narrative-engine@1]
+runtime:
+  type: agent
+  schedule: {stage: narrative}
+  io: {output: {contract: narrative-engine@1}}
+  agent: {tools: {builtin: [plugin-data-set]}}
 ---
-
 中文提示词。
 `;
-
   const LOCALIZED = `---
-name: demo
+id: demo
+kind: plugin
 description: English description
-stage: pre-turn
-capabilities:
-  - narrative
-  - image-generation
-tools:
-  builtin:
-    - plugin-data-set
-    - emit-event
+provides: [narrative-engine@1, image-generation@1]
+runtime:
+  type: agent
+  schedule: {stage: pre-turn}
+  io: {output: {contract: narrative-engine@1}}
+  agent: {tools: {builtin: [plugin-data-set, emit-event]}}
 ---
-
 English prompt body.
 `;
 
@@ -66,7 +67,7 @@ English prompt body.
     const loaded = await loadRuntime(discovery, "demo", "en-US");
 
     expect(loaded.manifest.stage).toBe("narrative");
-    expect(loaded.manifest.capabilities).toEqual(["narrative"]);
+    expect(loaded.manifest.outputContract).toEqual("narrative-engine@1");
     expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
     // Prose and prompt body still come from the translation.
     expect(loaded.manifest.description).toBe("English description");
@@ -132,7 +133,7 @@ English prompt body.
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       await fs.writeFile(
         path.join(dir, "PLUGIN.en.md"),
-        "---\nname: demo\n---\n\nEnglish prompt body.\n",
+        "---\nid: demo\n---\n\nEnglish prompt body.\n",
       );
       const loaded = await loadRuntime(
         {
@@ -147,7 +148,7 @@ English prompt body.
 
       expect(loaded.manifest.description).toBe("中文描述");
       expect(loaded.manifest.stage).toBe("narrative");
-      expect(loaded.manifest.capabilities).toEqual(["narrative"]);
+      expect(loaded.manifest.outputContract).toEqual("narrative-engine@1");
       expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
       expect(loaded.promptTemplate).toContain("English prompt body.");
       expect(warn).not.toHaveBeenCalled();
@@ -155,10 +156,42 @@ English prompt body.
     },
   );
 
+  it("captures localized root prompt contributions before execution", async () => {
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.md"),
+      "---\nid: demo\nkind: plugin\ndescription: Demo\ncontributes: {prompt: [{id: guide, content: 中文, position: pre-history}]}\n---\n",
+    );
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.en.md"),
+      "---\ncontributes: {prompt: [{id: guide, content: English, position: pre-history}]}\n---\n",
+    );
+    const discovery = {
+      id: "demo",
+      rootPath: dir,
+      pluginMdPaths: [],
+      isMultiRuntime: false,
+    };
+    const definition = await loadPluginDefinition(discovery);
+    const entry = await loadPluginEntryDefinition(discovery, [
+      definition.packageManifest,
+    ]);
+    expect(entry.staticPromptSegments[0].content).toBe("中文");
+    expect(
+      entry.staticPromptVariants?.["en"]?.[0].content ??
+        entry.staticPromptVariants?.["en-US"]?.[0].content,
+    ).toBe("English");
+    await fs.writeFile(path.join(dir, "PLUGIN.en.md"), "broken after capture");
+    expect(
+      Object.values(entry.staticPromptVariants ?? {})
+        .flat()
+        .map((segment) => segment.content),
+    ).toEqual(["English"]);
+  });
+
   it("validates translated prose after inheriting the canonical contract", async () => {
     await fs.writeFile(
       path.join(dir, "PLUGIN.en.md"),
-      "---\nname: demo\ndescription: 42\n---\nEnglish prompt.\n",
+      "---\nid: demo\ndescription: 42\n---\nEnglish prompt.\n",
     );
     await expect(
       loadRuntime(
@@ -236,40 +269,35 @@ describe("reconcileLocalizedManifest omitted fields", () => {
   });
 });
 
-describe("reconcileLocalizedManifest machine-field paths", () => {
-  it("keeps memoryBlocks[*].label from canonical while translating real prose", () => {
+describe("localized contribution identities", () => {
+  it("preserves contribution ids while translating labels and content", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    // `label` is display prose in most places (userSettings here) but a stable
-    // machine key inside memoryBlocks — translating it would split the block's
-    // working_memory key per UI language.
     const canonical = {
-      name: "demo",
-      memoryBlocks: [{ label: "core", displayName: "Core", content: "seed" }],
-      userSettings: [{ key: "tone", label: "Tone" }],
-    } as unknown as import("@covel/shared").RuntimeManifest;
+      contributes: {
+        settings: [{ key: "tone", label: "Tone" }],
+        prompt: [
+          { id: "reminder", content: "Reminder", position: "pre-history" },
+        ],
+      },
+    };
     const localized = {
-      name: "demo",
-      memoryBlocks: [
-        { label: "核心", displayName: "核心记忆", content: "种子" },
-      ],
-      userSettings: [{ key: "tone", label: "语气" }],
-    } as unknown as import("@covel/shared").RuntimeManifest;
-
+      contributes: {
+        settings: [{ key: "translated-key", label: "语气" }],
+        prompt: [{ id: "translated-id", content: "提醒", position: "system" }],
+      },
+    };
     const merged = reconcileLocalizedManifest(
       canonical,
       localized,
       "PLUGIN.zh.md",
-    ) as unknown as {
-      memoryBlocks: { label: string; displayName: string }[];
-      userSettings: { label: string }[];
-    };
-
-    expect(merged.memoryBlocks[0].label).toBe("core"); // machine key: canonical
-    expect(merged.memoryBlocks[0].displayName).toBe("核心记忆"); // prose: translated
-    expect(merged.userSettings[0].label).toBe("语气"); // genuine I18nText: translated
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("memoryBlocks[0].label"),
     );
+    expect(merged.contributes.settings).toEqual([
+      { key: "tone", label: "语气" },
+    ]);
+    expect(merged.contributes.prompt).toEqual([
+      { id: "reminder", content: "提醒", position: "pre-history" },
+    ]);
+    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 });

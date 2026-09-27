@@ -1,13 +1,4 @@
-/**
- * Process-wide registry for post-turn memory work.
- *
- * Turn completion deliberately does not await core-memory extraction or vector
- * ingestion. Registering both kinds of work here gives graceful shutdown one
- * barrier that can drain every memory system created in this process without
- * coupling the server composition root to an individual session.
- */
-
-export type MemoryBackgroundTaskKind = "core-update" | "vector-ingest";
+export type MemoryBackgroundTaskKind = "vector-ingest";
 
 export interface MemoryBackgroundTaskInfo {
   readonly kind: MemoryBackgroundTaskKind;

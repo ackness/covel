@@ -59,7 +59,7 @@ export async function processRuntimeResult(
     readonly hookPipeline?: HookPipeline;
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
-    readonly capabilities?: readonly string[];
+    readonly enforceImageFlow?: boolean;
     /** Source content anchor supplied by the execution finalizer for retries. */
     readonly messageSourceTurnId?: string;
     /**
@@ -128,7 +128,7 @@ export async function processRuntimeResult(
     store,
     sessionId,
     proposals,
-    opts?.capabilities,
+    opts?.enforceImageFlow,
   );
   if (missingAssetFailure) {
     imageGenerationFailures.push(missingAssetFailure);
@@ -138,7 +138,7 @@ export async function processRuntimeResult(
     store,
     sessionId,
     proposals,
-    opts?.capabilities,
+    opts?.enforceImageFlow,
   );
   imageGenerationFailures.push(...inlineMediaFailures);
   if (inlineMediaFailures.length > 0) {

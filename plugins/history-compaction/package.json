@@ -1,0 +1,17 @@
+{
+  "name": "@covel/plugin-history-compaction",
+  "version": "0.0.41",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@covel/shared": "workspace:*",
+    "@covel/context": "workspace:*",
+    "@covel/store": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}

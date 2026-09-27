@@ -44,21 +44,17 @@ export default function ({ tool, z }) {
       const now = new Date().toISOString();
       const schemaProposal = [...(context.pendingProposals ?? [])]
         .reverse()
-        .find(
-          (proposal) =>
-            proposal.type === "plugin.data" &&
-            proposal.payload?.namespace === "schema" &&
-            proposal.payload?.key === "character-attributes",
-        );
-      const schemaValue = schemaProposal?.payload?.value;
+        .find((proposal) => proposal.type === "character.schema.set");
+      const schemaValue =
+        schemaProposal?.payload ?? context.world?.characterSchema;
       if (!schemaValue || typeof schemaValue !== "object") {
         throw new Error(
           "set-world-schema must succeed before set-world-entries-batch",
         );
       }
-      const worldSchema = { "character-attributes": schemaValue };
+      const worldSchema = schemaValue;
 
-      // 1) Legacy plugin_data write — unchanged read path for old sessions.
+      // 1) Store the plugin-owned session dimension overrides.
       const pluginDataItems = params.entries.map((entry) => ({
         namespace: "entries",
         key: entry.key,

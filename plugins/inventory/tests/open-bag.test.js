@@ -50,11 +50,7 @@ describe("inventory open-bag command", () => {
       ctx,
     );
 
-    expect(ctx.store.listPluginData).toHaveBeenCalledWith(
-      "sess-1",
-      "inventory",
-      "items",
-    );
+    expect(ctx.store.listPluginData).toHaveBeenCalledWith("items");
     expect(result).toEqual({
       ok: true,
       message: "行囊中有 2 项物品。",

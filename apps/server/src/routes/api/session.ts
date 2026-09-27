@@ -1,3 +1,5 @@
+import { importWorldEmbeddedCharacters } from "./session/world-characters.js";
+import { characterSchemaSchema } from "@covel/shared";
 /**
  * Session routes — RESTful CRUD + session-scoped plugin management.
  *
@@ -55,19 +57,14 @@ import {
   SESSION_OWNER_TOKEN_HASH_KEY,
 } from "./session/session-guard.js";
 import {
-  approvedActivePlugins,
-  resolveSessionPlugins,
-  validateSessionRuntimeProviders,
+  resolveSessionPluginPlan,
   unknownPluginIds,
 } from "./session/plugins.js";
 import {
   buildSessionPatchUpdates,
   parseCreateSessionBody,
 } from "./session/request-helpers.js";
-import {
-  importWorldCharacterBlueprints,
-  importWorldEmbeddedLorebook,
-} from "./session/world-character-blueprints.js";
+import { importWorldEmbeddedLorebook } from "./session/world-lorebook.js";
 import { registerSessionMediaTokenRoute } from "./session/media-token-route.js";
 import { registerSessionPluginRoutes } from "./session/plugin-routes.js";
 import type { SessionRouteEnv } from "./session/route-env.js";
@@ -221,25 +218,19 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
-  const selectedPlugins = resolveSessionPlugins(
+  const selection = resolveSessionPluginPlan(
     parsedCreate.requestedPlugins,
     pluginRegistry,
+    { excluded: parsedCreate.excludedPlugins },
   );
-  const plugins = approvedActivePlugins(
-    selectedPlugins,
-    pluginRegistry,
-    c.get("rpcApprovalGate"),
-  );
-  try {
-    validateSessionRuntimeProviders(selectedPlugins, pluginRegistry);
-  } catch (error) {
-    return c.json(
-      errorBody(
-        error instanceof Error ? error.message : "Invalid runtime providers",
+  const failure = selection.rejected.find(
+    (item) =>
+      !["approval-required", "excluded", "default-replaced"].includes(
+        item.code,
       ),
-      400,
-    );
-  }
+  );
+  if (failure) return c.json(errorBody(failure.reason), 400);
+  const plugins = selection.active;
 
   if (rawWorldId) {
     const worldAccess = await withWritableWorld(
@@ -282,10 +273,14 @@ sessionRoutes.post("/", async (c) => {
     completedPlayerTurns: 0,
     setupRuntimes: {},
     // Persist selection; execution and lifecycle hooks use only live grants.
-    activePlugins: selectedPlugins,
+    activePlugins: plugins,
     createdAt: now,
     updatedAt: now,
     metadata: {
+      pluginSelection: {
+        requested: parsedCreate.requestedPlugins,
+        excluded: parsedCreate.excludedPlugins,
+      },
       ...(parsedCreate.loreOverride !== undefined
         ? { loreOverride: parsedCreate.loreOverride }
         : {}),
@@ -340,6 +335,22 @@ sessionRoutes.post("/", async (c) => {
     try {
       importedMediaRefs = await store.withTransaction(async (tx) => {
         await tx.createSession(session);
+        const worldForSchema = rawWorldId
+          ? await tx.getWorld(rawWorldId)
+          : null;
+        const schema = worldForSchema?.metadata?.characterSchema;
+        if (schema) {
+          const parsedSchema = characterSchemaSchema.parse({
+            ...(schema as Record<string, unknown>),
+            version: 1,
+          });
+          await tx.upsertCharacterSchema({
+            ...parsedSchema,
+            sessionId: id,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
         const importedWorldData = await applyPreparedWorldDataImportForSession({
           store: tx,
           mediaStore: c.get("mediaStore"),
@@ -350,11 +361,8 @@ sessionRoutes.post("/", async (c) => {
           deferMediaFinalize: true,
         });
         if (!importedWorldData.imported) {
-          await importWorldCharacterBlueprints(tx, id, rawWorldId, now, {
-            activePlugins: plugins,
-            registry: pluginRegistry,
-          });
           await importWorldEmbeddedLorebook(tx, id, rawWorldId, now);
+          await importWorldEmbeddedCharacters(tx, id, rawWorldId, now);
         }
         return importedWorldData.mediaRefs;
       });

@@ -149,7 +149,7 @@ function makeRuntime(name: string) {
     name,
     pluginId: name,
     outputKind: "plugin",
-    capabilities: [] as const,
+    outputContract: undefined,
   };
 }
 
@@ -226,7 +226,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
         handler: "./h.js",
         trigger: { type: "auto" },
         outputKind: "plugin",
-        capabilities: [],
+        outputContract: undefined,
       }) as RuntimeManifest;
     const schemaGen = fnRuntime("p/schema-gen", 40);
     const playerInit = fnRuntime("p/player-init", 500);
@@ -259,12 +259,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
             } as const;
           }
           // player-init reads the committed schema from the frozen snapshot.
-          const row = await ctx.store.getPluginData(
-            sessionId,
-            "p",
-            "world",
-            "schema",
-          );
+          const row = await ctx.store.getPluginData("world", "schema");
           playerInitRead = row?.value;
           return { outcome: "success", value: {} } as const;
         },
@@ -384,7 +379,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         handler: "./h.js",
         trigger: { type: "auto" },
         outputKind: "plugin",
-        capabilities: [],
+        outputContract: undefined,
       }) as RuntimeManifest;
 
     const aSetup = fnRuntime("plug-a/setup", "plug-a", 50); // setup band
@@ -445,7 +440,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       handler: "./h.js",
       trigger: { type: "auto" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
       inputs: { data: { from: { runtime: "a/gen" }, required: true } },
       input: { schema: "./in.json" },
     } as RuntimeManifest;
@@ -550,7 +545,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
           handler: "./h.js",
           trigger: { type: "auto" },
           outputKind: "plugin",
-          capabilities: [],
+          outputContract: undefined,
         }) as RuntimeManifest;
       const deps: TurnExecutorDeps = {
         loadRuntime: async (m): Promise<LoadedRuntime> => ({
@@ -596,7 +591,7 @@ describe("detached activation model (source × detached)", () => {
         handler: "./h.js",
         trigger: { type: "auto" },
         outputKind: "plugin",
-        capabilities: [],
+        outputContract: undefined,
         inputs: { data: { from: { runtime: "n/narr" }, required: true } },
       }) as RuntimeManifest;
     const noBinding = (name: string): RuntimeManifest =>
@@ -678,7 +673,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       handler: "./h.js",
       trigger: { type: "auto" },
       outputKind: "plugin",
-      capabilities: ["narr"],
+      outputContract: "narr",
     }) as RuntimeManifest;
   const consumer = (cardinality?: "one" | "all"): RuntimeManifest =>
     ({
@@ -690,7 +685,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       handler: "./h.js",
       trigger: { type: "auto" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
       inputs: {
         data: {
           from: { capability: "narr", ...(cardinality ? { cardinality } : {}) },
@@ -1295,7 +1290,7 @@ describe("accepts validation (static decidable subset + runtime check)", () => {
       handler: "./h.js",
       trigger: { type: "auto" },
       outputKind: "plugin",
-      capabilities: ["prov"],
+      outputContract: "prov",
     }) as RuntimeManifest;
   const consumer = (
     cardinality?: "one" | "all",
@@ -1310,7 +1305,7 @@ describe("accepts validation (static decidable subset + runtime check)", () => {
       handler: "./h.js",
       trigger: { type: "auto" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
       inputs: {
         data: {
           from: { capability: "prov", ...(cardinality ? { cardinality } : {}) },
@@ -1432,7 +1427,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       handler: "./h.js",
       trigger: { type: "manual" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
       input: { schema: "./in.json" },
     } as RuntimeManifest;
     const deps: TurnExecutorDeps = {
@@ -1476,7 +1471,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       runtimeType: "agent",
       trigger: { type: "manual" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
     } as RuntimeManifest;
     const assembled = buildContext({
       promptTemplate: "You roll dice.",
@@ -1533,7 +1528,7 @@ describe("recordAs export (persistent export revision)", () => {
       handler: "./h.js",
       trigger: { type: "auto" },
       outputKind: "plugin",
-      capabilities: ["cfg-provider"],
+      outputContract: "cfg-provider",
       version: "1.0.0",
       output: { schema: "./out.json", recordAs },
     }) as RuntimeManifest;
@@ -1551,7 +1546,7 @@ describe("recordAs export (persistent export revision)", () => {
       handler: "./h.js",
       trigger: { type: "auto" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
       input: {
         inject: [
           {

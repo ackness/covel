@@ -5,13 +5,10 @@ import type {
   StoreTransaction,
 } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import type { ParsedWorldDataTarget } from "../target-uri.js";
+import type { ResolvedPluginDataTarget } from "../contract-targets.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
 
-export type PluginDataTarget = Extract<
-  ParsedWorldDataTarget,
-  { kind: "plugin-data" }
->;
+export type PluginDataTarget = ResolvedPluginDataTarget;
 
 export type PlannedWrite =
   | {
@@ -100,7 +97,7 @@ export interface WorldDataImportedMediaRef {
 
 export interface WorldDataImportPreflightDeps {
   readonly activePlugins?: readonly string[];
-  readonly registry?: Pick<PluginRegistry, "get">;
+  readonly registry?: Pick<PluginRegistry, "get" | "getAll">;
   /**
    * Read-only planning never executes projection modules. Import/sync callers
    * leave this enabled and rely on `canExecuteProjection` for community code.

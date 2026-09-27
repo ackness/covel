@@ -1,3 +1,4 @@
+import { readFileSync as readContractFile } from "node:fs";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * codex plugin tests.
@@ -673,13 +674,25 @@ describe("codex plugin manifest", () => {
   /** @type {import('@covel/shared').RuntimeManifest} */
   let manifest;
   let loaded;
+  let declaration;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const discovery = discoveries.find((d) => d.id === "codex");
     const manifests = await loadPluginManifest(discovery);
     manifest = manifests[0].manifest;
-    loaded = await loadRuntime(discovery, manifest.name);
+    declaration = manifests[0].plugin;
+    loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
+      "world-ir@1": JSON.parse(
+        readContractFile(
+          new URL(
+            "../../world-ir/schemas/world-ir.schema.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ),
+    });
   });
 
   it("should be a non-core agent-runtime plugin", () => {
@@ -689,17 +702,17 @@ describe("codex plugin manifest", () => {
     // extractor / character-tracker.
     expect(manifest.stage).toBe("post-turn");
     // Agent runtime — no `runtimeType` field means default 'agent'
-    expect(manifest.runtimeType).toBeUndefined();
+    expect(manifest.runtimeType).toBe("agent");
     expect(manifest.handler).toBeUndefined();
   });
 
   it("should consume typed WorldIR and inject existing plugin data", () => {
     expect(manifest.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider", cardinality: "one" },
-      accepts: "covel://world/ir/v1",
+      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      accepts: "contract:world-ir@1",
       required: true,
     });
-    expect(manifest.relations?.requires).toContain("world-ir");
+    expect(declaration.requires).toContain("world-ir-provider@1");
 
     const injects = manifest.input?.inject ?? [];
     expect(injects).toHaveLength(1);
@@ -724,7 +737,9 @@ describe("codex plugin manifest", () => {
   });
 
   it("should declare post-history completion contract", () => {
-    expect(manifest.postHistory?.content).toContain("<existing-entries>");
+    expect(JSON.stringify(declaration.contributes.prompt)).toContain(
+      "<existing-entries>",
+    );
   });
 
   it("should load PLUGIN.md body as the LLM prompt template", () => {

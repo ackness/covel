@@ -387,7 +387,7 @@ const EXCLUDE_DIRS = new Set([
   "tests",
   "__tests__",
 ]);
-const sideCarResources = ["plugins", "prompts", "worlds"];
+const sideCarResources = ["plugins", "prompts", "worlds", "packs"];
 for (const entry of sideCarResources) {
   const src = path.join(projectRoot, entry);
   const dest = path.join(serverStaging, entry);

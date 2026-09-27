@@ -16,7 +16,7 @@ import {
   createPluginRpcRegistry,
   type HookContext,
 } from "@covel/runtime";
-import type { RuntimeManifest } from "@covel/shared";
+import type { PluginManifest, RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
@@ -59,8 +59,38 @@ function writePlugin(
       pluginMdPaths: [path.join(rootPath, "PLUGIN.md")],
       source: opts.source ?? "builtin",
     },
-    parsed: { manifest, promptTemplate: "", rawFrontmatter: {} },
+    parsed: {
+      manifest,
+      plugin: {
+        id: pluginId,
+        kind: "plugin",
+        description: pluginId,
+        entry: entryPath,
+        contributes: fixtureContributions(entrySource ?? ""),
+      },
+      promptTemplate: "",
+      rawFrontmatter: {},
+    },
   };
+}
+
+// These are synthetic registry fixtures: declarations mirror the literal
+// registrations in each fixture source; malformed calls still reach API validation.
+function fixtureContributions(
+  source: string,
+): NonNullable<PluginManifest["contributes"]> {
+  const matches = (pattern: RegExp) => [
+    ...new Set([...source.matchAll(pattern)].map((match) => match[1]!)),
+  ];
+  return {
+    tools: matches(
+      /registerTool\(\s*(?:\w+\.toolkit\.tool\()?\s*\{\s*name:\s*["']([^"']+)["']/g,
+    ).map((name) => (name.endsWith("-tool-") ? `${name}1` : name)),
+    actions: matches(/registerRpc\(["']([^"']+)["']/g),
+    services: matches(/\bcontract:\s*["']([^"']+)["']/g),
+    wires: matches(/\bid:\s*["']([^"']+)["']/g),
+    hooks: matches(/\.on\(["']([^"']+)["']/g).map((event) => ({ event })),
+  } as NonNullable<PluginManifest["contributes"]>;
 }
 
 function makeParams(entries: ReturnType<typeof writePlugin>[]) {
@@ -75,7 +105,8 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
         pluginType: "plugin",
         runtimeCount: 0,
       },
-      manifests: [entry.parsed],
+      packageManifest: entry.parsed,
+      manifests: [],
       status: "registered",
       loadedRuntimes: new Map(),
       source: entry.discovery.source,
@@ -388,7 +419,7 @@ describe("createBootstrapPluginEntries", () => {
     // only the sub-runtime manifest (no entry) — exactly the multi-runtime shape.
     fs.writeFileSync(
       path.join(rootPath, "PLUGIN.md"),
-      `---\nname: ${pluginId}\ndescription: multi-runtime root\npluginType: plugin\nentry: ./server/index.mjs\n---\n\n# Multi\n`,
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: multi-runtime root\nentry: ./server/index.mjs\ncontributes:\n  tools: [root-entry-tool]\n---\n\n# Multi\n`,
     );
     const subManifest = {
       name: `${pluginId}/worker`,
@@ -401,7 +432,7 @@ describe("createBootstrapPluginEntries", () => {
       id: pluginId,
       rootPath,
       isMultiRuntime: true,
-      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "PLUGIN.md")],
+      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "RUNTIME.md")],
       source: "builtin",
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
@@ -411,7 +442,7 @@ describe("createBootstrapPluginEntries", () => {
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
     fs.writeFileSync(
       discovery.pluginMdPaths[0]!,
-      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+      `---\ndescription: Worker\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n`,
     );
     const definition = await loadPluginDefinition(discovery);
     params.pluginRegistry.register({
@@ -440,7 +471,7 @@ describe("createBootstrapPluginEntries", () => {
     );
     fs.writeFileSync(
       path.join(rootPath, "PLUGIN.md"),
-      `---\nname: ${pluginId}\ndescription: community multi-runtime root\npluginType: plugin\nentry: ./server/index.mjs\n---\n`,
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: community multi-runtime root\nentry: ./server/index.mjs\ncontributes:\n  actions: [root-action]\n---\n`,
     );
 
     const subManifest = {
@@ -453,7 +484,7 @@ describe("createBootstrapPluginEntries", () => {
       id: pluginId,
       rootPath,
       isMultiRuntime: true,
-      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "PLUGIN.md")],
+      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "RUNTIME.md")],
       source: "community",
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
@@ -463,7 +494,7 @@ describe("createBootstrapPluginEntries", () => {
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
     fs.writeFileSync(
       discovery.pluginMdPaths[0]!,
-      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+      `---\ndescription: Worker\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n`,
     );
     const definition = await loadPluginDefinition(discovery);
     params.pluginRegistry.register({
@@ -793,6 +824,19 @@ export default async function (covel) {
     "rolls back the complete batch and reports invalid $name registrations",
     async ({ name, call, operation }) => {
       const pluginId = `entry-invalid-${name}`;
+      const expectedOperation = [
+        "hook-handler",
+        "hook-predicate",
+        "hook-timeout",
+        "hook-enforce",
+        "hook-options",
+        "rpc-duplicate",
+        "wire-module",
+        "wire-group",
+        "wire-duplicate",
+      ].includes(name)
+        ? "declarations"
+        : operation;
       const source = FULL_ENTRY_SRC.replace(
         'action: "continue"',
         'action: "abort", reason: "leaked hook"',
@@ -806,7 +850,7 @@ export default async function (covel) {
         ).rejects.toMatchObject({
           cause: {
             code: "plugin_registration_invalid",
-            registration: operation,
+            registration: expectedOperation,
           },
         });
         expect(entries.hasPendingEntry(pluginId)).toBe(true);
@@ -819,7 +863,7 @@ export default async function (covel) {
         expect(params.pluginRegistry.get(pluginId)).toMatchObject({
           status: "registered",
           error: expect.stringContaining(
-            `[plugin_registration_invalid] ${operation}:`,
+            `[plugin_registration_invalid] ${expectedOperation}:`,
           ),
         });
       } finally {

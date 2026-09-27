@@ -65,7 +65,7 @@ it("creates a third-party form from the real world-init guard in the first setup
       name: "Mistport",
       description: "Declared world attributes",
       createdAt: now,
-      metadata: { characterAttributes: world.characterAttributes },
+      metadata: { characterSchema: world.characterSchema },
     });
     await store.createSession({
       id: sessionId,

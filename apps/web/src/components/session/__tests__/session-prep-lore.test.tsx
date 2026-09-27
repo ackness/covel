@@ -26,6 +26,8 @@ vi.mock("@/hooks/use-slot-config.js", () => ({
 vi.mock("../session-prep/use-plugin-selection.js", () => ({
   usePluginSelection: () => ({
     selectedPluginIds: ["fixture-plugin"],
+    requestedPluginIds: ["fixture-plugin"],
+    excludedPluginIds: [],
     selectedPluginSummaries: [],
     selectedPluginIdSet: new Set(),
     pluginPlan: {},
@@ -138,7 +140,11 @@ describe("session prep lore ownership", () => {
       fireEvent.click(screen.getByRole("button", { name: "Retry" })),
     );
     fireEvent.click(start);
-    expect(onStart).toHaveBeenCalledWith(["fixture-plugin"], "Recovered draft");
+    expect(onStart).toHaveBeenCalledWith(
+      ["fixture-plugin"],
+      "Recovered draft",
+      [],
+    );
     expect(JSON.stringify(warn.mock.calls)).not.toContain("Sensitive");
     warn.mockRestore();
   });
@@ -157,7 +163,11 @@ describe("session prep lore ownership", () => {
     );
     expect(screen.getByRole("alert").textContent).toContain("Draft not saved");
     fireEvent.click(screen.getAllByRole("button", { name: "Start Game" })[0]!);
-    expect(onStart).toHaveBeenCalledWith(["fixture-plugin"], "Latest draft");
+    expect(onStart).toHaveBeenCalledWith(
+      ["fixture-plugin"],
+      "Latest draft",
+      [],
+    );
     await act(async () =>
       fireEvent.click(screen.getByRole("button", { name: "Retry" })),
     );
@@ -237,6 +247,7 @@ describe("session prep lore ownership", () => {
     expect(onStart).toHaveBeenCalledWith(
       ["fixture-plugin"],
       "Session-specific text",
+      [],
     );
     await act(async () => write.resolve());
   });

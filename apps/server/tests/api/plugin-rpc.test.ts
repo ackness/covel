@@ -12,9 +12,11 @@ import {
   type MediaStore,
 } from "@covel/store";
 import {
+  PluginExtensionHost,
+  PluginServiceRegistry,
   createPluginRpcRegistry,
   createRpcExecutor,
-  submitFormHandler,
+  createSubmitFormHandler,
   type PluginRpcRegistry,
   type RpcExecutor,
   type RpcHandlerContext,
@@ -40,6 +42,7 @@ import {
 } from "../../src/lib/session-lock.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 import branchReplyHandler from "../../../../plugins/branch-reply/handler.js";
+import branchReplyEntry from "../../../../plugins/branch-reply/server/index.js";
 
 type Env = {
   Variables: {
@@ -61,7 +64,10 @@ function setup(): {
 } {
   const store = createMemoryStore();
   const registry = createPluginRpcRegistry();
-  registry.registerFrameworkDefault("submit-form", submitFormHandler);
+  registry.registerFrameworkDefault(
+    "submit-form",
+    createSubmitFormHandler(undefined, store),
+  );
   registry.registerFrameworkDefault("echo", async (payload) => ({
     echoed: payload,
   }));
@@ -276,7 +282,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       runtimeType: "agent",
       outputKind: "story",
       model: "story",
-      capabilities: ["narrative"],
+      outputContract: "narrative@1",
       commands: [
         {
           name: "inspect",
@@ -295,6 +301,15 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     };
     pluginRegistry.register({
       id: "inspector",
+      packageManifest: {
+        ...parsed,
+        plugin: {
+          id: "inspector",
+          kind: "plugin",
+          description: "Inspector",
+          contributes: { commands: runtime.commands },
+        },
+      },
       summary: {
         id: "inspector",
         name: "Inspector",
@@ -1448,9 +1463,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       execution: "sync",
       handler: branchReplyHandler as FunctionHandler,
       stage: undefined,
-      // Declares the prompt-history-rewriter capability so the framework
-      // discovers it (instead of hardcoding "branch-reply" in the executor).
-      capabilities: ["branch-reply", "prompt-history-rewriter"],
     });
     const { entry: narratorEntry, loaded: narratorLoaded } = makeAgentEntry({
       pluginId: "chat-mode-narrator",
@@ -1464,6 +1476,16 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register(branchEntry);
     pluginRegistry.register(narratorEntry);
 
+    const extensions = new PluginExtensionHost(
+      new PluginServiceRegistry({
+        list: async (id) => (await store.getSession(id))?.activePlugins ?? [],
+        ensure: async () => {},
+      }),
+    );
+    branchReplyEntry({
+      provideExtension: (point, id, implementation) =>
+        extensions.register("branch-reply", { point, id }, implementation),
+    });
     const rpcRegistry = createPluginRpcRegistry();
     const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
@@ -1483,6 +1505,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
+      c.set("pluginExtensions", extensions);
       c.set("rpcExecutor", rpcExecutor);
       c.set("rpcRegistry", rpcRegistry);
       c.set("rpcApprovalGate", gate);
@@ -1509,7 +1532,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         id: "sess-branch-api",
-        plugins: ["chat-mode-narrator"],
+        plugins: ["chat-mode-narrator", "branch-reply"],
         locale: "zh-CN",
       }),
     });

@@ -189,13 +189,7 @@ export function findPluginDirectories(
   const selected = selectPackageEntries(entries, directory);
   const files = new Set(selected.map((e) => e.relativePath));
   const isPlugin = (prefix: string) =>
-    files.has(`${prefix}package.json`) &&
-    [...files].some(
-      (p) =>
-        p === `${prefix}PLUGIN.md` ||
-        (p.startsWith(prefix) &&
-          /^runtimes\/[^/]+\/PLUGIN\.md$/.test(p.slice(prefix.length))),
-    );
+    files.has(`${prefix}package.json`) && files.has(`${prefix}PLUGIN.md`);
   if (isPlugin("")) return [directory];
   const dirs = [...files]
     .filter(
@@ -208,7 +202,7 @@ export function findPluginDirectories(
   if (dirs.length === 0)
     throw httpError(
       400,
-      "No plugin found; expected package.json and PLUGIN.md (or runtimes/*/PLUGIN.md)",
+      "No plugin found; expected package.json and root PLUGIN.md",
     );
   if (dirs.length > 20)
     throw httpError(

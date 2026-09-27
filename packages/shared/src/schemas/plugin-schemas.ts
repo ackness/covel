@@ -5,6 +5,18 @@
  */
 
 import { z } from "zod";
+
+export const extensionDeclarationSchema = z.strictObject({
+  point: z.string().regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/),
+  id: z.string().regex(/^[a-zA-Z0-9][\w.-]*$/),
+  order: z.number().int().optional(),
+  slot: z
+    .string()
+    .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/)
+    .optional(),
+  watch: z.array(z.string().min(1)).optional(),
+  preview: z.array(z.string().min(1)).optional(),
+});
 import { HOOK_EVENTS } from "../types/hooks.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { EffectResource } from "../types/runtime-scheduling.js";
@@ -35,7 +47,7 @@ const pluginRelativeJsonSchemaPath = z
 /** Public framework schemas may be referenced by URI without plugin copies. */
 const runtimeJsonSchemaReference = z.union([
   pluginRelativeJsonSchemaPath,
-  z.literal("covel://world/ir/v1"),
+  z.string().regex(/^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$/),
 ]);
 
 /** capability cardinality — `one` (any single provider) or `all` (every provider). */
@@ -194,21 +206,18 @@ export const inputInjectDeclSchema = z.discriminatedUnion("kind", [
   runtimeInjectDeclSchema,
   pluginDataInjectDeclSchema,
   runtimeExportInjectDeclSchema,
+  z.strictObject({
+    kind: z.literal("kernel"),
+    from: z.literal("turn-digest@1"),
+    name: bindingNameSchema,
+  }),
 ]);
-
-export const inputToolDeclSchema = z
-  .object({
-    plugin: z.string().min(1),
-    runtime: z.string().min(1),
-  })
-  .strict();
 
 export const inputConfigSchema = z
   .object({
     /** Runtime-dir-relative JSON Schema path validating the activation payload. */
     schema: runtimeJsonSchemaReference.optional(),
     inject: z.array(inputInjectDeclSchema).optional(),
-    tools: z.array(inputToolDeclSchema).optional(),
   })
   .strict();
 
@@ -299,32 +308,6 @@ export const hookDeclarationSchema = z
   })
   .strict();
 
-// ── Author's note / Post-history declarations ──────────
-
-/**
- * Segment 9 — Author's note. Inserted near the end of the message history,
- * just before the Nth-from-last message (default depth = 4). Content is
- * interpolated with the same variable map as the plugin body.
- */
-export const authorsNoteDeclSchema = z
-  .object({
-    content: z.string().min(1),
-    depth: z.number().int().optional(),
-    role: z.enum(["system", "user", "assistant"]).optional(),
-  })
-  .strict();
-
-/**
- * Segment 10 — Post-history instructions. Appended at the very end of the
- * message array as a high-weight re-anchoring message.
- */
-export const postHistoryDeclSchema = z
-  .object({
-    content: z.string().min(1),
-    role: z.enum(["system", "user"]).optional(),
-  })
-  .strict();
-
 // ── Plugin entry path ─────────────────────────────────────
 
 const pluginRelativeJsPath = z
@@ -409,30 +392,6 @@ export const pluginEventDeclSchema = z
   })
   .strict();
 
-// ── Core-memory block schema ────────────────────────────────────
-
-/**
- * Declarative core-memory block definition for `RuntimeManifest.memoryBlocks`.
- * Validates the per-block shape declared in PLUGIN.md frontmatter so the
- * memory system can drive extraction/rendering off plugin data instead of
- * hardcoded block labels. See {@link MemoryBlockSchema}.
- */
-export const memoryBlockDeclSchema = z
-  .object({
-    label: z
-      .string()
-      .min(1)
-      .regex(/^[a-z][a-z0-9_]*$/, {
-        message:
-          "memory block label must be lowercase snake_case (letters, digits, underscores)",
-      }),
-    displayName: i18nTextLoose,
-    extractionHint: i18nTextLoose,
-    icon: z.string().min(1).optional(),
-    maxChars: z.number().int().positive().optional(),
-  })
-  .strict();
-
 // ── Plugin catalogue metadata ───────────────────────────────────
 
 const pluginTagSchema = z
@@ -450,17 +409,6 @@ const pluginTagSchema = z
 // consumer read; `capability` / `tag` targets never resolved at all. Annotate a
 // dependency with a YAML comment instead. Capability-based *scheduling*
 // dependencies are a different field — see `needs` / `after`.
-const relationEntrySchema = z.array(z.string().min(1)).optional();
-
-export const pluginRelationsSchema = z
-  .object({
-    provides: relationEntrySchema,
-    requires: relationEntrySchema,
-    recommends: relationEntrySchema,
-    conflicts: relationEntrySchema,
-  })
-  .strict();
-
 // ── UI spec ─────────────────────────────────────────────────────
 
 export const uiSpecSchema = z
@@ -525,6 +473,8 @@ export const stageSchema = z.enum(STAGE_ORDER);
 export const turnCompletionConfigSchema = z
   .object({
     mode: z.enum(["await", "detached"]).optional(),
+    settle: z.literal("before-next-execution").optional(),
+    maxSettleWaitMs: z.number().int().positive().optional(),
     maxQueueMs: z.number().int().positive().optional(),
     maxExecutionMs: z.number().int().positive().optional(),
     overlap: z.literal("serial").optional(),
@@ -595,7 +545,6 @@ export const effectResourceSchema = z.union([
     "characters:*",
     "assets:*",
     "media:*",
-    "working-memory:*",
     "lorebook:*",
     "ui:*",
     "interaction:*",
@@ -666,8 +615,8 @@ export const permissionsDeclSchema = z
  * superRefine has to name Zod's refinement-ctx type.
  */
 interface ManifestCrossFieldView {
-  readonly fallbackFor?: string;
-  readonly capabilities?: readonly string[];
+  readonly outputContract?: string;
+  readonly defaultProvider?: boolean;
   readonly runtimeType?: string;
   readonly handler?: string;
   readonly stage?: string;
@@ -675,6 +624,8 @@ interface ManifestCrossFieldView {
   readonly requireExplicitCompletion?: boolean;
   readonly turnCompletion?: {
     readonly mode?: string;
+    readonly settle?: string;
+    readonly maxSettleWaitMs?: number;
     readonly maxQueueMs?: number;
     readonly maxExecutionMs?: number;
     readonly overlap?: string;
@@ -706,10 +657,10 @@ function sharedManifestCrossFieldIssues(
   m: ManifestCrossFieldView,
 ): CrossFieldIssue[] {
   const issues: CrossFieldIssue[] = [];
-  if (m.fallbackFor && !m.capabilities?.includes(m.fallbackFor)) {
+  if (m.defaultProvider && !m.outputContract) {
     issues.push({
-      path: ["fallbackFor"],
-      message: "fallbackFor must be a declared capability",
+      path: ["defaultProvider"],
+      message: "defaultProvider requires an outputContract",
     });
   }
 
@@ -760,6 +711,15 @@ function sharedManifestCrossFieldIssues(
     });
   }
 
+  if (
+    m.turnCompletion?.maxSettleWaitMs !== undefined &&
+    m.turnCompletion.settle === undefined
+  ) {
+    issues.push({
+      path: ["turnCompletion", "maxSettleWaitMs"],
+      message: "maxSettleWaitMs requires settle",
+    });
+  }
   const turnCompletionMode = m.turnCompletion?.mode ?? "await";
   if (turnCompletionMode === "detached") {
     if (m.stage !== "post-turn" && m.stage !== "audit") {
@@ -784,6 +744,8 @@ function sharedManifestCrossFieldIssues(
       });
     }
   } else if (
+    m.turnCompletion?.settle !== undefined ||
+    m.turnCompletion?.maxSettleWaitMs !== undefined ||
     m.turnCompletion?.maxQueueMs !== undefined ||
     m.turnCompletion?.maxExecutionMs !== undefined ||
     m.turnCompletion?.overlap !== undefined ||
@@ -894,6 +856,7 @@ const runtimeManifestCommonShape = {
    * per plugin. Same traversal constraint as `wires` / rpc handlers.
    */
   entry: pluginRelativeJsPath.optional(),
+  extensions: z.array(extensionDeclarationSchema).optional(),
   model: z.string().optional(),
   llm: z
     .strictObject({
@@ -932,18 +895,9 @@ const runtimeManifestCommonShape = {
   maxRecursionDepth: z.number().int().min(0).max(50).optional(),
   pluginType: z.enum(["core-plugin", "plugin"]).optional(),
   outputKind: outputKindSchema.optional(),
-  /**
-   * Capability tags for framework discovery. Free-form by design: plugins
-   * may declare arbitrary custom tags. The framework only acts on the tags in
-   * `FRAMEWORK_KNOWN_CAPABILITIES` (plugin-level `FrameworkCapability` +
-   * runtime-level `FrameworkRuntimeCapability`); at server bootstrap,
-   * `validateRuntimeManifestSemantics` warns when a declared tag looks like
-   * a misspelled framework-known one.
-   */
-  capabilities: z.array(z.string().min(1)).optional(),
-  fallbackFor: z.string().min(1).optional(),
+  outputContract: z.string().min(1).optional(),
+  defaultProvider: z.boolean().optional(),
   tags: z.array(pluginTagSchema).optional(),
-  relations: pluginRelationsSchema.optional(),
   /** Coarse scheduling stage: which band this runtime runs in. */
   stage: stageSchema.optional(),
   /** Weak ordering dependencies (no gate). */
@@ -982,10 +936,6 @@ const runtimeManifestCommonShape = {
   ui: uiSpecSchema.optional(),
   userSettings: z.array(pluginUserSettingSpecSchema).optional(),
   commands: z.array(slashCommandSpecSchema).max(32).optional(),
-  summaryFocus: z.array(z.string()).optional(),
-  authorsNote: authorsNoteDeclSchema.optional(),
-  postHistory: postHistoryDeclSchema.optional(),
-  memoryBlocks: z.array(memoryBlockDeclSchema).optional(),
 } as const;
 
 /**

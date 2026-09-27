@@ -19,9 +19,9 @@ export default async function pregameHandler(ctx) {
   if (store && typeof store === "object") {
     const s = /** @type {any} */ (store);
     try {
-      const session = await s.getSession(sessionId);
+      const session = await s.getSession();
       if (session?.worldId) {
-        const world = await s.getWorld(session.worldId);
+        const world = await s.getWorld();
         if (world) {
           worldName = world.name ?? worldName;
           worldSummary = world.description ?? world.summary ?? "";

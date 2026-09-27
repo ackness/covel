@@ -93,26 +93,12 @@ export interface CharacterUpsertPayload {
    */
   readonly expectedVersion?: number;
   readonly createdAt?: string;
-  /**
-   * Optional plugin-data mirror target. When provided, the commit handler
-   * mirrors a compact character snapshot into this plugin's
-   * `characters/<id>` namespace so existing plugin UI panels can update via
-   * the standard `plugin-data.changed` channel.
-   */
-  readonly mirrorPluginId?: string;
-  /**
-   * Additional plugin-data mirror targets for framework panels that aggregate
-   * characters across multiple character-producing plugins.
-   */
-  readonly mirrorPluginIds?: readonly string[];
 }
 
-export interface WorkingMemorySetPayload {
-  readonly scope: "player" | "story" | "shared";
-  readonly key: string;
-  readonly value: unknown;
-  readonly schemaRef?: string;
-}
+export type CharacterSchemaSetPayload = Pick<
+  import("./world-model.js").CharacterSchema,
+  "types" | "attributes"
+>;
 
 /**
  * Payload for `lorebook.upsert` proposals.
@@ -163,7 +149,7 @@ export interface ProposalPayloadMap {
   "plugin.data.batch": PluginDataBatchPayload;
   "plugin.data.delete": PluginDataDeletePayload;
   "character.upsert": CharacterUpsertPayload;
-  "working_memory.set": WorkingMemorySetPayload;
+  "character.schema.set": CharacterSchemaSetPayload;
   "lorebook.upsert": LorebookUpsertPayload;
 }
 
@@ -210,7 +196,7 @@ export const PROPOSAL_TYPES = [
   "plugin.data.batch",
   "plugin.data.delete",
   "character.upsert",
-  "working_memory.set",
+  "character.schema.set",
   "lorebook.upsert",
 ] as const satisfies readonly ProposalType[];
 

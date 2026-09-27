@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
-import type { FunctionHandler, LoadedRuntime } from "@covel/plugin-loader";
+import {
+  createPluginRegistry,
+  type FunctionHandler,
+  type LoadedRuntime,
+} from "@covel/plugin-loader";
 import type {
   DeferredRuntimeJob,
   RuntimeManifest,
@@ -10,7 +14,11 @@ import { createMemoryStore } from "@covel/store";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
-import { createPluginRpcRuntimeTurnRunner } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
+import {
+  createPluginRpcRuntimeTurnRunner,
+  backgroundRuntimeLockId,
+  type PluginRpcRuntimeTurnContext,
+} from "../../src/routes/api/plugin-rpc/runtime-turn.js";
 import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
@@ -92,6 +100,7 @@ describe("plugin RPC detached-stage runner", () => {
     handler: FunctionHandler,
     hookPipeline?: HookPipeline,
     runtimeManifest = manifest(),
+    extra: Partial<PluginRpcRuntimeTurnContext> = {},
   ) {
     const store = createMemoryStore();
     const now = new Date().toISOString();
@@ -136,9 +145,106 @@ describe("plugin RPC detached-stage runner", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         llm: { generate: async () => ({}) } as any,
       },
+      ...extra,
     });
     return { store, session, runner, observed };
   }
+
+  it.each([false, true])(
+    "captures current runtime metadata after lock admission, detached=%s",
+    async (detached) => {
+      const registry = createPluginRegistry();
+      const current: RuntimeManifest = {
+        ...manifest(),
+        stage: undefined,
+        trigger: { type: "manual" },
+        inputs: undefined,
+        needs: undefined,
+        turnCompletion: undefined,
+      };
+      registry.register({
+        id: PLUGIN_ID,
+        summary: {
+          id: PLUGIN_ID,
+          name: PLUGIN_ID,
+          description: "fixture",
+          pluginType: "plugin",
+          runtimeCount: 2,
+        },
+        manifests: [producerManifest(), current].map((manifest) => ({
+          manifest,
+          promptTemplate: "",
+          rawFrontmatter: {},
+        })),
+        loadedRuntimes: new Map(),
+        status: "registered",
+      });
+      await registry.applyPersistedActivations(
+        SESSION_ID,
+        [PLUGIN_ID],
+        async () => {},
+      );
+      const raw = createInProcessSessionLock();
+      const held = new Set<string>();
+      const lock: PluginRpcRuntimeTurnContext["sessionLock"] = {
+        async withLock(id, fn) {
+          return raw.withLock(id, async () => {
+            held.add(id);
+            try {
+              return await fn();
+            } finally {
+              held.delete(id);
+            }
+          });
+        },
+      };
+      let captured = false;
+      const f = await setup(
+        async () => {
+          expect(captured).toBe(true);
+          expect(held.has(SESSION_ID)).toBe(!detached);
+          return { outcome: "success", value: {}, effects: {} };
+        },
+        undefined,
+        current,
+        {
+          activeRuntimes: [], // This stale request snapshot must not drive execution.
+          pluginRegistry: registry,
+          sessionLock: lock,
+          withSettledLock: (fn) => {
+            expect(captured).toBe(false);
+            return lock.withLock(SESSION_ID, fn);
+          },
+          withSnapshot: async (fn) => {
+            expect(
+              held.has(
+                detached
+                  ? backgroundRuntimeLockId(SESSION_ID, RUNTIME_ID)
+                  : SESSION_ID,
+              ),
+            ).toBe(true);
+            captured = true;
+            try {
+              return await registry.withSnapshot(fn);
+            } finally {
+              captured = false;
+            }
+          },
+        },
+      );
+      const result = await f.runner.runManualTurn({
+        turnId: `snapshot-${detached}`,
+        runtimeId: RUNTIME_ID,
+        detached,
+      });
+      expect(
+        result.runtimeResults.some(
+          (result) =>
+            result.runtimeId === RUNTIME_ID && result.status === "success",
+        ),
+      ).toBe(true);
+    },
+  );
 
   it.each(["manual", "background", "detached-stage"] as const)(
     "keeps operation settings during %s commit",

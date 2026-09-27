@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["label", "content"],
+  "properties": {
+    "label": {
+      "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "displayName": {},
+    "icon": {
+      "type": "string"
+    },
+    "charCount": {
+      "type": "integer"
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

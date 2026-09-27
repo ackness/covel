@@ -10,12 +10,14 @@ export function rebindSnapshotPayloadSession(
   ): T[] => records.map((record) => ({ ...record, sessionId }));
   return {
     ...payload,
+    characterSchema: payload.characterSchema
+      ? { ...payload.characterSchema, sessionId }
+      : null,
     characters: rebind(payload.characters),
     stateEntries: rebind(payload.stateEntries),
     stateSchemas: rebind(payload.stateSchemas),
     runtimeExports: rebind(payload.runtimeExports),
     pluginData: rebind(payload.pluginData),
-    workingMemory: rebind(payload.workingMemory),
     lorebookEntries: rebind(payload.lorebookEntries),
     suspensions: payload.suspensions.map((record) => ({
       ...record,

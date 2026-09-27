@@ -1,6 +1,6 @@
 # 世界事实提取 (World IR)
 
-`world-ir` 是通用的叙事事实抽取管线。它通过 `inputs.narrative` 按 `narrative-engine` capability 获取当前故事输出，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，成功的工具结果会直接成为严格校验的 `covel://world/ir/v1` 输出。
+`world-ir` 是通用的叙事事实抽取管线。它通过 `inputs.narrative` 按 `narrative-engine` capability 获取当前故事输出，并要求模型调用一次 `submit-world-facts`。工具补齐省略的协议常量 `schemaVersion: 1`（显式非法版本仍拒绝），参数按共享 World IR schema 校验，成功的工具结果会直接成为严格校验的 `contract:world-ir@1` 输出。
 
 同轮下游 runtime 应声明：
 

@@ -31,7 +31,10 @@ describe("branch-reply manifest and UI loading", () => {
       // the manual createCandidates / acceptCandidate actions still arrive via
       // plugin-rpc manualTrigger regardless of the declared trigger type.
       trigger: { type: "auto" },
-      capabilities: ["branch-reply", "prompt-history-rewriter"],
+      outputContract: "branch-reply@1",
+      extensions: [
+        { point: "prompt.history-transform@1", id: "accepted-branch" },
+      ],
       effects: { parallelSafe: true },
       ui: {
         message: ["./ui/branch-reply-block.json"],
@@ -56,9 +59,9 @@ describe("branch-reply manifest and UI loading", () => {
       id: "branch-reply",
       dataSource: { namespace: "message" },
       view: {
-        component: "BranchReplyCandidates",
+        component: "CandidateList",
         props: {
-          pluginId: "branch-reply",
+          acceptAction: { pluginId: "branch-reply" },
         },
       },
     });

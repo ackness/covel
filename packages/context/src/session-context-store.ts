@@ -28,7 +28,6 @@ import type {
   SessionSummaryRecord,
   TraceEventRecord,
   TurnMessageRecord,
-  WorkingMemoryRecord,
   WorldRecord,
 } from "./store-records.js";
 
@@ -43,16 +42,6 @@ export interface SessionContextReadStore {
     pluginId: string,
     namespace: string,
   ): Promise<readonly PluginDataRecord[]>;
-  /**
-   * Optional — older mock stores in plugin tests may not implement this.
-   * Loader probes via `typeof === 'function'` before invoking.
-   */
-  listWorkingMemory?(
-    sessionId: string,
-  ): Promise<readonly WorkingMemoryRecord[]>;
-  /**
-   * Optional — same rationale as `listWorkingMemory`.
-   */
   listSessionLorebookEntries?(
     sessionId: string,
   ): Promise<readonly LorebookEntryRecord[]>;
@@ -109,6 +98,5 @@ export type {
   SessionSummaryRecord,
   TraceEventRecord,
   TurnMessageRecord,
-  WorkingMemoryRecord,
   WorldRecord,
 } from "./store-records.js";

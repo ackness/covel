@@ -3,268 +3,139 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-
 const script = path.resolve(
   import.meta.dirname,
   "../scripts/validate-manifest.ts",
 );
 const roots: string[] = [];
-
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
-
-async function fixture(frontmatter: string) {
-  const root = await mkdtemp(
-    path.join(os.tmpdir(), "covel-manifest-authoring-"),
-  );
-  roots.push(root);
-  await writeManifest(root, frontmatter);
+async function fixture(fields: Record<string, unknown> = {}) {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "covel-authoring-"));
+  roots.push(temp);
+  const root = path.join(temp, "probe");
+  await write(root, "PLUGIN.md", {
+    id: "probe",
+    kind: "plugin",
+    description: "Probe",
+    ...fields,
+  });
   return root;
 }
-
-async function writeManifest(root: string, frontmatter: string) {
+async function write(root: string, filename: string, value: unknown) {
   await mkdir(root, { recursive: true });
   await writeFile(
-    path.join(root, "PLUGIN.md"),
-    `---\n${frontmatter}\n---\n`,
+    path.join(root, filename),
+    `---\n${JSON.stringify(value)}\n---\n`,
     "utf8",
   );
 }
-
-function validate(root: string, ...options: string[]) {
-  return spawnSync(
-    process.execPath,
-    ["--import", "tsx", script, root, ...options],
-    {
-      encoding: "utf8",
-      timeout: 10_000,
-    },
-  );
+function validate(...args: string[]) {
+  return spawnSync(process.execPath, ["--import", "tsx", script, ...args], {
+    encoding: "utf8",
+    timeout: 10_000,
+  });
 }
-
+const runtime = {
+  type: "function",
+  function: { handler: "./handler.js", timeoutMs: 90_000 },
+  schedule: { trigger: { type: "manual" } },
+};
 describe("manifest authoring CLI", () => {
   it.each([
-    ["authorsNote: {content: valid, depth: wrong}", "authorsNote.depth"],
-    ["postHistory: {content: valid, role: wrong}", "postHistory.role"],
-  ])("rejects raw invalid fields: %s", async (field, issuePath) => {
-    const root = await fixture(`name: probe\ndescription: Probe\n${field}`);
-    const result = validate(root);
+    "name",
+    "stage",
+    "capabilities",
+    "authorsNote",
+    "postHistory",
+    "userSettings",
+  ])("rejects legacy root field %s", async (field) => {
+    const result = validate(await fixture({ [field]: "legacy" }));
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("(authoring schema)");
-    expect(result.stderr).toContain(issuePath);
+    expect(result.stderr).toContain(field);
   });
-
-  it("accepts localized metadata and Hook/UI-only plugin declarations", async () => {
-    const root = await fixture(
-      [
-        "name: probe",
-        "description: {en: Probe, zh: 探针}",
-        "displayName: {en: Probe, zh: 探针}",
-        "entry: ./server/index.js",
-        "ui: {right: [./ui/panel.json]}",
-        "authorsNote: {content: Guidance, depth: 2, role: system}",
-        "postHistory: {content: Reminder, role: user}",
-      ].join("\n"),
-    );
+  it("accepts localized metadata and entry-only contribution packages", async () => {
+    const root = await fixture({
+      description: { en: "Probe", zh: "探针" },
+      entry: "./server/index.js",
+      contributes: {
+        ui: { right: ["./ui/panel.json"] },
+        prompt: [{ id: "guide", content: "Guidance", position: { depth: 2 } }],
+      },
+    });
     const result = validate(root);
     expect(result.status, result.stderr).toBe(0);
   });
-
-  it("accepts metadata roots and validates every runtime in a package", async () => {
-    const root = await fixture(
-      "name: probe\ndescription: Metadata\nentry: ./server/index.js",
-    );
-    await writeManifest(
-      path.join(root, "runtimes/note"),
-      [
-        "name: probe/note",
-        "description: Note",
-        "runtimeType: function",
-        "handler: ./handler.js",
-        "trigger: {type: manual}",
-      ].join("\n"),
-    );
-    await writeManifest(
-      path.join(root, "runtimes/listener"),
-      [
-        "name: probe/listener",
-        "description: Listener",
-        "runtimeType: function",
-        "handler: ./handler.js",
-        "trigger: {type: event, topic: note.created}",
-      ].join("\n"),
-    );
-    const result = validate(root);
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout.match(/✓/g)).toHaveLength(3);
-  });
-
-  it.each(["directory", "file"])(
-    "accepts shared multi-runtime root declarations via a %s argument",
-    async (argumentKind) => {
-      const root = await fixture(
-        [
-          "name: probe",
-          "description: Metadata",
-          "entry: ./server/index.js",
-          "ui: {right: [./ui/panel.json]}",
-          "userSettings: []",
-          "dataSchemas: {}",
-        ].join("\n"),
-      );
-      await writeManifest(
-        path.join(root, "runtimes/panel"),
-        "name: probe/panel\ndescription: Panel\nstage: narrative\nui: {right: [./panel.json]}",
-      );
-      const result = validate(
-        argumentKind === "file" ? path.join(root, "PLUGIN.md") : root,
-      );
+  it.each(["directory", "root", "child"])(
+    "validates all runtime declarations through a %s path",
+    async (kind) => {
+      const root = await fixture();
+      await write(path.join(root, "runtimes/note"), "RUNTIME.md", runtime);
+      await write(path.join(root, "runtimes/listener"), "RUNTIME.md", {
+        ...runtime,
+        schedule: { trigger: { type: "event", topic: "note.created" } },
+      });
+      const target =
+        kind === "directory"
+          ? root
+          : kind === "root"
+            ? path.join(root, "PLUGIN.md")
+            : path.join(root, "runtimes/note/RUNTIME.md");
+      const result = validate(target);
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stderr).not.toContain("(multi-runtime root)");
     },
   );
-
-  it("keeps single-runtime declarations valid with an empty runtimes directory", async () => {
-    const root = await fixture(
-      "name: probe\ndescription: Probe\nui: {right: [./panel.json]}\nuserSettings: []\ndataSchemas: {}",
-    );
-    await mkdir(path.join(root, "runtimes"));
+  it("rejects root execution alongside a runtimes directory", async () => {
+    const root = await fixture({ runtime });
+    await write(path.join(root, "runtimes/note"), "RUNTIME.md", runtime);
     const result = validate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("runtime");
+  });
+  it("rejects package contributions on a child even if equal to the root", async () => {
+    const root = await fixture({ contributes: { settings: [] } });
+    await write(path.join(root, "runtimes/note"), "RUNTIME.md", {
+      ...runtime,
+      contributes: { settings: [] },
+    });
+    const result = validate(path.join(root, "runtimes/note/RUNTIME.md"));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("contributes");
+  });
+  it("rejects legacy child PLUGIN.md files", async () => {
+    const root = await fixture();
+    await write(path.join(root, "runtimes/note"), "PLUGIN.md", runtime);
+    const result = validate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("RUNTIME.md");
+  });
+  it("validates sibling declarations when passed a child path", async () => {
+    const root = await fixture();
+    await write(path.join(root, "runtimes/note"), "RUNTIME.md", runtime);
+    await write(path.join(root, "runtimes/bad"), "RUNTIME.md", {
+      ...runtime,
+      type: "unknown",
+    });
+    const result = validate(path.join(root, "runtimes/note/RUNTIME.md"));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("runtimes/bad/RUNTIME.md");
+  });
+  it("validates each package once for overlapping paths", async () => {
+    const root = await fixture();
+    await write(path.join(root, "runtimes/note"), "RUNTIME.md", runtime);
+    const result = validate(
+      root,
+      path.join(root, "PLUGIN.md"),
+      path.join(root, "runtimes/note/RUNTIME.md"),
+    );
     expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.match(/✓/g)).toHaveLength(1);
   });
-
-  it("rejects execution fields on a multi-runtime package root", async () => {
-    const root = await fixture(
-      "name: probe\ndescription: Probe\nstage: narrative",
-    );
-    await writeManifest(
-      path.join(root, "runtimes/run"),
-      "name: probe/run\ndescription: Run\nstage: narrative",
-    );
-    const result = validate(root);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain('stage: "stage" is an execution field');
-  });
-
-  it("rejects conflicting package and runtime settings with source paths", async () => {
-    const root = await fixture(
-      "name: probe\ndescription: Probe\nuserSettings: [{key: limit, type: number, label: Limit, default: 1}]",
-    );
-    await writeManifest(
-      path.join(root, "runtimes/run"),
-      "name: probe/run\ndescription: Run\nstage: narrative\nuserSettings: [{key: limit, type: number, label: Limit, default: 2}]",
-    );
-    const result = validate(root);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Conflicting userSettings");
-    expect(result.stderr).toContain(path.join(root, "PLUGIN.md"));
-    expect(result.stderr).toContain(path.join(root, "runtimes/run/PLUGIN.md"));
-  });
-
-  it("resolves root schemas when validating a child manifest path", async () => {
-    const root = await fixture(
-      [
-        "name: probe",
-        "description: Metadata",
-        "dataSchemas:",
-        "  facts:",
-        "    schemaVersion: 1",
-        "    acceptsWorldData: true",
-        "    schema: ./schemas/facts.schema.json",
-      ].join("\n"),
-    );
-    const child = path.join(root, "runtimes/project/PLUGIN.md");
-    await writeManifest(
-      path.dirname(child),
-      [
-        "name: probe/project",
-        "description: Project",
-        "stage: narrative",
-        "worldProjections:",
-        "  facts:",
-        "    from: covel://world/ir/v1",
-        "    handler: ./project.js",
-        "    outputs:",
-        "      facts: {namespace: facts, key: id}",
-      ].join("\n"),
-    );
-
-    const result = validate(child);
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout.match(/✓/g)).toHaveLength(2);
-  });
-
-  it("rejects sibling conflicts when validating a child manifest path", async () => {
-    const root = await fixture(
-      "name: probe\ndescription: Metadata\nuserSettings: [{key: limit, type: number, label: Limit, default: 1}]",
-    );
-    const child = path.join(root, "runtimes/run/PLUGIN.md");
-    await writeManifest(
-      path.dirname(child),
-      "name: probe/run\ndescription: Run\nstage: narrative",
-    );
-    const sibling = path.join(root, "runtimes/other/PLUGIN.md");
-    await writeManifest(
-      path.dirname(sibling),
-      "name: probe/other\ndescription: Other\nstage: narrative\nuserSettings: [{key: limit, type: number, label: Limit, default: 2}]",
-    );
-
-    const result = validate(child);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Conflicting userSettings");
-    expect(result.stderr).toContain(path.join(root, "PLUGIN.md"));
-    expect(result.stderr).toContain(sibling);
-  });
-
-  it("checks package layout when validating a child manifest path", async () => {
-    const root = await fixture(
-      "name: probe\ndescription: Metadata\nstage: narrative",
-    );
-    const child = path.join(root, "runtimes/run/PLUGIN.md");
-    await writeManifest(
-      path.dirname(child),
-      "name: probe/run\ndescription: Run\nstage: narrative",
-    );
-
-    const result = validate(child);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("(multi-runtime root)");
-  });
-
-  it("validates each package only once for overlapping paths", async () => {
-    const root = await fixture("name: probe\ndescription: Metadata");
-    const child = path.join(root, "runtimes/run/PLUGIN.md");
-    await writeManifest(
-      path.dirname(child),
-      "name: probe/run\ndescription: Run\nstage: narrative",
-    );
-
-    const result = validate(root, child);
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout.match(/✓/g)).toHaveLength(2);
-  });
-
-  it("rejects package-only declarations in a runtime directory", async () => {
-    const root = await fixture("name: probe\ndescription: Probe");
-    await writeManifest(
-      path.join(root, "runtimes/panel"),
-      "name: probe/panel\ndescription: Panel\nui: {right: [./panel.json]}",
-    );
-    const result = validate(root);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(
-      "runtime declaration requires execution fields",
-    );
-  });
-
-  it("has no flag that bypasses the current authoring contract", async () => {
-    const root = await fixture(
-      "name: probe\ndescription: Probe\ntrigger: {type: auto}",
-    );
-    const result = validate(root, "--compat");
-    expect(result.status).not.toBe(0);
+  it("reports missing paths and unsupported flags", () => {
+    expect(validate("/missing/covel/plugin").status).toBe(1);
+    expect(validate("--legacy").status).toBe(2);
   });
 });

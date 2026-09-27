@@ -51,19 +51,24 @@ const spec = (pluginId: string, panelId: string) => ({
   ],
 });
 const plugin = (id: string): SessionPlugin => ({
+  sessionState: "active",
+  requires: [],
+  optional: [],
+  conflicts: [],
+  extensions: [],
   id,
   displayName: id,
   description: id,
   active: true,
   locked: false,
-  status: "registered",
-  pluginType: "plugin",
+  hostState: "approved",
+  kind: "plugin",
   source: "builtin",
   runtimeCount: 0,
   runtimes: [],
   tools: [],
   userSettings: [],
-  capabilities: [],
+  provides: [],
   tags: [],
 });
 beforeEach(async () => {

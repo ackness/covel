@@ -78,6 +78,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   saveEvent: ["events"],
   addMessage: ["messages"],
   upsertCharacter: ["characters"],
+  upsertCharacterSchema: ["characterSchemas"],
   deleteCharacter: ["characters"],
   addTraceEvent: ["traceEvents"],
   saveRuntimeOutput: ["runtimeOutputs"],
@@ -94,8 +95,6 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   compareAndSetPluginData: ["pluginData"],
   deletePluginData: ["pluginData"],
   // working memory / ledger / lorebook
-  upsertWorkingMemory: ["workingMemoryEntries"],
-  deleteWorkingMemory: ["workingMemoryEntries"],
   saveWorldDataImportLedgerBatch: ["worldDataImportLedger"],
   deleteWorldDataImportLedger: ["worldDataImportLedger"],
   upsertLorebookEntries: ["lorebookEntries"],

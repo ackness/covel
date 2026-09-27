@@ -26,7 +26,6 @@ import {
   makeTraceEvent,
   makeTurnMessage,
   makeTurnResult,
-  makeWorkingMemory,
   makeWorld,
   makeWorldDataImportLedger,
   ts,
@@ -756,193 +755,6 @@ export function registerRuntimeRecordStoreSuites(
     });
   });
 
-  describe("WorkingMemory", () => {
-    it("upsert + get roundtrip", async () => {
-      const wm = makeWorkingMemory({
-        sessionId: "wm-sess",
-        scope: "player",
-        key: "prefs",
-      });
-      await store.upsertWorkingMemory(wm);
-      const result = await store.getWorkingMemory("wm-sess", "player", "prefs");
-      expect(result).not.toBeNull();
-      expect(result!.key).toBe("prefs");
-      expect(result!.scope).toBe("player");
-      expect(result!.sessionId).toBe("wm-sess");
-      expect(result!.value).toEqual(wm.value);
-    });
-
-    it("preserves null values", async () => {
-      const wm = makeWorkingMemory({
-        sessionId: "wm-null",
-        scope: "player",
-        key: "prefs",
-        value: null,
-      });
-      await store.upsertWorkingMemory(wm);
-      const result = await store.getWorkingMemory("wm-null", "player", "prefs");
-      expect(result?.value).toBeNull();
-    });
-
-    it("list returns all entries for a session", async () => {
-      const w1 = makeWorkingMemory({
-        sessionId: "wm-list",
-        scope: "player",
-        key: "a",
-      });
-      const w2 = makeWorkingMemory({
-        sessionId: "wm-list",
-        scope: "story",
-        key: "b",
-      });
-      const w3 = makeWorkingMemory({
-        sessionId: "wm-list",
-        scope: "shared",
-        key: "c",
-      });
-      await store.upsertWorkingMemory(w1);
-      await store.upsertWorkingMemory(w2);
-      await store.upsertWorkingMemory(w3);
-      const list = await store.listWorkingMemory("wm-list");
-      expect(list).toHaveLength(3);
-      const keys = list.map((r) => r.key);
-      expect(keys).toContain("a");
-      expect(keys).toContain("b");
-      expect(keys).toContain("c");
-    });
-
-    it("parity: lists entries in semantic scope order (player → story → shared)", async () => {
-      // Insert scrambled; every backend must return semantic scope order then
-      // key. Alphabetical scope ordering ([player, shared, story]) would fail
-      // here, catching the SQL-vs-Memory/IDB divergence.
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({ sessionId: "wm-order", scope: "shared", key: "s" }),
-      );
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({ sessionId: "wm-order", scope: "story", key: "t" }),
-      );
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({ sessionId: "wm-order", scope: "player", key: "p" }),
-      );
-      const list = await store.listWorkingMemory("wm-order");
-      expect(list.map((r) => r.scope)).toEqual(["player", "story", "shared"]);
-    });
-
-    it("upsert-on-conflict replaces the record (same sessionId+scope+key)", async () => {
-      const wm = makeWorkingMemory({
-        sessionId: "wm-upsert",
-        scope: "player",
-        key: "pref",
-        value: "v1",
-      });
-      await store.upsertWorkingMemory(wm);
-
-      const wmUpdated = makeWorkingMemory({
-        sessionId: "wm-upsert",
-        scope: "player",
-        key: "pref",
-        value: "v2",
-      });
-      await store.upsertWorkingMemory(wmUpdated);
-
-      const list = await store.listWorkingMemory("wm-upsert");
-      expect(list).toHaveLength(1);
-      expect(list[0].value).toBe("v2");
-    });
-
-    it("delete removes only the targeted entry", async () => {
-      const w1 = makeWorkingMemory({
-        sessionId: "wm-del",
-        scope: "player",
-        key: "keep",
-      });
-      const w2 = makeWorkingMemory({
-        sessionId: "wm-del",
-        scope: "player",
-        key: "remove",
-      });
-      await store.upsertWorkingMemory(w1);
-      await store.upsertWorkingMemory(w2);
-
-      await store.deleteWorkingMemory("wm-del", "player", "remove");
-
-      const list = await store.listWorkingMemory("wm-del");
-      expect(list).toHaveLength(1);
-      expect(list[0].key).toBe("keep");
-
-      const removed = await store.getWorkingMemory(
-        "wm-del",
-        "player",
-        "remove",
-      );
-      expect(removed).toBeNull();
-    });
-
-    it("different sessions do not leak", async () => {
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({
-          sessionId: "wm-sess-A",
-          scope: "player",
-          key: "k",
-          value: "A",
-        }),
-      );
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({
-          sessionId: "wm-sess-B",
-          scope: "player",
-          key: "k",
-          value: "B",
-        }),
-      );
-
-      const listA = await store.listWorkingMemory("wm-sess-A");
-      const listB = await store.listWorkingMemory("wm-sess-B");
-      expect(listA).toHaveLength(1);
-      expect(listA[0].value).toBe("A");
-      expect(listB).toHaveLength(1);
-      expect(listB[0].value).toBe("B");
-    });
-
-    it("same key under different scopes are distinct records", async () => {
-      const sessId = "wm-scopes";
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({
-          sessionId: sessId,
-          scope: "player",
-          key: "sameKey",
-          value: "player-val",
-        }),
-      );
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({
-          sessionId: sessId,
-          scope: "story",
-          key: "sameKey",
-          value: "story-val",
-        }),
-      );
-
-      const playerEntry = await store.getWorkingMemory(
-        sessId,
-        "player",
-        "sameKey",
-      );
-      const storyEntry = await store.getWorkingMemory(
-        sessId,
-        "story",
-        "sameKey",
-      );
-      expect(playerEntry).not.toBeNull();
-      expect(storyEntry).not.toBeNull();
-      expect(playerEntry!.value).toBe("player-val");
-      expect(storyEntry!.value).toBe("story-val");
-
-      const list = await store.listWorkingMemory(sessId);
-      expect(list).toHaveLength(2);
-    });
-  });
-
   describe("WorldDataImportLedger", () => {
     it("saves a batch and lists rows sorted by importedAt then id", async () => {
       const first = makeWorldDataImportLedger({
@@ -954,7 +766,7 @@ export function registerRuntimeRecordStoreSuites(
       const second = makeWorldDataImportLedger({
         id: "ledger-b",
         sessionId: "ledger-batch",
-        target: "working-memory",
+        target: "plugin-data",
         pluginId: undefined,
         namespace: undefined,
         key: undefined,

@@ -1,0 +1,146 @@
+[
+  {
+    "id": "npc-kamishiro-mio",
+    "name": "神代澪",
+    "type": "npc",
+    "description": "二年 B 组班长兼文艺部部长，成绩优秀，做事认真，习惯把焦虑藏在礼貌和条理之下。",
+    "fields": {
+      "club": "文艺部",
+      "class": "二年 B 组",
+      "relationshipStage": "初识",
+      "affection": 12,
+      "trust": 20,
+      "pressure": 45,
+      "publicCloseness": 0,
+      "favoriteTopic": "书、学园祭刊物、安静的地方",
+      "availability": "早读前与课间在二年 B 组；放学后在文艺部活动室；午休偶尔去图书馆校稿",
+      "currentConcern": "在倒计时十四天的预算初审前补齐《春日薄荷》目录和社团存续理由"
+    }
+  },
+  {
+    "id": "npc-asakura-rin",
+    "name": "朝仓凛",
+    "type": "npc",
+    "description": "新闻部记者，行动快，嘴上轻浮，擅长用玩笑试探别人真实反应。",
+    "fields": {
+      "club": "新闻部",
+      "class": "二年 B 组",
+      "relationshipStage": "初识",
+      "affection": 10,
+      "trust": 10,
+      "pressure": 25,
+      "publicCloseness": 5,
+      "favoriteTopic": "传闻、采访、隐藏的真心话",
+      "availability": "课间与午休在二年 B 组或中庭告示台；放学后在新闻部编辑室",
+      "currentConcern": "决定怎样报道转学生，并为「传闻真伪墙」划清采访与朋友之间的边界"
+    }
+  },
+  {
+    "id": "npc-shiina-kaho",
+    "name": "椎名夏帆",
+    "type": "npc",
+    "description": "轻音部吉他手，直觉型行动派，看似随性，其实对舞台和喜欢的人都很认真。",
+    "fields": {
+      "club": "轻音部",
+      "class": "二年 A 组",
+      "relationshipStage": "初识",
+      "affection": 8,
+      "trust": 12,
+      "pressure": 35,
+      "publicCloseness": 2,
+      "favoriteTopic": "音乐、放学路、舞台",
+      "availability": "午休可能带吉他经过中庭；放学后在轻音部练习室；黄昏偶尔去樱坂海堤",
+      "currentConcern": "在倒计时七天的主舞台预演前写完新歌最后一段，并克服去年的失误阴影"
+    }
+  },
+  {
+    "id": "npc-shiraishi-yuma",
+    "name": "白石悠真",
+    "type": "npc",
+    "description": "学生会副会长，冷静守规矩，负责社团登记和学园祭流程，常被误会成不近人情。",
+    "fields": {
+      "club": "学生会",
+      "class": "二年 C 组",
+      "relationshipStage": "初识",
+      "affection": 6,
+      "trust": 18,
+      "pressure": 50,
+      "publicCloseness": 0,
+      "favoriteTopic": "规则、责任、安静的屋顶",
+      "availability": "课间在学生会室；放学后审核社团材料；十七点四十分巡查社团楼与屋顶",
+      "currentConcern": "按流程完成预算初审，同时替真正努力的社团保留可以申诉和补件的空间"
+    }
+  },
+  {
+    "id": "npc-mikoeda-haruka",
+    "name": "三枝遥",
+    "type": "npc",
+    "description": "学生会长，三年级。温和、精确，习惯用一句话把争执拉回流程；学园祭的资源分配由她拍板。",
+    "fields": {
+      "club": "学生会",
+      "class": "三年级",
+      "relationshipStage": "初识",
+      "affection": 5,
+      "trust": 22,
+      "pressure": 55,
+      "publicCloseness": 3,
+      "favoriteTopic": "流程、全局平衡、毕业后的去向",
+      "availability": "午休后或放学后在学生会室；关键节点会到中庭、社团楼和主舞台巡场",
+      "currentConcern": "完成最后一届学园祭与学生会交接，不让所谓公平抹掉小社团的努力"
+    }
+  },
+  {
+    "id": "npc-onodera-chihiro",
+    "name": "小野寺千寻",
+    "type": "npc",
+    "description": "二年 B 组班主任，国语老师，文艺部前顾问。尊重学生自主，会给温和提醒，却很少直接替学生解决问题。",
+    "fields": {
+      "club": "教职・文艺部前顾问",
+      "class": "二年 B 组班主任",
+      "relationshipStage": "师生",
+      "affection": 4,
+      "trust": 28,
+      "pressure": 30,
+      "publicCloseness": 0,
+      "favoriteTopic": "旧书、学生自己的选择、不急着给答案",
+      "availability": "上课与早读在二年 B 组；值日后短暂留在教室；需要时会经过图书馆旧刊架",
+      "currentConcern": "在不替学生解题的前提下，让转学生适应班级，也让文艺部拥有一次自己争取的机会"
+    }
+  },
+  {
+    "id": "npc-morikawa-souta",
+    "name": "森川奏太",
+    "type": "npc",
+    "description": "轻音部鼓手，夏帆的队友，二年 A 组。外向、嘴快，常误把别人的沉默当成默认；能制造喜剧误会，也能在舞台线里提醒玩家夏帆的压力。",
+    "fields": {
+      "club": "轻音部",
+      "class": "二年 A 组",
+      "relationshipStage": "初识",
+      "affection": 6,
+      "trust": 14,
+      "pressure": 20,
+      "publicCloseness": 8,
+      "favoriteTopic": "乐队、现场、把严肃的事说成玩笑",
+      "availability": "午休可能在二年 A 组或中庭；放学后固定在轻音部练习室；彩排前会去星砂乐器行",
+      "currentConcern": "检查主舞台设备并找机会坦白去年故障中自己漏检的责任"
+    }
+  },
+  {
+    "id": "npc-toujou-akane",
+    "name": "东条茜",
+    "type": "npc",
+    "description": "三年级图书委员长，沉默寡言的学姐，海猫书房的常客。看过社团消失，也看过有人拼命想留住一些东西，因此格外懂得安静的陪伴。",
+    "fields": {
+      "club": "图书委员会",
+      "class": "三年级",
+      "relationshipStage": "初识",
+      "affection": 7,
+      "trust": 16,
+      "pressure": 28,
+      "publicCloseness": 1,
+      "favoriteTopic": "书、旧学园祭特刊、海堤的黄昏",
+      "availability": "午休与放学后到十七点三十分在图书馆；闭馆后偶尔去海猫书房或樱坂海堤",
+      "currentConcern": "在毕业前整理旧刊签名页，并确认姐姐当年的保留运动是否还能帮助今天的文艺部"
+    }
+  }
+]

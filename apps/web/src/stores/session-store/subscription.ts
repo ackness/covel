@@ -1,3 +1,4 @@
+import { applyUiSlotEvent } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
 import type { SessionWorkspace } from "@/services/data-service.js";
@@ -101,6 +102,7 @@ export function createSubscriptionEventHandler(
 ) {
   return (event: SubscriptionEvent): void => {
     if (!options.isCurrent()) return;
+    if (applyUiSlotEvent(event.sessionId, event.type, event.payload)) return;
     switch (event.type) {
       case "interaction.requested":
       case "ui.rendered": {
@@ -491,7 +493,8 @@ export function useSessionSubscription({
       }
       if (
         event.type === "state.changed" ||
-        event.type === "character.upserted"
+        event.type === "character.upserted" ||
+        event.type === "character-schema.changed"
       ) {
         // These are committed state notifications. Reuse the in-flight snapshot
         // read instead of buffering reset triggers or duplicating action-stream

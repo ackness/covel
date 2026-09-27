@@ -9,7 +9,6 @@ import {
   createEmitEventTool,
   createMemoryTools,
   createPluginDataTools,
-  createWorldDimensionTools,
   runtimeDoneTool,
   SEARCH_TOOLS_TOOL_NAME,
   suspendTool,
@@ -34,9 +33,6 @@ describe("ToolRegistry", () => {
         {} as Parameters<typeof createPluginDataTools>[0],
       ),
       ...createMemoryTools({} as Parameters<typeof createMemoryTools>[0]),
-      ...createWorldDimensionTools(
-        {} as Parameters<typeof createWorldDimensionTools>[0],
-      ),
       createEmitEventTool({} as Parameters<typeof createEmitEventTool>[0]),
     ].map((entry) => entry.name);
     expect([...new Set([...names, SEARCH_TOOLS_TOOL_NAME])].sort()).toEqual(

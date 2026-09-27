@@ -1,23 +1,6 @@
-/**
- * Built-in memory tools — allow LLM runtimes to search conversation history,
- * read/write core memory blocks, and query archival knowledge.
- *
- * Inspired by Letta's memory tools:
- *   - conversation_search → memory-search (recall + archival)
- *   - core_memory_read    → memory-get-block
- *   - core_memory_replace → memory-update-block
- */
-
-import type { Proposal } from "@covel/shared";
 import { z } from "zod";
 import { tool } from "../tool.js";
-import { withPendingProposals } from "../result.js";
 import type { ToolModule } from "../types.js";
-
-// Core-memory blocks live in the "story" working-memory scope (mirrors
-// @covel/memory's SCOPE). memory-update-block writes there via a proposal so
-// the update commits (and rolls back) with the rest of the execution.
-const CORE_MEMORY_SCOPE = "story" as const;
 
 /** Minimal interface for recall search (avoids @covel/memory dependency). */
 interface RecallSearcher {
@@ -53,18 +36,9 @@ interface ArchivalSearcher {
   >;
 }
 
-/** Minimal interface for core memory block access. */
-interface MemoryBlockReader {
-  getBlock(
-    sessionId: string,
-    label: string,
-  ): Promise<{ label: string; content: string; updatedAt: string } | null>;
-}
-
 export interface MemoryToolDeps {
   readonly recall: RecallSearcher;
   readonly archival: ArchivalSearcher;
-  readonly blocks: MemoryBlockReader;
 }
 
 /**
@@ -146,103 +120,6 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
           resultCount: top.length,
           results: top,
         };
-      },
-    }),
-  );
-
-  // ── memory-get-block ──────────────────────────────────────────
-  tools.push(
-    tool({
-      name: "memory-get-block",
-      description:
-        "按标签读取一个核心记忆块。标签由当前世界和插件的 memoryBlocks 声明决定。",
-      parameters: z.object({
-        label: z.string().min(1).describe("当前世界声明的记忆块标签"),
-      }),
-      execute: async (params, context) => {
-        const pending = context.pendingProposals ?? [];
-        for (let i = pending.length - 1; i >= 0; i -= 1) {
-          const proposal = pending[i]!;
-          if (
-            proposal.type !== "working_memory.set" ||
-            proposal.sessionId !== context.sessionId ||
-            proposal.payload.scope !== CORE_MEMORY_SCOPE ||
-            proposal.payload.key !== params.label
-          )
-            continue;
-          // Match MemoryManager's block representation. Memory is shared
-          // within a session, so the proposal's source plugin is not a filter.
-          const raw = proposal.payload.value as
-            { text?: string } | string | null;
-          return {
-            found: true,
-            label: params.label,
-            content: typeof raw === "string" ? raw : (raw?.text ?? ""),
-            updatedAt: proposal.timestamp,
-          };
-        }
-        const block = await deps.blocks.getBlock(
-          context.sessionId,
-          params.label,
-        );
-        if (!block) {
-          return { found: false, label: params.label, content: "" };
-        }
-        return {
-          found: true,
-          label: block.label,
-          content: block.content,
-          updatedAt: block.updatedAt,
-        };
-      },
-    }),
-  );
-
-  // ── memory-update-block ───────────────────────────────────────
-  // Unrestricted builtin write tool: per the framework's tool-scoping model
-  // (builtin = available to every plugin, local = declaring plugin only) there
-  // is no capability-gated builtin tier. A runtime gets this tool by listing it
-  // in `tools.builtin`; access is opt-in but not capability-checked. See
-  // docs/reference/tools.md.
-  tools.push(
-    tool({
-      name: "memory-update-block",
-      description:
-        "更新当前世界声明的一个核心记忆块。内容应是完整的替换文本（不是增量），300-500 字以内。",
-      parameters: z.object({
-        label: z.string().min(1).describe("当前世界声明的记忆块标签"),
-        content: z
-          .string()
-          .min(1)
-          .max(2000)
-          .describe("完整的新内容（替换旧内容）"),
-      }),
-      execute: async (params, context) => {
-        // Buffer the block write as a working_memory.set proposal. The commit
-        // handler upserts working memory in the execution's transaction; a
-        // rollback drops it. This generic working-memory write does not perform
-        // MemoryManager's per-label truncation or plugin-data panel mirroring.
-        const proposal: Proposal = {
-          id: crypto.randomUUID(),
-          type: "working_memory.set",
-          source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
-          turnId: context.turnId,
-          sessionId: context.sessionId,
-          payload: {
-            scope: CORE_MEMORY_SCOPE,
-            key: params.label,
-            value: { text: params.content },
-          },
-          timestamp: new Date().toISOString(),
-        };
-        return withPendingProposals(
-          {
-            updated: true,
-            label: params.label,
-            contentLength: params.content.length,
-          },
-          [proposal],
-        );
       },
     }),
   );

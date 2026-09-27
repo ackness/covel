@@ -9,6 +9,7 @@ import {
   type FunctionHandler,
   type LoadedRuntime,
   type PluginRegistryEntry,
+  type PluginRuntimeGateway,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
@@ -25,6 +26,7 @@ import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "../../src/routes/api/session/session-guard.js";
+import type { createRuntimeJobCredentials } from "../../src/routes/api/plugin-rpc/runtime-job-credentials.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -209,8 +211,28 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
 });
 
 describe("bootstrap detached job completion", () => {
-  it.each([
+  it.each<{
+    value: Record<string, unknown>;
+    succeeds: boolean;
+    error?: string;
+    credentialSource?: "request" | "waiting" | "unready-request";
+  }>([
     { value: { generated: true }, succeeds: true, error: undefined },
+    {
+      value: { checkCredentials: true },
+      succeeds: true,
+      credentialSource: "request",
+    },
+    {
+      value: { checkCredentials: true },
+      succeeds: true,
+      credentialSource: "waiting",
+    },
+    {
+      value: { checkCredentials: true },
+      succeeds: true,
+      credentialSource: "unready-request",
+    },
     {
       value: { status: "failed" },
       succeeds: false,
@@ -233,10 +255,10 @@ describe("bootstrap detached job completion", () => {
     },
   ])(
     "settles domain writes and job completion together for $value",
-    async ({ value, succeeds, error }) => {
+    async ({ value, succeeds, error, credentialSource }) => {
       const root = await mkdtemp(join(tmpdir(), "covel-atomic-job-"));
       const pluginId = "atomic-job";
-      const runtimeId = `${pluginId}/leaf`;
+      const runtimeId = pluginId;
       const pluginDir = join(root, pluginId);
       const store = createMemoryStore();
       let boot: ApiBootstrapResult | undefined;
@@ -253,24 +275,31 @@ describe("bootstrap detached job completion", () => {
         await writeFile(
           join(pluginDir, "PLUGIN.md"),
           `---
-name: ${runtimeId}
+id: ${runtimeId}
+kind: plugin
 description: Atomic job fixture
 version: 1.0.0
-pluginType: plugin
-runtimeType: function
-handler: ./handler.js
-stage: post-turn
-trigger: { type: auto }
-effects:
-  writes: ["plugin-data:self:tracks"]
-turnCompletion: { mode: detached }
+runtime:
+  type: function
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+    completion:
+      mode: detached
+  function:
+    handler: ./handler.js
+  effects:
+    writes:
+      - plugin-data:self:tracks
 ---
 `,
         );
         await writeFile(
           join(pluginDir, "handler.js"),
-          `export default async () => {
+          `export default async (ctx) => {
           const value = ${JSON.stringify(value)};
+          if (value.checkCredentials) value.credentialSource = (await ctx.gateway.generateText({messages: []})).text;
           if (value.throwFromHandler) throw new Error("synthetic runtime failure");
           return {
             outcome: "success",
@@ -279,12 +308,37 @@ turnCompletion: { mode: detached }
           };
         };`,
         );
+        let credentials:
+          ReturnType<typeof createRuntimeJobCredentials> | undefined;
+        const serverReady = vi.fn(
+          () =>
+            credentialSource !== "waiting" &&
+            credentialSource !== "unready-request",
+        );
+        const makeGateway = (text: string) =>
+          ({
+            generateText: vi.fn(async () => ({
+              text,
+              finishReason: "stop",
+              usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            })),
+          }) as unknown as PluginRuntimeGateway;
+        const serverGateway = makeGateway("server");
         boot = await bootstrapApi({
           pluginsDir: root,
           store,
           storeBackend: "memory",
           llmAdapter: { generate: vi.fn() },
+          pluginGateway: serverGateway,
+          canRunRuntimeJobWithServerServices: serverReady,
+          perRequestMiddleware: [
+            async (c, next) => {
+              credentials = c.get("runtimeJobCredentials");
+              await next();
+            },
+          ],
         });
+        await boot.app.request("/api/health");
         expect(boot.registry.get(pluginId)?.status).toBe("registered");
         await boot.startupMaintenance;
         const now = new Date().toISOString();
@@ -326,13 +380,67 @@ turnCompletion: { mode: detached }
             },
           },
         });
+        const credentialKey = {
+          jobId: key.jobId,
+          sessionId: session.id,
+          expectedSessionIncarnation: sessionIncarnationIdentity(session),
+        };
+        const requestGateway = makeGateway("request");
+        const requestReady = vi.fn(
+          () => credentialSource !== "unready-request",
+        );
+        if (
+          credentialSource === "request" ||
+          credentialSource === "unready-request"
+        ) {
+          credentials!.register(credentialKey, {
+            llm: { generate: vi.fn() },
+            gateway: requestGateway,
+            canRun: requestReady,
+          });
+        }
         boot.runtimeJobWorker.wake();
+        if (credentialSource === "unready-request") {
+          await vi.waitFor(() => expect(serverReady).toHaveBeenCalled());
+          await expect(getRuntimeJob(store, key)).resolves.toMatchObject({
+            status: "queued",
+            attempt: 0,
+          });
+          expect(requestGateway.generateText).not.toHaveBeenCalled();
+          expect(serverGateway.generateText).not.toHaveBeenCalled();
+          expect(credentials!.peek(credentialKey)).toBeUndefined();
+          credentials!.register(credentialKey, {
+            llm: { generate: vi.fn() },
+            gateway: requestGateway,
+            canRun: () => true,
+          });
+          boot.runtimeJobWorker.wake();
+        }
+        if (credentialSource === "waiting") {
+          await vi.waitFor(() => expect(serverReady).toHaveBeenCalled());
+          await expect(getRuntimeJob(store, key)).resolves.toMatchObject({
+            status: "queued",
+          });
+          expect(serverGateway.generateText).not.toHaveBeenCalled();
+          serverReady.mockReturnValue(true);
+          boot.runtimeJobWorker.wake();
+        }
         await vi.waitFor(async () => {
           await expect(getRuntimeJob(store, key)).resolves.toMatchObject({
             status: succeeds ? "succeeded" : "failed",
             ...(succeeds ? {} : { reason: "execution-failed", error }),
           });
         });
+        if (credentialSource === "request") {
+          expect(serverReady).not.toHaveBeenCalled();
+          expect(requestGateway.generateText).toHaveBeenCalledOnce();
+          expect(serverGateway.generateText).not.toHaveBeenCalled();
+        } else if (credentialSource === "unready-request") {
+          expect(requestGateway.generateText).toHaveBeenCalledOnce();
+          expect(serverGateway.generateText).not.toHaveBeenCalled();
+        } else if (credentialSource === "waiting") {
+          expect(serverGateway.generateText).toHaveBeenCalledOnce();
+        }
         const written = await store.getPluginData(
           session.id,
           pluginId,

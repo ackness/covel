@@ -17,19 +17,25 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import path from "node:path";
 import fs from "node:fs";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
+import {
+  discoverPlugins,
+  loadPluginManifest,
+  loadPluginDefinition,
+} from "@covel/plugin-loader";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
 describe("char-creator plugin", () => {
   let discovery;
   let manifests;
+  let root;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     discovery = discoveries.find((d) => d.id === "char-creator");
     expect(discovery).toBeDefined();
     manifests = await loadPluginManifest(discovery);
+    root = (await loadPluginDefinition(discovery)).packageManifest.manifest;
   });
 
   describe("discovery", () => {
@@ -64,7 +70,7 @@ describe("char-creator plugin", () => {
 
     it("declares only create-character-form — character creation is performed by guard.js, not by the LLM", () => {
       expect(manifest.tools?.plugin).toEqual(["create-character-form"]);
-      expect(manifest.entry).toBe("./server/index.js");
+      expect(root.entry).toBe("./server/index.js");
     });
 
     it("requires one create-character-form call and stops immediately after success", () => {
@@ -79,18 +85,11 @@ describe("char-creator plugin", () => {
       // consumes the opening summary produced by pregame (priority 10)
       // rather than the (missing) narrator output. See plugin README / the
       // turn-executor scheduler band gate.
-      expect(manifest.input?.inject).toEqual([
-        expect.objectContaining({
-          from: "pregame",
-          field: "narrativeOutput",
-          as: "<pregame-opening>",
-        }),
-        expect.objectContaining({
-          from: "world-init/schema-gen",
-          field: "worldSchema",
-          as: "<same-turn-world-schema>",
-        }),
-      ]);
+      expect(
+        (manifest.input?.inject ?? []).some(
+          (input) => input.kind === "plugin-data",
+        ),
+      ).toBe(false);
     });
 
     it("declares turn-scoped needs so it waits for pregame and schema init", () => {
@@ -115,8 +114,8 @@ describe("char-creator plugin", () => {
     });
 
     it("declares the shared character-panel ui spec", () => {
-      expect(manifest.ui?.right).toEqual(
-        expect.arrayContaining(["../../ui/character-panel.json"]),
+      expect(root.ui?.right).toEqual(
+        expect.arrayContaining(["./ui/character-panel.json"]),
       );
     });
   });
@@ -158,45 +157,23 @@ describe("char-creator plugin", () => {
       expect(manifest.tools?.builtin).not.toContain("list-characters");
       expect(manifest.tools?.builtin).not.toContain("create-character");
       expect(manifest.tools?.builtin).not.toContain("update-character");
-      expect(manifest.input?.inject).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ namespace: "characters" }),
-        ]),
-      );
+      expect(
+        (manifest.input?.inject ?? []).some(
+          (input) => input.kind === "plugin-data",
+        ),
+      ).toBe(false);
     });
 
     it("injects narrativeOutput from both narrative engines ", () => {
-      // Engine-agnostic: one inject per known narrative engine; the absent
-      // engine resolves to nothing so exactly the active one fills the block.
-      for (const engine of ["narrator", "chat-mode-narrator"]) {
-        expect(manifest.input.inject).toContainEqual({
-          kind: "runtime",
-          from: engine,
-          field: "narrativeOutput",
-          as: "<narrator-output>",
-        });
-      }
-    });
-
-    it("injects the existing-characters roster as plugin-data (no list round-trip)", () => {
-      // The tracker's own characters are mirrored to plugin_data[characters];
-      // injecting them at prompt-build time removes the mandatory per-turn
-      // list-characters tool round-trip (same pattern codex uses for entries).
-      const pluginDataInjects = (manifest.input?.inject ?? []).filter(
-        (i) => i.kind === "plugin-data",
-      );
-      expect(pluginDataInjects).toContainEqual(
-        expect.objectContaining({
-          kind: "plugin-data",
-          namespace: "characters",
-          as: "<existing-characters>",
-          format: "summary",
-        }),
-      );
+      expect(manifest.inputs["narrator-output"]).toEqual({
+        from: { capability: "narrative-engine@1" },
+        select: "/narrativeOutput",
+        required: false,
+      });
     });
 
     it("gates on the narrative-engine capability, not an exact runtime ", () => {
-      expect(manifest.needs).toEqual([{ capability: "narrative-engine" }]);
+      expect(manifest.needs).toEqual([{ capability: "narrative-engine@1" }]);
     });
   });
 });

@@ -1,3 +1,5 @@
+import { resolveMediaImageFlow } from "./media-image-flow.js";
+import { withSettledExecutionLock } from "./plugin-rpc/settled-request.js";
 /**
  * Resume route — resumes a suspended runtime.
  *
@@ -246,7 +248,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   // hook scope so a plugin's hooks only run for sessions where it is active
   // (see hooks/hook-scope.ts).
   try {
-    return await sessionLock.withLock(sessionId, async () => {
+    return await withSettledExecutionLock(c, sessionId, async () => {
       c.get("requestWork")?.signal.throwIfAborted();
       // Active gate under the lock — a paused/ended session must
       // not accept a resume (it would commit state and write history).
@@ -442,6 +444,13 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         // finalize owns the transaction, the commit barrier (buffered fan-out
         // flushed only after commit, dropped on rollback), and the hook scope.
         const outcome = await commitExecution({
+          imageFlowRuntimeIds: (
+            await resolveMediaImageFlow(
+              store,
+              c.get("pluginExtensions"),
+              sessionId,
+            )
+          )?.assetRuntimeIds,
           signal: c.get("requestWork")?.signal,
           completion: {
             kind: "resume",
@@ -450,8 +459,6 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             pluginId: effectiveManifest.pluginId,
             runtimeId: effectiveManifest.name,
           },
-          memorySystem: resumeDeps.memorySystem,
-          capabilityPluginIds: resumeDeps.capabilityPluginIds,
           loadOutputSchema: async () =>
             (
               await resumeDeps.loadRuntime(

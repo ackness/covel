@@ -1,0 +1,17 @@
+{
+  "id": "world",
+  "blocks": [
+    {
+      "label": "signal_log",
+      "displayName": "Signal Log",
+      "extractionHint": "Record intercepted transmissions, timestamps, inconsistencies, decoded clues, competing interpretations, and any evidence that a message arrived before it was sent.",
+      "icon": "Radio"
+    },
+    {
+      "label": "relay_state",
+      "displayName": "Relay State",
+      "extractionHint": "Track power allocation, network coverage, crawler charge, storm timing, damaged equipment, and which communities or routes are currently cut off.",
+      "icon": "RadioTower"
+    }
+  ]
+}

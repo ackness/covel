@@ -77,7 +77,16 @@ export interface GeneratedWorldLorebookEntry {
   readonly extra?: Readonly<Record<string, unknown>>;
 }
 
+export interface GeneratedMemoryDefinition {
+  readonly label: string;
+  readonly displayName: string;
+  readonly extractionHint: string;
+  readonly icon?: string;
+  readonly maxChars?: number;
+}
+
 export interface GeneratedWorldPackageContent {
+  readonly memoryDefinitions?: readonly GeneratedMemoryDefinition[];
   readonly characters: readonly GeneratedWorldCharacter[];
   readonly lorebook: readonly GeneratedWorldLorebookEntry[];
   readonly rules: readonly GeneratedWorldLorebookEntry[];

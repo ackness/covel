@@ -46,14 +46,18 @@ function mockFetchOnce(body: unknown, status = 200): void {
 
 function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
   return {
+    requires: [],
+    optional: [],
+    conflicts: [],
+    extensions: [],
     id: "memory",
     displayName: "Memory",
     description: "Memory plugin",
-    pluginType: "plugin",
+    kind: "plugin",
     source: "builtin",
-    status: "registered",
+    hostState: "approved",
     runtimeCount: 1,
-    capabilities: ["memory-panel"],
+    provides: ["memory-panel"],
     tags: [],
     runtimes: [
       {
@@ -63,7 +67,7 @@ function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
         execution: "sync",
         turnCompletion: { mode: "await" },
         outputKind: "plugin",
-        capabilities: ["memory-panel"],
+        outputContract: "memory-panel",
         tags: [],
       },
     ],
@@ -83,6 +87,7 @@ describe("session plugin API", () => {
     const item: SessionPlugin = {
       ...plugin(),
       active: true,
+      sessionState: "active",
       locked: false,
     };
     mockFetchOnce({ items: [item], commands: [] });
@@ -133,7 +138,7 @@ describe("plugin discovery API", () => {
     mockFetchOnce({
       items: [
         plugin(),
-        plugin({ id: "broken", status: "error", error: "bad manifest" }),
+        plugin({ id: "broken", hostState: "error", error: "bad manifest" }),
       ],
     });
 
@@ -145,7 +150,7 @@ describe("plugin discovery API", () => {
 
     const installed = [
       plugin(),
-      plugin({ id: "broken", status: "error", error: "bad manifest" }),
+      plugin({ id: "broken", hostState: "error", error: "bad manifest" }),
     ];
     mockFetchOnce({ items: installed });
     await expect(listInstalledPlugins()).resolves.toEqual(installed);

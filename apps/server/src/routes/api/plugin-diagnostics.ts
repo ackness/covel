@@ -103,6 +103,7 @@ interface PluginDiagnosticsDeps {
   readonly hooks: HookPipeline;
   readonly rpc: PluginRpcRegistry;
   readonly services: PluginServiceRegistry;
+  readonly extensions?: import("@covel/runtime").PluginExtensionHost;
   readonly calls: RecentPluginServiceCalls;
   readonly hasPendingEntry: (pluginId: string) => boolean;
   readonly isServerCodeApproved: (
@@ -179,6 +180,11 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
                   .map(({ id, event }) => ({ id, event }))
               : [],
             actions: ownActions,
+            extensions: available
+              ? (deps.extensions?.list() ?? [])
+                  .filter((extension) => extension.pluginId === entry.id)
+                  .map(({ point, id, order }) => ({ point, id, order }))
+              : [],
             services: available
               ? services
                   .filter((service) => service.pluginId === entry.id)

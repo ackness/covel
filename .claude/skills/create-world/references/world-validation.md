@@ -137,7 +137,7 @@ if (missing.length){
 1. `world-init/schema-gen` 能否正确识别(或填充)世界维度
 2. `narrator` 第一回合输出是否贴合 `openingScenario`
 3. `/debug` 页面 → Prompt Viewer 检查 `world.lore` 段是否完整
-4. 是否有 `requiredPlugins` 缺失警告
+4. 是否有 依赖契约未满足的解析诊断
 
 不需要写测试代码,纯人工验证。
 
@@ -154,3 +154,5 @@ if (missing.length){
       ├─ 是 → L3 lore 覆盖度 grep + L4 真实游戏跑一回合
       └─ 否(本地测试用) → 跳过 L3/L4
 ```
+
+对于 `contract:` source，使用解析后的接收插件公开 schema 校验记录，并检查接收 namespace 的 `accepts`。角色导入还需校验角色类型、字段和 player 单例；不要以插件私有 namespace 代替角色领域。

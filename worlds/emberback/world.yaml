@@ -1,8 +1,9 @@
 schemaVersion: "1.0"
 id: emberback
 name: Emberback Relay
-version: "1.0.0"
-summary: A lonely relay on a tidally locked world receives a distress call in your own voice—sent from seventy-two hours in the future.
+version: 1.0.0
+summary: A lonely relay on a tidally locked world receives a distress call in
+  your own voice—sent from seventy-two hours in the future.
 defaultLocale: en-US
 supportedLocales:
   - en-US
@@ -12,73 +13,76 @@ tags:
   - mystery
   - exploration
 pluginPolicy:
-  preset: traditional-story
-  preferTags:
+  presetId: traditional-story
+  preferredTags:
     - mode:traditional-story
     - role:codex
     - role:world-rules
-  avoidTags:
+  avoidedTags:
     - mode:dialogue
-  requiredPlugins:
+  requested:
     - dice-check
     - core-quest
     - inventory
     - affinity
-  recommendedPlugins:
+  recommended:
     - npc-graph
     - codex
     - guide
     - character-blueprint
     - character-presence
     - living-world-rules
-memoryBlocks:
-  - label: signal_log
-    displayName: Signal Log
-    extractionHint: Record intercepted transmissions, timestamps, inconsistencies, decoded clues, competing interpretations, and any evidence that a message arrived before it was sent.
-    icon: Radio
-  - label: relay_state
-    displayName: Relay State
-    extractionHint: Track power allocation, network coverage, crawler charge, storm timing, damaged equipment, and which communities or routes are currently cut off.
-    icon: RadioTower
-characterAttributes:
-  - id: grit
-    name: Grit
-    type: number
-    min: 0
-    max: 5
-    defaultValue: 2
-    category: stats
-    description: Strength and endurance for hard travel, lifting, climbing, and staying functional under heat or cold stress.
-  - id: systems
-    name: Systems
-    type: number
-    min: 0
-    max: 5
-    defaultValue: 2
-    category: abilities
-    description: Technical skill with radios, power grids, vehicles, sensors, and improvised repairs.
-  - id: fieldcraft
-    name: Fieldcraft
-    type: number
-    min: 0
-    max: 5
-    defaultValue: 2
-    category: abilities
-    description: Practical judgment for navigation, weather, driving, route planning, and survival beyond the station.
-  - id: insight
-    name: Insight
-    type: number
-    min: 0
-    max: 5
-    defaultValue: 2
-    category: stats
-    description: Pattern recognition, careful observation, and the ability to separate a meaningful signal from noise.
-  - id: rapport
-    name: Rapport
-    type: number
-    min: 0
-    max: 5
-    defaultValue: 2
-    category: social
-    description: The ability to earn trust, calm conflict, read a room, and persuade people without treating them as obstacles.
+characterSchema:
+  types:
+    - npc
+    - companion
+  attributes:
+    - id: grit
+      name: Grit
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: stats
+      description:
+        Strength and endurance for hard travel, lifting, climbing, and
+        staying functional under heat or cold stress.
+    - id: systems
+      name: Systems
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: abilities
+      description:
+        Technical skill with radios, power grids, vehicles, sensors, and
+        improvised repairs.
+    - id: fieldcraft
+      name: Fieldcraft
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: abilities
+      description: Practical judgment for navigation, weather, driving, route
+        planning, and survival beyond the station.
+    - id: insight
+      name: Insight
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: stats
+      description: Pattern recognition, careful observation, and the ability to
+        separate a meaningful signal from noise.
+    - id: rapport
+      name: Rapport
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 2
+      category: social
+      description:
+        The ability to earn trust, calm conflict, read a room, and persuade
+        people without treating them as obstacles.
 worldData: data/world.data.yaml

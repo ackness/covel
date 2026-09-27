@@ -153,7 +153,14 @@ describe("plugin UI spec validation", () => {
     const diagnostics = (
       await Promise.all(
         uiFiles.map(async (file) => {
-          const spec = await loadPluginUiSpec(pluginsDirectory, file);
+          const spec = await loadPluginUiSpec(
+            join(
+              pluginsDirectory,
+              file.slice(pluginsDirectory.length + 1).split("/")[0]!,
+            ),
+            file,
+            file.slice(pluginsDirectory.length + 1).split("/")[0]!,
+          );
           return partition([spec]).diagnostics.map((diagnostic) => ({
             file,
             issues: diagnostic.issues,

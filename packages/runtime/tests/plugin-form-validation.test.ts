@@ -38,7 +38,7 @@ describe("plugin-owned form validation", () => {
   it("uses the committed owner and rule data with normalized input, ignoring forged metadata", async () => {
     const { store, context, submission } = await fixture();
     const validate = vi.fn(async () => undefined);
-    await createSubmitFormHandler(validate)(
+    await createSubmitFormHandler(validate, store)(
       {
         turnId: "turn",
         pluginId: "attacker",
@@ -65,8 +65,10 @@ describe("plugin-owned form validation", () => {
 
   it("rejects the complete batch before any writes when one plugin validation fails", async () => {
     const { store, context, submission } = await fixture();
-    const handler = createSubmitFormHandler(async ({ values }) =>
-      Number(values.points) > 4 ? "Over budget" : undefined,
+    const handler = createSubmitFormHandler(
+      async ({ values }) =>
+        Number(values.points) > 4 ? "Over budget" : undefined,
+      store,
     );
     await expect(
       handler(
@@ -97,6 +99,7 @@ describe("plugin-owned form validation", () => {
       const validate = vi.fn(async () => undefined);
       const handler = createSubmitFormHandler(
         mode === "missing-validator" ? undefined : validate,
+        store,
       );
       await expect(
         handler(

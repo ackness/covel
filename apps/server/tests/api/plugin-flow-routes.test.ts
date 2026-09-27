@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type ParsedPluginMd,
   type PluginRegistry,
   type PluginRegistryEntry,
@@ -38,7 +39,7 @@ describe("plugin flow routes", () => {
       pluginId: string;
       runtimeId: string;
       stage?: RuntimeManifest["stage"];
-      capabilities?: string[];
+      outputContract?: string;
       outputKind?: RuntimeManifest["outputKind"];
       trigger?: RuntimeManifest["trigger"];
     }) => {
@@ -49,7 +50,7 @@ describe("plugin flow routes", () => {
         runtimeType: "agent",
         execution: "sync",
         ...(args.stage ? { stage: args.stage } : {}),
-        ...(args.capabilities ? { capabilities: args.capabilities } : {}),
+        ...(args.outputContract ? { outputContract: args.outputContract } : {}),
         ...(args.outputKind ? { outputKind: args.outputKind } : {}),
         trigger: args.trigger ?? { type: "auto" },
       };
@@ -78,7 +79,7 @@ describe("plugin flow routes", () => {
       pluginId: "narrator",
       runtimeId: "narrator",
       stage: "narrative",
-      capabilities: ["narrative-engine"],
+      outputContract: "narrative-engine@1",
       outputKind: "story",
     });
     registerRuntime({
@@ -106,7 +107,7 @@ describe("plugin flow routes", () => {
         runtimeId: string;
         segmentId: string;
         isStoryRuntime: boolean;
-        capabilities: string[];
+        outputContract?: string;
         execution: string;
       }>;
     };
@@ -124,7 +125,7 @@ describe("plugin flow routes", () => {
         (step) =>
           step.runtimeId === "narrator" &&
           step.isStoryRuntime &&
-          step.capabilities.includes("narrative-engine") &&
+          step.outputContract === "narrative-engine@1" &&
           step.execution === "sync",
       ),
     ).toBe(true);
@@ -162,9 +163,8 @@ describe("plugin flow routes", () => {
       execution: "background",
       stage: "pre-turn",
       trigger: { type: "scheduled", interval: 3 },
-      capabilities: ["narrative"],
-      tags: ["mode:dialogue", "role:narrator"],
-      relations: { provides: ["narrative-engine"] },
+      outputContract: "narrative-engine@1",
+      tags: ["mode:dialogue"],
       turnCompletion: {
         mode: "detached",
         maxQueueMs: 30_000,
@@ -190,6 +190,10 @@ describe("plugin flow routes", () => {
         pluginType: "core-plugin",
         runtimeCount: 1,
       },
+      packageManifest: parsePluginMd(
+        "---\nid: test-package\nkind: core\ndescription: Test\ntags: [mode:dialogue]\nprovides: [narrative-engine@1]\n---\n",
+        "test-package/PLUGIN.md",
+      ),
       manifests: [parsed],
       manifest: parsed,
       loadedRuntimes: new Map(),
@@ -207,15 +211,13 @@ describe("plugin flow routes", () => {
         displayName?: unknown;
         description?: unknown;
         source?: string;
-        capabilities?: string[];
+        provides?: string[];
         tags?: string[];
-        relations?: Record<string, unknown>;
         runtimes?: Array<{
           trigger: { type?: string; interval?: number };
-          capabilities?: string[];
+          outputContract?: string;
           execution?: string;
           tags?: string[];
-          relations?: Record<string, unknown>;
           turnCompletion?: { mode: string; maxQueueMs?: number };
         }>;
       }>;
@@ -232,19 +234,15 @@ describe("plugin flow routes", () => {
       "en-US": "Package from the registry",
     });
     expect(pkg?.source).toBe("builtin");
-    expect(pkg?.capabilities).toEqual(["narrative"]);
-    expect(pkg?.tags).toEqual(["mode:dialogue", "role:narrator"]);
-    expect(pkg?.relations).toEqual({ provides: ["narrative-engine"] });
+    expect(pkg?.provides).toEqual(["narrative-engine@1"]);
+    expect(pkg?.tags).toEqual(["mode:dialogue"]);
     expect(pkg?.runtimes?.[0]?.trigger).toEqual({
       type: "scheduled",
       interval: 3,
     });
-    expect(pkg?.runtimes?.[0]?.capabilities).toEqual(["narrative"]);
+    expect(pkg?.runtimes?.[0]?.outputContract).toBe("narrative-engine@1");
     expect(pkg?.runtimes?.[0]?.execution).toBe("background");
-    expect(pkg?.runtimes?.[0]?.tags).toEqual([
-      "mode:dialogue",
-      "role:narrator",
-    ]);
+    expect(pkg?.runtimes?.[0]?.tags).toEqual(["mode:dialogue"]);
     expect(pkg?.runtimes?.[0]?.turnCompletion).toEqual({
       mode: "detached",
       maxQueueMs: 30_000,

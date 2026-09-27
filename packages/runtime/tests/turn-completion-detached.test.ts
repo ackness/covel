@@ -69,13 +69,13 @@ describe("scheduler-driven detached turn completion", () => {
   it("queues an eligible leaf without awaiting or invoking it", async () => {
     const narrative = runtime("story", {
       stage: "narrative",
-      capabilities: ["narrative-engine"],
+      outputContract: "narrative-engine@1",
     });
     const detached = runtime("media/tts", {
-      needs: [{ capability: "narrative-engine" }],
+      needs: [{ capability: "narrative-engine@1" }],
       inputs: {
         narrative: {
-          from: { capability: "narrative-engine" },
+          from: { capability: "narrative-engine@1" },
           select: "/narrativeOutput",
         },
       },
@@ -131,13 +131,13 @@ describe("scheduler-driven detached turn completion", () => {
   it("rehydrates frozen upstream results when the detached worker runs", async () => {
     const narrative = runtime("story", {
       stage: "narrative",
-      capabilities: ["narrative-engine"],
+      outputContract: "narrative-engine@1",
     });
     const detached = runtime("media/tts", {
-      needs: [{ capability: "narrative-engine" }],
+      needs: [{ capability: "narrative-engine@1" }],
       inputs: {
         narrative: {
-          from: { capability: "narrative-engine" },
+          from: { capability: "narrative-engine@1" },
           select: "/narrativeOutput",
         },
       },
@@ -210,7 +210,7 @@ describe("scheduler-driven detached turn completion", () => {
 
   it("keeps a declared detached runtime foreground when another runtime consumes it", async () => {
     const producer = runtime("extractor", {
-      capabilities: ["facts"],
+      outputContract: "facts",
       effects: { writes: ["plugin-data:self:facts"] },
       turnCompletion: { mode: "detached" },
     });

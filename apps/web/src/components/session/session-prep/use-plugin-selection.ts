@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { resolvePluginSelection } from "@covel/shared";
 import {
-  applyPluginPackSelection,
+  resolveSessionPlugins,
+  sessionWorldContextV1,
+  historyCompactV1,
+  mediaImageFlowV1,
+} from "@covel/shared";
+import {
   collectPluginTags,
   defaultSelectedPluginIds,
   filterPlugins,
@@ -20,6 +24,8 @@ export interface UsePluginSelectionResult {
   selectedPlugins: ReadonlySet<string>;
   selectedPluginSummaries: api.PluginSummary[];
   selectedPluginIds: string[];
+  requestedPluginIds: string[];
+  excludedPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
   pluginPlan: api.WorldPluginPlan | null;
   pluginPlanLoading: boolean;
@@ -70,6 +76,7 @@ export function usePluginSelection(
         // Publish defaults with the plan so consumers never observe a ready
         // plan alongside the temporary core-only selection.
         setSelectedPlugins(defaultSelectedPluginIds(plan));
+        setExcludedPlugins(new Set());
         setActivePluginPackId(plan.selectedPackId ?? null);
         setPluginPlan(plan);
       })
@@ -100,28 +107,59 @@ export function usePluginSelection(
   const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(
     () => new Set(corePluginIds),
   );
-  const selectedPluginIds = useMemo(
+  const [excludedPlugins, setExcludedPlugins] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const candidates = useMemo(
     () =>
-      resolvePluginSelection({
-        activePluginIds: [...selectedPlugins, ...worldRequiredPluginIds],
-        requestedPluginIds: [...worldRequiredPluginIds, ...selectedPlugins],
-        plugins,
+      plugins.map((plugin) => ({
+        ...plugin,
+        authorized:
+          plugin.source === "builtin" ||
+          plugin.hostState === "approved" ||
+          plugin.hostState === "loaded",
+        singlePoints: plugin.extensions
+          .filter((extension) =>
+            [
+              sessionWorldContextV1.id,
+              historyCompactV1.id,
+              mediaImageFlowV1.id,
+            ].includes(extension.point),
+          )
+          .map((extension) => extension.point),
+      })),
+    [plugins],
+  );
+  const resolution = useMemo(
+    () =>
+      resolveSessionPlugins({
+        requested: [...selectedPlugins, ...worldRequiredPluginIds],
+        excluded: [...excludedPlugins],
+        plugins: candidates,
       }),
-    [plugins, selectedPlugins, worldRequiredPluginIds],
+    [candidates, selectedPlugins, excludedPlugins, worldRequiredPluginIds],
+  );
+  // Approval-gated explicit requests stay selectable so creation can request consent.
+  const selectedPluginIds = useMemo(
+    () => [
+      ...new Set([
+        ...resolution.active,
+        ...resolution.rejected
+          .filter(
+            (item) =>
+              item.code === "approval-required" &&
+              selectedPlugins.has(item.pluginId),
+          )
+          .map((item) => item.pluginId),
+      ]),
+    ],
+    [resolution, selectedPlugins],
   );
   const selectedPluginIdSet = useMemo(
     () => new Set(selectedPluginIds),
     [selectedPluginIds],
   );
-  const lockedPluginIds = useMemo(
-    () =>
-      new Set(
-        [...corePluginIds, ...worldRequiredPluginIds].filter((id) =>
-          selectedPluginIdSet.has(id),
-        ),
-      ),
-    [corePluginIds, worldRequiredPluginIds, selectedPluginIdSet],
-  );
+  const lockedPluginIds = useMemo(() => new Set<string>(), []);
   const selectedPluginSummaries = useMemo(
     () => plugins.filter((plugin) => selectedPluginIdSet.has(plugin.id)),
     [plugins, selectedPluginIdSet],
@@ -171,50 +209,58 @@ export function usePluginSelection(
       setActivePluginPackId(pack.id);
       setSelectedPlugins(
         new Set(
-          resolvePluginSelection({
-            activePluginIds: [
-              ...applyPluginPackSelection(
-                selectedPluginIdSet,
-                pack,
-                plugins,
-                worldRequiredPluginIds,
-              ),
-            ],
-            requestedPluginIds: [
-              ...worldRequiredPluginIds,
-              ...pack.pluginIds,
-              ...pack.optionalPluginIds,
-            ],
-            plugins,
-          }),
+          [...selectedPlugins, ...pack.requested].filter(
+            (id) => !excludedPlugins.has(id),
+          ),
         ),
       );
     },
-    [pluginPacks, plugins, selectedPluginIdSet, worldRequiredPluginIds],
+    [pluginPacks, selectedPlugins, excludedPlugins],
   );
 
   const togglePlugin = useCallback(
     (name: string) => {
       if (lockedPluginIds.has(name)) return;
       setActivePluginPackId(null);
-      const next = new Set(selectedPluginIdSet);
-      const enabling = !next.has(name);
-      if (enabling) next.add(name);
-      else next.delete(name);
-      setSelectedPlugins(
-        new Set(
-          resolvePluginSelection({
-            activePluginIds: [...next],
-            requestedPluginIds: [
-              ...worldRequiredPluginIds,
-              ...(enabling ? [name] : next),
-            ],
-            plugins,
-          }),
-        ),
+      const enabling = !selectedPluginIdSet.has(name);
+      const next = new Set(
+        enabling ? [name, ...selectedPlugins] : selectedPlugins,
       );
+      if (!enabling) next.delete(name);
+      const excluded = new Set(excludedPlugins);
+      if (enabling) {
+        excluded.delete(name);
+        const replacement = resolveSessionPlugins({
+          requested: [...next, ...worldRequiredPluginIds],
+          excluded: [...excluded],
+          plugins: candidates,
+        });
+        // A successful explicit choice replaces only previously active conflicts.
+        // Keep unresolved requests so missing dependencies still reach validation.
+        if (replacement.active.includes(name)) {
+          for (const rejected of replacement.rejected) {
+            if (
+              selectedPluginIdSet.has(rejected.pluginId) &&
+              (rejected.code === "conflict" ||
+                rejected.code === "single-provider-conflict")
+            ) {
+              next.delete(rejected.pluginId);
+              excluded.add(rejected.pluginId);
+            }
+          }
+        }
+      } else excluded.add(name);
+      setExcludedPlugins(excluded);
+      setSelectedPlugins(next);
     },
-    [lockedPluginIds, plugins, selectedPluginIdSet, worldRequiredPluginIds],
+    [
+      lockedPluginIds,
+      selectedPlugins,
+      selectedPluginIdSet,
+      excludedPlugins,
+      candidates,
+      worldRequiredPluginIds,
+    ],
   );
 
   return {
@@ -223,6 +269,10 @@ export function usePluginSelection(
     selectedPlugins: selectedPluginIdSet,
     selectedPluginSummaries,
     selectedPluginIds,
+    requestedPluginIds: [
+      ...new Set([...selectedPlugins, ...worldRequiredPluginIds]),
+    ].filter((id) => !excludedPlugins.has(id)),
+    excludedPluginIds: [...excludedPlugins],
     selectedPluginIdSet,
     pluginPlan,
     pluginPlanLoading,

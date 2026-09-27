@@ -104,7 +104,11 @@ export function useBuildSessionActions({
   );
 
   const startGame = useCallback(
-    async (plugins?: string[], loreOverride?: string) => {
+    async (
+      plugins?: string[],
+      loreOverride?: string,
+      excludedPlugins?: string[],
+    ) => {
       if (!state.world) return;
       await startGameSession({
         ds,
@@ -115,6 +119,7 @@ export function useBuildSessionActions({
         world: state.world,
         plugins,
         loreOverride,
+        excludedPlugins,
       });
     },
     [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.world],

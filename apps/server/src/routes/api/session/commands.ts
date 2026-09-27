@@ -169,7 +169,7 @@ export function buildCommandEnvironment(args: {
               ...(getRuntimeSpec(runtime).stage
                 ? { stage: getRuntimeSpec(runtime).stage }
                 : {}),
-              capabilities: [...(runtime.capabilities ?? [])],
+              outputContract: runtime.outputContract,
               ...(includeModels
                 ? {
                     model: {

@@ -1,4 +1,19 @@
+export { enforcePluginRegistrationContract } from "./plugin-registration-contract.js";
 export { PluginServiceRegistry } from "./plugin-services.js";
+export {
+  PluginExtensionHost,
+  kernelExtensionPoints,
+} from "./plugin-extensions.js";
+export type {
+  PluginExtensionExecution,
+  PluginExtensionExecutionScope,
+} from "./plugin-extensions.js";
+export { createExtensionRegistration } from "./plugin-extension-registration.js";
+export {
+  createWorldModelView,
+  overlayWorldModelView,
+  collectUpstreamWorldProposals,
+} from "./function-runtime/world-model-view.js";
 // ── Trigger Router ───────────────────────────────────────────────
 export { shouldTrigger } from "./trigger/trigger.js";
 
@@ -133,7 +148,6 @@ export type {
   RpcDispatchDeps,
 } from "./rpc/rpc-executor.js";
 export {
-  submitFormHandler,
   createSubmitFormHandler,
   findCommittedInteraction,
   RpcValidationError,

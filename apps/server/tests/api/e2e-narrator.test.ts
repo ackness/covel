@@ -14,12 +14,14 @@
  * settles the current setup mirror first.
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import path from "node:path";
 import type { Hono } from "hono";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
+import { closeTestApi } from "../helpers/close-api.js";
+import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 
 // ── SSE drain helper ─────────────────────────────────────────────
 
@@ -86,6 +88,7 @@ class MockNarratorLLM implements LLMAdapter {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe("E2E: Narrator game flow", () => {
+  let boot: Awaited<ReturnType<typeof bootstrapApi>>;
   let app: Hono;
   let mockLLM: MockNarratorLLM;
   let store: Awaited<ReturnType<typeof bootstrapApi>>["store"];
@@ -94,17 +97,28 @@ describe("E2E: Narrator game flow", () => {
 
   beforeAll(async () => {
     mockLLM = new MockNarratorLLM();
-    const result = await bootstrapApi({
+    const result = (boot = await bootstrapApi({
       pluginsDir: PLUGINS_DIR,
       llmAdapter: mockLLM,
+      canRunRuntimeJobWithServerServices: () => true,
+      pluginGateway: {
+        async generateText() {
+          return { text: "{}", finishReason: "stop", usage: {} };
+        },
+      } as import("@covel/shared/plugin-runtime").PluginRuntimeGateway,
       store: createMemoryStore(),
       storeBackend: "memory",
-    });
+    }));
     app = result.app;
     store = result.store;
 
     // Activate narrator for all sessions globally
     result.registry.syncSessionActivations("__global__", ["narrator"]);
+  });
+
+  afterAll(async () => {
+    await closeTestApi(boot);
+    await store?.close();
   });
 
   async function markPreGameComplete(sessionId: string) {
@@ -248,6 +262,13 @@ describe("E2E: Narrator game flow", () => {
     expect(
       (await drainActionStream(turn2Res)).map((e) => e.type),
     ).not.toContain("error.occurred");
+    await vi.waitFor(async () => {
+      const jobs = await listRuntimeJobs(store, { sessionId: session.id });
+      expect(
+        jobs.filter((job) => job.runtimeId === "memory/extract"),
+      ).toHaveLength(2);
+      expect(jobs.every((job) => job.status === "succeeded")).toBe(true);
+    });
   });
 
   it("should return 404 for a turn on a non-existent session", async () => {
@@ -270,11 +291,11 @@ describe("E2E: Narrator game flow", () => {
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
-      items: Array<{ id: string; pluginType: string }>;
+      items: Array<{ id: string; kind: string }>;
     };
     const narrator = body.items.find((p) => p.id === "narrator");
     expect(narrator).toBeDefined();
-    expect(narrator!.pluginType).toBe("core-plugin");
+    expect(narrator!.kind).toBe("core");
   });
 
   it("should health check", async () => {

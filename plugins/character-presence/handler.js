@@ -16,7 +16,9 @@ const CHARACTER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
  * @returns {Promise<Record<string, unknown>>}
  */
 export default async function handler(ctx) {
-  const payload = ctx.manualPayload ?? {};
+  let payload = ctx.manualPayload ?? {};
+  if (payload.action === "replacePortrait")
+    payload = await replacementPayload(ctx, payload);
   const presence = normalizePresence(
     readManualEntity(payload, "presence", (form) =>
       presenceFromForm(form, ctx.sessionId),
@@ -285,4 +287,56 @@ function normalizeMediaRef(value, field) {
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Preserve the plugin-owned catalog when a projected portrait is replaced. */
+async function replacementPayload(ctx, payload) {
+  const characterId = normalizeRequiredString(
+    payload.characterId,
+    "characterId",
+  );
+  const rows = await ctx.store.listPluginData(PRESENCE_NAMESPACE);
+  const row =
+    rows.find((row) => row.value?.characterId === characterId) ??
+    rows.find(
+      (row) =>
+        typeof row.value?.characterId === "string" &&
+        characterId.endsWith(`-${row.value.characterId}`),
+    );
+  if (!row) throw new Error("Character portrait is unavailable");
+  const presence = row.value;
+  const variants = [...(presence.visuals?.variants ?? [])];
+  const declared = presence.visuals?.defaultVariant;
+  const defaultId =
+    (declared && variants.some((variant) => variant.id === declared)
+      ? declared
+      : variants[0]?.id) ?? "default";
+  const visuals = {
+    defaultVariant: defaultId,
+    variants: variants.some((variant) => variant.id === defaultId)
+      ? variants.map((variant) =>
+          variant.id === defaultId
+            ? { ...variant, sprite: payload.ref }
+            : variant,
+        )
+      : [
+          ...variants,
+          {
+            id: defaultId,
+            outfit: "default",
+            expression: "neutral",
+            pose: "default",
+            sprite: payload.ref,
+          },
+        ],
+  };
+  return {
+    presence: {
+      ...presence,
+      schemaVersion: 1,
+      avatar: payload.ref,
+      sprite: payload.ref,
+      visuals,
+    },
+  };
 }

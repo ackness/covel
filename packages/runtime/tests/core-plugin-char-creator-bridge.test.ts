@@ -92,10 +92,10 @@ async function createPregameStore(sessionId: string): Promise<DataStore> {
 
 describe("char-creator core plugin guard bridge", () => {
   // Deliberate change (scheduling redesign, Step 2 — turn-wide transaction):
-  // the guard's player-creation writes now BUFFER instead of hitting the store
+  // the guard's player-creation writes BUFFER instead of hitting the store
   // directly, and the same-batch main-loop follow-up that used to run the
   // narrator in the SAME turn was removed. So this is now a two-stage flow:
-  //   Turn 1 (setup): player-init's guard buffers the character + mirror and
+  //   Turn 1 (setup): player-init's guard buffers the character and
   //     returns skip:true; only finalize commits them. The narrator does NOT
   //     run this turn.
   //   Turn 2 (main loop): the narrator runs on the next request and reads the
@@ -189,7 +189,7 @@ describe("char-creator core plugin guard bridge", () => {
     expect(await store.listCharacters(sessionId)).toHaveLength(0);
 
     // Commit the setup execution, as the actions route does. The buffered
-    // character.upsert + plugin-data mirror commit in ONE transaction (and the
+    // character.upsert commit in ONE transaction (and the
     // session-clock write flips the band to playing).
     await finalizeExecution({
       executionContext: {
@@ -213,7 +213,7 @@ describe("char-creator core plugin guard bridge", () => {
       },
     });
 
-    // After commit: character + mirror landed atomically.
+    // After commit: character landed atomically.
     const characters = await store.listCharacters(sessionId);
     expect(characters).toHaveLength(1);
     expect(characters[0]).toMatchObject({
@@ -226,17 +226,9 @@ describe("char-creator core plugin guard bridge", () => {
       },
     });
 
-    const mirrors = await store.listPluginData(
-      sessionId,
-      "char-creator",
-      "characters",
-    );
-    expect(mirrors).toHaveLength(1);
-    expect(mirrors[0].value).toMatchObject({
-      name: "柳无痕",
-      type: "player",
-      description: "外门弟子，擅长追踪灵脉异动",
-    });
+    expect(
+      await store.listPluginData(sessionId, "char-creator", "characters"),
+    ).toEqual([]);
 
     // ── Turn 2 (main loop): the narrator runs and reads the committed player. ──
     const mainInput: TurnInput = {

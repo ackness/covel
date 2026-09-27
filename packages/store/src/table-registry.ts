@@ -53,6 +53,7 @@ export type SessionScopedMemoryKey = Extract<
   | "events"
   | "messages"
   | "characters"
+  | "characterSchemas"
   | "pluginData"
   | "worldDataImportLedger"
   | "traceEvents"
@@ -60,7 +61,6 @@ export type SessionScopedMemoryKey = Extract<
   | "interactionRecords"
   | "turnMessages"
   | "playerInputs"
-  | "workingMemoryEntries"
   | "lorebookEntries"
   | "sessionSummaries"
   | "suspensions"
@@ -130,6 +130,11 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
     memoryKind: "array",
   },
   {
+    table: "character_schemas",
+    memoryKey: "characterSchemas",
+    memoryKind: "map",
+  },
+  {
     table: "characters",
     memoryKey: "characters",
     memoryKind: "map",
@@ -168,11 +173,6 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
     table: "player_inputs",
     memoryKey: "playerInputs",
     memoryKind: "array",
-  },
-  {
-    table: "working_memory",
-    memoryKey: "workingMemoryEntries",
-    memoryKind: "map",
   },
   {
     table: "lorebook_entries",

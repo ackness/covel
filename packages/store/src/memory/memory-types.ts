@@ -1,6 +1,7 @@
 import type { DataStore } from "../types.js";
 import type {
   CharacterRecord,
+  CharacterSchemaRecord,
   EventRecord,
   InteractionRecordRow,
   JobStatusRecord,
@@ -24,7 +25,6 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   TurnResultRecord,
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
 } from "../types.js";
@@ -55,6 +55,7 @@ export interface MemoryState {
   readonly stateChanges: StateChangeRecord[];
   readonly events: EventRecord[];
   readonly messages: MessageRecord[];
+  readonly characterSchemas: Map<string, CharacterSchemaRecord>;
   readonly characters: Map<string, CharacterRecord>;
   readonly pluginData: Map<string, PluginDataRecord>;
   readonly suspensions: Map<string, SuspensionRecord>;
@@ -69,7 +70,6 @@ export interface MemoryState {
   readonly interactionRecords: InteractionRecordRow[];
   readonly turnMessages: TurnMessageRecord[];
   readonly playerInputs: PlayerInputRecord[];
-  readonly workingMemoryEntries: Map<string, WorkingMemoryRecord>;
   readonly worldDataImportLedger: Map<string, WorldDataImportLedgerRecord>;
   readonly lorebookEntries: Map<string, LorebookEntryRecord>;
   readonly sessionSummaries: SessionSummaryRecord[];

@@ -64,7 +64,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
     segmentId: FlowSegmentId;
     runtimeType: string;
     outputKind: string;
-    capabilities: string[];
+    outputContract?: string;
     execution: "sync" | "background";
     model?: string;
     trigger: {
@@ -138,7 +138,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
         segmentId,
         runtimeType: manifest.runtimeType ?? "agent",
         outputKind: manifest.outputKind ?? "plugin",
-        capabilities: [...(manifest.capabilities ?? [])],
+        outputContract: manifest.outputContract,
         execution: manifest.execution ?? "sync",
         model: manifest.model,
         trigger: {
@@ -158,7 +158,9 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
                   format: inject.format,
                   as: inject.as,
                 }
-              : { name: inject.name, recordAs: inject.recordAs }),
+              : inject.kind === "kernel"
+                ? { name: inject.name, from: inject.from }
+                : { name: inject.name, recordAs: inject.recordAs }),
         })),
         tools: {
           builtin: [...(manifest.tools?.builtin ?? [])],

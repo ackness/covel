@@ -564,6 +564,7 @@ describe("createCommitPipeline", () => {
       addMessage: vi.fn(),
       updateSession: vi.fn(),
       saveEvent: vi.fn(),
+      listCharacters: vi.fn(async () => []),
       upsertCharacter: vi.fn(),
       setPluginData: vi.fn(),
       setPluginDataBatch: vi.fn(),
@@ -959,50 +960,15 @@ describe("createCommitPipeline", () => {
       });
     });
 
-    it("can mirror the character snapshot to plugin data for UI subscribers", async () => {
+    it("writes only the authoritative character record", async () => {
       const store = createMockStore();
       const pipeline = createCommitPipeline(store as any);
-      const proposal = makeProposal("character.upsert", {
-        id: "char-2",
-        name: "Mira",
-        mirrorPluginId: "char-creator",
-      });
-
-      const result = await pipeline.commit(proposal);
-
+      const result = await pipeline.commit(
+        makeProposal("character.upsert", { id: "char-2", name: "Mira" }),
+      );
       expect(result.committed).toBe(true);
-      expect(store.setPluginData).toHaveBeenCalledOnce();
-      expect(store.setPluginData.mock.calls[0][0]).toMatchObject({
-        sessionId: SESSION_ID,
-        pluginId: "char-creator",
-        namespace: "characters",
-        key: "char-2",
-        value: expect.objectContaining({
-          id: "char-2",
-          name: "Mira",
-          type: "npc",
-          version: 1,
-        }),
-      });
-    });
-
-    it("can mirror the character snapshot to multiple plugin panels", async () => {
-      const store = createMockStore();
-      const pipeline = createCommitPipeline(store as any);
-      const proposal = makeProposal("character.upsert", {
-        id: "char-3",
-        name: "Rin",
-        mirrorPluginId: "character-blueprint",
-        mirrorPluginIds: ["char-creator", "character-blueprint"],
-      });
-
-      const result = await pipeline.commit(proposal);
-
-      expect(result.committed).toBe(true);
-      expect(store.setPluginData).toHaveBeenCalledTimes(2);
-      expect(
-        store.setPluginData.mock.calls.map((call) => call[0].pluginId),
-      ).toEqual(["character-blueprint", "char-creator"]);
+      expect(store.upsertCharacter).toHaveBeenCalledOnce();
+      expect(store.setPluginData).not.toHaveBeenCalled();
     });
 
     it("validates required fields", async () => {
@@ -1013,7 +979,7 @@ describe("createCommitPipeline", () => {
       );
 
       expect(result.committed).toBe(false);
-      expect(result.error).toContain("name must be a non-empty string");
+      expect(result.error).toContain("name");
       expect(store.upsertCharacter).not.toHaveBeenCalled();
     });
   });
@@ -1548,7 +1514,7 @@ describe("processRuntimeResult", () => {
       SESSION_ID,
       "plugin",
       {
-        capabilities: ["image-generation"],
+        enforceImageFlow: true,
       },
     );
 
@@ -1604,7 +1570,7 @@ describe("processRuntimeResult", () => {
       SESSION_ID,
       "plugin",
       {
-        capabilities: ["image-generation"],
+        enforceImageFlow: true,
       },
     );
 
@@ -1633,7 +1599,7 @@ describe("processRuntimeResult", () => {
       store as any,
       SESSION_ID,
       "plugin",
-      { capabilities: ["image-generation"] },
+      { enforceImageFlow: true },
     );
 
     expect(events).toHaveLength(0);
@@ -1673,7 +1639,7 @@ describe("processRuntimeResult", () => {
       SESSION_ID,
       "plugin",
       {
-        capabilities: ["image-generation"],
+        enforceImageFlow: true,
       },
     );
 
@@ -1725,7 +1691,7 @@ describe("processRuntimeResult", () => {
       SESSION_ID,
       "plugin",
       {
-        capabilities: ["image-generation"],
+        enforceImageFlow: true,
       },
     );
 
@@ -1758,7 +1724,7 @@ describe("processRuntimeResult", () => {
         SESSION_ID,
         "plugin",
         {
-          capabilities: ["image-generation"],
+          enforceImageFlow: true,
         },
       );
 
@@ -1775,9 +1741,6 @@ describe("processRuntimeResult", () => {
 
   it("should surface failed proposals when commit returns committed:false", async () => {
     const store = createMockStore();
-    // Use working_memory.set which returns committed:false when feature flag is off
-    // We simulate this by creating a result whose normalized output includes
-    // a narrative (will succeed) alongside testing the return structure
     const result = makeRuntimeResult({
       narrativeOutput: "Some text.",
     });

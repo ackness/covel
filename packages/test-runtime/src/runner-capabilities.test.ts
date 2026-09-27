@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { CharacterAttributeSchema } from "@covel/shared";
+import type { CharacterSchema } from "@covel/shared";
 import { runRuntimeDebug } from "./runner.js";
 
 const roots: string[] = [];
@@ -11,9 +11,9 @@ afterEach(async () => {
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
-
 const schema = {
   version: 1,
+  types: ["npc", "companion"],
   attributes: [
     {
       id: "hp",
@@ -25,13 +25,59 @@ const schema = {
       max: 100,
     },
   ],
-} satisfies CharacterAttributeSchema;
+} satisfies CharacterSchema;
 
-async function fixture(files: Record<string, string>) {
+async function fixture(
+  mode: "buffered" | "committed" | "private",
+  invalid = false,
+) {
   const root = await mkdtemp(
-    path.join(os.tmpdir(), "covel-harness-capabilities-"),
+    path.join(os.tmpdir(), "covel-harness-world-model-"),
   );
   roots.push(root);
+  const schemaTool = `export default covel => {
+    covel.registerTool(covel.toolkit.tool({
+      name: "set-schema", description: "Set fixture schema", parameters: covel.toolkit.z.object({}),
+      execute: async (_args, ctx) => covel.toolkit.withPendingProposals({ok:true}, [{
+        id: crypto.randomUUID(), type:"character.schema.set", payload:${JSON.stringify({ types: schema.types, attributes: schema.attributes })},
+        sessionId:ctx.sessionId, turnId:ctx.turnId,
+        source:{pluginId:ctx.pluginId,runtimeId:ctx.runtimeId}, timestamp:new Date().toISOString()
+      }])
+    }));
+  };`;
+  const files: Record<string, string> = {
+    "probe/package.json": '{"type":"module"}',
+    "probe/PLUGIN.md": `---\nid: probe\nkind: plugin\ndescription: Probe\n${mode === "committed" ? "entry: ./entry.js\ncontributes: {tools: [set-schema]}\n" : ""}---\n`,
+    "probe/entry.js": schemaTool,
+    "probe/runtimes/root/RUNTIME.md": `---\ntype: function\nfunction: {handler: ./handler.js${mode === "committed" ? ", tools: {plugin: [set-schema]}" : ""}}\nschedule: {trigger: {type: manual}}\n---\n`,
+    "probe/runtimes/root/handler.js": `export default async ctx => {
+      ${mode === "committed" ? 'await ctx.tools.call("set-schema", {});' : ""}
+      return {outcome:"success",effects:{events:[{topic:"root.ready",data:{}}]}};
+    };`,
+    "support/package.json": '{"type":"module"}',
+    "support/PLUGIN.md": `---\nid: support\nkind: plugin\ndescription: Support\n${mode === "buffered" ? "entry: ./entry.js\ncontributes: {tools: [set-schema]}\n" : ""}---\n`,
+    "support/entry.js": schemaTool,
+    "support/runtimes/follower/RUNTIME.md": `---
+type: function
+function:
+  handler: ./handler.js
+  tools:
+    builtin: [get-character-schema, create-character, get-character]
+    plugin: ${mode === "buffered" ? "[set-schema]" : "[]"}
+schedule:
+  trigger: {type: event, topic: root.ready}
+  manual: {execution: background}
+---
+`,
+    "support/runtimes/follower/handler.js": `export default async ctx => {
+      ${mode === "buffered" ? 'await ctx.tools.call("set-schema", {});' : ""}
+      ${mode === "private" ? `await ctx.pluginData.set("schema", "character-attributes", ${JSON.stringify(schema)});` : ""}
+      const result = await ctx.tools.call("get-character-schema", {});
+      await ctx.tools.call("create-character", {name:"Test player",type:"player",fields:${invalid ? '{hp:"invalid"}' : "{}"}});
+      const character = await ctx.tools.call("get-character", {name:"Test player"});
+      return {outcome:"success",value:{schema:result.schema,fields:character.character.fields,worldSchema:ctx.world.characterSchema}};
+    };`,
+  };
   for (const [relative, content] of Object.entries(files)) {
     const target = path.join(root, relative);
     await mkdir(path.dirname(target), { recursive: true });
@@ -40,39 +86,11 @@ async function fixture(files: Record<string, string>) {
   return root;
 }
 
-function runtime(name: string, extra = "") {
-  return `---\nname: ${name}\ndescription: Fixture\nruntimeType: function\nhandler: ./handler.js\ntrigger: {type: manual}\n${extra}---\n`;
-}
-
-async function providerFixture(
-  capability: "package" | "runtime" | "none",
-  invalid = false,
-) {
-  const declaration = "capabilities: [world-data-provider]\n";
-  return fixture({
-    "probe/package.json": '{"type":"module"}',
-    "probe/PLUGIN.md": "---\nname: probe\ndescription: Probe\n---\n",
-    "probe/runtimes/root/PLUGIN.md": runtime("probe/root"),
-    "probe/runtimes/root/handler.js":
-      'export default async () => ({outcome: "success", effects: {events: [{topic: "root.ready", data: {}}]}});',
-    "support/package.json": '{"type":"module"}',
-    "support/PLUGIN.md": `---\nname: support\ndescription: Support\n${capability === "package" ? declaration : ""}---\n`,
-    "support/runtimes/follower/PLUGIN.md": `---\nname: support/follower\ndescription: Support follower\nruntimeType: function\nhandler: ./handler.js\ntrigger: {type: event, topic: root.ready}\nexecution: background\ntools: {builtin: [get-character-schema, create-character, get-character]}\n${capability === "runtime" ? declaration : ""}---\n`,
-    "support/runtimes/follower/handler.js": `export default async ctx => {
-      await ctx.pluginData.set("schema", "character-attributes", ${JSON.stringify(schema)});
-      const result = await ctx.tools.call("get-character-schema", {});
-      await ctx.tools.call("create-character", {name: "Test player", type: "player", fields: ${invalid ? '{hp: "invalid"}' : "{}"}});
-      const character = await ctx.tools.call("get-character", {name: "Test player"});
-      return {outcome: "success", value: {schema: result.schema, fields: character.character.fields}};
-    };`,
-  });
-}
-
-describe("runtime debug capability providers", () => {
-  it.each(["package", "runtime"] as const)(
-    "uses a selected %s provider for schemas and character defaults",
-    async (capability) => {
-      const root = await providerFixture(capability);
+describe("runtime debug World Model", () => {
+  it.each(["buffered", "committed"] as const)(
+    "uses %s domain schema for character defaults",
+    async (mode) => {
+      const root = await fixture(mode);
       const report = await runRuntimeDebug({
         runtimeId: "probe/root",
         pluginsDir: root,
@@ -80,18 +98,19 @@ describe("runtime debug capability providers", () => {
       });
       expect(
         report.runtimeResults.find(
-          ({ runtimeId }) => runtimeId === "support/follower",
+          (result) => result.runtimeId === "support/follower",
         ),
+        JSON.stringify(report.runtimeResults),
       ).toMatchObject({
         status: "success",
-        output: { schema, fields: { hp: 10 } },
+        output: { schema, fields: { hp: 10 }, worldSchema: schema },
       });
       expect(report.jobs).toMatchObject([{ status: "done" }]);
     },
   );
 
-  it("enforces the support provider's field constraints", async () => {
-    const root = await providerFixture("package", true);
+  it("enforces domain schema constraints before committing character writes", async () => {
+    const root = await fixture("committed", true);
     const report = await runRuntimeDebug({
       runtimeId: "probe/root",
       pluginsDir: root,
@@ -99,8 +118,9 @@ describe("runtime debug capability providers", () => {
     });
     expect(
       report.runtimeResults.find(
-        ({ runtimeId }) => runtimeId === "support/follower",
+        (result) => result.runtimeId === "support/follower",
       ),
+      JSON.stringify(report.runtimeResults),
     ).toMatchObject({
       status: "failed",
       error: expect.stringContaining(
@@ -110,8 +130,8 @@ describe("runtime debug capability providers", () => {
     expect(report.jobs).toMatchObject([{ status: "failed" }]);
   });
 
-  it("does not infer a provider from schema data without a capability", async () => {
-    const root = await providerFixture("none");
+  it("does not infer a domain schema from a plugin's private schema data", async () => {
+    const root = await fixture("private");
     const report = await runRuntimeDebug({
       runtimeId: "probe/root",
       pluginsDir: root,
@@ -119,44 +139,12 @@ describe("runtime debug capability providers", () => {
     });
     expect(
       report.runtimeResults.find(
-        ({ runtimeId }) => runtimeId === "support/follower",
+        (result) => result.runtimeId === "support/follower",
       ),
+      JSON.stringify(report.runtimeResults),
     ).toMatchObject({
       status: "success",
-      output: { schema: null, fields: {} },
-    });
-  });
-
-  it("rejects competing runtime providers under the host's fallback rules", async () => {
-    const files: Record<string, string> = {
-      "probe/package.json": '{"type":"module"}',
-      "probe/PLUGIN.md": runtime(
-        "probe",
-        "tools: {builtin: [get-character-schema]}\n",
-      ),
-      "probe/handler.js":
-        'export default async ctx => ({outcome: "success", value: await ctx.tools.call("get-character-schema", {})});',
-    };
-    for (const id of ["fallback", "first", "second"]) {
-      files[`${id}/package.json`] = '{"type":"module"}';
-      files[`${id}/PLUGIN.md`] = runtime(
-        id,
-        `capabilities: [world-data-provider]\n${id === "fallback" ? "fallbackFor: world-data-provider\n" : ""}`,
-      );
-      files[`${id}/handler.js`] =
-        'export default async () => ({outcome: "success", value: null});';
-    }
-    const root = await fixture(files);
-    const report = await runRuntimeDebug({
-      runtimeId: "probe",
-      pluginsDir: root,
-      withPlugins: ["fallback", "first", "second"],
-    });
-    expect(report.runtimeResults[0]).toMatchObject({
-      status: "failed",
-      error: expect.stringContaining(
-        "Multiple active providers for world-data-provider",
-      ),
+      output: { schema: null, fields: {}, worldSchema: null },
     });
   });
 });

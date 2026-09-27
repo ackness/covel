@@ -21,6 +21,10 @@ const retry: ExecutionStep = {
   attemptStatus: "committed",
 };
 const namespace = { __turnId: "retry", prompt1Text: "Inspect the door" };
+const suggestions = {
+  turnId: "retry",
+  choices: [{ id: "prompt:1", text: "Inspect the door" }],
+};
 
 function state(): SessionState {
   return {
@@ -68,11 +72,11 @@ describe("legacy third-party message recovery", () => {
       expect(current.messages[1]?.turnId).toBe("source");
       expect(
         filterStalePrompts(
-          namespace,
+          suggestions,
           "source",
           pluginMessageTurnResolver(current.executionSteps, current.messages),
         ),
-      ).toBe(namespace);
+      ).toBe(suggestions);
       expect(current.pluginData.external?.message?.__turnId).toBe("retry");
     },
   );
@@ -84,11 +88,11 @@ describe("legacy third-party message recovery", () => {
     });
     expect(
       filterStalePrompts(
-        namespace,
+        suggestions,
         "source",
         pluginMessageTurnResolver(current.executionSteps, current.messages),
       ),
-    ).toEqual({});
+    ).toBeUndefined();
     current = reducer(current, {
       type: "SET_TURN_ATTEMPT_STATUS",
       turnId: "retry",
@@ -102,7 +106,7 @@ describe("legacy third-party message recovery", () => {
       [retry],
       [story, { ...story, id: "new", turnId: "new" }],
     );
-    expect(filterStalePrompts(namespace, "new", resolve)).toEqual({});
+    expect(filterStalePrompts(suggestions, "new", resolve)).toBeUndefined();
   });
 
   it.each(["failed", "interrupted", "pending"] as const)(
@@ -112,7 +116,9 @@ describe("legacy third-party message recovery", () => {
         [{ ...retry, attemptStatus }],
         [story],
       );
-      expect(filterStalePrompts(namespace, "source", resolve)).toEqual({});
+      expect(
+        filterStalePrompts(suggestions, "source", resolve),
+      ).toBeUndefined();
     },
   );
 

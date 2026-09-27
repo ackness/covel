@@ -4,10 +4,10 @@ import {
   createPresetRegistry,
   createProviderRegistry,
 } from "@covel/ai-provider";
-import { createGatewayAdapter } from "@covel/runtime";
+import { createPluginRuntimeGateway } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store";
 import { outboundFetch } from "../../../../packages/ai-provider/src/outbound-network.js";
-import { createBootstrapMemorySystem } from "../../src/routes/api/bootstrap/memory.js";
+import extractMemory from "../../../../plugins/memory/server/extract.js";
 
 vi.mock("../../../../packages/ai-provider/src/outbound-network.js", () => ({
   outboundFetch: vi.fn(),
@@ -55,7 +55,7 @@ function fixture(explicitThinking = false) {
       },
     }),
   });
-  const adapter = createGatewayAdapter(
+  const adapter = createPluginRuntimeGateway(
     gateway,
     explicitThinking
       ? {
@@ -67,14 +67,37 @@ function fixture(explicitThinking = false) {
         }
       : {},
   );
-  const bootstrap = createBootstrapMemorySystem({
-    store: createMemoryStore(),
-    manifestCache: new Map(),
-    llmAdapter: adapter,
-    preferredMemorySlot: "memory",
-    resolveModel: (manifest) => manifest.model,
-  })!;
-  return bootstrap.forRequest(adapter);
+  const blocks = new Map<string, unknown>();
+  return {
+    blocks,
+    async run() {
+      const result = await extractMemory({
+        sessionId: "session",
+        pluginId: "memory",
+        locale: "en-US",
+        signal: AbortSignal.timeout(120_000),
+        gateway: adapter,
+        inputs: {
+          turn: {
+            value: {
+              turnId: "turn",
+              narrativeText: input.narrativeText,
+              playerMessage: "go",
+              toolCallSummaries: [],
+            },
+          },
+        },
+        pluginData: {
+          get: async () => null,
+          list: async () => [],
+          set: async (_ns: string, key: string, value: unknown) => {
+            blocks.set(key, value);
+          },
+        },
+      });
+      return result;
+    },
+  };
 }
 
 beforeEach(() => {
@@ -103,9 +126,11 @@ describe("memory LLM request policy", () => {
     "defaults extraction to no thinking while preserving explicit settings (%s)",
     async (explicitThinking) => {
       fetch.mockResolvedValue(success());
-      const result =
-        await fixture(explicitThinking).updater.updateAfterTurn(input);
-      expect(result).toMatchObject({ updated: true, blocksChanged: ["scene"] });
+      const result = await fixture(explicitThinking).run();
+      expect(result).toMatchObject({
+        outcome: "success",
+        value: { blocksChanged: ["scene"] },
+      });
       const body = JSON.parse(String(fetch.mock.calls[0]![1]!.body));
       expect(body.enable_thinking).toBe(explicitThinking);
     },
@@ -123,18 +148,16 @@ describe("memory LLM request policy", () => {
         }),
     );
     const memory = fixture();
-    const update = memory.updater.updateAfterTurn(input);
+    const update = memory.run();
     await vi.advanceTimersByTimeAsync(90_000);
     expect(await update).toMatchObject({
-      updated: true,
-      blocksChanged: ["scene"],
+      outcome: "success",
+      value: { blocksChanged: ["scene"] },
     });
     expect(fetch).toHaveBeenCalledOnce();
-    expect(
-      (await memory.manager.loadBlocks(input.sessionId)).find(
-        (block) => block.label === "scene",
-      )?.content,
-    ).toBe("The gate is open.");
+    expect(memory.blocks.get("scene")).toMatchObject({
+      content: "The gate is open.",
+    });
   });
 
   it("aborts a stalled request at 120 seconds without retrying the timeout", async () => {
@@ -147,20 +170,22 @@ describe("memory LLM request policy", () => {
         }),
     );
     const memory = fixture();
-    const update = memory.updater.updateAfterTurn(input);
+    const update = memory.run();
     let settled = false;
-    void update.then(() => {
-      settled = true;
-    });
+    const rejected = expect(update).rejects.toThrow("Timed out");
+    void update.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
     await vi.advanceTimersByTimeAsync(119_999);
     expect(fetch).toHaveBeenCalledOnce();
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await update).toMatchObject({
-      updated: false,
-      error: expect.stringContaining("Timed out"),
-    });
-    await memory.updater.awaitPending(input.sessionId);
+    await rejected;
     expect(fetch).toHaveBeenCalledOnce();
   });
 });

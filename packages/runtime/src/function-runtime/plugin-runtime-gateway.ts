@@ -58,6 +58,7 @@ export interface FullGatewayLike {
     input: {
       presetId?: string;
       messages: Array<{ role: string; content: string | null }>;
+      defaults?: import("@covel/shared").LLMRequestDefaults;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: FullGatewayOptions,
@@ -75,6 +76,7 @@ export interface FullGatewayLike {
       presetId?: string;
       schema: ZodType<T>;
       messages: Array<{ role: string; content: string | null }>;
+      defaults?: import("@covel/shared").LLMRequestDefaults;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: FullGatewayOptions,
@@ -207,6 +209,7 @@ export function createPluginRuntimeGateway(
         {
           ...(input.presetId ? { presetId: input.presetId } : {}),
           messages,
+          ...(input.defaults ? { defaults: input.defaults } : {}),
           ...(input.providerRequestMetadata
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
             : {}),
@@ -229,6 +232,7 @@ export function createPluginRuntimeGateway(
     },
 
     async generateObject<T>(input: {
+      readonly defaults?: import("@covel/shared").LLMRequestDefaults;
       readonly presetId?: string;
       readonly schema: Readonly<Record<string, unknown>>;
       readonly prompt?: string;
@@ -268,6 +272,7 @@ export function createPluginRuntimeGateway(
           ...(input.presetId ? { presetId: input.presetId } : {}),
           schema: zodSchema as ZodType<T>,
           messages,
+          ...(input.defaults ? { defaults: input.defaults } : {}),
           ...(input.providerRequestMetadata
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
             : {}),

@@ -258,25 +258,3 @@ export function usePluginJobs(pluginId: string): readonly PluginJobRecord[] {
 }
 
 const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
-
-/**
- * React hook — discovers the character-attribute schema written by whichever
- * plugin declares `capabilities: [world-data-provider]`. The schema lives
- * under the well-known path `(*, 'schema', 'character-attributes')`, so we
- * scan across all pluginIds and return the first match instead of hardcoding
- * `world-init` (framework/plugin isolation rule).
- *
- * Returns `null` when no world has produced a schema yet.
- */
-export function useCharacterAttributeSchema(): unknown {
-  // Snapshot is the schema value itself (stable reference while untouched),
-  // so unrelated plugin-data writes don't re-render consumers.
-  return useSyncExternalStore(subscribe, () => {
-    const all = getActiveData();
-    for (const pluginId of Object.keys(all)) {
-      const value = all[pluginId]?.["schema"]?.["character-attributes"];
-      if (value) return value;
-    }
-    return null;
-  });
-}

@@ -22,14 +22,14 @@ describe("UI spec loading", () => {
     await fs.writeFile(
       path.join(pluginDir, "PLUGIN.md"),
       `---
-name: test-ui-plugin
+id: test-ui-plugin
+kind: plugin
 description: Plugin with UI specs
-stage: narrative
-ui:
-  right:
-    - ./ui/panel.json
-  message:
-    - ./ui/block.json
+runtime: {type: agent, schedule: {stage: narrative}}
+contributes:
+  ui:
+    right: [./ui/panel.json]
+    message: [./ui/block.json]
 ---
 
 Test prompt.
@@ -62,9 +62,10 @@ Test prompt.
     await fs.writeFile(
       path.join(noUiDir, "PLUGIN.md"),
       `---
-name: no-ui-plugin
+id: no-ui-plugin
+kind: plugin
 description: No UI
-stage: narrative
+runtime: {type: agent, schedule: {stage: narrative}}
 ---
 
 Prompt.
@@ -78,14 +79,16 @@ Prompt.
     await fs.writeFile(
       path.join(handlerDir, "PLUGIN.md"),
       `---
-name: ui-handler-plugin
+id: ui-handler-plugin
+kind: plugin
 description: UI plus handler
-stage: narrative
-runtimeType: function
-handler: ./handler.mjs
-ui:
-  right:
-    - ./ui/panel.json
+runtime:
+  type: function
+  schedule: {stage: narrative}
+  function: {handler: ./handler.mjs}
+contributes:
+  ui:
+    right: [./ui/panel.json]
 ---
 
 Prompt.
@@ -108,12 +111,13 @@ export default async function handler() { return { proposals: [] }; }
     await fs.writeFile(
       path.join(evilDir, "PLUGIN.md"),
       `---
-name: evil-plugin
+id: evil-plugin
+kind: plugin
 description: Evil
-stage: narrative
-ui:
-  right:
-    - ../../etc/passwd
+runtime: {type: agent, schedule: {stage: narrative}}
+contributes:
+  ui:
+    right: [../../etc/passwd]
 ---
 
 Prompt.

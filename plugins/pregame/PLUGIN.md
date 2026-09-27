@@ -1,22 +1,27 @@
 ---
-name: pregame
+id: pregame
+kind: core
 displayName:
   zh: 开局准备
   en: Pre-Game Setup
 description:
   zh: 在开局时读取世界资料，准备好第一段冒险。
-  en: Reads the world details at the start and prepares the first step of the adventure.
-pluginType: core-plugin
-stage: setup
-runtimeType: function
-outputKind: system
-handler: ./handler.js
+  en: >-
+    Reads the world details at the start and prepares the first step of the
+    adventure.
 tags:
-  - role:pre-game
-  - cost:function
-trigger:
-  type: auto # setup runtimes are auto-only; maxTriggerCount is the retry budget
-  maxTriggerCount: 1
+  - "cost:function"
+runtime:
+  type: function
+  schedule:
+    stage: setup
+    trigger:
+      type: auto
+      maxTriggerCount: 1
+  io:
+    visibility: system
+  function:
+    handler: ./handler.js
 ---
 
 # Pre-Game 初始化插件

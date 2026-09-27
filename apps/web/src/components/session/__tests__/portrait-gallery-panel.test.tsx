@@ -24,11 +24,19 @@ vi.mock("@/lib/toast-channel.js", () => ({ emitToast: mocks.toast }));
 vi.mock("@/lib/catalog/session-context.js", () => ({
   useActiveSessionId: () => "session-a",
 }));
-vi.mock("@/stores/plugin-data-store.js", () => ({
-  usePluginNamespace: () => ({
-    hero: { schemaVersion: 1, characterId: "hero", displayName: "Hero" },
-    guide: { schemaVersion: 1, characterId: "guide", displayName: "Guide" },
-  }),
+vi.mock("@/stores/ui-slot-store.js", () => ({
+  useUiSlots: () => [
+    {
+      slot: "character.visual@1",
+      key: "hero",
+      value: { characterId: "hero", displayName: "Hero" },
+    },
+    {
+      slot: "character.visual@1",
+      key: "guide",
+      value: { characterId: "guide", displayName: "Guide" },
+    },
+  ],
 }));
 vi.mock("@/components/Media.js", () => ({ Media: () => null }));
 vi.mock("@/components/MediaPreviewDialog.js", () => ({
@@ -66,8 +74,15 @@ beforeEach(() => {
 function upload() {
   const view = render(
     <PortraitGalleryPanel
-      pluginId="portrait-provider"
-      runtimeId="portrait-provider/save"
+      replaceAction={{
+        pluginId: "portrait-provider",
+        runtimeId: "portrait-provider/save",
+        payload: {
+          action: "replacePortrait",
+          characterId: { from: "item.characterId" },
+          ref: { from: "upload" },
+        },
+      }}
     />,
   );
   const input = view.container.querySelector("input[type=file]")!;
@@ -108,11 +123,9 @@ it("hydrates before upload and resolves approval without uploading twice", async
       pluginId: "portrait-provider",
       runtimeId: "portrait-provider/save",
       payload: {
-        presence: expect.objectContaining({
-          characterId: "hero",
-          avatar: ref,
-          sprite: ref,
-        }),
+        action: "replacePortrait",
+        characterId: "hero",
+        ref,
       },
     }),
   );

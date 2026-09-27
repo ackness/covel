@@ -28,68 +28,19 @@ export function pluginDeclarations(
   return [...declarations.values()];
 }
 
-function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, item: unknown) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
-        )
-      : item,
-  );
-}
-
-function mergeItems<T>(
-  records: readonly ParsedPluginMd[],
-  field: string,
-  entries: (manifest: RuntimeManifest) => readonly (readonly [string, T])[],
-): Record<string, T> {
-  const merged = new Map<string, { value: T; source: string }>();
-  for (const record of records) {
-    const source = record.sourcePath ?? record.manifest.name;
-    for (const [key, value] of entries(record.manifest)) {
-      const previous = merged.get(key);
-      if (previous && stableJson(previous.value) !== stableJson(value)) {
-        throw new Error(
-          `Conflicting ${field} declaration "${key}": ${previous.source} and ${source}`,
-        );
-      }
-      if (!previous) merged.set(key, { value, source });
-    }
-  }
-  return Object.fromEntries(
-    [...merged].map(([key, { value }]) => [key, value]),
-  );
-}
-
-/** Resolve plugin-scoped contributions once, rejecting ambiguous declarations. */
+/** Plugin declarations have one explicit owner: the root PLUGIN.md. */
 export function resolvePluginDeclarations(records: readonly ParsedPluginMd[]) {
+  const root =
+    records.find((record) => record.plugin)?.manifest ??
+    records.find((record) => record.manifest.name === record.manifest.pluginId)
+      ?.manifest;
   return {
-    userSettings: Object.values(
-      mergeItems(records, "userSettings", (m) =>
-        (m.userSettings ?? []).map((v) => [v.key, v] as const),
-      ),
-    ),
-    dataSchemas: mergeItems(records, "dataSchemas", (m) =>
-      Object.entries(m.dataSchemas ?? {}),
-    ),
-    worldProjections: mergeItems(records, "worldProjections", (m) =>
-      Object.entries(m.worldProjections ?? {}),
-    ),
-    commands: Object.values(
-      mergeItems(records, "commands", (m) =>
-        (m.commands ?? []).map((v) => [v.name, v] as const),
-      ),
-    ),
-    events: Object.values(
-      mergeItems(records, "events", (m) =>
-        (m.events ?? []).map((v) => [v.topic, v] as const),
-      ),
-    ),
-    memoryBlocks: Object.values(
-      mergeItems(records, "memoryBlocks", (m) =>
-        (m.memoryBlocks ?? []).map((v) => [v.label, v] as const),
-      ),
-    ),
+    extensions: root?.extensions ?? [],
+    userSettings: root?.userSettings ?? [],
+    dataSchemas: root?.dataSchemas ?? {},
+    worldProjections: root?.worldProjections ?? {},
+    commands: root?.commands ?? [],
+    events: root?.events ?? [],
   };
 }
 
@@ -109,6 +60,13 @@ export function validatePluginDeclarations(
       );
     }
     names.set(record.manifest.name, record);
+  }
+  const plugin = records.find((record) => record.plugin)?.plugin;
+  for (const command of plugin?.contributes?.commands ?? []) {
+    if (!plugin?.contributes?.actions?.includes(command.action))
+      throw new Error(
+        `Command ${command.name} action ${command.action} must be declared in contributes.actions`,
+      );
   }
   const declarations = resolvePluginDeclarations(records);
   for (const [id, projection] of Object.entries(

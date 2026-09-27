@@ -77,13 +77,28 @@ it.each(
           { name: "probe", description: "Probe", action: "entry-action" },
         ],
       } as RuntimeManifest;
-      const parsed = { manifest, promptTemplate: "", rawFrontmatter: {} };
+      const parsed = {
+        manifest,
+        plugin: {
+          id: pluginId,
+          kind: "plugin" as const,
+          description: pluginId,
+          entry: "entry.mjs",
+          contributes: {
+            actions: ["entry-action"],
+            commands: manifest.commands,
+          },
+        },
+        promptTemplate: "",
+        rawFrontmatter: {},
+      };
       const pluginRegistry = createPluginRegistry();
       pluginRegistry.register({
         id: pluginId,
         source: source as PluginSource | undefined,
         status: "registered",
-        manifest: parsed,
+        packageManifest: parsed,
+        manifests: [],
         loadedRuntimes: new Map(),
         summary: {
           id: pluginId,

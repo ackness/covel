@@ -1,3 +1,4 @@
+import { buildTurnDigest } from "./turn-digest.js";
 /**
  * TurnExecutor — orchestrates a complete turn execution.
  *
@@ -63,9 +64,7 @@ import {
 import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
 import { planTurnDetachment } from "../schedule/turn-completion.js";
 import {
-  loadCoreMemoryBlocks,
   loadSessionSummaries,
-  loadWorkingMemory,
   refreshSessionContextSnapshot,
 } from "./session-context.js";
 import {
@@ -333,6 +332,33 @@ async function executeTurnImpl(
       }
     }
   }
+  if (deps.extensions) {
+    const extensionSession = await deps.store?.getSession(input.sessionId);
+    deps = {
+      ...deps,
+      extensionExecution: deps.extensions.createExecution({
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        locale: input.locale ?? "zh-CN",
+        world: {
+          characterSchema:
+            (await deps.store?.getCharacterSchema(input.sessionId)) ?? null,
+          characters: (await deps.store?.listCharacters(input.sessionId)) ?? [],
+          worldRecord: extensionSession?.worldId
+            ? ((await deps.store?.getWorld(extensionSession.worldId)) ?? null)
+            : null,
+        },
+        signal:
+          getTurnExecutionSignal(deps.turnControl) ??
+          new AbortController().signal,
+        gateway: deps.gateway,
+        utils: deps.utils,
+        pluginData: deps.store
+          ? await deps.store.listPluginDataSessionScope(input.sessionId)
+          : [],
+      }),
+    };
+  }
   const projectedPromptHistory = await buildProjectedPromptHistory({
     input,
     deps,
@@ -455,22 +481,12 @@ async function executeTurnImpl(
     );
   }
   const sessionSummaries = await loadSessionSummaries({ input, deps });
-  // Single listWorkingMemory read per turn: the raw records are threaded into
-  // the core-memory manager (initializeDefaults + loadBlocks) below (R-13).
-  const { entries: workingMemory, records: workingMemoryRecords } =
-    await loadWorkingMemory({ input, deps });
-  const coreMemoryBlocks = await loadCoreMemoryBlocks({
-    input,
-    deps,
-    ...(workingMemoryRecords ? { workingMemoryRecords } : {}),
-  });
   const loadSessionContext = () =>
     refreshSessionContextSnapshot({
       input,
       deps,
       turnNumber,
       sessionSummaries,
-      coreMemoryBlocks,
     });
   let sessionContext = await loadSessionContext();
   const refreshSessionContext = async () =>
@@ -600,8 +616,6 @@ async function executeTurnImpl(
       ...(deps.compactor && deps.store && shouldAppendPlayerMessage
         ? { prepareCompactedContext }
         : {}),
-      workingMemory,
-      coreMemoryBlocks,
       sessionContext,
       triggerEvent,
       turnOptions: options,
@@ -741,6 +755,11 @@ async function executeTurnImpl(
           : {}),
         ...(manifest.version ? { pluginVersion: manifest.version } : {}),
         upstreamResults: frozenUpstreamResults,
+        turnDigest: buildTurnDigest(
+          input,
+          frozenUpstreamResults,
+          activeRuntimes,
+        ),
       });
     }
     const results = await executeParallel(

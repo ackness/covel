@@ -6,7 +6,7 @@
 
 - `PLUGIN.md`：单 agent runtime 和故事提示词。
 - 使用 `story` 模型 slot。
-- 常驻 prompt 只使用世界名称、简介和标签，不在每轮重复注入开场全文；开局由 setup 历史承接，可调用 `world-dimension-get` 按需获取精确世界事实。
+- 常驻 prompt 只使用世界名称、简介和标签，不在每轮重复注入开场全文；开局由 setup 历史承接，由世界上下文扩展提供世界事实。
 - 可调用 `memory-search` 检索被压缩或已离开当前窗口的对话与长期知识。
 - `advertiseEvents: true`，可调用 `emit-event` 发射当前会话已声明的领域事件。
 

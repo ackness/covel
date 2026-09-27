@@ -145,7 +145,7 @@ export function detectSetupSessionCycles(
   const inScope = new Set(pendingSetup.map((r) => r.name));
   const capabilityProviders = new Map<string, string[]>();
   for (const rt of pendingSetup) {
-    for (const cap of rt.capabilities ?? []) {
+    for (const cap of rt.outputContract ? [rt.outputContract] : []) {
       const list = capabilityProviders.get(cap) ?? [];
       list.push(rt.name);
       capabilityProviders.set(cap, list);
