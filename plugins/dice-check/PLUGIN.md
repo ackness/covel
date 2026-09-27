@@ -15,6 +15,8 @@ tags:
   - "ui:right-panel"
 provides:
   - dice-check@1
+optional:
+  - tabletop-check@1
 entry: ./server/index.js
 contributes:
   events:
@@ -59,4 +61,4 @@ contributes:
     - roll
 ---
 
-Dice Check turns "does my lockpicking succeed?" from narrative-LLM freestyle into an auditable roll: a pre-turn runtime rolls the turn's d20 pool and injects it (with the check rules) into the narrative engine, which resolves risky actions against it and emits `check.resolved` receipts. The root entry exposes player-facing dice actions; see `runtimes/roller/PLUGIN.md` (the pre-roll injector) and `runtimes/recorder/PLUGIN.md` (the receipt recorder + UI) for the executable runtimes.
+Dice Check turns "does my lockpicking succeed?" from narrative-LLM freestyle into an auditable roll: a pre-turn runtime rolls the turn's d20 pool and injects it (with the check rules) into the narrative engine, which resolves risky actions against it and emits `check.resolved` receipts. A same-turn `tabletop-check@1` receipt owns its submitted action, so the recorder skips dice-pool events for that turn. The root entry exposes player-facing dice actions; see `runtimes/roller/RUNTIME.md` (the pre-roll injector) and `runtimes/recorder/RUNTIME.md` (the receipt recorder + UI) for the executable runtimes.

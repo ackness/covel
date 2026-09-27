@@ -105,7 +105,10 @@ async function fixture(withRuntime = false) {
     status: "active",
     phase: "playing",
     activePlugins: [id],
-    metadata: { approvalScopeNonce: "fixture-scope" },
+    metadata: {
+      approvalScopeNonce: "fixture-scope",
+      pluginSelection: { requested: [id], excluded: [] },
+    },
     setupRuntimes: {},
     completedPlayerTurns: 0,
     createdAt: new Date().toISOString(),
@@ -162,12 +165,50 @@ async function fixture(withRuntime = false) {
     services,
     client,
     disposed,
+    store,
     revoke: () => {
       approved = false;
     },
   };
 }
 describe("plugin generation reload", () => {
+  it("recomputes dependencies before admitting a reloaded generation and preserves the running snapshot", async () => {
+    const f = await fixture(true);
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const old = f.manager.withSnapshot("session", async () => {
+      started.resolve();
+      await finish.promise;
+      expect(
+        f.registry.getActiveRuntimes("session").map((r) => r.pluginId),
+      ).toEqual([f.id]);
+    });
+    await started.promise;
+    const file = path.join(f.root, "PLUGIN.md");
+    const original = await fs.readFile(file, "utf8");
+    await fs.writeFile(
+      file,
+      original.replace(
+        "kind: plugin",
+        "kind: plugin\nrequires: [missing-provider@1]",
+      ),
+    );
+    await f.manager.reload(f.id, "session");
+    await f.manager.withSnapshot("session", async () => {
+      expect(f.registry.getActiveRuntimes("session")).toEqual([]);
+      expect((await f.store.getSession("session"))?.activePlugins).toEqual([]);
+    });
+    finish.resolve();
+    await old;
+    // Keep the user's requested selection, so fixing the declaration restores it.
+    await fs.writeFile(file, original);
+    await f.manager.reload(f.id, "session");
+    await f.manager.withSnapshot("session", async () => {
+      expect(
+        f.registry.getActiveRuntimes("session").map((r) => r.pluginId),
+      ).toEqual([f.id]);
+    });
+  });
   it("atomically publishes the new generation while captured executions retain old lookups and resources", async () => {
     const f = await fixture();
     const started = Promise.withResolvers<void>();

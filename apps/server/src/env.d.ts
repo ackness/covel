@@ -177,6 +177,7 @@ declare module "hono" {
     withPluginSnapshot?: <T>(
       sessionId: string,
       fn: () => Promise<T>,
+      beforeCapture?: () => Promise<void>,
     ) => Promise<T>;
     hasPendingPluginEntry?: (pluginId: string) => boolean;
     /** Public services exported by active, approved plugin entries. */

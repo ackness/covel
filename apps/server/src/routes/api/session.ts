@@ -1,4 +1,5 @@
 import { importWorldEmbeddedCharacters } from "./session/world-characters.js";
+import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
 import { characterSchemaSchema } from "@covel/shared";
 /**
  * Session routes — RESTful CRUD + session-scoped plugin management.
@@ -585,7 +586,7 @@ sessionRoutes.patch("/:id", async (c) => {
   const updates = parsedPatch.updates;
 
   const sessionLock = c.get("sessionLock");
-  const updated = await sessionLock.withLock(id, async () => {
+  const updated = await withSettledSessionLock(c, id, async () => {
     const lockedGuard = await resolveSessionParam(c);
     if (!lockedGuard.ok) return lockedGuard.response;
     const session = lockedGuard.session;

@@ -257,6 +257,16 @@ describe("tabletop package installed as a third-party ZIP", () => {
       path.join(root, "builtin/narrator/node_modules"),
       "junction",
     );
+    await cp(
+      path.join(project, "plugins/dice-check"),
+      path.join(root, "builtin/dice-check"),
+      { recursive: true, filter: (source) => !source.includes("node_modules") },
+    );
+    await symlink(
+      path.join(project, "plugins/dice-check/node_modules"),
+      path.join(root, "builtin/dice-check/node_modules"),
+      "junction",
+    );
     vi.stubEnv("COVEL_USER_PLUGINS_DIR", path.join(root, "user"));
     vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-tabletop-token");
     vi.stubEnv("NODE_ENV", "production");
@@ -698,6 +708,169 @@ sources:
     expect(await store.listCharacters(sessionId)).toHaveLength(1);
     expect(
       await store.listPluginData(sessionId, pluginId, "checks"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps a submitted tabletop check separate from dice-pool receipts in the following turn", async () => {
+    await action("start_session", {});
+    const allocation = await latestForm();
+    expect(
+      (await submit(allocation, { tideReading: 4, combat: 2 })).status,
+    ).toBe(200);
+    await action("send_message", { content: "Begin" });
+    const enabledDice = await request(
+      `${sessionPath}/plugins/dice-check`,
+      "PUT",
+    );
+    expect(enabledDice.status, await enabledDice.text()).toBe(200);
+
+    const opened = await request(`${sessionPath}/plugin-rpc`, "POST", {
+      kind: "runtime",
+      pluginId,
+      runtimeId: `${pluginId}/check`,
+      payload: { openForm: true },
+    });
+    expect(opened.status, await opened.text()).toBe(200);
+    const check = await latestForm();
+    expect(
+      (
+        await submit(check, {
+          action: "Check the receiver wiring for a loose connection",
+          attribute: "tideReading",
+          difficulty: "12",
+        })
+      ).status,
+    ).toBe(200);
+
+    let emit = true;
+    let expectTabletopReceipt = true;
+    generate.mockImplementation(async (request) => {
+      if (!request.tools?.some((tool) => tool.name === "emit-event") || !emit) {
+        return {
+          content: "The receiver responds.",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      }
+      const prompt = request.messages
+        .map((message) =>
+          typeof message.content === "string" ? message.content : "",
+        )
+        .join("\n");
+      const inputBlock = prompt.match(
+        /<runtime-inputs>\s*(\{[^\n]+\})\s*<\/runtime-inputs>/,
+      );
+      const slots = inputBlock
+        ? (JSON.parse(inputBlock[1]!) as {
+            tabletopCheck?: { value?: string };
+            "check-results"?: { value?: string };
+          })
+        : {};
+      const tabletop = slots.tabletopCheck?.value?.match(
+        /Settled tabletop check \(do not reroll or change the result\): (\{.*\})/,
+      );
+      const receipt = tabletop
+        ? (JSON.parse(tabletop[1]!) as {
+            action: string;
+            attribute: string;
+            die: number;
+            modifier: number;
+            difficulty: number;
+            total: number;
+            outcome: string;
+          })
+        : null;
+      expect(Boolean(receipt)).toBe(expectTabletopReceipt);
+      const pool = slots["check-results"]?.value?.match(
+        /Pre-rolled d20s: #1: (\d+)/,
+      );
+      const roll = receipt?.die ?? Number(pool?.[1]);
+      expect(Number.isInteger(roll)).toBe(true);
+      const modifier = receipt?.modifier ?? 0;
+      const dc = receipt?.difficulty ?? 12;
+      const outcome =
+        receipt?.outcome ??
+        (roll === 20
+          ? "critical-success"
+          : roll === 1
+            ? "critical-failure"
+            : roll + modifier >= dc
+              ? "success"
+              : "failure");
+      emit = false;
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `check-${crypto.randomUUID()}`,
+            name: "emit-event",
+            arguments: JSON.stringify({
+              topic: "check.resolved",
+              data: {
+                checks: [
+                  {
+                    action: receipt?.action ?? "Inspect the receiver",
+                    attribute: receipt?.attribute ?? "tideReading",
+                    roll,
+                    modifier,
+                    dc,
+                    difficulty: "normal",
+                    total: roll + modifier,
+                    outcome,
+                  },
+                ],
+              },
+            }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    });
+
+    const settled = await action("send_message", {
+      content: "Resolve the submitted check",
+    });
+    expect(settled.runtimeResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtimeId: `${pluginId}/check`,
+          status: "success",
+        }),
+        expect.objectContaining({
+          runtimeId: "dice-check/recorder",
+          status: "skipped",
+        }),
+      ]),
+    );
+    expect(
+      settled.runtimeResults
+        .find((result) => result.runtimeId === "narrator")
+        ?.toolCalls.map((call) => call.toolName),
+    ).toContain("emit-event");
+    expect(
+      await store.listPluginData(sessionId, pluginId, "checks"),
+    ).toHaveLength(1);
+    expect(
+      await store.listPluginData(sessionId, "dice-check", "checks"),
+    ).toHaveLength(0);
+
+    emit = true;
+    expectTabletopReceipt = false;
+    const ordinary = await action("send_message", {
+      content: "Inspect the receiver again",
+    });
+    expect(ordinary.runtimeResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtimeId: "dice-check/recorder",
+          status: "success",
+        }),
+      ]),
+    );
+    expect(
+      await store.listPluginData(sessionId, "dice-check", "checks"),
     ).toHaveLength(1);
   });
 });

@@ -2,6 +2,7 @@ import { resolveMediaImageFlow } from "./media-image-flow.js";
 import { listRuntimeJobs } from "./plugin-rpc/jobs.js";
 import {
   withSettledExecutionLock,
+  withSettledSessionLock,
   requestJobServices,
 } from "./plugin-rpc/settled-request.js";
 /**
@@ -97,6 +98,7 @@ type Env = {
     loadRuntimeFn: (
       manifest: RuntimeManifest,
       locale?: string,
+      sessionId?: string,
     ) => Promise<LoadedRuntime | undefined>;
     toolExecutor: ToolExecutor;
     resolveModel: (
@@ -881,7 +883,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             loadOutputSchema: async (runtimeId) => {
               const rt = activeRuntimes.find((r) => r.name === runtimeId);
               return rt
-                ? (await loadRuntimeFn(rt, effectiveLocale))?.outputSchema
+                ? (await loadRuntimeFn(rt, effectiveLocale, sessionId))
+                    ?.outputSchema
                 : undefined;
             },
             // MediaRef canonicalization / ownership for published export values.
@@ -979,9 +982,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 sessionId,
               )
             )?.assetRuntimeIds,
-          withSettledLock: (fn) => withSettledExecutionLock(c, sessionId, fn),
-          withSnapshot: (fn) =>
-            c.get("withPluginSnapshot")?.(sessionId, fn) ?? fn(),
+          withSettledLock: (fn, waitBudget) =>
+            withSettledSessionLock(c, sessionId, fn, waitBudget),
+          withSnapshot: async (fn, beforeCapture) => {
+            const snapshot = c.get("withPluginSnapshot");
+            if (snapshot) return snapshot(sessionId, fn, beforeCapture);
+            if (beforeCapture)
+              await sessionLock.withLock(sessionId, beforeCapture);
+            return fn();
+          },
           store,
           eventBus,
           sessionLock,

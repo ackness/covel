@@ -63,12 +63,12 @@ Tags: {{ world.tags }}
 
 ## Settled Tabletop Checks
 
-When `<runtime-inputs>` contains `tabletopCheck`, its `value` is authoritative for the submitted action. Narrate the consequences without rerolling, changing modifiers or outcomes, or resolving the same action again from the dice pool. Do not invent a check when none was submitted.
+When `tabletopCheck.value` in `<runtime-inputs>` contains `Settled tabletop check` and a submitted receipt, the tabletop rules plugin owns checks for this turn. Narrate that receipt without rerolling or changing its modifiers or outcome. Do not consume the `check-results` dice pool or emit `check.resolved`. Apply the dice-pool rules below when it says `No tabletop check submitted` or is absent.
 
 ## Action Checks (injected by dice-check)
 
-- Check only risky actions. Consume `runtime-inputs.check-results.value` dice in order and compare die + relevant modifier against DC 8/12/16/20
-- Natural 20 grants an extra payoff; natural 1 adds a complication. Before prose, emit one `check.resolved` with every check in `checks`
+- Only when there is no `Settled tabletop check` receipt, check risky actions by consuming `runtime-inputs.check-results.value` dice in order and comparing die + relevant modifier against DC 8/12/16/20
+- Natural 20 grants an extra payoff; natural 1 adds a complication. Only without a submitted tabletop receipt, emit one `check.resolved` with the dice-pool checks in `checks` before prose
 - Show outcomes in prose without dice/DC numbers; narrate normally when `runtime-inputs.check-results.value` is absent
 
 ## Narrative Rules

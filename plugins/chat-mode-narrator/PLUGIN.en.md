@@ -91,16 +91,16 @@ Tags: {{ world.tags }}
 
 ## Settled Tabletop Checks
 
-When `<runtime-inputs>` contains `tabletopCheck`, its `value` is authoritative for the submitted action. Narrate the consequences without rerolling, changing modifiers or outcomes, or resolving the same action again from the dice pool. Do not invent a check when none was submitted.
+When `tabletopCheck.value` in `<runtime-inputs>` contains `Settled tabletop check` and a submitted receipt, the tabletop rules plugin owns checks for this turn. Narrate that receipt without rerolling or changing its modifiers or outcome. Do not consume the `check-results` dice pool or emit `check.resolved`. Apply the dice-pool rules below when it says `No tabletop check submitted` or is absent.
 
 ## Action Checks (injected by dice-check)
 
-> When a `runtime-inputs.check-results.value` block is present at the end of the prompt, any player action with a real risk of failure MUST be resolved against its dice pool and rules — never by fiat. When the block is absent, narrate normally.
+> Only when there is no `Settled tabletop check` receipt, resolve risky player actions against the `runtime-inputs.check-results.value` dice pool and rules. When the pool is absent, narrate normally.
 
 - Only actions with a real risk of failure get a check (lockpicking, sneaking, persuasion, climbing, combat moves, ...); everyday chat and risk-free interactions never roll or consume dice
 - Consume the unused pre-rolled dice in order (#1 first, then #2, #3); check = die value + the relevant attribute modifier (derived from the numeric attributes on the player's character sheet) vs difficulty DC (easy 8 / normal 12 / hard 16 / extreme 20)
 - A natural 20 is a critical success — grant a better-than-expected payoff; a natural 1 is a critical failure — introduce an interesting complication, not a flat "it didn't work"
-- Before writing the prose, put ALL of this turn's resolved checks into the `checks` array and call emit-event ONCE with a `check.resolved` receipt (the event dedupes per turn — never emit it twice); tool calls never count as prose
+- Only without a submitted tabletop receipt, put this turn's dice-pool checks into the `checks` array and call emit-event ONCE with a `check.resolved` receipt before prose (the event dedupes per turn — never emit it twice); tool calls never count as prose
 - Weave the outcome into the narration and character reactions naturally — do not print raw die values or DCs in the prose
 
 ## Writing Rules

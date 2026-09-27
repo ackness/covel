@@ -4,15 +4,15 @@
 
 ## 选择通信方式
 
-| 需求                             | 接口                                                      | 执行与数据边界                                                         |
-| -------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 消费本轮上游结果                 | `inputs` + `accepts`                                      | 按 capability/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过 |
-| 消费已提交的历史结果             | `output.recordAs` + `input.inject` runtime-export         | 读取本次执行开始前的快照                                               |
-| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger | 由调度和提交链路管理；不是内存中任意广播                               |
-| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services`                  | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务                  |
-| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`            | 走 runtime 的 proposal/commit 边界，不直接写别的插件                   |
-| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`  | 复用现有 RPC、会话归属与审批；写入边界见下文                           |
-| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                             | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作               |
+| 需求                             | 接口                                                             | 执行与数据边界                                                             |
+| -------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 消费本轮上游结果                 | `runtime.io.inputs` + `accepts`                                  | 按版本化 contract/runtime 绑定，建立调度依赖，携带来源；必需输入缺失时跳过 |
+| 消费已提交的历史结果             | `runtime.io.output.recordAs` + `io.inputs` 的 `scope: committed` | 读取本次执行开始前的快照                                                   |
+| 发出事件、触发后续工作           | handler 结果的 events / `emit-event` 工具 + event trigger        | 由调度和提交链路管理；不是内存中任意广播                                   |
+| 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services`                         | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务                      |
+| Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                   | 走 runtime 的 proposal/commit 边界，不直接写别的插件                       |
+| UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`         | 复用现有 RPC、会话归属与审批；写入边界见下文                               |
+| 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                    | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                   |
 
 `ctx.services` 当前向 function runtime 开放。Agent 可通过插件自己的 function runtime 取得服务结果，再通过 `inputs` 接收，或继续使用已注册本地工具。它不会自动把全部公共服务暴露给每个 Agent。
 
@@ -48,6 +48,8 @@ entry 在宿主内按插件激活一次，**不属于某个会话**。禁用一�
 仅 `NODE_ENV=development` 启用社区插件热重载，builtin 包与生产环境不允许。`POST /api/plugins/:id/reload` 接收可选 `{ "sessionId": "..." }`；操作须通过安装 API 的本机/管理员鉴权，并由指定会话（省略时使用曾批准此插件的会话）提供当前有效的 server-code 授权。开发宿主同时监听社区插件目录，150 ms 合并文件变化后使用相同路径重载；没有有效授权时拒绝执行插件代码。
 
 宿主先解析新声明、运行新 entry 工厂并校验注册契约，再预加载已获 server-code 与 runtime 双授权的 handler/guard，最后一次发布工具、Hook、RPC、服务、表单校验器、wire 与 runtime 元数据。准备失败保留旧代。进行中的执行捕获旧代引用；后续执行使用新代。旧代停止接收新查找，等待已捕获执行及超时后仍未结束的 provider promise 释放，再调用 `onDispose()`。快照不保留授权，调用和提交仍检查实时撤销状态。
+
+重载发布后，每个会话的下一次执行会在捕获新快照前，按原始请求、显式排除和当前授权重新解析依赖图。新增的必需契约缺少提供者或产生互斥冲突时，该插件不能沿用旧的激活结果执行；修正声明后仍保留用户原始选择。已开始的执行保留原有激活图和服务引用，但显式停用、撤销授权或替换会话仍使其失效。
 
 直接 entry、handler 与 guard 模块使用代次 URL 重新导入。**相对导入的依赖模块不会随之失效**：需热更新的逻辑必须位于直接加载模块或其 entry 工厂内部，相对依赖应保持稳定；修改相对依赖、宿主代码或不能安全清理的顶层资源时重启服务。ESM 的旧模块缓存由 Node 持有，长时间反复开发重载可通过重启回收。
 

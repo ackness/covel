@@ -11,7 +11,14 @@ export interface SettleTimeout {
   readonly waitedMs: number;
 }
 
+/** Reused when an entry point must release other locks and retry admission. */
+export interface SettleWaitBudget {
+  readonly startedAt: number;
+  deadline: number;
+}
+
 export interface SettledSessionLockOptions {
+  readonly waitBudget?: SettleWaitBudget;
   readonly signal?: AbortSignal;
   readonly provideCredentials?: (
     jobs: readonly SettlingJob[],
@@ -110,15 +117,18 @@ export function createSettledSessionLock(args: {
       // A nested framework action is part of the execution already admitted.
       // Rechecking here could wait on work while retaining the outer lock.
       if (parent?.get(sessionId)?.active) return fn();
-      const startedAt = performance.now();
-      let deadline = Infinity;
+      const budget = options.waitBudget ?? {
+        startedAt: performance.now(),
+        deadline: Infinity,
+      };
+      const startedAt = budget.startedAt;
       const constrainDeadline = (jobs: readonly SettlingJob[]) => {
         for (const job of jobs) {
-          const budget = job.maxSettleWaitMs ?? DEFAULT_SETTLE_WAIT_MS;
-          if (!Number.isFinite(budget) || budget <= 0) {
+          const maxWait = job.maxSettleWaitMs ?? DEFAULT_SETTLE_WAIT_MS;
+          if (!Number.isFinite(maxWait) || maxWait <= 0) {
             throw new RangeError("maxSettleWaitMs must be positive");
           }
-          deadline = Math.min(deadline, startedAt + budget);
+          budget.deadline = Math.min(budget.deadline, startedAt + maxWait);
         }
       };
       for (;;) {
@@ -130,7 +140,7 @@ export function createSettledSessionLock(args: {
           await options.provideCredentials?.(pending);
           options.signal?.throwIfAborted();
           args.wake?.();
-          const remaining = deadline - performance.now();
+          const remaining = budget.deadline - performance.now();
           if (remaining > 0) {
             await wait(Math.min(remaining, pollIntervalMs), options.signal);
             continue;
@@ -145,7 +155,8 @@ export function createSettledSessionLock(args: {
             const live = await args.listPendingJobs(sessionId);
             options.signal?.throwIfAborted();
             constrainDeadline(live);
-            if (live.length > 0 && performance.now() < deadline) return RETRY;
+            if (live.length > 0 && performance.now() < budget.deadline)
+              return RETRY;
             if (live.length > 0) {
               await options.onTimeout?.({
                 pendingJobIds: live.map((job) => job.jobId),

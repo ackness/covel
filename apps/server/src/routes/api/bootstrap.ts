@@ -1,4 +1,5 @@
 import { createPluginReloadRoutes } from "./plugin-reload.js";
+import { createPluginServiceAdmission } from "./bootstrap/plugin-service-admission.js";
 import {
   mediaImageFlowRoutes,
   resolveMediaImageFlow,
@@ -466,28 +467,15 @@ async function assembleApi(
   };
 
   const serviceCalls = new RecentPluginServiceCalls();
+  const serviceAdmission = createPluginServiceAdmission({
+    store,
+    registry,
+    ensurePluginEntry: (pluginId, sessionId) =>
+      runtimeLoader.ensurePluginEntry(pluginId, sessionId),
+  });
   const services = new PluginServiceRegistry({
     onCallCompleted: (event) => serviceCalls.record(event),
-    async ensure(sessionId, pluginId) {
-      const session = await store.getSession(sessionId);
-      if (!session?.activePlugins.includes(pluginId))
-        throw new Error(`Plugin is not active: ${pluginId}`);
-      await runtimeLoader.ensurePluginEntry(pluginId, sessionId);
-      return sessionIncarnationIdentity(session);
-    },
-    async list(sessionId) {
-      const session = await store.getSession(sessionId);
-      const admitted: string[] = [];
-      for (const pluginId of session?.activePlugins ?? []) {
-        try {
-          await runtimeLoader.ensurePluginEntry(pluginId, sessionId);
-          admitted.push(pluginId);
-        } catch {
-          // Unapproved or failed entries are not available service providers.
-        }
-      }
-      return admitted;
-    },
+    ...serviceAdmission.admission,
   });
   const extensions = new PluginExtensionHost(services);
   const hookPipeline = createHookPipeline();
@@ -497,6 +485,7 @@ async function assembleApi(
   // entries run here; community entries defer to ensurePluginEntry.
   const pluginEntries = (owned.pluginEntries =
     await createBootstrapPluginEntries({
+      sessionLock,
       discoveryMap,
       manifestCache,
       pluginRegistry: registry,
@@ -515,6 +504,21 @@ async function assembleApi(
       extensions,
     }));
   runtimeLoader.bindPluginEntry(pluginEntries.ensurePluginEntry);
+  const withPluginSnapshot = <T>(
+    sessionId: string,
+    fn: () => Promise<T>,
+    beforeCapture?: () => Promise<void>,
+  ): Promise<T> => {
+    let authority: Awaited<ReturnType<typeof serviceAdmission.capture>>;
+    return pluginEntries.withSnapshot(
+      sessionId,
+      () => authority.run(fn),
+      async () => {
+        await beforeCapture?.();
+        authority = await serviceAdmission.capture(sessionId);
+      },
+    );
+  };
   pluginEntries.watch();
   const pluginDiagnostics = createPluginDiagnostics({
     registry,
@@ -623,7 +627,8 @@ async function assembleApi(
         eventBus,
         sessionLock,
         sessionId: job.sessionId,
-        withSnapshot: (fn) => pluginEntries.withSnapshot(job.sessionId, fn),
+        withSnapshot: (fn, beforeCapture) =>
+          withPluginSnapshot(job.sessionId, fn, beforeCapture),
         session: {
           locale: payload.locale,
           ...(payload.runtimeModelOverrides
@@ -831,7 +836,7 @@ async function assembleApi(
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
-    c.set("withPluginSnapshot", pluginEntries.withSnapshot);
+    c.set("withPluginSnapshot", withPluginSnapshot);
     c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {
       c.set("worldsDirs", config.worldsDirs);

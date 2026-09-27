@@ -30,6 +30,8 @@ import {
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
 import { buildSessionHookScope } from "../session/hook-scope.js";
+import { listSettlingRuntimeJobs } from "./jobs.js";
+import type { SettleWaitBudget } from "./settled-session-lock.js";
 
 export class SessionApprovalScopeChangedError extends Error {
   constructor() {
@@ -52,8 +54,15 @@ export interface PluginRpcRuntimeTurnContext {
   readonly resolveImageFlowRuntimeIds?: () => Promise<
     readonly string[] | undefined
   >;
-  readonly withSettledLock?: <T>(fn: () => Promise<T>) => Promise<T>;
-  readonly withSnapshot?: <T>(fn: () => Promise<T>) => Promise<T>;
+  readonly withSettledLock?: <T>(
+    fn: () => Promise<T>,
+    waitBudget?: SettleWaitBudget,
+  ) => Promise<T>;
+  readonly withSnapshot?: <T>(
+    fn: () => Promise<T>,
+    /** Runs under the session lock immediately before artifact capture. */
+    beforeCapture?: () => Promise<void>,
+  ) => Promise<T>;
   readonly sessionId: string;
   readonly session: Pick<SessionRecord, "locale" | "runtimeModelOverrides">;
   readonly activeRuntimes: readonly RuntimeManifest[];
@@ -156,8 +165,14 @@ export function createPluginRpcRuntimeTurnRunner(
     );
   }
 
-  function withSnapshot<T>(fn: () => Promise<T>): Promise<T> {
-    return ctx.withSnapshot ? ctx.withSnapshot(fn) : fn();
+  async function withSnapshot<T>(
+    fn: () => Promise<T>,
+    beforeCapture?: () => Promise<void>,
+  ): Promise<T> {
+    if (ctx.withSnapshot) return ctx.withSnapshot(fn, beforeCapture);
+    if (beforeCapture)
+      await ctx.sessionLock.withLock(ctx.sessionId, beforeCapture);
+    return fn();
   }
 
   function executionControl(
@@ -358,121 +373,167 @@ export function createPluginRpcRuntimeTurnRunner(
     const executionInput = { ...turnInput, userSettings };
     const turnControl = executionControl(opts.executionSignal);
     const executionSignal = turnControl?.executionSignal;
-    if (!opts.expectedSessionIncarnation)
-      await ctx.withSettledLock?.(async () => {});
+    const waitBudget: SettleWaitBudget = {
+      startedAt: performance.now(),
+      deadline: Infinity,
+    };
+    const retryAdmission = Symbol(
+      "retry settled admission without runtime lock",
+    );
+    const needsSettle = !opts.expectedSessionIncarnation && ctx.withSettledLock;
+    let settleTimedOut = false;
     const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
-    return ctx.sessionLock.withLock(jobLockId, () =>
-      withSnapshot(async () => {
-        const target = activeRuntimes().find(
-          (runtime) => runtime.name === runtimeId,
-        );
-        if (
-          !target ||
-          (opts.expectedPluginId && target.pluginId !== opts.expectedPluginId)
-        ) {
-          throw new SessionApprovalScopeChangedError();
-        }
-        const proposalGuard =
-          opts.completionKind === "detached"
-            ? createDetachedProposalGuard(target)
-            : opts.proposalGuard;
-        executionSignal?.throwIfAborted();
-        // Detached work does not hold the main session lock during provider
-        // execution. Take it briefly to linearize authorization against a
-        // concurrent revoke/disable/delete before spending external work.
-        const executionScope = await ctx.sessionLock.withLock(
-          ctx.sessionId,
-          () =>
-            requireLiveApprovedSession(runtimeId).then(async (live) => {
-              if (
-                opts.expectedSessionIncarnation &&
-                sessionIncarnationIdentity(live) !==
-                  opts.expectedSessionIncarnation
-              ) {
-                throw new SessionApprovalScopeChangedError();
-              }
+    for (;;) {
+      if (needsSettle) {
+        await ctx.withSettledLock!(async () => {
+          // The barrier admits pending jobs only after its wait budget expired.
+          // Remember that admission across the subsequent runtime-lock acquire.
+          settleTimedOut =
+            (await listSettlingRuntimeJobs(ctx.store, ctx.sessionId)).length >
+            0;
+        }, waitBudget);
+      }
+      try {
+        return await ctx.sessionLock.withLock(jobLockId, () =>
+          withSnapshot(
+            async () => {
               const target = activeRuntimes().find(
                 (runtime) => runtime.name === runtimeId,
               );
               if (
-                opts.expectedPluginVersion !== undefined &&
-                target?.version !== opts.expectedPluginVersion
+                !target ||
+                (opts.expectedPluginId &&
+                  target.pluginId !== opts.expectedPluginId)
               ) {
                 throw new SessionApprovalScopeChangedError();
               }
-              await opts.beforeExecute?.();
+              const proposalGuard =
+                opts.completionKind === "detached"
+                  ? createDetachedProposalGuard(target)
+                  : opts.proposalGuard;
               executionSignal?.throwIfAborted();
-              return hookScopeFor(live.activePlugins, userSettings);
-            }),
+              // Detached work does not hold the main session lock during provider
+              // execution. Take it briefly to linearize authorization against a
+              // concurrent revoke/disable/delete before spending external work.
+              const executionScope = await ctx.sessionLock.withLock(
+                ctx.sessionId,
+                async () => {
+                  const live = await requireLiveApprovedSession(runtimeId);
+                  if (
+                    opts.expectedSessionIncarnation &&
+                    sessionIncarnationIdentity(live) !==
+                      opts.expectedSessionIncarnation
+                  ) {
+                    throw new SessionApprovalScopeChangedError();
+                  }
+                  const target = activeRuntimes().find(
+                    (runtime) => runtime.name === runtimeId,
+                  );
+                  if (
+                    opts.expectedPluginVersion !== undefined &&
+                    target?.version !== opts.expectedPluginVersion
+                  ) {
+                    throw new SessionApprovalScopeChangedError();
+                  }
+                  await opts.beforeExecute?.();
+                  executionSignal?.throwIfAborted();
+                  return hookScopeFor(live.activePlugins, userSettings);
+                },
+              );
+              const result = await executeTurn(
+                executionInput,
+                activeRuntimes(),
+                {
+                  ...ctx.deps,
+                  hookScope: executionScope,
+                  store: ctx.store,
+                  eventBus: ctx.eventBus,
+                  emitter,
+                  ...(ctx.hookPipeline
+                    ? { hookPipeline: ctx.hookPipeline }
+                    : {}),
+                  turnControl,
+                },
+              );
+              if (
+                opts.rejectSuspension === true &&
+                [
+                  ...result.runtimeResults,
+                  ...(result.nestedRuntimeResults ?? []),
+                ].some((runtimeResult) => runtimeResult.status === "suspended")
+              ) {
+                throw new Error(
+                  "detached stage runtimes cannot suspend for input",
+                );
+              }
+              const outcome = await ctx.sessionLock.withLock(
+                ctx.sessionId,
+                async () => {
+                  // Minutes can pass while the generation runs, so the session state
+                  // read before it started is no longer trustworthy. Re-read under
+                  // the lock and refuse to commit into a session the player has since
+                  // paused or ended — the throw is caught by the background job
+                  // runner, which settles the job row as failed.
+                  const live = await ctx.store.getSession(ctx.sessionId);
+                  if (!live) {
+                    throw new SessionNotActiveError("deleted");
+                  }
+                  if (live.status !== "active") {
+                    throw new SessionNotActiveError(live.status);
+                  }
+                  assertApprovalScope(live, runtimeId);
+                  if (
+                    opts.expectedSessionIncarnation &&
+                    sessionIncarnationIdentity(live) !==
+                      opts.expectedSessionIncarnation
+                  ) {
+                    throw new SessionApprovalScopeChangedError();
+                  }
+                  if (opts.beforeCommit) {
+                    await opts.beforeCommit({
+                      backgroundTurnId: result.turnId,
+                      backgroundExecutionId:
+                        result.executionContext.executionId,
+                    });
+                  }
+                  const completeInTx = opts.completeInTx;
+                  return processTurnResults(
+                    result,
+                    emitter,
+                    hookScopeFor(live.activePlugins, userSettings),
+                    {
+                      executionSignal,
+                      ...(completeInTx
+                        ? { extraInTx: (tx) => completeInTx(tx, result) }
+                        : {}),
+                      ...(proposalGuard ? { proposalGuard } : {}),
+                      ...(opts.completionKind !== undefined
+                        ? { completionKind: opts.completionKind }
+                        : {}),
+                    },
+                  );
+                },
+              );
+              return { turnResult: result, commit: outcome };
+            },
+            needsSettle && !settleTimedOut
+              ? async () => {
+                  // The host invokes this under the same session lock as artifact
+                  // capture. Release the runtime lock before waiting on raced jobs:
+                  // the settling worker may need this same runtime key to finish.
+                  if (
+                    (await listSettlingRuntimeJobs(ctx.store, ctx.sessionId))
+                      .length
+                  )
+                    throw retryAdmission;
+                }
+              : undefined,
+          ),
         );
-        const result = await executeTurn(executionInput, activeRuntimes(), {
-          ...ctx.deps,
-          hookScope: executionScope,
-          store: ctx.store,
-          eventBus: ctx.eventBus,
-          emitter,
-          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-          turnControl,
-        });
-        if (
-          opts.rejectSuspension === true &&
-          [
-            ...result.runtimeResults,
-            ...(result.nestedRuntimeResults ?? []),
-          ].some((runtimeResult) => runtimeResult.status === "suspended")
-        ) {
-          throw new Error("detached stage runtimes cannot suspend for input");
-        }
-        const outcome = await ctx.sessionLock.withLock(
-          ctx.sessionId,
-          async () => {
-            // Minutes can pass while the generation runs, so the session state
-            // read before it started is no longer trustworthy. Re-read under
-            // the lock and refuse to commit into a session the player has since
-            // paused or ended — the throw is caught by the background job
-            // runner, which settles the job row as failed.
-            const live = await ctx.store.getSession(ctx.sessionId);
-            if (!live) {
-              throw new SessionNotActiveError("deleted");
-            }
-            if (live.status !== "active") {
-              throw new SessionNotActiveError(live.status);
-            }
-            assertApprovalScope(live, runtimeId);
-            if (
-              opts.expectedSessionIncarnation &&
-              sessionIncarnationIdentity(live) !==
-                opts.expectedSessionIncarnation
-            ) {
-              throw new SessionApprovalScopeChangedError();
-            }
-            if (opts.beforeCommit) {
-              await opts.beforeCommit({
-                backgroundTurnId: result.turnId,
-                backgroundExecutionId: result.executionContext.executionId,
-              });
-            }
-            const completeInTx = opts.completeInTx;
-            return processTurnResults(
-              result,
-              emitter,
-              hookScopeFor(live.activePlugins, userSettings),
-              {
-                executionSignal,
-                ...(completeInTx
-                  ? { extraInTx: (tx) => completeInTx(tx, result) }
-                  : {}),
-                ...(proposalGuard ? { proposalGuard } : {}),
-                ...(opts.completionKind !== undefined
-                  ? { completionKind: opts.completionKind }
-                  : {}),
-              },
-            );
-          },
-        );
-        return { turnResult: result, commit: outcome };
-      }),
-    );
+      } catch (error) {
+        if (error !== retryAdmission) throw error;
+      }
+    }
   }
 
   async function runManualTurn(

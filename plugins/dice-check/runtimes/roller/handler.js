@@ -59,7 +59,8 @@ function buildCheckContext(dice, locale) {
     "- When the player attempts an action with a real risk of failure this turn, consume the unused pre-rolled dice in order (#1 first, then #2, #3)",
     "- Check = die value + relevant attribute modifier (derived from the numeric attributes on the player's character sheet) vs difficulty DC: easy 8 / normal 12 / hard 16 / extreme 20",
     "- A natural 20 is a critical success and a natural 1 is a critical failure, regardless of modifiers",
-    "- After resolving ALL of this turn's checks, emit ONE `check.resolved` event via emit-event carrying every check in its `checks` array (the event dedupes per turn — never emit it twice)",
+    "- If a submitted tabletopCheck receipt is present, that check owns this turn: ignore this dice pool and do not emit `check.resolved`",
+    "- Otherwise, after resolving ALL of this turn's dice-pool checks, emit ONE `check.resolved` event via emit-event carrying every check in its `checks` array (the event dedupes per turn — never emit it twice)",
     "- Risk-free everyday actions get no check and consume no dice",
   ].join("\n");
   const simplifiedChinese = [
@@ -72,7 +73,8 @@ function buildCheckContext(dice, locale) {
     "- 玩家本回合尝试**有失败风险**的行动时，按顺序消耗未用的预掷骰（先 #1，再 #2、#3）",
     "- 判定 = 骰值 + 相关属性修正（从玩家角色卡的数值属性换算）vs 难度 DC：轻松 8 / 普通 12 / 困难 16 / 极难 20",
     "- 天然 20 为大成功（critical-success）、天然 1 为大失败（critical-failure），无视修正",
-    "- 本回合全部判定完成后，用 emit-event 发射**一次** `check.resolved` 事件，把所有判定装进 `checks` 数组（该事件同回合去重，绝不发第二次）",
+    "- 若存在已提交的 tabletopCheck 回执，本回合由该检定独占：忽略此骰池，也不发射 `check.resolved`",
+    "- 否则本回合全部骰池判定完成后，用 emit-event 发射**一次** `check.resolved` 事件，把所有骰池判定装进 `checks` 数组（该事件同回合去重，绝不发第二次）",
     "- 无失败风险的日常行动不判定、不掷骰",
   ].join("\n");
   return pickLocaleText(locale, simplifiedChinese, english);

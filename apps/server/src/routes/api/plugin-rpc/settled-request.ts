@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { RuntimeJobServices } from "./runtime-job-credentials.js";
+import type { SettleWaitBudget } from "./settled-session-lock.js";
 import { hasResolvedRuntimeJobCredentials } from "../../../runtime-job-readiness.js";
 import { listRuntimeJobs } from "./jobs.js";
 import { parseStagedRuntimeJobPayload } from "./runtime-job-worker.js";
@@ -34,6 +35,7 @@ export async function withSettledSessionLock<T>(
   c: Context,
   sessionId: string,
   fn: () => Promise<T>,
+  waitBudget?: SettleWaitBudget,
 ): Promise<T> {
   const provideCredentials = async () => {
     const services = requestJobServices(c);
@@ -64,6 +66,7 @@ export async function withSettledSessionLock<T>(
   return settled.withLock(
     sessionId,
     {
+      waitBudget,
       signal: c.get("requestWork")?.signal ?? c.req.raw.signal,
       provideCredentials,
       onTimeout: async (info) => {
@@ -87,15 +90,21 @@ export async function withSettledExecutionLock<T>(
   c: Context,
   sessionId: string,
   fn: () => Promise<T>,
+  waitBudget?: SettleWaitBudget,
 ): Promise<T> {
-  return withSettledSessionLock(c, sessionId, async () => {
-    const session = await c.get("store").getSession(sessionId);
-    if (session)
-      c.get("pluginRegistry")?.syncSessionActivations(
-        sessionId,
-        session.activePlugins,
-      );
-    const snapshot = c.get("withPluginSnapshot");
-    return snapshot ? snapshot(sessionId, fn) : fn();
-  });
+  return withSettledSessionLock(
+    c,
+    sessionId,
+    async () => {
+      const session = await c.get("store").getSession(sessionId);
+      if (session)
+        c.get("pluginRegistry")?.syncSessionActivations(
+          sessionId,
+          session.activePlugins,
+        );
+      const snapshot = c.get("withPluginSnapshot");
+      return snapshot ? snapshot(sessionId, fn) : fn();
+    },
+    waitBudget,
+  );
 }

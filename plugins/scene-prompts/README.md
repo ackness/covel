@@ -10,7 +10,7 @@
 
 ## 数据与行为
 
-- 通过 `inputs.narrative.from.capability: narrative-engine` 读取当前叙事，不绑定具体叙事器 id。
+- 通过 `runtime.io.inputs.narrative.from.contract: narrative-engine@1` 读取当前叙事，不绑定具体叙事器 ID；`select: /narrativeOutput` 取叙事文本。
 - 必需输入由 JSON Schema 校验；失败的叙事引擎不会调度本 runtime。
 - 一次工具调用生成 `recap`、`decision` 和观察、提问、行动、社交四类短句建议。
 - 工具通过一个 `plugin.data.batch` 写入本轮完整结果，`__turnId` 用于隔离旧轮数据。
@@ -22,4 +22,4 @@
 
 ## 供其他插件消费的输出
 
-`output.schema` 公开当轮 `{ scene, recap, decision, prompts }` 工具结果。消费者通过 `inputs` 绑定 `scene-prompts` capability 和自己的 `accepts` schema，即可在当前执行中读取结果与来源，无须读取本插件内部数据。示例为 [Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。
+`runtime.io.output.schema` 公开当轮 `{ scene, recap, decision, prompts }` 工具结果，`runtime.io.output.contract` 为 `scene-prompts@1`。消费者通过自己的 `runtime.io.inputs.<name>.from.contract: scene-prompts@1` 和 `accepts` schema，在当前执行中读取结果与来源，无须读取本插件内部数据。示例为 [Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。

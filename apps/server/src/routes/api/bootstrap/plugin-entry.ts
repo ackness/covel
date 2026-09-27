@@ -48,6 +48,10 @@ import type { DataStore } from "@covel/store";
 import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
+import {
+  readSessionPluginSelection,
+  resolveSessionPluginPlan,
+} from "../session/plugins.js";
 
 /**
  * Validate that `target` is inside `root` after resolving symlinks.
@@ -83,6 +87,7 @@ async function assertInsideRoot(root: string, target: string): Promise<void> {
 // compile error.
 
 export interface BootstrapPluginEntriesParams {
+  readonly sessionLock?: import("../../../lib/session-lock.js").SessionLock;
   readonly runtimeLoader?: RuntimeLoader;
   readonly development?: boolean;
   readonly onReload?: (pluginId: string) => void | Promise<void>;
@@ -109,7 +114,11 @@ export interface BootstrapPluginEntriesParams {
 }
 
 export interface BootstrapPluginEntries {
-  withSnapshot<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
+  withSnapshot<T>(
+    sessionId: string,
+    fn: () => Promise<T>,
+    beforeCapture?: () => Promise<void>,
+  ): Promise<T>;
   reload(
     pluginId: string,
     sessionId?: string,
@@ -146,6 +155,8 @@ export async function createBootstrapPluginEntries(
   const draining = new Set<Promise<void>>();
   const development =
     params.development ?? readRuntimeEnv().nodeEnv === "development";
+  let publishedRevision = 0;
+  const sessionRevisions = new Map<string, number>();
   let operationTail: Promise<unknown> = Promise.resolve();
   const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
     const result = operationTail.then(fn);
@@ -431,6 +442,7 @@ export async function createBootstrapPluginEntries(
         publishRuntimeGeneration?.();
         activeScopes.set(pluginId, batch);
         invokedPluginIds.add(pluginId);
+        publishedRevision += 1;
       } catch (error) {
         if (previousEntry) params.pluginRegistry?.register(previousEntry);
         await batch.dispose(error);
@@ -467,48 +479,100 @@ export async function createBootstrapPluginEntries(
 
   return {
     reload,
-    async withSnapshot(sessionId, fn) {
-      if (snapshotSessions.getStore() === sessionId) return fn();
-      const captured = await serialize(async () => {
-        if (closed) throw new Error("plugin entries are closed");
-        const runtime = await params.runtimeLoader?.capture(sessionId);
-        // Include every admitted entry: services can cross active plugin boundaries.
-        const releases: (() => void)[] = [];
-        try {
-          for (const scope of activeScopes.values())
-            releases.push(scope.retain());
-        } catch (error) {
-          for (const release of releases.reverse()) release();
-          throw error;
+    async withSnapshot(sessionId, fn, beforeCapture) {
+      if (snapshotSessions.getStore() === sessionId) {
+        if (beforeCapture) {
+          if (params.sessionLock)
+            await params.sessionLock.withLock(sessionId, beforeCapture);
+          else await beforeCapture();
         }
-        const run = <T>(task: () => T): T =>
-          params.tools.withSnapshot(() =>
-            params.hookPipeline.withSnapshot(() =>
-              params.rpcRegistry.withSnapshot(() =>
-                withWireRegistrySnapshot(() => {
-                  const inside = () =>
-                    params.pluginRegistry
-                      ? params.pluginRegistry.withSnapshot(task)
-                      : task();
-                  return params.services
-                    ? params.services.withSnapshot(inside)
-                    : inside();
-                }),
+        return fn();
+      }
+      const capture = () =>
+        serialize(async () => {
+          await beforeCapture?.();
+          if (closed) throw new Error("plugin entries are closed");
+          // Resolve against the same publication as the captured artifacts. A
+          // reload can change requirements or single-provider conflicts without
+          // any plugin-toggle request. Callers hold the session admission lock.
+          if (
+            params.pluginRegistry &&
+            (sessionRevisions.get(sessionId) ?? 0) < publishedRevision
+          ) {
+            const session = await params.store.getSession(sessionId);
+            if (!session)
+              throw new Error("Session not found during plugin admission");
+            const authorized: string[] = [];
+            for (const entry of params.pluginRegistry.getAll().values()) {
+              if (
+                getPluginTrustInfo(entry.id, entry.source).autoLoad ||
+                (await isCommunityServerCodeApproved?.(sessionId, entry.id))
+              )
+                authorized.push(entry.id);
+            }
+            const selection = readSessionPluginSelection(session);
+            const plan = resolveSessionPluginPlan(
+              selection.requested,
+              params.pluginRegistry,
+              {
+                excluded: selection.excluded,
+                authorized,
+              },
+            );
+            if (
+              JSON.stringify(plan.active) !==
+              JSON.stringify(session.activePlugins)
+            )
+              await params.store.updateSession(sessionId, {
+                activePlugins: plan.active,
+              });
+            params.pluginRegistry.syncSessionActivations(
+              sessionId,
+              plan.active,
+            );
+            sessionRevisions.set(sessionId, publishedRevision);
+          }
+          const runtime = await params.runtimeLoader?.capture(sessionId);
+          // Include every admitted entry: services can cross active plugin boundaries.
+          const releases: (() => void)[] = [];
+          try {
+            for (const scope of activeScopes.values())
+              releases.push(scope.retain());
+          } catch (error) {
+            for (const release of releases.reverse()) release();
+            throw error;
+          }
+          const run = <T>(task: () => T): T =>
+            params.tools.withSnapshot(() =>
+              params.hookPipeline.withSnapshot(() =>
+                params.rpcRegistry.withSnapshot(() =>
+                  withWireRegistrySnapshot(() => {
+                    const inside = () =>
+                      params.pluginRegistry
+                        ? params.pluginRegistry.withSnapshot(task)
+                        : task();
+                    return params.services
+                      ? params.services.withSnapshot(inside)
+                      : inside();
+                  }),
+                ),
               ),
-            ),
-          );
-        // Capture ALS maps before releasing the publication queue, then retain the
-        // continuation closure. The task itself must execute outside that queue.
-        let execute!: <T>(task: () => T) => T;
-        run(() => {
-          execute = AsyncLocalStorage.snapshot();
+            );
+          // Capture ALS maps before releasing the publication queue, then retain the
+          // continuation closure. The task itself must execute outside that queue.
+          let execute!: <T>(task: () => T) => T;
+          run(() => {
+            execute = AsyncLocalStorage.snapshot();
+          });
+          return {
+            run: <T>(task: () => T) =>
+              execute(() => (runtime ? runtime.run(task) : task())),
+            releases,
+          };
         });
-        return {
-          run: <T>(task: () => T) =>
-            execute(() => (runtime ? runtime.run(task) : task())),
-          releases,
-        };
-      });
+      const captured = params.sessionLock
+        ? await params.sessionLock.withLock(sessionId, capture)
+        : await capture();
       try {
         return await captured.run(() => snapshotSessions.run(sessionId, fn));
       } finally {

@@ -140,12 +140,12 @@ runtime:
 
 ## 已结算的跑团检定
 
-若 `<runtime-inputs>` 中存在 `tabletopCheck`，以其 `value` 中的结算结果为准，只叙述对应行动的后果，不重掷、不修改修正值或成败，也不再次通过骰池结算同一行动。没有提交检定时，不编造检定结果。
+若 `<runtime-inputs>` 的 `tabletopCheck.value` 包含 `Settled tabletop check` 及已提交的检定回执，本回合检定由跑团规则插件独占。只叙述该回执对应行动的后果，不重掷、不修改修正值或成败，不使用 `check-results` 骰池，也不发射 `check.resolved`。若其内容为 `No tabletop check submitted` 或缺失，才按下方骰池规则处理普通风险行动。
 
 ## 行动判定（由骰子判定注入）
 
-- 仅对有失败风险的行动判定；按顺序消耗 `runtime-inputs.check-results.value` 预掷骰，以骰值 + 相关属性修正对抗 DC 8/12/16/20
-- 天然 20 给额外收获；天然 1 引入复杂后果。正文前将本回合全部判定作为 `checks`，只发射一次 `check.resolved`
+- 仅在本回合没有 `Settled tabletop check` 回执时，对有失败风险的行动判定；按顺序消耗 `runtime-inputs.check-results.value` 预掷骰，以骰值 + 相关属性修正对抗 DC 8/12/16/20
+- 天然 20 给额外收获；天然 1 引入复杂后果。仅在没有已提交的跑团检定回执时，正文前将本回合骰池判定作为 `checks`，只发射一次 `check.resolved`
 - 在叙事中呈现成败，不显示骰值或 DC；没有 `runtime-inputs.check-results.value` 时按一般叙事逻辑处理
 
 ## 叙事规则

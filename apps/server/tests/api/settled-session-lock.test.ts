@@ -85,6 +85,23 @@ describe("settled session lock", () => {
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 
+  it("preserves the earliest deadline when an entry retries after releasing its runtime lock", async () => {
+    const { lock, setPending } = setup();
+    const waitBudget = {
+      startedAt: performance.now() - 100,
+      deadline: Infinity,
+    };
+    const onTimeout = vi.fn();
+    setPending([{ jobId: "first", maxSettleWaitMs: 10 }]);
+    await lock.withLock("session", { waitBudget, onTimeout }, async () => {});
+    expect(waitBudget.deadline).toBe(waitBudget.startedAt + 10);
+    setPending([{ jobId: "raced", maxSettleWaitMs: 60_000 }]);
+    await lock.withLock("session", { waitBudget, onTimeout }, async () => {});
+    expect(waitBudget.deadline).toBe(waitBudget.startedAt + 10);
+    expect(onTimeout).toHaveBeenCalledTimes(2);
+    expect(onTimeout.mock.lastCall?.[0].pendingJobIds).toEqual(["raced"]);
+  });
+
   it("aborts only this waiter and leaves the job available to another waiter", async () => {
     const { raw, lock, setPending } = setup();
     setPending([{ jobId: "running" }]);

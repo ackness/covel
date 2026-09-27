@@ -82,6 +82,14 @@ Compose 固定应用容器的 `SERVER_PORT=3001`，宿主机入口由 `APP_BIND_
 
 `pnpm db:generate` 生成供开发维护评审的 PostgreSQL schema 快照与 SQL（`apps/server/drizzle/`，不入库）；`pnpm db:studio` 打开 PostgreSQL 查看工具。两者直接执行 Drizzle，读取根 `.env`，并保留 shell 的 `DATABASE_URL` 覆盖。已有数据库升级需要针对旧 schema 编写并审核 SQL，在备份副本验证后手动应用；这些维护工具不负责 SQLite 升级。
 
+### Plugin extension development data
+
+本次插件扩展契约调整不提供旧开发数据自动升级。旧 SQLite `lorebook_entries` 表以 `plugin_id` 为列和主键的一部分，当前版本要求 `owner`；启动时的 `CREATE TABLE IF NOT EXISTS` 不会改变旧表，随后创建 `owner` 索引可能直接报错。仅删除或新建会话、快照、浏览器 checkpoint 都不能修复这个数据库结构。
+
+处理旧开发环境时，先停止所有使用该数据库的 server/desktop 进程，确认实际 `SQLITE_PATH`（源码开发默认由 dev-home bootstrap 指向 `$COVEL_HOME/data/covel.db`，未设置 home 时为 `~/.covel/data/covel.db`）。把该数据库及同名前缀的 `-wal`、`-shm` 文件一起备份到安全位置。随后将 `SQLITE_PATH` 指向一个**尚不存在**的新文件，或在确认备份可用后重建整套开发数据库；启动当前版本让它创建新 schema，再新建会话与快照。不要在仍有进程打开数据库时单独移动或删除 WAL/SHM；本指南不要求删除真实用户数据。
+
+同时检查用户安装插件目录（`COVEL_USER_PLUGINS_DIR`，默认 `$COVEL_HOME/plugins`）和用户世界目录（`COVEL_USER_WORLDS_DIR`，默认 `$COVEL_HOME/worlds`）：多 runtime 插件的子清单必须是 `RUNTIME.md`，不是旧子 `PLUGIN.md`；世界 `pluginPolicy` 应使用当前 `requested`、`recommended` 与契约解析规则，`worldData` 的插件数据目标应使用 `contract:<id>`。先备份旧目录，再更新为通过当前 loader 校验的包。旧文件不会自动转换；不需要覆盖未经核对的用户内容。
+
 ## Registry 中的其他运行变量
 
 以下变量同样属于当前 `registry.ts` 契约，但不需要在上面的运行说明中展开：

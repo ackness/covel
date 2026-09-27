@@ -62,16 +62,17 @@ evolution:
 
 内置 `world-time` 是 core-plugin，包含两个 runtime：
 
-1. `world-time/context`（pre-turn function）读取会话时钟或世界初值，发布 `world-time-context` capability。初值和本地化显示更新通过 proposal 暂存。
+1. `world-time/context`（pre-turn function）读取会话时钟或世界初值，发布 `world-time-context@1` 契约输出。初值和本地化显示更新通过 proposal 暂存。
 2. `world-time/advance`（post-turn agent）通过 required inputs 读取本轮成功叙事和时间起点，调用 `advance-world-time`。模型只提议跨度/方向，插件完成历法运算和策略校验。工具成功即结束；默认 20 步工具预算、超时和循环检测仍有效。
 
-叙事插件接入：
+叙事插件的 `RUNTIME.md` 接入：
 
 ```yaml
-inputs:
-  worldTime:
-    from: { capability: world-time-context, cardinality: one }
-    required: false
+io:
+  inputs:
+    worldTime:
+      from: { contract: world-time-context@1, cardinality: one }
+      required: false
 ```
 
 `worldTime.value` 包含 `definition`、整数 `tick`、`display`，以及 calendar 的年月日时分或 phases 的 cycle/phase。它是本轮起点。叙事遵循世界的 prompt，明确耗时/转场；post-turn 阶段再结算结束时间。旧记忆和历史叙事不能覆盖该起点。`scene` 记忆仅描述氛围，当前日期和时刻由结构化时钟维护。

@@ -19,18 +19,19 @@
 - 判定回执写入 `plugin_data[dice-check][checks]`（key = `<turnId>-<序号>`，含展示字段）。
 - 本回合判定数组写入 `plugin_data[dice-check][message]`（key = turnId，值带 `__turnId`，消息层 block 数据源）。
 - 回执批量逐项校验：按顺序匹配本回合预掷骰池，并验证 `total = roll + modifier`、difficulty 对应 DC、天然 1/20 和 `total vs DC` 对应 outcome；无效项跳过、有效项照常落库，缺少预掷审计轨时整体 fail-closed。
+- 若同一执行的可选 `tabletop-check@1` 输入已有本回合表单回执，表单检定由 tabletop-rules 独占，recorder 整批跳过模型发出的 `check.resolved`，不再把独立掷出的表单骰当作本插件的骰池。下一无表单回执的普通回合仍照常校验和记账。
 
 ## 集成
 
-叙事引擎（narrator / chat-mode-narrator）需要两处配合（本插件不改它们的文件）：
+叙事引擎（narrator / chat-mode-narrator）消费公开的骰池输出；有 `tabletopCheck.value` 表单回执时，应只叙述该已结算结果，不再发射 `check.resolved`。普通风险行动需要：
 
-1. frontmatter `input.inject` 追加一条，消费 roller 的 `checkContext`：
+1. 在 `io.inputs` 中绑定 roller 的 `checkContext`：
 
    ```yaml
-   - kind: runtime
-     from: dice-check/roller
-     field: checkContext
-     as: "<check-results>"
+   check-results:
+     from: { runtime: dice-check/roller }
+     select: /checkContext
+     required: false
    ```
 
 2. 正文追加「判定规则使用」段落：何时判定、如何用骰池与属性修正、整回合判定完成后经 emit-event **一次性**发 `check.resolved` 批量回执（叙事引擎已声明 `advertiseEvents: true` 时，事件目录会自动出现在 prompt 里）。

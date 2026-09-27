@@ -29,15 +29,15 @@
 
 ## 世界包导入
 
-`items` namespace 声明了 `acceptsWorldData: true`，世界包可以在 `worldData` 里预置开局装备：
+`contributes.data.items.accepts` 声明接收 `inventory.items@1`。世界包可以按数据契约预置开局装备，导入时由当前活动插件的声明确定接收者：
 
 ```yaml
 sources:
   startingGear:
     kind: json
     path: data/inventory/starting-gear.json
-    schema: plugin://inventory/items
-    to: plugin:inventory/items
+    schema: contract:inventory.items@1
+    to: contract:inventory.items@1
     key: id
 ```
 

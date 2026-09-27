@@ -20,6 +20,7 @@ function makeCtx({
   existingCheckRows = [],
   existingMessage = null,
   dice = [14, 6, 20],
+  tabletopReceipt = undefined,
 } = {}) {
   return {
     pluginId: "dice-check",
@@ -27,15 +28,19 @@ function makeCtx({
     sessionId: "sess-1",
     turnId: "turn-7",
     triggerEvent: noTriggerEvent ? undefined : { topic: TOPIC, data },
-    inputs:
-      dice === null
+    inputs: {
+      ...(dice === null
         ? {}
         : {
             dicePool: {
               value: dice,
               source: { runtimeId: "dice-check/roller" },
             },
-          },
+          }),
+      ...(tabletopReceipt === undefined
+        ? {}
+        : { tabletopCheck: { value: tabletopReceipt } }),
+    },
     pluginData: {
       get: vi.fn(async (namespace, key) => {
         if (namespace === "message" && key === "turn-7") return existingMessage;
@@ -51,6 +56,67 @@ function makeCtx({
 }
 
 describe("dice-check recorder handler", () => {
+  it("skips a submitted tabletop check even when its die occurs later in the dice pool", async () => {
+    const ctx = makeCtx({
+      data: {
+        checks: [
+          {
+            action: "Check the receiver wiring for a loose connection",
+            attribute: "systems",
+            roll: 12,
+            modifier: 4,
+            dc: 12,
+            difficulty: "normal",
+            total: 16,
+            outcome: "success",
+          },
+        ],
+      },
+      dice: [18, 12, 20],
+      tabletopReceipt: {
+        resolvedTurnId: "turn-7",
+        die: 12,
+        modifier: 4,
+        difficulty: 12,
+        total: 16,
+        outcome: "success",
+      },
+    });
+
+    const result = await handler(ctx);
+    expect(result).toMatchObject({ outcome: "skipped" });
+    expect(ctx.pluginData.get).not.toHaveBeenCalled();
+    expect(result.effects).toBeUndefined();
+  });
+
+  it("records an ordinary dice-pool action when the tabletop receipt is from a previous turn", async () => {
+    const ctx = makeCtx({
+      data: { checks: [VALID_CHECK] },
+      tabletopReceipt: { resolvedTurnId: "turn-6", die: 12 },
+    });
+
+    const result = await handler(ctx);
+    expect(result.outcome).toBe("success");
+    expect(
+      result.effects.pluginData.find((row) => row.namespace === "checks").value
+        .roll,
+    ).toBe(14);
+  });
+
+  it("records an ordinary dice-pool action when tabletop has no submitted receipt", async () => {
+    const ctx = makeCtx({
+      data: { checks: [VALID_CHECK] },
+      tabletopReceipt: null,
+    });
+
+    const result = await handler(ctx);
+    expect(result.outcome).toBe("success");
+    expect(
+      result.effects.pluginData.find((row) => row.namespace === "checks").value
+        .roll,
+    ).toBe(14);
+  });
+
   it("records a valid batched receipt into the checks namespace with a turn-scoped sequence key", async () => {
     // Arrange
     const ctx = makeCtx({ data: { checks: [VALID_CHECK] } });

@@ -167,6 +167,11 @@ export function createPluginRegistry(
     ReadonlyMap<string, PluginRegistryEntry>
   >();
   const readableEntries = () => snapshots.getStore() ?? entries;
+  const activationSnapshots = new AsyncLocalStorage<
+    ReadonlyMap<string, ReadonlySet<string>>
+  >();
+  const readableActivations = () =>
+    activationSnapshots.getStore() ?? sessionActivations;
   // Process-local mirror of each session's persisted `activePlugins`.
   // Only `applyPersistedActivations` (persist-first mutation) and
   // `syncSessionActivations` (locked read-repair) may write to it.
@@ -199,7 +204,11 @@ export function createPluginRegistry(
 
   return {
     withSnapshot(fn) {
-      return snapshots.getStore() ? fn() : snapshots.run(new Map(entries), fn);
+      return snapshots.getStore()
+        ? fn()
+        : snapshots.run(new Map(entries), () =>
+            activationSnapshots.run(new Map(sessionActivations), fn),
+          );
     },
     register(entry: PluginRegistryEntry): void {
       resolvePluginDeclarations(pluginDeclarations(entry));
@@ -235,7 +244,7 @@ export function createPluginRegistry(
     },
 
     getActivePlugins(sessionId: string): readonly string[] {
-      return [...(sessionActivations.get(sessionId) ?? [])];
+      return [...(readableActivations().get(sessionId) ?? [])];
     },
 
     async applyPersistedActivations(
@@ -291,7 +300,7 @@ export function createPluginRegistry(
     },
 
     getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[] {
-      return [...(sessionActivations.get(sessionId) ?? [])]
+      return [...(readableActivations().get(sessionId) ?? [])]
         .flatMap((id) => {
           const entry = readableEntries().get(id);
           return entry
@@ -307,7 +316,7 @@ export function createPluginRegistry(
     },
 
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {
-      const sessionSet = sessionActivations.get(sessionId);
+      const sessionSet = readableActivations().get(sessionId);
       if (sessionSet === undefined || sessionSet.size === 0) {
         return [];
       }

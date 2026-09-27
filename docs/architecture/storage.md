@@ -398,3 +398,10 @@ no compatibility reader or cache migration is provided.
 The plugin-extension migration removes the working-memory table and character
 plugin mirrors. Memory blocks are ordinary plugin-owned data. Recreate affected
 development sessions, snapshots and browser checkpoints; old data is not migrated.
+An existing SQLite database can also fail during startup: older
+`lorebook_entries` tables use `plugin_id`, while the current table and indexes
+require `owner`. `CREATE TABLE IF NOT EXISTS` does not change that table. Stop
+the server, back up the database together with any `-wal` and `-shm` files,
+then use a new `SQLITE_PATH` or recreate the development database. Creating only
+new sessions in the old database is insufficient. See the
+[development migration steps](../guide/env-registry.md#plugin-extension-development-data).

@@ -1,48 +1,9 @@
 # @covel/plugin-director
 
-Narration director for the main story voice. **Opt-in, disabled by default.**
+Opt-in narration guidance, disabled by default. The package has no schedulable runtime and does not write session data. `PLUGIN.md` declares a `prompt.segment@1` provider, registered by `server/index.js`.
 
-director is a cross-cutting framework-capability plugin: it carries no
-schedulable runtime and writes nothing to the store. It shapes the narrative
-voice entirely through a single lifecycle hook declared in `PLUGIN.md`.
+The provider returns one localized, stable system segment with `audience: "story"`. The host selects story outputs by `outputKind` and places the segment before the stable cache boundary; other runtime kinds receive no director segment. The text in `hooks/_preamble.js` guides scene delivery and player agency without changing world canon or making an LLM call.
 
-## Behaviour
+Enable `director` in a world's plugin selection or for a session through `PUT /api/sessions/:id/plugins/:pluginId`. Only sessions that activate the package receive its segment. The prompt construction contract is documented in [plugin extensions](../../docs/reference/plugin-extensions.md).
 
-| Hook                  | Effect                                                                                                                                                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PostContextAssembly` | Once a runtime's context is assembled (after `buildContext`, before the agent loop), appends a static director preamble to the **story** runtime's system prompt. Story is identified by `payload.outputKind === "story"`. |
-
-Every non-story runtime (codex / guide / extractors / system) returns a plain
-`continue` and is left byte-for-byte unchanged.
-
-## Why `outputKind`, not a plugin id
-
-The framework forbids plugins from hardcoding concrete plugin ids
-(framework/plugin isolation rule). The `PostContextAssembly` payload carries a
-read-only `outputKind` field (`story` / `plugin` / `system`), so director can
-target the narrative voice without naming any specific runtime.
-
-## The preamble
-
-`hooks/_preamble.js` is a frozen text constant — directing guidance only
-(open in motion, sensory grounding, scene shape, character fidelity, leaving
-room for the player). It refines _delivery_ and explicitly never overrides world
-canon or the system instructions it follows.
-
-## Scope & isolation
-
-The hook is a pure **rewrite**: it only reshapes the assembled system prompt it
-is handed. It never touches the store, never emits proposals, and never calls the
-LLM itself.
-
-## Enabling
-
-Add `director` to a world's plugin set, or enable it for a session via
-`PUT /api/sessions/:id/plugins/:pluginId`. Its hook then scopes to that session
-only (framework hook scoping); other sessions are unaffected.
-
-## Tests
-
-```bash
-pnpm --filter @covel/plugin-director test
-```
+Run `pnpm --filter @covel/plugin-director test` after changing its provider or preamble.

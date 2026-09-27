@@ -70,7 +70,7 @@ node scripts/emit-scenes.mjs haruka-academy
 
 ## 接入插件
 
-`data/world.data.yaml` 里有两个相关 source：`scenes`（`kind: media, to: media, indexTo: plugin:scene-stage/assets, key: filename`）把 `media/scenes/*.png` 按 sha256 导入媒体库并写入 scene-stage 的 `assets` 索引；`scenesRegistry`（`kind: json, to: plugin:scene-stage/scenes, key: registryId`）把 `scenes.registry.json` 的 `sceneId → { day, night } MediaRef` 映射导入 scene-stage 的 `scenes` namespace，由 `scene-stage/resolver` 在 `scene.set` 事件到达时消费。
+`data/world.data.yaml` 里有两个相关 source：`scenes`（`kind: media, to: media, indexTo: contract:stage.scene-assets@1, key: filename`）把 `media/scenes/*.png` 按 sha256 导入媒体库并写入接收插件的资产索引；`scenesRegistry`（`kind: json, schema: contract:stage.scenes@1, to: contract:stage.scenes@1, key: registryId`）把 `scenes.registry.json` 的 `sceneId → { day, night } MediaRef` 映射导入接收插件的场景 namespace。内置 `scene-stage/resolver` 在 `scene.set` 事件到达时消费它；世界包不绑定这个插件 ID。
 
 ## 复用与重生成
 

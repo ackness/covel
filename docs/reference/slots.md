@@ -80,11 +80,9 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 连接测试通过与回合执行相同的请求头校验、用途绑定、参数覆盖和能力限制；用途测试保留 slot 名，不能先替换成 preset ID 后丢失该用途的配置。`GET /api/presets` 与 `GET /api/llm-config` 返回模型能力和白名单中的 `parameterOverrides` 默认值，设置页据此显示 TOML 默认值及恢复默认后的预算，不返回任意 provider metadata。新旧 token 设置入口共用覆盖数据与 `resolveLlmTokenLimits`；页面同时显示有效输出预算和剩余输入预算，并提示上下文与输出冲突。未知模型的协议默认值只声明模态和特性，不推测具体模型的 token 上限。
 
-后台记忆更新使用触发它的请求 adapter，切换模型或调整输出参数后重试同样生效。请求包装器共享记忆管理器及按 session 串行的 pending 队列：`MemoryUpdater.updateAfterTurn(params, llmOverride?)` 捕获本次 adapter，`awaitPending(sessionId)` 仍等待同一队列。恢复暂停任务时重新使用当前请求的上下文预算。调用前预算超限、provider 初始化失败和上游请求失败均在错误详情保留实际 provider/model；无效输出参数归为不可重试的配置错误。
+记忆由 `memory` 插件的 post-turn function runtime 提取。它消费冻结的 `turn-digest@1`，作为 `completion.mode: detached` 作业执行；`settle: before-next-execution` 使下一次执行在获取新快照前等待已入队作业，最长等待由 `maxSettleWaitMs` 控制。作业通过当前请求的 gateway 使用 `memory` 用途和 `reasoningEffort: disabled` 默认值；请求上下文中的模型绑定、参数覆盖和授权仍经普通 gateway 解析。模型调用失败不回滚已提交剧情，失败或取消的提取不提交部分记忆。
 
-记忆提取是框架服务。用途分配始终列出 `memory`，即使服务端未定义该 slot：浏览器显式绑定优先；未绑定时服务端依次选择 `memory`、`plugin`、`story`、首个 text slot。每次任务读取最新基础配置，支持热重载；排队任务保留各自请求的 adapter 和 slot。纯 UI、无 model/stage 的自动声明不会在会话插件列表显示无效的 runtime 模型选择器。
-
-记忆请求每次调用的整体超时为 120 秒（包含该调用内部的传输重试），默认关闭额外思考以降低事实提取耗时；用户显式配置的思考参数仍优先。memory 库保留有限瞬态重试，gateway 返回的不可重试错误（包括整体超时）不会重试。`{}` 表示合法的无变化；非法 JSON、非对象或没有有效记忆块的非空结果均记录失败。结果以 `memory.updated` 写入该回合 trace，并在 `memory-panel` capability 的宿主下持久化 `_memory/update` 状态。已结束的 provider / 解析失败会清除该任务的待恢复记录，下一轮不会立即重复同一失败请求；进程中断或持久化失败的任务仍保留恢复能力。失败不回滚已提交剧情；下一次有叙事输出的成功回合会提取新剧情，成功后清除失败提示。
+成功的提取写入 `memory` 插件自己的 `blocks` namespace，面板直接读取该数据；提示词由其 `prompt.segment@1` 扩展注入。没有独立的框架记忆服务、`memory-panel` capability 或 `_memory/update` 镜像。`memory` 用途仍可在模型配置中显式绑定；具体解析与回退遵循本页通用 slot 规则。
 
 ## 请求中的模型身份
 

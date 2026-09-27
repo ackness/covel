@@ -14,6 +14,12 @@ import { createMemoryStore } from "@covel/store";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { createSettledSessionLock } from "../../src/routes/api/plugin-rpc/settled-session-lock.js";
+import {
+  createRuntimeJob,
+  listSettlingRuntimeJobs,
+  transitionRuntimeJob,
+} from "../../src/routes/api/plugin-rpc/jobs.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   backgroundRuntimeLockId,
@@ -149,6 +155,144 @@ describe("plugin RPC detached-stage runner", () => {
     });
     return { store, session, runner, observed };
   }
+
+  it("rechecks settling work after runtime contention and releases its lock for the worker", async () => {
+    const raw = createInProcessSessionLock();
+    let release!: () => void;
+    const held = raw.withLock(
+      backgroundRuntimeLockId(SESSION_ID, RUNTIME_ID),
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    await vi.waitFor(() => expect(release).toBeDefined());
+    let settled!: ReturnType<typeof createSettledSessionLock>;
+    const admitted = vi.fn();
+    const captured = vi.fn();
+    const handler = vi.fn(async () => ({ outcome: "success", value: {} }));
+    const f = await setup(
+      handler,
+      undefined,
+      {
+        ...manifest(),
+        stage: undefined,
+        trigger: { type: "manual" },
+        inputs: undefined,
+        needs: undefined,
+        turnCompletion: undefined,
+      },
+      {
+        sessionLock: raw,
+        withSettledLock: async (fn, waitBudget) => {
+          const result = await settled.withLock(SESSION_ID, { waitBudget }, fn);
+          admitted();
+          return result;
+        },
+        withSnapshot: async (fn, beforeCapture) => {
+          await raw.withLock(SESSION_ID, async () => {
+            await beforeCapture?.();
+            captured();
+          });
+          return fn();
+        },
+      },
+    );
+    settled = createSettledSessionLock({
+      sessionLock: raw,
+      listPendingJobs: (sessionId) =>
+        listSettlingRuntimeJobs(f.store, sessionId),
+      pollIntervalMs: 1,
+    });
+    const execution = f.runner.runManualTurn({
+      turnId: "manual-raced",
+      runtimeId: RUNTIME_ID,
+      detached: true,
+    });
+    await vi.waitFor(() => expect(admitted).toHaveBeenCalledOnce());
+    const key = { sessionId: SESSION_ID, pluginId: PLUGIN_ID, jobId: "raced" };
+    await raw.withLock(SESSION_ID, () =>
+      createRuntimeJob(f.store, {
+        ...key,
+        runtimeId: RUNTIME_ID,
+        origin: { activation: "stage", sourceTurnId: "intervening-turn" },
+        payload: {},
+        settle: "before-next-execution",
+      }),
+    );
+    // Queue behind the waiting manual execution, using the SAME runtime key.
+    // The manual admission must release that key before waiting on this job.
+    const worker = raw.withLock(
+      backgroundRuntimeLockId(SESSION_ID, RUNTIME_ID),
+      () =>
+        raw.withLock(SESSION_ID, async () => {
+          expect(handler).not.toHaveBeenCalled();
+          for (const [from, to] of [
+            ["queued", "claimed"],
+            ["claimed", "running"],
+            ["running", "succeeded"],
+          ] as const) {
+            await transitionRuntimeJob(f.store, { ...key, from: [from], to });
+          }
+        }),
+    );
+    release();
+    await held;
+    await worker;
+    expect((await execution).commit.committed).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(admitted).toHaveBeenCalledTimes(2);
+    expect(captured).toHaveBeenCalledOnce();
+  });
+
+  it("admits background work after settle timeout without cancelling the pending job", async () => {
+    const raw = createInProcessSessionLock();
+    let settled!: ReturnType<typeof createSettledSessionLock>;
+    const onTimeout = vi.fn();
+    const handler = vi.fn(async () => ({ outcome: "success", value: {} }));
+    const f = await setup(
+      handler,
+      undefined,
+      {
+        ...manifest(),
+        stage: undefined,
+        trigger: { type: "manual" },
+        inputs: undefined,
+        needs: undefined,
+        turnCompletion: undefined,
+      },
+      {
+        sessionLock: raw,
+        withSettledLock: (fn, waitBudget) =>
+          settled.withLock(SESSION_ID, { waitBudget, onTimeout }, fn),
+      },
+    );
+    settled = createSettledSessionLock({
+      sessionLock: raw,
+      listPendingJobs: (sessionId) =>
+        listSettlingRuntimeJobs(f.store, sessionId),
+      pollIntervalMs: 1,
+    });
+    await createRuntimeJob(f.store, {
+      sessionId: SESSION_ID,
+      pluginId: PLUGIN_ID,
+      runtimeId: RUNTIME_ID,
+      jobId: "slow",
+      origin: { activation: "stage", sourceTurnId: "source" },
+      payload: {},
+      settle: "before-next-execution",
+      maxSettleWaitMs: 10,
+    });
+    const result = await f.runner.runManualTurn({
+      turnId: "manual-timeout",
+      runtimeId: RUNTIME_ID,
+      detached: true,
+    });
+    expect(result.commit.committed).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(onTimeout).toHaveBeenCalledOnce();
+    expect(await listSettlingRuntimeJobs(f.store, SESSION_ID)).toHaveLength(1);
+  });
 
   it.each([false, true])(
     "captures current runtime metadata after lock admission, detached=%s",
@@ -341,7 +485,15 @@ describe("plugin RPC detached-stage runner", () => {
         },
       };
     };
-    const { store, session, runner, observed } = await setup(handler);
+    const settle = vi.fn(async () => {
+      throw new Error("A settling worker must never wait on its own job");
+    });
+    const { store, session, runner, observed } = await setup(
+      handler,
+      undefined,
+      manifest(),
+      { withSettledLock: settle },
+    );
     const beforeCommit = vi.fn(async () => {});
 
     const outcome = await runner.runDetachedStage({
@@ -353,6 +505,7 @@ describe("plugin RPC detached-stage runner", () => {
     });
 
     expect(outcome.commit.committed).toBe(true);
+    expect(settle).not.toHaveBeenCalled();
     expect(beforeCommit).toHaveBeenCalledWith({
       backgroundTurnId: "background-turn",
       backgroundExecutionId: expect.any(String),

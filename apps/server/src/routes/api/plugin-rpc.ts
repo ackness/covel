@@ -349,9 +349,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
             sessionId,
           )
         )?.assetRuntimeIds,
-      withSettledLock: (fn) => withSettledSessionLock(c, sessionId, fn),
-      withSnapshot: (fn) =>
-        c.get("withPluginSnapshot")?.(sessionId, fn) ?? fn(),
+      withSettledLock: (fn, waitBudget) =>
+        withSettledSessionLock(c, sessionId, fn, waitBudget),
+      withSnapshot: (fn, beforeCapture) =>
+        c.get("withPluginSnapshot")?.(sessionId, fn, beforeCapture) ??
+        sessionLock.withLock(sessionId, async () => beforeCapture?.()).then(fn),
       pluginRegistry,
       store,
       eventBus,
