@@ -100,6 +100,18 @@ fallback = "story"
 # # Optional: also enable router-evaluation below and its provider key.
 # # fallback = "router-evaluation"
 
+# -- Optional: Jev via OpenJEV (public API for TypeSafe System One) --
+# Key: OPENJEV_API_KEY. Same wire protocol as the typesafe provider;
+# only the host and model id differ. https://openjev.sh/dashboard
+#
+# [covel.evaluation]
+# provider = "openjev"
+# model    = "openjev"
+# baseUrl  = "https://api.openjev.sh/v1"
+# protocol = "typesafe-systemone-v1"
+# tag      = "evaluation"
+# output   = ["evaluation"]
+
 # -- Optional: OpenRouter chat + Jev on one connection -------------
 # Both slots share OPENROUTER_API_KEY and baseUrl, with per-model protocols.
 # Text alternative: deepseek/deepseek-v4.1-flash.
