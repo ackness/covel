@@ -39,6 +39,10 @@ runtime；`--ignore-upstreams` 可隔离该门控，但不会替你生成所需�
 - 涉及 agent tool loop、`input.inject`、多 runtime 或 event 链：手搓 turn-executor 集成测试（见下）或 `pnpm test:runtime`。
 - 发布前要验证完整 HTTP 行为：跑 `scripts/e2e-plugin-verify.ts`，并完成下面的第三方包和玩家流程验证。
 
+## 可操作的组合示例
+
+[可组合记录工作台](../../examples/composable-notes/README.md) 提供三个独立安装包：HTML 面板和手动任务组成工作台，两个零 runtime 服务包提供可替换的文本处理。`pnpm pack:notes-example` 生成 ZIP，`pnpm test:notes-example` 验证计算行为和真实安装、审批、服务切换、禁用后拒绝写入；无需模型密钥。
+
 ## 独立第三方包与玩家流程
 
 [`tests/third-party/lifecycle-probe`](../../tests/third-party/lifecycle-probe/README.md) 是独立 ID、

@@ -146,6 +146,10 @@ const response = await window.covel.invoke("invokePluginAction", {
 
 动作返回现有 RPC 响应；后台 `accepted` 表示任务已接收，不代表完成。桥接通信和调用异常以不含服务端内部详情的错误返回。每个挂载实例独立连接，卸载时关闭；插件不能获取宿主中的任意函数。
 
+## 可安装的组合示例
+
+[记录工作台与两个处理服务](../../examples/composable-notes/README.md) 展示包级 HTML UI、`/notes` 命令、手动 function runtime、服务发现和可替换的 entry-only 提供者。工作台只写自己的记录，服务只计算；原样保存、格式整理和项目列表均不使用 LLM。新增提供者通过 `examples/note-format@1` 契约接入，框架和工作台不按提供者 ID 分支。
+
 ## 开发时查看注册与调用
 
 在会话输入 `/plugins` 打开调试页的插件视图，或输入 `/plugins my-plugin` 同时筛选该包及其作为调用方或提供方的服务记录。命令由框架命令目录提供，可搜索、自动补全并走现有 command RPC 校验和追踪，不消耗玩家回合，也不调用 LLM。`/debug` 和 `/trace` 继续打开原调试入口。

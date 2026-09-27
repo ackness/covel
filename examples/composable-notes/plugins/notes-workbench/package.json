@@ -1,0 +1,10 @@
+{
+  "name": "notes-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Installable composable notes workbench example",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "notes-workbench",
+  "label": { "zh": "记录工作台", "en": "Notes Workbench" },
+  "icon": "book-open",
+  "alwaysRender": true,
+  "dataSource": { "namespace": "notes" },
+  "webview": { "entry": "./workbench.html", "height": 580 }
+}

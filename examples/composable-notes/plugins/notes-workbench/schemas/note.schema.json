@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "originalText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "pattern": "\\S"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000,
+      "pattern": "\\S"
+    },
+    "providerPluginId": { "type": ["string", "null"], "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "originalText", "text", "providerPluginId", "createdAt"],
+  "additionalProperties": false
+}
