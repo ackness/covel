@@ -212,7 +212,7 @@ relations:
 
 ```
 plugins/my-combat/
-├── PLUGIN.md              # 可选：包级摘要（仅 name/description/pluginType，不作为 runtime）
+├── PLUGIN.md              # 包级信息与共享声明，不作为 runtime
 ├── runtimes/
 │   ├── combat-init/
 │   │   └── PLUGIN.md      # 战斗初始化 runtime（name: my-combat/combat-init）
@@ -230,9 +230,9 @@ plugins/my-combat/
 - 通过 `input.inject` 互相传递数据
 - 共享 `tools/` 目录下的工具
 
-`discoverPlugins()` 在检测到 `runtimes/` 子目录后**只**收集 `runtimes/*/PLUGIN.md` 作为 runtime；根目录的 `PLUGIN.md`（如果存在）由 `loadPluginSummary()` 读取以提供包级 `name`（displayName）和 `description`，其 `entry` 字段另由 `plugin-entry.ts` 直接读取（它不在 runtime 列表里，早期版本因此丢过整个插件的本地工具注册）。**没有**根 PLUGIN.md 时，框架会把展示名强制设为 plugin id（如 `my-combat`），UI 会显得冗长。第三方插件作者建议提供根 PLUGIN.md；详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
+`discoverPlugins()` 在检测到 `runtimes/` 子目录后，只把 `runtimes/*/PLUGIN.md` 中的执行声明收集为 runtime。多 runtime 根清单不能包含执行字段，每个子清单则必须有实际执行声明。根 `PLUGIN.md` 提供包级信息与共享声明；其 `entry` 与子 runtime 声明的 entry 合并、按路径去重，并在插件激活时执行。根清单不参与调度，但其中的 UI、设置、命令、事件、数据 schema 等声明仍会加载。没有根清单时，展示名回退到 plugin id（如 `my-combat`）；建议提供根清单。详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
 
-> 注意：单 runtime 插件正好相反 —— 没有 `runtimes/` 时，根目录的 `PLUGIN.md` 本身就是唯一的 runtime（其 frontmatter 同时承担 runtime 字段和包级摘要两种职责）。
+没有 `runtimes/` 的单根布局也按声明内容判定：根 `PLUGIN.md` 含 `trigger`、`runtimeType`、`handler`、`model`、`stage` 等执行字段时，它是唯一 runtime；仅有 `entry`、UI、Hook 或数据契约等包级声明时，插件有 **0 个 runtime**，仍可提供这些能力。仅写 `capabilities`、`outputKind` 或 Markdown 正文不会创建 runtime；纯声明插件无须虚构 `trigger: { type: manual }`。包级 UI 描述符没有 `runtimeId`，使用面板时不要假定该字段存在。
 
 ### 插件级字段的合并规则
 
