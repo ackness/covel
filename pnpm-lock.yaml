@@ -408,9 +408,6 @@ importers:
 
   packages/memory:
     dependencies:
-      '@covel/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@covel/store':
         specifier: workspace:*
         version: link:../store
@@ -1012,9 +1009,6 @@ importers:
 
   plugins/world-ir:
     dependencies:
-      '@covel/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       zod:
         specifier: ^4.4.3
         version: 4.4.3
