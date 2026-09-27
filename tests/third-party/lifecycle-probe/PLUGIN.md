@@ -10,6 +10,7 @@ description:
 provides:
   - scene-prompts@1
   - narrative-engine@1
+optional: [narrative-engine@1]
 entry: ./server/index.js
 contracts:
   lifecycle-probe.notes.initial@1:

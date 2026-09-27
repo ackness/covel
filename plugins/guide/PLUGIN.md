@@ -13,6 +13,8 @@ tags:
   - "mode:traditional-story"
   - "cost:llm"
   - "ui:message-block"
+requires:
+  - narrative-engine@1
 entry: ./server/index.js
 contributes:
   ui:

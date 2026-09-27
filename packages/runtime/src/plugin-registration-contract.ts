@@ -19,8 +19,14 @@ export function enforcePluginRegistrationContract(
   for (const id of declarations.services ?? []) declare("service", id);
   for (const id of declarations.forms ?? []) declare("form", id);
   for (const id of declarations.wires ?? []) declare("wire", id);
-  for (const hook of declarations.hooks ?? [])
-    declare("hook", `${hook.event}:${hook.enforce ?? "normal"}`);
+  // Hooks declare event/phase access, not a handler count. Multiple independent
+  // handlers may implement the same declared event and phase.
+  const expectedHooks = new Set(
+    (declarations.hooks ?? []).map(
+      (hook) => `${hook.event}:${hook.enforce ?? "normal"}`,
+    ),
+  );
+  const seenHooks = new Set<string>();
   const record = (kind: string, id: string) => {
     const key = `${kind}:${id}`;
     const count = (seen.get(key) ?? 0) + 1;
@@ -55,7 +61,10 @@ export function enforcePluginRegistrationContract(
       },
       on(event, handler, options) {
         api.on(event, handler, options);
-        record("hook", `${event}:${options?.enforce ?? "normal"}`);
+        const key = `${event}:${options?.enforce ?? "normal"}`;
+        if (!expectedHooks.has(key))
+          throw invalid(`Undeclared registration: hook:${key}`);
+        seenHooks.add(key);
       },
       registerWires(wires) {
         if (!wires || typeof wires !== "object")
@@ -75,6 +84,10 @@ export function enforcePluginRegistrationContract(
       },
     },
     validate() {
+      for (const key of expectedHooks) {
+        if (!seenHooks.has(key))
+          throw invalid(`Missing registration: hook:${key}`);
+      }
       for (const [key, count] of expected) {
         if (seen.get(key) !== count)
           throw invalid(`Missing registration: ${key}`);

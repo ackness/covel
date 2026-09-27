@@ -280,6 +280,36 @@ export async function loadPluginDefinition(
       );
     outputs.add(contract);
   }
+  const dependencies = new Set([
+    ...(plugin.requires ?? []),
+    ...(plugin.optional ?? []),
+  ]);
+  for (const parsed of manifests) {
+    const references = [
+      ...(parsed.runtime?.schedule?.needs ?? []).flatMap((need) =>
+        typeof need === "object" && "contract" in need
+          ? [{ contract: need.contract, field: "schedule.needs" }]
+          : [],
+      ),
+      ...Object.entries(parsed.runtime?.io?.inputs ?? {}).flatMap(
+        ([name, input]) =>
+          "contract" in input.from
+            ? [
+                {
+                  contract: input.from.contract,
+                  field: `io.inputs.${name}.from.contract`,
+                },
+              ]
+            : [],
+      ),
+    ];
+    for (const { contract, field } of references) {
+      if (!dependencies.has(contract))
+        throw new Error(
+          `${parsed.sourcePath}: ${field} contract ${contract} must be declared in root requires or optional`,
+        );
+    }
+  }
   const definition = { plugin, packageManifest, manifests };
   validatePluginDeclarations([
     packageManifest,

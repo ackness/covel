@@ -13,6 +13,7 @@ interface SlotState {
   endedTurns: Set<string>;
   revisions: Map<string, number>;
   sequence: number;
+  epoch: number;
   visible: readonly VisibleSlot[];
   loading?: Promise<void>;
 }
@@ -30,6 +31,7 @@ const stateFor = (sessionId: string) => {
       endedTurns: new Set(),
       revisions: new Map(),
       sequence: 0,
+      epoch: 0,
       visible: EMPTY,
     };
     states.set(sessionId, state);
@@ -42,6 +44,11 @@ const publish = (state: SlotState) => {
   ];
   for (const listener of listeners) listener();
 };
+const endTurn = (state: SlotState, turnId: string) => {
+  state.endedTurns.add(turnId);
+  if (state.endedTurns.size > 128)
+    state.endedTurns.delete(state.endedTurns.values().next().value!);
+};
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => {
@@ -53,12 +60,13 @@ export function refreshUiSlots(sessionId: string): Promise<void> {
   const state = stateFor(sessionId);
   if (state.loading) return state.loading;
   const started = state.sequence;
-  state.loading = request<{ items: UiSlotSnapshot[] }>(
+  const epoch = state.epoch;
+  const loading = request<{ items: UiSlotSnapshot[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/ui-slots`,
     { sessionId },
   )
     .then((response) => {
-      if (states.get(sessionId) !== state) return;
+      if (states.get(sessionId) !== state || state.epoch !== epoch) return;
       const received = new Set<string>();
       for (const candidate of response.items) {
         const parsed = uiSlotSnapshotSchema.safeParse(candidate);
@@ -75,9 +83,23 @@ export function refreshUiSlots(sessionId: string): Promise<void> {
       publish(state);
     })
     .finally(() => {
-      state.loading = undefined;
+      if (state.loading === loading) state.loading = undefined;
     });
-  return state.loading;
+  state.loading = loading;
+  return loading;
+}
+
+/** Discard a disconnected projection and start a new authoritative read. */
+export function recoverUiSlots(sessionId: string): Promise<void> {
+  const state = stateFor(sessionId);
+  state.epoch += 1;
+  state.loading = undefined;
+  for (const preview of state.previews.values())
+    if (preview.previewTurnId) endTurn(state, preview.previewTurnId);
+  state.previews.clear();
+  state.committed.clear();
+  publish(state);
+  return refreshUiSlots(sessionId);
 }
 
 /** Shared by action SSE and the durable background subscription. */
@@ -94,9 +116,7 @@ export function applyUiSlotEvent(
     return false;
   }
   if (type === "system.reset") {
-    state.previews.clear();
-    publish(state);
-    void refreshUiSlots(sessionId).catch(() => {});
+    void recoverUiSlots(sessionId).catch(() => {});
     return false;
   }
   if (
@@ -109,9 +129,7 @@ export function applyUiSlotEvent(
     type === "execution.commit_failed"
   ) {
     if (turn) {
-      state.endedTurns.add(turn);
-      if (state.endedTurns.size > 128)
-        state.endedTurns.delete(state.endedTurns.values().next().value!);
+      endTurn(state, turn);
       for (const [key, preview] of state.previews)
         if (preview.previewTurnId === turn) state.previews.delete(key);
       publish(state);

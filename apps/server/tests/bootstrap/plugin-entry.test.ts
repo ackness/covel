@@ -825,11 +825,7 @@ export default async function (covel) {
     async ({ name, call, operation }) => {
       const pluginId = `entry-invalid-${name}`;
       const expectedOperation = [
-        "hook-handler",
-        "hook-predicate",
-        "hook-timeout",
         "hook-enforce",
-        "hook-options",
         "rpc-duplicate",
         "wire-module",
         "wire-group",

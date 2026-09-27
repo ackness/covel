@@ -1,3 +1,13 @@
+import {
+  historyCompactV1,
+  mediaImageFlowV1,
+  promptHistoryTransformV1,
+  promptSegmentV1,
+  sessionWorldContextV1,
+  uiSlotV1,
+  uiSlotValueSchemas,
+  type ExtensionDeclaration,
+} from "./extension-points/index.js";
 import type { PluginManifest } from "./types/plugin-manifest.js";
 
 export interface SessionPluginCandidate {
@@ -9,8 +19,7 @@ export interface SessionPluginCandidate {
   readonly requires?: readonly string[];
   readonly optional?: readonly string[];
   readonly conflicts?: readonly string[];
-  /** Extension points whose registered composition mode is single. */
-  readonly singlePoints?: readonly string[];
+  readonly extensions?: readonly ExtensionDeclaration[];
 }
 export interface PluginResolutionRejection {
   readonly pluginId: string;
@@ -31,8 +40,35 @@ export interface SessionPluginResolution {
   readonly autoAdded: string[];
   readonly rejected: PluginResolutionRejection[];
 }
-const contracts = (plugin: SessionPluginCandidate) =>
-  (plugin.provides ?? []).map((p) => (typeof p === "string" ? p : p.contract));
+const extensionPoints = [
+  historyCompactV1,
+  mediaImageFlowV1,
+  promptHistoryTransformV1,
+  promptSegmentV1,
+  sessionWorldContextV1,
+  uiSlotV1,
+];
+const kernelContracts = new Set([
+  ...extensionPoints.map((point) => point.id),
+  ...Object.keys(uiSlotValueSchemas),
+]);
+const singlePoints = new Set(
+  extensionPoints
+    .filter((point) => point.mode === "single")
+    .map((point) => point.id),
+);
+/** Kernel dependencies require implementations, not a root capability claim. */
+const contracts = (plugin: SessionPluginCandidate): string[] => [
+  ...(plugin.provides ?? [])
+    .map((p) => (typeof p === "string" ? p : p.contract))
+    .filter((contract) => !kernelContracts.has(contract)),
+  ...(plugin.extensions ?? []).flatMap((extension) => [
+    extension.point,
+    ...(extension.point === uiSlotV1.id && extension.slot
+      ? [extension.slot]
+      : []),
+  ]),
+];
 const isDefault = (plugin: SessionPluginCandidate, contract: string) =>
   plugin.provides?.some(
     (p) => typeof p !== "string" && p.contract === contract && p.default,
@@ -177,8 +213,14 @@ export function resolveSessionPlugins(args: {
       continue;
     }
     const duplicate = accepted.find((other) =>
-      p.singlePoints?.some((point) =>
-        registry.get(other)!.singlePoints?.includes(point),
+      p.extensions?.some(
+        (extension) =>
+          singlePoints.has(extension.point) &&
+          registry
+            .get(other)!
+            .extensions?.some(
+              (otherExtension) => otherExtension.point === extension.point,
+            ),
       ),
     );
     if (duplicate) {

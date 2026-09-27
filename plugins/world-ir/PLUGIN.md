@@ -17,6 +17,8 @@ provides:
 contracts:
   world-ir@1:
     schema: ./schemas/world-ir.schema.json
+requires:
+  - narrative-engine@1
 entry: ./server/index.js
 contributes:
   tools:

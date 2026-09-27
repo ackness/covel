@@ -1,4 +1,4 @@
-import { applyUiSlotEvent } from "@/stores/ui-slot-store.js";
+import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
 import type { SessionWorkspace } from "@/services/data-service.js";
@@ -503,6 +503,9 @@ export function useSessionSubscription({
         if (recovering) stateRefreshPending = true;
         else startRecovery();
       } else if (event.type === "system.reset") {
+        void recoverUiSlots(sessionId).catch(
+          ignoreError("refresh UI slots after reset"),
+        );
         startRecovery();
       } else if (recovering) {
         // Apply live changes after the authoritative snapshot so an older HTTP
@@ -523,6 +526,9 @@ export function useSessionSubscription({
         const reconnected = hasConnected;
         hasConnected = true;
         if (reconnected && sessionIdRef.current === sessionId) {
+          void recoverUiSlots(sessionId).catch(
+            ignoreError("refresh UI slots after reconnect"),
+          );
           startRecovery();
         }
       }

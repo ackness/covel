@@ -140,6 +140,7 @@ export function StageView(props: StageViewProps): ReactElement {
         id: actor.characterId,
         name: actor.displayName,
         visual: actor.visual,
+        active: actor.active,
         position: actor.position,
         transition: actor.transition,
         exiting: actor.exiting,

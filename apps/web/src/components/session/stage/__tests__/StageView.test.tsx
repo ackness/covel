@@ -13,21 +13,32 @@ import {
 import type { StreamMessage } from "@/stores/session-store.js";
 import { StageView, type StageViewProps } from "../StageView.js";
 
+const stageSlots = vi.hoisted(() => ({
+  items: [] as Array<{ slot: string; value: unknown }>,
+}));
+
 vi.mock("@/hooks/use-media-query.js", () => ({ useMediaQuery: () => true }));
 vi.mock("../../chat-messages.js", () => ({ ChatMessages: () => null }));
 vi.mock("../../chat-messages/message-blocks.js", () => ({
   MessageBlockRenderer: () => null,
 }));
 vi.mock("../StageBackdrop.js", () => ({ StageBackdrop: () => null }));
-vi.mock("../StageSprites.js", () => ({ StageSprites: () => null }));
+vi.mock("../StageSprites.js", () => ({
+  StageSprites: ({ speakers }: { speakers: unknown }) => (
+    <div data-testid="stage-speakers">{JSON.stringify(speakers)}</div>
+  ),
+}));
 vi.mock("../StagePluginPanels.js", () => ({
   StagePluginPanels: () => <div data-testid="plugin-extension" />,
 }));
-vi.mock("@/stores/ui-slot-store.js", () => ({ useUiSlots: () => [] }));
+vi.mock("@/stores/ui-slot-store.js", () => ({
+  useUiSlots: () => stageSlots.items,
+}));
 
 afterEach(() => {
   cleanup();
   clearAllStreamingText();
+  stageSlots.items = [];
 });
 
 const previousStory: StreamMessage = {
@@ -65,6 +76,28 @@ function fixture(): StageViewProps {
 }
 
 describe("stage decision lifecycle", () => {
+  it("passes explicit cast focus through to the sprite layer", () => {
+    stageSlots.items = [
+      {
+        slot: "stage.cast@1",
+        value: {
+          actors: [
+            { characterId: "first", displayName: "First", active: false },
+            { characterId: "second", displayName: "Second", active: true },
+          ],
+          retainWhenEmpty: true,
+        },
+      },
+    ];
+    render(<StageView {...fixture()} />);
+    expect(
+      JSON.parse(screen.getByTestId("stage-speakers").textContent ?? ""),
+    ).toMatchObject([
+      { id: "first", active: false },
+      { id: "second", active: true },
+    ]);
+  });
+
   it("hides the old decision and plugin surface until the new story is read and execution finishes", () => {
     let props = fixture();
     const { rerender } = render(<StageView {...props} />);

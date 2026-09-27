@@ -106,7 +106,12 @@ export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
     requires: plugin?.requires ?? [],
     optional: plugin?.optional ?? [],
     conflicts: plugin?.conflicts ?? [],
-    extensions: plugin?.contributes?.extensions ?? [],
+    extensions: [
+      ...(plugin?.contributes?.extensions ?? []),
+      ...(plugin?.contributes?.prompt?.length
+        ? [{ point: "prompt.segment@1", id: "static-prompt" }]
+        : []),
+    ],
     tags: uniqueSorted([
       ...(entry.summary.tags ?? []),
       ...declarations.flatMap((manifest) => manifest.tags ?? []),

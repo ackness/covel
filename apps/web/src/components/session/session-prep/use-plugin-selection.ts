@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  resolveSessionPlugins,
-  sessionWorldContextV1,
-  historyCompactV1,
-  mediaImageFlowV1,
-} from "@covel/shared";
+import { resolveSessionPlugins } from "@covel/shared";
 import {
   collectPluginTags,
   defaultSelectedPluginIds,
@@ -118,15 +113,6 @@ export function usePluginSelection(
           plugin.source === "builtin" ||
           plugin.hostState === "approved" ||
           plugin.hostState === "loaded",
-        singlePoints: plugin.extensions
-          .filter((extension) =>
-            [
-              sessionWorldContextV1.id,
-              historyCompactV1.id,
-              mediaImageFlowV1.id,
-            ].includes(extension.point),
-          )
-          .map((extension) => extension.point),
       })),
     [plugins],
   );

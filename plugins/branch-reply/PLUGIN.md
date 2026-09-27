@@ -13,6 +13,8 @@ tags:
   - "ui:manual-action"
 provides:
   - branch-reply@1
+optional:
+  - narrative-engine@1
 entry: ./server/index.js
 contributes:
   extensions:

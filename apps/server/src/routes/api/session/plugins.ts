@@ -10,9 +10,6 @@ import {
 import type { SessionRecord } from "@covel/store";
 import {
   resolveSessionPlugins,
-  sessionWorldContextV1,
-  historyCompactV1,
-  mediaImageFlowV1,
   type SessionPlugin,
   type SnapshotPluginStatus,
   type SessionPluginResolution,
@@ -20,11 +17,6 @@ import {
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
 import { sessionApprovalScope } from "./session-guard.js";
 
-const singlePoints = new Set([
-  sessionWorldContextV1.id,
-  historyCompactV1.id,
-  mediaImageFlowV1.id,
-]);
 export function readSessionPluginSelection(session: SessionRecord): {
   requested: string[];
   excluded: string[];
@@ -89,9 +81,7 @@ export function resolveSessionPluginPlan(
           requires: summary.requires,
           optional: summary.optional,
           conflicts: summary.conflicts,
-          singlePoints: summary.extensions
-            .filter((extension) => singlePoints.has(extension.point))
-            .map((extension) => extension.point),
+          extensions: summary.extensions,
         };
       }),
   });

@@ -25,6 +25,78 @@ describe("session plugin contract resolution", () => {
     expect(plan.active).toEqual(["a", "b"]);
     expect(plan.autoAdded).toEqual(["b"]);
   });
+  it.each([
+    ["prompt.segment@1", { point: "prompt.segment@1", id: "segment" }],
+    [
+      "character.visual@1",
+      { point: "ui.slot@1", id: "visual", slot: "character.visual@1" },
+    ],
+  ])(
+    "resolves %s from extension implementations instead of bare provides",
+    (contract, extension) => {
+      const plan = resolveSessionPlugins({
+        requested: ["consumer"],
+        plugins: [
+          p("consumer", { requires: [contract] }),
+          p("claim", { provides: [contract] }),
+          p("implementation", { extensions: [extension] }),
+        ],
+      });
+      expect(plan.active).toEqual(["consumer", "implementation"]);
+      expect(plan.autoAdded).toEqual(["implementation"]);
+    },
+  );
+  it("does not treat a different UI slot as a matching implementation", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["consumer"],
+      plugins: [
+        p("consumer", { requires: ["character.visual@1"] }),
+        p("claim", { provides: ["character.visual@1"] }),
+        p("backdrop", {
+          extensions: [
+            { point: "ui.slot@1", id: "backdrop", slot: "stage.backdrop@1" },
+          ],
+        }),
+      ],
+    });
+    expect(plan.active).toEqual([]);
+    expect(plan.rejected[0]?.code).toBe("missing-provider");
+  });
+  it("honors authorization and exclusions for extension dependencies", () => {
+    const plugins = [
+      p("consumer", { requires: ["prompt.segment@1"] }),
+      p("implementation", {
+        source: "community",
+        authorized: false,
+        extensions: [{ point: "prompt.segment@1", id: "prompt" }],
+      }),
+    ];
+    expect(
+      resolveSessionPlugins({ requested: ["consumer"], plugins }).rejected[0]
+        ?.code,
+    ).toBe("approval-required");
+    expect(
+      resolveSessionPlugins({
+        requested: ["consumer"],
+        excluded: ["implementation"],
+        plugins,
+      }).rejected[0]?.code,
+    ).toBe("missing-provider");
+  });
+  it("allows explicitly declared dependencies on a package's own output", () => {
+    expect(
+      resolveSessionPlugins({
+        requested: ["self"],
+        plugins: [
+          p("self", {
+            provides: ["own@1"],
+            requires: ["own@1"],
+            optional: ["own@1"],
+          }),
+        ],
+      }).active,
+    ).toEqual(["self"]);
+  });
   it("honors explicit exclusions including core defaults", () => {
     const plan = resolveSessionPlugins({
       requested: ["consumer"],
@@ -113,8 +185,8 @@ describe("session plugin contract resolution", () => {
     const plan = resolveSessionPlugins({
       requested: ["b", "a"],
       plugins: [
-        p("a", { singlePoints: ["point@1"] }),
-        p("b", { singlePoints: ["point@1"] }),
+        p("a", { extensions: [{ point: "history.compact@1", id: "compact" }] }),
+        p("b", { extensions: [{ point: "history.compact@1", id: "compact" }] }),
       ],
     });
     expect(plan.active).toEqual(["b"]);

@@ -15,6 +15,8 @@ tags:
   - "ui:message-block"
 provides:
   - scene-prompts@1
+requires:
+  - narrative-engine@1
 entry: ./server/index.js
 contributes:
   extensions:

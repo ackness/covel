@@ -253,7 +253,7 @@ function findPresence(
  * kept as `ref: null` slots (the sprite layer renders a fallback card) rather
  * than dropped — dropping the primary speaker left the dialog nameplate
  * pointing at nobody on stage. `speakers[0]` (the highest-salience speaker
- * from scene-cast) is always flagged `active`.
+ * from scene-cast) is the fallback focus when no actor specifies `active`.
  *
  * `stations` is the sticky assignment from {@link assignStations} — pass the
  * previous render's map through it so sprites keep their spots across speaker
@@ -264,8 +264,13 @@ export function computeSpriteSlots(
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
   stations?: ReadonlyMap<string, SpritePosition>,
 ): StageSpriteSlot[] {
-  const primaryId = speakers.find((speaker) => !speaker.exiting)?.id;
   const staged = speakers.slice(0, MAX_SPRITE_SLOTS);
+  const hasExplicitFocus = staged.some(
+    (speaker) => speaker.active !== undefined,
+  );
+  const primaryId = hasExplicitFocus
+    ? undefined
+    : staged.find((speaker) => !speaker.exiting)?.id;
   const resolved =
     stations ??
     assignStations(
@@ -284,7 +289,7 @@ export function computeSpriteSlots(
       ...(visual?.stage ? { framing: visual.stage } : {}),
       ...(speaker.transition ? { transition: speaker.transition } : {}),
       ...(speaker.exiting ? { exiting: true } : {}),
-      active: speaker.id === primaryId,
+      active: !speaker.exiting && (speaker.active ?? speaker.id === primaryId),
       pos: speaker.position ?? resolved.get(speaker.id) ?? "center",
     };
   });

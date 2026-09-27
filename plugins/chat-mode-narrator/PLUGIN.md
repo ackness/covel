@@ -26,6 +26,9 @@ requires:
   - branch-reply@1
 conflicts:
   - narrative-engine@1
+optional:
+  - world-time-context@1
+  - tabletop-check@1
 entry: ./server/index.js
 contributes:
   settings:

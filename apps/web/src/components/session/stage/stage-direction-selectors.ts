@@ -12,6 +12,7 @@ export interface StageSpeaker {
   readonly id: string;
   readonly name: string;
   readonly visual?: CharacterVisualRequest;
+  readonly active?: boolean;
   readonly position?: SpritePosition;
   readonly transition?: StageTransition;
   readonly exiting?: boolean;

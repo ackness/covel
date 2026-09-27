@@ -228,6 +228,28 @@ describe("computeSpriteSlots", () => {
     expect(slots[0]).toMatchObject({ exiting: true, active: false });
     expect(slots[1]).toMatchObject({ active: true });
   });
+
+  it("respects explicit focus on the second actor", () => {
+    const slots = computeSpriteSlots(
+      [
+        { id: "first", name: "First", active: false },
+        { id: "second", name: "Second", active: true },
+      ],
+      {},
+    );
+    expect(slots.map((slot) => slot.active)).toEqual([false, true]);
+  });
+
+  it("keeps every actor dim when all active flags are false", () => {
+    const slots = computeSpriteSlots(
+      [
+        { id: "first", name: "First", active: false },
+        { id: "second", name: "Second", active: false },
+      ],
+      {},
+    );
+    expect(slots.map((slot) => slot.active)).toEqual([false, false]);
+  });
 });
 
 describe("assignStations", () => {

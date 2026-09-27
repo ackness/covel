@@ -2,6 +2,7 @@
 id: "{{pluginName}}"
 kind: plugin
 description: "{{pluginDescription}}"
+optional: [narrative-engine@1]
 contributes:
   ui:
     right:

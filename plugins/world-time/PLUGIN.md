@@ -12,6 +12,10 @@ description:
 provides:
   - world-time-evolution@1
   - world-time-context@1
+requires:
+  - narrative-engine@1
+optional:
+  - world-time-context@1
 entry: ./server/index.js
 contributes:
   commands:

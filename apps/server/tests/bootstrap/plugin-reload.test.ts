@@ -33,7 +33,7 @@ afterEach(async () => {
       .map((root) => fs.rm(root, { recursive: true, force: true })),
   );
 });
-async function fixture(withRuntime = false) {
+async function fixture(withRuntime = false, activateEntry = true) {
   const parent = await fs.mkdtemp(path.join(os.tmpdir(), "covel-reload-"));
   roots.push(parent);
   const id = `reload-${crypto.randomUUID()}`;
@@ -144,7 +144,7 @@ async function fixture(withRuntime = false) {
   });
   runtimeLoader?.bindPluginEntry(manager.ensurePluginEntry);
   managers.push(manager);
-  await manager.ensurePluginEntry(id, "session");
+  if (activateEntry) await manager.ensurePluginEntry(id, "session");
   const client = () =>
     services.createClient({
       sessionId: "session",
@@ -172,6 +172,107 @@ async function fixture(withRuntime = false) {
   };
 }
 describe("plugin generation reload", () => {
+  it("coordinates first activation with an in-flight reload without leaking a scope", async () => {
+    const f = await fixture(true, false);
+    const preparing = Promise.withResolvers<void>();
+    const publish = Promise.withResolvers<void>();
+    const prepareGeneration = f.runtimeLoader!.prepareGeneration.bind(
+      f.runtimeLoader,
+    );
+    vi.spyOn(f.runtimeLoader!, "prepareGeneration").mockImplementation(
+      async (args) => {
+        preparing.resolve();
+        await publish.promise;
+        return prepareGeneration(args);
+      },
+    );
+    await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2));
+    const reloading = f.manager.reload(f.id, "session");
+    await preparing.promise;
+    const activating = f.manager.ensurePluginEntry(f.id, "session");
+    // Let admission resume from its approval check while publication is held.
+    await Promise.resolve();
+    publish.resolve();
+    await Promise.all([reloading, activating]);
+    expect(
+      await f.client().call({
+        pluginId: f.id,
+        name: "value",
+        contract: "fixture.value@1",
+        input: null,
+      }),
+    ).toBe(2);
+    expect(f.disposed).toEqual([]);
+    await f.manager.close();
+    expect(f.disposed).toEqual([2]);
+  });
+
+  it("admits the first entry while capturing runtimes without waiting on its own publication", async () => {
+    const f = await fixture(true, false);
+    const capturing = Promise.withResolvers<void>();
+    const proceed = Promise.withResolvers<void>();
+    const capture = f.runtimeLoader!.capture.bind(f.runtimeLoader);
+    vi.spyOn(f.runtimeLoader!, "capture").mockImplementation(
+      async (sessionId) => {
+        capturing.resolve();
+        await proceed.promise;
+        return capture(sessionId);
+      },
+    );
+    expect(f.manager.hasPendingEntry(f.id)).toBe(true);
+    const snapshot = f.manager.withSnapshot("session", async () => {
+      expect(f.manager.hasPendingEntry(f.id)).toBe(false);
+      const manifest = f.registry.getActiveRuntimes("session")[0]!;
+      const runtime = await f.runtimeLoader!.loadRuntimeFn(
+        manifest,
+        "en",
+        "session",
+      );
+      expect(await runtime!.handler!({} as never)).toBe(1);
+      expect(
+        await f.client().call({
+          pluginId: f.id,
+          name: "value",
+          contract: "fixture.value@1",
+          input: null,
+        }),
+      ).toBe(1);
+    });
+    await capturing.promise;
+    const activating = f.manager.ensurePluginEntry(f.id, "session");
+    // The capture must adopt the activation queued behind its own operation.
+    await Promise.resolve();
+    proceed.resolve();
+    await Promise.all([snapshot, activating]);
+    await f.manager.close();
+    expect(f.disposed).toEqual([1]);
+  });
+
+  it("rechecks approval before a queued first activation can invoke its factory", async () => {
+    const f = await fixture(true, false);
+    const capturing = Promise.withResolvers<void>();
+    const proceed = Promise.withResolvers<void>();
+    const snapshot = f.manager.withSnapshot(
+      "session",
+      async () => {},
+      async () => {
+        capturing.resolve();
+        await proceed.promise;
+      },
+    );
+    await capturing.promise;
+    const activation = f.manager.ensurePluginEntry(f.id, "session");
+    const rejected = expect(activation).rejects.toThrow("approval was revoked");
+    await Promise.resolve();
+    f.revoke();
+    proceed.resolve();
+    await Promise.all([snapshot, rejected]);
+    expect(f.manager.hasPendingEntry(f.id)).toBe(true);
+    expect(f.tools.find("value", f.id)).toBeUndefined();
+    await f.manager.close();
+    expect(f.disposed).toEqual([]);
+  });
+
   it("recomputes dependencies before admitting a reloaded generation and preserves the running snapshot", async () => {
     const f = await fixture(true);
     const started = Promise.withResolvers<void>();

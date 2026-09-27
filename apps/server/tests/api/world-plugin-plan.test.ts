@@ -7,7 +7,12 @@ import {
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import { createMemoryStore, type DataStore } from "@covel/store";
-import type { PluginManifest, WorldPluginPlan } from "@covel/shared";
+import {
+  resolveSessionPlugins,
+  type PluginManifest,
+  type WorldPluginPlan,
+} from "@covel/shared";
+import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 import { worldPluginPlanRoutes } from "../../src/routes/api/worlds/plugin-plan.js";
 import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
 
@@ -155,5 +160,45 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     const response = await app.request("/api/worlds/missing/plugin-plan");
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ code: "world_not_found" });
+  });
+});
+
+describe("extension dependency session plans", () => {
+  it("uses the same implementation metadata for server and client candidates", () => {
+    const registry = createPluginRegistry();
+    registry.register(
+      entry("consumer", {
+        requires: ["prompt.segment@1", "character.visual@1"],
+      }),
+    );
+    registry.register(
+      entry("claim", { provides: ["prompt.segment@1", "character.visual@1"] }),
+    );
+    registry.register(
+      entry("prompt", {
+        contributes: {
+          prompt: [{ id: "note", content: "Note", position: "system" }],
+        },
+      }),
+    );
+    registry.register(
+      entry("visual", {
+        contributes: {
+          extensions: [
+            { point: "ui.slot@1", id: "visual", slot: "character.visual@1" },
+          ],
+        },
+      }),
+    );
+    const server = resolveSessionPluginPlan(["consumer"], registry);
+    const client = resolveSessionPlugins({
+      requested: ["consumer"],
+      plugins: [...registry.getAll().values()].map((plugin) => ({
+        ...buildPluginSummary(plugin),
+        authorized: true,
+      })),
+    });
+    expect(server.active).toEqual(["consumer", "prompt", "visual"]);
+    expect(client).toEqual(server);
   });
 });

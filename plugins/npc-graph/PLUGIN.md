@@ -19,6 +19,8 @@ provides:
   - graph-rag@1
 requires:
   - world-ir-provider@1
+optional:
+  - scene-cast@1
 entry: ./server/index.js
 contributes:
   ui:

@@ -157,9 +157,22 @@ export async function createBootstrapPluginEntries(
     params.development ?? readRuntimeEnv().nodeEnv === "development";
   let publishedRevision = 0;
   const sessionRevisions = new Map<string, number>();
+  const publicationOperations = new AsyncLocalStorage<{ active: boolean }>();
   let operationTail: Promise<unknown> = Promise.resolve();
   const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
-    const result = operationTail.then(fn);
+    // Runtime capture admits entries while already holding this queue. Reuse
+    // that operation, but never let a captured execution retain queue ownership.
+    if (publicationOperations.getStore()?.active) return fn();
+    const result = operationTail.then(() => {
+      const operation = { active: true };
+      return publicationOperations.run(operation, async () => {
+        try {
+          return await fn();
+        } finally {
+          operation.active = false;
+        }
+      });
+    });
     operationTail = result.catch(() => {});
     return result;
   };
@@ -294,7 +307,10 @@ export async function createBootstrapPluginEntries(
   };
 
   const invokedPluginIds = new Set<string>();
-  const inFlight = new Map<string, Promise<void>>();
+  const inFlight = new Map<
+    string,
+    { result: Promise<void>; run(): Promise<void> }
+  >();
 
   // Builtin entries run at bootstrap so their capabilities are
   // available from the first turn.
@@ -334,18 +350,50 @@ export async function createBootstrapPluginEntries(
     }
     if (invokedPluginIds.has(pluginId)) return;
     const pending = inFlight.get(pluginId);
-    if (pending) return pending;
+    if (pending)
+      return publicationOperations.getStore()?.active
+        ? pending.run()
+        : pending.result;
 
-    const promise = (async () => {
-      try {
-        await invokeEntryForPlugin(pluginId);
-        invokedPluginIds.add(pluginId);
-      } finally {
-        inFlight.delete(pluginId);
+    let settle!: { resolve(): void; reject(reason: unknown): void };
+    const result = new Promise<void>((resolve, reject) => {
+      settle = { resolve, reject };
+    });
+    let started = false;
+    const run = (): Promise<void> => {
+      if (!started) {
+        started = true;
+        void (async () => {
+          try {
+            if (closed) throw new Error("plugin entries are closed");
+            if (
+              !trust.autoLoad &&
+              !(await isCommunityServerCodeApproved?.(sessionId, pluginId))
+            )
+              throw new Error(
+                "Plugin entry approval was revoked before activation",
+              );
+            if (closed) throw new Error("plugin entries are closed");
+            // A reload can publish while this first activation is queued.
+            if (!invokedPluginIds.has(pluginId)) {
+              await invokeEntryForPlugin(pluginId);
+              invokedPluginIds.add(pluginId);
+            }
+            settle.resolve();
+          } catch (error) {
+            settle.reject(error);
+          } finally {
+            inFlight.delete(pluginId);
+          }
+        })();
       }
-    })();
-    inFlight.set(pluginId, promise);
-    return promise;
+      return result;
+    };
+    inFlight.set(pluginId, { result, run });
+    // Capture can adopt an activation queued behind itself. The queued callback
+    // then shares its result, preserving one factory attempt for concurrent calls.
+    void serialize(run).catch(() => {});
+    return result;
   };
 
   const ensurePluginEntry = (
@@ -393,7 +441,7 @@ export async function createBootstrapPluginEntries(
         }
       if (!approvedSession)
         throw new Error("Plugin reload requires a live server-code approval");
-      await inFlight.get(pluginId);
+      await inFlight.get(pluginId)?.run();
       const next = await preparePluginReload(discovery, [
         ...(params.pluginRegistry?.getAll().values() ?? []),
       ]);

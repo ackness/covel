@@ -17,6 +17,8 @@ tags:
 provides:
   - contract: character-creation@1
     default: true
+requires:
+  - narrative-engine@1
 entry: ./server/index.js
 contributes:
   extensions:

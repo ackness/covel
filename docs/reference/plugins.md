@@ -118,6 +118,8 @@ entry 注册与清单双向校验，未声明的注册和未实现的声明都�
 
 Function runtime 必须声明 `function.handler`，模块必须默认导出函数，不能同时配置 `agent`。Agent runtime 不能配置 `function`。
 
+runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 必须在根 `requires` 或 `optional` 中声明，加载器对内联和子 runtime 同样校验。包内其他 runtime 提供的契约也需声明，可列入 `optional`，无需激活其他插件；`schedule.after` 只排序，`from.kernel` 是内核输入，两者不产生包激活依赖。
+
 阶段按 `setup → pre-turn → narrative → post-turn → audit` 推进，阶段之间有完成屏障。相同阶段的先后由依赖边决定。`needs` 是成功门控，`after` 只表达排序。调度不能用更晚阶段的输出解锁更早阶段。
 
 触发类型包括 `auto`、`scheduled`、`manual` 和 `event`。自动主循环运行时应声明 stage；manual/event 可按请求或事件独立触发。`schedule.manual.execution: background` 使用后台执行，`schedule.completion` 控制回合是否等待，具体限制由 manifest 校验和运行时准入执行。

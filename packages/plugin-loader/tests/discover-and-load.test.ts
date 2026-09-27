@@ -118,6 +118,63 @@ describe("current package discovery and loading", () => {
     [d] = await discoverPlugins(temp);
     await expect(loadPluginDefinition(d!)).rejects.toThrow("ambiguous");
   });
+  it.each(["needs", "input"])(
+    "rejects undeclared runtime %s contract dependencies",
+    async (kind) => {
+      const runtime =
+        kind === "needs"
+          ? {
+              ...agent,
+              schedule: {
+                ...agent.schedule,
+                needs: [{ contract: "upstream@1" }],
+              },
+            }
+          : {
+              ...agent,
+              io: {
+                inputs: {
+                  facts: { from: { contract: "upstream@1" }, required: false },
+                },
+              },
+            };
+      await root({ runtime });
+      const [d] = await discoverPlugins(temp);
+      await expect(loadPluginDefinition(d!)).rejects.toThrow(
+        /upstream@1 must be declared in root requires or optional/,
+      );
+      await root({ requires: ["upstream@1"], runtime });
+      await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
+      await root({ optional: ["upstream@1"], runtime });
+      await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
+    },
+  );
+  it("checks child contracts, including own outputs, but excludes kernel inputs and pure ordering", async () => {
+    await root({ provides: ["own@1"] });
+    await write(
+      path.join(temp, "probe/runtimes/producer/RUNTIME.md"),
+      md({ ...agent, io: { output: { contract: "own@1" } } }),
+    );
+    await write(
+      path.join(temp, "probe/runtimes/consumer/RUNTIME.md"),
+      md({
+        ...agent,
+        schedule: { ...agent.schedule, after: [{ contract: "ordering@1" }] },
+        io: {
+          inputs: {
+            own: { from: { contract: "own@1" } },
+            digest: { from: { kernel: "turn-digest@1" } },
+          },
+        },
+      }),
+    );
+    const [d] = await discoverPlugins(temp);
+    await expect(loadPluginDefinition(d!)).rejects.toThrow(
+      /own@1 must be declared/,
+    );
+    await root({ provides: ["own@1"], optional: ["own@1"] });
+    await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
+  });
   it("loads contract schemas and validates data contract schema identity", async () => {
     await root({
       contracts: { "data@1": { schema: "./data.json" } },
