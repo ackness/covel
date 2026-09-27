@@ -2,7 +2,6 @@ import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
-import type { ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
 const RUNTIME_PROXY_PATHS = ["/api"] as const;
@@ -19,20 +18,23 @@ const RUNTIME_NOT_READY_BODY = JSON.stringify({
  * frontend `request()` helper retries idempotent GETs on 503, so the first load
  * simply waits for the server to finish booting — no manual reload needed.
  */
-function configureRuntimeProxy(proxy: {
-  on(
-    event: "error",
-    handler: (err: Error, req: unknown, res: unknown) => void,
-  ): void;
-}): void {
+const configureRuntimeProxy: NonNullable<ProxyOptions["configure"]> = (
+  proxy,
+) => {
   proxy.on("error", (_err, _req, res) => {
-    const response = res as Partial<ServerResponse>;
-    if (typeof response.writeHead === "function" && !response.headersSent) {
-      response.writeHead(503, { "Content-Type": "application/json" });
-      response.end?.(RUNTIME_NOT_READY_BODY);
+    if ("writeHead" in res && !res.headersSent && !res.writableEnded) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(RUNTIME_NOT_READY_BODY);
     }
   });
-}
+  proxy.on("proxyRes", (upstreamResponse, _req, response) => {
+    // A broken upstream stream does not end the pipe, leaving SSE readers pending.
+    upstreamResponse.on("error", () => response.destroy());
+    upstreamResponse.on("close", () => {
+      if (!upstreamResponse.complete) response.destroy();
+    });
+  });
+};
 
 function readEnvString(
   name: string,

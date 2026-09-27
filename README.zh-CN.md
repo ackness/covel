@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.40-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.40)
+[![Version](https://img.shields.io/badge/version-v0.0.41-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.41)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **发布版本：v0.0.40**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
+> **发布版本：v0.0.41**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
 
 ## 亮点
 
@@ -57,17 +57,17 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `cost-gate`、`story-guard`、`director`                |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`、`character-presence` |
 
-`PLUGIN.md` 的 frontmatter 声明调度、工具、事件、`capabilities` 与 `outputKind`（`story`、`plugin` 或 `system`）。只有 agent runtime 才会把 Markdown 正文作为模型指令。多 runtime 插件在根目录保留包级信息，实际执行 manifest 位于 `runtimes/*/PLUGIN.md`：
+`PLUGIN.md` 的 frontmatter 承载包级声明，并可按需加入明确的 runtime 执行配置，字段包括工具、事件、UI、设置、`capabilities` 与 `outputKind`（`story`、`plugin` 或 `system`）。只有 agent runtime 才会把 Markdown 正文作为模型指令。多 runtime 插件在根目录保留包级信息与共享声明，实际执行 manifest 位于 `runtimes/*/PLUGIN.md`：
 
 ```text
 plugins/npc-graph/
-├── PLUGIN.md                         # 插件包身份与共享元数据
+├── PLUGIN.md                         # 插件包身份与共享声明
 └── runtimes/
     ├── rag-retriever/PLUGIN.md       # 回合前确定性检索
     └── extractor/PLUGIN.md           # 回合后关系抽取 agent
 ```
 
-内核通过声明式能力和类型化输出连接这些模块。因此叙事者、图像服务商、舞台导演或规则系统都能被替换，而无需在框架里为某个插件 ID 添加特例。
+单根清单布局只有声明执行字段时才产生 runtime；仅有 `capabilities`、`outputKind` 或正文不会创建 runtime。仅含 entry、Hook、UI 或数据声明的插件有 0 个 runtime，仍可提供对应能力。内核通过声明式能力和类型化输出连接这些模块。因此叙事者、图像服务商、舞台导演或规则系统都能被替换，而无需在框架里为某个插件 ID 添加特例。
 
 扩展应按独立 community 包开发并验证安装、授权、重启和卸载，见[插件测试](./docs/guide/plugin-testing.md)与
 [玩家流程验收](./docs/guide/e2e-testing.md#发版前的玩家流程验收)。框架统一版本，插件和世界包可独立维护版本。

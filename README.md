@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.40-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.40)
+[![Version](https://img.shields.io/badge/version-v0.0.41-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.41)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Release version: v0.0.40**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
+> **Release version: v0.0.41**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
 
 ## Highlights
 
@@ -57,17 +57,17 @@ A plugin is not necessarily one autonomous agent. It may contain one runtime, se
 | **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `cost-gate`, `story-guard`, `director`                |
 | **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`, `character-presence` |
 
-`PLUGIN.md` frontmatter declares scheduling, tools, events, `capabilities`, and `outputKind` (`story`, `plugin`, or `system`). For an agent runtime, its Markdown body is also the model instruction. A multi-runtime package keeps package metadata at the root and puts executable manifests under `runtimes/*/PLUGIN.md`:
+`PLUGIN.md` frontmatter carries package declarations and, when needed, explicit runtime execution settings. These include tools, events, UI, settings, `capabilities`, and `outputKind` (`story`, `plugin`, or `system`). For an agent runtime, its Markdown body is also the model instruction. A multi-runtime package keeps package metadata and shared declarations at the root and puts executable manifests under `runtimes/*/PLUGIN.md`:
 
 ```text
 plugins/npc-graph/
-├── PLUGIN.md                         # package identity and shared metadata
+├── PLUGIN.md                         # package identity and shared declarations
 └── runtimes/
     ├── rag-retriever/PLUGIN.md       # deterministic pre-turn retrieval
     └── extractor/PLUGIN.md           # post-turn relationship agent
 ```
 
-The kernel connects these pieces through declared capabilities and typed outputs. That is what makes a narrator, image provider, stage director, or rules system swappable without framework branches for a particular plugin ID.
+In a single-file layout, the root manifest becomes a runtime only when it declares execution fields; `capabilities`, `outputKind`, and prose alone do not create one. A package containing only entry code, hooks, UI, or data declarations has zero runtimes and remains usable. The kernel connects these pieces through declared capabilities and typed outputs. That is what makes a narrator, image provider, stage director, or rules system swappable without framework branches for a particular plugin ID.
 
 Author and validate extensions as independent community packages, including installation, approval,
 restart and removal. See [plugin testing](./docs/guide/plugin-testing.md) and the

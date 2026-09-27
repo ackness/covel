@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.41] - 2026-09-27
+
+This release makes plugin package declarations composable, tightens activation and service lifecycles, and adds tools for developing multiple cooperating plugins (#86).
+
+### Added
+
+- **Composable plugin packages.** Root and child runtime manifests can contribute shared UI, settings, data schemas, projections, commands, events, memory blocks and entry declarations. Consistent duplicates merge; a package with only entry, Hook, UI or data declarations has zero executable runtimes. Runtime execution remains explicit in the root single-file layout or `runtimes/*/PLUGIN.md`.
+- **Plugin diagnostics and composition testing.** `/plugins` opens a session-aware debugger view of active plugins, registrations and recent bounded service calls; `/plugins <plugin-id>` filters it. The test-runtime CLI can load multiple plugins together with `--with-plugin` to exercise their declared interactions.
+- **Isolated HTML panel drafts.** A plugin webview can keep bounded temporary `uiState` through `setUiState`, restoring a draft when its sidebar tab is revisited within the same session view.
+
+### Changed
+
+- **Tool isolation and activation diagnostics.** Tool names are scoped to the registering plugin, so different plugins can use the same local name; framework tool names remain reserved. Activation diagnostics identify registration failures without exposing arbitrary plugin exceptions.
+- **Plugin resource and service lifetimes.** Failed entry initialization and host shutdown cancel `covel.signal` and run registered `covel.onDispose()` cleanup. Service calls support an optional local `timeoutMs` budget, preserve parent cancellation and deadlines, and reject cycles or chains beyond eight calls. A local timeout does not cancel the parent runtime.
+
+### Fixed
+
+- **Development sessions recover after backend restarts.** The Vite API proxy now closes interrupted upstream streams so the client can reconcile the saved execution state and offer an explicit retry, instead of waiting indefinitely without a retry prompt.
+
+### Breaking plugin contracts
+
+- Declaration-only single-root packages expose `runtimeCount: 0`, and package-level UI descriptors omit `runtimeId`. Custom registry and UI consumers must handle both cases; enabled Hooks and package settings remain available without a synthetic runtime.
+- Multi-runtime roots cannot contain execution fields, while each child runtime manifest must declare execution. Conflicting package declarations now fail loading; invalid registrations, unknown Hooks and plugin-local name collisions fail activation and roll back the registration batch.
+- Custom `PluginAPI` hosts must provide `signal` and `onDispose`. Service contexts expire when each call settles; implementations must finish dependent work within that lifetime and pass cancellation to asynchronous work.
+
+### Upgrade notes
+
+- Update the server, Web client, desktop shell and framework packages together. Validate complete plugin packages with `pnpm validate:plugin <plugin-directory>` and resolve manifest or registration errors before activation. This release introduces no database migration.
+- macOS Apple Silicon and Windows x64 artifacts are unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
+
 ## [0.0.40] - 2026-09-25
 
 This release adds community plugin and world directories, GitHub installation and reviewed updates, and restores community plugin selections across session creation and backend restarts.
@@ -1350,7 +1380,10 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.38...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.41...HEAD
+[0.0.41]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.41
+[0.0.40]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.40
+[0.0.39]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.39
 [0.0.38]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.38
 [0.0.37]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.37
 [0.0.36]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.36
