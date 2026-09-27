@@ -1,6 +1,15 @@
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { runRuntimeCases, runRuntimeDebug } from "./runner.js";
@@ -430,7 +439,7 @@ describe("runtime debug host integration", () => {
     ]);
   });
 
-  it("passes user settings only to followers owned by that plugin", async () => {
+  it("preserves per-plugin settings across followers and cross-plugin recursion", async () => {
     const { root, pluginRoot } = await pluginFixture();
     await writeFile(
       path.join(pluginRoot, "PLUGIN.md"),
@@ -447,6 +456,11 @@ describe("runtime debug host integration", () => {
       "follower",
       'return {outcome: "success", value: {count: ctx.userSettings.count}};',
       "trigger: {type: event, topic: root.ready}\nexecution: background",
+    );
+    await runtimeFixture(
+      pluginRoot,
+      "child",
+      'return {outcome: "success", value: {count: ctx.userSettings.count}};',
     );
 
     const supportRoot = path.join(root, "support");
@@ -470,7 +484,7 @@ describe("runtime debug host integration", () => {
     );
     await writeFile(
       path.join(supportRoot, "runtimes", "follower", "handler.js"),
-      'export default async function(ctx) { return {outcome: "success", value: {count: ctx.userSettings.count}}; }\n',
+      'export default async function(ctx) { await ctx.recursiveCall({manualTrigger: {runtimeId: "probe/child"}}); return {outcome: "success", value: {count: ctx.userSettings.count}}; }\n',
       "utf8",
     );
 
@@ -491,7 +505,104 @@ describe("runtime debug host integration", () => {
           .map(({ runtimeId, output }) => [runtimeId, output?.count]),
       ),
     ).toEqual({ "probe/follower": 99, "support/follower": 10 });
+    expect(
+      report.runtimeResults.find(({ runtimeId }) => runtimeId === "probe/child")
+        ?.output,
+    ).toEqual({ count: 99 });
   });
+
+  it.each([false, true])(
+    "stops entry-owned workers before draining timed-out tools (cleanup error: %s)",
+    async (cleanupFails) => {
+      const { root, pluginRoot } = await pluginFixture();
+      await writeFile(
+        path.join(pluginRoot, "PLUGIN.md"),
+        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+        "utf8",
+      );
+      const entryPath = path.join(pluginRoot, "entry.js");
+      await writeFile(
+        entryPath,
+        `export const state = {disposed: false, drained: false, aborted: false};
+        let finish;
+        export function release() { finish?.({stopped: true}); }
+        export default covel => {
+          const work = new Promise(resolve => { finish = resolve; });
+          covel.onDispose(() => {
+            state.disposed = true;
+            state.aborted = covel.signal.aborted;
+            release();
+            if (${cleanupFails}) throw new Error("worker cleanup failed");
+          });
+          covel.registerTool(covel.toolkit.tool({
+            name: "wait-for-worker", description: "Wait for an entry-owned worker",
+            parameters: covel.toolkit.z.object({}),
+            execute: async () => {
+              const result = await work;
+              await new Promise(resolve => setTimeout(resolve, 10));
+              state.drained = true;
+              return result;
+            },
+          }));
+        };`,
+        "utf8",
+      );
+      await runtimeFixture(
+        pluginRoot,
+        "root",
+        'await ctx.tools.call("wait-for-worker", {}); return {outcome: "success", value: null};',
+        "trigger: {type: manual}\ntimeoutMs: 20\ntools: {plugin: [wait-for-worker]}",
+      );
+      const entry = (await import(
+        pathToFileURL(await realpath(entryPath)).href
+      )) as {
+        state: { disposed: boolean; drained: boolean; aborted: boolean };
+        release(): void;
+      };
+      const running = runRuntimeDebug({
+        runtimeId: "probe/root",
+        pluginsDir: root,
+      });
+      const settled = running.then(
+        (result) => ({ result, error: undefined }),
+        (error: unknown) => ({ result: undefined, error }),
+      );
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const outcome = await Promise.race([
+          settled,
+          new Promise<"blocked">((resolve) => {
+            timer = setTimeout(() => resolve("blocked"), 2_000);
+          }),
+        ]);
+        expect(outcome).not.toBe("blocked");
+        expect(entry.state).toEqual({
+          disposed: true,
+          drained: true,
+          aborted: true,
+        });
+        if (outcome === "blocked") return;
+        if (cleanupFails) {
+          expect(outcome.error).toMatchObject({
+            errors: [
+              expect.objectContaining({ message: "worker cleanup failed" }),
+            ],
+          });
+        } else {
+          expect(outcome.error).toBeUndefined();
+          expect(outcome.result?.runtimeResults[0]).toMatchObject({
+            status: "failed",
+            error: expect.stringContaining("timed out after 20ms"),
+          });
+        }
+      } finally {
+        clearTimeout(timer);
+        // Release the fixture even when the old shutdown ordering regresses.
+        entry.release();
+        await settled;
+      }
+    },
+  );
 
   it("rolls back the root and nested writes and does not run followers when a proposal fails", async () => {
     const { root, pluginRoot } = await pluginFixture();

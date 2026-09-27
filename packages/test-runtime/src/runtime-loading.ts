@@ -11,15 +11,18 @@ import {
   type PluginAPI,
 } from "@covel/runtime";
 import {
+  createPluginRegistry,
   discoverPlugins,
   loadPluginDefinition,
   loadPluginEntryDefinition,
+  loadPluginSummary,
   pluginDeclarations,
   resolvePluginRuntimeManifest,
   type PluginDefinition,
   loadRuntime,
   type LoadedRuntime,
   type PluginDiscoveryResult,
+  type PluginRegistry,
 } from "@covel/plugin-loader";
 import {
   ToolRegistry,
@@ -38,6 +41,7 @@ export interface RuntimeLoadResult {
   readonly target: RuntimeManifest;
   readonly pluginIds: readonly string[];
   readonly discoveries: ReadonlyMap<string, PluginDiscoveryResult>;
+  readonly registry: PluginRegistry;
   readonly loadedCache: Map<string, LoadedRuntime>;
   /** Tools registered by the selected packages' entry modules. */
   readonly entryTools: readonly { pluginId: string; tool: ToolModule }[];
@@ -154,10 +158,20 @@ export async function loadRuntimeBundle(args: {
   // Resolve every selected package and the target before any entry factory runs.
   const discoveries = new Map<string, PluginDiscoveryResult>();
   const definitions = new Map<string, PluginDefinition>();
+  const registry = createPluginRegistry();
   for (const id of pluginIds) {
     const discovery = await discoverPlugin(args.pluginsDir, id);
+    const definition = await loadPluginDefinition(discovery);
     discoveries.set(id, discovery);
-    definitions.set(id, await loadPluginDefinition(discovery));
+    definitions.set(id, definition);
+    registry.register({
+      id,
+      summary: await loadPluginSummary(discovery, args.locale, definition),
+      packageManifest: definition.packageManifest,
+      manifests: definition.manifests,
+      loadedRuntimes: new Map(),
+      status: "registered",
+    });
   }
   const discovery = discoveries.get(args.pluginId)!;
   const targetDefinition = definitions.get(args.pluginId)!;
@@ -269,6 +283,7 @@ export async function loadRuntimeBundle(args: {
     target,
     pluginIds,
     discoveries,
+    registry,
     loadedCache,
     entryTools,
     services,

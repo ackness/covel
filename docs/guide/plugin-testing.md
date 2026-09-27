@@ -138,9 +138,9 @@ pnpm vitest run plugins/<id>/tests
 
 harness 会执行选定插件的 `entry` 模块并注册它导出的工具和服务，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。hook / RPC / wire 的注册会被接受但不生效——它们属于 server bootstrap 的职责，单 runtime 的 harness 回合走不到。
 
-harness 默认只加载被测插件。使用可重复的 `--with-plugin <id>` 显式加入协作插件；API `runRuntimeDebug` 和 case 均使用 `withPlugins: string[]`，case 的列表覆盖 CLI 列表。它们从同一个 `--plugins-dir` 查找，重复 ID 去重，缺失包在 entry 执行前报错。选定包均加入测试会话，工具按所属插件隔离，服务仅允许选定且当前会话仍活跃的插件调用；退出及初始化失败时逆序清理入口资源。CLI 会执行这些包的服务端代码，应只选择信任的本地包，生产审批仍需通过 HTTP 测试验证。
+harness 默认只加载被测插件。使用可重复的 `--with-plugin <id>` 显式加入协作插件；API `runRuntimeDebug` 和 case 均使用 `withPlugins: string[]`，case 的列表覆盖 CLI 列表。它们从同一个 `--plugins-dir` 查找，重复 ID 去重，缺失包在 entry 执行前报错。选定包均加入测试会话，工具按所属插件隔离，服务仅允许选定且当前会话仍活跃的插件调用。角色工具按生产 registry 的 `world-data-provider` capability 规则定位 schema，包含协作插件的包级和 runtime 声明。退出及初始化失败时逆序清理入口资源；正常退出同时启动入口清理和工具停机，等待工具回调结束后才关闭 store，避免超时工具阻塞停止它所等待的入口资源。CLI 会执行这些包的服务端代码，应只选择信任的本地包，生产审批仍需通过 HTTP 测试验证。
 
-只有指定目标被改为初始手动触发，加入协作插件不会自动运行其全部 runtime；声明的事件下游仍可执行。跨插件 `needs` 需要实际的上游结果，单纯加载包并不制造结果。仅调试不依赖上游的路径时，可以用 case `"ignoreUpstreams": true` 或 CLI `--ignore-upstreams`。报告的 `pluginData` 仍只包含被测插件。`userSettings` 覆盖值仅应用于被测插件及其自己的后台任务；协作插件使用自身声明的默认值。
+只有指定目标被改为初始手动触发，加入协作插件不会自动运行其全部 runtime；声明的事件下游仍可执行。跨插件 `needs` 需要实际的上游结果，单纯加载包并不制造结果。仅调试不依赖上游的路径时，可以用 case `"ignoreUpstreams": true` 或 CLI `--ignore-upstreams`。报告的 `pluginData` 仍只包含被测插件。`userSettings` 覆盖值仅应用于被测插件的 runtime，包括协作插件后台任务递归调用回来的 runtime；协作插件使用自身声明的默认值。后台与递归执行保留完整的按插件分桶设置快照。
 
 常用命令：
 

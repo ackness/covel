@@ -134,7 +134,7 @@ export async function runDeferredFollower(args: {
   readonly locale: string;
   readonly manifests: readonly RuntimeManifest[];
   readonly deps: TurnExecutorDeps & { readonly store: DataStore };
-  readonly userSettings?: Record<string, unknown>;
+  readonly userSettings?: TurnInput["userSettings"];
 }): Promise<DeferredFollowerJobResult> {
   const { store } = args.deps;
   const manifest = args.manifests.find(
@@ -172,9 +172,7 @@ export async function runDeferredFollower(args: {
   });
 
   const startMs = Date.now();
-  const userSettings = snapshotUserSettings(
-    args.userSettings ? { [manifest.pluginId]: args.userSettings } : undefined,
-  );
+  const userSettings = snapshotUserSettings(args.userSettings);
   let runtimeResult: RuntimeResult;
   let runtimeResults: readonly RuntimeResult[];
   let deferredFollowers: readonly DeferredFollowerInput[] = [];

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import {
   DEFAULT_LOCALE,
+  FrameworkCapability,
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
@@ -141,6 +142,7 @@ export async function runRuntimeDebug(
       services,
       pluginIds,
       discoveries,
+      registry,
     } = (bundle = await loadRuntimeBundle({
       pluginsDir,
       pluginId,
@@ -163,6 +165,7 @@ export async function runRuntimeDebug(
       createdAt: now,
       updatedAt: now,
     });
+    registry.syncSessionActivations(sessionId, pluginIds);
 
     const tools = new ToolRegistry();
     for (const t of builtinUITools) tools.registerBuiltin(t);
@@ -170,7 +173,11 @@ export async function runRuntimeDebug(
     tools.registerBuiltin(runtimeDoneTool);
     for (const t of createPluginDataTools(store)) tools.registerBuiltin(t);
     for (const t of createCharacterTools(store, {
-      findWorldDataPluginId: () => pluginId,
+      findWorldDataPluginId: (id) =>
+        registry.findPluginByCapability(
+          id,
+          FrameworkCapability.WorldDataProvider,
+        ),
     })) {
       tools.registerBuiltin(t);
     }
@@ -242,9 +249,7 @@ export async function runRuntimeDebug(
         locale,
         manifests,
         deps,
-        ...(userSettings?.[follower.pluginId]
-          ? { userSettings: userSettings[follower.pluginId] }
-          : {}),
+        userSettings,
       });
       jobs.push({
         jobId: job.jobId,
@@ -317,18 +322,25 @@ export async function runRuntimeDebug(
     throw error;
   } finally {
     const errors: unknown[] = [];
-    for (const close of [
-      () => toolExecutor?.close(),
-      () => bundle?.close(),
-      () => store.close(),
-    ]) {
-      try {
-        await close();
-      } catch (error) {
-        errors.push(
-          ...(error instanceof AggregateError ? error.errors : [error]),
-        );
-      }
+    const collectError = (error: unknown) => {
+      errors.push(
+        ...(error instanceof AggregateError ? error.errors : [error]),
+      );
+    };
+    // Stop tool admission and entry-owned workers together: a timed-out tool
+    // may only settle once its entry's disposal stops the worker it awaits.
+    const stopped = await Promise.allSettled([
+      Promise.resolve().then(() => toolExecutor?.close()),
+      Promise.resolve().then(() => bundle?.close()),
+    ]);
+    for (const result of stopped) {
+      if (result.status === "rejected") collectError(result.reason);
+    }
+    // Losing tool callbacks and their host I/O must drain before store closure.
+    try {
+      await store.close();
+    } catch (error) {
+      collectError(error);
     }
     if (errors.length > 0) {
       if (failed) {
