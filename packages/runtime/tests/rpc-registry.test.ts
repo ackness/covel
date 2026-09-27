@@ -86,6 +86,32 @@ describe("PluginRpcRegistry", () => {
     ).toBe("community");
   });
 
+  it.each([
+    { options: { trustLevel: "unknown" }, source: "community" },
+    { options: { trustLevel: null }, source: "community" },
+    { options: { trustLevel: 1 }, source: "community" },
+    { options: "builtin", source: "community" },
+    { options: null, source: "community" },
+    { options: {}, source: "unknown" },
+  ])(
+    "rejects untyped RPC trust inputs before publishing %#",
+    ({ options, source }) => {
+      const registry = createPluginRpcRegistry();
+      expect(() =>
+        registry.registerPluginHandler(
+          "untrusted-plugin",
+          "action",
+          async () => null,
+          options as never,
+          source as never,
+        ),
+      ).toThrow(TypeError);
+      expect(
+        registry.getPluginAction("untrusted-plugin", "action"),
+      ).toBeUndefined();
+    },
+  );
+
   it("throws on duplicate (pluginId, action) registration", () => {
     const registry = createPluginRpcRegistry();
     registry.registerPluginHandler("p", "a", async () => null, {}, "builtin");

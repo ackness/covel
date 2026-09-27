@@ -34,6 +34,7 @@ import {
 import {
   buildPluginPanelInitialState,
   flattenStateForPluginPanel,
+  parsePluginUiState,
 } from "@/lib/plugin-panel-state.js";
 import { Button as UIButton } from "@/components/ui/button.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
@@ -50,6 +51,7 @@ export type PluginPanelStateCache = Map<string, StateStore>;
 
 export interface PluginPanelProps {
   pluginId: string;
+  panelId?: string;
   spec: Record<string, unknown>;
   stateCache?: PluginPanelStateCache;
   onAction?: (actionName: string, params?: Record<string, unknown>) => void;
@@ -69,6 +71,7 @@ function resolveEmptyMessage(value: unknown, locale: string): string {
 
 export function PluginPanel({
   pluginId,
+  panelId,
   spec,
   stateCache,
   onAction,
@@ -129,7 +132,11 @@ export function PluginPanel({
     });
   }, []);
 
-  const stateCacheKey = `${pluginId}:${String(spec.id ?? spec.label ?? "panel")}`;
+  const stateCacheKey = JSON.stringify([
+    spec.webview ? "webview" : "json",
+    pluginId,
+    panelId ?? spec.id ?? spec.label ?? "panel",
+  ]);
   const stateStoreRef = useRef<StateStore | null>(null);
   if (!stateStoreRef.current) {
     const cached = stateCache?.get(stateCacheKey);
@@ -137,15 +144,28 @@ export function PluginPanel({
     if (!cached) stateCache?.set(stateCacheKey, stateStoreRef.current);
   }
   const stateStore = stateStoreRef.current;
+  const [uiState, setUiState] = useState(
+    () => stateStore.get("/uiState") ?? null,
+  );
+  const updateUiState = useCallback(
+    (params: Record<string, unknown>) => {
+      const snapshot = parsePluginUiState(params.value);
+      stateStore.set("/uiState", snapshot);
+      setUiState(snapshot);
+      return { status: "ok" };
+    },
+    [stateStore],
+  );
 
   const initialState = useMemo(
     () => buildPluginPanelInitialState(data, invokingMap),
     [data, invokingMap],
   );
   useEffect(() => {
+    if (spec.webview) return;
     const updates = flattenStateForPluginPanel(initialState);
     stateStore.update(updates);
-  }, [initialState, stateStore]);
+  }, [initialState, stateStore, spec.webview]);
 
   const failedJobs = useMemo(
     () =>
@@ -391,6 +411,7 @@ export function PluginPanel({
           .filter((name) => typeof handlers[name] === "function")
           .map((name) => [name, handlers[name]!]),
       );
+      allowed.setUiState = updateUiState;
       return (
         <PluginWebview
           title={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
@@ -403,6 +424,7 @@ export function PluginPanel({
             locale: activeLocale,
             locked: interactionLocked,
             context: surfaceContext ?? {},
+            uiState,
           }}
         />
       );

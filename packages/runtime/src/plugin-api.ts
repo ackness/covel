@@ -69,6 +69,10 @@ export interface PluginRpcOptions {
  * Initialization failures discard the batch and permit a later activation retry.
  */
 export interface PluginAPI {
+  /** Activation lifetime, aborted on initialization failure or host shutdown. */
+  readonly signal: AbortSignal;
+  /** Release factory-created resources on rollback or shutdown, in reverse order. */
+  onDispose(cleanup: () => void | Promise<void>): void;
   /** Publish a reusable function; callers receive validated values, never private plugin state. */
   registerService<I, O>(
     definition: import("@covel/shared/plugin-runtime").PluginServiceDefinition<
@@ -83,7 +87,7 @@ export interface PluginAPI {
     readonly fetchWithRetry: typeof fetchWithRetry;
     readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
   };
-  /** Register a local tool (scoped to this plugin, like `tools.local`). */
+  /** Register a local tool scoped to this plugin. */
   registerTool(toolModule: ToolModule): void;
   /** Register a lifecycle hook handler (16 events, same semantics as `hooks`). */
   on(

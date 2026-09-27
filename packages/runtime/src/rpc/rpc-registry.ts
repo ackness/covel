@@ -43,18 +43,32 @@ const TRUST_RANK: Readonly<Record<RpcTrustLevel, number>> = {
 function resolveActionTrust(
   pluginId: string,
   action: string,
-  options: { readonly trustLevel?: RpcTrustLevel },
-  pluginTrust: RpcTrustLevel,
+  options: unknown,
+  pluginTrust: unknown,
 ): RpcTrustLevel {
-  if (!options.trustLevel) return pluginTrust;
-  if (TRUST_RANK[options.trustLevel] > TRUST_RANK[pluginTrust]) {
+  if (pluginTrust !== "builtin" && pluginTrust !== "community") {
+    throw new TypeError("Plugin RPC source trust must be builtin or community");
+  }
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    throw new TypeError("Plugin RPC options must be an object");
+  }
+  const requested = (options as { readonly trustLevel?: unknown }).trustLevel;
+  if (
+    requested !== undefined &&
+    requested !== "builtin" &&
+    requested !== "community"
+  ) {
+    throw new TypeError("Plugin RPC trustLevel must be builtin or community");
+  }
+  if (requested === undefined) return pluginTrust;
+  if (TRUST_RANK[requested] > TRUST_RANK[pluginTrust]) {
     console.warn(
-      `[plugin-rpc] ${pluginId}::${action} declared trustLevel=${options.trustLevel} ` +
+      `[plugin-rpc] ${pluginId}::${action} declared trustLevel=${requested} ` +
         `but plugin source is ${pluginTrust}; clamping to ${pluginTrust}.`,
     );
     return pluginTrust;
   }
-  return options.trustLevel;
+  return requested;
 }
 
 /** Resolved RPC handler signature. */

@@ -6,6 +6,10 @@ description:
   en: Standalone third-party install, approval, runtime, and uninstall probe.
 pluginType: plugin
 entry: ./server/index.js
+commands:
+  - name: probe
+    description: { zh: 查看插件测试状态, en: Show plugin probe status }
+    action: probe-status
 ---
 
 # Plugin Lifecycle Probe

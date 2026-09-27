@@ -9,6 +9,69 @@ import {
 } from "../plugin-panel-tabs.js";
 
 describe("plugin-panel tab helpers", () => {
+  it("keeps anonymous panel identities when another plugin is enabled or disabled", () => {
+    const own = {
+      pluginId: "probe",
+      specs: [{ label: { en: "First" } }, { label: { en: "Second" } }],
+    };
+    const other = {
+      pluginId: "other",
+      specs: [{ label: "Other" }],
+    };
+    const before = aggregateSpecsIntoGroups([own], "en-US");
+    const enabled = aggregateSpecsIntoGroups([other, own], "en-US");
+    const disabled = aggregateSpecsIntoGroups([own], "en-US");
+    const identities = (groups: typeof before) =>
+      groups.flatMap((group) =>
+        group.subPanels
+          .filter((panel) => panel.pluginId === "probe")
+          .map(({ id, label }) => ({ id, label })),
+      );
+    expect(identities(before)).toEqual([
+      { id: "probe-0", label: "First" },
+      { id: "probe-1", label: "Second" },
+    ]);
+    expect(identities(enabled)).toEqual(identities(before));
+    expect(identities(disabled)).toEqual(identities(before));
+  });
+
+  it("reserves explicit IDs across the same plugin's entries before generating IDs", () => {
+    const groups = aggregateSpecsIntoGroups(
+      [
+        {
+          pluginId: "probe",
+          specs: [{ label: "First" }, { id: "probe-1", label: "Explicit one" }],
+        },
+        { pluginId: "other", specs: [{ label: "Other" }] },
+        {
+          pluginId: "probe",
+          specs: [
+            { id: "probe-0", label: "Explicit zero" },
+            { label: "Second" },
+            { id: "named", label: "Named" },
+          ],
+        },
+        { pluginId: "probe", specs: [{ label: "Third" }] },
+      ],
+      "en-US",
+    );
+    expect(
+      Object.fromEntries(
+        groups.flatMap((group) =>
+          group.subPanels.map(({ label, id }) => [label, id]),
+        ),
+      ),
+    ).toEqual({
+      First: "probe-2",
+      "Explicit one": "probe-1",
+      Other: "other-0",
+      "Explicit zero": "probe-0",
+      Second: "probe-3",
+      Named: "named",
+      Third: "probe-4",
+    });
+  });
+
   it("groups shared panel specs and sorts by group order", () => {
     const warnings: string[] = [];
     const groups = aggregateSpecsIntoGroups(

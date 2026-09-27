@@ -106,6 +106,7 @@ const setup = (
   commands: readonly SessionSlashCommand[] = [],
 ) => {
   const onSendMessage = vi.fn();
+  const onCommandClientAction = vi.fn();
   const view = renderHook(() =>
     useGameViewComposer({
       messages,
@@ -114,9 +115,10 @@ const setup = (
       session: sessionRecord(phase),
       onSendMessage,
       commands,
+      onCommandClientAction,
     }),
   );
-  return { ...view, onSendMessage };
+  return { ...view, onSendMessage, onCommandClientAction };
 };
 
 describe("useGameViewComposer", () => {
@@ -296,6 +298,45 @@ describe("useGameViewComposer", () => {
     );
     expect(onSendMessage).not.toHaveBeenCalled();
     expect(sessionMock.clearInteractionDrafts).not.toHaveBeenCalled();
+  });
+
+  it("preserves an optional plugin filter from a diagnostics client action", async () => {
+    postPluginRpcWithApproval.mockResolvedValueOnce({
+      status: "ok",
+      result: {
+        ok: true,
+        clientAction: { type: "open-plugin-diagnostics" },
+      },
+    });
+    const first = setup([], false, "playing", [rollCommand]);
+    act(() => first.result.current.setInputValue("/roll"));
+    act(() => first.result.current.handleSubmit());
+    await waitFor(() =>
+      expect(first.onCommandClientAction).toHaveBeenCalledWith({
+        type: "open-plugin-diagnostics",
+        pluginId: undefined,
+      }),
+    );
+
+    postPluginRpcWithApproval.mockResolvedValueOnce({
+      status: "ok",
+      result: {
+        ok: true,
+        clientAction: {
+          type: "open-plugin-diagnostics",
+          pluginId: "guide",
+        },
+      },
+    });
+    const second = setup([], false, "playing", [rollCommand]);
+    act(() => second.result.current.setInputValue("/roll"));
+    act(() => second.result.current.handleSubmit());
+    await waitFor(() =>
+      expect(second.onCommandClientAction).toHaveBeenCalledWith({
+        type: "open-plugin-diagnostics",
+        pluginId: "guide",
+      }),
+    );
   });
 
   it("keeps known commands out of mid-turn steer", async () => {

@@ -3,9 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getSpeechWire } from "@covel/ai-provider";
-import type {
-  ParsedPluginMd,
-  PluginDiscoveryResult,
+import {
+  createPluginRegistry,
+  loadPluginDefinition,
+  loadPluginSummary,
+  type ParsedPluginMd,
+  type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import {
   createHookPipeline,
@@ -15,7 +18,7 @@ import {
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
-import type { ToolModule } from "@covel/tools";
+import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
 
 let tmpRoot: string;
@@ -61,13 +64,29 @@ function writePlugin(
 }
 
 function makeParams(entries: ReturnType<typeof writePlugin>[]) {
+  const pluginRegistry = createPluginRegistry();
+  for (const entry of entries) {
+    pluginRegistry.register({
+      id: entry.discovery.id,
+      summary: {
+        id: entry.discovery.id,
+        name: entry.discovery.id,
+        description: "Fixture",
+        pluginType: "plugin",
+        runtimeCount: 0,
+      },
+      manifests: [entry.parsed],
+      status: "registered",
+      loadedRuntimes: new Map(),
+      source: entry.discovery.source,
+    });
+  }
   return {
+    pluginRegistry,
     discoveryMap: new Map(entries.map((e) => [e.discovery.id, e.discovery])),
     manifestCache: new Map(entries.map((e) => [e.discovery.id, [e.parsed]])),
     store: createMemoryStore(),
-    toolMap: new Map<string, ToolModule>(),
-    localToolNames: new Set<string>(),
-    pluginToolAccess: new Map<string, Set<string>>(),
+    tools: new ToolRegistry(),
     hookPipeline: createHookPipeline(),
     rpcRegistry: createPluginRpcRegistry(),
     isCommunityServerCodeApproved: () => true,
@@ -105,6 +124,118 @@ export default function (covel) {
 const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
 describe("createBootstrapPluginEntries", () => {
+  it.each([false, true])(
+    "closes pending factories without starting later entries, cleanupFailure=%s",
+    async (cleanupFailure) => {
+      const state = {
+        started: Promise.withResolvers<void>(),
+        cleaned: false,
+        lateStarted: false,
+        cleanupFailure,
+        signal: undefined as AbortSignal | undefined,
+      };
+      const globals = globalThis as Record<string, unknown>;
+      globals.__covelEntryAbort = state;
+      const pluginId = `entry-abort-${cleanupFailure}`;
+      const plugin = writePlugin(
+        pluginId,
+        `
+      export default async function(api) {
+        const state = globalThis.__covelEntryAbort;
+        state.signal = api.signal;
+        api.onDispose(async () => {
+          await Promise.resolve();
+          state.cleaned = true;
+          if (state.cleanupFailure) throw new Error("resource cleanup failed");
+        });
+        api.registerRpc("pending", async () => true);
+        state.started.resolve();
+        await new Promise(resolve => api.signal.addEventListener("abort", resolve, { once: true }));
+      }
+    `,
+        { source: "community" },
+      );
+      const params = makeParams([plugin]);
+      const second = {
+        ...plugin.parsed,
+        manifest: {
+          ...plugin.parsed.manifest,
+          name: `${pluginId}/second`,
+          entry: "server/second.mjs",
+        },
+      };
+      fs.writeFileSync(
+        path.join(plugin.discovery.rootPath, "server/second.mjs"),
+        "export default api => { globalThis.__covelEntryAbort.lateStarted = true; };",
+      );
+      params.pluginRegistry.register({
+        ...params.pluginRegistry.get(pluginId)!,
+        manifests: [plugin.parsed, second],
+      });
+      const entries = await createBootstrapPluginEntries(params);
+      try {
+        const activation = entries.ensurePluginEntry(pluginId, "session");
+        const rejected =
+          expect(activation).rejects.toThrow("failed to activate");
+        await state.started.promise;
+        const closing = entries.close();
+        if (cleanupFailure)
+          await expect(closing).rejects.toThrow("plugin entry cleanup failed");
+        else await closing;
+        await rejected;
+        expect(state.signal?.aborted).toBe(true);
+        expect(state.cleaned).toBe(true);
+        expect(state.lateStarted).toBe(false);
+        expect(params.rpcRegistry.list()).toEqual([]);
+      } finally {
+        await entries.close().catch(() => {});
+        delete globals.__covelEntryAbort;
+      }
+    },
+  );
+
+  it("cleans a failed activation before retrying with a fresh signal", async () => {
+    const state = { signals: [] as AbortSignal[], cleanups: 0 };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelEntryRetryResources = state;
+    const plugin = writePlugin(
+      "entry-retry-resources",
+      `
+      export default function(api) {
+        const state = globalThis.__covelEntryRetryResources;
+        state.signals.push(api.signal);
+        api.onDispose(async () => { state.cleanups += 1; });
+        api.registerRpc("ready", async () => true);
+        if (state.signals.length === 1) throw new Error("first initialization failed");
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries(params);
+    try {
+      await expect(
+        entries.ensurePluginEntry("entry-retry-resources", "s"),
+      ).rejects.toThrow("failed to activate");
+      expect(state.cleanups).toBe(1);
+      expect(state.signals[0]!.aborted).toBe(true);
+      expect(params.rpcRegistry.list()).toEqual([]);
+      await entries.ensurePluginEntry("entry-retry-resources", "s");
+      expect(state.signals[1]!.aborted).toBe(false);
+      expect(state.signals[1]).not.toBe(state.signals[0]);
+      expect(
+        params.rpcRegistry.getPluginAction("entry-retry-resources", "ready"),
+      ).toBeDefined();
+      await entries.close();
+      expect(state.cleanups).toBe(2);
+      expect(state.signals[1]!.aborted).toBe(true);
+      expect(params.rpcRegistry.list()).toEqual([]);
+    } finally {
+      await entries.close();
+      delete globals.__covelEntryRetryResources;
+    }
+  });
+
   it("unregisters successful entries so a fresh host can register the same wires", async () => {
     const plugin = writePlugin("entry-host-lifecycle", FULL_ENTRY_SRC);
     const params = makeParams([plugin]);
@@ -115,9 +246,7 @@ describe("createBootstrapPluginEntries", () => {
     expect(entries.close()).toBe(closing);
     await closing;
     expect(getSpeechWire("entry-host-lifecycle/entry-tts")).toBeNull();
-    expect(params.toolMap.size).toBe(0);
-    expect(params.localToolNames.size).toBe(0);
-    expect(params.pluginToolAccess.size).toBe(0);
+    expect(params.tools.pluginTools.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
     expect(closeStore).not.toHaveBeenCalled();
     await expect(
@@ -161,7 +290,7 @@ describe("createBootstrapPluginEntries", () => {
       approval.resolve(true);
       await Promise.all([rejected, closing]);
     }
-    expect(params.toolMap.size).toBe(0);
+    expect(params.tools.pluginTools.size).toBe(0);
     expect(getSpeechWire("entry-closing-approval/entry-tts")).toBeNull();
   });
 
@@ -213,12 +342,9 @@ describe("createBootstrapPluginEntries", () => {
 
     await createBootstrapPluginEntries(params);
 
-    // Tool: in the tool map, marked local, and in the plugin's access set.
-    expect(params.toolMap.has("entry-tool")).toBe(true);
-    expect(params.localToolNames.has("entry-tool")).toBe(true);
-    expect(params.pluginToolAccess.get("entry-full-a")?.has("entry-tool")).toBe(
-      true,
-    );
+    // Tools are owned by the registering plugin.
+    expect(params.tools.find("entry-tool", "entry-full-a")).toBeDefined();
+    expect(params.tools.find("entry-tool", "other")).toBeUndefined();
 
     // Hook: fires through the pipeline.
     const result = await params.hookPipeline.run("TurnStart", hookCtx, {});
@@ -240,7 +366,7 @@ describe("createBootstrapPluginEntries", () => {
   it("runs a MULTI-runtime plugin's entry declared on the metadata-only root PLUGIN.md", async () => {
     // Regression: discover.ts lists only runtime PLUGIN.mds for a multi-runtime
     // plugin, so an `entry` on the metadata-only root PLUGIN.md is absent from
-    // manifestCache — the entry must be read from the root directly, otherwise
+    // manifestCache — the package declaration must be retained in the registry, otherwise
     // the plugin's local tools never register (npc-graph's graph tools case).
     const pluginId = "multi-root-entry";
     const rootPath = path.join(tmpRoot, pluginId);
@@ -281,13 +407,25 @@ describe("createBootstrapPluginEntries", () => {
     params.manifestCache.set(pluginId, [
       { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
     ]);
+    const discovery = params.discoveryMap.get(pluginId)!;
+    fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
+    fs.writeFileSync(
+      discovery.pluginMdPaths[0]!,
+      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+    );
+    const definition = await loadPluginDefinition(discovery);
+    params.pluginRegistry.register({
+      id: pluginId,
+      summary: await loadPluginSummary(discovery),
+      ...definition,
+      status: "registered",
+      loadedRuntimes: new Map(),
+      source: discovery.source,
+    });
 
     await createBootstrapPluginEntries(params);
 
-    expect(params.toolMap.has("root-entry-tool")).toBe(true);
-    expect(params.pluginToolAccess.get(pluginId)?.has("root-entry-tool")).toBe(
-      true,
-    );
+    expect(params.tools.find("root-entry-tool", pluginId)).toBeDefined();
   });
 
   it("reports and activates a community MULTI-runtime root-only entry consistently", async () => {
@@ -321,6 +459,21 @@ describe("createBootstrapPluginEntries", () => {
     params.manifestCache.set(pluginId, [
       { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
     ]);
+    const discovery = params.discoveryMap.get(pluginId)!;
+    fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
+    fs.writeFileSync(
+      discovery.pluginMdPaths[0]!,
+      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+    );
+    const definition = await loadPluginDefinition(discovery);
+    params.pluginRegistry.register({
+      id: pluginId,
+      summary: await loadPluginSummary(discovery),
+      ...definition,
+      status: "registered",
+      loadedRuntimes: new Map(),
+      source: discovery.source,
+    });
 
     const { ensurePluginEntry, hasPendingEntry } =
       await createBootstrapPluginEntries(params);
@@ -360,14 +513,20 @@ export default function (covel) {
     const params = makeParams([p]);
 
     const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
-    expect(params.toolMap.has("community-tool-1")).toBe(false);
+    expect(
+      Boolean(params.tools.find("community-tool-1", "entry-community-a")),
+    ).toBe(false);
 
     await ensurePluginEntry("entry-community-a");
-    expect(params.toolMap.has("community-tool-1")).toBe(true);
+    expect(
+      Boolean(params.tools.find("community-tool-1", "entry-community-a")),
+    ).toBe(true);
 
     // Second ensure is a no-op — the factory must not run twice.
     await ensurePluginEntry("entry-community-a");
-    expect(params.toolMap.has("community-tool-2")).toBe(false);
+    expect(
+      Boolean(params.tools.find("community-tool-2", "entry-community-a")),
+    ).toBe(false);
   });
 
   it("rejects community entry activation without a session grant", async () => {
@@ -478,9 +637,17 @@ export default async function (covel) {
       p.parsed,
       {
         ...p.parsed,
-        manifest: { ...p.parsed.manifest, entry: "server/second.mjs" },
+        manifest: {
+          ...p.parsed.manifest,
+          name: "entry-retry-batch/second",
+          entry: "server/second.mjs",
+        },
       },
     ]);
+    params.pluginRegistry.register({
+      ...params.pluginRegistry.get(p.discovery.id)!,
+      manifests: params.manifestCache.get(p.discovery.id),
+    });
     const entries = await createBootstrapPluginEntries(params);
     const attempts = await Promise.allSettled([
       entries.ensurePluginEntry(p.discovery.id),
@@ -488,12 +655,20 @@ export default async function (covel) {
     ]);
     expect(attempts.map((r) => r.status)).toEqual(["rejected", "rejected"]);
     expect(entries.hasPendingEntry(p.discovery.id)).toBe(true);
+    expect(params.pluginRegistry.get(p.discovery.id)).toMatchObject({
+      status: "registered",
+      error: "Entry activation failed; check the server log for details.",
+    });
     expect(params.rpcRegistry.list()).toEqual([]);
     expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual({
       action: "continue",
     });
     await entries.ensurePluginEntry(p.discovery.id);
     expect(entries.hasPendingEntry(p.discovery.id)).toBe(false);
+    expect(params.pluginRegistry.get(p.discovery.id)?.status).toBe(
+      "registered",
+    );
+    expect(params.pluginRegistry.get(p.discovery.id)?.error).toBeUndefined();
     const entry = params.rpcRegistry.getPluginAction(p.discovery.id, "count");
     expect(
       await entry?.handler(
@@ -529,36 +704,131 @@ export default async function (covel) {
     warn.mockRestore();
   });
 
-  it("warn-skips non-function default exports, unknown hook events, and non-ToolModule registrations", async () => {
+  it("keeps non-function default exports pending without publishing registrations", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const notFn = writePlugin(
       "entry-notfn-a",
       `export default { nope: true };`,
     );
-    const badCalls = writePlugin(
-      "entry-badcalls-a",
-      `
-export default (covel) => {
-  covel.on("NotARealEvent", async () => ({ action: "continue" }));
-  covel.registerTool({ name: "raw-object" });
-};
-`,
-    );
-    const params = makeParams([notFn, badCalls]);
+    const params = makeParams([notFn]);
+    const entries = await createBootstrapPluginEntries(params);
 
-    await createBootstrapPluginEntries(params);
-
-    expect(params.toolMap.size).toBe(0);
-    expect(
-      warn.mock.calls.some((c) => String(c[0]).includes("NotARealEvent")),
-    ).toBe(true);
-    expect(
-      warn.mock.calls.some((c) => String(c[0]).includes("registerTool")),
-    ).toBe(true);
+    expect(params.tools.pluginTools.size).toBe(0);
+    expect(entries.hasPendingEntry(notFn.discovery.id)).toBe(true);
+    expect(params.pluginRegistry.get(notFn.discovery.id)?.error).toBeDefined();
     warn.mockRestore();
   });
 
-  it("rejects registerTool name collisions instead of overwriting", async () => {
+  it.each([
+    {
+      name: "tool",
+      call: 'covel.registerTool({ name: "raw-object" });',
+      operation: "registerTool",
+    },
+    ...["create-form", "memory-search", "search-tools"].map((toolName) => ({
+      name: `reserved-${toolName}`,
+      call: `covel.registerTool(covel.toolkit.tool({ name: "${toolName}", description: "reserved", parameters: covel.toolkit.z.object({}), execute: async () => ({}) }));`,
+      operation: "registerTool",
+    })),
+    {
+      name: "hook-event",
+      call: 'covel.on("NotARealEvent", async () => ({}));',
+      operation: "on",
+    },
+    {
+      name: "hook-handler",
+      call: 'covel.on("TurnStart", null);',
+      operation: "on",
+    },
+    ...[
+      ['{ match: "yes" }', "hook-predicate"],
+      ["{ timeoutMs: -1 }", "hook-timeout"],
+      ['{ enforce: "unknown" }', "hook-enforce"],
+      ["null", "hook-options"],
+    ].map(([options, name]) => ({
+      name,
+      call: `covel.on("TurnStart", async () => ({}), ${options});`,
+      operation: "on",
+    })),
+    ...[
+      ['{ trustLevel: "unknown" }', "rpc-trust"],
+      ['{ trustLevel: "" }', "rpc-empty-trust"],
+      ["null", "rpc-options"],
+    ].map(([options, name]) => ({
+      name,
+      call: `covel.registerRpc("invalid-options", async () => true, ${options});`,
+      operation: "registerRpc",
+    })),
+    {
+      name: "rpc-handler",
+      call: 'covel.registerRpc("broken", null);',
+      operation: "registerRpc",
+    },
+    {
+      name: "rpc-duplicate",
+      call: 'covel.registerRpc("entry-action", async () => true);',
+      operation: "registerRpc",
+    },
+    {
+      name: "wire-module",
+      call: "covel.registerWires(null);",
+      operation: "registerWires",
+    },
+    {
+      name: "wire-shape",
+      call: 'covel.registerWires({ speech: [{ id: "invalid" }] });',
+      operation: "registerWires",
+    },
+    {
+      name: "wire-group",
+      call: "covel.registerWires({ speech: {} });",
+      operation: "registerWires",
+    },
+    {
+      name: "wire-duplicate",
+      call: 'covel.registerWires({ speech: [{ id: "entry-tts", async synthesize() {} }] });',
+      operation: "registerWires",
+    },
+  ])(
+    "rolls back the complete batch and reports invalid $name registrations",
+    async ({ name, call, operation }) => {
+      const pluginId = `entry-invalid-${name}`;
+      const source = FULL_ENTRY_SRC.replace(
+        'action: "continue"',
+        'action: "abort", reason: "leaked hook"',
+      ).replace(/\n}\n$/, `\n  ${call}\n}\n`);
+      const plugin = writePlugin(pluginId, source, { source: "community" });
+      const params = makeParams([plugin]);
+      const entries = await createBootstrapPluginEntries(params);
+      try {
+        await expect(
+          entries.ensurePluginEntry(pluginId, "s1"),
+        ).rejects.toMatchObject({
+          cause: {
+            code: "plugin_registration_invalid",
+            registration: operation,
+          },
+        });
+        expect(entries.hasPendingEntry(pluginId)).toBe(true);
+        expect(params.tools.pluginTools.size).toBe(0);
+        expect(params.rpcRegistry.list()).toEqual([]);
+        expect(getSpeechWire(`${pluginId}/entry-tts`)).toBeNull();
+        expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual(
+          { action: "continue" },
+        );
+        expect(params.pluginRegistry.get(pluginId)).toMatchObject({
+          status: "registered",
+          error: expect.stringContaining(
+            `[plugin_registration_invalid] ${operation}:`,
+          ),
+        });
+      } finally {
+        await entries.close();
+      }
+    },
+  );
+
+  it("registers the same local tool name independently for different plugins", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const first = writePlugin(
       "entry-collide-a",
@@ -591,24 +861,16 @@ export default (covel) => {
 `,
     );
     const params = makeParams([first, second]);
-    // Simulate a builtin already occupying a name — entry must not replace it.
-    const builtinTool = {
-      _type: "covel-tool",
-      name: "shared-name",
-    } as unknown as ToolModule;
-    params.toolMap.set("shared-name", builtinTool);
-
-    await createBootstrapPluginEntries(params);
-
-    // Original registration untouched; neither collider got access.
-    expect(params.toolMap.get("shared-name")).toBe(builtinTool);
-    expect(params.localToolNames.has("shared-name")).toBe(false);
-    expect(
-      params.pluginToolAccess.get("entry-collide-a")?.has("shared-name"),
-    ).toBeFalsy();
-    expect(
-      warn.mock.calls.filter((c) => String(c[0]).includes("collides")),
-    ).toHaveLength(2);
+    const entries = await createBootstrapPluginEntries(params);
+    const firstTool = params.tools.find("shared-name", "entry-collide-a");
+    const secondTool = params.tools.find("shared-name", "entry-collide-b");
+    expect(firstTool?.description).toBe("first wins");
+    expect(secondTool?.description).toBe("would hijack");
+    expect(firstTool).not.toBe(secondTool);
+    expect(params.tools.find("shared-name", "unregistered")).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    await entries.close();
+    expect(params.tools.pluginTools.size).toBe(0);
     warn.mockRestore();
   });
 
@@ -658,7 +920,7 @@ export default function (covel) {
       await entries.ensurePluginEntry(pluginId);
       const executor = createToolExecutor({
         store: params.store,
-        findTool: () => params.toolMap.get("read-state"),
+        findTool: (name, context) => params.tools.find(name, context.pluginId),
       });
       const results = await Promise.all(
         ["s1", "s2"].map((sessionId) =>
@@ -730,8 +992,12 @@ export default async function (covel) {
       ensurePluginEntry("entry-inflight-a"),
     ]);
 
-    expect(params.toolMap.has("inflight-tool-1")).toBe(true);
-    expect(params.toolMap.has("inflight-tool-2")).toBe(false);
+    expect(
+      Boolean(params.tools.find("inflight-tool-1", "entry-inflight-a")),
+    ).toBe(true);
+    expect(
+      Boolean(params.tools.find("inflight-tool-2", "entry-inflight-a")),
+    ).toBe(false);
   });
 
   it("hasPendingEntry: true for a deferred community entry, false once activated", async () => {
@@ -793,4 +1059,35 @@ it("publishes services atomically and removes them when the entry closes", async
   ).toEqual({ value: 6 });
   await entries.close();
   expect(await client.discover("fixture/double@1")).toEqual([]);
+});
+
+it("reports malformed services as registration errors and rolls back earlier capabilities", async () => {
+  const { PluginServiceRegistry } = await import("@covel/runtime");
+  const services = new PluginServiceRegistry({
+    list: async () => ["invalid-service-entry"],
+    ensure: async () => {},
+  });
+  const fixture = writePlugin(
+    "invalid-service-entry",
+    `
+    export default function(covel) {
+      covel.registerRpc("pending", async () => true);
+      covel.registerService({ name: "broken", contract: "fixture/broken@1" });
+    }
+  `,
+    { source: "community" },
+  );
+  const params = makeParams([fixture]);
+  const entries = await createBootstrapPluginEntries({ ...params, services });
+  try {
+    await expect(
+      entries.ensurePluginEntry("invalid-service-entry", "s"),
+    ).rejects.toThrow("[plugin_registration_invalid] registerService:");
+    expect(params.pluginRegistry.get("invalid-service-entry")?.error).toContain(
+      "registerService:",
+    );
+    expect(params.rpcRegistry.list()).toEqual([]);
+  } finally {
+    await entries.close();
+  }
 });

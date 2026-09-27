@@ -8,6 +8,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import {
   loadPluginLlmConfig,
+  pluginDeclarations,
   deriveBuiltinPluginIds,
   type PluginRegistry,
   type PluginLlmConfig,
@@ -59,6 +60,10 @@ import { workingMemoryRoutes } from "./working-memory.js";
 import { installRoutes } from "./install.js";
 import { aiRoutes } from "./ai.js";
 import { traceRoutes } from "./traces.js";
+import {
+  createPluginDiagnostics,
+  RecentPluginServiceCalls,
+} from "./plugin-diagnostics.js";
 import { mediaRoutes } from "./media.js";
 import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
@@ -365,6 +370,7 @@ async function assembleApi(
   // `bindPluginEntry` after `createBootstrapPluginEntries` resolves). See
   // the ORDERING CONSTRAINT in runtime-loader.ts for the full contract.
   const runtimeLoader = createRuntimeLoader({
+    pluginRegistry: registry,
     discoveryMap,
     manifestCache,
     store,
@@ -375,16 +381,13 @@ async function assembleApi(
   // 6. Create ToolExecutor with builtin + plugin local tools + approval.
   //    Wiring extracted into `setupPluginTools` (bootstrap/tools.ts). It builds
   //    the framework tool registry, per-session character-tool overrides, and
-  //    the approval-gated executor. `toolMap` / `builtinToolNames` remain
+  //    the approval-gated executor. the registry remains
   //    mutable here so the memory system can register its tools below.
   const {
-    toolMap,
-    builtinToolNames,
-    localToolNames,
+    tools,
     toolExecutor,
     prepareToolsForSession,
     clearSessionToolOverrides,
-    pluginToolAccess,
   } = await setupPluginTools({
     store,
     registry,
@@ -439,12 +442,15 @@ async function assembleApi(
     );
   };
 
+  const serviceCalls = new RecentPluginServiceCalls();
   const services = new PluginServiceRegistry({
+    onCallCompleted: (event) => serviceCalls.record(event),
     async ensure(sessionId, pluginId) {
       const session = await store.getSession(sessionId);
       if (!session?.activePlugins.includes(pluginId))
         throw new Error(`Plugin is not active: ${pluginId}`);
       await runtimeLoader.ensurePluginEntry(pluginId, sessionId);
+      return sessionIncarnationIdentity(session);
     },
     async list(sessionId) {
       const session = await store.getSession(sessionId);
@@ -469,10 +475,9 @@ async function assembleApi(
     await createBootstrapPluginEntries({
       discoveryMap,
       manifestCache,
+      pluginRegistry: registry,
       store,
-      toolMap,
-      localToolNames,
-      pluginToolAccess,
+      tools,
       hookPipeline,
       rpcRegistry,
       isCommunityServerCodeApproved,
@@ -480,6 +485,22 @@ async function assembleApi(
       services,
     }));
   runtimeLoader.bindPluginEntry(pluginEntries.ensurePluginEntry);
+  const pluginDiagnostics = createPluginDiagnostics({
+    registry,
+    tools,
+    hooks: hookPipeline,
+    rpc: rpcRegistry,
+    services,
+    calls: serviceCalls,
+    hasPendingEntry: pluginEntries.hasPendingEntry,
+    isServerCodeApproved: (session, pluginId) =>
+      rpcApprovalGate.hasGrant(
+        session.id,
+        pluginId,
+        COMMUNITY_SERVER_CODE_ACTION,
+        sessionApprovalScope(session, pluginId),
+      ),
+  });
 
   // Community activation seam: running the plugin's `entry` module is what
   // registers its tools, hooks, rpc actions and wires.
@@ -505,7 +526,11 @@ async function assembleApi(
 
   // 8. Create memory system (Letta-style three-tier memory)
   const bootstrapMemory = createBootstrapMemorySystem({
-    manifestCache,
+    manifestCache: new Map(
+      [...registry.getAll()]
+        .filter(([, entry]) => entry.status !== "error")
+        .map(([id, entry]) => [id, pluginDeclarations(entry)]),
+    ),
     store,
     llmAdapter: config.llmAdapter,
     ...(config.vectorBackend !== "none" && config.memoryEmbed
@@ -530,8 +555,7 @@ async function assembleApi(
   });
   if (bootstrapMemory) {
     for (const t of bootstrapMemory.tools) {
-      toolMap.set(t.name, t);
-      builtinToolNames.add(t.name);
+      tools.registerBuiltin(t);
     }
   }
 
@@ -580,6 +604,7 @@ async function assembleApi(
       }
 
       const runner = createPluginRpcRuntimeTurnRunner({
+        pluginRegistry: registry,
         store,
         eventBus,
         sessionLock,
@@ -729,7 +754,7 @@ async function assembleApi(
     if (config.mediaStore) {
       c.set("mediaStore", config.mediaStore);
     }
-    c.set("builtinToolNames", [...builtinToolNames].sort());
+    c.set("builtinToolNames", [...tools.builtinTools.keys()].sort());
     await next();
     const staleRead = await verifyResolvedSessionRead(c);
     if (staleRead) c.res = staleRead;
@@ -785,6 +810,7 @@ async function assembleApi(
   app.route("/api/ai", aiRoutes);
   app.route("/api/actions", actionRoutes);
   app.route("/api/traces", traceRoutes);
+  app.route("/api/sessions", pluginDiagnostics.routes);
   app.route("/api/media", mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
   // Start maintenance only after assembly succeeds. These scans remain

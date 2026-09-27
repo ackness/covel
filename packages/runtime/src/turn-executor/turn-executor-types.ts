@@ -21,6 +21,7 @@ import type { LLMAdapter } from "../llm/llm-adapter.js";
 import type { TurnControl } from "./turn-control.js";
 import type { ToolExecutor } from "../agent-loop/tool-executor.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
+import type { HookScope } from "../hooks/hook-scope.js";
 import type { MediaStoreLike } from "../function-runtime/runtime-media-context.js";
 
 /**
@@ -84,6 +85,8 @@ export interface AgentLoopDeps {
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
+  /** Persisted session activation scope, including plugins without runtimes. */
+  readonly hookScope?: HookScope;
   readonly services?: import("../plugin-services.js").PluginServiceRegistry;
   /** Optional store used by the orchestration harness and function runtimes. */
   readonly store?: DataStore;

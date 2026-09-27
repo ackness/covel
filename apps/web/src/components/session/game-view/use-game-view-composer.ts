@@ -250,7 +250,12 @@ export function useGameViewComposer({
           if (typeof action.type === "string") {
             onCommandClientAction?.({
               type: action.type,
-              pluginId: command.pluginId,
+              pluginId:
+                action.type === "open-plugin-diagnostics"
+                  ? typeof action.pluginId === "string"
+                    ? action.pluginId
+                    : undefined
+                  : command.pluginId,
               ...(typeof action.panelId === "string"
                 ? { panelId: action.panelId }
                 : {}),

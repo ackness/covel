@@ -1,5 +1,6 @@
 import {
   getPluginTrustInfo,
+  pluginDeclarations,
   resolveRuntimeProviders,
   type PluginRegistry,
   type PluginRegistryEntry,
@@ -126,7 +127,7 @@ export function findWorldDataProviderPluginId(
   for (const pid of activePlugins) {
     const entry = pluginRegistry.get(pid);
     if (!entry) continue;
-    for (const { manifest } of pluginManifestRecords(entry)) {
+    for (const { manifest } of pluginDeclarations(entry)) {
       if (
         manifest.capabilities?.includes(FrameworkCapability.WorldDataProvider)
       ) {

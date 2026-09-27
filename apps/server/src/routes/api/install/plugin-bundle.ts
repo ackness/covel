@@ -1,4 +1,11 @@
 import { parse } from "yaml";
+import {
+  parsePluginMd,
+  hasRuntimeDeclaration,
+  validatePluginDeclarations,
+  multiRuntimeRootDiagnostics,
+  type ParsedPluginMd,
+} from "@covel/plugin-loader";
 import { z } from "zod";
 import { validatePluginManifest, formatValidationErrors } from "@covel/shared";
 import { httpError, type ExtractedEntry } from "./shared.js";
@@ -136,8 +143,29 @@ export function validatePluginBundle(
       e.relativePath === "PLUGIN.md" ||
       /^runtimes\/[^/]+\/PLUGIN\.md$/.test(e.relativePath),
   );
+  const declarations: ParsedPluginMd[] = [];
+  const isMultiRuntime = manifests.some((m) =>
+    m.relativePath.startsWith("runtimes/"),
+  );
   for (const m of manifests) {
     const parsed = readPluginFrontmatter(m.content.toString("utf-8"));
+    if (isMultiRuntime && m.relativePath === "PLUGIN.md") {
+      const diagnostics = multiRuntimeRootDiagnostics(parsed);
+      if (diagnostics.length)
+        throw httpError(
+          400,
+          diagnostics.map((d) => `${m.relativePath}: ${d.message}`).join("\n"),
+        );
+    }
+    if (
+      m.relativePath.startsWith("runtimes/") &&
+      !hasRuntimeDeclaration(parsed)
+    ) {
+      throw httpError(
+        400,
+        `${m.relativePath}: runtime declaration requires execution fields; move package-only declarations to the root PLUGIN.md`,
+      );
+    }
     const result = validatePluginManifest(parsed);
     if (!result.valid) {
       throw httpError(
@@ -145,6 +173,9 @@ export function validatePluginBundle(
         `invalid frontmatter in ${m.relativePath}:\n${formatValidationErrors(result.errors ?? [])}`,
       );
     }
+    declarations.push(
+      parsePluginMd(m.content.toString("utf-8"), m.relativePath),
+    );
     const declared = (result.data as { name?: unknown }).name;
     if (typeof declared !== "string" || declared.trim() === "") {
       throw httpError(
@@ -159,6 +190,15 @@ export function validatePluginBundle(
         `plugin id mismatch: package.json name resolves to canonical id "${canonicalId}" but ${m.relativePath} declares "${declaredRoot}"`,
       );
     }
+  }
+
+  try {
+    validatePluginDeclarations(declarations);
+  } catch (error) {
+    throw httpError(
+      400,
+      error instanceof Error ? error.message : String(error),
+    );
   }
 
   return { pluginId: canonicalId };

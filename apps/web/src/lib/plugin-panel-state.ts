@@ -1,3 +1,35 @@
+/** Copy a bounded JSON draft so callers cannot mutate the cached snapshot. */
+export function parsePluginUiState(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("UI state must be an object or null");
+  }
+  const encoded = JSON.stringify(value, (_key, child: unknown) => {
+    if (
+      (typeof child === "number" && !Number.isFinite(child)) ||
+      ["undefined", "function", "symbol", "bigint"].includes(typeof child) ||
+      (child !== null &&
+        typeof child === "object" &&
+        !Array.isArray(child) &&
+        Object.getPrototypeOf(child) !== Object.prototype &&
+        Object.getPrototypeOf(child) !== null)
+    ) {
+      throw new Error("UI state must contain JSON values");
+    }
+    return child;
+  });
+  if (new TextEncoder().encode(encoded).byteLength > 32 * 1024) {
+    throw new Error("UI state exceeds 32 KiB");
+  }
+  const snapshot: unknown = JSON.parse(encoded);
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    throw new Error("UI state must be an object or null");
+  }
+  return snapshot as Record<string, unknown>;
+}
+
 export function buildPluginPanelInitialState(
   data: Record<string, unknown>,
   invokingMap: Record<string, true>,

@@ -24,6 +24,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import {
   loadRuntime as loadRuntimeFromDisk,
   getPluginTrustInfo,
+  type PluginRegistry,
   type ParsedPluginMd,
   type PluginDiscoveryResult,
   type LoadedRuntime,
@@ -36,6 +37,7 @@ import type { DataStore } from "@covel/store";
 import { sessionApprovalScope } from "../session/session-guard.js";
 
 export interface RuntimeLoaderParams {
+  readonly pluginRegistry?: PluginRegistry;
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
   readonly store: DataStore;
@@ -122,7 +124,11 @@ export function createRuntimeLoader(
         // The entry check is the fail-closed approval boundary. Keep it ahead
         // of every other community import, including the runtime handler.
         await boundEnsurePluginEntry(pluginId, sessionId);
-        return loadRuntimeFromDisk(discovery, manifest.name, locale);
+        const entry = params.pluginRegistry?.get(pluginId);
+        return loadRuntimeFromDisk(discovery, manifest.name, locale, {
+          packageManifest: entry?.packageManifest,
+          manifests,
+        });
       }
     }
     return undefined;

@@ -104,12 +104,31 @@ export function aggregateSpecsIntoGroups(
   options?: { warn?: (message: string) => void },
 ): PluginPanelTabGroup[] {
   const groupMap = new Map<string, WritablePluginPanelTabGroup>();
-  let counter = 0;
+  const panelIds = new Map<string, { next: number; used: Set<string> }>();
+  // Reserve declarations from every entry before assigning local fallback IDs.
+  // Other plugins appearing or disappearing must not change a panel's identity.
+  for (const entry of slotEntries) {
+    let ids = panelIds.get(entry.pluginId);
+    if (!ids) {
+      ids = { next: 0, used: new Set() };
+      panelIds.set(entry.pluginId, ids);
+    }
+    for (const spec of entry.specs) {
+      if (spec.id !== undefined) ids.used.add(spec.id);
+    }
+  }
 
   for (const entry of slotEntries) {
+    const ids = panelIds.get(entry.pluginId)!;
     for (const spec of entry.specs) {
       if (spec.surfaces && !spec.surfaces.includes("panel")) continue;
-      const specId = spec.id ?? `${entry.pluginId}-${counter++}`;
+      let specId = spec.id;
+      if (specId === undefined) {
+        do {
+          specId = `${entry.pluginId}-${ids.next++}`;
+        } while (ids.used.has(specId));
+        ids.used.add(specId);
+      }
       const groupKey = spec.group ?? `${entry.pluginId}::${specId}`;
 
       const subShort = resolveI18n(spec.shortLabel, locale) || undefined;

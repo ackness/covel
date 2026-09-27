@@ -126,8 +126,14 @@ for (const width of [1280, 390]) {
     await expect(consent).not.toBeChecked();
     await consent.check();
     await install.click();
+    const installedWorlds = dialog
+      .getByRole("heading", { name: "Installed world packages", exact: true })
+      .locator("..");
     await expect(
-      dialog.getByRole("button", { name: "Check for updates", exact: true }),
+      installedWorlds.getByRole("button", {
+        name: "Check for updates",
+        exact: true,
+      }),
     ).toHaveCount(2);
     await expect(install).toHaveCount(0);
     expect(previewRequests).toBe(1);

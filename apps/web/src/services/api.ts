@@ -57,6 +57,7 @@ export type {
 export * from "./api/overlay.js";
 export * from "./api/plugin-data.js";
 export * from "./api/plugin-rpc.js";
+export * from "./api/plugin-diagnostics.js";
 export * from "./api/approvals.js";
 export * from "./api/traces.js";
 export * from "./api/health.js";

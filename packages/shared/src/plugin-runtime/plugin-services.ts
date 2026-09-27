@@ -10,12 +10,19 @@ export interface PluginServiceDescriptor {
 
 export interface PluginServiceClient {
   discover(contract: string): Promise<readonly PluginServiceDescriptor[]>;
-  call(request: {
-    readonly pluginId: string;
-    readonly name: string;
-    readonly contract: string;
-    readonly input: unknown;
-  }): Promise<unknown>;
+  call(
+    request: {
+      readonly pluginId: string;
+      readonly name: string;
+      readonly contract: string;
+      readonly input: unknown;
+    },
+    /** The call budget includes provider admission and nested service work. */
+    options?: {
+      readonly signal?: AbortSignal;
+      readonly timeoutMs?: number;
+    },
+  ): Promise<unknown>;
 }
 
 /** Services compute values; the calling runtime owns persistent effects. */

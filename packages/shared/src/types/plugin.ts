@@ -607,13 +607,13 @@ export const PLUGIN_SCOPED_FIELDS = {
   /** Merged on `key`; all runtimes share `plugin.<pluginId>.<key>`. */
   userSettings: {
     merge: "keyed",
-    conflict: "warn, first declaration wins",
-    where: "apps/server/src/routes/misc-api/plugin-catalog.ts",
+    conflict: "throws - the plugin fails to register",
+    where: "packages/plugin-loader/src/declarations.ts",
   },
-  /** Merged on command name; divergent declarations warn and keep the first. */
+  /** Merged on command name; divergent declarations reject the package. */
   commands: {
     merge: "keyed",
-    conflict: "warn, first declaration wins within one plugin",
+    conflict: "throws - the plugin fails to register",
     where: "apps/server/src/routes/api/session/commands.ts",
   },
   /** Merged on namespace — the strictest of the set. */
@@ -631,13 +631,15 @@ export const PLUGIN_SCOPED_FIELDS = {
   /** Merged on `label` across ALL plugins, not just this one. */
   memoryBlocks: {
     merge: "keyed",
-    conflict: "higher trust tier wins; equal tier is first-wins",
+    conflict:
+      "throws within one plugin; across plugins higher trust wins, then first-wins",
     where: "apps/server/src/routes/api/bootstrap/memory.ts",
   },
   /** Merged on `topic` across all active runtimes of the session. */
   events: {
     merge: "keyed",
-    conflict: "first-wins; warns only when the clash is cross-plugin",
+    conflict:
+      "throws within one plugin; across plugins first-wins with a warning",
     where: "apps/server/src/routes/api/bootstrap/event-directory.ts",
   },
   /** Unioned and sorted for the catalogue. */

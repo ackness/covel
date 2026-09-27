@@ -7,10 +7,12 @@ import {
   commitExecution,
   buildHookSettings,
   snapshotUserSettings,
+  type HookScope,
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import type { DataStore, SessionRecord, StoreTransaction } from "@covel/store";
 import type { EventBus } from "@covel/events";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import type {
   DeferredRuntimeJob,
   RuntimeManifest,
@@ -27,6 +29,7 @@ import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
+import { buildSessionHookScope } from "../session/hook-scope.js";
 
 export class SessionApprovalScopeChangedError extends Error {
   constructor() {
@@ -49,6 +52,7 @@ export interface PluginRpcRuntimeTurnContext {
   readonly sessionId: string;
   readonly session: Pick<SessionRecord, "locale" | "runtimeModelOverrides">;
   readonly activeRuntimes: readonly RuntimeManifest[];
+  readonly pluginRegistry?: PluginRegistry;
   /** Capability incarnation captured for every runtime plugin in this graph. */
   readonly approvalScopes: ReadonlyMap<string, string>;
   readonly deps: Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter">;
@@ -186,10 +190,29 @@ export function createPluginRpcRuntimeTurnRunner(
     return live;
   }
 
+  function hookScopeFor(
+    activePluginIds: readonly string[],
+    userSettings: Parameters<typeof snapshotUserSettings>[0],
+  ): HookScope {
+    if (!ctx.pluginRegistry) {
+      return {
+        activePluginIds: new Set(
+          ctx.activeRuntimes.map((runtime) => runtime.pluginId),
+        ),
+        settings: buildHookSettings(ctx.activeRuntimes, userSettings),
+      };
+    }
+    return buildSessionHookScope({
+      pluginRegistry: ctx.pluginRegistry,
+      activePluginIds,
+      userSettings,
+    });
+  }
+
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
-    hookSettings: ReturnType<typeof buildHookSettings>,
+    hookScope: HookScope,
     opts: {
       readonly executionSignal?: AbortSignal;
       readonly proposalGuard?: Parameters<
@@ -234,7 +257,8 @@ export function createPluginRpcRuntimeTurnRunner(
       sessionId: ctx.sessionId,
       executionContext: turnResult.executionContext,
       runtimes: ctx.activeRuntimes,
-      hookSettings,
+      activePluginIds: hookScope.activePluginIds,
+      hookSettings: hookScope.settings,
       results: [
         ...turnResult.runtimeResults,
         ...(turnResult.nestedRuntimeResults ?? []),
@@ -315,7 +339,6 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly commit: TurnCommitOutcome;
   }> {
     const userSettings = snapshotUserSettings(turnInput.userSettings);
-    const hookSettings = buildHookSettings(ctx.activeRuntimes, userSettings);
     const executionInput = { ...turnInput, userSettings };
     const turnControl = executionControl(opts.executionSignal);
     const executionSignal = turnControl?.executionSignal;
@@ -325,7 +348,7 @@ export function createPluginRpcRuntimeTurnRunner(
       // Detached work does not hold the main session lock during provider
       // execution. Take it briefly to linearize authorization against a
       // concurrent revoke/disable/delete before spending external work.
-      await ctx.sessionLock.withLock(ctx.sessionId, () =>
+      const executionScope = await ctx.sessionLock.withLock(ctx.sessionId, () =>
         requireLiveApprovedSession(runtimeId).then(async (live) => {
           if (
             opts.expectedSessionIncarnation &&
@@ -344,10 +367,12 @@ export function createPluginRpcRuntimeTurnRunner(
           }
           await opts.beforeExecute?.();
           executionSignal?.throwIfAborted();
+          return hookScopeFor(live.activePlugins, userSettings);
         }),
       );
       const result = await executeTurn(executionInput, ctx.activeRuntimes, {
         ...ctx.deps,
+        hookScope: executionScope,
         store: ctx.store,
         eventBus: ctx.eventBus,
         emitter,
@@ -391,18 +416,23 @@ export function createPluginRpcRuntimeTurnRunner(
             });
           }
           const completeInTx = opts.completeInTx;
-          return processTurnResults(result, emitter, hookSettings, {
-            executionSignal,
-            ...(completeInTx
-              ? { extraInTx: (tx) => completeInTx(tx, result) }
-              : {}),
-            ...(opts.proposalGuard
-              ? { proposalGuard: opts.proposalGuard }
-              : {}),
-            ...(opts.completionKind !== undefined
-              ? { completionKind: opts.completionKind }
-              : {}),
-          });
+          return processTurnResults(
+            result,
+            emitter,
+            hookScopeFor(live.activePlugins, userSettings),
+            {
+              executionSignal,
+              ...(completeInTx
+                ? { extraInTx: (tx) => completeInTx(tx, result) }
+                : {}),
+              ...(opts.proposalGuard
+                ? { proposalGuard: opts.proposalGuard }
+                : {}),
+              ...(opts.completionKind !== undefined
+                ? { completionKind: opts.completionKind }
+                : {}),
+            },
+          );
         },
       );
       return { turnResult: result, commit: outcome };
@@ -443,7 +473,6 @@ export function createPluginRpcRuntimeTurnRunner(
     };
 
     const userSettings = snapshotUserSettings(turnInput.userSettings);
-    const hookSettings = buildHookSettings(ctx.activeRuntimes, userSettings);
     const executionInput = { ...turnInput, userSettings };
 
     // Background mode has already returned 202 to the client and detached from
@@ -461,13 +490,15 @@ export function createPluginRpcRuntimeTurnRunner(
           commit: r.commit,
         }))
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
-          await requireLiveApprovedSession(args.runtimeId);
+          const live = await requireLiveApprovedSession(args.runtimeId);
+          const hookScope = hookScopeFor(live.activePlugins, userSettings);
           executionSignal?.throwIfAborted();
           const turnResult = await executeTurn(
             executionInput,
             ctx.activeRuntimes,
             {
               ...ctx.deps,
+              hookScope,
               turnControl,
               store: ctx.store,
               eventBus: ctx.eventBus,
@@ -478,7 +509,7 @@ export function createPluginRpcRuntimeTurnRunner(
           const outcome = await processTurnResults(
             turnResult,
             emitter,
-            hookSettings,
+            hookScope,
             { executionSignal },
           );
           return { result: turnResult, commit: outcome };

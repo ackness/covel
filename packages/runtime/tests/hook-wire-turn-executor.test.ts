@@ -115,6 +115,40 @@ describe("Turn executor hook wire-in", () => {
   });
 
   describe("TurnStart hook", () => {
+    it("runs a scoped entry-only hook with no runtime in the graph", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const inactive = vi.fn(async () => ({ action: "continue" as const }));
+      const active = vi.fn(async (ctx: { getOwnSettings?: () => unknown }) => {
+        expect(ctx.getOwnSettings?.()).toEqual({ budget: 4 });
+        return { action: "abort" as const, reason: "budget exceeded" };
+      });
+      pipeline.register({
+        id: "entry-only:TurnStart",
+        event: "TurnStart",
+        pluginId: "entry-only",
+        handler: active,
+      });
+      pipeline.register({
+        id: "inactive:TurnStart",
+        event: "TurnStart",
+        pluginId: "inactive",
+        handler: inactive,
+      });
+      const deps = await makeDeps(llm, pipeline);
+      const result = await executeTurn(makeTurnInput(), [], {
+        ...deps,
+        hookScope: {
+          activePluginIds: new Set(["entry-only"]),
+          settings: { "entry-only": { budget: 4 } },
+        },
+      });
+      expect(result.abortReason).toBe("budget exceeded");
+      expect(active).toHaveBeenCalledOnce();
+      expect(inactive).not.toHaveBeenCalled();
+      expect(llm.calls).toHaveLength(0);
+    });
+
     it("continues turn normally when TurnStart hook returns continue", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();

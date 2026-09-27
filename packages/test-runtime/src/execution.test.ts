@@ -420,7 +420,7 @@ describe("test-runtime execution helpers", () => {
       locale: "zh-CN",
       manifests: [runtimeManifest],
       deps: executionDeps(store, loadedCache),
-      userSettings: { count: 5 },
+      userSettings: { [PLUGIN_ID]: { count: 5 } },
     });
     expect(received).toEqual({ enabled: true, count: 5 });
   });
@@ -525,7 +525,7 @@ describe("test-runtime execution helpers", () => {
       locale: "zh-CN",
       manifests: [runtimeManifest],
       deps: executionDeps(store, loadedCache),
-      userSettings: { enabled: true },
+      userSettings: { [PLUGIN_ID]: { enabled: true } },
     });
 
     expect(job.status).toBe("done");

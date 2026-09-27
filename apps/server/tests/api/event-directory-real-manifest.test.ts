@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   createPluginRegistry,
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
   loadPluginSummary,
 } from "@covel/plugin-loader";
 import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
@@ -28,12 +28,13 @@ async function setupSceneStageDirectory() {
   if (!discovery)
     throw new Error("scene-stage plugin not found under plugins/");
 
+  const definition = await loadPluginDefinition(discovery);
   const registry = createPluginRegistry();
   registry.register({
     id: discovery.id,
-    summary: await loadPluginSummary(discovery),
+    summary: await loadPluginSummary(discovery, undefined, definition),
     rootPath: discovery.rootPath,
-    manifests: await loadPluginManifest(discovery),
+    ...definition,
     loadedRuntimes: new Map(),
     status: "registered",
   });

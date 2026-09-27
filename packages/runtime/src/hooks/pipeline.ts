@@ -87,6 +87,13 @@ export class HookPipeline {
     this.registrations.clear();
   }
 
+  /** Host diagnostics expose identities only, never handlers or predicates. */
+  list(): readonly { id: string; event: HookEvent; pluginId?: string }[] {
+    return [...this.registrations.values()].flatMap((entries) =>
+      entries.map(({ id, event, pluginId }) => ({ id, event, pluginId })),
+    );
+  }
+
   /**
    * Run all handlers registered for `event` with the event's semantic.
    * Sequential hooks can return accumulated `replace` or `abort`;

@@ -13,6 +13,7 @@ export interface RuntimeCase {
   readonly name: string;
   readonly runtimeId: string;
   readonly pluginId?: string;
+  readonly withPlugins?: readonly string[];
   readonly message?: string;
   readonly payload?: Record<string, unknown>;
   readonly userSettings?: Record<string, unknown>;
@@ -73,6 +74,7 @@ export function buildCaseDebugOptions(args: {
     ...base,
     runtimeId: testCase.runtimeId,
     pluginId: testCase.pluginId ?? args.pluginId,
+    withPlugins: testCase.withPlugins ?? base.withPlugins,
     caseName: testCase.name,
     message: testCase.message ?? base.message,
     payload: testCase.payload ?? base.payload,

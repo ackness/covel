@@ -11,7 +11,4 @@ capabilities: [manual-invoke]
 execution: sync
 trigger:
   type: manual
-ui:
-  right:
-    - ./ui/panel.json
 ---

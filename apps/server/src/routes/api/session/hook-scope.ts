@@ -1,4 +1,4 @@
-import type { PluginRegistry } from "@covel/plugin-loader";
+import { pluginDeclarations, type PluginRegistry } from "@covel/plugin-loader";
 import { buildHookSettings, type HookScope } from "@covel/runtime";
 import type { TurnInput } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
@@ -14,30 +14,37 @@ export async function loadSessionHookScope(args: {
   readonly session: Pick<SessionRecord, "activePlugins" | "worldId">;
   readonly userSettings?: TurnInput["userSettings"];
 }): Promise<HookScope> {
-  // Read the supplied persisted activation set, not a potentially stale
-  // process-local registry view. Lifecycle hooks also cover hook-only plugins.
-  const activePluginIds = new Set(args.session.activePlugins);
-  const runtimes = [...activePluginIds].flatMap((pluginId) => {
-    const entry = args.pluginRegistry?.get(pluginId);
-    if (!entry) return [];
-    const manifests = entry.manifests?.length
-      ? entry.manifests
-      : entry.manifest
-        ? [entry.manifest]
-        : [];
-    return manifests.map(({ manifest }) => ({ ...manifest, pluginId }));
-  });
   const world = args.session.worldId
     ? await args.store.getWorld(args.session.worldId)
     : null;
+  return buildSessionHookScope({
+    pluginRegistry: args.pluginRegistry,
+    activePluginIds: args.session.activePlugins,
+    userSettings: mergePluginUserSettings(
+      readWorldPluginSettings(world?.metadata),
+      args.userSettings,
+    ),
+  });
+}
+
+/** Use the persisted activation set, including plugins with no runtimes. */
+export function buildSessionHookScope(args: {
+  readonly pluginRegistry?: PluginRegistry;
+  readonly activePluginIds: Iterable<string>;
+  readonly userSettings?: TurnInput["userSettings"];
+}): HookScope {
+  const activePluginIds = new Set(args.activePluginIds);
+  const declarations = [...activePluginIds].flatMap((pluginId) => {
+    const entry = args.pluginRegistry?.get(pluginId);
+    return entry
+      ? pluginDeclarations(entry).map(({ manifest }) => ({
+          ...manifest,
+          pluginId,
+        }))
+      : [];
+  });
   return {
     activePluginIds,
-    settings: buildHookSettings(
-      runtimes,
-      mergePluginUserSettings(
-        readWorldPluginSettings(world?.metadata),
-        args.userSettings,
-      ),
-    ),
+    settings: buildHookSettings(declarations, args.userSettings),
   };
 }

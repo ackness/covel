@@ -451,6 +451,7 @@ function SessionRightPanel({
                 {currentSub && (
                   <PluginPanel
                     key={pluginPanelKey(currentSub)}
+                    panelId={currentSub.id}
                     pluginId={currentSub.pluginId}
                     spec={currentSub.spec}
                     stateCache={pluginPanelStateCacheRef.current}

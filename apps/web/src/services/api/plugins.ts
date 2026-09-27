@@ -41,7 +41,7 @@ export async function getPluginCatalog(options?: {
     loadErrors: plugins
       .filter(
         (plugin): plugin is PluginSummary & { error: string } =>
-          plugin.status === "error" && typeof plugin.error === "string",
+          typeof plugin.error === "string",
       )
       .map((plugin) => ({ pluginId: plugin.id, errors: [plugin.error] })),
   };

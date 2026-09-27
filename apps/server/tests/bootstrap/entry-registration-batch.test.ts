@@ -6,30 +6,23 @@ import {
 } from "@covel/ai-provider";
 import { createHookPipeline, createPluginRpcRegistry } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store";
-import type { ToolModule } from "@covel/tools";
-import { EntryRegistrationBatch } from "../../src/routes/api/bootstrap/entry-registration-batch.js";
+import { ToolRegistry, type ToolModule } from "@covel/tools";
+import { PluginEntryScope } from "@covel/runtime";
 import { buildEntryApi } from "../../src/routes/api/bootstrap/plugin-entry-api.js";
 import type { BootstrapPluginEntriesParams } from "../../src/routes/api/bootstrap/plugin-entry.js";
 
 function fixture() {
-  const batch = new EntryRegistrationBatch();
+  const batch = new PluginEntryScope();
   const params: BootstrapPluginEntriesParams = {
     discoveryMap: new Map(),
     manifestCache: new Map(),
     store: createMemoryStore(),
-    toolMap: new Map(),
-    localToolNames: new Set(),
-    pluginToolAccess: new Map(),
+    tools: new ToolRegistry(),
     hookPipeline: createHookPipeline(),
     rpcRegistry: createPluginRpcRegistry(),
     isCommunityHookApproved: () => true,
   };
-  const api = buildEntryApi(
-    params,
-    "batch-fixture",
-    "plugins/batch-fixture/PLUGIN.md",
-    batch,
-  );
+  const api = buildEntryApi(params, "batch-fixture", batch);
   return { batch, params, api };
 }
 
@@ -53,7 +46,7 @@ describe("entry publication", () => {
     expect(
       params.rpcRegistry.getFormValidator("batch-fixture", "staged"),
     ).toBeUndefined();
-    expect(params.toolMap.size).toBe(0);
+    expect(params.tools.pluginTools.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
     await params.hookPipeline.run("TurnStart", ctx, {});
     expect(hook).not.toHaveBeenCalled();
@@ -61,7 +54,9 @@ describe("entry publication", () => {
     expect(
       params.rpcRegistry.getFormValidator("batch-fixture", "staged"),
     ).toBeDefined();
-    expect(params.toolMap.has("staged")).toBe(true);
+    expect(params.tools.pluginTools.get("batch-fixture")?.has("staged")).toBe(
+      true,
+    );
     expect(
       params.rpcRegistry.getPluginAction("batch-fixture", "staged"),
     ).toBeDefined();
@@ -70,21 +65,21 @@ describe("entry publication", () => {
     expect(() => api.registerRpc("late", async () => true)).toThrow(
       "registration is closed",
     );
-    batch.dispose();
-    expect(params.toolMap.size).toBe(0);
+    await batch.dispose();
+    expect(params.tools.pluginTools.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
     expect(
       params.rpcRegistry.getFormValidator("batch-fixture", "staged"),
     ).toBeUndefined();
     await params.hookPipeline.run("TurnStart", ctx, {});
     expect(hook).toHaveBeenCalledOnce();
-    expect(() => batch.dispose()).not.toThrow();
+    await expect(batch.dispose()).resolves.toBeUndefined();
   });
 
   it("rolls back a failed publication across tools, hooks, RPC, and every wire kind", async () => {
     const { batch, params, api } = fixture();
     const existing = { name: "existing", _type: "covel-tool" } as ToolModule;
-    params.toolMap.set("existing", existing);
+    params.tools.pluginTools.set("other", new Map([["existing", existing]]));
     const hook = vi.fn(async () => ({ action: "continue" as const }));
     api.registerTool(
       api.toolkit.tool({
@@ -106,11 +101,11 @@ describe("entry publication", () => {
       throw new Error("publication failed");
     });
     expect(() => batch.commit()).toThrow("publication failed");
-    batch.rollback();
-    batch.rollback();
-    expect([...params.toolMap.values()]).toEqual([existing]);
-    expect(params.localToolNames.size).toBe(0);
-    expect(params.pluginToolAccess.size).toBe(0);
+    await batch.dispose();
+    await batch.dispose();
+    expect([...params.tools.pluginTools.get("other")!.values()]).toEqual([
+      existing,
+    ]);
     expect(params.rpcRegistry.list()).toEqual([]);
     expect(
       params.rpcRegistry.getFormValidator("batch-fixture", "rollback-form"),
@@ -122,7 +117,7 @@ describe("entry publication", () => {
     expect(getTranscriptionWire("batch-fixture/rollback")).toBeNull();
   });
 
-  it("continues reverse-order cleanup after a disposer fails and closes failed APIs", () => {
+  it("continues reverse-order cleanup after a disposer fails and closes failed APIs", async () => {
     const { batch, api } = fixture();
     const order: number[] = [];
     batch.track(() => order.push(1));
@@ -131,9 +126,9 @@ describe("entry publication", () => {
       throw new Error("cleanup failed");
     });
     batch.track(() => order.push(3));
-    expect(() => batch.rollback()).toThrow(AggregateError);
+    await expect(batch.dispose()).rejects.toThrow(AggregateError);
     expect(order).toEqual([3, 2, 1]);
-    expect(() => batch.rollback()).not.toThrow();
+    await expect(batch.dispose()).rejects.toThrow(AggregateError);
     expect(() => api.registerRpc("late", async () => true)).toThrow(
       "registration is closed",
     );

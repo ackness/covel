@@ -321,7 +321,7 @@ describe("plugin-scoped field registry", () => {
     // Declarative data contracts fail closed; userSettings warns.
     expect(PLUGIN_SCOPED_FIELDS.dataSchemas.conflict).toMatch(/throw/i);
     expect(PLUGIN_SCOPED_FIELDS.worldProjections.conflict).toMatch(/throw/i);
-    expect(PLUGIN_SCOPED_FIELDS.userSettings.conflict).toMatch(/warn/i);
+    expect(PLUGIN_SCOPED_FIELDS.userSettings.conflict).toMatch(/throw/i);
     // Entry modules are additive across declarations.
     expect(PLUGIN_SCOPED_FIELDS.entry.merge).toBe("union");
     // displayName is the sole root-only field.

@@ -12,7 +12,7 @@
  *     recorder, emitter, and commit-pipeline rows alike (R-14).
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createEventBus, type SubscriptionEvent } from "@covel/events";
@@ -26,6 +26,7 @@ import {
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
+import { createHookPipeline } from "@covel/runtime";
 
 const SESSION_ID = "sess-barrier";
 const RUNTIME_ID = "fake-narrator";
@@ -99,6 +100,7 @@ describe("POST /api/actions — turn commit barrier", () => {
   let app: Hono;
   let busEvents: SubscriptionEvent[];
   let memoryCalls: Array<{ busTypesAtCall: string[] }>;
+  let hookPipeline: ReturnType<typeof createHookPipeline>;
 
   beforeEach(async () => {
     store = createMemoryStore();
@@ -163,6 +165,7 @@ describe("POST /api/actions — turn commit barrier", () => {
     const { llm } = makeFakeLLM("A committed narrative line.");
     const sessionLock = createInProcessSessionLock();
     const loaded = makeFakeLoadedRuntime({ name: RUNTIME_ID });
+    hookPipeline = createHookPipeline();
 
     app = new Hono();
     app.use("*", async (c, next) => {
@@ -177,25 +180,142 @@ describe("POST /api/actions — turn commit barrier", () => {
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);
       c.set("memorySystem", memorySystem);
+      c.set("hookPipeline", hookPipeline);
       await next();
     });
     app.route("/api/actions", actionRoutes);
   });
 
-  async function runTurn(): Promise<Array<{ type: string; traceId?: string }>> {
+  async function runTurn(
+    sessionId = SESSION_ID,
+    settings?: Record<string, Record<string, unknown>>,
+  ): Promise<Array<{ type: string; traceId?: string }>> {
     const res = await app.request("/api/actions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(settings
+          ? {
+              "X-Plugin-User-Settings": Buffer.from(
+                JSON.stringify(settings),
+              ).toString("base64"),
+            }
+          : {}),
+      },
       body: JSON.stringify({
         requestId: "req-barrier",
         type: "send_message",
-        sessionId: SESSION_ID,
+        sessionId,
         payload: { content: "hello" },
       }),
     });
     expect(res.status).toBe(200);
     return drainActionStream(res);
   }
+
+  it("scopes zero-runtime package hooks and defaults through execution and commit", async () => {
+    const pluginId = "entry-only";
+    const observed: Array<{
+      sessionId: string;
+      event: string;
+      settings: unknown;
+    }> = [];
+    const inactive = vi.fn(async () => ({ action: "continue" as const }));
+    registry.register({
+      id: pluginId,
+      source: "builtin",
+      status: "registered",
+      loadedRuntimes: new Map(),
+      manifests: [],
+      summary: {
+        id: pluginId,
+        name: pluginId,
+        description: "Hook-only package",
+        pluginType: "plugin",
+        runtimeCount: 0,
+      },
+      packageManifest: {
+        manifest: {
+          name: pluginId,
+          pluginId,
+          description: "Hook-only package",
+          userSettings: [
+            { key: "budget", type: "number", label: "Budget", default: 10 },
+          ],
+        },
+        promptTemplate: "",
+        rawFrontmatter: {},
+      },
+    });
+    for (const event of ["TurnStart", "PreStateCommit"] as const) {
+      hookPipeline.register({
+        id: `${pluginId}:${event}`,
+        event,
+        pluginId,
+        handler: async (ctx) => {
+          observed.push({
+            sessionId: ctx.sessionId,
+            event,
+            settings: ctx.getOwnSettings?.(),
+          });
+          return { action: "continue" };
+        },
+      });
+      hookPipeline.register({
+        id: `inactive:${event}`,
+        event,
+        pluginId: "inactive",
+        handler: inactive,
+      });
+    }
+    await store.updateSession(SESSION_ID, {
+      activePlugins: [RUNTIME_ID, pluginId],
+    });
+    const secondId = "sess-barrier-second";
+    const first = await store.getSession(SESSION_ID);
+    await store.createSession({
+      ...first!,
+      id: secondId,
+      metadata: {
+        ...first!.metadata,
+        approvalScopeNonce: crypto.randomUUID(),
+        sessionIncarnationNonce: crypto.randomUUID(),
+      },
+    });
+    await store.appendTurnMessage({
+      id: "prior-player-second",
+      sessionId: secondId,
+      turnId: "prior-turn-second",
+      sourceType: "player",
+      role: "user",
+      content: "prior turn",
+      order: 0,
+      createdAt: "2024-01-01T00:00:00Z",
+    });
+
+    const [firstTurn, secondTurn] = await Promise.all([
+      runTurn(),
+      runTurn(secondId, { [pluginId]: { budget: 4 } }),
+    ]);
+    expect(firstTurn.map((event) => event.type)).not.toContain(
+      "error.occurred",
+    );
+    expect(secondTurn.map((event) => event.type)).not.toContain(
+      "error.occurred",
+    );
+    expect(
+      observed.filter((entry) => entry.event === "TurnStart"),
+    ).toHaveLength(2);
+    expect(
+      observed.filter((entry) => entry.event === "PreStateCommit").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(inactive).not.toHaveBeenCalled();
+    for (const entry of observed) {
+      expect(entry.settings).toEqual({
+        budget: entry.sessionId === secondId ? 4 : 10,
+      });
+    }
+  });
 
   it("gates post-turn memory ingestion behind commit + snapshot (R-06/R-09)", async () => {
     const envelopes = await runTurn();

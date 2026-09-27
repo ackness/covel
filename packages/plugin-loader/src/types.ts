@@ -41,6 +41,8 @@ import type {
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
 
 export interface ParsedPluginMd {
+  /** Declaration source for diagnostics; absent in hand-built test fixtures. */
+  readonly sourcePath?: string;
   /** Validated manifest from YAML frontmatter. */
   readonly manifest: RuntimeManifest;
   /** Markdown body (un-interpolated prompt template). */
@@ -82,11 +84,6 @@ export interface PluginEntryDefinition {
   readonly pluginRoot: string;
   /** Plugin-root-relative entry module paths, deduplicated in declaration order. */
   readonly entryPaths: readonly string[];
-  /** Non-fatal parse issue for a metadata-only multi-runtime root manifest. */
-  readonly rootManifestIssue?: {
-    readonly path: string;
-    readonly message: string;
-  };
 }
 
 // ── Progressive loading results ──────────────────────────────────
@@ -117,6 +114,8 @@ export type PluginEntryStatus =
   "discovered" | "registered" | "active" | "disabled" | "error";
 
 export interface PluginRegistryEntry {
+  /** Root package declaration, independent of the executable runtime list. */
+  readonly packageManifest?: ParsedPluginMd;
   readonly id: string;
   readonly summary: PluginSummary;
   /** Absolute plugin root path, used by tooling that resolves plugin-relative assets. */

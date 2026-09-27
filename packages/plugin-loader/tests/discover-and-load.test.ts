@@ -1,12 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { pluginDeclarations } from "../src/declarations.js";
 import { discoverPlugins } from "../src/discover.js";
 import {
   loadPluginSummary,
   loadPluginManifest,
+  loadPluginDefinition,
+  loadPluginEntryDefinition,
   loadRuntime,
+  loadRuntimeUi,
 } from "../src/load.js";
 
 const MINIMAL_FRONTMATTER = `---
@@ -38,7 +42,76 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+describe("multi-runtime root diagnostics", () => {
+  it("loads a root-only entry/UI package with no runtime", async () => {
+    const rootPath = path.join(tmpDir, "test-plugin");
+    await fs.mkdir(rootPath);
+    await fs.writeFile(
+      path.join(rootPath, "PLUGIN.md"),
+      "---\nname: test-plugin\ndescription: Package\nentry: ./server.js\nui: {right: [./panel.json]}\n---\n",
+      "utf8",
+    );
+    const [discovery] = await discoverPlugins(tmpDir);
+    const definition = await loadPluginDefinition(discovery!);
+    expect(definition.manifests).toEqual([]);
+    expect(definition.packageManifest?.manifest.entry).toBe("./server.js");
+    expect(
+      (await loadPluginSummary(discovery!, undefined, definition)).runtimeCount,
+    ).toBe(0);
+    // Entry discovery consumes the snapshot, not current disk contents.
+    await fs.rm(path.join(rootPath, "PLUGIN.md"));
+    expect(
+      (
+        await loadPluginEntryDefinition(
+          discovery!,
+          pluginDeclarations(definition),
+        )
+      ).entryPaths,
+    ).toEqual(["./server.js"]);
+  });
+
+  it("loads package declarations and preserves root entry activation", async () => {
+    const rootPath = path.join(tmpDir, "test-plugin");
+    const runtimePath = path.join(rootPath, "runtimes", "panel");
+    await fs.mkdir(runtimePath, { recursive: true });
+    await fs.writeFile(
+      path.join(rootPath, "PLUGIN.md"),
+      makeFrontmatter({
+        stage: undefined,
+        entry: "./server/index.js",
+        ui: { right: ["./panel.json"] },
+        userSettings: [],
+        dataSchemas: {},
+      }).replace("stage: undefined\n", ""),
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(runtimePath, "PLUGIN.md"),
+      makeFrontmatter({ name: "test-plugin/panel" }),
+      "utf8",
+    );
+    const [discovery] = await discoverPlugins(tmpDir);
+    const loaded = await loadPluginDefinition(discovery!);
+    const manifests = loaded.manifests;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const definition = await loadPluginEntryDefinition(
+      discovery!,
+      pluginDeclarations(loaded),
+    );
+
+    expect(definition.entryPaths).toEqual(["./server/index.js"]);
+    expect(manifests.map(({ manifest }) => manifest.name)).toEqual([
+      "test-plugin/panel",
+    ]);
+    expect(warn).not.toHaveBeenCalled();
+    expect(loaded.packageManifest?.manifest.ui).toEqual({
+      right: ["./panel.json"],
+    });
+  });
 });
 
 // ── discoverPlugins ─────────────────────────────────────────────
@@ -269,15 +342,16 @@ describe("loadPluginSummary", () => {
         name: "summary-multi",
         description: "Multi summary",
         pluginType: "core-plugin",
-      }),
+        stage: undefined,
+      }).replace("stage: undefined\n", ""),
     );
     await fs.writeFile(
       path.join(pluginDir, "runtimes", "rt-a", "PLUGIN.md"),
-      makeFrontmatter({ name: "rt-a", description: "Runtime A" }),
+      makeFrontmatter({ name: "summary-multi/rt-a", description: "Runtime A" }),
     );
     await fs.writeFile(
       path.join(pluginDir, "runtimes", "rt-b", "PLUGIN.md"),
-      makeFrontmatter({ name: "rt-b", description: "Runtime B" }),
+      makeFrontmatter({ name: "summary-multi/rt-b", description: "Runtime B" }),
     );
 
     const [discovery] = await discoverPlugins(tmpDir);
@@ -294,7 +368,7 @@ describe("loadPluginSummary", () => {
 
 describe("loadPluginManifest", () => {
   it("returns array with 1 ParsedPluginMd for single-runtime", async () => {
-    const pluginDir = path.join(tmpDir, "manifest-single");
+    const pluginDir = path.join(tmpDir, "test-plugin");
     await fs.mkdir(pluginDir, { recursive: true });
     await fs.writeFile(path.join(pluginDir, "PLUGIN.md"), MINIMAL_FRONTMATTER);
 
@@ -316,11 +390,17 @@ describe("loadPluginManifest", () => {
     });
     await fs.writeFile(
       path.join(pluginDir, "runtimes", "rt-a", "PLUGIN.md"),
-      makeFrontmatter({ name: "rt-a", description: "Runtime A" }),
+      makeFrontmatter({
+        name: "manifest-multi/rt-a",
+        description: "Runtime A",
+      }),
     );
     await fs.writeFile(
       path.join(pluginDir, "runtimes", "rt-b", "PLUGIN.md"),
-      makeFrontmatter({ name: "rt-b", description: "Runtime B" }),
+      makeFrontmatter({
+        name: "manifest-multi/rt-b",
+        description: "Runtime B",
+      }),
     );
 
     const [discovery] = await discoverPlugins(tmpDir);
@@ -328,13 +408,64 @@ describe("loadPluginManifest", () => {
 
     expect(manifests).toHaveLength(2);
     const names = manifests.map((m) => m.manifest.name).sort();
-    expect(names).toEqual(["rt-a", "rt-b"]);
+    expect(names).toEqual(["manifest-multi/rt-a", "manifest-multi/rt-b"]);
   });
 });
 
 // ── loadRuntime ─────────────────────────────────────────────────
 
 describe("loadRuntime", () => {
+  it("loads logical runtime IDs from their discovered directory and rejects escaped source paths", async () => {
+    const rootPath = path.join(tmpDir, "probe");
+    const implementation = path.join(rootPath, "runtimes", "implementation");
+    await fs.mkdir(implementation, { recursive: true });
+    await fs.writeFile(
+      path.join(rootPath, "PLUGIN.md"),
+      "---\nname: probe\ndescription: Package\nuserSettings: [{key: limit, type: number, label: Limit, default: 3}]\n---\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(implementation, "PLUGIN.md"),
+      "---\nname: probe/logical\ndescription: Runtime\nruntimeType: function\nhandler: ./handler.mjs\ntrigger: {type: manual}\nui: {right: [./panel.json]}\n---\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(implementation, "handler.mjs"),
+      "export default async () => ({status: 'success'});",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(implementation, "panel.json"),
+      '{"id":"local-panel","view":{"component":"Text"}}',
+      "utf8",
+    );
+    const [discovery] = await discoverPlugins(tmpDir);
+    const definition = await loadPluginDefinition(discovery!);
+    const loaded = await loadRuntime(
+      discovery!,
+      "probe/logical",
+      undefined,
+      definition,
+    );
+    expect(loaded.handler).toBeTypeOf("function");
+    expect(loaded.manifest.userSettings?.[0]?.default).toBe(3);
+    expect(
+      (await loadRuntimeUi(discovery!, "probe/logical", undefined, definition))
+        .uiSpecs?.right?.[0]?.id,
+    ).toBe("local-panel");
+    expect((await loadRuntime(discovery!, "probe/logical")).handler).toBeTypeOf(
+      "function",
+    );
+    const outside = path.join(tmpDir, "outside.md");
+    await fs.writeFile(outside, "private", "utf8");
+    await expect(
+      loadRuntime(discovery!, "probe/logical", undefined, {
+        ...definition,
+        manifests: [{ ...definition.manifests[0]!, sourcePath: outside }],
+      }),
+    ).rejects.toThrow("path traversal rejected");
+  });
+
   it("rejects a function handler module whose default export is not a function", async () => {
     const pluginDir = path.join(tmpDir, "invalid-handler");
     await fs.mkdir(pluginDir, { recursive: true });

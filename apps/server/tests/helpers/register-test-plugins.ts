@@ -1,6 +1,6 @@
 import {
   discoverPluginsMulti,
-  loadPluginManifest,
+  loadPluginDefinition,
   loadPluginSummary,
   type PluginRegistry,
 } from "@covel/plugin-loader";
@@ -13,10 +13,9 @@ export async function registerTestPlugins(
 ): Promise<void> {
   const discoveries = await discoverPluginsMulti(pluginDirectories);
   for (const discovery of discoveries) {
-    const [summary, manifests] = await Promise.all([
-      loadPluginSummary(discovery),
-      loadPluginManifest(discovery),
-    ]);
+    const definition = await loadPluginDefinition(discovery);
+    const { packageManifest, manifests } = definition;
+    const summary = await loadPluginSummary(discovery, undefined, definition);
     registry.register({
       id: discovery.id,
       summary,
@@ -27,6 +26,7 @@ export async function registerTestPlugins(
           path.resolve(discovery.pluginMdPaths[index]!),
         ]),
       ),
+      packageManifest,
       manifest: manifests[0],
       manifests,
       loadedRuntimes: new Map(),

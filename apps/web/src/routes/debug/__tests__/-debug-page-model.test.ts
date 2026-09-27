@@ -42,11 +42,43 @@ function turn(turnId: string, events: api.TraceEvent[]): api.TurnTrace {
 }
 
 describe("debug route model", () => {
-  it("keeps route search params limited to a string sid", () => {
+  it("validates plugin diagnostics deep links", () => {
     expect(validateDebugSearch({ sid: "session-1" })).toEqual({
       sid: "session-1",
+      view: undefined,
+      pluginId: undefined,
     });
-    expect(validateDebugSearch({ sid: 42 })).toEqual({ sid: undefined });
+    expect(
+      validateDebugSearch({
+        sid: "session-2",
+        view: "plugins",
+        pluginId: "map",
+      }),
+    ).toEqual({ sid: "session-2", view: "plugins", pluginId: "map" });
+    expect(validateDebugSearch({ sid: "session-2", view: "data" })).toEqual({
+      sid: "session-2",
+      view: "data",
+      pluginId: undefined,
+    });
+    expect(validateDebugSearch({ sid: "session-2", view: "cost" })).toEqual({
+      sid: "session-2",
+      view: "cost",
+      pluginId: undefined,
+    });
+    expect(
+      validateDebugSearch({
+        sid: "session-2",
+        view: "traces",
+        pluginId: "map",
+      }),
+    ).toEqual({ sid: "session-2", view: "traces", pluginId: undefined });
+    expect(
+      validateDebugSearch({ sid: 42, view: "invalid", pluginId: "map" }),
+    ).toEqual({
+      sid: undefined,
+      view: undefined,
+      pluginId: undefined,
+    });
   });
 
   it("counts story turns while retaining manual invocation placement", () => {

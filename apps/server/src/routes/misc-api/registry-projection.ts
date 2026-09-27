@@ -1,15 +1,15 @@
 import path from "node:path";
-import type { ParsedPluginMd, PluginRegistryEntry } from "@covel/plugin-loader";
+import {
+  pluginRuntimeManifests,
+  type ParsedPluginMd,
+  type PluginRegistryEntry,
+} from "@covel/plugin-loader";
 
 /** Canonical manifest records published by bootstrap into the registry. */
 export function pluginManifestRecords(
   entry: PluginRegistryEntry,
 ): readonly ParsedPluginMd[] {
-  return entry.manifests && entry.manifests.length > 0
-    ? entry.manifests
-    : entry.manifest
-      ? [entry.manifest]
-      : [];
+  return pluginRuntimeManifests(entry);
 }
 
 /** Resolve a runtime directory without rediscovering or reparsing its plugin. */
@@ -17,6 +17,8 @@ export function pluginRuntimeDirectory(
   entry: PluginRegistryEntry,
   runtimeName: string,
 ): string | undefined {
+  if (entry.packageManifest?.manifest.name === runtimeName)
+    return entry.rootPath;
   if (entry.runtimeManifestPaths) {
     const documentPath = entry.runtimeManifestPaths[runtimeName];
     return documentPath ? path.dirname(documentPath) : undefined;

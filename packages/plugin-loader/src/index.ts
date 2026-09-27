@@ -7,10 +7,23 @@ export { discoverPlugins, discoverPluginsMulti } from "./discover.js";
 export {
   loadPluginSummary,
   loadPluginManifest,
+  loadPluginDefinition,
   loadPluginEntryDefinition,
   loadRuntime,
   loadRuntimeUi,
 } from "./load.js";
+export type { PluginDefinition } from "./load.js";
+export {
+  pluginDeclarations,
+  pluginRuntimeManifests,
+  resolvePluginDeclarations,
+  resolvePluginRuntimeManifest,
+  validatePluginDeclarations,
+} from "./declarations.js";
+export {
+  hasRuntimeDeclaration,
+  multiRuntimeRootDiagnostics,
+} from "./root-manifest-diagnostics.js";
 
 // ── Registry ─────────────────────────────────────────────────────
 export { normalizeRuntimeManifest, getRuntimeSpec } from "./normalize.js";

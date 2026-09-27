@@ -19,6 +19,21 @@
         "component": "Button",
         "props": {
           "label": {
+            "zh": "查看状态",
+            "en": "Show status"
+          }
+        },
+        "on": {
+          "click": {
+            "action": "invokeCommand",
+            "params": { "command": "probe", "args": {} }
+          }
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
             "zh": "写入记录",
             "en": "Write note"
           }

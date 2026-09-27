@@ -17,7 +17,10 @@ import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { isSetupRuntime, readRuntimeEnv } from "@covel/shared";
-import type { PluginRegistry } from "@covel/plugin-loader";
+import {
+  pluginRuntimeManifests,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import type { SessionRecord } from "@covel/store";
 import { SessionAlreadyExistsError } from "@covel/store/errors";
 import { runSessionStartHook, runWithHookScope } from "@covel/runtime";
@@ -97,12 +100,9 @@ function sessionHasSetupRuntime(
   for (const pluginId of pluginIds) {
     const entry = registry.get(pluginId);
     if (!entry) continue;
-    const manifests =
-      entry.manifests && entry.manifests.length > 0
-        ? entry.manifests.map((m) => m.manifest)
-        : entry.manifest
-          ? [entry.manifest.manifest]
-          : [];
+    const manifests = pluginRuntimeManifests(entry).map(
+      ({ manifest }) => manifest,
+    );
     for (const manifest of manifests) {
       if (isSetupRuntime(manifest)) return true;
     }

@@ -61,25 +61,13 @@ describe("mergePluginUserSettings", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("warns and keeps the first when two runtimes declare the key differently", () => {
-    // Arrange — diverging defaults for one stored value is an authoring bug.
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const manifests = [
-      runtime("tts/auto", [VOICE]),
-      runtime("tts/manual", [{ ...VOICE, default: "other_voice" }]),
-    ];
-
-    // Act
-    const merged = mergePluginUserSettings("tts", manifests);
-
-    // Assert
-    expect(merged).toHaveLength(1);
-    expect(merged[0].default).toBe("mimo_default");
-    expect(warn).toHaveBeenCalledTimes(1);
-    const message = String(warn.mock.calls[0][0]);
-    expect(message).toContain("plugin.tts.voice");
-    expect(message).toContain("tts/auto");
-    expect(message).toContain("tts/manual");
+  it("rejects different defaults for one plugin setting", () => {
+    expect(() =>
+      mergePluginUserSettings("tts", [
+        runtime("tts/auto", [VOICE]),
+        runtime("tts/manual", [{ ...VOICE, default: "other_voice" }]),
+      ]),
+    ).toThrow(/Conflicting userSettings.*tts\/auto.*tts\/manual/);
   });
 
   it("keeps distinct keys from different runtimes", () => {

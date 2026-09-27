@@ -1,5 +1,6 @@
 // ── Tool definition ──────────────────────────────────────────────
 export { tool, ToolValidationError } from "./tool.js";
+export { ToolRegistry, FRAMEWORK_TOOL_NAMES } from "./registry.js";
 export {
   getPendingProposals,
   getToolContent,
