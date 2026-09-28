@@ -349,12 +349,18 @@ describe("createBootstrapPluginEntries", () => {
   });
 
   it("bounds stalled rollback cleanup and retains its shutdown diagnostic", async () => {
+    const started = Promise.withResolvers<void>();
+    const globals = globalThis as typeof globalThis & {
+      __covelCleanupStarted?: () => void;
+    };
+    globals.__covelCleanupStarted = started.resolve;
     const plugin = writePlugin(
       "entry-stalled-cleanup",
       `
       export default async function(api) {
         api.onDispose(() => new Promise(() => {}));
         api.registerRpc("pending", async () => true);
+        globalThis.__covelCleanupStarted();
         await new Promise(() => {});
       }
     `,
@@ -365,10 +371,16 @@ describe("createBootstrapPluginEntries", () => {
       ...params,
       entryActivationTimeoutMs: 20,
     });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
-      const failure = await entries
+      const pendingFailure = entries
         .ensurePluginEntry("entry-stalled-cleanup", "slow")
         .catch((error: unknown) => error);
+      // The budget must expire after the fixture registers cleanup, not
+      // during a slow module import on a busy CI worker.
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(40);
+      const failure = await pendingFailure;
       expect(failure).toBeInstanceOf(AggregateError);
       expect((failure as AggregateError).errors).toEqual([
         expect.objectContaining({
@@ -385,6 +397,8 @@ describe("createBootstrapPluginEntries", () => {
       );
     } finally {
       await entries.close().catch(() => {});
+      vi.useRealTimers();
+      delete globals.__covelCleanupStarted;
     }
   });
 
