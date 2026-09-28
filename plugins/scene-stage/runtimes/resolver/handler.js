@@ -1,4 +1,5 @@
 import { withPendingProposals } from "@covel/tools";
+import { optionalString } from "@covel/plugin-handlers-utils";
 import { createHash } from "node:crypto";
 import {
   GENERATED_NS,
@@ -88,8 +89,10 @@ export default async function handler(ctx) {
     turnId: ctx.turnId,
   });
 
-  // A repeated scene.set for the same scene+variant is always a no-op,
-  // including while generation is pending. Background followers execute
+  // A repeated scene.set for the same scene+variant and source is a no-op,
+  // including while generation is pending. A source change (none -> pending
+  // after configuring an image slot, or pending -> none after removing it)
+  // must update the stage. Background followers execute
   // outside the cross-process session lock, so re-emitting here can enqueue
   // the same billed request on two pods before either one commits its cache.
   // Failed background jobs retain their triggerEvent and are retried through
@@ -98,7 +101,8 @@ export default async function handler(ctx) {
     previous &&
     typeof previous === "object" &&
     previous.sceneId === stage.sceneId &&
-    previous.variant === stage.variant;
+    previous.variant === stage.variant &&
+    previous.source === stage.source;
   if (isNoOp) {
     return {
       outcome: "success",
@@ -182,7 +186,9 @@ function isGenerationGateOpen(ctx, generatedRows) {
   const maxGenerated = resolveMaxGenerated(
     ctx.userSettings?.maxGeneratedScenes,
   );
-  return autoGenerate && generatedRows.length < maxGenerated;
+  if (!autoGenerate || generatedRows.length >= maxGenerated) return false;
+  const presetId = optionalString(ctx.userSettings?.modelPresetId) ?? "image";
+  return ctx.images ? ctx.images.isAvailable(presetId) : false;
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { LLMResponseFormat, LLMRequestDefaults } from "@covel/shared";
+import type { ImageGenerationTarget } from "@covel/shared/plugin-runtime";
 import type { ZodType } from "zod";
 import type {
   EvaluationParams,
@@ -24,7 +25,10 @@ import {
   handleTargetFailure,
   prepareTarget,
 } from "./gateway-fallback-chain.js";
-import { createGatewaySlotResolution } from "./gateway-slot-resolution.js";
+import {
+  createGatewaySlotResolution,
+  targetMetadata,
+} from "./gateway-slot-resolution.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
 import { DEFAULT_IMAGE_WIRE, getImageWire } from "./image/wire-registry.js";
@@ -625,13 +629,16 @@ export function createGateway(deps: GatewayDependencies) {
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
-  ): Promise<ImageGenerationResult & { model: string; provider: string }> {
+  ): Promise<
+    ImageGenerationResult & {
+      model: string;
+      provider: string;
+      target: ImageGenerationTarget;
+    }
+  > {
     return runOperation(
       {
-        // Default to the conventional "image" slot so an omitted presetId
-        // enters the named-slot → image-tag fallback chain instead of
-        // passing `undefined` through to the default (text) slot. Keeps
-        // the documented "defaults to image-tag resolution" contract true.
+        // The image role is an exact binding, independent of the text default.
         presetId: input.presetId ?? "image",
         mode: "image",
         fallbackTag: "image",
@@ -653,6 +660,13 @@ export function createGateway(deps: GatewayDependencies) {
               retriable: false,
             });
           }
+          const generationTarget: ImageGenerationTarget = {
+            provider: targetProvider(target),
+            model: targetModel(target),
+            protocol: target.preset?.protocol ?? resolved.protocol,
+            baseUrl: resolved.config.baseUrl ?? target.preset?.baseUrl,
+            metadata: structuredClone(targetMetadata(target)),
+          };
           const result = await wire.generate(
             configWithSignal(resolved.config, options),
             {
@@ -676,6 +690,7 @@ export function createGateway(deps: GatewayDependencies) {
           );
           return {
             ...result,
+            target: generationTarget,
             model: targetModel(target),
             provider: targetProvider(target),
           };

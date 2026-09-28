@@ -27,12 +27,14 @@ function makeCtx({
   existingGenerated = null,
   stage = null,
   images = {
+    isAvailable: vi.fn().mockReturnValue(true),
     generate: vi
       .fn()
       .mockResolvedValue({ refs: [makeRef()], warnings: [], cached: false }),
   },
   progress = undefined,
   signal = undefined,
+  userSettings = undefined,
 } = {}) {
   const get = vi.fn(async (namespace, key) => {
     if (namespace === "scenes" && key === "scene-registry") return registry;
@@ -57,6 +59,7 @@ function makeCtx({
     pluginData: { get, set: vi.fn(), list: vi.fn(), delete: vi.fn() },
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     images,
+    ...(userSettings ? { userSettings } : {}),
     ...(progress ? { progress } : {}),
     ...(signal ? { signal } : {}),
   };
@@ -85,6 +88,7 @@ describe("scene-stage background-gen handler", () => {
           "Visual novel background, an abandoned observatory at dusk, clean composition",
         size: "1536x1024",
         n: 1,
+        presetId: "image",
         metadata: {
           kind: "scene-background",
           sceneId: "gen-abcd1234",
@@ -127,6 +131,28 @@ describe("scene-stage background-gen handler", () => {
     );
   });
 
+  it("forwards a trimmed image slot override to the provider", async () => {
+    const ctx = makeCtx({
+      userSettings: { modelPresetId: "  illustration  " },
+    });
+
+    await handler(ctx);
+
+    expect(ctx.images.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ presetId: "illustration" }),
+    );
+  });
+
+  it("uses the default image slot when the override is blank", async () => {
+    const ctx = makeCtx({ userSettings: { modelPresetId: "  " } });
+
+    await handler(ctx);
+
+    expect(ctx.images.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ presetId: "image" }),
+    );
+  });
+
   it("2. night variant appends nightSuffix and preserves the existing day ref", async () => {
     const existingDay = makeRef("d");
     const ctx = makeCtx({
@@ -162,18 +188,67 @@ describe("scene-stage background-gen handler", () => {
     );
   });
 
-  it("4. returns a failed status and logs when ctx.images is unavailable, without throwing", async () => {
+  it("4. skips without a job when ctx.images is unavailable", async () => {
     // null (not undefined) so the makeCtx default parameter doesn't refill it.
     const ctx = makeCtx({ images: null });
 
     const result = await handler(ctx);
 
-    expect(result.outcome).toBe("failed");
-    expect(result.error).toMatch(/ctx\.images is unavailable/);
-    expect(ctx.logger.error).toHaveBeenCalledWith(
-      "scene-stage.background-gen.no-images-context",
-      expect.objectContaining({ sceneId: "gen-abcd1234" }),
+    expect(result).toEqual({
+      outcome: "skipped",
+      skipReason: "image model unavailable",
+    });
+    expect(ctx.logger.error).not.toHaveBeenCalled();
+    expect(ctx.pluginData.set).not.toHaveBeenCalled();
+  });
+
+  it("skips an unavailable selected slot before progress or generation", async () => {
+    const progress = { report: vi.fn() };
+    const ctx = makeCtx({
+      progress,
+      userSettings: { modelPresetId: "  illustration  " },
+      stage: {
+        sceneId: "gen-abcd1234",
+        variant: "day",
+        source: "pending",
+      },
+    });
+    ctx.images.isAvailable.mockReturnValue(false);
+
+    const result = await handler(ctx);
+
+    expect(result).toEqual({
+      outcome: "skipped",
+      skipReason: "image model unavailable",
+    });
+    expect(ctx.images.isAvailable).toHaveBeenCalledWith("illustration");
+    expect(ctx.images.generate).not.toHaveBeenCalled();
+    expect(progress.report).not.toHaveBeenCalled();
+    expect(ctx.pluginData.set).toHaveBeenCalledWith(
+      "stage",
+      "current",
+      expect.objectContaining({
+        sceneId: "gen-abcd1234",
+        variant: "day",
+        source: "none",
+        sourceLabel: { zh: "无背景", en: "No backdrop" },
+      }),
     );
+  });
+
+  it("does not clear a different current scene when a queued job loses its model", async () => {
+    const ctx = makeCtx({
+      stage: {
+        sceneId: "another-scene",
+        variant: "day",
+        source: "pending",
+      },
+    });
+    ctx.images.isAvailable.mockReturnValue(false);
+
+    const result = await handler(ctx);
+
+    expect(result.outcome).toBe("skipped");
     expect(ctx.pluginData.set).not.toHaveBeenCalled();
   });
 
@@ -227,10 +302,12 @@ describe("scene-stage background-gen handler", () => {
         resolved: null,
       },
     });
+    ctx.images.isAvailable.mockReturnValue(false);
 
     const result = await handler(ctx);
 
     expect(ctx.images.generate).not.toHaveBeenCalled();
+    expect(ctx.images.isAvailable).not.toHaveBeenCalled();
     expect(result.outcome).toBe("skipped");
     expect(ctx.pluginData.set).not.toHaveBeenCalledWith(
       "generated",
@@ -269,6 +346,7 @@ describe("scene-stage background-gen handler", () => {
   it("returns a failed status when the provider resolves with zero refs", async () => {
     const ctx = makeCtx({
       images: {
+        isAvailable: vi.fn().mockReturnValue(true),
         generate: vi
           .fn()
           .mockResolvedValue({ refs: [], warnings: [], cached: false }),
@@ -319,6 +397,7 @@ describe("scene-stage background-gen progress reporting", () => {
     const ctx = makeCtx({
       progress: { report },
       images: {
+        isAvailable: vi.fn().mockReturnValue(true),
         generate: vi.fn().mockRejectedValue(new Error("provider exploded")),
       },
     });

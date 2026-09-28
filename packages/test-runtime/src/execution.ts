@@ -247,8 +247,15 @@ export async function runDeferredFollower(args: {
     runtimeResults = [runtimeResult];
   }
 
+  const output = (runtimeResult.output ?? {}) as Record<string, unknown>;
+  // A handler's explicit skip is complete work. Framework gates do not carry
+  // this outcome and must retain their failure signal (e.g. missing upstreams).
   const failed =
-    runtimeResult.status === "failed" || runtimeResult.status === "skipped";
+    runtimeResult.status === "failed" ||
+    Boolean(runtimeResult.error) ||
+    (runtimeResult.status === "skipped" && output.outcome !== "skipped") ||
+    output.status === "failed" ||
+    (typeof output.error === "string" && output.error.length > 0);
   const status = failed ? "failed" : "done";
   const completedAt = new Date().toISOString();
   await store.setPluginData({

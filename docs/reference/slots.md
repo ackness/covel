@@ -49,11 +49,13 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 ## Slot 解析链
 
-1. **具名命中** — 请求指定 `presetId`（如 `ctx.images.generate({ presetId: "image" })`）时直接按名解析；`default` 自动别名到 llm.toml 里定义的第一个 slot。
-2. **Tag-aware fallback** — 具名未命中时，回落到第一个**同 tag** 的 slot（`gateway-slot-resolution.ts`）。**跨 tag fallback 被禁止**：image 请求永远不会静默路由到 text slot。
-3. **省略 presetId** — 媒体操作有约定默认名：`generateImage` → `"image"`、`synthesizeSpeech` → `"speech"`、`transcribeAudio` → `"transcription"`，保证进入同 tag fallback 链而不是落到默认 text slot。
-4. **Per-runtime 覆盖** — `sessions.runtime_model_overrides`（runtimeId → slot 名）先于 `manifest.model` 与 gateway 默认（`packages/runtime/src/agent-loop/agent-loop-policy.ts`；请求级 `modelOverride` 只对 `outputKind: story` 的 runtime 优先于它）。
-5. **Per-request 覆盖** — 前端经 `X-Slot-Config.slotBindings` 明确选择本地 `modelRef` 或服务端 `presetId`，并由 `X-Provider-Keys` 提供本次请求的连接密钥。两种模型身份可同名，临时配置不会替换服务端预设。
+1. **请求绑定** — `X-Slot-Config.slotBindings` 优先，区分本地 `modelRef` 与服务端 `presetId`；本地模型必须随请求声明。密钥经 `X-Provider-Keys` 提供，不写入插件或世界包。
+2. **具名命中** — 按 preset ID 或具名 slot 解析。图片调用要求精确命中且目标具有 image 输出能力；拼错名称、缺配置或选到文本模型均返回 `CONFIG_ERROR`，不调用服务商。
+3. **省略名称** — `generateImage` 与 `resolveSlot({ fallbackTag: "image" })` 都使用 `image`。不会自动挑选其它图像用途，也不会使用默认文本模型。语音与转写保留各自 `speech` / `transcription` 默认名及原有同 tag 解析。
+4. **非图片同 tag 回退** — 文本等既有调用具名未命中时可回落到同 tag slot；不跨 tag 回退。图片用途不适用此规则。
+5. **任务选择用途** — Agent 的 `runtimeModelOverrides` 优先于 `manifest.model`；function 图片任务由插件的 `modelPresetId` 设置选择用途。两者最终使用同一请求级模型绑定。
+
+场景补图、社区插画插件、世界素材与协议的关系见 [图像生成](image-generation.md)。
 
 模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：请求级 operational 覆盖 → `llm.toml` 手动字段 → 内置模型资料 → 版本化 LiteLLM 快照 → 协议默认。请求覆盖经 `X-Slot-Config.capabilityOverrides` 下发，只包含 input/output/features/contextWindow/maxOutputTokens；价格覆盖仅供客户端显示，绝不进入服务端信任边界。`self` 部署允许本机用户扩张能力；`demo` / `commercial` 只接受基础能力的非空子集，并对 token 上限取服务端值与请求值的较小者。每次请求只克隆 effective target，不修改全局 registry。每次 agent 调用在 `PreLLMCall` 之后通过 `LLMAdapter.resolveBudget(slot)` 读取实际用途的 `contextWindow`、`maxOutputTokens` 和用户请求的 `requestedMaxOutputTokens`，再预留输出并裁剪输入；上下文组装和 `PostContextAssembly` 不再提前按其他模型的窗口裁剪历史。story / plugin 各自使用实际目标的窗口，compactor 使用 `fast` 的当前配置；请求覆盖与 `llm.toml` 热更新都通过同一 adapter 解析。`createTurnContextBudget` 仅提供未知模型的 32,768 窗口回退值；显式 `COVEL_COMPACTOR_CONTEXT_WINDOW` 通过 `BudgetOptions.contextWindowLimit` 保留为部署上限，不能扩大模型自身能力。
 

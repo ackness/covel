@@ -5,17 +5,17 @@
 ## 运行时结构
 
 - `PLUGIN.md`：插件级元信息（名称/描述/关联），本身不是可执行 runtime——`runtimes/` 下才是实际发现、调度的四个 runtime。
-- `runtimes/resolver/PLUGIN.md` + `handler.js` + `ui/scene-stage-panel.json`：事件触发函数 runtime（消费 `scene.set`），场景匹配与舞台状态写入，声明右侧只读场景面板。
-- `runtimes/direction/PLUGIN.md` + `handler.js`：消费 `stage.direction`，持久化角色登退场、站位、焦点及视觉变体请求到 `direction/current`；动作流预览为退场与清场播放指定 transition，持久状态只保留仍在场角色。
-- `runtimes/background-gen/PLUGIN.md` + `handler.js`：后台函数 runtime，消费内部信令 `scene-stage.generate.requested`，调用 `ctx.images` 增量生成缺失的场景背景。
-- `runtimes/seed/PLUGIN.md` + `handler.js`：`stage: setup` 函数 runtime，开局把注册表第一个场景写入 `stage/current`，为"叙事整局不发 `scene.set`"兜底。
+- `runtimes/resolver/RUNTIME.md` + `handler.js` + `ui/scene-stage-panel.json`：事件触发函数 runtime（消费 `scene.set`），场景匹配与舞台状态写入，声明右侧只读场景面板。
+- `runtimes/direction/RUNTIME.md` + `handler.js`：消费 `stage.direction`，持久化角色登退场、站位、焦点及视觉变体请求到 `direction/current`；动作流预览为退场与清场播放指定 transition，持久状态只保留仍在场角色。
+- `runtimes/background-gen/RUNTIME.md` + `handler.js`：后台函数 runtime，消费内部信令 `scene-stage.generate.requested`，调用 `ctx.images` 增量生成缺失的场景背景。
+- `runtimes/seed/RUNTIME.md` + `handler.js`：`stage: setup` 函数 runtime，开局把注册表第一个场景写入 `stage/current`，为"叙事整局不发 `scene.set`"兜底。
 - `lib/stage-data.js`：三个 runtime 共享的 namespace/key 常量、`source`/变体文案映射，以及 `stage/current` 记录的唯一构造入口（`buildStageRecord` / `makeStageProposal`）。
 - `schemas/scene-set.event.json`：`scene.set` 载荷校验。
 - `schemas/stage-direction.event.json`：`stage.direction` 批量 cues 载荷校验。
 - `schemas/generate-requested.event.json`：`scene-stage.generate.requested` 载荷校验（内部信令，`advertise: false`，不进 `<available-events>` 目录）。
 - `schemas/scenes.schema.json`：`scenes` namespace 校验，对齐世界包导入的场景注册表形状（`schemaVersion` + `registryId` + `style` + `scenes[]`）。
 
-`events[].schema` 和 `dataSchemas.*.schema` 路径始终相对**插件根目录**解析（不管声明它们的 PLUGIN.md 放在哪个 runtime 下）；`handler` 和 `ui.*` 路径相对**各自 runtime 目录**解析——两个 runtime 的 `schemas/` 因此共享放在插件根，`ui/` 则跟着 `resolver` runtime 走。
+`events[].schema` 和 `dataSchemas.*.schema` 路径始终相对**插件根目录**解析；`handler` 和 `ui.*` 路径相对**各自 runtime 目录**解析——两个 runtime 的 `schemas/` 因此共享放在插件根，`ui/` 则跟着 `resolver` runtime 走。
 
 ## 数据与行为
 
@@ -30,10 +30,13 @@
 
 - `autoGenerateScenes`（默认 `true`）：场景未命中注册表时，是否自动请求背景生成。关闭后未命中场景的 `stage/current.source` 恒为 `"none"`，由消费方（舞台 UI）走世界头图/渐变等回退链。
 - `maxGeneratedScenes`（默认 `10`）：单会话内允许增量生成的场景数上限，达到后新场景同样回退到 `source: "none"`，即使门控开启。
+- `modelPresetId`（`slot`，默认 `image`）：自动补图调用 `ctx.images` 时选用的图像模型用途。默认配置对应 `llm.toml` 中的 `[covel.image]`；可在插件设置或开局准备的提供方 slot 中选择其他已配置的图像用途。
+
+场景背景由本插件内置的 `background-gen` 工作流生成，与社区插画插件的 `media.image-flow@1` 扩展相互独立。安装或启用插画插件不会自动配置场景背景的模型。需要补图但所选 `[covel.<slot>]` 不存在、模型不支持图像输出或服务商未注册时，解析器直接写入 `source: "none"`，不排队生成；已排队的任务若运行时发现模型不可用，也会跳过而不发起请求，并将仍处于 `pending` 的同场景背景改为 `none`，避免持续显示生成中。配置好图像用途后，再次发射同场景的 `scene.set` 即可请求补图。若模型已可用但生成仍失败，查看后台任务及 `scene-stage.background-gen.failed` 日志中的提供方报错。
 
 ## 已知边界
 
-- **门控中途从关切换到开，同场景同变体不会立即补图**：`stage/current` 的 no-op 防抖（`previous.sceneId` 与 `previous.variant` 都不变时直接跳过）在补图判断之前就早退了，所以如果 `autoGenerateScenes` 关闭期间某场景/变体已经写过一次 `stage/current`（未命中或缺变体），随后开启门控但叙事仍反复发同一场景/变体的 `scene.set`，不会补发生成请求——需要先切换地点或昼夜（打破 no-op 条件）才能让 resolver 重新评估门控。
+- **同场景的会话图缺失昼夜变体时，门控变化不会立即补图**：会话中已生成某一变体（例如白天）而另一变体缺失时，`stage/current.source` 保持 `"session"`。若首次请求缺失变体时自动生成未开启或图像模型不可用，之后开启门控但场景/昼夜不变，no-op 防抖仍会跳过；切换地点或昼夜后，resolver 会重新评估缺失变体。
 - ~~**生成期间会话锁被长时间持有**~~：**已解决**（2026-07-28）。deferred follower 的执行（含 60-300s 的图像生成）现在跑在会话锁**外**，只有提交阶段（`processTurnResults`：finalize 事务 + auto-snapshot）进锁，玩家因此只需等毫秒级的提交而不是整张图。`resolver` 对相同 scene/variant 的 `pending` 状态不再重复发生成事件，避免多 Pod 在首个任务提交前各自计费；同一进程内的 follower 仍由 `<sessionId>::<runtimeId>` 作业锁串行。提交前会在锁内重读一次会话状态，玩家中途暂停/结束会话时 follower 的写入会被丢弃而不是提交进去。
 - **`execution: background` 任务不跨进程重启恢复**：`background-gen` 由框架的 `_jobs` 挂起队列（`setImmediate` + `_jobs/<jobId>` pending 行）驱动，没有持久化的任务队列；服务进程在生成请求排队后、完成前重启，该请求就丢了。框架**不会**自动重跑——重跑要再计一次费，且请求级 `userSettings` 没有持久化在任务行上，重跑等于换参数重新扣费。现在服务重启后的开机扫描会按 owner 判定把这类孤儿任务立即标为 `failed`（`reason: "orphaned"`，并保留 `triggerEvent` 供显式重试），前端因此会弹出失败提示，不再是无声的永久转圈。但 `stage/current.source` 仍会停在 `"pending"`——那是插件自己的状态，框架不碰；直接重发相同 `scene.set` 会被幂等 no-op，玩家应从失败任务提示执行 retry，或先切换地点/昼夜再回来。
 

@@ -63,7 +63,7 @@ export function commitFailureMessage(outcome: TurnCommitOutcome): string {
 
 export interface FollowerRuntimeJobResult {
   readonly jobStatus: "done" | "failed";
-  readonly runtimeStatus: "success" | "failed";
+  readonly runtimeStatus: "success" | "failed" | "skipped";
   readonly durationMs: number;
   readonly error?: string;
   readonly output: unknown;
@@ -79,8 +79,13 @@ export function deriveFollowerRuntimeJobResult(args: {
     unknown
   >;
   const executorReportedFailure =
+    !args.followerResult ||
     args.followerResult?.status === "failed" ||
-    args.followerResult?.status === "skipped";
+    Boolean(args.followerResult?.error) ||
+    // Only the handler envelope marks an intentional no-op. Framework gates
+    // (dependency/setup/guard) must retain their failed-job signal.
+    (args.followerResult?.status === "skipped" &&
+      outputRecord.outcome !== "skipped");
   const handlerSaysFailed =
     outputRecord.status === "failed" ||
     (typeof outputRecord.error === "string" && outputRecord.error.length > 0);
@@ -92,13 +97,19 @@ export function deriveFollowerRuntimeJobResult(args: {
       ? outputRecord.error
       : !args.commit.committed
         ? commitFailureMessage(args.commit)
-        : isFailure
-          ? "runtime reported failure"
-          : undefined);
+        : !args.followerResult
+          ? "deferred follower produced no result"
+          : isFailure
+            ? "runtime reported failure"
+            : undefined);
 
   return {
     jobStatus: isFailure ? "failed" : "done",
-    runtimeStatus: isFailure ? "failed" : "success",
+    runtimeStatus: isFailure
+      ? "failed"
+      : args.followerResult?.status === "skipped"
+        ? "skipped"
+        : "success",
     durationMs: args.followerResult?.durationMs ?? args.turnDurationMs,
     ...(error ? { error } : {}),
     output: args.followerResult?.output ?? outputRecord,

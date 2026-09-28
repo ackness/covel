@@ -293,9 +293,22 @@ describe("runtime debug host integration", () => {
 
   // CLI cases include a fresh Node/tsx import graph. Keep the outer budget
   // above the child's 10-second hard limit, including setup on loaded CI hosts.
-  it.each(["skipped-follower", "missing-follower"])(
-    "fails cases and CLI when the job fails without a failed runtime (%s)",
-    async (mode) => {
+  it.each([
+    {
+      mode: "skipped-follower",
+      jobStatus: "done",
+      caseStatus: "passed",
+      exitCode: 0,
+    },
+    {
+      mode: "missing-follower",
+      jobStatus: "failed",
+      caseStatus: "failed",
+      exitCode: 1,
+    },
+  ])(
+    "reports $mode job and CLI outcomes",
+    async ({ mode, jobStatus, caseStatus, exitCode }) => {
       const { root, pluginRoot } = await pluginFixture();
       await runtimeFixture(
         pluginRoot,
@@ -337,7 +350,10 @@ describe("runtime debug host integration", () => {
       ).toBe(false);
       expect(
         cases.cases[0]?.result.jobs.some((job) => job.status === "failed"),
-      ).toBe(true);
+      ).toBe(jobStatus === "failed");
+      expect(cases.cases[0]?.result.jobs).toContainEqual(
+        expect.objectContaining({ status: jobStatus }),
+      );
       const cli = spawnSync(
         process.execPath,
         [
@@ -351,8 +367,8 @@ describe("runtime debug host integration", () => {
         ],
         { encoding: "utf8", timeout: 10_000 },
       );
-      expect(cli.status, cli.stderr).toBe(1);
-      expect(cases.cases[0]?.status).toBe("failed");
+      expect(cli.status, cli.stderr).toBe(exitCode);
+      expect(cases.cases[0]?.status).toBe(caseStatus);
     },
     15_000,
   );

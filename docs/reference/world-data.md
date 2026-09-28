@@ -510,6 +510,8 @@ preflight 要求对应 contract 的 schema 和接收声明已注册。`character
 
 ## Scene Backgrounds
 
+世界包的预制背景通过 `stage.scene-assets@1` / `stage.scenes@1` 导入，使用已有图片无需配置图像模型。启用 `scene-stage` 的自动补图后，缺图时才调用该插件 `modelPresetId` 指向的图像用途。安装社区插画插件不会替它选择模型，见[图像生成](image-generation.md)。
+
 场景背景（教室、社团楼、海堤这类地点插画，日/夜各一张）与立绘同一套图片管线，但清单结构不同：作者手编 `media/scenes.json`，脚本按清单批量生成 PNG、再由 `scripts/emit-scenes.mjs` 生成内容寻址的 `scenes.registry.json`。
 
 `media/scenes.json` 字段：

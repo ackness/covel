@@ -5,7 +5,7 @@ import {
   resolveLlmTokenLimits,
   type LLMProviderRequest,
 } from "@covel/shared";
-import { AiProviderError } from "./errors.js";
+import { AiProviderError, ModelConfigurationError } from "./errors.js";
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
@@ -27,6 +27,18 @@ import type {
   SlotOverridesInput,
   CapabilityOverridePolicy,
 } from "./types.js";
+
+/** Shared public configuration projection for lookup and dispatched image identity. */
+export function targetMetadata(
+  target: ResolvedTarget,
+): Record<string, unknown> {
+  return {
+    ...target.preset?.providerRequestMetadata,
+    ...(target.preset?.embeddingFormat !== undefined
+      ? { embeddingFormat: target.preset.embeddingFormat }
+      : {}),
+  };
+}
 
 export interface GatewaySlotResolutionDependencies {
   providerRegistry: {
@@ -127,8 +139,9 @@ export function createGatewaySlotResolution(
   /**
    * Resolve a slot name to its preset ID.
    *
-   * If the slot isn't configured, fall back to the first registered slot
-   * whose tag matches `fallbackTag`. This lets minimal configs (e.g. only
+   * Image roles require an exact binding and an image-capable target.
+   * Other missing slots fall back to the first registered slot whose tag
+   * matches `fallbackTag`. This lets minimal configs (e.g. only
    * a `story` slot defined) serve every plugin that asks for `plugin`,
    * `fast`, `balance`, etc. — the user gets a warning once per unknown
    * slot so they can add the missing entry when they care.
@@ -145,6 +158,62 @@ export function createGatewaySlotResolution(
     fallbackTag: string = "text",
     options?: GatewayOptions,
   ): string | undefined {
+    if (fallbackTag !== "image")
+      return resolvePresetId(presetId, fallbackTag, options);
+
+    const role = presetId ?? "image";
+    let resolvedId: string | undefined;
+    let target: ResolvedTarget;
+    try {
+      resolvedId = resolvePresetId(role, fallbackTag, options);
+      target = applyRequestCapabilityOverlay(
+        deps.presetRegistry.resolveTextTarget({ presetId: resolvedId }),
+        role,
+        options?.slotOverrides,
+        options?.capabilityOverridePolicy ?? "restrict-only",
+        true,
+      );
+    } catch (cause) {
+      if (
+        !(cause instanceof ModelConfigurationError) &&
+        !(cause instanceof AiProviderError && cause.code === "CONFIG_ERROR")
+      )
+        throw cause;
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: `Image model role "${role}" could not be resolved. Bind this role to an enabled image model in model settings or llm.toml.`,
+        provider: "unknown",
+        retriable: false,
+        cause,
+      });
+    }
+    const capability = target.preset?.capability;
+    const modes =
+      target.preset?.supportedModes ?? target.profile.supportedModes;
+    if (
+      protocolOutputModalities(target.preset?.protocol).includes(
+        "evaluation",
+      ) ||
+      !(capability
+        ? capability.output.includes("image")
+        : modes.includes("image"))
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: `Model "${targetModel(target)}" cannot generate images for role "${role}". Bind this role to an image-capable model.`,
+        provider: targetProvider(target),
+        model: targetModel(target),
+        retriable: false,
+      });
+    }
+    return resolvedId;
+  }
+
+  function resolvePresetId(
+    presetId: string | undefined,
+    fallbackTag: string,
+    options?: GatewayOptions,
+  ): string | undefined {
     if (!presetId) return presetId;
 
     const binding = options?.slotOverrides?.slotBindings?.[presetId];
@@ -154,6 +223,8 @@ export function createGatewaySlotResolution(
         options?.slotOverrides,
         (id) => deps.presetRegistry.hasPreset?.(id) ?? false,
       );
+      // The image path validates every resolution source in its caller.
+      if (fallbackTag === "image") return resolvedId;
       const target = applyRequestCapabilityOverlay(
         deps.presetRegistry.resolveTextTarget({ presetId: resolvedId }),
         presetId,
@@ -196,6 +267,9 @@ export function createGatewaySlotResolution(
 
     const direct = deps.slotRegistry.resolveSlot(presetId);
     if (direct) return direct;
+
+    // Image roles are explicit choices; another image slot is not a substitute.
+    if (fallbackTag === "image") return presetId;
 
     const candidates = deps.slotRegistry.listSlotsByTag(fallbackTag);
     if (candidates.length === 0) return presetId;
@@ -332,6 +406,7 @@ export function createGatewaySlotResolution(
     const cleanup = applySlotOverlay(deps, options?.slotOverrides);
     try {
       const tag = options?.fallbackTag ?? "text";
+      if (tag === "image") presetId ??= "image";
       const effectivePresetId = resolveSlotOrPassthrough(
         presetId,
         tag,
@@ -385,12 +460,7 @@ export function createGatewaySlotResolution(
       // per-slot hints) under a single `metadata` bag the plugin owns.
       // This is the contract that lets new plugin formats declare bespoke
       // slot fields without framework changes.
-      const metadata: Record<string, unknown> = {
-        ...presetMeta,
-        ...(target.preset?.embeddingFormat !== undefined
-          ? { embeddingFormat: target.preset.embeddingFormat }
-          : {}),
-      };
+      const metadata = targetMetadata(target);
 
       return {
         // Overlay registrations use internal scoped ids — surface the
@@ -413,6 +483,19 @@ export function createGatewaySlotResolution(
         metadata,
         ...(parameterOverrides ? { parameterOverrides } : {}),
       };
+    } catch (cause) {
+      if (
+        options?.fallbackTag !== "image" ||
+        !(cause instanceof ModelConfigurationError)
+      )
+        throw cause;
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: `Image model role "${presetId ?? "image"}" has unavailable provider configuration. Configure its provider and protocol in model settings or llm.toml.`,
+        provider: "unknown",
+        retriable: false,
+        cause,
+      });
     } finally {
       cleanup();
     }

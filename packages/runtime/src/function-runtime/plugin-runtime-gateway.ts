@@ -17,6 +17,7 @@
 import type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
+  ImageGenerationTarget,
   PluginEvaluationInput,
   EvaluationQuestions,
   EvaluationResult,
@@ -121,6 +122,7 @@ export interface FullGatewayLike {
     },
     options?: FullGatewayOptions,
   ): Promise<{
+    target: ImageGenerationTarget;
     images: ReadonlyArray<
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
       | { kind: "url"; url: string; mime: string }
@@ -357,7 +359,11 @@ export function createPluginRuntimeGateway(
           ...(input.signal ? { signal: input.signal } : {}),
         },
       );
-      return { images: result.images, warnings: result.warnings };
+      return {
+        target: result.target,
+        images: result.images,
+        warnings: result.warnings,
+      };
     };
   }
 

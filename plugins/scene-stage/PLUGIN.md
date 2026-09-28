@@ -12,7 +12,6 @@ tags:
   - "cost:function"
   - "ui:right-panel"
 provides:
-  - image-generation@1
   - stage-direction@1
   - scene-stage@1
 entry: ./server/index.js
@@ -90,6 +89,15 @@ contributes:
           the registry and the auto-generate gate allows it.
       advertise: false
   settings:
+    - key: modelPresetId
+      type: slot
+      default: image
+      label:
+        zh: 场景背景图像用途
+        en: Scene background image slot
+      description:
+        zh: 选择用于自动生成场景背景的图像模型用途，对应 llm.toml 中的 [covel.<用途名>]。
+        en: Selects the image model slot used for generated scene backgrounds, configured under [covel.<slot>] in llm.toml.
     - key: autoGenerateScenes
       type: toggle
       default: true

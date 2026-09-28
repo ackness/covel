@@ -24,6 +24,7 @@
 | Prompt structure             | [`prompt-structure.md`](prompt-structure.md)               | `packages/context/src/`, `packages/runtime/src/turn-executor/turn-runtime-execution.ts`, `packages/runtime/src/turn-executor/session-context.ts`    |
 | Theme packages               | [`theme-packages.md`](theme-packages.md)                   | `apps/web/src/lib/theme-*.ts`, `packages/settings/src/`                                                                                             |
 | Store transactions           | [`transactions.md`](transactions.md)                       | `packages/store/src/`                                                                                                                               |
+| Image generation             | [`image-generation.md`](image-generation.md)               | `plugins/scene-stage/`, `packages/runtime/src/function-runtime/runtime-images-context.ts`, `packages/ai-provider/src/gateway.ts`                    |
 | Media store                  | [`media-store.md`](media-store.md)                         | `packages/store/src/media-store.ts`, `packages/store/src/media-store/`                                                                              |
 | Storage architecture         | [`../architecture/storage.md`](../architecture/storage.md) | `packages/store/src/`, `apps/web/src/services/storage/`, desktop path helpers                                                                       |
 

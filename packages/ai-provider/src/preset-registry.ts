@@ -1,4 +1,5 @@
 import type { ModelProfile, PresetConfig, ResolvedTarget } from "./types.js";
+import { ModelConfigurationError } from "./errors.js";
 
 /** Fallback context window size when synthesizing a profile from a preset. */
 const SYNTHETIC_CONTEXT_WINDOW = 64_000;
@@ -63,10 +64,14 @@ export function createPresetRegistry(options: {
 
     const preset = presets.get(presetId) ?? null;
     if (!preset) {
-      throw new Error(`Preset registry: preset "${presetId}" not found.`);
+      throw new ModelConfigurationError(
+        `Preset registry: preset "${presetId}" not found.`,
+      );
     }
     if (!preset.enabled) {
-      throw new Error(`Preset registry: preset "${presetId}" is disabled.`);
+      throw new ModelConfigurationError(
+        `Preset registry: preset "${presetId}" is disabled.`,
+      );
     }
     return preset;
   }
@@ -101,14 +106,16 @@ export function createPresetRegistry(options: {
       preset?.tier;
 
     if (!targetProfileId) {
-      throw new Error("Preset registry: no text profile target resolved.");
+      throw new ModelConfigurationError(
+        "Preset registry: no text profile target resolved.",
+      );
     }
 
     const baseProfile = profiles.get(targetProfileId);
 
     // If no profile exists but we have a preset, synthesize a profile from it
     if (!baseProfile && !preset) {
-      throw new Error(
+      throw new ModelConfigurationError(
         `Preset registry: profile "${targetProfileId}" not found.`,
       );
     }
@@ -152,17 +159,17 @@ export function createPresetRegistry(options: {
     if (input?.presetId) {
       const preset = presets.get(input.presetId);
       if (!preset) {
-        throw new Error(
+        throw new ModelConfigurationError(
           `Preset registry: preset "${input.presetId}" not found.`,
         );
       }
       if (!preset.enabled) {
-        throw new Error(
+        throw new ModelConfigurationError(
           `Preset registry: preset "${input.presetId}" is disabled.`,
         );
       }
       if (!preset.supportedModes.includes("embed")) {
-        throw new Error(
+        throw new ModelConfigurationError(
           `Preset registry: preset "${input.presetId}" does not support embedding.`,
         );
       }
@@ -190,7 +197,7 @@ export function createPresetRegistry(options: {
       ) ?? null;
 
     if (!profile && !preset) {
-      throw new Error(
+      throw new ModelConfigurationError(
         'Preset registry: no embedding target configured. Add an embed slot to llm.toml (output = ["embedding"]) or register an "embed-default" profile programmatically.',
       );
     }

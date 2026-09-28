@@ -18,7 +18,7 @@ provides:
   - narrative-engine@1
 requires:
   - scene-cast@1
-  - image-generation@1
+  - scene-stage@1
   - scene-prompts@1
   - character-blueprint@1
   - character-presence@1

@@ -140,6 +140,35 @@ async function getJobRow(
 }
 
 describe("test-runtime execution helpers", () => {
+  it("keeps dependency-gated follower skips failed", async () => {
+    const store = await createSessionStore();
+    const runtimeManifest = manifest({ needs: ["plugin/upstream"] });
+    const handler = vi.fn(async () => ({ outcome: "success" as const }));
+    const loadedCache = new Map([
+      [RUNTIME_ID, loadedRuntime(handler, runtimeManifest)],
+    ]);
+    const job = await runDeferredFollower({
+      follower: {
+        runtimeId: RUNTIME_ID,
+        pluginId: PLUGIN_ID,
+        triggerEvent: { topic: "test.ready", data: {} },
+      },
+      sessionId: SESSION_ID,
+      locale: "zh-CN",
+      manifests: [runtimeManifest],
+      deps: executionDeps(store, loadedCache),
+    });
+    expect(job.status).toBe("failed");
+    expect(job.result).toMatchObject({
+      status: "skipped",
+      output: { skippedBy: "framework:needs" },
+    });
+    expect(handler).not.toHaveBeenCalled();
+    expect((await getJobRow(store, job.jobId)).value).toMatchObject({
+      status: "failed",
+    });
+  });
+
   it("revokes a timed-out follower and discards its early and late writes", async () => {
     vi.useFakeTimers();
     const started = deferred<void>();
@@ -305,7 +334,11 @@ describe("test-runtime execution helpers", () => {
         deps: executionDeps(store, loadedCache),
       });
       expect(job.result.status).toBe(outcome);
-      expect(job.status).toBe(outcome === "skipped" ? "failed" : "done");
+      expect(job.status).toBe("done");
+      expect((await getJobRow(store, job.jobId)).value).toMatchObject({
+        status: "done",
+        runtimeResults: [{ status: outcome }],
+      });
       expect(
         await store.listPluginData(SESSION_ID, PLUGIN_ID, "notes"),
       ).toEqual([]);

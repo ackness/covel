@@ -395,6 +395,13 @@ export interface PluginServiceGateway {
     background?: "transparent" | "opaque";
     signal?: AbortSignal;
   }): Promise<{
+    target: {
+      readonly provider: string;
+      readonly model: string;
+      readonly protocol: string;
+      readonly baseUrl?: string;
+      readonly metadata: Readonly<Record<string, unknown>>;
+    };
     images: ReadonlyArray<
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
       | { kind: "url"; url: string; mime: string }

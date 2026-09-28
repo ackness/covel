@@ -22,6 +22,7 @@ export type {
   MediaContext,
   ImageGenerateInput,
   ImageGenerateOutput,
+  ImageGenerationTarget,
   ImagesContext,
   SpeechGenerateInput,
   SpeechGenerateOutput,

@@ -255,7 +255,10 @@ export async function executeFunctionRuntime({
   const imagesHandle =
     tracedGateway?.generateImage && deps.mediaStore && mediaHandle
       ? createRuntimeImagesContext(
-          { generateImage: tracedGateway.generateImage.bind(tracedGateway) },
+          {
+            generateImage: tracedGateway.generateImage.bind(tracedGateway),
+            resolveSlot: tracedGateway.resolveSlot.bind(tracedGateway),
+          },
           deps.mediaStore,
           mediaHandle,
           { sessionId: input.sessionId, pluginId: manifest.pluginId },

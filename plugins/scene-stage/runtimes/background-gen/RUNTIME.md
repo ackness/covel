@@ -10,11 +10,9 @@ schedule:
   manual:
     execution: background
 io:
-  output:
-    contract: image-generation@1
   visibility: plugin
 function:
   handler: ./handler.js
 ---
 
-Background-gen calls the framework image pipeline (`ctx.images`) to render a scene background from the registry's shared `style` block plus the scene's `visualHint`. Runs off the turn's critical path; day variants generate first, night variants lazily on first request.
+Background-gen calls the framework image pipeline (`ctx.images`) using the `modelPresetId` image slot (default `image`) to render a scene background from the registry's shared `style` block plus the scene's `visualHint`. This built-in scene asset workflow does not depend on a community illustration plugin or the `media.image-flow@1` extension. Runs off the turn's critical path; day variants generate first, night variants lazily on first request. The resolver does not enqueue work when the selected image slot is unavailable; already queued work also skips before progress or generation if that slot becomes unavailable and clears a matching pending stage. Configure an image-capable `[covel.<slot>]` in `llm.toml` and send `scene.set` again to request a missing background. For failures after generation starts, inspect the background-generation job and provider error.

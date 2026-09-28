@@ -17,7 +17,7 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 ## Highlights
 
-- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Install an image-generation plugin from the [plugin directory](https://github.com/covel-ai/covel-plugins) to generate new backdrops during play.
+- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Configure an image model for Scene Stage to generate missing backdrops during play. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](docs/reference/image-generation.md).
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
 - 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
 - 🧩 **Plugins stay replaceable** — the kernel discovers `capabilities` and `outputKind`; framework code does not branch on concrete plugin IDs.
