@@ -37,3 +37,30 @@ contracts:
 ---
 
 Memory extraction runs as a detached post-turn function with a before-next-execution barrier. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.
+
+## Quality Characteristics
+
+**Extraction Reliability**: Memory extraction is **not guaranteed to be lossless**. The LLM may:
+
+- Miss important facts mentioned briefly in narrative
+- Misinterpret ambiguous phrasing
+- Prioritize recent events over older but significant details
+- Produce inconsistent extractions across similar contexts
+
+**Configuration Sensitivity**: The current default timeout (30s) and retry settings have **not been empirically validated** across diverse model speeds, narrative complexity, or session lengths. Deployments may need to tune these values based on:
+
+- Model choice (faster models like DeepSeek vs slower models like GPT-4)
+- Average turn length and narrative density
+- Acceptable latency budget for post-turn processing
+
+**Recall Accuracy**: Retrieved blocks reflect the quality of extraction. If a fact was not extracted or was extracted incorrectly, recall will not surface it. Consider combining with:
+
+- Explicit player note-taking mechanisms
+- Full-text search over raw narrative history for critical fact verification
+- Periodic manual review of extracted blocks
+
+**Best Practices**:
+
+- Monitor extraction failures and timeout rates in production
+- Validate memory accuracy during long sessions (>50 turns)
+- Use structured character/world updates for critical game state that must persist reliably

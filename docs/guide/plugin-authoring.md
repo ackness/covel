@@ -56,6 +56,8 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 跨插件调用使用版本化契约，例如 `narrative-engine@1`。根 `requires` 驱动会话依赖解析，`io.inputs` 绑定执行结果，`schedule.needs` 控制运行条件。普通契约可以有多个提供者；用 `cardinality: one/all` 指定输入要求，用显式 `conflicts` 或单提供者扩展点表达互斥。
 
+**跨包依赖边界**：`needs`、`after` 和 `io.inputs` 的跨包引用必须使用版本化契约（如 `narrative-engine@1`），不允许直接引用其他插件的 runtime 名称（如 `other-plugin/some-runtime`）。包内多个 runtime 之间可以使用 runtime 名称建立排序和输入关系，但跨包必须通过公开契约解耦。违反此规则的 manifest 加载时会被拒绝。
+
 ## 数据归属
 
 角色和角色 schema 读取 `ctx.world`，角色写入通过 proposals。不要把角色复制到本插件的 `characters` namespace，也不要扫描其他插件私有 schema。

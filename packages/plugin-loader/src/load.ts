@@ -312,6 +312,9 @@ export async function loadPluginDefinition(
             : [],
       ),
     ];
+    // Cross-package named runtime references are rejected by design (see 08-implementation-reconciliation.md §8.1).
+    // Within-package references (pluginId/runtimeName) are permitted for internal coordination.
+    // Cross-package dependencies must use the contract system for stable, versioned coupling.
     for (const { runtimeId, field } of runtimeReferences) {
       if (runtimeId !== plugin.id && !runtimeId.startsWith(`${plugin.id}/`))
         throw new Error(

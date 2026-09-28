@@ -258,6 +258,10 @@ function buildPromptSegmentsCommon(
       content: segment.content,
       order: segment.order ?? 0,
     }));
+  // volatility filters stable vs. turn-scoped extensions for cache boundary optimization.
+  // Currently only applies to system-position segments (see 08-implementation-reconciliation.md §8.1).
+  // Other positions (pre-history, post-history, depth) do not yet respect volatility—
+  // extending it requires confirming no cache-key drift from turn-local segments landing in the stable zone.
   return {
     stableExtensions: systemSegments
       .filter((segment) => segment.volatility !== "turn")

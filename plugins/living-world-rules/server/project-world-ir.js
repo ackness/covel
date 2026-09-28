@@ -51,6 +51,11 @@ function projectCoordinate(value) {
 /**
  * Project plugin-neutral WorldIR statements into living-world-rules records.
  * Unknown attributes stay in the IR and are intentionally ignored here.
+ *
+ * This worldProjections handler is retained by design (see 08-implementation-reconciliation.md §8.1):
+ * WorldIR hooks provide a declarative import surface that separates world authoring from plugin
+ * data schemas. While most runtime logic has migrated to extensions, this projection layer
+ * remains as an intentional design choice for world-data interop.
  */
 export default function projectWorldIR({ value }) {
   const rules = value.statements

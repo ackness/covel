@@ -85,6 +85,28 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 契约 ID 形如 `narrative-engine@1`。`runtime.io.output.contract` 必须由本包 `provides` 声明，同包不允许两个 runtime 产出同一契约。跨包可以有多个普通提供者，消费者使用 `cardinality: one` 或 `all` 表达选择要求。单提供者扩展点及显式 `conflicts` 另外执行互斥检查。`conflicts` 只允许插件契约；引用内核扩展点或 UI 槽位会得到 `invalid-conflict` 和 `conflicts` 字段位置，内核点的组合由 mode 决定。
 
+### 契约版本策略
+
+当前插件扩展契约处于**开发期**（v0.x）。开发期内：
+
+- 框架可在次版本变更中修改契约结构、字段语义和校验规则
+- 不提供跨版本兼容读取或双写迁移
+- 旧会话快照和排队作业需要重建
+- 变更记录在 CHANGELOG 和相关 PR 的迁移说明中
+
+稳定版（@1）发布后：
+
+- 破坏性变更将使用新的契约 ID（例如 `@2`）
+- 消费者按需声明支持的版本范围
+- 框架提供版本协商和迁移路径
+- 旧版本契约将保持至少一个大版本的兼容期
+
+外部插件作者应：
+
+- 在开发期保持契约依赖的灵活性，预期结构可能变化
+- 稳定后明确声明支持的契约版本
+- 跟踪框架的 CHANGELOG 和迁移指南
+
 | `contributes` 字段 | 对应注册或资源                                   |
 | ------------------ | ------------------------------------------------ |
 | `tools`            | `registerTool` 的工具名                          |
@@ -119,6 +141,8 @@ entry 注册与清单双向校验，未声明的注册和未实现的声明都�
 Function runtime 必须声明 `function.handler`，模块必须默认导出函数，不能同时配置 `agent`。Agent runtime 不能配置 `function`。
 
 `schedule.needs`、`schedule.after` 与 `io.inputs.*.from.runtime` 中的 runtime ID 只能属于本包（完整 `<pluginId>/<runtimeId>` 或单 runtime 的包 ID），裸字符串依赖也受此限制。跨包引用必须使用公开的版本化 contract；纯 `after` 不会自动激活提供者。
+
+**跨包 runtime 引用边界**：包内 runtime 引用（`needs/after/inputs`）是合理的实现排序和数据流，允许包内使用具体 runtime ID。跨包依赖必须通过契约（`from.contract`）实现，确保提供者可替换，消费者无需修改。加载器对跨包 runtime 引用执行严格校验并拒绝加载。
 
 runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 必须在根 `requires` 或 `optional` 中声明，加载器对内联和子 runtime 同样校验。包内其他 runtime 提供的契约也需声明，可列入 `optional`，无需激活其他插件；`schedule.after` 只排序，`from.kernel` 是内核输入，两者不产生包激活依赖。
 
