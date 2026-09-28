@@ -127,6 +127,53 @@ describe("createWorld", () => {
     if (tmp) await rm(tmp, { recursive: true, force: true });
   });
 
+  it("propagates caller cancellation on the final generation attempt", async () => {
+    const controller = new AbortController();
+    const reason = new Error("caller canceled final attempt");
+    let calls = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        calls++;
+        if (calls === 3) controller.abort(reason);
+        throw new Error("provider request failed");
+      },
+    };
+
+    await expect(
+      createWorld({
+        llm,
+        concept: "Synthetic world",
+        outputDir: tmp,
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(calls).toBe(3);
+    expect(await readdir(tmp)).toEqual([]);
+  });
+
+  it("continues retrying attempt timeouts when the caller has not canceled", async () => {
+    let calls = 0;
+    const llm: LLMAdapter = {
+      async generate({ signal }) {
+        calls++;
+        return new Promise<LLMResponse>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      },
+    };
+
+    const result = await createWorld({
+      llm,
+      concept: "Synthetic world",
+      outputDir: tmp,
+      attemptTimeoutMs: 5,
+    });
+    expect(result.success).toBe(false);
+    expect(calls).toBe(3);
+  });
+
   it("preserves an existing package and admits only one concurrent creator", async () => {
     const options = {
       llm: new FixedLlm(

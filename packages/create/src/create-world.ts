@@ -112,6 +112,7 @@ export async function createWorld(
         signal: attemptSignal,
       });
     } catch (err) {
+      options.signal?.throwIfAborted();
       const msg = err instanceof Error ? err.message : String(err);
       log(options, "error", `LLM generate() threw: ${msg}`);
       lastErrors = [`LLM error: ${msg}`];
@@ -319,6 +320,7 @@ export async function createWorld(
           `targeted WORLD.md repair succeeded in ${Date.now() - repairStart}ms`,
         );
       } catch (err) {
+        options.signal?.throwIfAborted();
         const msg = err instanceof Error ? err.message : String(err);
         const repairError = `WORLD.md targeted repair LLM error: ${msg}`;
         lastErrors = [...loreMetaErrors, repairError];

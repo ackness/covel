@@ -57,6 +57,13 @@ runtime:
 
 Manual function runtime for saving a session world rule into the Covel lorebook.
 
+WorldIR `type: rule` statements project to rule ids of the form
+`world-ir-<sha256(statement.id)>`. The original id remains in
+`sourceStatementId`, so Unicode and long WorldIR ids are importable while
+projected rules satisfy the rule id constraint. The projection changes the
+imported rule key for existing WorldIR content; recreate affected development
+plugin data when adopting this contract.
+
 ## Manual payload
 
 ```json

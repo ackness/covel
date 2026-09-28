@@ -115,6 +115,41 @@ describe("createWorld WORLD.md repair", () => {
     ).resolves.toContain("id: repair-world");
   });
 
+  it("propagates caller cancellation during targeted lore repair", async () => {
+    const controller = new AbortController();
+    const reason = new Error("caller canceled targeted repair");
+    let calls = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        calls++;
+        if (calls === 1) {
+          return {
+            content: fullPackage(META_LORE),
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        }
+        controller.abort(reason);
+        throw new Error("repair provider failed");
+      },
+    };
+
+    await expect(
+      createWorld({
+        llm,
+        concept: "修复世界",
+        outputDir,
+        signal: controller.signal,
+        attemptTimeoutMs: 5_000,
+      }),
+    ).rejects.toBe(reason);
+    expect(calls).toBe(2);
+    await expect(
+      readFile(path.join(outputDir, "repair-world", "WORLD.md")),
+    ).rejects.toThrow();
+  });
+
   it("keeps concurrent template sources isolated through repair and retry", async () => {
     await Promise.all(
       ["first", "second"].map(async (owner) => {

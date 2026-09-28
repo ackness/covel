@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const RULE_KINDS = new Set(["constant", "triggered", "evolving"]);
 const RULE_CATEGORIES = new Set([
   "character",
@@ -72,7 +74,8 @@ export default function projectWorldIR({ value }) {
 
       return {
         schemaVersion: 1,
-        id: statement.id,
+        id: `world-ir-${createHash("sha256").update(statement.id).digest("hex")}`,
+        sourceStatementId: statement.id,
         content: statement.content,
         ...(title !== undefined ? { title } : {}),
         ...(kind !== undefined ? { kind } : {}),

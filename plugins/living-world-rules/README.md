@@ -16,6 +16,7 @@
 - 发出 `lorebook.upsert` proposal，让规则影响后续提示词。
 - 通过 rule coordinate 控制规则进入提示词的位置。
 - WorldIR projection 只负责生成并校验 plugin-data；需要同时创建 lorebook 的 world 包应使用 `schema: contract:world.rules@1`、`to: contract:world.rules@1+lorebook` 导入。projection output effects 会在后续独立扩展，不在纯转换 handler 中隐式执行。
+- WorldIR `type: rule` 的导入键统一为 `world-ir-<sha256(statement.id)>`，原始 ID 保存在 `sourceStatementId`。这允许 Unicode 和超长 statement ID 通过规则 ID 校验；使用旧投影键的开发数据需重新导入。
 
 ## 开发
 

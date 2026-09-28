@@ -123,12 +123,8 @@ export function extractImagePrompt(
   return readPromptPayload(ctx.manualPayload, extraFields);
 }
 
-function imageRecordKey(
-  imageId: string,
-  refs: readonly unknown[],
-  idx: number,
-): string {
-  return refs.length === 1 ? imageId : `${imageId}-${idx + 1}`;
+function imageRecordKey(imageId: string, idx: number): string {
+  return idx === 0 ? imageId : `${imageId}-${idx + 1}`;
 }
 
 function errorMessage(err: unknown): string {
@@ -253,10 +249,10 @@ export async function runImageGeneration(
 
     const completedAt = new Date().toISOString();
     const imageRecords = refs.map((ref, idx) => ({
-      key: imageRecordKey(imageId, refs, idx),
+      key: imageRecordKey(imageId, idx),
       value: {
         ...baseRecord,
-        imageId: imageRecordKey(imageId, refs, idx),
+        imageId: imageRecordKey(imageId, idx),
         batchId: imageId,
         imageIndex: idx,
         imageCount: refs.length,

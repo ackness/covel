@@ -308,6 +308,8 @@ schema 引用从已注册插件根 `contracts.<id>.schema` 解析，文件位于
 
 ## WorldIR 与插件投影
 
+`living-world-rules` 将每个源 statement ID 投影为 `world-ir-` 加其 UTF-8 SHA-256 十六进制摘要，并在 `sourceStatementId` 保留原始 ID。这样中文、带标点和长 ID 都满足目标规则的 ASCII/长度约束，源 ID 变化也会产生不同键。所有 WorldIR 规则使用同一映射；旧键的开发期导入数据需要重建后重新导入，手工规则 ID 不受影响。
+
 `contract:world-ir@1` 引用 `world-ir` 插件发布的中立中间表示 schema。它让 world 作者或上游抽取器只维护一份世界事实，再由各插件把相同输入转换成自己的 `contributes.data` 记录。v1 envelope 顶层和每类记录都拒绝未知字段；插件专用扩展只能放在 `attributes` 中：
 
 ```yaml

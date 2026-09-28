@@ -39,6 +39,37 @@ function makeContext() {
 }
 
 describe("runImageGeneration model availability", () => {
+  it.each([1, 2, 3])(
+    "settles the pending gallery entry when the provider returns %s images",
+    async (count) => {
+      const { ctx, available, generate, set } = makeContext();
+      available.mockReturnValue(true);
+      generate.mockResolvedValue({
+        refs: Array.from({ length: count }, (_, index) => ({
+          id: `media-${index}`,
+          mime: "image/png",
+          size: 4,
+        })),
+        warnings: [],
+        cached: false,
+      });
+      const result = await runImageGeneration(ctx, config);
+      const rows = new Map<string, unknown>();
+      for (const [, key, value] of set.mock.calls) rows.set(key, value);
+      for (const entry of result.effects?.pluginData ?? [])
+        rows.set(entry.key, entry.value);
+      expect(rows.size).toBe(count);
+      expect([...rows.values()]).toEqual(
+        Array.from({ length: count }, () =>
+          expect.objectContaining({ status: "done" }),
+        ),
+      );
+      expect(rows.get(result.value?.imageId as string)).toMatchObject({
+        imageIndex: 0,
+        status: "done",
+      });
+    },
+  );
   it("skips repeated missing-model attempts without gallery writes, then generates when configured", async () => {
     const { ctx, available, generate, set } = makeContext();
 

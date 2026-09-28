@@ -26,6 +26,7 @@
           "maxLength": 128,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
         },
+        "sourceStatementId": { "type": "string", "minLength": 1 },
         "title": { "type": "string" },
         "content": { "type": "string", "minLength": 1 },
         "kind": { "enum": ["constant", "triggered", "evolving"] },
