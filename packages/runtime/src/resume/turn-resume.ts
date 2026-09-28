@@ -15,6 +15,7 @@ import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
+import { createAgentSchemaGate } from "../agent-loop/runtime-output-validator.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
 import { completionContractError } from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
@@ -327,6 +328,14 @@ async function executeResumedRuntime(
     failedToolCalls,
     pendingProposals,
     emittedEvents,
+    schemaGate: createAgentSchemaGate({
+      manifest,
+      input,
+      runId,
+      startTime,
+      collectedToolCalls,
+      outputSchema: loaded.outputSchema,
+    }),
   });
   if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
     return finalizeWithPostRuntime({
@@ -350,7 +359,6 @@ async function executeResumedRuntime(
     });
   }
   if (finalized.kind === "short-circuit") {
-    // Unreachable: resume passes no schemaGate. Defensive only.
     return finalizeWithPostRuntime(finalized.result);
   }
   const output = finalized.output;

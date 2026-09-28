@@ -642,6 +642,14 @@ export async function executeFunctionRuntime({
         ? "success"
         : handlerOutcome.outcome,
     output: runtimeOutput,
+    ...(handlerOutcome.outcome === "success"
+      ? {
+          canonicalValue:
+            handlerOutcome.value === undefined
+              ? {}
+              : { value: structuredClone(handlerOutcome.value) },
+        }
+      : {}),
     toolCalls: runtimeTools.records,
     durationMs: Date.now() - startTime,
     ...(envelopeSchemaError
@@ -657,7 +665,10 @@ export async function executeFunctionRuntime({
     manifest,
     input,
     rawResult,
-    { outputContractSchema: loaded.outputContractSchema },
+    {
+      outputContractSchema: loaded.outputContractSchema,
+      outputSchema: loaded.outputSchema,
+    },
   );
 
   // Flush execution-buffered domain writes onto the result output so

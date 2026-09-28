@@ -10,9 +10,8 @@
  * The transform:
  *   1. Build the envelope from finalContent (parsed) or the last presentable /
  *      structured tool output, or fail when only failed tool calls remain.
- *   2. (optional) Run a schema gate between build and decoration — the main
- *      path uses it for prose-failure + schema-validation checks; resume skips
- *      it. A gate hit short-circuits finalize.
+ *   2. Run the shared schema gate between build and decoration when a private
+ *      output schema is declared. A gate hit short-circuits finalize.
  *   3. Decorate: attach interactions, sanitize story narrative, attach buffered
  *      proposals.
  */
@@ -50,7 +49,7 @@ export interface FinalizeAgentOutputParams {
    * Optional schema gate, invoked after a preferred tool output or final text
    * has been converted into the output envelope. Returning a failed
    * RuntimeResult short-circuits finalize; the caller is responsible for any
-   * telemetry + PostRuntime wrapping. Resume passes none.
+   * telemetry + PostRuntime wrapping.
    */
   readonly schemaGate?: (args: {
     readonly output: Record<string, unknown>;

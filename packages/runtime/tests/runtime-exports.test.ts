@@ -345,3 +345,36 @@ describe("agent export segment", () => {
     expect(JSON.parse(match![1]!)).toEqual(exportSlots);
   });
 });
+
+it("withholds invalid canonical values without growing an existing export revision", async () => {
+  const store = createMemoryStore();
+  const publish = (value: unknown) =>
+    publishExecutionExports({
+      sink: store,
+      sessionId: "canonical",
+      results: [
+        {
+          status: "success",
+          runtimeId: "p/main",
+          runId: "run",
+          output: { value },
+          canonicalValue: { value: value as import("@covel/shared").JsonValue },
+        },
+      ],
+      declFor: () => ({
+        recordAs: "number",
+        pluginId: "p",
+        pluginVersion: "1",
+      }),
+      loadOutputSchema: async () => ({ type: "number" }),
+      committedAt: "2026-01-01T00:00:00Z",
+    });
+  await publish(7);
+  await publish("invalid");
+  const latest = await store.getLatestRuntimeExport(
+    "canonical",
+    "p/main",
+    "number",
+  );
+  expect(latest).toMatchObject({ value: 7, revision: 1 });
+});

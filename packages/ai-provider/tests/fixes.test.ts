@@ -304,7 +304,7 @@ describe("providerRequestMetadata cannot override critical fields", () => {
           start(controller) {
             controller.enqueue(
               new TextEncoder().encode(
-                'data: {"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}\n\n' +
+                'data: {"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}\n\n' +
                   "data: [DONE]\n\n",
               ),
             );

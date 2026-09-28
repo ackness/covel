@@ -137,8 +137,7 @@ export interface CallLLMWithRetryParams {
   readonly provider?: string;
   /**
    * Player/turn-level abort. Non-retriable: fires
-   * {@link TurnAbortedError} immediately — including out of the streaming
-   * salvage path, so a player abort never commits partial content.
+   * {@link TurnAbortedError} immediately — including after an adapter returns, so a player abort never commits content.
    */
   readonly abortSignal?: AbortSignal;
 }
@@ -258,6 +257,10 @@ export async function callLLMWithRetry(
           ? { onProviderRequest: trace.onProviderRequest }
           : {}),
       });
+      throwIfTurnAborted(params.abortSignal);
+      if (response.finishReason === "error") {
+        throw new Error("PROVIDER_ERROR: model generation ended with an error");
+      }
       await trace.ensureCalling();
       await emitLlmRespondedSuccess(params.emitter, {
         runtimeId: params.runtimeId,
@@ -402,7 +405,8 @@ export async function streamLLMWithRetry(
     let streamedReasoningContent = "";
     let providerContinuation: LLMProviderContinuation | undefined;
     let streamedUsage = { inputTokens: 0, outputTokens: 0 };
-    let streamFinishReason: "stop" | "tool_calls" | "length" | "error" = "stop";
+    let streamFinishReason:
+      "stop" | "tool_calls" | "length" | "error" | undefined;
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
     const forwardDeltas = attempt === 0; // avoid duplicate text on retry
     const streamStart = Date.now();
@@ -432,7 +436,7 @@ export async function streamLLMWithRetry(
           : {}),
       })) {
         if (event.type === "text-delta") {
-          firstTokenSeen = true;
+          if (event.textDelta.length > 0) firstTokenSeen = true;
           streamedContent += event.textDelta;
           if (event.textDelta.length > 0) {
             await trace.ensureCalling();
@@ -453,6 +457,9 @@ export async function streamLLMWithRetry(
           await trace.ensureCalling();
           streamFinishReason = event.finishReason as
             "stop" | "tool_calls" | "length" | "error";
+          if (streamFinishReason === "error") {
+            throw new Error("PROVIDER_ERROR: model stream ended with an error");
+          }
           if (event.reasoningContent)
             streamedReasoningContent = event.reasoningContent;
           if (event.usage) streamedUsage = event.usage;
@@ -461,6 +468,12 @@ export async function streamLLMWithRetry(
         }
       }
 
+      throwIfTurnAborted(params.abortSignal);
+      if (streamFinishReason === undefined) {
+        throw new Error(
+          "PROVIDER_ERROR: model stream ended without a terminal event",
+        );
+      }
       clearTimeout(callTimeoutHandle);
       clearTimeout(ttfbHandle);
       params.abortSignal?.removeEventListener("abort", onExternalAbort);
@@ -510,28 +523,16 @@ export async function streamLLMWithRetry(
         streaming: true,
       });
 
-      // Player abort is non-retriable AND must bypass the salvage path
-      // below — salvaged partial narrative would otherwise be committed.
+      // Partial output must never become a successful response or be spliced
+      // into a retry. Empty transient failures retain the normal retry policy.
       throwIfTurnAborted(params.abortSignal);
-
-      // Salvage path: stream died mid-flight but we already received useful
-      // content. Always prefer salvaging over retry — perturbation on a
-      // retry would duplicate the partial text to the user, and partial
-      // content is signal a provider-level retry cannot reproduce.
-      if (streamedContent.length > 0 || streamedToolCalls.length > 0) {
-        return {
-          response: {
-            content: streamedContent || null,
-            toolCalls: streamedToolCalls,
-            finishReason: "error",
-            usage: streamedUsage,
-            ...(providerContinuation ? { providerContinuation } : {}),
-            ...(streamedReasoningContent
-              ? { reasoningContent: streamedReasoningContent }
-              : {}),
-          },
-          attempt,
-        };
+      if (firstTokenSeen) {
+        throw new LLMRetryError({
+          reason: lastReason,
+          attempts: attempt + 1,
+          cause: err,
+          hasPartialOutput: true,
+        });
       }
 
       if (attempt >= policy.maxRetries) {

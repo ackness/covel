@@ -104,6 +104,8 @@ function collectEventsFrom(
   result: RuntimeResult,
   sink: Map<string, Record<string, unknown>>,
 ): void {
+  // Domain events belong only to successful producers, including at later depths.
+  if (result.status !== "success") return;
   const output = result.output as Record<string, unknown> | null | undefined;
   const events = output?.events as Array<Record<string, unknown>> | undefined;
   if (!events) return;

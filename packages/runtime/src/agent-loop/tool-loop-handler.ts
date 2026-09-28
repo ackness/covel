@@ -36,6 +36,7 @@ import type {
 import {
   combineAbortSignals,
   getTurnExecutionSignal,
+  throwIfTurnExecutionAborted,
 } from "../turn-executor/turn-control.js";
 
 export interface RequestLLMResponseOptions {
@@ -134,7 +135,7 @@ async function requestStreaming(
   // Streaming path: helper enforces per-attempt call-timeout + first-token
   // (TTFB) guard, retries on transient failures, and forwards text deltas to
   // the caller on the first attempt. If streaming exhausts its retries with a
-  // transient failure, fall back to a single non-stream call.
+  // failure before producing output, fall back to a non-stream call.
   try {
     const streamed = await streamLLMWithRetry({
       ...callParams,
@@ -142,7 +143,11 @@ async function requestStreaming(
     });
     response = streamed.response;
   } catch (streamError) {
-    if (streamError instanceof LLMRetryError && Date.now() < deadline) {
+    if (
+      streamError instanceof LLMRetryError &&
+      !streamError.hasPartialOutput &&
+      Date.now() < deadline
+    ) {
       console.warn(
         `[stream-recovery] ${manifest.name} streaming exhausted (reason=${streamError.reason}); falling back to non-stream generate()`,
       );
@@ -289,6 +294,13 @@ async function malformedToolArgsFallback(args: {
         ),
       ),
     });
+    throwIfTurnExecutionAborted(
+      deps.turnControl,
+      "malformed tool arguments fallback",
+    );
+    if (response.finishReason === "error") {
+      throw new Error("PROVIDER_ERROR: model generation ended with an error");
+    }
     await ensureCalling();
   } catch (fallbackErr) {
     // Pair every `llm.calling` with an `llm.responded` on the error path so

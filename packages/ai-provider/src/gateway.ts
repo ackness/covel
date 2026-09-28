@@ -357,7 +357,7 @@ export function createGateway(deps: GatewayDependencies) {
           targetModel(target),
           options?.traceId,
         );
-        let finalUsage: UsageSummary | null = null;
+        let completion: Extract<StreamEvent, { type: "done" }> | undefined;
 
         for await (const event of resolved.adapter.streamText(
           configWithSignal(resolved.config, options, {
@@ -386,8 +386,30 @@ export function createGateway(deps: GatewayDependencies) {
           ) {
             emittedDelta = true;
           }
-          if (event.type === "done") finalUsage = event.usage;
+          if (event.type === "done") {
+            if (event.finishReason === "error") {
+              throw new AiProviderError({
+                code: "PROVIDER_ERROR",
+                message: "Provider stream reported an error finish reason",
+                provider,
+                model: targetModel(target),
+                retriable: true,
+              });
+            }
+            completion = event;
+            continue;
+          }
           yield event;
+        }
+
+        if (!completion) {
+          throw new AiProviderError({
+            code: "PROVIDER_ERROR",
+            message: "Provider stream ended without a done event",
+            provider,
+            model: targetModel(target),
+            retriable: true,
+          });
         }
 
         await notifySuccess(
@@ -396,10 +418,11 @@ export function createGateway(deps: GatewayDependencies) {
           resolved.protocol,
           "stream",
           targetModel(target),
-          finalUsage,
+          completion.usage,
           Date.now() - startTime,
           options?.traceId,
         );
+        yield completion;
         return;
       } catch (error) {
         // Once a delta has been emitted we can no longer retry on another
@@ -424,6 +447,8 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       values: string[];
+      /** Reject configuration drift before sending vectors to a locked index. */
+      expectedModelId?: string;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
@@ -442,9 +467,25 @@ export function createGateway(deps: GatewayDependencies) {
         presetId: input.presetId,
         mode: "embed",
         fallbackTag: "embedding",
-        resolveTargets: (presetId) => [
-          deps.presetRegistry.resolveEmbeddingTarget({ presetId }),
-        ],
+        resolveTargets: (presetId) => {
+          const target = deps.presetRegistry.resolveEmbeddingTarget({
+            presetId,
+          });
+          const modelId = `${target.profile.provider}/${target.profile.model}`;
+          if (
+            input.expectedModelId !== undefined &&
+            input.expectedModelId !== modelId
+          ) {
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: `Embedding model changed: expected ${input.expectedModelId}, resolved ${modelId}`,
+              provider: target.profile.provider,
+              model: target.profile.model,
+              retriable: false,
+            });
+          }
+          return [target];
+        },
         // Embed routes differently from the text path: via the preset (which
         // carries baseUrl/protocol) when available, else via the embed
         // profile's bare provider name — the provider registry fills in

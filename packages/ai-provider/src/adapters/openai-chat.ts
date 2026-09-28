@@ -3,6 +3,10 @@ import {
   defaultToolChoice,
 } from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
+import {
+  assertStreamPayload,
+  assertStreamCompleted,
+} from "./stream-completion.js";
 import type { UsageSummary } from "../types.js";
 import {
   postJson,
@@ -308,6 +312,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
+      let completed = false;
       let reasoningAcc = "";
       // Accumulate tool_call deltas by index across chunks.
       const toolCallAcc = new Map<
@@ -316,6 +321,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
+        assertStreamPayload(payload, "openai-chat");
         const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
         if (reasoningDelta) {
           reasoningAcc += reasoningDelta;
@@ -347,8 +353,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         }
 
         const reason = readOpenAiChatStreamFinishReason(payload);
-        if (reason) finishReason = reason;
+        if (reason) {
+          finishReason = reason;
+          completed = true;
+        }
       }
+
+      assertStreamCompleted(completed, "openai-chat");
 
       // Emit accumulated tool calls before done.
       if (toolCallAcc.size > 0) {

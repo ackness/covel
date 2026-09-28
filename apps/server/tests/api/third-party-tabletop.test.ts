@@ -232,9 +232,11 @@ describe("tabletop package installed as a third-party ZIP", () => {
       path.join(providerDir, "RUNTIME.md"),
       "---\ntype: function\ndescription: Schema provider\nfunction:\n  handler: ./handler.js\n  tools:\n    plugin: [set-schema]\nschedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: world-data-provider@1}\n---\n",
     );
+    // The public output contract has an explicit empty business value; the
+    // character schema itself is committed through the tool's domain proposal.
     await writeFile(
       path.join(providerDir, "handler.js"),
-      `export default async function (ctx) { await ctx.tools.call("set-schema", {}); return {outcome: "success", completion: "done"}; }`,
+      `export default async function (ctx) { await ctx.tools.call("set-schema", {}); return {outcome: "success", value: {}, completion: "done"}; }`,
     );
     await writeFile(
       path.join(root, "builtin/core-fixture/entry.mjs"),

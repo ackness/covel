@@ -73,6 +73,7 @@ export async function finalizeRuntimeResult(
     readonly lastTarget?: LLMTargetIdentity;
     readonly deltaCount?: number;
     readonly outputContractSchema?: Readonly<Record<string, unknown>>;
+    readonly outputSchema?: Readonly<Record<string, unknown>>;
   } = {},
 ): Promise<RuntimeResult> {
   result = withAgentFailureTarget(result, options.lastTarget);
@@ -110,6 +111,30 @@ export async function finalizeRuntimeResult(
     if (error)
       finalized = { ...finalized, status: "failed", output: null, error };
   }
+  if (
+    finalized.status === "success" &&
+    finalized.canonicalValue?.value !== undefined &&
+    options.outputSchema
+  ) {
+    let error: string | undefined;
+    try {
+      const validation = validateOutput(
+        finalized.canonicalValue.value,
+        options.outputSchema,
+      );
+      if (!validation.valid)
+        error = (validation.errors ?? []).slice(0, 5).join("; ");
+    } catch {
+      error = "schema could not be compiled or output could not be validated";
+    }
+    if (error !== undefined)
+      finalized = {
+        ...finalized,
+        status: "failed",
+        output: null,
+        error: `output-schema-invalid: ${error}`,
+      };
+  }
   const guardProvided =
     finalized.status === "skipped" &&
     finalized.output !== null &&
@@ -129,9 +154,19 @@ export async function finalizeRuntimeResult(
         : (await deps.loadRuntime?.(manifest, input.locale, input.sessionId))
             ?.outputContractSchema;
       const validation = schema
-        ? validateOutput(finalized.output, schema)
+        ? validateOutput(
+            finalized.canonicalValue
+              ? finalized.canonicalValue.value
+              : finalized.output,
+            schema,
+          )
         : undefined;
-      if (validation && !validation.valid)
+      if (
+        finalized.canonicalValue &&
+        finalized.canonicalValue.value === undefined
+      ) {
+        contractError = "canonical value unavailable after output rewrite";
+      } else if (validation && !validation.valid)
         contractError = (validation.errors ?? []).slice(0, 5).join("; ");
     } catch {
       // Loading and compiling a third-party schema can fail. Finalization has

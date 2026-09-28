@@ -149,6 +149,7 @@ describe("normalized provider reasoning", () => {
       },
       { type: "content_block_stop", index: 2 },
       { type: "message_delta", delta: { stop_reason: "tool_use" } },
+      { type: "message_stop" },
     ]);
     const adapter = createAnthropicMessagesAdapter();
     const events = await Array.fromAsync(

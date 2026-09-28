@@ -60,6 +60,8 @@ export interface RuntimeResult {
   readonly turnId: string;
   readonly status: RuntimeStatus;
   readonly output: Readonly<Record<string, unknown>> | null;
+  /** Function business value, separate from materialized domain effects. */
+  readonly canonicalValue?: { readonly value?: JsonValue };
   readonly toolCalls: readonly ToolCallRecord[];
   readonly durationMs: number;
   readonly tokenUsage?: TokenUsage;

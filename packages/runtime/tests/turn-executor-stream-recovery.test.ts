@@ -2,7 +2,7 @@
  * Stream fallback in TurnExecutor.
  *
  * When the streaming LLM call throws mid-stream, the runtime either:
- *  - salvages accumulated content (and marks finishReason='error'), or
+ *  - fails after partial output without replacing it via generate(), or
  *  - falls back to a single non-stream generate() call, or
  *  - (if both fail) surfaces a failed RuntimeResult via the outer catch.
  */
@@ -14,6 +14,7 @@ import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type {
@@ -135,7 +136,7 @@ describe("TurnExecutor stream recovery", () => {
     warnSpy.mockRestore();
   });
 
-  it("stream throws after yielding content: salvages accumulated text and marks error finishReason", async () => {
+  it("stream throws after yielding content: fails without fallback or narrative commit", async () => {
     const llm = new PartialStreamThenThrowLLM();
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
@@ -148,17 +149,28 @@ describe("TurnExecutor stream recovery", () => {
 
     const result = await executeTurn(makeTurnInput(), [noToolManifest], deps);
 
-    // Turn completes without throwing.
     expect(result.runtimeResults).toHaveLength(1);
     const rr = result.runtimeResults[0]!;
-    expect(rr.status).toBe("success");
-
-    // Accumulated streamed content survives.
-    const output = rr.output as Record<string, unknown>;
-    expect(output.narrativeOutput).toBe("Hello world");
-
-    // Fallback generate() is NOT called when we have partial content.
+    expect(rr.status).toBe("failed");
+    expect(rr.error).toContain("upstream reset");
     expect(llm.generate).not.toHaveBeenCalled();
+    const commit = await finalizeExecution({
+      store: deps.store!,
+      sessionId: "sess-1",
+      executionContext: result.executionContext,
+      runtimes: [noToolManifest],
+      results: result.runtimeResults,
+      turnIds: [result.turnId],
+    });
+    expect(commit.status).toBe("failed");
+    expect(
+      commit.events.some((event) => event.type === "narrative.completed"),
+    ).toBe(false);
+    expect(
+      (await deps.store!.listMessages("sess-1")).some(
+        (message) => message.role === "assistant",
+      ),
+    ).toBe(false);
   });
 
   it("stream throws with no content: falls back to generate() exactly once", async () => {

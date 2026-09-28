@@ -20,6 +20,7 @@
  * timeout, session-scope filtering) is untouched — see `./pipeline.ts`.
  */
 
+import { isDeepStrictEqual } from "node:util";
 import type { EventBus } from "@covel/events";
 import type {
   InputSlot,
@@ -293,8 +294,17 @@ export async function runPostRuntimeHook(
           resumeSchema: result.output.resumeSchema,
         }
       : undefined;
+  // An output-only rewrite cannot silently publish the handler's old business
+  // value. Hooks may explicitly replace canonicalValue; finalization validates it.
+  const canonicalValue = result.canonicalValue
+    ? !isDeepStrictEqual(replaced.output, result.output) &&
+      isDeepStrictEqual(replaced.canonicalValue, result.canonicalValue)
+      ? {}
+      : (replaced.canonicalValue ?? {})
+    : undefined;
   return {
     ...replaced,
+    canonicalValue,
     ...(result.status === "suspended"
       ? {
           status: "suspended" as const,

@@ -177,6 +177,10 @@ io:
 
 内核在 runtime 最终输出边界校验已发布的契约，失败结果不能提交领域 effects 或写入 `recordAs`。同轮输入在应用 `select` 前再次校验完整输出；`scope: committed` 输入读取冻结的完整 export 后同样校验公共契约，即使没有显式 `accepts`。消费者的 `accepts` 可另加限制，不能关闭公共契约校验。契约发生变化时应重建受影响的开发期会话数据和历史 exports。
 
+Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`；运行时用 `canonicalValue` 单独保存它，`output` 保留供领域提交使用的物化 effects envelope。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。Agent 的契约值仍为最终 `output`。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
+
+`PostRuntime` 若改变 function 的 `output`，应同时明确提供匹配的 `canonicalValue`，新值会重新接受私有和公共 schema 校验。仅改写 `output` 会撤销业务值，停止 export 与下游值绑定；有公共输出契约时还会因缺失契约值而失败。失败 runtime 的输出事件不触发后继 runtime。普通执行与 resume 共用 agent 输出 schema gate。上述契约变化需要重建旧 function 执行结果、exports 和相关开发期快照。
+
 `ctx.playerMessage` 保持当前输入文本字符串。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
 
 内核输入 `turn-digest@1` 冻结同一份 lastPlayerInput 快照及 `runtimeResults`。后者包含已经观察到的终态 `{runtimeId, status}`，status 为 `success/failed/skipped/suspended`；没有把尚未结束的 runtime 预测为成功。detached worker 消费源执行快照，不重新查询最新表单或回合状态。此输入契约更新后，旧作业与快照需要重建，不做兼容读取。

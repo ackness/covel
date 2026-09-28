@@ -1204,3 +1204,5 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 payload 为 `{entries:[{id,keys,content,strategy,position?,insertionOrder?,enabled?,extra?}]}`。`strategy` 为 `constant` 或 `selective`。owner 由提案来源固定为 `{kind:"plugin",pluginId}`；插件不能声明 world/player owner 或覆盖其他插件的词条。
 
 持久身份为 `(sessionId, owner, id)`。世界导入写 world owner，玩家管理 API 写 player owner；相同 id 在不同 owner 下独立存在。更新自身词条保留 createdAt。
+
+`withPendingProposals()` 与 `withEmittedEvents()` 可以按任意顺序组合，支持普通对象、冻结对象和标量内容。显式 execution envelope 保留同一 `content` 及两个副作用通道；再次设置同一通道会替换该通道。消费者使用 `getToolContent()`、`getPendingProposals()`、`getEmittedEvents()` 读取，不依赖属性是否可枚举。

@@ -537,7 +537,7 @@ describe("streamLLMWithRetry", () => {
     expect(result.response.usage).toEqual({ inputTokens: 42, outputTokens: 7 });
   });
 
-  it("salvages partial content when the stream throws mid-flight", async () => {
+  it("rejects partial content without retrying when the stream throws mid-flight", async () => {
     const llm = createScriptedStreamLLM([
       {
         events: [{ type: "text-delta", textDelta: "partial" }],
@@ -546,15 +546,15 @@ describe("streamLLMWithRetry", () => {
     ]);
     const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000 });
 
-    const result = await streamLLMWithRetry({
-      llm,
-      messages: baseMessages,
-      policy,
-      deadline: Date.now() + 10_000,
-    });
-
-    expect(result.response.content).toBe("partial");
-    expect(result.response.finishReason).toBe("error");
+    await expect(
+      streamLLMWithRetry({
+        llm,
+        messages: baseMessages,
+        policy,
+        deadline: Date.now() + 10_000,
+      }),
+    ).rejects.toThrow("upstream reset");
+    expect(llm.attempts).toBe(1);
   });
 
   it("retries when the first attempt throws transiently with no content", async () => {
@@ -1024,4 +1024,114 @@ describe("thinking stream activity", () => {
       vi.useRealTimers();
     }
   });
+});
+
+describe("provider failure terminals", () => {
+  const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 1 });
+
+  it("rejects non-streaming error responses before success telemetry", async () => {
+    const llm = createScriptedLLM([
+      {
+        kind: "ok",
+        response: { ...okResponse("partial"), finishReason: "error" },
+      },
+      {
+        kind: "ok",
+        response: { ...okResponse("partial"), finishReason: "error" },
+      },
+    ]);
+    const emitter = makeEmitterSpy();
+    await expect(
+      callLLMWithRetry({
+        llm,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+        emitter,
+      }),
+    ).rejects.toThrow("model generation ended with an error");
+    expect(
+      emitter.events
+        .filter((e) => e.type === "llm.responded")
+        .every((e) => e.payload.finishReason === "error"),
+    ).toBe(true);
+  });
+
+  it.each([
+    [
+      { type: "text-delta", textDelta: "partial" },
+      { type: "done", finishReason: "error" },
+    ],
+    [
+      { type: "tool-call", id: "call", name: "write", arguments: "{}" },
+      { type: "done", finishReason: "error" },
+    ],
+    [{ type: "text-delta", textDelta: "partial" }],
+    [{ type: "reasoning-delta", reasoningDelta: "partial reasoning" }],
+  ] satisfies LLMStreamEvent[][])(
+    "rejects incomplete or failed streams without retrying: %j",
+    async (...events) => {
+      const llm = createScriptedStreamLLM([{ events }]);
+      const emitter = makeEmitterSpy();
+      await expect(
+        streamLLMWithRetry({
+          llm,
+          messages: [],
+          policy,
+          deadline: Date.now() + 10_000,
+          emitter,
+        }),
+      ).rejects.toThrow("PROVIDER_ERROR");
+      expect(llm.attempts).toBe(1);
+      expect(
+        emitter.events.filter((e) => e.type === "llm.responded"),
+      ).toHaveLength(1);
+      expect(emitter.events.at(-1)?.payload.finishReason).toBe("error");
+    },
+  );
+
+  it("retries an explicit stream error before any output and accepts the successful retry", async () => {
+    const llm = createScriptedStreamLLM([
+      { events: [{ type: "done", finishReason: "error" }] },
+      {
+        events: [
+          { type: "text-delta", textDelta: "complete" },
+          { type: "done", finishReason: "stop" },
+        ],
+      },
+    ]);
+    const result = await streamLLMWithRetry({
+      llm,
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+    });
+    expect(result.response.content).toBe("complete");
+    expect(llm.attempts).toBe(2);
+  });
+});
+
+it("does not treat empty text deltas as partial output when retrying a stream", async () => {
+  const llm = createScriptedStreamLLM([
+    {
+      events: [
+        { type: "text-delta", textDelta: "" },
+        { type: "done", finishReason: "error" },
+      ],
+    },
+    {
+      events: [
+        { type: "text-delta", textDelta: "complete" },
+        { type: "done", finishReason: "stop" },
+      ],
+    },
+  ]);
+  const result = await streamLLMWithRetry({
+    llm,
+    messages: [],
+    policy: buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 1 }),
+    deadline: Date.now() + 10_000,
+  });
+  expect(result.response.content).toBe("complete");
+  expect(llm.attempts).toBe(2);
 });

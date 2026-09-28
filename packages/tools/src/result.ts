@@ -34,12 +34,20 @@ export function withPendingProposals<T extends object>(
 export function withPendingProposals<T>(
   content: T,
   pendingProposals: readonly Proposal[],
+): T | ToolExecutionEnvelope<T>;
+export function withPendingProposals<T>(
+  content: T,
+  pendingProposals: readonly Proposal[],
 ): T | ToolExecutionEnvelope<T> {
   if (pendingProposals.length === 0) {
     return content;
   }
 
   const copied = [...pendingProposals];
+
+  if (isExecutionEnvelope(content)) {
+    return executionEnvelope({ ...content, pendingProposals: copied }) as T;
+  }
 
   if (content !== null && typeof content === "object") {
     try {
@@ -58,7 +66,14 @@ export function withPendingProposals<T>(
   const envelope = {
     content,
     pendingProposals: copied,
+    emittedEvents: getEmittedEvents(content),
   } as ToolExecutionEnvelope<T>;
+  return executionEnvelope(envelope);
+}
+
+function executionEnvelope<T>(
+  envelope: ToolExecutionEnvelope<T>,
+): ToolExecutionEnvelope<T> {
   Object.defineProperty(envelope, TOOL_EXECUTION_ENVELOPE, {
     value: true,
     enumerable: false,
@@ -102,12 +117,20 @@ export function withEmittedEvents<T extends object>(
 export function withEmittedEvents<T>(
   content: T,
   events: readonly EmittedEvent[],
+): T | ToolExecutionEnvelope<T>;
+export function withEmittedEvents<T>(
+  content: T,
+  events: readonly EmittedEvent[],
 ): T | ToolExecutionEnvelope<T> {
   if (events.length === 0) {
     return content;
   }
 
   const copied = [...events];
+
+  if (isExecutionEnvelope(content)) {
+    return executionEnvelope({ ...content, emittedEvents: copied }) as T;
+  }
 
   if (content !== null && typeof content === "object") {
     try {
@@ -126,14 +149,9 @@ export function withEmittedEvents<T>(
   const envelope = {
     content,
     emittedEvents: copied,
+    pendingProposals: getPendingProposals(content),
   } as ToolExecutionEnvelope<T>;
-  Object.defineProperty(envelope, TOOL_EXECUTION_ENVELOPE, {
-    value: true,
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  });
-  return envelope;
+  return executionEnvelope(envelope);
 }
 
 export function getEmittedEvents(

@@ -96,11 +96,14 @@ export class LLMRetryError extends Error {
   readonly cause: unknown;
   readonly reason: RetryReason;
   readonly attempts: number;
+  /** A failed stream produced output; retry/fallback must not replace it. */
+  readonly hasPartialOutput: boolean;
   constructor(args: {
     reason: RetryReason;
     attempts: number;
     cause: unknown;
     message?: string;
+    hasPartialOutput?: boolean;
   }) {
     // Surface the underlying cause message in the wrapper error so test
     // assertions (and user-facing traces) can still match on provider
@@ -113,6 +116,7 @@ export class LLMRetryError extends Error {
     this.reason = args.reason;
     this.attempts = args.attempts;
     this.cause = args.cause;
+    this.hasPartialOutput = args.hasPartialOutput ?? false;
   }
 }
 

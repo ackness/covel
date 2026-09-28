@@ -241,9 +241,13 @@ function extractValue(
   if (!result || (result.status !== "success" && !guardProvided)) {
     return { ok: false, reason: "upstream-failed" };
   }
+  let value: unknown = result.canonicalValue
+    ? result.canonicalValue.value
+    : result.output;
+  if (value === undefined) return { ok: false, reason: "input-missing" };
   // The contract, not the original implementation, defines the output shape.
   if (contractSchema) {
-    const validation = validateAcceptedValue(result.output, contractSchema);
+    const validation = validateAcceptedValue(value, contractSchema);
     if (!validation.valid)
       return {
         ok: false,
@@ -251,7 +255,6 @@ function extractValue(
         errors: validation.errors ?? [],
       };
   }
-  let value: unknown = result.output;
   if (binding.select) {
     const resolved = resolveJsonPointer(value, binding.select);
     if (!resolved.found) return { ok: false, reason: "input-missing" };

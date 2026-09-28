@@ -26,10 +26,7 @@ import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { agentInputSlots } from "./runtime-input-slots.js";
 import { filterRuntimeHistory } from "./message-filter.js";
-import {
-  checkSchemaProseFailure,
-  checkSchemaValidation,
-} from "./runtime-output-validator.js";
+import { createAgentSchemaGate } from "./runtime-output-validator.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
@@ -338,13 +335,7 @@ export async function executeAgentRuntime({
     });
   }
 
-  // Build the runtime output from final content + tool results. This shares the
-  // exact transform with the resume path (finalizeAgentOutput). The schema gate
-  // below runs the two schema-declared-runtime checks — prose-instead-of-JSON
-  // and schema validation — that the resume path intentionally skips. A
-  // schema-declared runtime that returns unparseable prose or a non-conforming
-  // envelope surfaces a real `failed` result with a diagnostic instead of
-  // silently falling back to narrativeOutput.
+  // Ordinary execution and resume share both output construction and schema policy.
   const finalized = finalizeAgentOutput({
     manifest,
     finalContent,
@@ -354,37 +345,14 @@ export async function executeAgentRuntime({
     pendingProposals,
     emittedEvents,
     dedupeInteractions: true,
-    schemaGate:
-      loaded.outputSchema && manifest.outputKind !== "story"
-        ? ({ output: built, parsedAsJson, finalContent: content }) => {
-            const ctx = {
-              manifest,
-              input,
-              runId,
-              startTime,
-              collectedToolCalls,
-              outputSchema: loaded.outputSchema!,
-            };
-            if (content !== null) {
-              const proseFailure = checkSchemaProseFailure(
-                ctx,
-                content,
-                parsedAsJson,
-              );
-              if (proseFailure) {
-                // Emission happens in finalizeFailure (the short-circuit
-                // result routes through it) — emitting here too would
-                // double-fire.
-                return proseFailure;
-              }
-            }
-            const schemaFailure = checkSchemaValidation(ctx, built);
-            if (schemaFailure) {
-              return schemaFailure;
-            }
-            return undefined;
-          }
-        : undefined,
+    schemaGate: createAgentSchemaGate({
+      manifest,
+      input,
+      runId,
+      startTime,
+      collectedToolCalls,
+      outputSchema: loaded.outputSchema,
+    }),
   });
 
   if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {

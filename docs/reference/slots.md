@@ -188,6 +188,10 @@ providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 
 三个文本协议共用的 SSE 解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
 
+文本流必须包含协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。
+
+嵌入调用可传 `expectedModelId`（`provider/model`）；Gateway 在解析目标后、网络请求前校验它。Memory 的 `EmbedFn(texts, { sessionId, modelId })` 必须使用会话锁定的模型身份。修改当前配置不能把同维度的另一个模型写入旧索引；不匹配时查询降级为关键词检索，摄入不推进进度。恢复原模型配置后可继续补录；需要切换模型时重建开发期会话及索引，已混入错误向量的数据也需重建。
+
 ## API Key 流转
 
 Key 永远不进 `llm.toml`：dev 放 `.env.llm`，桌面端放 `~/.covel/keys.env`（mode 600），纯 web 放 localStorage（`covel:keys`）。每次 AI 请求经 `X-Provider-Keys` header（base64 JSON `{provider: key}`）到达服务端，按目标 slot 的 `provider` 名分发绑定 —— wire 拿到的 `config.apiKey` 已是该 slot provider 的 key，客户端 key 覆盖 env key。

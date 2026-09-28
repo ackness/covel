@@ -18,6 +18,10 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
+import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { tool, getPendingProposals } from "@covel/tools";
+import { z } from "zod";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
 // Minimal LLM that returns a fixed string as the final content — enough to
@@ -167,4 +171,111 @@ describe("agent schema gate (golden)", () => {
     const r = result.runtimeResults[0];
     expect(r?.status).toBe("success");
   });
+});
+
+describe("ordinary and resumed private schema parity", () => {
+  it.each([
+    ['{"prompt":"portrait"}', "success"],
+    ['{"prompt":17}', "failed"],
+    ["plain prose", "failed"],
+  ] as const)("uses the same verdict for %s", async (content, status) => {
+    const m = manifest({ output: { schema: "output.json" } });
+    const deps = makeDeps(new FixedContentLLM(content), { ...OBJECT_SCHEMA });
+    const ordinary = await executeTurn(input("schema-parity"), [m], deps);
+    const resumed = await resumeSuspendedRuntime(
+      {
+        id: "suspended",
+        sessionId: "schema-parity",
+        turnId: "schema-parity-turn",
+        pluginId: m.pluginId,
+        runtimeId: m.name,
+        reason: "input",
+        resumeSchema: {},
+        createdAt: "2026-01-01T00:00:00Z",
+        pendingContinuation: {
+          messages: [],
+          toolCallsSoFar: [],
+          pendingProposals: [],
+          executionContext: {
+            executionId: "previous",
+            origin: "manual",
+            countPolicy: "none",
+          },
+        },
+      },
+      {},
+      m,
+      deps,
+    );
+    expect(ordinary.runtimeResults[0]?.status).toBe(status);
+    expect(resumed.status).toBe(status);
+    expect(resumed.output).toEqual(ordinary.runtimeResults[0]?.output);
+    expect(getPendingProposals(resumed.output)).toEqual([]);
+    expect(await deps.store!.listMessages("schema-parity")).toEqual([]);
+  });
+
+  it.each([true, false])(
+    "validates completing-tool outputs in both entrypoints (valid=%s)",
+    async (valid) => {
+      const m = manifest({
+        output: { schema: "output.json" },
+        completeAfterTools: ["complete"],
+        requireToolUse: true,
+        tools: { plugin: ["complete"] },
+      });
+      const deps = makeDeps(
+        {
+          generate: async () => ({
+            content: "incidental prose",
+            toolCalls: [{ id: "call", name: "complete", arguments: "{}" }],
+            finishReason: "tool_calls",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          }),
+        },
+        { ...OBJECT_SCHEMA },
+      );
+      const complete = tool({
+        name: "complete",
+        description: "Return structured data",
+        parameters: z.object({}),
+        execute: async () => (valid ? { prompt: "portrait" } : { wrong: true }),
+      });
+      deps.toolExecutor = createToolExecutor({
+        findTool: () => complete,
+        store: deps.store!,
+      });
+      const ordinary = await executeTurn(input("tool-parity"), [m], deps);
+      const resumed = await resumeSuspendedRuntime(
+        {
+          id: "suspended",
+          sessionId: "tool-parity",
+          turnId: "tool-parity-turn",
+          pluginId: m.pluginId,
+          runtimeId: m.name,
+          reason: "input",
+          resumeSchema: {},
+          createdAt: "2026-01-01T00:00:00Z",
+          pendingContinuation: {
+            messages: [],
+            toolCallsSoFar: [],
+            pendingProposals: [],
+            executionContext: {
+              executionId: "previous",
+              origin: "manual",
+              countPolicy: "none",
+            },
+          },
+        },
+        {},
+        m,
+        deps,
+      );
+      expect(
+        ordinary.runtimeResults[0]?.status,
+        ordinary.runtimeResults[0]?.error,
+      ).toBe(valid ? "success" : "failed");
+      expect(resumed.status).toBe(ordinary.runtimeResults[0]?.status);
+      expect(resumed.output).toEqual(ordinary.runtimeResults[0]?.output);
+    },
+  );
 });
