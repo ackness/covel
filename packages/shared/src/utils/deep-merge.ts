@@ -10,21 +10,25 @@ export function deepMerge<T extends Record<string, unknown>>(
 
   for (const key of Object.keys(source)) {
     const sourceVal = source[key];
-    const targetVal = (result as Record<string, unknown>)[key];
-
-    if (isPlainObject(sourceVal) && isPlainObject(targetVal)) {
-      (result as Record<string, unknown>)[key] = deepMerge(
-        targetVal as Record<string, unknown>,
-        sourceVal as Record<string, unknown>,
-      );
-    } else {
-      (result as Record<string, unknown>)[key] = sourceVal;
-    }
+    const targetVal = Object.hasOwn(result, key) ? result[key] : undefined;
+    const value =
+      isPlainObject(sourceVal) && isPlainObject(targetVal)
+        ? deepMerge(targetVal, sourceVal)
+        : sourceVal;
+    // Preserve JSON keys such as __proto__ without invoking inherited setters.
+    Object.defineProperty(result, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
 
   return result;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
