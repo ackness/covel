@@ -4,7 +4,7 @@ import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { errorBody, okBody } from "../../../api-error.js";
 import {
-  buildAvailablePluginList,
+  buildSessionPluginView,
   readSessionPluginSelection,
   resolveSessionPluginPlan,
   authorizedSessionPluginIds,
@@ -50,24 +50,20 @@ export function registerSessionPluginRoutes(
           409,
         );
       }
-      const selection = readSessionPluginSelection(lockedGuard.session);
-      const plan = resolveSessionPluginPlan(
-        selection.requested,
-        pluginRegistry,
-        {
-          excluded: selection.excluded,
-          authorized: authorizedSessionPluginIds(
-            pluginRegistry,
-            c.get("rpcApprovalGate"),
-            lockedGuard.session,
-          ),
-        },
-      );
-      const active = plan.active;
+      const view = buildSessionPluginView(lockedGuard.session, pluginRegistry, {
+        isEntryPublished: c.get("isPluginEntryPublished"),
+        authorized: authorizedSessionPluginIds(
+          pluginRegistry,
+          c.get("rpcApprovalGate"),
+          lockedGuard.session,
+        ),
+      });
       return c.json({
-        items: buildAvailablePluginList(active, pluginRegistry, plan),
-        resolution: plan,
-        commands: buildSessionCommandList(active, pluginRegistry),
+        ...view,
+        commands: buildSessionCommandList(
+          view.resolution.active,
+          pluginRegistry,
+        ),
       });
     });
   });

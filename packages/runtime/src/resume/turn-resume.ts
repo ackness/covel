@@ -1,3 +1,4 @@
+import { loadLastPlayerInput } from "../turn-executor/session-state.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { DEFAULT_MAX_TOOL_STEPS } from "../agent-loop/agent-loop-policy.js";
 import type {
@@ -161,7 +162,12 @@ async function executeResumedRuntime(
     // conversations. Feed resume data through the explicit handler context and
     // reuse the normal function finalizer so output normalization, hooks and
     // buffered proposals follow the same path as an ordinary invocation.
+    const lastPlayerInput = await loadLastPlayerInput(
+      deps.store,
+      input.sessionId,
+    );
     return executeFunctionRuntime({
+      lastPlayerInput,
       manifest,
       input,
       loaded,

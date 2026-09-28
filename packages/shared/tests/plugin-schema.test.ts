@@ -278,3 +278,36 @@ describe("plugin manifest semantic diagnostics", () => {
     expect(validateRuntimeManifestSemantics(manifest)).toEqual([]);
   });
 });
+
+describe("kernel extension conflicts", () => {
+  it.each([
+    "prompt.segment@1",
+    "ui.slot@1",
+    "character.visual@1",
+    "stage.cast@1",
+  ])(
+    "rejects %s only in conflicts with a stable field diagnostic",
+    (contract) => {
+      const root = {
+        id: "probe",
+        kind: "plugin",
+        description: "Probe",
+        requires: [contract],
+        optional: [contract],
+      };
+      expect(pluginManifestSchema.safeParse(root).success).toBe(true);
+      const invalid = pluginManifestSchema.safeParse({
+        ...root,
+        conflicts: [contract],
+      });
+      expect(invalid.success).toBe(false);
+      if (!invalid.success)
+        expect(invalid.error.issues).toContainEqual(
+          expect.objectContaining({
+            path: ["conflicts", 0],
+            params: { code: "invalid-conflict" },
+          }),
+        );
+    },
+  );
+});

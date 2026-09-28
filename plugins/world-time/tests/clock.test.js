@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { worldTimeSchema, validateDimensions } from "@covel/shared";
+import { describe, expect, it, vi } from "vitest";
+import { validateDimensions } from "@covel/shared";
+import { worldTimeSchema } from "../schema.js";
 import {
   DEFAULT_TIME,
   advanceTime,
   describeTime,
   initialTick,
+  loadTime,
 } from "../clock.js";
 
 const calendar = {
@@ -46,14 +48,70 @@ describe("world-owned time", () => {
     expect(describeTime(definition, start + 60).weekday).toBe("C");
     expect(describeTime(definition, start - 120).weekday).toBe("C");
   });
-  it("validates as an ordinary dimension including external dimension imports", () => {
-    expect(validateDimensions({ time: calendar }).valid).toBe(true);
-    expect(validateDimensions({ time: phases }).valid).toBe(true);
+  it("keeps time out of kernel dimensions and validates plugin definitions", () => {
+    expect(validateDimensions({ time: calendar }).valid).toBe(false);
+    expect(worldTimeSchema.safeParse(calendar).success).toBe(true);
+    expect(worldTimeSchema.safeParse(phases).success).toBe(true);
     expect(
-      validateDimensions({
-        time: { ...calendar, initial: { ...calendar.initial, day: 3 } },
-      }).valid,
+      worldTimeSchema.safeParse({
+        ...calendar,
+        initial: { ...calendar.initial, day: 3 },
+      }).success,
     ).toBe(false);
+  });
+  it("adopts imported definitions before the first turn and uses the default when absent", async () => {
+    const imported = {
+      getPluginData: async (namespace) =>
+        namespace === "definitions"
+          ? { value: { id: "world", definition: phases } }
+          : null,
+    };
+    expect(await loadTime(imported, "en")).toMatchObject({
+      definition: phases,
+      tick: initialTick(phases),
+    });
+    expect(
+      await loadTime({ getPluginData: async () => null }, "en"),
+    ).toMatchObject({
+      definition: DEFAULT_TIME,
+      tick: initialTick(DEFAULT_TIME),
+    });
+  });
+  it.each([
+    { ...phases, initial: { cycle: 0, phase: 99 } },
+    { ...calendar, initial: { ...calendar.initial, day: 99 } },
+  ])(
+    "rejects invalid imported calendar semantics without committing a clock",
+    async (definition) => {
+      const store = {
+        getPluginData: async (namespace) =>
+          namespace === "definitions"
+            ? { value: { id: "world", definition } }
+            : null,
+        setPluginData: vi.fn(),
+      };
+      await expect(loadTime(store, "en")).rejects.toThrow();
+      expect(store.setPluginData).not.toHaveBeenCalled();
+    },
+  );
+  it("does not reinterpret an existing clock after imported definitions change", async () => {
+    const adopted = {
+      schemaVersion: 1,
+      definition: calendar,
+      tick: initialTick(calendar) + 30,
+    };
+    const store = {
+      getPluginData: async (namespace) => ({
+        value:
+          namespace === "clock"
+            ? adopted
+            : {
+                id: "world",
+                definition: { ...phases, initial: { cycle: 0, phase: 99 } },
+              },
+      }),
+    };
+    expect(await loadTime(store, "en")).toMatchObject(adopted);
   });
   it("carries custom minutes, hours and unequal month lengths deterministically", () => {
     const tick = initialTick(calendar);

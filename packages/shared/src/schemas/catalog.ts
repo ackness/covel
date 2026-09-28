@@ -67,3 +67,34 @@ export const jobListPropsSchema = z.object({
     })
     .optional(),
 });
+
+/** Graph records are supplied by the owning panel; field paths describe its data. */
+export const graphCanvasPropsSchema = z.strictObject({
+  nodes: z.unknown(),
+  edges: z.unknown(),
+  node: z.strictObject({
+    idField: z.string().min(1),
+    labelField: z.string().min(1),
+    typeField: z.string().min(1),
+    summaryField: z.string().min(1),
+    labelsField: z.string().min(1),
+    colors: z.record(z.string(), z.string().min(1)),
+    defaultColor: z.string().min(1),
+  }),
+  edge: z.strictObject({
+    idField: z.string().min(1),
+    sourceField: z.string().min(1),
+    targetField: z.string().min(1),
+    relationField: z.string().min(1),
+    strengthField: z.string().min(1),
+    factField: z.string().min(1),
+    inactiveField: z.string().min(1),
+    colors: z.strictObject({
+      positive: z.string().min(1),
+      negative: z.string().min(1),
+      neutral: z.string().min(1),
+    }),
+  }),
+  height: z.number().int().min(80).max(800).default(480),
+});
+export type GraphCanvasProps = z.infer<typeof graphCanvasPropsSchema>;

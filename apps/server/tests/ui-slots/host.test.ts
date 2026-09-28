@@ -12,7 +12,9 @@ const disposables: UiSlotHost[] = [];
 afterEach(async () => {
   await Promise.all(disposables.splice(0).map((host) => host.close()));
 });
-async function fixture() {
+async function fixture(
+  onProjection?: Parameters<typeof createUiSlotHost>[0]["onProjection"],
+) {
   const store = createMemoryStore();
   await store.createSession({
     id: "session",
@@ -44,6 +46,7 @@ async function fixture() {
     services,
     extensionHost,
     debounceMs: 1,
+    onProjection,
   });
   disposables.push(host);
   const emit = (type: string, payload: Record<string, unknown>) =>
@@ -262,4 +265,84 @@ describe("UI slot projection host", () => {
       (await f.host.get("session", { slot: "stage.backdrop@1" }))[0]?.value,
     ).toEqual({ pending: false, name: "Gate" });
   });
+});
+
+it("coalesces repeated multi-provider bursts and reports each real projection once", async () => {
+  const samples: number[] = [];
+  const f = await fixture((metric) => samples.push(metric.durationMs));
+  const first = vi.fn(async (_input, ctx) => ({
+    name:
+      (await ctx.pluginData.get("places", "current"))?.value?.name ?? "Cold",
+    pending: false,
+  }));
+  const second = vi.fn((input) => ({
+    ...input.previous,
+    name: `${input.previous.name} lit`,
+  }));
+  f.extensionHost.register(
+    "alpha",
+    {
+      point: uiSlotV1.id,
+      id: "location",
+      slot: "stage.backdrop@1",
+      watch: ["places"],
+    },
+    { handler: first },
+  );
+  f.extensionHost.register(
+    "beta",
+    {
+      point: uiSlotV1.id,
+      id: "lighting",
+      slot: "stage.backdrop@1",
+      order: 1,
+      watch: ["lighting"],
+    },
+    { handler: second },
+  );
+  await f.host.get("session", { slot: "stage.backdrop@1" });
+  for (let batch = 1; batch <= 10; batch++) {
+    await f.store.setPluginData({
+      sessionId: "session",
+      pluginId: "alpha",
+      namespace: "places",
+      key: "current",
+      value: { name: `Place ${batch}` },
+      updatedAt: new Date().toISOString(),
+    });
+    for (let update = 0; update < 20; update++)
+      f.emit("plugin-data.changed", {
+        pluginId: update % 2 ? "alpha" : "beta",
+        changes: [{ namespace: update % 2 ? "places" : "lighting" }],
+      });
+    await vi.waitFor(() => expect(samples).toHaveLength(batch + 1));
+    expect(first).toHaveBeenCalledTimes(batch + 1);
+    expect(second).toHaveBeenCalledTimes(batch + 1);
+    expect(
+      (await f.host.get("session", { slot: "stage.backdrop@1" }))[0]?.value,
+    ).toEqual({ name: `Place ${batch} lit`, pending: false });
+  }
+  const count = f.changes.filter(
+    (event) => event.type === "ui.slot.changed",
+  ).length;
+  f.emit("plugin-data.changed", {
+    pluginId: "alpha",
+    changes: [{ namespace: "places" }],
+  });
+  await vi.waitFor(() => expect(samples).toHaveLength(12));
+  expect(
+    f.changes.filter((event) => event.type === "ui.slot.changed"),
+  ).toHaveLength(count);
+  const warm = samples.slice(1).sort((a, b) => a - b);
+  process.stdout.write(
+    JSON.stringify({
+      kind: "synthetic-projection",
+      providers: 2,
+      coldMs: samples[0],
+      warmSamples: warm.length,
+      medianMs: warm[Math.floor(warm.length / 2)],
+      p95Ms: warm[Math.ceil(warm.length * 0.95) - 1],
+      maxMs: warm.at(-1),
+    }) + "\n",
+  );
 });

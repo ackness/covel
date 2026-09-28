@@ -120,6 +120,15 @@ describe("memory detached lifecycle", () => {
         }),
       },
     };
+    const formA = {
+      id: "form-a",
+      sessionId: "session",
+      turnId: "form-turn",
+      formId: "profile",
+      values: { favorite: "snapshot-A" },
+      createdAt: timestamp,
+    };
+    await store.savePlayerInput(formA);
     const source = await executeTurn(
       {
         sessionId: "session",
@@ -136,6 +145,8 @@ describe("memory detached lifecycle", () => {
       turnId: "source",
       playerMessage: "Go to the harbour",
       narrativeText: "The source-turn harbour.",
+      lastPlayerInput: formA,
+      runtimeResults: [{ runtimeId: "story", status: "success" }],
     });
     const key = {
       jobId: descriptor!.jobId,
@@ -183,6 +194,14 @@ describe("memory detached lifecycle", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(nextStarted).not.toHaveBeenCalled();
     const service = credentials.take(key)!;
+    await store.savePlayerInput({
+      ...formA,
+      id: "form-b",
+      values: { favorite: "snapshot-B" },
+      createdAt: "2026-09-28T00:00:00.000Z",
+    });
+    // JSON persistence simulates the worker restoring the queued source facts.
+    const restoredDescriptor = JSON.parse(JSON.stringify(descriptor));
     const worker = await executeTurn(
       {
         sessionId: "session",
@@ -190,12 +209,14 @@ describe("memory detached lifecycle", () => {
         playerMessage: "unrelated later request",
         locale: "en",
         origin: "background",
-        detachedStage: descriptor,
+        detachedStage: restoredDescriptor,
       },
       [story, memory],
       { store, llm: service.llm, gateway: service.gateway, loadRuntime },
     );
     expect(worker.runtimeResults[0]?.status).toBe("success");
+    expect(generateText.mock.calls[0]?.[0]?.prompt).toContain("snapshot-A");
+    expect(generateText.mock.calls[0]?.[0]?.prompt).not.toContain("snapshot-B");
     expect(
       await store.getPluginData("session", "memory", "blocks", "scene"),
     ).toBeNull();
@@ -260,4 +281,129 @@ describe("memory detached lifecycle", () => {
       }),
     ).resolves.toEqual([]);
   });
+});
+
+it("settles ten source turns in order and never publishes a timed-out late memory", async () => {
+  const { store, extensions, raw, settled, loadRuntime } = await fixture();
+  let committedMarker = "";
+  for (let index = 1; index <= 10; index++) {
+    const marker = `source-memory-${index}`;
+    const turnId = `source-${index}`;
+    const source = await executeTurn(
+      { sessionId: "session", turnId, playerMessage: marker, origin: "player" },
+      [story, memory],
+      { store, llm, loadRuntime },
+    );
+    const descriptor = source.deferredRuntimeJobs![0]!;
+    const key = {
+      sessionId: "session",
+      pluginId: "memory",
+      jobId: descriptor.jobId,
+    };
+    await createRuntimeJob(store, {
+      ...key,
+      runtimeId: memory.name,
+      origin: { activation: "stage", sourceTurnId: turnId },
+      payload: descriptor,
+      settle: "before-next-execution",
+    });
+    await claimRuntimeJob(store, { ...key, ownerId: "worker", leaseMs: 10000 });
+    await transitionRuntimeJob(store, {
+      ...key,
+      from: ["claimed"],
+      to: "running",
+    });
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const generateText = vi.fn(async () => {
+      entered();
+      await gate;
+      return {
+        text: JSON.stringify({ scene: marker }),
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    });
+    const worker = executeTurn(
+      {
+        sessionId: "session",
+        turnId: `worker-${index}`,
+        playerMessage: "",
+        origin: "background",
+        detachedStage: JSON.parse(JSON.stringify(descriptor)),
+      },
+      [story, { ...memory, timeoutMs: index === 5 ? 20 : 5000 }],
+      { store, llm, loadRuntime, gateway: { generateText } },
+    );
+    await started;
+    const nextStarted = vi.fn();
+    const next = settled.withLock("session", {}, async () => {
+      nextStarted();
+      return extensions
+        .createExecution({
+          sessionId: "session",
+          turnId: `next-${index}`,
+          locale: "en",
+          signal: new AbortController().signal,
+          pluginData: await store.listPluginDataSessionScope("session"),
+        })
+        .run(promptSegmentV1, {
+          turnId: `next-${index}`,
+          playerMessage: "Continue",
+        });
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(nextStarted).not.toHaveBeenCalled();
+    if (index !== 5) release();
+    const execution = await worker;
+    if (index === 5) {
+      expect(execution.runtimeResults[0]?.status).toBe("failed");
+      await transitionRuntimeJob(store, {
+        ...key,
+        from: ["running"],
+        to: "failed",
+      });
+      release();
+    } else {
+      expect(execution.runtimeResults[0]?.status).toBe("success");
+      await raw.withLock("session", async () => {
+        const committed = await commitExecution({
+          store,
+          sessionId: "session",
+          results: execution.runtimeResults,
+          runtimes: [memory],
+          turnIds: [],
+          executionContext: execution.executionContext!,
+          completion: { kind: "detached", turnId: `worker-${index}` },
+          extraInTx: async (tx) => {
+            await transitionRuntimeJob(tx, {
+              ...key,
+              from: ["running"],
+              to: "succeeded",
+            });
+          },
+        });
+        expect(committed.status).toBe("committed");
+      });
+      committedMarker = marker;
+    }
+    const text = (await next)
+      .flat()
+      .map((segment) => segment.content)
+      .join("\n");
+    expect(text).toContain(committedMarker);
+    expect(text).not.toContain("source-memory-5");
+    expect(generateText).toHaveBeenCalledOnce();
+    expect(await listSettlingRuntimeJobs(store, "session")).toEqual([]);
+  }
+  expect(
+    (await store.getPluginData("session", "memory", "blocks", "scene"))?.value,
+  ).toMatchObject({ content: "source-memory-10" });
+  await store.close();
 });

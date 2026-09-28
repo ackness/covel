@@ -49,9 +49,13 @@ export interface PluginSummary {
   readonly description: I18nText;
   readonly kind: "core" | "plugin";
   readonly source: PluginSource;
-  readonly hostState:
-    "discovered" | "installed" | "approved" | "loaded" | "error";
+  /** Process-wide entry publication; never implies session authorization. */
+  readonly hostState: "discovered" | "installed" | "loaded" | "error";
   readonly error?: string;
+  readonly registrationError?: {
+    readonly code: "plugin_registration_invalid";
+    readonly registration: string;
+  };
   readonly runtimeCount: number;
   readonly version?: string;
   readonly provides: NonNullable<
@@ -139,6 +143,8 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
 }
 
 export interface SessionPlugin extends PluginSummary {
+  /** Live authorization for this session, independent of host publication. */
+  readonly serverCodeApproved: boolean;
   /** Selected by the player but paused until this process receives approval. */
   readonly approvalRequired?: boolean;
   readonly active: boolean;

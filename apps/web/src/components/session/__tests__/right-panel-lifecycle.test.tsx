@@ -51,6 +51,7 @@ const spec = (pluginId: string, panelId: string) => ({
   ],
 });
 const plugin = (id: string): SessionPlugin => ({
+  serverCodeApproved: true,
   sessionState: "active",
   requires: [],
   optional: [],
@@ -61,7 +62,7 @@ const plugin = (id: string): SessionPlugin => ({
   description: id,
   active: true,
   locked: false,
-  hostState: "approved",
+  hostState: "loaded",
   kind: "plugin",
   source: "builtin",
   runtimeCount: 0,

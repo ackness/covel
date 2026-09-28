@@ -30,12 +30,20 @@ export default async function guard(ctx) {
   const { logger, sessionId, store, locale } = ctx;
   const s = /** @type {any} */ (store);
 
-  try {
-    const characters = ctx.world.characters;
-    const player = Array.isArray(characters)
-      ? characters.find((c) => c.type === "player")
-      : null;
+  const characters = ctx.world.characters;
+  const player = Array.isArray(characters)
+    ? characters.find((c) => c.type === "player")
+    : null;
+  // Ordering alone does not guarantee the schema provider succeeded. Use the
+  // execution-local World Model, which includes same-turn schema proposals,
+  // and fail outside the recoverable-error fallback below.
+  if (!player && !ctx.world.characterSchema) {
+    throw new Error(
+      "Character schema is not ready. Complete world initialization before creating a player.",
+    );
+  }
 
+  try {
     await logger?.debug("player-init guard inspected session", {
       characterCount: Array.isArray(characters) ? characters.length : "N/A",
       playerFound: Boolean(player),

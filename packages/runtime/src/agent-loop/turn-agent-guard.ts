@@ -1,3 +1,4 @@
+import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import type {
   RuntimeManifest,
@@ -37,6 +38,8 @@ import {
 } from "../function-runtime/runtime-abort-boundaries.js";
 
 export interface ExecuteAgentGuardOptions {
+  readonly lastPlayerInput?:
+    import("@covel/shared").PlayerInputSubmission | null;
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
@@ -67,6 +70,7 @@ export interface ExecuteAgentGuardOptions {
 }
 
 export async function executeAgentGuard({
+  lastPlayerInput = null,
   upstreamProposals = [],
   manifest,
   input,
@@ -248,8 +252,7 @@ export async function executeAgentGuard({
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
       session: {
-        lastPlayerInput:
-          input.detachedStage?.turnDigest?.playerMessage ?? input.playerMessage,
+        lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
       },
       locale: input.locale,
       store: guardStore,

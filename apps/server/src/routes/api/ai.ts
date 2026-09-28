@@ -1,3 +1,4 @@
+import { worldGenerationDataContracts } from "../../world-data/portable-contract-data.js";
 /**
  * API AI routes — LLM-driven generation endpoints.
  *
@@ -185,6 +186,9 @@ function withGeneratedPackageMetadata(
     ...record,
     metadata: {
       ...record.metadata,
+      ...(packageContent.contractData?.length
+        ? { contractData: packageContent.contractData }
+        : {}),
       ...(packageContent.characters.length > 0
         ? { characterBlueprints: packageContent.characters }
         : {}),
@@ -271,6 +275,9 @@ aiRoutes.post(
           model: typeof body.model === "string" ? body.model : undefined,
           locale: normalizeLocale(body.locale, DEFAULT_LOCALE),
           brief: brief.value,
+          dataContracts: await worldGenerationDataContracts(
+            c.get("pluginRegistry"),
+          ),
           signal: shutdownSignal
             ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
             : c.req.raw.signal,

@@ -24,7 +24,7 @@ function plugin(
     description: "",
     kind: "plugin",
     source: "builtin",
-    hostState: "approved",
+    hostState: "loaded",
     runtimeCount: 0,
     provides: [],
     tags: [],

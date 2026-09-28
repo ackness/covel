@@ -269,16 +269,19 @@ export async function buildImportPlan(options: {
       continue;
     }
 
-    const read = await readWorldDataSource(source, options.locale);
+    const read =
+      source.inlineValue !== undefined
+        ? { value: source.inlineValue, path: undefined, diagnostics: [] }
+        : await readWorldDataSource(source, options.locale);
     diagnostics.push(...read.diagnostics);
     if (read.diagnostics.some((diagnostic) => diagnostic.level === "error")) {
       continue;
     }
-    if (!read.path) continue;
+    if (!read.path && source.inlineValue === undefined) continue;
 
     const mediaFiles =
       source.descriptor.kind === "media"
-        ? await collectMediaSourceFiles(source, read.path)
+        ? await collectMediaSourceFiles(source, read.path!)
         : null;
     if (mediaFiles) diagnostics.push(...mediaFiles.diagnostics);
     if (
@@ -301,7 +304,9 @@ export async function buildImportPlan(options: {
     const sourceDigest =
       source.descriptor.kind === "media"
         ? (mediaFiles?.digest ?? sha256Hex(""))
-        : (await digestFile(read.path)).digest;
+        : source.inlineValue !== undefined
+          ? sha256Hex(canonicalJson(source.inlineValue))
+          : (await digestFile(read.path!)).digest;
 
     if (source.descriptor.kind === "media") {
       for (const mediaPath of mediaFiles?.files ?? []) {

@@ -83,7 +83,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `contributes`                                   | 下表列出的包级贡献                                     |
 | `runtime`                                       | 可选的单 runtime 声明                                  |
 
-契约 ID 形如 `narrative-engine@1`。`runtime.io.output.contract` 必须由本包 `provides` 声明，同包不允许两个 runtime 产出同一契约。跨包可以有多个普通提供者，消费者使用 `cardinality: one` 或 `all` 表达选择要求。单提供者扩展点及显式 `conflicts` 另外执行互斥检查。
+契约 ID 形如 `narrative-engine@1`。`runtime.io.output.contract` 必须由本包 `provides` 声明，同包不允许两个 runtime 产出同一契约。跨包可以有多个普通提供者，消费者使用 `cardinality: one` 或 `all` 表达选择要求。单提供者扩展点及显式 `conflicts` 另外执行互斥检查。`conflicts` 只允许插件契约；引用内核扩展点或 UI 槽位会得到 `invalid-conflict` 和 `conflicts` 字段位置，内核点的组合由 mode 决定。
 
 | `contributes` 字段 | 对应注册或资源                                   |
 | ------------------ | ------------------------------------------------ |
@@ -118,9 +118,13 @@ entry 注册与清单双向校验，未声明的注册和未实现的声明都�
 
 Function runtime 必须声明 `function.handler`，模块必须默认导出函数，不能同时配置 `agent`。Agent runtime 不能配置 `function`。
 
+`schedule.needs`、`schedule.after` 与 `io.inputs.*.from.runtime` 中的 runtime ID 只能属于本包（完整 `<pluginId>/<runtimeId>` 或单 runtime 的包 ID），裸字符串依赖也受此限制。跨包引用必须使用公开的版本化 contract；纯 `after` 不会自动激活提供者。
+
 runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 必须在根 `requires` 或 `optional` 中声明，加载器对内联和子 runtime 同样校验。包内其他 runtime 提供的契约也需声明，可列入 `optional`，无需激活其他插件；`schedule.after` 只排序，`from.kernel` 是内核输入，两者不产生包激活依赖。
 
 阶段按 `setup → pre-turn → narrative → post-turn → audit` 推进，阶段之间有完成屏障。相同阶段的先后由依赖边决定。`needs` 是成功门控，`after` 只表达排序。调度不能用更晚阶段的输出解锁更早阶段。
+
+包级 `requires` 保证契约提供者被激活，不要求每次执行都重新产生输出。需要在后续执行处理表单的 setup runtime 应用 `after` 排在一次性 setup 提供者之后，并读取已提交状态；不要使用默认 turn scope 的契约 `needs`，否则提供者完成 setup 后不再运行，消费者会被成功门控跳过。`after` 不证明初始化成功；消费者 guard 必须检查所需领域状态，例如新建主角前确认 `ctx.world.characterSchema` 已存在，缺失时明确失败，不生成表单或写入角色。
 
 触发类型包括 `auto`、`scheduled`、`manual` 和 `event`。自动主循环运行时应声明 stage；manual/event 可按请求或事件独立触发。`schedule.manual.execution: background` 使用后台执行，`schedule.completion` 控制回合是否等待，具体限制由 manifest 校验和运行时准入执行。
 
@@ -156,6 +160,10 @@ io:
 ```
 
 普通输入读同一 execution 的已完成上游结果，`select` 为结果值上的 JSON Pointer。跨 execution 读取使用 `scope: committed` 和 `recordAs`。Schema 可以是本地路径或 `contract:<contractId>`；跨提供者契约 schema 在加载时解析。提示词中的绑定位于 `runtime-inputs.<binding>.value`，不要再依赖旧注入标签。
+
+`ctx.playerMessage` 保持当前输入文本字符串。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
+
+内核输入 `turn-digest@1` 冻结同一份 lastPlayerInput 快照及 `runtimeResults`。后者包含已经观察到的终态 `{runtimeId, status}`，status 为 `success/failed/skipped/suspended`；没有把尚未结束的 runtime 预测为成功。detached worker 消费源执行快照，不重新查询最新表单或回合状态。此输入契约更新后，旧作业与快照需要重建，不做兼容读取。
 
 ## World Model 与数据边界
 
@@ -216,6 +224,8 @@ pnpm --filter @covel/plugin-example test
 pnpm lint
 ```
 
+`validate:plugin` 执行静态作者校验，不执行 entry。builtin 的真实注册、声明对齐及发布验收由 `apps/server/tests/bootstrap/builtin-plugin-entries.test.ts` 随全量 `pnpm test` 执行；此验收不执行社区 entry。
+
 新增行为应测试正常输出、无效输入与数据归属，涉及执行失败还应验证 proposals 不会部分提交。社区插件服务端代码在用户授权后加载；manifest 声明不是授权本身。
 
 ## 代表性实现
@@ -231,3 +241,7 @@ pnpm lint
 | 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                         |
 | 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
 | 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)               |
+
+### 保留的数据命名空间
+
+整个 `_` 前缀保留给内核，插件不能经通用 plugin-data API 或 proposal 写入或删除这些 namespace，包括未知的 `_` 名和旧 `_memory`。插件日志通过受限 logger API 产生；业务数据使用 `blocks`、`definitions` 等普通名称。`__kernel:<subsystem>` 是不同的 owner 分区，插件绑定的读取接口不可访问它。完整清单与读取权限见[存储架构](../architecture/storage.md#plugin-data-ownership-and-reserved-names)。

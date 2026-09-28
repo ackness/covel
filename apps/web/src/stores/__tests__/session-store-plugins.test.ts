@@ -17,7 +17,7 @@ function sessionPlugin(
     description: `${id} plugin`,
     kind: locked ? "core" : "plugin",
     source: "builtin",
-    hostState: "approved",
+    hostState: "loaded",
     runtimeCount: 0,
     provides: [],
     tags: [],
@@ -25,6 +25,7 @@ function sessionPlugin(
     tools: [],
     userSettings: [],
     active,
+    serverCodeApproved: true,
     sessionState: active ? "active" : "inactive",
     locked,
   };

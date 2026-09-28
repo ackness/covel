@@ -110,7 +110,7 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 
 有 estimator 和 context budget 时才执行预算裁剪。预算边界覆盖 context assembly、`PostContextAssembly` 后以及每次 `PreLLMCall` 后的实际请求，包括工具和响应 schema、工具结果、steering 与 retry 内容。当前用户回合和摘要信封在普通历史裁剪中受保护；工具调用与结果的配对必须保留。必要时先截短过长工具回读，再截短本次调用中的摘要，数据库原始记录不受影响。固定内容仍超限时拒绝 provider 请求。response reserve 同时限制本次请求的最大输出。
 
-`serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；turn 扩展段放在最后一个缓存边界之后，不设置断点。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
+`serializeSystemPrompt(segments, true)` 在以下非空段之后插入内部 PUA sentinel（`\uE000`）：framework preamble、runtime 正文、stable/session 扩展段、after-plugin 世界书。最多四处；进入 system prompt 的 turn 扩展段（`position: system` 或 system 角色的 `pre-history`）放在最后一个缓存边界之后，不设置断点。user/assistant 角色的 pre-history、post-history 和 depth 段保持各自消息位置，不承诺这些消息位于某个 system 缓存边界内。Anthropic adapter 将标记转换为 `cache_control` text blocks；其他 provider 由 adapter 清理内部标记并使用其支持的缓存方式。
 
 稳定内容排在前面可以保留相同前缀。`volatility` 仅决定排序和缓存边界，不保证内容永远不变，也不取消执行内的扩展结果复用。
 
@@ -131,3 +131,5 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 - `packages/context/src/session-context.ts`：世界与世界书视图。
 
 扩展声明与调用边界见 [插件扩展参考](./plugin-extensions.md)，作者格式见 [插件参考](./plugins.md)。
+
+`world-ir` 的 `PostContextAssembly` Hook 继续负责裁剪自身历史输出及相关记忆，而非追加一个提示词段；这类变换保留 Hook，新增内容使用 `prompt.segment@1`。

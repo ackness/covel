@@ -10,13 +10,15 @@
 
 ## 数据与行为
 
+`turn-digest@1` 包含来源回合的叙事、工具摘要、已观察 runtime 终态，以及最近结构化表单 `lastPlayerInput`（无提交时为 null）。表单保留 formId/turnId 等来源，可能属于更早回合；提取提示词将其标为数据，World Model 的权威身份仍优先。后台执行不重新读取后来提交的表单。
+
 下一次执行等待已入队的提取任务提交，然后捕获新的插件数据快照。等待超时不取消任务；禁用插件后不再等待它，也不注入其记忆。失败或取消的提取不会提交部分记忆。
 
 `player_profile` 的确定性身份行来自权威 World Model，动态状态由模型维护。插件可以通过 `memory.block-definitions@1` 提供额外标签。世界数据使用 `memory.blocks@1` 契约，记录形状为 `{id: "world", blocks: [...]}`，写入本插件 `definitions/world`。默认标签不可被外部定义替换。
 
 提示词内容经过 XML 转义，作为 `audience: story`、`volatility: turn` 的片段放在缓存边界之后。最多展示 60 个块，正文共享 8192 字符预算。
 
-旧开发数据中的 `working_memory`、内核提取队列和镜像数据不再读取；升级后应重建开发会话。
+旧开发数据中的 `working_memory`、内核提取队列和镜像数据不再读取；升级后应重建开发会话、快照和旧格式 detached 作业。
 
 ## 验证
 

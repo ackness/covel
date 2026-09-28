@@ -34,6 +34,10 @@ function session(id = "session", incarnation = "original"): SessionRecord {
     completedPlayerTurns: 0,
     activePlugins: ["builtin", "community", "pending", "failed", "broken"],
     metadata: {
+      pluginSelection: {
+        requested: ["builtin", "community", "pending", "failed", "broken"],
+        excluded: [],
+      },
       sessionIncarnationNonce: incarnation,
       approvalScopeNonce: "private-approval-scope",
       ownerTokenHash: hashSessionOwnerToken("fixture-owner-token"),
@@ -82,8 +86,10 @@ function fixture() {
     rpc,
     services,
     calls,
-    hasPendingEntry: (pluginId) => pending.has(pluginId),
-    isServerCodeApproved: (_session, pluginId) => approved.has(pluginId),
+    isEntryPublished: (pluginId) =>
+      !pending.has(pluginId) && pluginId !== "failed" && pluginId !== "broken",
+    isServerCodeApproved: (session, pluginId) =>
+      approved.has(pluginId) || approved.has(`${session.id}/${pluginId}`),
   });
   function registerPlugin(
     id: string,
@@ -156,6 +162,70 @@ function fixture() {
 }
 
 describe("recent plugin service calls", () => {
+  it("aggregates exactly the returned extension call window and respects filters and incarnation", () => {
+    const { diagnostics, calls } = fixture();
+    const owner = session();
+    const extension = {
+      point: "ui.slot@1",
+      id: "backdrop",
+      slot: "stage.backdrop@1",
+    };
+    calls.record(
+      callEvent(owner, "old-error", { extension, outcome: "error" }),
+    );
+    for (let index = 0; index < 100; index++)
+      calls.record(
+        callEvent(owner, `call-${index}`, {
+          extension,
+          outcome:
+            index === 98 ? "timeout" : index === 99 ? "cancelled" : "success",
+        }),
+      );
+    expect(diagnostics.snapshot(owner).extensionCalls).toEqual([
+      {
+        point: "ui.slot@1",
+        providerPluginId: "provider",
+        total: 100,
+        success: 98,
+        error: 0,
+        timeout: 1,
+        cancelled: 1,
+      },
+    ]);
+    calls.record(callEvent(owner, "service-only"));
+    expect(diagnostics.snapshot(owner).extensionCalls[0]!.total).toBe(99);
+    expect(diagnostics.snapshot(owner, "other").extensionCalls).toEqual([]);
+    expect(
+      diagnostics.snapshot(session("session", "replacement")).extensionCalls,
+    ).toEqual([]);
+    const listed = calls.list(owner);
+    Object.assign(listed[1]!.extension!, { point: "mutated" });
+    expect(calls.list(owner)[1]!.extension!.point).toBe("ui.slot@1");
+  });
+
+  it("separates one published entry from each session's live authorization", () => {
+    const { diagnostics, registerPlugin, approved, ensure } = fixture();
+    registerPlugin("community", { source: "community" });
+    approved.add("first/community");
+    expect(diagnostics.snapshot(session("first")).plugins[0]).toMatchObject({
+      hostState: "loaded",
+      sessionState: "active",
+      serverCodeApproved: true,
+    });
+    expect(diagnostics.snapshot(session("second")).plugins[0]).toMatchObject({
+      hostState: "loaded",
+      sessionState: "approval-required",
+      serverCodeApproved: false,
+      rejection: { code: "approval-required" },
+    });
+    approved.clear();
+    expect(diagnostics.snapshot(session("first")).plugins[0]).toMatchObject({
+      hostState: "loaded",
+      sessionState: "approval-required",
+      serverCodeApproved: false,
+    });
+    expect(ensure).not.toHaveBeenCalled();
+  });
   it("bounds the global history and returns the latest 100 matching calls", () => {
     const calls = new RecentPluginServiceCalls();
     const first = session("first");
@@ -281,7 +351,9 @@ describe("plugin diagnostics snapshots", () => {
     });
     const [snapshot] = diagnostics.snapshot(session()).plugins;
     expect(snapshot).toMatchObject({
-      state: "ready",
+      hostState: "loaded",
+      sessionState: "active",
+      serverCodeApproved: true,
       runtimeIds: ["builtin/runtime"],
       registrations: {
         tools: ["dynamic-tool"],
@@ -327,7 +399,9 @@ describe("plugin diagnostics snapshots", () => {
     registerPlugin("inactive");
     registerPlugin("community", { source: "community" });
     registerPlugin("pending");
-    registerPlugin("failed", { error: "private-activation-error" });
+    registerPlugin("failed", {
+      error: "[plugin_registration_invalid] private-activation-error",
+    });
     registerPlugin("broken", { status: "error", error: "private-load-error" });
     pending.add("pending");
     rpc.registerPluginHandler(
@@ -340,15 +414,18 @@ describe("plugin diagnostics snapshots", () => {
     const snapshot = diagnostics.snapshot(session());
     expect(
       Object.fromEntries(
-        snapshot.plugins.map((plugin) => [plugin.pluginId, plugin.state]),
+        snapshot.plugins.map((plugin) => [
+          plugin.pluginId,
+          [plugin.hostState, plugin.sessionState, plugin.serverCodeApproved],
+        ]),
       ),
     ).toEqual({
-      builtin: "ready",
-      inactive: "inactive",
-      community: "approval-required",
-      pending: "entry-pending",
-      failed: "activation-error",
-      broken: "load-error",
+      builtin: ["loaded", "active", true],
+      inactive: ["loaded", "inactive", true],
+      community: ["loaded", "approval-required", false],
+      pending: ["installed", "active", true],
+      failed: ["error", "active", true],
+      broken: ["error", "rejected", true],
     });
     expect(
       snapshot.plugins.find(({ pluginId }) => pluginId === "community")!
@@ -357,11 +434,16 @@ describe("plugin diagnostics snapshots", () => {
     approved.add("community");
     expect(diagnostics.snapshot(session(), "community").plugins).toEqual([
       expect.objectContaining({
-        state: "ready",
+        hostState: "loaded",
+        sessionState: "active",
+        serverCodeApproved: true,
         registrations: expect.objectContaining({ actions: ["inspect-action"] }),
       }),
     ]);
     expect(JSON.stringify(snapshot)).not.toContain("private-");
+    expect(
+      snapshot.plugins.find((plugin) => plugin.pluginId === "failed"),
+    ).not.toHaveProperty("registrationError");
   });
 
   it("accepts query-token authentication while rejecting unknown query options", async () => {

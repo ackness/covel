@@ -9,14 +9,14 @@ schedule:
   stage: setup
   trigger:
     type: auto
-  needs:
-    - pregame
-    - world-init/schema-gen
+  after:
+    - contract: session.opening@1
+    - contract: world-data-provider@1
 io:
   inputs:
     pregame-opening:
       from:
-        runtime: pregame
+        contract: session.opening@1
       select: /narrativeOutput
       required: false
   output:

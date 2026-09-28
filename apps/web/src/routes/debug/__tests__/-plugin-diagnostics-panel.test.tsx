@@ -20,12 +20,25 @@ function snapshot(
   return {
     sessionId,
     capturedAt: "2026-09-26T00:00:00Z",
+    extensionCalls: [
+      {
+        point: "ui.slot@1",
+        providerPluginId: pluginId,
+        total: 3,
+        success: 1,
+        error: 1,
+        timeout: 1,
+        cancelled: 0,
+      },
+    ],
     history: { scope: "process", limit: 100 },
     plugins: [
       {
         pluginId,
         source: "community",
-        state: "ready",
+        hostState: "loaded",
+        sessionState: "active",
+        serverCodeApproved: true,
         active: true,
         runtimeIds: ["map/runtime"],
         registrations: {
@@ -74,6 +87,9 @@ describe("plugin diagnostics panel", () => {
     const { rerender } = render(<PluginDiagnosticsPanel {...initial} />);
     expect(await screen.findByText("map/runtime")).toBeDefined();
     expect(screen.getByText("locate")).toBeDefined();
+    expect(screen.getByText("loaded")).toBeDefined();
+    expect(screen.getByText("active")).toBeDefined();
+    expect(screen.getByText("3 / 1 / 1 / 1 / 0")).toBeDefined();
     expect(screen.getByText("map-hook (turn.started)")).toBeDefined();
     expect(screen.getByText("navigate")).toBeDefined();
     expect(screen.getByText("lookup (map.lookup.v1)")).toBeDefined();

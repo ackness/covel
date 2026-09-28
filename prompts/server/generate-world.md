@@ -124,9 +124,11 @@ Anchor the lore around one core anomaly or pressure mechanism that makes this wo
 
 ## WORLD_PACKAGE_YAML
 
+Include optional `contractData: [{ contract, key, value }]` for world-specific plugin definitions using only public data schemas supplied in the creation brief. Each record value must have an `id` equal to `key`. Do not put plugin-owned definitions in `dimensions`. Omit contractData when no suitable contract is supplied.
+
 This section carries optional text content that ships with the world package.
-Always include all four top-level arrays. Use `[]` when the Creation Brief says
-OMIT. Never add other top-level fields.
+Always include the four content arrays below. Use `[]` when the Creation Brief says
+OMIT. The optional `contractData` array above is the only additional top-level field.
 
 ```yaml
 memoryDefinitions:

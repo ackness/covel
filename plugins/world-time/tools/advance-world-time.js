@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { worldTimeSchema } from "@covel/shared";
+import { worldTimeSchema } from "../schema.js";
 import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 import { advanceTime, describeTime } from "../clock.js";

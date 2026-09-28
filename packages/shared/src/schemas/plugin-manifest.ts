@@ -1,3 +1,8 @@
+import {
+  isKernelExtensionContract,
+  INVALID_KERNEL_CONFLICT,
+  kernelConflictMessage,
+} from "../extension-points/contracts.js";
 import { z } from "zod";
 import {
   contractIdSchema,
@@ -40,7 +45,18 @@ export const pluginManifestSchema = z.strictObject({
     .optional(),
   requires: z.array(contractIdSchema).optional(),
   optional: z.array(contractIdSchema).optional(),
-  conflicts: z.array(contractIdSchema).optional(),
+  conflicts: z
+    .array(
+      contractIdSchema.superRefine((contract, ctx) => {
+        if (isKernelExtensionContract(contract))
+          ctx.addIssue({
+            code: "custom",
+            message: kernelConflictMessage(contract),
+            params: { code: INVALID_KERNEL_CONFLICT },
+          });
+      }),
+    )
+    .optional(),
   contracts: z
     .record(contractIdSchema, z.strictObject({ schema: z.string().min(1) }))
     .optional(),

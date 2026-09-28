@@ -1,3 +1,4 @@
+import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
 import { defineExtensionPoint } from "./index.js";
 
@@ -20,8 +21,7 @@ export const promptSegmentSchema = z.strictObject({
 export type PromptSegment = z.infer<typeof promptSegmentSchema>;
 
 export const promptSegmentV1 = defineExtensionPoint({
-  id: "prompt.segment@1",
-  mode: "collect",
+  ...kernelExtensionPoints.promptSegment,
   input: z.strictObject({ turnId: z.string(), playerMessage: z.string() }),
   output: z.array(promptSegmentSchema),
   timeoutMs: 500,

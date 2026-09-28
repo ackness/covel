@@ -1,3 +1,4 @@
+import { turnDigestSchema } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import type { DataStore, StoreTransaction } from "@covel/store";
 import type {
@@ -61,21 +62,13 @@ export function parseStagedRuntimeJobPayload(
   ) {
     return undefined;
   }
-  const digest = descriptor.turnDigest;
-  if (
-    digest !== undefined &&
-    (!digest ||
-      typeof digest !== "object" ||
-      Array.isArray(digest) ||
-      typeof digest.turnId !== "string" ||
-      typeof digest.playerMessage !== "string" ||
-      typeof digest.narrativeText !== "string" ||
-      !Array.isArray(digest.toolCallSummaries) ||
-      digest.toolCallSummaries.some((item) => typeof item !== "string") ||
-      (digest.locale !== undefined && typeof digest.locale !== "string"))
-  )
+  const digest = turnDigestSchema.safeParse(descriptor.turnDigest);
+  if (!digest.success || digest.data.turnId !== descriptor.sourceTurnId)
     return undefined;
-  return payload as StagedRuntimeJobPayload;
+  return {
+    ...payload,
+    descriptor: { ...descriptor, turnDigest: digest.data },
+  } as StagedRuntimeJobPayload;
 }
 
 export interface RuntimeJobExecutionControl {

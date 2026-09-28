@@ -1,3 +1,4 @@
+import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
 import { defineExtensionPoint } from "./index.js";
 export const mediaImageFlowSchema = z.strictObject({
@@ -7,8 +8,7 @@ export const mediaImageFlowSchema = z.strictObject({
 });
 export type MediaImageFlow = z.infer<typeof mediaImageFlowSchema>;
 export const mediaImageFlowV1 = defineExtensionPoint({
-  id: "media.image-flow@1",
-  mode: "single",
+  ...kernelExtensionPoints.mediaImageFlow,
   input: z.strictObject({}),
   output: mediaImageFlowSchema,
   timeoutMs: 500,

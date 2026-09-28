@@ -358,7 +358,9 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       plugins: expect.arrayContaining([
         expect.objectContaining({
           pluginId: providerPluginId,
-          state: "inactive",
+          hostState: "installed",
+          sessionState: "inactive",
+          serverCodeApproved: false,
           registrations: {
             tools: [],
             hooks: [],
@@ -498,7 +500,9 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       plugins: [
         {
           pluginId: providerPluginId,
-          state: "ready",
+          hostState: "loaded",
+          sessionState: "active",
+          serverCodeApproved: true,
           runtimeIds: [],
           registrations: {
             services: [

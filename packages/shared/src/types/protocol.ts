@@ -374,6 +374,10 @@ export type CovelEvent =
   | { readonly type: "hook.fired"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.rewrote"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.aborted"; readonly payload: CovelEventPayload }
+  | {
+      readonly type: "plugin.service.completed";
+      readonly payload: CovelEventPayload;
+    }
   // Slash-command lifecycle. Composer and plugin JSON-render UI actions share
   // this exact trace shape; `payload.source` is the only entry-point marker.
   | { readonly type: "command.invoked"; readonly payload: CovelEventPayload }
@@ -503,6 +507,7 @@ export const COVEL_EVENT_META = {
   "hook.fired": { forwardToActionStream: true },
   "hook.rewrote": { forwardToActionStream: true },
   "hook.aborted": { forwardToActionStream: true },
+  "plugin.service.completed": { forwardToActionStream: false },
   // Command lifecycle is consumed by traces/debug, not the gameplay stream.
   "command.invoked": { forwardToActionStream: false },
   "command.completed": { forwardToActionStream: false },

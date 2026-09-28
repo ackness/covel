@@ -64,6 +64,7 @@ export async function writeWorldDataFiles(
     inline && typeof inline === "object" && Object.keys(inline).length > 0,
   );
   const characters = packageContent?.characters ?? [];
+  const contractData = packageContent?.contractData ?? [];
   const memoryDefinitions = packageContent?.memoryDefinitions ?? [];
   const lorebook = [
     ...(packageContent?.lorebook ?? []),
@@ -73,7 +74,8 @@ export async function writeWorldDataFiles(
     !hasDimensions &&
     characters.length === 0 &&
     lorebook.length === 0 &&
-    memoryDefinitions.length === 0
+    memoryDefinitions.length === 0 &&
+    contractData.length === 0
   ) {
     return [];
   }
@@ -149,6 +151,23 @@ export async function writeWorldDataFiles(
       path: memoryPath,
       schema: "contract:memory.blocks@1",
       to: "contract:memory.blocks@1",
+      key: "id",
+    };
+  }
+
+  for (const [index, record] of contractData.entries()) {
+    const recordPath = `data/contract-${index}.json`;
+    await writeFile(
+      path.join(worldDir, recordPath),
+      `${JSON.stringify(record.value, null, 2)}\n`,
+      "utf8",
+    );
+    written.push(recordPath);
+    sources[`contract${index}`] = {
+      kind: "json",
+      path: recordPath,
+      schema: `contract:${record.contract}`,
+      to: `contract:${record.contract}`,
       key: "id",
     };
   }

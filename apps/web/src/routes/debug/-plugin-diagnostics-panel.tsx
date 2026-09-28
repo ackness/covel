@@ -190,6 +190,42 @@ export function PluginDiagnosticsPanel({
             </div>
           )}
           <h3 className="ui-title mb-2 mt-6 text-sm font-semibold">
+            {t(
+              "debugger.plugins.extensionCalls",
+              "Extension calls in this window",
+            )}
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr>
+                  <th className="p-2">
+                    {t("debugger.plugins.providerPoint", "Provider / point")}
+                  </th>
+                  <th className="p-2">
+                    {t(
+                      "debugger.plugins.callCounts",
+                      "Total / success / error / timeout / cancelled",
+                    )}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.extensionCalls.map((count) => (
+                  <tr key={`${count.point}/${count.providerPluginId}`}>
+                    <td className="p-2 font-mono">
+                      {count.providerPluginId} · {count.point}
+                    </td>
+                    <td className="p-2">
+                      {count.total} / {count.success} / {count.error} /{" "}
+                      {count.timeout} / {count.cancelled}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <h3 className="ui-title mb-2 mt-6 text-sm font-semibold">
             {t("debugger.plugins.calls", "Recent service calls")}
           </h3>
           {snapshot.calls.length === 0 ? (
@@ -288,9 +324,7 @@ function PluginCard({
           <h3 className="font-mono text-sm font-semibold break-all">
             {plugin.pluginId}
           </h3>
-          <p className="text-muted-foreground">
-            {plugin.source} · {plugin.state}
-          </p>
+          <p className="text-muted-foreground">{plugin.source}</p>
         </div>
         {!filtered && (
           <Button variant="ghost" size="sm" onClick={onFilter}>
@@ -299,6 +333,50 @@ function PluginCard({
         )}
       </div>
       <dl className="grid gap-2 sm:grid-cols-2">
+        <Capability
+          label={t("debugger.plugins.hostState", "Host state")}
+          values={[plugin.hostState]}
+        />
+        <Capability
+          label={t("debugger.plugins.sessionState", "Session state")}
+          values={[plugin.sessionState]}
+        />
+        <Capability
+          label={t("debugger.plugins.authorization", "Session authorization")}
+          values={[
+            plugin.serverCodeApproved
+              ? t("debugger.plugins.approved", "Approved")
+              : t("debugger.plugins.notApproved", "Not approved"),
+          ]}
+        />
+        {plugin.autoAdded && (
+          <Capability
+            label={t("debugger.plugins.dependencies", "Dependencies")}
+            values={[
+              t("debugger.plugins.autoAdded", "Added by dependency resolution"),
+            ]}
+          />
+        )}
+        {plugin.rejection && (
+          <Capability
+            label={t("debugger.plugins.rejection", "Resolution rejection")}
+            values={[`${plugin.rejection.code}: ${plugin.rejection.reason}`]}
+          />
+        )}
+        {plugin.error && (
+          <Capability
+            label={t("debugger.plugins.failure", "Load / activation error")}
+            values={[plugin.error]}
+          />
+        )}
+        {plugin.registrationError && (
+          <Capability
+            label={t("debugger.plugins.failure", "Load / activation error")}
+            values={[
+              `${plugin.registrationError.code}: ${plugin.registrationError.registration}`,
+            ]}
+          />
+        )}
         <Capability
           label={t("debugger.plugins.runtimes", "Runtimes")}
           values={plugin.runtimeIds}
@@ -326,7 +404,8 @@ function PluginCard({
         <Capability
           label={t("debugger.plugins.extensions", "Extensions")}
           values={(registrations.extensions ?? []).map(
-            (extension) => `${extension.id} (${extension.point})`,
+            (extension) =>
+              `${extension.id} (${extension.point}${extension.slot ? ` · ${extension.slot}` : ""})`,
           )}
         />
         <Capability

@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   PluginExtensionHost,
   PluginServiceRegistry,
+  createTurnEmitter,
   type LLMAdapter,
   type LLMResponse,
 } from "@covel/runtime";
@@ -82,12 +83,49 @@ describe("createBootstrapCompactorRunner", () => {
       llmAdapter,
     });
 
-    const result = await runner.run("session-1", "", messages, "en-US");
+    const emitter = createTurnEmitter({
+      store,
+      sessionId: "session-1",
+      turnId: "current-turn",
+      traceId: "current-flow",
+    });
+    await emitter.emit("hook.fired", {});
+    const result = await runner.run(
+      "session-1",
+      "",
+      messages,
+      "en-US",
+      emitter.traceId,
+      emitter,
+    );
+    await emitter.emit("hook.fired", {});
 
     expect(result.compacted).toBe(true);
     expect(resolveBudget).toHaveBeenCalledWith("fast");
     expect(generate).toHaveBeenCalledWith(
       expect.objectContaining({ model: "fast", maxOutputTokens: 400 }),
     );
+    const traces = await store.listTraceEvents("session-1");
+    expect(
+      traces.find((trace) => trace.type === "plugin.service.completed"),
+    ).toMatchObject({
+      turnId: "current-turn",
+      traceId: "current-flow",
+      payload: {
+        outcome: "success",
+        extension: { point: "history.compact@1" },
+        seq: 1,
+      },
+    });
+    expect(
+      traces
+        .filter(
+          (trace) =>
+            trace.type === "hook.fired" ||
+            trace.type === "plugin.service.completed",
+        )
+        .map((trace) => (trace.payload as { seq: number }).seq),
+    ).toEqual([0, 1, 2]);
+    await store.close();
   });
 });

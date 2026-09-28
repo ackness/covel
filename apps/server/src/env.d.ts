@@ -180,6 +180,7 @@ declare module "hono" {
       beforeCapture?: () => Promise<void>,
     ) => Promise<T>;
     hasPendingPluginEntry?: (pluginId: string) => boolean;
+    isPluginEntryPublished?: (pluginId: string) => boolean;
     /** Public services exported by active, approved plugin entries. */
     pluginServices?: import("@covel/runtime").PluginServiceRegistry;
     uiSlots?: import("./ui-slots/host.js").UiSlotHost;

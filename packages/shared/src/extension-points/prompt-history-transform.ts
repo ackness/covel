@@ -1,3 +1,4 @@
+import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
 import { defineExtensionPoint } from "./index.js";
 
@@ -40,8 +41,7 @@ export const historyMessageSchema: z.ZodType<ExtensionHistoryMessage> =
   });
 
 export const promptHistoryTransformV1 = defineExtensionPoint({
-  id: "prompt.history-transform@1",
-  mode: "pipeline",
+  ...kernelExtensionPoints.promptHistoryTransform,
   input: z.object({
     messages: z.array(historyMessageSchema).readonly(),
     turnId: z.string(),

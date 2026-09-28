@@ -337,6 +337,7 @@ async function executeTurnImpl(
     deps = {
       ...deps,
       extensionExecution: deps.extensions.createExecution({
+        emitter: deps.emitter,
         sessionId: input.sessionId,
         turnId: input.turnId,
         locale: input.locale ?? "zh-CN",
@@ -535,6 +536,7 @@ async function executeTurnImpl(
           projectedPromptHistory,
           input.locale,
           deps.emitter?.traceId,
+          deps.emitter,
         );
         await runPostCompactionHook(hookOpts, {
           compacted: result.compacted,
@@ -759,6 +761,7 @@ async function executeTurnImpl(
           input,
           frozenUpstreamResults,
           activeRuntimes,
+          sessionMeta.lastPlayerInput,
         ),
       });
     }

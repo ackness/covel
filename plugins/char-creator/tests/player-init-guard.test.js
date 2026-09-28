@@ -29,6 +29,31 @@ function context(values, characters = []) {
 }
 
 describe("player initialization World Model", () => {
+  it.each([null, { characterName: "Alex" }])(
+    "fails without a schema before producing a form or a player for input %j",
+    async (values) => {
+      const ctx = context(values);
+      ctx.world.characterSchema = null;
+      await expect(guard(ctx)).rejects.toThrow("Character schema is not ready");
+    },
+  );
+  it("accepts the retained submission after schema recovery and applies defaults", async () => {
+    const ctx = context({ characterName: "Alex" });
+    ctx.world.characterSchema = null;
+    await expect(guard(ctx)).rejects.toThrow("Character schema is not ready");
+    ctx.world.characterSchema = schema;
+    const result = await guard(ctx);
+    expect(result).toMatchObject({ preGameDone: true, playerExists: true });
+    expect(getPendingProposals(result)).toEqual([
+      expect.objectContaining({
+        type: "character.upsert",
+        payload: expect.objectContaining({
+          name: "Alex",
+          fields: { systems: 2 },
+        }),
+      }),
+    ]);
+  });
   it("rejects an invalid submitted attribute without rewriting the submission", async () => {
     const values = { characterName: "Alex", systems: "self-taught" };
     await expect(guard(context(values))).rejects.toThrow(/systems/);
@@ -55,9 +80,9 @@ describe("player initialization World Model", () => {
     ]);
   });
   it("reuses the player already visible in the execution", async () => {
-    const result = await guard(
-      context(null, [{ id: "player", type: "player" }]),
-    );
+    const ctx = context(null, [{ id: "player", type: "player" }]);
+    ctx.world.characterSchema = null;
+    const result = await guard(ctx);
     expect(result).toMatchObject({ skip: true, playerId: "player" });
     expect(getPendingProposals(result)).toEqual([]);
   });

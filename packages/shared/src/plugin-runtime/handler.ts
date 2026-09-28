@@ -21,7 +21,10 @@ import type {
  * The handler receives this context and returns a Record<string, unknown> output.
  */
 export interface FunctionHandlerContext {
-  readonly session?: { readonly lastPlayerInput: string };
+  readonly session?: {
+    readonly lastPlayerInput:
+      import("../types/message.js").PlayerInputSubmission | null;
+  };
   /** Committed world records plus validated execution-local proposals. */
   readonly world?: import("../proposals/world-model.js").WorldModelView;
   /** Public, schema-validated services exported by active plugins. */

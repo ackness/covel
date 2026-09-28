@@ -1955,16 +1955,16 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 返回 `{items: PluginSummary[]}`。`PluginSummary` 来自 registry 的统一投影：
 
-| 字段                                                        | 含义                                                                         |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `id`, `displayName`, `description`                          | 包身份与可本地化描述                                                         |
-| `kind`, `source`                                            | `core \| plugin` 与 `builtin \| community`                                   |
-| `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| approved \| loaded \| error` 与加载错误 |
-| `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                                           |
-| `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                             |
-| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                                 |
+| 字段                                                        | 含义                                                             |
+| ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| `id`, `displayName`, `description`                          | 包身份与可本地化描述                                             |
+| `kind`, `source`                                            | `core \| plugin` 与 `builtin \| community`                       |
+| `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error` 与加载错误 |
+| `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                               |
+| `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                 |
+| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                     |
 
-宿主是否加载与会话是否激活是两种状态；列表不会把全局宿主状态写成某个会话的 active。失败包作为 `hostState:"error"` 的目录项保留。纯声明或 entry-only 包可以没有 runtime。
+宿主是否加载与会话是否激活是两种状态；列表不会把全局宿主状态写成某个会话的 active。`loaded` 来自当前 entry 代次的实际发布状态，与 runtime 缓存无关；首次发布失败为 `error`，重载失败而旧代仍可用时仍为 `loaded` 并可携带 `error`。纯声明或 entry-only 包可以没有 runtime。
 
 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、有效 `turnCompletion`、`outputKind`、可选 `outputContract` 等字段。UI 按公开 contract 和扩展点发现行为，不能根据具体插件 ID 推断能力。
 
@@ -1984,7 +1984,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 #### `GET /api/sessions/:id/plugins`
 
-列出会话可见的 canonical 插件描述。`items[]` 在 `PluginSummary` 上增加 `active`、`locked`、`sessionState`、可选 `approvalRequired`、`autoAdded` 与 `rejection`；顶层 `commands[]` 是按当前激活集过滤并加入框架命令后的唯一可执行目录，避免按插件重复返回命令。
+列出会话可见的 canonical 插件描述。`items[]` 在 `PluginSummary` 上增加 `active`、`locked`、`sessionState`、`serverCodeApproved`、可选 `approvalRequired`、`autoAdded` 与 `rejection`；顶层 `commands[]` 是按当前激活集过滤并加入框架命令后的唯一可执行目录，避免按插件重复返回命令。
 
 **响应:**
 
@@ -2026,6 +2026,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       "conflicts": [],
       "extensions": [],
       "sessionState": "active",
+      "serverCodeApproved": true,
       "tags": ["mode:traditional-story", "cost:llm"]
     }
   ]
@@ -3341,14 +3342,15 @@ embedding requests outside the memory subsystem.
 返回 `PluginDiagnosticsSnapshot`（`@covel/shared`）：
 
 - `sessionId`、`capturedAt`：所属会话与快照时间。
-- `plugins[]`：`pluginId`、`source`（`builtin` / `community`）、`active`、`state`、`runtimeIds`、`registrations`、`commands`。
-- `state`：`ready`、`inactive`、`approval-required`、`entry-pending`、`activation-error`、`load-error`。失败状态不携带原始异常。
-- `registrations`：工具名 `tools[]`、Hook `{ id, event }[]`、RPC action 名 `actions[]`、服务 `{ name, contract }[]`。仅返回当前会话活跃且已批准、无加载/激活错误的包的实际注册项；其余包为空。
+- `plugins[]`：`pluginId`、`source`、`active`、`hostState`、`sessionState`、`serverCodeApproved`、可选 `autoAdded` / `rejection` / `approvalRequired` / `error` / `registrationError`、`runtimeIds`、`registrations`、`commands`。状态与依赖结果复用会话插件列表的只读解析。
+- `hostState` 表示全进程 entry 发布状态，`sessionState` 为 `active | inactive | approval-required | rejected`，`serverCodeApproved` 根据当前会话实时授权派生。全局 loaded 不代表本会话获准运行，撤权不销毁其他会话共享的 entry。`error` 只提供固定说明，`registrationError: { code: "plugin_registration_invalid", registration }` 仅来自宿主识别的注册错误类型，不从错误字符串推断，也不携带原始异常。
+- `registrations`：工具名 `tools[]`、Hook `{ id, event }[]`、RPC action 名 `actions[]`、服务 `{ name, contract }[]`、扩展 `{ point, id, order?, slot? }[]`。仅返回当前会话活跃且已批准、宿主状态非 error 的包的实际注册项；其余包为空。
 - `commands[]`：声明的 `{ name, action, registered }`，`registered` 表示 action 是否在上述注册表中，不代替执行时权限检查。
-- `calls[]`：`callId`、可选 `parentCallId` / `turnId` / `runtimeId`、`callerPluginId`、`providerPluginId`、`name`、`contract`、`completedAt`、`durationMs`、`outcome`（`success` / `timeout` / `cancelled` / `error`）、可选固定分类 `errorCode`。
+- `calls[]`：`callId`、可选 `parentCallId` / `turnId` / `runtimeId`、`callerPluginId`、`providerPluginId`、`name`、`contract`、`completedAt`、`durationMs`、`outcome`（`success` / `timeout` / `cancelled` / `error`）、可选固定分类 `errorCode`，扩展调用附 `extension: { point, id, slot? }`（来自注册项）。最终输出及归属校验失败为 `output-validation`。
+- `extensionCalls[]`：按 `point` 与 `providerPluginId` 汇总本次返回的同一 calls 窗口，含 `total / success / error / timeout / cancelled`；不是全生命周期累计值。缓存命中不增加计数；未发现可用提供者没有调用记录；skip 与 fail-turn 均只记录实际失败一次。
 - `history`：`{ "scope": "process", "limit": 100 }`。全进程最多保留 500 条已完成调用，按当前会话实例筛选后倒序返回最多 100 条；不跨进程共享或持久化。
 
-调用方准入成功前的失败不写入该会话历史。记录不含输入、输出、原始错误、凭据或私有会话范围；同 ID 重建会话与旧历史隔离。未匹配已注册描述符的请求使用 `<unavailable>` 作为服务标识，避免复制任意请求内容；可显示的诊断字符串最多 256 个 UTF-16 单元，截断时以 `...[truncated]` 标记，内部会话匹配仍使用完整身份。此窗口用于开发诊断，不是完整审计日志。
+调用方准入成功前的失败不写入该会话历史。记录不含输入、输出、原始错误、凭据或私有会话范围；同 ID 重建会话与旧历史隔离。未匹配已注册描述符的请求使用 `<unavailable>` 作为服务标识，避免复制任意请求内容；可显示的诊断字符串最多 256 个 UTF-16 单元，截断时以 `...[truncated]` 标记，内部会话匹配仍使用完整身份。此窗口用于开发诊断，不是完整审计日志。有实际回合 emitter 的扩展、压缩及 function service 调用另通过 `plugin.service.completed` 写入既有持久 trace；复用 callId、父调用、traceId 与回合关联，等待 trace 写入尝试完成后再返回。存储失败不改变调用结果，provider 耗时不含 trace I/O。无回合 emitter 的 UI 后台投影仅进入进程窗口，不伪造回合。
 
 框架目录包含 `/plugins [pluginId]`，ID `framework:plugins`，action `slash-plugins`，参数为可选字符串 `pluginId`。使用 `POST /api/sessions/:id/plugin-rpc` 的 `kind: "command"` 执行，返回 `result.clientAction: { type: "open-plugin-diagnostics", pluginId? }`；无参数时查看全部安装包。普通 action 请求不能替代此命令上下文。Web 客户端打开 `/debug` 的 `view=plugins`，保留当前 `sid` 和可选 `pluginId`。调试页的 `view` 支持 `traces` / `data` / `cost` / `plugins`，缺省为 `traces`；插件筛选只在 `plugins` 视图生效。命令不触发玩家回合或模型调用。
 

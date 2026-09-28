@@ -55,6 +55,7 @@ export async function createWorld(
     locale,
     options.brief,
     options.loadPrompt,
+    options.dataContracts,
   );
   log(
     options,
@@ -220,6 +221,7 @@ export async function createWorld(
     const generatedPackage = normalizeGeneratedPackage(
       rawPackage,
       options.brief,
+      options.dataContracts,
     );
     if (generatedPackage.errors.length > 0) {
       lastErrors = generatedPackage.errors;

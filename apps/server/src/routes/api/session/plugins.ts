@@ -113,12 +113,20 @@ export function buildAvailablePluginList(
   active: readonly string[],
   registry: PluginRegistry,
   plan?: SessionPluginResolution,
+  options: {
+    authorized?: readonly string[];
+    isEntryPublished?: (pluginId: string) => boolean;
+  } = {},
 ): SessionPlugin[] {
+  const authorized = new Set(
+    options.authorized ?? authorizedSessionPluginIds(registry),
+  );
   return [...registry.getAll().values()].map((entry) => {
     const rejection = plan?.rejected.find((item) => item.pluginId === entry.id);
     const isActive = active.includes(entry.id);
     return {
-      ...buildPluginSummary(entry),
+      ...buildPluginSummary(entry, options.isEntryPublished),
+      serverCodeApproved: authorized.has(entry.id),
       active: isActive,
       locked: false,
       sessionState: isActive
@@ -135,6 +143,31 @@ export function buildAvailablePluginList(
         : {}),
     };
   });
+}
+
+/** Shared read-only projection for session lists and diagnostics. */
+export function buildSessionPluginView(
+  session: SessionRecord,
+  registry: PluginRegistry,
+  options: {
+    authorized: readonly string[];
+    isEntryPublished?: (pluginId: string) => boolean;
+  },
+): { items: SessionPlugin[]; resolution: SessionPluginResolution } {
+  const selection = readSessionPluginSelection(session);
+  const resolution = resolveSessionPluginPlan(selection.requested, registry, {
+    excluded: selection.excluded,
+    authorized: options.authorized,
+  });
+  return {
+    items: buildAvailablePluginList(
+      resolution.active,
+      registry,
+      resolution,
+      options,
+    ),
+    resolution,
+  };
 }
 export function buildSnapshotPluginList(
   registry: PluginRegistry,

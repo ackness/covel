@@ -285,6 +285,39 @@ export async function loadPluginDefinition(
     ...(plugin.optional ?? []),
   ]);
   for (const parsed of manifests) {
+    const runtimeReferences = [
+      ...(["needs", "after"] as const).flatMap((field) =>
+        (parsed.runtime?.schedule?.[field] ?? []).flatMap((reference, index) =>
+          typeof reference === "string"
+            ? [{ runtimeId: reference, field: `schedule.${field}[${index}]` }]
+            : "runtime" in reference
+              ? [
+                  {
+                    runtimeId: reference.runtime,
+                    field: `schedule.${field}[${index}].runtime`,
+                  },
+                ]
+              : [],
+        ),
+      ),
+      ...Object.entries(parsed.runtime?.io?.inputs ?? {}).flatMap(
+        ([name, input]) =>
+          "runtime" in input.from
+            ? [
+                {
+                  runtimeId: input.from.runtime,
+                  field: `io.inputs.${name}.from.runtime`,
+                },
+              ]
+            : [],
+      ),
+    ];
+    for (const { runtimeId, field } of runtimeReferences) {
+      if (runtimeId !== plugin.id && !runtimeId.startsWith(`${plugin.id}/`))
+        throw new Error(
+          `${parsed.sourcePath}: ${field} references runtime ${runtimeId} outside package ${plugin.id}; use a contract for cross-package dependencies`,
+        );
+    }
     const references = [
       ...(parsed.runtime?.schedule?.needs ?? []).flatMap((need) =>
         typeof need === "object" && "contract" in need

@@ -759,6 +759,6 @@ sources:
 - `key` 只支持简单字段名、markdown/text literal key、media `filename`。
 - remote、SQLite source、CUE、RO-Crate、复杂 JSON Patch override 属于后续阶段。
 
-世界时间是正式的 `time` 维度，支持内联、`dimensionSources.time` 和 `world:metadata.dimensions` 数据源。字段、倒流/随机规则及会话快照语义见 [World time](./world-time.md)。
+世界时间由插件拥有的 `world.time-definition@1` 数据契约承载，记录为 `{ id: world, definition }`，通过 `schema` 与 `to` 的同名契约导入。它不属于世界维度。AI 生成的通用 `contractData` 记录在文件、服务端存储和浏览器私有世界中保留相同契约身份；便携记录要求 `key === value.id`。字段、倒流/随机规则及会话快照语义见 [World time](./world-time.md)。
 
 GitHub 世界包目录、多世界选择、代理下载和更新流程见 [世界目录与安装](./world-installation.md)。

@@ -68,7 +68,7 @@ describe("core plugin manifest contract", () => {
     expect(schemaGen).toMatchObject({
       pluginType: "core-plugin",
       stage: "setup",
-      after: ["pregame"],
+      after: [{ capability: "session.opening@1" }],
       model: "plugin",
       guard: "../../guard.js",
       trigger: { type: "auto", maxTriggerCount: 1 },
@@ -92,12 +92,14 @@ describe("core plugin manifest contract", () => {
       requireToolUse: true,
       completeAfterTools: ["create-character-form"],
       maxRetries: 0,
-      // Turn-scoped needs carry both the intra-stage order and the same-turn
-      // gate; the explicit stage picks the band.
-      needs: ["pregame", "world-init/schema-gen"],
+      // Order one-time setup providers without requiring them on form submission.
+      after: [
+        { capability: "session.opening@1" },
+        { capability: "world-data-provider@1" },
+      ],
     });
     expect(playerInit.inputs?.["pregame-opening"]).toMatchObject({
-      from: { runtime: "pregame" },
+      from: { capability: "session.opening@1" },
       select: "/narrativeOutput",
     });
 
@@ -147,11 +149,11 @@ describe("core plugin manifest contract", () => {
     });
     expect(narrator.inputs).toMatchObject({
       "npc-relationships": {
-        from: { runtime: "npc-graph/rag-retriever" },
+        from: { capability: "graph-rag@1" },
         select: "/npcContext",
       },
       "check-results": {
-        from: { runtime: "dice-check/roller" },
+        from: { capability: "dice-check@1" },
         select: "/checkContext",
       },
     });

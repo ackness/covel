@@ -90,6 +90,13 @@ Compose 固定应用容器的 `SERVER_PORT=3001`，宿主机入口由 `APP_BIND_
 
 同时检查用户安装插件目录（`COVEL_USER_PLUGINS_DIR`，默认 `$COVEL_HOME/plugins`）和用户世界目录（`COVEL_USER_WORLDS_DIR`，默认 `$COVEL_HOME/worlds`）：多 runtime 插件的子清单必须是 `RUNTIME.md`，不是旧子 `PLUGIN.md`；世界 `pluginPolicy` 应使用当前 `requested`、`recommended` 与契约解析规则，`worldData` 的插件数据目标应使用 `contract:<id>`。先备份旧目录，再更新为通过当前 loader 校验的包。旧文件不会自动转换；不需要覆盖未经核对的用户内容。
 
+当前契约还要求同步更新以下消费者：
+
+- 后台作业必须持久化完整 `turn-digest@1`，包括结构化 `lastPlayerInput` 和 `runtimeResults`；旧作业、快照及会话需要重建，不支持缺字段恢复。`ctx.playerMessage` 仍为文本，`ctx.session.lastPlayerInput` 现在为提交记录或 `null`。
+- 插件状态读取 `hostState`、`sessionState` 和独立的 `serverCodeApproved`；不要以 `loaded` 推断会话授权。
+- 跨包 runtime 的输入、`needs` 和 `after` 使用根清单声明过的契约；一次性 setup 的先后顺序使用 `after`，不要把已完成的 setup 设为后续每次执行都必须产生结果的 `needs`。
+- 世界时间从 `dimensions.time` 迁到 `world.time-definition@1` 数据，面板绑定和 GraphCanvas 按当前 props 契约更新。世界生成的文件、仅存储及直接返回模式均携带 `contractData`。
+
 ## Registry 中的其他运行变量
 
 以下变量同样属于当前 `registry.ts` 契约，但不需要在上面的运行说明中展开：

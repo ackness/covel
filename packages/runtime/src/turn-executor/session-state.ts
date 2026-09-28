@@ -1,9 +1,15 @@
+import { snapshotPlayerInput } from "./turn-digest.js";
 import type {
+  PlayerInputSubmission,
   RuntimeManifest,
   SetupRuntimeState,
   TurnInput,
 } from "@covel/shared";
-import { isSetupRuntime, promptHistoryTransformV1 } from "@covel/shared";
+import {
+  isSetupRuntime,
+  promptHistoryTransformV1,
+  turnDigestSchema,
+} from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
@@ -18,6 +24,7 @@ export interface TurnSessionCharacter {
 export interface TurnSessionMeta {
   readonly turnNumber: number;
   readonly characters: readonly TurnSessionCharacter[];
+  readonly lastPlayerInput: PlayerInputSubmission | null;
   readonly lastFormValues: Record<string, unknown> | undefined;
 }
 
@@ -83,7 +90,22 @@ export async function loadTurnSessionState(args: {
   let completedPlayerTurns = 0;
   let setupRuntimes: Readonly<Record<string, SetupRuntimeState>> = {};
   let sessionCharacters: TurnSessionCharacter[] = [];
-  let lastFormValues: Record<string, unknown> | undefined;
+  const sourceDigest = input.detachedStage
+    ? turnDigestSchema.parse(input.detachedStage.turnDigest)
+    : null;
+  if (
+    sourceDigest &&
+    (sourceDigest.turnId !== input.detachedStage?.sourceTurnId ||
+      (sourceDigest.lastPlayerInput &&
+        sourceDigest.lastPlayerInput.sessionId !== input.sessionId))
+  ) {
+    throw new Error(
+      "Detached source snapshot does not belong to this execution",
+    );
+  }
+  let lastPlayerInput: PlayerInputSubmission | null = snapshotPlayerInput(
+    sourceDigest?.lastPlayerInput ?? null,
+  );
 
   if (deps.store) {
     const session = await deps.store.getSession(input.sessionId);
@@ -103,16 +125,8 @@ export async function loadTurnSessionState(args: {
       fields: c.fields as Record<string, unknown>,
     }));
 
-    try {
-      const inputs = await deps.store.listPlayerInputs(input.sessionId);
-      if (inputs.length > 0) {
-        const latest = inputs[inputs.length - 1];
-        if (latest?.values && typeof latest.values === "object") {
-          lastFormValues = latest.values as Record<string, unknown>;
-        }
-      }
-    } catch {
-      // Non-critical: player inputs may not exist yet.
+    if (!input.detachedStage) {
+      lastPlayerInput = await loadLastPlayerInput(deps.store, input.sessionId);
     }
   }
 
@@ -123,7 +137,8 @@ export async function loadTurnSessionState(args: {
     sessionMeta: {
       turnNumber,
       characters: sessionCharacters,
-      lastFormValues,
+      lastPlayerInput,
+      lastFormValues: lastPlayerInput?.values,
     },
     sessionStatus,
     turnNumber,
@@ -168,4 +183,26 @@ export function getPreGameRuntimeState(
   const preGameRuntimes = activeRuntimes.filter(isSetupRuntime);
   const isPreGamePending = phase === "setup";
   return { preGameRuntimes, isPreGamePending };
+}
+
+/** Called once after execution admission, including a new resume invocation. */
+export async function loadLastPlayerInput(
+  store: import("@covel/store").DataStore | undefined,
+  sessionId: string,
+): Promise<PlayerInputSubmission | null> {
+  const inputs = await store?.listPlayerInputs(sessionId);
+  // Store enumeration order is not chronological (SQL has no ORDER BY).
+  // Persisted UTC timestamps define recency; IDs break equal-time ties stably.
+  const latest = inputs?.reduce<
+    import("@covel/store").PlayerInputRecord | null
+  >(
+    (current, candidate) =>
+      !current ||
+      candidate.createdAt > current.createdAt ||
+      (candidate.createdAt === current.createdAt && candidate.id > current.id)
+        ? candidate
+        : current,
+    null,
+  );
+  return snapshotPlayerInput(latest ?? null);
 }

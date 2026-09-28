@@ -4,6 +4,8 @@ import type {
 } from "@covel/shared";
 import type {
   GeneratedWorldCharacter,
+  GeneratedContractData,
+  WorldGenerationDataContract,
   GeneratedMemoryDefinition,
   GeneratedWorldLorebookEntry,
   GeneratedWorldPackageContent,
@@ -157,10 +159,54 @@ function duplicateIds(
 export function normalizeGeneratedPackage(
   value: unknown,
   brief: WorldCreationBrief | undefined,
+  dataContracts: readonly WorldGenerationDataContract[] = [],
 ): { content: GeneratedWorldPackageContent; errors: string[] } {
   const requested = requestedKinds(brief);
   const errors: string[] = [];
   const root = isRecord(value) ? value : {};
+
+  const contractData: GeneratedContractData[] = [];
+  const identities = new Set<string>();
+  if (root.contractData !== undefined && !Array.isArray(root.contractData))
+    errors.push("contractData must be an array");
+  for (const [index, record] of (Array.isArray(root.contractData)
+    ? root.contractData
+    : []
+  ).entries()) {
+    if (
+      !isRecord(record) ||
+      typeof record.contract !== "string" ||
+      typeof record.key !== "string" ||
+      !CONTENT_ID.test(record.key) ||
+      !isRecord(record.value) ||
+      record.value.id !== record.key
+    ) {
+      errors.push(
+        `contractData[${index}] requires contract, key and an object value with matching id`,
+      );
+      continue;
+    }
+    const declaration = dataContracts.find(
+      (item) => item.contract === record.contract,
+    );
+    if (!declaration || !declaration.validate(record.value)) {
+      errors.push(
+        `contractData[${index}] has an unknown contract or invalid value`,
+      );
+      continue;
+    }
+    const identity = `${record.contract}/${record.key}`;
+    if (identities.has(identity)) {
+      errors.push(`duplicate contractData record: ${identity}`);
+      continue;
+    }
+    identities.add(identity);
+    contractData.push({
+      contract: record.contract,
+      key: record.key,
+      value: record.value,
+    });
+  }
 
   const characters = requested.has("characters")
     ? (Array.isArray(root.characters) ? root.characters.slice(0, 5) : [])
@@ -245,7 +291,7 @@ export function normalizeGeneratedPackage(
   }
 
   return {
-    content: { characters, lorebook, rules, memoryDefinitions },
+    content: { characters, lorebook, rules, memoryDefinitions, contractData },
     errors,
   };
 }

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { createStateStore } from "@json-render/react";
 import {
   buildPluginPanelInitialState,
   expandIndexedState,
   flattenStateForPluginPanel,
   parsePluginUiState,
+  resolvePluginPanelSources,
 } from "../plugin-panel-state.js";
 
 describe("plugin-panel state helpers", () => {
@@ -96,6 +98,51 @@ describe("plugin-panel state helpers", () => {
       "/entries": [{ key: "a", value: 1 }],
       "/nested/value": 2,
       "/empty": null,
+    });
+  });
+
+  it("binds only owner namespaces and replaces stale sources on session changes", () => {
+    const bindings = { vertices: "characters", connections: "relations" };
+    const store = createStateStore({});
+    const first = resolvePluginPanelSources(
+      {
+        characters: { a: { label: "First" } },
+        relations: { ab: {} },
+      },
+      bindings,
+    );
+    store.update(
+      flattenStateForPluginPanel(buildPluginPanelInitialState({}, {}, first)),
+    );
+    expect(store.get("/sources/vertices/a/label")).toBe("First");
+    expect(store.get("/sources/connections/ab")).toEqual({});
+
+    const second = resolvePluginPanelSources(
+      { characters: { b: { label: "Second" } } },
+      bindings,
+    );
+    store.update(
+      flattenStateForPluginPanel(buildPluginPanelInitialState({}, {}, second)),
+    );
+    expect(store.get("/sources/vertices/a")).toBeUndefined();
+    expect(store.get("/sources/vertices/b/label")).toBe("Second");
+    expect(store.get("/sources/connections")).toEqual({});
+  });
+
+  it("ignores inherited namespace names but accepts explicit own names", () => {
+    const bindings = { first: "constructor", second: "toString" };
+    expect(resolvePluginPanelSources({}, bindings)).toEqual({
+      first: {},
+      second: {},
+    });
+
+    const ownerNamespaces = Object.fromEntries([
+      ["constructor", { a: { label: "First" } }],
+      ["toString", { b: { label: "Second" } }],
+    ]);
+    expect(resolvePluginPanelSources(ownerNamespaces, bindings)).toEqual({
+      first: { a: { label: "First" } },
+      second: { b: { label: "Second" } },
     });
   });
 });

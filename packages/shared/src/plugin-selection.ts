@@ -1,13 +1,10 @@
+import type { ExtensionDeclaration } from "./extension-points/index.js";
 import {
-  historyCompactV1,
-  mediaImageFlowV1,
-  promptHistoryTransformV1,
-  promptSegmentV1,
-  sessionWorldContextV1,
-  uiSlotV1,
-  uiSlotValueSchemas,
-  type ExtensionDeclaration,
-} from "./extension-points/index.js";
+  kernelExtensionPoints,
+  isKernelExtensionContract,
+  INVALID_KERNEL_CONFLICT,
+  kernelConflictMessage,
+} from "./extension-points/contracts.js";
 import type { PluginManifest } from "./types/plugin-manifest.js";
 
 export interface SessionPluginCandidate {
@@ -24,6 +21,7 @@ export interface SessionPluginCandidate {
 export interface PluginResolutionRejection {
   readonly pluginId: string;
   readonly code:
+    | typeof INVALID_KERNEL_CONFLICT
     | "unknown-plugin"
     | "approval-required"
     | "excluded"
@@ -34,26 +32,15 @@ export interface PluginResolutionRejection {
     | "default-replaced";
   readonly reason: string;
   readonly candidates?: readonly string[];
+  readonly path?: readonly (string | number)[];
 }
 export interface SessionPluginResolution {
   readonly active: string[];
   readonly autoAdded: string[];
   readonly rejected: PluginResolutionRejection[];
 }
-const extensionPoints = [
-  historyCompactV1,
-  mediaImageFlowV1,
-  promptHistoryTransformV1,
-  promptSegmentV1,
-  sessionWorldContextV1,
-  uiSlotV1,
-];
-const kernelContracts = new Set([
-  ...extensionPoints.map((point) => point.id),
-  ...Object.keys(uiSlotValueSchemas),
-]);
-const singlePoints = new Set(
-  extensionPoints
+const singlePoints = new Set<string>(
+  Object.values(kernelExtensionPoints)
     .filter((point) => point.mode === "single")
     .map((point) => point.id),
 );
@@ -61,10 +48,10 @@ const singlePoints = new Set(
 const contracts = (plugin: SessionPluginCandidate): string[] => [
   ...(plugin.provides ?? [])
     .map((p) => (typeof p === "string" ? p : p.contract))
-    .filter((contract) => !kernelContracts.has(contract)),
+    .filter((contract) => !isKernelExtensionContract(contract)),
   ...(plugin.extensions ?? []).flatMap((extension) => [
     extension.point,
-    ...(extension.point === uiSlotV1.id && extension.slot
+    ...(extension.point === kernelExtensionPoints.uiSlot.id && extension.slot
       ? [extension.slot]
       : []),
   ]),
@@ -91,6 +78,7 @@ export function resolveSessionPlugins(args: {
     code: PluginResolutionRejection["code"],
     reason: string,
     candidates?: string[],
+    path?: readonly (string | number)[],
   ) => {
     active.delete(id);
     autoAdded.delete(id);
@@ -100,6 +88,7 @@ export function resolveSessionPlugins(args: {
         code,
         reason,
         ...(candidates ? { candidates } : {}),
+        ...(path ? { path } : {}),
       });
   };
   const eligible = (p: SessionPluginCandidate) =>
@@ -118,6 +107,18 @@ export function resolveSessionPlugins(args: {
     }
     if (p.source !== "builtin" && !p.authorized) {
       reject(id, "approval-required", `Plugin ${id} requires approval`);
+      return;
+    }
+    const invalidConflict =
+      p.conflicts?.findIndex(isKernelExtensionContract) ?? -1;
+    if (invalidConflict !== -1) {
+      reject(
+        id,
+        INVALID_KERNEL_CONFLICT,
+        kernelConflictMessage(p.conflicts![invalidConflict]!),
+        undefined,
+        ["conflicts", invalidConflict],
+      );
       return;
     }
     active.add(id);

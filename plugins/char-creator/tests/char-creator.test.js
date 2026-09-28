@@ -92,8 +92,12 @@ describe("char-creator plugin", () => {
       ).toBe(false);
     });
 
-    it("declares turn-scoped needs so it waits for pregame and schema init", () => {
-      expect(manifest.needs).toEqual(["pregame", "world-init/schema-gen"]);
+    it("orders initial setup without requiring completed providers on form submission", () => {
+      expect(manifest.needs ?? []).toEqual([]);
+      expect(manifest.after).toEqual([
+        { capability: "session.opening@1" },
+        { capability: "world-data-provider@1" },
+      ]);
     });
 
     it("uses an auto trigger with a guard to gate re-runs", () => {

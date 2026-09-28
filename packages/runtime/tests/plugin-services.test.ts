@@ -5,8 +5,12 @@ import {
   PluginServiceRegistry,
   type PluginServiceCallEvent,
 } from "../src/plugin-services.js";
+import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 
-function fixture(onCallCompleted?: (event: PluginServiceCallEvent) => void) {
+function fixture(
+  onCallCompleted?: (event: PluginServiceCallEvent) => void,
+  emitter?: TurnEmitter,
+) {
   const active = new Set(["consumer", "provider"]);
   const events: PluginServiceCallEvent[] = [];
   const ensure = vi.fn(async (_sessionId: string, pluginId: string) => {
@@ -25,6 +29,7 @@ function fixture(onCallCompleted?: (event: PluginServiceCallEvent) => void) {
     sessionId: "test",
     pluginId: "consumer",
     signal: abort.signal,
+    emitter,
   });
   return { registry, client, abort, active, ensure, events };
 }
@@ -72,7 +77,12 @@ describe("public plugin services", () => {
   });
 
   it("correlates nested calls and identifies each immediate caller", async () => {
-    const { registry, client, active, events } = fixture();
+    const emit = vi.fn(async () => {});
+    const { registry, client, active, events } = fixture(undefined, {
+      sessionId: "test",
+      turnId: "turn",
+      emit,
+    });
     active.add("inner");
     registry.register("inner", {
       name: "rank",
@@ -82,6 +92,7 @@ describe("public plugin services", () => {
       handler: (input, context) => {
         expect(context.callerPluginId).toBe("provider");
         expect(context.services).not.toHaveProperty("list");
+        expect(context).not.toHaveProperty("emitter");
         return input;
       },
     });
@@ -117,6 +128,12 @@ describe("public plugin services", () => {
     });
     expect(inner!.callId).not.toBe(outer!.callId);
     expect(outer!.durationMs).toBeGreaterThanOrEqual(0);
+    expect(emit.mock.calls).toEqual(
+      events.map(({ diagnosticScope: _scope, ...event }) => [
+        "plugin.service.completed",
+        event,
+      ]),
+    );
   });
 
   it("emits fixed error codes without retaining sensitive values", async () => {

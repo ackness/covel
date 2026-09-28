@@ -107,6 +107,31 @@ describe("plugin UI spec validation", () => {
     );
   });
 
+  it("accepts explicit named namespaces and rejects dynamic or qualified bindings", () => {
+    const spec = {
+      id: "named-sources",
+      dataSource: {
+        namespace: "characters",
+        bindings: { nodes: "characters", edges: "relationship_facts" },
+      },
+      view: { component: "GraphCanvas", props: {} },
+    };
+    expect(partition([spec]).valid).toEqual([spec]);
+    for (const bindings of [
+      { nodes: { $state: "/other" } },
+      { nodes: "foreign/records" },
+      { "../nodes": "characters" },
+    ]) {
+      const result = partition([
+        { ...spec, dataSource: { namespace: "characters", bindings } },
+      ]);
+      expect(result.valid).toEqual([]);
+      expect(result.diagnostics[0]?.issues[0]?.path).toContain(
+        "dataSource.bindings",
+      );
+    }
+  });
+
   it.each(["ui/panel.tsx", "ui/panel.js", "ui/panel.txt"])(
     "diagnoses unsupported component files: %s",
     (componentPath) => {

@@ -32,6 +32,7 @@
     "pack:test-plugin": "pnpm --filter @covel/server exec tsx tests/helpers/third-party-package.ts",
     "test:coverage": "turbo test -- --coverage",
     "e2e": "playwright test",
+    "e2e:extensions": "playwright test --config tests/e2e/third-party-stage.config.ts",
     "e2e:ui": "playwright test --ui",
     "dev:electron": "pnpm --filter @covel/desktop dev",
     "build:electron": "pnpm --filter @covel/desktop dist && node apps/desktop/scripts/cleanup-artifacts.mjs --strip-unpacked",

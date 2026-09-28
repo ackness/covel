@@ -1,91 +1,100 @@
 import type { ForceLink, ForceNode } from "./graph-types.js";
+import type { GraphCanvasProps } from "@covel/shared";
 
-interface GraphNodeRecord {
-  id: string;
-  name: string;
-  type: "individual" | "group" | "faction";
-  summary?: string;
-  labels?: readonly string[];
-}
-
-interface GraphEdgeRecord {
-  id: string;
-  source: string;
-  target: string;
-  relation: string;
-  strength: number;
-  fact?: string;
-  invalidAt?: number;
-}
-
-const NODE_COLORS = {
-  individual: "#60a5fa",
-  group: "#a78bfa",
-  faction: "#f59e0b",
-} as const;
-
-const POSITIVE_EDGE = "#22c55e";
-const NEGATIVE_EDGE = "#ef4444";
-const NEUTRAL_EDGE = "#94a3b8";
-
-function pickEdgeColor(strength: number): string {
-  if (strength >= 0.33) return POSITIVE_EDGE;
-  if (strength <= -0.33) return NEGATIVE_EDGE;
-  return NEUTRAL_EDGE;
-}
-
-function isGraphNodeRecord(value: unknown): value is GraphNodeRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.name === "string" &&
-    (record.type === "individual" ||
-      record.type === "group" ||
-      record.type === "faction")
+function records(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value.filter(isRecord);
+  if (!isRecord(value)) return [];
+  return Object.entries(value).flatMap(([key, entry]) =>
+    isRecord(entry) ? [{ key, ...entry }] : [],
   );
 }
 
-function isGraphEdgeRecord(value: unknown): value is GraphEdgeRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.source === "string" &&
-    typeof record.target === "string" &&
-    typeof record.relation === "string" &&
-    typeof record.strength === "number"
-  );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function buildNodes(nodes: Record<string, unknown>): ForceNode[] {
-  return Object.values(nodes)
-    .filter(isGraphNodeRecord)
-    .map((node) => ({
-      id: node.id,
-      name: node.name,
-      type: node.type,
-      summary: node.summary ?? "",
-      labels: [...(node.labels ?? [])],
-      color: NODE_COLORS[node.type] ?? "#9ca3af",
-      radius: nodeRadius(node.name),
-    }));
+function read(value: unknown, path: string): unknown {
+  let current = value;
+  for (const part of path.split(/[/.]/).filter(Boolean)) {
+    if (!isRecord(current) && !Array.isArray(current)) return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }
 
-export function buildLinks(edges: Record<string, unknown>): ForceLink[] {
-  return Object.values(edges)
-    .filter(isGraphEdgeRecord)
-    .filter((edge) => edge.invalidAt === undefined)
-    .map((edge) => ({
-      source: edge.source,
-      target: edge.target,
-      edgeId: edge.id,
-      relation: edge.relation,
-      strength: edge.strength,
-      fact: edge.fact ?? "",
-      color: pickEdgeColor(edge.strength),
-      width: 1 + Math.abs(edge.strength) * 2,
-    }));
+export function buildNodes(
+  recordsValue: unknown,
+  fields: GraphCanvasProps["node"],
+): ForceNode[] {
+  return records(recordsValue).flatMap((record) => {
+    const id = read(record, fields.idField);
+    const name = read(record, fields.labelField);
+    if (typeof id !== "string" || !id || typeof name !== "string" || !name)
+      return [];
+    const type = read(record, fields.typeField);
+    const summary = read(record, fields.summaryField);
+    const labels = read(record, fields.labelsField);
+    const kind = typeof type === "string" ? type : "";
+    return [
+      {
+        id,
+        name,
+        type: kind,
+        summary: typeof summary === "string" ? summary : "",
+        labels: Array.isArray(labels)
+          ? labels.filter((label): label is string => typeof label === "string")
+          : [],
+        color: Object.hasOwn(fields.colors, kind)
+          ? fields.colors[kind]
+          : fields.defaultColor,
+        radius: nodeRadius(name),
+      },
+    ];
+  });
+}
+
+export function buildLinks(
+  recordsValue: unknown,
+  fields: GraphCanvasProps["edge"],
+): ForceLink[] {
+  return records(recordsValue).flatMap((record) => {
+    if (read(record, fields.inactiveField) !== undefined) return [];
+    const id = read(record, fields.idField);
+    const source = read(record, fields.sourceField);
+    const target = read(record, fields.targetField);
+    const strength = read(record, fields.strengthField);
+    if (
+      typeof id !== "string" ||
+      !id ||
+      typeof source !== "string" ||
+      !source ||
+      typeof target !== "string" ||
+      !target ||
+      typeof strength !== "number" ||
+      !Number.isFinite(strength)
+    )
+      return [];
+    const relation = read(record, fields.relationField);
+    const fact = read(record, fields.factField);
+    const color =
+      strength >= 0.33
+        ? fields.colors.positive
+        : strength <= -0.33
+          ? fields.colors.negative
+          : fields.colors.neutral;
+    return [
+      {
+        source,
+        target,
+        edgeId: id,
+        relation: typeof relation === "string" ? relation : "",
+        strength,
+        fact: typeof fact === "string" ? fact : "",
+        color,
+        width: 1 + Math.abs(strength) * 2,
+      },
+    ];
+  });
 }
 
 function nodeRadius(name: string): number {

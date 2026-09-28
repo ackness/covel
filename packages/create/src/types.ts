@@ -25,6 +25,8 @@ export interface CreateWorldOptions {
   readonly locale?: string;
   /** Structured player-facing brief for the generated experience/package. */
   readonly brief?: WorldCreationBrief;
+  /** Loaded public data contracts available to generated world records. */
+  readonly dataContracts?: readonly WorldGenerationDataContract[];
   /** Optional abort signal for cancelling slow provider calls. */
   readonly signal?: AbortSignal;
   /** Per-attempt generation timeout; a targeted lore repair shares this budget. */
@@ -86,8 +88,23 @@ export interface GeneratedMemoryDefinition {
 }
 
 export interface GeneratedWorldPackageContent {
+  readonly contractData?: readonly GeneratedContractData[];
   readonly memoryDefinitions?: readonly GeneratedMemoryDefinition[];
   readonly characters: readonly GeneratedWorldCharacter[];
   readonly lorebook: readonly GeneratedWorldLorebookEntry[];
   readonly rules: readonly GeneratedWorldLorebookEntry[];
+}
+
+/** Portable authored data; key equals the record's id field. */
+export interface GeneratedContractData {
+  readonly contract: string;
+  readonly key: string;
+  readonly value: Readonly<Record<string, unknown>>;
+}
+
+export interface WorldGenerationDataContract {
+  readonly contract: string;
+  readonly schema: Readonly<Record<string, unknown>>;
+  /** The caller compiles the loaded contract schema; create owns no gameplay schema. */
+  readonly validate: (value: unknown) => boolean;
 }

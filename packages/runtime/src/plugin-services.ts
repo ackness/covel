@@ -16,6 +16,13 @@ import {
   withDefaultGatewaySignal,
   withDefaultUtilsSignal,
 } from "./function-runtime/runtime-abort-boundaries.js";
+import type { TurnEmitter } from "./trace/turn-emitter.js";
+
+class ServiceOutputValidationError extends Error {
+  constructor() {
+    super("Plugin service output failed validation");
+  }
+}
 
 interface Entry extends PluginServiceDescriptor {
   readonly extension?: ExtensionDeclaration;
@@ -36,6 +43,8 @@ export interface KernelServiceCaller extends Omit<Caller, "pluginId"> {
 }
 
 interface Caller {
+  /** Host-owned trace destination; never exposed in the plugin context. */
+  readonly emitter?: TurnEmitter;
   readonly sessionId: string;
   readonly pluginId: string;
   readonly turnId?: string;
@@ -46,6 +55,7 @@ interface Caller {
 }
 
 export interface PluginServiceCallEvent {
+  readonly extension?: Pick<ExtensionDeclaration, "point" | "id" | "slot">;
   readonly sessionId: string;
   /** Opaque host admission scope; inherited by nested calls once known. */
   readonly diagnosticScope?: string;
@@ -66,6 +76,7 @@ export interface PluginServiceCallEvent {
     | "admission-error"
     | "unavailable"
     | "invocation-error"
+    | "output-validation"
     | "timeout"
     | "cancelled";
 }
@@ -261,17 +272,31 @@ export class PluginServiceRegistry {
       throw new Error("Invalid extension declaration");
     // A reserved service namespace prevents collisions with plugin services.
     const name = `__extension.${point.id}.${declaration.id}`;
+    const registeredDeclaration = structuredClone(declaration);
     return this.registerDefinition(
       pluginId,
       {
         name,
         contract: point.id,
         input: point.input,
-        output: point.output,
+        output: {
+          parse(value: unknown): O {
+            const parsed = point.output.parse(value);
+            return point.attributeOutput
+              ? point.output.parse(
+                  point.attributeOutput(parsed, {
+                    ...structuredClone(registeredDeclaration),
+                    pluginId,
+                    name,
+                  }),
+                )
+              : parsed;
+          },
+        },
         handler: (input, context) =>
           definition.handler(input, context as PluginExtensionContext),
       },
-      structuredClone(declaration),
+      registeredDeclaration,
     );
   }
 
@@ -349,7 +374,11 @@ export class PluginServiceRegistry {
         context.signal.throwIfAborted();
         const result = await definition.handler(parsed, context);
         context.signal.throwIfAborted();
-        return structuredClone(definition.output.parse(result));
+        try {
+          return structuredClone(definition.output.parse(result));
+        } catch {
+          throw new ServiceOutputValidationError();
+        }
       },
     };
     this.entries.set(key, entry);
@@ -404,6 +433,7 @@ export class PluginServiceRegistry {
         };
         let errorCode: PluginServiceCallEvent["errorCode"] = "invalid-options";
         let outcome: PluginServiceCallEvent["outcome"] = "success";
+        let extension: PluginServiceCallEvent["extension"];
         let target = {
           providerPluginId: "<unavailable>",
           name: "<unavailable>",
@@ -427,6 +457,10 @@ export class PluginServiceRegistry {
                   ? this.readEntries().get(key)
                   : undefined;
               if (registered?.contract === contract) {
+                if (registered.extension) {
+                  const { point, id, slot } = registered.extension;
+                  extension = { point, id, ...(slot ? { slot } : {}) };
+                }
                 target = {
                   providerPluginId: registered.pluginId,
                   name: registered.name,
@@ -479,6 +513,15 @@ export class PluginServiceRegistry {
                 name: entry.name,
                 contract: entry.contract,
               };
+              extension = entry.extension
+                ? {
+                    point: entry.extension.point,
+                    id: entry.extension.id,
+                    ...(entry.extension.slot
+                      ? { slot: entry.extension.slot }
+                      : {}),
+                  }
+                : undefined;
               // Never lend the caller's store, settings, tools or proposal buffer.
               // The lent gateway strips slot secrets, and the nested client carries
               // the stripped facade so deeper hops cannot recover key material.
@@ -510,6 +553,8 @@ export class PluginServiceRegistry {
         } catch (error) {
           outcome = state.cancellation ?? "error";
           if (state.cancellation) errorCode = state.cancellation;
+          else if (error instanceof ServiceOutputValidationError)
+            errorCode = "output-validation";
           throw error;
         } finally {
           const event: PluginServiceCallEvent = {
@@ -525,6 +570,7 @@ export class PluginServiceRegistry {
             ...(parentState ? { parentCallId: parentState.callId } : {}),
             callerPluginId: caller.pluginId,
             ...target,
+            ...(extension ? { extension } : {}),
             durationMs: Math.max(0, performance.now() - started),
             outcome,
             ...(outcome === "success" ? {} : { errorCode }),
@@ -534,6 +580,19 @@ export class PluginServiceRegistry {
             if (observation) void Promise.resolve(observation).catch(() => {});
           } catch {
             // Diagnostics are best effort and cannot change call results.
+          }
+          if (caller.emitter) {
+            // The private incarnation scope never enters persisted/public trace.
+            const { diagnosticScope: _scope, ...payload } = event;
+            try {
+              await caller.emitter.emit("plugin.service.completed", payload);
+            } catch {
+              console.warn("[plugin-services] trace observation failed", {
+                callId: event.callId,
+                sessionId: event.sessionId,
+                turnId: event.turnId,
+              });
+            }
           }
         }
       },

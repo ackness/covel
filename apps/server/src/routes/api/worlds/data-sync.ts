@@ -71,6 +71,7 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
       : [];
 
   const result = await preflightWorldDataForSession({
+    contractData: (await store.getWorld(worldId))?.metadata?.contractData,
     sessionId,
     worldId,
     worldsDirs,

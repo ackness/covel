@@ -23,7 +23,7 @@ const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
   description: "",
   kind: id === "core" ? "core" : "plugin",
   source: "builtin",
-  hostState: "approved",
+  hostState: "loaded",
   runtimeCount: 1,
   provides: [],
   tags: [],

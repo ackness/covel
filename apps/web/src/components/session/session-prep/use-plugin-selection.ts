@@ -109,10 +109,7 @@ export function usePluginSelection(
     () =>
       plugins.map((plugin) => ({
         ...plugin,
-        authorized:
-          plugin.source === "builtin" ||
-          plugin.hostState === "approved" ||
-          plugin.hostState === "loaded",
+        authorized: plugin.source === "builtin",
       })),
     [plugins],
   );

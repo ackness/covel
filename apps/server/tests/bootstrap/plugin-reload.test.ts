@@ -23,6 +23,7 @@ import {
 } from "../../src/routes/api/bootstrap/plugin-entry.js";
 import { createRuntimeLoader } from "../../src/routes/api/bootstrap/runtime-loader.js";
 import type { RpcApprovalGate } from "@covel/approval";
+import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 const roots: string[] = [];
 const managers: BootstrapPluginEntries[] = [];
 afterEach(async () => {
@@ -172,6 +173,53 @@ async function fixture(withRuntime = false, activateEntry = true) {
   };
 }
 describe("plugin generation reload", () => {
+  it("reports trusted declaration error metadata and clears it after a successful publication", async () => {
+    const f = await fixture(false, false);
+    await fs.writeFile(
+      path.join(f.root, "entry.mjs"),
+      "export default function() {}\n",
+    );
+    await expect(f.manager.ensurePluginEntry(f.id, "session")).rejects.toThrow(
+      "failed to activate",
+    );
+    expect(
+      buildPluginSummary(f.registry.get(f.id)!, f.manager.isEntryPublished),
+    ).toMatchObject({
+      hostState: "error",
+      registrationError: {
+        code: "plugin_registration_invalid",
+        registration: "declarations",
+      },
+    });
+    await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2));
+    await f.manager.reload(f.id, "session");
+    expect(
+      buildPluginSummary(f.registry.get(f.id)!, f.manager.isEntryPublished)
+        .hostState,
+    ).toBe("loaded");
+    expect(f.registry.get(f.id)).not.toHaveProperty("registrationError");
+  });
+  it("projects actual entry publication independently of runtime caches and live approval", async () => {
+    const f = await fixture(false, false);
+    const summary = () =>
+      buildPluginSummary(f.registry.get(f.id)!, f.manager.isEntryPublished);
+    expect(summary().hostState).toBe("installed");
+    await f.manager.ensurePluginEntry(f.id, "session");
+    expect(f.registry.get(f.id)!.loadedRuntimes.size).toBe(0);
+    expect(summary().hostState).toBe("loaded");
+    await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2, true));
+    await expect(f.manager.reload(f.id, "session")).rejects.toThrow(
+      "failed to activate",
+    );
+    expect(summary()).toMatchObject({
+      hostState: "loaded",
+      error: expect.any(String),
+    });
+    f.revoke();
+    expect(summary().hostState).toBe("loaded");
+    await f.manager.close();
+    expect(f.manager.isEntryPublished(f.id)).toBe(false);
+  });
   it("coordinates first activation with an in-flight reload without leaking a scope", async () => {
     const f = await fixture(true, false);
     const preparing = Promise.withResolvers<void>();

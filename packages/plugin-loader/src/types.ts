@@ -150,6 +150,11 @@ export interface PluginRegistryEntry {
   readonly loadedRuntimes: ReadonlyMap<string, LoadedRuntime>;
   readonly status: PluginEntryStatus;
   readonly error?: string;
+  /** Host-authenticated registration diagnostic; never parsed from error text. */
+  readonly registrationError?: {
+    readonly code: "plugin_registration_invalid";
+    readonly registration: string;
+  };
   /**
    * Discovery-source trust. Set by bootstrap from
    * `PluginDiscoveryResult.source` so downstream trust decisions (runtime RPC

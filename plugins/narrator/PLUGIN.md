@@ -19,6 +19,8 @@ provides:
 conflicts:
   - narrative-engine@1
 optional:
+  - graph-rag@1
+  - dice-check@1
   - world-time-context@1
   - tabletop-check@1
 entry: ./server/index.js
@@ -98,12 +100,12 @@ runtime:
         required: false
       npc-relationships:
         from:
-          runtime: npc-graph/rag-retriever
+          contract: graph-rag@1
         select: /npcContext
         required: false
       check-results:
         from:
-          runtime: dice-check/roller
+          contract: dice-check@1
         select: /checkContext
         required: false
     output:

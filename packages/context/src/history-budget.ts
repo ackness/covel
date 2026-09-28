@@ -2,6 +2,7 @@ import {
   DEFAULT_LOCALE,
   type HistoryCompactionInput,
   type HistoryCompactionOutput,
+  type CovelEventType,
 } from "@covel/shared";
 import type {
   SessionContextStore,
@@ -33,6 +34,13 @@ export interface CompactorRunner {
     messages: readonly TurnMessageRecord[],
     locale?: string,
     traceId?: string,
+    trace?: {
+      readonly turnId: string;
+      emit(
+        type: CovelEventType,
+        payload: Record<string, unknown>,
+      ): Promise<void>;
+    },
   ): Promise<CompactorResult>;
 }
 /** Budget admission and atomic persistence; compaction policy belongs to a provider. */

@@ -17,6 +17,7 @@ import { covelRegistry } from "@/lib/catalog.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import {
   usePluginJobs,
+  usePluginNamespaces,
   usePluginNamespace,
 } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
@@ -32,6 +33,7 @@ import {
   buildPluginPanelInitialState,
   flattenStateForPluginPanel,
   parsePluginUiState,
+  resolvePluginPanelSources,
 } from "@/lib/plugin-panel-state.js";
 import { Button as UIButton } from "@/components/ui/button.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
@@ -80,10 +82,18 @@ export function PluginPanel({
 }: PluginPanelProps) {
   const { t, i18n } = useTranslation();
   const activeLocale = i18n.resolvedLanguage ?? i18n.language;
-  const dataSource = spec.dataSource as Record<string, string> | undefined;
+  const dataSource = spec.dataSource as
+    | { namespace?: string; source?: string; bindings?: Record<string, string> }
+    | undefined;
   const namespace = dataSource?.namespace ?? "default";
   const sourceKind = dataSource?.source;
   const liveData = usePluginNamespace(pluginId, namespace);
+  const ownerNamespaces = usePluginNamespaces(pluginId);
+  const sources = useMemo(
+    () =>
+      resolvePluginPanelSources(ownerNamespaces, dataSource?.bindings ?? {}),
+    [ownerNamespaces, dataSource?.bindings],
+  );
   const jobs = usePluginJobs(pluginId);
   const { state: sessionState } = useSession();
   const sessionCharacters =
@@ -155,8 +165,8 @@ export function PluginPanel({
   );
 
   const initialState = useMemo(
-    () => buildPluginPanelInitialState(data, invokingMap),
-    [data, invokingMap],
+    () => buildPluginPanelInitialState(data, invokingMap, sources),
+    [data, invokingMap, sources],
   );
   useEffect(() => {
     if (spec.webview) return;

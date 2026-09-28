@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-/** Validate one current-format plugin package, including all runtime files. */
+/** Statically validate current-format packages; never execute plugin entries. */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadPluginDefinition } from "../src/load.js";
@@ -49,7 +49,7 @@ for (const arg of args) {
       ),
       pluginMdPaths,
     });
-    console.log(`✓ ${rootPath}`);
+    console.log(`✓ Static package validation: ${rootPath}`);
   } catch (error) {
     console.error(
       `✗ ${error instanceof Error ? error.message : String(error)}`,

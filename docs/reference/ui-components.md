@@ -133,16 +133,25 @@ See [form tools](./tools.md#create-form) and [plugin testing](../guide/plugin-te
 
 ### Visualization
 
-| Component         | Purpose                                                                                                                                          | Key props                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `GraphCanvas`     | Force-directed graph via `react-force-graph-2d` (lazy-loaded, ~60 KB gzip). Reads `pluginData[pluginId][nodesNamespace]` and `[edgesNamespace]`. | `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?` |
-| `WorldDimensions` | Renders the active world's structured dimensions (geography / factions / power system / …). Reads from session context; no bindings required.    | —                                                         |
+| Component         | Purpose                                                                                                                                       | Key props                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `GraphCanvas`     | Force-directed graph via `react-force-graph-2d` (lazy-loaded, ~60 KB gzip). Renders the nodes and edges supplied by the panel.                | `nodes`, `edges`, `node`, `edge`, `height?` |
+| `WorldDimensions` | Renders the active world's structured dimensions (geography / factions / power system / …). Reads from session context; no bindings required. | —                                           |
+
+`GraphCanvas` accepts arrays or key-to-record objects for `nodes` and `edges`.
+The `node` mapping declares `idField`, `labelField`, `typeField`,
+`summaryField`, `labelsField`, `colors` (by type), and `defaultColor`.
+The `edge` mapping declares `idField`, `sourceField`, `targetField`,
+`relationField`, `strengthField`, `factField`, `inactiveField`, and
+`colors` (`positive`, `negative`, `neutral`). Field paths are relative to each
+record. An edge is hidden whenever its configured inactive field is defined,
+including value `0`. The panel binds its own namespaces to these props; the
+component does not select a plugin or namespace.
 
 `GraphCanvas` refreshes node summaries and relationship text on metadata-only
-plugin-data updates. The simulation retains its node identities, positions and
+data updates. The simulation retains its node identities, positions and
 pins; only topology changes (including changing either endpoint of an existing
-edge ID) publish a new simulation data wrapper. Expired edges are omitted whenever
-`invalidAt` is defined, including turn `0`. Selection
+edge ID) publish a new simulation data wrapper. Selection
 highlighting computes direct neighbors once per data/selection change and uses
 constant-time membership checks while painting nodes.
 

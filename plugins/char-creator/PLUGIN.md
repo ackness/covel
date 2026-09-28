@@ -18,6 +18,8 @@ provides:
   - contract: character-creation@1
     default: true
 requires:
+  - session.opening@1
+  - world-data-provider@1
   - narrative-engine@1
 entry: ./server/index.js
 contributes:

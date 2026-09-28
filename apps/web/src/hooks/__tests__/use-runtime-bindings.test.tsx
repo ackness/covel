@@ -15,7 +15,7 @@ const plugins: PluginSummary[] = [
     description: "Fixture package",
     kind: "plugin",
     source: "builtin",
-    hostState: "approved",
+    hostState: "loaded",
     runtimeCount: 1,
     provides: [],
     tags: [],

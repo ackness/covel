@@ -80,7 +80,7 @@ beforeEach(async () => {
       description: "Fixture",
       kind: "plugin",
       source: "builtin",
-      hostState: "approved",
+      hostState: "loaded",
       runtimeCount: 1,
       provides: [],
       tags: [],

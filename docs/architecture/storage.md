@@ -405,3 +405,26 @@ the server, back up the database together with any `-wal` and `-shm` files,
 then use a new `SQLITE_PATH` or recreate the development database. Creating only
 new sessions in the old database is insufficient. See the
 [development migration steps](../guide/env-registry.md#plugin-extension-development-data).
+
+## Plugin-data ownership and reserved names
+
+Plugin-facing data APIs bind both session ID and plugin owner. A namespace is a
+name inside that owner's partition, not a way to select another owner. Ordinary
+plugin writes are buffered as proposals and committed under the source owner.
+
+| Owner / namespace                                                                        | Authority                               | Plugin access                                                                                                                              |
+| ---------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                  | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                   |
+| Plugin owner, `_jobs`                                                                    | RPC job status and progress             | Read only; job APIs own transitions.                                                                                                       |
+| Plugin owner, `_runtime_jobs`                                                            | Durable runtime scheduling and recovery | Read only; runtime workers own transitions.                                                                                                |
+| Plugin owner, `_logs`                                                                    | Runtime log ring                        | Read only through data APIs; entries are produced through the scoped logger.                                                               |
+| Plugin owner, `message`                                                                  | Plugin                                  | Ordinary proposal-backed data; the UI host prefetches and forwards it for declared message panels without interpreting its business shape. |
+| Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | Plugin                                  | Read own data and write through proposals. The old character mirrors are not recreated.                                                    |
+| `__kernel:<subsystem>` owner, including `__kernel:vector`                                | Kernel                                  | Not visible through plugin-bound store or extension APIs. This is an owner partition, not a plugin namespace.                              |
+
+The full underscore prefix remains reserved. Enumerating today's three names as
+exceptions would allow future kernel bookkeeping to become plugin-writable before
+all callers were updated. `_memory` stays protected even though the old memory
+mirror and queue were removed; no compatibility reads or data restoration are
+implied. Jobs and logs retain their existing snapshot/fork inclusion policies.
+These are API authority boundaries, not encryption or a process sandbox.

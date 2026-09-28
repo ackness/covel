@@ -23,7 +23,7 @@ function plugin(
     description: `${id} plugin`,
     kind: "plugin",
     source: "builtin",
-    hostState: "approved",
+    hostState: "loaded",
     runtimeCount: 0,
     provides: [],
     tags: [],

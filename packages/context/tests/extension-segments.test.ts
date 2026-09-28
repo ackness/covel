@@ -126,3 +126,34 @@ it("clamps depth beyond the available history and supports depth zero", () => {
     "last",
   ]);
 });
+
+it("keeps mixed message positions while moving volatile system-role content past system cache markers", () => {
+  const { systemPrompt, messages } = assemble([
+    segment("fresh-system", { position: "pre-history", role: "system" }),
+    segment("stable-system", {
+      position: "pre-history",
+      role: "system",
+      volatility: "stable",
+    }),
+    segment("early-user", { position: "pre-history", role: "user" }),
+    segment("deep-assistant", {
+      position: { depth: 0 },
+      role: "assistant",
+      volatility: "session",
+    }),
+    segment("late-user", {
+      position: "post-history",
+      role: "user",
+      volatility: "stable",
+    }),
+  ]);
+  const boundary = systemPrompt.lastIndexOf(PROMPT_CACHE_BREAKPOINT_MARKER);
+  expect(systemPrompt.indexOf("stable-system")).toBeLessThan(boundary);
+  expect(systemPrompt.indexOf("fresh-system")).toBeGreaterThan(boundary);
+  expect(messages).toEqual([
+    { role: "user", content: "early-user" },
+    { role: "user", content: "hello" },
+    { role: "assistant", content: "deep-assistant" },
+    { role: "user", content: "late-user" },
+  ]);
+});

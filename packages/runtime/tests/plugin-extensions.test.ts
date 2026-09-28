@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   defineExtensionPoint,
   promptHistoryTransformV1,
+  uiSlotV1,
   type ExtensionMode,
   type ExtensionPluginDataRecord,
   type PluginExtensionContext,
@@ -12,6 +13,8 @@ import {
   PluginServiceRegistry,
   type PluginServiceCallEvent,
 } from "../src/plugin-services.js";
+import { createTurnEmitter } from "../src/trace/turn-emitter.js";
+import { createMemoryStore } from "@covel/store";
 
 function fixture<M extends ExtensionMode>(
   mode: M,
@@ -89,6 +92,145 @@ function fixture<M extends ExtensionMode>(
 const input = { value: 2, turnId: "turn" };
 
 describe("kernel extension execution", () => {
+  it("records final slot validation once and persists the same sanitized failure before returning skip", async () => {
+    const events: PluginServiceCallEvent[] = [];
+    const services = new PluginServiceRegistry({
+      ensure: async () => "private-incarnation",
+      list: async () => ["alpha"],
+      onCallCompleted: (event) => {
+        events.push(event);
+      },
+    });
+    const host = new PluginExtensionHost(services);
+    const declaration = {
+      point: uiSlotV1.id,
+      id: "backdrop",
+      slot: "stage.backdrop@1",
+    };
+    host.register("alpha", declaration, {
+      handler: () => ({ actors: [] }),
+    });
+    declaration.slot = "stage.cast@1";
+    const records: unknown[] = [];
+    const store = createMemoryStore();
+    let persist!: () => void;
+    const persisted = new Promise<void>((resolve) => {
+      persist = resolve;
+    });
+    const emitter = createTurnEmitter({
+      sessionId: "session",
+      turnId: "turn",
+      traceId: "flow",
+      store: {
+        addTraceEvent: async (record) => {
+          await persisted;
+          await store.addTraceEvent(record);
+          records.push(record);
+        },
+      },
+    });
+    const execution = host.createExecution({
+      sessionId: "session",
+      locale: "en",
+      turnId: "turn",
+      signal: new AbortController().signal,
+      pluginData: [],
+      emitter,
+    });
+    let finished = false;
+    const result = execution
+      .run(uiSlotV1, { slot: "stage.backdrop@1", previous: null, events: [] })
+      .then((value) => {
+        finished = true;
+        return value;
+      });
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+    expect(finished).toBe(false);
+    expect(events[0]).toMatchObject({
+      outcome: "error",
+      errorCode: "output-validation",
+      extension: {
+        point: "ui.slot@1",
+        id: "backdrop",
+        slot: "stage.backdrop@1",
+      },
+    });
+    persist();
+    await expect(result).resolves.toBeNull();
+    await expect(
+      execution.run(uiSlotV1, {
+        slot: "stage.backdrop@1",
+        previous: null,
+        events: [],
+      }),
+    ).resolves.toBeNull();
+    expect(events).toHaveLength(1);
+    expect(records).toEqual([
+      expect.objectContaining({
+        type: "plugin.service.completed",
+        traceId: "flow",
+        turnId: "turn",
+        payload: expect.objectContaining({
+          callId: events[0]!.callId,
+          outcome: "error",
+          errorCode: "output-validation",
+          seq: 0,
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(records)).not.toContain("private-incarnation");
+    expect(JSON.stringify(records)).not.toContain("actors");
+    expect(await store.listTraceEvents("session")).toEqual(records);
+    await store.close();
+  });
+
+  it("fails required final attribution once and isolates a failing trace observer", async () => {
+    const { services, events } = fixture("single", "fail-turn");
+    const point = defineExtensionPoint({
+      id: "test.attributed@1",
+      mode: "single",
+      onError: "fail-turn",
+      timeoutMs: 100,
+      input: z.unknown(),
+      output: z.number(),
+      attributeOutput: () => {
+        throw new Error("private-output");
+      },
+    });
+    const host = new PluginExtensionHost(services, [point]);
+    host.register(
+      "alpha",
+      { point: point.id, id: "value" },
+      { handler: () => 1 },
+    );
+    const emit = vi.fn(async () => {
+      throw new Error("private-store-error");
+    });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const execution = host.createExecution({
+      sessionId: "session",
+      locale: "en",
+      signal: new AbortController().signal,
+      pluginData: [],
+      emitter: { sessionId: "session", turnId: "turn", emit },
+    });
+    await expect(execution.run(point, null)).rejects.toThrow(
+      "output failed validation",
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      outcome: "error",
+      errorCode: "output-validation",
+    });
+    expect(emit).toHaveBeenCalledOnce();
+    expect(JSON.stringify(emit.mock.calls)).not.toContain("private-");
+    expect(warning).toHaveBeenCalledWith(
+      "[plugin-services] trace observation failed",
+      expect.objectContaining({ callId: events[0]!.callId }),
+    );
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("private-");
+    warning.mockRestore();
+  });
   it("composes pipelines deterministically while retaining input-only fields", async () => {
     const { point, host, execution } = fixture("pipeline");
     const seen: string[] = [];
@@ -151,7 +293,8 @@ describe("kernel extension execution", () => {
   });
 
   it("does not invoke inactive or unapproved providers", async () => {
-    const { point, host, execution, active, approved } = fixture("pipeline");
+    const { point, host, execution, active, approved, events } =
+      fixture("pipeline");
     const handler = vi.fn(() => ({ value: 10 }));
     host.register("alpha", { point: point.id, id: "one" }, { handler });
     host.register("beta", { point: point.id, id: "two" }, { handler });
@@ -159,10 +302,11 @@ describe("kernel extension execution", () => {
     approved.delete("beta");
     await expect(execution().run(point, input)).resolves.toEqual({ value: 2 });
     expect(handler).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
   });
 
   it("deduplicates concurrent equivalent input within an execution and isolates cached values", async () => {
-    const { point, host, execution } = fixture("pipeline");
+    const { point, host, execution, events } = fixture("pipeline");
     const handler = vi.fn((value: typeof input) => ({
       value: value.value + 1,
     }));
@@ -176,6 +320,7 @@ describe("kernel extension execution", () => {
     expect(second).toEqual({ value: 3 });
     await expect(run.run(point, input)).resolves.toEqual({ value: 3 });
     expect(handler).toHaveBeenCalledTimes(1);
+    expect(events).toHaveLength(1);
     await execution().run(point, input);
     expect(handler).toHaveBeenCalledTimes(2);
     await run.run(point, { ...input, value: 3 });

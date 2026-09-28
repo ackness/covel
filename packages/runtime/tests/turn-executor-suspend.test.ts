@@ -1389,6 +1389,15 @@ describe("resumeSuspendedRuntime", () => {
       createdAt: new Date().toISOString(),
     });
 
+    const submittedForm = {
+      id: "resume-form",
+      sessionId: "sess-resume",
+      turnId: "turn-resume",
+      formId: "question",
+      values: { answer: "yes" },
+      createdAt: new Date().toISOString(),
+    };
+    await store.savePlayerInput(submittedForm);
     const llmGenerate = vi.fn(async () => {
       throw new Error("function resume must not call the LLM");
     });
@@ -1450,6 +1459,7 @@ describe("resumeSuspendedRuntime", () => {
       output: { narrativeOutput: "Resumed function." },
     });
     expect(receivedContext).toMatchObject({
+      session: { lastPlayerInput: submittedForm },
       resumeData: { answer: "yes" },
       resumedFromSuspensionId: id,
       execution: {

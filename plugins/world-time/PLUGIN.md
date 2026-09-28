@@ -16,8 +16,17 @@ requires:
   - narrative-engine@1
 optional:
   - world-time-context@1
+contracts:
+  world.time-definition@1:
+    schema: schemas/time-definition.schema.json
 entry: ./server/index.js
 contributes:
+  data:
+    definitions:
+      version: 1
+      schema: schemas/time-definition.schema.json
+      accepts:
+        - world.time-definition@1
   commands:
     - name: time
       description:
@@ -27,6 +36,7 @@ contributes:
   ui:
     right:
       - ./ui/clock-panel.json
+      - ./ui/definition-panel.json
   tools:
     - advance-world-time
   actions:

@@ -139,6 +139,8 @@ export interface BootstrapPluginEntries {
    * inside the not-yet-run entry.
    */
   readonly hasPendingEntry: (pluginId: string) => boolean;
+  /** Current published generation only; reading this never activates code. */
+  readonly isEntryPublished: (pluginId: string) => boolean;
 }
 
 export async function createBootstrapPluginEntries(
@@ -180,15 +182,31 @@ export async function createBootstrapPluginEntries(
   let closed = false;
   let closing: Promise<void> | undefined;
 
-  const reportActivation = (pluginId: string, error?: string): void => {
+  const reportActivation = (
+    pluginId: string,
+    error?: string,
+    cause?: unknown,
+  ): void => {
     const entry = params.pluginRegistry?.get(pluginId);
     if (!entry) return;
-    const { error: _previousError, ...definition } = entry;
+    const {
+      error: _previousError,
+      registrationError: _previousRegistrationError,
+      ...definition
+    } = entry;
     params.pluginRegistry!.register({
       ...definition,
       // Valid declarations remain available to command/UI discovery so the
       // next invocation can retry activation. Only discovery rejects a package.
       ...(error ? { error } : {}),
+      ...(cause instanceof PluginRegistrationError
+        ? {
+            registrationError: {
+              code: cause.code,
+              registration: cause.registration,
+            },
+          }
+        : {}),
     });
   };
 
@@ -271,7 +289,7 @@ export async function createBootstrapPluginEntries(
         throw new AggregateError([failure, rollbackError], failure.message);
       } finally {
         // Failed cleanup stays owned so host shutdown also reports it.
-        reportActivation(pluginId, diagnostic);
+        reportActivation(pluginId, diagnostic, error);
       }
       throw failure;
     }
@@ -300,7 +318,7 @@ export async function createBootstrapPluginEntries(
       } catch (rollbackError) {
         throw new AggregateError([failure, rollbackError], failure.message);
       } finally {
-        reportActivation(pluginId, diagnostic);
+        reportActivation(pluginId, diagnostic, error);
       }
       throw failure;
     }
@@ -663,6 +681,7 @@ export async function createBootstrapPluginEntries(
     },
     ensurePluginEntry,
     hasPendingEntry,
+    isEntryPublished: (pluginId) => !closed && activeScopes.has(pluginId),
     close() {
       if (closing) return closing;
       closed = true;

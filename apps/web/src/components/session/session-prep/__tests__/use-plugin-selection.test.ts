@@ -32,7 +32,7 @@ function plugin(
     description: "",
     kind: "plugin",
     source: "builtin",
-    hostState: "approved",
+    hostState: "loaded",
     runtimeCount: 0,
     tags: [],
     provides: [],
@@ -76,6 +76,26 @@ function selectionPlan(defaultPluginIds: string[]): WorldPluginPlan {
 }
 
 describe("usePluginSelection", () => {
+  it("does not infer new-session authorization from a globally loaded community entry", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
+      selectionPlan(["community"]),
+    );
+    const community = plugin("community", {
+      source: "community",
+      hostState: "loaded",
+      requires: ["dependency@1"],
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(
+        PLAN.worldId,
+        [community, DEPENDENCY_PLUGIN],
+        prepareWorldForServer,
+      ),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.selectedPluginIds).toContain("community");
+    expect(result.current.selectedPluginIds).not.toContain("dependency");
+  });
   beforeEach(() => {
     vi.mocked(api.getWorldPluginPlan).mockReset();
   });

@@ -303,6 +303,9 @@ sessionRoutes.post("/", async (c) => {
   // Do that before taking the session lock or opening the DB transaction; the
   // prepared plan is immutable input to the atomic write phase below.
   const preparedWorldData = await prepareWorldDataImportForSession({
+    contractData: rawWorldId
+      ? (await store.getWorld(rawWorldId))?.metadata?.contractData
+      : undefined,
     sessionId: id,
     worldId: rawWorldId,
     worldsDirs,
@@ -361,7 +364,10 @@ sessionRoutes.post("/", async (c) => {
           prepared: preparedWorldData,
           deferMediaFinalize: true,
         });
-        if (!importedWorldData.imported) {
+        if (
+          !importedWorldData.imported ||
+          (preparedWorldData.imported && preparedWorldData.portableOnly)
+        ) {
           await importWorldEmbeddedLorebook(tx, id, rawWorldId, now);
           await importWorldEmbeddedCharacters(tx, id, rawWorldId, now);
         }

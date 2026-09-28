@@ -87,7 +87,7 @@ export interface RuntimeRetryScope {
  * session state.
  */
 export interface DeferredRuntimeJob {
-  readonly turnDigest?: TurnDigest;
+  readonly turnDigest: TurnDigest;
   readonly jobId: string;
   readonly runtimeId: string;
   readonly pluginId: string;
@@ -113,13 +113,9 @@ export type DetachedStageInput = Pick<
 >;
 
 /** Frozen source-turn facts supplied by the kernel, independent of provider IDs. */
-export interface TurnDigest {
-  readonly turnId: string;
-  readonly playerMessage: string;
-  readonly narrativeText: string;
-  readonly toolCallSummaries: readonly string[];
-  readonly locale?: string;
-}
+export type TurnDigest = import("zod").infer<
+  typeof import("../schemas/execution-snapshots.js").turnDigestSchema
+>;
 
 // ── Turn input / result ──────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import {
   loadPluginManifest,
   loadPluginDefinition,
 } from "@covel/plugin-loader";
-import { worldTimeSchema } from "@covel/shared";
+import { worldTimeSchema } from "../schema.js";
 import time from "../rpc/time.js";
 import register from "../server/index.js";
 import { DEFAULT_TIME, initialTick } from "../clock.js";

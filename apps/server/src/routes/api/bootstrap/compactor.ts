@@ -29,7 +29,14 @@ export function createBootstrapCompactorRunner(
   const { extensions, store, llmAdapter } = params;
 
   return {
-    async run(sessionId, systemPromptPreview, messages, locale, traceId) {
+    async run(
+      sessionId,
+      systemPromptPreview,
+      messages,
+      locale,
+      traceId,
+      trace,
+    ) {
       // Resolve once per run so a hot reload cannot make the threshold use one
       // capability while the provider call uses another. Compaction input and
       // output share the same model context, so only the window left after the
@@ -41,6 +48,17 @@ export function createBootstrapCompactorRunner(
       );
       const execution = extensions.createExecution({
         sessionId,
+        ...(trace
+          ? {
+              turnId: trace.turnId,
+              emitter: {
+                sessionId,
+                turnId: trace.turnId,
+                traceId,
+                emit: (type, payload) => trace.emit(type, payload),
+              },
+            }
+          : {}),
         locale: locale ?? "zh-CN",
         signal: new AbortController().signal,
         pluginData: await store.listPluginDataSessionScope(sessionId),

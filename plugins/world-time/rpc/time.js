@@ -1,4 +1,4 @@
-import { worldTimeSchema } from "@covel/shared";
+import { worldTimeSchema } from "../schema.js";
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
 import { describeTime } from "../clock.js";
 

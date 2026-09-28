@@ -47,7 +47,7 @@ const fixturePlugin: PluginSummary = {
   description: "Fixture plugin",
   kind: "plugin",
   source: "builtin",
-  hostState: "approved",
+  hostState: "loaded",
   runtimeCount: 1,
   provides: [],
   tags: [],
@@ -294,6 +294,7 @@ it("uses session metadata and exposes every agent runtime with text-only role ch
     ...fixturePlugin,
     displayName: "Current session plugin",
     active: true,
+    serverCodeApproved: true,
     sessionState: "active" as const,
     locked: false,
     runtimes: [

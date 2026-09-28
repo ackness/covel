@@ -11,6 +11,10 @@ description:
     adventure.
 tags:
   - "cost:function"
+provides: [session.opening@1]
+contracts:
+  session.opening@1:
+    schema: ./schemas/opening.schema.json
 runtime:
   type: function
   schedule:
@@ -19,6 +23,9 @@ runtime:
       type: auto
       maxTriggerCount: 1
   io:
+    output:
+      contract: session.opening@1
+      schema: ./schemas/opening.schema.json
     visibility: system
   function:
     handler: ./handler.js

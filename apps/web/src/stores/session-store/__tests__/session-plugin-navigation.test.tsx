@@ -33,6 +33,7 @@ const session: SessionRecord = {
   updatedAt: "2026-09-06T00:00:00.000Z",
 };
 const plugin: SessionPlugin = {
+  serverCodeApproved: true,
   sessionState: "active",
   requires: [],
   optional: [],
@@ -43,7 +44,7 @@ const plugin: SessionPlugin = {
   description: "",
   kind: "plugin",
   source: "community",
-  hostState: "approved",
+  hostState: "loaded",
   runtimeCount: 0,
   provides: [],
   tags: [],

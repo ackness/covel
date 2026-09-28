@@ -34,7 +34,7 @@ function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
     description: "",
     kind: "plugin",
     source: "builtin",
-    hostState: "approved",
+    hostState: "loaded",
     runtimeCount: 0,
     provides: [],
     tags: [],
@@ -42,6 +42,7 @@ function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
     tools: [],
     userSettings: [],
     active,
+    serverCodeApproved: true,
     sessionState: active ? "active" : "inactive",
     locked: false,
   };

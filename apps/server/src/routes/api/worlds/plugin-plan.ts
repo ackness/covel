@@ -108,8 +108,8 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
       404,
     );
   }
-  const plugins = [...c.get("pluginRegistry").getAll().values()].map(
-    buildPluginSummary,
+  const plugins = [...c.get("pluginRegistry").getAll().values()].map((entry) =>
+    buildPluginSummary(entry, c.get("isPluginEntryPublished")),
   );
   const { policy, packs } = resolvePolicy(world.metadata);
   const selectedPack = policy.presetId

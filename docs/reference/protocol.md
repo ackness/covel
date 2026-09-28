@@ -666,3 +666,17 @@ subscription. Completion, failure, and cancellation also clear previews on the
 client. A late preview for an ended turn is ignored; an explicit new execution
 start permits the same turn ID to be retried. A GET started before newer SSE
 updates must not overwrite those updates when its response arrives.
+
+## 来源执行快照
+
+`ctx.playerMessage` 保持当前执行的文本命令。`ctx.session.lastPlayerInput` 为源执行准入后捕获的最近结构化提交，形状为 `{ id, sessionId, turnId, formId, values, createdAt }`，无提交时为 `null`。以持久 UTC `createdAt` 确定最近提交，相同时间戳以 `id` 字典序作稳定决胜，不依赖数据库枚举顺序。`values` 只接受 JSON 数据，表单可能来自更早回合；消费者按来源标识解释，不自动把旧表单当成本次命令。
+
+`turn-digest@1` 包含 `turnId/playerMessage/locale/narrativeText/toolCallSummaries/lastPlayerInput/runtimeResults`。`runtimeResults` 仅列捕获时来源回合已经观察到的 `runtimeId` 与 `success/failed/skipped/suspended` 状态，不含尚未运行的消费者或其他回合的重试种子。只有成功的故事和已接受工具调用进入文本摘要。
+
+内核复制并冻结提交和摘要，在作业事务中保存同一份来源快照；worker 恢复时用共享 schema 校验，不能重新查最新表单。正常、manual 和 resume 在各自新执行准入后捕获一次。此开发期契约采用 current-only 升级：缺少新字段的旧作业及旧会话快照需要重建，不提供旧字符串格式兼容。
+
+## 插件调用 trace
+
+`plugin.service.completed` 是 trace-only 事件，`forwardToActionStream: false`。payload 包含 `callId/parentCallId?/sessionId/turnId?/runtimeId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`；扩展调用另含宿主注册元数据 `extension: { point, id, slot? }`。不记录输入、输出、原始异常或私有 `diagnosticScope`。
+
+输出的原始校验、归属处理 `attributeOutput` 和最终校验在同一次调用的完成边界内进行，失败记为一次 `output-validation`；缓存命中不新增调用。具有真实 TurnEmitter 的执行复用其 `traceId/retryScope/seq` 并等待持久化尝试，`durationMs` 不包含 trace I/O；观察失败只发固定警告，不改变插件结果。没有回合 emitter 的 UI 后台投影仅进入有界进程窗口，不伪造回合 trace。

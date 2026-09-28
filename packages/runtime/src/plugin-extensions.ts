@@ -16,6 +16,7 @@ import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "./plugin-services.js";
 
 export interface PluginExtensionExecutionScope {
+  readonly emitter?: import("./trace/turn-emitter.js").TurnEmitter;
   readonly world?: import("@covel/shared").WorldModelView;
   readonly sessionId: string;
   readonly locale: string;
@@ -276,10 +277,6 @@ export class PluginExtensionHost {
                   },
                   { timeoutMs: point.timeoutMs },
                 )) as O;
-                if (point.attributeOutput)
-                  value = point.output.parse(
-                    point.attributeOutput(value, provider),
-                  );
               } catch (error) {
                 scope.signal.throwIfAborted();
                 if (point.onError === "fail-turn") throw error;

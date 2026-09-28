@@ -1,3 +1,4 @@
+import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
@@ -58,24 +59,29 @@ export type {
 export async function prepareWorldDataImportForSession(
   options: PrepareWorldDataImportForSessionOptions,
 ): Promise<PreparedWorldDataImport> {
-  if (!options.worldId || !options.worldsDirs?.length) {
+  if (!options.worldId) return { imported: false, diagnostics: [] };
+  const worldRoot = options.worldsDirs?.length
+    ? await resolveWorldRoot(options.worldId, options.worldsDirs)
+    : null;
+  const manifest = worldRoot ? await readWorldManifest(worldRoot) : null;
+  if (!worldRoot || !manifest?.worldData) {
+    const sources = portableContractSources(options.contractData);
+    if (options.contractData === undefined)
+      return { imported: false, diagnostics: [] };
+    const plan = await buildImportPlan({
+      sessionId: options.sessionId,
+      worldId: options.worldId,
+      sources,
+      deps: options.preflight,
+      now: options.now,
+      locale: options.locale,
+    });
     return {
-      imported: false,
-      diagnostics: [],
-    };
-  }
-  const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
-  if (!worldRoot) {
-    return {
-      imported: false,
-      diagnostics: [],
-    };
-  }
-  const manifest = await readWorldManifest(worldRoot);
-  if (!manifest.worldData) {
-    return {
-      imported: false,
-      diagnostics: [],
+      imported: true,
+      portableOnly: true,
+      diagnostics: [...plan.diagnostics, ...plan.mergeEvents],
+      plan,
+      mediaRefs: [],
     };
   }
 
@@ -195,6 +201,9 @@ export async function importWorldDataForSession(
       ? await options.store.getSession(options.sessionId)
       : null;
   const prepared = await prepareWorldDataImportForSession({
+    contractData: options.worldId
+      ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
+      : undefined,
     sessionId: options.sessionId,
     worldId: options.worldId,
     worldsDirs: options.worldsDirs,
@@ -225,30 +234,51 @@ export async function preflightWorldDataForSession(
   options: PreflightWorldDataForSessionOptions,
 ): Promise<PreflightWorldDataForSessionResult> {
   if (!options.worldId || !options.worldsDirs?.length) {
-    return {
-      imported: false,
-      diagnostics: [],
-      planned: 0,
-      targets: [],
-    };
+    const prepared = await prepareWorldDataImportForSession({
+      ...options,
+      worldsDirs: [],
+      preflight: { ...options.preflight, executeProjectionHandlers: false },
+    });
+    return prepared.imported
+      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
+      : {
+          imported: false,
+          diagnostics: prepared.diagnostics,
+          planned: 0,
+          targets: [],
+        };
   }
   const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
   if (!worldRoot) {
-    return {
-      imported: false,
-      diagnostics: [],
-      planned: 0,
-      targets: [],
-    };
+    const prepared = await prepareWorldDataImportForSession({
+      ...options,
+      worldsDirs: [],
+      preflight: { ...options.preflight, executeProjectionHandlers: false },
+    });
+    return prepared.imported
+      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
+      : {
+          imported: false,
+          diagnostics: prepared.diagnostics,
+          planned: 0,
+          targets: [],
+        };
   }
   const manifest = await readWorldManifest(worldRoot);
   if (!manifest.worldData) {
-    return {
-      imported: false,
-      diagnostics: [],
-      planned: 0,
-      targets: [],
-    };
+    const prepared = await prepareWorldDataImportForSession({
+      ...options,
+      worldsDirs: [],
+      preflight: { ...options.preflight, executeProjectionHandlers: false },
+    });
+    return prepared.imported
+      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
+      : {
+          imported: false,
+          diagnostics: prepared.diagnostics,
+          planned: 0,
+          targets: [],
+        };
   }
 
   const descriptor = await loadWorldDataDescriptor({
@@ -282,13 +312,20 @@ export async function preflightWorldDataForSession(
     locale: options.locale,
   });
 
+  return preflightPlanResult(plan, [
+    ...descriptor.diagnostics,
+    ...plan.diagnostics,
+    ...plan.mergeEvents,
+  ]);
+}
+
+function preflightPlanResult(
+  plan: PreparedWorldDataSync["plan"],
+  diagnostics: PreparedWorldDataSync["diagnostics"],
+): PreflightWorldDataForSessionResult {
   return {
     imported: true,
-    diagnostics: [
-      ...descriptor.diagnostics,
-      ...plan.diagnostics,
-      ...plan.mergeEvents,
-    ],
+    diagnostics,
     planned: plan.writes.length,
     targets: plan.writes.map((write) => ({
       kind: write.kind,
@@ -336,15 +373,15 @@ export async function prepareWorldDataSyncForSession(
   options: SyncWorldDataForSessionOptions,
 ): Promise<PreparedWorldDataSync> {
   if (!options.worldId || !options.worldsDirs?.length) {
-    return { imported: false, diagnostics: [], plan: emptyImportPlan() };
+    return preparePortableWorldDataSync(options);
   }
   const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
   if (!worldRoot) {
-    return { imported: false, diagnostics: [], plan: emptyImportPlan() };
+    return preparePortableWorldDataSync(options);
   }
   const manifest = await readWorldManifest(worldRoot);
   if (!manifest.worldData) {
-    return { imported: false, diagnostics: [], plan: emptyImportPlan() };
+    return preparePortableWorldDataSync(options);
   }
 
   const descriptor = await loadWorldDataDescriptor({
@@ -387,6 +424,34 @@ export async function prepareWorldDataSyncForSession(
     ],
     plan,
   };
+}
+
+async function preparePortableWorldDataSync(
+  options: SyncWorldDataForSessionOptions,
+): Promise<PreparedWorldDataSync> {
+  const session = !options.preflight?.activePlugins
+    ? await options.store.getSession(options.sessionId)
+    : null;
+  const prepared = await prepareWorldDataImportForSession({
+    sessionId: options.sessionId,
+    worldId: options.worldId,
+    now: options.now,
+    locale: options.locale ?? session?.locale,
+    contractData: options.worldId
+      ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
+      : undefined,
+    preflight: {
+      ...options.preflight,
+      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
+    },
+  });
+  return prepared.imported
+    ? { imported: true, diagnostics: prepared.diagnostics, plan: prepared.plan }
+    : {
+        imported: false,
+        diagnostics: prepared.diagnostics,
+        plan: emptyImportPlan(),
+      };
 }
 
 export async function syncWorldDataForSession(

@@ -1,9 +1,9 @@
+import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
 import { defineExtensionPoint } from "./index.js";
 
 export const sessionWorldContextV1 = defineExtensionPoint({
-  id: "session.world-context@1",
-  mode: "single",
+  ...kernelExtensionPoints.sessionWorldContext,
   input: z.strictObject({}),
   output: z.strictObject({
     schema: z.record(z.string(), z.unknown()).optional(),

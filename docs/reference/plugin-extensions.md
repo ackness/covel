@@ -45,6 +45,8 @@ export default function (covel) {
 
 entry 在宿主内按插件激活一次，**不属于某个会话**。禁用一个会话中的插件不会销毁其他会话共用的 entry；会话数据仍使用调用上下文和插件数据存储，不放到共享模块闭包中。单次任务使用 `ctx.signal`，需要会话结束通知时使用 `SessionEnd` Hook。此接口依靠插件配合取消和完成清理，不能强制终止忽略信号的 JS，不提供独立后台调度器。
 
+宿主目录的 `hostState` 只描述实际 entry 发布状态（`discovered / installed / loaded / error`），不再包含 `approved`。会话 API 单独提供实时 `serverCodeApproved` 与依赖解析后的 `sessionState / autoAdded / rejection`；不能从全局 `loaded` 推断另一个会话的授权。首次激活失败显示 error，重载失败但旧代保留时仍显示 loaded，错误信息独立展示。
+
 ## 开发时单插件热重载
 
 仅 `NODE_ENV=development` 启用社区插件热重载，builtin 包与生产环境不允许。`POST /api/plugins/:id/reload` 接收可选 `{ "sessionId": "..." }`；操作须通过安装 API 的本机/管理员鉴权，并由指定会话（省略时使用曾批准此插件的会话）提供当前有效的 server-code 授权。开发宿主同时监听社区插件目录，150 ms 合并文件变化后使用相同路径重载；没有有效授权时拒绝执行插件代码。
@@ -168,8 +170,16 @@ const response = await window.covel.invoke("invokePluginAction", {
 
 在会话输入 `/plugins` 打开调试页的插件视图，或输入 `/plugins my-plugin` 同时筛选该包及其作为调用方或提供方的服务记录。命令由框架命令目录提供，可搜索、自动补全并走现有 command RPC 校验和追踪，不消耗玩家回合，也不调用 LLM。`/debug` 和 `/trace` 继续打开原调试入口。
 
-插件视图展示安装来源、当前会话的启用与授权状态、runtime ID、实际注册的工具、Hook、RPC action、服务及声明的 slash command。`registered` 只表示命令 action 已注册，实际执行仍检查命令参数、会话和对应 action 的权限。未启用或未授权的包不会展示为当前可用的注册能力。查询只读宿主注册表，不触发 entry、服务发现或插件代码；加载失败和激活失败显示固定状态，具体错误从服务端日志排查。
+插件视图展示安装来源、当前会话的启用与授权状态、runtime ID、实际注册的工具、Hook、RPC action、服务及声明的 slash command。`registered` 只表示命令 action 已注册，实际执行仍检查命令参数、会话和对应 action 的权限。未启用或未授权的包不会展示为当前可用的注册能力。查询只读宿主注册表和会话依赖解析，不触发 entry、服务发现或插件代码；错误信息使用固定说明，并在宿主识别到注册错误时展示结构化 `registrationError` 的 code/registration，具体异常从服务端日志排查。
 
 最近服务调用只保存在当前 server 进程内，全局最多 500 条，每次返回当前会话实例最近 100 条，可按插件筛选。记录调用关系、所属 runtime/turn、耗时、成功/失败/超时/取消与固定错误分类，不记录参数、结果、原始异常或会话私有标识。未取得调用方准入范围的调用不进入会话历史；删除后同 ID 重建的会话无法读取旧记录。重启或请求落到其他进程时不会共享历史，因此该窗口不能用于持久审计或用量统计。未匹配服务的请求使用 `<unavailable>` 标识，超长诊断字符串截断至 256 个 UTF-16 单元并标记 `...[truncated]`。页面支持手动与自动刷新，同一会话及筛选条件下刷新时保留当前列表，避免滚动位置被清空；切换会话或筛选条件时立即隐藏旧快照，查询失败时也清除已显示的数据。
 
 接口见 [插件诊断 API](api.md#get-apisessionsidplugin-diagnostics)。本地组合调试使用 [test-runtime 的 --with-plugin](../guide/plugin-testing.md#coveltest-runtime)，然后用真实 server 验证审批、slash、Hook 和 UI。
+
+### 扩展调用的失败与 trace
+
+扩展输出先经过点的 output schema，再执行权威归属处理与最终 schema 校验；三步均在一次 service 调用的结算边界内。槽位类型不匹配等最终错误记录为一次 `error / output-validation`，然后由点的 `onError` 决定 skip 或 fail-turn，不会先记 success 再补 failure。超时后的迟到结果不追加 success。
+
+具有回合 emitter 的扩展、压缩与 function service 调用使用同一 `plugin.service.completed` 完成事件写入持久 trace，嵌套调用继承 emitter 并携带 parentCallId。事件只包含身份、扩展 point/id/slot、耗时和固定结果分类，不含调用输入、输出、原始错误、凭据或私有 session incarnation。复用既有 TurnEmitter 的 traceId、seq 和重试范围，等待写入尝试完成；存储失败沿用 trace 的尽力记录语义，不改变插件结果，耗时不包含 trace I/O。没有回合 emitter 的 UI 后台投影只保留进程内诊断窗口。
+
+诊断按当前返回的最近 100 条调用（全进程最多保留 500 条）计算 point/provider 的 total、success、error、timeout、cancelled。缓存命中与同执行并发合并不增加事件或统计；未激活或未批准的提供者在 discovery 被排除，不算调用失败；调用发出后准入失败则保留失败事件。该统计仅代表当前窗口，会随淘汰变化，不是累计用量。

@@ -218,6 +218,7 @@ export async function buildSessionDiscoverySnapshot(options: {
   readonly registry?: PluginRegistry;
   readonly sessionId: string;
   readonly builtinToolNames?: readonly string[];
+  readonly isEntryPublished?: (pluginId: string) => boolean;
 }): Promise<SessionDiscoverySnapshot> {
   const session = await options.store.getSession(options.sessionId);
   const activePluginIds = session?.activePlugins ?? [];
@@ -229,7 +230,9 @@ export async function buildSessionDiscoverySnapshot(options: {
 
   return {
     framework: buildFrameworkCapabilities(options.builtinToolNames).framework,
-    plugins: pluginEntries.map(buildPluginDetail),
+    plugins: pluginEntries.map((entry) =>
+      buildPluginDetail(entry, options.isEntryPublished),
+    ),
     pluginData: await Promise.all(
       activePluginIds.map(async (pluginId) => ({
         pluginId,

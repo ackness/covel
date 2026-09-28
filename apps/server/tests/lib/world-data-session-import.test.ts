@@ -20,6 +20,7 @@ import {
   WorldDataSyncConflictError,
   importWorldDataForSession,
   prepareWorldDataImportForSession,
+  preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
@@ -208,6 +209,90 @@ async function builtinPluginRegistry() {
 }
 
 describe("world data session importer", () => {
+  it.each(["haruka-academy", "mistport"])(
+    "imports %s time definitions before narration",
+    async (worldId) => {
+      const registry = await builtinPluginRegistry();
+      const store = await makeStore(["world-time"]);
+      const result = await importWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+        now: NOW,
+        preflight: { registry, activePlugins: ["world-time"] },
+      });
+      expect(
+        result.diagnostics.filter((item) => item.level === "error"),
+      ).toEqual([]);
+      expect(
+        (
+          await store.getPluginData(
+            "sess-1",
+            "world-time",
+            "definitions",
+            "world",
+          )
+        )?.value,
+      ).toMatchObject({
+        id: "world",
+        definition: {
+          kind: worldId === "mistport" ? "phases" : "calendar",
+          initial:
+            worldId === "mistport"
+              ? { cycle: 1, phase: 0 }
+              : { year: 1, month: 4, day: 8, hour: 8, minute: 20, weekday: 0 },
+        },
+      });
+      expect(
+        await store.getPluginData("sess-1", "world-time", "clock", "current"),
+      ).toBeNull();
+    },
+  );
+
+  it("leaves Emberback without an imported definition so the plugin uses its default", async () => {
+    const registry = await builtinPluginRegistry();
+    const store = await makeStore(["world-time"]);
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId: "emberback",
+      worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+      now: NOW,
+      preflight: { registry, activePlugins: ["world-time"] },
+    });
+    expect(result.diagnostics.filter((item) => item.level === "error")).toEqual(
+      [],
+    );
+    expect(
+      await store.getPluginData("sess-1", "world-time", "definitions", "world"),
+    ).toBeNull();
+  });
+
+  it("skips time data with a warning when its receiver is disabled", async () => {
+    const registry = await builtinPluginRegistry();
+    const result = await preflightWorldDataForSession({
+      sessionId: "preview",
+      worldId: "mistport",
+      worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+      now: NOW,
+      preflight: { registry, activePlugins: [] },
+    });
+    expect(result.diagnostics.filter((item) => item.level === "error")).toEqual(
+      [],
+    );
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        level: "warning",
+        message:
+          'No active receiver for data contract "world.time-definition@1"; source skipped',
+      }),
+    );
+    expect(
+      result.targets.some((target) => target.pluginId === "world-time"),
+    ).toBe(false);
+  });
+
   it("compiles bundled plugin dataSchemas with Ajv", async () => {
     const pluginsRoot = path.resolve(
       import.meta.dirname,
@@ -252,6 +337,7 @@ describe("world data session importer", () => {
       "scene-stage/assets",
       "scene-stage/scenes",
       "tabletop-rules/rules",
+      "world-time/definitions",
     ]);
   });
 

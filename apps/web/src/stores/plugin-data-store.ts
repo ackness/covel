@@ -33,6 +33,7 @@ export interface PluginDataChange {
 }
 
 const EMPTY_DATA: PluginData = Object.freeze({}) as PluginData;
+const EMPTY_PLUGIN: Record<string, Record<string, unknown>> = Object.freeze({});
 const EMPTY_NAMESPACE: Record<string, unknown> = Object.freeze({});
 
 let activeSessionId: string | null = null;
@@ -84,8 +85,16 @@ export function getPluginNamespaceSnapshot(
   pluginId: string,
   namespace: string,
 ): Record<string, unknown> {
+  const data = getPluginNamespacesSnapshot(pluginId);
+  return Object.hasOwn(data, namespace) ? data[namespace]! : EMPTY_NAMESPACE;
+}
+
+/** Stable owner slice; writes by other plugins keep this reference unchanged. */
+export function getPluginNamespacesSnapshot(
+  pluginId: string,
+): Record<string, Record<string, unknown>> {
   const data = getActiveData();
-  return data[pluginId]?.[namespace] ?? EMPTY_NAMESPACE;
+  return Object.hasOwn(data, pluginId) ? data[pluginId]! : EMPTY_PLUGIN;
 }
 
 /** Apply a batch of changes from a plugin-data.changed event. */
@@ -176,6 +185,15 @@ export function resetPluginData(): void {
 /** React hook — returns all plugin data for the active session. */
 export function usePluginData(): PluginData {
   return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+/** Subscribe to all namespaces of one plugin without rendering on other owners' writes. */
+export function usePluginNamespaces(
+  pluginId: string,
+): Record<string, Record<string, unknown>> {
+  return useSyncExternalStore(subscribe, () =>
+    getPluginNamespacesSnapshot(pluginId),
+  );
 }
 
 /**

@@ -75,7 +75,7 @@ export const worldTimeSchema = z
       .strict(),
   ])
   .superRefine((value, ctx) => {
-    const issue = (path: (string | number)[], message: string) =>
+    const issue = (path, message) =>
       ctx.addIssue({ code: "custom", path, message });
     const rule = value.evolution;
     if (rule.defaultStep > rule.maxStep)
@@ -147,4 +147,15 @@ export const worldTimeSchema = z
       issue(["calendar"], "calendar exceeds safe integer arithmetic");
   });
 
-export type WorldTimeDefinition = z.infer<typeof worldTimeSchema>;
+/** @typedef {import("zod").infer<typeof worldTimeSchema>} WorldTimeDefinition */
+
+export const timeDefinitionRecordSchema = z
+  .object({
+    id: z.literal("world"),
+    definition: worldTimeSchema,
+  })
+  .strict();
+
+export const timeDefinitionJsonSchema = z.toJSONSchema(
+  timeDefinitionRecordSchema,
+);

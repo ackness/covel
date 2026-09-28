@@ -74,6 +74,15 @@ async function createPregameStore(sessionId: string): Promise<DataStore> {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   });
+  // The completed schema-gen mirror must have its authoritative schema.
+  await store.upsertCharacterSchema({
+    sessionId,
+    version: 1,
+    types: ["npc", "companion"],
+    attributes: [{ id: "background", name: "Background", type: "string" }],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
   await store.savePlayerInput({
     id: "input-char-bridge",
     sessionId,

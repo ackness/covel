@@ -53,7 +53,7 @@ describe("chat foundation manifests", () => {
     expect(loadedSceneCast.uiSpecs.right).toHaveLength(1);
   });
 
-  it("loads chat-mode-narrator with active cast runtime injection", () => {
+  it("loads chat-mode-narrator with active cast contract injection", () => {
     expect(chatNarrator).toMatchObject({
       name: "chat-mode-narrator",
       pluginType: "plugin",
@@ -63,7 +63,7 @@ describe("chat foundation manifests", () => {
     });
     expect(chatNarrator.outputContract).toBe("narrative-engine@1");
     expect(chatNarrator.inputs["active-cast"]).toMatchObject({
-      from: { runtime: "scene-cast" },
+      from: { capability: "scene-cast@1" },
       select: "/activeCastContext",
       required: false,
     });

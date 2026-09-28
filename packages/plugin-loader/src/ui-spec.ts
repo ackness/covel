@@ -54,6 +54,26 @@ export function validateUiBindings(
   }
   if (!value || typeof value !== "object") return;
   for (const [key, item] of Object.entries(value)) {
+    if (key === "dataSource" && item && typeof item === "object") {
+      const bindings = (item as Record<string, unknown>).bindings;
+      if (bindings !== undefined) {
+        if (
+          !bindings ||
+          typeof bindings !== "object" ||
+          Array.isArray(bindings) ||
+          Object.keys(bindings).length > 8 ||
+          Object.entries(bindings).some(
+            ([name, namespace]) =>
+              !/^[a-z][a-zA-Z0-9_]*$/.test(name) ||
+              typeof namespace !== "string" ||
+              !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(namespace),
+          )
+        )
+          throw new Error(
+            "UI dataSource.bindings must name explicit own namespaces",
+          );
+      }
+    }
     if (
       ["pluginId", "sourcePlugin", "sourcePluginId"].includes(key) &&
       item !== ownerPluginId

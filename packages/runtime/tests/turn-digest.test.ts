@@ -25,6 +25,9 @@ describe("kernel turn digest", () => {
         live,
         result({ turnId: "previous" }),
         result({ status: "failed" }),
+        result({ runtimeId: "skipped", status: "skipped" }),
+        result({ runtimeId: "waiting", status: "pending" }),
+        result({ runtimeId: "running", status: "running" }),
         result({ runtimeId: "helper" }),
       ],
       [story],
@@ -34,6 +37,13 @@ describe("kernel turn digest", () => {
       playerMessage: "Go",
       locale: "en",
       narrativeText: "Current story",
+      lastPlayerInput: null,
+      runtimeResults: [
+        { runtimeId: "story", status: "success" },
+        { runtimeId: "story", status: "failed" },
+        { runtimeId: "skipped", status: "skipped" },
+        { runtimeId: "helper", status: "success" },
+      ],
       toolCallSummaries: [],
     });
     live.output!.narrativeOutput = "Mutated afterwards";

@@ -76,6 +76,7 @@ traceRoutes.get("/:sessionId", async (c) => {
 
   const events = await store.listTraceEvents(sessionId);
   const discovery = await buildSessionDiscoverySnapshot({
+    isEntryPublished: c.get("isPluginEntryPublished"),
     store,
     registry: c.get("pluginRegistry"),
     sessionId,
@@ -99,6 +100,7 @@ traceRoutes.get("/:sessionId/turns", async (c) => {
 
   const events = await store.listTraceEvents(sessionId);
   const discovery = await buildSessionDiscoverySnapshot({
+    isEntryPublished: c.get("isPluginEntryPublished"),
     store,
     registry: c.get("pluginRegistry"),
     sessionId,
@@ -146,6 +148,7 @@ traceRoutes.get(
     const discovery = before
       ? undefined
       : await buildSessionDiscoverySnapshot({
+          isEntryPublished: c.get("isPluginEntryPublished"),
           store,
           registry: c.get("pluginRegistry"),
           sessionId,

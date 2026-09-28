@@ -59,3 +59,9 @@ sources:
     to: contract:memory.blocks@1
     schema: contract:memory.blocks@1
     key: id
+  timeDefinition:
+    kind: yaml
+    path: data/time.yaml
+    schema: contract:world.time-definition@1
+    to: contract:world.time-definition@1
+    key: id

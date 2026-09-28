@@ -1,3 +1,4 @@
+import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
 import { defineExtensionPoint } from "./index.js";
 import { historyMessageSchema } from "./prompt-history-transform.js";
@@ -36,8 +37,7 @@ export type HistoryCompactionOutput = z.infer<
   typeof historyCompactionOutputSchema
 >;
 export const historyCompactV1 = defineExtensionPoint({
-  id: "history.compact@1",
-  mode: "single",
+  ...kernelExtensionPoints.historyCompact,
   input: historyCompactionInputSchema,
   output: historyCompactionOutputSchema,
   timeoutMs: 60_000,

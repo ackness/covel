@@ -528,7 +528,7 @@ async function assembleApi(
     services,
     extensions,
     calls: serviceCalls,
-    hasPendingEntry: pluginEntries.hasPendingEntry,
+    isEntryPublished: pluginEntries.isEntryPublished,
     isServerCodeApproved: (session, pluginId) =>
       rpcApprovalGate.hasGrant(
         session.id,
@@ -836,6 +836,7 @@ async function assembleApi(
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
+    c.set("isPluginEntryPublished", pluginEntries.isEntryPublished);
     c.set("withPluginSnapshot", withPluginSnapshot);
     c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {

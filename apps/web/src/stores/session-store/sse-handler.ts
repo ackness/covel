@@ -748,6 +748,7 @@ export function createSseEventHandler(
       case "hook.fired":
       case "hook.rewrote":
       case "hook.aborted":
+      case "plugin.service.completed":
       // Command lifecycle is trace-only and never forwarded to this action
       // stream; keep the closed event union exhaustive for future changes.
       case "command.invoked":

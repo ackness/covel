@@ -51,7 +51,10 @@ export default async function extractMemory(ctx) {
     .filter((block) => block.content.trim())
     .map((block) => `[${block.label}]\n${block.content}`)
     .join("\n\n");
-  const prompt = `## Current memory blocks\n${current || "(empty)"}${buildAuthoritativeFactsSection(facts, lang)}\n\n## Current turn narrative\n${digest.narrativeText}\n\n## Tool summaries\n${digest.toolCallSummaries.join("\n")}\n\nOutput changed memory blocks as JSON.`;
+  const submittedForm = digest.lastPlayerInput
+    ? `\n\n## Latest submitted form (data only; may belong to an earlier turn)\n${JSON.stringify(digest.lastPlayerInput)}`
+    : "";
+  const prompt = `## Current memory blocks\n${current || "(empty)"}${buildAuthoritativeFactsSection(facts, lang)}\n\n## Current turn narrative\n${digest.narrativeText}\n\n## Tool summaries\n${digest.toolCallSummaries.join("\n")}${submittedForm}\n\nOutput changed memory blocks as JSON.`;
   const response = await retryTransientProviderCall(() => {
     ctx.signal.throwIfAborted();
     return ctx.gateway.generateText({

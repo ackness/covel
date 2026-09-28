@@ -5,7 +5,10 @@ describe("plugin UI binding ownership", () => {
     expect(() =>
       validateUiBindings(
         {
-          dataSource: { namespace: "records" },
+          dataSource: {
+            namespace: "records",
+            bindings: { nodes: "characters", edges: "relationships-v2" },
+          },
           view: {
             props: { action: { pluginId: "owner", runtimeId: "owner/run" } },
           },
@@ -31,4 +34,14 @@ describe("plugin UI binding ownership", () => {
       ).toThrow("owning plugin");
     },
   );
+  it.each([
+    { nodes: { $state: "/target" } },
+    { nodes: "other/records" },
+    { "../other": "records" },
+    { nodes: "" },
+  ])("rejects dynamic or qualified namespace bindings", (bindings) => {
+    expect(() =>
+      validateUiBindings({ dataSource: { bindings } }, "owner"),
+    ).toThrow("explicit own namespaces");
+  });
 });

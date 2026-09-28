@@ -18,7 +18,7 @@ const plugin: PluginSummary = {
   description: "Current metadata",
   kind: "plugin",
   source: "builtin",
-  hostState: "approved",
+  hostState: "loaded",
   runtimeCount: 2,
   provides: [],
   tags: [],

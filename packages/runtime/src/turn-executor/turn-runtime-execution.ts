@@ -1,4 +1,4 @@
-import { buildTurnDigest } from "./turn-digest.js";
+import { buildTurnDigest, freezeSnapshot } from "./turn-digest.js";
 import { collectUpstreamWorldProposals } from "../function-runtime/world-model-view.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
@@ -83,6 +83,7 @@ export interface RuntimeInvocation {
           description?: string;
           fields?: Record<string, unknown>;
         }[];
+        lastPlayerInput?: import("@covel/shared").PlayerInputSubmission | null;
         lastFormValues?: Record<string, unknown>;
       }
     | undefined;
@@ -552,13 +553,15 @@ export async function executeOneRuntime(
         );
       const digest =
         input.detachedStage?.turnDigest ??
-        buildTurnDigest(input, [...completedResults.values()], activeRuntimes);
+        buildTurnDigest(
+          input,
+          [...completedResults.values()],
+          activeRuntimes,
+          sessionMeta?.lastPlayerInput ?? null,
+        );
       inputSlots[inject.name] = {
         cardinality: "one",
-        value: Object.freeze({
-          ...digest,
-          toolCallSummaries: Object.freeze([...digest.toolCallSummaries]),
-        }),
+        value: freezeSnapshot(structuredClone(digest)),
         source: {
           pluginId: "__kernel",
           runtimeId: inject.from,
@@ -628,6 +631,7 @@ export async function executeOneRuntime(
     );
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
+        lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
         upstreamProposals,
         manifest,
         input,
@@ -649,6 +653,7 @@ export async function executeOneRuntime(
     }
 
     const guardResult = await executeAgentGuard({
+      lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
       upstreamProposals,
       manifest,
       input,

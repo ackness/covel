@@ -148,6 +148,8 @@ export type PreparedWorldDataImport =
     }
   | {
       readonly imported: true;
+      /** Portable contract records do not replace embedded character/lore imports. */
+      readonly portableOnly?: boolean;
       readonly diagnostics: readonly WorldDataDiagnostic[];
       readonly plan: ImportPlan;
       /** Media assets materialized before the database transaction opens. */
@@ -155,6 +157,7 @@ export type PreparedWorldDataImport =
     };
 
 export interface PrepareWorldDataImportForSessionOptions {
+  readonly contractData?: unknown;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];
@@ -176,6 +179,7 @@ export interface ApplyPreparedWorldDataImportForSessionOptions {
 }
 
 export interface PreflightWorldDataForSessionOptions {
+  readonly contractData?: unknown;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];

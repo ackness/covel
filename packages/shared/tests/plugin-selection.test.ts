@@ -192,6 +192,24 @@ describe("session plugin contract resolution", () => {
     expect(plan.active).toEqual(["b"]);
     expect(plan.rejected[0]?.code).toBe("single-provider-conflict");
   });
+  it("rejects invalid kernel conflicts without suppressing collect providers", () => {
+    const plan = resolveSessionPlugins({
+      requested: ["invalid", "one", "two"],
+      plugins: [
+        p("invalid", { conflicts: ["prompt.segment@1"] }),
+        p("one", { extensions: [{ point: "prompt.segment@1", id: "one" }] }),
+        p("two", { extensions: [{ point: "prompt.segment@1", id: "two" }] }),
+      ],
+    });
+    expect(plan.active).toEqual(["one", "two"]);
+    expect(plan.rejected).toEqual([
+      expect.objectContaining({
+        pluginId: "invalid",
+        code: "invalid-conflict",
+        path: ["conflicts", 0],
+      }),
+    ]);
+  });
   it("does not activate optional recommendations", () =>
     expect(
       resolveSessionPlugins({

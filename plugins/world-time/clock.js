@@ -1,4 +1,5 @@
-import { resolveI18nText, worldTimeSchema } from "@covel/shared";
+import { resolveI18nText } from "@covel/shared";
+import { worldTimeSchema, timeDefinitionRecordSchema } from "./schema.js";
 
 export const DEFAULT_TIME = worldTimeSchema.parse({
   kind: "calendar",
@@ -186,10 +187,10 @@ export async function loadTime(store, locale) {
       locale,
     };
   }
-  const session = await store.getSession();
-  const world = session?.worldId ? await store.getWorld() : null;
-  const declared = world?.metadata?.dimensions?.time ?? world?.dimensions?.time;
-  const definition = worldTimeSchema.parse(declared ?? DEFAULT_TIME);
+  const imported = await store.getPluginData("definitions", "world");
+  const definition = imported
+    ? timeDefinitionRecordSchema.parse(imported.value).definition
+    : DEFAULT_TIME;
   const tick = initialTick(definition);
   return {
     schemaVersion: 1,

@@ -18,7 +18,7 @@ const plugin = {
   description: "Memory plugin",
   kind: "plugin",
   source: "builtin",
-  hostState: "approved",
+  hostState: "loaded",
   runtimeCount: 1,
   provides: ["memory@1"],
   requires: [],

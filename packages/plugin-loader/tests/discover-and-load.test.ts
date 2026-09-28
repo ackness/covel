@@ -175,6 +175,52 @@ describe("current package discovery and loading", () => {
     await root({ provides: ["own@1"], optional: ["own@1"] });
     await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
   });
+  it.each([
+    { schedule: { needs: ["foreign"] } },
+    {
+      schedule: {
+        stage: "setup",
+        needs: [{ runtime: "foreign/step", scope: "session" }],
+      },
+    },
+    { schedule: { after: ["probe-other/step"] } },
+    { schedule: { after: [{ runtime: "foreign" }] } },
+    { io: { inputs: { facts: { from: { runtime: "foreign/step" } } } } },
+  ])(
+    "rejects cross-package runtime references in $schedule $io",
+    async (reference) => {
+      await root({ runtime: { ...agent, ...reference } });
+      const [d] = await discoverPlugins(temp);
+      await expect(loadPluginDefinition(d!)).rejects.toThrow(
+        /use a contract for cross-package dependencies/,
+      );
+    },
+  );
+  it("allows package-owned runtime references in needs, after and inputs", async () => {
+    await root();
+    await write(
+      path.join(temp, "probe/runtimes/producer/RUNTIME.md"),
+      md(agent),
+    );
+    await write(
+      path.join(temp, "probe/runtimes/consumer/RUNTIME.md"),
+      md({
+        ...agent,
+        schedule: {
+          ...agent.schedule,
+          needs: ["probe/producer"],
+          after: [{ runtime: "probe/producer" }],
+        },
+        io: {
+          inputs: {
+            facts: { from: { runtime: "probe/producer" }, required: true },
+          },
+        },
+      }),
+    );
+    const [d] = await discoverPlugins(temp);
+    await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
+  });
   it("loads contract schemas and validates data contract schema identity", async () => {
     await root({
       contracts: { "data@1": { schema: "./data.json" } },

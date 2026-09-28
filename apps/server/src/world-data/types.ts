@@ -29,6 +29,8 @@ export interface MergedWorldDataSource {
 }
 
 export interface OrderedWorldDataSource extends MergedWorldDataSource {
+  /** In-memory portable records use the same import planner as file sources. */
+  readonly inlineValue?: unknown;
   readonly resolvedOrder: number;
 }
 

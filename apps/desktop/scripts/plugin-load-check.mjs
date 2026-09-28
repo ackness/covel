@@ -16,3 +16,17 @@ export function assertNoPluginLoadErrors(stderrChunks) {
     );
   }
 }
+
+/** Exercise actual staged entry imports, including plugin-only workspace dependencies. */
+export function assertLoadedBuiltinPluginEntries(items) {
+  if (!Array.isArray(items))
+    throw new Error("staged /api/plugins returned no items");
+  for (const id of ["affinity", "codex", "core-quest", "dice-check"]) {
+    const plugin = items.find((item) => item?.id === id);
+    if (plugin?.source !== "builtin" || plugin.hostState !== "loaded") {
+      throw new Error(
+        `staged builtin plugin entry ${id} is not loaded: ${plugin?.hostState ?? "missing"}`,
+      );
+    }
+  }
+}

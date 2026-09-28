@@ -1,3 +1,4 @@
+import { kernelExtensionPoints, kernelUiSlots } from "./contracts.js";
 import { z } from "zod";
 import { defineExtensionPoint } from "./index.js";
 import { mediaRefSchema } from "../types/media.js";
@@ -91,19 +92,13 @@ export const stageChoicesSchema = z.strictObject({
     .max(64),
 });
 export const uiSlotValueSchemas = {
-  "stage.backdrop@1": stageBackdropSchema,
-  "stage.cast@1": stageCastSchema,
-  "stage.dialogue@1": stageDialogueSchema,
-  "stage.choices@1": stageChoicesSchema,
-  "character.visual@1": characterVisualSchema,
+  [kernelUiSlots.backdrop]: stageBackdropSchema,
+  [kernelUiSlots.cast]: stageCastSchema,
+  [kernelUiSlots.dialogue]: stageDialogueSchema,
+  [kernelUiSlots.choices]: stageChoicesSchema,
+  [kernelUiSlots.characterVisual]: characterVisualSchema,
 } as const;
-export const uiSlotNameSchema = z.enum([
-  "stage.backdrop@1",
-  "stage.cast@1",
-  "stage.dialogue@1",
-  "stage.choices@1",
-  "character.visual@1",
-]);
+export const uiSlotNameSchema = z.enum(Object.values(kernelUiSlots));
 export type UiSlotName = z.infer<typeof uiSlotNameSchema>;
 export type StageBackdropModel = z.infer<typeof stageBackdropSchema>;
 export type StageCastModel = z.infer<typeof stageCastSchema>;
@@ -142,8 +137,7 @@ export const uiSlotInputSchema = z.strictObject({
 });
 export type UiSlotProjectionInput = z.infer<typeof uiSlotInputSchema>;
 export const uiSlotV1 = defineExtensionPoint({
-  id: "ui.slot@1",
-  mode: "pipeline",
+  ...kernelExtensionPoints.uiSlot,
   input: uiSlotInputSchema,
   output: valueSchema,
   timeoutMs: 500,

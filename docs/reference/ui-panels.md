@@ -91,7 +91,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 > `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则 之间切换。（旧 `world-entries` 子 Tab 已移除：对导入型世界它只是 `world-overview` 已格式化渲染的同一份 dimensions 的原始 JSON 重复；`entries` 的 lorebook/prompt 写入不变，`/debug` Data Explorer 仍可查看。）
 > `character` 组汇聚 `char-creator` 的 character-panel（从会话 World Model 的 `session.characters` 读取活角色）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；角色创建或导入经 World Model 写入，不依靠跨插件角色镜像。
-> `npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
+> `npc-graph/extractor` 的 npc-graph-panel 通过 `dataSource.bindings` 把自身 `nodes` + `edges` 两个 namespace 注入面板状态，再作为 props 传给 `GraphCanvas` 呈现关系图（react-force-graph-2d 懒加载）。
 > `memory` 包注册 `prompt.segment@1`、`memory.block-definitions@1` 服务和右侧面板。`runtimes/extract/RUNTIME.md` 消费冻结的 `turn-digest@1`，以 `settle: before-next-execution` 的脱离回合任务更新本插件 `blocks` namespace。面板直接读取这些块；提示词片段位于缓存边界之后。禁用该插件的会话不运行提取、不等待它的任务，也不注入其记忆。
 
 ### 世界文档（框架自持 Tab）
@@ -163,6 +163,7 @@ ui:
 - `icon` — 框架允许列表内的 Lucide 图标名（kebab-case）；完整列表见
   [UI Components / Display](ui-components.md#display)
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
+- `dataSource.bindings` — 可选的至多 8 个具名自有 namespace 绑定，例如 `{ "nodes": "characters", "edges": "relations" }`；面板在 `/sources/nodes`、`/sources/edges` 暴露其当前会话数据供 `$state` 引用。名称与 namespace 必须为字面量，无法指定其他插件；切换会话时这些值随数据源刷新，缺失的 namespace 为空对象。主 `namespace` 仍决定普通面板数据和空态。
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件。当前 Web UI 只执行这类声明式 spec；`.tsx`、`.js` 等非 JSON UI 声明不受支持，API 会给出对应诊断并剔除该项
 

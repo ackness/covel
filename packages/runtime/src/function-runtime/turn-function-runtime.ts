@@ -1,3 +1,4 @@
+import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
 import { createWorldModelView } from "./world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import type {
@@ -59,6 +60,8 @@ import {
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
 
 export interface ExecuteFunctionRuntimeOptions {
+  readonly lastPlayerInput?:
+    import("@covel/shared").PlayerInputSubmission | null;
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
@@ -110,6 +113,7 @@ export interface ExecuteFunctionRuntimeOptions {
 }
 
 export async function executeFunctionRuntime({
+  lastPlayerInput = null,
   upstreamProposals = [],
   manifest,
   input,
@@ -387,6 +391,7 @@ export async function executeFunctionRuntime({
       : undefined,
   };
   const serviceClient = deps.services?.createClient({
+    emitter: deps.emitter,
     sessionId: input.sessionId,
     turnId: input.turnId,
     runtimeId: manifest.name,
@@ -422,8 +427,7 @@ export async function executeFunctionRuntime({
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
       session: {
-        lastPlayerInput:
-          input.detachedStage?.turnDigest?.playerMessage ?? input.playerMessage,
+        lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
       },
       locale: input.locale,
       store: revocable.store,

@@ -11,7 +11,7 @@ schedule:
     type: auto
     maxTriggerCount: 1
   after:
-    - pregame
+    - contract: session.opening@1
 io:
   output:
     schema: ./output.schema.json

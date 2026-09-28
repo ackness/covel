@@ -883,6 +883,14 @@ describe("TurnExecutor E2E", () => {
 describe("TurnExecutor _interaction protocol", () => {
   it("should detect _interaction from tool results and populate pendingInputs", async () => {
     const store = await createMainLoopStore("sess-1");
+    await store.upsertCharacterSchema({
+      sessionId: "sess-1",
+      version: 1,
+      types: ["npc", "companion"],
+      attributes: [{ id: "background", name: "Background", type: "string" }],
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    });
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const charDiscovery = discoveries.find((d) => d.id === "char-creator")!;
     const charManifests = await loadPluginManifest(charDiscovery);
@@ -954,15 +962,9 @@ describe("TurnExecutor _interaction protocol", () => {
       }),
     };
 
-    // Strip the upstream gate for this unit test — the real player-init
-    // declares turn-scoped `needs: [pregame, world-init/schema-gen]` so the
-    // framework skips it when those aren't scheduled. This test focuses on the
-    // interaction protocol in isolation and doesn't wire in the setup chain.
-    const isolatedManifest = {
-      ...charManifest,
-      needs: undefined,
-    };
-    const result = await executeTurn(makeTurnInput(), [isolatedManifest], deps);
+    // Isolate the interaction protocol after world initialization. The real
+    // guard reads the schema above; absent providers add no `after` DAG edges.
+    const result = await executeTurn(makeTurnInput(), [charManifest], deps);
 
     // Should have pendingInputs with the interaction protocol
     expect(result.pendingInputs).toBeDefined();

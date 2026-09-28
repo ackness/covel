@@ -30,6 +30,7 @@ const {
   listPlugins,
   listInstalledPlugins,
   listSessionPlugins,
+  getPluginDiagnostics,
 } = await import("../api.js");
 
 function mockFetchOnce(body: unknown, status = 200): void {
@@ -55,7 +56,7 @@ function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
     description: "Memory plugin",
     kind: "plugin",
     source: "builtin",
-    hostState: "approved",
+    hostState: "loaded",
     runtimeCount: 1,
     provides: ["memory-panel"],
     tags: [],
@@ -83,10 +84,81 @@ afterEach(() => {
 });
 
 describe("session plugin API", () => {
+  it("preserves diagnostic states, dependency reasons, extension metadata and window counts", async () => {
+    const body = {
+      sessionId: "session",
+      capturedAt: "2026-09-28T00:00:00Z",
+      plugins: [
+        {
+          pluginId: "community",
+          source: "community",
+          hostState: "loaded",
+          sessionState: "approval-required",
+          serverCodeApproved: false,
+          active: false,
+          approvalRequired: true,
+          rejection: {
+            pluginId: "community",
+            code: "approval-required",
+            reason: "Approval required",
+          },
+          runtimeIds: [],
+          registrations: {
+            tools: [],
+            hooks: [],
+            actions: [],
+            services: [],
+            extensions: [
+              {
+                point: "ui.slot@1",
+                id: "backdrop",
+                slot: "stage.backdrop@1",
+                order: 0,
+              },
+            ],
+          },
+          commands: [],
+        },
+      ],
+      calls: [
+        {
+          callId: "one",
+          callerPluginId: "__kernel",
+          providerPluginId: "community",
+          name: "__extension.ui.slot@1.backdrop",
+          contract: "ui.slot@1",
+          completedAt: "2026-09-28T00:00:00Z",
+          durationMs: 2,
+          outcome: "error",
+          errorCode: "output-validation",
+          extension: {
+            point: "ui.slot@1",
+            id: "backdrop",
+            slot: "stage.backdrop@1",
+          },
+        },
+      ],
+      extensionCalls: [
+        {
+          point: "ui.slot@1",
+          providerPluginId: "community",
+          total: 1,
+          success: 0,
+          error: 1,
+          timeout: 0,
+          cancelled: 0,
+        },
+      ],
+      history: { scope: "process", limit: 100 },
+    };
+    mockFetchOnce(body);
+    await expect(getPluginDiagnostics("session")).resolves.toEqual(body);
+  });
   it("returns the canonical list envelope without client-side remapping", async () => {
     const item: SessionPlugin = {
       ...plugin(),
       active: true,
+      serverCodeApproved: true,
       sessionState: "active",
       locked: false,
     };

@@ -259,14 +259,15 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
     description: i18nTextSchema,
     kind: z.enum(["core", "plugin"]),
     source: z.enum(["builtin", "community"]),
-    hostState: z.enum([
-      "discovered",
-      "installed",
-      "approved",
-      "loaded",
-      "error",
-    ]),
+    hostState: z.enum(["discovered", "installed", "loaded", "error"]),
     error: z.string().optional(),
+    registrationError: z
+      .object({
+        code: z.literal("plugin_registration_invalid"),
+        registration: z.string(),
+      })
+      .strict()
+      .optional(),
     runtimeCount: z.number().int().nonnegative(),
     version: z.string().optional(),
     provides: z.array(

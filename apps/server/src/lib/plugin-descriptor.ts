@@ -58,7 +58,10 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
   };
 }
 
-export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
+export function buildPluginSummary(
+  entry: PluginRegistryEntry,
+  isEntryPublished?: (pluginId: string) => boolean,
+): PluginSummary {
   const manifests = pluginManifestRecords(entry).map(
     ({ manifest }) => manifest,
   );
@@ -87,17 +90,17 @@ export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
     description: entry.summary.description,
     kind: plugin?.kind ?? "plugin",
     source,
-    hostState:
-      entry.status === "error"
+    hostState: isEntryPublished?.(entry.id)
+      ? "loaded"
+      : entry.status === "error" || entry.error
         ? "error"
         : entry.status === "discovered"
           ? "discovered"
-          : entry.loadedRuntimes.size > 0
-            ? "loaded"
-            : source === "builtin"
-              ? "approved"
-              : "installed",
+          : "installed",
     ...(entry.error ? { error: entry.error } : {}),
+    ...(entry.registrationError
+      ? { registrationError: { ...entry.registrationError } }
+      : {}),
     runtimeCount: runtimes.length,
     ...((entry.packageManifest?.manifest ?? manifests[0])?.version
       ? { version: (entry.packageManifest?.manifest ?? manifests[0])!.version }
@@ -167,8 +170,11 @@ function runtimeContract(manifest: RuntimeManifest): RuntimePluginContract {
   };
 }
 
-export function buildPluginDetail(entry: PluginRegistryEntry): PluginDetail {
-  const summary = buildPluginSummary(entry);
+export function buildPluginDetail(
+  entry: PluginRegistryEntry,
+  isEntryPublished?: (pluginId: string) => boolean,
+): PluginDetail {
+  const summary = buildPluginSummary(entry, isEntryPublished);
   const runtimes = pluginManifestRecords(entry).map(({ manifest }) =>
     runtimeContract(resolvePluginRuntimeManifest(entry, manifest)),
   );
