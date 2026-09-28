@@ -24,6 +24,16 @@
  * `number[]` once, not per call.
  */
 
+/** Reserved storage owner for memory's physical index and its derived progress. */
+export const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
+
+/** These records are meaningful only alongside the physical vector index. */
+export function isDerivedVectorRecord(record: {
+  readonly pluginId: string;
+}): boolean {
+  return record.pluginId === MEMORY_VECTOR_PLUGIN_ID;
+}
+
 // ── Model identity & routing ─────────────────────────────────────
 
 /** Identity of an embedding model. Used as routing key. */

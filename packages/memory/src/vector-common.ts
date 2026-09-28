@@ -12,11 +12,13 @@
  * Inject-only embedding function. The memory package never imports a concrete
  * provider — `@covel/ai-provider` is composed in at the server bootstrap layer
  * and handed in as this seam (mirrors how the LLM adapter is injected). Returns
- * one `Float32Array` per input string, in order. The dimension must match the
- * session's locked embedding model (the store throws on mismatch).
+ * one `Float32Array` per input string, in order. Implementations must enforce
+ * context.modelId before issuing provider work; matching dimensions alone do
+ * not make embeddings from different models compatible.
  */
 export type EmbedFn = (
   texts: readonly string[],
+  context: { readonly sessionId: string; readonly modelId: string },
 ) => Promise<readonly Float32Array[]>;
 
 /**
@@ -28,7 +30,7 @@ export type EmbedFn = (
  * make it impossible to collide with a real plugin id (npm package names, from
  * which plugin ids derive, cannot begin with `_`).
  */
-export const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
+export { MEMORY_VECTOR_PLUGIN_ID } from "@covel/store/vector";
 
 /** Namespace for embedded conversation-history (recall) vectors. */
 export const RECALL_NAMESPACE = "recall";

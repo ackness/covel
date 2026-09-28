@@ -119,7 +119,7 @@ export function createVectorIngestor(deps: {
     try {
       recall = await ingestRecall(
         store,
-        embed,
+        (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
         expectedSessionCreatedAt,
       );
@@ -129,7 +129,7 @@ export function createVectorIngestor(deps: {
     try {
       archival = await ingestArchival(
         store,
-        embed,
+        (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
         expectedSessionCreatedAt,
       );
@@ -190,7 +190,7 @@ export function createVectorIngestor(deps: {
 
 async function ingestRecall(
   store: VectorStore,
-  embed: EmbedFn,
+  embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
   expectedSessionCreatedAt: string,
 ): Promise<number> {
@@ -282,7 +282,7 @@ interface ArchivalItem {
 
 async function ingestArchival(
   store: VectorStore,
-  embed: EmbedFn,
+  embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
   expectedSessionCreatedAt: string,
 ): Promise<number> {
@@ -465,7 +465,7 @@ function warn(kind: string, sessionId: string, err: unknown): void {
 }
 
 async function embedWithRetry(
-  embed: EmbedFn,
+  embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   texts: readonly string[],
   sessionId: string,
   kind: "recall" | "archival",

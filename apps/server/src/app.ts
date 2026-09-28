@@ -20,7 +20,10 @@ import {
   resolveBackendFromEnv,
 } from "@covel/store/factory";
 import { resolveUserResourceDirs } from "./lib/user-resource-dirs.js";
-import { createEmbeddingLockHelper } from "./embedding-lock.js";
+import {
+  createEmbeddingLockHelper,
+  createMemoryEmbed,
+} from "./embedding-lock.js";
 import {
   createGatewayAdapter,
   createPluginRuntimeGateway,
@@ -285,19 +288,7 @@ async function initializeServer(): Promise<void> {
       ai,
       apiKeys,
     });
-    // Embedding seam for the semantic memory tier. The memory package never
-    // imports a provider — it gets this injected (mirrors the LLM adapter). Routes
-    // through the same gateway embed slot the embedding-lock probe uses, so the
-    // produced dimension always matches the session's locked vector model.
-    const memoryEmbed = async (
-      texts: readonly string[],
-    ): Promise<Float32Array[]> => {
-      const res = await ai.gateway.embed(
-        { values: [...texts] },
-        apiKeys ? { envApiKeys: apiKeys } : undefined,
-      );
-      return res.embeddings.map((e) => Float32Array.from(e));
-    };
+    const memoryEmbed = createMemoryEmbed({ ai, apiKeys });
     const perRequestLlm = createPerRequestLlmMiddleware({
       ai,
       envApiKeys: apiKeys,

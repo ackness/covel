@@ -1,3 +1,4 @@
+import { isDerivedVectorRecord } from "@covel/store/vector";
 /**
  * Snapshot / Fork routes.
  *
@@ -407,11 +408,13 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             }
 
             const pluginDataBatch: PluginDataRecord[] =
-              snapshot.payload.pluginData.map((pd) => ({
-                ...pd,
-                id: randomUUID(),
-                sessionId: childSessionId,
-              }));
+              snapshot.payload.pluginData
+                .filter((row) => !isDerivedVectorRecord(row))
+                .map((pd) => ({
+                  ...pd,
+                  id: randomUUID(),
+                  sessionId: childSessionId,
+                }));
             if (pluginDataBatch.length > 0) {
               await tx.setPluginDataBatch(pluginDataBatch);
             }

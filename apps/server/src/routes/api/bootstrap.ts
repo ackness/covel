@@ -1,3 +1,4 @@
+import type { EmbedFn } from "@covel/memory";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
 import { createPluginServiceAdmission } from "./bootstrap/plugin-service-admission.js";
 import {
@@ -190,7 +191,7 @@ export interface ApiBootstrapConfig {
    * write ingestion path. The composition root builds it from
    * `createAiStack().gateway.embed`. Absent → keyword-only memory (unchanged).
    */
-  readonly memoryEmbed?: (texts: readonly string[]) => Promise<Float32Array[]>;
+  readonly memoryEmbed?: EmbedFn;
   /**
    * Preferred slot name for internal memory LLM work.
    *

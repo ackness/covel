@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
 import {
   acquireSqliteConnection,
@@ -10,6 +11,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -164,8 +166,14 @@ function initializeSqliteMediaStore(
       }
       const path = mediaPath(mediaRoot, id);
       mkdirSync(dirname(path), { recursive: true });
-      if (!existsSync(path)) {
-        writeFileSync(path, bytes);
+      // Publish only complete bytes. An orphan final file from an interrupted
+      // earlier write is replaced from the caller's verified content as well.
+      const temporaryPath = `${path}.${randomUUID()}.tmp`;
+      try {
+        writeFileSync(temporaryPath, bytes, { flag: "wx" });
+        renameSync(temporaryPath, path);
+      } finally {
+        rmSync(temporaryPath, { force: true });
       }
       const ref: MediaRef = {
         id,

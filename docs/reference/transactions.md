@@ -143,6 +143,12 @@ nested-call rejection) but differ in concurrency and isolation:
 > gap without a store-connection rearchitecture. Regression coverage:
 > `packages/store/tests/serialized-write-gate.test.ts`.
 
+### Vector index initialization and transfer
+
+A registered vector model guarantees its physical table exists. PostgreSQL initializes the registry row, optional vector extension, table, and indexes in one transaction, then publishes the in-process cache after commit. An advisory transaction lock serializes initialization across processes. SQLite uses an immediate transaction and reads model state directly so outer rollbacks cannot leave stale caches. Existing broken development registries must be recreated.
+
+Snapshots, forks, and browser checkpoint transfers exclude the reserved `__kernel:vector` partition. Its ingest cursors and hashes describe a local physical index, not transferable session data. Both producers and importers apply this rule; rebuilt sessions re-index their messages and lore. Ordinary plugin data with the same namespace names is retained.
+
 ### MediaStore transaction and concurrency fixes
 
 Media lifecycle mutations use per-resource atomicity alongside the DataStore
