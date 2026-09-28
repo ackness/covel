@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageImports } from "./lib/package-imports.mjs";
@@ -16,7 +16,15 @@ const layers = {
   "plugin-handlers-utils": ["shared"],
   "plugin-loader": ["events", "shared"],
   // Tool fixtures use runtime's scoped-read implementation and store/tool types.
-  "plugin-test-utils": ["plugin-loader", "runtime", "shared", "store", "tools"],
+  // sdk-alignment asserts the public SDK stays structurally equal to shared.
+  "plugin-test-utils": [
+    "plugin-handlers-utils",
+    "plugin-loader",
+    "runtime",
+    "shared",
+    "store",
+    "tools",
+  ],
   runtime: [
     "ai-provider",
     "approval",
@@ -96,6 +104,13 @@ for (const workspace of workspaces) {
         );
         if (owner && owner !== workspace)
           fail("cross-workspace source import; use the package's public entry");
+        // Plugin modules execute as written; no compiler maps `.js` to `.ts`.
+        if (
+          workspace.group === "plugins" &&
+          !typeOnly &&
+          !statSync(target, { throwIfNoEntry: false })?.isFile()
+        )
+          fail("relative import must name an existing file");
         continue;
       }
       if (!specifier.startsWith("@covel/")) continue;

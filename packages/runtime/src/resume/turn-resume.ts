@@ -118,6 +118,7 @@ async function executeResumedRuntime(
     finalizeRuntimeResult(deps, manifest, input, result, {
       lastTarget,
       deltaCount,
+      outputContractSchema: loaded?.outputContractSchema,
     });
 
   const preRuntime = await runRuntimePreHook(

@@ -559,6 +559,7 @@ async function runAgentToolLoopWithinBudget(
                 );
               }
               return handleSuspension({
+                outputContractSchema: loaded.outputContractSchema,
                 sentinel: toolResult.parsedResult,
                 manifest,
                 input,

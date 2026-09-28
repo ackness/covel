@@ -6,11 +6,13 @@ export type JsonValue =
   | null
   | readonly JsonValue[]
   | { readonly [key: string]: JsonValue | undefined };
-export interface MediaReference {
+// A type literal (not an interface) so the implicit index signature keeps this
+// assignable to the kernel's loose-object media ref contract.
+export type MediaReference = {
   readonly id: string;
   readonly mime: string;
   readonly size: number;
-}
+};
 export type ImageGenerationResult =
   | {
       readonly outcome: "success";

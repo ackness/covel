@@ -654,6 +654,7 @@ export async function executeFunctionRuntime({
     manifest,
     input,
     rawResult,
+    { outputContractSchema: loaded.outputContractSchema },
   );
 
   // Flush execution-buffered domain writes onto the result output so

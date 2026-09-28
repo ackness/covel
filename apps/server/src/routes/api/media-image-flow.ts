@@ -17,7 +17,8 @@ export async function resolveMediaImageFlow(
       sessionId,
       locale: session.locale ?? "zh-CN",
       signal,
-      pluginData: await store.listPluginDataSessionScope(sessionId),
+      readPluginData: (pluginId, namespace) =>
+        store.listPluginData(sessionId, pluginId, namespace),
     })
     .run(mediaImageFlowV1, {});
 }

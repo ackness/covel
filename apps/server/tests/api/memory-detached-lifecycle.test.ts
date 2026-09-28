@@ -184,7 +184,8 @@ describe("memory detached lifecycle", () => {
         locale: "en",
         turnId: "next",
         signal: new AbortController().signal,
-        pluginData: await store.listPluginDataSessionScope("session"),
+        readPluginData: (pluginId, namespace) =>
+          store.listPluginData("session", pluginId, namespace),
       });
       return execution.run(promptSegmentV1, {
         turnId: "next",
@@ -272,7 +273,7 @@ describe("memory detached lifecycle", () => {
           sessionId: "session",
           locale: "en",
           signal: new AbortController().signal,
-          pluginData: [],
+          readPluginData: async () => [],
         });
         return execution.run(promptSegmentV1, {
           turnId: "next",
@@ -351,7 +352,8 @@ it("settles ten source turns in order and never publishes a timed-out late memor
           turnId: `next-${index}`,
           locale: "en",
           signal: new AbortController().signal,
-          pluginData: await store.listPluginDataSessionScope("session"),
+          readPluginData: (pluginId, namespace) =>
+            store.listPluginData("session", pluginId, namespace),
         })
         .run(promptSegmentV1, {
           turnId: `next-${index}`,

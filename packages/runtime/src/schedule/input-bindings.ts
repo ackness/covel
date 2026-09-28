@@ -42,11 +42,21 @@ import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js"
 
 type Schema = Readonly<Record<string, unknown>>;
 
+/** Locale-independent order keeps injected prompt bytes stable. */
+const compareCodeUnits = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 function validateAcceptedValue(
   value: unknown,
   schema: Schema,
 ): { readonly valid: boolean; readonly errors?: readonly string[] } {
-  return validateOutput(value, schema);
+  try {
+    return validateOutput(value, schema);
+  } catch {
+    return {
+      valid: false,
+      errors: ["schema validation failed: schema could not be compiled"],
+    };
+  }
 }
 
 /** Machine-readable skip reasons a binding gate can emit. */
@@ -57,6 +67,7 @@ export type BindingSkipReason =
   | "input-missing"
   | "input-schema-invalid"
   | "input-schema-incompatible"
+  | "contract-output-invalid"
   | "invalid-detached-contract"
   | "media-ownership-invalid";
 
@@ -79,6 +90,11 @@ export interface ResolveBindingsInput {
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   /** Consumer's loaded `accepts` schemas, keyed by binding name. */
   readonly acceptsSchemas: Readonly<Record<string, Schema>>;
+  /**
+   * Published schema of each contract-sourced binding's contract, keyed by
+   * binding name. Every provider's full output must satisfy it before `select`.
+   */
+  readonly contractSchemas?: Readonly<Record<string, Schema>>;
   /** Producer's declared `output.schema` (for the build-time compatibility check). */
   readonly loadProducerSchema: (
     producer: RuntimeManifest,
@@ -202,14 +218,21 @@ function providersFor(
   };
 }
 
+type ExtractFailure =
+  | { ok: false; reason: "upstream-failed" | "input-missing" }
+  | {
+      ok: false;
+      reason: "contract-output-invalid";
+      errors: readonly string[];
+    };
+
 /** Extract a producer's completed value + its provenance source. */
 function extractValue(
   producer: RuntimeManifest,
   binding: RuntimeBinding,
   completedResults: ReadonlyMap<string, RuntimeResult>,
-):
-  | { ok: true; value: JsonValue; source: InputSource }
-  | { ok: false; reason: "upstream-failed" | "input-missing" } {
+  contractSchema: Schema | undefined,
+): { ok: true; value: JsonValue; source: InputSource } | ExtractFailure {
   const result = completedResults.get(producer.name);
   // A guard can produce the value without an LLM call. Scheduling skips have
   // no such output and must still gate consumers; failed guards never qualify.
@@ -217,6 +240,16 @@ function extractValue(
     result?.status === "skipped" && result.output?.skip === true;
   if (!result || (result.status !== "success" && !guardProvided)) {
     return { ok: false, reason: "upstream-failed" };
+  }
+  // The contract, not the original implementation, defines the output shape.
+  if (contractSchema) {
+    const validation = validateAcceptedValue(result.output, contractSchema);
+    if (!validation.valid)
+      return {
+        ok: false,
+        reason: "contract-output-invalid",
+        errors: validation.errors ?? [],
+      };
   }
   let value: unknown = result.output;
   if (binding.select) {
@@ -242,6 +275,29 @@ function diag(
   message: string,
 ): SchedulingDiagnostic {
   return { code, severity, runtimeId, message };
+}
+
+/** A contract violation is the provider's defect, so it is always an error. */
+function extractFailureDiagnostic(
+  failure: ExtractFailure,
+  required: boolean,
+  runtimeId: string,
+  bindingName: string,
+  provider: RuntimeManifest,
+): SchedulingDiagnostic {
+  return failure.reason === "contract-output-invalid"
+    ? diag(
+        failure.reason,
+        "error",
+        runtimeId,
+        `binding "${bindingName}" provider "${provider.name}" violates its contract schema: ${failure.errors.slice(0, 3).join("; ")}`,
+      )
+    : diag(
+        failure.reason,
+        required ? "error" : "warn",
+        runtimeId,
+        `binding "${bindingName}": ${failure.reason}`,
+      );
 }
 
 /**
@@ -287,6 +343,8 @@ export async function resolveInputBindings(
   for (const [name, binding] of bindingEntries) {
     const required = binding.required !== false;
     const acceptsSchema = args.acceptsSchemas[name];
+    const contractSchema =
+      "capability" in binding.from ? args.contractSchemas?.[name] : undefined;
     const { providers, cardinality } = providersFor(binding, activeRuntimes);
 
     // cardinality: one with multiple providers is a build-time ambiguity.
@@ -322,7 +380,8 @@ export async function resolveInputBindings(
       const itemsSchema =
         cardinality === "all" ? asSchema(acceptsSchema.items) : acceptsSchema;
       for (const provider of providers) {
-        const producerSchema = await args.loadProducerSchema(provider);
+        const producerSchema =
+          (await args.loadProducerSchema(provider)) ?? contractSchema;
         const projected = projectSchemaBySelect(producerSchema, binding.select);
         const compat = checkAcceptsCompatibility(
           projected,
@@ -359,28 +418,35 @@ export async function resolveInputBindings(
     // Extract value(s).
     if (cardinality === "all") {
       const sorted = [...providers].sort((a, b) =>
-        a.name.localeCompare(b.name),
+        compareCodeUnits(a.name, b.name),
       );
       const items: { value: JsonValue; source: InputSource }[] = [];
-      let failed: "upstream-failed" | "input-missing" | undefined;
+      let failed: ExtractFailure | undefined;
       for (const provider of sorted) {
-        const got = extractValue(provider, binding, completedResults);
+        const got = extractValue(
+          provider,
+          binding,
+          completedResults,
+          contractSchema,
+        );
         if (!got.ok) {
-          failed = got.reason;
+          diagnostics.push(
+            extractFailureDiagnostic(
+              got,
+              required,
+              manifest.name,
+              name,
+              provider,
+            ),
+          );
+          failed = got;
           break;
         }
         items.push({ value: got.value, source: got.source });
       }
       if (failed) {
-        diagnostics.push(
-          diag(
-            failed,
-            required ? "error" : "warn",
-            manifest.name,
-            `binding "${name}": ${failed}`,
-          ),
-        );
-        if (required) return { ok: false, skipReason: failed, diagnostics };
+        if (required)
+          return { ok: false, skipReason: failed.reason, diagnostics };
         continue;
       }
       // Canonicalize each item's MediaRefs before the array accepts check.
@@ -435,14 +501,20 @@ export async function resolveInputBindings(
       continue;
     }
 
-    const got = extractValue(providers[0]!, binding, completedResults);
+    const got = extractValue(
+      providers[0]!,
+      binding,
+      completedResults,
+      contractSchema,
+    );
     if (!got.ok) {
       diagnostics.push(
-        diag(
-          got.reason,
-          required ? "error" : "warn",
+        extractFailureDiagnostic(
+          got,
+          required,
           manifest.name,
-          `binding "${name}": ${got.reason}`,
+          name,
+          providers[0]!,
         ),
       );
       if (required) return { ok: false, skipReason: got.reason, diagnostics };
@@ -519,6 +591,8 @@ export interface ResolveExportBindingsInput {
   readonly activeRuntimes: readonly RuntimeManifest[];
   /** Consumer's loaded export `accepts` schemas, keyed by binding name. */
   readonly acceptsSchemas: Readonly<Record<string, Schema>>;
+  /** Published contracts validate the complete committed output before accepts. */
+  readonly contractSchemas?: Readonly<Record<string, Schema>>;
   /**
    * Frozen read of a producer's latest committed export at execution start —
    * the caller pins `atOrBefore` to the execution's start instant so a revision
@@ -588,7 +662,7 @@ export async function resolveExportBindings(
 
     const targets =
       cardinality === "all"
-        ? [...providers].sort((a, b) => a.name.localeCompare(b.name))
+        ? [...providers].sort((a, b) => compareCodeUnits(a.name, b.name))
         : [providers[0]!];
 
     const items: { value: JsonValue; source: InputSource }[] = [];
@@ -598,6 +672,23 @@ export async function resolveExportBindings(
       if (!record) {
         skipReason = "export-missing";
         break;
+      }
+      const contractSchema =
+        "capability" in eb.from ? args.contractSchemas?.[name] : undefined;
+      if (contractSchema) {
+        const validation = validateAcceptedValue(record.value, contractSchema);
+        if (!validation.valid) {
+          diagnostics.push(
+            diag(
+              "contract-output-invalid",
+              "error",
+              consumerRuntimeId,
+              `export "${name}" provider "${provider.name}" violates its contract schema: ${(validation.errors ?? []).slice(0, 3).join("; ")}`,
+            ),
+          );
+          skipReason = "export-schema-invalid";
+          break;
+        }
       }
       // Runtime actual-value check against the consumer's `accepts` (docs 02
       // §3.1 / §3.4.4): a producer whose export shape the consumer cannot accept

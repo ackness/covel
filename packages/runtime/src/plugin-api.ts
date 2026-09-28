@@ -24,7 +24,13 @@ import type {
   validateBaseUrlForPlugin,
   WireModuleShape,
 } from "@covel/ai-provider";
-import type { HookEnforce, HookEventName, RpcTrustLevel } from "@covel/shared";
+import type {
+  HookEnforce,
+  HookEventName,
+  KernelExtensionPointId,
+  KernelExtensionPointIo,
+  RpcTrustLevel,
+} from "@covel/shared";
 import type {
   shortId,
   shortIdBatch,
@@ -80,11 +86,18 @@ export interface PluginAPI {
       O
     >,
   ): void;
-  /** Implement a kernel-owned point declared by this plugin's manifest. */
-  provideExtension<I = unknown, O = unknown>(
-    point: string,
+  /**
+   * Implement a kernel-owned point declared by this plugin's manifest. Known
+   * versioned point ids bind the handler's input/output types from
+   * `KernelExtensionPointIo`.
+   */
+  provideExtension<P extends KernelExtensionPointId>(
+    point: P,
     id: string,
-    definition: import("@covel/shared").PluginExtensionDefinition<I, O>,
+    definition: import("@covel/shared").PluginExtensionDefinition<
+      KernelExtensionPointIo[P]["input"],
+      KernelExtensionPointIo[P]["output"]
+    >,
   ): void;
   readonly pluginId: string;
   readonly toolkit: PluginToolkit;

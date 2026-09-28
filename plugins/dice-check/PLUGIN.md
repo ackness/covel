@@ -17,6 +17,9 @@ provides:
   - dice-check@1
 optional:
   - tabletop-check@1
+contracts:
+  dice-check@1:
+    schema: ./schemas/dice-check.schema.json
 entry: ./server/index.js
 contributes:
   events:

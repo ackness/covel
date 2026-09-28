@@ -14,6 +14,9 @@ tags:
   - "ui:right-panel"
 provides:
   - scene-cast@1
+contracts:
+  scene-cast@1:
+    schema: ./schemas/scene-cast.schema.json
 entry: ./server/index.js
 contributes:
   extensions:

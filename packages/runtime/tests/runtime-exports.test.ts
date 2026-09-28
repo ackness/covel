@@ -212,6 +212,69 @@ describe("resolveExportBindings", () => {
       skipReason: "export-schema-invalid",
     });
   });
+  it.each([true, false])(
+    "validates a public export contract without accepts (required=%s)",
+    async (required) => {
+      const res = await resolveExportBindings({
+        consumerRuntimeId: "c/main",
+        exportBindings: {
+          cfg: binding({ from: { capability: "cfg-provider" }, required }),
+        },
+        activeRuntimes: [provider("p/gen")],
+        acceptsSchemas: {},
+        contractSchemas: { cfg: SCHEMA },
+        getFrozenExport: async () => record({ threshold: "invalid" }),
+      });
+      expect(res.ok).toBe(!required);
+      if (res.ok) expect(res.slots).toEqual({});
+      expect(res.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "contract-output-invalid",
+          severity: "error",
+        }),
+      );
+    },
+  );
+
+  it("validates the full public export before an additional consumer accepts check", async () => {
+    const res = await resolveExportBindings({
+      consumerRuntimeId: "c/main",
+      exportBindings: {
+        cfg: binding({ from: { capability: "cfg-provider" } }),
+      },
+      activeRuntimes: [provider("p/gen")],
+      acceptsSchemas: { cfg: { properties: { threshold: { minimum: 10 } } } },
+      contractSchemas: { cfg: SCHEMA },
+      getFrozenExport: async () => record({ threshold: 7 }),
+    });
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "export-schema-invalid",
+    });
+    expect(res.diagnostics[0]?.code).toBe("export-schema-invalid");
+  });
+
+  it("reports an unresolvable public schema reference as an export binding error", async () => {
+    const res = await resolveExportBindings({
+      consumerRuntimeId: "c/main",
+      exportBindings: {
+        cfg: binding({ from: { capability: "cfg-provider" } }),
+      },
+      activeRuntimes: [provider("p/gen")],
+      acceptsSchemas: {},
+      contractSchemas: { cfg: { $ref: "#/definitions/missing" } },
+      getFrozenExport: async () => record({ threshold: 7 }),
+    });
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "export-schema-invalid",
+    });
+    expect(res.diagnostics[0]).toMatchObject({
+      code: "contract-output-invalid",
+      severity: "error",
+      message: expect.stringContaining("schema validation failed"),
+    });
+  });
 
   it("omits an optional binding whose export is missing (no gate)", async () => {
     const res = await resolveExportBindings({

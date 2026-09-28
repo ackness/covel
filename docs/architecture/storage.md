@@ -429,8 +429,8 @@ mirror and queue were removed; no compatibility reads or data restoration are
 implied. Jobs and logs retain their existing snapshot/fork inclusion policies.
 These are API authority boundaries, not encryption or a process sandbox.
 
-**Stability commitment**: The `_` prefix reservation is a permanent design decision
-(see 08-implementation-reconciliation.md §8.1). New kernel subsystems may introduce
+**Stability commitment**: The `_` prefix reservation is a permanent design decision.
+New kernel subsystems may introduce
 additional `_<name>` namespaces without breaking changes. Plugin authors must never
 rely on `_` namespaces for their own data or assume they can write to kernel-reserved
 names.

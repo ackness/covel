@@ -10,6 +10,14 @@
     "./image-generation": {
       "types": "./dist/image-generation.d.ts",
       "import": "./dist/image-generation.js"
+    },
+    "./extension-points": {
+      "types": "./dist/extension-points.d.ts",
+      "import": "./dist/extension-points.js"
+    },
+    "./plugin-api": {
+      "types": "./dist/plugin-api.d.ts",
+      "import": "./dist/plugin-api.js"
     }
   },
   "scripts": {
@@ -25,6 +33,9 @@
   "devDependencies": {
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "zod": "^4.4.3"
   },
   "files": [
     "dist",

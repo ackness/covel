@@ -1676,6 +1676,42 @@ describe("processRuntimeResult", () => {
     });
   });
 
+  it("rejects inline media in pluginData under a non-images namespace", async () => {
+    // Replacement image plugins declare their own namespaces; enforcement
+    // scopes to the image-flow runtime contract, not the "images" name.
+    const store = createMockStore();
+    const result = makeRuntimeResult({
+      assetGenerations: [
+        { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
+      ],
+      pluginData: [
+        {
+          namespace: "gallery",
+          key: "job-1",
+          value: { status: "done", base64: "aGVsbG8=" },
+        },
+      ],
+    });
+
+    const { events, failedProposals } = await processRuntimeResult(
+      result,
+      store as any,
+      SESSION_ID,
+      "plugin",
+      { enforceImageFlow: true },
+    );
+
+    expect(events).toHaveLength(0);
+    expect(failedProposals).toHaveLength(1);
+    expect(failedProposals[0]).toMatchObject({
+      error: "image.generate.plugin_data_inline_media",
+      proposal: {
+        type: "plugin.data",
+        payload: { namespace: "gallery", key: "job-1" },
+      },
+    });
+  });
+
   it("keeps image generation logs empty for pending async asset outputs", async () => {
     const store = createMockStore();
     const result = makeRuntimeResult({

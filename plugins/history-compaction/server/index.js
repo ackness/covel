@@ -1,4 +1,4 @@
-import { compactHistory } from "./strategy.js";
+import { compactHistory } from "./strategy.ts";
 export default function register(api) {
   api.provideExtension("history.compact@1", "rolling-summary", {
     async handler(input, ctx) {

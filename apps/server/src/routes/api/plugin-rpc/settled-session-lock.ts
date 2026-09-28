@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { MAX_SETTLE_WAIT_MS } from "@covel/shared";
 import type { SessionLock } from "../../../lib/session-lock.js";
 
 export interface SettlingJob {
@@ -35,6 +36,8 @@ export interface SettledSessionLock {
 }
 
 const DEFAULT_SETTLE_WAIT_MS = 60_000;
+/** Durable polling backs off so a long wait does not query every tick. */
+const MAX_POLL_INTERVAL_MS = 250;
 const RETRY = Symbol("retry after releasing the session lock");
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
@@ -128,9 +131,13 @@ export function createSettledSessionLock(args: {
           if (!Number.isFinite(maxWait) || maxWait <= 0) {
             throw new RangeError("maxSettleWaitMs must be positive");
           }
-          budget.deadline = Math.min(budget.deadline, startedAt + maxWait);
+          budget.deadline = Math.min(
+            budget.deadline,
+            startedAt + Math.min(maxWait, MAX_SETTLE_WAIT_MS),
+          );
         }
       };
+      let pollDelay = pollIntervalMs;
       for (;;) {
         options.signal?.throwIfAborted();
         const pending = await args.listPendingJobs(sessionId);
@@ -142,7 +149,11 @@ export function createSettledSessionLock(args: {
           args.wake?.();
           const remaining = budget.deadline - performance.now();
           if (remaining > 0) {
-            await wait(Math.min(remaining, pollIntervalMs), options.signal);
+            await wait(Math.min(remaining, pollDelay), options.signal);
+            pollDelay = Math.min(
+              pollDelay * 2,
+              Math.max(pollIntervalMs, MAX_POLL_INTERVAL_MS),
+            );
             continue;
           }
         }

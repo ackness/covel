@@ -472,6 +472,8 @@ async function assembleApi(
     registry,
     ensurePluginEntry: (pluginId, sessionId) =>
       runtimeLoader.ensurePluginEntry(pluginId, sessionId),
+    isEntryRetryDeferred: (pluginId) =>
+      owned.pluginEntries?.isEntryRetryDeferred(pluginId) ?? false,
   });
   const services = new PluginServiceRegistry({
     onCallCompleted: (event) => serviceCalls.record(event),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { promptSegmentV1 } from "@covel/shared";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { PluginExtensionHost } from "../src/plugin-extensions.js";
 import { PluginEntryScope } from "../src/plugin-entry-scope.js";
@@ -56,6 +57,52 @@ describe("extension declaration publication", () => {
       expect(() => scope.commit()).toThrow(/extension/i);
       await scope.dispose();
       expect(host.list()).toEqual([]);
+    },
+  );
+
+  it.each([
+    [{}, "session"],
+    [
+      { en: [{ id: "note", content: "EN", position: "system" as const }] },
+      "turn",
+    ],
+  ])(
+    "publishes static prompt segments with variants %j as %s",
+    async (variants, volatility) => {
+      const host = new PluginExtensionHost(
+        new PluginServiceRegistry({
+          list: async () => ["fixture"],
+          ensure: async () => {},
+        }),
+      );
+      const scope = new PluginEntryScope();
+      createExtensionRegistration(
+        host,
+        "fixture",
+        [],
+        scope,
+        undefined,
+        [{ id: "note", content: "STATIC", position: "system" }],
+        variants,
+      ).validate();
+      scope.commit();
+      const segments = await host
+        .createExecution({
+          sessionId: "session",
+          locale: "zh-CN",
+          signal: new AbortController().signal,
+          readPluginData: async () => [],
+        })
+        .run(promptSegmentV1, { turnId: "turn", playerMessage: "" });
+      expect(segments.flat()).toEqual([
+        expect.objectContaining({
+          content: "STATIC",
+          audience: "self",
+          volatility,
+          providerPluginId: "fixture",
+        }),
+      ]);
+      await scope.dispose();
     },
   );
 

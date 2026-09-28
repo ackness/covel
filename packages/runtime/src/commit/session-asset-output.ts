@@ -167,8 +167,9 @@ function hasInlineImagePluginData(proposal: Proposal): boolean {
 
 function isInlineImagePluginDataItem(item: unknown): boolean {
   if (!item || typeof item !== "object") return false;
-  const payload = item as { namespace?: unknown; value?: unknown };
-  if (payload.namespace !== "images") return false;
+  // Scoped by the image-flow runtime contract, not by a namespace name: an
+  // image asset runtime may write status records under its own namespace.
+  const payload = item as { value?: unknown };
   return containsInlineMediaField(payload.value);
 }
 

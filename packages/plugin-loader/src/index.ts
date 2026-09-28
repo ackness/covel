@@ -76,5 +76,6 @@ export type {
 } from "./types.js";
 
 export { resolveRuntimeProviders } from "./runtime-providers.js";
+export { contractReferenceDiagnostics } from "./contract-diagnostics.js";
 
 export { compileRuntimeManifest } from "./compile-manifest.js";

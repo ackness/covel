@@ -5,15 +5,15 @@ import {
   getPendingProposals,
   runtimeDoneTool,
 } from "@covel/tools";
-import { createMemoryStore } from "../../../packages/store/src/index.js";
+import { createMemoryStore } from "../../../packages/store/src/index.ts";
 import {
   createToolExecutor,
   createHookPipeline,
   executeTurn,
   finalizeExecution,
-} from "../../../packages/runtime/src/index.js";
-import { MockLLM } from "../../../packages/plugin-test-utils/src/mock-llm.js";
-import { loadRuntimeBundle } from "../../../packages/test-runtime/src/runtime-loading.js";
+} from "../../../packages/runtime/src/index.ts";
+import { MockLLM } from "../../../packages/plugin-test-utils/src/mock-llm.ts";
+import { loadRuntimeBundle } from "../../../packages/test-runtime/src/runtime-loading.ts";
 import trackerReadBudget from "../hooks/tracker-read-budget.js";
 import protectCharacterProfiles from "../hooks/protect-character-profiles.js";
 

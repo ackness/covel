@@ -14,6 +14,8 @@ export function createPluginServiceAdmission(args: {
     pluginId: string,
     sessionId: string,
   ) => Promise<void>;
+  /** Discovery skips recently failed entries instead of re-running them. */
+  readonly isEntryRetryDeferred?: (pluginId: string) => boolean;
 }) {
   const executions = new AsyncLocalStorage<SessionRecord>();
   const activeIds = (session: SessionRecord): readonly string[] =>
@@ -24,6 +26,11 @@ export function createPluginServiceAdmission(args: {
   async function ensure(sessionId: string, pluginId: string): Promise<string> {
     const live = await args.store.getSession(sessionId);
     if (!live) throw new Error("Plugin service session is unavailable");
+    return admit(live, pluginId);
+  }
+
+  async function admit(live: SessionRecord, pluginId: string): Promise<string> {
+    const sessionId = live.id;
     const captured = executions.getStore();
     if (
       captured &&
@@ -61,8 +68,10 @@ export function createPluginServiceAdmission(args: {
         if (!session) return [];
         const admitted: string[] = [];
         for (const pluginId of activeIds(session)) {
+          if (args.isEntryRetryDeferred?.(pluginId)) continue;
           try {
-            await ensure(sessionId, pluginId);
+            // One live read authorizes the whole list.
+            await admit(session, pluginId);
             admitted.push(pluginId);
           } catch {
             // Revoked, unapproved and failed entries are not discoverable.

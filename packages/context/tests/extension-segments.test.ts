@@ -127,6 +127,19 @@ it("clamps depth beyond the available history and supports depth zero", () => {
   ]);
 });
 
+it("breaks same-order provider ties by code units, not locale", () => {
+  // localeCompare ranks "alpha" before "Zeta"; code-unit order puts "Zeta"
+  // first. Both must agree with the extension host's provider ordering so
+  // assembled bytes stay identical across ICU builds.
+  const { systemPrompt } = assemble([
+    segment("from-alpha", { providerPluginId: "alpha" }),
+    segment("from-zeta", { providerPluginId: "Zeta" }),
+  ]);
+  expect(systemPrompt.indexOf("from-zeta")).toBeLessThan(
+    systemPrompt.indexOf("from-alpha"),
+  );
+});
+
 it("keeps mixed message positions while moving volatile system-role content past system cache markers", () => {
   const { systemPrompt, messages } = assemble([
     segment("fresh-system", { position: "pre-history", role: "system" }),

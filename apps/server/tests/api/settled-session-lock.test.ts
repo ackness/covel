@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_SETTLE_WAIT_MS } from "@covel/shared";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
   createSettledSessionLock,
@@ -82,6 +83,26 @@ describe("settled session lock", () => {
     await expect(
       lock.withLock("session", { onTimeout }, async () => "complete"),
     ).resolves.toBe("complete");
+    expect(onTimeout).toHaveBeenCalledOnce();
+  });
+
+  it("clamps persisted settle waits to the kernel ceiling", async () => {
+    const { lock, setPending } = setup();
+    setPending([{ jobId: "stalling", maxSettleWaitMs: 10 * 60_000 }]);
+    const onTimeout = vi.fn();
+    await expect(
+      lock.withLock(
+        "session",
+        {
+          onTimeout,
+          waitBudget: {
+            startedAt: performance.now() - MAX_SETTLE_WAIT_MS - 1,
+            deadline: Infinity,
+          },
+        },
+        async () => "admitted",
+      ),
+    ).resolves.toBe("admitted");
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 

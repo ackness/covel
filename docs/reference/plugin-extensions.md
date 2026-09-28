@@ -24,6 +24,31 @@ UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，ha
 
 `contributes.hooks` 按 `event` 与 `enforce` 声明允许的 Hook，省略 `enforce` 等同于 `normal`。同一声明可以通过多次 `covel.on()` 注册多个独立 handler；未声明的事件或阶段、以及没有实现的声明仍会使整个 entry 发布失败。
 
+## 插件作者类型
+
+外部插件从公开包 `@covel/plugin-handlers-utils` 导入 `PluginAPI` 或 `PluginEntryFactory` 类型，无需安装私有的 runtime/shared workspace 包。`@covel/plugin-handlers-utils/extension-points` 提供扩展点的输入、输出和上下文类型；完整入口类型也可从 `@covel/plugin-handlers-utils/plugin-api` 导入。
+
+```js
+/** @type {import("@covel/plugin-handlers-utils").PluginEntryFactory} */
+export default function (covel) {
+  covel.provideExtension("prompt.segment@1", "direction", {
+    handler: (_input, ctx) => [
+      {
+        id: "direction",
+        content: `Locale: ${ctx.locale}`,
+        position: "system",
+        audience: "self",
+        volatility: "turn",
+      },
+    ],
+  });
+}
+```
+
+使用 TypeScript 或开启 JavaScript 的 `checkJs` 后，已知扩展点会约束 handler 的输入和输出。清单声明与运行时 schema 校验仍然必需；类型检查不能代替授权或输出校验。
+
+插件 JavaScript 模块的相对导入必须指向包中实际存在的文件。若导入未经编译的 TypeScript helper，应写真实的 `.ts` 后缀。仓库源码开发通过 `pnpm dev` 的 tsx 加载器启动；Node 的类型剥离本身不会把 workspace 源码中的 `.js` 导入映射到 `.ts`，因此直接用裸 `node import(...)` 加载整个源码依赖图不属于该开发启动方式。
+
 ## Entry 资源生命周期
 
 `covel.signal` 对应本次插件激活。初始化失败或宿主关闭时信号取消；`covel.onDispose(callback)` 在工厂执行期间登记同步或异步清理函数，适合关闭订阅、连接、计时器和共享缓存。资源取得后应立即登记清理，再执行下一步可能失败的初始化。
@@ -42,6 +67,10 @@ export default function (covel) {
 ```
 
 关闭先取消信号、停止接收新注册，再撤销已发布的能力，最后逆序等待清理函数。一个清理失败不阻止其他清理；错误会汇总报告，重复关闭不会再次执行回调。初始化失败同样清理已取得资源，重试使用新的 signal。测试运行器执行完成或失败后也会关闭入口资源。
+
+服务端 entry 初始化默认最多等待 15 秒；失败回滚清理另有最多 15 秒的等待预算。清理超时不会阻止失败返回、后续重试或其他会话捕获快照，宿主关闭时仍报告未完成的失败清理。失败后的被动服务发现默认退避 30 秒，显式激活与重载可重试。
+
+首次激活与重载的准备按插件串行执行。工厂运行、runtime 模块加载和失败资源清理不占用全局发布队列；不同插件或不依赖该插件的会话可以继续执行。捕获 runtime 期间若有新代发布，宿主会重新取得快照，确保同次执行的工具、服务和 runtime 来自一致的发布状态。
 
 entry 在宿主内按插件激活一次，**不属于某个会话**。禁用一个会话中的插件不会销毁其他会话共用的 entry；会话数据仍使用调用上下文和插件数据存储，不放到共享模块闭包中。单次任务使用 `ctx.signal`，需要会话结束通知时使用 `SessionEnd` Hook。此接口依靠插件配合取消和完成清理，不能强制终止忽略信号的 JS，不提供独立后台调度器。
 

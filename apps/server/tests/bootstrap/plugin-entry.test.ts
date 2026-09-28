@@ -225,6 +225,217 @@ describe("createBootstrapPluginEntries", () => {
     },
   );
 
+  it("bounds a stalled factory without blocking later activations", async () => {
+    const state = { signal: undefined as AbortSignal | undefined };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelEntryStall = state;
+    const stalled = writePlugin(
+      "entry-stalled",
+      `
+      export default async function(api) {
+        globalThis.__covelEntryStall.signal = api.signal;
+        await new Promise(() => {});
+      }
+    `,
+      { source: "community" },
+    );
+    const healthy = writePlugin(
+      "entry-after-stall",
+      `export default function(api) { api.registerRpc("ready", async () => true); }`,
+      { source: "community" },
+    );
+    const params = {
+      ...makeParams([stalled, healthy]),
+      entryActivationTimeoutMs: 50,
+      entryRetryDelayMs: 60_000,
+    };
+    const entries = await createBootstrapPluginEntries(params);
+    try {
+      const first = entries.ensurePluginEntry("entry-stalled", "s");
+      const second = entries.ensurePluginEntry("entry-after-stall", "s");
+      await expect(first).rejects.toThrow("activation-timeout");
+      await second;
+      expect(state.signal?.aborted).toBe(true);
+      expect(entries.isEntryRetryDeferred("entry-stalled")).toBe(true);
+      expect(entries.isEntryRetryDeferred("entry-after-stall")).toBe(false);
+      expect(
+        params.rpcRegistry.getPluginAction("entry-after-stall", "ready"),
+      ).toBeDefined();
+    } finally {
+      await entries.close();
+      delete globals.__covelEntryStall;
+    }
+  });
+
+  it("clears retry deferral after an explicit successful retry", async () => {
+    const state = { calls: 0 };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelEntryDeferral = state;
+    const plugin = writePlugin(
+      "entry-deferral",
+      `
+      export default function(api) {
+        if (globalThis.__covelEntryDeferral.calls++ === 0) throw new Error("first failure");
+        api.registerRpc("ready", async () => true);
+      }
+    `,
+      { source: "community" },
+    );
+    const entries = await createBootstrapPluginEntries({
+      ...makeParams([plugin]),
+      entryRetryDelayMs: 60_000,
+    });
+    try {
+      await expect(
+        entries.ensurePluginEntry("entry-deferral", "s"),
+      ).rejects.toThrow("failed to activate");
+      expect(entries.isEntryRetryDeferred("entry-deferral")).toBe(true);
+      await entries.ensurePluginEntry("entry-deferral", "s");
+      expect(entries.isEntryRetryDeferred("entry-deferral")).toBe(false);
+      expect(state.calls).toBe(2);
+    } finally {
+      await entries.close();
+      delete globals.__covelEntryDeferral;
+    }
+  });
+
+  it("isolates pending factories from other plugins and session captures", async () => {
+    const state = {
+      started: Promise.withResolvers<void>(),
+      release: Promise.withResolvers<void>(),
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelIsolatedEntry = state;
+    const pending = writePlugin(
+      "entry-isolated-pending",
+      `
+      export default async function(api) {
+        globalThis.__covelIsolatedEntry.started.resolve();
+        await globalThis.__covelIsolatedEntry.release.promise;
+        api.registerRpc("ready", async () => true);
+      }
+    `,
+      { source: "community" },
+    );
+    const healthy = writePlugin(
+      "entry-isolated-healthy",
+      'export default function(api) { api.registerRpc("ready", async () => true); }',
+      { source: "community" },
+    );
+    const params = makeParams([pending, healthy]);
+    const entries = await createBootstrapPluginEntries(params);
+    const activation = entries.ensurePluginEntry(
+      "entry-isolated-pending",
+      "slow",
+    );
+    try {
+      await state.started.promise;
+      await entries.ensurePluginEntry("entry-isolated-healthy", "other");
+      await entries.withSnapshot("other", async () => {
+        expect(
+          params.rpcRegistry.getPluginAction("entry-isolated-healthy", "ready"),
+        ).toBeDefined();
+        expect(
+          params.rpcRegistry.getPluginAction("entry-isolated-pending", "ready"),
+        ).toBeUndefined();
+      });
+      expect(entries.isEntryPublished("entry-isolated-pending")).toBe(false);
+    } finally {
+      state.release.resolve();
+      await activation;
+      await entries.close();
+      delete globals.__covelIsolatedEntry;
+    }
+  });
+
+  it("bounds stalled rollback cleanup and retains its shutdown diagnostic", async () => {
+    const plugin = writePlugin(
+      "entry-stalled-cleanup",
+      `
+      export default async function(api) {
+        api.onDispose(() => new Promise(() => {}));
+        api.registerRpc("pending", async () => true);
+        await new Promise(() => {});
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      entryActivationTimeoutMs: 20,
+    });
+    try {
+      const failure = await entries
+        .ensurePluginEntry("entry-stalled-cleanup", "slow")
+        .catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        expect.objectContaining({
+          message: expect.stringContaining("activation-timeout"),
+        }),
+        expect.objectContaining({ message: "plugin entry cleanup timed out" }),
+      ]);
+      expect(entries.isEntryRetryDeferred("entry-stalled-cleanup")).toBe(true);
+      await entries.withSnapshot("other", async () => {
+        expect(params.rpcRegistry.list()).toEqual([]);
+      });
+      await expect(entries.close()).rejects.toThrow(
+        "plugin entry cleanup failed",
+      );
+    } finally {
+      await entries.close().catch(() => {});
+    }
+  });
+
+  it("rechecks approval when a prepared first entry is published", async () => {
+    const state = {
+      started: Promise.withResolvers<void>(),
+      release: Promise.withResolvers<void>(),
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelRevokedEntry = state;
+    const plugin = writePlugin(
+      "entry-revoked-publication",
+      `
+      export default async function(api) {
+        api.registerRpc("ready", async () => true);
+        globalThis.__covelRevokedEntry.started.resolve();
+        await globalThis.__covelRevokedEntry.release.promise;
+      }
+    `,
+      { source: "community" },
+    );
+    let approved = true;
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      isCommunityServerCodeApproved: () => approved,
+    });
+    const activation = entries.ensurePluginEntry(
+      "entry-revoked-publication",
+      "session",
+    );
+    const rejected = expect(activation).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        message: "Plugin entry approval was revoked before publication",
+      }),
+    });
+    try {
+      await state.started.promise;
+      approved = false;
+      state.release.resolve();
+      await rejected;
+      expect(params.rpcRegistry.list()).toEqual([]);
+      expect(entries.isEntryPublished("entry-revoked-publication")).toBe(false);
+    } finally {
+      state.release.resolve();
+      await activation.catch(() => {});
+      await entries.close();
+      delete globals.__covelRevokedEntry;
+    }
+  });
+
   it("cleans a failed activation before retrying with a fresh signal", async () => {
     const state = { signals: [] as AbortSignal[], cleanups: 0 };
     const globals = globalThis as Record<string, unknown>;

@@ -15,6 +15,8 @@ tags:
 provides:
   - world-ir-provider@1
 contracts:
+  world-ir-provider@1:
+    schema: ./schemas/world-ir.schema.json
   world-ir@1:
     schema: ./schemas/world-ir.schema.json
 requires:

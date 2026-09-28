@@ -87,6 +87,12 @@ export type ExtensionResult<O, M extends ExtensionMode> = M extends "collect"
     ? O | undefined
     : O;
 
+export type {
+  ExtensionPointInput,
+  ExtensionPointOutput,
+  KernelExtensionPointId,
+  KernelExtensionPointIo,
+} from "./io.js";
 export {
   promptHistoryTransformV1,
   historyMessageSchema,

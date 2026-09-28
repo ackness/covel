@@ -7,7 +7,7 @@ import {
   readManualEntity,
   splitList,
 } from "@covel/plugin-handlers-utils";
-import { characterBlueprintToCharacterUpsert } from "./types/blueprint.js";
+import { characterBlueprintToCharacterUpsert } from "./types/blueprint.ts";
 import { shortId, withPendingProposals } from "@covel/tools";
 
 const BLUEPRINT_NAMESPACE = "blueprints";

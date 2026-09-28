@@ -293,6 +293,7 @@ export async function executeAgentRuntime({
     finalizeRuntimeResult({ ...deps, hookPipeline }, manifest, input, result, {
       lastTarget: toolLoop.lastTarget,
       deltaCount: streamDeltaCount,
+      outputContractSchema: loaded.outputContractSchema,
     });
 
   if (!stoppedWithResponse && !finalContent) {
@@ -429,7 +430,11 @@ export async function executeAgentRuntime({
     manifest,
     input,
     rawResult,
-    { lastTarget: toolLoop.lastTarget, deltaCount: streamDeltaCount },
+    {
+      lastTarget: toolLoop.lastTarget,
+      deltaCount: streamDeltaCount,
+      outputContractSchema: loaded.outputContractSchema,
+    },
   );
   if (deps.store && result.output) {
     attachRuntimeJournal(

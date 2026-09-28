@@ -170,6 +170,7 @@ export {
   authoringTriggerConfigSchema,
   stageSchema,
   turnCompletionConfigSchema,
+  MAX_SETTLE_WAIT_MS,
   afterRefSchema,
   needsRefSchema,
   runtimeBindingSchema,

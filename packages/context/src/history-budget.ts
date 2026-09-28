@@ -41,6 +41,8 @@ export interface CompactorRunner {
         payload: Record<string, unknown>,
       ): Promise<void>;
     },
+    /** Cancels the compaction provider together with the requesting execution. */
+    signal?: AbortSignal,
   ): Promise<CompactorResult>;
 }
 /** Budget admission and atomic persistence; compaction policy belongs to a provider. */

@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "contract:narrative-engine@1",
+  "title": "Covel narrative engine output v1",
+  "type": "object",
+  "required": ["narrativeOutput"],
+  "properties": {
+    "narrativeOutput": { "type": "string" }
+  },
+  "additionalProperties": true
+}

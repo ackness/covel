@@ -8,6 +8,7 @@ import {
   readdir,
   mkdir,
   rename,
+  symlink,
   writeFile,
   rm,
 } from "node:fs/promises";
@@ -33,7 +34,15 @@ try {
   );
   assert.equal(manifest.private, undefined);
   assert.deepEqual(manifest.dependencies ?? {}, {});
-  assert.deepEqual(manifest.peerDependencies ?? {}, {});
+  assert.deepEqual(manifest.peerDependencies, { zod: "^4.4.3" });
+  // Zod is a public peer. Resolve it from the SDK package and place only
+  // that peer beside the packed artifact; no private workspace package is
+  // visible to the consumer.
+  await symlink(
+    path.dirname(require.resolve("zod/package.json")),
+    path.join(temp, "node_modules/zod"),
+    "dir",
+  );
   await writeFile(
     path.join(temp, "consumer.mjs"),
     `
@@ -56,11 +65,64 @@ assert.equal(typeof runImageGeneration, "function");
     `
 import { makeProposal, optionalNumber } from "@covel/plugin-handlers-utils";
 import type { ImageGenerationHandlerContext } from "@covel/plugin-handlers-utils/image-generation";
+import type { PluginAPI, PluginEntryFactory } from "@covel/plugin-handlers-utils";
 const p = makeProposal({pluginId:"sample",turnId:"t",sessionId:"s"},"now","plugin.data",{namespace:"notes",key:"current",value:1});
 const kind: "plugin.data" = p.type;
 const value: number = p.payload.value;
 const ctx: ImageGenerationHandlerContext = {turnId:"t"};
-void [kind,value,ctx,optionalNumber("1")];
+declare const api: PluginAPI;
+api.provideExtension("prompt.segment@1", "note", {handler: (input) => {
+  const t: string = input.turnId;
+  void t;
+  return [{id: "s", content: "c", position: "system", audience: "all", volatility: "turn"}];
+}});
+api.provideExtension("history.compact@1", "summary", {handler: async (_input, context) => {
+  const response = await context.gateway?.generateText({prompt: "Summarize the history"});
+  const verdict = context.utils?.validateBaseUrl("https://example.com");
+  const request = context.utils?.fetchWithRetry("https://example.com");
+  const geography = context.world.worldRecord?.dimensions?.geography?.regions;
+  const opening = context.world.worldRecord?.dimensions?.startingConditions?.openingHook;
+  void [verdict, request, geography, opening];
+  return {messageIds: [], content: response?.text ?? "", focusSections: []};
+}});
+const entry: PluginEntryFactory = (covel) => {
+  covel.registerTool(covel.toolkit.tool({
+    name: "echo",
+    description: "Echo text",
+    parameters: covel.toolkit.z.object({ text: covel.toolkit.z.string() }),
+    execute: async ({ text }, context) => {
+      const sessionId: string = context.sessionId;
+      return { text, sessionId };
+    },
+  }));
+  covel.on("TurnStart", async (context) => {
+    const id: string = context.sessionId;
+    void id;
+    return { action: "continue" };
+  });
+  covel.registerRpc("echo", async (payload, context) => {
+    const sessionId: string = context.sessionId;
+    return { payload, sessionId };
+  });
+  covel.registerService({
+    name: "echo",
+    contract: "sample/echo@1",
+    input: covel.toolkit.z.object({ text: covel.toolkit.z.string() }),
+    output: covel.toolkit.z.object({ text: covel.toolkit.z.string() }),
+    handler: (input) => ({ text: input.text }),
+  });
+  covel.registerWires({ image: [] });
+  covel.registerFormValidator("sample", (values) =>
+    values.text === undefined ? "text is required" : undefined,
+  );
+  covel.onDispose(async () => {});
+  covel.http.validateBaseUrl("https://example.com");
+};
+// @ts-expect-error Unknown extension point ids are rejected.
+api.provideExtension("unknown.point@1", "bad", { handler: () => null });
+// @ts-expect-error Wrong handler output for a known point is rejected.
+api.provideExtension("prompt.segment@1", "bad", { handler: () => 1 });
+void [kind,value,ctx,entry,optionalNumber("1")];
 `,
   );
   await writeFile(

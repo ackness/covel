@@ -24,8 +24,15 @@ export interface PluginExtensionExecutionScope {
   readonly signal: AbortSignal;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
-  /** Host captures all rows once at execution start, before any provider runs. */
-  readonly pluginData: readonly ExtensionPluginDataRecord[];
+  /**
+   * Reads one namespace of one provider's data. The host calls it on first
+   * access, at most once per plugin and namespace in an execution, and hands
+   * providers detached copies of that read for the rest of the execution.
+   */
+  readonly readPluginData: (
+    pluginId: string,
+    namespace: string,
+  ) => Promise<readonly ExtensionPluginDataRecord[]>;
 }
 
 export interface PluginExtensionExecution {
@@ -167,30 +174,40 @@ export class PluginExtensionHost {
     return this.services.listExtensions();
   }
 
-  /** Call when activating a session; run also checks before invoking providers. */
-  async validateSession(sessionId: string): Promise<void> {
-    for (const point of this.points.values()) {
-      if (point.mode !== "single") continue;
-      const providers = await this.services.discoverExtensions(
-        sessionId,
-        point.id,
-      );
-      if (providers.length > 1)
-        throw new Error(
-          `Conflicting providers for single extension point: ${point.id}`,
-        );
-    }
-  }
-
   createExecution(
     scope: PluginExtensionExecutionScope,
   ): PluginExtensionExecution {
     const world = structuredClone(
       scope.world ?? { characterSchema: null, characters: [] },
     );
-    const rows = structuredClone(scope.pluginData).filter(
-      (row) => row.sessionId === undefined || row.sessionId === scope.sessionId,
-    );
+    const reads = new Map<
+      string,
+      Promise<readonly ExtensionPluginDataRecord[]>
+    >();
+    // Providers only ever see their own namespaces, so the host never loads
+    // the whole session. Filtering keeps isolation independent of the reader.
+    const namespaceRows = (pluginId: string, namespace: string) => {
+      const key = JSON.stringify([pluginId, namespace]);
+      let rows = reads.get(key);
+      if (!rows) {
+        rows = scope
+          .readPluginData(pluginId, namespace)
+          .then((loaded) =>
+            structuredClone(loaded).filter(
+              (row) =>
+                row.pluginId === pluginId &&
+                row.namespace === namespace &&
+                (row.sessionId === undefined ||
+                  row.sessionId === scope.sessionId),
+            ),
+          );
+        reads.set(key, rows);
+        rows.catch(() => {
+          if (reads.get(key) === rows) reads.delete(key);
+        });
+      }
+      return rows;
+    };
     const cache = new Map<string, Promise<unknown>>();
     const client = this.services.createKernelClient({
       ...scope,
@@ -202,23 +219,15 @@ export class PluginExtensionHost {
         pluginData: {
           get: async (namespace, key) => {
             signal.throwIfAborted();
-            return structuredClone(
-              rows.find(
-                (row) =>
-                  row.pluginId === pluginId &&
-                  row.namespace === namespace &&
-                  row.key === key,
-              ),
-            );
+            const rows = await namespaceRows(pluginId, namespace);
+            signal.throwIfAborted();
+            return structuredClone(rows.find((row) => row.key === key));
           },
           list: async (namespace) => {
             signal.throwIfAborted();
-            return structuredClone(
-              rows.filter(
-                (row) =>
-                  row.pluginId === pluginId && row.namespace === namespace,
-              ),
-            );
+            const rows = await namespaceRows(pluginId, namespace);
+            signal.throwIfAborted();
+            return structuredClone(rows);
           },
         },
       }),

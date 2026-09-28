@@ -11,6 +11,7 @@ import { createUiSlotHost, type UiSlotHost } from "../../src/ui-slots/host.js";
 const disposables: UiSlotHost[] = [];
 afterEach(async () => {
   await Promise.all(disposables.splice(0).map((host) => host.close()));
+  vi.useRealTimers();
 });
 async function fixture(
   onProjection?: Parameters<typeof createUiSlotHost>[0]["onProjection"],
@@ -61,6 +62,144 @@ async function fixture(
   return { store, active, services, extensionHost, host, changes, emit };
 }
 describe("UI slot projection host", () => {
+  it("keeps an in-flight session and its queued reads alive across LRU eviction", async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    const base = (await f.store.getSession("session"))!;
+    for (let index = 0; index < 256; index++)
+      await f.store.createSession({ ...base, id: `other-${index}` });
+    const started = Promise.withResolvers<void>();
+    const blocked = Promise.withResolvers<void>();
+    const handler = vi.fn(
+      async (_input: UiSlotProjectionInput, ctx: PluginExtensionContext) => {
+        if (ctx.sessionId === "session") {
+          started.resolve();
+          await blocked.promise;
+        }
+        return { pending: false, name: ctx.sessionId };
+      },
+    );
+    f.extensionHost.register(
+      "alpha",
+      {
+        point: uiSlotV1.id,
+        id: "backdrop",
+        slot: "stage.backdrop@1",
+      },
+      { handler },
+    );
+    const query = { slot: "stage.backdrop@1" as const };
+    const first = f.host.get("session", query);
+    const queued = f.host.get("session", query);
+    await started.promise;
+    try {
+      for (let index = 0; index < 256; index++)
+        await f.host.get(`other-${index}`, query);
+    } finally {
+      blocked.resolve();
+    }
+    for (const result of await Promise.all([first, queued]))
+      expect(result).toEqual([
+        expect.objectContaining({ value: { pending: false, name: "session" } }),
+      ]);
+    expect(
+      handler.mock.calls.filter(([, ctx]) => ctx.sessionId === "session"),
+    ).toHaveLength(1);
+    // Idle entries still obey the cap, even while the oldest session is busy.
+    const before = handler.mock.calls.length;
+    await f.host.get("other-0", query);
+    expect(handler).toHaveBeenCalledTimes(before + 1);
+  });
+
+  it("returns every concurrent projection when all sessions exceed the cache cap", async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    const base = (await f.store.getSession("session"))!;
+    const ids = Array.from({ length: 257 }, (_, index) => `parallel-${index}`);
+    for (const id of ids) await f.store.createSession({ ...base, id });
+    const blocked = Promise.withResolvers<void>();
+    const handler = vi.fn(
+      async (_input: UiSlotProjectionInput, ctx: PluginExtensionContext) => {
+        await blocked.promise;
+        return { pending: false, name: ctx.sessionId };
+      },
+    );
+    f.extensionHost.register(
+      "alpha",
+      {
+        point: uiSlotV1.id,
+        id: "backdrop",
+        slot: "stage.backdrop@1",
+      },
+      { handler },
+    );
+    const query = { slot: "stage.backdrop@1" as const };
+    const requests = ids.map((id) => f.host.get(id, query));
+    try {
+      await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(ids.length));
+    } finally {
+      blocked.resolve();
+    }
+    const results = await Promise.all(requests);
+    for (const [index, result] of results.entries())
+      expect(result).toEqual([
+        expect.objectContaining({
+          value: { pending: false, name: ids[index] },
+        }),
+      ]);
+    // Finishing work trims temporary overflow without dropping its response.
+    await f.host.get(ids[0]!, query);
+    expect(handler).toHaveBeenCalledTimes(ids.length + 1);
+  });
+
+  it("keeps a debounced update when every other cached session is busy", async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    const base = (await f.store.getSession("session"))!;
+    const ids = Array.from({ length: 256 }, (_, index) => `busy-${index}`);
+    for (const id of ids) await f.store.createSession({ ...base, id });
+    const blocked = Promise.withResolvers<void>();
+    const handler = vi.fn(
+      async (_input: UiSlotProjectionInput, ctx: PluginExtensionContext) => {
+        if (ctx.sessionId !== "session") await blocked.promise;
+        return { pending: false, name: ctx.sessionId };
+      },
+    );
+    f.extensionHost.register(
+      "alpha",
+      {
+        point: uiSlotV1.id,
+        id: "backdrop",
+        slot: "stage.backdrop@1",
+        watch: ["stage"],
+      },
+      { handler },
+    );
+    const requests = ids.map((id) =>
+      f.host.get(id, { slot: "stage.backdrop@1" }),
+    );
+    try {
+      await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(ids.length));
+      f.emit("plugin-data.changed", {
+        pluginId: "alpha",
+        changes: [{ namespace: "stage" }],
+      });
+      await vi.waitFor(() =>
+        expect(f.changes).toContainEqual(
+          expect.objectContaining({
+            type: "ui.slot.changed",
+            payload: expect.objectContaining({
+              value: { pending: false, name: "session" },
+            }),
+          }),
+        ),
+      );
+    } finally {
+      blocked.resolve();
+      await Promise.all(requests);
+    }
+  });
+
   it("composes ordered providers, isolates reads, caches unchanged values and watches only declared own namespaces", async () => {
     const f = await fixture();
     await f.store.setPluginData({
@@ -154,6 +293,38 @@ describe("UI slot projection host", () => {
         ),
       ).toBe(true),
     );
+  });
+  it("drops a stale keyless placeholder once visual keys arrive", async () => {
+    const f = await fixture();
+    let values: { characterId: string }[] = [];
+    f.extensionHost.register(
+      "alpha",
+      {
+        point: uiSlotV1.id,
+        id: "visual",
+        slot: "character.visual@1",
+        watch: ["art"],
+      },
+      { handler: () => ({ characters: values }) },
+    );
+    // Empty collection caches a keyless "cleared" snapshot for the slot.
+    const cleared = await f.host.get("session", {
+      slot: "character.visual@1",
+    });
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0]).toMatchObject({ value: null });
+    expect(cleared[0]).not.toHaveProperty("key");
+    values = [{ characterId: "hero" }];
+    f.emit("plugin-data.changed", {
+      pluginId: "alpha",
+      changes: [{ namespace: "art" }],
+    });
+    await vi.waitFor(async () => {
+      const entries = await f.host.get("session", {
+        slot: "character.visual@1",
+      });
+      expect(entries).toEqual([expect.objectContaining({ key: "hero" })]);
+    });
   });
   it("discards an in-flight preview when its turn ends", async () => {
     const f = await fixture();

@@ -87,25 +87,13 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 ### 契约版本策略
 
-当前插件扩展契约处于**开发期**（v0.x）。开发期内：
+契约 ID 中的 `@N` 是版本标识（如 `narrative-engine@1`）。内核采用 **current-only** 策略：只承载当前契约版本，不做版本协商，不同时支持多个版本，也不提供跨版本兼容读取或双写迁移。
 
-- 框架可在次版本变更中修改契约结构、字段语义和校验规则
-- 不提供跨版本兼容读取或双写迁移
+- 破坏性变更使用新的契约 ID（例如 `@2`），提供者与消费者在同一个变更中同步升级，旧版本随即失效
 - 旧会话快照和排队作业需要重建
 - 变更记录在 CHANGELOG 和相关 PR 的迁移说明中
 
-稳定版（@1）发布后：
-
-- 破坏性变更将使用新的契约 ID（例如 `@2`）
-- 消费者按需声明支持的版本范围
-- 框架提供版本协商和迁移路径
-- 旧版本契约将保持至少一个大版本的兼容期
-
-外部插件作者应：
-
-- 在开发期保持契约依赖的灵活性，预期结构可能变化
-- 稳定后明确声明支持的契约版本
-- 跟踪框架的 CHANGELOG 和迁移指南
+外部插件作者应跟踪框架的 CHANGELOG，在契约变更后同步升级并更新声明的契约版本。
 
 | `contributes` 字段 | 对应注册或资源                                   |
 | ------------------ | ------------------------------------------------ |
@@ -184,6 +172,10 @@ io:
 ```
 
 普通输入读同一 execution 的已完成上游结果，`select` 为结果值上的 JSON Pointer。跨 execution 读取使用 `scope: committed` 和 `recordAs`。Schema 可以是本地路径或 `contract:<contractId>`；跨提供者契约 schema 在加载时解析。提示词中的绑定位于 `runtime-inputs.<binding>.value`，不要再依赖旧注入标签。
+
+发布 runtime 输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。同一契约 ID 的所有提供者必须发布一致的 schema；替代插件的 `provides` 与本插件 runtime 的 `io.output.contract` 必须对齐，其他已安装插件的产出不能替它满足声明。缺少被消费契约的 schema 或只有声明而无产出的提供者会产生加载诊断。
+
+内核在 runtime 最终输出边界校验已发布的契约，失败结果不能提交领域 effects 或写入 `recordAs`。同轮输入在应用 `select` 前再次校验完整输出；`scope: committed` 输入读取冻结的完整 export 后同样校验公共契约，即使没有显式 `accepts`。消费者的 `accepts` 可另加限制，不能关闭公共契约校验。契约发生变化时应重建受影响的开发期会话数据和历史 exports。
 
 `ctx.playerMessage` 保持当前输入文本字符串。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
 

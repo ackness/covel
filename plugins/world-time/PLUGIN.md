@@ -17,6 +17,8 @@ requires:
 optional:
   - world-time-context@1
 contracts:
+  world-time-context@1:
+    schema: ./schemas/world-time-context.schema.json
   world.time-definition@1:
     schema: schemas/time-definition.schema.json
 entry: ./server/index.js

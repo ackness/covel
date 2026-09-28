@@ -43,6 +43,7 @@ export interface HandleSuspensionOptions {
   readonly suspendToolCallId: string;
   readonly startTime: number;
   readonly runId: string;
+  readonly outputContractSchema?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -121,6 +122,7 @@ export async function handleSuspension(
     manifest,
     input,
     suspendedResult,
+    { outputContractSchema: opts.outputContractSchema },
   );
   return finalResult.status === "suspended"
     ? attachSuspensionArtifact(finalResult, { record: suspension })

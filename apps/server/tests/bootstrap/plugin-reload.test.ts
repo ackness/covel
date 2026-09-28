@@ -288,13 +288,141 @@ describe("plugin generation reload", () => {
     });
     await capturing.promise;
     const activating = f.manager.ensurePluginEntry(f.id, "session");
-    // The capture must adopt the activation queued behind its own operation.
+    // Capture and explicit activation share one plugin preparation.
     await Promise.resolve();
     proceed.resolve();
     await Promise.all([snapshot, activating]);
     await f.manager.close();
     expect(f.disposed).toEqual([1]);
   });
+
+  it("lets unrelated sessions capture while runtime admission waits for a factory", async () => {
+    const f = await fixture(true, false);
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    f.globals[f.id] = { disposed: f.disposed, started, release };
+    await fs.writeFile(
+      path.join(f.root, "entry.mjs"),
+      f.source(1).replace(
+        "export default function(api) {",
+        `export default async function(api) {
+        globalThis[${JSON.stringify(f.id)}].started.resolve();
+        await globalThis[${JSON.stringify(f.id)}].release.promise;`,
+      ),
+    );
+    const session = (await f.store.getSession("session"))!;
+    await f.store.createSession({
+      ...session,
+      id: "other",
+      activePlugins: [],
+      metadata: {},
+    });
+    const snapshot = f.manager.withSnapshot("session", async () => "ready");
+    try {
+      await started.promise;
+      await expect(
+        f.manager.withSnapshot("other", async () => "independent"),
+      ).resolves.toBe("independent");
+      expect(f.manager.isEntryPublished(f.id)).toBe(false);
+    } finally {
+      release.resolve();
+      await snapshot;
+    }
+  });
+
+  it("does not retry failed entry admission while capturing runtimes", async () => {
+    const f = await fixture(true, false);
+    await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(1, true));
+    const capture = vi.spyOn(f.runtimeLoader!, "capture");
+    await expect(
+      f.manager.withSnapshot("session", async () => {}),
+    ).rejects.toThrow("failed to activate");
+    expect(capture).toHaveBeenCalledOnce();
+    expect(f.disposed).toEqual([1]);
+    expect(f.manager.isEntryRetryDeferred(f.id)).toBe(true);
+  });
+
+  it("keeps the current generation capturable while reload prepares runtime modules", async () => {
+    const f = await fixture(true);
+    const preparing = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const prepare = f.runtimeLoader!.prepareGeneration.bind(f.runtimeLoader);
+    vi.spyOn(f.runtimeLoader!, "prepareGeneration").mockImplementation(
+      async (args) => {
+        preparing.resolve();
+        await release.promise;
+        return prepare(args);
+      },
+    );
+    await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2));
+    const reloading = f.manager.reload(f.id, "session");
+    try {
+      await preparing.promise;
+      await f.manager.withSnapshot("session", async () => {
+        expect(
+          await f.client().call({
+            pluginId: f.id,
+            name: "value",
+            contract: "fixture.value@1",
+            input: null,
+          }),
+        ).toBe(1);
+      });
+    } finally {
+      release.resolve();
+      await reloading;
+    }
+  });
+
+  it.each([false, true])(
+    "recaptures a concurrently replaced runtime generation, interruptedLoad=%s",
+    async (interruptedLoad) => {
+      const f = await fixture(true);
+      const loaded = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const capture = f.runtimeLoader!.capture.bind(f.runtimeLoader);
+      const capturing = vi
+        .spyOn(f.runtimeLoader!, "capture")
+        .mockImplementationOnce(async (sessionId) => {
+          const artifacts = await capture(sessionId);
+          loaded.resolve();
+          await release.promise;
+          if (interruptedLoad)
+            throw new Error("manifest changed during loading");
+          return artifacts;
+        });
+      const snapshot = f.manager.withSnapshot("session", async () => {
+        const manifest = f.registry.getActiveRuntimes("session")[0]!;
+        const runtime = await f.runtimeLoader!.loadRuntimeFn(
+          manifest,
+          "en",
+          "session",
+        );
+        expect(await runtime!.handler!({} as never)).toBe(2);
+        expect(
+          await f.client().call({
+            pluginId: f.id,
+            name: "value",
+            contract: "fixture.value@1",
+            input: null,
+          }),
+        ).toBe(2);
+      });
+      try {
+        await loaded.promise;
+        await fs.writeFile(path.join(f.root, "entry.mjs"), f.source(2));
+        await fs.writeFile(
+          path.join(f.root, "handler.mjs"),
+          "export default async function() {return 2}",
+        );
+        await f.manager.reload(f.id, "session");
+      } finally {
+        release.resolve();
+        await snapshot;
+      }
+      expect(capturing).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("rechecks approval before a queued first activation can invoke its factory", async () => {
     const f = await fixture(true, false);

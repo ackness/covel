@@ -388,6 +388,7 @@ export async function executeAgentGuard({
         manifest,
         input,
         result,
+        { outputContractSchema: loaded.outputContractSchema },
       );
       const postOutput = postResult.output as Record<string, unknown> | null;
       if (

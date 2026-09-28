@@ -149,7 +149,6 @@ describe("world routes", () => {
   beforeEach(() => {
     store = createMemoryStore();
     const pluginRegistry = {
-      findPluginByCapability: () => "world-data-provider",
       get: () => undefined,
     } as PluginRegistry;
     app = createTestApp(store, pluginRegistry);

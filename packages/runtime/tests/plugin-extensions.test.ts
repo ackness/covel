@@ -67,13 +67,15 @@ function fixture<M extends ExtensionMode>(
       value: "secret",
     },
   ];
+  // Deliberately unfiltered: the host enforces plugin/namespace/session scope.
+  const readPluginData = vi.fn(async () => snapshot);
   const execution = () =>
     host.createExecution({
       sessionId: "session",
       locale: "en",
       turnId: "turn",
       signal: abort.signal,
-      pluginData: snapshot,
+      readPluginData,
     });
   return {
     point,
@@ -85,6 +87,7 @@ function fixture<M extends ExtensionMode>(
     host,
     abort,
     snapshot,
+    readPluginData,
     execution,
   };
 }
@@ -134,7 +137,7 @@ describe("kernel extension execution", () => {
       locale: "en",
       turnId: "turn",
       signal: new AbortController().signal,
-      pluginData: [],
+      readPluginData: async () => [],
       emitter,
     });
     let finished = false;
@@ -211,7 +214,7 @@ describe("kernel extension execution", () => {
       sessionId: "session",
       locale: "en",
       signal: new AbortController().signal,
-      pluginData: [],
+      readPluginData: async () => [],
       emitter: { sessionId: "session", turnId: "turn", emit },
     });
     await expect(execution.run(point, null)).rejects.toThrow(
@@ -281,15 +284,13 @@ describe("kernel extension execution", () => {
     host.register("alpha", { point: point.id, id: "one" }, { handler });
     await expect(execution().run(point, input)).resolves.toEqual({ value: 1 });
     host.register("beta", { point: point.id, id: "two" }, { handler });
-    await expect(host.validateSession("session")).rejects.toThrow(
-      "Conflicting providers",
-    );
     await expect(execution().run(point, input)).rejects.toThrow(
       "Conflicting providers",
     );
     expect(handler).toHaveBeenCalledTimes(1);
     active.delete("beta");
-    await expect(host.validateSession("session")).resolves.toBeUndefined();
+    await expect(execution().run(point, input)).resolves.toEqual({ value: 1 });
+    expect(handler).toHaveBeenCalledTimes(2);
   });
 
   it("does not invoke inactive or unapproved providers", async () => {
@@ -328,7 +329,8 @@ describe("kernel extension execution", () => {
   });
 
   it("reads detached, own-plugin execution snapshots and expires retained data access", async () => {
-    const { point, host, execution, snapshot } = fixture("pipeline");
+    const { point, host, execution, snapshot, readPluginData } =
+      fixture("pipeline");
     let retained!: PluginExtensionContext;
     host.register(
       "alpha",
@@ -340,6 +342,8 @@ describe("kernel extension execution", () => {
           expect(list).toHaveLength(1);
           expect(list[0]?.updatedAt).toBe("2026-01-01");
           (list[0]!.value as { number: number }).number = 200;
+          // Later source changes do not leak into the execution's first read.
+          (snapshot[0]!.value as { number: number }).number = 100;
           expect(
             await context.pluginData.get("values", "secret"),
           ).toBeUndefined();
@@ -355,8 +359,9 @@ describe("kernel extension execution", () => {
       },
     );
     const run = execution();
-    (snapshot[0]!.value as { number: number }).number = 100;
     await expect(run.run(point, input)).resolves.toEqual({ value: 1 });
+    expect(readPluginData).toHaveBeenCalledTimes(1);
+    expect(readPluginData).toHaveBeenCalledWith("alpha", "values");
     await expect(retained.pluginData.list("values")).rejects.toThrow(
       "completed",
     );
@@ -496,7 +501,7 @@ describe("kernel extension execution", () => {
       sessionId: "session",
       locale: "en",
       signal: abort.signal,
-      pluginData: [],
+      readPluginData: async () => [],
     });
     const message = {
       sessionId: "session",

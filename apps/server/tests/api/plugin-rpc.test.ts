@@ -1043,7 +1043,7 @@ function makeFunctionEntry(args: {
   handler: FunctionHandler;
   execution?: "sync" | "background";
   stage?: RuntimeManifest["stage"];
-  /** Semantic capability tags for framework discovery (findPluginByCapability). */
+  /** Semantic capability tags for framework discovery. */
   capabilities?: readonly string[];
   /** Plugin discovery source — drives trust-gate verdict. Defaults to 'builtin'
    * so happy-path tests auto-allow without explicit approvals. Community

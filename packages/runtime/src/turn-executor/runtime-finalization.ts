@@ -4,6 +4,7 @@ import type {
   RuntimeResult,
   TurnInput,
 } from "@covel/shared";
+import { validateOutput } from "@covel/tools";
 import {
   runPostRuntimeHook,
   runPreRuntimeHook,
@@ -24,7 +25,8 @@ import {
 type FinalizationDeps = Pick<
   TurnExecutorDeps,
   "hookPipeline" | "turnControl" | "onRuntimeComplete" | "eventBus" | "emitter"
->;
+> &
+  Partial<Pick<TurnExecutorDeps, "loadRuntime">>;
 
 /** Apply plugin policy once before dispatching an agent, function or guard. */
 export async function runRuntimePreHook(
@@ -70,6 +72,7 @@ export async function finalizeRuntimeResult(
     readonly cause?: unknown;
     readonly lastTarget?: LLMTargetIdentity;
     readonly deltaCount?: number;
+    readonly outputContractSchema?: Readonly<Record<string, unknown>>;
   } = {},
 ): Promise<RuntimeResult> {
   result = withAgentFailureTarget(result, options.lastTarget);
@@ -106,6 +109,43 @@ export async function finalizeRuntimeResult(
     const error = storyOutputError(finalized.output);
     if (error)
       finalized = { ...finalized, status: "failed", output: null, error };
+  }
+  const guardProvided =
+    finalized.status === "skipped" &&
+    finalized.output !== null &&
+    typeof finalized.output === "object" &&
+    !Array.isArray(finalized.output) &&
+    (finalized.output as Record<string, unknown>).skip === true;
+  if (
+    manifest.outputContract &&
+    (finalized.status === "success" || guardProvided)
+  ) {
+    let contractError: string | undefined;
+    try {
+      // Normal dispatch supplies the already loaded schema. A hook can also
+      // recover a pre-dispatch failure; that path must pass the same gate.
+      const schema = Object.hasOwn(options, "outputContractSchema")
+        ? options.outputContractSchema
+        : (await deps.loadRuntime?.(manifest, input.locale, input.sessionId))
+            ?.outputContractSchema;
+      const validation = schema
+        ? validateOutput(finalized.output, schema)
+        : undefined;
+      if (validation && !validation.valid)
+        contractError = (validation.errors ?? []).slice(0, 5).join("; ");
+    } catch {
+      // Loading and compiling a third-party schema can fail. Finalization has
+      // already run PostRuntime, so return one failed terminal instead of
+      // throwing into the dispatch catch and invoking the hook a second time.
+      contractError = "contract schema could not be loaded or compiled";
+    }
+    if (contractError !== undefined)
+      finalized = {
+        ...finalized,
+        status: "failed",
+        output: null,
+        error: `contract-output-invalid (${manifest.outputContract}): ${contractError}`,
+      };
   }
   finalized = withAgentFailureTarget(finalized, options.lastTarget);
   if (manifest.outputKind === "story" && finalized.status === "success") {

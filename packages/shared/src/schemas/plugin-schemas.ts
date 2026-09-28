@@ -467,6 +467,12 @@ export const pluginUserSettingSpecSchema = z
 export const stageSchema = z.enum(STAGE_ORDER);
 
 /**
+ * Upper bound for one settle barrier. Every later player action may wait this
+ * long, so the kernel clamps persisted values to it as well.
+ */
+export const MAX_SETTLE_WAIT_MS = 120_000;
+
+/**
  * Scheduler-driven turn-barrier policy. Kept separate from `execution`, whose
  * existing meaning is manual/event activation mode.
  */
@@ -474,7 +480,12 @@ export const turnCompletionConfigSchema = z
   .object({
     mode: z.enum(["await", "detached"]).optional(),
     settle: z.literal("before-next-execution").optional(),
-    maxSettleWaitMs: z.number().int().positive().optional(),
+    maxSettleWaitMs: z
+      .number()
+      .int()
+      .positive()
+      .max(MAX_SETTLE_WAIT_MS)
+      .optional(),
     maxQueueMs: z.number().int().positive().optional(),
     maxExecutionMs: z.number().int().positive().optional(),
     overlap: z.literal("serial").optional(),

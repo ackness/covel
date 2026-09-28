@@ -36,6 +36,7 @@ export function createBootstrapCompactorRunner(
       locale,
       traceId,
       trace,
+      signal,
     ) {
       // Resolve once per run so a hot reload cannot make the threshold use one
       // capability while the provider call uses another. Compaction input and
@@ -60,8 +61,9 @@ export function createBootstrapCompactorRunner(
             }
           : {}),
         locale: locale ?? "zh-CN",
-        signal: new AbortController().signal,
-        pluginData: await store.listPluginDataSessionScope(sessionId),
+        signal: signal ?? new AbortController().signal,
+        readPluginData: (pluginId, namespace) =>
+          store.listPluginData(sessionId, pluginId, namespace),
         gateway: {
           resolveSlot: () => null,
           generateObject: async () => {

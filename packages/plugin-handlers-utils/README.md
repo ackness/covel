@@ -1,13 +1,29 @@
 # @covel/plugin-handlers-utils
 
-Public, dependency-free ESM helpers for Covel plugin handlers. Requires Node.js 26+.
+Public ESM helpers and entry types for Covel plugin authors. Requires Node.js 26+.
 
 ```js
 import { optionalString, makeProposal } from "@covel/plugin-handlers-utils";
 import { runImageGeneration } from "@covel/plugin-handlers-utils/image-generation";
 ```
 
-The root exports input normalization, locale selection, cancellation, proposal-envelope construction, and narrative review helpers. The image-generation subpath exports the shared image pipeline handler and its structural context types. No database, kernel, or private workspace package is required at runtime or by the emitted type declarations.
+The root exports input normalization, locale selection, cancellation, proposal-envelope construction, and narrative review helpers. The `image-generation` subpath exports the shared image pipeline handler and its structural context types. The `extension-points` subpath (also re-exported from the root) carries the typed public contract for kernel extension points: `PluginExtensionApi`, `ExtensionPointIo`, `ExtensionPointHandler`, the handler `ExtensionHandlerContext`, and every point's input/output shapes (`prompt.segment@1`, `prompt.history-transform@1`, `ui.slot@1`, `session.world-context@1`, `history.compact@1`, `media.image-flow@1`).
+
+The root and `plugin-api` subpath also export `PluginAPI` and `PluginEntryFactory` for a unified server `entry` module. These cover lifecycle cleanup, tools, hooks, RPC, form validators, services, HTTP helpers, media wires, and known extension points. Authoring against the full entry facade requires the public `zod` peer package (`^4.4.3`) for precise schema and tool argument inference. The emitted declarations require no database, kernel, or private workspace package.
+
+```js
+/** @type {import("@covel/plugin-handlers-utils").PluginEntryFactory} */
+export default function (covel) {
+  covel.registerTool(
+    covel.toolkit.tool({
+      name: "echo",
+      description: "Echo text",
+      parameters: covel.toolkit.z.object({ text: covel.toolkit.z.string() }),
+      execute: async ({ text }) => ({ text }),
+    }),
+  );
+}
+```
 
 `makeProposal` preserves the supplied literal type and payload shape. It does not validate domain permissions or payload schemas; the host validates proposals before committing. Writes through a handler's `pluginData` context remain scoped and buffered by the host. The locale helper selects Simplified Chinese for `zh`, `zh-CN`, and `zh-Hans` (case/underscore insensitive), and English otherwise.
 

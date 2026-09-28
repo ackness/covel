@@ -312,7 +312,7 @@ export async function loadPluginDefinition(
             : [],
       ),
     ];
-    // Cross-package named runtime references are rejected by design (see 08-implementation-reconciliation.md §8.1).
+    // Cross-package named runtime references are rejected by design (see docs/reference/plugins.md).
     // Within-package references (pluginId/runtimeName) are permitted for internal coordination.
     // Cross-package dependencies must use the contract system for stable, versioned coupling.
     for (const { runtimeId, field } of runtimeReferences) {
@@ -669,6 +669,9 @@ export async function loadRuntime(
     parsed.manifest.output?.schema,
     contracts,
   );
+  const outputContractSchema = parsed.manifest.outputContract
+    ? contracts[parsed.manifest.outputContract]
+    : undefined;
 
   const inputSchema = parsed.manifest.input?.schema
     ? await loadDeclaredSchema(
@@ -687,11 +690,29 @@ export async function loadRuntime(
     contracts,
   );
 
+  const bindingContractSchemas = Object.fromEntries(
+    Object.entries(parsed.manifest.inputs ?? {}).flatMap(([name, binding]) => {
+      const schema =
+        "capability" in binding.from
+          ? contracts[binding.from.capability]
+          : undefined;
+      return schema ? [[name, schema]] : [];
+    }),
+  );
+
   const exportAcceptsSchemas = await loadExportAcceptsSchemas(
     runtimeDir,
     discovery.rootPath,
     parsed.manifest.input?.inject,
     contracts,
+  );
+  const exportContractSchemas = Object.fromEntries(
+    (parsed.manifest.input?.inject ?? []).flatMap((binding) => {
+      if (binding.kind !== "runtime-export" || !("capability" in binding.from))
+        return [];
+      const schema = contracts[binding.from.capability];
+      return schema ? [[binding.name, schema]] : [];
+    }),
   );
 
   // Load function handler for runtimeType: 'function'
@@ -738,9 +759,16 @@ export async function loadRuntime(
     manifest: resolvePluginRuntimeManifest(snapshot, parsed.manifest),
     promptTemplate: parsed.promptTemplate,
     outputSchema,
+    ...(outputContractSchema ? { outputContractSchema } : {}),
     ...(inputSchema ? { inputSchema } : {}),
     ...(bindingAcceptsSchemas ? { bindingAcceptsSchemas } : {}),
+    ...(Object.keys(bindingContractSchemas).length
+      ? { bindingContractSchemas }
+      : {}),
     ...(exportAcceptsSchemas ? { exportAcceptsSchemas } : {}),
+    ...(Object.keys(exportContractSchemas).length
+      ? { exportContractSchemas }
+      : {}),
     handler,
     guard,
     uiSpecs,

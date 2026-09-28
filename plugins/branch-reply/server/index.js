@@ -1,4 +1,4 @@
-import { applyBranchReplyAcceptedCandidates } from "./history-transform.js";
+import { applyBranchReplyAcceptedCandidates } from "./history-transform.ts";
 
 export default function (covel) {
   covel.provideExtension("prompt.history-transform@1", "accepted-branch", {

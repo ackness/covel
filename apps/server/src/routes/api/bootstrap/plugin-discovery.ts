@@ -3,6 +3,7 @@ import { validateRuntimeManifestSemantics } from "@covel/shared";
 import path from "node:path";
 import type { EventBus } from "@covel/events";
 import {
+  contractReferenceDiagnostics,
   createPluginRegistry,
   discoverPluginsMulti,
   loadPluginDefinition,
@@ -148,6 +149,11 @@ export async function discoverAndRegisterPlugins(
       });
     }
   }
+
+  for (const message of contractReferenceDiagnostics(
+    registry.getAll().values(),
+  ))
+    console.warn(`[bootstrap] ${message}`);
 
   return { registry, discoveryMap, manifestCache };
 }

@@ -27,6 +27,7 @@ interface SessionSlots {
   readonly endedTurns: Set<string>;
   readonly dirty: Set<UiSlotName>;
   chain: Promise<void>;
+  pending: number;
   timer?: ReturnType<typeof setTimeout>;
 }
 export interface UiSlotHost {
@@ -66,18 +67,32 @@ export function createUiSlotHost(args: {
   const sessions = new Map<string, SessionSlots>();
   const abort = new AbortController();
   let closed = false;
-  const sessionState = (id: string): SessionSlots => {
-    let state = sessions.get(id);
-    if (!state) {
-      state = {
-        cache: new Map(),
-        events: new Map(),
-        endedTurns: new Set(),
-        dirty: new Set(),
-        chain: Promise.resolve(),
-      };
-      sessions.set(id, state);
+  const trimSessions = (keepId?: string) => {
+    // Busy sessions own queued work and event state. Allow temporary overflow
+    // until they finish, then evict only idle least-recently-used sessions.
+    for (const [id, state] of sessions) {
+      if (sessions.size <= 256) break;
+      if (id === keepId || state.pending > 0 || state.timer) continue;
+      sessions.delete(id);
     }
+  };
+  const sessionState = (id: string): SessionSlots => {
+    const existing = sessions.get(id);
+    if (existing) {
+      sessions.delete(id);
+      sessions.set(id, existing);
+      return existing;
+    }
+    const state: SessionSlots = {
+      cache: new Map(),
+      events: new Map(),
+      endedTurns: new Set(),
+      dirty: new Set(),
+      chain: Promise.resolve(),
+      pending: 0,
+    };
+    sessions.set(id, state);
+    trimSessions(id);
     return state;
   };
   const emit = (
@@ -97,15 +112,19 @@ export function createUiSlotHost(args: {
   };
   const enqueue = <T>(
     sessionId: string,
-    task: () => Promise<T>,
+    task: (state: SessionSlots) => Promise<T>,
   ): Promise<T> => {
     const state = sessionState(sessionId);
-    const result = state.chain.then(task);
+    state.pending++;
+    const result = state.chain.then(() => task(state));
     state.chain = result.then(
       () => undefined,
       () => undefined,
     );
-    return result;
+    return result.finally(() => {
+      state.pending--;
+      trimSessions();
+    });
   };
   const project = async (
     sessionId: string,
@@ -119,8 +138,7 @@ export function createUiSlotHost(args: {
       sessions.delete(sessionId);
       return;
     }
-    const [pluginData, characters, characterSchema] = await Promise.all([
-      args.store.listPluginDataSessionScope(sessionId),
+    const [characters, characterSchema] = await Promise.all([
       args.store.listCharacters(sessionId),
       args.store.getCharacterSchema(sessionId),
     ]);
@@ -128,7 +146,8 @@ export function createUiSlotHost(args: {
       sessionId,
       locale: session.locale,
       signal: abort.signal,
-      pluginData,
+      readPluginData: (pluginId, namespace) =>
+        args.store.listPluginData(sessionId, pluginId, namespace),
       world: { characters, characterSchema },
       ...(turnId ? { turnId } : {}),
     });
@@ -157,11 +176,17 @@ export function createUiSlotHost(args: {
           for (const previous of state.cache.values()) {
             if (
               previous.slot === slot &&
+              // The keyless placeholder is a slot-level "cleared" marker,
+              // not an inventory key: never re-emit it as a removed key.
+              previous.key !== undefined &&
               !values.some((entry) => entry.key === previous.key)
             )
               values.push({ key: previous.key, value: null });
           }
           if (!values.length) values.push({ value: null });
+          // Keyed characters supersede a keyless "empty" placeholder cached
+          // by an earlier projection; drop it instead of leaving it forever.
+          else state.cache.delete(cacheKey(slot));
         } else {
           values.push({
             value:
@@ -228,79 +253,85 @@ export function createUiSlotHost(args: {
     if (!relevant) return;
     const { sessionId, payload } = event;
     const state = sessionState(sessionId);
-    const turnId =
-      typeof payload.turnId === "string" ? payload.turnId : undefined;
-    if (terminalEvents.has(event.type) && turnId) {
-      state.endedTurns.add(turnId);
-      if (state.endedTurns.size > 128)
-        state.endedTurns.delete(state.endedTurns.values().next().value!);
-      state.events.delete(turnId);
-      emit(sessionId, "ui.slot.cleared", { turnId });
-      schedule(sessionId, uiSlotNameSchema.options);
-      return;
-    }
-    const providers = await args.services.discoverExtensions(
-      sessionId,
-      uiSlotV1.id,
-    );
-    const slots = new Set<UiSlotName>();
-    for (const provider of providers) {
-      const parsed = uiSlotNameSchema.safeParse(provider.slot);
-      if (!parsed.success) continue;
-      if (event.type === "plugin-data.changed") {
-        if (
-          provider.pluginId !== payload.pluginId ||
-          !Array.isArray(payload.changes)
-        )
-          continue;
-        if (
-          payload.changes.some(
-            (change: unknown) =>
-              change &&
-              typeof change === "object" &&
-              provider.watch?.includes(
-                String((change as Record<string, unknown>).namespace),
-              ),
-          )
-        )
-          slots.add(parsed.data);
-      } else if (event.type === "domain-event.previewed") {
-        if (provider.preview?.includes(String(payload.topic)))
-          slots.add(parsed.data);
-      } else slots.add(parsed.data);
-    }
-    if (event.type === "plugin.deactivated") {
-      for (const value of state.cache.values()) slots.add(value.slot);
-    }
-    if (
-      event.type === "domain-event.previewed" &&
-      turnId &&
-      slots.size &&
-      !state.endedTurns.has(turnId)
-    ) {
-      if (
-        typeof payload.topic !== "string" ||
-        !payload.data ||
-        typeof payload.data !== "object" ||
-        Array.isArray(payload.data)
-      )
+    state.pending++;
+    try {
+      const turnId =
+        typeof payload.turnId === "string" ? payload.turnId : undefined;
+      if (terminalEvents.has(event.type) && turnId) {
+        state.endedTurns.add(turnId);
+        if (state.endedTurns.size > 128)
+          state.endedTurns.delete(state.endedTurns.values().next().value!);
+        state.events.delete(turnId);
+        emit(sessionId, "ui.slot.cleared", { turnId });
+        schedule(sessionId, uiSlotNameSchema.options);
         return;
-      state.events.set(
-        turnId,
-        [
-          ...(state.events.get(turnId) ?? []),
-          {
-            topic: payload.topic,
-            data: payload.data as Record<string, unknown>,
-            turnId,
-            ...(typeof payload.pluginId === "string"
-              ? { pluginId: payload.pluginId }
-              : {}),
-          },
-        ].slice(-128),
+      }
+      const providers = await args.services.discoverExtensions(
+        sessionId,
+        uiSlotV1.id,
       );
-      await enqueue(sessionId, () => project(sessionId, [...slots], turnId));
-    } else schedule(sessionId, [...slots]);
+      const slots = new Set<UiSlotName>();
+      for (const provider of providers) {
+        const parsed = uiSlotNameSchema.safeParse(provider.slot);
+        if (!parsed.success) continue;
+        if (event.type === "plugin-data.changed") {
+          if (
+            provider.pluginId !== payload.pluginId ||
+            !Array.isArray(payload.changes)
+          )
+            continue;
+          if (
+            payload.changes.some(
+              (change: unknown) =>
+                change &&
+                typeof change === "object" &&
+                provider.watch?.includes(
+                  String((change as Record<string, unknown>).namespace),
+                ),
+            )
+          )
+            slots.add(parsed.data);
+        } else if (event.type === "domain-event.previewed") {
+          if (provider.preview?.includes(String(payload.topic)))
+            slots.add(parsed.data);
+        } else slots.add(parsed.data);
+      }
+      if (event.type === "plugin.deactivated") {
+        for (const value of state.cache.values()) slots.add(value.slot);
+      }
+      if (
+        event.type === "domain-event.previewed" &&
+        turnId &&
+        slots.size &&
+        !state.endedTurns.has(turnId)
+      ) {
+        if (
+          typeof payload.topic !== "string" ||
+          !payload.data ||
+          typeof payload.data !== "object" ||
+          Array.isArray(payload.data)
+        )
+          return;
+        state.events.set(
+          turnId,
+          [
+            ...(state.events.get(turnId) ?? []),
+            {
+              topic: payload.topic,
+              data: payload.data as Record<string, unknown>,
+              turnId,
+              ...(typeof payload.pluginId === "string"
+                ? { pluginId: payload.pluginId }
+                : {}),
+            },
+          ].slice(-128),
+        );
+        await enqueue(sessionId, () => project(sessionId, [...slots], turnId));
+      } else schedule(sessionId, [...slots]);
+    } finally {
+      state.pending--;
+      trimSessions();
+    }
   };
   const unsubscribe = args.eventBus.onEmit((event) => {
     void handle(event).catch(() => {});
@@ -312,8 +343,7 @@ export function createUiSlotHost(args: {
           (!query.slot || slot === query.slot) &&
           (!query.prefix || slot.startsWith(query.prefix)),
       );
-      await enqueue(sessionId, async () => {
-        const state = sessionState(sessionId);
+      return enqueue(sessionId, async (state) => {
         const missing = names.filter(
           (slot) =>
             state.dirty.has(slot) ||
@@ -321,12 +351,13 @@ export function createUiSlotHost(args: {
         );
         for (const slot of missing) state.dirty.delete(slot);
         if (missing.length) await project(sessionId, missing);
+        if (sessions.get(sessionId) !== state) return [];
+        return [...state.cache.values()].filter(
+          (entry) =>
+            names.includes(entry.slot) &&
+            (query.key === undefined || entry.key === query.key),
+        );
       });
-      return [...sessionState(sessionId).cache.values()].filter(
-        (entry) =>
-          names.includes(entry.slot) &&
-          (query.key === undefined || entry.key === query.key),
-      );
     },
     invalidateSession(sessionId) {
       schedule(sessionId, uiSlotNameSchema.options);

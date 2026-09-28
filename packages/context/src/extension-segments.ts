@@ -7,8 +7,11 @@ export function selectPromptSegments(
 ): readonly PromptSegment[] {
   // Volatility ordering: stable segments appear before session segments, which appear before turn segments.
   // This hardcoded map is the authoritative volatility ordering used during prompt assembly.
-  // See: docs/reference/plugin-extensions.md for the volatility contract.
+  // See: docs/reference/extension-points.md for the volatility contract.
   const volatility = { stable: 0, session: 1, turn: 2 };
+  // Code-unit compare keeps the assembled bytes identical across ICU builds,
+  // matching the extension host's provider ordering.
+  const codeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   return (segments ?? [])
     .filter((segment) => {
       const audience = segment.audience;
@@ -27,7 +30,7 @@ export function selectPromptSegments(
         // to same-order segments from other plugins. Plugins that care about
         // relative ordering should set explicit `order` values instead of relying
         // on this implicit tiebreaker.
-        (a.providerPluginId ?? "").localeCompare(b.providerPluginId ?? "") ||
-        a.id.localeCompare(b.id),
+        codeUnit(a.providerPluginId ?? "", b.providerPluginId ?? "") ||
+        codeUnit(a.id, b.id),
     );
 }

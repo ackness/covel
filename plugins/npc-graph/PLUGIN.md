@@ -21,6 +21,9 @@ requires:
   - world-ir-provider@1
 optional:
   - scene-cast@1
+contracts:
+  graph-rag@1:
+    schema: ./schemas/graph-rag.schema.json
 entry: ./server/index.js
 contributes:
   ui:

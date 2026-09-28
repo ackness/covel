@@ -13,6 +13,8 @@ provides:
   - tabletop-check@1
 entry: ./server/index.js
 contracts:
+  tabletop-check@1:
+    schema: ./schemas/tabletop-check.schema.json
   tabletop-rules.rules.initial@1:
     schema: ./schemas/rules.schema.json
 contributes:

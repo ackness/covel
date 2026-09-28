@@ -354,9 +354,12 @@ async function executeTurnImpl(
           new AbortController().signal,
         gateway: deps.gateway,
         utils: deps.utils,
-        pluginData: deps.store
-          ? await deps.store.listPluginDataSessionScope(input.sessionId)
-          : [],
+        readPluginData: async (pluginId, namespace) =>
+          (await deps.store?.listPluginData(
+            input.sessionId,
+            pluginId,
+            namespace,
+          )) ?? [],
       }),
     };
   }
@@ -537,6 +540,7 @@ async function executeTurnImpl(
           input.locale,
           deps.emitter?.traceId,
           deps.emitter,
+          getTurnExecutionSignal(deps.turnControl),
         );
         await runPostCompactionHook(hookOpts, {
           compacted: result.compacted,

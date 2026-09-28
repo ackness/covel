@@ -31,6 +31,9 @@ optional:
   - dice-check@1
   - world-time-context@1
   - tabletop-check@1
+contracts:
+  narrative-engine@1:
+    schema: ./schemas/narrative-engine.schema.json
 entry: ./server/index.js
 contributes:
   settings:

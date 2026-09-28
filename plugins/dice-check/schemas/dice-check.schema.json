@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "contract:dice-check@1",
+  "title": "Covel dice pool output v1",
+  "type": "object",
+  "required": ["dice", "checkContext"],
+  "properties": {
+    "dice": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 20 }
+    },
+    "checkContext": { "type": "string" }
+  },
+  "additionalProperties": true
+}

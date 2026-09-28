@@ -247,6 +247,44 @@ describe("current package discovery and loading", () => {
     const [d] = await discoverPlugins(temp);
     await expect(loadRuntime(d!, "probe")).rejects.toThrow("traversal");
   });
+  it("loads public contracts independently of producer schemas and consumer accepts", async () => {
+    await root({
+      provides: ["output@1"],
+      requires: ["data@1"],
+      contracts: { "output@1": { schema: "./output-contract.json" } },
+      runtime: {
+        ...agent,
+        io: {
+          output: { contract: "output@1" },
+          inputs: {
+            live: { from: { contract: "data@1" }, select: "/text" },
+            saved: {
+              from: { contract: "data@1" },
+              scope: "committed",
+              recordAs: "facts",
+            },
+          },
+        },
+      },
+    });
+    const schema = {
+      type: "object",
+      required: ["text"],
+      properties: { text: { type: "string" } },
+    };
+    await write(
+      path.join(temp, "probe/output-contract.json"),
+      JSON.stringify(schema),
+    );
+    const [d] = await discoverPlugins(temp);
+    const loaded = await loadRuntime(d!, "probe", undefined, undefined, {
+      "data@1": schema,
+    });
+    expect(loaded.outputSchema).toBeUndefined();
+    expect(loaded.outputContractSchema).toEqual(schema);
+    expect(loaded.bindingContractSchemas).toEqual({ live: schema });
+    expect(loaded.exportContractSchemas).toEqual({ saved: schema });
+  });
   it("rejects handler modules without a callable default export", async () => {
     await root({
       runtime: {

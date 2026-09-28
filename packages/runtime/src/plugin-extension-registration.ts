@@ -35,12 +35,13 @@ export function createExtensionRegistration(
       )
     )
       throw invalid("static-prompt is reserved for contributes.prompt");
-    // Locale variants are resolved per-turn, so a plugin that ships any
-    // PLUGIN.<locale>.md file can produce different content each turn.
-    // When no variants exist the content never changes and should respect
-    // the segment's declared volatility instead of breaking the cache every
-    // turn unnecessarily.
-    const hasLocaleVariants = Object.keys(staticVariants).length > 0;
+    // Authored static segments carry no volatility of their own. Variants are
+    // selected from each execution's locale, so they stay after the cache
+    // boundary; a single-language prompt is session-stable.
+    const volatility =
+      Object.keys(staticVariants).length > 0
+        ? ("turn" as const)
+        : ("session" as const);
     batch.stage(() => {
       if (!host) throw new Error("Plugin extension host is unavailable");
       batch.track(
@@ -66,10 +67,7 @@ export function createExtensionRegistration(
               return segments.map((segment) => ({
                 ...segment,
                 audience: "self",
-                // Force turn-scoped volatility only when locale variants
-                // exist — the selected variant can change per turn, so it
-                // must not land in the stable cache zone.
-                ...(hasLocaleVariants ? { volatility: "turn" as const } : {}),
+                volatility,
               }));
             },
           },
@@ -80,7 +78,11 @@ export function createExtensionRegistration(
   const declared = new Map(declarations.map((d) => [`${d.point}/${d.id}`, d]));
   const provided = new Set<string>();
   return {
-    provideExtension(point, id, definition) {
+    provideExtension<I, O>(
+      point: string,
+      id: string,
+      definition: PluginExtensionDefinition<I, O>,
+    ) {
       batch.stage(() => {
         const key = `${point}/${id}`;
         const declaration = declared.get(key);

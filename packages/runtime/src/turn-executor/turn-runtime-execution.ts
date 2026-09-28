@@ -506,6 +506,7 @@ export async function executeOneRuntime(
       activeRuntimes,
       completedResults,
       acceptsSchemas: loaded.bindingAcceptsSchemas ?? {},
+      contractSchemas: loaded.bindingContractSchemas ?? {},
       // Same shared canonicalizer as the activation boundary: an injected
       // same-execution value carries the producer's raw MediaRefs (they have
       // not passed an output boundary), so ownership is checked here before
@@ -585,6 +586,7 @@ export async function executeOneRuntime(
         exportBindings: exportSpec,
         activeRuntimes,
         acceptsSchemas: loaded.exportAcceptsSchemas ?? {},
+        contractSchemas: loaded.exportContractSchemas ?? {},
         getFrozenExport: (producerRuntimeId, recordAs) =>
           deps.store
             ? deps.store.getLatestRuntimeExport(

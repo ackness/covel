@@ -573,6 +573,89 @@ describe("resolveInputBindings — accepts double layer", () => {
   });
 });
 
+describe("resolveInputBindings — published contract schema", () => {
+  const contract = {
+    type: "object",
+    required: ["npcContext"],
+    properties: { npcContext: { type: "string" } },
+  } as const;
+  const args = (output: unknown, required: boolean) => ({
+    ...baseArgs({
+      manifest: rt("c/main", {
+        inputs: {
+          graph: {
+            from: { capability: "graph-rag@1" },
+            select: "/npcContext",
+            required,
+          },
+        },
+      }),
+      activeRuntimes: [
+        rt("third/retriever", { outputContract: "graph-rag@1" }),
+      ],
+      completedResults: new Map([
+        ["third/retriever", success("third/retriever", output)],
+      ]),
+    }),
+    contractSchemas: { graph: contract },
+  });
+
+  it("injects a conforming provider's selected value", async () => {
+    const res = await resolveInputBindings(
+      args({ npcContext: "A knows B", extra: 1 }, true),
+    );
+    expect(res).toMatchObject({
+      ok: true,
+      slots: { graph: { cardinality: "one", value: "A knows B" } },
+    });
+  });
+
+  it.each([true, false])(
+    "reports a contract violation as a provider error (required=%s)",
+    async (required) => {
+      const res = await resolveInputBindings(
+        args({ context: "renamed field" }, required),
+      );
+      expect(res.ok).toBe(!required);
+      if (!res.ok) expect(res.skipReason).toBe("contract-output-invalid");
+      expect(res.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "contract-output-invalid",
+          severity: "error",
+          message: expect.stringContaining("third/retriever"),
+        }),
+      );
+    },
+  );
+
+  it("uses the contract as producer schema for accepts compatibility", async () => {
+    const res = await resolveInputBindings({
+      ...args({ npcContext: "text" }, true),
+      acceptsSchemas: { graph: { type: "number" } },
+    });
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "input-schema-incompatible",
+    });
+  });
+
+  it("reports an unresolvable public schema reference as a binding error", async () => {
+    const res = await resolveInputBindings({
+      ...args({ npcContext: "text" }, true),
+      contractSchemas: { graph: { $ref: "#/definitions/missing" } },
+    });
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "contract-output-invalid",
+    });
+    expect(res.diagnostics[0]).toMatchObject({
+      code: "contract-output-invalid",
+      severity: "error",
+      message: expect.stringContaining("schema validation failed"),
+    });
+  });
+});
+
 describe("bindings imply DAG ordering edges", () => {
   it("a capability binding places the consumer after its provider", () => {
     const provider = rt("p/gen", {

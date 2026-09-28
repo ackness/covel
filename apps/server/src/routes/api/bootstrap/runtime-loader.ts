@@ -37,7 +37,7 @@ export interface RuntimeLoader {
   bindPluginEntry(
     fn: (pluginId: string, sessionId?: string) => Promise<void>,
   ): void;
-  /** Called only within the entry manager's publication/admission queue. */
+  /** The entry manager checks publication consistency after asynchronous loading. */
   capture(sessionId: string): Promise<RuntimeArtifactSnapshot>;
   prepareGeneration(args: {
     discovery: PluginDiscoveryResult;
