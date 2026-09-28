@@ -92,6 +92,7 @@ export { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js
 export { createProviderRegistry } from "./provider-registry.js";
 export {
   configureOutboundProxy,
+  prepareOutboundProxy,
   getOutboundProxyStatus,
   normalizeOutboundProxyConfig,
   outboundFetch,

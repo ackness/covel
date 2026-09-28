@@ -689,6 +689,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                                                                                                                           |
 | POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                                                                                                                           |
 
+代理 PUT 先准备并验证传输，再原子持久化配置，最后发布到进程内。磁盘写入失败时保留原 dispatcher 与 GET 状态。底层 `prepareOutboundProxy()` 提供 `commit()` / `dispose()`；未提交的传输由调用者释放，`configureOutboundProxy()` 用于立即应用。
+
 #### PUT /api/config/keys
 
 桌面 `PUT /api/config/keys` 接受 `{ provider: string | null }`：空字符串或 `null` 删除密钥。整批输入先校验，含内部换行或其它类型时返回 `400`，文件和运行时均保持原状；原子写入成功后才发布运行时密钥。Electron 保存完整密钥列表时，会将已有但不再出现的 provider 转成显式删除，清空最后一个密钥也会同时清除文件和运行时值。仅在 sidecar 连接不可用时回退到本地保存，HTTP 拒绝不会触发覆盖。
