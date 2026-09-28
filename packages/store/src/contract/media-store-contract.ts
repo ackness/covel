@@ -52,6 +52,49 @@ export function runMediaStoreContractTests(
       expect(a.id).not.toBe(c.id);
     });
 
+    it("pins new and duplicate bytes atomically until the initial ref is removed", async () => {
+      const store = await createStore();
+      const bytes = [PNG, OTHER];
+      for (const value of bytes) {
+        if (value === OTHER) await store.put(OTHER, "image/png");
+        const ref = await store.put(value, "image/png", undefined, {
+          sessionId: "world-data-import:attempt",
+          pluginId: "portraits",
+        });
+        expect(
+          await store.isReferencedBy(ref.id, "world-data-import:attempt"),
+        ).toBe(true);
+        for (const dryRun of [true, false]) {
+          const cleanup = await store.cleanup(new Set(), {
+            maxAgeMs: 0,
+            dryRun,
+          });
+          expect(cleanup.deletedIds).not.toContain(ref.id);
+          expect(cleanup.protectedIds).toContain(ref.id);
+          expect(await store.exists(ref.id)).toBe(true);
+        }
+        await store.removeRef(ref.id, "world-data-import:attempt");
+      }
+      const cleanup = await store.cleanup(new Set(), { maxAgeMs: 0 });
+      expect(cleanup.retained).toBe(0);
+    });
+
+    it("keeps initial-reference metadata first-writer-wins without taking ownership", async () => {
+      const store = await createStore();
+      const first = await store.put(PNG, "image/png", undefined, {
+        sessionId: "world-data-import:attempt",
+        pluginId: "first",
+      });
+      await store.put(PNG, "image/png", undefined, {
+        sessionId: "world-data-import:attempt",
+        pluginId: "second",
+      });
+      expect((await store.lookup(first.id))?.ownerSessionId).toBeNull();
+      expect(await store.listRefs()).toEqual([
+        expect.objectContaining({ mediaId: first.id, pluginId: "first" }),
+      ]);
+    });
+
     it("keeps metadata immutable for duplicate content", async () => {
       const store = await createStore();
 

@@ -28,7 +28,10 @@ function createMemoryAdapter(): SettingsBackendAdapter {
       return { ...secrets };
     },
     async saveSecrets(next) {
-      secrets = { ...next };
+      for (const [provider, value] of Object.entries(next)) {
+        if (value === null) delete secrets[provider];
+        else secrets[provider] = value;
+      }
     },
   };
 }

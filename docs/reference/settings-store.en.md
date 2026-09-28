@@ -34,9 +34,13 @@ Backends implementing `loadWithRevision` / `saveWithRevision` must check a monot
 
 `SettingsStoreApi.refresh(): Promise<void>` queues a read of non-secret settings and notifies keys whose values actually changed. Pending writes still compare against their original base when a refresh runs before them. Custom adapters without revision capabilities use serialized snapshot writes; `refresh()` does not read these adapters. This backend capability difference does not permit old persistence formats.
 
-Web refreshes on storage events for `covel:settings`, window focus, and restored visibility. Endpoint, price multiplier, and output-limit drafts retain unfinished input when another window changes the saved value, block automatic overwrite, and offer an explicit reload action. API-key reads, writes, and deletions do not participate in this synchronization or merging.
+Web refreshes on storage events for `covel:settings`, window focus, and restored visibility. Endpoint, price multiplier, and output-limit drafts retain unfinished input when another window changes the saved value, block automatic overwrite, and offer an explicit reload action. API keys do not participate in ordinary settings refresh or broadcasts; writes merge through the separate provider patch channel.
 
 ## Secret-channel boundaries
+
+`SettingsBackendAdapter.saveSecrets(patch)`, desktop `covel:keys:save`, and REST `/api/config/keys` accept provider-to-`string | null` patches. Omitted providers remain unchanged and `null` explicitly deletes. Separate instances updating different providers preserve each other's changes. Writes to the same provider take effect in backend arrival order; an explicit same-value set or a delete absent from the local cache still persists. This channel does not provide same-key CAS. `clearAll()` removes only providers known to the current instance, preserving unknown providers added by another instance.
+
+The localStorage backend must hold a Web Lock while reading the latest secrets, applying the patch, and writing it back. Without Web Locks, secret writes fail; use a supported browser on HTTPS or localhost. REST applies patches on the server; desktop IPC synchronously reads and merges the local file when the sidecar is unavailable. Secrets never enter ordinary settings, revision broadcasts, or default exports. Custom adapters must implement this atomic patch contract instead of accepting complete secret snapshots.
 
 The `keys.*` namespace and entries registered with `backend: "keys"` or `secret: true` use the separate secrets channel. A normal-backend declaration cannot override the reserved namespace. Selected ordinary import `entries` containing such a key are rejected before any writes. Secret imports must use `bundle.keys` with explicit `includeSecrets: true`. Ordinary serialization and exports always exclude known secret entries.
 

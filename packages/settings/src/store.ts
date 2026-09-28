@@ -171,7 +171,7 @@ export class SettingsStore implements SettingsStoreApi {
         ? this.serializeEntries()
         : (Object.fromEntries(this.secrets) as Record<string, string>);
     try {
-      await this.enqueueSnapshot(target, snapshot);
+      await this.enqueueSnapshot(target, snapshot, keys);
       this.replacePersistedSnapshot(target, snapshot);
     } catch (err) {
       if (this.persistRevisions[target] === revision) {
@@ -211,6 +211,7 @@ export class SettingsStore implements SettingsStoreApi {
   private enqueueSnapshot(
     target: "values" | "secrets",
     snapshot: Record<string, unknown> | Record<string, string>,
+    keys: readonly string[],
   ): Promise<void> {
     const operation = this.persistTails[target].then(async () => {
       if (this.hydrationState === "failed") {
@@ -219,7 +220,26 @@ export class SettingsStore implements SettingsStoreApi {
         );
       }
       if (target === "secrets") {
-        await this.adapter.saveSecrets(snapshot as Record<string, string>);
+        const desired = snapshot as Record<string, string>;
+        const confirmed = this.persistedSnapshots.secrets;
+        // Keep explicit intent even for repeated set/clear calls. Include any
+        // unconfirmed earlier local changes carried by this queued snapshot,
+        // but never rewrite unrelated providers from a stale instance cache.
+        const changed = new Set(keys);
+        for (const provider of new Set([
+          ...confirmed.keys(),
+          ...Object.keys(desired),
+        ])) {
+          if (confirmed.get(provider) !== desired[provider])
+            changed.add(provider);
+        }
+        const patch = Object.fromEntries(
+          [...changed].map((provider) => [
+            provider,
+            Object.hasOwn(desired, provider) ? desired[provider] : null,
+          ]),
+        );
+        await this.adapter.saveSecrets(patch);
         return;
       }
       await this.adapter.save(snapshot as Record<SettingKey, unknown>);
@@ -357,12 +377,17 @@ export class SettingsStore implements SettingsStoreApi {
         normalized = parsed.data;
       }
       const operation = this.isSecretKey(key)
-        ? this.persist("secrets", () => {
-            const provider = this.stripKeysPrefix(key);
-            const str = typeof value === "string" ? value : String(value ?? "");
-            if (str.trim().length === 0) this.secrets.delete(provider);
-            else this.secrets.set(provider, str);
-          })
+        ? this.persist(
+            "secrets",
+            () => {
+              const provider = this.stripKeysPrefix(key);
+              const str =
+                typeof value === "string" ? value : String(value ?? "");
+              if (str.trim().length === 0) this.secrets.delete(provider);
+              else this.secrets.set(provider, str);
+            },
+            [this.stripKeysPrefix(key)],
+          )
         : this.persist(
             "values",
             () => {
@@ -410,9 +435,13 @@ export class SettingsStore implements SettingsStoreApi {
     try {
       const entry = this.registry.get(key);
       const operation = this.isSecretKey(key)
-        ? this.persist("secrets", () => {
-            this.secrets.delete(this.stripKeysPrefix(key));
-          })
+        ? this.persist(
+            "secrets",
+            () => {
+              this.secrets.delete(this.stripKeysPrefix(key));
+            },
+            [this.stripKeysPrefix(key)],
+          )
         : this.persist(
             "values",
             () => {
@@ -442,7 +471,9 @@ export class SettingsStore implements SettingsStoreApi {
           this.persist("values", () => this.values.clear(), [
             ...this.values.keys(),
           ]),
-          this.persist("secrets", () => this.secrets.clear()),
+          this.persist("secrets", () => this.secrets.clear(), [
+            ...this.secrets.keys(),
+          ]),
         ]).then(() => {
           for (const entry of this.registry.values()) {
             this.notify(entry.key, entry.default);
@@ -534,11 +565,15 @@ export class SettingsStore implements SettingsStoreApi {
       );
     }
     if (secretUpdates.length > 0) {
-      await this.persist("secrets", () => {
-        for (const [provider, keyValue] of secretUpdates) {
-          this.secrets.set(provider, keyValue);
-        }
-      });
+      await this.persist(
+        "secrets",
+        () => {
+          for (const [provider, keyValue] of secretUpdates) {
+            this.secrets.set(provider, keyValue);
+          }
+        },
+        secretUpdates.map(([provider]) => provider),
+      );
     }
     for (const [key, value] of nonSecretUpdates) {
       this.notify(key, value);

@@ -148,7 +148,9 @@ async function saveSettingsViaSidecar(
   );
 }
 
-async function saveKeysViaSidecar(keys: Record<string, string>): Promise<void> {
+async function saveKeysViaSidecar(
+  keys: Record<string, string | null>,
+): Promise<void> {
   await requestSidecarConfig<{ ok?: boolean }>("/api/config/keys", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

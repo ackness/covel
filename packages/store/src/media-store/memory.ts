@@ -1,5 +1,8 @@
 import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
-import { finalizeMediaCleanupResult } from "./cleanup-result.js";
+import {
+  claimedMediaIds,
+  finalizeMediaCleanupResult,
+} from "./cleanup-result.js";
 import {
   bytesToReadableStream,
   cleanupCandidates,
@@ -37,12 +40,31 @@ export function createMemoryMediaStore(): MediaStore {
     set.add(id);
   }
 
+  function recordRef(id: string, sessionId: string, pluginId?: string): void {
+    addRefInternal(sessionId, id);
+    // First writer wins for plugin_id — keyed only on (sessionId, mediaId)
+    // to mirror the UNIQUE constraint enforced by SQLite/PG.
+    const key = `${sessionId}\u0000${id}`;
+    if (!refRows.has(key)) {
+      refRows.set(key, {
+        sessionId,
+        mediaId: id,
+        pluginId: pluginId ?? null,
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+
   return {
-    async put(blob, mime, meta) {
+    async put(blob, mime, meta, initialRef) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
       const existing = assets.get(id);
-      if (existing) return structuredClone(existing.ref);
+      if (existing) {
+        if (initialRef)
+          recordRef(id, initialRef.sessionId, initialRef.pluginId);
+        return structuredClone(existing.ref);
+      }
       const ref: MediaRef = {
         id,
         mime,
@@ -54,6 +76,7 @@ export function createMemoryMediaStore(): MediaStore {
         ref,
         createdAt: new Date().toISOString(),
       });
+      if (initialRef) recordRef(id, initialRef.sessionId, initialRef.pluginId);
       return structuredClone(ref);
     },
 
@@ -114,18 +137,7 @@ export function createMemoryMediaStore(): MediaStore {
 
     async addRef(id, sessionId, pluginId) {
       if (!assets.has(id)) return;
-      addRefInternal(sessionId, id);
-      // First writer wins for plugin_id — keyed only on (sessionId, mediaId)
-      // to mirror the UNIQUE constraint enforced by SQLite/PG.
-      const key = `${sessionId}\u0000${id}`;
-      if (!refRows.has(key)) {
-        refRows.set(key, {
-          sessionId,
-          mediaId: id,
-          pluginId: pluginId ?? null,
-          createdAt: new Date().toISOString(),
-        });
-      }
+      recordRef(id, sessionId, pluginId);
     },
 
     async removeRef(id, sessionId) {
@@ -178,7 +190,7 @@ export function createMemoryMediaStore(): MediaStore {
       const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
         inventory,
-        protectedIds,
+        claimedMediaIds(protectedIds, inventory, await this.listRefs()),
         policy,
       );
       const deletedIds: string[] = [];

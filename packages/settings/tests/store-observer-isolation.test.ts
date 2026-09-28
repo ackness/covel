@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalStorageBackend } from "../src/backends/localstorage.js";
 import { SettingsStore } from "../src/store.js";
 import type { SettingsBackendAdapter } from "../src/types.js";
 import { createMemoryAdapter } from "./test-adapter.js";
+import { locks } from "node:worker_threads";
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -50,7 +51,9 @@ function observeWithFaults(store: SettingsStore, key: string) {
   return { keyListener, globalListener };
 }
 
+beforeEach(() => vi.stubGlobal("navigator", { locks }));
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 

@@ -9,6 +9,7 @@ import type {
 import {
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
+  releaseWorldDataMediaRefs,
 } from "./media-handling.js";
 import { ledgerForWrite, valueHashForWrite } from "./ledger.js";
 import { pluginWriteIdentity } from "./identity.js";
@@ -156,80 +157,90 @@ export async function writeImportPlan(options: {
     sessionId: options.sessionId,
     writes: selected,
   });
-  const materializedWrites = materialized.writes;
+  try {
+    const materializedWrites = materialized.writes;
 
-  const pluginWrites = materializedWrites.filter(
-    (
-      write,
-    ): write is PlannedWrite &
-      ({ kind: "plugin-data" } | { kind: "media-index" }) =>
-      write.kind === "plugin-data" || write.kind === "media-index",
-  );
-  const pluginRecords = pluginWrites.map((write) =>
-    toPluginDataRecord(options.sessionId, write, options.now),
-  );
-  if (pluginRecords.length > 0) {
-    await options.store.setPluginDataBatch(pluginRecords);
-  }
-
-  const lorebookEntries = materializedWrites
-    .filter(
-      (write): write is PlannedWrite & { kind: "lorebook" } =>
-        write.kind === "lorebook",
-    )
-    .map((write, index) => ({
-      write,
-      record: toLorebookRecord(
-        options.sessionId,
+    const pluginWrites = materializedWrites.filter(
+      (
         write,
-        500 + index * 100,
-        options.now,
-      ),
-    }));
-  const lorebookRecords = lorebookEntries.map((entry) => entry.record);
-  if (lorebookRecords.length > 0) {
-    await options.store.upsertLorebookEntries(lorebookRecords);
-  }
-
-  const characterWrites = materializedWrites.filter(
-    (write): write is PlannedWrite & { kind: "character" } =>
-      write.kind === "character",
-  );
-  if (characterWrites.length > 0) {
-    const [characters, characterSchema] = await Promise.all([
-      options.store.listCharacters(options.sessionId),
-      options.store.getCharacterSchema(options.sessionId),
-    ]);
-    const merged = new Map(characters.map((record) => [record.id, record]));
-    for (const write of characterWrites)
-      merged.set(write.record.id, write.record);
-    validateWorldModel({ characters: [...merged.values()], characterSchema });
-  }
-  for (const write of materializedWrites) {
-    if (write.kind === "character") {
-      await options.store.upsertCharacter(write.record);
+      ): write is PlannedWrite &
+        ({ kind: "plugin-data" } | { kind: "media-index" }) =>
+        write.kind === "plugin-data" || write.kind === "media-index",
+    );
+    const pluginRecords = pluginWrites.map((write) =>
+      toPluginDataRecord(options.sessionId, write, options.now),
+    );
+    if (pluginRecords.length > 0) {
+      await options.store.setPluginDataBatch(pluginRecords);
     }
-  }
 
-  const lorebookRecordById = new Map(
-    lorebookEntries.map((entry) => [entry.write.id, entry.record]),
-  );
-  const ledger = materializedWrites.map((write) => {
-    const lorebookRecord =
-      write.kind === "lorebook" ? lorebookRecordById.get(write.id) : undefined;
-    return ledgerForWrite({
-      sessionId: options.sessionId,
-      worldId: options.worldId,
-      write,
-      now: options.now,
-      valueHash: valueHashForWrite({
-        sessionId: options.sessionId,
+    const lorebookEntries = materializedWrites
+      .filter(
+        (write): write is PlannedWrite & { kind: "lorebook" } =>
+          write.kind === "lorebook",
+      )
+      .map((write, index) => ({
         write,
-        lorebookRecord,
-      }),
+        record: toLorebookRecord(
+          options.sessionId,
+          write,
+          500 + index * 100,
+          options.now,
+        ),
+      }));
+    const lorebookRecords = lorebookEntries.map((entry) => entry.record);
+    if (lorebookRecords.length > 0) {
+      await options.store.upsertLorebookEntries(lorebookRecords);
+    }
+
+    const characterWrites = materializedWrites.filter(
+      (write): write is PlannedWrite & { kind: "character" } =>
+        write.kind === "character",
+    );
+    if (characterWrites.length > 0) {
+      const [characters, characterSchema] = await Promise.all([
+        options.store.listCharacters(options.sessionId),
+        options.store.getCharacterSchema(options.sessionId),
+      ]);
+      const merged = new Map(characters.map((record) => [record.id, record]));
+      for (const write of characterWrites)
+        merged.set(write.record.id, write.record);
+      validateWorldModel({ characters: [...merged.values()], characterSchema });
+    }
+    for (const write of materializedWrites) {
+      if (write.kind === "character") {
+        await options.store.upsertCharacter(write.record);
+      }
+    }
+
+    const lorebookRecordById = new Map(
+      lorebookEntries.map((entry) => [entry.write.id, entry.record]),
+    );
+    const ledger = materializedWrites.map((write) => {
+      const lorebookRecord =
+        write.kind === "lorebook"
+          ? lorebookRecordById.get(write.id)
+          : undefined;
+      return ledgerForWrite({
+        sessionId: options.sessionId,
+        worldId: options.worldId,
+        write,
+        now: options.now,
+        valueHash: valueHashForWrite({
+          sessionId: options.sessionId,
+          write,
+          lorebookRecord,
+        }),
+      });
     });
-  });
-  await options.store.saveWorldDataImportLedgerBatch?.(ledger);
+    await options.store.saveWorldDataImportLedgerBatch?.(ledger);
+  } catch (error) {
+    await releaseWorldDataMediaRefs({
+      mediaStore: options.mediaStore,
+      refs: materialized.mediaRefs,
+    });
+    throw error;
+  }
   if (!options.deferMediaFinalize) {
     await finalizeWorldDataMediaRefs({
       mediaStore: options.mediaStore,
@@ -238,7 +249,7 @@ export async function writeImportPlan(options: {
   }
 
   return {
-    written: materializedWrites.length,
+    written: materialized.writes.length,
     skipped,
     mediaRefs: materialized.mediaRefs,
   };

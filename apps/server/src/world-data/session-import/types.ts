@@ -89,6 +89,8 @@ export interface PreparedWorldDataSync {
 }
 
 export interface WorldDataImportedMediaRef {
+  /** Private preparation claim, never a real session identity. */
+  readonly temporarySessionId: string;
   readonly id: string;
   readonly sessionId: string;
   readonly pluginId: string;

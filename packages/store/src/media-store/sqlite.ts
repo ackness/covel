@@ -20,7 +20,10 @@ import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { createTables } from "../sqlite/sqlite-store-mappers.js";
 import type { SqliteMediaStoreOptions } from "./types.js";
-import { finalizeMediaCleanupResult } from "./cleanup-result.js";
+import {
+  claimedMediaIds,
+  finalizeMediaCleanupResult,
+} from "./cleanup-result.js";
 import {
   cleanupCandidates,
   filterAssetsByMetadata,
@@ -144,53 +147,68 @@ function initializeSqliteMediaStore(
   );
 
   const store: MediaStore = {
-    async put(blob, mime, meta) {
+    async put(blob, mime, meta, initialRef) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
-      const existing = select.get(id) as
-        | { id: string; mime: string; size: number; meta: string | null }
-        | undefined;
-      if (existing) {
-        return {
-          id: existing.id,
-          mime: existing.mime,
-          size: existing.size,
-          ...(existing.meta
-            ? {
-                meta: JSON.parse(existing.meta) as Readonly<
-                  Record<string, unknown>
-                >,
-              }
-            : {}),
-        };
-      }
-      const path = mediaPath(mediaRoot, id);
-      mkdirSync(dirname(path), { recursive: true });
-      // Publish only complete bytes. An orphan final file from an interrupted
-      // earlier write is replaced from the caller's verified content as well.
-      const temporaryPath = `${path}.${randomUUID()}.tmp`;
-      try {
-        writeFileSync(temporaryPath, bytes, { flag: "wx" });
-        renameSync(temporaryPath, path);
-      } finally {
-        rmSync(temporaryPath, { force: true });
-      }
-      const ref: MediaRef = {
-        id,
-        mime,
-        size: bytes.byteLength,
-        ...(meta === undefined ? {} : { meta: toMeta(meta) }),
-      };
-      insertAsset.run({
-        id,
-        sha256: id,
-        mime,
-        size: bytes.byteLength,
-        path,
-        meta: meta === undefined ? null : JSON.stringify(meta),
-        createdAt: new Date().toISOString(),
-      });
-      return ref;
+      return sqlite
+        .transaction(() => {
+          const claim = () => {
+            if (initialRef)
+              insertRef.run({
+                sessionId: initialRef.sessionId,
+                mediaId: id,
+                pluginId: initialRef.pluginId ?? null,
+                createdAt: new Date().toISOString(),
+              });
+          };
+          const existing = select.get(id) as
+            | { id: string; mime: string; size: number; meta: string | null }
+            | undefined;
+          if (existing) {
+            claim();
+            return {
+              id: existing.id,
+              mime: existing.mime,
+              size: existing.size,
+              ...(existing.meta
+                ? {
+                    meta: JSON.parse(existing.meta) as Readonly<
+                      Record<string, unknown>
+                    >,
+                  }
+                : {}),
+            };
+          }
+          const path = mediaPath(mediaRoot, id);
+          mkdirSync(dirname(path), { recursive: true });
+          // Publish only complete bytes. An orphan final file from an interrupted
+          // earlier write is replaced from the caller's verified content as well.
+          const temporaryPath = `${path}.${randomUUID()}.tmp`;
+          try {
+            writeFileSync(temporaryPath, bytes, { flag: "wx" });
+            renameSync(temporaryPath, path);
+          } finally {
+            rmSync(temporaryPath, { force: true });
+          }
+          const ref: MediaRef = {
+            id,
+            mime,
+            size: bytes.byteLength,
+            ...(meta === undefined ? {} : { meta: toMeta(meta) }),
+          };
+          insertAsset.run({
+            id,
+            sha256: id,
+            mime,
+            size: bytes.byteLength,
+            path,
+            meta: meta === undefined ? null : JSON.stringify(meta),
+            createdAt: new Date().toISOString(),
+          });
+          claim();
+          return ref;
+        })
+        .immediate();
     },
 
     async get(ref) {
@@ -317,7 +335,7 @@ function initializeSqliteMediaStore(
       const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
         inventory,
-        protectedIds,
+        claimedMediaIds(protectedIds, inventory, await this.listRefs()),
         policy,
       );
       if (!policy?.dryRun) {

@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { normalizeProviderKeyMap, toApiKeyEnvMap } from "./provider-keys.js";
+import {
+  normalizeProviderKeyMap,
+  providerKeyToId,
+  toApiKeyEnvMap,
+} from "./provider-keys.js";
 
 export function loadEnvFiles(baseDir: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -29,15 +33,19 @@ export function loadKeysEnvForChild(keysFile: string): Record<string, string> {
   return toApiKeyEnvMap(loadKeysEnv(keysFile));
 }
 
-/** Convert a complete renderer snapshot into the sidecar's patch protocol. */
-export function buildKeysEnvPatch(
+/** Apply one explicit patch when the sidecar is unavailable. */
+export function patchKeysEnv(
   keysFile: string,
-  keys: Record<string, string>,
-): Record<string, string> {
-  const removals = Object.fromEntries(
-    Object.keys(loadKeysEnv(keysFile)).map((provider) => [provider, ""]),
-  );
-  return { ...removals, ...normalizeProviderKeyMap(keys) };
+  patch: Record<string, string | null>,
+): void {
+  const keys = loadKeysEnv(keysFile);
+  for (const [name, value] of Object.entries(patch)) {
+    const provider = providerKeyToId(name);
+    if (!provider) continue;
+    if (value === null || !value.trim()) delete keys[provider];
+    else keys[provider] = value;
+  }
+  saveKeysEnv(keysFile, keys);
 }
 
 export function saveKeysEnv(

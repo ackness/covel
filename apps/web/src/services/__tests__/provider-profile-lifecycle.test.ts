@@ -31,8 +31,11 @@ beforeEach(async () => {
       entries = structuredClone(next);
     }),
     loadSecrets: async () => ({ ...secrets }),
-    saveSecrets: vi.fn(async (next) => {
-      secrets = { ...next };
+    saveSecrets: vi.fn(async (patch: Record<string, string | null>) => {
+      for (const [provider, value] of Object.entries(patch)) {
+        if (value === null) delete secrets[provider];
+        else secrets[provider] = value;
+      }
     }),
   };
   context.store = new SettingsStore(adapter);

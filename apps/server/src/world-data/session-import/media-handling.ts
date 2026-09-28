@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { MediaStore } from "@covel/store";
@@ -34,43 +35,77 @@ export async function materializeMediaIndexWrites(options: {
 }> {
   const out: PlannedWrite[] = [];
   const mediaRefs: WorldDataImportedMediaRef[] = [];
-  for (const write of options.writes) {
-    if (write.kind !== "media-index") {
-      out.push(write);
-      continue;
-    }
-    const importInfo = isRecord(write.value)
-      ? (write.value.import as unknown)
-      : undefined;
-    const mediaPath =
-      isRecord(importInfo) && typeof importInfo.path === "string"
-        ? importInfo.path
+  // Colon is excluded from user session IDs; each attempt owns only its claims.
+  const temporarySessionId = `world-data-import:${randomUUID()}`;
+  try {
+    for (const write of options.writes) {
+      if (write.kind !== "media-index") {
+        out.push(write);
+        continue;
+      }
+      const importInfo = isRecord(write.value)
+        ? (write.value.import as unknown)
         : undefined;
-    if (!mediaPath || !options.mediaStore) {
-      out.push(write);
-      continue;
+      const mediaPath =
+        isRecord(importInfo) && typeof importInfo.path === "string"
+          ? importInfo.path
+          : undefined;
+      if (!mediaPath || !options.mediaStore) {
+        out.push(write);
+        continue;
+      }
+      const bytes = await readFile(mediaPath);
+      const ref = await options.mediaStore.put(
+        bytes,
+        mediaMime(mediaPath),
+        {
+          filename: path.basename(mediaPath),
+          sourceId: write.source.id,
+        },
+        { sessionId: temporarySessionId, pluginId: write.pluginId },
+      );
+      const importedRef = {
+        temporarySessionId,
+        id: ref.id,
+        sessionId: options.sessionId,
+        pluginId: write.pluginId,
+      };
+      mediaRefs.push(importedRef);
+      out.push({
+        ...write,
+        value: {
+          ref,
+          filename: path.basename(mediaPath),
+          sourceId: write.source.id,
+        },
+      });
     }
-    const bytes = await readFile(mediaPath);
-    const ref = await options.mediaStore.put(bytes, mediaMime(mediaPath), {
-      filename: path.basename(mediaPath),
-      sourceId: write.source.id,
+    return { writes: out, mediaRefs };
+  } catch (error) {
+    await releaseWorldDataMediaRefs({
+      mediaStore: options.mediaStore,
+      refs: mediaRefs,
     });
-    const importedRef = {
-      id: ref.id,
-      sessionId: options.sessionId,
-      pluginId: write.pluginId,
-    };
-    mediaRefs.push(importedRef);
-    out.push({
-      ...write,
-      value: {
-        ref,
-        filename: path.basename(mediaPath),
-        sourceId: write.source.id,
-      },
-    });
+    throw error;
   }
-  return { writes: out, mediaRefs };
+}
+
+/** Release only preparation claims; never another import's or session's refs. */
+export async function releaseWorldDataMediaRefs(options: {
+  mediaStore?: MediaStore;
+  refs: readonly WorldDataImportedMediaRef[];
+}): Promise<void> {
+  if (!options.mediaStore) return;
+  for (const ref of options.refs) {
+    try {
+      await options.mediaStore.removeRef(ref.id, ref.temporarySessionId);
+    } catch {
+      // Retain conservatively without masking the original import outcome.
+      console.warn(
+        "[world-data] failed to release a temporary media reference",
+      );
+    }
+  }
 }
 
 export async function finalizeWorldDataMediaRefs(options: {
@@ -86,4 +121,5 @@ export async function finalizeWorldDataMediaRefs(options: {
     );
     await options.mediaStore.addRef(ref.id, ref.sessionId, ref.pluginId);
   }
+  await releaseWorldDataMediaRefs(options);
 }

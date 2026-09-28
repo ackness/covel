@@ -33,6 +33,7 @@ import { loadSessionHookScope } from "./session/hook-scope.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import {
   finalizeWorldDataMediaRefs,
+  releaseWorldDataMediaRefs,
   applyPreparedWorldDataImportForSession,
   prepareWorldDataImportForSession,
   type WorldDataImportedMediaRef,
@@ -323,6 +324,7 @@ sessionRoutes.post("/", async (c) => {
   // update atomic with delete/recreate. Plugin hooks run after releasing this
   // main lock: hook code may call back through the HTTP API and must be able to
   // acquire the session lock without deadlocking.
+  let creationCommitted = false;
   const commitCreation = async () => {
     // Scoped transaction: createSession + world-data import + blueprint
     // fallback commit atomically. Writes flow through the tx-bound view (`tx`),
@@ -367,9 +369,10 @@ sessionRoutes.post("/", async (c) => {
         }
         return importedWorldData.mediaRefs;
       });
+      creationCommitted = true;
     } catch (error) {
       // Media materialization intentionally happens before the transaction.
-      // Unclaimed bytes from failed preparation are left for media GC; a
+      // The outer finalizer releases this attempt's preparation claims; a
       // duplicate session request must never release the live session's refs.
       if (error instanceof SessionAlreadyExistsError) {
         return c.json(errorBody(error.message, { code: error.code }), 409);
@@ -383,6 +386,7 @@ sessionRoutes.post("/", async (c) => {
       });
     } catch (err) {
       await store.deleteSession(id);
+      creationCommitted = false;
       // This creation owns the session lifecycle lock; release only its claims.
       // Content-addressed bytes may be shared and are reclaimed by media GC.
       await c.get("mediaStore")?.releaseSession(id);
@@ -427,11 +431,20 @@ sessionRoutes.post("/", async (c) => {
       return { runStartHook: false };
     }
   };
-  const created = await sessionLock.withLock(id, () =>
-    rawWorldId
-      ? withWritableWorld(c, rawWorldId, commitCreation)
-      : commitCreation(),
-  );
+  const created = await sessionLock
+    .withLock(id, () =>
+      rawWorldId
+        ? withWritableWorld(c, rawWorldId, commitCreation)
+        : commitCreation(),
+    )
+    .finally(async () => {
+      // On a failed rollback, keep pins for the still-durable session rows.
+      if (!creationCommitted)
+        await releaseWorldDataMediaRefs({
+          mediaStore: c.get("mediaStore"),
+          refs: preparedWorldData.imported ? preparedWorldData.mediaRefs : [],
+        });
+    });
   if (created instanceof Response) {
     return created;
   }

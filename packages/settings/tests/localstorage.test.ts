@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalStorageBackend } from "../src/backends/localstorage.js";
+import { SettingsStore } from "../src/store.js";
+import { locks } from "node:worker_threads";
 
 function makeFakeStorage(): Storage {
   const map = new Map<string, string>();
@@ -29,7 +31,9 @@ describe("LocalStorageBackend", () => {
   let storage: Storage;
   beforeEach(() => {
     storage = makeFakeStorage();
+    vi.stubGlobal("navigator", { locks });
   });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("round-trips entries", async () => {
     const be = createLocalStorageBackend(storage);
@@ -52,6 +56,87 @@ describe("LocalStorageBackend", () => {
     expect(await be.loadSecrets()).toEqual({ openai: "sk-x" });
   });
 
+  it("preserves independent provider writes from two initialized stores", async () => {
+    const first = new SettingsStore(createLocalStorageBackend(storage));
+    const second = new SettingsStore(createLocalStorageBackend(storage));
+    await Promise.all([first.init(), second.init()]);
+
+    await first.set("keys.providerA", "synthetic-a");
+    await second.set("keys.providerB", "synthetic-b");
+
+    expect(await createLocalStorageBackend(storage).loadSecrets()).toEqual({
+      providerA: "synthetic-a",
+      providerB: "synthetic-b",
+    });
+  });
+
+  it("atomically merges concurrent provider writes", async () => {
+    const first = new SettingsStore(createLocalStorageBackend(storage));
+    const second = new SettingsStore(createLocalStorageBackend(storage));
+    await Promise.all([first.init(), second.init()]);
+    await Promise.all([
+      first.set("keys.providerA", "synthetic-a"),
+      second.set("keys.providerB", "synthetic-b"),
+    ]);
+    expect(await createLocalStorageBackend(storage).loadSecrets()).toEqual({
+      providerA: "synthetic-a",
+      providerB: "synthetic-b",
+    });
+    expect(storage.getItem("covel:settings")).toBeNull();
+  });
+
+  it("deletes only the named provider and never resurrects a stale sibling", async () => {
+    const backend = createLocalStorageBackend(storage);
+    await backend.saveSecrets({
+      providerA: "synthetic-a",
+      providerB: "synthetic-b",
+    });
+    const first = new SettingsStore(createLocalStorageBackend(storage));
+    const second = new SettingsStore(createLocalStorageBackend(storage));
+    await Promise.all([first.init(), second.init()]);
+    await Promise.all([
+      first.clear("keys.providerA"),
+      second.set("keys.providerB", "synthetic-next"),
+    ]);
+    expect(await backend.loadSecrets()).toEqual({
+      providerB: "synthetic-next",
+    });
+  });
+
+  it("preserves an explicit same-value write against another instance's change", async () => {
+    const backend = createLocalStorageBackend(storage);
+    await backend.saveSecrets({ providerA: "synthetic-old" });
+    const first = new SettingsStore(createLocalStorageBackend(storage));
+    const second = new SettingsStore(createLocalStorageBackend(storage));
+    await Promise.all([first.init(), second.init()]);
+    await first.set("keys.providerA", "synthetic-new");
+    await second.set("keys.providerA", "synthetic-old");
+    expect(await backend.loadSecrets()).toEqual({ providerA: "synthetic-old" });
+  });
+
+  it("preserves an explicit delete when the cached provider is already absent", async () => {
+    const backend = createLocalStorageBackend(storage);
+    const first = new SettingsStore(createLocalStorageBackend(storage));
+    const second = new SettingsStore(createLocalStorageBackend(storage));
+    await Promise.all([first.init(), second.init()]);
+    await first.set("keys.providerA", "synthetic-a");
+    await second.clear("keys.providerA");
+    expect(await backend.loadSecrets()).toEqual({});
+  });
+
+  it("refuses a non-atomic secret write without Web Locks", async () => {
+    storage.setItem("covel:keys", JSON.stringify({ providerA: "synthetic-a" }));
+    vi.stubGlobal("navigator", {});
+    await expect(
+      createLocalStorageBackend(storage).saveSecrets({
+        providerB: "synthetic-b",
+      }),
+    ).rejects.toThrow(/Web Locks/);
+    expect(await createLocalStorageBackend(storage).loadSecrets()).toEqual({
+      providerA: "synthetic-a",
+    });
+  });
+
   it("rejects corrupt JSON instead of treating it as empty", async () => {
     storage.setItem("covel:settings", "not-json");
     const be = createLocalStorageBackend(storage);
@@ -65,6 +150,9 @@ describe("LocalStorageBackend", () => {
     );
     const be = createLocalStorageBackend(storage);
     await expect(be.loadSecrets()).rejects.toThrow(/invalid/);
+    const original = storage.getItem("covel:keys");
+    await expect(be.saveSecrets({ openai: null })).rejects.toThrow(/invalid/);
+    expect(storage.getItem("covel:keys")).toBe(original);
   });
 
   it("reads the current bundle and detects a stale revision", async () => {

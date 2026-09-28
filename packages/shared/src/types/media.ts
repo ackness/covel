@@ -79,7 +79,13 @@ export interface MediaCleanupResult {
 }
 
 export interface MediaStore {
-  put(blob: Uint8Array | Blob, mime: string, meta?: object): Promise<MediaRef>;
+  /** Publish bytes and an optional initial reference atomically with cleanup. */
+  put(
+    blob: Uint8Array | Blob,
+    mime: string,
+    meta?: object,
+    initialRef?: { readonly sessionId: string; readonly pluginId?: string },
+  ): Promise<MediaRef>;
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
   resolveUrl(ref: MediaRef): Promise<string>;

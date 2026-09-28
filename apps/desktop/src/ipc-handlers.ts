@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
-import { buildKeysEnvPatch, loadKeysEnv, saveKeysEnv } from "./env-files.js";
+import { loadKeysEnv, patchKeysEnv } from "./env-files.js";
 import {
   importAsset,
   type ImportKind,
@@ -100,7 +100,9 @@ export interface DesktopIpcHandlersDeps {
     entries: Record<string, unknown>,
     expectedRevision: number,
   ) => Promise<SettingsPersistenceBundle>;
-  readonly saveKeysViaSidecar: (keys: Record<string, string>) => Promise<void>;
+  readonly saveKeysViaSidecar: (
+    keys: Record<string, string | null>,
+  ) => Promise<void>;
 }
 
 export function registerDesktopIpcHandlers({
@@ -227,19 +229,18 @@ export function registerDesktopIpcHandlers({
     if (!isTrustedSender(event, "covel:keys:save")) return { ok: false };
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       return { ok: false };
-    const keys: Record<string, string> = {};
+    const keys: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
-      if (typeof v !== "string") return { ok: false };
+      if (v !== null && typeof v !== "string") return { ok: false };
       keys[k] = v;
     }
     try {
-      const patch = buildKeysEnvPatch(paths.userKeysEnvPath, keys);
       try {
-        await saveKeysViaSidecar(patch);
+        await saveKeysViaSidecar(keys);
       } catch (err) {
         if (!isSidecarUnavailable(err)) throw err;
         writeLog("warn", "keys:save sidecar fallback:", err);
-        saveKeysEnv(paths.userKeysEnvPath, keys);
+        patchKeysEnv(paths.userKeysEnvPath, keys);
       }
       return { ok: true };
     } catch (err) {

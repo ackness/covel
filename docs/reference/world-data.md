@@ -692,7 +692,7 @@ POST /api/worlds/<world-id>/sync-data
 5. source 已移除且目标 row 也已缺失时，只清理 stale ledger，不报告 conflict。
 6. 传 `force:true` 时允许覆盖 modified/missing 冲突。
 
-media index 同步删除只在事务提交后移除当前 session 的显式 media ref；ownership 随会话生命周期释放，底层内容寻址字节由媒体 GC 回收。准备阶段仅写入字节，不创建 owner/ref。导入失败留下的无归属字节也交给 GC，不根据准备时的旧状态强制删除可能已被其他会话引用的内容。新建会话的媒体 finalization 失败时，在同一会话生命周期锁内删除该会话并释放其媒体归属与引用。
+media index 同步删除只在事务提交后移除当前 session 的显式 media ref；ownership 随会话生命周期释放，底层内容寻址字节由媒体 GC 回收。准备阶段将字节和本次导入专属的 `world-data-import:<uuid>` 临时引用原子写入，防止发布完成前被 GC 回收。finalization 先建立真实会话的归属与引用，再释放临时引用；准备、事务或会话准入失败只释放本次导入的临时引用，不强制删除共享字节，不释放已有会话的 claims。新建会话的媒体 finalization 失败时，在同一会话生命周期锁内删除该会话并释放其媒体归属与引用。语义事务已提交但媒体 finalization 失败时保留临时引用，避免已提交索引失去保护；会话创建回滚删除失败时同样保留。临时引用释放失败仅记录日志；进程崩溃或释放失败可能遗留临时引用，GC 会保守保留其字节，不会自动过期，需确认导入已停止后人工清理。此机制复用现有引用表，无需迁移。
 
 ### World 包与插件包的边界
 

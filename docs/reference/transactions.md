@@ -361,11 +361,18 @@ that ledger for dry-run, hash-based conflict detection, and explicit
 
 Media bytes live in `MediaStore`, which has a separate lifecycle from
 `DataStore`. World-data import validates media during preflight, writes the
-media object before the session-store media index row, and rolls back the
-`DataStore` transaction on failure. Sync deletion of importer-managed media
-index rows removes only the current session's explicit media ref; the
-content-addressed media asset is deleted only when the current session owns it
-and no refs remain.
+media object and a unique temporary reference atomically before the session-store
+media index row, and rolls back the `DataStore` transaction on failure. The
+reference protects unpublished bytes from concurrent GC. Finalization establishes
+session claims before releasing the temporary reference; failed preparation or
+publication releases only that attempt's temporary references. Sync deletion of
+importer-managed media index rows removes only the current session's explicit
+media ref. Lifecycle GC reclaims bytes after all ownership/ref claims are gone.
+Temporary-reference release failures are logged without masking the import
+outcome. Crashes may leave conservative pins that require operator cleanup;
+there is no automatic expiry or schema migration. If semantic data has committed
+but media finalization fails, temporary references remain to protect that data;
+creation rollback only releases them after the session deletion succeeds.
 
 ### Observability
 
@@ -410,7 +417,7 @@ the affected table in the relevant reference doc.
 
 - **`POST /worlds/:id/sync-dimensions`** — 世界所有的 Lorebook 条目更新（upsert 新条目 → 删除过期条目，不写插件私有数据）在**一个 SessionLock + 一个 store transaction** 内完成。失败整体回滚并返回 500，不会让下一轮 prompt 读到「删了一半」的世界数据。
 - **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑（新扫描会把该改动报为正常 conflict）或显式 `force`。路由同时持 SessionLock，挡住回合并发写。
-- **媒体副作用仍在 DB 事务内**（`deferMediaFinalize: false`）。DB 回滚无法撤销已写入的 media bytes，因此 materialize 过程使用**增量补偿栈**：每次 `put` 成功立即登记，中途失败也能清理已落盘的资产。
+- **媒体与 DataStore 分属不同生命周期**。session create 和 sync 在语义事务前准备媒体，`put` 原子建立本次导入专属临时引用。发布成功先建立 session claims 再释放临时引用；提交前失败只释放本次临时引用，无归属字节交给 GC，不强制删除内容。提交后 finalization 失败则保留保护，创建回滚成功删除会话后才可释放。兼容调用入口若在 DataStore 事务内 materialize，也遵守同一引用规则。进程崩溃可能留下无自动过期的临时引用，需确认导入已停止后人工清理。
 - **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。
 
 记忆抽取使用通用 detached runtime 作业。故事提交事务同时保存 `turn-digest@1` 和作业记录，凭据仅保留在进程内交接表；登记后事务失败必须清理对应凭据。Worker 将插件块的 proposal 与作业完成回执放在同一事务里提交。

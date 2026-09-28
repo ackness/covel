@@ -196,7 +196,16 @@ describe("json-file backend IPC write contract", () => {
 });
 
 describe("json-file backend REST secrets contract", () => {
-  it("preserves opaque configured providers and translates omissions to deletes", async () => {
+  it("passes explicit secret patches unchanged through IPC", async () => {
+    const invoke = vi.fn().mockResolvedValue({ ok: true });
+    const backend = createJsonFileBackend({ ipc: { invoke } });
+    await backend.saveSecrets({ providerA: "synthetic-a", providerB: null });
+    expect(invoke).toHaveBeenCalledWith("covel:keys:save", {
+      providerA: "synthetic-a",
+      providerB: null,
+    });
+  });
+  it("preserves omitted providers and sends only explicit changes", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(res(200, { items: ["deepseek", "open-router"] }))
@@ -210,12 +219,13 @@ describe("json-file backend REST secrets contract", () => {
     await backend.saveSecrets({
       deepseek: SERVER_MANAGED_SECRET,
       qwen: "new-qwen-key",
+      deleted: null,
     });
 
     const init = fetchImpl.mock.calls[1]?.[1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
       qwen: "new-qwen-key",
-      "open-router": null,
+      deleted: null,
     });
   });
 

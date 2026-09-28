@@ -514,6 +514,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("gives builtin plugin actions scoped immediate writes without host store authority", async () => {
+    await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     let exposed: string[] = [];
     const createdAt = "2026-01-01T00:00:00.000Z";
     await store.setPluginData({
@@ -578,7 +579,71 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     ).toBeNull();
   });
 
+  it.each(["builtin", "community"] as const)(
+    "rejects actions from a disabled %s plugin before approval or handler execution",
+    async (trust) => {
+      const handler = vi.fn(async () => ({ updated: true }));
+      registry.registerPluginHandler("fixture", "update", handler, {}, trust);
+      const response = await app.request(
+        "/api/sessions/sess-rpc-1/plugin-rpc",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "action",
+            pluginId: "fixture",
+            action: "update",
+          }),
+        },
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        code: "plugin_not_active",
+      });
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rechecks action activation after waiting for the session lock", async () => {
+    const { app, store, registry, sessionLock, gate } = setup();
+    await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: ["fixture"] });
+    const handler = vi.fn(async () => ({ updated: true }));
+    registry.registerPluginHandler("fixture", "update", handler, {}, "builtin");
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const admitted = Promise.withResolvers<void>();
+    const evaluate = gate.evaluate.bind(gate);
+    vi.spyOn(gate, "evaluate").mockImplementation((input) => {
+      admitted.resolve();
+      return evaluate(input);
+    });
+    const owner = sessionLock.withLock("sess-rpc-1", async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const pending = app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: "fixture",
+        action: "update",
+      }),
+    });
+    await admitted.promise;
+    await store.updateSession("sess-rpc-1", { activePlugins: [] });
+    release.resolve();
+    await owner;
+    const response = await pending;
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "plugin_not_active" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("dispatches an entry-registered plugin action", async () => {
+    await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     registry.registerPluginHandler(
       "codex",
       "regenerate",
@@ -928,6 +993,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   it("routes an entry-registered action through the approval gate instead of 404", async () => {
     const { app, store, registry, activateCalls } = setupEntry();
     await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: [PLUGIN_ID] });
 
     const res = await call(app, "entry-action");
 
@@ -948,6 +1014,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   it("activates the entry and dispatches after the approval is granted", async () => {
     const { app, store, gate, registry } = setupEntry();
     await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: [PLUGIN_ID] });
 
     const first = await call(app, "entry-action");
     const { approvalId } = (await first.json()) as { approvalId: string };
@@ -989,6 +1056,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   it("404s a genuinely-unknown action once the entry is active", async () => {
     const { app, store, gate } = setupEntry();
     await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: [PLUGIN_ID] });
 
     // Approve loading the entry, then verify an undeclared action is rejected
     // before any action-specific approval is created.

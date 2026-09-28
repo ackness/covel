@@ -34,9 +34,13 @@
 
 `SettingsStoreApi.refresh(): Promise<void>` 按队列顺序读取非密钥设置，并通知实际变化的键。刷新与待保存修改并发时，后续修改仍会按其原始基值检查冲突。未声明 revision 能力的自定义后端使用串行快照写入，`refresh()` 不读取此类后端；这是后端能力差异，不支持旧持久化格式。
 
-Web 在 `covel:settings` 的 storage 事件、窗口 focus 和恢复可见时刷新。配置中的地址、价格倍率、输出额度草稿遇到远端更新时保留输入，阻止自动覆盖，并提供“加载已保存值”操作。API key 的读取、写入和删除不参与上述同步或合并。
+Web 在 `covel:settings` 的 storage 事件、窗口 focus 和恢复可见时刷新。配置中的地址、价格倍率、输出额度草稿遇到远端更新时保留输入，阻止自动覆盖，并提供“加载已保存值”操作。API key 不参与上述普通设置刷新或广播；写入通过独立的 provider patch 合并。
 
 ## 密钥通道边界
+
+`SettingsBackendAdapter.saveSecrets(patch)`、桌面 `covel:keys:save` 和 REST `/api/config/keys` 都接受 provider 到 `string | null` 的增量映射。未提及的 provider 保持不变，`null` 明确删除；不同实例写入不同 provider 不会覆盖彼此。同一 provider 按后端接收的写入顺序生效，显式重复设置旧值或删除不存在于本地缓存的 key 仍会提交。此通道不提供同键 CAS。`clearAll()` 只删除当前实例已知的 provider，不删除其他实例后来新增的未知 provider。
+
+localStorage 后端必须在 Web Lock 内读取最新密钥、应用 patch 并写回；缺少 Web Locks 时拒绝密钥保存，需使用支持的 HTTPS 或 localhost 环境。REST 由服务端应用 patch，桌面 IPC 在侧车不可用时同步读取并合并本地文件。密钥不进入普通 settings、revision 广播或默认导出。自定义 adapter 必须实现相同的原子 patch 合同，不再接收完整密钥快照。
 
 `keys.*` 命名空间以及注册为 `backend: "keys"` 或 `secret: true` 的条目使用独立 secrets 通道，普通后端声明不能覆盖 `keys.*` 的含义。导入选中的普通 `entries` 若包含此类条目，会在任何写入前明确拒绝；密钥必须位于 `bundle.keys`，并显式设置 `includeSecrets: true`。普通序列化和导出始终过滤已知 secret 条目。
 

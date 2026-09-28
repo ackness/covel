@@ -158,14 +158,34 @@ Only the current `(session_id, media_id)` constraint is supported. Recreate
 development databases that use the former media-reference shape; the framework
 does not migrate or automatically delete old rows.
 
-World-data preparation only materializes bytes; it creates no owner or session
-reference. A failed prepare/import leaves those bytes for lifecycle GC. It never
-force-deletes a content ID based on whether it was unclaimed during preparation:
-another session may have claimed the same bytes in the meantime. If a newly
-created session fails media finalization, the creation path deletes that session
-and releases its claims under the session lifecycle lock. Duplicate creation
-failures cannot release an existing session's claims. Sync removes its explicit
-references after commit and leaves ownership/byte reclamation to lifecycle GC.
+`put(bytes, mime, meta?, initialRef?)` can create an initial reference in the
+same critical section/transaction that publishes the bytes, including when the
+content already exists. It does not assign ownership. The reference follows the
+usual `(sessionId, mediaId)` first-writer-wins rule and is visible to cleanup
+before `put` returns.
+
+World-data preparation uses this operation to pin bytes under a unique
+`world-data-import:<uuid>` reference. The colon is outside the accepted user
+session-ID alphabet. Each import attempt therefore owns separate temporary
+references even when concurrent attempts target the same session and content.
+Finalization establishes the real session's ownership/ref before releasing the
+temporary references. Preparation, semantic-write, duplicate-session, and world
+admission failures release only the current attempt's temporary references;
+they never force-delete shared content or release an existing session's claims.
+Unclaimed bytes are then eligible for lifecycle GC. If a newly created session
+fails media finalization, creation deletes that session and releases its claims
+under the session lifecycle lock. Sync removes explicit references after commit
+and leaves ownership/byte reclamation to lifecycle GC.
+
+If semantic data has committed but finalization fails, the temporary reference
+remains until permanent claims can be recovered. Session creation releases it
+after a successful rollback; a failed rollback also retains the pin.
+Temporary-reference release is best-effort and logs failures without changing
+the import outcome. A process crash or release failure can leave a temporary
+reference behind; cleanup conservatively retains its bytes. These references
+have no automatic expiry. An operator must establish that the import is no
+longer active before manually removing an abandoned temporary reference. No
+persistent schema change or development-data recreation is required.
 
 ## Lifecycle Cleanup
 
@@ -176,7 +196,9 @@ owners and rethrows the original error. After success, the returned store's
 
 The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler integration. The route scans live sessions, messages, plugin data, runtime outputs, trace events, snapshots, turn results, `MediaStore.listAssets()`, and `MediaStore.listRefs()` with the shared `collectMediaRefIds()` scanner, then passes the protected id set into `MediaStore.cleanup()`.
 
-`protectedIds` is a planning snapshot, not the final deletion authority. Every
+`protectedIds` is a planning snapshot, not the final deletion authority. Cleanup
+also includes every current ownership/ref claim in its plan, including temporary
+import references, so dry runs report pinned assets as protected. Every
 backend rechecks the asset's current owner and reference rows in the same
 critical section/transaction as deletion (PG advisory transaction lock +
 `NOT EXISTS`, SQLite `BEGIN IMMEDIATE`, IndexedDB two-store `readwrite`, Memory

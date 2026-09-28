@@ -1,7 +1,10 @@
 import type { MediaStore } from "@covel/shared";
 import postgres, { type JSONValue, type Sql } from "postgres";
 import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-store-mappers.js";
-import { finalizeMediaCleanupResult } from "./cleanup-result.js";
+import {
+  claimedMediaIds,
+  finalizeMediaCleanupResult,
+} from "./cleanup-result.js";
 import type { PgMediaStoreOptions } from "./types.js";
 import {
   cleanupCandidates,
@@ -88,7 +91,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
   }
 
   return {
-    async put(blob, mime, meta) {
+    async put(blob, mime, meta, initialRef) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
       return sql.begin(async (tx) => {
@@ -106,7 +109,16 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
           WHERE id = ${id}
           LIMIT 1
         `;
+        const claim = async () => {
+          if (!initialRef) return;
+          await tx`
+            INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
+            VALUES (${initialRef.sessionId}, ${id}, ${initialRef.pluginId ?? null}, ${new Date().toISOString()})
+            ON CONFLICT (session_id, media_id) DO NOTHING
+          `;
+        };
         if (existing[0]) {
+          await claim();
           return {
             id: existing[0].id,
             mime: existing[0].mime,
@@ -129,6 +141,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
           ON CONFLICT (id) DO NOTHING
         `;
 
+        await claim();
         return {
           id,
           mime,
@@ -302,7 +315,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
       const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
         inventory,
-        protectedIds,
+        claimedMediaIds(protectedIds, inventory, await this.listRefs()),
         policy,
       );
       if (!policy?.dryRun) {

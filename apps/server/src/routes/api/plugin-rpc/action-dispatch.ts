@@ -65,6 +65,20 @@ export async function dispatchPluginAction(
     body.kind === "command" ? resolvedCommand!.action : body.action;
   const pluginId =
     body.kind === "command" ? resolvedCommand!.pluginId : body.pluginId;
+  const inactiveAction = (current: SessionRecord): Response | undefined => {
+    if (
+      body.kind === "action" &&
+      pluginId !== FRAMEWORK_PLUGIN_SENTINEL &&
+      !(current.activePlugins ?? []).includes(pluginId)
+    ) {
+      return c.json(
+        errorBody(`plugin "${pluginId}" is not active in this session`, {
+          code: "plugin_not_active",
+        }),
+        404,
+      );
+    }
+  };
   const actionPayload =
     body.kind === "command" ? commandInvocation : body.payload;
   const registry = c.get("rpcRegistry");
@@ -110,6 +124,9 @@ export async function dispatchPluginAction(
       404,
     );
   }
+  const inactive = inactiveAction(session);
+  if (inactive) return inactive;
+
   // Community modules execute in the server process and register global
   // capabilities. Hosted deployments therefore require the operator
   // credential in addition to the session owner token.
@@ -275,6 +292,8 @@ export async function dispatchPluginAction(
         );
       }
       const liveActivePlugins = liveSession.activePlugins ?? [];
+      const inactive = inactiveAction(liveSession);
+      if (inactive) return inactive;
       if (pluginId === FRAMEWORK_PLUGIN_SENTINEL && action === "submit-form") {
         const approval = await preflightFormApprovals(
           c,
