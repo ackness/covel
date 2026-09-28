@@ -12,6 +12,9 @@
     "apps/desktop": {
       "ignoreDependencies": ["@covel/web"]
     },
+    "packages/plugin-test-utils": {
+      "entry": ["src/sdk-alignment.ts"]
+    },
     "plugins/*": {
       "entry": [
         "handler.js",
