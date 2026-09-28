@@ -1,4 +1,4 @@
-import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
+import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.js";
 
 function validationPath(path) {
   if (path === "(root)") return [];
