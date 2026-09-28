@@ -166,9 +166,15 @@ describe("handler store ownership", () => {
         "a",
       ]),
     ).toBeNull();
-    expect(
+    for (const records of [
       await Reflect.apply(trusted.listCharacters, trusted, ["other"]),
-    ).toEqual(await trusted.listCharacters());
+      await trusted.listCharacters(),
+    ]) {
+      // Overlay reads derive updatedAt independently; authority must stay bound.
+      expect(records).toEqual([
+        { ...character(), name: "Buffered", updatedAt: expect.any(String) },
+      ]);
+    }
     expect(Reflect.get(trusted, "listPluginDataSessionScope")).toBeUndefined();
     expect(
       (await store.getPluginData(ctx.sessionId, ctx.pluginId, "items", "a"))!
