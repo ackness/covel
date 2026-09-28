@@ -35,6 +35,12 @@ export function createExtensionRegistration(
       )
     )
       throw invalid("static-prompt is reserved for contributes.prompt");
+    // Locale variants are resolved per-turn, so a plugin that ships any
+    // PLUGIN.<locale>.md file can produce different content each turn.
+    // When no variants exist the content never changes and should respect
+    // the segment's declared volatility instead of breaking the cache every
+    // turn unnecessarily.
+    const hasLocaleVariants = Object.keys(staticVariants).length > 0;
     batch.stage(() => {
       if (!host) throw new Error("Plugin extension host is unavailable");
       batch.track(
@@ -60,7 +66,10 @@ export function createExtensionRegistration(
               return segments.map((segment) => ({
                 ...segment,
                 audience: "self",
-                volatility: "turn",
+                // Force turn-scoped volatility only when locale variants
+                // exist — the selected variant can change per turn, so it
+                // must not land in the stable cache zone.
+                ...(hasLocaleVariants ? { volatility: "turn" as const } : {}),
               }));
             },
           },
