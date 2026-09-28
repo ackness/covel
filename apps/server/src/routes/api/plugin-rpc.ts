@@ -341,6 +341,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const turnId = crypto.randomUUID();
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
+      memorySystem: c.get("memorySystem"),
       resolveImageFlowRuntimeIds: async () =>
         (
           await resolveMediaImageFlow(

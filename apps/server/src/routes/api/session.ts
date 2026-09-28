@@ -32,7 +32,6 @@ import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
 import { loadSessionHookScope } from "./session/hook-scope.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import {
-  cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
   applyPreparedWorldDataImportForSession,
   prepareWorldDataImportForSession,
@@ -318,18 +317,13 @@ sessionRoutes.post("/", async (c) => {
       registry: pluginRegistry,
     },
   });
-  const preparedMediaRefs = preparedWorldData.imported
-    ? preparedWorldData.mediaRefs
-    : [];
 
   const sessionLock = c.get("sessionLock");
   // Keep the persistent commit, media finalisation and process-local registry
   // update atomic with delete/recreate. Plugin hooks run after releasing this
   // main lock: hook code may call back through the HTTP API and must be able to
   // acquire the session lock without deadlocking.
-  let creationStarted = false;
   const commitCreation = async () => {
-    creationStarted = true;
     // Scoped transaction: createSession + world-data import + blueprint
     // fallback commit atomically. Writes flow through the tx-bound view (`tx`),
     // so a mid-import failure auto-rolls-back the session row — and on
@@ -375,12 +369,8 @@ sessionRoutes.post("/", async (c) => {
       });
     } catch (error) {
       // Media materialization intentionally happens before the transaction.
-      // If createSession or a later transactional fallback fails before the
-      // prepared importer can return its refs, compensate them here.
-      await cleanupWorldDataMediaRefs({
-        mediaStore: c.get("mediaStore"),
-        refs: preparedMediaRefs,
-      });
+      // Unclaimed bytes from failed preparation are left for media GC; a
+      // duplicate session request must never release the live session's refs.
       if (error instanceof SessionAlreadyExistsError) {
         return c.json(errorBody(error.message, { code: error.code }), 409);
       }
@@ -393,10 +383,9 @@ sessionRoutes.post("/", async (c) => {
       });
     } catch (err) {
       await store.deleteSession(id);
-      await cleanupWorldDataMediaRefs({
-        mediaStore: c.get("mediaStore"),
-        refs: importedMediaRefs,
-      });
+      // This creation owns the session lifecycle lock; release only its claims.
+      // Content-addressed bytes may be shared and are reclaimed by media GC.
+      await c.get("mediaStore")?.releaseSession(id);
       throw err;
     }
 
@@ -438,27 +427,12 @@ sessionRoutes.post("/", async (c) => {
       return { runStartHook: false };
     }
   };
-  let created: Awaited<ReturnType<typeof commitCreation>> | Response;
-  try {
-    created = await sessionLock.withLock(id, () =>
-      rawWorldId
-        ? withWritableWorld(c, rawWorldId, commitCreation)
-        : commitCreation(),
-    );
-  } catch (error) {
-    if (!creationStarted)
-      await cleanupWorldDataMediaRefs({
-        mediaStore: c.get("mediaStore"),
-        refs: preparedMediaRefs,
-      });
-    throw error;
-  }
+  const created = await sessionLock.withLock(id, () =>
+    rawWorldId
+      ? withWritableWorld(c, rawWorldId, commitCreation)
+      : commitCreation(),
+  );
   if (created instanceof Response) {
-    if (!creationStarted)
-      await cleanupWorldDataMediaRefs({
-        mediaStore: c.get("mediaStore"),
-        refs: preparedMediaRefs,
-      });
     return created;
   }
 

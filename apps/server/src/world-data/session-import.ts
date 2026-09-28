@@ -2,10 +2,8 @@ import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
-  cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
-  maybeDeleteOwnedUnreferencedMedia,
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
 import {
@@ -44,7 +42,7 @@ function deferredProjectionLedgerKey(
   return `${ledger.sourceId}\u0000${projection.slice("projection:".length)}\u0000${output.slice("output:".length)}`;
 }
 
-export { cleanupWorldDataMediaRefs, finalizeWorldDataMediaRefs };
+export { finalizeWorldDataMediaRefs };
 
 export type {
   ImportWorldDataForSessionResult,
@@ -113,21 +111,13 @@ export async function prepareWorldDataImportForSession(
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   let materializedWrites = plan.writes;
   if (options.mediaStore) {
-    try {
-      const materialized = await materializeMediaIndexWrites({
-        mediaStore: options.mediaStore,
-        sessionId: options.sessionId,
-        writes: plan.writes,
-        onMediaRef: (ref) => mediaRefs.push(ref),
-      });
-      materializedWrites = materialized.writes;
-    } catch (error) {
-      await cleanupWorldDataMediaRefs({
-        mediaStore: options.mediaStore,
-        refs: mediaRefs,
-      });
-      throw error;
-    }
+    const materialized = await materializeMediaIndexWrites({
+      mediaStore: options.mediaStore,
+      sessionId: options.sessionId,
+      writes: plan.writes,
+    });
+    mediaRefs.push(...materialized.mediaRefs);
+    materializedWrites = materialized.writes;
   }
   return {
     imported: true,
@@ -158,23 +148,15 @@ export async function applyPreparedWorldDataImportForSession(
     };
   }
   let result: Awaited<ReturnType<typeof writeImportPlan>>;
-  try {
-    result = await writeImportPlan({
-      store: options.store,
-      mediaStore: options.mediaStore,
-      sessionId: options.sessionId,
-      worldId: options.worldId,
-      now: options.now,
-      plan: options.prepared.plan,
-      deferMediaFinalize: options.deferMediaFinalize,
-    });
-  } catch (error) {
-    await cleanupWorldDataMediaRefs({
-      mediaStore: options.mediaStore,
-      refs: options.prepared.mediaRefs,
-    });
-    throw error;
-  }
+  result = await writeImportPlan({
+    store: options.store,
+    mediaStore: options.mediaStore,
+    sessionId: options.sessionId,
+    worldId: options.worldId,
+    now: options.now,
+    plan: options.prepared.plan,
+    deferMediaFinalize: options.deferMediaFinalize,
+  });
   if (!options.deferMediaFinalize && options.prepared.mediaRefs.length > 0) {
     await finalizeWorldDataMediaRefs({
       mediaStore: options.mediaStore,
@@ -583,103 +565,80 @@ export async function syncWorldDataForSession(
   }
 
   const mediaRefs: WorldDataImportedMediaRef[] = [];
-  // Media ids unreferenced by ledger deletes inside the transaction. Their
-  // removeRef + owned-media delete (which does an irreversible rmSync) is
-  // finalized only AFTER commit — the mirror of the put-side deferral — so a
-  // mid-transaction abort rolls back the DB rows without having deleted a file
-  // the restored rows still point at.
+  // Drop references only after the semantic transaction commits.
   const pendingMediaUnrefs: string[] = [];
-  let materializedWritesToApply: readonly PlannedWrite[] = writesToApply;
-  try {
-    const materialized = await materializeMediaIndexWrites({
-      mediaStore: options.mediaStore,
-      sessionId: options.sessionId,
-      writes: writesToApply,
-      onMediaRef: (ref) => mediaRefs.push(ref),
-    });
-    materializedWritesToApply = materialized.writes;
+  const materialized = await materializeMediaIndexWrites({
+    mediaStore: options.mediaStore,
+    sessionId: options.sessionId,
+    writes: writesToApply,
+  });
+  mediaRefs.push(...materialized.mediaRefs);
+  const materializedWritesToApply = materialized.writes;
 
-    // Scoped transaction: ledger deletes + plan writes commit atomically and a
-    // throw auto-rolls-back the DB. `mediaRefs` is collected on the outer array
-    // so the catch below can still clean up media written before the failure
-    // (media files live outside the DB transaction).
-    await options.store.withTransaction(async (tx) => {
-      // Compare-and-swap. The conflict scan above ran BEFORE this transaction
-      // opened, so anything it declared unmodified could have been edited in
-      // between — by a turn, or by another HTTP writer — and a `force: false`
-      // sync would then silently overwrite that edit. Re-read each target's
-      // hash inside the transaction and abort the whole thing if it moved.
-      // The caller's session lock closes the turn-interleave window; this
-      // closes the rest.
-      if (!options.force) {
-        for (const ledger of ledgersToDelete) {
-          const freshHash = await currentHashForLedger({
-            store: tx,
-            sessionId: options.sessionId,
-            ledger,
-          });
-          // `null` means the target is already gone — deleting it is still the
-          // right outcome, and the pre-scan reached the same conclusion.
-          if (freshHash !== null && freshHash !== ledger.valueHash) {
-            throw new WorldDataSyncConflictError(
-              `world-data sync aborted: "${ledgerKey(ledger)}" changed after the conflict check`,
-            );
-          }
-        }
-      }
-
+  // Scoped transaction: ledger deletes + plan writes commit atomically and a
+  // throw rolls back the DB. Unclaimed materialized bytes remain for media GC.
+  await options.store.withTransaction(async (tx) => {
+    // Compare-and-swap. The conflict scan above ran BEFORE this transaction
+    // opened, so anything it declared unmodified could have been edited in
+    // between — by a turn, or by another HTTP writer — and a `force: false`
+    // sync would then silently overwrite that edit. Re-read each target's
+    // hash inside the transaction and abort the whole thing if it moved.
+    // The caller's session lock closes the turn-interleave window; this
+    // closes the rest.
+    if (!options.force) {
       for (const ledger of ledgersToDelete) {
-        await deleteLedgerTarget({
+        const freshHash = await currentHashForLedger({
           store: tx,
           sessionId: options.sessionId,
           ledger,
-          onMediaUnref: (mediaId) => pendingMediaUnrefs.push(mediaId),
         });
-        await tx.deleteWorldDataImportLedger(options.sessionId, ledger.id);
+        // `null` means the target is already gone — deleting it is still the
+        // right outcome, and the pre-scan reached the same conclusion.
+        if (freshHash !== null && freshHash !== ledger.valueHash) {
+          throw new WorldDataSyncConflictError(
+            `world-data sync aborted: "${ledgerKey(ledger)}" changed after the conflict check`,
+          );
+        }
       }
-      if (materializedWritesToApply.length > 0) {
-        const writeResult = await writeImportPlan({
-          store: tx,
-          // Media-index writes were materialized above, before opening the DB
-          // transaction. Keeping this undefined guards against future write
-          // shapes accidentally performing filesystem I/O in the transaction.
-          mediaStore: undefined,
-          sessionId: options.sessionId,
-          worldId,
-          now: options.now,
-          plan: {
-            writes: materializedWritesToApply,
-            diagnostics: [],
-            mergeEvents: [],
-            deferredProjectionOutputs: [],
-          },
-          deferMediaFinalize: options.deferMediaFinalize,
-        });
-        mediaRefs.push(...writeResult.mediaRefs);
-      }
-    });
-  } catch (err) {
-    await cleanupWorldDataMediaRefs({
-      mediaStore: options.mediaStore,
-      refs: mediaRefs,
-    });
-    throw err;
-  }
+    }
 
-  // The transaction committed. Only now delete the media unreferenced by the
-  // ledger deletes: removeRef drops the ref row, and an owned asset with no
-  // remaining refs is deleted (files and all). A failure here leaks a ref/asset
-  // (a GC concern) rather than stranding a committed reference on a missing
-  // file, so each is best-effort and independent.
+    for (const ledger of ledgersToDelete) {
+      await deleteLedgerTarget({
+        store: tx,
+        sessionId: options.sessionId,
+        ledger,
+        onMediaUnref: (mediaId) => pendingMediaUnrefs.push(mediaId),
+      });
+      await tx.deleteWorldDataImportLedger(options.sessionId, ledger.id);
+    }
+    if (materializedWritesToApply.length > 0) {
+      const writeResult = await writeImportPlan({
+        store: tx,
+        // Media-index writes were materialized above, before opening the DB
+        // transaction. Keeping this undefined guards against future write
+        // shapes accidentally performing filesystem I/O in the transaction.
+        mediaStore: undefined,
+        sessionId: options.sessionId,
+        worldId,
+        now: options.now,
+        plan: {
+          writes: materializedWritesToApply,
+          diagnostics: [],
+          mergeEvents: [],
+          deferredProjectionOutputs: [],
+        },
+        deferMediaFinalize: options.deferMediaFinalize,
+      });
+      mediaRefs.push(...writeResult.mediaRefs);
+    }
+  });
+
+  // Release references after commit. Ownership/bytes remain for lifecycle GC;
+  // content-addressed media can be claimed by another session concurrently.
   if (options.mediaStore && pendingMediaUnrefs.length > 0) {
     for (const mediaId of pendingMediaUnrefs) {
       try {
         await options.mediaStore.removeRef(mediaId, options.sessionId);
-        await maybeDeleteOwnedUnreferencedMedia({
-          mediaStore: options.mediaStore,
-          mediaId,
-          sessionId: options.sessionId,
-        });
       } catch {
         // Continue finalizing the remaining unrefs.
       }

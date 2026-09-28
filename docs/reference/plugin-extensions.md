@@ -166,7 +166,7 @@ const value = await ctx.services.call(
 
 `webview.entry` 相对 JSON 文件，必须是插件根目录内的 `.html`，真实路径（包括符号链接）不能越界，单文件最多 512 KiB。可使用原生 DOM、Canvas、SVG，或将 React/Vue 等构建成包含脚本和样式的单个 HTML。无需修改 Web 源码或重建框架；开发时社区插件文件变化自动重载注册表；其他环境需要重启服务端。
 
-HTML 使用 `sandbox="allow-scripts"` 的独立 origin，没有宿主 DOM、cookie、localStorage 或 provider key 访问权。CSP 禁止 fetch 和外部脚本/样式加载，依赖与资源应打包为内联或 data 资源。不要在 HTML 中直接调用 Covel HTTP API。此 UI 沙箱不改变服务端插件代码的信任模型。
+HTML 使用两层 `sandbox="allow-scripts"` iframe，每层均为独立 opaque origin，没有宿主 DOM、cookie、localStorage 或 provider key 访问权。可信外层只负责传递一次桥接端口，其 `frame-src 'none'` CSP 阻止内层向网络地址导航；插件不能修改外层策略，也不能导航外层或顶层页面。内层通过 `srcdoc` 加载，保留内联脚本、DOM、Canvas、SVG 与动作桥；文档重新加载后不会重新获得端口，HTML 变更则重新创建容器。CSP 同时禁止 fetch、表单提交及外部脚本/样式加载，依赖与资源应打包为内联或 data 资源。不要在 HTML 中直接调用 Covel HTTP API。桥接状态属于插件可读数据，不应含密钥；此 UI 边界不改变服务端插件代码的信任模型，也不提供 CPU、内存或渲染资源配额。
 
 宿主注入 `window.covel`：
 

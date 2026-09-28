@@ -92,7 +92,6 @@ export interface WorldDataImportedMediaRef {
   readonly id: string;
   readonly sessionId: string;
   readonly pluginId: string;
-  readonly cleanupOnFailure: boolean;
 }
 
 export interface WorldDataImportPreflightDeps {

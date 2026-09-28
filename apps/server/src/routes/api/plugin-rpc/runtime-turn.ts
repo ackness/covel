@@ -1,10 +1,10 @@
+import { commitExecution } from "../commit-execution.js";
 import {
   createTurnEmitter,
   collectExecutionJournal,
   collectExecutionSuspensions,
   createDetachedProposalGuard,
   executeTurn,
-  commitExecution,
   buildHookSettings,
   snapshotUserSettings,
   type HookScope,
@@ -48,6 +48,7 @@ export class SessionNotActiveError extends Error {
 }
 
 export interface PluginRpcRuntimeTurnContext {
+  readonly memorySystem?: import("@covel/memory").MemorySystem;
   readonly store: DataStore;
   readonly eventBus: EventBus;
   readonly sessionLock: SessionLock;
@@ -258,6 +259,7 @@ export function createPluginRpcRuntimeTurnRunner(
     // turn_results row to `failed`; a clean run settles it `committed`, both
     // inside that transaction.
     const outcome = await commitExecution({
+      memorySystem: ctx.memorySystem,
       imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(),
       signal: opts.executionSignal,
       completion:

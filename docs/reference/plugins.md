@@ -179,7 +179,7 @@ io:
 
 Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`；运行时用 `canonicalValue` 单独保存它，`output` 保留供领域提交使用的物化 effects envelope。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。Agent 的契约值仍为最终 `output`。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
 
-`PostRuntime` 若改变 function 的 `output`，应同时明确提供匹配的 `canonicalValue`，新值会重新接受私有和公共 schema 校验。仅改写 `output` 会撤销业务值，停止 export 与下游值绑定；有公共输出契约时还会因缺失契约值而失败。失败 runtime 的输出事件不触发后继 runtime。普通执行与 resume 共用 agent 输出 schema gate。上述契约变化需要重建旧 function 执行结果、exports 和相关开发期快照。
+`PostRuntime` 若改变 function 的 `output`，应同时明确提供匹配的 `canonicalValue`，新值会重新接受私有和公共 schema 校验。仅改写 `output` 会撤销业务值，停止 export 与下游值绑定；有公共输出契约时还会因缺失契约值而失败。失败 runtime 的输出事件不触发后继 runtime。普通执行与 resume 共用 agent 输出 schema gate；非 story agent 声明私有 `io.output.schema` 后，最终无正文或空正文也会按候选输出校验，不符合 schema 即失败，暂停时积累的写入不提交。Story agent 保留独立的叙事正文检查，不使用私有 schema gate。上述契约变化需要重建旧 function 执行结果、exports 和相关开发期快照。
 
 `ctx.playerMessage` 保持当前输入文本字符串。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
 

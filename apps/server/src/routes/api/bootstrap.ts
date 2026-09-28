@@ -1,3 +1,4 @@
+import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
 import type { EmbedFn } from "@covel/memory";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
 import { createPluginServiceAdmission } from "./bootstrap/plugin-service-admission.js";
@@ -570,10 +571,12 @@ async function assembleApi(
       ? { embed: config.memoryEmbed }
       : {}),
     runIngestExclusive: (sessionId, task) =>
-      memoryIngestLock.withLock(
-        `memory-ingest:${JSON.stringify([sessionId])}`,
-        task,
-      ),
+      memoryIngestLock.withLock(memoryIngestLockId(sessionId), async () => {
+        if (config.vectorBackend !== "none") {
+          await config.ensureEmbeddingLock?.(sessionId);
+        }
+        return task();
+      }),
   });
   if (bootstrapMemory) {
     for (const t of bootstrapMemory.tools) {
@@ -625,6 +628,7 @@ async function assembleApi(
       }
 
       const runner = createPluginRpcRuntimeTurnRunner({
+        memorySystem: bootstrapMemory.memorySystem,
         pluginRegistry: registry,
         store,
         eventBus,
@@ -829,6 +833,7 @@ async function assembleApi(
     c.set("rpcRegistry", rpcRegistry);
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("sessionLock", sessionLock);
+    c.set("memoryIngestLock", memoryIngestLock);
     c.set("runtimeJobWorker", runtimeJobWorker);
     c.set("runtimeJobCredentials", runtimeJobCredentials);
     c.set("settledSessionLock", settledSessionLock);

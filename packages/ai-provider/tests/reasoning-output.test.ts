@@ -81,7 +81,7 @@ const cases: Array<{
     name: "Responses",
     adapter: createOpenAiResponsesAdapter,
     model: "gpt-5.2",
-    response: { output: responsesOutput },
+    response: { status: "completed", output: responsesOutput },
   },
 ];
 
@@ -233,7 +233,7 @@ describe("normalized provider reasoning", () => {
       reasoning: { summary: "auto" },
       include: ["message.output_text.logprobs", "reasoning.encrypted_content"],
     });
-    const next = respond({ output: [] });
+    const next = respond({ status: "completed", output: [] });
     const params = {
       model: "gpt-5.2",
       messages: [

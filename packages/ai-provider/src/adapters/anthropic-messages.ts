@@ -18,9 +18,10 @@ import {
 } from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
 import {
-  assertStreamPayload,
+  assertGenerationPayload,
   assertStreamCompleted,
-} from "./stream-completion.js";
+  assertSuccessfulFinishReason,
+} from "./generation-completion.js";
 import type {
   ModelRequestContext,
   ProviderConfig,
@@ -356,6 +357,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       );
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
+      assertGenerationPayload(payload, "anthropic");
+      assertSuccessfulFinishReason(
+        String(payload.stop_reason ?? "stop"),
+        "anthropic",
+      );
 
       const toolCalls = readAnthropicToolCalls(payload);
       return {
@@ -405,6 +411,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       );
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
+      assertGenerationPayload(payload, "anthropic");
+      assertSuccessfulFinishReason(
+        String(payload.stop_reason ?? "stop"),
+        "anthropic",
+      );
 
       let rawObject: unknown;
       try {
@@ -483,7 +494,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
-        assertStreamPayload(payload, "anthropic-messages");
+        assertGenerationPayload(payload, "anthropic-messages");
         if (payload.type === "message_stop") completed = true;
         continuation.push(payload);
         const delta = payload.delta as Record<string, unknown> | undefined;

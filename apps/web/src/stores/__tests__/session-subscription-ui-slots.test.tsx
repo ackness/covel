@@ -102,6 +102,7 @@ function setup() {
   return renderHook(() => {
     const slots = useUiSlots("s");
     useSessionSubscription({
+      storageMode: "remote",
       sessionId: "s",
       dispatch,
       workspace,

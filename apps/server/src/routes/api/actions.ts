@@ -1,3 +1,4 @@
+import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import { listRuntimeJobs } from "./plugin-rpc/jobs.js";
 import {
@@ -29,7 +30,6 @@ import {
   createTurnEmitter,
   collectExecutionJournal,
   collectExecutionSuspensions,
-  commitExecution,
   snapshotUserSettings,
 } from "@covel/runtime";
 import type {
@@ -716,6 +716,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly status: JobStatusRecord;
           }> = [];
           const outcome = await commitExecution({
+            memorySystem: c.get("memorySystem"),
             imageFlowRuntimeIds: (
               await resolveMediaImageFlow(
                 store,
@@ -974,6 +975,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // a rolled-back turn operates on state that no longer exists.
       if (committed && result.deferredFollowers?.length) {
         const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
+          memorySystem: c.get("memorySystem"),
           resolveImageFlowRuntimeIds: async () =>
             (
               await resolveMediaImageFlow(

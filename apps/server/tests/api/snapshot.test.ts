@@ -757,7 +757,7 @@ describe("Snapshot routes", () => {
       ).toBe(2);
     });
 
-    it("copies opaque plugin data while re-minting first-class character ids", async () => {
+    it("preserves character identifiers used by opaque plugin data", async () => {
       // Plugin-owned values are opaque to the kernel, even if they resemble IDs.
       await store.setPluginData({
         id: "sess-1-charmirror",
@@ -788,7 +788,11 @@ describe("Snapshot routes", () => {
       expect(mirror).toHaveLength(1);
       expect(mirror[0]!.key).toBe("sess-1-hero");
       expect((mirror[0]!.value as { id: string }).id).toBe("sess-1-hero");
-      expect(childChar.id).not.toBe("sess-1-hero");
+      expect(childChar.id).toBe("sess-1-hero");
+      const childSnapshot = (await store.listSnapshots(childId))[0]!;
+      expect(childSnapshot.payload.characters).toEqual(
+        await store.listCharacters(childId),
+      );
     });
 
     it("copies media_refs for inherited MediaRefs on fork", async () => {

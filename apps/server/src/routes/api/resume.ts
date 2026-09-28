@@ -1,3 +1,4 @@
+import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import { withSettledExecutionLock } from "./plugin-rpc/settled-request.js";
 /**
@@ -37,7 +38,6 @@ import type { DataStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
-  commitExecution,
   resumeSuspendedRuntime,
   snapshotUserSettings,
   createTurnEmitter,
@@ -444,6 +444,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         // finalize owns the transaction, the commit barrier (buffered fan-out
         // flushed only after commit, dropped on rollback), and the hook scope.
         const outcome = await commitExecution({
+          memorySystem: c.get("memorySystem"),
           imageFlowRuntimeIds: (
             await resolveMediaImageFlow(
               store,

@@ -623,7 +623,7 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
     expect(await store.listCharacters("sess-rollback")).toEqual([]);
   });
 
-  it("deletes the committed session and imported media when media finalization fails", async () => {
+  it("deletes the failed session and releases its media claims for GC", async () => {
     const world = await makeWorldPackage({
       id: "media-finalize-world",
       descriptor: `schemaVersion: 1
@@ -687,6 +687,10 @@ sources:
     expect(
       await store.listWorldDataImportLedger("sess-media-finalize"),
     ).toEqual([]);
+    expect(await mediaStore.listAssets()).toEqual([
+      expect.objectContaining({ ownerSessionId: null }),
+    ]);
+    await mediaStore.cleanup(new Set(), { maxAgeMs: 0 });
     expect(await mediaStore.listAssets()).toEqual([]);
     expect(await mediaStore.listRefs()).toEqual([]);
   });
@@ -768,6 +772,10 @@ sources:
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ code: "world_not_found" });
     expect(await store.getSession("delayed-create")).toBeNull();
+    expect(await mediaStore.listAssets()).toEqual([
+      expect.objectContaining({ ownerSessionId: null }),
+    ]);
+    await mediaStore.cleanup(new Set(), { maxAgeMs: 0 });
     expect(await mediaStore.listAssets()).toEqual([]);
     expect(await mediaStore.listRefs()).toEqual([]);
   });

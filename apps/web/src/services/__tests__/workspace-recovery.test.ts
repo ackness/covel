@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { ApiError } from "../api/request.js";
 import { createSessionWorkspace } from "../data-service/workspace.js";
+import { createSessionSubscription } from "../subscription.js";
 
 const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
@@ -175,6 +176,87 @@ describe("workspace durable pending-commit recovery", () => {
       1,
     );
   });
+
+  it("restores the browser checkpoint before reconnecting a restarted server stream", async () => {
+    const service = new LocalDataService(vault);
+    await service.createSession("world", "session", [], "en-US");
+    await service.addMessage({
+      id: "retained",
+      sessionId: "session",
+      role: "user",
+      content: "Synthetic retained input",
+      createdAt: "2026-09-01T00:00:00.000Z",
+    });
+    const checkpoint = await vault.getLatestCheckpoint("session");
+    const workspace = createSessionWorkspace(service, "local");
+    let mirrored = true;
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    let finishUpload!: () => void;
+    const upload = new Promise<void>((resolve) => {
+      finishUpload = resolve;
+    });
+    api.getSession.mockImplementation(async () => {
+      if (!mirrored) throw new ApiError(404, "/sessions/session", "");
+      return { id: "session" };
+    });
+    api.uploadBrowserCheckpoint.mockImplementation(async () => {
+      await upload;
+      mirrored = true;
+      return { ok: true };
+    });
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      mirrored
+        ? new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                stream = controller;
+              },
+            }),
+          )
+        : new Response("Session not found", { status: 404 }),
+    );
+    const events = vi.fn();
+    const subscription = createSessionSubscription("session", {
+      recoverMissingSession: () => workspace.hydrate("session"),
+    });
+    subscription.on("*", events);
+    try {
+      await vi.waitFor(() => expect(subscription.state).toBe("connected"));
+      mirrored = false;
+      stream.close();
+      await vi.waitFor(
+        () => expect(api.uploadBrowserCheckpoint).toHaveBeenCalledOnce(),
+        { timeout: 5000 },
+      );
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(api.createSession).toHaveBeenCalledOnce();
+      expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+        "session",
+        checkpoint,
+      );
+      finishUpload();
+      await vi.waitFor(() => expect(subscription.state).toBe("connected"), {
+        timeout: 5000,
+      });
+      stream.enqueue(
+        new TextEncoder().encode(
+          'event: plugin-data.changed\ndata: {"payload":{"recovered":true}}\n\n',
+        ),
+      );
+      await vi.waitFor(() =>
+        expect(events).toHaveBeenCalledWith(
+          expect.objectContaining({ payload: { recovered: true } }),
+        ),
+      );
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect((await vault.getLatestCheckpoint("session"))?.messages).toEqual(
+        checkpoint!.messages,
+      );
+    } finally {
+      finishUpload();
+      subscription.close();
+    }
+  }, 10000);
 
   it("downloads a previous pending result before staging a background commit after reload", async () => {
     await failedDownload();

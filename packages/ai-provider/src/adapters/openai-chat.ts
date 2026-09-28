@@ -4,9 +4,10 @@ import {
 } from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
 import {
-  assertStreamPayload,
+  assertGenerationPayload,
   assertStreamCompleted,
-} from "./stream-completion.js";
+  assertSuccessfulFinishReason,
+} from "./generation-completion.js";
 import type { UsageSummary } from "../types.js";
 import {
   postJson,
@@ -230,6 +231,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/chat/completions", body);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
+      assertGenerationPayload(payload, "openai-chat");
+      assertSuccessfulFinishReason(
+        readOpenAiChatFinishReason(payload),
+        "openai-chat",
+      );
 
       const toolCalls = readOpenAiChatToolCalls(payload);
       const reasoningContent = readOpenAiChatReasoningContent(payload);
@@ -257,6 +263,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
+      assertGenerationPayload(payload, "openai-chat");
+      assertSuccessfulFinishReason(
+        readOpenAiChatFinishReason(payload),
+        "openai-chat",
+      );
 
       let rawObject: unknown;
       try {
@@ -321,7 +332,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
-        assertStreamPayload(payload, "openai-chat");
+        assertGenerationPayload(payload, "openai-chat");
         const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
         if (reasoningDelta) {
           reasoningAcc += reasoningDelta;

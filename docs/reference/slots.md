@@ -205,3 +205,5 @@ Provider and plugin HTTP helpers cancel rejected response bodies before retrying
 错误详情保留失败请求实际使用的 `provider` 和 `model`，包含备用模型最终失败的情况；后续修改配置不会改变已记录的失败目标。可在失败任务上打开“更换模型 / 调整参数”，进入模型用途选择服务商和模型，并展开“生成参数”调整上下文窗口、模型最大输出能力、单次输出、温度、采样和思考强度；能力字段也可以通过原“编辑能力”入口覆盖，包括仅在前端配置的模型用途。两处复用同一个 token 编辑组件，并沿用 `llm.capabilityOverrides` / `llm.paramOverrides`，无需迁移旧设置。资料库输出上限仅供参考，不阻止输入符合设置范围的手动参数。
 
 关闭设置后点击“重试此任务”，请求重新读取当前模型和参数；已提交的剧情和其他成功任务仍保留。最大输出限制与输入上下文窗口是两个独立的设置，调低输出不会删除会话历史。
+
+非流式文本与对象生成同样拒绝 provider 错误正文或 `finishReason: error`，即使 HTTP 为 200、正文仍可解析，也不会上报成功或交给函数插件写入记忆。Responses 必须处于 `completed` 或 `incomplete` 终态；排队、处理中、取消、失败或缺失状态均按 provider error 处理。`incomplete` 仍映射为 `length`，保留调用方既有截断策略。无输出的 provider error 可按已配置的备用模型策略回退。

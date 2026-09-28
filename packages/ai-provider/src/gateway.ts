@@ -8,6 +8,7 @@ import type {
 } from "./evaluation/types.js";
 
 import { AiProviderError } from "./errors.js";
+import { assertSuccessfulFinishReason } from "./adapters/generation-completion.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
 import {
@@ -228,6 +229,10 @@ export function createGateway(deps: GatewayDependencies) {
             },
             { profile: target.profile, preset: target.preset, mode: "text" },
           );
+          assertSuccessfulFinishReason(
+            result.finishReason,
+            targetProvider(target),
+          );
           return {
             ...result,
             model: targetModel(target),
@@ -276,6 +281,10 @@ export function createGateway(deps: GatewayDependencies) {
               ),
             },
             { profile: target.profile, preset: target.preset, mode: "object" },
+          );
+          assertSuccessfulFinishReason(
+            result.finishReason,
+            targetProvider(target),
           );
           return {
             ...(result as {
@@ -387,15 +396,7 @@ export function createGateway(deps: GatewayDependencies) {
             emittedDelta = true;
           }
           if (event.type === "done") {
-            if (event.finishReason === "error") {
-              throw new AiProviderError({
-                code: "PROVIDER_ERROR",
-                message: "Provider stream reported an error finish reason",
-                provider,
-                model: targetModel(target),
-                retriable: true,
-              });
-            }
+            assertSuccessfulFinishReason(event.finishReason, provider);
             completion = event;
             continue;
           }

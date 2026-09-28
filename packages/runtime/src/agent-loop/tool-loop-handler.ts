@@ -5,7 +5,7 @@ import type { LLMProviderRequest, LLMTargetIdentity } from "@covel/shared";
  * One agent step issues exactly one LLM response. Depending on the runtime it
  * goes through one of three paths:
  *   - streaming (story runtimes) — with a non-stream fallback when the stream
- *     exhausts retries or finishes with tool_calls but no parsed calls;
+ *     exhausts retries or finishes empty with tool_calls but no parsed calls;
  *   - non-streaming — with a narrow secondary retry for DeepSeek's malformed
  *     tool-arguments error.
  *
@@ -131,6 +131,7 @@ async function requestStreaming(
 ): Promise<LLMResponse> {
   const { manifest, deadline, toolDefs } = opts;
   let response: LLMResponse;
+  let usedNonStreamFallback = false;
 
   // Streaming path: helper enforces per-attempt call-timeout + first-token
   // (TTFB) guard, retries on transient failures, and forwards text deltas to
@@ -152,19 +153,34 @@ async function requestStreaming(
         `[stream-recovery] ${manifest.name} streaming exhausted (reason=${streamError.reason}); falling back to non-stream generate()`,
       );
       response = await callLLMWithRetry(callParams);
+      usedNonStreamFallback = true;
     } else {
       throw streamError;
     }
   }
 
-  // If the stream finished with tool_calls but our adapter could not parse
-  // structured calls out of delta chunks (some providers don't deliver them on
-  // SSE), fall back to a non-stream call to get the structured payload.
+  // Some providers finish with tool_calls but omit the structured payload on
+  // SSE. Only an entirely empty stream can be replaced: text has already been
+  // forwarded to the player, and reasoning is part of this response's output.
   if (
     response.finishReason === "tool_calls" &&
     response.toolCalls.length === 0 &&
     toolDefs
   ) {
+    if (response.content || response.reasoningContent) {
+      throw new Error(
+        "PROVIDER_ERROR: model stream ended with tool_calls but no structured calls after producing output",
+      );
+    }
+    if (
+      usedNonStreamFallback ||
+      !opts.deps.llm.stream ||
+      Date.now() >= deadline
+    ) {
+      throw new Error(
+        "PROVIDER_ERROR: model response ended with tool_calls but no structured calls",
+      );
+    }
     response = await callLLMWithRetry(callParams);
   }
   return response;

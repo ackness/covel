@@ -1,7 +1,7 @@
 import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
-import type { SessionWorkspace } from "@/services/data-service.js";
+import type { SessionWorkspace, StorageMode } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   createSessionSubscription,
@@ -45,6 +45,7 @@ interface UseSessionSubscriptionOptions {
   sessionId: string | null | undefined;
   dispatch: (action: SessionAction) => void;
   workspace: SessionWorkspace;
+  storageMode: StorageMode;
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
   stateRef: MutableRef<SessionState>;
@@ -382,6 +383,7 @@ export function useSessionSubscription({
   sessionId,
   dispatch,
   workspace,
+  storageMode,
   sessionIdRef,
   sessionGenerationRef,
   stateRef,
@@ -539,6 +541,13 @@ export function useSessionSubscription({
     const sub = createSessionSubscription(sessionId, {
       topics: ["plugin", "system", "game", "runtime", "job", "state"],
       onStateChange: handleConnectionStateChange,
+      recoverMissingSession:
+        storageMode === "local"
+          ? async () => {
+              if (isCurrent())
+                await workspace.hydrate(sessionId, { isCurrent });
+            }
+          : undefined,
     });
     subscriptionRef.current = sub;
 
@@ -558,6 +567,7 @@ export function useSessionSubscription({
     sessionGenerationRef,
     dispatch,
     workspace,
+    storageMode,
     sessionIdRef,
     stateRef,
     activeTurnIdRef,

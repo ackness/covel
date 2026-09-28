@@ -1,3 +1,4 @@
+import { scheduleMemoryIngest } from "./commit-execution.js";
 import { isDerivedVectorRecord } from "@covel/store/vector";
 /**
  * Snapshot / Fork routes.
@@ -374,17 +375,11 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               updatedAt: now,
             });
 
-            // Copy characters. Mint fresh ids because several store backends key
-            // characters by `id` alone — reusing the parent's id would overwrite
-            // the parent's row in those backends. Track old→new so the character
-            // mirror plugin-data (keyed by character id) can be remapped below.
-            const characterIdMap = new Map<string, string>();
+            // Characters are keyed by (sessionId, id). Keep stable identifiers
+            // so copied plugin references and the child snapshot agree.
             for (const ch of snapshot.payload.characters) {
-              const newId = randomUUID();
-              characterIdMap.set(ch.id, newId);
               const record: CharacterRecord = {
                 ...ch,
-                id: newId,
                 sessionId: childSessionId,
               };
               await tx.upsertCharacter(record);
@@ -672,6 +667,8 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             500,
           );
         }
+
+        scheduleMemoryIngest(c.get("memorySystem"), childSessionId);
 
         // Post-commit side effects: the fork is durable, so the following run OUT of
         // the DataStore transaction.

@@ -9,6 +9,9 @@ import type {
 } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { tool } from "@covel/tools";
+import { z } from "zod";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import {
   resolveExportBindings,
@@ -35,6 +38,122 @@ const llm: LLMAdapter = {
 const input = { sessionId: "session", turnId: "turn", playerMessage: "act" };
 
 describe("terminal domain boundaries", () => {
+  it.each(["text", "reasoning"] as const)(
+    "does not replace %s output after an empty tool_calls terminal",
+    async (outputMode) => {
+      const store = createMemoryStore();
+      const story = {
+        ...base,
+        name: "probe/story-with-tool",
+        runtimeType: "agent" as const,
+        stage: "narrative" as const,
+        outputKind: "story" as const,
+        tools: { plugin: ["lookup"] },
+      };
+      const lookup = tool({
+        name: "lookup",
+        description: "Synthetic lookup",
+        parameters: z.object({}),
+        execute: async () => ({ found: true }),
+      });
+      const streamedText = "The door is red.";
+      const streamedDeltas: string[] = [];
+      const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
+        content: "The door is blue.",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      }));
+      const turn = await executeTurn(input, [story], {
+        store,
+        toolExecutor: createToolExecutor({ findTool: () => lookup, store }),
+        onDelta: async (delta) => {
+          streamedDeltas.push(JSON.stringify(delta));
+        },
+        llm: {
+          generate,
+          stream: async function* () {
+            if (outputMode === "text") {
+              yield { type: "text-delta" as const, textDelta: streamedText };
+            } else {
+              yield {
+                type: "reasoning-delta" as const,
+                reasoningDelta: "The door color was considered.",
+              };
+            }
+            yield { type: "done" as const, finishReason: "tool_calls" };
+          },
+        },
+        loadRuntime: async () => ({
+          manifest: story,
+          promptTemplate: "Write story",
+        }),
+      });
+      expect(turn.runtimeResults[0]?.status).toBe("failed");
+      expect(turn.runtimeResults[0]?.error).toContain(
+        "tool_calls but no structured calls",
+      );
+      expect(generate).not.toHaveBeenCalled();
+      if (outputMode === "text") {
+        expect(streamedDeltas.join(" ")).toContain(streamedText);
+      }
+      const committed = await finalizeExecution({
+        store,
+        sessionId: input.sessionId,
+        executionContext: turn.executionContext,
+        runtimes: [story],
+        results: turn.runtimeResults,
+        turnIds: [turn.turnId],
+      });
+      expect(committed.status).toBe("failed");
+      expect(await store.listMessages(input.sessionId)).toEqual([]);
+    },
+  );
+
+  it("allows one non-stream recovery for a wholly empty tool_calls stream", async () => {
+    const store = createMemoryStore();
+    const story = {
+      ...base,
+      name: "probe/empty-story-with-tool",
+      runtimeType: "agent" as const,
+      stage: "narrative" as const,
+      outputKind: "story" as const,
+      tools: { plugin: ["lookup"] },
+    };
+    const lookup = tool({
+      name: "lookup",
+      description: "Synthetic lookup",
+      parameters: z.object({}),
+      execute: async () => ({ found: true }),
+    });
+    const generate = vi.fn<LLMAdapter["generate"]>(async () => ({
+      content: "The door is blue.",
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    const turn = await executeTurn(input, [story], {
+      store,
+      toolExecutor: createToolExecutor({ findTool: () => lookup, store }),
+      onDelta: async () => {},
+      llm: {
+        generate,
+        stream: async function* () {
+          yield { type: "done" as const, finishReason: "tool_calls" };
+        },
+      },
+      loadRuntime: async () => ({
+        manifest: story,
+        promptTemplate: "Write story",
+      }),
+    });
+    expect(turn.runtimeResults[0]?.status).toBe("success");
+    expect(turn.runtimeResults[0]?.output).toMatchObject({
+      narrativeOutput: "The door is blue.",
+    });
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
   it.each([false, true])(
     "only successful producers can commit follower writes (rejected=%s)",
     async (reject) => {

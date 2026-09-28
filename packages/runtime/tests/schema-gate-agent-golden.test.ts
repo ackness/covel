@@ -14,8 +14,9 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
+import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
@@ -174,6 +175,97 @@ describe("agent schema gate (golden)", () => {
 });
 
 describe("ordinary and resumed private schema parity", () => {
+  it.each([null, ""])(
+    "rejects empty terminal content (%s), retaining resumed writes and continuation",
+    async (content) => {
+      const m = manifest({ output: { schema: "output.json" } });
+      const store = createMemoryStore();
+      const validContent = '{"prompt":"portrait"}';
+      let nextContent: string | null = content;
+      const deps = makeDeps(
+        {
+          generate: async () => ({
+            content: nextContent,
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 0 },
+          }),
+        },
+        { ...OBJECT_SCHEMA },
+      );
+      deps.store = store;
+      const turnInput = input(`empty-${content === null ? "null" : "string"}`);
+      const ordinary = await executeTurn(turnInput, [m], deps);
+      expect(ordinary.runtimeResults[0]?.status).toBe("failed");
+      expect(ordinary.runtimeResults[0]?.error).toContain(
+        "output did not match output.schema",
+      );
+
+      const proposal: Proposal = {
+        id: "pending-write",
+        type: "plugin.data",
+        sessionId: turnInput.sessionId,
+        turnId: turnInput.turnId,
+        source: { pluginId: m.pluginId, runtimeId: m.name },
+        payload: { namespace: "audit", key: "committed", value: true },
+        timestamp: new Date().toISOString(),
+      };
+      const suspension = {
+        id: "pending-suspension",
+        sessionId: turnInput.sessionId,
+        turnId: turnInput.turnId,
+        pluginId: m.pluginId,
+        runtimeId: m.name,
+        reason: "input",
+        resumeSchema: {},
+        createdAt: new Date().toISOString(),
+        pendingContinuation: {
+          messages: [],
+          toolCallsSoFar: [],
+          pendingProposals: [proposal],
+          executionContext: {
+            executionId: "previous",
+            origin: "manual" as const,
+            countPolicy: "none" as const,
+          },
+        },
+      };
+      await store.saveSuspension(suspension);
+      const resumed = await resumeSuspendedRuntime(suspension, {}, m, deps);
+      expect(resumed.status).toBe("failed");
+      expect(resumed.error).toContain("output did not match output.schema");
+      expect(getPendingProposals(resumed.output)).toEqual([]);
+      await finalizeExecution({
+        store,
+        sessionId: turnInput.sessionId,
+        executionContext: {
+          executionId: resumed.runId,
+          origin: "resume",
+          countPolicy: "none",
+        },
+        runtimes: [m],
+        results: [resumed],
+        turnIds: [turnInput.turnId],
+      });
+      expect(
+        await store.getPluginData(
+          turnInput.sessionId,
+          m.pluginId,
+          "audit",
+          "committed",
+        ),
+      ).toBeNull();
+      expect(
+        (await store.getSuspension(suspension.id))?.resolvedAt,
+      ).toBeUndefined();
+
+      nextContent = validContent;
+      const retry = await resumeSuspendedRuntime(suspension, {}, m, deps);
+      expect(retry.status).toBe("success");
+      expect(getPendingProposals(retry.output)).toEqual([proposal]);
+    },
+  );
+
   it.each([
     ['{"prompt":"portrait"}', "success"],
     ['{"prompt":17}', "failed"],

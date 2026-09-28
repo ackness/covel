@@ -149,6 +149,27 @@ A registered vector model guarantees its physical table exists. PostgreSQL initi
 
 Snapshots, forks, and browser checkpoint transfers exclude the reserved `__kernel:vector` partition. Its ingest cursors and hashes describe a local physical index, not transferable session data. Both producers and importers apply this rule; rebuilt sessions re-index their messages and lore. Ordinary plugin data with the same namespace names is retained.
 
+The server's shared commit entry point schedules best-effort ingestion only after
+`commitExecution` reports a durable commit. Player, manual, resumed, and detached
+executions use that entry point. Fork and browser checkpoint replacement also
+schedule ingestion. Bootstrap establishes the configured embedding model lock
+inside the ingestion lease before reading the corpus. A scheduled run continues
+through bounded provider batches until the current corpus is indexed; short or
+failed embeddings leave unfinished progress for a later run.
+
+Ingestion uses its own per-session lock (advisory across PostgreSQL hosts), never
+the turn lock. Lifecycle replacement and deletion acquire locks in this order:
+session, world when needed, ingestion, then storage transaction. They wait for
+all delayed vectors, cursor updates, hash updates, and archival deletions before
+replacing or deleting state, including checkpoints that retain `createdAt`.
+Ordinary turns can commit while embeddings run; the ingestor coalesces another
+pass to observe those commits. Shutdown drains tracked memory tasks before
+closing storage. Embedding failures do not change the committed turn outcome.
+
+Fork preserves character IDs because every backend keys characters by
+`(sessionId, id)`. Copied plugin references and the child's snapshot therefore
+identify the same characters as the child store.
+
 ### MediaStore transaction and concurrency fixes
 
 Media lifecycle mutations use per-resource atomicity alongside the DataStore

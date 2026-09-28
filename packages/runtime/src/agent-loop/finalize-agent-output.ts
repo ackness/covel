@@ -46,8 +46,8 @@ export interface FinalizeAgentOutputParams {
    */
   readonly dedupeInteractions?: boolean;
   /**
-   * Optional schema gate, invoked after a preferred tool output or final text
-   * has been converted into the output envelope. Returning a failed
+   * Optional schema gate, invoked after any candidate output has been
+   * converted into the output envelope. Returning a failed
    * RuntimeResult short-circuits finalize; the caller is responsible for any
    * telemetry + PostRuntime wrapping.
    */
@@ -90,18 +90,14 @@ export function finalizeAgentOutput(
   const structured = findLastStructuredToolOutput(executedToolCalls);
 
   let output: Record<string, unknown>;
+  let parsedAsJson = true;
+  let schemaFinalContent: string | null = null;
   if (preferredOutput) {
     output = { ...preferredOutput };
-    if (schemaGate) {
-      const failed = schemaGate({
-        output,
-        parsedAsJson: true,
-        finalContent: null,
-      });
-      if (failed) return { kind: "short-circuit", result: failed };
-    }
   } else if (finalContent) {
     const parsed = parseFinalOutputEnvelope(finalContent);
+    parsedAsJson = parsed.parsedAsJson;
+    schemaFinalContent = finalContent;
     const suppressNarrative = shouldSuppressToolLoopNarrative({
       outputKind: manifest.outputKind,
       executedToolCalls,
@@ -118,18 +114,19 @@ export function finalizeAgentOutput(
     output = suppressNarrative
       ? (structured ?? presentable ?? { narrativeOutput: "" })
       : parsed.output;
-    if (schemaGate) {
-      const failed = schemaGate({
-        output,
-        parsedAsJson: parsed.parsedAsJson,
-        finalContent,
-      });
-      if (failed) return { kind: "short-circuit", result: failed };
-    }
   } else if (failedToolCalls.length > 0) {
     return { kind: "tool-failed" };
   } else {
     output = presentable ?? { narrativeOutput: "" };
+  }
+
+  if (schemaGate) {
+    const failed = schemaGate({
+      output,
+      parsedAsJson,
+      finalContent: schemaFinalContent,
+    });
+    if (failed) return { kind: "short-circuit", result: failed };
   }
 
   // Tool-emitted events merge in after any envelope-declared `events` (LLM

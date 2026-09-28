@@ -14,9 +14,10 @@ import {
 } from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
 import {
-  assertStreamPayload,
+  assertGenerationPayload,
   assertStreamCompleted,
-} from "./stream-completion.js";
+  assertSuccessfulFinishReason,
+} from "./generation-completion.js";
 import type { UsageSummary } from "../types.js";
 import {
   postJson,
@@ -136,7 +137,7 @@ function mapResponseStatus(status: unknown): string {
     case "failed":
       return "error";
     default:
-      return "stop";
+      return "error";
   }
 }
 
@@ -300,6 +301,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/responses", body);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
+      assertGenerationPayload(payload, "openai-responses");
+      assertSuccessfulFinishReason(
+        mapResponseStatus(payload.status),
+        "openai-responses",
+      );
 
       return {
         text: readResponsesOutputText(payload),
@@ -331,6 +337,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
+      assertGenerationPayload(payload, "openai-responses");
+      assertSuccessfulFinishReason(
+        mapResponseStatus(payload.status),
+        "openai-responses",
+      );
 
       let rawObject: unknown;
       try {
@@ -400,7 +411,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
-        assertStreamPayload(payload, "openai-responses");
+        assertGenerationPayload(payload, "openai-responses");
         if (payload.type === "response.output_item.done")
           outputItems.set(Number(payload.output_index ?? 0), payload.item);
         const reasoningDelta = reasoning.push(payload);
@@ -456,7 +467,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           streamFinishReason = mapResponseStatus(
             responseObj?.status ?? terminalStatus,
           );
-          assertStreamPayload(
+          assertGenerationPayload(
             { error: streamFinishReason === "error" },
             "openai-responses",
           );

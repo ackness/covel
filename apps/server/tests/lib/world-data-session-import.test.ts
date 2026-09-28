@@ -953,7 +953,7 @@ sources:
     ).rejects.toThrow(/invalid world dimensions/);
   });
 
-  it("cleans imported media when later store writes fail", async () => {
+  it("leaves unclaimed media for GC when later store writes fail", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
@@ -996,6 +996,10 @@ sources:
       }),
     ).rejects.toThrow(/simulated plugin-data failure/);
 
+    expect(await mediaStore.listAssets()).toEqual([
+      expect.objectContaining({ ownerSessionId: null }),
+    ]);
+    await mediaStore.cleanup(new Set(), { maxAgeMs: 0 });
     expect(await mediaStore.listAssets()).toEqual([]);
     expect(await mediaStore.listRefs()).toEqual([]);
   });

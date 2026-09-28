@@ -391,7 +391,7 @@ test.describe("Stage view mode", () => {
       await page.reload();
       const host = page.getByTestId("stage-plugin-panels");
       await expect(host).toBeVisible();
-      const frame = host.frameLocator("iframe");
+      const frame = host.frameLocator("iframe").frameLocator("iframe");
       await expect(frame.getByText("75%", { exact: true })).toBeVisible();
       await expect(frame.getByText("25%", { exact: true })).toBeVisible();
       await expect(host.locator("iframe")).toHaveAttribute(
@@ -399,7 +399,9 @@ test.describe("Stage view mode", () => {
         "allow-scripts",
       );
       const content = await host.locator("iframe").elementHandle();
-      const child = await content!.contentFrame();
+      const wrapper = await content!.contentFrame();
+      const innerContent = await wrapper!.$("iframe");
+      const child = await innerContent!.contentFrame();
       expect(
         await child!.evaluate(() => {
           try {

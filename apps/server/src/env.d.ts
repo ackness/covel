@@ -90,6 +90,7 @@ declare module "hono" {
     resolveModel: ResolveModelFn;
     compactorRunner: CompactorRunner;
     /** Request-visible memory system wired by the bootstrap composition root. */
+    memoryIngestLock?: import("./lib/session-lock.js").SessionLock;
     memorySystem?: import("@covel/memory").MemorySystem;
     /**
      * Prompt-assembly hard-prune budget (`applyBudget`), derived from the

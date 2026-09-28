@@ -158,6 +158,15 @@ Only the current `(session_id, media_id)` constraint is supported. Recreate
 development databases that use the former media-reference shape; the framework
 does not migrate or automatically delete old rows.
 
+World-data preparation only materializes bytes; it creates no owner or session
+reference. A failed prepare/import leaves those bytes for lifecycle GC. It never
+force-deletes a content ID based on whether it was unclaimed during preparation:
+another session may have claimed the same bytes in the meantime. If a newly
+created session fails media finalization, the creation path deletes that session
+and releases its claims under the session lifecycle lock. Duplicate creation
+failures cannot release an existing session's claims. Sync removes its explicit
+references after commit and leaves ownership/byte reclamation to lifecycle GC.
+
 ## Lifecycle Cleanup
 
 The SQLite media factory owns its shared connection reference until construction

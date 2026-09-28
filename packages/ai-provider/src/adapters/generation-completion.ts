@@ -1,14 +1,16 @@
 import { AiProviderError } from "../errors.js";
 
-/** HTTP 200 does not imply that an SSE generation completed successfully. */
-export function assertStreamPayload(
+/** HTTP 200 does not imply that a generation completed successfully. */
+export function assertGenerationPayload(
   payload: Record<string, unknown>,
   provider: string,
 ): void {
   if (
     payload.error ||
     payload.type === "error" ||
-    payload.type === "response.failed"
+    payload.type === "response.failed" ||
+    payload.status === "failed" ||
+    payload.status === "cancelled"
   ) {
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
@@ -27,6 +29,21 @@ export function assertStreamCompleted(
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
       message: `${provider} stream ended before its terminal event`,
+      provider,
+      retriable: true,
+    });
+  }
+}
+
+/** Keep custom adapters behind the same success boundary as built-in wires. */
+export function assertSuccessfulFinishReason(
+  finishReason: string,
+  provider: string,
+): void {
+  if (finishReason === "error") {
+    throw new AiProviderError({
+      code: "PROVIDER_ERROR",
+      message: `${provider} reported an error finish reason`,
       provider,
       retriable: true,
     });

@@ -36,13 +36,43 @@ const BRIDGE = `
   });
 })();`;
 
+/**
+ * The trusted parent owns frame-src: a document's own CSP cannot prevent its
+ * self-navigation. Keep plugin markup in a separately sandboxed child whose
+ * navigations are checked against this parent's policy. srcdoc is permitted
+ * without allowing any network frame source.
+ */
 export function pluginWebviewDocument(html: string): string {
-  // 'unsafe-inline' is load-bearing: plugin documents are arbitrary inline
-  // HTML delivered via srcDoc, so nonce/hash CSP cannot work without
-  // rewriting plugin markup. The real boundary is the iframe sandbox (opaque
-  // origin, no parent storage) plus connect-src 'none' — plugin script may
-  // run but cannot make network calls or reach host state.
-  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><script>${BRIDGE}</script>${html}`;
+  const inner = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><script>${BRIDGE}</script>${html}`;
+  const escaped = inner
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<style>html,body,iframe{width:100%;height:100%;margin:0;border:0;display:block}</style>
+<script>
+(() => {
+  let loaded = false, connected = false, pending;
+  const connect = () => {
+    if (!loaded || connected || !pending) return;
+    connected = true;
+    document.querySelector("iframe").contentWindow.postMessage({ type: "covel:connect" }, "*", [pending]);
+    pending = undefined;
+  };
+  addEventListener("message", event => {
+    if (event.source !== parent || event.data?.type !== "covel:connect" || !event.ports[0]) return;
+    if (connected || pending) { event.ports[0].close(); return; }
+    pending = event.ports[0];
+    connect();
+  });
+  document.addEventListener("load", event => {
+    if (event.target !== document.querySelector("iframe") || loaded) return;
+    loaded = true;
+    connect();
+  }, true);
+})();
+</script><iframe title="Plugin content" sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${escaped}"></iframe>`;
 }
 
 export function PluginWebview(props: {
@@ -74,7 +104,10 @@ export function PluginWebview(props: {
     [],
   );
 
+  const connectedFrame = useRef<HTMLIFrameElement | null>(null);
   const connect = () => {
+    if (!frame.current || connectedFrame.current === frame.current) return;
+    connectedFrame.current = frame.current;
     port.current?.close();
     const channel = new MessageChannel();
     port.current = channel.port1;
@@ -124,6 +157,7 @@ export function PluginWebview(props: {
 
   return (
     <iframe
+      key={document}
       ref={frame}
       title={props.title}
       sandbox="allow-scripts"

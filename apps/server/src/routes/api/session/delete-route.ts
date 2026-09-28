@@ -1,3 +1,4 @@
+import { withMemoryIngestLock } from "../../../lib/memory-ingest-lock.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { randomUUID } from "node:crypto";
 import { decodePluginUserSettingsHeader } from "../plugin-user-settings.js";
@@ -255,7 +256,7 @@ export async function deleteSessionWithLifecycle(
 
       try {
         await c.get("mediaStore")?.releaseSession(id);
-        await store.deleteSession(id);
+        await withMemoryIngestLock(c, id, () => store.deleteSession(id));
       } catch (error) {
         const live = await store.getSession(id);
         if (!live) {
