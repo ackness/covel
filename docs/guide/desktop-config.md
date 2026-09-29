@@ -93,7 +93,7 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 设置界面的模型部分分为“用途分配”“服务商与模型”“生成参数”。“服务商与模型”采用服务商列表 + 详情结构，一个服务商只需配置一次 API 地址、协议、密钥和价格倍率，并可批量添加多个模型 ID；`openai/gpt-5.6-sol` 等带 `/` 的 ID 会按原样发送。随后在“用途分配”中分别选择服务商和模型，无需再创建自定义 Preset。价格倍率默认 `1`，调试成本面板会用模型参考价乘以该倍率估算结算金额。
 
-模型设置只把 `llm.providers` 作为持久化真源；旧版 `llm.customPresets` 会在启动时先迁移连接密钥和模型引用，全部成功后删除。旧 API facade 与请求中的 custom preset 结构由 providers 即时编译，不再维护第二份同步副本。
+模型设置只把 `llm.providers` 作为持久化真源；启动和读取不会迁移或回退到 `llm.customPresets`。受影响的模型配置和凭证应通过当前服务商界面重新建立；旧条目不会自动删除。
 
 **热重载**：改完 `llm.toml` 不必重启应用 —— 到 **设置 → 模型 → 用途分配** 点“重新加载配置”即可。后端会重读文件并原地应用到运行中的 gateway（`POST /api/llm-config/reload`），新增/删除的用途立即生效。桌面版该接口受一次性 bearer token 保护（同其他写接口），前端自动附带；dev/web tier 无 token 时开放。
 
@@ -134,7 +134,7 @@ REST Settings backend 会把 `GET /api/config/keys` 返回的 provider 列表 hy
 
 若 `keys.env` 无法读取，GET 返回 `500 keys_file_unreadable`，PUT 返回 `409 keys_file_unreadable` 并保留原路径；写入同样使用同目录临时文件 + rename 原子替换。
 
-`settings.json` 使用同目录临时文件 + rename 原子替换，当前持久化格式为 `schemaVersion: 2`，并携带单调 `revision`。旧版 v1（必须有对象 `entries`）会在内存迁移为 revision 0，并在下次成功保存时写为 v2。若现有文件无法读取、JSON/`entries` 损坏或版本过新，GET 返回 `500 settings_file_invalid`，PUT 返回 `409 settings_file_invalid` 并保留原文件；写入必须携带读取到的 revision，若另一实例先保存则返回 `409 settings_revision_conflict` 且文件不变。读取失败时 SettingsStore 保持只读。正常的 revision 冲突会先验证并加载最新快照，再按设置键做三方比较：不同键的修改可在 CAS 保护下重放，同一键（包括整个对象或数组）的冲突仍拒绝覆盖，并提示核对最新值后重试。普通设置在浏览器 storage 事件、窗口重新聚焦或页面恢复可见时同步；这些同步不读取或写入 API key。详见 [SettingsStore 契约](../reference/settings-store.md)。
+`settings.json` 使用同目录临时文件 + rename 原子替换，当前持久化格式为 `schemaVersion: 2`，并携带单调 `revision`。无版本或 v1 持久化数据会被拒绝，不会自动转换或删除；先备份，再重建受影响的设置。独立的设置导入/导出格式仍使用 `schemaVersion: 1`。升级前请阅读 [v0.0.42 升级指南](./upgrade-0.0.42.md)。若现有文件无法读取、JSON/`entries` 损坏或版本过新，GET 返回 `500 settings_file_invalid`，PUT 返回 `409 settings_file_invalid` 并保留原文件；写入必须携带读取到的 revision，若另一实例先保存则返回 `409 settings_revision_conflict` 且文件不变。读取失败时 SettingsStore 保持只读。正常的 revision 冲突会先验证并加载最新快照，再按设置键做三方比较：不同键的修改可在 CAS 保护下重放，同一键（包括整个对象或数组）的冲突仍拒绝覆盖，并提示核对最新值后重试。普通设置在浏览器 storage 事件、窗口重新聚焦或页面恢复可见时同步；这些同步不读取或写入 API key。详见 [SettingsStore 契约](../reference/settings-store.md)。
 
 `GET /api/config/info` 的响应里增加了 `requiresAuth` 字段，前端据此决定是否需要附带 Authorization 头。Electron 渲染进程通过 `covel:get-info` IPC 拿到 `restToken` 字段，自动注入到所有写请求。开发模式下若未设置该 env，token 门不启用，纯 web tier 与 `pnpm dev:web` 流程保持原样。
 

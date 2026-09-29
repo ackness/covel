@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.41-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.41)
+[![Version](https://img.shields.io/badge/version-v0.0.42-8b5cf6)](./docs/CHANGELOG.md#0042---2026-09-29)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,14 +13,14 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **发布版本：v0.0.41**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
+> **当前源码版本：v0.0.42**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；升级前请阅读 [v0.0.42 升级指南](./docs/guide/upgrade-0.0.42.md)与[变更记录](./docs/CHANGELOG.md)。已有数据库和会话不会自动迁移，请保留完整备份并使用新的存储。
 
 ## 亮点
 
 - 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。为场景舞台配置图像模型后，可在游玩中补齐缺失背景。社区生图插件提供独立的剧情插画与画廊流程，见[图像生成](docs/reference/image-generation.md)。
 - ⚙️ **可组合的插件 runtime** —— 在一条能力驱动的管线中组合 LLM agent、确定性函数、UI 面板、数据 schema、事件和生命周期 hook。
 - 🎲 **内置 RPG 玩法** —— 预掷骰判定（可视化回执）、自动跟踪的任务日志、玩家可直接操作的行囊、逐 NPC 好感度。全部是可选插件；世界包可以预置任务、开局装备与初始好感。
-- 🧩 **插件保持可替换** —— 内核通过 `capabilities` 和 `outputKind` 发现能力，框架代码不按具体插件 ID 分支。
+- 🧩 **插件保持可替换** —— 内核通过版本化契约和声明的输出可见性发现能力，框架代码不按具体插件 ID 分支。
 - 🎲 **可选配点规则** —— `tabletop-rules` 使用第三方 ZIP 包同样可用的类型化表单、校验器和确定性工具接口。两个叙事插件均支持人称设置，正文检查后整段展示。
 - 🌍 **可移植世界包** —— 用同一套 `WorldData` 导入协议携带世界观、角色 schema、主要角色、规则、记忆块、任务、物品、立绘、场景与插件默认值。
 - 🔄 **共享 WorldIR** —— 回合后先生成一次插件中立事实投影，任务、行囊、好感、图鉴与关系插件复用同一份证据，不再各自重读故事。
@@ -57,17 +57,19 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `cost-gate`、`story-guard`、`director`                |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`、`character-presence` |
 
-`PLUGIN.md` 的 frontmatter 承载包级声明，并可按需加入明确的 runtime 执行配置，字段包括工具、事件、UI、设置、`capabilities` 与 `outputKind`（`story`、`plugin` 或 `system`）。只有 agent runtime 才会把 Markdown 正文作为模型指令。多 runtime 插件在根目录保留包级信息与共享声明，实际执行 manifest 位于 `runtimes/*/PLUGIN.md`：
+根 `PLUGIN.md` 声明包身份、版本化的 `provides` / `requires` / `optional` 契约，以及工具、事件、UI、设置等共享 `contributes`。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
 
 ```text
 plugins/npc-graph/
-├── PLUGIN.md                         # 插件包身份与共享声明
+├── PLUGIN.md                         # package identity, contracts, contributions
 └── runtimes/
-    ├── rag-retriever/PLUGIN.md       # 回合前确定性检索
-    └── extractor/PLUGIN.md           # 回合后关系抽取 agent
+    ├── rag-retriever/RUNTIME.md      # deterministic pre-turn retrieval
+    └── extractor/RUNTIME.md          # post-turn relationship agent
 ```
 
-单根清单布局只有声明执行字段时才产生 runtime；仅有 `capabilities`、`outputKind` 或正文不会创建 runtime。仅含 entry、Hook、UI 或数据声明的插件有 0 个 runtime，仍可提供对应能力。内核通过声明式能力和类型化输出连接这些模块。因此叙事者、图像服务商、舞台导演或规则系统都能被替换，而无需在框架里为某个插件 ID 添加特例。
+两种布局不能混用。仅含 entry、Hook、UI 或数据声明的包无需 runtime。runtime 以 `io.visibility` 声明可见性，需要发布公共输出契约时使用 `io.output.contract`；agent 使用自己清单的正文作为模型指令。运行结果区分业务 `output`、显式 `effects` 和 `completion`，普通数据字段不会意外触发写入或结束 setup。作者格式和结果边界见[插件契约参考](./docs/reference/plugins.md)。
+
+内核通过契约、类型化扩展点和公共 UI 槽位连接这些模块。叙事者、图像服务商、舞台导演或规则系统都能被替换，无需在框架里为某个插件 ID 添加特例。
 
 扩展应按独立 community 包开发并验证安装、授权、重启和卸载，见[插件测试](./docs/guide/plugin-testing.md)与
 [玩家流程验收](./docs/guide/e2e-testing.md#发版前的玩家流程验收)。框架统一版本，插件和世界包可独立维护版本。
@@ -76,7 +78,7 @@ plugins/npc-graph/
 
 ![AI 世界构筑器正在配置可移植世界包](./.assets/images/readme/world-package-builder.png)
 
-世界包是可移植的内容层。`world.yaml` 描述身份、语言、呈现方式、角色属性、记忆块和期望的插件组合；`WORLD.md` 保存权威世界观；`data/world.data.yaml` 把类型化 source 映射到世界 metadata、角色、资料库、媒体索引或插件自己的 namespace。
+世界包是可移植的内容层。`world.yaml` 描述身份、语言、呈现方式、角色属性和期望的插件组合；`WORLD.md` 保存权威世界观；`data/world.data.yaml` 把类型化 source 映射到世界 metadata、角色、资料库、媒体索引或插件自己的 namespace。
 
 ```text
 worlds/my-world/
@@ -93,7 +95,7 @@ worlds/my-world/
     └── 角色 presence 与场景索引
 ```
 
-`pluginPolicy` 选择 preset，并把插件标为必需、推荐或排除；非必需项仍可由玩家调整。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。`memoryBlocks` 可以加入线索、嫌疑人、信号日志、倒计时等题材记忆，无需修改记忆系统。
+`pluginPolicy` 选择预设，并以 `requested`、`recommended` 声明插件；版本化契约负责解析依赖，推荐项仍由玩家选择。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
 
 `WorldData` 是统一导入协议，不是第二种世界格式。source 可以是 YAML、JSON、Markdown、文本或媒体，目标可以是通用角色/资料库，也可以是明确接受 WorldData 的插件 namespace。应用内 AI 构筑器生成的也是同一套标准包：它会根据结构化创作简报生成 manifest、世界观、维度、主要角色、资料库和规则。文件型世界包可以携带完整媒体；浏览器或 store 中的 AI 世界保留可移植文本回退，媒体仍由文件或资源存储承载。
 

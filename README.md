@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.41-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.41)
+[![Version](https://img.shields.io/badge/version-v0.0.42-8b5cf6)](./docs/CHANGELOG.md#0042---2026-09-29)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,14 +13,14 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Release version: v0.0.41**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
+> **Source version: v0.0.42**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Read the [v0.0.42 upgrade guide](./docs/guide/upgrade-0.0.42.en.md) and [changelog](./docs/CHANGELOG.md) before upgrading. Existing databases and sessions are not automatically migrated; preserve a complete backup and start with new storage.
 
 ## Highlights
 
 - 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Configure an image model for Scene Stage to generate missing backdrops during play. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](docs/reference/image-generation.md).
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
 - 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
-- 🧩 **Plugins stay replaceable** — the kernel discovers `capabilities` and `outputKind`; framework code does not branch on concrete plugin IDs.
+- 🧩 **Plugins stay replaceable** — the kernel resolves versioned contracts and declared output visibility; framework code does not branch on concrete plugin IDs.
 - 🎲 **Optional point-buy rules** — `tabletop-rules` uses the same typed forms, validators and deterministic tools available to third-party ZIP packages. Narration perspective is configurable in both narrative plugins; checked prose appears after review.
 - 🌍 **Portable world packs** — bundle lore, character schemas, cast, rules, memory blocks, quests, items, portraits, scenes, and plugin defaults behind one `WorldData` import protocol.
 - 🔄 **One shared WorldIR** — a post-turn fact projection lets quests, inventory, affinity, the codex, and relationship plugins reuse the same evidence instead of independently re-reading the story.
@@ -57,17 +57,19 @@ A plugin is not necessarily one autonomous agent. It may contain one runtime, se
 | **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `cost-gate`, `story-guard`, `director`                |
 | **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`, `character-presence` |
 
-`PLUGIN.md` frontmatter carries package declarations and, when needed, explicit runtime execution settings. These include tools, events, UI, settings, `capabilities`, and `outputKind` (`story`, `plugin`, or `system`). For an agent runtime, its Markdown body is also the model instruction. A multi-runtime package keeps package metadata and shared declarations at the root and puts executable manifests under `runtimes/*/PLUGIN.md`:
+Root `PLUGIN.md` declares package identity, versioned `provides` / `requires` / `optional` contracts, and shared `contributes` such as tools, events, UI, and settings. A single executable runtime goes under its explicit `runtime` field. A multi-runtime package instead places execution manifests under `runtimes/*/RUNTIME.md`:
 
 ```text
 plugins/npc-graph/
-├── PLUGIN.md                         # package identity and shared declarations
+├── PLUGIN.md                         # package identity, contracts, contributions
 └── runtimes/
-    ├── rag-retriever/PLUGIN.md       # deterministic pre-turn retrieval
-    └── extractor/PLUGIN.md           # post-turn relationship agent
+    ├── rag-retriever/RUNTIME.md      # deterministic pre-turn retrieval
+    └── extractor/RUNTIME.md          # post-turn relationship agent
 ```
 
-In a single-file layout, the root manifest becomes a runtime only when it declares execution fields; `capabilities`, `outputKind`, and prose alone do not create one. A package containing only entry code, hooks, UI, or data declarations has zero runtimes and remains usable. The kernel connects these pieces through declared capabilities and typed outputs. That is what makes a narrator, image provider, stage director, or rules system swappable without framework branches for a particular plugin ID.
+The two layouts cannot be mixed. Packages containing only entry code, hooks, UI, or data declarations need no runtime. Runtimes declare visibility in `io.visibility` and can publish an output contract through `io.output.contract`; an agent uses its own manifest body as model instructions. Runtime results separate business `output`, explicit `effects`, and `completion`, so an ordinary data field cannot accidentally trigger a write or end setup. See the [plugin contract reference](./docs/reference/plugins.md) for the authoring format and result boundaries.
+
+The kernel connects these pieces through contracts, typed extension points, and public UI slots. Narrators, image providers, stage directors, and rules systems can be replaced without framework branches for a particular plugin ID.
 
 Author and validate extensions as independent community packages, including installation, approval,
 restart and removal. See [plugin testing](./docs/guide/plugin-testing.md) and the
@@ -78,7 +80,7 @@ plugins and world packs may use their own versions.
 
 ![AI world builder configuring a portable world pack](./.assets/images/readme/world-package-builder.png)
 
-A world pack is the portable content layer. `world.yaml` describes identity, locales, presentation, character attributes, memory blocks, and the desired plugin composition. `WORLD.md` provides canonical lore. `data/world.data.yaml` maps typed sources into world metadata, characters, lorebook entries, media indexes, or plugin-owned namespaces.
+A world pack is the portable content layer. `world.yaml` describes identity, locales, presentation, character attributes and the desired plugin composition. `WORLD.md` provides canonical lore. `data/world.data.yaml` maps typed sources into world metadata, characters, lorebook entries, media indexes, or plugin-owned namespaces.
 
 ```text
 worlds/my-world/
@@ -95,7 +97,7 @@ worlds/my-world/
     └── presence and scene indexes
 ```
 
-`pluginPolicy` chooses a preset and marks plugins as required, recommended, or excluded; optional choices remain player-configurable. `pluginSettings` supplies world defaults below player overrides. `memoryBlocks` adds genre-specific memory such as clues, suspects, signal logs, or countdowns without modifying the memory system.
+`pluginPolicy` chooses a preset and declares `requested` and `recommended` plugins; versioned contracts resolve their dependencies, and recommendations remain player-configurable. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
 
 `WorldData` is the shared import protocol, not a second world format. Its sources can be YAML, JSON, Markdown, text, or media and can target canonical characters/lorebook data or a plugin namespace that explicitly accepts world data. The in-app AI builder produces the same standard package: it can generate the manifest, lore, dimensions, main cast, lorebook, and rules from a structured creative brief. File-backed packs can include full media; browser/store-backed generated worlds retain a portable text fallback while media remains file- or asset-backed.
 
