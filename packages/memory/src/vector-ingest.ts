@@ -21,11 +21,17 @@
 import { collectArchivalItems } from "./archival-items.js";
 import type { VectorIngestStore } from "./store-contracts.js";
 
-import type { VectorStoreCapability } from "@covel/store/vector";
+import type {
+  CommitVectorIndexBatchInput,
+  VectorStoreCapability,
+} from "@covel/store/vector";
 import { supportsVector } from "@covel/store/vector";
 
 /** Store narrowed to one that can persist vectors. */
 type VectorStore = VectorIngestStore & VectorStoreCapability;
+type VectorIndexUpsert = NonNullable<
+  CommitVectorIndexBatchInput["upserts"]
+>[number];
 import {
   ARCHIVAL_NAMESPACE,
   contentHash,
@@ -230,7 +236,7 @@ async function ingestRecall(
       )
     : [];
 
-  let written = 0;
+  const upserts: VectorIndexUpsert[] = [];
   // Advance the cursor only past messages we handled: persisted embeddings and
   // empty-content rows (which are never embeddable, so skipping them forward is
   // what keeps a run of blank rows from stalling the cursor forever). If
@@ -247,13 +253,10 @@ async function ingestRecall(
     const embedding = vectors[vectorIndex];
     vectorIndex += 1;
     if (!embedding || embedding.length === 0) break;
-    await store.upsertVector({
-      sessionId,
-      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+    upserts.push({
       namespace: RECALL_NAMESPACE,
       key: msg.id,
       embedding,
-      expectedSessionCreatedAt,
       payload: JSON.stringify({
         turnId: msg.turnId ?? "",
         role: msg.role,
@@ -261,22 +264,22 @@ async function ingestRecall(
         createdAt: msg.createdAt,
       }),
     });
-    written += 1;
     lastHandled = { createdAt: msg.createdAt, id: msg.id };
   }
 
   if (lastHandled) {
-    await writeProgress(
+    await commitIndexBatch(
       store,
       sessionId,
       CURSOR_NS,
       lastHandled,
       progress.raw,
       expectedSessionCreatedAt,
+      { upserts },
     );
   }
   return {
-    written,
+    written: upserts.length,
     more:
       batch.length === MAX_INGEST_BATCH && lastHandled?.id === batch.at(-1)?.id,
   };
@@ -304,29 +307,12 @@ async function ingestArchival(
   const liveKeys = new Set(items.map((it) => it.vecKey));
   const removedKeys = Object.keys(hashes).filter((key) => !liveKeys.has(key));
   const hasDeletion = removedKeys.length > 0;
+  const deletes = removedKeys.map((key) => ({
+    namespace: ARCHIVAL_NAMESPACE,
+    key,
+  }));
   for (const key of removedKeys) {
-    await store.deleteVectors({
-      sessionId,
-      pluginId: MEMORY_VECTOR_PLUGIN_ID,
-      namespace: ARCHIVAL_NAMESPACE,
-      key,
-      expectedSessionCreatedAt,
-    });
     delete hashes[key];
-  }
-
-  if (items.length === 0) {
-    if (hasDeletion) {
-      await writeProgress(
-        store,
-        sessionId,
-        HASHES_NS,
-        {},
-        progress.raw,
-        expectedSessionCreatedAt,
-      );
-    }
-    return { written: 0, more: false };
   }
 
   // Embed only items whose content fingerprint is new or changed.
@@ -335,13 +321,14 @@ async function ingestArchival(
   );
   if (changed.length === 0) {
     if (hasDeletion)
-      await writeProgress(
+      await commitIndexBatch(
         store,
         sessionId,
         HASHES_NS,
         hashes,
         progress.raw,
         expectedSessionCreatedAt,
+        { deletes },
       );
     return { written: 0, more: false };
   }
@@ -355,18 +342,15 @@ async function ingestArchival(
   );
 
   const nextHashes: ArchivalHashes = { ...hashes };
-  let written = 0;
+  const upserts: VectorIndexUpsert[] = [];
   for (let i = 0; i < batch.length; i += 1) {
     const it = batch[i];
     const embedding = vectors[i];
     if (!embedding || embedding.length === 0) continue;
-    await store.upsertVector({
-      sessionId,
-      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+    upserts.push({
       namespace: ARCHIVAL_NAMESPACE,
       key: it.vecKey,
       embedding,
-      expectedSessionCreatedAt,
       payload: JSON.stringify({
         source: it.source,
         key: it.displayKey,
@@ -375,20 +359,20 @@ async function ingestArchival(
       }),
     });
     nextHashes[it.vecKey] = contentHash(it.text);
-    written += 1;
   }
 
-  await writeProgress(
+  await commitIndexBatch(
     store,
     sessionId,
     HASHES_NS,
     nextHashes,
     progress.raw,
     expectedSessionCreatedAt,
+    { upserts, deletes },
   );
   return {
-    written,
-    more: changed.length > batch.length && written === batch.length,
+    written: upserts.length,
+    more: changed.length > batch.length && upserts.length === batch.length,
   };
 }
 
@@ -406,21 +390,23 @@ async function readProgress<T>(
   return { raw, value: raw === null ? null : (JSON.parse(raw) as T) };
 }
 
-async function writeProgress(
+async function commitIndexBatch(
   store: VectorStore,
   sessionId: string,
   namespace: string,
   value: unknown,
   expectedValue: string | null,
   expectedSessionCreatedAt: string,
+  changes: Pick<CommitVectorIndexBatchInput, "upserts" | "deletes">,
 ): Promise<void> {
-  const updated = await store.compareAndSetVectorIndexProgress({
+  const updated = await store.commitVectorIndexBatch({
     sessionId,
     pluginId: MEMORY_VECTOR_PLUGIN_ID,
     namespace,
     value: JSON.stringify(value),
     expectedValue,
     expectedSessionCreatedAt,
+    ...changes,
   });
   if (!updated)
     throw new Error("Vector index progress changed during ingestion");

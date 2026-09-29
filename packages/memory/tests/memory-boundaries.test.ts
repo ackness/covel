@@ -41,6 +41,48 @@ async function fixture(
 }
 
 describe("memory ownership boundaries", () => {
+  it("keeps the newer index when an older instance finishes embedding last", async () => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const {
+      store,
+      memory: older,
+      character,
+    } = await fixture(async (texts) => {
+      entered.resolve();
+      await release.promise;
+      return texts.map(() => new Float32Array([1, 0]));
+    });
+    const embed = vi.fn(async (texts: readonly string[]) =>
+      texts.map(() => new Float32Array([0, 1])),
+    );
+    const newer = createMemorySystem({ store, embed });
+    const pending = older.ingest("session");
+    try {
+      await entered.promise;
+      await store.upsertCharacter({ ...character, description: "new harbour" });
+      expect((await newer.ingest("session")).archival).toBe(1);
+      release.resolve();
+      await pending;
+      expect((await newer.ingest("session")).archival).toBe(0);
+      expect(embed).toHaveBeenCalledTimes(1);
+      const rows = await store.searchVectors({
+        sessionId: "session",
+        query: new Float32Array([0, 1]),
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].payload).toContain("new harbour");
+      // No source contains this word: a keyword fallback cannot hide a stale index.
+      const hits = await newer.archival.search("session", "seaport");
+      expect(hits).toHaveLength(1);
+      expect(hits[0].content).toContain("new harbour");
+    } finally {
+      release.resolve();
+      await pending;
+      await store.close();
+    }
+  });
+
   it("does not return deleted or changed knowledge before the next ingestion", async () => {
     const { store, memory, character } = await fixture();
     await memory.ingest("session");
@@ -52,6 +94,45 @@ describe("memory ownership boundaries", () => {
     expect(current[0].content).not.toContain("old observatory");
     await store.deleteCharacter("session", "character");
     expect(await memory.archival.search("session", "Alice")).toEqual([]);
+  });
+
+  it("publishes archival deletions only with the successfully embedded batch", async () => {
+    let fail = false;
+    const { store, memory, character } = await fixture(async (texts) => {
+      if (fail) throw new Error("synthetic embedding failure");
+      return texts.map(() => new Float32Array([1, 0]));
+    });
+    const survivor = { ...character, id: "survivor", name: "Bob" };
+    await store.upsertCharacter(survivor);
+    await memory.ingest("session");
+    const scope = {
+      sessionId: "session",
+      pluginId: "__kernel:vector",
+      namespace: "archival-ingest",
+    };
+    const before = await store.getVectorIndexProgress(scope);
+    const search = () =>
+      store.searchVectors({
+        sessionId: "session",
+        query: new Float32Array([1, 0]),
+      });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await store.deleteCharacter("session", character.id);
+      await store.upsertCharacter({ ...survivor, description: "new harbour" });
+      fail = true;
+      expect((await memory.ingest("session")).archival).toBe(0);
+      expect(await search()).toHaveLength(2);
+      expect(await store.getVectorIndexProgress(scope)).toBe(before);
+      fail = false;
+      expect((await memory.ingest("session")).archival).toBe(1);
+      const rows = await search();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].payload).toContain("new harbour");
+    } finally {
+      warn.mockRestore();
+      await store.close();
+    }
   });
 
   it("removes a deleted vector without paying to embed unchanged survivors", async () => {

@@ -91,8 +91,9 @@ export interface MemorySystemDeps {
   readonly embed?: import("./vector-common.js").EmbedFn;
   /**
    * Optional cross-process serialization for a complete vector-ingestion
-   * sweep. Production PostgreSQL deployments inject an advisory-lock runner;
-   * local deployments rely on the ingestor's in-process single-flight map.
+   * sweep. Avoids redundant embedding work across instances; atomic index
+   * batches preserve consistency even without this coordinator. Each instance
+   * also coalesces concurrent requests for the same session.
    */
   readonly runIngestExclusive?: import("./vector-ingest.js").RunIngestExclusive;
 }

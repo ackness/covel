@@ -24,7 +24,7 @@ it("rejects a partial vector adapter before callers access model metadata", () =
       listVectorModels: async () => [],
       lockSessionEmbeddingModel: async () => {},
       getVectorIndexProgress: async () => null,
-      compareAndSetVectorIndexProgress: async () => true,
+      commitVectorIndexBatch: async () => true,
     }),
   ).toBe(true);
 });
@@ -67,7 +67,10 @@ try {
   const client = postgres(DATABASE_URL, { connect_timeout: 3 });
   // Requires the pgvector extension to be installable — that's what makes the
   // vector path real, vs. a plain PG that would throw on `CREATE EXTENSION`.
-  await client`CREATE EXTENSION IF NOT EXISTS vector`;
+  const extensions = await client`
+    SELECT name FROM pg_available_extensions WHERE name = 'vector'
+  `;
+  if (extensions.length === 0) throw new Error("pgvector is not installable");
   await client.end();
   pgVectorAvailable = true;
 } catch (error) {

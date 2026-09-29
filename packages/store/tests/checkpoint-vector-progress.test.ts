@@ -15,7 +15,7 @@ it("keeps derived index progress out of checkpoints and clears it on replacement
     pluginId: "index-owner",
     namespace: "recall",
   };
-  await store.compareAndSetVectorIndexProgress({
+  await store.commitVectorIndexBatch({
     ...scope,
     value: "cursor",
     expectedValue: null,

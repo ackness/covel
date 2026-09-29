@@ -22,7 +22,7 @@ export const STORE_WRITE_METHODS: ReadonlySet<string> = new Set(
  * single connection and must queue on the same gate.
  */
 export const VECTOR_WRITE_METHODS: ReadonlySet<string> = new Set([
-  "compareAndSetVectorIndexProgress",
+  "commitVectorIndexBatch",
   "upsertVector",
   "deleteVectors",
   "ensureVectorModel",

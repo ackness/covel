@@ -433,10 +433,16 @@ the affected table in the relevant reference doc.
 ## Derived vector-index progress
 
 `VectorStoreCapability` exposes `getVectorIndexProgress(scope)` and
-`compareAndSetVectorIndexProgress(input)` for serialized, index-owned progress.
+`commitVectorIndexBatch(input)` for atomic vector and index-progress writes.
 Scope is `(sessionId, pluginId, namespace)`. Updates require both the previously
 read serialized value (`null` means absent) and `expectedSessionCreatedAt`.
-A CAS conflict returns `false`; a stale or missing session incarnation throws.
+A batch may include `deletes` (namespace/key pairs) and `upserts`
+(namespace/key/embedding/payload), scoped to the same session and plugin. The
+progress namespace identifies the cursor or hash map; each vector mutation names
+its own data namespace. Deletes run before upserts, and all mutations commit with
+the new progress value. A CAS conflict returns `false` without changing vectors
+or progress; a stale or missing session incarnation or any invalid mutation
+throws and rolls back the entire batch.
 PostgreSQL holds the parent session row with `FOR KEY SHARE`, while SQLite uses
 an immediate transaction and Memory uses its serialized store boundary. These
 operations do not run on the `StoreTransaction` business-data view.
@@ -448,6 +454,9 @@ restored or forked sessions rebuild indexes from their own source rows.
 
 `deleteVectors` optionally accepts `key` to remove one entry within the selected
 scope and `expectedSessionCreatedAt` to reject stale asynchronous deletions.
-Ingestion reads all archival sources successfully before issuing any deletion.
-The vector and progress writes remain idempotent, asynchronous operations;
-embedding provider calls are never held inside a business-data transaction.
+Ingestion reads all archival sources and completes embedding before submitting
+the corresponding deletes, upserts, and progress as one batch. An older sweep
+cannot overwrite the vectors owned by a newer progress value. Optional
+cross-process ingestion locks reduce duplicate embedding work; correctness does
+not depend on them. Embedding provider calls never run inside the index commit
+transaction or a business-data transaction.

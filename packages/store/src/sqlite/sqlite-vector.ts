@@ -53,7 +53,7 @@ import type {
   VectorSearchResult,
   DeleteVectorsInput,
   VectorIndexProgressScope,
-  UpdateVectorIndexProgressInput,
+  CommitVectorIndexBatchInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
 
@@ -249,6 +249,10 @@ export function createSqliteVectorCapability(
   async function resolveSessionVectorTarget(
     sessionId: string,
   ): Promise<VectorTarget | null> {
+    return resolveVectorTarget(sessionId);
+  }
+
+  function resolveVectorTarget(sessionId: string): VectorTarget | null {
     const sessionRow = sqlite
       .prepare(
         `SELECT embedding_model_id, embedding_locked_at FROM sessions WHERE id = ?`,
@@ -312,7 +316,11 @@ export function createSqliteVectorCapability(
   // ── VectorStoreCapability ────────────────────────────────────────
 
   async function upsertVector(input: UpsertVectorInput): Promise<void> {
-    const target = await resolveSessionVectorTarget(input.sessionId);
+    sqlite.transaction(() => upsertVectorInTransaction(input)).immediate();
+  }
+
+  function upsertVectorInTransaction(input: UpsertVectorInput): void {
+    const target = resolveVectorTarget(input.sessionId);
     if (!target) {
       throw new Error(
         `sqlite-vec upsertVector: session ${input.sessionId} has no embedding model locked`,
@@ -339,43 +347,40 @@ export function createSqliteVectorCapability(
          (session_id, plugin_id, namespace, data_key, payload, embedding)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
-    const txn = sqlite.transaction(() => {
-      const session = sqlite
-        .prepare(
-          `SELECT embedding_model_id, created_at
+    const session = sqlite
+      .prepare(
+        `SELECT embedding_model_id, created_at
              FROM sessions
             WHERE id = ?`,
-        )
-        .get(input.sessionId) as UpsertSessionRow | undefined;
-      if (!session) {
-        throw new Error(
-          `sqlite-vec upsertVector: session ${input.sessionId} not found`,
-        );
-      }
-      if (session.embedding_model_id !== target.modelRegistryId) {
-        throw new Error(
-          `sqlite-vec upsertVector: session ${input.sessionId} changed embedding model`,
-        );
-      }
-      if (
-        input.expectedSessionCreatedAt !== undefined &&
-        session.created_at !== input.expectedSessionCreatedAt
-      ) {
-        throw new Error(
-          `sqlite-vec upsertVector: session ${input.sessionId} incarnation changed`,
-        );
-      }
-      del.run(input.sessionId, input.pluginId, input.namespace, input.key);
-      ins.run(
-        input.sessionId,
-        input.pluginId,
-        input.namespace,
-        input.key,
-        input.payload ?? null,
-        toJsonVector(input.embedding),
+      )
+      .get(input.sessionId) as UpsertSessionRow | undefined;
+    if (!session) {
+      throw new Error(
+        `sqlite-vec upsertVector: session ${input.sessionId} not found`,
       );
-    });
-    txn.immediate();
+    }
+    if (session.embedding_model_id !== target.modelRegistryId) {
+      throw new Error(
+        `sqlite-vec upsertVector: session ${input.sessionId} changed embedding model`,
+      );
+    }
+    if (
+      input.expectedSessionCreatedAt !== undefined &&
+      session.created_at !== input.expectedSessionCreatedAt
+    ) {
+      throw new Error(
+        `sqlite-vec upsertVector: session ${input.sessionId} incarnation changed`,
+      );
+    }
+    del.run(input.sessionId, input.pluginId, input.namespace, input.key);
+    ins.run(
+      input.sessionId,
+      input.pluginId,
+      input.namespace,
+      input.key,
+      input.payload ?? null,
+      toJsonVector(input.embedding),
+    );
   }
 
   async function searchVectors(
@@ -451,8 +456,8 @@ export function createSqliteVectorCapability(
     return row?.value ?? null;
   }
 
-  async function compareAndSetVectorIndexProgress(
-    input: UpdateVectorIndexProgressInput,
+  async function commitVectorIndexBatch(
+    input: CommitVectorIndexBatchInput,
   ): Promise<boolean> {
     return sqlite
       .transaction(() => {
@@ -462,33 +467,56 @@ export function createSqliteVectorCapability(
         if (!session || session.created_at !== input.expectedSessionCreatedAt) {
           throw new Error("Vector index progress: session incarnation changed");
         }
-        if (input.expectedValue === null) {
-          return (
-            sqlite
-              .prepare(
-                "INSERT INTO vector_index_progress (session_id, plugin_id, namespace, value) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
-              )
-              .run(
+        const changed =
+          input.expectedValue === null
+            ? sqlite
+                .prepare(
+                  "INSERT INTO vector_index_progress (session_id, plugin_id, namespace, value) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+                )
+                .run(
+                  input.sessionId,
+                  input.pluginId,
+                  input.namespace,
+                  input.value,
+                ).changes
+            : sqlite
+                .prepare(
+                  "UPDATE vector_index_progress SET value = ? WHERE session_id = ? AND plugin_id = ? AND namespace = ? AND value = ?",
+                )
+                .run(
+                  input.value,
+                  input.sessionId,
+                  input.pluginId,
+                  input.namespace,
+                  input.expectedValue,
+                ).changes;
+        if (changed === 0) return false;
+        if (input.deletes?.length) {
+          const target = resolveVectorTarget(input.sessionId);
+          if (target) {
+            const remove = sqlite.prepare(
+              `DELETE FROM ${physicalTableName(target.modelRegistryId)}
+               WHERE session_id = ? AND plugin_id = ? AND namespace = ? AND data_key = ?`,
+            );
+            for (const mutation of input.deletes) {
+              remove.run(
                 input.sessionId,
                 input.pluginId,
-                input.namespace,
-                input.value,
-              ).changes > 0
-          );
+                mutation.namespace,
+                mutation.key,
+              );
+            }
+          }
         }
-        return (
-          sqlite
-            .prepare(
-              "UPDATE vector_index_progress SET value = ? WHERE session_id = ? AND plugin_id = ? AND namespace = ? AND value = ?",
-            )
-            .run(
-              input.value,
-              input.sessionId,
-              input.pluginId,
-              input.namespace,
-              input.expectedValue,
-            ).changes > 0
-        );
+        for (const mutation of input.upserts ?? []) {
+          upsertVectorInTransaction({
+            ...mutation,
+            sessionId: input.sessionId,
+            pluginId: input.pluginId,
+            expectedSessionCreatedAt: input.expectedSessionCreatedAt,
+          });
+        }
+        return true;
       })
       .immediate();
   }
@@ -537,7 +565,7 @@ export function createSqliteVectorCapability(
 
   return {
     getVectorIndexProgress,
-    compareAndSetVectorIndexProgress,
+    commitVectorIndexBatch,
     upsertVector,
     searchVectors,
     deleteVectors,

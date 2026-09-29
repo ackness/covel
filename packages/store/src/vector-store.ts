@@ -132,10 +132,15 @@ export interface VectorIndexProgressScope {
   readonly namespace: string;
 }
 
-export interface UpdateVectorIndexProgressInput extends VectorIndexProgressScope {
+export interface CommitVectorIndexBatchInput extends VectorIndexProgressScope {
   readonly value: string;
   readonly expectedValue: string | null;
   readonly expectedSessionCreatedAt: string;
+  readonly upserts?: readonly Pick<
+    UpsertVectorInput,
+    "namespace" | "key" | "embedding" | "payload"
+  >[];
+  readonly deletes?: readonly Pick<UpsertVectorInput, "namespace" | "key">[];
 }
 
 // ── Capability interfaces ────────────────────────────────────────
@@ -148,10 +153,13 @@ export interface VectorStoreCapability {
   getVectorIndexProgress(
     scope: VectorIndexProgressScope,
   ): Promise<string | null>;
-  /** Atomic progress update; stale session incarnations reject and CAS conflicts return false. */
-  compareAndSetVectorIndexProgress(
-    input: UpdateVectorIndexProgressInput,
-  ): Promise<boolean>;
+  /**
+   * Atomically commit deletes, then upserts, and index progress. A CAS conflict
+   * returns false without mutation. Stale incarnations or invalid mutations
+   * throw and roll back the entire batch. Mutation namespaces are independent
+   * of the progress namespace; sessionId and pluginId apply to the whole batch.
+   */
+  commitVectorIndexBatch(input: CommitVectorIndexBatchInput): Promise<boolean>;
   /** Insert or replace a vector keyed by (sessionId, pluginId, namespace, key). */
   upsertVector(input: UpsertVectorInput): Promise<void>;
   /** Top-k nearest neighbours for a query within the session's vector space. */
@@ -213,7 +221,7 @@ export function supportsVector<T extends object>(
     typeof candidate.searchVectors === "function" &&
     typeof candidate.deleteVectors === "function" &&
     typeof candidate.getVectorIndexProgress === "function" &&
-    typeof candidate.compareAndSetVectorIndexProgress === "function" &&
+    typeof candidate.commitVectorIndexBatch === "function" &&
     typeof candidate.lockSessionEmbeddingModel === "function" &&
     typeof candidate.ensureVectorModel === "function" &&
     typeof candidate.resolveSessionVectorTarget === "function" &&

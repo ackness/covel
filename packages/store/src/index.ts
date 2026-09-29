@@ -80,7 +80,7 @@ export type {
   VectorSearchResult,
   DeleteVectorsInput,
   VectorIndexProgressScope,
-  UpdateVectorIndexProgressInput,
+  CommitVectorIndexBatchInput,
 } from "./vector-store.js";
 export type {
   DataStore,
