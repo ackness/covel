@@ -84,6 +84,8 @@ export async function observeJsonRequest(
   serializedBody: string,
   transportAttempt: number,
   call: () => Promise<Response>,
+  logicalAttempt?: number,
+  transportRetryReason?: LLMProviderRequest["transportRetryReason"],
 ): Promise<Response> {
   if (!observation) return call();
   const start = Date.now();
@@ -97,6 +99,8 @@ export async function observeJsonRequest(
         protocol: observation.protocol,
         ...projectRequestBody(serializedBody),
         transportAttempt,
+        ...(logicalAttempt !== undefined ? { logicalAttempt } : {}),
+        ...(transportRetryReason ? { transportRetryReason } : {}),
         startedAt: new Date(start).toISOString(),
         durationMs: Date.now() - start,
         ...outcome,

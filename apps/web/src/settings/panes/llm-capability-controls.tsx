@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { projectModelCapabilityForBuiltinAdapter } from "@covel/shared";
 import { ModelTokenLimits } from "./llm-token-limits.js";
 import { Label } from "@/components/ui/label.js";
 import {
@@ -183,16 +184,37 @@ export function CapabilityEditor({
   serverCap,
   override,
   onUpdate,
+  context,
 }: {
   serverCap: ModelCapabilityInfo | undefined;
   override: Partial<ModelCapabilityInfo> | undefined;
   onUpdate: (patch: Partial<ModelCapabilityInfo>) => void;
+  context?: { protocol: string; role: string };
 }) {
   const { t } = useTranslation();
-  const effective = mergeCapability(serverCap, override);
-  const currentInput = override?.input ?? serverCap?.input ?? ["text"];
-  const currentOutput = override?.output ?? serverCap?.output ?? ["text"];
-  const currentFeatures = override?.features ?? serverCap?.features ?? [];
+  const merged = mergeCapability(serverCap, override);
+  const effective =
+    merged && context
+      ? projectModelCapabilityForBuiltinAdapter(
+          merged,
+          context.protocol,
+          context.role,
+        )
+      : merged;
+  const available = context
+    ? projectModelCapabilityForBuiltinAdapter(
+        {
+          input: ALL_INPUT_MODALITY_IDS,
+          output: ALL_OUTPUT_MODALITY_IDS,
+          features: ALL_FEATURE_IDS,
+        },
+        context.protocol,
+        context.role,
+      )
+    : undefined;
+  const currentInput = effective?.input ?? ["text"];
+  const currentOutput = effective?.output ?? ["text"];
+  const currentFeatures = effective?.features ?? [];
   const toggle = <T extends string>(
     list: T[],
     item: T,
@@ -215,6 +237,7 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                disabled={available ? !available.input.includes(id) : false}
                 onClick={() =>
                   toggle(currentInput as InputModality[], id, "input")
                 }
@@ -242,6 +265,7 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                disabled={available ? !available.output.includes(id) : false}
                 onClick={() =>
                   toggle(currentOutput as OutputModality[], id, "output")
                 }
@@ -269,6 +293,7 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                disabled={available ? !available.features?.includes(id) : false}
                 onClick={() =>
                   toggle(currentFeatures as ModelFeature[], id, "features")
                 }

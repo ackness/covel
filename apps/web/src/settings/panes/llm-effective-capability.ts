@@ -1,4 +1,7 @@
-import { getBuiltinProviderConnection } from "@covel/shared";
+import {
+  getBuiltinProviderConnection,
+  projectModelCapabilityForBuiltinAdapter,
+} from "@covel/shared";
 import {
   mergeCapability,
   type LlmSlotInfo,
@@ -56,6 +59,7 @@ export function resolveDisplayCapability(
   lookup: ModelCapabilityLookupResult | null | undefined,
   baseCapability?: ModelCapabilityInfo | null,
   override?: Partial<ModelCapabilityInfo>,
+  context?: { protocol: string; role: string },
 ): ModelCapabilityInfo | undefined {
   const known = lookup?.found && lookup.source !== "protocol-default";
   const capability = known
@@ -69,8 +73,15 @@ export function resolveDisplayCapability(
       : undefined;
   // Protocol defaults describe a transport's baseline support, not a model's
   // documented token budget. Explicit user overrides remain authoritative.
-  return mergeCapability(
+  const merged = mergeCapability(
     mergeCapability(capability, baseCapability ?? undefined),
     override,
   );
+  return merged && context && lookup?.usesBuiltinAdapter !== false
+    ? projectModelCapabilityForBuiltinAdapter(
+        merged,
+        context.protocol,
+        context.role,
+      )
+    : merged;
 }

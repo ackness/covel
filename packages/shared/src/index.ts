@@ -16,6 +16,8 @@ export {
 
 // ── Types ─────────────────────────────────────────────────────────
 export * from "./types/index.js";
+export * from "./types/llm-diagnostics.js";
+export * from "./llm-request-budget.js";
 export type {
   EvaluationJson,
   EvaluationValue,
@@ -33,6 +35,7 @@ export {
   protocolOutputModalities,
   supportsModelRole,
 } from "./model-capabilities.js";
+export { projectModelCapabilityForBuiltinAdapter } from "./model-capability-support.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
 export {

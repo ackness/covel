@@ -158,6 +158,7 @@ export function LlmAdvancedPane({
     effectiveTarget.provider,
     effectiveTarget.protocol,
     catalogRevision,
+    "text",
   );
   const reasoningProfile = lookup?.reasoning;
   const canPruneReasoningOverride = lookup !== undefined && lookup !== null;
@@ -165,6 +166,7 @@ export function LlmAdvancedPane({
     lookup,
     effectiveTarget.baseCapability,
     getCapabilityOverrides()[selectedSlot],
+    { protocol: effectiveTarget.protocol, role: "text" },
   );
   const supportsTextGeneration = isRoleModelCompatible(
     { ...effectiveTarget, capability },

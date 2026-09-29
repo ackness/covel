@@ -105,6 +105,7 @@ export function LlmSlotCard({
     target.provider,
     target.protocol,
     catalogRevision,
+    roleTag,
   );
   const {
     provider: effectiveProvider,
@@ -345,6 +346,8 @@ export function LlmSlotCard({
           provider={effectiveProvider}
           baseCapability={target.baseCapability}
           override={capOverride}
+          protocol={effectiveProtocol}
+          role={roleTag}
         />
       )}
 
@@ -377,9 +380,19 @@ export function LlmSlotCard({
 
       {effectiveModel && isEditing && (
         <CapabilityEditor
-          serverCap={resolveDisplayCapability(lookup, target.baseCapability)}
+          serverCap={resolveDisplayCapability(
+            lookup,
+            target.baseCapability,
+            undefined,
+            { protocol: effectiveProtocol, role: roleTag },
+          )}
           override={capOverride}
           onUpdate={onUpdateCapability}
+          context={
+            lookup?.usesBuiltinAdapter === false
+              ? undefined
+              : { protocol: effectiveProtocol, role: roleTag }
+          }
         />
       )}
       {effectiveModel && !incompatibleBinding && roleTag === "text" && (

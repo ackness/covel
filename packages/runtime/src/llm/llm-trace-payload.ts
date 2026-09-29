@@ -94,6 +94,9 @@ export function buildLlmRespondedSuccessPayload(
     runtimeId: input.runtimeId,
     pluginId: input.pluginId,
     text: input.response.content ?? "",
+    ...(input.response.diagnostics
+      ? { diagnostics: input.response.diagnostics }
+      : {}),
     ...(input.response.reasoningContent
       ? { reasoningContent: input.response.reasoningContent }
       : {}),
@@ -118,7 +121,17 @@ export interface LlmRespondedErrorInput {
 export function buildLlmRespondedErrorPayload(
   input: LlmRespondedErrorInput,
 ): Record<string, unknown> {
+  const error = input.error;
+  const details =
+    error && typeof error === "object" && "details" in error
+      ? error.details
+      : undefined;
+  const diagnostics =
+    details && typeof details === "object" && "diagnostics" in details
+      ? details.diagnostics
+      : undefined;
   return {
+    ...(diagnostics ? { diagnostics } : {}),
     runtimeId: input.runtimeId,
     pluginId: input.pluginId,
     finishReason: "error",

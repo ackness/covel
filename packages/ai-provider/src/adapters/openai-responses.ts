@@ -36,6 +36,10 @@ import { extractReasoningRequestFields } from "../reasoning-effort.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 import { objectResponseFormat } from "./structured-output.js";
 import {
+  readResponseDiagnostics,
+  ResponseDiagnostics,
+} from "./response-diagnostics.js";
+import {
   createMetadataSanitizer,
   extractParameterOverrides,
   mediaRefFallbackText,
@@ -301,6 +305,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       }
       const response = await postJson(config, "/responses", body);
       const payload = await parseJson(response);
+      const diagnostics = readResponseDiagnostics(
+        payload,
+        "responses",
+        "openai-responses",
+      );
       assertSuccess(response, payload, "openai-responses");
       assertGenerationPayload(payload, "openai-responses");
       assertSuccessfulFinishReason(
@@ -309,6 +318,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       );
 
       return {
+        ...(diagnostics ? { diagnostics } : {}),
         text: readResponsesOutputText(payload),
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
@@ -341,6 +351,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         ),
       });
       const payload = await parseJson(response);
+      const diagnostics = readResponseDiagnostics(
+        payload,
+        "responses",
+        "openai-responses",
+      );
       assertSuccess(response, payload, "openai-responses");
       assertGenerationPayload(payload, "openai-responses");
       assertSuccessfulFinishReason(
@@ -360,6 +375,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       }
 
       return {
+        ...(diagnostics ? { diagnostics } : {}),
         object: validation.data,
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
@@ -402,6 +418,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
       if (!response.ok) {
         const payload = await parseJson(response);
+        readResponseDiagnostics(payload, "responses", "openai-responses");
         assertSuccess(response, payload, "openai-responses");
       }
 
@@ -409,6 +426,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       let streamFinishReason = "stop";
       let completed = false;
       const reasoning = new ResponsesReasoningAccumulator();
+      const diagnostics = new ResponseDiagnostics("responses");
       const outputItems = new Map<number, unknown>();
       let completedOutput: unknown;
       // Accumulate streaming function-call items keyed by the Responses item
@@ -418,71 +436,79 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         { callId: string | null; name: string | null; arguments: string }
       >();
 
-      for await (const payload of iterateSsePayloads(response)) {
-        assertGenerationPayload(payload, "openai-responses");
-        if (payload.type === "response.output_item.done")
-          outputItems.set(Number(payload.output_index ?? 0), payload.item);
-        const reasoningDelta = reasoning.push(payload);
-        if (reasoningDelta) yield { type: "reasoning-delta", reasoningDelta };
-        if (
-          payload.type === "response.output_text.delta" &&
-          typeof payload.delta === "string"
-        ) {
-          yield { type: "text-delta", textDelta: payload.delta as string };
-        }
+      try {
+        for await (const payload of iterateSsePayloads(response)) {
+          diagnostics.push(payload);
+          if (payload.error || payload.type === "response.failed")
+            diagnostics.assertNotRefused("openai-responses");
+          assertGenerationPayload(payload, "openai-responses");
+          if (payload.type === "response.output_item.done")
+            outputItems.set(Number(payload.output_index ?? 0), payload.item);
+          const reasoningDelta = reasoning.push(payload);
+          if (reasoningDelta) yield { type: "reasoning-delta", reasoningDelta };
+          if (
+            payload.type === "response.output_text.delta" &&
+            typeof payload.delta === "string"
+          ) {
+            yield { type: "text-delta", textDelta: payload.delta as string };
+          }
 
-        const added = readResponsesStreamFunctionCallAdded(payload);
-        if (added) {
-          const existing = toolCallAcc.get(added.id);
-          toolCallAcc.set(added.id, {
-            callId: added.callId ?? existing?.callId ?? null,
-            name: added.name ?? existing?.name ?? null,
-            arguments: added.arguments || existing?.arguments || "",
-          });
-        }
+          const added = readResponsesStreamFunctionCallAdded(payload);
+          if (added) {
+            const existing = toolCallAcc.get(added.id);
+            toolCallAcc.set(added.id, {
+              callId: added.callId ?? existing?.callId ?? null,
+              name: added.name ?? existing?.name ?? null,
+              arguments: added.arguments || existing?.arguments || "",
+            });
+          }
 
-        const argsDelta = readResponsesStreamFunctionCallArgsDelta(payload);
-        if (argsDelta) {
-          const existing = toolCallAcc.get(argsDelta.itemId) ?? {
-            callId: null,
-            name: null,
-            arguments: "",
-          };
-          existing.arguments += argsDelta.delta;
-          toolCallAcc.set(argsDelta.itemId, existing);
-        }
+          const argsDelta = readResponsesStreamFunctionCallArgsDelta(payload);
+          if (argsDelta) {
+            const existing = toolCallAcc.get(argsDelta.itemId) ?? {
+              callId: null,
+              name: null,
+              arguments: "",
+            };
+            existing.arguments += argsDelta.delta;
+            toolCallAcc.set(argsDelta.itemId, existing);
+          }
 
-        const argsDone = readResponsesStreamFunctionCallArgsDone(payload);
-        if (argsDone) {
-          const existing = toolCallAcc.get(argsDone.itemId) ?? {
-            callId: null,
-            name: null,
-            arguments: "",
-          };
-          // The `done` event carries the authoritative full argument string.
-          existing.arguments = argsDone.arguments;
-          if (argsDone.name) existing.name = argsDone.name;
-          toolCallAcc.set(argsDone.itemId, existing);
-        }
+          const argsDone = readResponsesStreamFunctionCallArgsDone(payload);
+          if (argsDone) {
+            const existing = toolCallAcc.get(argsDone.itemId) ?? {
+              callId: null,
+              name: null,
+              arguments: "",
+            };
+            // The `done` event carries the authoritative full argument string.
+            existing.arguments = argsDone.arguments;
+            if (argsDone.name) existing.name = argsDone.name;
+            toolCallAcc.set(argsDone.itemId, existing);
+          }
 
-        const terminalStatus = terminalResponseStatus(payload.type);
-        if (terminalStatus) {
-          const responseObj = payload.response as
-            Record<string, unknown> | undefined;
-          usage = readOpenAiResponsesUsage(responseObj);
-          if (Array.isArray(responseObj?.output))
-            completedOutput = responseObj.output;
-          streamFinishReason = mapResponseStatus(
-            responseObj?.status ?? terminalStatus,
-          );
-          assertGenerationPayload(
-            { error: streamFinishReason === "error" },
-            "openai-responses",
-          );
-          completed = true;
+          const terminalStatus = terminalResponseStatus(payload.type);
+          if (terminalStatus) {
+            const responseObj = payload.response as
+              Record<string, unknown> | undefined;
+            usage = readOpenAiResponsesUsage(responseObj);
+            if (Array.isArray(responseObj?.output))
+              completedOutput = responseObj.output;
+            streamFinishReason = mapResponseStatus(
+              responseObj?.status ?? terminalStatus,
+            );
+            assertGenerationPayload(
+              { error: streamFinishReason === "error" },
+              "openai-responses",
+            );
+            completed = true;
+          }
         }
+      } catch (error) {
+        diagnostics.assertNotRefused("openai-responses");
+        throw error;
       }
-
+      diagnostics.assertNotRefused("openai-responses");
       assertStreamCompleted(completed, "openai-responses");
 
       // Emit accumulated tool calls before done. The Responses API references
@@ -500,6 +526,9 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
       yield {
         type: "done",
+        ...(diagnostics.diagnostics()
+          ? { diagnostics: diagnostics.diagnostics() }
+          : {}),
         finishReason: streamFinishReason,
         usage,
         reasoningContent: reasoning.text(),

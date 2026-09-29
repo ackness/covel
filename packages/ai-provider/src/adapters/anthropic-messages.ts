@@ -4,6 +4,10 @@ import {
 } from "./provider-continuation.js";
 import { readAnthropicReasoning } from "./http/reasoning-readers.js";
 import {
+  readResponseDiagnostics,
+  ResponseDiagnostics,
+} from "./response-diagnostics.js";
+import {
   objectResponseFormat,
   responseFormatInstruction,
 } from "./structured-output.js";
@@ -27,6 +31,7 @@ import {
 import type {
   ModelRequestContext,
   ProviderConfig,
+  ToolCallPart,
   UsageSummary,
 } from "../types.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
@@ -115,6 +120,7 @@ interface AnthropicSystemBlock {
 const ANTHROPIC_PARAMETER_FIELD_MAP = {
   temperature: "temperature",
   topP: "top_p",
+  topK: "top_k",
   maxOutputTokens: "max_tokens",
 } as const;
 
@@ -362,6 +368,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         headers,
       );
       const payload = await parseJson(response);
+      const diagnostics = readResponseDiagnostics(
+        payload,
+        "anthropic",
+        "anthropic",
+      );
       assertSuccess(response, payload, "anthropic");
       assertGenerationPayload(payload, "anthropic");
       assertSuccessfulFinishReason(
@@ -371,6 +382,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
       const toolCalls = readAnthropicToolCalls(payload);
       return {
+        ...(diagnostics ? { diagnostics } : {}),
         text: readAnthropicText(payload),
         finishReason: String(payload.stop_reason ?? "stop"),
         usage: readAnthropicUsage(payload),
@@ -419,6 +431,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         headers,
       );
       const payload = await parseJson(response);
+      const diagnostics = readResponseDiagnostics(
+        payload,
+        "anthropic",
+        "anthropic",
+      );
       assertSuccess(response, payload, "anthropic");
       assertGenerationPayload(payload, "anthropic");
       assertSuccessfulFinishReason(
@@ -438,6 +455,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       }
 
       return {
+        ...(diagnostics ? { diagnostics } : {}),
         object: validation.data,
         finishReason: String(payload.stop_reason ?? "stop"),
         usage: readAnthropicUsage(payload),
@@ -489,6 +507,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
       if (!response.ok) {
         const payload = await parseJson(response);
+        readResponseDiagnostics(payload, "anthropic", "anthropic");
         assertSuccess(response, payload, "anthropic-messages");
       }
 
@@ -497,6 +516,9 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       let completed = false;
       const thinkingBlocks = new Map<number, string>();
       const continuation = new AnthropicContinuationAccumulator();
+      const diagnostics = new ResponseDiagnostics("anthropic");
+      // Final stop_reason may refuse the whole turn after a tool block closes.
+      const completedToolCalls: ToolCallPart[] = [];
       // Anthropic streams a tool call as `content_block_start` (id + name),
       // then its arguments as `input_json_delta` fragments, closed by
       // `content_block_stop`. Accumulate per block index and emit once whole —
@@ -506,100 +528,110 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         { id: string; name: string; json: string }
       >();
 
-      for await (const payload of iterateSsePayloads(response)) {
-        assertGenerationPayload(payload, "anthropic-messages");
-        if (payload.type === "message_stop") completed = true;
-        continuation.push(payload);
-        const delta = payload.delta as Record<string, unknown> | undefined;
-        if (
-          payload.type === "content_block_delta" &&
-          delta?.type === "text_delta" &&
-          typeof delta.text === "string"
-        ) {
-          yield { type: "text-delta", textDelta: delta.text };
-        }
-
-        if (payload.type === "content_block_start") {
-          const block = payload.content_block as
-            Record<string, unknown> | undefined;
-          if (block?.type === "thinking") {
-            const text =
-              typeof block.thinking === "string" ? block.thinking : "";
-            thinkingBlocks.set(Number(payload.index ?? 0), text);
-            if (text) yield { type: "reasoning-delta", reasoningDelta: text };
+      try {
+        for await (const payload of iterateSsePayloads(response)) {
+          diagnostics.push(payload);
+          if (payload.error) diagnostics.assertNotRefused("anthropic");
+          assertGenerationPayload(payload, "anthropic-messages");
+          if (payload.type === "message_stop") completed = true;
+          continuation.push(payload);
+          const delta = payload.delta as Record<string, unknown> | undefined;
+          if (
+            payload.type === "content_block_delta" &&
+            delta?.type === "text_delta" &&
+            typeof delta.text === "string"
+          ) {
+            yield { type: "text-delta", textDelta: delta.text };
           }
-          if (block?.type === "tool_use") {
-            pendingToolBlocks.set(Number(payload.index ?? 0), {
-              id: String(block.id ?? ""),
-              name: String(block.name ?? ""),
-              json: "",
-            });
+
+          if (payload.type === "content_block_start") {
+            const block = payload.content_block as
+              Record<string, unknown> | undefined;
+            if (block?.type === "thinking") {
+              const text =
+                typeof block.thinking === "string" ? block.thinking : "";
+              thinkingBlocks.set(Number(payload.index ?? 0), text);
+              if (text) yield { type: "reasoning-delta", reasoningDelta: text };
+            }
+            if (block?.type === "tool_use") {
+              pendingToolBlocks.set(Number(payload.index ?? 0), {
+                id: String(block.id ?? ""),
+                name: String(block.name ?? ""),
+                json: "",
+              });
+            }
           }
-        }
 
-        if (
-          payload.type === "content_block_delta" &&
-          delta?.type === "thinking_delta" &&
-          typeof delta.thinking === "string"
-        ) {
-          const index = Number(payload.index ?? 0);
-          thinkingBlocks.set(
-            index,
-            (thinkingBlocks.get(index) ?? "") + delta.thinking,
-          );
-          yield { type: "reasoning-delta", reasoningDelta: delta.thinking };
-        }
-
-        if (
-          payload.type === "content_block_delta" &&
-          delta?.type === "input_json_delta"
-        ) {
-          const pending = pendingToolBlocks.get(Number(payload.index ?? 0));
-          if (pending) pending.json += String(delta.partial_json ?? "");
-        }
-
-        if (payload.type === "content_block_stop") {
-          const index = Number(payload.index ?? 0);
-          const pending = pendingToolBlocks.get(index);
-          if (pending) {
-            pendingToolBlocks.delete(index);
-            yield {
-              type: "tool-call",
-              id: pending.id,
-              name: pending.name,
-              // A tool invoked with no arguments streams no deltas at all.
-              arguments: pending.json || "{}",
-            };
+          if (
+            payload.type === "content_block_delta" &&
+            delta?.type === "thinking_delta" &&
+            typeof delta.thinking === "string"
+          ) {
+            const index = Number(payload.index ?? 0);
+            thinkingBlocks.set(
+              index,
+              (thinkingBlocks.get(index) ?? "") + delta.thinking,
+            );
+            yield { type: "reasoning-delta", reasoningDelta: delta.thinking };
           }
-        }
 
-        if (payload.type === "message_start") {
-          const msgUsage = (
-            payload.message as Record<string, unknown> | undefined
-          )?.usage as Record<string, unknown> | undefined;
-          if (msgUsage) {
-            const startUsage = readAnthropicUsage({ usage: msgUsage });
+          if (
+            payload.type === "content_block_delta" &&
+            delta?.type === "input_json_delta"
+          ) {
+            const pending = pendingToolBlocks.get(Number(payload.index ?? 0));
+            if (pending) pending.json += String(delta.partial_json ?? "");
+          }
+
+          if (payload.type === "content_block_stop") {
+            const index = Number(payload.index ?? 0);
+            const pending = pendingToolBlocks.get(index);
+            if (pending) {
+              pendingToolBlocks.delete(index);
+              completedToolCalls.push({
+                id: pending.id,
+                name: pending.name,
+                // A tool invoked with no arguments streams no deltas at all.
+                arguments: pending.json || "{}",
+              });
+            }
+          }
+
+          if (payload.type === "message_start") {
+            const msgUsage = (
+              payload.message as Record<string, unknown> | undefined
+            )?.usage as Record<string, unknown> | undefined;
+            if (msgUsage) {
+              const startUsage = readAnthropicUsage({ usage: msgUsage });
+              usage = {
+                ...startUsage,
+                outputTokens: usage.outputTokens,
+              };
+            }
+          }
+
+          if (payload.type === "message_delta") {
+            finishReason = String(delta?.stop_reason ?? finishReason);
+            const usageObj = payload.usage as
+              Record<string, unknown> | undefined;
             usage = {
-              ...startUsage,
-              outputTokens: usage.outputTokens,
+              ...usage,
+              outputTokens: readTokenCount(
+                usageObj?.output_tokens,
+                usage.outputTokens,
+              ),
             };
           }
         }
-
-        if (payload.type === "message_delta") {
-          finishReason = String(delta?.stop_reason ?? finishReason);
-          const usageObj = payload.usage as Record<string, unknown> | undefined;
-          usage = {
-            ...usage,
-            outputTokens: readTokenCount(
-              usageObj?.output_tokens,
-              usage.outputTokens,
-            ),
-          };
-        }
+      } catch (error) {
+        diagnostics.assertNotRefused("anthropic");
+        throw error;
       }
-
+      diagnostics.assertNotRefused("anthropic");
       assertStreamCompleted(completed, "anthropic-messages");
+      for (const toolCall of completedToolCalls) {
+        yield { type: "tool-call", ...toolCall };
+      }
       const reasoningContent = [...thinkingBlocks.entries()]
         .sort(([a], [b]) => a - b)
         .map(([, text]) => text)
@@ -607,6 +639,9 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         .join("\n\n");
       yield {
         type: "done",
+        ...(diagnostics.diagnostics()
+          ? { diagnostics: diagnostics.diagnostics() }
+          : {}),
         finishReason,
         usage,
         ...(reasoningContent ? { reasoningContent } : {}),

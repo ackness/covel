@@ -1,4 +1,6 @@
 import type {
+  LLMDiagnostics,
+  LLMRequestBudget,
   LLMResponseFormat,
   LLMProviderContinuation,
   LLMProviderRequest,
@@ -160,6 +162,8 @@ export interface ProviderConfig {
   headers?: Record<string, string>;
   /** Abort signal for request cancellation. */
   signal?: AbortSignal;
+  /** Shared finite budget across transport, gateway fallback, and runtime retries. */
+  requestBudget?: LLMRequestBudget;
   /**
    * Prompt cache strategy for this provider.
    *
@@ -242,6 +246,7 @@ export interface ModelProfile {
 // ── Preset Config (from TOML [[presets]]) ──────────────────────────
 
 export interface PresetConfig {
+  providerOptions?: import("./provider-options.js").ProviderOptions;
   id: string;
   name: string;
   provider: string;
@@ -354,6 +359,7 @@ export interface TextMessage {
 export type UsageSummary = LLMUsageSummary;
 
 export interface TextGenerationResult {
+  diagnostics?: LLMDiagnostics;
   text: string;
   finishReason: string;
   usage: UsageSummary;
@@ -373,6 +379,7 @@ export interface ObjectGenerationParams<
 }
 
 export interface ObjectGenerationResult<TObject = unknown> {
+  diagnostics?: LLMDiagnostics;
   object: TObject;
   reasoningContent?: string;
   providerContinuation?: LLMProviderContinuation;
@@ -388,6 +395,7 @@ export type StreamEvent =
   | { type: "tool-call"; id: string; name: string; arguments: string }
   | {
       type: "done";
+      diagnostics?: LLMDiagnostics;
       finishReason: string;
       usage: UsageSummary;
       /**

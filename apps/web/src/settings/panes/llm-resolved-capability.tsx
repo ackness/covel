@@ -12,14 +12,26 @@ export function ResolvedCapability({
   provider,
   baseCapability,
   override,
+  protocol,
+  role,
 }: {
   lookup: ModelCapabilityLookupResult | null | undefined;
   provider: string;
   baseCapability?: ModelCapabilityInfo | null;
   override?: Partial<ModelCapabilityInfo>;
+  protocol: string;
+  role: string;
 }) {
   const { t } = useTranslation();
-  const capability = resolveDisplayCapability(lookup, baseCapability, override);
+  const capability = resolveDisplayCapability(
+    lookup,
+    baseCapability,
+    override,
+    {
+      protocol,
+      role,
+    },
+  );
   if (!capability)
     return (
       <p className="text-[10px] text-muted-foreground">

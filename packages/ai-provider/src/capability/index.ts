@@ -1,4 +1,5 @@
 export { type KnownModelEntry } from "./known-models.js";
+export { projectCapabilityForBuiltinAdapter } from "./adapter-support.js";
 export {
   resolveCapabilityDetails,
   resolveCapability,

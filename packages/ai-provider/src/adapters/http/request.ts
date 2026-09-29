@@ -1,4 +1,9 @@
 import { observeJsonRequest } from "./request-observation.js";
+import {
+  assertLlmRequestBudget,
+  awaitLlmRequest,
+  createLlmRequestScope,
+} from "@covel/shared";
 import type { FormData as UndiciFormData } from "undici";
 import type { ProviderConfig } from "../../types.js";
 import { outboundFetch } from "../../outbound-network.js";
@@ -76,51 +81,86 @@ export async function postJson(
           return endpoint.toString();
         })();
   const serializedBody = JSON.stringify(body);
-  const effectiveSignal = signal ?? config.signal;
+  const scope = config.requestBudget
+    ? createLlmRequestScope({
+        budget: config.requestBudget,
+        signal: signal ?? config.signal,
+      })
+    : undefined;
+  const effectiveSignal = scope?.signal ?? signal ?? config.signal;
 
   let transportAttempt = 0;
-  const doFetch = async (): Promise<Response> =>
-    observeJsonRequest(
+  let transportRetryReason: "http-429" | "http-5xx" | undefined;
+  const doFetch = async (): Promise<Response> => {
+    if (scope)
+      assertLlmRequestBudget(scope.budget, {
+        signal: effectiveSignal,
+        consumeAttempt: true,
+      });
+    return observeJsonRequest(
       config.requestObservation,
       serializedBody,
       transportAttempt++,
       async () => {
         effectiveSignal?.throwIfAborted();
         return rejectRedirect(
-          await pinnedFetch(url, {
-            method: "POST",
-            headers,
-            body: serializedBody,
-            redirect: "manual",
-            signal: effectiveSignal,
-          }),
+          await awaitLlmRequest(
+            pinnedFetch(url, {
+              method: "POST",
+              headers,
+              body: serializedBody,
+              redirect: "manual",
+              signal: effectiveSignal,
+            }),
+            effectiveSignal,
+          ),
           url,
         );
       },
+      scope ? scope.budget.attempts - 1 : undefined,
+      transportRetryReason,
     );
+  };
 
-  if (isRetryDisabled()) {
-    return doFetch();
-  }
-
-  let response = await doFetch();
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    if (!isRetriableStatus(response.status)) {
-      return response;
+  try {
+    if (isRetryDisabled()) {
+      return await doFetch();
     }
 
-    // Discard rejected bodies without buffering an unbounded error stream.
-    await response.body?.cancel().catch(() => {});
+    let response = await doFetch();
 
-    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
-    const delay = retryAfterMs ?? computeBackoffMs(attempt);
-    await sleepWithAbort(delay, effectiveSignal);
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (!isRetriableStatus(response.status)) {
+        return response;
+      }
 
-    response = await doFetch();
+      // Discard rejected bodies without buffering an unbounded error stream.
+      if (response.body) {
+        await awaitLlmRequest(
+          response.body.cancel().catch(() => {}),
+          effectiveSignal,
+        );
+      }
+      if (scope)
+        assertLlmRequestBudget(scope.budget, {
+          signal: effectiveSignal,
+          requireAttempt: true,
+        });
+
+      const retryAfterMs = parseRetryAfterMs(
+        response.headers.get("retry-after"),
+      );
+      const delay = retryAfterMs ?? computeBackoffMs(attempt);
+      await sleepWithAbort(delay, effectiveSignal);
+
+      transportRetryReason = response.status === 429 ? "http-429" : "http-5xx";
+      response = await doFetch();
+    }
+
+    return response;
+  } finally {
+    scope?.dispose();
   }
-
-  return response;
 }
 
 /**
@@ -143,17 +183,35 @@ export async function getJson(
   };
 
   const url = buildProviderUrl(config.baseUrl, path);
-  const effectiveSignal = signal ?? config.signal;
+  const scope = config.requestBudget
+    ? createLlmRequestScope({
+        budget: config.requestBudget,
+        signal: signal ?? config.signal,
+      })
+    : undefined;
+  const effectiveSignal = scope?.signal ?? signal ?? config.signal;
 
-  return rejectRedirect(
-    await pinnedFetch(url, {
-      method: "GET",
-      headers,
-      redirect: "manual",
-      signal: effectiveSignal,
-    }),
-    url,
-  );
+  try {
+    if (scope)
+      assertLlmRequestBudget(scope.budget, {
+        signal: effectiveSignal,
+        consumeAttempt: true,
+      });
+    return rejectRedirect(
+      await awaitLlmRequest(
+        pinnedFetch(url, {
+          method: "GET",
+          headers,
+          redirect: "manual",
+          signal: effectiveSignal,
+        }),
+        effectiveSignal,
+      ),
+      url,
+    );
+  } finally {
+    scope?.dispose();
+  }
 }
 
 export async function postFormData(
@@ -165,17 +223,37 @@ export async function postFormData(
   assertAllowedBaseUrl(config.baseUrl);
 
   const url = buildProviderUrl(config.baseUrl, path);
-  return rejectRedirect(
-    await pinnedFetch(url, {
-      method: "POST",
-      headers: {
-        ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
-        ...config.headers,
-      },
-      body: body as unknown as BodyInit,
-      redirect: "manual",
-      signal: signal ?? config.signal,
-    }),
-    url,
-  );
+  const scope = config.requestBudget
+    ? createLlmRequestScope({
+        budget: config.requestBudget,
+        signal: signal ?? config.signal,
+      })
+    : undefined;
+  try {
+    if (scope)
+      assertLlmRequestBudget(scope.budget, {
+        signal: scope?.signal ?? signal ?? config.signal,
+        consumeAttempt: true,
+      });
+    return rejectRedirect(
+      await awaitLlmRequest(
+        pinnedFetch(url, {
+          method: "POST",
+          headers: {
+            ...(config.apiKey
+              ? { authorization: `Bearer ${config.apiKey}` }
+              : {}),
+            ...config.headers,
+          },
+          body: body as unknown as BodyInit,
+          redirect: "manual",
+          signal: scope?.signal ?? signal ?? config.signal,
+        }),
+        scope?.signal ?? signal ?? config.signal,
+      ),
+      url,
+    );
+  } finally {
+    scope?.dispose();
+  }
 }

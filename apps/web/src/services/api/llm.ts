@@ -127,6 +127,9 @@ export interface ModelCapabilityLookupResult {
   candidates: string[];
   reasoning: ReasoningEffortProfile | null;
   capability: ModelCapabilityInfo;
+  /** Operational envelope for the requested role; absent for raw lookups. */
+  effectiveCapability?: ModelCapabilityInfo;
+  usesBuiltinAdapter?: boolean;
 }
 
 import {
@@ -154,7 +157,7 @@ export interface ReasoningEffortProfile {
 /**
  * Module-level lookup cache — capability records don't change within a page
  * visit (same assumption as the cost panel's price cache). Keyed on
- * provider + protocol + model so every panel (providers, slots, generation)
+ * provider + protocol + role + model so every panel (providers, slots, generation)
  * shares one request per target.
  */
 const capabilityCache = new Map<string, Promise<ModelCapabilityLookupResult>>();
@@ -168,14 +171,21 @@ export async function lookupModelCapabilityDetails(
   model: string,
   provider?: string,
   protocol?: string,
+  role?: string,
 ): Promise<ModelCapabilityLookupResult> {
-  const cacheKey = JSON.stringify([provider ?? null, protocol ?? null, model]);
+  const cacheKey = JSON.stringify([
+    provider ?? null,
+    protocol ?? null,
+    role ?? null,
+    model,
+  ]);
   const cached = capabilityCache.get(cacheKey);
   if (cached) return cached;
 
   const params = new URLSearchParams({ model });
   if (provider) params.set("provider", provider);
   if (protocol) params.set("protocol", protocol);
+  if (role) params.set("role", role);
   let promise: Promise<ModelCapabilityLookupResult>;
   promise = request<ModelCapabilityLookupResult>(
     `/api/model-db/lookup?${params.toString()}`,

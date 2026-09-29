@@ -4,8 +4,11 @@ import {
   supportsModelRole,
   resolveLlmTokenLimits,
   type LLMProviderRequest,
+  type LLMRequestBudget,
 } from "@covel/shared";
 import { AiProviderError, ModelConfigurationError } from "./errors.js";
+import { projectCapabilityForBuiltinAdapter } from "./capability/adapter-support.js";
+import { validateParameterMetadata } from "./provider-options.js";
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
@@ -70,6 +73,8 @@ export interface GatewaySlotResolutionDependencies {
 }
 
 export interface GatewayOptions {
+  /** Shared transport count and deadline for one logical call, including fallback. */
+  requestBudget?: LLMRequestBudget;
   onProviderRequest?: (request: LLMProviderRequest) => void;
   /**
    * Request-supplied API keys (X-Provider-Keys header). Applied to any
@@ -125,6 +130,7 @@ export interface GatewaySlotResolution {
     metadata: Record<string, unknown> | undefined,
     presetId: string | undefined,
     options: GatewayOptions | undefined,
+    presetMetadata?: Record<string, unknown>,
   ): Record<string, unknown> | undefined;
   resolveSlot(
     presetId: string | undefined,
@@ -360,11 +366,17 @@ export function createGatewaySlotResolution(
     metadata: Record<string, unknown> | undefined,
     presetId: string | undefined,
     options: GatewayOptions | undefined,
+    presetMetadata?: Record<string, unknown>,
   ): Record<string, unknown> | undefined {
-    const presetMeta = target.preset?.providerRequestMetadata;
+    const presetMeta = presetMetadata ?? target.preset?.providerRequestMetadata;
     const merged =
       presetMeta || metadata ? { ...presetMeta, ...metadata } : undefined;
     const result = withParameterOverrides(merged, presetId, options);
+    validateParameterMetadata(
+      result ?? {},
+      targetProvider(target),
+      target.preset?.protocol ?? "openai-chat-v1",
+    );
     const parameters = result?.parameterOverrides as
       ModelParameterOverrides | undefined;
     const limits = resolveLlmTokenLimits({
@@ -478,7 +490,15 @@ export function createGatewaySlotResolution(
         model,
         tag: presetTag,
         ...(target.preset?.capability
-          ? { capability: target.preset.capability }
+          ? {
+              capability: resolved.usesBuiltinAdapter
+                ? projectCapabilityForBuiltinAdapter(
+                    target.preset.capability,
+                    resolved.protocol,
+                    options?.fallbackTag ?? presetTag,
+                  )
+                : target.preset.capability,
+            }
           : {}),
         metadata,
         ...(parameterOverrides ? { parameterOverrides } : {}),

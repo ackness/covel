@@ -43,6 +43,15 @@ import {
   emitLlmRespondedSuccess,
 } from "../llm/llm-telemetry.js";
 import { AiProviderError } from "@covel/ai-provider";
+import {
+  assertLlmRequestBudget,
+  awaitLlmRequest,
+  createLlmRequestBudget,
+  createLlmRequestScope,
+  iterateLlmRequest,
+  LLMRequestBudgetError,
+  type LLMRequestBudget,
+} from "@covel/shared";
 import { TurnAbortedError } from "../turn-executor/turn-control.js";
 import { acquireLLMSlot } from "./llm-slots.js";
 import {
@@ -53,6 +62,7 @@ import {
   exhaustedError,
   extractMessage,
   isTransientError,
+  isTerminalLlmRequestError,
   perturbMessages,
   type RetryPolicy,
   type RetryReason,
@@ -112,7 +122,8 @@ export interface CallLLMWithRetryParams {
    * LLM concurrency slot. The loop already extends its OWN deadline by the
    * wait; callers holding an enclosing deadline (the agent tool loop) use
    * this to extend theirs too — otherwise queue time still burns the loop
-   * budget and a late step dies with its calls never attempted.
+   * budget and a late step dies with its calls never attempted. The separate
+   * logical request deadline stays fixed and includes time spent queued.
    */
   readonly onQueueWait?: (waitedMs: number) => void;
   /**
@@ -141,6 +152,8 @@ export interface CallLLMWithRetryParams {
    * {@link TurnAbortedError} immediately — including after an adapter returns, so a player abort never commits content.
    */
   readonly abortSignal?: AbortSignal;
+  /** Shared transport/time ceiling across every retry and fallback target. */
+  readonly requestBudget?: LLMRequestBudget;
 }
 
 export interface RetryInfo {
@@ -206,102 +219,131 @@ export async function callLLMWithRetry(
   let effectiveDeadline = deadline;
   let lastError: unknown = new Error("retry loop did not execute");
   let lastReason: RetryReason = "unknown";
+  throwIfTurnAborted(params.abortSignal);
+  assertDeadlineNotReached(effectiveDeadline, 0, lastError);
+  const requestScope = createLlmRequestScope({
+    budget: params.requestBudget ?? createLlmRequestBudget(),
+    signal: params.abortSignal,
+  });
 
-  for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
-    throwIfTurnAborted(params.abortSignal);
-    assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
-    // Queue for a concurrency slot before arming any timers; time spent
-    // queued extends the deadline — it is the gate's cost, not the runtime's.
-    const slot = await acquireLLMSlot(params.abortSignal).catch(
-      (error: unknown) => {
+  try {
+    for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
+      throwIfTurnAborted(params.abortSignal);
+      assertLlmRequestBudget(requestScope.budget, {
+        signal: requestScope.signal,
+        requireAttempt: true,
+      });
+      assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
+      // Queue before arming per-attempt timers. Queue time credits the runtime
+      // deadline, while the logical request deadline remains a hard ceiling.
+      const slot = await acquireLLMSlot(requestScope.signal).catch(
+        (error: unknown) => {
+          throwIfTurnAborted(params.abortSignal);
+          throw error;
+        },
+      );
+      if (params.abortSignal?.aborted) {
+        slot.release();
         throwIfTurnAborted(params.abortSignal);
-        throw error;
-      },
-    );
-    if (params.abortSignal?.aborted) {
-      slot.release();
-      throwIfTurnAborted(params.abortSignal);
-    }
-    effectiveDeadline += slot.waitedMs;
-    if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
-
-    const budget = computeAttemptBudget(policy, effectiveDeadline);
-    const timeoutSignal = AbortSignal.timeout(budget);
-    const signal = params.abortSignal
-      ? AbortSignal.any([timeoutSignal, params.abortSignal])
-      : timeoutSignal;
-    const attemptMessages = perturbMessages(messages, attempt, lastReason);
-
-    const callStart = Date.now();
-    const trace = createAttemptTrace(
-      params,
-      attemptMessages,
-      attempt,
-      new Date(callStart).toISOString(),
-      false,
-      slot.waitedMs,
-    );
-    try {
-      throwIfTurnAborted(params.abortSignal);
-      const response = await llm.generate({
-        model,
-        messages: attemptMessages,
-        tools,
-        responseFormat: params.responseFormat,
-        ...(params.defaults ? { defaults: params.defaults } : {}),
-        ...(params.maxOutputTokens !== undefined
-          ? { maxOutputTokens: params.maxOutputTokens }
-          : {}),
-        signal,
-        onTargetAttempt: trace.onTargetAttempt,
-        ...(params.emitter
-          ? { onProviderRequest: trace.onProviderRequest }
-          : {}),
-      });
-      throwIfTurnAborted(params.abortSignal);
-      if (response.finishReason === "error") {
-        throw new Error("PROVIDER_ERROR: model generation ended with an error");
       }
-      await trace.ensureCalling();
-      await emitLlmRespondedSuccess(params.emitter, {
-        runtimeId: params.runtimeId,
-        pluginId: params.pluginId,
-        response,
-        durationMs: Date.now() - callStart,
-        attempt,
-      });
-      return response;
-    } catch (err) {
-      await trace.ensureCalling();
-      await emitLlmRespondedError(params.emitter, {
-        runtimeId: params.runtimeId,
-        pluginId: params.pluginId,
-        error: err,
-        durationMs: Date.now() - callStart,
-        attempt,
-      });
-      throwIfTurnAborted(params.abortSignal);
-      lastError = err;
-      lastReason = isCallTimeout(err, timeoutSignal)
-        ? "call-timeout"
-        : isTransientError(err)
-          ? "transient-error"
-          : "unknown";
-      if (attempt >= policy.maxRetries || lastReason === "unknown") {
-        throw new LLMRetryError({
-          reason: lastReason,
-          attempts: attempt + 1,
-          cause: err,
-        });
+      try {
+        effectiveDeadline += slot.waitedMs;
+        if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
+
+        const budget = computeAttemptBudget(
+          policy,
+          Math.min(effectiveDeadline, requestScope.budget.deadline),
+        );
+        const timeoutSignal = AbortSignal.timeout(budget);
+        const signal = AbortSignal.any([timeoutSignal, requestScope.signal]);
+        const attemptMessages = perturbMessages(messages, attempt, lastReason);
+
+        const callStart = Date.now();
+        const trace = createAttemptTrace(
+          params,
+          attemptMessages,
+          attempt,
+          new Date(callStart).toISOString(),
+          false,
+          slot.waitedMs,
+        );
+        try {
+          throwIfTurnAborted(params.abortSignal);
+          const response = await awaitLlmRequest(
+            llm.generate({
+              model,
+              messages: attemptMessages,
+              tools,
+              responseFormat: params.responseFormat,
+              ...(params.defaults ? { defaults: params.defaults } : {}),
+              ...(params.maxOutputTokens !== undefined
+                ? { maxOutputTokens: params.maxOutputTokens }
+                : {}),
+              signal,
+              requestBudget: requestScope.budget,
+              onTargetAttempt: trace.onTargetAttempt,
+              ...(params.emitter
+                ? { onProviderRequest: trace.onProviderRequest }
+                : {}),
+            }),
+            signal,
+          );
+          throwIfTurnAborted(params.abortSignal);
+          if (response.finishReason === "error") {
+            throw new Error(
+              "PROVIDER_ERROR: model generation ended with an error",
+            );
+          }
+          await trace.ensureCalling();
+          await emitLlmRespondedSuccess(params.emitter, {
+            runtimeId: params.runtimeId,
+            pluginId: params.pluginId,
+            response,
+            durationMs: Date.now() - callStart,
+            attempt,
+          });
+          return response;
+        } catch (err) {
+          await trace.ensureCalling();
+          await emitLlmRespondedError(params.emitter, {
+            runtimeId: params.runtimeId,
+            pluginId: params.pluginId,
+            error: err,
+            durationMs: Date.now() - callStart,
+            attempt,
+          });
+          throwIfTurnAborted(params.abortSignal);
+          requestScope.signal.throwIfAborted();
+          if (isTerminalLlmRequestError(err)) throw err;
+          lastError = err;
+          lastReason = isCallTimeout(err, timeoutSignal)
+            ? "call-timeout"
+            : isTransientError(err)
+              ? "transient-error"
+              : "unknown";
+          if (attempt >= policy.maxRetries || lastReason === "unknown") {
+            throw new LLMRetryError({
+              reason: lastReason,
+              attempts: attempt + 1,
+              cause: err,
+            });
+          }
+          assertLlmRequestBudget(requestScope.budget, {
+            signal: requestScope.signal,
+            requireAttempt: true,
+          });
+          onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
+        }
+      } finally {
+        slot.release();
       }
-      onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
-    } finally {
-      slot.release();
     }
+
+    // Unreachable; the loop either returns or throws.
+    throw exhaustedError(policy, lastReason, lastError);
+  } finally {
+    requestScope.dispose();
   }
-
-  // Unreachable; the loop either returns or throws.
-  throw exhaustedError(policy, lastReason, lastError);
 }
 
 function throwIfTurnAborted(abortSignal: AbortSignal | undefined): void {
@@ -311,6 +353,12 @@ function throwIfTurnAborted(abortSignal: AbortSignal | undefined): void {
 }
 
 function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
+  if (
+    err instanceof LLMRequestBudgetError ||
+    (err instanceof AiProviderError &&
+      (err.code === "REQUEST_BUDGET_EXCEEDED" || err.code === "REFUSAL"))
+  )
+    return false;
   if (signal.aborted) {
     const reason = (signal as AbortSignal & { reason?: unknown }).reason;
     const msg = reason instanceof Error ? reason.message : String(reason ?? "");
@@ -361,208 +409,248 @@ export async function streamLLMWithRetry(
 
   let lastError: unknown = new Error("stream retry loop did not execute");
   let lastReason: RetryReason = "unknown";
+  throwIfTurnAborted(params.abortSignal);
+  assertDeadlineNotReached(effectiveDeadline, 0, lastError);
+  const requestScope = createLlmRequestScope({
+    budget: params.requestBudget ?? createLlmRequestBudget(),
+    signal: params.abortSignal,
+  });
 
-  for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
-    throwIfTurnAborted(params.abortSignal);
-    assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
-    // Queue for a concurrency slot before arming any timers; time spent
-    // queued extends the deadline — it is the gate's cost, not the runtime's.
-    const slot = await acquireLLMSlot(params.abortSignal).catch(
-      (error: unknown) => {
+  try {
+    for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
+      throwIfTurnAborted(params.abortSignal);
+      assertLlmRequestBudget(requestScope.budget, {
+        signal: requestScope.signal,
+        requireAttempt: true,
+      });
+      assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
+      // Queue before arming per-attempt timers. Queue time credits the runtime
+      // deadline, while the logical request deadline remains a hard ceiling.
+      const slot = await acquireLLMSlot(requestScope.signal).catch(
+        (error: unknown) => {
+          throwIfTurnAborted(params.abortSignal);
+          throw error;
+        },
+      );
+      if (params.abortSignal?.aborted) {
+        slot.release();
         throwIfTurnAborted(params.abortSignal);
-        throw error;
-      },
-    );
-    if (params.abortSignal?.aborted) {
-      slot.release();
-      throwIfTurnAborted(params.abortSignal);
-    }
-    effectiveDeadline += slot.waitedMs;
-    if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
-
-    const budget = computeAttemptBudget(policy, effectiveDeadline);
-    // Compose three abort sources into one per-attempt signal:
-    //   1. overall call budget (per-attempt)
-    //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first event
-    //   3. player turn abort — forwarded from params.abortSignal below
-    const callAborter = new AbortController();
-    const onExternalAbort = (): void => {
-      callAborter.abort(new DOMException("turn aborted", "AbortError"));
-    };
-    params.abortSignal?.addEventListener("abort", onExternalAbort, {
-      once: true,
-    });
-    const callTimeoutHandle = setTimeout(() => {
-      callAborter.abort(new DOMException("call timeout", "TimeoutError"));
-    }, budget);
-    const ttfbHandle = setTimeout(() => {
-      if (!firstTokenSeen) {
-        callAborter.abort(
-          new DOMException("first-token timeout", "TimeoutError"),
-        );
       }
-    }, policy.firstTokenTimeoutMs);
+      try {
+        effectiveDeadline += slot.waitedMs;
+        if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
 
-    let firstTokenSeen = false;
-    const streamedToolCalls: LLMToolCall[] = [];
-    let streamedContent = "";
-    let streamedReasoningContent = "";
-    let providerContinuation: LLMProviderContinuation | undefined;
-    let streamedUsage = { inputTokens: 0, outputTokens: 0 };
-    let streamFinishReason:
-      "stop" | "tool_calls" | "length" | "error" | undefined;
-    const attemptMessages = perturbMessages(messages, attempt, lastReason);
-    const forwardDeltas = attempt === 0; // avoid duplicate text on retry
-    const streamStart = Date.now();
-    const trace = createAttemptTrace(
-      params,
-      attemptMessages,
-      attempt,
-      new Date(streamStart).toISOString(),
-      true,
-      slot.waitedMs,
-    );
-
-    try {
-      throwIfTurnAborted(params.abortSignal);
-      for await (const event of llm.stream({
-        model,
-        messages: attemptMessages,
-        tools,
-        ...(params.defaults ? { defaults: params.defaults } : {}),
-        ...(params.maxOutputTokens !== undefined
-          ? { maxOutputTokens: params.maxOutputTokens }
-          : {}),
-        signal: callAborter.signal,
-        onTargetAttempt: trace.onTargetAttempt,
-        ...(params.emitter
-          ? { onProviderRequest: trace.onProviderRequest }
-          : {}),
-      })) {
-        if (event.type === "text-delta") {
-          if (event.textDelta.length > 0) firstTokenSeen = true;
-          streamedContent += event.textDelta;
-          if (event.textDelta.length > 0) {
-            await trace.ensureCalling();
-            if (forwardDeltas) await onDelta?.(event.textDelta);
+        const budget = computeAttemptBudget(
+          policy,
+          Math.min(effectiveDeadline, requestScope.budget.deadline),
+        );
+        // Compose three abort sources into one per-attempt signal:
+        //   1. overall call budget (per-attempt)
+        //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first event
+        //   3. player turn abort — forwarded from params.abortSignal below
+        const callAborter = new AbortController();
+        const onExternalAbort = (): void => {
+          callAborter.abort(requestScope.signal.reason);
+        };
+        requestScope.signal.addEventListener("abort", onExternalAbort, {
+          once: true,
+        });
+        const callTimeoutHandle = setTimeout(() => {
+          callAborter.abort(new DOMException("call timeout", "TimeoutError"));
+        }, budget);
+        const ttfbHandle = setTimeout(() => {
+          if (!firstTokenSeen) {
+            callAborter.abort(
+              new DOMException("first-token timeout", "TimeoutError"),
+            );
           }
-        } else if (event.type === "reasoning-delta") {
-          if (event.reasoningDelta.length > 0) firstTokenSeen = true;
-          streamedReasoningContent += event.reasoningDelta;
-        } else if (event.type === "tool-call") {
-          firstTokenSeen = true;
+        }, policy.firstTokenTimeoutMs);
+
+        let firstTokenSeen = false;
+        const streamedToolCalls: LLMToolCall[] = [];
+        let streamedContent = "";
+        let streamedReasoningContent = "";
+        let providerContinuation: LLMProviderContinuation | undefined;
+        let diagnostics: LLMResponse["diagnostics"];
+        let streamedUsage = { inputTokens: 0, outputTokens: 0 };
+        let streamFinishReason:
+          "stop" | "tool_calls" | "length" | "error" | undefined;
+        const attemptMessages = perturbMessages(messages, attempt, lastReason);
+        const forwardDeltas = attempt === 0; // avoid duplicate text on retry
+        const streamStart = Date.now();
+        const trace = createAttemptTrace(
+          params,
+          attemptMessages,
+          attempt,
+          new Date(streamStart).toISOString(),
+          true,
+          slot.waitedMs,
+        );
+
+        try {
+          throwIfTurnAborted(params.abortSignal);
+          requestScope.signal.throwIfAborted();
+          for await (const event of iterateLlmRequest(
+            llm.stream({
+              model,
+              messages: attemptMessages,
+              tools,
+              responseFormat: params.responseFormat,
+              ...(params.defaults ? { defaults: params.defaults } : {}),
+              ...(params.maxOutputTokens !== undefined
+                ? { maxOutputTokens: params.maxOutputTokens }
+                : {}),
+              signal: callAborter.signal,
+              requestBudget: requestScope.budget,
+              onTargetAttempt: trace.onTargetAttempt,
+              ...(params.emitter
+                ? { onProviderRequest: trace.onProviderRequest }
+                : {}),
+            }),
+            callAborter.signal,
+          )) {
+            if (event.type === "text-delta") {
+              if (event.textDelta.length > 0) firstTokenSeen = true;
+              streamedContent += event.textDelta;
+              if (event.textDelta.length > 0) {
+                await trace.ensureCalling();
+                if (forwardDeltas) await onDelta?.(event.textDelta);
+              }
+            } else if (event.type === "reasoning-delta") {
+              if (event.reasoningDelta.length > 0) firstTokenSeen = true;
+              streamedReasoningContent += event.reasoningDelta;
+            } else if (event.type === "tool-call") {
+              firstTokenSeen = true;
+              await trace.ensureCalling();
+              streamedToolCalls.push({
+                id: event.id,
+                name: event.name,
+                arguments: event.arguments,
+              });
+            } else if (event.type === "done") {
+              await trace.ensureCalling();
+              streamFinishReason = event.finishReason as
+                "stop" | "tool_calls" | "length" | "error";
+              if (streamFinishReason === "error") {
+                throw new Error(
+                  "PROVIDER_ERROR: model stream ended with an error",
+                );
+              }
+              if (event.reasoningContent)
+                streamedReasoningContent = event.reasoningContent;
+              if (event.usage) streamedUsage = event.usage;
+              if (event.providerContinuation)
+                providerContinuation = event.providerContinuation;
+              if (event.diagnostics) diagnostics = event.diagnostics;
+            }
+          }
+
+          throwIfTurnAborted(params.abortSignal);
+          if (streamFinishReason === undefined) {
+            throw new Error(
+              "PROVIDER_ERROR: model stream ended without a terminal event",
+            );
+          }
+          clearTimeout(callTimeoutHandle);
+          clearTimeout(ttfbHandle);
+          requestScope.signal.removeEventListener("abort", onExternalAbort);
           await trace.ensureCalling();
-          streamedToolCalls.push({
-            id: event.id,
-            name: event.name,
-            arguments: event.arguments,
+
+          const finalResponse: LLMResponse = {
+            content: streamedContent || null,
+            toolCalls: streamedToolCalls,
+            finishReason: streamFinishReason,
+            usage: streamedUsage,
+            ...(diagnostics ? { diagnostics } : {}),
+            ...(providerContinuation ? { providerContinuation } : {}),
+            ...(streamedReasoningContent
+              ? { reasoningContent: streamedReasoningContent }
+              : {}),
+          };
+          await emitLlmRespondedSuccess(params.emitter, {
+            runtimeId: params.runtimeId,
+            pluginId: params.pluginId,
+            response: finalResponse,
+            durationMs: Date.now() - streamStart,
+            attempt,
+            streaming: true,
           });
-        } else if (event.type === "done") {
+          return {
+            response: finalResponse,
+            attempt,
+          };
+        } catch (err) {
+          clearTimeout(callTimeoutHandle);
+          clearTimeout(ttfbHandle);
+          requestScope.signal.removeEventListener("abort", onExternalAbort);
+          lastError = err;
+          lastReason = classifyStreamError(
+            err,
+            callAborter.signal,
+            firstTokenSeen,
+          );
+
+          // Pair every `llm.calling` with an `llm.responded` on the error path.
+          // Without this, a streamed turn that fails mid-flight leaves a dangling
+          // `llm.calling` in trace_events and breaks trace-viewer pairing. This
+          // must run BEFORE the abort throw below so a player abort still emits
+          // the paired `llm.responded`.
           await trace.ensureCalling();
-          streamFinishReason = event.finishReason as
-            "stop" | "tool_calls" | "length" | "error";
-          if (streamFinishReason === "error") {
-            throw new Error("PROVIDER_ERROR: model stream ended with an error");
+          await emitLlmRespondedError(params.emitter, {
+            runtimeId: params.runtimeId,
+            pluginId: params.pluginId,
+            error: err,
+            durationMs: Date.now() - streamStart,
+            attempt,
+            streaming: true,
+          });
+
+          // Partial output must never become a successful response or be spliced
+          // into a retry. Empty transient failures retain the normal retry policy.
+          throwIfTurnAborted(params.abortSignal);
+          requestScope.signal.throwIfAborted();
+          if (isTerminalLlmRequestError(err)) throw err;
+          if (firstTokenSeen) {
+            throw new LLMRetryError({
+              reason: lastReason,
+              attempts: attempt + 1,
+              cause: err,
+              hasPartialOutput: true,
+            });
           }
-          if (event.reasoningContent)
-            streamedReasoningContent = event.reasoningContent;
-          if (event.usage) streamedUsage = event.usage;
-          if (event.providerContinuation)
-            providerContinuation = event.providerContinuation;
+
+          if (attempt >= policy.maxRetries) {
+            throw new LLMRetryError({
+              reason: lastReason,
+              attempts: attempt + 1,
+              cause: err,
+            });
+          }
+          // Retry on transient failures; surface "unknown" errors immediately —
+          // an unclassified error usually means a bug in our code, not something
+          // a retry can fix.
+          if (lastReason === "unknown") {
+            throw new LLMRetryError({
+              reason: lastReason,
+              attempts: attempt + 1,
+              cause: err,
+            });
+          }
+          assertLlmRequestBudget(requestScope.budget, {
+            signal: requestScope.signal,
+            requireAttempt: true,
+          });
+          onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
         }
+      } finally {
+        slot.release();
       }
-
-      throwIfTurnAborted(params.abortSignal);
-      if (streamFinishReason === undefined) {
-        throw new Error(
-          "PROVIDER_ERROR: model stream ended without a terminal event",
-        );
-      }
-      clearTimeout(callTimeoutHandle);
-      clearTimeout(ttfbHandle);
-      params.abortSignal?.removeEventListener("abort", onExternalAbort);
-      await trace.ensureCalling();
-
-      const finalResponse: LLMResponse = {
-        content: streamedContent || null,
-        toolCalls: streamedToolCalls,
-        finishReason: streamFinishReason,
-        usage: streamedUsage,
-        ...(providerContinuation ? { providerContinuation } : {}),
-        ...(streamedReasoningContent
-          ? { reasoningContent: streamedReasoningContent }
-          : {}),
-      };
-      await emitLlmRespondedSuccess(params.emitter, {
-        runtimeId: params.runtimeId,
-        pluginId: params.pluginId,
-        response: finalResponse,
-        durationMs: Date.now() - streamStart,
-        attempt,
-        streaming: true,
-      });
-      return {
-        response: finalResponse,
-        attempt,
-      };
-    } catch (err) {
-      clearTimeout(callTimeoutHandle);
-      clearTimeout(ttfbHandle);
-      params.abortSignal?.removeEventListener("abort", onExternalAbort);
-      lastError = err;
-      lastReason = classifyStreamError(err, callAborter.signal, firstTokenSeen);
-
-      // Pair every `llm.calling` with an `llm.responded` on the error path.
-      // Without this, a streamed turn that fails mid-flight leaves a dangling
-      // `llm.calling` in trace_events and breaks trace-viewer pairing. This
-      // must run BEFORE the abort throw below so a player abort still emits
-      // the paired `llm.responded`.
-      await trace.ensureCalling();
-      await emitLlmRespondedError(params.emitter, {
-        runtimeId: params.runtimeId,
-        pluginId: params.pluginId,
-        error: err,
-        durationMs: Date.now() - streamStart,
-        attempt,
-        streaming: true,
-      });
-
-      // Partial output must never become a successful response or be spliced
-      // into a retry. Empty transient failures retain the normal retry policy.
-      throwIfTurnAborted(params.abortSignal);
-      if (firstTokenSeen) {
-        throw new LLMRetryError({
-          reason: lastReason,
-          attempts: attempt + 1,
-          cause: err,
-          hasPartialOutput: true,
-        });
-      }
-
-      if (attempt >= policy.maxRetries) {
-        throw new LLMRetryError({
-          reason: lastReason,
-          attempts: attempt + 1,
-          cause: err,
-        });
-      }
-      // Retry on transient failures; surface "unknown" errors immediately —
-      // an unclassified error usually means a bug in our code, not something
-      // a retry can fix.
-      if (lastReason === "unknown") {
-        throw new LLMRetryError({
-          reason: lastReason,
-          attempts: attempt + 1,
-          cause: err,
-        });
-      }
-      onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
-    } finally {
-      slot.release();
     }
-  }
 
-  throw exhaustedError(policy, lastReason, lastError);
+    throw exhaustedError(policy, lastReason, lastError);
+  } finally {
+    requestScope.dispose();
+  }
 }
 
 function classifyStreamError(

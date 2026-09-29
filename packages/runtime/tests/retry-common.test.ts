@@ -86,6 +86,8 @@ describe.each(["generate", "stream"] as const)(
       { code: "CONFIG_ERROR", retriable: false },
       { code: "SCHEMA_VALIDATION_FAILED", retriable: false },
       { code: "PROVIDER_ERROR", retriable: false },
+      { code: "REFUSAL", statusCode: 429, retriable: false },
+      { code: "REQUEST_BUDGET_EXCEEDED", retriable: false },
     ] as const)(
       "does not retry $code ($statusCode) based on message keywords",
       async (fields) => {
@@ -96,7 +98,14 @@ describe.each(["generate", "stream"] as const)(
         });
         const { attempt, run } = fixture(error);
 
-        await expect(run()).rejects.toMatchObject({ cause: error });
+        if (
+          fields.code === "REFUSAL" ||
+          fields.code === "REQUEST_BUDGET_EXCEEDED"
+        ) {
+          await expect(run()).rejects.toBe(error);
+        } else {
+          await expect(run()).rejects.toMatchObject({ cause: error });
+        }
         expect(attempt).toHaveBeenCalledTimes(1);
       },
     );

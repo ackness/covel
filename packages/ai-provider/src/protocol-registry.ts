@@ -104,12 +104,7 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
     cacheStrategy: "auto-prefix",
     capabilityDefaults: {
       ...BASE_CAPABILITY_DEFAULTS,
-      features: [
-        "function_calling",
-        "structured_output",
-        "streaming",
-        "web_search",
-      ],
+      features: ["function_calling", "structured_output", "streaming"],
     },
   },
   "anthropic-messages-v1": {

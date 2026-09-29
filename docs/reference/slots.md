@@ -46,6 +46,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | `thinking` / `reasoning_effort`     | —    | 思考模式与强度；按目标协议转换为对应请求字段                                                                                                      |
 | `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                                                                  |
 | `providerRequestMetadata`           | —    | 生成请求的自由 KV（per-call 优先）；评估请求不使用。媒体 wire 路由键也放这里，见下                                                                |
+| `providerOptions`                   | —    | 文本 / 对象 / 流式调用的供应商或协议命名空间参数，只解析当前目标的设置，见下                                                                      |
 
 ## Slot 解析链
 
@@ -62,6 +63,8 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 输出额度由共享的 `resolveLlmTokenLimits` 计算：默认 16,384，按模型输出能力收窄；小上下文的自动默认值最多使用窗口的一半，为输入保留空间。用户显式额度可高于或低于默认值，并在校验前读取；有效输出不能占满上下文，最终输入与输出无法同时容纳时明确失败。gateway 对每次实际目标（包括备用模型）重新限制输出额度，agent 与函数插件的 text / object / stream 调用均沿用这条路径；Anthropic 未知输出能力也默认 16k，不再回退 1024 或把资料库最大能力当默认请求量。HTTP 429 限流允许切换已配置的备用模型，其他 4xx 保留原失败路径；流式内容一旦输出，仍禁止切换，避免混入两个模型的结果。
 
 仓库快照由维护者通过 `pnpm --filter @covel/ai-provider update-model-db` 从固定 commit 生成；设置页的手动刷新会把较新数据写入用户配置目录，并在后续启动时优先于内置快照加载。
+
+模型资料与当前适配器可执行的能力分开处理。内置 Chat、Responses、Anthropic 文本适配器的输入只支持 text/image，输出只支持 text，不声明 `web_search` 或 `computer_use`。能力覆盖合并后仍受这层限制，不能通过手动勾选启用尚未实现的协议功能。`GET /api/model-db/lookup` 保留原始 `capability`；传入 `role` 与 `protocol` 后另返回 `effectiveCapability`，并在能解析连接时返回 `usesBuiltinAdapter`。设置页、`resolveSlot` 和实际文本调用上下文使用同一投影。程序化注册的自定义 adapter 与独立图片、语音、转写、embedding wire 保留自身能力。未知模型仍标注协议推断来源，不把协议默认值当作已核实的模型事实。
 
 调用后的工具完成契约、输出校验和工具循环耗尽等失败也保留最后一次响应的服务商和模型。该身份由 `onTargetAttempt` 跟随实际请求更新，包含备用模型；普通执行和暂停后的恢复执行共用失败身份处理，不能用初始用途绑定冒充最终响应模型。
 
@@ -184,6 +187,27 @@ providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 - 未注册的 wire id 在生成时抛 `CONFIG_ERROR`（报错信息含修复指引），不会静默回落。
 - 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription? })` 注册自定义 wire（frontmatter 的 `wires` 字段仍被接受但已弃用）—— 见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wireentry-里的-covelregisterwires)；wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription)。
 
+## 供应商参数
+
+`generateText`、`generateObject`、`streamText` 与 TOML preset 接受 `providerOptions`。命名空间键使用实际 provider ID 或协议 ID；单次解析先应用协议命名空间，再应用 provider 命名空间。只校验当前目标的命名空间，备用目标的配置在真正切换时才生效。
+
+```toml
+[covel.story.providerOptions.openai]
+store = false
+reasoningEffort = "high"
+
+[covel.story.providerOptions."openai-responses-v1"]
+reasoningSummary = "auto"
+```
+
+当前类型化字段包括 `reasoningEffort`、`reasoningSummary`、`parallelToolCalls`、`store`、`seed`、`user` 和 Anthropic `thinking`。支持范围按协议判断，例如 `seed` 只用于 Chat，`reasoningSummary` 只用于 Responses，`thinking` 只用于 Anthropic。启用 thinking 使用 `{ type: "enabled", budgetTokens: 2048 }`，转换为 wire 的 `budget_tokens`。非法已知字段在请求前抛不可重试 `CONFIG_ERROR`；不支持或未知字段被忽略并记录 `diagnostics.warnings`。生成参数也校验有限数值、采样范围和正整数输出额度。
+
+合并顺序是 preset 的自由 metadata → preset 的命名空间设置 → 本次调用的自由 metadata → 本次调用的命名空间设置 → 用途和 runtime 的生成参数限制。`extraBody` 可传尚未类型化的原生字段；model、messages、tools、stream、响应格式、输出预算等框架字段受保护，不能借此覆盖，省略时产生 warning。
+
+自由格式的 `providerRequestMetadata` 仍可使用。本次调用中的原生字段只随最初的 provider、协议和端点发送；fallback 改变其中任意一个时会省略这些字段并记录 warning。可移植的 `parameterOverrides` 仍保留，每个备用 preset 自己的配置仍然生效。需要跨供应商设置时应使用各自的 `providerOptions` 命名空间。媒体 wire 路由和插件的 `resolveSlot().metadata` 契约不变。
+
+此接口参考 [AI SDK 的 provider options](https://ai-sdk.dev/docs/foundations/provider-options) 与其命名空间校验方式，保留 Covel 的用途绑定和协议适配器。
+
 ## 结构化输出
 
 `gateway.generateObject({ schema, messages })` 在发送请求前，将 Zod schema 的输入形态转换为 JSON Schema。Responses 将完整的 `name` / `schema` 放入 `text.format`；OpenAI Chat 使用兼容的 `json_object` 模式，并在系统消息中传递 schema；Anthropic 在系统消息中传递 schema 和 JSON 输出指令。Chat / Anthropic 的指令不保证模型一定遵守 schema，所有协议仍在返回后通过原始 Zod schema 的 `safeParse` 校验，应用默认值和转换。自定义 refinement 也在这一步校验。
@@ -197,6 +221,12 @@ providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 三个文本协议共用的 SSE 解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
 
 文本流必须包含协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。
+
+三协议的 text/object 返回值和 stream 的 `done` 可携带 `diagnostics`，包含供应商及请求 warning、URL/文档来源和引用位置；runtime bridge 和 LLM trace 保留这些信息。`citations.location` 区分回答文本位置与来源文本位置，不能把 Anthropic 文档页码或原文字符偏移当作回答偏移。来源只记录已收到的协议数据，不代表已支持主动调用 web search 或文件工具。
+
+function 插件的 `PluginRuntimeGateway` 同样透传 `providerOptions` 与完整返回诊断。该路径的 `gateway.responded` / `gateway.failed` trace 保持原有隐私约定，只记录 `diagnosticsSummary` 中的 warning 类型、来源/引用数量及拒绝原因，不记录引用原文、来源 URL、标题或拒绝全文。
+
+显式 refusal 或 content filter 抛出不可重试的 `REFUSAL`，在 `error.details.diagnostics.refusal` 保留拒绝原因；不切换备用模型。即使已有普通文本或工具内容，也不能把混合拒绝记成成功。流式文本可能已经交付，但不会产生成功 `done`；三个适配器的完整工具调用都等最终拒绝检查通过后才交付。协议回归使用 `packages/ai-provider/tests/protocol-fixtures/` 中的合成响应，覆盖字节分片、工具参数、未知扩展、拒绝和引用，避免依赖付费 API 或保存真实对话。
 
 嵌入调用可传 `expectedModelId`（`provider/model`）；Gateway 在解析目标后、网络请求前校验它。Memory 的 `EmbedFn(texts, { sessionId, modelId })` 必须使用会话锁定的模型身份。修改当前配置不能把同维度的另一个模型写入旧索引；不匹配时查询降级为关键词检索，摄入不推进进度。恢复原模型配置后可继续补录；需要切换模型时重建开发期会话及索引，已混入错误向量的数据也需重建。
 
@@ -213,6 +243,14 @@ Key 永远不进 `llm.toml`：dev 放 `.env.llm`，桌面端放 `~/.covel/keys.e
 ## HTTP retry cleanup
 
 Provider and plugin HTTP helpers cancel rejected response bodies before retrying instead of buffering the entire error stream. Redirect responses are also cancelled when rejected. `Retry-After` waits remain abortable; long finite delays are split into timer-safe intervals, and non-finite delays fail explicitly instead of overflowing into immediate retries.
+
+`Retry-After` 同时接受整数秒和 HTTP-date；过去的日期立即重试，无效值退回退避策略。文本 / 对象 / 流式 / 评估的 gateway 调用默认共享最多 8 次实际 HTTP 请求和 120 秒总时限。runtime 的一次逻辑调用只创建一次预算，HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`；runtime 执行预算继续按原策略计算，并发排队保留原有的额度补偿；每次实际调用同时受执行预算、逻辑总时限和取消信号约束。排队和退避也计入逻辑总时间，已经输出内容的流仍禁止重试。耗尽返回不可重试的 `REQUEST_BUDGET_EXCEEDED`。调用方可通过 `createLlmRequestBudget` 显式设置更紧或更宽的策略，并在 `GatewayOptions.requestBudget` / `LLMAdapter` 参数中传递。
+
+媒体和 embedding 不自动套用文本预算，保留独立 wire 的时限及轮询策略；例如 DashScope WAN 仍可每 2 秒轮询、最多 300 秒。它们可以显式传入预算，此时所有 HTTP 请求（含轮询）都计数。底层 HTTP helper 只消耗传入的预算。观测数据在原 `transportAttempt` 之外提供可选 `logicalAttempt` 和 `transportRetryReason`（`http-429` / `http-5xx`）。
+
+生命周期 hook 的每个通知阶段合计最多等待 1 秒。普通 hook 异常或超时记录 warning 后继续；请求取消或逻辑 deadline 会立即停止等待，不触发额外重试。预算到期时，gateway 也会停止等待不响应 signal 的自定义 adapter；自定义实现仍应使用 signal 取消其底层 I/O。
+
+请求次数由框架 HTTP helper 在真正发送前计数。自定义 adapter 如果直接使用自己的网络客户端，应在发送前调用 `assertLlmRequestBudget(config.requestBudget, { signal: config.signal, consumeAttempt: true })`（存在预算时）；框架无法自动统计其内部 HTTP 请求。
 
 ## 失败后的模型与参数调整
 

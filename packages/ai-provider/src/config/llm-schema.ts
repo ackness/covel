@@ -133,6 +133,10 @@ export const slotDefinitionSchema = z.object({
    * ```
    */
   providerRequestMetadata: z.record(z.string(), z.unknown()).optional(),
+  /** Namespaced settings; the active provider/protocol validates its own options. */
+  providerOptions: z
+    .record(z.string(), z.record(z.string(), z.unknown()))
+    .optional(),
 });
 
 export type SlotDefinition = z.infer<typeof slotDefinitionSchema>;

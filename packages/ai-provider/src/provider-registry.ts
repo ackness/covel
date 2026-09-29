@@ -60,6 +60,8 @@ interface ProviderRegistration {
 
 export interface ProviderResolution {
   adapter: ModelProviderAdapter;
+  /** Only built-in adapters are bounded by the framework's protocol support. */
+  usesBuiltinAdapter?: boolean;
   config: ProviderConfig;
   protocol: ProviderProtocol;
   hooks: ProviderLifecycleHook[];
@@ -212,6 +214,7 @@ export function createProviderRegistry(options?: {
 
     return {
       adapter,
+      usesBuiltinAdapter: !protocolRoute?.adapter && !registered.adapter,
       config: mergedConfig,
       protocol,
       hooks: [...(registered.hooks ?? [])],

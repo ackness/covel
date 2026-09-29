@@ -343,6 +343,7 @@ describe("LLM settings regressions", () => {
         "local-model",
         "fixture",
         "openai-chat-v1",
+        "text",
       ),
     );
     expect(screen.getByText("local-model", { exact: true })).toBeTruthy();
@@ -353,6 +354,7 @@ describe("LLM settings regressions", () => {
         "server-model",
         "fixture",
         "openai-chat-v1",
+        "text",
       ),
     );
     expect(screen.getByText("server-model", { exact: true })).toBeTruthy();
@@ -517,6 +519,7 @@ describe("LLM settings regressions", () => {
         "story-model",
         "openai",
         "openai-chat-v1",
+        "text",
       ),
     );
     await waitFor(() =>
@@ -555,6 +558,7 @@ describe("LLM settings regressions", () => {
         "story-model",
         "openai",
         "openai-chat-v1",
+        "text",
       ),
     );
     await act(async () => undefined);
@@ -593,6 +597,7 @@ describe("LLM settings regressions", () => {
         "qwen3.8-flash",
         "ali-coding-plan",
         "openai-chat-v1",
+        "text",
       ),
     );
     expect(screen.getByText("qwen3.8-flash")).toBeTruthy();

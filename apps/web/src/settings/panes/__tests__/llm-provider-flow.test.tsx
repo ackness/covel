@@ -176,6 +176,7 @@ describe("provider configuration flow", () => {
         "opaque-model",
         "example",
         "anthropic-v1",
+        undefined,
       ),
     );
     expect(await screen.findByText("Model limits unknown")).toBeTruthy();

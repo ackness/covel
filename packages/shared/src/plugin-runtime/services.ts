@@ -1,4 +1,5 @@
 import type { LLMUsageSummary, MediaRef } from "../index.js";
+import type { LLMDiagnostics } from "../types/llm-diagnostics.js";
 import type { FunctionHandlerContext } from "./handler.js";
 import type {
   EvaluationParams,
@@ -46,9 +47,14 @@ export interface PluginRuntimeGateway {
     }[];
     readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
+    /** Namespaced options are validated by the host provider gateway. */
+    readonly providerOptions?: Readonly<
+      Record<string, Readonly<Record<string, unknown>>>
+    >;
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly text: string;
+    readonly diagnostics?: LLMDiagnostics;
     readonly reasoningContent?: string;
     readonly finishReason: string;
     readonly usage: LLMUsageSummary;
@@ -67,9 +73,13 @@ export interface PluginRuntimeGateway {
     }[];
     readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
+    readonly providerOptions?: Readonly<
+      Record<string, Readonly<Record<string, unknown>>>
+    >;
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly object: T;
+    readonly diagnostics?: LLMDiagnostics;
     readonly reasoningContent?: string;
     readonly finishReason: string;
     readonly usage: LLMUsageSummary;

@@ -1,4 +1,12 @@
-import type { LLMProviderRequest, LLMTargetIdentity } from "@covel/shared";
+import {
+  assertLlmRequestBudget,
+  awaitLlmRequest,
+  createLlmRequestBudget,
+  createLlmRequestScope,
+  type LLMProviderRequest,
+  type LLMRequestBudget,
+  type LLMTargetIdentity,
+} from "@covel/shared";
 /**
  * LLM request machinery for the agent tool-call loop.
  *
@@ -28,6 +36,7 @@ import {
   emitLlmRespondedSuccess,
 } from "../llm/llm-telemetry.js";
 import { shouldRetryMalformedToolArguments } from "../turn-executor/turn-output-helpers.js";
+import { isTerminalLlmRequestError } from "../retry/retry-common.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import type {
   LLMToolDefinition,
@@ -88,6 +97,9 @@ export async function requestLLMResponse(
     resolvedTarget = undefined;
   }
 
+  const requestScope = createLlmRequestScope({
+    budget: createLlmRequestBudget(),
+  });
   const callParams = {
     llm: deps.llm,
     model: effectiveModel,
@@ -98,6 +110,7 @@ export async function requestLLMResponse(
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     policy: retryPolicy,
     deadline,
+    requestBudget: requestScope.budget,
     onQueueWait,
     onTargetAttempt: (target: LLMTargetIdentity) => {
       resolvedTarget = target;
@@ -116,10 +129,17 @@ export async function requestLLMResponse(
     abortSignal: getTurnExecutionSignal(deps.turnControl),
   } as const;
 
-  const response = useStreaming
-    ? await requestStreaming(opts, callParams, onStreamDelta)
-    : await requestNonStreaming(opts, callParams);
-  return { ...response, target: resolvedTarget };
+  try {
+    const response = await awaitLlmRequest(
+      useStreaming
+        ? requestStreaming(opts, callParams, onStreamDelta)
+        : requestNonStreaming(opts, callParams),
+      requestScope.signal,
+    );
+    return { ...response, target: resolvedTarget };
+  } finally {
+    requestScope.dispose();
+  }
 }
 
 type CallParams = Parameters<typeof callLLMWithRetry>[0];
@@ -209,7 +229,11 @@ async function requestNonStreaming(
     return await callLLMWithRetry(callParams);
   } catch (error) {
     const cause = error instanceof LLMRetryError ? error.cause : error;
-    if (!toolDefs || !shouldRetryMalformedToolArguments(cause)) {
+    if (
+      isTerminalLlmRequestError(cause) ||
+      !toolDefs ||
+      !shouldRetryMalformedToolArguments(cause)
+    ) {
       throw error;
     }
     return malformedToolArgsFallback({
@@ -225,6 +249,7 @@ async function requestNonStreaming(
       resolvedModel: callParams.resolvedModel,
       provider: callParams.provider,
       onTargetAttempt: callParams.onTargetAttempt,
+      requestBudget: callParams.requestBudget!,
     });
   }
 }
@@ -242,6 +267,7 @@ async function malformedToolArgsFallback(args: {
   resolvedModel: string | undefined;
   provider: string | undefined;
   onTargetAttempt?: (target: LLMTargetIdentity) => void;
+  requestBudget: LLMRequestBudget;
 }): Promise<LLMResponse> {
   const {
     manifest,
@@ -282,34 +308,47 @@ async function malformedToolArgsFallback(args: {
   };
   let response: LLMResponse;
   try {
-    response = await deps.llm.generate({
-      model: effectiveModel,
-      messages,
-      tools: toolDefs,
-      responseFormat,
-      defaults: manifest.llm,
-      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-      ...(deps.emitter
-        ? {
-            onProviderRequest: (request: LLMProviderRequest) => {
-              providerRequests.push(request);
-            },
-          }
-        : {}),
-      onTargetAttempt: (target) => {
-        actualTarget = target;
-        args.onTargetAttempt?.(target);
-      },
-      signal: combineAbortSignals(
-        getTurnExecutionSignal(deps.turnControl),
-        AbortSignal.timeout(
-          Math.max(
-            1000,
-            Math.min(retryPolicy.callTimeoutMs, deadline - Date.now()),
+    assertLlmRequestBudget(args.requestBudget, {
+      requireAttempt: true,
+      signal: getTurnExecutionSignal(deps.turnControl),
+    });
+    const signal = combineAbortSignals(
+      getTurnExecutionSignal(deps.turnControl),
+      AbortSignal.timeout(
+        Math.max(
+          1000,
+          Math.min(
+            retryPolicy.callTimeoutMs,
+            deadline - Date.now(),
+            args.requestBudget.deadline - Date.now(),
           ),
         ),
       ),
-    });
+    );
+    response = await awaitLlmRequest(
+      deps.llm.generate({
+        model: effectiveModel,
+        messages,
+        tools: toolDefs,
+        responseFormat,
+        defaults: manifest.llm,
+        requestBudget: args.requestBudget,
+        ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+        ...(deps.emitter
+          ? {
+              onProviderRequest: (request: LLMProviderRequest) => {
+                providerRequests.push(request);
+              },
+            }
+          : {}),
+        onTargetAttempt: (target) => {
+          actualTarget = target;
+          args.onTargetAttempt?.(target);
+        },
+        signal,
+      }),
+      signal,
+    );
     throwIfTurnExecutionAborted(
       deps.turnControl,
       "malformed tool arguments fallback",
@@ -329,6 +368,10 @@ async function malformedToolArgsFallback(args: {
       durationMs: Date.now() - fallbackCallStart,
       attempt: 0,
     });
+    throwIfTurnExecutionAborted(
+      deps.turnControl,
+      "malformed tool arguments fallback",
+    );
     throw fallbackErr;
   }
   await emitLlmRespondedSuccess(deps.emitter, {

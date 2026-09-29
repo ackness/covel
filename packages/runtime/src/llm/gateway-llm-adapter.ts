@@ -1,5 +1,6 @@
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
+import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
 /**
  * Bridge adapter: @covel/ai-provider gateway → LLMAdapter interface.
  *
@@ -139,6 +140,7 @@ export interface GatewayLike {
       envApiKeys?: Record<string, string>;
       traceId?: string;
       signal?: AbortSignal;
+      requestBudget?: LLMRequestBudget;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
       /** Request-hard generation limit; gateway applies it after metadata. */
@@ -153,6 +155,7 @@ export interface GatewayLike {
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
     reasoningContent?: string;
     providerContinuation?: LLMProviderContinuation;
+    diagnostics?: LLMDiagnostics;
   }>;
 
   streamText?(
@@ -176,12 +179,14 @@ export interface GatewayLike {
       }>;
       providerRequestMetadata?: Record<string, unknown>;
       defaults?: LLMRequestDefaults;
+      responseFormat?: LLMResponseFormat;
     },
     options?: {
       apiKeys?: Record<string, string>;
       envApiKeys?: Record<string, string>;
       traceId?: string;
       signal?: AbortSignal;
+      requestBudget?: LLMRequestBudget;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
       /** @see generateText options.parameterOverrides */
@@ -200,6 +205,7 @@ export interface GatewayLike {
     reasoningContent?: string;
     providerContinuation?: LLMProviderContinuation;
     usage?: LLMUsageSummary;
+    diagnostics?: LLMDiagnostics;
   }>;
 }
 
@@ -307,6 +313,9 @@ export function createGatewayAdapter(
               }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.requestBudget
+            ? { requestBudget: params.requestBudget }
+            : {}),
           ...(params.onTargetAttempt
             ? { onTargetAttempt: params.onTargetAttempt }
             : {}),
@@ -317,6 +326,7 @@ export function createGatewayAdapter(
       );
 
       return {
+        ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
         content: result.text || null,
         toolCalls: (result.toolCalls ?? []).map((tc) => ({
           id: tc.id,
@@ -344,7 +354,9 @@ export function createGatewayAdapter(
         throw new Error("Gateway does not support streaming");
       }
 
-      const messages = toGatewayMessages(params.messages);
+      const messages = toGatewayMessages(
+        withResponseFormatInstruction(params.messages, params.responseFormat),
+      );
       const tools = params.tools?.map(toGatewayTool);
 
       for await (const event of gateway.streamText(
@@ -353,6 +365,7 @@ export function createGatewayAdapter(
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
+          responseFormat: params.responseFormat,
         },
         {
           apiKeys: config?.apiKeys,
@@ -372,6 +385,9 @@ export function createGatewayAdapter(
               }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.requestBudget
+            ? { requestBudget: params.requestBudget }
+            : {}),
           ...(params.onTargetAttempt
             ? { onTargetAttempt: params.onTargetAttempt }
             : {}),
@@ -400,6 +416,7 @@ export function createGatewayAdapter(
         } else if (event.type === "done") {
           yield {
             type: "done" as const,
+            ...(event.diagnostics ? { diagnostics: event.diagnostics } : {}),
             finishReason: event.finishReason ?? "stop",
             ...(event.providerContinuation
               ? { providerContinuation: event.providerContinuation }
