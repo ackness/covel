@@ -88,7 +88,7 @@ export function parseCreateSessionBody(
 
 type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
-export type SessionPatchUpdates = Partial<
+type SessionPatchUpdates = Partial<
   Writable<
     Pick<SessionRecord, "status" | "updatedAt" | "runtimeModelOverrides">
   >

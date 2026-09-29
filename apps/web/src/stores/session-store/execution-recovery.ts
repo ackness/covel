@@ -21,7 +21,7 @@ interface RecoveryOptions {
 }
 
 /** Refreshing an observation never starts another action or LLM call. */
-export async function refreshRecoveredExecution(
+async function refreshRecoveredExecution(
   sessionId: string,
   status: SessionExecutionStatus,
   options: Pick<RecoveryOptions, "stateRef" | "dispatch" | "workspace">,

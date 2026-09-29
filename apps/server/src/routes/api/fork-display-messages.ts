@@ -9,7 +9,7 @@ import type {
 /** Rolls back the child when a captured conversation boundary is unavailable. */
 export class ForkCursorMissingError extends Error {}
 
-export async function readForkDisplayMessages(
+async function readForkDisplayMessages(
   store: Pick<DataStore, "listMessages">,
   parentSessionId: string,
   snapshot: SnapshotRecord,

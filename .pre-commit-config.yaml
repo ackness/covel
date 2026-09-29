@@ -1,7 +1,9 @@
 minimum_pre_commit_version: "4.0.0"
 
 default_language_version:
-  node: "26.7.0"
+  # Use the Node 26 toolchain selected by mise; older nodeenv releases require
+  # an exact version when downloading Node and cannot resolve a major alone.
+  node: system
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

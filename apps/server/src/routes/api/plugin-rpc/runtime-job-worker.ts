@@ -105,7 +105,7 @@ export class RuntimeJobNoLongerCurrentError extends Error {
   }
 }
 
-export class RuntimeJobExecutionTimedOutError extends Error {
+class RuntimeJobExecutionTimedOutError extends Error {
   constructor(readonly maxExecutionMs: number) {
     super(`detached runtime job exceeded ${maxExecutionMs}ms execution limit`);
     this.name = "RuntimeJobExecutionTimedOutError";

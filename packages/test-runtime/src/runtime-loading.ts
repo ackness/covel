@@ -131,7 +131,7 @@ export function prepareRuntimeManifests(args: {
   return { manifests, target };
 }
 
-export async function loadRuntimeCache(args: {
+async function loadRuntimeCache(args: {
   readonly discovery: PluginDiscoveryResult;
   readonly rawManifests: readonly RuntimeManifest[];
   readonly definition: PluginDefinition;

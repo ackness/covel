@@ -1,8 +1,4 @@
-import {
-  getPluginTrustInfo,
-  type PluginRegistry,
-  type PluginRegistryEntry,
-} from "@covel/plugin-loader";
+import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import {
   COMMUNITY_SERVER_CODE_ACTION,
   type RpcApprovalGate,
@@ -85,23 +81,6 @@ export function resolveSessionPluginPlan(
         };
       }),
   });
-}
-/** Resolve the entire authorized graph rather than filtering its providers afterward. */
-export function approvedActivePlugins(
-  pluginIds: readonly string[],
-  registry: PluginRegistry,
-  gate: RpcApprovalGate | undefined,
-  session?: SessionRecord,
-): string[] {
-  return resolveSessionPluginPlan(pluginIds, registry, {
-    authorized: authorizedSessionPluginIds(registry, gate, session),
-    ...(session
-      ? { excluded: readSessionPluginSelection(session).excluded }
-      : {}),
-  }).active;
-}
-export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
-  return entry.packageManifest?.plugin?.kind === "core";
 }
 export function unknownPluginIds(
   requestedPlugins: readonly string[],

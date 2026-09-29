@@ -1,4 +1,3 @@
-import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 /**
  * Session-param resolution guard + session owner-token authorization.
  *
@@ -42,19 +41,18 @@ import type { Context } from "hono";
 import type { DataStore, SessionRecord } from "@covel/store";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
-import type { SessionLock } from "../../../lib/session-lock.js";
 
 export const SESSION_NOT_FOUND_CODE = "session_not_found";
-export const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
+const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
 export const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
-export const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
+const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
 
 /** Metadata key holding the SHA-256 hex hash of the session owner token. */
 export const SESSION_OWNER_TOKEN_HASH_KEY = "ownerTokenHash";
 /** Private metadata key that identifies one persisted session incarnation. */
 export const SESSION_APPROVAL_SCOPE_KEY = "approvalScopeNonce";
 /** Private per-plugin revocation generations within the session scope. */
-export const SESSION_APPROVAL_REVISIONS_KEY = "approvalScopeRevisions";
+const SESSION_APPROVAL_REVISIONS_KEY = "approvalScopeRevisions";
 /** Private immutable identity for sessions that do not carry an owner hash. */
 export const SESSION_INCARNATION_KEY = "sessionIncarnationNonce";
 /** Private marker that keeps a failed/in-progress delete fail-closed. */
@@ -124,73 +122,6 @@ export function publicSessionIncarnation(session: SessionRecord): string {
   return createHash("sha256")
     .update(sessionIncarnationIdentity(session))
     .digest("hex");
-}
-
-/**
- * Short commit barrier for session-scoped mutations.
- *
- * Callers parse/validate bodies and perform non-mutating expensive work before
- * entering. The callback runs under the cross-Pod session lock only after the
- * owner, immutable incarnation, deletion marker and explicit status policy are
- * revalidated against the live row.
- */
-export async function withLockedSessionMutation<T>(options: {
-  readonly c: Context;
-  readonly store: DataStore;
-  readonly sessionLock: SessionLock;
-  readonly sessionId: string;
-  readonly expectedSession: SessionRecord;
-  readonly allowedStatuses: "any" | readonly string[];
-  readonly allowDeletionPending?: boolean;
-  readonly mutate: (session: SessionRecord) => Promise<T>;
-}): Promise<T | Response> {
-  return withSettledSessionLock(options.c, options.sessionId, async () => {
-    const live = await options.store.getSession(options.sessionId);
-    if (!live) {
-      return options.c.json(
-        errorBody(`Session not found: ${options.sessionId}`, {
-          code: SESSION_NOT_FOUND_CODE,
-        }),
-        404,
-      );
-    }
-    const ownerDenied = checkSessionOwner(options.c, live);
-    if (ownerDenied) return ownerDenied;
-    if (
-      sessionIncarnationIdentity(live) !==
-      sessionIncarnationIdentity(options.expectedSession)
-    ) {
-      return options.c.json(
-        errorBody("Session was replaced while the request was waiting", {
-          code: "session_incarnation_changed",
-        }),
-        409,
-      );
-    }
-    if (
-      !options.allowDeletionPending &&
-      live.metadata?.[SESSION_DELETION_PENDING_KEY]
-    ) {
-      return options.c.json(
-        errorBody("Session deletion is in progress; retry DELETE", {
-          code: "session_deleting",
-        }),
-        409,
-      );
-    }
-    if (
-      options.allowedStatuses !== "any" &&
-      !options.allowedStatuses.includes(live.status)
-    ) {
-      return options.c.json(
-        errorBody(`Session is ${live.status}; mutation refused`, {
-          code: "session_not_active",
-        }),
-        409,
-      );
-    }
-    return options.mutate(live);
-  });
 }
 
 /**
@@ -268,7 +199,7 @@ export function safeEqual(a: string, b: string): boolean {
  * Extract the caller-presented session token. Query-param fallback exists for
  * EventSource (SSE) clients, which cannot set request headers.
  */
-export function extractSessionOwnerToken(c: Context): string | undefined {
+function extractSessionOwnerToken(c: Context): string | undefined {
   const auth = (c.req.header("authorization") ?? "").trim();
   const bearer = /^Bearer\s+(.+)$/i.exec(auth)?.[1]?.trim();
   if (bearer) return bearer;

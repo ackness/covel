@@ -10,7 +10,6 @@
  * (`lib/catalog.tsx`) continue to work without change.
  */
 
-import { useMemo } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
@@ -24,6 +23,12 @@ import { useI18nResolver } from "./helpers.js";
 
 // ── Button ────────────────────────────────────────────────────────
 // Kept here: complex standalone, references session store + selection state.
+
+const invocationParams = new Map<string, readonly [string, string]>([
+  ["invokeRuntime", ["runtime", "runtimeId"]],
+  ["invokePluginAction", ["action", "action"]],
+  ["invokeCommand", ["command", "command"]],
+]);
 
 export const Button: ComponentRenderer = ({ element, emit }) => {
   const resolve = useI18nResolver();
@@ -41,20 +46,6 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
   const { state } = useSession();
   const pendingDrafts = state.pendingInteractionDrafts;
   const { get: getState } = useStateStore();
-  const isSelected = useMemo(() => {
-    if (pendingDrafts.length === 0) return false;
-    const click = element.on?.click;
-    if (!click) return false;
-    const bindings = Array.isArray(click) ? click : [click];
-    for (const binding of bindings) {
-      const resolved = resolveActionParams(
-        binding.params as Record<string, unknown> | undefined,
-        getState,
-      );
-      if (matchesPendingDraft(resolved, pendingDrafts)) return true;
-    }
-    return false;
-  }, [element.on, pendingDrafts, getState]);
 
   // ── In-flight feedback for plugin-rpc dispatch ─────────────────────
   //
@@ -64,36 +55,25 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
   // the button that fired the action — no risk of dimming the whole panel.
   const invokingMap =
     (getState("/_invoking") as Record<string, boolean> | undefined) ?? {};
-  const isPending = useMemo(() => {
-    const click = element.on?.click;
-    if (!click) return false;
-    const bindings = Array.isArray(click) ? click : [click];
-    for (const binding of bindings) {
-      const resolved = resolveActionParams(
-        binding.params as Record<string, unknown> | undefined,
-        getState,
-      );
-      if (
-        binding.action === "invokeRuntime" &&
-        typeof resolved.runtimeId === "string"
-      ) {
-        if (invokingMap[`runtime:${resolved.runtimeId}`]) return true;
-      }
-      if (
-        binding.action === "invokePluginAction" &&
-        typeof resolved.action === "string"
-      ) {
-        if (invokingMap[`action:${resolved.action}`]) return true;
-      }
-      if (
-        binding.action === "invokeCommand" &&
-        typeof resolved.command === "string"
-      ) {
-        if (invokingMap[`command:${resolved.command}`]) return true;
-      }
+  const click = element.on?.click;
+  const bindings = click ? (Array.isArray(click) ? click : [click]) : [];
+  let isSelected = false;
+  let isPending = false;
+  // `getState` is stable even when the store changes. Resolve dynamic action
+  // params on each render so both feedback states track the current snapshot.
+  for (const binding of bindings) {
+    const resolved = resolveActionParams(
+      binding.params as Record<string, unknown> | undefined,
+      getState,
+    );
+    isSelected ||= matchesPendingDraft(resolved, pendingDrafts);
+    const invocation = invocationParams.get(binding.action);
+    if (invocation) {
+      const [kind, param] = invocation;
+      const id = resolved[param];
+      isPending ||= typeof id === "string" && !!invokingMap[`${kind}:${id}`];
     }
-    return false;
-  }, [element.on, invokingMap, getState]);
+  }
 
   const Loader = Loader2;
 

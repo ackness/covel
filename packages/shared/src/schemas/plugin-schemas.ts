@@ -21,10 +21,6 @@ import { HOOK_EVENTS } from "../types/hooks.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { EffectResource } from "../types/runtime-scheduling.js";
 import { slashCommandSpecSchema } from "./slash-command-schema.js";
-export {
-  slashCommandArgumentSpecSchema,
-  slashCommandSpecSchema,
-} from "./slash-command-schema.js";
 
 // ── Shared path & scheduling primitives ──────────────────────────
 // Hoisted so the Input section (runtime-export inject, data bindings) and the
@@ -51,10 +47,10 @@ const runtimeJsonSchemaReference = z.union([
 ]);
 
 /** capability cardinality — `one` (any single provider) or `all` (every provider). */
-export const dependencyCardinalitySchema = z.enum(["one", "all"]);
+const dependencyCardinalitySchema = z.enum(["one", "all"]);
 
 /** `needs` gate scope — same-execution (`turn`) or persistent snapshot (`session`). */
-export const dependencyScopeSchema = z.enum(["turn", "session"]);
+const dependencyScopeSchema = z.enum(["turn", "session"]);
 
 /**
  * A dependency/binding source: exactly one of `runtime` (an id) or `capability`
@@ -62,7 +58,7 @@ export const dependencyScopeSchema = z.enum(["turn", "session"]);
  * `{ runtime, capability }` — or a stray `cardinality` on a runtime ref — is
  * rejected: cardinality is capability-only by construction.
  */
-export const bindingSourceSchema = z.union([
+const bindingSourceSchema = z.union([
   z.object({ runtime: z.string().min(1) }).strict(),
   z
     .object({
@@ -117,14 +113,7 @@ export const triggerConfigSchema = z
   .object({ type: triggerTypeSchema, ...triggerConfigShape })
   .strict();
 
-/**
- * Authoring schema — identical to the compat schema now that reserved triggers
- * are rejected on both. Kept as distinct exports so the authoring / compat call
- * sites stay explicit (and can diverge again if the authoring surface tightens
- * further).
- */
-export const authoringTriggerTypeSchema = triggerTypeSchema;
-
+/** Authoring trigger config shares the current production trigger shape. */
 export const authoringTriggerConfigSchema = triggerConfigSchema;
 
 // ── Input ────────────────────────────────────────────────────────
@@ -133,7 +122,7 @@ export const authoringTriggerConfigSchema = triggerConfigSchema;
  * Runtime-output inject — read a field from a completed upstream runtime's
  * output and wrap it in an XML tag.
  */
-export const runtimeInjectDeclSchema = z
+const runtimeInjectDeclSchema = z
   .object({
     kind: z.literal("runtime"),
     from: z.string().min(1),
@@ -187,7 +176,7 @@ export const pluginDataInjectDeclSchema = z
  * export key. Cross-execution counterpart to the same-execution `inputs`
  * bindings.
  */
-export const runtimeExportInjectDeclSchema = z
+const runtimeExportInjectDeclSchema = z
   .object({
     kind: z.literal("runtime-export"),
     name: bindingNameSchema,
@@ -213,7 +202,7 @@ export const inputInjectDeclSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-export const inputConfigSchema = z
+const inputConfigSchema = z
   .object({
     /** Runtime-dir-relative JSON Schema path validating the activation payload. */
     schema: runtimeJsonSchemaReference.optional(),
@@ -225,7 +214,7 @@ export const inputConfigSchema = z
 
 export const outputKindSchema = z.enum(["story", "plugin", "system"]);
 
-export const outputConfigSchema = z
+const outputConfigSchema = z
   .object({
     // Compatibility: output schema declarations historically allowed any
     // string and the loader enforced containment. Keep that surface while
@@ -338,7 +327,7 @@ const worldProjectionKeyFieldSchema = z
       "key must be a field name starting with a letter and containing only letters/digits/underscore/hyphen",
   });
 
-export const worldProjectionOutputDeclSchema = z
+const worldProjectionOutputDeclSchema = z
   .object({
     namespace: pluginDataNamespaceSchema,
     key: worldProjectionKeyFieldSchema,
@@ -351,7 +340,7 @@ const worldProjectionOutputsSchema = z
     message: "outputs must declare at least one destination",
   });
 
-export const worldProjectionDeclSchema = z
+const worldProjectionDeclSchema = z
   .object({
     from: z.string().trim().min(1).regex(/\S/),
     handler: pluginRelativeJsPath,
@@ -377,7 +366,7 @@ const EVENT_TOPIC_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
  * these across active plugins per session and validates emitted payloads
  * against `schema` before they enter the same-turn event fan-out.
  */
-export const pluginEventDeclSchema = z
+const pluginEventDeclSchema = z
   .object({
     topic: z
       .string()
@@ -411,7 +400,7 @@ const pluginTagSchema = z
 // dependencies are a different field — see `needs` / `after`.
 // ── UI spec ─────────────────────────────────────────────────────
 
-export const uiSpecSchema = z
+const uiSpecSchema = z
   .object({
     right: z.array(z.string().min(1)).optional(),
     message: z.array(z.string().min(1)).optional(),
@@ -498,13 +487,13 @@ export const turnCompletionConfigSchema = z
  * `{ runtime }`; the object form is a {@link bindingSourceSchema} (runtime XOR
  * capability). `scope` is intentionally NOT accepted on `after` entries.
  */
-export const afterRefSchema = z.union([z.string().min(1), bindingSourceSchema]);
+const afterRefSchema = z.union([z.string().min(1), bindingSourceSchema]);
 
 /**
  * `needs` entry — ordering + gate. Adds an optional `scope` (turn/session) to
  * either a runtime or capability ref; `cardinality` stays capability-only.
  */
-export const needsRefSchema = z.union([
+const needsRefSchema = z.union([
   z.string().min(1),
   z
     .object({
@@ -522,7 +511,7 @@ export const needsRefSchema = z.union([
 ]);
 
 /** Typed same-execution data binding (`inputs.<name>`). */
-export const runtimeBindingSchema = z
+const runtimeBindingSchema = z
   .object({
     from: bindingSourceSchema,
     select: jsonPointerSchema.optional(),
@@ -531,7 +520,7 @@ export const runtimeBindingSchema = z
   })
   .strict();
 
-export const inputsBindingMapSchema = z.record(
+const inputsBindingMapSchema = z.record(
   bindingNameSchema,
   runtimeBindingSchema,
 );
@@ -549,7 +538,7 @@ export const inputsBindingMapSchema = z.record(
 // strings so the pattern survives into the generated JSON Schema, but Zod infers
 // them as `string`. Narrow the static type to `EffectResource` to match the
 // manifest interface — runtime validation and JSON Schema output are unchanged.
-export const effectResourceSchema = z.union([
+const effectResourceSchema = z.union([
   z.enum([
     "state:*",
     "narrative:*",
@@ -590,7 +579,7 @@ export const effectsDeclSchema = z
 
 // ── HTTP permission declaration ──────────────────────────────────
 
-export const httpMethodSchema = z.enum([
+const httpMethodSchema = z.enum([
   "GET",
   "POST",
   "PUT",
@@ -599,7 +588,7 @@ export const httpMethodSchema = z.enum([
   "HEAD",
 ]);
 
-export const httpPermissionDeclSchema = z
+const httpPermissionDeclSchema = z
   .object({
     origin: z.string().regex(/^https:\/\/[^/?#@]+$/, {
       message:

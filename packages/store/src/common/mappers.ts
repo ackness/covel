@@ -18,7 +18,6 @@
  */
 
 export type { JsonReader } from "./mappers/json-reader.js";
-export { asBoolean } from "./mappers/json-reader.js";
 
 export * from "./mappers/session-mappers.js";
 export * from "./mappers/world-mappers.js";

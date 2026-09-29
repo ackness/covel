@@ -12,6 +12,6 @@
   "devDependencies": {
     "@covel/plugin-handlers-utils": "^0.0.42",
     "typescript": "^7.0.2",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   }
 }

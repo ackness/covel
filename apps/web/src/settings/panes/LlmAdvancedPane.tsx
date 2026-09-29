@@ -94,7 +94,7 @@ const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   },
 ];
 
-export function effectiveParameterValue(
+function effectiveParameterValue(
   override: number | undefined,
   defaultValue: number,
 ): number {

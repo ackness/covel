@@ -26,8 +26,8 @@ import {
   hasOperatorToken,
   isSessionOwnerAuthEnforced,
   sessionIncarnationIdentity,
-  withLockedSessionMutation,
 } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
   Variables: {

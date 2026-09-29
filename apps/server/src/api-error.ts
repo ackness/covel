@@ -117,7 +117,7 @@ export async function parseJsonBody<Schema extends ZodType>(
  */
 const SENSITIVE_QUERY_PARAMS = ["token", "session_token"];
 
-export function redactSensitiveQueryParams(url: string): string {
+function redactSensitiveQueryParams(url: string): string {
   try {
     const parsed = new URL(url);
     for (const param of SENSITIVE_QUERY_PARAMS) {

@@ -9,7 +9,6 @@ export type {
   LorebookOwner,
 } from "./types/world-model.js";
 export {
-  characterSchemaSchema,
   characterSchemaRecordSchema,
   lorebookOwnerSchema,
 } from "./schemas/world-model.js";
@@ -157,30 +156,20 @@ export {
   triggerTypeSchema,
   triggerConfigSchema,
   inputInjectDeclSchema,
-  inputConfigSchema,
   outputKindSchema,
-  outputConfigSchema,
   pluginDataSchemaDeclSchema,
   pluginDataSchemaMapSchema,
-  worldProjectionOutputDeclSchema,
-  worldProjectionDeclSchema,
   worldProjectionMapSchema,
   toolsConfigSchema,
   hookDeclarationSchema,
-  pluginEventDeclSchema,
   runtimeManifestInputSchema,
   runtimeManifestAuthoringSchema,
   authoringTriggerConfigSchema,
   stageSchema,
   turnCompletionConfigSchema,
   MAX_SETTLE_WAIT_MS,
-  afterRefSchema,
-  needsRefSchema,
-  runtimeBindingSchema,
   effectsDeclSchema,
   permissionsDeclSchema,
-  slashCommandArgumentSpecSchema,
-  slashCommandSpecSchema,
   validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
 
@@ -194,6 +183,7 @@ export type {
 export {
   i18nTextSchema,
   attributeDefinitionSchema,
+  characterSchemaSchema,
   worldManifestSchema,
   worldDimensionsSchema,
   worldGeographySchema,

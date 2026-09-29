@@ -38,11 +38,11 @@
   "devDependencies": {
     "ajv": "^8.20.0",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "smol-toml": "^1.8.0",
-    "zod": "^4.4.3",
+    "zod": "^4.6.5",
     "@covel/plugin-handlers-utils": "workspace:*"
   }
 }

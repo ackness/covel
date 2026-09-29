@@ -9,12 +9,12 @@
   },
   "dependencies": {
     "@covel/plugin-handlers-utils": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@covel/plugin-test-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.1",
     "@covel/tools": "workspace:*"
   }
 }

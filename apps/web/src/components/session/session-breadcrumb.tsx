@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-export type SessionStep = "world_select" | "prep" | "game";
+type SessionStep = "world_select" | "prep" | "game";
 
 interface SessionBreadcrumbProps {
   step: SessionStep;

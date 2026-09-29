@@ -25,10 +25,10 @@ export interface BrowserVaultOptions {
   readonly dbName?: string;
 }
 
-export const BROWSER_VAULT_DB_NAME = "covel-browser-vault";
-export const BROWSER_VAULT_SCHEMA_VERSION = 5;
+const BROWSER_VAULT_DB_NAME = "covel-browser-vault";
+const BROWSER_VAULT_SCHEMA_VERSION = 5;
 
-export class BrowserVaultError extends Error {
+class BrowserVaultError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "BrowserVaultError";

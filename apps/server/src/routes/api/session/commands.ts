@@ -19,7 +19,7 @@ import {
 import type { SlashCommandParseResult } from "@covel/shared";
 import type { SessionRecord } from "@covel/store";
 
-export const FRAMEWORK_SLASH_COMMANDS: readonly SessionSlashCommand[] = [
+const FRAMEWORK_SLASH_COMMANDS: readonly SessionSlashCommand[] = [
   {
     id: "framework:plugins",
     pluginId: "framework",

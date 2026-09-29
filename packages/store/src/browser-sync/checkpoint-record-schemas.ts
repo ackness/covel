@@ -18,7 +18,7 @@ export const jsonValue = z.custom<JsonValue>(isJsonValue, {
   message: "must be a JSON-serialisable value",
 });
 export const jsonObject = z.record(z.string(), jsonValue);
-export const sessionRow = z.looseObject({
+const sessionRow = z.looseObject({
   id: nonEmptyString,
   sessionId: nonEmptyString,
 });

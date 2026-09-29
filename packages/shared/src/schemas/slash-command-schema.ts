@@ -11,7 +11,7 @@ const slashCommandNameSchema = z
       "command names must be lowercase kebab-case without a leading slash",
   });
 
-export const slashCommandArgumentSpecSchema = z
+const slashCommandArgumentSpecSchema = z
   .object({
     name: slashCommandNameSchema,
     type: z.enum(["string", "integer", "number", "boolean"]).optional(),

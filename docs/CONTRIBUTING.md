@@ -8,7 +8,7 @@
 
 ## 开发环境
 
-- Node.js ≥ 26
+- Node.js 26.x
 - pnpm 11.22.0（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
@@ -19,6 +19,8 @@ cp llm.toml.example llm.toml   # 配置 LLM slot
 cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
 ```
+
+每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26 和 pnpm 11.22，因此还需安装 mise 并准备相应工具链。`pnpm check` 中的工作流检查另需 `actionlint`（安装方法见下文）。
 
 ### PostgreSQL 18 开发环境
 
@@ -66,7 +68,10 @@ node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
 
 ```bash
 pnpm check                                 # CI 静态检查与脚本回归
+pnpm deps:check                            # Fallow 依赖与导入检查
+pnpm analyze                               # Fallow 死代码、重复代码与复杂度报告
 pnpm test                                  # 全量
+pnpm check:push                            # 手动检查当前已提交的 HEAD
 pnpm --filter @covel/runtime test          # 单包
 pnpm test:pg                               # 必须连接 PostgreSQL 的集成检查
 pnpm e2e:smoke                             # CI 的确定性 Chromium 核心流程
@@ -74,6 +79,10 @@ pnpm e2e                                   # Playwright 端到端
 ```
 
 `pnpm check` 包含 peer 依赖、类型、包边界、依赖声明、插件 manifest、i18n、脚本回归和工作流检查。工作流检查要求安装 `actionlint`（CI 固定使用 1.7.12；本地可用 `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`）。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
+
+安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile`、`pnpm check`、`VITEST_MAX_WORKERS=2 pnpm test --concurrency=2` 和 `pnpm e2e --list`；任何一步失败都会阻止推送。检查不复制工作区的 `.env`、`node_modules`、`test-results` 或 `.turbo`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。这会使每次推送增加数分钟；需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。该检查只收集 E2E 测试，不执行 PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
+
+[Fallow](https://github.com/fallow-rs/fallow) 作为根开发依赖安装，替代 Knip。`deps:check` 会阻断未使用依赖、未声明依赖与无法解析的导入；`analyze` 提供完整报告，供人工核实后清理，不作为全量阻断项。`.fallowrc.jsonc` 声明文件路由、插件动态入口和手动运行的脚本；增加这类入口时同步维护配置，避免误报。工具版本遵循工作区的 7 天发布等待期。
 
 `pnpm test:pg` 从环境或根 `.env` 读取 `DATABASE_URL`，强制执行 Store 与 Server 的 PostgreSQL 测试；数据库缺失、不可达或缺少 pgvector 都会失败。Store 和 Server 的普通测试也接收显式传入的数据库环境变量，但由于数据库状态不属于源码输入，这两组测试不复用 Turbo 缓存。其余缓存会跟随公共 TypeScript 配置失效，读取框架 prompt 的测试也跟随 `prompts/**` 失效。
 
@@ -107,7 +116,7 @@ PR、main 和发布复用同一份 CI 检查，包含独立 PostgreSQL 与 Chrom
 
 1. 从 `main` 分出一个 feature branch
 2. 推送后通过 GitHub UI 开 PR，指向 `main`
-3. 确保 CI 全部绿；`pnpm check` 与 `pnpm test` 本地先跑过
+3. 推送时等待 pre-push 检查通过，再确认 CI 全部绿；涉及数据库或 UI 的变更还需运行相应专项检查
 4. PR 描述说明「为什么」与「如何验证」
 5. 有破坏性变更时，在正文中标注 `BREAKING CHANGE:`
 

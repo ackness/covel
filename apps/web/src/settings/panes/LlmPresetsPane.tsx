@@ -31,8 +31,6 @@ import { ProviderDetails } from "./llm-provider-details.js";
 import { ModelDialog, ProviderDialog } from "./llm-provider-dialogs.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 
-export { buildProviderCatalog } from "./llm-provider-catalog.js";
-
 /** Provider catalogue with connection settings and one-to-many model editing. */
 export function LlmPresetsPane() {
   const { t } = useTranslation();

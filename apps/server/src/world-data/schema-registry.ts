@@ -11,9 +11,6 @@ import { canonicalJson, sha256Hex } from "./digest.js";
 import { resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
-const PLUGIN_SCHEMA_URI_RE =
-  /^plugin:\/\/([a-z][a-z0-9-]*)\/([a-z][a-zA-Z0-9_-]{0,63})$/;
-
 // Validators are recompiled when a schema file digest changes. Avoid Ajv's
 // process-global `$id` registration so a legitimate hot reload of the same
 // schema identity does not fail with "schema already exists".
@@ -62,13 +59,6 @@ export type WorldDataSchemaRef =
   | BuiltinDimensionsWorldDataSchemaRef
   | PluginWorldDataSchemaRef
   | LocalWorldDataSchemaRef;
-
-export function parsePluginSchemaUri(
-  uri: string,
-): { pluginId: string; namespace: string } | null {
-  const match = PLUGIN_SCHEMA_URI_RE.exec(uri);
-  return match ? { pluginId: match[1]!, namespace: match[2]! } : null;
-}
 
 export function pluginSchemaUriForTarget(options: {
   readonly pluginId: string;

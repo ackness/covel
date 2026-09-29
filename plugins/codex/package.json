@@ -14,7 +14,7 @@
     "@covel/plugin-test-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/shared": "workspace:*",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.1",
     "@covel/tools": "workspace:*"
   }
 }

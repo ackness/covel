@@ -12,7 +12,7 @@ export interface RoleModel {
   capability?: { output: readonly string[] };
 }
 
-export function modelOutputs(model: RoleModel): readonly string[] {
+function modelOutputs(model: RoleModel): readonly string[] {
   const protocolOutput = protocolOutputModalities(
     model.protocol ?? getBuiltinProviderConnection(model.provider)?.protocol,
   );

@@ -1,6 +1,6 @@
 type ShutdownSignal = "SIGINT" | "SIGTERM";
 
-export const SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
+const SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
 export interface ShutdownServer {
   close: (callback?: (error?: Error) => void) => unknown;

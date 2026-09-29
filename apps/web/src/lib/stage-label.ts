@@ -6,7 +6,7 @@ type Translate = (key: string, fallback: string) => string;
  * Player-facing localized labels for the named execution stages. Replaces the
  * old `P{priority}` numeric badges. Keys live under `session.stage.*`.
  */
-export const STAGE_LABELS: Record<Stage, { key: string; fallback: string }> = {
+const STAGE_LABELS: Record<Stage, { key: string; fallback: string }> = {
   setup: { key: "session.stage.setup", fallback: "Setup" },
   "pre-turn": { key: "session.stage.pre-turn", fallback: "Pre-Turn" },
   narrative: { key: "session.stage.narrative", fallback: "Narrative" },

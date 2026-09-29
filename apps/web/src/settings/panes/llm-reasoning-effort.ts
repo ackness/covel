@@ -19,7 +19,7 @@ export function isReasoningEffortOverrideValid(
   return profile?.options.some((option) => option.value === override) ?? false;
 }
 
-export function clearReasoningEffortOverride(
+function clearReasoningEffortOverride(
   overrides: Record<string, ModelParameterOverrides>,
   slotId: string,
 ): Record<string, ModelParameterOverrides> {

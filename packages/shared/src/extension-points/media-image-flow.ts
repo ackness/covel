@@ -1,6 +1,6 @@
 import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
-import { defineExtensionPoint } from "./index.js";
+import { defineExtensionPoint } from "./definition.js";
 export const mediaImageFlowSchema = z.strictObject({
   pluginId: z.string().optional(),
   entryRuntimeId: z.string().min(1),

@@ -12,12 +12,12 @@ import { pingPreset, type PingResult } from "@/services/api.js";
  * fallback → any enabled preset. The response's `testedTarget.resolvedVia`
  * lets the UI warn when a slot silently fell through.
  */
-export type PingTarget =
+type PingTarget =
   | { kind: "preset"; presetId: string }
   | { kind: "model"; modelRef: string }
   | { kind: "slot"; slotId: string };
 
-export type PingVariant = "inline" | "icon";
+type PingVariant = "inline" | "icon";
 
 interface PingButtonProps {
   target: PingTarget;

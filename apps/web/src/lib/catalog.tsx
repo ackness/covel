@@ -75,12 +75,6 @@ import {
   WorldDimensions,
 } from "./catalog/session-renderers.js";
 
-export {
-  resolveI18n,
-  resolveIcon,
-  useI18nResolver,
-} from "./catalog/helpers.js";
-
 const FilterContainer = createFilterContainer((name) =>
   Object.hasOwn(covelRegistry, name) ? covelRegistry[name] : undefined,
 );

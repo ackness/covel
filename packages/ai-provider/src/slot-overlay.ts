@@ -199,7 +199,7 @@ export function applySlotOverlay(
   };
 }
 
-export function supportedModesForCapability(
+function supportedModesForCapability(
   capability: ModelCapability,
 ): OperationMode[] {
   const modes = new Set<OperationMode>();
@@ -221,7 +221,7 @@ export function supportedModesForCapability(
   return modes.size > 0 ? [...modes] : ["text", "object", "stream"];
 }
 
-export function tagForCapability(capability: ModelCapability): string {
+function tagForCapability(capability: ModelCapability): string {
   return modelOutputTag(capability.output);
 }
 

@@ -26,6 +26,11 @@ alone does not pass this check: a plugin can fail while the server keeps running
 
 ## macOS
 
+Electron 44 requires macOS 13 (Ventura) or later. The packaging config declares
+`mac.minimumSystemVersion: "13.0.0"` to match that runtime requirement; macOS 12
+is no longer supported by current builds. See the
+[Electron 44 release notes](https://github.com/electron/electron/releases/tag/v44.0.0).
+
 ### Official unsigned build
 
 The committed config sets `mac.identity: null` and `mac.notarize: false`; release CI also sets `CSC_IDENTITY_AUTO_DISCOVERY=false`. No signing or Apple account secrets are required.

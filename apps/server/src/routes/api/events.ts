@@ -12,10 +12,8 @@ import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
 import { errorBody, okBody, parseJsonBody } from "../../api-error.js";
 import type { SessionLock } from "../../lib/session-lock.js";
-import {
-  checkSessionOwner,
-  withLockedSessionMutation,
-} from "./session/session-guard.js";
+import { checkSessionOwner } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
   Variables: {

@@ -292,7 +292,7 @@ async function writeEntriesToDir(
   }
 }
 
-export async function materializeAtomically(
+async function materializeAtomically(
   finalDir: string,
   writer: (stagingDir: string) => Promise<void>,
 ): Promise<void> {

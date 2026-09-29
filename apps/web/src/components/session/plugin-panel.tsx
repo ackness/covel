@@ -31,7 +31,7 @@ import { compactJobId } from "@/lib/job-ui.js";
 import { pluginPanelViewToSpec } from "@/lib/plugin-panel-spec.js";
 import {
   buildPluginPanelInitialState,
-  flattenStateForPluginPanel,
+  syncPluginPanelState,
   parsePluginUiState,
   resolvePluginPanelSources,
 } from "@/lib/plugin-panel-state.js";
@@ -80,6 +80,8 @@ export function PluginPanel({
   surfaceContext,
   enableDevtools = false,
 }: PluginPanelProps) {
+  const interactionLockedRef = useRef(interactionLocked);
+  interactionLockedRef.current = interactionLocked;
   const { t, i18n } = useTranslation();
   const activeLocale = i18n.resolvedLanguage ?? i18n.language;
   const dataSource = spec.dataSource as
@@ -120,9 +122,8 @@ export function PluginPanel({
   // `/_invoking/<key>` so the catalog Button can show a loading spinner while
   // a plugin-rpc call is pending. Without this affordance the player clicks
   // "generate image" and stares at a static button for ~30 s while the LLM
-  // chain runs, with no signal that anything is happening. StateProvider does
-  // a flat-pointer diff each time `initialState` changes (see @json-render/
-  // react StateProvider) so flipping a key here propagates through.
+  // chain runs, with no signal that anything is happening. External state
+  // synchronization replaces the invoking map when calls start or finish.
   const [invokingMap, setInvokingMap] = useState<Record<string, true>>({});
   const [dismissedErrorJobs, setDismissedErrorJobs] = useState<
     Record<string, true>
@@ -170,8 +171,7 @@ export function PluginPanel({
   );
   useEffect(() => {
     if (spec.webview) return;
-    const updates = flattenStateForPluginPanel(initialState);
-    stateStore.update(updates);
+    syncPluginPanelState(stateStore, initialState);
   }, [initialState, stateStore, spec.webview]);
 
   const failedJobs = useMemo(
@@ -496,6 +496,7 @@ export function PluginPanel({
           : undefined
       }
       aria-disabled={interactionLocked}
+      inert={interactionLocked}
     >
       {namespace !== "_jobs" && failedJobs.length > 0 && (
         <div className="mb-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -553,6 +554,7 @@ export function PluginPanel({
             Object.entries(handlers).map(([name, handler]) => [
               name,
               async (params: Record<string, unknown>) => {
+                if (interactionLockedRef.current) return;
                 await handler(params);
               },
             ]),

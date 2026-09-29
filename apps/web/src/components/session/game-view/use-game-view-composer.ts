@@ -32,7 +32,7 @@ export interface CommandFeedback {
   readonly message: string;
 }
 
-export interface CommandClientAction {
+interface CommandClientAction {
   readonly type: string;
   readonly pluginId?: string;
   readonly panelId?: string;

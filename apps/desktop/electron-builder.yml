@@ -81,6 +81,7 @@ compression: normal
 # ── macOS ─────────────────────────────────────────────────────────
 mac:
   icon: resources/icon.icns
+  minimumSystemVersion: "13.0.0"
   target:
     - target: dmg
       arch: [arm64]

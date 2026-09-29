@@ -129,7 +129,7 @@ export function registry(entries: readonly PluginRegistryEntry[]) {
   return { get: (pluginId: string) => byId.get(pluginId), getAll: () => byId };
 }
 
-export function dataContractFor(pluginId: string, namespace: string): string {
+function dataContractFor(pluginId: string, namespace: string): string {
   const names: Record<string, string> = {
     "character-blueprint/blueprints": "character.blueprints@1",
     "character-presence/assets": "character.portrait-assets@1",

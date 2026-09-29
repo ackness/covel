@@ -45,12 +45,9 @@ import { useWorldDataPreflight } from "./session-prep/use-world-data-preflight.j
 import { usePrepRuntimeBindings } from "./session-prep/use-prep-runtime-bindings.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { getDataService } from "@/services/data-service.js";
-import {
-  defaultSelectedPluginIdsForWorld,
-  isLockedCorePackage,
-} from "./session-prep/plugin-selection-helpers.js";
+import { isLockedCorePackage } from "./session-prep/plugin-selection-helpers.js";
 
-export { defaultSelectedPluginIdsForWorld, isLockedCorePackage };
+export { isLockedCorePackage };
 
 const worldPluginSettingsSchema = z.record(
   z.string(),

@@ -1,6 +1,6 @@
 import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
-import { defineExtensionPoint } from "./index.js";
+import { defineExtensionPoint } from "./definition.js";
 import { historyMessageSchema } from "./prompt-history-transform.js";
 
 export const historyCompactionInputSchema = z.strictObject({

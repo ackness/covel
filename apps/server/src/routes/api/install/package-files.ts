@@ -7,7 +7,7 @@ import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { digestEntries } from "./github-source.js";
 import { httpError, LIMITS, type ExtractedEntry } from "./shared.js";
 
-export const receiptFile = ".covel-install.json";
+const receiptFile = ".covel-install.json";
 export const packageReceiptSchema = z
   .object({
     source: githubPluginSourceSchema,
@@ -85,9 +85,7 @@ export async function readReceipt(directory: string): Promise<PackageReceipt> {
 
 // Read without importing modules. Detect local edits, extra data, links, and
 // deleted files before an update can replace any package directory.
-export async function readPackageFiles(
-  directory: string,
-): Promise<ExtractedEntry[]> {
+async function readPackageFiles(directory: string): Promise<ExtractedEntry[]> {
   await assertPackageDirectory(directory);
   const entries: ExtractedEntry[] = [];
   let bytes = 0;

@@ -18,10 +18,8 @@ import { reservedPluginDataNamespaceError } from "@covel/shared";
 import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
 import { publicPluginDataValue } from "./plugin-rpc/runtime-job-public.js";
-import {
-  resolveSessionParam,
-  withLockedSessionMutation,
-} from "./session/session-guard.js";
+import { resolveSessionParam } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
   Variables: {

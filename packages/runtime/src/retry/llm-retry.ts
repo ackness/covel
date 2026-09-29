@@ -78,8 +78,6 @@ export {
   DEFAULT_MAX_RETRIES,
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
   DEFAULT_LOOP_THRESHOLD,
-  DEFAULT_CALL_TIMEOUT_CAP_MS,
-  MIN_CALL_TIMEOUT_MS,
 } from "./retry-common.js";
 export type { RetryPolicy, RetryReason } from "./retry-common.js";
 

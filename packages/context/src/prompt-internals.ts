@@ -268,7 +268,7 @@ async function resolvePluginDataInject(
  * an entry never appears twice in the output even when it qualifies for
  * both slices.
  */
-export function twoPassTruncate(
+function twoPassTruncate(
   entries: readonly PluginDataRecord[],
   max: number,
 ): PluginDataRecord[] {
@@ -307,7 +307,7 @@ const SUMMARY_VALUE_CAP = 200;
  * any plugin's internal record shape (codex uses `{title, content, tags,
  * rarity}`, character-tracker uses something else, etc).
  */
-export function serializeEntries(
+function serializeEntries(
   entries: readonly PluginDataRecord[],
   format: "summary" | "full" | "ids-only",
 ): string {

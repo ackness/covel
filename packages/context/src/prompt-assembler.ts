@@ -59,7 +59,7 @@ import type {
  * the at-depth (segment 8) contributions, which are inserted into the message
  * stack via {@link depthContributions} rather than the system prompt string.
  */
-export interface PromptSegments {
+interface PromptSegments {
   /** Segment 1 — framework preamble (session-stable header). */
   readonly stableExtensions?: string;
   readonly turnExtensions?: string;

@@ -10,7 +10,6 @@ import {
   SessionStateContext,
   useSession,
   useSessionActions,
-  useSessionState,
 } from "./session-store/context.js";
 import {
   useBootEffect,
@@ -25,17 +24,15 @@ import { useSessionSubscription } from "./session-store/subscription.js";
 import { useExecutionRecovery } from "./session-store/execution-recovery.js";
 
 export type {
-  AssetProgressEvent,
   ExecutionStep,
   PendingInteractionDraft,
   StreamMessage,
-  SuspensionSummary,
 } from "./session-store/types.js";
 export {
   mergeGameStateForReplacement,
   enrichGameStateFromSnapshot,
 } from "./session-store/game-state.js";
-export { useSession, useSessionActions, useSessionState };
+export { useSession, useSessionActions };
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);

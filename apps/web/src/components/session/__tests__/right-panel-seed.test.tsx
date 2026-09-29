@@ -33,9 +33,6 @@ vi.mock("../world-document-panel.js", () => ({
   WorldDocumentPanel: () => <div />,
 }));
 vi.mock("../database-panel.js", () => ({ DatabasePanel: () => <div /> }));
-vi.mock("../memory-update-notice.js", () => ({
-  MemoryUpdateNotice: () => null,
-}));
 vi.mock("../plugin-panel.js", () => ({ PluginPanel: () => <div /> }));
 
 const session: SessionRecord = {

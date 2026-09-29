@@ -30,9 +30,10 @@ export default function ({ tool, z }) {
       const edgeRows = (await context.store.listPluginData("edges")) ?? [];
 
       const nodes = nodeRows.slice(0, limit).map((row) => {
-        const value = /** @type {import('@covel/shared').NpcNode} */ (
-          row.value ?? {}
-        );
+        const value =
+          /** @type {{ id: string, name: string, type: string, labels: string[], summary: string, lastSeenTurn: number }} */ (
+            row.value ?? {}
+          );
         return {
           id: value.id,
           name: value.name,
@@ -44,9 +45,10 @@ export default function ({ tool, z }) {
       });
 
       const edges = edgeRows.slice(0, limit).map((row) => {
-        const value = /** @type {import('@covel/shared').NpcEdge} */ (
-          row.value ?? {}
-        );
+        const value =
+          /** @type {{ id: string, source: string, target: string, relation: string, strength: number, fact: string, validAt: number, invalidAt?: number }} */ (
+            row.value ?? {}
+          );
         return {
           id: value.id,
           source: value.source,

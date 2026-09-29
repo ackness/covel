@@ -4,8 +4,5 @@
  * can depend on it without a barrel import cycle.
  */
 
-export { AssetRender, type AssetRenderProps } from "./AssetRender.js";
-export { AssetImage } from "./AssetImage.js";
-export { AssetAudio } from "./AssetAudio.js";
-export { AssetGenericLink } from "./AssetGenericLink.js";
+export { AssetRender } from "./AssetRender.js";
 export { AssetTurnSidebar } from "./AssetTurnSidebar.js";

@@ -81,7 +81,7 @@ export function withAgentFailureTarget(
   };
 }
 
-export function completionCorrection(
+function completionCorrection(
   manifest: RuntimeManifest,
   locale?: string,
 ): string {

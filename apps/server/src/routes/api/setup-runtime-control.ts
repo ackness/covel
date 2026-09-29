@@ -20,10 +20,8 @@ import type { DataStore } from "@covel/store";
 import { retrySetup, waiveSetup, type SetupControlResult } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import {
-  resolveSessionParam,
-  withLockedSessionMutation,
-} from "./session/session-guard.js";
+import { resolveSessionParam } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
   Variables: {

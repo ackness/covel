@@ -32,7 +32,7 @@ export interface NormalizedHandlerResult {
 }
 
 /** Domain-effect control keys the runtime output normalizer understands. */
-export const DOMAIN_EFFECT_KEYS = [
+const DOMAIN_EFFECT_KEYS = [
   "statePatches",
   "events",
   "interactions",

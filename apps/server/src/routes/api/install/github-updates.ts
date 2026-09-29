@@ -63,7 +63,7 @@ import {
   isWorldDeleting,
 } from "../../../world-lifecycle.js";
 
-export async function assertWorldPackageUpdate(c: Context, id: string) {
+async function assertWorldPackageUpdate(c: Context, id: string) {
   const world = await c.get("store").getWorld(id);
   if (!world || !world.metadata?.packageManaged || isWorldDeleting(world))
     throw httpError(409, "Only installed GitHub worlds can be updated");

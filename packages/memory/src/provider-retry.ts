@@ -61,7 +61,7 @@ export async function retryTransientProviderCall<T>(
   }
 }
 
-export function isTransientProviderError(error: unknown): boolean {
+function isTransientProviderError(error: unknown): boolean {
   const chain = errorChain(error);
   for (const item of chain) {
     const record = item as Record<string, unknown>;

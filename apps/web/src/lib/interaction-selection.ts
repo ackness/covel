@@ -17,7 +17,7 @@ export interface PendingInteractionDraft {
  * Resolve a single param value that might be a `{$state: "..."}` reference
  * produced by json-render's flat spec format.
  */
-export function resolveDynamicParam(
+function resolveDynamicParam(
   value: unknown,
   getState: (path: string) => unknown,
 ): unknown {

@@ -52,7 +52,6 @@ export type {
   PreflightWorldDataForSessionResult,
   SyncWorldDataForSessionResult,
   WorldDataImportedMediaRef,
-  WorldDataImportPreflightDeps,
 };
 
 export async function prepareWorldDataImportForSession(

@@ -86,7 +86,6 @@ export class TurnAbortedError extends Error {
 
 /** An expired execution may be observed by hooks, but cannot be recovered into success. */
 export class RuntimeTimeoutError extends Error {
-  readonly code = "RUNTIME_TIMEOUT" as const;
   override name = "RuntimeTimeoutError";
 }
 

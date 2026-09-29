@@ -1,6 +1,6 @@
 import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
-import { defineExtensionPoint } from "./index.js";
+import { defineExtensionPoint } from "./definition.js";
 
 export const promptSegmentSchema = z.strictObject({
   id: z.string().min(1),

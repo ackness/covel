@@ -51,7 +51,7 @@ export interface FilterTab {
 }
 
 /** Icons accepted by the plugin UI protocol. Unknown names render no icon. */
-export const catalogIcons: Readonly<Record<string, LucideIcon>> = {
+const catalogIcons: Readonly<Record<string, LucideIcon>> = {
   anchor: Anchor,
   backpack: Backpack,
   "book-marked": BookMarked,
@@ -128,7 +128,7 @@ export function useI18nResolver(): (value: unknown) => string {
   );
 }
 
-export function isRecordLike(value: unknown): value is Record<string, unknown> {
+function isRecordLike(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 

@@ -1,6 +1,7 @@
 import type { MediaStore } from "@covel/shared";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { filterAssetsByMetadata } from "../media-store/filter.js";
+import { cleanupCandidates } from "../media-store/cleanup-policy.js";
 import {
   claimedMediaIds,
   finalizeMediaCleanupResult,
@@ -9,7 +10,6 @@ import {
   cloneMeta,
   type IdbMediaAssetRecord,
   type IdbMediaRefRecord,
-  planMediaCleanup,
   refKey,
   sha256,
   sortAssetRecords,
@@ -290,7 +290,7 @@ export async function createIndexedDbMediaStore(
       const assets = sortAssetRecords(
         (await db.getAll(STORE_ASSETS)).map(toAssetRecord),
       );
-      const { result, idsToDelete } = planMediaCleanup(
+      const { result, idsToDelete } = cleanupCandidates(
         assets,
         claimedMediaIds(
           protectedIds,

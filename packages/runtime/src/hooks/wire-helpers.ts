@@ -184,7 +184,7 @@ export async function runPreCompactionHook(
   return { skip: result?.action === "abort" };
 }
 
-export interface PostCompactionPayload {
+interface PostCompactionPayload {
   readonly compacted: boolean;
   readonly summaryId?: string;
 }
@@ -363,7 +363,7 @@ export interface AssembledContextView {
   }[];
 }
 
-export interface PostContextAssemblyPayload extends AssembledContextView {
+interface PostContextAssemblyPayload extends AssembledContextView {
   readonly pluginId: string;
   readonly runtimeId: string;
 }
@@ -417,7 +417,7 @@ export interface PreLLMCallRequest {
   readonly stream?: false;
 }
 
-export interface PreLLMCallPayload extends PreLLMCallRequest {
+interface PreLLMCallPayload extends PreLLMCallRequest {
   readonly pluginId: string;
   readonly runtimeId: string;
 }
@@ -485,7 +485,7 @@ export async function runPostLLMResponseHook(
 
 // ── PreToolUse ───────────────────────────────────────────────────
 
-export interface PreToolUsePayload {
+interface PreToolUsePayload {
   readonly toolCall: {
     readonly id: string;
     readonly name: string;
@@ -540,7 +540,7 @@ export async function runPreToolUseHook(
 
 // ── PostToolUse ──────────────────────────────────────────────────
 
-export interface PostToolUsePayload {
+interface PostToolUsePayload {
   readonly toolCall: {
     readonly id: string;
     readonly name: string;

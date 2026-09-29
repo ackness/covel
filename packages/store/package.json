@@ -67,16 +67,16 @@
   "dependencies": {
     "@covel/shared": "workspace:*",
     "better-sqlite3": "^13.0.3",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "idb": "^8.0.3",
     "postgres": "^3.4.9",
     "sqlite-vec": "^0.1.9",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "fake-indexeddb": "^6.2.5",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

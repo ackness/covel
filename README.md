@@ -139,7 +139,7 @@ Open a side panel mid-play and you are reading the state carried forward from th
 
 ### Play
 
-Download the **macOS Apple Silicon** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases). The guide appears on your first visit to world selection: add a connection and model in **Configure Providers & Models**, test connectivity, check assignments in **Model Roles**, then choose a world, confirm its play pack, and start. Existing model settings can be reused.
+Download the **macOS Apple Silicon (macOS 13+)** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases). The guide appears on your first visit to world selection: add a connection and model in **Configure Providers & Models**, test connectivity, check assignments in **Model Roles**, then choose a world, confirm its play pack, and start. Existing model settings can be reused.
 
 You can skip the guide to browse worlds, but configure a model before generating a story. Reopen **Getting started guide** from world selection at any time. Complete any character creation or opening choices before entering actions to advance the story.
 
