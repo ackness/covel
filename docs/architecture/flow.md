@@ -116,17 +116,17 @@ flowchart TB
       G3 --> G1["guard? (agent runtime)"]
       G1 --> G2["SSE: runtime.started"]
       G2 --> RT{"runtimeType"}
-      RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，物化 success.value / effects"]
+      RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，分别保存 output / effects / completion"]
       F1 --> G6
       RT -->|agent| G4["buildContext<br/>runtime 正文 + prompt.segment 扩展段<br/>+ typed inputs + 投影历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
       G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse"]
-      G5 --> G6["normalizeOutput → Proposal[]"]
+      G5 -->|拆分 agent 协议| G6["RuntimeResult: output / effects / completion"]
       G6 --> G7["PostRuntime hook"]
       G7 --> Final["校验故事输出 / 超时 / 父级取消"]
       Final --> G8["唯一终态 + turnId / runId<br/>runtime.completed / runtime.failed / runtime.skipped"]
     end
 
-    Group --> Commit["CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
+    Group --> Commit["effects + story 输出 → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
     Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted / record.updated"]
     SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
     PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
@@ -705,11 +705,12 @@ sequenceDiagram
         Server-->>Web: SSE: runtime.started
         alt function runtime
             Kernel->>Plugin: handler(ctx)
-            Plugin-->>Kernel: HandlerResult → 物化成功输出 → Proposal[]
+            Plugin-->>Kernel: HandlerResult → output / effects / completion
         else agent runtime
             Plugin->>LLM: buildContext + generate + tool loop
-            Plugin-->>Kernel: RuntimeOutput → normalizeOutput → Proposal[]
+            Plugin-->>Kernel: Agent 协议 → output / effects / completion
         end
+        Note over Kernel: 仅显式 effects 与 story 叙事生成 Proposal[]，统一提交
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
         Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
@@ -742,8 +743,9 @@ sequenceDiagram
 
 启动 → 插件发现              @covel/plugin-loader             扫描 plugins/ 目录
                              ├── discoverPlugins()            发现所有插件
-                             ├── loadPluginManifest()         解析 PLUGIN.md frontmatter
-                             ├── loadRuntime()                加载 prompt + tools + ui specs
+                             ├── loadPluginDefinition()       解析包声明与显式 runtime 列表
+                             ├── loadPluginUi()               加载包级静态 UI
+                             ├── loadRuntime()                加载 runtime prompt / handler / schemas
                              └── createPluginRegistry()       内存索引 + session 激活
 
 启动 → LLM 初始化            @covel/ai-provider               多供应商 LLM 抽象

@@ -1,3 +1,4 @@
+import type { PackageManifest } from "@covel/plugin-loader";
 /**
  * Session event directory — aggregates the `events` contracts declared by
  * a session's active plugin runtimes so the builtin `emit-event` tool
@@ -18,11 +19,7 @@ import {
   type AnySchema,
   type ValidateFunction,
 } from "ajv/dist/2020.js";
-import {
-  resolveI18nText,
-  type PluginEventDecl,
-  type RuntimeManifest,
-} from "@covel/shared";
+import { resolveI18nText, type PluginEventDecl } from "@covel/shared";
 import { resolveContainedPath } from "../../../world-data/safe-path.js";
 
 export interface EventDirectory {
@@ -38,7 +35,7 @@ export interface EventDirectory {
 
 export interface EventDirectoryDeps {
   readonly registry: {
-    getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[];
+    getActivePluginDeclarations(sessionId: string): readonly PackageManifest[];
   };
   /** pluginId → absolute plugin root path. `undefined` when unresolvable. */
   readonly resolvePluginDir: (pluginId: string) => string | undefined;
@@ -111,7 +108,7 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
               );
             }
           }
-          continue; // first-wins (getActivePluginDeclarations is (stage, name)-sorted)
+          continue; // first-wins (getActivePluginDeclarations is name-sorted)
         }
         byTopic.set(decl.topic, {
           pluginId: manifest.pluginId,

@@ -68,9 +68,9 @@ export function collectUiBlocks(
   return blocks;
 }
 
-export function collectAssetGenerations(
-  output: Record<string, unknown>,
-): AssetGeneratePayload[] {
+export function collectAssetGenerations(output: {
+  readonly assetGenerations?: unknown;
+}): AssetGeneratePayload[] {
   const assets: AssetGeneratePayload[] = [];
   appendAssets(output.assetGenerations, assets);
   return assets;

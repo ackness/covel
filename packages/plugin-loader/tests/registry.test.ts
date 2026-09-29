@@ -4,8 +4,9 @@ import type {
   LoadedRuntime,
   PluginRegistryEntry,
   PluginSummary,
-  ParsedPluginMd,
+  ParsedRuntimeMd,
   RegistryChangeEvent,
+  ParsedPluginMd,
 } from "../src/types.js";
 import { createPluginRegistry, type PluginRegistry } from "../src/registry.js";
 
@@ -48,13 +49,34 @@ function makeRuntimeManifest(
   };
 }
 
-function makeParsedPluginMd(
+function makeParsedRuntimeMd(
+  name: string,
+  priority: number,
+  overrides?: Partial<RuntimeManifest>,
+): ParsedRuntimeMd {
+  return {
+    runtime: { type: overrides?.runtimeType ?? "agent" },
+    manifest: makeRuntimeManifest(name, priority, overrides),
+    promptTemplate: "",
+    rawFrontmatter: {},
+  };
+}
+
+function makePackageManifest(
   name: string,
   priority: number,
   overrides?: Partial<RuntimeManifest>,
 ): ParsedPluginMd {
   return {
-    manifest: makeRuntimeManifest(name, priority, overrides),
+    manifest: {
+      name,
+      pluginId: name,
+      description: name,
+      pluginType: "plugin",
+      dataSchemas: overrides?.dataSchemas,
+      worldProjections: overrides?.worldProjections,
+    },
+    plugin: { id: name, kind: "plugin", description: name },
     promptTemplate: "",
     rawFrontmatter: {},
   };
@@ -103,14 +125,14 @@ describe("PluginRegistry", () => {
       };
       const entry = makeEntry("world-data", {
         rootPath: "/plugins/world-data",
-        packageManifest: makeParsedPluginMd("world-data", 400, {
+        packageManifest: makePackageManifest("world-data", 400, {
           dataSchemas: { relationships },
         }),
         manifests: [
-          makeParsedPluginMd("world-data/extract", 400, {
+          makeParsedRuntimeMd("world-data/extract", 400, {
             dataSchemas: { relationships },
           }),
-          makeParsedPluginMd("world-data/import", 500, {
+          makeParsedRuntimeMd("world-data/import", 500, {
             dataSchemas: { relationships },
           }),
         ],
@@ -169,7 +191,7 @@ describe("PluginRegistry", () => {
       registry.register(
         makeEntry("world-data", {
           manifests: [
-            makeParsedPluginMd("world-data/extract", 400, {
+            makeParsedRuntimeMd("world-data/extract", 400, {
               dataSchemas: {
                 facts: {
                   namespace: "facts",
@@ -193,7 +215,7 @@ describe("PluginRegistry", () => {
         },
       };
       const entry = makeEntry("world-projector", {
-        packageManifest: makeParsedPluginMd("world-projector", 50, {
+        packageManifest: makePackageManifest("world-projector", 50, {
           worldProjections: { characters },
         }),
         dataSchemas: {
@@ -205,10 +227,10 @@ describe("PluginRegistry", () => {
           },
         },
         manifests: [
-          makeParsedPluginMd("world-projector/setup", 50, {
+          makeParsedRuntimeMd("world-projector/setup", 50, {
             worldProjections: { characters },
           }),
-          makeParsedPluginMd("world-projector/audit", 1_100, {
+          makeParsedRuntimeMd("world-projector/audit", 1_100, {
             worldProjections: { characters },
           }),
         ],
@@ -248,7 +270,7 @@ describe("PluginRegistry", () => {
       registry.register(
         makeEntry("world-projector", {
           manifests: [
-            makeParsedPluginMd("world-projector/setup", 50, {
+            makeParsedRuntimeMd("world-projector/setup", 50, {
               worldProjections: {
                 facts: {
                   from: "contract:world@1",
@@ -347,12 +369,12 @@ describe("PluginRegistry", () => {
     it("removes every activation without affecting registered plugins", async () => {
       registry.register(
         makeEntry("alpha", {
-          manifest: makeParsedPluginMd("alpha/runtime", 500),
+          manifests: [makeParsedRuntimeMd("alpha/runtime", 500)],
         }),
       );
       registry.register(
         makeEntry("beta", {
-          manifest: makeParsedPluginMd("beta/runtime", 600),
+          manifests: [makeParsedRuntimeMd("beta/runtime", 600)],
         }),
       );
       await registry.applyPersistedActivations(
@@ -379,12 +401,12 @@ describe("PluginRegistry", () => {
     it("replaces stale activations without affecting other sessions", () => {
       registry.register(
         makeEntry("alpha", {
-          manifest: makeParsedPluginMd("alpha/runtime", 500),
+          manifests: [makeParsedRuntimeMd("alpha/runtime", 500)],
         }),
       );
       registry.register(
         makeEntry("beta", {
-          manifest: makeParsedPluginMd("beta/runtime", 600),
+          manifests: [makeParsedRuntimeMd("beta/runtime", 600)],
         }),
       );
       registry.syncSessionActivations("session-1", ["alpha"]);
@@ -403,12 +425,12 @@ describe("PluginRegistry", () => {
     it("hydrates persisted activation state without emitting lifecycle events", () => {
       registry.register(
         makeEntry("alpha", {
-          manifest: makeParsedPluginMd("alpha/runtime", 500),
+          manifests: [makeParsedRuntimeMd("alpha/runtime", 500)],
         }),
       );
       registry.register(
         makeEntry("beta", {
-          manifest: makeParsedPluginMd("beta/runtime", 600),
+          manifests: [makeParsedRuntimeMd("beta/runtime", 600)],
         }),
       );
       const handler = vi.fn<(event: RegistryChangeEvent) => void>();
@@ -430,10 +452,9 @@ describe("PluginRegistry", () => {
     it("searches every declared runtime without requiring loaded artifacts", () => {
       registry.register(
         makeEntry("image-plugin", {
-          manifest: makeParsedPluginMd("image-plugin/prompt", 500),
           manifests: [
-            makeParsedPluginMd("image-plugin/prompt", 500),
-            makeParsedPluginMd("image-plugin/generator", 600, {
+            makeParsedRuntimeMd("image-plugin/prompt", 500),
+            makeParsedRuntimeMd("image-plugin/generator", 600, {
               outputContract: "image-generator@1",
             }),
           ],
@@ -459,8 +480,7 @@ describe("PluginRegistry", () => {
       } satisfies LoadedRuntime;
       registry.register(
         makeEntry("artifact-only", {
-          manifest: makeParsedPluginMd("artifact-only/runtime", 500),
-          manifests: [makeParsedPluginMd("artifact-only/runtime", 500)],
+          manifests: [makeParsedRuntimeMd("artifact-only/runtime", 500)],
           loadedRuntimes: new Map([["artifact-only/runtime", loadedOnly]]),
         }),
       );
@@ -531,13 +551,13 @@ describe("PluginRegistry", () => {
     it("should return runtime manifests from active plugins sorted by stage ascending", () => {
       // Distinct stages: high(100)=pre-turn, mid(500)=narrative, low(800)=post-turn.
       const entryLow = makeEntry("low", {
-        manifest: makeParsedPluginMd("low-runtime", 800),
+        manifests: [makeParsedRuntimeMd("low-runtime", 800)],
       });
       const entryHigh = makeEntry("high", {
-        manifest: makeParsedPluginMd("high-runtime", 100),
+        manifests: [makeParsedRuntimeMd("high-runtime", 100)],
       });
       const entryMid = makeEntry("mid", {
-        manifest: makeParsedPluginMd("mid-runtime", 500),
+        manifests: [makeParsedRuntimeMd("mid-runtime", 500)],
       });
 
       registry.register(entryLow);
@@ -558,10 +578,14 @@ describe("PluginRegistry", () => {
       // Both post-turn (501-999); priority order would be zeta(600) < alpha(800),
       // but the (stage, name) sort orders alpha before zeta.
       registry.register(
-        makeEntry("z", { manifest: makeParsedPluginMd("zeta-runtime", 600) }),
+        makeEntry("z", {
+          manifests: [makeParsedRuntimeMd("zeta-runtime", 600)],
+        }),
       );
       registry.register(
-        makeEntry("a", { manifest: makeParsedPluginMd("alpha-runtime", 800) }),
+        makeEntry("a", {
+          manifests: [makeParsedRuntimeMd("alpha-runtime", 800)],
+        }),
       );
       registry.syncSessionActivations("session-2", ["z", "a"]);
 
@@ -578,7 +602,7 @@ describe("PluginRegistry", () => {
 
     it("should not include inactive plugins", () => {
       const entry = makeEntry("alpha", {
-        manifest: makeParsedPluginMd("alpha-runtime", 500),
+        manifests: [makeParsedRuntimeMd("alpha-runtime", 500)],
       });
       registry.register(entry);
       // Not activated for session-1

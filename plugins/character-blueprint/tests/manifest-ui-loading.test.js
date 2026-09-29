@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
+  compileInlineRuntime,
+  loadPluginUi,
   loadPluginManifest,
   loadRuntime,
   parsePluginMd,
@@ -22,12 +24,16 @@ describe("character-blueprint manifest and UI loading", () => {
     expect(parsed.manifest).toMatchObject({
       name: "character-blueprint",
       pluginId: "character-blueprint",
-      runtimeType: "function",
-      handler: "./handler.js",
-      trigger: { type: "manual" },
       ui: {
         right: ["./ui/blueprints-panel.json"],
       },
+    });
+    expect(compileInlineRuntime(parsed).manifest).toMatchObject({
+      name: "character-blueprint",
+      pluginId: "character-blueprint",
+      runtimeType: "function",
+      handler: "./handler.js",
+      trigger: { type: "manual" },
     });
   });
 
@@ -42,14 +48,15 @@ describe("character-blueprint manifest and UI loading", () => {
     expect(manifests).toHaveLength(1);
 
     const loaded = await loadRuntime(discovery, "character-blueprint");
+    const ui = await loadPluginUi(discovery);
     expect(loaded.handler).toBeTypeOf("function");
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
+    expect(ui.uiSpecs?.right).toHaveLength(1);
     // Read-only display panel (no editing): relies on emptyState rather than
     // alwaysRender, so a world without preset characters shows the empty hint.
-    expect(loaded.uiSpecs?.right?.[0]).toMatchObject({
+    expect(ui.uiSpecs?.right?.[0]).toMatchObject({
       id: "character-blueprint",
       dataSource: { namespace: "blueprints" },
     });
-    expect(loaded.uiSpecs?.right?.[0]?.emptyState).toBeDefined();
+    expect(ui.uiSpecs?.right?.[0]?.emptyState).toBeDefined();
   });
 });

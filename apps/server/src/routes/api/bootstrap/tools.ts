@@ -32,7 +32,7 @@ import type { PermissionRule } from "@covel/approval";
 import type {
   PluginRegistry,
   PluginDiscoveryResult,
-  ParsedPluginMd,
+  ParsedRuntimeMd,
 } from "@covel/plugin-loader";
 import type { EventDirectory } from "./event-directory.js";
 
@@ -40,7 +40,7 @@ export interface SetupPluginToolsParams {
   readonly store: DataStore;
   readonly registry: PluginRegistry;
   readonly discoveryMap: Map<string, PluginDiscoveryResult>;
-  readonly manifestCache: Map<string, readonly ParsedPluginMd[]>;
+  readonly manifestCache: Map<string, readonly ParsedRuntimeMd[]>;
   readonly llmAdapter: LLMAdapter;
   readonly eventDirectory: EventDirectory;
 }

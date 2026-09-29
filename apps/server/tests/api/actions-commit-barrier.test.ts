@@ -44,6 +44,7 @@ function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
 
 function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
   const parsed = {
+    runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
     manifest: loaded.manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -52,7 +53,7 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
     id: loaded.manifest.pluginId,
     source: "builtin",
     summary: makeSummary({ id: loaded.manifest.pluginId }),
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",
@@ -213,10 +214,16 @@ describe("POST /api/actions — turn commit barrier", () => {
         runtimeCount: 0,
       },
       packageManifest: {
+        plugin: {
+          id: pluginId,
+          kind: "plugin",
+          description: "Hook-only package",
+        },
         manifest: {
           name: pluginId,
           pluginId,
           description: "Hook-only package",
+          pluginType: "plugin",
           userSettings: [
             { key: "budget", type: "number", label: "Budget", default: 10 },
           ],

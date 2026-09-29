@@ -70,8 +70,8 @@ export function attachRuntimeJournal(
   manifest: RuntimeManifest,
   output: Readonly<Record<string, unknown>>,
 ): void {
-  const interactions = Array.isArray(output.interactions)
-    ? output.interactions
+  const interactions = Array.isArray(result.effects?.interactions)
+    ? result.effects.interactions
     : undefined;
   if (
     result.status !== "success" ||
@@ -98,7 +98,7 @@ export function attachRuntimeJournal(
       content,
       order: stageMessageOrder(getRuntimeSpec(manifest).stage),
       pendingInput: interactions,
-      ui: Array.isArray(output.ui) ? output.ui : undefined,
+      ui: Array.isArray(result.effects?.ui) ? result.effects.ui : undefined,
       createdAt: new Date().toISOString(),
     },
   ]);

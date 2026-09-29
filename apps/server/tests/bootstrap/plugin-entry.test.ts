@@ -8,6 +8,8 @@ import {
   loadPluginDefinition,
   loadPluginSummary,
   type ParsedPluginMd,
+  type ParsedRuntimeMd,
+  type PackageManifest,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import {
@@ -50,7 +52,7 @@ function writePlugin(
     pluginId,
     description: pluginId,
     entry: entryPath,
-  } as unknown as RuntimeManifest;
+  } as PackageManifest;
   return {
     discovery: {
       id: pluginId,
@@ -115,7 +117,9 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
   return {
     pluginRegistry,
     discoveryMap: new Map(entries.map((e) => [e.discovery.id, e.discovery])),
-    manifestCache: new Map(entries.map((e) => [e.discovery.id, [e.parsed]])),
+    manifestCache: new Map<string, readonly ParsedRuntimeMd[]>(
+      entries.map((e) => [e.discovery.id, []]),
+    ),
     store: createMemoryStore(),
     tools: new ToolRegistry(),
     hookPipeline: createHookPipeline(),
@@ -156,12 +160,11 @@ const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
 describe("createBootstrapPluginEntries", () => {
   it.each([false, true])(
-    "closes pending factories without starting later entries, cleanupFailure=%s",
+    "closes pending package factories and runs their cleanup, cleanupFailure=%s",
     async (cleanupFailure) => {
       const state = {
         started: Promise.withResolvers<void>(),
         cleaned: false,
-        lateStarted: false,
         cleanupFailure,
         signal: undefined as AbortSignal | undefined,
       };
@@ -187,22 +190,6 @@ describe("createBootstrapPluginEntries", () => {
         { source: "community" },
       );
       const params = makeParams([plugin]);
-      const second = {
-        ...plugin.parsed,
-        manifest: {
-          ...plugin.parsed.manifest,
-          name: `${pluginId}/second`,
-          entry: "server/second.mjs",
-        },
-      };
-      fs.writeFileSync(
-        path.join(plugin.discovery.rootPath, "server/second.mjs"),
-        "export default api => { globalThis.__covelEntryAbort.lateStarted = true; };",
-      );
-      params.pluginRegistry.register({
-        ...params.pluginRegistry.get(pluginId)!,
-        manifests: [plugin.parsed, second],
-      });
       const entries = await createBootstrapPluginEntries(params);
       try {
         const activation = entries.ensurePluginEntry(pluginId, "session");
@@ -216,7 +203,6 @@ describe("createBootstrapPluginEntries", () => {
         await rejected;
         expect(state.signal?.aborted).toBe(true);
         expect(state.cleaned).toBe(true);
-        expect(state.lateStarted).toBe(false);
         expect(params.rpcRegistry.list()).toEqual([]);
       } finally {
         await entries.close().catch(() => {});
@@ -661,7 +647,12 @@ describe("createBootstrapPluginEntries", () => {
       source: "builtin",
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
-      { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
+      {
+        runtime: { type: "agent" },
+        manifest: subManifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      },
     ]);
     const discovery = params.discoveryMap.get(pluginId)!;
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
@@ -713,7 +704,12 @@ describe("createBootstrapPluginEntries", () => {
       source: "community",
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
-      { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
+      {
+        runtime: { type: "agent" },
+        manifest: subManifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      },
     ]);
     const discovery = params.discoveryMap.get(pluginId)!;
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
@@ -817,12 +813,6 @@ export default function (covel) {
       path.join(outsideDir, "evil.mjs"),
       path.join(rootPath, "server", "index.mjs"),
     );
-    const manifest = {
-      name: pluginId,
-      pluginId,
-      description: pluginId,
-      entry: "server/index.mjs",
-    } as unknown as RuntimeManifest;
     const params = makeParams([]);
     params.discoveryMap.set(pluginId, {
       id: pluginId,
@@ -831,9 +821,10 @@ export default function (covel) {
       pluginMdPaths: [path.join(rootPath, "PLUGIN.md")],
       source: "community",
     });
-    params.manifestCache.set(pluginId, [
-      { manifest, promptTemplate: "", rawFrontmatter: {} },
-    ]);
+    fs.writeFileSync(
+      path.join(rootPath, "PLUGIN.md"),
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: Symlink test\nentry: ./server/index.mjs\ncontributes:\n  actions: [escaped]\n---\n`,
+    );
 
     const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
     const failure = await ensurePluginEntry(pluginId, "session").then(
@@ -868,7 +859,7 @@ export default async function (covel) {
     ).toBeDefined();
   });
 
-  it("keeps a failed multi-entry activation pending and retries the entire batch", async () => {
+  it("keeps a partially initialized package pending and retries its entry", async () => {
     const p = writePlugin(
       "entry-retry-batch",
       `
@@ -889,21 +880,14 @@ export default async function (covel) {
     `,
     );
     const params = makeParams([p]);
-    params.manifestCache.set(p.discovery.id, [
-      p.parsed,
-      {
-        ...p.parsed,
-        manifest: {
-          ...p.parsed.manifest,
-          name: "entry-retry-batch/second",
-          entry: "server/second.mjs",
-        },
-      },
-    ]);
-    params.pluginRegistry.register({
-      ...params.pluginRegistry.get(p.discovery.id)!,
-      manifests: params.manifestCache.get(p.discovery.id),
-    });
+    const entryPath = path.join(p.discovery.rootPath, "server/index.mjs");
+    fs.writeFileSync(
+      entryPath,
+      fs
+        .readFileSync(entryPath, "utf8")
+        .replace("export default function (covel)", "function prepare(covel)") +
+        '\nimport second from "./second.mjs";\nexport default api => { prepare(api); second(api); };',
+    );
     const entries = await createBootstrapPluginEntries(params);
     const attempts = await Promise.allSettled([
       entries.ensurePluginEntry(p.discovery.id),

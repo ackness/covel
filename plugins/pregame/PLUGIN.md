@@ -45,13 +45,20 @@ runtime:
 2. 返回 narrativeOutput 给后续插件作为上下文
 3. 报告 `completion: "done"`，全部 setup 完成后内核把 `phase` 翻到 playing
 
-## 输出
+## Handler 返回值
 
 ```json
 {
-  "narrativeOutput": "世界观摘要文本...",
-  "notifications": [{ "level": "info", "title": "...", "message": "..." }],
-  "initialized": true,
-  "preGameDone": true
+  "outcome": "success",
+  "value": {
+    "narrativeOutput": "世界观摘要文本...",
+    "initialized": true
+  },
+  "effects": {
+    "notifications": [{ "level": "info", "title": "...", "message": "..." }]
+  },
+  "completion": "done"
 }
 ```
+
+RuntimeResult 的 `output` 保存 `value` 的业务内容，`effects` 保存通知，`completion` 保存准备阶段的完成信号。

@@ -1,6 +1,11 @@
 export { loadPluginUiSpec } from "./ui-spec.js";
 // ── Parsers ──────────────────────────────────────────────────────
-export { parsePluginMd, parseRuntimeMd } from "./parse-plugin-md.js";
+export {
+  parsePluginMd,
+  parseRuntimeMd,
+  compileInlineRuntime,
+  normalizePackageManifest,
+} from "./parse-plugin-md.js";
 
 // ── Discovery & Loading ──────────────────────────────────────────
 export { discoverPlugins, discoverPluginsMulti } from "./discover.js";
@@ -10,7 +15,7 @@ export {
   loadPluginDefinition,
   loadPluginEntryDefinition,
   loadRuntime,
-  loadRuntimeUi,
+  loadPluginUi,
 } from "./load.js";
 export type { PluginDefinition } from "./load.js";
 export {
@@ -44,6 +49,8 @@ export type { PluginLlmConfig, PluginLlmSlot } from "./plugin-llm-config.js";
 // ── Types ────────────────────────────────────────────────────────
 export type {
   ParsedPluginMd,
+  ParsedRuntimeMd,
+  PackageManifest,
   PluginDiscoveryResult,
   PluginEntryDefinition,
   PluginSummary,

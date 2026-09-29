@@ -24,7 +24,8 @@ function resultEmitting(
     runId: "run-1",
     turnId: "turn-1",
     status: "success",
-    output: { events: [{ topic, data }] },
+    output: {},
+    effects: { events: [{ topic, data }] },
     toolCalls: [],
     durationMs: 0,
     timestamp: "2024-01-01T00:00:00Z",
@@ -251,6 +252,31 @@ describe("runEventChain honours event-runtime throttling", () => {
 });
 
 describe("event producer terminal status", () => {
+  it("does not trigger followers from business output named events", async () => {
+    const executeRuntime = vi.fn();
+    const deferred = await runEventChain({
+      activeRuntimes: [backgroundFollower, relay],
+      completedResults: new Map([
+        [
+          "seed/emitter",
+          {
+            ...resultEmitting("seed/emitter", "topic-x", {}),
+            output: { events: [{ topic: "topic-x", data: {} }] },
+            effects: undefined,
+          },
+        ],
+      ]),
+      executeRuntime,
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      turnNumber: 1,
+      logicalTurn: 1,
+      setupRuntimes: {},
+    });
+    expect(executeRuntime).not.toHaveBeenCalled();
+    expect(deferred).toEqual([]);
+  });
+
   it.each(["failed", "suspended", "skipped"] as const)(
     "does not admit sync or deferred followers from a %s producer",
     async (status) => {

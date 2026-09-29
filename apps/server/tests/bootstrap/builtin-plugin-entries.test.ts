@@ -6,7 +6,7 @@ import {
   discoverPluginsMulti,
   loadPluginDefinition,
   loadPluginSummary,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
 } from "@covel/plugin-loader";
 import {
   createHookPipeline,
@@ -25,7 +25,7 @@ it("publishes and disposes every real builtin entry against its root declaration
   const discoveries = await discoverPluginsMulti([root]);
   expect(discoveries.length).toBeGreaterThan(0);
   const registry = createPluginRegistry();
-  const manifestCache = new Map<string, readonly ParsedPluginMd[]>();
+  const manifestCache = new Map<string, readonly ParsedRuntimeMd[]>();
   for (const discovery of discoveries) {
     expect(discovery.source).toBe("builtin");
     const relative = path.relative(root, await fs.realpath(discovery.rootPath));
@@ -41,7 +41,7 @@ it("publishes and disposes every real builtin entry against its root declaration
       summary: await loadPluginSummary(discovery, undefined, definition),
       packageManifest: definition.packageManifest,
       manifests: definition.manifests,
-      manifest: definition.manifests[0],
+
       loadedRuntimes: new Map(),
       status: "registered",
     });

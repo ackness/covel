@@ -73,12 +73,12 @@ agent/function/background runtime、entry、工具、RPC、Hook、设置、UI、
 
 主要导出：
 
-| 导出                                                         | 用途                                                               |
-| ------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `MockLLM`                                                    | 记录 LLM 调用；支持 `defaultResponse` 和按顺序消费的 `responses[]` |
-| `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult` | 减少 fixture 样板代码                                              |
-| `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                  |
-| `expectAssetGenerated`                                       | 断言 runtime output 的 `assetGenerations[]` 中有合法 MediaRef      |
+| 导出                                                         | 用途                                                                 |
+| ------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `MockLLM`                                                    | 记录 LLM 调用；支持 `defaultResponse` 和按顺序消费的 `responses[]`   |
+| `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult` | 减少 fixture 样板代码                                                |
+| `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                    |
+| `expectAssetGenerated`                                       | 断言 RuntimeResult 的 `effects.assetGenerations[]` 中有合法 MediaRef |
 
 function handler 单元测试（真实范例：[`plugins/character-presence/tests/handler.test.js`](../../plugins/character-presence/tests/handler.test.js)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
 
@@ -101,11 +101,11 @@ it("saves data via a plugin.data proposal", async () => {
 });
 ```
 
-事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），并用 `expectAssetGenerated` 断言产物——完整范例见 [`plugins/scene-stage/tests/background-gen.test.js`](../../plugins/scene-stage/tests/background-gen.test.js)。
+事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），直接断言 `HandlerResult.effects` 的产物，范例见 [`plugins/scene-stage/tests/background-gen.test.js`](../../plugins/scene-stage/tests/background-gen.test.js)。`expectAssetGenerated` 接受 `RuntimeResult`、结果数组或 `TurnResult`，只检查显式 effects，不接受裸业务输出。
 
 ### In-process turn（手搓 turn-executor）
 
-需要跑完整 turn（agent tool loop、event 链、proposal commit）时，直接用 `@covel/runtime` 的公开导出手工组装：`discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）发现并加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，LLM 用 `MockLLM` 或按步骤出 tool-call 的自定义 `LLMAdapter`。提交时通过 `commitExecution` 一次处理 `runtimeResults`、`nestedRuntimeResults`、`collectExecutionJournal` 和 `collectExecutionSuspensions`；不能只遍历顶层结果逐个落库，否则会遗漏递归写入并丢失整次执行的事务边界。当前作者工具的组装见 [`packages/test-runtime/src/execution.ts`](../../packages/test-runtime/src/execution.ts)。下面的低层测试范例用于理解 event 链和 proposal：
+需要跑完整 turn（agent tool loop、event 链、proposal commit）时，直接用 `@covel/runtime` 的公开导出手工组装：`discoverPlugins` / `loadPluginDefinition` / `loadRuntime`（`@covel/plugin-loader`）发现并加载真实 runtime，从定义的 `manifests` 选择执行项，从 `packageManifest` 读取包级 entry 与贡献。`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，LLM 用 `MockLLM` 或按步骤出 tool-call 的自定义 `LLMAdapter`。提交时通过 `commitExecution` 一次处理 `runtimeResults`、`nestedRuntimeResults`、`collectExecutionJournal` 和 `collectExecutionSuspensions`；不能只遍历顶层结果逐个落库，否则会遗漏递归写入并丢失整次执行的事务边界。当前作者工具的组装见 [`packages/test-runtime/src/execution.ts`](../../packages/test-runtime/src/execution.ts)。下面的低层测试范例用于理解 event 链和 proposal：
 
 - [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) — 合成 emitter runtime 发 `scene.set`，同 turn event 链触发真实 scene-stage resolver 并 commit `plugin.data`。
 - [`packages/runtime/tests/emit-event-integration.test.ts`](../../packages/runtime/tests/emit-event-integration.test.ts) — 该模式的最初出处。

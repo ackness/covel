@@ -3,7 +3,7 @@
  *
  * Both the normal execution path (`executeAgentRuntime`) and the resume path
  * (`resumeSuspendedRuntime`) end the same way: turn the loop's final content +
- * executed tool calls into the runtime's `output` object. This module owns that
+ * executed tool calls into separate business output and runtime effects. This module owns that
  * shared transform so the two paths cannot drift apart again (they had — resume
  * was a hand-copied, slowly diverging clone of the main finalize block).
  *
@@ -12,13 +12,21 @@
  *      structured tool output, or fail when only failed tool calls remain.
  *   2. Run the shared schema gate between build and decoration when a private
  *      output schema is declared. A gate hit short-circuits finalize.
- *   3. Decorate: attach interactions, sanitize story narrative, attach buffered
- *      proposals.
+ *   3. Extract declared and tool-emitted effects, sanitize story narrative,
+ *      attach buffered proposals to the business output.
  */
 
-import type { Proposal, RuntimeManifest, RuntimeResult } from "@covel/shared";
+import type {
+  JsonValue,
+  Proposal,
+  RuntimeEffects,
+  RuntimeManifest,
+  RuntimeResult,
+  ToolCallRecord,
+} from "@covel/shared";
 import { storyOutputError } from "./story-output.js";
 import { withPendingProposals, type EmittedEvent } from "@covel/tools";
+import { collectUiBlocks } from "../session/session-kernel-helpers.js";
 import {
   findLastStructuredToolOutput,
   findPresentableToolOutput,
@@ -35,15 +43,13 @@ export interface FinalizeAgentOutputParams {
   /** Prefer this completing-tool result over incidental assistant prose. */
   readonly preferredOutput?: Record<string, unknown>;
   readonly executedToolCalls: readonly ExecutedToolCallState[];
+  /** Tool results persisted before a suspension, unavailable in executedToolCalls. */
+  readonly priorToolCalls?: readonly ToolCallRecord[];
   readonly failedToolCalls: readonly FailedToolCallState[];
   readonly pendingProposals: readonly Proposal[];
-  /** Events emitted via `emit-event` tool calls — appended to `output.events`. */
+  /** Events emitted via `emit-event` tool calls — appended to `effects.events`. */
   readonly emittedEvents?: readonly EmittedEvent[];
-  /**
-   * Dedupe interactions by `interactionId`. The main agent path enables this so
-   * the LLM calling the same UI tool twice does not render duplicate forms; the
-   * resume path keeps its historical pass-through behaviour (off by default).
-   */
+  /** Dedupe repeated tool interactions by `interactionId`. */
   readonly dedupeInteractions?: boolean;
   /**
    * Optional schema gate, invoked after any candidate output has been
@@ -66,7 +72,12 @@ export interface FinalizeAgentOutputParams {
  *  - `short-circuit` — the schema gate produced a failed RuntimeResult.
  */
 export type FinalizeAgentOutput =
-  | { readonly kind: "ok"; readonly output: Record<string, unknown> }
+  | {
+      readonly kind: "ok";
+      readonly output: Record<string, unknown>;
+      readonly effects?: RuntimeEffects;
+      readonly completion?: "done" | "pending";
+    }
   | { readonly kind: "tool-failed" }
   | { readonly kind: "invalid-output"; readonly error: string }
   | { readonly kind: "short-circuit"; readonly result: RuntimeResult };
@@ -79,6 +90,7 @@ export function finalizeAgentOutput(
     finalContent,
     preferredOutput,
     executedToolCalls,
+    priorToolCalls = [],
     failedToolCalls,
     pendingProposals,
     emittedEvents = [],
@@ -129,25 +141,85 @@ export function finalizeAgentOutput(
     if (failed) return { kind: "short-circuit", result: failed };
   }
 
-  // Tool-emitted events merge in after any envelope-declared `events` (LLM
-  // JSON output can already carry its own `events` array) — envelope wins the
-  // same-topic race in the turn-event-chain fan-out's first-wins semantics.
-  if (emittedEvents.length > 0) {
-    const existingEvents = Array.isArray(output.events) ? output.events : [];
-    output.events = [...existingEvents, ...emittedEvents];
+  const declaredEvents = Array.isArray(output.events) ? output.events : [];
+  const effectEvents = declaredEvents.filter(isEffectEvent);
+  if (effectEvents.length > 0) {
+    const businessEvents = declaredEvents.filter(
+      (event) => !isEffectEvent(event),
+    );
+    if (businessEvents.length > 0) output.events = businessEvents;
+    else delete output.events;
   }
 
-  const interactions = extractInteractions(
-    executedToolCalls,
+  // An envelope-declared event precedes a tool-emitted event with the same
+  // topic, preserving the turn-event-chain's first-wins order.
+  const effects: Record<string, unknown> = {};
+  if (effectEvents.length > 0 || emittedEvents.length > 0) {
+    effects.events = [...effectEvents, ...emittedEvents];
+  }
+
+  // A resumed loop starts its executedToolCalls afresh; earlier successful
+  // tool outputs survive only as ToolCallRecords. Failed calls have null or
+  // diagnostic-string outputs, so only record-shaped results can supply UI.
+  const priorToolResults = priorToolCalls
+    .filter(
+      (call) =>
+        call.output !== null &&
+        typeof call.output === "object" &&
+        !Array.isArray(call.output),
+    )
+    .map((call) => ({
+      name: call.toolName,
+      result: call.output,
+      success: true,
+    }));
+  const toolResults = [...priorToolResults, ...executedToolCalls];
+  const toolInteractions = extractInteractions(
+    toolResults,
     dedupeInteractions,
     manifest.name,
   );
+  const declaredInteractions = Array.isArray(output.interactions)
+    ? output.interactions
+    : [];
+  const interactions =
+    toolInteractions.length > 0 ? toolInteractions : declaredInteractions;
   if (interactions.length > 0) {
-    output.interactions = interactions;
-    if (finalContent && !output.narrativeOutput) {
+    effects.interactions = interactions;
+    if (finalContent && !parsedAsJson && !output.narrativeOutput) {
       output.narrativeOutput = finalContent;
     }
   }
+  delete output.interactions;
+  delete output.interaction;
+
+  const ui = collectUiBlocks(
+    output,
+    toolResults
+      .filter((call) => call.success)
+      .map((call) => ({ output: call.result })),
+  );
+  if (ui.length > 0) effects.ui = ui;
+  delete output.ui;
+
+  for (const key of [
+    "statePatches",
+    "assetGenerations",
+    "pluginData",
+    "notifications",
+  ] as const) {
+    if (Array.isArray(output[key])) effects[key] = output[key];
+    delete output[key];
+  }
+
+  const completion =
+    output.preGameDone === true || output.completion === "done"
+      ? "done"
+      : output.completion === "pending"
+        ? "pending"
+        : undefined;
+  delete output.preGameDone;
+  if (completion) delete output.completion;
 
   if (
     manifest.outputKind === "story" &&
@@ -166,7 +238,23 @@ export function finalizeAgentOutput(
   const storyError =
     manifest.outputKind === "story" ? storyOutputError(output) : undefined;
   if (storyError) return { kind: "invalid-output", error: storyError };
-  return { kind: "ok", output };
+  return {
+    kind: "ok",
+    output,
+    ...(Object.keys(effects).length > 0
+      ? { effects: effects as RuntimeEffects }
+      : {}),
+    ...(completion ? { completion } : {}),
+  };
+}
+
+function isEffectEvent(value: unknown): value is JsonValue {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    "topic" in value
+  );
 }
 
 /**
@@ -175,7 +263,10 @@ export function finalizeAgentOutput(
  * so a UI tool the LLM called twice does not render twice.
  */
 function extractInteractions(
-  executedToolCalls: readonly ExecutedToolCallState[],
+  executedToolCalls: readonly Pick<
+    ExecutedToolCallState,
+    "name" | "result" | "success"
+  >[],
   dedupe: boolean,
   runtimeName: string,
 ): Array<Record<string, unknown>> {

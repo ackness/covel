@@ -31,10 +31,16 @@ it("resolves hook settings for an active package with no runtimes", () => {
     },
     manifests: [],
     packageManifest: {
+      plugin: {
+        id: pluginId,
+        kind: "plugin",
+        description: "Hook-only package",
+      },
       manifest: {
         name: pluginId,
         pluginId,
         description: "Hook-only package",
+        pluginType: "plugin",
         userSettings: [
           { key: "budget", type: "number", label: "Budget", default: 10 },
         ],
@@ -78,12 +84,17 @@ describe.each(["memory", "sqlite"])(
         pluginType: "plugin",
         runtimeCount: 1,
       },
-      manifest: {
+      packageManifest: {
+        plugin: {
+          id: pluginId,
+          kind: "plugin",
+          description: "Settings fixture",
+        },
         manifest: {
           name: pluginId,
           pluginId,
           description: "Synthetic settings fixture",
-          runtimeType: "function",
+          pluginType: "plugin",
           userSettings: [
             { key: "tone", type: "text", label: "Tone", default: "default" },
           ],

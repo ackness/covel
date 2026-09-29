@@ -126,9 +126,8 @@ export default async function handler(ctx) {
   // this keeps the night art aligned with the day subject).
   const effectiveHint = visualHint ?? candidate.visualHint;
   const proposal = makeStageProposal(ctx, stage);
-  // Mixing split: `stage` is the business value, the generate-requested event
-  // is a domain effect. The kernel projects effects.events back to the legacy
-  // top-level `events` key that turn-event-chain / normalizeOutput read.
+  // `stage` is the business value; the generate-requested event is a domain
+  // effect consumed by the event chain after the runtime commits.
   const envelope =
     candidate.source === "pending" || needsVariantBackfill
       ? {

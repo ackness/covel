@@ -31,6 +31,8 @@ example/
 
 加载器会编译成内部执行结构。内部 `RuntimeManifest` 字段不是作者格式，不能复制到 `PLUGIN.md` 根层。
 
+加载结果分为包定义 `ParsedPluginMd` 和执行定义 `ParsedRuntimeMd`。`loadPluginDefinition()` 返回必需的 `packageManifest` 与显式的 `manifests` 数组；数组为空就没有可调度的 runtime。`parsePluginMd()` 只解析包，根内联 runtime 由 `compileInlineRuntime()` 显式编译。包的 entry、UI、事件、命令和扩展只从根定义注册一次，不复制到每个 runtime；runtime 保留执行身份与版本，并继承执行所需的用户设置和数据 schema。
+
 ## 根 PLUGIN.md
 
 ```yaml
@@ -177,9 +179,15 @@ io:
 
 内核在 runtime 最终输出边界校验已发布的契约，失败结果不能提交领域 effects 或写入 `recordAs`。同轮输入在应用 `select` 前再次校验完整输出；`scope: committed` 输入读取冻结的完整 export 后同样校验公共契约，即使没有显式 `accepts`。消费者的 `accepts` 可另加限制，不能关闭公共契约校验。契约发生变化时应重建受影响的开发期会话数据和历史 exports。
 
-Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`；运行时用 `canonicalValue` 单独保存它，`output` 保留供领域提交使用的物化 effects envelope。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。Agent 的契约值仍为最终 `output`。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
+内部 `RuntimeResult` 分别保存 `output`（业务输出）、`effects`（显式副作用）和 `completion`（`done` / `pending`）。提交、事件后继和待处理交互读取 `effects`，setup 完成判断读取 `completion`。`outputKind: story` 的 `output.narrativeOutput` 仍按声明发布叙事。
 
-`PostRuntime` 若改变 function 的 `output`，应同时明确提供匹配的 `canonicalValue`，新值会重新接受私有和公共 schema 校验。仅改写 `output` 会撤销业务值，停止 export 与下游值绑定；有公共输出契约时还会因缺失契约值而失败。失败 runtime 的输出事件不触发后继 runtime。普通执行与 resume 共用 agent 输出 schema gate；非 story agent 声明私有 `io.output.schema` 后，最终无正文或空正文也会按候选输出校验，不符合 schema 即失败，暂停时积累的写入不提交。Story agent 保留独立的叙事正文检查，不使用私有 schema gate。上述契约变化需要重建旧 function 执行结果、exports 和相关开发期快照。
+Function 的输出契约以 handler 返回的 `value` 为准，可以是标量、数组、对象或 `null`。运行时用 `canonicalValue` 保存原始业务值；对象投影为 `output`，标量、数组和 `null` 投影为 `{ value }`，缺省值投影为空对象。业务值中的 `events`、`pluginData`、`interactions` 或 `preGameDone` 等同名字段不会发起副作用或完成 setup；这些意图必须通过 `HandlerResult.effects` 和 `HandlerResult.completion` 表达。同轮输入、公共契约校验与 `recordAs` 发布都读取同一业务值。没有提供 `value` 时不发布 export；不要通过猜测 `output.value` 拆箱。普通输入的 `select` 作用于此业务值；committed 输入读取完整 export，不支持 `select`。
+
+Agent 继续使用现有的提示词输出协议。执行边界统一将声明的副作用和工具结果归入 `effects`，将 `preGameDone: true` 转为 `completion: "done"`；包含 `topic` 的事件归入副作用，WorldIR 的业务事件保留在 `output.events`。Agent 的公共契约值为拆分后的业务 `output`，普通执行与 resume 使用相同边界。
+
+`PostRuntime` 若改变 function 的 `output`，应同时明确提供匹配的 `canonicalValue`，新值会重新接受私有和公共 schema 校验。仅改写 `output` 会撤销业务值，停止 export 与下游值绑定；有公共输出契约时还会因缺失契约值而失败。修改副作用或完成信号应直接修改 `effects` 或 `completion`。失败 runtime 的副作用不提交，事件不触发后继 runtime。普通执行与 resume 共用 agent 输出 schema gate；非 story agent 声明私有 `io.output.schema` 后，先校验候选协议输出，再拆分业务值与副作用，最终无正文或空正文也接受校验，不符合 schema 即失败，暂停时积累的写入不提交。Story agent 保留独立的叙事正文检查，不使用私有 schema gate。
+
+上述内部结果结构变化需要重建受影响的开发期执行结果、exports、后台作业及快照；不兼容读取旧的平铺副作用结果。
 
 `ctx.playerMessage` 保持当前输入文本字符串。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
 

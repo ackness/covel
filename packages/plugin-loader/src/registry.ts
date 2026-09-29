@@ -14,7 +14,11 @@ import {
 } from "@covel/shared";
 import { resolveRuntimeProviders } from "./runtime-providers.js";
 import type { EventBus } from "@covel/events";
-import type { PluginRegistryEntry, RegistryChangeEvent } from "./types.js";
+import type {
+  PluginRegistryEntry,
+  RegistryChangeEvent,
+  PackageManifest,
+} from "./types.js";
 import {
   pluginDeclarations,
   pluginRuntimeManifests,
@@ -115,8 +119,8 @@ export interface PluginRegistry {
 
   /** Get active runtimes sorted by (stage, name). */
   getActiveRuntimes(sessionId: string): readonly RuntimeManifest[];
-  /** Active package and runtime-local source declarations, including zero-runtime packages. */
-  getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[];
+  /** Active package declarations, sorted by name, including zero-runtime packages. */
+  getActivePluginDeclarations(sessionId: string): readonly PackageManifest[];
 
   /** Read-only view of a session's in-memory activation set. */
   getActivePlugins(sessionId: string): readonly string[];
@@ -299,7 +303,7 @@ export function createPluginRegistry(
       };
     },
 
-    getActivePluginDeclarations(sessionId: string): readonly RuntimeManifest[] {
+    getActivePluginDeclarations(sessionId: string): readonly PackageManifest[] {
       return [...(readableActivations().get(sessionId) ?? [])]
         .flatMap((id) => {
           const entry = readableEntries().get(id);
@@ -307,12 +311,7 @@ export function createPluginRegistry(
             ? pluginDeclarations(entry).map(({ manifest }) => manifest)
             : [];
         })
-        .sort(
-          (a, b) =>
-            stageRank(getRuntimeSpec(a).stage) -
-              stageRank(getRuntimeSpec(b).stage) ||
-            a.name.localeCompare(b.name),
-        );
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
 
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {

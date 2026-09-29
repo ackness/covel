@@ -21,7 +21,8 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import path from "node:path";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
+  loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
@@ -713,13 +714,18 @@ describe("core-quest plugin manifest", () => {
   let manifest;
   let loaded;
   let declaration;
+  let packageManifest;
+  let loadedUi;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const discovery = discoveries.find((d) => d.id === "core-quest");
-    const manifests = await loadPluginManifest(discovery);
+    const definition = await loadPluginDefinition(discovery);
+    const manifests = definition.manifests;
+    packageManifest = definition.packageManifest.manifest;
+    loadedUi = await loadPluginUi(discovery, undefined, definition);
     manifest = manifests[0].manifest;
-    declaration = manifests[0].plugin;
+    declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
       "world-ir@1": JSON.parse(
         readContractFile(
@@ -765,7 +771,7 @@ describe("core-quest plugin manifest", () => {
   });
 
   it("declares the upsert-quests plugin tool via the entry module", () => {
-    expect(manifest.entry).toBe("./server/index.js");
+    expect(packageManifest.entry).toBe("./server/index.js");
     expect(manifest.tools?.plugin).toEqual(["upsert-quests"]);
     expect(manifest.completeAfterTools).toEqual(["upsert-quests"]);
     expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
@@ -773,7 +779,7 @@ describe("core-quest plugin manifest", () => {
   });
 
   it("accepts world-data imports into the quests namespace", () => {
-    expect(manifest.dataSchemas?.quests).toMatchObject({
+    expect(packageManifest.dataSchemas?.quests).toMatchObject({
       schemaVersion: 1,
       acceptsWorldData: true,
       schema: "./schemas/quests.schema.json",
@@ -781,16 +787,18 @@ describe("core-quest plugin manifest", () => {
   });
 
   it("declares right panel and message block UI specs", () => {
-    expect(manifest.ui?.right).toContain("./ui/quest-log-panel.json");
-    expect(manifest.ui?.message).toContain("./ui/quest-changes-block.json");
+    expect(packageManifest.ui?.right).toContain("./ui/quest-log-panel.json");
+    expect(packageManifest.ui?.message).toContain(
+      "./ui/quest-changes-block.json",
+    );
   });
 
   it("loads UI spec JSON with panel metadata", () => {
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0].id).toBe("core-quest");
-    expect(loaded.uiSpecs?.right?.[0].icon).toBe("scroll-text");
-    expect(loaded.uiSpecs?.message).toHaveLength(1);
-    expect(loaded.uiSpecs?.message?.[0].id).toBe("core-quest-changes");
+    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
+    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("core-quest");
+    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("scroll-text");
+    expect(loadedUi.uiSpecs?.message).toHaveLength(1);
+    expect(loadedUi.uiSpecs?.message?.[0].id).toBe("core-quest-changes");
   });
 
   it("loads PLUGIN.md body as the LLM prompt template", () => {

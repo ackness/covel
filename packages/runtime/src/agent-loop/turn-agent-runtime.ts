@@ -379,15 +379,15 @@ export async function executeAgentRuntime({
   if (finalized.kind === "short-circuit") {
     return finalizeFailure(finalized.result);
   }
-  const output = finalized.output;
-
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
     turnId: input.turnId,
     status: "success",
-    output,
+    output: finalized.output,
+    ...(finalized.effects ? { effects: finalized.effects } : {}),
+    ...(finalized.completion ? { completion: finalized.completion } : {}),
     toolCalls: collectedToolCalls,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),

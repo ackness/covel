@@ -160,7 +160,8 @@ function statePatchResult(field: string, value: unknown) {
     runId: crypto.randomUUID(),
     turnId: "t",
     status: "success" as const,
-    output: { statePatches: [{ table: "stats", field, value }] },
+    output: {},
+    effects: { statePatches: [{ table: "stats", field, value }] },
     toolCalls: [] as const,
     durationMs: 1,
     timestamp: new Date().toISOString(),
@@ -823,7 +824,8 @@ describe("commit transaction & rollback", () => {
         pluginId: "broken",
         runtimeId: "broken/runtime",
         turnId,
-        output: { statePatches: [{ field: "mp", value: attempt }] },
+        output: {},
+        effects: { statePatches: [{ field: "mp", value: attempt }] },
       };
       const completedSetup = mirrorSetupDone("1.0.0", now, 1, attempt);
 

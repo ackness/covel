@@ -31,18 +31,17 @@ function compileDependency(
 /** Compile current authoring contracts into the kernel's execution IR. */
 export function compileRuntimeManifest(
   plugin: PluginManifest,
-  runtime: RuntimeAuthoringManifest | undefined,
+  runtime: RuntimeAuthoringManifest,
   runtimeId: string,
 ): RuntimeManifest {
-  const c = plugin.contributes;
-  const a = runtime?.agent;
+  const a = runtime.agent;
   const loop = a?.loop;
-  const schedule = runtime?.schedule;
-  const inject: InputInjectDecl[] = (runtime?.io?.selfData ?? []).map(
+  const schedule = runtime.schedule;
+  const inject: InputInjectDecl[] = (runtime.io?.selfData ?? []).map(
     (entry) => ({ kind: "plugin-data", ...entry }),
   );
   const inputs: Record<string, unknown> = {};
-  for (const [name, binding] of Object.entries(runtime?.io?.inputs ?? {})) {
+  for (const [name, binding] of Object.entries(runtime.io?.inputs ?? {})) {
     if ("kernel" in binding.from)
       inject.push({ kind: "kernel", from: binding.from.kernel, name });
     else if (binding.scope === "committed")
@@ -61,90 +60,55 @@ export function compileRuntimeManifest(
       inputs[name] = { ...rest, from: compileSource(binding.from) };
     }
   }
-  const ownRoot = runtimeId === plugin.id;
-  const contract = runtime?.io?.output?.contract;
-  const dataSchemas =
-    c?.data &&
-    Object.fromEntries(
-      Object.entries(c.data).map(
-        ([namespace, { version, accepts, ...decl }]) => [
-          namespace,
-          {
-            ...decl,
-            namespace,
-            schemaVersion: version,
-            acceptsWorldData: Boolean(accepts?.length),
-          },
-        ],
-      ),
-    );
-  const output = runtime?.io?.output;
+  const contract = runtime.io?.output?.contract;
+  const output = runtime.io?.output;
   const parsed = runtimeManifestInputSchema.parse({
     name: runtimeId,
-    description: runtime?.description ?? plugin.description,
-    ...(ownRoot
-      ? {
-          displayName: plugin.displayName,
-          version: plugin.version,
-          tags: plugin.tags,
-          entry: plugin.entry,
-          extensions: c?.extensions,
-          commands: c?.commands,
-          events: c?.events,
-          userSettings: c?.settings,
-          dataSchemas,
-          worldProjections: c?.worldProjections,
-          ui: c?.ui,
-        }
-      : {}),
+    version: plugin.version,
+    description: runtime.description ?? plugin.description,
     pluginType: plugin.kind === "core" ? "core-plugin" : "plugin",
-    ...(runtime
-      ? {
-          runtimeType: runtime.type,
-          handler: runtime.function?.handler,
-          guard: runtime.guard,
-          model: a?.model,
-          llm: a?.llm,
-          tools: runtime.function?.tools ?? a?.tools,
-          advertiseEvents: a?.advertiseEvents,
-          stage: schedule?.stage,
-          trigger: schedule?.trigger,
-          needs: schedule?.needs?.map(compileDependency),
-          after: schedule?.after?.map(compileDependency),
-          turnCompletion: schedule?.completion,
-          execution: schedule?.manual?.execution,
-          effects: runtime.effects,
-          permissions: runtime.permissions,
-          maxSteps: loop?.maxSteps,
-          timeoutMs: runtime.function?.timeoutMs ?? loop?.timeoutMs,
-          callTimeoutMs: loop?.callTimeoutMs,
-          firstTokenTimeoutMs: loop?.firstTokenTimeoutMs,
-          maxRetries: loop?.maxRetries,
-          loopDetectionThreshold: loop?.loopDetection,
-          maxRecursionDepth: loop?.maxRecursionDepth,
-          requireToolUse: loop?.completion?.require === "tool-use" || undefined,
-          requireExplicitCompletion:
-            loop?.completion?.require === "explicit" || undefined,
-          completeAfterTools: loop?.completion?.afterTools,
-          outputKind: runtime.io?.visibility,
-          ...(output
-            ? { output: { schema: output.schema, recordAs: output.recordAs } }
-            : {}),
-          ...(Object.keys(inputs).length ? { inputs } : {}),
-          ...(inject.length || runtime.io?.payloadSchema
-            ? { input: { inject, schema: runtime.io?.payloadSchema } }
-            : {}),
-          outputContract: contract,
-          defaultProvider:
-            contract &&
-            plugin.provides?.some(
-              (p) =>
-                typeof p !== "string" && p.contract === contract && p.default,
-            )
-              ? true
-              : undefined,
-        }
+    runtimeType: runtime.type,
+    handler: runtime.function?.handler,
+    guard: runtime.guard,
+    model: a?.model,
+    llm: a?.llm,
+    tools: runtime.function?.tools ?? a?.tools,
+    advertiseEvents: a?.advertiseEvents,
+    stage: schedule?.stage,
+    trigger: schedule?.trigger,
+    needs: schedule?.needs?.map(compileDependency),
+    after: schedule?.after?.map(compileDependency),
+    turnCompletion: schedule?.completion,
+    execution: schedule?.manual?.execution,
+    effects: runtime.effects,
+    permissions: runtime.permissions,
+    maxSteps: loop?.maxSteps,
+    timeoutMs: runtime.function?.timeoutMs ?? loop?.timeoutMs,
+    callTimeoutMs: loop?.callTimeoutMs,
+    firstTokenTimeoutMs: loop?.firstTokenTimeoutMs,
+    maxRetries: loop?.maxRetries,
+    loopDetectionThreshold: loop?.loopDetection,
+    maxRecursionDepth: loop?.maxRecursionDepth,
+    requireToolUse: loop?.completion?.require === "tool-use" || undefined,
+    requireExplicitCompletion:
+      loop?.completion?.require === "explicit" || undefined,
+    completeAfterTools: loop?.completion?.afterTools,
+    outputKind: runtime.io?.visibility,
+    ...(output
+      ? { output: { schema: output.schema, recordAs: output.recordAs } }
       : {}),
+    ...(Object.keys(inputs).length ? { inputs } : {}),
+    ...(inject.length || runtime.io?.payloadSchema
+      ? { input: { inject, schema: runtime.io?.payloadSchema } }
+      : {}),
+    outputContract: contract,
+    defaultProvider:
+      contract &&
+      plugin.provides?.some(
+        (p) => typeof p !== "string" && p.contract === contract && p.default,
+      )
+        ? true
+        : undefined,
   });
   return {
     ...parsed,

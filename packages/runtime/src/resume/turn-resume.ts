@@ -325,9 +325,11 @@ async function executeResumedRuntime(
     finalContent,
     ...(finalToolOutput ? { preferredOutput: finalToolOutput } : {}),
     executedToolCalls,
+    priorToolCalls: pendingContinuation.toolCallsSoFar as ToolCallRecord[],
     failedToolCalls,
     pendingProposals,
     emittedEvents,
+    dedupeInteractions: true,
     schemaGate: createAgentSchemaGate({
       manifest,
       input,
@@ -361,8 +363,6 @@ async function executeResumedRuntime(
   if (finalized.kind === "short-circuit") {
     return finalizeWithPostRuntime(finalized.result);
   }
-  const output = finalized.output;
-
   // The runtime NO LONGER resolves the suspension or appends the
   // assistant turn message here. Those writes belong to the commit-owning
   // caller (apps/server resume route), which folds them into the SAME
@@ -378,7 +378,9 @@ async function executeResumedRuntime(
     runId,
     turnId: suspension.turnId,
     status: "success",
-    output,
+    output: finalized.output,
+    ...(finalized.effects ? { effects: finalized.effects } : {}),
+    ...(finalized.completion ? { completion: finalized.completion } : {}),
     toolCalls: collectedToolCalls,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),

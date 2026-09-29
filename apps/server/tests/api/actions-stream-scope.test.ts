@@ -40,6 +40,7 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
     runtimeCount: 1,
   };
   const parsed = {
+    runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
     manifest: loaded.manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -48,7 +49,7 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
     id: loaded.manifest.pluginId,
     source: "builtin",
     summary,
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",

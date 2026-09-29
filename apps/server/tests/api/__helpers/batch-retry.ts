@@ -81,7 +81,12 @@ export async function batchRetryFixture() {
       },
     };
     loadedByName.set(name, loaded);
-    const parsed = { manifest, promptTemplate: "", rawFrontmatter: {} };
+    const parsed = {
+      runtime: { type: manifest.runtimeType ?? ("agent" as const) },
+      manifest,
+      promptTemplate: "",
+      rawFrontmatter: {},
+    };
     registry.register({
       id: name,
       source: "builtin",
@@ -92,7 +97,7 @@ export async function batchRetryFixture() {
         pluginType: "core-plugin",
         runtimeCount: 1,
       },
-      manifest: parsed,
+
       manifests: [parsed],
       loadedRuntimes: new Map([[name, loaded]]),
       status: "registered",

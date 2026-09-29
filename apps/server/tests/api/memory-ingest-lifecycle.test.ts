@@ -91,6 +91,7 @@ async function fixture(
     await rm(pluginsDir, { recursive: true, force: true });
   });
   const parsed = {
+    runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
     manifest: loaded.manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -105,7 +106,7 @@ async function fixture(
       pluginType: "plugin",
       runtimeCount: 1,
     },
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",

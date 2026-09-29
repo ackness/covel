@@ -49,7 +49,7 @@ describe("world data projections", () => {
         pluginType: "plugin",
         runtimeCount: manifests.length,
       },
-      manifest: manifests[0],
+
       manifests,
       packageManifest,
       loadedRuntimes: new Map(),

@@ -320,7 +320,7 @@ describe("current package discovery and loading", () => {
     );
     const plan = resolveSessionPlugins({
       requested: ["chat-mode-narrator"],
-      plugins: definitions.map(({ plugin }) => ({
+      plugins: definitions.map(({ packageManifest: { plugin } }) => ({
         ...plugin,
         source: "builtin" as const,
         authorized: true,

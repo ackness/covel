@@ -9,11 +9,11 @@ import { normalizeUIRenderInstruction } from "@covel/shared";
 import type {
   Proposal,
   ProposalSource,
+  RuntimeEffects,
   UIRenderInstruction,
 } from "@covel/shared";
 import {
   collectAssetGenerations,
-  collectUiBlocks,
   makeProposal,
 } from "../session/session-kernel-helpers.js";
 
@@ -23,7 +23,7 @@ export function normalizeOutput(
   turnId: string,
   sessionId: string,
   outputKind?: string,
-  toolCalls?: ReadonlyArray<{ output?: unknown }>,
+  effects: RuntimeEffects = {},
 ): Proposal[] {
   const proposals: Proposal[] = [];
   const kind = outputKind ?? "plugin";
@@ -52,8 +52,8 @@ export function normalizeOutput(
     );
   }
 
-  // interaction.request — from interactions[]
-  const interactions = output.interactions as
+  // Only the explicit effects channel can request domain changes.
+  const interactions = effects.interactions as
     Array<Record<string, unknown>> | undefined;
   if (interactions && interactions.length > 0) {
     for (const inter of interactions) {
@@ -70,8 +70,10 @@ export function normalizeOutput(
     }
   }
 
-  // ui blocks — from runtime output or tool-call parsed results
-  const uiBlocks = collectUiBlocks(output, toolCalls);
+  const uiBlocks = (Array.isArray(effects.ui) ? effects.ui : []).filter(
+    (block): block is Record<string, unknown> =>
+      block !== null && typeof block === "object" && !Array.isArray(block),
+  );
   for (const [index, block] of uiBlocks.entries()) {
     const fallbackId =
       (typeof block.interactionId === "string" && block.interactionId) ||
@@ -88,7 +90,7 @@ export function normalizeOutput(
   }
 
   // state.patch — from statePatches[]
-  const statePatches = output.statePatches as
+  const statePatches = effects.statePatches as
     Array<Record<string, unknown>> | undefined;
   if (statePatches && statePatches.length > 0) {
     for (const patch of statePatches) {
@@ -98,15 +100,8 @@ export function normalizeOutput(
     }
   }
 
-  // event.emit — from events[] entries that use the domain-event envelope.
-  //
-  // `events` is also a legitimate field in typed plugin schemas (WorldIR, for
-  // example, stores factual story events there).  Treating every array entry
-  // as `{ topic, data }` turns those schema values into malformed proposals
-  // and rolls back an otherwise valid turn.  Presence of the discriminator is
-  // enough here; malformed topic values still reach the commit validator and
-  // produce the existing actionable error instead of being silently dropped.
-  const events = Array.isArray(output.events) ? output.events : [];
+  // Business output may use the same keys; it is never inspected here.
+  const events = Array.isArray(effects.events) ? effects.events : [];
   for (const evt of events) {
     if (
       !evt ||
@@ -127,9 +122,9 @@ export function normalizeOutput(
     );
   }
 
-  // asset.generate — from output.assetGenerations[]. Accepted entry shape:
+  // asset.generate — from effects.assetGenerations[]. Accepted entry shape:
   // { ref: MediaRef, modality: string, meta?: object }.
-  for (const asset of collectAssetGenerations(output)) {
+  for (const asset of collectAssetGenerations(effects)) {
     proposals.push(
       makeProposal("asset.generate", source, turnId, sessionId, {
         ref: asset.ref,
@@ -144,7 +139,7 @@ export function normalizeOutput(
   // batched plugin.data.batch so commits happen in one store call. Function
   // runtimes need this to write their own namespace (e.g. image galleries,
   // job state, per-session caches) without reaching into DataStore directly.
-  const pluginData = output.pluginData as
+  const pluginData = effects.pluginData as
     | Array<{
         namespace?: unknown;
         key?: unknown;
@@ -187,7 +182,7 @@ export function normalizeOutput(
   // Plugins that want a richer notification UI can additionally emit
   // `events: [{ topic: 'notification.shown', data: {...} }]` — the event.emit
   // branch above already handles that and the frontend can subscribe.
-  const notifications = output.notifications as
+  const notifications = effects.notifications as
     Array<Record<string, unknown>> | undefined;
   if (notifications && notifications.length > 0) {
     for (const n of notifications) {

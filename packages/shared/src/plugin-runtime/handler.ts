@@ -118,7 +118,7 @@ export interface FunctionHandlerContext {
   /**
    * Optional trigger-event descriptor — only populated when this runtime
    * was activated by the in-turn event chain (an earlier runtime in the
-   * same turn emitted `output.events: [{ topic, data }]` matching this
+   * same turn emitted `effects.events: [{ topic, data }]` matching this
    * runtime's `trigger: { type: 'event', topic }`). Absent for manual,
    * scheduled, and auto-trigger activations.
    */

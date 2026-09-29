@@ -44,7 +44,8 @@ function statePatchResult(field: string, value: unknown) {
     runId: crypto.randomUUID(),
     turnId: TURN,
     status: "success" as const,
-    output: { statePatches: [{ table: "stats", field, value }] },
+    output: {},
+    effects: { statePatches: [{ table: "stats", field, value }] },
     toolCalls: [] as const,
     durationMs: 1,
     timestamp: new Date().toISOString(),
@@ -54,7 +55,8 @@ function statePatchResult(field: string, value: unknown) {
 function badResult() {
   return {
     ...statePatchResult("hp", 1),
-    output: { statePatches: [{ field: "hp", value: 1 }] },
+    output: {},
+    effects: { statePatches: [{ field: "hp", value: 1 }] },
   };
 }
 

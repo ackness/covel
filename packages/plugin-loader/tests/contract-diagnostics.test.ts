@@ -7,6 +7,7 @@ import {
   discoverPlugins,
   loadPluginDefinition,
   type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginRegistryEntry,
 } from "../src/index.js";
 
@@ -26,10 +27,11 @@ function entry(
   const manifests = (options.runtimes ?? []).map(
     (runtime) =>
       ({
+        runtime: { type: runtime.runtimeType ?? "agent" },
         manifest: { name: id, pluginId: id, description: id, ...runtime },
         promptTemplate: "",
         rawFrontmatter: {},
-      }) as ParsedPluginMd,
+      }) as ParsedRuntimeMd,
   );
   return {
     id,

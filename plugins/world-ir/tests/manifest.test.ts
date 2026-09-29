@@ -2,7 +2,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { validateWorldIRV1 } from "../schemas/world-ir.js";
@@ -15,14 +15,16 @@ describe("world-ir plugin contract", () => {
     );
     expect(discovery).toBeDefined();
 
-    const [parsed] = await loadPluginManifest(discovery!);
+    const definition = await loadPluginDefinition(discovery!);
+    const [parsed] = definition.manifests;
+    const { manifest: packageManifest } = definition.packageManifest;
     const loaded = await loadRuntime(discovery!, "world-ir");
     expect(parsed?.manifest.outputContract).toBe("world-ir-provider@1");
-    expect(parsed?.manifest.displayName).toEqual({
+    expect(packageManifest.displayName).toEqual({
       zh: "世界事实提取",
       en: "World Fact Extraction",
     });
-    expect(parsed?.manifest.entry).toBe("./server/index.js");
+    expect(packageManifest.entry).toBe("./server/index.js");
     expect(parsed?.manifest.tools?.plugin).toEqual(["submit-world-facts"]);
     expect(parsed?.manifest.requireToolUse).toBe(true);
     expect(parsed?.manifest.completeAfterTools).toEqual(["submit-world-facts"]);

@@ -805,7 +805,7 @@ async function executeTurnImpl(
 
   // Drop retry seeds BEFORE the event fan-out and the finalizer: seeds are
   // inject/needs context for the retried runtime only. runEventChain collects
-  // `output.events` from every completedResults entry — leaving seeds in
+  // `effects.events` from every completedResults entry — leaving seeds in
   // would REPLAY the original turn's events (scene.set, receipts, generation
   // requests) on every retry. Seeds a real execution overwrote stay.
   for (const [name, seed] of retrySeeds) {
@@ -845,14 +845,12 @@ async function executeTurnImpl(
   // character form, etc. A setup runtime is considered
   // "done" when ANY of the following hold:
   //
-  //   1. Its output reports `preGameDone: true`
+  //   1. Its successful result reports `completion: "done"`
   //        - Used by runtimes that complete deterministically in one turn
-  //          (e.g. `pregame` handler returns `{ preGameDone: true }`
+  //          (e.g. `pregame` handler returns `completion: "done"`
   //          after writing the welcome notification).
-  //        - Also used by runtimes whose guard triggers completion after the
-  //          player submits an interactive form (e.g. `char-creator/
-  //          player-init` only returns `preGameDone: true` in the guard
-  //          branch that observes a submitted character form).
+  //        - Agent protocol `preGameDone: true` is converted to this signal
+  //          at the agent output boundary.
   //
   //   2. Its guard returned `{ skip: true }`
   //        - Covers a setup runtime that finds its work already done or
@@ -871,7 +869,7 @@ async function executeTurnImpl(
   // authoritative phase to `playing`.
   //
   // IMPORTANT: plugins with a form-submission completion signal (like
-  // player-init) MUST NOT report `preGameDone: true` in the "form shown"
+  // player-init) MUST NOT report completion in the "form shown"
   // turn — they report it only after the player submits the form. This
   // keeps the user interactable while Pre-Game is still progressing.
   //

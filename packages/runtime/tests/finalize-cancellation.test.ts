@@ -23,7 +23,8 @@ const execution = {
       runtimeId: "fixture",
       turnId: "turn-cancel-commit",
       status: "success",
-      output: {
+      output: {},
+      effects: {
         statePatches: [1, 2, 3].map((value) => ({
           table: "stats",
           field: `hp${value}`,

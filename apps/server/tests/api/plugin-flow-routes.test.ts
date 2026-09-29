@@ -3,7 +3,7 @@ import { createMemoryStore, type DataStore } from "@covel/store";
 import {
   createPluginRegistry,
   parsePluginMd,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -54,7 +54,8 @@ describe("plugin flow routes", () => {
         ...(args.outputKind ? { outputKind: args.outputKind } : {}),
         trigger: args.trigger ?? { type: "auto" },
       };
-      const parsed: ParsedPluginMd = {
+      const parsed: ParsedRuntimeMd = {
+        runtime: { type: manifest.runtimeType ?? "agent" },
         manifest,
         promptTemplate: "",
         rawFrontmatter: {},
@@ -68,7 +69,6 @@ describe("plugin flow routes", () => {
           pluginType: "plugin",
           runtimeCount: 1,
         },
-        manifest: parsed,
         manifests: [parsed],
         loadedRuntimes: new Map(),
         status: "registered",
@@ -172,7 +172,8 @@ describe("plugin flow routes", () => {
         stalePolicy: "reject",
       },
     };
-    const parsed: ParsedPluginMd = {
+    const parsed: ParsedRuntimeMd = {
+      runtime: { type: manifest.runtimeType ?? "agent" },
       manifest,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -195,7 +196,6 @@ describe("plugin flow routes", () => {
         "test-package/PLUGIN.md",
       ),
       manifests: [parsed],
-      manifest: parsed,
       loadedRuntimes: new Map(),
       status: "registered",
       source: "builtin",

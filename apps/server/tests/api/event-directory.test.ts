@@ -6,7 +6,7 @@ import {
   createPluginRegistry,
   type ParsedPluginMd,
 } from "@covel/plugin-loader";
-import type { RuntimeManifest } from "@covel/shared";
+import type { PackageManifest } from "@covel/plugin-loader";
 import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
 
 const tempRoots: string[] = [];
@@ -34,13 +34,15 @@ async function writeSchema(
 }
 
 function parsedManifest(
-  patch: Partial<RuntimeManifest> & Pick<RuntimeManifest, "name" | "pluginId">,
+  patch: Partial<PackageManifest> & Pick<PackageManifest, "name" | "pluginId">,
 ): ParsedPluginMd {
   return {
+    plugin: { id: patch.pluginId, kind: "plugin", description: "test plugin" },
     manifest: {
+      pluginType: "plugin",
       description: "test runtime",
       ...patch,
-    } as RuntimeManifest,
+    } as PackageManifest,
     promptTemplate: "",
     rawFrontmatter: {},
   };
@@ -62,8 +64,8 @@ function registerPlugin(
       runtimeCount: 1,
     },
     rootPath,
-    manifest,
-    manifests: [manifest],
+    packageManifest: manifest,
+    manifests: [],
     loadedRuntimes: new Map(),
     status: "registered",
   });
@@ -88,7 +90,7 @@ async function setupBasicSession() {
     parsedManifest({
       name: "plugin-a/main",
       pluginId: "plugin-a",
-      stage: "pre-turn",
+
       events: [
         {
           topic: "scene.set",
@@ -114,7 +116,7 @@ async function setupBasicSession() {
     parsedManifest({
       name: "plugin-b/main",
       pluginId: "plugin-b",
-      stage: "pre-turn",
+
       events: [
         {
           topic: "quest.done",
@@ -136,7 +138,7 @@ async function setupBasicSession() {
     parsedManifest({
       name: "plugin-c/main",
       pluginId: "plugin-c",
-      stage: "pre-turn",
+
       events: [
         {
           topic: "npc.spawn",
@@ -298,7 +300,7 @@ describe("event directory", () => {
     if (!result.ok) expect(result.reason).toContain("schema unreadable");
   });
 
-  it("warns once and keeps the lower-priority plugin's schema on cross-plugin topic conflicts", async () => {
+  it("warns once and keeps the alphabetically first plugin's schema on cross-plugin topic conflicts", async () => {
     const registry = createPluginRegistry();
     const rootPaths = new Map<string, string>();
 
@@ -311,7 +313,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-a/main",
         pluginId: "plugin-a",
-        stage: "pre-turn",
+
         events: [
           {
             topic: "scene.set",
@@ -337,7 +339,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-e/main",
         pluginId: "plugin-e",
-        stage: "pre-turn",
+
         events: [
           {
             topic: "scene.set",
@@ -358,7 +360,7 @@ describe("event directory", () => {
       resolvePluginDir: (pluginId) => rootPaths.get(pluginId),
     });
 
-    // plugin-a wins first-wins: getActiveRuntimes now sorts by (stage, name), and
+    // plugin-a wins first-wins: getActivePluginDeclarations sorts by name, and
     // both runtimes are pre-turn (auto trigger), so "plugin-a/main" < "plugin-e/main"
     // by name → plugin-a first. Its schema requires "location", not "sceneId".
     const winnerResult = await directory.validate("sess-2", "scene.set", {
@@ -385,7 +387,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-a/main",
         pluginId: "plugin-a",
-        stage: "pre-turn",
+
         events: [
           {
             topic: "scene.set",
@@ -411,7 +413,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-e/main",
         pluginId: "plugin-e",
-        stage: "pre-turn",
+
         events: [
           {
             topic: "scene.set",

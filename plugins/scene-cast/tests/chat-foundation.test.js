@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   discoverPlugins,
   loadPluginManifest,
+  loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { scheduleByDag } from "@covel/runtime";
@@ -16,6 +17,7 @@ describe("chat foundation manifests", () => {
   let chatNarrator;
   let loadedSceneCast;
   let loadedChatNarrator;
+  let sceneCastUi;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
@@ -32,6 +34,7 @@ describe("chat foundation manifests", () => {
     chatNarrator = (await loadPluginManifest(chatNarratorDiscovery))[0]
       .manifest;
     loadedSceneCast = await loadRuntime(sceneCastDiscovery, sceneCast.name);
+    sceneCastUi = await loadPluginUi(sceneCastDiscovery);
     loadedChatNarrator = await loadRuntime(
       chatNarratorDiscovery,
       chatNarrator.name,
@@ -50,7 +53,7 @@ describe("chat foundation manifests", () => {
     expect(sceneCast.outputContract).toBe("scene-cast@1");
     expect(sceneCast.trigger).toMatchObject({ type: "scheduled", interval: 1 });
     expect(loadedSceneCast.handler).toBeTypeOf("function");
-    expect(loadedSceneCast.uiSpecs.right).toHaveLength(1);
+    expect(sceneCastUi.uiSpecs.right).toHaveLength(1);
   });
 
   it("loads chat-mode-narrator with active cast contract injection", () => {

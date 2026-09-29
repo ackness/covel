@@ -24,13 +24,20 @@ This is a `runtimeType: function` plugin. It does NOT call the LLM — it runs t
 2. Return `narrativeOutput` so later plugins have context
 3. Report `completion: "done"`; once every setup runtime is done the kernel flips `phase` to playing
 
-## Output
+## Handler result
 
 ```json
 {
-  "narrativeOutput": "World overview text ...",
-  "notifications": [{ "level": "info", "title": "...", "message": "..." }],
-  "initialized": true,
-  "preGameDone": true
+  "outcome": "success",
+  "value": {
+    "narrativeOutput": "World overview text ...",
+    "initialized": true
+  },
+  "effects": {
+    "notifications": [{ "level": "info", "title": "...", "message": "..." }]
+  },
+  "completion": "done"
 }
 ```
+
+`RuntimeResult.output` stores the business value, `effects` stores the notification, and `completion` stores the setup completion signal.

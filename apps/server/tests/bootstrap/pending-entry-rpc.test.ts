@@ -13,10 +13,10 @@ import {
 import {
   createPluginRegistry,
   type PluginDiscoveryResult,
+  parsePluginMd,
   type PluginSource,
 } from "@covel/plugin-loader";
 import { createRpcApprovalGate } from "@covel/approval";
-import type { RuntimeManifest } from "@covel/shared";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guard.js";
@@ -68,30 +68,10 @@ it.each(
       };
       const store = createMemoryStore();
       const registry = createPluginRpcRegistry();
-      const manifest = {
-        name: pluginId,
-        pluginId,
-        description: pluginId,
-        entry: "entry.mjs",
-        commands: [
-          { name: "probe", description: "Probe", action: "entry-action" },
-        ],
-      } as RuntimeManifest;
-      const parsed = {
-        manifest,
-        plugin: {
-          id: pluginId,
-          kind: "plugin" as const,
-          description: pluginId,
-          entry: "entry.mjs",
-          contributes: {
-            actions: ["entry-action"],
-            commands: manifest.commands,
-          },
-        },
-        promptTemplate: "",
-        rawFrontmatter: {},
-      };
+      const parsed = parsePluginMd(
+        `---\n${JSON.stringify({ id: pluginId, kind: "plugin", description: pluginId, entry: "entry.mjs", contributes: { actions: ["entry-action"], commands: [{ name: "probe", description: "Probe", action: "entry-action" }] } })}\n---\n`,
+        path.join(rootPath, "PLUGIN.md"),
+      );
       const pluginRegistry = createPluginRegistry();
       pluginRegistry.register({
         id: pluginId,
@@ -111,7 +91,7 @@ it.each(
       const entries = await createBootstrapPluginEntries({
         pluginRegistry,
         discoveryMap: new Map([[pluginId, discovery]]),
-        manifestCache: new Map([[pluginId, [parsed]]]),
+        manifestCache: new Map([[pluginId, []]]),
         store,
         tools: new ToolRegistry(),
         hookPipeline: createHookPipeline(),

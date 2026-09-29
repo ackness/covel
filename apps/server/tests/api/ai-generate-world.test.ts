@@ -190,7 +190,7 @@ describe("ai world generation route", () => {
         rootPath: discovery.rootPath,
         manifests: [],
         packageManifest: parsePluginMd(
-          `---\n${JSON.stringify({ ...definition.plugin, id: pluginId, contributes: { ...definition.plugin.contributes, data: { [namespace]: definition.plugin.contributes.data!.definitions! } } })}\n---`,
+          `---\n${JSON.stringify({ ...definition.packageManifest.plugin, id: pluginId, contributes: { ...definition.packageManifest.plugin.contributes, data: { [namespace]: definition.packageManifest.plugin.contributes.data!.definitions! } } })}\n---`,
           "fixture/PLUGIN.md",
         ),
         loadedRuntimes: new Map(),

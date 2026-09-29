@@ -22,7 +22,8 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import path from "node:path";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
+  loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
 import {
@@ -675,13 +676,18 @@ describe("codex plugin manifest", () => {
   let manifest;
   let loaded;
   let declaration;
+  let packageManifest;
+  let loadedUi;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const discovery = discoveries.find((d) => d.id === "codex");
-    const manifests = await loadPluginManifest(discovery);
+    const definition = await loadPluginDefinition(discovery);
+    const manifests = definition.manifests;
+    packageManifest = definition.packageManifest.manifest;
+    loadedUi = await loadPluginUi(discovery, undefined, definition);
     manifest = manifests[0].manifest;
-    declaration = manifests[0].plugin;
+    declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
       "world-ir@1": JSON.parse(
         readContractFile(
@@ -756,14 +762,14 @@ describe("codex plugin manifest", () => {
   });
 
   it("should declare right panel UI spec", () => {
-    expect(manifest.ui).toBeDefined();
-    expect(manifest.ui?.right).toContain("./ui/codex-panel.json");
+    expect(packageManifest.ui).toBeDefined();
+    expect(packageManifest.ui?.right).toContain("./ui/codex-panel.json");
   });
 
   it("should load UI spec JSON with panel metadata", () => {
-    expect(loaded.uiSpecs).toBeDefined();
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0].id).toBe("codex");
-    expect(loaded.uiSpecs?.right?.[0].icon).toBe("book-open");
+    expect(loadedUi.uiSpecs).toBeDefined();
+    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
+    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("codex");
+    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("book-open");
   });
 });

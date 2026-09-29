@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { expectAssetGenerated } from "@covel/plugin-test-utils";
+import {
+  expectAssetGenerated,
+  makeRuntimeResult,
+} from "@covel/plugin-test-utils";
 import handler from "../runtimes/background-gen/handler.js";
 
 const TOPIC = "scene-stage.generate.requested";
@@ -100,7 +103,10 @@ describe("scene-stage background-gen handler", () => {
       AbortSignal,
     );
 
-    const asset = expectAssetGenerated(result.effects, { modality: "image" });
+    const asset = expectAssetGenerated(
+      makeRuntimeResult({ effects: result.effects }),
+      { modality: "image" },
+    );
     expect(asset.meta).toEqual({
       kind: "scene-background",
       sceneId: "gen-abcd1234",

@@ -68,7 +68,7 @@ export function markPreGameCompletion(args: {
 function setupResultIsDone(result: RuntimeResult): boolean {
   const output = result.output as Record<string, unknown> | undefined;
   return (
-    (result.status === "success" && output?.preGameDone === true) ||
+    (result.status === "success" && result.completion === "done") ||
     (result.status === "skipped" && output?.skip === true)
   );
 }

@@ -417,12 +417,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
               : typeof out.content === "string"
                 ? out.content
                 : JSON.stringify(result.output);
-          const interactionsArr = out.interactions as unknown[] | undefined;
+          const interactionsArr = result.effects?.interactions;
           const pendingInput =
             interactionsArr && interactionsArr.length > 0
               ? interactionsArr
               : undefined;
-          const ui = out.ui as unknown[] | undefined;
+          const ui = result.effects?.ui;
           await s.appendTurnMessage({
             id: crypto.randomUUID(),
             sessionId,

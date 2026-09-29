@@ -155,7 +155,8 @@ describe("operation settings snapshot", () => {
                   turnId: sessionId,
                   runId: sessionId,
                   status: "success",
-                  output: {
+                  output: {},
+                  effects: {
                     statePatches: [{ table: "stats", field: "hp", value: 1 }],
                   },
                   toolCalls: [],

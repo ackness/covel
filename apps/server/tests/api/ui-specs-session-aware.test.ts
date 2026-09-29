@@ -65,7 +65,9 @@ function makeEntry(
 
 function makeManifest(name: string, pluginId: string): ParsedPluginMd {
   return {
+    plugin: { id: pluginId, kind: "plugin", description: "Test" },
     manifest: {
+      pluginType: "plugin",
       name,
       pluginId,
       description: "",
@@ -111,8 +113,8 @@ describe("GET /api/ui-specs session-aware filter", () => {
             }),
           ],
         ]),
-        manifest: makeManifest("codex", "codex"),
-        manifests: [makeManifest("codex", "codex")],
+        packageManifest: makeManifest("codex", "codex"),
+        manifests: [],
       }),
     );
     registry.register(
@@ -137,8 +139,8 @@ describe("GET /api/ui-specs session-aware filter", () => {
             }),
           ],
         ]),
-        manifest: makeManifest("optional-plugin", "optional-plugin"),
-        manifests: [makeManifest("optional-plugin", "optional-plugin")],
+        packageManifest: makeManifest("optional-plugin", "optional-plugin"),
+        manifests: [],
       }),
     );
 

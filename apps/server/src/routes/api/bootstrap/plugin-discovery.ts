@@ -7,9 +7,8 @@ import {
   createPluginRegistry,
   discoverPluginsMulti,
   loadPluginDefinition,
-  pluginDeclarations,
   loadPluginSummary,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginDiscoveryResult,
   type PluginRegistry,
 } from "@covel/plugin-loader";
@@ -23,7 +22,7 @@ export interface DiscoverAndRegisterPluginsConfig {
 export interface DiscoverAndRegisterPluginsResult {
   readonly registry: PluginRegistry;
   readonly discoveryMap: Map<string, PluginDiscoveryResult>;
-  readonly manifestCache: Map<string, readonly ParsedPluginMd[]>;
+  readonly manifestCache: Map<string, readonly ParsedRuntimeMd[]>;
 }
 
 export async function discoverAndRegisterPlugins(
@@ -47,7 +46,7 @@ export async function discoverAndRegisterPlugins(
   );
 
   const discoveryMap = new Map<string, PluginDiscoveryResult>();
-  const manifestCache = new Map<string, readonly ParsedPluginMd[]>();
+  const manifestCache = new Map<string, readonly ParsedRuntimeMd[]>();
 
   for (const discovery of discoveries) {
     try {
@@ -57,15 +56,10 @@ export async function discoverAndRegisterPlugins(
         ...(await loadPluginSummary(discovery, undefined, definition)),
         runtimeCount: manifests.length,
       };
-      const declarations = pluginDeclarations(definition);
 
-      for (const parsed of declarations) {
+      for (const parsed of manifests) {
         for (const diagnostic of validateRuntimeManifestSemantics(
           parsed.manifest,
-        ).filter(
-          (diagnostic) =>
-            manifests.includes(parsed) ||
-            diagnostic.code !== "schedulable-missing-stage",
         )) {
           console.warn(`[bootstrap] ${diagnostic.message}`);
         }
@@ -110,7 +104,7 @@ export async function discoverAndRegisterPlugins(
             path.resolve(discovery.pluginMdPaths[index]!),
           ]),
         ),
-        manifest: manifests[0],
+
         packageManifest,
         manifests,
         loadedRuntimes: new Map(),

@@ -49,6 +49,7 @@ function makeParsedManifest(
   },
 ) {
   return {
+    runtime: { type: "agent" as const },
     manifest: {
       name: manifest.name,
       description: manifest.description ?? `${manifest.name} runtime`,
@@ -223,9 +224,10 @@ describe("Plugin Routes", () => {
               ...parsed.manifest,
               name: "my-plugin",
               pluginId: "my-plugin",
+              pluginType: "plugin",
             },
           },
-          manifest: parsed,
+
           manifests: [parsed],
         }),
       );

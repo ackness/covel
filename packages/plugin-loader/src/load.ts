@@ -23,12 +23,17 @@ import type {
   PluginEntryDefinition,
   LoadedRuntime,
   ParsedPluginMd,
+  ParsedRuntimeMd,
+  PackageManifest,
   FunctionHandler,
   AgentGuard,
 } from "./types.js";
-import { parsePluginMd, parseRuntimeMd } from "./parse-plugin-md.js";
 import {
-  pluginDeclarations,
+  parsePluginMd,
+  parseRuntimeMd,
+  compileInlineRuntime,
+} from "./parse-plugin-md.js";
+import {
   resolvePluginRuntimeManifest,
   validatePluginDeclarations,
 } from "./declarations.js";
@@ -101,8 +106,17 @@ async function resolveLocalizedPluginMd(
 async function parsePluginMdForLocale(
   dir: string,
   locale?: string,
+): Promise<ParsedPluginMd>;
+async function parsePluginMdForLocale(
+  dir: string,
+  locale: string | undefined,
+  plugin: PluginManifest,
+): Promise<ParsedRuntimeMd>;
+async function parsePluginMdForLocale(
+  dir: string,
+  locale?: string,
   plugin?: PluginManifest,
-): Promise<ParsedPluginMd> {
+): Promise<ParsedPluginMd | ParsedRuntimeMd> {
   const stem = plugin ? "RUNTIME" : "PLUGIN";
   const localizedPath = await resolveLocalizedPluginMd(dir, locale, stem);
   const basePath = path.join(dir, `${stem}.md`);
@@ -207,9 +221,8 @@ export async function loadPluginSummary(
  * @param locale - Optional locale for loading localized PLUGIN.md
  */
 export interface PluginDefinition {
-  readonly plugin: PluginManifest;
-  readonly packageManifest?: ParsedPluginMd;
-  readonly manifests: readonly ParsedPluginMd[];
+  readonly packageManifest: ParsedPluginMd;
+  readonly manifests: readonly ParsedRuntimeMd[];
 }
 
 export async function loadPluginDefinition(
@@ -223,7 +236,7 @@ export async function loadPluginDefinition(
   );
   const contractSchemas: Record<string, Readonly<Record<string, unknown>>> = {};
   for (const [contract, declaration] of Object.entries(
-    parsedPackage.plugin!.contracts ?? {},
+    parsedPackage.plugin.contracts ?? {},
   )) {
     const schemaPath = path.resolve(discovery.rootPath, declaration.schema);
     await assertInsideRoot(discovery.rootPath, schemaPath, "Contract schema");
@@ -232,10 +245,10 @@ export async function loadPluginDefinition(
     ) as Record<string, unknown>;
   }
   for (const [namespace, declaration] of Object.entries(
-    parsedPackage.plugin!.contributes?.data ?? {},
+    parsedPackage.plugin.contributes?.data ?? {},
   )) {
     for (const contract of declaration.accepts ?? []) {
-      const declared = parsedPackage.plugin!.contracts?.[contract];
+      const declared = parsedPackage.plugin.contracts?.[contract];
       if (
         !declared ||
         path.resolve(discovery.rootPath, declared.schema) !==
@@ -247,20 +260,23 @@ export async function loadPluginDefinition(
     }
   }
   const packageManifest = { ...parsedPackage, contractSchemas };
-  const plugin = packageManifest.plugin!;
+  const plugin = packageManifest.plugin;
   if (plugin.id !== discovery.id)
     throw new Error(
       `${rootPath}: id must match plugin directory ${discovery.id}`,
     );
   if (discovery.isMultiRuntime && plugin.runtime)
     throw new Error(`${rootPath}: inline runtime and runtimes/ cannot coexist`);
-  const manifests: ParsedPluginMd[] = [];
+  const manifests: ParsedRuntimeMd[] = [];
   if (discovery.isMultiRuntime) {
     for (const mdPath of discovery.pluginMdPaths)
       manifests.push(
         await parsePluginMdForLocale(path.dirname(mdPath), locale, plugin),
       );
-  } else if (plugin.runtime) manifests.push(packageManifest);
+  } else {
+    const runtime = compileInlineRuntime(packageManifest);
+    if (runtime) manifests.push(runtime);
+  }
   const provided = new Set(
     (plugin.provides ?? []).map((p) =>
       typeof p === "string" ? p : p.contract,
@@ -346,18 +362,15 @@ export async function loadPluginDefinition(
         );
     }
   }
-  const definition = { plugin, packageManifest, manifests };
-  validatePluginDeclarations([
-    packageManifest,
-    ...manifests.filter((m) => m !== packageManifest),
-  ]);
+  const definition = { packageManifest, manifests };
+  validatePluginDeclarations([packageManifest]);
   return definition;
 }
 
 export async function loadPluginManifest(
   discovery: PluginDiscoveryResult,
   locale?: string,
-): Promise<readonly ParsedPluginMd[]> {
+): Promise<readonly ParsedRuntimeMd[]> {
   return (await loadPluginDefinition(discovery, locale)).manifests;
 }
 
@@ -381,15 +394,12 @@ export async function loadPluginEntryDefinition(
       "Localized plugin manifest",
     );
     const localized = await parsePluginMdForLocale(discovery.rootPath, locale);
-    staticPromptVariants[locale] = localized.plugin?.contributes?.prompt ?? [];
+    staticPromptVariants[locale] = localized.plugin.contributes?.prompt ?? [];
   }
   return {
     staticPromptVariants,
-    contributions:
-      declarations.find((record) => record.plugin)?.plugin?.contributes ?? {},
-    staticPromptSegments:
-      declarations.find((record) => record.plugin)?.plugin?.contributes
-        ?.prompt ?? [],
+    contributions: declarations[0]?.plugin.contributes ?? {},
+    staticPromptSegments: declarations[0]?.plugin.contributes?.prompt ?? [],
     extensions: resolvePluginDeclarations(declarations).extensions,
     pluginId: discovery.id,
     pluginRoot: discovery.rootPath,
@@ -410,11 +420,8 @@ async function resolveRuntimeDir(
   discovery: PluginDiscoveryResult,
   runtimeName: string,
   definition: PluginDefinition,
-  includePackage = false,
 ): Promise<string> {
-  const records = includePackage
-    ? pluginDeclarations(definition)
-    : definition.manifests;
+  const records = definition.manifests;
   const record = records.find(({ manifest }) => manifest.name === runtimeName);
   if (!record?.sourcePath)
     throw new Error(
@@ -598,35 +605,29 @@ async function loadExportAcceptsSchemas(
 }
 
 /**
- * Level 1.5: Load only a runtime's manifest + UI specs — no handler / guard
+ * Load the package declaration and its UI specs — no handler / guard
  * imports. UI specs are data (JSON files, or a recorded component path), so
  * this path never executes plugin JS and is safe for untrusted (community)
  * plugins whose code must not run before approval.
  */
-export async function loadRuntimeUi(
+export async function loadPluginUi(
   discovery: PluginDiscoveryResult,
-  runtimeName: string,
   locale?: string,
   definition?: PluginDefinition,
-): Promise<Pick<LoadedRuntime, "manifest" | "uiSpecs">> {
+): Promise<{
+  readonly manifest: PackageManifest;
+  readonly uiSpecs: LoadedRuntime["uiSpecs"];
+}> {
   const snapshot =
     definition ?? (await loadPluginDefinition(discovery, locale));
-  const runtimeDir = await resolveRuntimeDir(
-    discovery,
-    runtimeName,
-    snapshot,
-    true,
-  );
-  const parsed = pluginDeclarations(snapshot).find(
-    (record) => record.manifest.name === runtimeName,
-  )!;
+  const manifest = snapshot.packageManifest.manifest;
   const uiSpecs = await loadUiSpecs(
-    runtimeDir,
+    discovery.rootPath,
     discovery.rootPath,
     discovery.id,
-    parsed.manifest.ui,
+    manifest.ui,
   );
-  return { manifest: parsed.manifest, uiSpecs };
+  return { manifest, uiSpecs };
 }
 
 /**
@@ -747,14 +748,6 @@ export async function loadRuntime(
     guard = mod.default as AgentGuard;
   }
 
-  // Load UI spec files from ui/ directory
-  const uiSpecs = await loadUiSpecs(
-    runtimeDir,
-    discovery.rootPath,
-    discovery.id,
-    parsed.manifest.ui,
-  );
-
   return {
     manifest: resolvePluginRuntimeManifest(snapshot, parsed.manifest),
     promptTemplate: parsed.promptTemplate,
@@ -771,7 +764,6 @@ export async function loadRuntime(
       : {}),
     handler,
     guard,
-    uiSpecs,
   };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createPluginRegistry,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
@@ -45,7 +45,13 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
         description: "Inspector",
         contributes: { commands: manifests[0]?.commands ?? [] },
       },
-      manifest: manifests[0],
+      manifest: {
+        name: "inspector",
+        pluginId: "inspector",
+        description: "Inspector",
+        pluginType: "plugin",
+        commands: manifests[0]?.commands,
+      },
       promptTemplate: "",
       rawFrontmatter: {},
     },
@@ -59,7 +65,8 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
     status: "registered",
     source: "builtin",
     loadedRuntimes: new Map(),
-    manifests: manifests.map((runtime): ParsedPluginMd => ({
+    manifests: manifests.map((runtime): ParsedRuntimeMd => ({
+      runtime: { type: runtime.runtimeType ?? "agent" },
       manifest: runtime,
       promptTemplate: "",
       rawFrontmatter: {},

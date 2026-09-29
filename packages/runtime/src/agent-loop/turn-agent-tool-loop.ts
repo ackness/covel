@@ -64,7 +64,7 @@ export interface AgentToolLoopCompleted {
   readonly executedToolCalls: ExecutedToolCallState[];
   readonly failedToolCalls: FailedToolCallState[];
   readonly pendingProposals: Proposal[];
-  /** Domain events emitted via `emit-event` tool calls this loop — merged into `output.events` at finalize. */
+  /** Domain events emitted via `emit-event` tool calls this loop — merged into `effects.events` at finalize. */
   readonly emittedEvents: EmittedEvent[];
   readonly streamDeltaCount: number;
   readonly stoppedWithResponse: boolean;

@@ -185,9 +185,9 @@ describe("GET /api/ui-specs — registry snapshot", () => {
     await symlink(join(dir, "panel-plugin"), alias, "dir");
     const entry = registry.get("panel-plugin")!;
     const parsed = {
-      ...entry.manifest!,
+      ...entry.packageManifest!,
       manifest: {
-        ...entry.manifest!.manifest,
+        ...entry.packageManifest!.manifest,
         ui: { right: ["./ui/panel.json", "./ui/client-only.tsx"] },
       },
     };
@@ -195,8 +195,6 @@ describe("GET /api/ui-specs — registry snapshot", () => {
       ...entry,
       rootPath: alias,
       packageManifest: parsed,
-      manifest: parsed,
-      manifests: [parsed],
     });
 
     const response = await app.request("/api/ui-specs");

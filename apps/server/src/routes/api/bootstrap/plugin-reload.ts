@@ -53,7 +53,7 @@ export async function preparePluginReload(
         parsed.sourcePath!,
       ]),
     ),
-    manifest: definition.manifests[0],
+
     packageManifest: definition.packageManifest,
     manifests: definition.manifests,
     loadedRuntimes: new Map(),

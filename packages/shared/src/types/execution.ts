@@ -59,8 +59,13 @@ export interface RuntimeResult {
   readonly runId: string;
   readonly turnId: string;
   readonly status: RuntimeStatus;
+  /** Business output only; domain effects are never inferred from its keys. */
   readonly output: Readonly<Record<string, unknown>> | null;
-  /** Function business value, separate from materialized domain effects. */
+  /** Explicit effects consumed by event dispatch, interaction handling and commit. */
+  readonly effects?: import("./handler-result.js").RuntimeEffects;
+  /** Setup completion is independent of business output. */
+  readonly completion?: "done" | "pending";
+  /** Exact function value, including scalar/array values, for schemas and bindings. */
   readonly canonicalValue?: { readonly value?: JsonValue };
   readonly toolCalls: readonly ToolCallRecord[];
   readonly durationMs: number;

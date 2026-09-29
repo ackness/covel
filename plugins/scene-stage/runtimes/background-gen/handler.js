@@ -158,9 +158,7 @@ export default async function handler(ctx) {
     sequence: (progressSequence += 1),
   });
 
-  // assetGenerations is a domain effect; the kernel projects it back to the
-  // legacy top-level `assetGenerations` key that session-output-normalizer /
-  // collectAssetGenerations read.
+  // assetGenerations is a domain effect, separate from the business value.
   return {
     outcome: "success",
     effects: {

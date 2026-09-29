@@ -177,8 +177,7 @@ describe("requireToolUse gate", () => {
 
     const res = result.runtimeResults.find((r) => r.runtimeId === "plug/gated");
     expect(res?.status).toBe("success");
-    const events = (res?.output as Record<string, unknown> | null)?.events as
-      Array<{ topic: string }> | undefined;
+    const events = res?.effects?.events;
     expect(events).toEqual([{ topic: "test.ping", data: { x: 1 } }]);
   });
 

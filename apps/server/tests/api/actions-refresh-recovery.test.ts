@@ -22,6 +22,7 @@ async function fixture() {
   const sessionId = crypto.randomUUID();
   const loaded = makeFakeLoadedRuntime({ name: "test-story" });
   const parsed = {
+    runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
     manifest: loaded.manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -37,7 +38,7 @@ async function fixture() {
       pluginType: "plugin",
       runtimeCount: 1,
     },
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([["test-story", loaded]]),
     status: "registered",

@@ -46,6 +46,7 @@ async function run(
   >,
   seeds: RuntimeResult[] = [],
   scoped = true,
+  runtimeEffects: Record<string, import("@covel/shared").RuntimeEffects> = {},
 ) {
   const store = createMemoryStore();
   await store.createSession({
@@ -86,6 +87,7 @@ async function run(
           return {
             outcome: "success",
             value: (await handlers[rt.name]!(ctx)) as never,
+            effects: runtimeEffects[rt.name],
           };
         },
       }),
@@ -270,11 +272,12 @@ describe("single runtime recovery scope", () => {
         ],
         "target",
         {
-          target: async () => ({ events: [{ topic: "changed", data: {} }] }),
+          target: async () => ({ updated: true }),
           follower: async () => ({ updated: true }),
         },
         [seed("follower", { alreadyCommitted: true })],
         scoped,
+        { target: { events: [{ topic: "changed", data: {} }] } },
       );
       expect(calls).toEqual(scoped ? ["target"] : ["target", "follower"]);
       expect(result.runtimeResults.map((row) => row.runtimeId)).toEqual(calls);
@@ -300,6 +303,7 @@ describe("single runtime recovery scope", () => {
         },
         [],
         scoped,
+        { target: { events: [{ topic: "changed", data: {} }] } },
       );
       expect(calls).toEqual(scoped ? ["target"] : ["target", "leaf"]);
       const target = result.runtimeResults.find(
@@ -324,6 +328,7 @@ describe("single runtime recovery scope", () => {
         { target: async () => ({ generated: true }) },
         [],
         scoped,
+        { target: { events: [{ topic: "changed", data: {} }] } },
       );
       expect(calls).toEqual(scoped ? ["target"] : []);
       expect(result.runtimeResults.map((row) => row.status)).toEqual(

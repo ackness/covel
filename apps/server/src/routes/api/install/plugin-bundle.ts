@@ -1,10 +1,11 @@
 import { parse } from "yaml";
 import {
   parsePluginMd,
+  compileInlineRuntime,
   parseRuntimeMd,
   validatePluginDeclarations,
   multiRuntimeRootDiagnostics,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
 } from "@covel/plugin-loader";
 import { z } from "zod";
 import { httpError, type ExtractedEntry } from "./shared.js";
@@ -142,7 +143,8 @@ export function validatePluginBundle(
       if (diagnostics.length)
         throw new Error(diagnostics.map((d) => d.message).join("\n"));
     }
-    const declarations: ParsedPluginMd[] = [root];
+    const inline = compileInlineRuntime(root);
+    const declarations: ParsedRuntimeMd[] = inline ? [inline] : [];
     for (const child of children)
       declarations.push(
         parseRuntimeMd(
@@ -151,7 +153,7 @@ export function validatePluginBundle(
           root.plugin!,
         ),
       );
-    validatePluginDeclarations(declarations);
+    validatePluginDeclarations([root]);
     const provided = new Set(
       (root.plugin!.provides ?? []).map((value) =>
         typeof value === "string" ? value : value.contract,

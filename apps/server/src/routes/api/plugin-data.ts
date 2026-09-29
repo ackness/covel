@@ -62,7 +62,7 @@ function corePluginWriteError(
 ): string | null {
   const entry = registry.get(pluginId);
   const pluginType =
-    entry?.manifest?.manifest?.pluginType ?? entry?.summary?.pluginType;
+    entry?.packageManifest?.manifest.pluginType ?? entry?.summary?.pluginType;
   if (pluginType === "core-plugin") {
     return `Plugin "${pluginId}" is a core plugin; its data is framework-owned and cannot be written through this API`;
   }

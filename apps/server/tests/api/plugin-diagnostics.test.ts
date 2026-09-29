@@ -128,19 +128,21 @@ function fixture() {
         pluginType: "plugin",
         runtimeCount: 1,
       },
-      manifest: {
-        manifest: {
-          name: `${id}/runtime`,
-          description: "private-description",
-          stage: "post-turn",
-          commands: [
-            { name: "inspect", action: "inspect-action" },
-            { name: "missing", action: "missing-action" },
-          ],
+      manifests: [
+        {
+          manifest: {
+            name: `${id}/runtime`,
+            description: "private-description",
+            stage: "post-turn",
+            commands: [
+              { name: "inspect", action: "inspect-action" },
+              { name: "missing", action: "missing-action" },
+            ],
+          },
+          promptTemplate: "private-prompt",
+          rawFrontmatter: { secret: "private-frontmatter" },
         },
-        promptTemplate: "private-prompt",
-        rawFrontmatter: { secret: "private-frontmatter" },
-      },
+      ],
       loadedRuntimes: new Map(),
       status: "registered",
       ...overrides,

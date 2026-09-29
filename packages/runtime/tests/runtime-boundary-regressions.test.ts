@@ -339,9 +339,10 @@ describe("canonical function values", () => {
         }),
       });
       expect(turn.runtimeResults[0]?.status).toBe("success");
-      expect(turn.runtimeResults[0]?.output).toMatchObject({
-        preGameDone: true,
-      });
+      expect(turn.runtimeResults[0]?.completion).toBe("done");
+      expect(turn.runtimeResults[0]?.effects?.events).toEqual([
+        { topic: "changed", data: {} },
+      ]);
       expect(turn.runtimeResults[0]?.canonicalValue).toEqual({ value });
       const binding = {
         from: { runtime: producer.name },

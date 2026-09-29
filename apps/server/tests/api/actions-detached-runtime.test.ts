@@ -116,6 +116,7 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
     ]);
     const parsed = manifests.map((manifest) => ({
       manifest,
+      runtime: { type: manifest.runtimeType ?? "agent" },
       promptTemplate: "",
       rawFrontmatter: {},
     }));
@@ -128,7 +129,6 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
         pluginType: "plugin",
         runtimeCount: manifests.length,
       },
-      manifest: parsed[0],
       manifests: parsed,
       loadedRuntimes: loaded,
       status: "registered",

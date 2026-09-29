@@ -61,7 +61,14 @@ describe("resume commit composition", () => {
           pluginType: "plugin",
           runtimeCount: 1,
         },
-        manifests: [{ manifest, promptTemplate: "", rawFrontmatter: {} }],
+        manifests: [
+          {
+            runtime: { type: manifest.runtimeType ?? ("agent" as const) },
+            manifest,
+            promptTemplate: "",
+            rawFrontmatter: {},
+          },
+        ],
       });
       await store.saveSuspension({
         id: "suspension",

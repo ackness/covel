@@ -197,7 +197,7 @@ async function builtinPluginRegistry() {
         runtimeCount: manifests.length,
       },
       rootPath: discovery.rootPath,
-      manifest: manifests[0],
+
       manifests,
       packageManifest,
       loadedRuntimes: new Map(),

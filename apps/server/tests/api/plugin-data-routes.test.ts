@@ -67,7 +67,7 @@ function registerPlugin(
     },
     loadedRuntimes: new Map(),
     status: "registered",
-    manifest: parsed,
+
     manifests: [parsed],
   });
 }

@@ -104,6 +104,7 @@ async function runScenario(options: { readonly failCommit: boolean }) {
       runtimeCount: manifests.length,
     },
     manifests: manifests.map((runtimeManifest) => ({
+      runtime: { type: runtimeManifest.runtimeType ?? ("agent" as const) },
       manifest: runtimeManifest,
       promptTemplate: "",
       rawFrontmatter: {},

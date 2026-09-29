@@ -5,7 +5,7 @@ import {
   loadRuntime as loadRuntimeFromDisk,
   getPluginTrustInfo,
   type PluginRegistry,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginDiscoveryResult,
   type LoadedRuntime,
   type PluginDefinition,
@@ -20,7 +20,7 @@ import { sessionApprovalScope } from "../session/session-guard.js";
 export interface RuntimeLoaderParams {
   readonly pluginRegistry?: PluginRegistry;
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
-  readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
+  readonly manifestCache: ReadonlyMap<string, readonly ParsedRuntimeMd[]>;
   readonly store: DataStore;
   readonly getApprovalGate: () => RpcApprovalGate;
 }
@@ -127,7 +127,6 @@ export function createRuntimeLoader(
           manifest.name,
           locale,
           {
-            plugin: entry.packageManifest.plugin,
             packageManifest: entry.packageManifest,
             manifests: manifests ?? [],
           },

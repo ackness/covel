@@ -33,8 +33,9 @@ import {
   getPluginTrustInfo,
   loadPluginEntryDefinition,
   pluginDeclarations,
+  loadPluginDefinition,
   type PluginEntryDefinition,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginDiscoveryResult,
   type PluginRegistry,
 } from "@covel/plugin-loader";
@@ -92,7 +93,7 @@ export interface BootstrapPluginEntriesParams {
   readonly development?: boolean;
   readonly onReload?: (pluginId: string) => void | Promise<void>;
   readonly discoveryMap: Map<string, PluginDiscoveryResult>;
-  readonly manifestCache: Map<string, readonly ParsedPluginMd[]>;
+  readonly manifestCache: Map<string, readonly ParsedRuntimeMd[]>;
   /** Expose activation failures through the existing plugin discovery DTO. */
   readonly pluginRegistry?: PluginRegistry;
   readonly store: DataStore;
@@ -261,7 +262,7 @@ export async function createBootstrapPluginEntries(
       discovery,
       registryEntry
         ? pluginDeclarations(registryEntry)
-        : (manifestCache.get(pluginId) ?? []),
+        : pluginDeclarations(await loadPluginDefinition(discovery)),
     );
     entryDefinitions.set(pluginId, definition);
   }

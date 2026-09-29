@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parsePluginMd, parseRuntimeMd } from "../src/parse-plugin-md.js";
+import {
+  parsePluginMd,
+  parseRuntimeMd,
+  compileInlineRuntime,
+} from "../src/parse-plugin-md.js";
 const md = (value: object, body = "Prompt") =>
   `---\n${JSON.stringify(value)}\n---\n${body}`;
 const root = { id: "probe", kind: "plugin", description: "Probe" };
@@ -10,8 +14,26 @@ describe("current authoring manifests", () => {
       "probe/PLUGIN.md",
     );
     expect(parsed.plugin?.contributes?.tools).toEqual(["probe"]);
-    expect(parsed.runtime).toBeUndefined();
-    expect(parsed.manifest.runtimeType).toBeUndefined();
+    expect(compileInlineRuntime(parsed)).toBeUndefined();
+    expect(parsed.manifest).not.toHaveProperty("runtimeType");
+    expect(parsed.manifest).not.toHaveProperty("stage");
+  });
+  it("retains the package version for inline and child job identity checks", () => {
+    const parsed = parsePluginMd(
+      md({
+        ...root,
+        version: "2.3.4",
+        runtime: { type: "agent", schedule: { trigger: { type: "manual" } } },
+      }),
+      "probe/PLUGIN.md",
+    );
+    expect(compileInlineRuntime(parsed)!.manifest.version).toBe("2.3.4");
+    const child = parseRuntimeMd(
+      md({ type: "agent", schedule: { trigger: { type: "manual" } } }),
+      "probe/runtimes/worker/RUNTIME.md",
+      parsed.plugin,
+    );
+    expect(child.manifest.version).toBe("2.3.4");
   });
   it("compiles grouped scheduling, loop, outputs and own data", () => {
     const parsed = parsePluginMd(
@@ -48,7 +70,7 @@ describe("current authoring manifests", () => {
       }),
       "probe/PLUGIN.md",
     );
-    expect(parsed.manifest).toMatchObject({
+    expect(compileInlineRuntime(parsed)!.manifest).toMatchObject({
       name: "probe",
       pluginId: "probe",
       stage: "post-turn",
@@ -58,8 +80,10 @@ describe("current authoring manifests", () => {
       requireExplicitCompletion: true,
       completeAfterTools: ["save"],
     });
-    expect(parsed.manifest.inputs?.upstream.required).toBe(false);
-    expect(parsed.manifest.input?.inject).toEqual([
+    expect(
+      compileInlineRuntime(parsed)!.manifest.inputs?.upstream.required,
+    ).toBe(false);
+    expect(compileInlineRuntime(parsed)!.manifest.input?.inject).toEqual([
       {
         kind: "plugin-data",
         namespace: "notes",
@@ -102,11 +126,11 @@ describe("current authoring manifests", () => {
       },
     };
     const parsed = parsePluginMd(md({ ...root, runtime }), "probe/PLUGIN.md");
-    expect(parsed.manifest.tools).toEqual({
+    expect(compileInlineRuntime(parsed)!.manifest.tools).toEqual({
       builtin: ["get-character"],
       plugin: ["inspect"],
     });
-    expect(parsed.manifest.timeoutMs).toBe(90000);
+    expect(compileInlineRuntime(parsed)!.manifest.timeoutMs).toBe(90000);
     expect(() =>
       parsePluginMd(
         md({
@@ -142,8 +166,8 @@ describe("current authoring manifests", () => {
       }),
       "probe/PLUGIN.md",
     );
-    expect(parsed.manifest.inputs).toBeUndefined();
-    expect(parsed.manifest.input?.inject).toEqual([
+    expect(compileInlineRuntime(parsed)!.manifest.inputs).toBeUndefined();
+    expect(compileInlineRuntime(parsed)!.manifest.input?.inject).toEqual([
       { kind: "kernel", from: "turn-digest@1", name: "digest" },
       {
         kind: "runtime-export",

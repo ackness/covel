@@ -1,4 +1,5 @@
 import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
+import { toJsonValueOrDiagnostic } from "@covel/shared";
 import { createWorldModelView } from "./world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import type {
@@ -30,6 +31,7 @@ import {
 import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
 import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { materializeHandlerSuccess } from "../commit/materialize-handler-output.js";
+import { collectUiBlocks } from "../session/session-kernel-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -613,20 +615,40 @@ export async function executeFunctionRuntime({
     }
   }
 
-  const runtimeOutput =
+  const materialized: Pick<RuntimeResult, "output" | "effects" | "completion"> =
     !envelopeSchemaError && handlerOutcome.outcome === "success"
       ? materializeHandlerSuccess(handlerOutcome, output)
-      : (output as Record<string, unknown>);
+      : {
+          output: output as Record<string, unknown>,
+          ...(!envelopeSchemaError &&
+          (handlerOutcome.outcome === "failed" ||
+            handlerOutcome.outcome === "skipped") &&
+          handlerOutcome.effects
+            ? { effects: structuredClone(handlerOutcome.effects) }
+            : {}),
+        };
+
+  let effects = materialized.effects;
 
   if (
     !envelopeSchemaError &&
     handlerOutcome.outcome === "success" &&
     runtimeTools.events.length > 0
   ) {
-    runtimeOutput.events = [
-      ...(Array.isArray(runtimeOutput.events) ? runtimeOutput.events : []),
-      ...runtimeTools.events,
-    ];
+    effects = {
+      ...effects,
+      events: [
+        ...(Array.isArray(effects?.events) ? effects.events : []),
+        ...runtimeTools.events.map((event) =>
+          toJsonValueOrDiagnostic(event, "event"),
+        ),
+      ],
+    };
+  }
+  if (!envelopeSchemaError && handlerOutcome.outcome === "success") {
+    const ui = collectUiBlocks({ ui: effects?.ui }, runtimeTools.records);
+    if (ui.length > 0)
+      effects = { ...effects, ui: ui as import("@covel/shared").JsonValue[] };
   }
 
   // A failed schema gate overrides the handler outcome: the runtime
@@ -641,7 +663,8 @@ export async function executeFunctionRuntime({
       : handlerOutcome.outcome === "success"
         ? "success"
         : handlerOutcome.outcome,
-    output: runtimeOutput,
+    ...materialized,
+    ...(effects ? { effects } : {}),
     ...(handlerOutcome.outcome === "success"
       ? {
           canonicalValue:

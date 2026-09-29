@@ -566,7 +566,8 @@ describe("test-runtime execution helpers", () => {
       pluginId: PLUGIN_ID,
       turnId: expect.stringMatching(/^turn-/),
       status: "success",
-      output: {
+      output: {},
+      effects: {
         pluginData: [
           {
             namespace: "events",

@@ -1,10 +1,6 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import {
-  discoverPlugins,
-  loadPluginManifest,
-  loadPluginDefinition,
-} from "@covel/plugin-loader";
+import { discoverPlugins, loadPluginDefinition } from "@covel/plugin-loader";
 import { worldTimeSchema } from "../schema.js";
 import time from "../rpc/time.js";
 import register from "../server/index.js";
@@ -28,9 +24,9 @@ describe("world-time command", () => {
     const entry = (
       await discoverPlugins(path.resolve(import.meta.dirname, "../.."))
     ).find((plugin) => plugin.id === "world-time");
-    const manifests = await loadPluginManifest(entry);
     expect(
-      (await loadPluginDefinition(entry)).plugin.contributes.commands,
+      (await loadPluginDefinition(entry)).packageManifest.plugin.contributes
+        .commands,
     ).toEqual([expect.objectContaining({ name: "time", action: "time" })]);
     const registerRpc = vi.fn();
     register({

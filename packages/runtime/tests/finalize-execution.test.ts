@@ -12,7 +12,7 @@
 import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import type { SuspensionRecord } from "@covel/store";
-import type { Proposal } from "@covel/shared";
+import type { Proposal, RuntimeEffects } from "@covel/shared";
 import { withPendingProposals } from "@covel/tools";
 import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
@@ -34,7 +34,11 @@ function makeRuntime(name: string, outputKind = "plugin"): RuntimeManifestLite {
   return { name, pluginId: name, outputKind, outputContract: undefined };
 }
 
-function makeResult(runtimeId: string, output: ResultOutput) {
+function makeResult(
+  runtimeId: string,
+  output: ResultOutput = {},
+  effects?: RuntimeEffects,
+) {
   return {
     pluginId: runtimeId,
     runtimeId,
@@ -42,6 +46,7 @@ function makeResult(runtimeId: string, output: ResultOutput) {
     turnId: TURN_ID,
     status: "success" as const,
     output,
+    effects,
     toolCalls: [] as const,
     durationMs: 1,
     timestamp: new Date().toISOString(),
@@ -73,12 +78,12 @@ function makeSuspension(): SuspensionRecord {
 }
 
 /** A state.patch that commits; assert via `getStateEntry`. */
-function statePatch(field: string, value: unknown): ResultOutput {
+function statePatch(field: string, value: unknown): RuntimeEffects {
   return { statePatches: [{ table: "stats", field, value }] };
 }
 
 /** A state.patch missing `table` — the handler rejects it with `{ committed: false }`. */
-function badStatePatch(): ResultOutput {
+function badStatePatch(): RuntimeEffects {
   return { statePatches: [{ field: "hp", value: 1 }] };
 }
 
@@ -139,11 +144,15 @@ describe("finalizeExecution", () => {
         },
         runtimes: [makeRuntime("form")],
         results: [
-          makeResult("form", {
-            interactions: [
-              { interactionId: "check", type: "form", fields: [] },
-            ],
-          }),
+          makeResult(
+            "form",
+            {},
+            {
+              interactions: [
+                { interactionId: "check", type: "form", fields: [] },
+              ],
+            },
+          ),
         ],
         turnIds: [TURN_ID],
         extraInTx: async () => {
@@ -182,7 +191,7 @@ describe("finalizeExecution", () => {
         runtimes: [makeRuntime("story", "story"), makeRuntime("tracker")],
         results: [
           makeResult("story", { narrativeOutput: "A complete, valid scene." }),
-          makeResult("tracker", statePatch("hp", 99)),
+          makeResult("tracker", {}, statePatch("hp", 99)),
         ],
         turnIds: [TURN_ID],
         extraInTx: async () => {
@@ -256,7 +265,7 @@ describe("finalizeExecution", () => {
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
-      results: [makeResult("rt-a", badStatePatch())],
+      results: [makeResult("rt-a", {}, badStatePatch())],
       suspensions: [makeSuspension()],
       turnIds: [TURN_ID],
       eventBus,
@@ -272,8 +281,8 @@ describe("finalizeExecution", () => {
     await savePendingTurn(store);
     const { emitter, emits } = makeRecordingEmitter();
 
-    // Runtime A commits a state.patch (fan-out buffered); runtime B's patch is
-    // malformed and the handler rejects it with { committed: false }.
+    // Runtime A commits several explicit effects; runtime B's malformed patch
+    // causes the entire transaction to roll back.
     const outcome = await finalizeExecution({
       executionContext: {
         executionId: crypto.randomUUID(),
@@ -284,8 +293,18 @@ describe("finalizeExecution", () => {
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
       results: [
-        makeResult("rt-a", statePatch("hp", 42)),
-        makeResult("rt-b", badStatePatch()),
+        makeResult(
+          "rt-a",
+          {},
+          {
+            ...statePatch("hp", 42),
+            events: [{ topic: "stats.changed", data: { hp: 42 } }],
+            pluginData: [
+              { namespace: "entries", key: "rollback", value: { hp: 42 } },
+            ],
+          },
+        ),
+        makeResult("rt-b", {}, badStatePatch()),
       ],
       turnIds: [TURN_ID],
       emitter,
@@ -300,6 +319,10 @@ describe("finalizeExecution", () => {
 
     // The committed sibling's write is rolled back — DB has no trace of it.
     expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+    expect(await store.listEvents(SESSION_ID)).toEqual([]);
+    expect(
+      await store.getPluginData(SESSION_ID, "rt-a", "entries", "rollback"),
+    ).toBeNull();
     // The execution's turn_results row is settled failed.
     expect(await commitStatusOf(store)).toBe("failed");
     // No post-commit fan-out leaked for the rolled-back sibling.
@@ -352,7 +375,7 @@ describe("finalizeExecution", () => {
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
-      results: [makeResult("rt-a", statePatch("hp", 10))],
+      results: [makeResult("rt-a", {}, statePatch("hp", 10))],
       turnIds: [TURN_ID],
       journalMessages: [
         {
@@ -399,7 +422,7 @@ describe("finalizeExecution", () => {
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
-      results: [makeResult("rt-a", badStatePatch())],
+      results: [makeResult("rt-a", {}, badStatePatch())],
       turnIds: [TURN_ID],
       journalMessages: [
         {
@@ -436,8 +459,8 @@ describe("finalizeExecution", () => {
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
       results: [
-        makeResult("rt-a", statePatch("hp", 10)),
-        makeResult("rt-b", statePatch("mp", 20)),
+        makeResult("rt-a", {}, statePatch("hp", 10)),
+        makeResult("rt-b", {}, statePatch("mp", 20)),
       ],
       turnIds: [TURN_ID],
       emitter,
@@ -493,7 +516,7 @@ describe("finalizeExecution", () => {
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-b"), makeRuntime("rt-a", "story")],
       results: [
-        makeResult("rt-b", statePatch("hp", 99)),
+        makeResult("rt-b", {}, statePatch("hp", 99)),
         makeResult("rt-a", { toolCalls: [] }),
       ],
       turnIds: [TURN_ID],
@@ -530,7 +553,7 @@ describe("finalizeExecution", () => {
       runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
       results: [
         makeResult("rt-a", { narrativeOutput: "committed line" }),
-        makeResult("rt-b", badStatePatch()),
+        makeResult("rt-b", {}, badStatePatch()),
       ],
       turnIds: [TURN_ID],
     });
@@ -578,7 +601,7 @@ describe("finalizeExecution", () => {
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
       results: [
         makeResult("rt-a", output),
-        makeResult("rt-b", badStatePatch()),
+        makeResult("rt-b", {}, badStatePatch()),
       ],
       turnIds: [TURN_ID],
     });
@@ -652,7 +675,7 @@ describe("finalizeExecution", () => {
         sessionId: SESSION_ID,
         executionContext,
         runtimes: [makeRuntime("rt-a")],
-        results: [makeResult("rt-a", statePatch("hp", 3))],
+        results: [makeResult("rt-a", {}, statePatch("hp", 3))],
         turnIds: [TURN_ID],
       });
 
@@ -670,7 +693,7 @@ describe("finalizeExecution", () => {
         sessionId: SESSION_ID,
         executionContext,
         runtimes: [makeRuntime("rt-a")],
-        results: [makeResult("rt-a", badStatePatch())],
+        results: [makeResult("rt-a", {}, badStatePatch())],
         turnIds: [TURN_ID],
       });
 

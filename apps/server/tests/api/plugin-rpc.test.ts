@@ -295,6 +295,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       ],
     };
     const parsed = {
+      runtime: { type: runtime.runtimeType ?? ("agent" as const) },
       manifest: runtime,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -317,7 +318,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
         pluginType: "plugin",
         runtimeCount: 1,
       },
-      manifest: parsed,
+
       manifests: [parsed],
       loadedRuntimes: new Map([
         [runtime.name, { manifest: runtime, promptTemplate: "" }],
@@ -1195,6 +1196,7 @@ function makeFunctionEntry(args: {
   };
 
   const parsed = {
+    runtime: { type: manifest.runtimeType ?? ("agent" as const) },
     manifest,
     promptTemplate: "",
     rawFrontmatter: {},
@@ -1203,7 +1205,7 @@ function makeFunctionEntry(args: {
   const entry: PluginRegistryEntry = {
     id: args.pluginId,
     summary: makeSummary(args.pluginId),
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[args.runtimeId, loaded]]),
     status: "registered",
@@ -1239,6 +1241,7 @@ function makeAgentEntry(args: {
     promptTemplate: "You are a test narrator.",
   };
   const parsed = {
+    runtime: { type: manifest.runtimeType ?? ("agent" as const) },
     manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -1246,7 +1249,7 @@ function makeAgentEntry(args: {
   const entry: PluginRegistryEntry = {
     id: args.pluginId,
     summary: makeSummary(args.pluginId),
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[args.runtimeId, loaded]]),
     status: "registered",
@@ -2569,11 +2572,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     // pluginRegistry indexes by pluginId, so registering two entries with
     // the same id would overwrite. `getActiveRuntimes` walks `manifests[]`.
     const parsedTarget = {
+      runtime: {
+        type: targetLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: targetLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
     };
     const parsedFollower = {
+      runtime: {
+        type: followerLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: followerLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -2581,7 +2590,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register({
       id: PLUGIN_ID,
       summary: makeSummary(PLUGIN_ID),
-      manifest: parsedTarget,
+
       manifests: [parsedTarget, parsedFollower],
       loadedRuntimes: new Map([
         [TARGET, targetLoaded],
@@ -2820,11 +2829,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     };
 
     const parsedTarget = {
+      runtime: {
+        type: targetLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: targetLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
     };
     const parsedFollower = {
+      runtime: {
+        type: followerLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: followerLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -2832,7 +2847,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register({
       id: PLUGIN_ID,
       summary: makeSummary(PLUGIN_ID),
-      manifest: parsedTarget,
+
       manifests: [parsedTarget, parsedFollower],
       loadedRuntimes: new Map([
         [TARGET, targetLoaded],

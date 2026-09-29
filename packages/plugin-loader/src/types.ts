@@ -35,24 +35,51 @@ import type {
   PluginTag,
   PluginType,
   RuntimeManifest,
+  PluginUserSettingSpec,
+  PluginEventDecl,
+  SlashCommandSpec,
 } from "@covel/shared";
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
 
-export interface ParsedPluginMd {
+/** Normalized package contributions; never an executable runtime. */
+export interface PackageManifest {
+  readonly name: string;
+  readonly pluginId: string;
+  readonly description: string;
+  readonly pluginType: PluginType;
+  readonly displayName?: import("@covel/shared").PluginManifest["displayName"];
+  readonly version?: string;
+  readonly tags?: readonly PluginTag[];
+  readonly entry?: string;
+  readonly extensions?: readonly import("@covel/shared").ExtensionDeclaration[];
+  readonly userSettings?: readonly PluginUserSettingSpec[];
+  readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
+  readonly commands?: readonly SlashCommandSpec[];
+  readonly events?: readonly PluginEventDecl[];
+  readonly ui?: NonNullable<
+    import("@covel/shared").PluginManifest["contributes"]
+  >["ui"];
+}
+
+interface ParsedMarkdown {
+  readonly sourcePath?: string;
+  readonly promptTemplate: string;
+  readonly rawFrontmatter: Readonly<Record<string, unknown>>;
+}
+
+export interface ParsedPluginMd extends ParsedMarkdown {
+  readonly plugin: import("@covel/shared").PluginManifest;
+  readonly manifest: PackageManifest;
   readonly contractSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
-  readonly plugin?: import("@covel/shared").PluginManifest;
-  readonly runtime?: import("@covel/shared").RuntimeAuthoringManifest;
-  /** Declaration source for diagnostics; absent in hand-built test fixtures. */
-  readonly sourcePath?: string;
-  /** Validated manifest from YAML frontmatter. */
+}
+
+export interface ParsedRuntimeMd extends ParsedMarkdown {
+  readonly runtime: import("@covel/shared").RuntimeAuthoringManifest;
   readonly manifest: RuntimeManifest;
-  /** Markdown body (un-interpolated prompt template). */
-  readonly promptTemplate: string;
-  /** Raw frontmatter object (before validation). */
-  readonly rawFrontmatter: Readonly<Record<string, unknown>>;
 }
 
 // ── Plugin discovery ─────────────────────────────────────────────
@@ -135,13 +162,11 @@ export interface PluginRegistryEntry {
   readonly rootPath?: string;
   /** Discovery-time absolute PLUGIN.md paths keyed by declared runtime ID. */
   readonly runtimeManifestPaths?: Readonly<Record<string, string>>;
-  /** Primary manifest (first runtime). */
-  readonly manifest?: ParsedPluginMd;
-  /** All manifests for multi-runtime plugins. */
-  readonly manifests?: readonly ParsedPluginMd[];
-  /** Plugin-level data schema declarations merged across all runtime manifests. */
+  /** Explicit executable runtime definitions; absent entries have no execution. */
+  readonly manifests?: readonly ParsedRuntimeMd[];
+  /** Normalized package data schema declarations. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
-  /** Plugin-level world projections merged across all runtime manifests. */
+  /** Normalized package world projections. */
   readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
   /**
    * Executable artifacts loaded on demand.

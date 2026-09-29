@@ -575,8 +575,18 @@ describe("TurnExecutor E2E", () => {
     expect(guideResult.output).toMatchObject({
       topic: "探查百灵沼泽入口",
       categories: expect.any(Array),
-      ui: expect.any(Array),
     });
+    expect(guideResult.output).not.toHaveProperty("ui");
+    expect(guideResult.effects?.ui).toEqual([
+      {
+        type: "action-guide",
+        topic: "探查百灵沼泽入口",
+        categories: [
+          { style: "safe", suggestions: ["先观察周围灵气流向"] },
+          { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+        ],
+      },
+    ]);
     expect(
       (guideResult.output as Record<string, unknown>).narrativeOutput,
     ).toBeUndefined();

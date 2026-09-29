@@ -50,7 +50,12 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     trigger: { type: "auto" },
   } as RuntimeManifest;
   const loaded: LoadedRuntime = { manifest, promptTemplate: "", handler };
-  const parsed = { manifest, promptTemplate: "", rawFrontmatter: {} };
+  const parsed = {
+    runtime: { type: manifest.runtimeType ?? ("agent" as const) },
+    manifest,
+    promptTemplate: "",
+    rawFrontmatter: {},
+  };
   const summary: PluginSummary = {
     id: PLUGIN_ID,
     name: PLUGIN_ID,
@@ -61,7 +66,7 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
   return {
     id: PLUGIN_ID,
     summary,
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[RUNTIME, loaded]]),
     status: "registered",

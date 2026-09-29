@@ -1,7 +1,7 @@
 /**
  * Integration test for the unified event emission layer's runtime leg (plan
  * task 3): an agent runtime calls the `emit-event` builtin tool, the tool
- * loop threads the emitted event into `output.events` at finalize, the
+ * loop threads the emitted event into `effects.events` at finalize, the
  * same-turn event fan-out (`runEventChain`) triggers the subscribing
  * function runtime, and the commit-proposal pipeline sees exactly one
  * `event.emit` proposal — proving `emit-event` never double-emits via a
@@ -87,7 +87,7 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
   };
 }
 
-describe("emit-event: tool-loop accumulation + finalize merge into output.events", () => {
+describe("emit-event: tool-loop accumulation + finalize merge into effects.events", () => {
   it("fans out to the same-turn subscriber and commits exactly one event.emit proposal", async () => {
     const emitterManifest: RuntimeManifest = {
       name: "plug/emitter",
@@ -157,13 +157,12 @@ describe("emit-event: tool-loop accumulation + finalize merge into output.events
     expect(triggerEvent?.topic).toBe("test.ping");
     expect(triggerEvent?.data?.x).toBe(1);
 
-    // Emitter's own RuntimeResult carries the event in output.events.
+    // Emitter's own RuntimeResult carries the event in effects.events.
     const emitterResult = result.runtimeResults.find(
       (r) => r.runtimeId === "plug/emitter",
     );
     expect(emitterResult?.status).toBe("success");
-    const events = (emitterResult?.output as Record<string, unknown> | null)
-      ?.events as Array<{ topic: string; data: unknown }> | undefined;
+    const events = emitterResult?.effects?.events;
     expect(events).toEqual([{ topic: "test.ping", data: { x: 1 } }]);
 
     // Double-emission guard: the commit-proposal computation (mirrors
@@ -176,6 +175,7 @@ describe("emit-event: tool-loop accumulation + finalize merge into output.events
       "turn-1",
       "sess-1",
       "plugin",
+      emitterResult?.effects,
     );
     proposals.push(...getPendingProposals(output));
     const eventEmitProposals = proposals.filter((p) => p.type === "event.emit");
@@ -323,10 +323,9 @@ describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
     );
     expect(emitterResult?.status).toBe("success");
 
-    // Only the first emit-event call produced an event — output.events has
+    // Only the first emit-event call produced an event — effects.events has
     // exactly one entry, from step 1's payload.
-    const events = (emitterResult?.output as Record<string, unknown> | null)
-      ?.events as Array<{ topic: string; data: unknown }> | undefined;
+    const events = emitterResult?.effects?.events;
     expect(events).toEqual([{ topic: "test.ping", data: { x: 1 } }]);
 
     // The second tool call got the "already emitted" no-op hint instead of
@@ -345,6 +344,7 @@ describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
       "turn-1",
       "sess-1",
       "plugin",
+      emitterResult?.effects,
     );
     proposals.push(...getPendingProposals(output));
     const eventEmitProposals = proposals.filter((p) => p.type === "event.emit");

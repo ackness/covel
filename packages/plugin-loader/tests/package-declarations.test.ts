@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parsePluginMd, parseRuntimeMd } from "../src/parse-plugin-md.js";
+import {
+  parsePluginMd,
+  parseRuntimeMd,
+  compileInlineRuntime,
+} from "../src/parse-plugin-md.js";
 import { createPluginRegistry } from "../src/registry.js";
 import {
   pluginDeclarations,
@@ -62,7 +66,6 @@ describe("package declarations", () => {
     });
     const record = entry({
       packageManifest: root,
-      manifest: root,
       manifests: [],
     });
     const registry = createPluginRegistry();
@@ -95,7 +98,47 @@ describe("package declarations", () => {
     expect(effective.dataSchemas).toEqual(root.manifest.dataSchemas);
     expect(effective.outputContract).toBe("compute@1");
     expect(effective.ui).toBeUndefined();
-    expect(pluginDeclarations(record)).toEqual([root, runtime]);
+    expect(pluginDeclarations(record)).toEqual([root]);
+  });
+  it("publishes one package contribution set for multiple runtimes", async () => {
+    const root = declaration({
+      contributes: {
+        actions: ["inspect"],
+        commands: [{ name: "probe", description: "Probe", action: "inspect" }],
+        events: [
+          {
+            topic: "probe.ready",
+            description: "Ready",
+            schema: "./ready.json",
+          },
+        ],
+        settings: [setting],
+      },
+    });
+    const first = child(root);
+    const second = parseRuntimeMd(
+      `---\n${JSON.stringify({ type: "agent", schedule: { stage: "post-turn" } })}\n---\n`,
+      "probe/runtimes/second/RUNTIME.md",
+      root.plugin,
+    );
+    const registry = createPluginRegistry();
+    registry.register(
+      entry({ packageManifest: root, manifests: [first, second] }),
+    );
+    registry.syncSessionActivations("session", ["probe"]);
+    expect(registry.getActivePluginDeclarations("session")).toEqual([
+      root.manifest,
+    ]);
+    expect(
+      registry.getActiveRuntimes("session").map((runtime) => runtime.name),
+    ).toEqual(["probe/run", "probe/second"]);
+    for (const runtime of registry.getActiveRuntimes("session")) {
+      expect(runtime.userSettings).toEqual([setting]);
+      expect(runtime).not.toHaveProperty("commands");
+      expect(runtime).not.toHaveProperty("events");
+    }
+    expect(root.manifest).not.toHaveProperty("stage");
+    expect(root.manifest).not.toHaveProperty("runtimeType");
   });
   it.each(["settings", "data", "commands", "events", "ui"])(
     "rejects package contribution %s on a child runtime",
@@ -106,13 +149,18 @@ describe("package declarations", () => {
       );
     },
   );
-  it("deduplicates a compact runtime and validates command action ownership", () => {
+  it("keeps inline execution separate and validates command action ownership", () => {
     const root = declaration({
       runtime: { type: "agent", schedule: { stage: "narrative" } },
       contributes: { settings: [setting] },
     });
     expect(
-      pluginDeclarations(entry({ packageManifest: root, manifests: [root] })),
+      pluginDeclarations(
+        entry({
+          packageManifest: root,
+          manifests: [compileInlineRuntime(root)!],
+        }),
+      ),
     ).toEqual([root]);
     expect(resolvePluginDeclarations([root]).userSettings).toEqual([setting]);
     const invalid = declaration({

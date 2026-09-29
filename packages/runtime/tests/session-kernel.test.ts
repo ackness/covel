@@ -104,7 +104,7 @@ describe("normalizeOutput", () => {
 
   describe("interaction.request", () => {
     it("should extract interactions array as separate proposals", () => {
-      const output = {
+      const effects = {
         interactions: [
           {
             type: "form",
@@ -121,7 +121,14 @@ describe("normalizeOutput", () => {
           },
         ],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       const interactionProposals = proposals.filter(
         (p) => p.type === "interaction.request",
@@ -135,7 +142,7 @@ describe("normalizeOutput", () => {
       expect(interactionProposals[1].payload.type).toBe("choice");
     });
 
-    it("should extract ui blocks from tool-call outputs as ui.render proposals", () => {
+    it("should extract explicit ui effects as ui.render proposals", () => {
       const output = { narrativeOutput: "Guide updated." };
       const proposals = normalizeOutput(
         output,
@@ -143,34 +150,15 @@ describe("normalizeOutput", () => {
         TURN_ID,
         SESSION_ID,
         "system",
-        [
-          {
-            output: {
-              ui: [
-                {
-                  type: "action-guide",
-                  topic: "Next move",
-                  categories: [
-                    { style: "safe", suggestions: ["先观察周围环境"] },
-                  ],
-                },
-              ],
+        {
+          ui: [
+            {
+              type: "action-guide",
+              topic: "Next move",
+              categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
             },
-          },
-          {
-            output: {
-              ui: [
-                {
-                  type: "action-guide",
-                  topic: "Next move",
-                  categories: [
-                    { style: "safe", suggestions: ["先观察周围环境"] },
-                  ],
-                },
-              ],
-            },
-          },
-        ],
+          ],
+        },
       );
 
       const renderProposals = proposals.filter((p) => p.type === "ui.render");
@@ -194,13 +182,20 @@ describe("normalizeOutput", () => {
 
   describe("state.patch", () => {
     it("should extract statePatches as separate proposals", () => {
-      const output = {
+      const effects = {
         statePatches: [
           { table: "world", field: "weather", value: "stormy" },
           { table: "player", field: "hp", value: 80 },
         ],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       const stateProposals = proposals.filter((p) => p.type === "state.patch");
       expect(stateProposals).toHaveLength(2);
@@ -219,10 +214,17 @@ describe("normalizeOutput", () => {
 
   describe("event.emit", () => {
     it("should extract events array as event.emit proposals", () => {
-      const output = {
+      const effects = {
         events: [{ topic: "combat.started", data: { enemies: 3 } }],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       const eventProposals = proposals.filter((p) => p.type === "event.emit");
       expect(eventProposals).toHaveLength(1);
@@ -232,7 +234,7 @@ describe("normalizeOutput", () => {
       });
     });
 
-    it("ignores typed plugin events that are not domain-event envelopes", () => {
+    it("does not turn business events or pluginData into effects", () => {
       const output = {
         events: [
           {
@@ -241,25 +243,36 @@ describe("normalizeOutput", () => {
             participantIds: ["player", "teacher"],
             description: "The player arrived at school.",
           },
+          { topic: "looks.like.domain.event", data: {} },
+        ],
+        pluginData: [
+          { namespace: "notes", key: "business", value: "kept as data" },
         ],
       };
 
       const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
 
-      expect(proposals.filter((p) => p.type === "event.emit")).toEqual([]);
-      expect(output.events).toHaveLength(1);
+      expect(proposals).toEqual([]);
+      expect(output.events).toHaveLength(2);
     });
   });
 
   describe("asset.generate", () => {
     it("emits asset.generate proposals from assetGenerations[]", () => {
-      const output = {
+      const effects = {
         assetGenerations: [
           { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
         ],
       };
 
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       expect(proposals).toHaveLength(1);
       expect(proposals[0].type).toBe("asset.generate");
@@ -271,7 +284,7 @@ describe("normalizeOutput", () => {
     });
 
     it("emits asset.generate proposals from assetGenerations[] and drops inline media", () => {
-      const output = {
+      const effects = {
         assetGenerations: [
           { ref: MEDIA_REF, modality: "image" },
           { base64: "abc", modality: "image" },
@@ -279,7 +292,14 @@ describe("normalizeOutput", () => {
         ],
       };
 
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       expect(proposals).toHaveLength(1);
       expect(proposals[0].type).toBe("asset.generate");
@@ -289,7 +309,7 @@ describe("normalizeOutput", () => {
       });
     });
 
-    it("ignores assets[] because assetGenerations[] is the runtime output contract", () => {
+    it("ignores assets[] in business output", () => {
       const output = {
         assets: [{ ref: MEDIA_REF_2, modality: "image" }],
       };
@@ -301,18 +321,22 @@ describe("normalizeOutput", () => {
   });
 
   describe("pluginData", () => {
-    // Function runtimes return `pluginData: [{namespace, key, value}]` to
-    // instruct the kernel to persist into their own plugin_data namespace.
-    // The normaliser picks this up the same way it does `events[]` /
-    // `statePatches[]`: a shape on the runtime output that turns into
-    // typed Proposals, committed through the standard commit pipeline.
+    // Function runtimes return `effects.pluginData` to request writes to their
+    // own plugin_data namespace through the commit pipeline.
     it("emits a single plugin.data proposal for one entry", () => {
-      const output = {
+      const effects = {
         pluginData: [
           { namespace: "images", key: "job-1", value: { ref: MEDIA_REF } },
         ],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       const dataProposals = proposals.filter((p) => p.type === "plugin.data");
       expect(dataProposals).toHaveLength(1);
@@ -324,14 +348,21 @@ describe("normalizeOutput", () => {
     });
 
     it("batches multiple entries into a single plugin.data.batch proposal", () => {
-      const output = {
+      const effects = {
         pluginData: [
           { namespace: "images", key: "job-1", value: { ref: MEDIA_REF } },
           { namespace: "images", key: "job-2", value: { ref: MEDIA_REF } },
           { namespace: "_jobs", key: "j1", value: { status: "done" } },
         ],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       const batches = proposals.filter((p) => p.type === "plugin.data.batch");
       expect(batches).toHaveLength(1);
@@ -352,7 +383,7 @@ describe("normalizeOutput", () => {
     });
 
     it("silently drops malformed entries and keeps valid ones", () => {
-      const output = {
+      const effects = {
         pluginData: [
           { namespace: "good", key: "k1", value: 1 },
           { namespace: "", key: "k2", value: 2 }, // empty namespace
@@ -362,7 +393,14 @@ describe("normalizeOutput", () => {
           { namespace: "good", key: "k4", value: null }, // null value is valid
         ],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       const batches = proposals.filter((p) => p.type === "plugin.data.batch");
       expect(batches).toHaveLength(1);
@@ -391,18 +429,17 @@ describe("normalizeOutput", () => {
       ).toHaveLength(0);
 
       expect(
-        normalizeOutput({ pluginData: [] }, SOURCE, TURN_ID, SESSION_ID).filter(
+        normalizeOutput({}, SOURCE, TURN_ID, SESSION_ID, "plugin", {
+          pluginData: [],
+        }).filter(
           (p) => p.type === "plugin.data" || p.type === "plugin.data.batch",
         ),
       ).toHaveLength(0);
 
       expect(
-        normalizeOutput(
-          { pluginData: [{ namespace: "", key: "", value: null }] },
-          SOURCE,
-          TURN_ID,
-          SESSION_ID,
-        ).filter(
+        normalizeOutput({}, SOURCE, TURN_ID, SESSION_ID, "plugin", {
+          pluginData: [{ namespace: "", key: "", value: null }],
+        }).filter(
           (p) => p.type === "plugin.data" || p.type === "plugin.data.batch",
         ),
       ).toHaveLength(0);
@@ -410,14 +447,14 @@ describe("normalizeOutput", () => {
   });
 
   describe("notifications", () => {
-    // pregame and similar plugins return a `notifications[]` array of
+    // pregame and similar plugins return `effects.notifications` with
     // { level, title, message } objects to surface system-level messages to
     // the player (welcome banner, world intro, etc.). Before this change the
     // kernel silently dropped them. We map each notification to a
     // narrative.append proposal with kind='system' so it reaches the chat
     // surface through the same commit path as any other system message.
     it("emits one narrative.append per notification with kind=system", () => {
-      const output = {
+      const effects = {
         notifications: [
           {
             level: "info",
@@ -427,7 +464,14 @@ describe("normalizeOutput", () => {
           { level: "warn", title: "⚠ 低灵根", message: "修炼速度较慢" },
         ],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       expect(proposals).toHaveLength(2);
       expect(proposals[0].type).toBe("narrative.append");
@@ -442,13 +486,20 @@ describe("normalizeOutput", () => {
     });
 
     it("omits missing title or message gracefully", () => {
-      const output = {
+      const effects = {
         notifications: [
           { level: "info", message: "仅有正文" },
           { level: "info", title: "仅有标题" },
         ],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
 
       expect(proposals).toHaveLength(2);
       expect(proposals[0].payload).toMatchObject({
@@ -462,16 +513,25 @@ describe("normalizeOutput", () => {
     });
 
     it("skips entries that have neither title nor message", () => {
-      const output = {
+      const effects = {
         notifications: [{ level: "info" }, { level: "warn", message: "" }],
       };
-      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+      const proposals = normalizeOutput(
+        {},
+        SOURCE,
+        TURN_ID,
+        SESSION_ID,
+        "plugin",
+        effects,
+      );
       expect(proposals).toHaveLength(0);
     });
 
     it("produces notifications in addition to narrativeOutput (story only)", () => {
       const output = {
         narrativeOutput: "World intro text.",
+      };
+      const effects = {
         notifications: [{ level: "info", title: "欢迎", message: "开始冒险" }],
       };
       // narrativeOutput + notifications both surface as narrative.append, but
@@ -483,6 +543,7 @@ describe("normalizeOutput", () => {
         TURN_ID,
         SESSION_ID,
         "story",
+        effects,
       );
 
       expect(proposals).toHaveLength(2);
@@ -499,10 +560,12 @@ describe("normalizeOutput", () => {
     });
   });
 
-  describe("mixed output", () => {
+  describe("business output and effects", () => {
     it("should extract all proposal types from a complex output", () => {
       const output = {
         narrativeOutput: "The story continues.",
+      };
+      const effects = {
         statePatches: [{ table: "world", field: "time", value: "night" }],
         interactions: [
           {
@@ -519,6 +582,7 @@ describe("normalizeOutput", () => {
         TURN_ID,
         SESSION_ID,
         "story",
+        effects,
       );
 
       expect(proposals).toHaveLength(3);
@@ -1284,22 +1348,25 @@ describe("processRuntimeResult", () => {
 
   it("should handle runtime with interactions (form block)", async () => {
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      narrativeOutput: "Choose your path.",
-      interactions: [
-        {
-          type: "form",
-          interactionId: "char-form",
-          title: "Character",
-          fields: [],
-          submitLabel: "Go",
+    const result = makeRuntimeResult(
+      { narrativeOutput: "Choose your path." },
+      {
+        effects: {
+          interactions: [
+            {
+              type: "form",
+              interactionId: "char-form",
+              title: "Character",
+              fields: [],
+              submitLabel: "Go",
+            },
+          ],
         },
-      ],
-    });
+      },
+    );
 
     // Use "story" outputKind so narrative.append fires alongside the form
-    // interaction — matches the previous contract where both events were
-    // expected together. Non-story kinds intentionally skip narrative.
+    // interaction. Non-story kinds intentionally skip narrative.
     const { events } = await processRuntimeResult(
       result,
       store as any,
@@ -1317,35 +1384,20 @@ describe("processRuntimeResult", () => {
     expect(store.addMessage).toHaveBeenCalledTimes(2);
   });
 
-  it("should commit ui blocks from tool-call outputs", async () => {
+  it("should commit explicit ui effects", async () => {
     const store = createMockStore();
     const result = makeRuntimeResult(
       { narrativeOutput: "Hidden guide text." },
       {
-        toolCalls: [
-          {
-            toolCallId: "call-1",
-            toolName: "generate-guide",
-            pluginId: "test-plugin",
-            runtimeId: "test-runtime",
-            turnId: TURN_ID,
-            input: {},
-            output: {
-              ui: [
-                {
-                  type: "action-guide",
-                  topic: "Where next?",
-                  categories: [
-                    { style: "safe", suggestions: ["先观察周围环境"] },
-                  ],
-                },
-              ],
+        effects: {
+          ui: [
+            {
+              type: "action-guide",
+              topic: "Where next?",
+              categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
             },
-            durationMs: 1,
-            approvalStatus: "auto-allowed",
-            timestamp: new Date().toISOString(),
-          },
-        ],
+          ],
+        },
       },
     );
 
@@ -1432,14 +1484,19 @@ describe("processRuntimeResult", () => {
     expect(msgArg.metadata.runtimeId).toBe("narrator");
   });
 
-  it("commits a fake runtime asset output through the event and trace path", async () => {
+  it("commits a runtime asset effect through the event and trace path", async () => {
     const emitter = makeEmitterSpy(SESSION_ID, TURN_ID);
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      assetGenerations: [
-        { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
-      ],
-    });
+    const result = makeRuntimeResult(
+      {},
+      {
+        effects: {
+          assetGenerations: [
+            { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
+          ],
+        },
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1473,14 +1530,19 @@ describe("processRuntimeResult", () => {
     ).toBeDefined();
   });
 
-  it("commits multiple asset.generate outputs in assetGenerations[] order", async () => {
+  it("commits multiple asset.generate effects in assetGenerations[] order", async () => {
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      assetGenerations: [
-        { ref: MEDIA_REF, modality: "image", meta: { prompt: "first" } },
-        { ref: MEDIA_REF_2, modality: "image", meta: { prompt: "second" } },
-      ],
-    });
+    const result = makeRuntimeResult(
+      {},
+      {
+        effects: {
+          assetGenerations: [
+            { ref: MEDIA_REF, modality: "image", meta: { prompt: "first" } },
+            { ref: MEDIA_REF_2, modality: "image", meta: { prompt: "second" } },
+          ],
+        },
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1504,9 +1566,14 @@ describe("processRuntimeResult", () => {
 
   it("reports an error when image generation finishes without a valid asset proposal", async () => {
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      assetGenerations: [{ base64: "abc", modality: "image" }],
-    });
+    const result = makeRuntimeResult(
+      {},
+      {
+        effects: {
+          assetGenerations: [{ base64: "abc", modality: "image" }],
+        },
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1558,11 +1625,16 @@ describe("processRuntimeResult", () => {
 
   it("keeps image generation logs empty when a valid asset proposal commits", async () => {
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      assetGenerations: [
-        { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
-      ],
-    });
+    const result = makeRuntimeResult(
+      {},
+      {
+        effects: {
+          assetGenerations: [
+            { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
+          ],
+        },
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1581,18 +1653,24 @@ describe("processRuntimeResult", () => {
 
   it("requires image-generation runtimes to emit assetGenerations[]", async () => {
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      assets: [
-        { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
-      ],
-      pluginData: [
-        {
-          namespace: "images",
-          key: "img-001",
-          value: { status: "done", ref: MEDIA_REF, prompt: "forest" },
+    const result = makeRuntimeResult(
+      {
+        assets: [
+          { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
+        ],
+      },
+      {
+        effects: {
+          pluginData: [
+            {
+              namespace: "images",
+              key: "img-001",
+              value: { status: "done", ref: MEDIA_REF, prompt: "forest" },
+            },
+          ],
         },
-      ],
-    });
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1620,18 +1698,23 @@ describe("processRuntimeResult", () => {
 
   it("reports an error when image generation writes inline media into pluginData.images", async () => {
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      assetGenerations: [
-        { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
-      ],
-      pluginData: [
-        {
-          namespace: "images",
-          key: "job-1",
-          value: { status: "done", url: "https://cdn/x.png" },
+    const result = makeRuntimeResult(
+      {},
+      {
+        effects: {
+          assetGenerations: [
+            { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
+          ],
+          pluginData: [
+            {
+              namespace: "images",
+              key: "job-1",
+              value: { status: "done", url: "https://cdn/x.png" },
+            },
+          ],
         },
-      ],
-    });
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1680,18 +1763,23 @@ describe("processRuntimeResult", () => {
     // Replacement image plugins declare their own namespaces; enforcement
     // scopes to the image-flow runtime contract, not the "images" name.
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      assetGenerations: [
-        { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
-      ],
-      pluginData: [
-        {
-          namespace: "gallery",
-          key: "job-1",
-          value: { status: "done", base64: "aGVsbG8=" },
+    const result = makeRuntimeResult(
+      {},
+      {
+        effects: {
+          assetGenerations: [
+            { ref: MEDIA_REF, modality: "image", meta: { prompt: "forest" } },
+          ],
+          pluginData: [
+            {
+              namespace: "gallery",
+              key: "job-1",
+              value: { status: "done", base64: "aGVsbG8=" },
+            },
+          ],
         },
-      ],
-    });
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1714,12 +1802,16 @@ describe("processRuntimeResult", () => {
 
   it("keeps image generation logs empty for pending async asset outputs", async () => {
     const store = createMockStore();
-    const result = makeRuntimeResult({
-      status: "pending",
-      pluginData: [
-        { namespace: "jobs", key: "job-1", value: { status: "pending" } },
-      ],
-    });
+    const result = makeRuntimeResult(
+      { status: "pending" },
+      {
+        effects: {
+          pluginData: [
+            { namespace: "jobs", key: "job-1", value: { status: "pending" } },
+          ],
+        },
+      },
+    );
 
     const { events, failedProposals } = await processRuntimeResult(
       result,
@@ -1741,18 +1833,22 @@ describe("processRuntimeResult", () => {
     });
   });
 
-  // A function handler that reports its own terminal outcome — RuntimeResult.status
-  // stays "success" while output.status carries failed/skipped/error (see
-  // turn-function-runtime) — deliberately produces no asset.generate proposal and
-  // must not be flagged as asset_missing.
+  // A business output reporting a failed/skipped/error operation deliberately
+  // produces no asset.generate effect and must not be flagged as asset_missing.
   it.each(["failed", "skipped", "error"])(
     "keeps image generation logs empty for %s handler outputs",
     async (status) => {
       const store = createMockStore();
-      const result = makeRuntimeResult({
-        status,
-        pluginData: [{ namespace: "jobs", key: "job-1", value: { status } }],
-      });
+      const result = makeRuntimeResult(
+        { status },
+        {
+          effects: {
+            pluginData: [
+              { namespace: "jobs", key: "job-1", value: { status } },
+            ],
+          },
+        },
+      );
 
       const { events, failedProposals } = await processRuntimeResult(
         result,

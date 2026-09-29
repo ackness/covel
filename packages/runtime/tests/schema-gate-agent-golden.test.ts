@@ -61,12 +61,14 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
 function makeDeps(
   llm: LLMAdapter,
   outputSchema?: Record<string, unknown>,
+  outputContractSchema?: Record<string, unknown>,
 ): TurnExecutorDeps {
   return {
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "Return JSON.",
       ...(outputSchema ? { outputSchema } : {}),
+      ...(outputContractSchema ? { outputContractSchema } : {}),
     }),
     llm,
     store: createMemoryStore(),
@@ -175,6 +177,63 @@ describe("agent schema gate (golden)", () => {
 });
 
 describe("ordinary and resumed private schema parity", () => {
+  it("passes separated effects and completion through ordinary and resumed results", async () => {
+    const worldEvent = { id: "founding", description: "The city was founded" };
+    const output = {
+      name: "Atlas",
+      events: [worldEvent],
+      notifications: [{ message: "Ready" }],
+      preGameDone: true,
+    };
+    const m = manifest({ outputContract: "world-ir-provider@1" });
+    const deps = makeDeps(
+      new FixedContentLLM(JSON.stringify(output)),
+      undefined,
+      {
+        type: "object",
+        required: ["events", "name"],
+        properties: {
+          events: { type: "array" },
+          name: { type: "string" },
+        },
+      },
+    );
+    const ordinary = await executeTurn(input("effect-parity"), [m], deps);
+    const resumed = await resumeSuspendedRuntime(
+      {
+        id: "effect-suspension",
+        sessionId: "effect-parity",
+        turnId: "effect-parity-turn",
+        pluginId: m.pluginId,
+        runtimeId: m.name,
+        reason: "input",
+        resumeSchema: {},
+        createdAt: "2026-01-01T00:00:00Z",
+        pendingContinuation: {
+          messages: [],
+          toolCallsSoFar: [],
+          pendingProposals: [],
+          executionContext: {
+            executionId: "previous",
+            origin: "manual",
+            countPolicy: "none",
+          },
+        },
+      },
+      {},
+      m,
+      deps,
+    );
+    for (const result of [ordinary.runtimeResults[0], resumed]) {
+      expect(result?.status).toBe("success");
+      expect(result?.output).toEqual({ name: "Atlas", events: [worldEvent] });
+      expect(result?.effects).toEqual({
+        notifications: [{ message: "Ready" }],
+      });
+      expect(result?.completion).toBe("done");
+    }
+  });
+
   it.each([null, ""])(
     "rejects empty terminal content (%s), retaining resumed writes and continuation",
     async (content) => {
@@ -330,7 +389,14 @@ describe("ordinary and resumed private schema parity", () => {
         name: "complete",
         description: "Return structured data",
         parameters: z.object({}),
-        execute: async () => (valid ? { prompt: "portrait" } : { wrong: true }),
+        execute: async () =>
+          valid
+            ? {
+                prompt: "portrait",
+                interaction: { interactionId: "form-1", type: "form" },
+                ui: [{ id: "card-1", type: "form" }],
+              }
+            : { wrong: true },
       });
       deps.toolExecutor = createToolExecutor({
         findTool: () => complete,
@@ -368,6 +434,15 @@ describe("ordinary and resumed private schema parity", () => {
       ).toBe(valid ? "success" : "failed");
       expect(resumed.status).toBe(ordinary.runtimeResults[0]?.status);
       expect(resumed.output).toEqual(ordinary.runtimeResults[0]?.output);
+      if (valid) {
+        for (const result of [ordinary.runtimeResults[0], resumed]) {
+          expect(result?.output).toEqual({ prompt: "portrait" });
+          expect(result?.effects).toEqual({
+            interactions: [{ interactionId: "form-1", type: "form" }],
+            ui: [{ id: "card-1", type: "form" }],
+          });
+        }
+      }
     },
   );
 });

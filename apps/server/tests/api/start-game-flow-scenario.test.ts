@@ -81,6 +81,7 @@ function makeSummary(id: string): PluginSummary {
 
 function makeEntry(id: string, loaded: LoadedRuntime): PluginRegistryEntry {
   const parsed = {
+    runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
     manifest: loaded.manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -89,7 +90,7 @@ function makeEntry(id: string, loaded: LoadedRuntime): PluginRegistryEntry {
     id,
     source: "builtin",
     summary: makeSummary(id),
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",

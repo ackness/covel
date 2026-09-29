@@ -4,9 +4,14 @@ import path from "node:path";
 import {
   pluginManifestSchema,
   runtimeAuthoringManifestSchema,
+  resolveI18nText,
 } from "@covel/shared";
 import type { PluginManifest } from "@covel/shared";
-import type { ParsedPluginMd } from "./types.js";
+import type {
+  ParsedPluginMd,
+  ParsedRuntimeMd,
+  PackageManifest,
+} from "./types.js";
 import { reconcileLocalizedManifest } from "./localized-manifest.js";
 import { compileRuntimeManifest } from "./compile-manifest.js";
 
@@ -39,8 +44,7 @@ export function parsePluginMd(
     return {
       sourcePath: filePath,
       plugin,
-      ...(plugin.runtime ? { runtime: plugin.runtime } : {}),
-      manifest: compileRuntimeManifest(plugin, plugin.runtime, plugin.id),
+      manifest: normalizePackageManifest(plugin),
       promptTemplate: body,
       rawFrontmatter: data,
     };
@@ -53,7 +57,7 @@ export function parseRuntimeMd(
   filePath: string,
   plugin: PluginManifest,
   canonicalFrontmatter?: Readonly<Record<string, unknown>>,
-): ParsedPluginMd {
+): ParsedRuntimeMd {
   try {
     const { body, data } = frontmatter(content, filePath, canonicalFrontmatter);
     const runtime = runtimeAuthoringManifestSchema.parse(data);
@@ -74,4 +78,57 @@ export function parseRuntimeMd(
   } catch (error) {
     return invalid(filePath, error);
   }
+}
+
+/** Normalize package declarations independently of runtime compilation. */
+export function normalizePackageManifest(
+  plugin: PluginManifest,
+): PackageManifest {
+  const c = plugin.contributes;
+  return {
+    name: plugin.id,
+    pluginId: plugin.id,
+    description: resolveI18nText(plugin.description, "en") ?? "",
+    pluginType: plugin.kind === "core" ? "core-plugin" : "plugin",
+    displayName: plugin.displayName,
+    version: plugin.version,
+    tags: plugin.tags,
+    entry: plugin.entry,
+    extensions: c?.extensions,
+    commands: c?.commands,
+    events: c?.events,
+    userSettings: c?.settings,
+    worldProjections: c?.worldProjections,
+    ui: c?.ui,
+    dataSchemas:
+      c?.data &&
+      Object.fromEntries(
+        Object.entries(c.data).map(
+          ([namespace, { version, accepts, ...decl }]) => [
+            namespace,
+            {
+              ...decl,
+              namespace,
+              schemaVersion: version,
+              acceptsWorldData: Boolean(accepts?.length),
+            },
+          ],
+        ),
+      ),
+  };
+}
+
+/** Compile only explicitly declared inline execution. */
+export function compileInlineRuntime(
+  parsed: ParsedPluginMd,
+): ParsedRuntimeMd | undefined {
+  const runtime = parsed.plugin.runtime;
+  if (!runtime) return undefined;
+  return {
+    sourcePath: parsed.sourcePath,
+    runtime,
+    manifest: compileRuntimeManifest(parsed.plugin, runtime, parsed.plugin.id),
+    promptTemplate: parsed.promptTemplate,
+    rawFrontmatter: parsed.rawFrontmatter,
+  };
 }
