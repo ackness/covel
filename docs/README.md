@@ -4,7 +4,7 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 
 > 🇬🇧 English overview: [`../README.md`](../README.md)
 
-当前文档按框架 **0.0.35** 的实现同步。框架版本以根 [`package.json`](../package.json) 为准，
+当前文档按框架 **0.0.42** 的实现同步。框架版本以根 [`package.json`](../package.json) 为准，
 插件与世界包可独立维护版本；协议/schema 版本和历史变更记录不随应用版本统一替换。
 
 正在逐步建设[文档 v2](./v2/README.md)：按游玩、创建世界、开发插件、验证与分发组织阅读路径，
@@ -15,6 +15,7 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | 你要做什么               | 入口                                                                               | 接着看                                                                                                               |
 | ------------------------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | 第一次跑项目             | [`../README.md`](../README.md)                                                     | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                                               |
+| 升级到 v0.0.42           | [`guide/upgrade-0.0.42.md`](./guide/upgrade-0.0.42.md)                             | [English](./guide/upgrade-0.0.42.en.md), [`CHANGELOG.md`](./CHANGELOG.md)                                            |
 | 写插件                   | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md)                         | [`reference/plugins.md`](./reference/plugins.md), [`reference/tools.md`](./reference/tools.md)                       |
 | 写零代码插件             | [`guide/plugin-authoring-zero-code.md`](./guide/plugin-authoring-zero-code.md)     | [`guide/plugin-authoring-agent.md`](./guide/plugin-authoring-agent.md)                                               |
 | 给插件加 UI              | [`guide/plugin-ui-runtime-guidelines.md`](./guide/plugin-ui-runtime-guidelines.md) | [`reference/ui-panels.md`](./reference/ui-panels.md), [`reference/ui-components.md`](./reference/ui-components.md)   |

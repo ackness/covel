@@ -23,14 +23,15 @@
 
 ## App And Runtime
 
-| Goal                                  | Start here                                       | Reference                                                                                      |
-| ------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| 配置模型用途、单局 runtime 与桌面目录 | [`desktop-config.md`](./desktop-config.md)       | [`../reference/slots.md`](../reference/slots.md), [`../reference/api.md`](../reference/api.md) |
-| 构建、签名和公证桌面版                | [`desktop-packaging.md`](./desktop-packaging.md) | [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                                                     |
-| 配置环境变量                          | [`env-registry.md`](./env-registry.md)           | `packages/shared/src/env/registry.ts`                                                          |
-| 做主题包                              | [`themes.md`](./themes.md)                       | [`../reference/theme-packages.md`](../reference/theme-packages.md)                             |
-| 写外部 Agent skill                    | [`skills.md`](./skills.md)                       | `.claude/skills/`                                                                              |
-| 做浏览器 E2E                          | [`e2e-testing.md`](./e2e-testing.md)             | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                                               |
+| Goal                                  | Start here                                                                     | Reference                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| 升级到 v0.0.42 并保留回退环境         | [`upgrade-0.0.42.md`](./upgrade-0.0.42.md) / [English](./upgrade-0.0.42.en.md) | [`../reference/plugins.md`](../reference/plugins.md), [`env-registry.md`](./env-registry.md)   |
+| 配置模型用途、单局 runtime 与桌面目录 | [`desktop-config.md`](./desktop-config.md)                                     | [`../reference/slots.md`](../reference/slots.md), [`../reference/api.md`](../reference/api.md) |
+| 构建、签名和公证桌面版                | [`desktop-packaging.md`](./desktop-packaging.md)                               | [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                                                     |
+| 配置环境变量                          | [`env-registry.md`](./env-registry.md)                                         | `packages/shared/src/env/registry.ts`                                                          |
+| 做主题包                              | [`themes.md`](./themes.md)                                                     | [`../reference/theme-packages.md`](../reference/theme-packages.md)                             |
+| 写外部 Agent skill                    | [`skills.md`](./skills.md)                                                     | `.claude/skills/`                                                                              |
+| 做浏览器 E2E                          | [`e2e-testing.md`](./e2e-testing.md)                                           | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                                               |
 
 ## Writing Rules
 

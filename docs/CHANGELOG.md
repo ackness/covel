@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.42] - 2026-09-29
+
+This release introduces versioned plugin extension contracts and the kernel-owned World Model, and hardens execution, persistence, and recovery across the server, browser, and desktop shell (#89). It replaces several development-era contracts; follow the [v0.0.42 upgrade guide](./guide/upgrade-0.0.42.en.md) before opening existing development data.
+
+### Added
+
+- **Versioned plugin extensions.** Declared providers can contribute prompt segments, history transforms, world context, compaction, image workflows, and UI slots. The host validates registrations, input and output, ordering, timeouts, and failure policy for single, collect, and pipeline calls. Contract-based `provides`, `requires`, `optional`, and `conflicts` drive dependency admission instead of plugin-specific kernel rules.
+- **World Model and portable world data.** The kernel owns session character schemas and records; plugin views are read-only, and character changes use domain proposals. Lorebook entries have world, player, or plugin ownership. World imports can target versioned contracts, and authored time definitions use `world.time-definition@1`.
+- **Server-projected stage slots.** Backdrops, cast, dialogue, choices, and character visuals are validated and projected on the server. The client consumes public slot data, including recovered state after stream resets, rather than plugin-private namespaces.
+- **Plugin-owned memory and development reload.** Memory extraction uses plugin data and detached settle jobs; versioned extensions supply history transforms and compaction. Development reload can refresh an approved community plugin while in-flight work retains its admitted generation; later executions resolve the updated dependency graph.
+
+### Changed
+
+- **Package declarations and execution are separate.** Root `PLUGIN.md` declares the package and its contributions once; executable runtimes use explicit runtime manifests, including `RUNTIME.md` in multi-runtime packages. A package with no executable runtime schedules nothing. Static UI can load without importing plugin code.
+- **Runtime results have distinct channels.** `output` is the business value, `effects` requests domain writes or events, and `completion` controls turn/setup state. Function return objects with fields such as `events` or `pluginData` are no longer treated as implicit effects. Validation, bindings, and exports use the exact function value, including scalars and `null`.
+- **Detached work has explicit admission and snapshots.** Required settle jobs share a bounded wait budget, and timed-out waits do not cancel the job. Structured form submissions are frozen at admission; complete `turn-digest@1` snapshots protect resumed and detached work from later input. Pausing or ending a session waits for relevant settle work.
+
+### Fixed
+
+- **Provider completion cannot publish partial output.** Streams require a valid terminal marker, and provider error bodies remain errors even under HTTP 200. Failed or incomplete output cannot commit effects or be joined to a retry; supported empty transient failures can still retry or fall back.
+- **Vector and media persistence preserve ownership.** Vector indexes bind atomically to an embedding-model identity and reject drift, including same-dimension models; restored sessions rebuild derived vector progress. Media blobs publish before metadata, and world imports pin shared content through commit or rollback so another session's bytes remain available.
+- **Browser and desktop recovery respect current state.** Stale session responses and subscriptions cannot replace a newer view; missing workspace mirrors recover from local checkpoints. Disabled-plugin actions are rejected at admission. Plugin HTML runs in nested sandboxed frames. Desktop sidecar recovery cancels stale starts, reconnects to the recovered port, and bounds repeated crashes; proxy settings persist before transport changes.
+- **Provider keys and world imports keep their contracts.** Atomic provider-key patches preserve omitted providers. WorldIR statement IDs map to stable `world-ir-<SHA256(statement.id)>` rule IDs with `sourceStatementId` provenance. Image generation respects cancellation and polling deadlines, and deep merge preserves special JSON keys as own data.
+
+### Breaking plugin and data contracts
+
+- Update custom loaders, hosts, and plugins to the current package/runtime manifests, declared dependencies, typed extension handlers, and explicit runtime `output`/`effects`/`completion`. `loadPluginDefinition()` now exposes `packageManifest` and runtime `manifests`; static UI uses `loadPluginUi()`. Host extension scopes read data through `readPluginData(pluginId, namespace)`; provider handlers use owner-bound `ctx.pluginData.get/list`. Cross-package named runtime references and undeclared runtime contracts are rejected.
+- Update integrations for structured `ctx.session.lastPlayerInput` (`ctx.playerMessage` remains text), complete detached turn digests, and separate `hostState`, `sessionState`, and `serverCodeApproved`. Loading host code does not grant session authorization. Image roles resolve explicitly; narrative mode requires `scene-stage@1`.
+- Custom settings and desktop key adapters must apply provider patches atomically: a string sets a key, `null` deletes it, and omission preserves it. Browser localStorage secret writes require Web Locks in a supported HTTPS or localhost context. Reimport old WorldIR rules to obtain the new stable IDs; changing an embedding model requires a fresh development session and index.
+
+### Upgrade notes
+
+- **There is no automated compatibility layer or migration for old databases, sessions, or schemas.** Stop the server and back up the database plus SQLite WAL/SHM files before using a fresh database path or rebuilding development storage against the current schema. The old Lorebook table can fail startup with `no such column: owner`; creating a new session alone does not repair that database. Recreate old sessions, memory, snapshots, browser checkpoints, and incompatible world data rather than restoring them into the new contract. Follow the [upgrade guide](./guide/upgrade-0.0.42.en.md) for the reset sequence.
+- Update the server, Web client, desktop shell, and framework packages together. Plugin and world packages are versioned separately from Covel and must be updated to their matching contracts; installed user copies do not change when their source repositories change. Validate custom plugins with `pnpm validate:plugin <plugin-directory>` before activation.
+- Development reload refreshes directly loaded entry, handler, and guard modules; changes to relative dependency modules require a server restart. Community server code still runs in the host process. Already-claimed memory jobs are not automatically replayed after a process crash.
+- macOS Apple Silicon and Windows x64 artifacts remain unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
+
 ## [0.0.41] - 2026-09-27
 
 This release makes plugin package declarations composable, tightens activation and service lifecycles, and adds tools for developing multiple cooperating plugins (#86).
