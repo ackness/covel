@@ -20,6 +20,8 @@ cp .env.llm.example .env.llm   # fill in API keys
 pnpm dev                       # start frontend + backend
 ```
 
+After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each new clone to install the local Git pre-push hook. It preserves the existing pre-commit hook and refuses to overwrite an unrelated pre-push hook; resolve that conflict yourself before installing. The hook uses `mise exec` to select the Node 26 and pnpm 11.22 toolchain from `mise.toml`, so install mise and those tools first. The workflow checks in `pnpm check` also require `actionlint` (installation instructions below).
+
 ### PostgreSQL 18 development environment
 
 Create the root `.env` as above and keep `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, and `DATABASE_URL` consistent. Starting only the database does not require the Docker app's operator token:
@@ -69,6 +71,7 @@ pnpm check                                 # CI static checks and script regress
 pnpm deps:check                            # Fallow dependency and import checks
 pnpm analyze                               # Fallow dead code, duplication, and complexity report
 pnpm test                                  # everything
+pnpm check:push                            # manually check committed HEAD
 pnpm --filter @covel/runtime test          # single package
 pnpm test:pg                               # required PostgreSQL integration checks
 pnpm e2e:smoke                             # deterministic CI Chromium flows
@@ -76,6 +79,8 @@ pnpm e2e                                   # Playwright end-to-end
 ```
 
 `pnpm check` runs peer dependency, type, package boundary, dependency declaration, plugin manifest, i18n, script regression, and workflow checks. Workflow validation requires `actionlint` (CI pins 1.7.12; install locally with `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`). `pnpm lint` and `pnpm test` no longer build Web assets implicitly; run `pnpm build` separately to validate packaging.
+
+Once installed, the hook checks every distinct, non-deleted committed tip in each `git push`, including refs other than the current HEAD. For each tip it makes a disposable clean clone and runs `pnpm install --frozen-lockfile`, `pnpm check`, `VITEST_MAX_WORKERS=2 pnpm test --concurrency=2`, and `pnpm e2e --list`; a failure blocks the push. The clone does not copy the working tree's `.env`, `node_modules`, `test-results`, or `.turbo`, and the check removes `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS` to avoid connecting to a developer database. Expect several extra minutes per push. Run `pnpm check:push` to check the committed HEAD before pushing. This check collects E2E tests but does not run PostgreSQL integration, browser smoke, or release/build packaging checks. Run `pnpm test:pg`, `pnpm e2e:smoke`, `pnpm e2e`, `pnpm build`, and release checks explicitly when relevant, and rely on CI for the complete gate.
 
 [Fallow](https://github.com/fallow-rs/fallow) is installed as a root dev dependency, replacing Knip. `deps:check` fails on unused dependencies, unlisted dependencies, and unresolved imports. `analyze` provides the full report for reviewed cleanup without gating on every finding. `.fallowrc.jsonc` declares file-based routes, dynamically loaded plugins, and manual scripts; update it when adding such entry points to avoid false positives. The tool version follows the workspace's seven-day minimum release age.
 
@@ -111,7 +116,7 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 
 1. Branch off `main` into a feature branch
 2. Open a PR targeting `main` after pushing
-3. Make sure CI is green; run `pnpm check` and `pnpm test` locally first
+3. Wait for the pre-push checks, then make sure CI is green; run the relevant database or UI checks separately
 4. Describe **why** the change exists and **how to verify** it
 5. For breaking changes, add a `BREAKING CHANGE:` footer
 

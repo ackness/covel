@@ -16,6 +16,8 @@
     "check:manifests": "node scripts/check-plugin-manifests.mjs",
     "check:scripts": "node --test scripts/tests/*.test.mjs",
     "check:workflows": "node scripts/check-workflows.mjs",
+    "check:push": "node scripts/check-push.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
     "deps:check": "fallow dead-code --unused-deps --unlisted-deps --unresolved-imports",
     "analyze": "fallow --score",
     "clean": "turbo clean",
