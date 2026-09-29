@@ -15,13 +15,13 @@
 
 import { describe, expect, it, vi } from "vitest";
 import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import { tool, getPendingProposals } from "@covel/tools";
+import { tool } from "@covel/tools";
 import { z } from "zod";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
@@ -293,7 +293,7 @@ describe("ordinary and resumed private schema parity", () => {
       const resumed = await resumeSuspendedRuntime(suspension, {}, m, deps);
       expect(resumed.status).toBe("failed");
       expect(resumed.error).toContain("output did not match output.schema");
-      expect(getPendingProposals(resumed.output)).toEqual([]);
+      expect(resumed.pendingProposals ?? []).toEqual([]);
       await finalizeExecution({
         store,
         sessionId: turnInput.sessionId,
@@ -321,7 +321,7 @@ describe("ordinary and resumed private schema parity", () => {
       nextContent = validContent;
       const retry = await resumeSuspendedRuntime(suspension, {}, m, deps);
       expect(retry.status).toBe("success");
-      expect(getPendingProposals(retry.output)).toEqual([proposal]);
+      expect(retry.pendingProposals).toEqual([proposal]);
     },
   );
 
@@ -361,7 +361,7 @@ describe("ordinary and resumed private schema parity", () => {
     expect(ordinary.runtimeResults[0]?.status).toBe(status);
     expect(resumed.status).toBe(status);
     expect(resumed.output).toEqual(ordinary.runtimeResults[0]?.output);
-    expect(getPendingProposals(resumed.output)).toEqual([]);
+    expect(resumed.pendingProposals ?? []).toEqual([]);
     expect(await deps.store!.listMessages("schema-parity")).toEqual([]);
   });
 

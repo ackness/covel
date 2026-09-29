@@ -379,6 +379,9 @@ async function executeResumedRuntime(
     turnId: suspension.turnId,
     status: "success",
     output: finalized.output,
+    ...(finalized.pendingProposals
+      ? { pendingProposals: finalized.pendingProposals }
+      : {}),
     ...(finalized.effects ? { effects: finalized.effects } : {}),
     ...(finalized.completion ? { completion: finalized.completion } : {}),
     toolCalls: collectedToolCalls,

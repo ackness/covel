@@ -14,7 +14,7 @@ import {
   loadRuntime,
 } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { tool } from "@covel/tools";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";

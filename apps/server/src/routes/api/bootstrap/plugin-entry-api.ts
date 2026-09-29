@@ -5,7 +5,8 @@ import type {
   PluginToolkit,
   PluginEntryScope,
 } from "@covel/runtime";
-import { HOOK_EVENTS, type RpcTrustLevel } from "@covel/shared";
+import type { RpcTrustLevel } from "@covel/shared";
+import { validatePluginHookRegistration } from "@covel/runtime";
 import {
   shortId,
   shortIdBatch,
@@ -17,19 +18,6 @@ import type { BootstrapPluginEntriesParams } from "./plugin-entry.js";
 import { registerNamespaced } from "./plugin-wires.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
 
-const HOOK_EVENT_SET: ReadonlySet<string> = new Set(HOOK_EVENTS);
-const hookOptionsSchema = z
-  .object({
-    match: z
-      .custom(
-        (value) => typeof value === "function",
-        "expected a predicate function",
-      )
-      .optional(),
-    timeoutMs: z.number().finite().positive().optional(),
-    enforce: z.enum(["pre", "normal", "post"]).optional(),
-  })
-  .strict();
 const rpcOptionsSchema = z
   .object({
     description: z.string().optional(),
@@ -134,19 +122,12 @@ export function buildEntryApi(
     },
     on(event, handler, options) {
       batch.stage(() => {
-        validateOptions(hookOptionsSchema, "on", options);
-        if (!HOOK_EVENT_SET.has(event)) {
-          throw new PluginRegistrationError(
-            "on",
-            `unknown hook event "${event}"`,
-          );
-        }
-        if (typeof handler !== "function") {
-          throw new PluginRegistrationError(
-            "on",
-            `hook "${event}" expects a handler function`,
-          );
-        }
+        validatePluginHookRegistration(
+          event,
+          handler,
+          options,
+          (message) => new PluginRegistrationError("on", message),
+        );
         hookSeq += 1;
         const sessionGuardedHandler: typeof handler = async (ctx, payload) => {
           if (

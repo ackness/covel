@@ -1,6 +1,10 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
 import { makeManualFunctionContext } from "@covel/plugin-test-utils";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../handler.js";
 
 function ctx(manualPayload) {
@@ -19,7 +23,7 @@ const avatar = {
 };
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business return
-// is under `result.value`; pending proposals stay on the envelope (result).
+// is under `getToolContent(result).value`; pending proposals stay on the envelope (result).
 describe("character-presence handler", () => {
   it("saves presence refs by character id", async () => {
     const result = await handler(
@@ -38,7 +42,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       characterId: "mentor-lin",
     });
@@ -78,7 +82,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result.value.characterId).toBe("npc:archivist-1");
+    expect(getToolContent(result).value.characterId).toBe("npc:archivist-1");
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.key).toBe("npc:archivist-1");
   });
@@ -139,7 +143,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       characterId: "mentor-lin",
     });
@@ -178,7 +182,7 @@ describe("character-presence handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       characterId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
     });

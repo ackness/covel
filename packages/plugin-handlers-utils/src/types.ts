@@ -5,7 +5,7 @@ export type JsonValue =
   | boolean
   | null
   | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue | undefined };
+  | { readonly [key: string]: JsonValue };
 // A type literal (not an interface) so the implicit index signature keeps this
 // assignable to the kernel's loose-object media ref contract.
 export type MediaReference = {

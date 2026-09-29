@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { buildContext } from "../src/index.js";
+import { buildContextSync as buildContext } from "../src/context-builder.js";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   type PromptSegment,

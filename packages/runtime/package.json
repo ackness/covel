@@ -28,6 +28,7 @@
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@covel/plugin-handlers-utils": "workspace:*"
   }
 }

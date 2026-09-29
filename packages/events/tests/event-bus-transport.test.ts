@@ -1,10 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
-import {
-  createMemoryStore,
-  type DataStore,
-  type EventRecord,
-} from "@covel/store";
+import { type DataStore, type EventRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   createEventBus,
   RECEIVE_GAP_FLUSH_MS,

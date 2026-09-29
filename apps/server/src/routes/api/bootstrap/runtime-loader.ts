@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { RuntimeManifest } from "@covel/shared";
 import {
   loadRuntime as loadRuntimeFromDisk,
+  resolveRuntimePrompt,
   getPluginTrustInfo,
   type PluginRegistry,
   type ParsedRuntimeMd,
@@ -38,7 +39,7 @@ export interface RuntimeLoader {
     fn: (pluginId: string, sessionId?: string) => Promise<void>,
   ): void;
   /** The entry manager checks publication consistency after asynchronous loading. */
-  capture(sessionId: string): Promise<RuntimeArtifactSnapshot>;
+  capture(sessionId: string, locale?: string): Promise<RuntimeArtifactSnapshot>;
   prepareGeneration(args: {
     discovery: PluginDiscoveryResult;
     definition: PluginDefinition;
@@ -58,7 +59,9 @@ export function createRuntimeLoader(
   const artifacts = new Map<string, Promise<LoadedRuntime>>();
   const snapshots = new AsyncLocalStorage<{
     sessionId: string;
+    locale?: string;
     loaded: ReadonlyMap<string, LoadedRuntime>;
+    prompts: ReadonlyMap<string, ParsedRuntimeMd>;
   }>();
 
   const authorized = async (
@@ -106,7 +109,13 @@ export function createRuntimeLoader(
           throw new Error(
             `Runtime ${manifest.name} was not admitted in this execution snapshot`,
           );
-        return loaded;
+        return {
+          ...loaded,
+          promptTemplate: resolveRuntimePrompt(
+            captured.prompts.get(manifest.name)!,
+            locale ?? captured.locale,
+          ),
+        };
       }
       // No runtime module may be imported before entry authorization succeeds.
       await boundEnsurePluginEntry(pluginId, sessionId);
@@ -200,7 +209,7 @@ export function createRuntimeLoader(
         for (const [key, value] of staged) artifacts.set(key, value);
       };
     },
-    async capture(sessionId) {
+    async capture(sessionId, locale) {
       const existing = snapshots.getStore();
       if (existing) {
         if (existing.sessionId !== sessionId)
@@ -210,20 +219,31 @@ export function createRuntimeLoader(
       const session = await store.getSession(sessionId);
       if (!session)
         throw new Error("Session not found while capturing runtimes");
+      const effectiveLocale = locale ?? session.locale;
       const loaded = new Map<string, LoadedRuntime>();
+      const prompts = new Map<string, ParsedRuntimeMd>();
       for (const pluginId of session.activePlugins) {
         for (const parsed of manifestCache.get(pluginId) ?? []) {
           if (!(await authorized(pluginId, parsed.manifest.name, sessionId)))
             continue;
           const runtime = await loadRuntimeFn(
             parsed.manifest,
-            session.locale,
+            effectiveLocale,
             sessionId,
           );
-          if (runtime) loaded.set(parsed.manifest.name, runtime);
+          if (runtime) {
+            loaded.set(parsed.manifest.name, runtime);
+            prompts.set(parsed.manifest.name, parsed);
+          }
         }
       }
-      return { run: (fn) => snapshots.run({ sessionId, loaded }, fn) };
+      return {
+        run: (fn) =>
+          snapshots.run(
+            { sessionId, locale: effectiveLocale, loaded, prompts },
+            fn,
+          ),
+      };
     },
   };
 }

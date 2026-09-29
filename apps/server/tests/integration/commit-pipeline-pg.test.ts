@@ -19,7 +19,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { Proposal } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
-import { createPgStore } from "@covel/store";
+import { createPgStore } from "@covel/store/postgres";
 import { createCommitPipeline } from "@covel/runtime";
 import {
   createIsolatedPgDatabase,

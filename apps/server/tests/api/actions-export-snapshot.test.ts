@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import {
   createPluginRegistry,
@@ -44,6 +44,11 @@ runtime:
       'export default async function() { return { outcome: "success", value: { narrativeOutput: "The journey continues." } }; }',
     );
     await fs.writeFile(
+      path.join(root, "PLUGIN.en.md"),
+      (await fs.readFile(path.join(root, "PLUGIN.md"), "utf-8")) +
+        "English captured body.\n",
+    );
+    await fs.writeFile(
       path.join(root, "output.json"),
       JSON.stringify({
         type: "object",
@@ -82,7 +87,7 @@ runtime:
         approvalScopeNonce: "approval-fixture",
         sessionIncarnationNonce: "session-fixture",
       },
-      locale: "en",
+      locale: "zh-CN",
       createdAt: now,
       updatedAt: now,
     });
@@ -100,9 +105,26 @@ runtime:
       c.set("pluginRegistry", registry);
       c.set("sessionLock", createInProcessSessionLock());
       c.set("eventBus", createEventBus(store));
-      c.set("loadRuntimeFn", loader.loadRuntimeFn);
-      c.set("withPluginSnapshot", async (sessionId, fn) =>
-        (await loader.capture(sessionId)).run(fn),
+      c.set("loadRuntimeFn", async (...args) => {
+        const loaded = await loader.loadRuntimeFn(...args);
+        expect(loaded?.promptTemplate).toContain("English captured body.");
+        return loaded;
+      });
+      c.set(
+        "withPluginSnapshot",
+        async (sessionId, fn, _beforeCapture, locale) => {
+          expect((await store.getSession(sessionId))?.locale).toBe("zh-CN");
+          expect(locale).toBe("en-US");
+          return (await loader.capture(sessionId, locale)).run(async () => {
+            const loaded = await loader.loadRuntimeFn(
+              definition.manifests[0]!.manifest,
+              undefined,
+              sessionId,
+            );
+            expect(loaded?.promptTemplate).toContain("English captured body.");
+            return fn();
+          });
+        },
       );
       c.set("resolveModel", () => undefined);
       c.set("llmAdapter", {
@@ -120,11 +142,13 @@ runtime:
         requestId: "export-action",
         type: "send_message",
         sessionId: "session",
+        locale: "en-US",
         payload: { content: "Continue" },
       }),
     });
     const stream = await response.text();
     expect(response.status, stream).toBe(200);
+    expect((await store.getSession("session"))?.locale).toBe("en-US");
     const exports = await store.listRuntimeExports("session");
     expect(exports, stream).toHaveLength(1);
     expect(exports[0]).toMatchObject({

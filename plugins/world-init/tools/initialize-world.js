@@ -2,7 +2,7 @@ import {
   getPendingProposals,
   getToolContent,
   withPendingProposals,
-} from "@covel/tools";
+} from "@covel/plugin-handlers-utils";
 import makeSetWorldSchema, {
   createWorldAttributeSchema,
 } from "./set-world-schema.js";

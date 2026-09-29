@@ -2,16 +2,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  createMemoryStore,
-  exportSessionCheckpoint,
-  type DataStore,
-} from "@covel/store";
-import { awaitPendingMemoryBackgroundTasks } from "@covel/memory";
-import { MEMORY_VECTOR_PLUGIN_ID } from "@covel/store/vector";
+import { exportSessionCheckpoint, type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
+
+const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
 
 const now = "2026-01-01T00:00:00.000Z";
 const cleanups: Array<() => Promise<void>> = [];
@@ -136,14 +133,13 @@ async function fixture(
 
 it("automatically ingests committed actions and fully rebuilds a fork beyond one batch", async () => {
   const texts: string[] = [];
-  const { app, store, action, vectors, ensureEmbeddingLock } = await fixture(
-    async (input) => {
+  const { app, store, action, vectors, ensureEmbeddingLock, memorySystem } =
+    await fixture(async (input) => {
       texts.push(...input);
       return input.map(() => new Float32Array([1, 0]));
-    },
-  );
+    });
   await action();
-  await awaitPendingMemoryBackgroundTasks();
+  await memorySystem.drain();
   expect((await vectors()).length).toBeGreaterThan(0);
   for (let i = 0; i < 260; i++) {
     await store.appendTurnMessage({
@@ -177,9 +173,14 @@ it("automatically ingests committed actions and fully rebuilds a fork beyond one
     createdAt: now,
     updatedAt: now,
   });
-  const snapshot = (await (
-    await app.request("/api/sessions/session/snapshots", { method: "POST" })
-  ).json()) as { id: string };
+  const snapshotResponse = await app.request(
+    "/api/sessions/session/snapshots",
+    { method: "POST" },
+  );
+  expect(snapshotResponse.status, await snapshotResponse.clone().text()).toBe(
+    201,
+  );
+  const snapshot = (await snapshotResponse.json()) as { id: string };
   texts.length = 0;
   const response = await app.request("/api/sessions/session/fork", {
     method: "POST",
@@ -191,7 +192,7 @@ it("automatically ingests committed actions and fully rebuilds a fork beyond one
     sessionId: string;
     forkSnapshotId: string;
   };
-  await awaitPendingMemoryBackgroundTasks();
+  await memorySystem.drain();
   expect(ensureEmbeddingLock).toHaveBeenCalledWith(fork.sessionId);
   expect(texts.filter((text) => text.startsWith("history "))).toHaveLength(260);
   expect((await vectors(fork.sessionId)).length).toBeGreaterThan(260);
@@ -215,14 +216,16 @@ it("waits for delayed ingestion before replacing a checkpoint, then rebuilds onl
   const started = deferred();
   const release = deferred();
   let delay = true;
-  const { app, store, action, vectors } = await fixture(async (texts) => {
-    if (delay) {
-      delay = false;
-      started.resolve();
-      await release.promise;
-    }
-    return texts.map(() => new Float32Array([1, 0]));
-  });
+  const { app, store, action, vectors, memorySystem } = await fixture(
+    async (texts) => {
+      if (delay) {
+        delay = false;
+        started.resolve();
+        await release.promise;
+      }
+      return texts.map(() => new Float32Array([1, 0]));
+    },
+  );
   await action();
   await started.promise;
   const browser = createMemoryStore();
@@ -253,22 +256,21 @@ it("waits for delayed ingestion before replacing a checkpoint, then rebuilds onl
   expect(deleteSession).not.toHaveBeenCalled();
   release.resolve();
   expect((await replacing).status).toBe(200);
-  await awaitPendingMemoryBackgroundTasks();
+  await memorySystem.drain();
   expect(await vectors()).toHaveLength(1);
   expect((await vectors())[0]?.payload).toContain("new checkpoint corpus");
-  const progress = await store.getPluginData(
-    "session",
-    MEMORY_VECTOR_PLUGIN_ID,
-    "recall-ingest",
-    "cursor",
-  );
-  expect(progress?.value).toEqual({ id: "replacement", createdAt: now });
+  const progress = await store.getVectorIndexProgress({
+    sessionId: "session",
+    pluginId: MEMORY_VECTOR_PLUGIN_ID,
+    namespace: "recall-ingest",
+  });
+  expect(JSON.parse(progress!)).toEqual({ id: "replacement", createdAt: now });
 });
 
 it("drains delayed ingestion before delete and leaves same-id recreation without old progress", async () => {
   const started = deferred();
   const release = deferred();
-  const { app, store, action } = await fixture(async (texts) => {
+  const { app, store, action, memorySystem } = await fixture(async (texts) => {
     started.resolve();
     await release.promise;
     return texts.map(() => new Float32Array([1, 0]));
@@ -282,30 +284,33 @@ it("drains delayed ingestion before delete and leaves same-id recreation without
   release.resolve();
   expect((await deleting).status).toBe(200);
   await seed(store);
-  await awaitPendingMemoryBackgroundTasks();
+  await memorySystem.drain();
   expect(
-    await store.listPluginData("session", MEMORY_VECTOR_PLUGIN_ID),
-  ).toEqual([]);
+    await store.getVectorIndexProgress({
+      sessionId: "session",
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: "recall-ingest",
+    }),
+  ).toBeNull();
 });
 
 it("does not ingest rolled-back story output or advance its cursor", async () => {
   const embed = vi.fn(async (texts: readonly string[]) =>
     texts.map(() => new Float32Array([1, 0])),
   );
-  const { store, action, vectors, llm } = await fixture(embed);
+  const { store, action, vectors, llm, memorySystem } = await fixture(embed);
   vi.spyOn(llm, "generate").mockRejectedValue(
     new Error("synthetic generation failure"),
   );
   await action(false);
-  await awaitPendingMemoryBackgroundTasks();
+  await memorySystem.drain();
   expect(embed).not.toHaveBeenCalled();
   expect(await vectors()).toEqual([]);
   expect(
-    await store.getPluginData(
-      "session",
-      MEMORY_VECTOR_PLUGIN_ID,
-      "recall-ingest",
-      "cursor",
-    ),
+    await store.getVectorIndexProgress({
+      sessionId: "session",
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: "recall-ingest",
+    }),
   ).toBeNull();
 });

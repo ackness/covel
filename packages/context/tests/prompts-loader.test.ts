@@ -2,11 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import {
-  createPromptLoader,
-  loadPrompt,
-  setPromptsRoot,
-} from "../src/index.js";
+import { createPromptLoader, loadPrompt } from "../src/index.js";
+import { setPromptsRoot } from "../src/prompts-loader.js";
 
 let root: string;
 beforeEach(async () => {

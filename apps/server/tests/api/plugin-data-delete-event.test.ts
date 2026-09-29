@@ -5,7 +5,8 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { createEventBus, type EventBus } from "@covel/events";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { wrapStoreWithPluginDataEvents } from "../../src/routes/api/bootstrap.js";
 
 interface SubEvent {

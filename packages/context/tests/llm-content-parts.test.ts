@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildContext } from "@covel/context";
+import { buildContextSync as buildContext } from "../src/context-builder.js";
 import type { ContextBuildParams, MessageHistoryRecord } from "@covel/context";
 import type {
   AssetGenerateView,

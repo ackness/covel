@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";

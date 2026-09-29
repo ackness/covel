@@ -16,6 +16,7 @@
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {
+    "@covel/plugin-handlers-utils": "workspace:*",
     "@covel/shared": "workspace:*",
     "ajv": "^8.20.0",
     "zod": "^4.4.3"

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { createRpcApprovalGate } from "@covel/approval";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import {
   createPluginRegistry,

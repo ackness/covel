@@ -1,5 +1,14 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+} from "@covel/plugin-test-utils";
 /**
  * affinity plugin tests.
  *
@@ -27,95 +36,12 @@ import {
   loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpdateAffinity from "../tools/update-affinity.js";
 import { AFFINITY_TIERS, clampScore, getTier } from "../tier-metadata.js";
 
-// In-memory mock store for plugin-data operations
-function createMockPluginDataStore() {
-  /** @type {Map<string, unknown>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const results = [];
-      for (const [k, v] of data) {
-        if (
-          k.startsWith(`${sessionId}:${pluginId}:`) &&
-          (!namespace || k.startsWith(`${sessionId}:${pluginId}:${namespace}:`))
-        ) {
-          results.push(v);
-        }
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type === "plugin.data") {
-      await store.setPluginData({
-        id: proposal.id,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: proposal.payload.namespace,
-        key: proposal.payload.key,
-        value: proposal.payload.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      });
-      continue;
-    }
-
-    if (proposal.type === "plugin.data.batch") {
-      await store.setPluginDataBatch(
-        proposal.payload.items.map((item, index) => ({
-          id: `${proposal.id}:${index}`,
-          sessionId: proposal.sessionId,
-          pluginId: proposal.source.pluginId,
-          namespace: item.namespace,
-          key: item.key,
-          value: item.value,
-          createdAt: proposal.timestamp,
-          updatedAt: proposal.timestamp,
-        })),
-      );
-    }
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
-
-/** Seed a committed affinity record directly into the mock store. */
+/** Seed a committed affinity record directly into the test store. */
 async function seedRecord(store, key, value) {
   await store.setPluginData({
     id: `seed-${key}`,
@@ -180,8 +106,8 @@ describe("update-affinity", () => {
   let mockStore;
   let updateAffinityTool;
 
-  beforeEach(() => {
-    mockStore = createMockPluginDataStore();
+  beforeEach(async () => {
+    mockStore = await createPluginTestStore(ctx);
     updateAffinityTool = bindToolStore(
       createUpdateAffinity({
         tool,
@@ -200,9 +126,9 @@ describe("update-affinity", () => {
       mockStore,
     );
 
-    expect(result.applied).toBe(1);
-    expect(result.results[0].status).toBe("created");
-    const id = result.results[0].id;
+    expect(getToolContent(result).applied).toBe(1);
+    expect(getToolContent(result).results[0].status).toBe("created");
+    const id = getToolContent(result).results[0].id;
     expect(id).toBeDefined();
 
     const stored = await mockStore.getPluginData(
@@ -236,7 +162,7 @@ describe("update-affinity", () => {
       mockStore,
     );
 
-    expect(result.results[0].status).toBe("updated");
+    expect(getToolContent(result).results[0].status).toBe("updated");
     const stored = await mockStore.getPluginData(
       "sess-1",
       "affinity",
@@ -354,7 +280,7 @@ describe("update-affinity", () => {
     );
 
     // Matched by name — reuses the preseeded key instead of forking a record.
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       id: "aff-suwan",
       status: "updated",
     });
@@ -391,7 +317,7 @@ describe("update-affinity", () => {
       mockStore,
     );
 
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       id: "aff-lian",
       status: "updated",
     });
@@ -461,7 +387,7 @@ describe("update-affinity", () => {
       { changes: [{ name: "莉安", delta: 5, reason: "你替她挡了债主" }] },
       ctx,
     );
-    const id = first.results[0].id;
+    const id = getToolContent(first).results[0].id;
 
     const second = await updateAffinityTool.execute(
       { changes: [{ name: "莉安", delta: 3, reason: "你送她回家" }] },
@@ -469,7 +395,7 @@ describe("update-affinity", () => {
     );
 
     // The second call saw the uncommitted score of 5, not a fresh record.
-    expect(second.results[0]).toMatchObject({
+    expect(getToolContent(second).results[0]).toMatchObject({
       id,
       score: 8,
       status: "updated",

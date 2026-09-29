@@ -6,6 +6,7 @@
  * required here.
  */
 
+/** @param {import("@covel/plugin-handlers-utils/plugin-api").PluginToolkit} toolkit */
 export default function ({ tool, z, shortId, withPendingProposals }) {
   return tool({
     name: "record-note",

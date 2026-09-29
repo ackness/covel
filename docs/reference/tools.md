@@ -29,7 +29,7 @@
 | **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
 | **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
 | **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
-| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)           |
+| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 lorebook/角色)                 |
 | initialize-world                      | local   | world-init          | auto-allow | 原子提交角色属性 Schema 与世界词条                                                  |
 | set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部 schema 写入原语                                      |
 | set-world-entries-batch               | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部词条写入原语                                          |
@@ -381,6 +381,10 @@ interface UIRenderPart {
 ---
 
 ### 插件记忆与向量搜索
+
+`memory-search` 通过 `MemorySystem.search(sessionId, query, { scope, limit })` 查询，工具层仅处理参数和展示格式。同次 `scope: "all"` 查询并发搜索两个来源，共享一次同模型的 query embedding；缓存只活到该次查询结束。embedding 失败仍分别回退到关键词搜索。
+
+混合结果按两个来源各自的名次交替排列，同名次先 recall，某一来源不足时由另一来源补满。返回的 `score` 只表示来源内部的分数，不能跨来源比较或重新排序；这也适用于一侧向量检索、另一侧关键词回退的情况。指定单一 scope 时保留该来源原有顺序。
 
 `memory-search` 是框架的 recall/archival 搜索工具。核心记忆块由 `memory` 插件的 `blocks` namespace 持久化，后台提取通过普通 `plugin.data` proposals 提交，并由 `prompt.segment@1` 提供提示词段。框架工具不直接读写其他插件的块数据。
 
@@ -904,7 +908,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ---
 
-## ToolClient
+## ToolExecutor
 
 工具执行统一经过 `ToolExecutor`：通过注入的 `findTool(name, context)` 解析出 `ToolModule` 后直接调用 `module.execute(args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
 
@@ -914,26 +918,15 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 **执行端授权**：工具白名单同时约束 LLM 广告面和执行面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
 
-接口位于 `@covel/tools`：
+宿主通过 `@covel/tools` 的 `createDefaultToolRegistry({ store, eventDirectory })` 一次装配 UI、suspend、runtime-done、plugin-data、emit-event 和 character 内置工具。server 传入真实事件目录，并按会话覆盖角色写入工具；`test-runtime` 传入不允许任何主题的隔离目录。两者共享注册集合和默认规则，调试宿主不因此具有全部生产服务。
 
-```typescript
-interface ToolClient {
-  readonly id: string;
-  list(): Promise<readonly ToolDefinition[]>;
-  call(
-    name: string,
-    args: unknown,
-    ctx: ToolExecutionContext,
-  ): Promise<ToolCallResult>;
-  close?(): Promise<void>;
-}
-```
+插件作者在 `entry` 中使用 `covel.toolkit.tool()`；常用上下文、结果协议和 helper 由公开 `@covel/plugin-handlers-utils` 提供。registry 与内置工具构造器属于宿主 API。
 
 ---
 
 ## 审批策略
 
-工具调用经过 `ApprovalPipeline` 审批检查，当前规则（配置在 `apps/server/src/routes/api/bootstrap/tools.ts`）：
+工具调用经过 `ApprovalPipeline` 审批检查，当前规则由 `@covel/approval` 的 `createDefaultToolApprovalPipeline()` 构造，server 与 `test-runtime` 共用：
 
 | 来源分类        | 规则      | 说明                           |
 | --------------- | --------- | ------------------------------ |
@@ -1111,25 +1104,45 @@ export default function ({ tool, z, shortId }) {
 
 这是一项不兼容的 API 修正：移除 `PluginToolkit.store` 和 `PluginStoreView`。旧工具应把工厂闭包中的 `store.getPluginData(sessionId, pluginId, namespace, key)` 改成 `context.store.getPluginData(namespace, key)`，并移除对执行器已有提案的重复合并。组合工具内部直接调用子工具时，新产生的局部提案尚未进入执行器读取快照；这类子调用仍需显式使用 `overlayPluginDataValue` 等纯辅助函数合并局部提案（例如 codex 的同步工具）。写入仍返回 `withPendingProposals(...)`，不可在工具执行中直接提交领域状态。
 
-### 方式二：直接导出（TypeScript）
+### TypeScript 入口
 
 ```typescript
-import { z } from "zod";
-import { tool } from "@covel/tools";
+import type { PluginEntryFactory } from "@covel/plugin-handlers-utils";
 
-export const myTool = tool({
-  name: "my-tool-name",
-  description: "工具描述",
-  parameters: z.object({
-    param1: z.string().describe("参数描述"),
-  }),
-  execute: async (params, context) => {
-    return { result: params.param1 };
-  },
-});
+const register: PluginEntryFactory = (covel) => {
+  covel.registerTool(
+    covel.toolkit.tool({
+      name: "my-tool-name",
+      description: "工具描述",
+      parameters: covel.toolkit.z.object({ param1: covel.toolkit.z.string() }),
+      execute: async ({ param1 }) => ({ result: param1 }),
+    }),
+  );
+};
+export default register;
 ```
 
-> 注意：直接导出模式无法使用 `shortId` 注入，需自行从 `@covel/tools` 导入。
+工具参数使用 Zod 的输入 schema 向模型描述，执行时仍进行完整解析，回调收到 transform 后的值。不能转换为 JSON Schema 的参数在构造工具时带工具名抛错，不会退化成无参数说明的 schema。
+
+### 结果与写入
+
+`withPendingProposals(content, proposals)` 始终返回以下公开契约，不修改正文，空写入列表和冻结对象的行为也相同：
+
+```typescript
+interface PluginToolResult<T> {
+  readonly kind: "covel.tool-result";
+  readonly content: T;
+  readonly pendingProposals: readonly PluginProposal[];
+  readonly emittedEvents?: readonly {
+    topic: string;
+    data: Record<string, unknown>;
+  }[];
+}
+```
+
+使用公开 SDK 的 `getToolContent(result)` 读取业务正文，`getPendingProposals(result)` 读取写入。纯工具可以直接返回正文。`withEmittedEvents` 保留已有 proposal 通道；组合后的结果可用对象展开、`structuredClone` 或 JSON 复制而不丢失副作用。宿主仍检查来源、权限和数据 schema，`kind` 本身不授予写权限。
+
+旧插件和测试应把 `result.someField` 改为 `getToolContent(result).someField`；调用 helper 后必须使用其返回对象。当前只支持显式协议，没有 Symbol 附加或旧结果形态的兼容分支。
 
 ### 注册与声明
 

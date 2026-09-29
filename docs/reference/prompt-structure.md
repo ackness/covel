@@ -1,14 +1,12 @@
 # Prompt 结构参考
 
-`buildContext()` 与 `buildContextAsync()` 都使用 `packages/context/src/prompt-assembler.ts`。插件正文、声明输入、世界书和扩展段在这里组装为 `systemPrompt` 与 `messages`；记忆内容和历史摘要策略由插件提供。
+`buildContext(params)` 是统一的异步构建入口，内部按输入声明决定是否读取本插件数据。插件正文、声明输入、世界书和扩展段在 `packages/context/src/prompt-assembler.ts` 组装为 `systemPrompt` 与 `messages`；记忆内容和历史摘要策略由插件提供。
 
 ## 1. 构建入口与历史流水线
 
-| 入口                            | 用途                                                       |
-| ------------------------------- | ---------------------------------------------------------- |
-| `buildContext(params)`          | 同步组装 context。                                         |
-| `buildContextAsync(params)`     | 额外读取 runtime 的 `io.selfData` 声明所对应的本插件数据。 |
-| `needsAsyncBuild({ manifest })` | 根据编译后的输入声明选择入口。                             |
+| 入口                         | 用途                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `await buildContext(params)` | 组装 context；需要读取 `input.inject` 中的 `plugin-data` 时使用传入的 `store`。 |
 
 一次执行的历史处理顺序如下：
 

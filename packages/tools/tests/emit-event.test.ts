@@ -1,3 +1,4 @@
+import { getToolContent } from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
 import { createEmitEventTool } from "../src/builtin/emit-event.js";
 import { getEmittedEvents, getPendingProposals } from "../src/result.js";
@@ -66,8 +67,10 @@ describe("emit-event tool", () => {
       ctx,
     )) as { _text: string };
     expect(getEmittedEvents(result)).toBeUndefined();
-    expect(result._text).toContain('unknown topic "quest.done"');
-    expect(result._text).toContain("scene.set");
+    expect(getToolContent(result)._text).toContain(
+      'unknown topic "quest.done"',
+    );
+    expect(getToolContent(result)._text).toContain("scene.set");
   });
 
   it("rejects an advertise:false internal topic without leaking its name", async () => {
@@ -82,10 +85,14 @@ describe("emit-event tool", () => {
       ctx,
     )) as { _text: string };
     expect(getEmittedEvents(result)).toBeUndefined();
-    expect(result._text).toContain('unknown topic "quest.done"');
-    expect(result._text).toContain("scene.set");
+    expect(getToolContent(result)._text).toContain(
+      'unknown topic "quest.done"',
+    );
+    expect(getToolContent(result)._text).toContain("scene.set");
     // The internal topic must not be echoed back in the available-topics hint.
-    expect(result._text).not.toContain("Available topics: quest.done");
+    expect(getToolContent(result)._text).not.toContain(
+      "Available topics: quest.done",
+    );
   });
 
   it("returns the schema validation error verbatim so the LLM can retry", async () => {
@@ -97,7 +104,7 @@ describe("emit-event tool", () => {
       ctx,
     )) as { _text: string };
     expect(getEmittedEvents(result)).toBeUndefined();
-    expect(result._text).toContain("missing field location");
+    expect(getToolContent(result)._text).toContain("missing field location");
   });
 
   it("never returns event.emit pending proposals (double-emission guard)", async () => {
@@ -117,6 +124,6 @@ describe("emit-event tool", () => {
       { ...ctx, emittedEventTopics: ["scene.set"] },
     )) as { _text: string };
     expect(getEmittedEvents(result)).toBeUndefined();
-    expect(result._text).toContain("already emitted");
+    expect(getToolContent(result)._text).toContain("already emitted");
   });
 });

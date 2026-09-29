@@ -202,7 +202,7 @@ integration in `apps/desktop/src/main.ts`, and the publishing configuration abov
 - [ ] Update `docs/CHANGELOG.md` with the target version
 - [ ] Sync version badges, Release links, and current-version notices in `README.md` and `README.zh-CN.md`
 - [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard/constants.ts` if the tutorial changed
-- [ ] Run local `pnpm lint`, `pnpm test`, `pnpm e2e` and `pnpm release:preflight` sequentially; fix known failures before pushing
+- [ ] Run local `pnpm check`, `pnpm test`, `pnpm test:pg`, `pnpm e2e` and `pnpm release:preflight` sequentially; fix known failures before pushing
 - [ ] Run `pnpm --filter @covel/desktop build`
 - [ ] Complete the [player-flow acceptance checks](./e2e-testing.md#发版前的玩家流程验收) with isolated data and a real model; deterministic tests and startup health alone do not cover playability
 - [ ] Run `pnpm --filter @covel/desktop smoke:restart` in a desktop session to verify the preload version and navigation to the new backend port

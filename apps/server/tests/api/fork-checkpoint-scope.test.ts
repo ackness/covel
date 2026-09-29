@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
-  createMemoryStore,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
   type DataStore,
 } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   makeCharacter,
   makeSession,

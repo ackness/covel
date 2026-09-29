@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
   applyChanges,
+  dropPluginDataSession,
   getPluginNamespacesSnapshot,
   getPluginNamespaceSnapshot,
   loadPluginData,
@@ -95,6 +96,24 @@ describe("plugin-data-store — sessionId-scoped isolation", () => {
     expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({
       "key-A": "A",
     });
+  });
+
+  it("drops a deleted session while preserving the newly active session", () => {
+    setActiveSession("session-a");
+    applyChanges("codex", [
+      { namespace: "message", key: "old", value: "A", operation: "set" },
+    ]);
+    setActiveSession("session-b");
+    applyChanges("codex", [
+      { namespace: "message", key: "current", value: "B", operation: "set" },
+    ]);
+
+    dropPluginDataSession("session-a");
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({
+      current: "B",
+    });
+    setActiveSession("session-a");
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({});
   });
 
   it("writes are ignored when no session is bound (defensive)", () => {

@@ -1,14 +1,13 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
-  createMemoryStore,
-  createMemoryMediaStore,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
   type DataStore,
   type MediaStore,
   type SnapshotRecord,
 } from "@covel/store";
+import { createMemoryStore, createMemoryMediaStore } from "@covel/store/memory";
 import { buildSessionSnapshot } from "@covel/runtime";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {

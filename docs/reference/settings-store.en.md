@@ -6,6 +6,8 @@
 
 Ordinary persisted settings accept only `schemaVersion: 2` with `revision`, `savedAt`, and `entries`. LocalStorage, REST, and desktop IPC share this validation. Unversioned and v1 development data are rejected on reads and replacement writes, without migration or deletion; recreate affected development settings. The separate settings import/export `SettingsExportBundle.schemaVersion: 1` remains the current export contract.
 
+At startup, Electron uses IPC. Without IPC, the app probes `/api/config/info` and selects localStorage only after an explicit `isDesktop: false` response. Timeouts, network failures, and invalid responses leave the mode unknown and show a retry screen before creating the settings store. Retrying never migrates settings between backends.
+
 ## Schema normalization
 
 Registered non-secret settings expose the schema's parsed result during hydration, dynamic registration, `set()`, `setMany()`, import, refresh, and rollback after a failed write. Nested `.default()` values and string trimming appear in `get()`, exports, and subscriber notifications; explicit writes persist the parsed result. Unregistered keys retain their original values.

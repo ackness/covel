@@ -8,7 +8,8 @@
 
 import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createPluginRpcJobRunner } from "../../src/routes/api/plugin-rpc/background-jobs.js";
 import type { ManualTurnSummary } from "../../src/routes/api/plugin-rpc/runtime-response.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";

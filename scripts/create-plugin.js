@@ -29,6 +29,7 @@ import {
   mkdirSync,
   readdirSync,
   statSync,
+  rmSync,
   existsSync,
 } from "node:fs";
 import { resolve, join, dirname, relative } from "node:path";
@@ -256,6 +257,9 @@ if (mode === "with-tools") {
   }
 }
 
+if (existsSync(join(targetDir, "tsconfig.json"))) {
+  console.log("  类型检查：进入插件目录执行 pnpm install && pnpm lint");
+}
 console.log(`\n插件创建完成！路径：${targetDir}\n`);
 
 // ── 实现 ──────────────────────────────────────────────────────────
@@ -339,6 +343,20 @@ function runCustomMultiRuntime(runtimes) {
     }
   }
 
+  // An agent-only package has no JavaScript author code to type-check.
+  if (!runtimes.some((runtime) => runtime.type === "function")) {
+    rmSync(join(targetDir, "tsconfig.json"));
+    const packagePath = join(targetDir, "package.json");
+    const packageJson = JSON.parse(readFileSync(packagePath, "utf-8"));
+    delete packageJson.scripts.lint;
+    delete packageJson.devDependencies;
+    writeFileSync(
+      packagePath,
+      `${JSON.stringify(packageJson, null, 2)}\n`,
+      "utf-8",
+    );
+  }
+
   // Custom runtimes do not include the demo's note panel.
   writeFileSync(
     join(targetDir, "PLUGIN.md"),
@@ -409,13 +427,14 @@ function renderFunctionStubHandler(runtimeName) {
 
 const NOTES_NAMESPACE = 'notes';
 
+/** @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler} */
 export default async function ${camelize(runtimeName)}Handler(ctx) {
   const { pluginData, logger, manualPayload, turnId } = ctx;
 
   if (!pluginData || typeof pluginData.set !== 'function') {
     return {
       outcome: 'failed',
-      error: 'ctx.pluginData.set is unavailable. Upgrade @covel/runtime.',
+      error: 'This handler requires plugin data writes.',
     };
   }
 
@@ -520,7 +539,7 @@ ${lines}
 1. 修改 \`README.md\`，维护给人类和开发者看的说明。
 2. 修改 \`runtimes/<name>/RUNTIME.md\`，维护 runtime 元信息和模型指令。
 3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
-4. Run \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
+4. ${runtimes.some((runtime) => runtime.type === "function") ? "Run `pnpm install && pnpm lint` in this plugin directory to check JavaScript against the public SDK. Then run" : "Run"} \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
 `;
 }
 

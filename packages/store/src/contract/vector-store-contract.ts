@@ -21,7 +21,7 @@
  * dimensions within a session is not a supported scenario.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import type { DataStore } from "../types.js";
 import type { VectorStoreCapability, VectorModelOps } from "../vector-store.js";
@@ -90,6 +90,299 @@ export function runVectorStoreContractTests(
 
     beforeEach(async () => {
       store = await createStore();
+    });
+
+    afterEach(async () => {
+      await store.close();
+    });
+
+    it("deletes one key without removing surviving vectors or other namespaces", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      const embedding = new Float32Array([1, 0]);
+      for (const [namespace, key] of [
+        ["archive", "removed"],
+        ["archive", "kept"],
+        ["other", "removed"],
+      ]) {
+        await store.upsertVector({
+          sessionId: "s1",
+          pluginId: "owner",
+          namespace,
+          key,
+          embedding,
+        });
+      }
+      await expect(
+        store.deleteVectors({
+          sessionId: "s1",
+          pluginId: "owner",
+          namespace: "archive",
+          key: "removed",
+          expectedSessionCreatedAt: "stale-incarnation",
+        }),
+      ).rejects.toThrow("incarnation changed");
+      await store.deleteVectors({
+        sessionId: "s1",
+        pluginId: "owner",
+        namespace: "archive",
+        key: "removed",
+      });
+      const results = await store.searchVectors({
+        sessionId: "s1",
+        query: embedding,
+        topK: 10,
+      });
+      expect(
+        results.map((row) => `${row.namespace}/${row.key}`).sort(),
+      ).toEqual(["archive/kept", "other/removed"]);
+    });
+
+    it("isolates index progress, compares revisions atomically and rejects stale incarnations", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      const session = (await store.getSession("s1"))!;
+      const scope = { sessionId: "s1", pluginId: "owner", namespace: "recall" };
+      const input = {
+        ...scope,
+        value: "first",
+        expectedValue: null,
+        expectedSessionCreatedAt: session.createdAt,
+      };
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+      const attempts = await Promise.all([
+        store.commitVectorIndexBatch(input),
+        store.commitVectorIndexBatch({ ...input, value: "second" }),
+      ]);
+      expect(attempts.filter(Boolean)).toHaveLength(1);
+      const current = await store.getVectorIndexProgress(scope);
+      expect(
+        await store.getVectorIndexProgress({ ...scope, pluginId: "other" }),
+      ).toBeNull();
+      expect(
+        await store.getVectorIndexProgress({ ...scope, namespace: "other" }),
+      ).toBeNull();
+      expect(await store.listPluginDataSessionScope("s1")).toEqual([]);
+      expect(
+        await store.commitVectorIndexBatch({
+          ...input,
+          expectedValue: "wrong",
+        }),
+      ).toBe(false);
+      expect(
+        await store.commitVectorIndexBatch({
+          ...input,
+          expectedValue: current,
+          value: "advanced",
+        }),
+      ).toBe(true);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.deleteSession("s1");
+          throw new Error("rollback deletion");
+        }),
+      ).rejects.toThrow("rollback deletion");
+      expect(await store.getVectorIndexProgress(scope)).toBe("advanced");
+      await store.deleteSession("s1");
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+      await store.createSession({
+        ...session,
+        createdAt: "2030-01-01T00:00:00.000Z",
+      });
+      await expect(store.commitVectorIndexBatch(input)).rejects.toThrow(
+        "incarnation changed",
+      );
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+    });
+
+    it("commits exactly one initial batch with vectors matching its progress", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      const session = (await store.getSession("s1"))!;
+      const scope = {
+        sessionId: "s1",
+        pluginId: "owner",
+        namespace: "progress",
+      };
+      const embedding = new Float32Array([1, 0]);
+      const attempts = await Promise.all(
+        ["first", "second"].map((value) =>
+          store.commitVectorIndexBatch({
+            ...scope,
+            value,
+            expectedValue: null,
+            expectedSessionCreatedAt: session.createdAt,
+            upserts: [
+              { namespace: "chunks", key: "shared", embedding, payload: value },
+            ],
+          }),
+        ),
+      );
+      expect(attempts.filter(Boolean)).toHaveLength(1);
+      const winner = attempts[0] ? "first" : "second";
+      expect(await store.getVectorIndexProgress(scope)).toBe(winner);
+      const rows = await store.searchVectors({
+        sessionId: "s1",
+        query: embedding,
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        namespace: "chunks",
+        key: "shared",
+        payload: winner,
+      });
+    });
+
+    it("leaves committed vectors untouched when an older batch loses CAS", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      const session = (await store.getSession("s1"))!;
+      const scope = {
+        sessionId: "s1",
+        pluginId: "owner",
+        namespace: "progress",
+      };
+      const embedding = new Float32Array([1, 0]);
+      const guard = { ...scope, expectedSessionCreatedAt: session.createdAt };
+      expect(
+        await store.commitVectorIndexBatch({
+          ...guard,
+          expectedValue: null,
+          value: "new",
+          upserts: [
+            { namespace: "chunks", key: "shared", embedding, payload: "new" },
+            { namespace: "chunks", key: "kept", embedding, payload: "kept" },
+          ],
+        }),
+      ).toBe(true);
+      expect(
+        await store.commitVectorIndexBatch({
+          ...guard,
+          expectedValue: null,
+          value: "old",
+          deletes: [{ namespace: "chunks", key: "kept" }],
+          upserts: [
+            {
+              namespace: "chunks",
+              key: "shared",
+              embedding: new Float32Array([0, 1]),
+              payload: "old",
+            },
+          ],
+        }),
+      ).toBe(false);
+      expect(await store.getVectorIndexProgress(scope)).toBe("new");
+      const rows = await store.searchVectors({
+        sessionId: "s1",
+        query: embedding,
+      });
+      expect(rows.map((row) => row.payload).sort()).toEqual(["kept", "new"]);
+      expect(rows.every((row) => row.distance === 0)).toBe(true);
+    });
+
+    it("rolls back progress, deletes and earlier upserts when a later mutation fails", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      const session = (await store.getSession("s1"))!;
+      const scope = {
+        sessionId: "s1",
+        pluginId: "owner",
+        namespace: "progress",
+      };
+      const embedding = new Float32Array([1, 0]);
+      const guard = { ...scope, expectedSessionCreatedAt: session.createdAt };
+      await store.commitVectorIndexBatch({
+        ...guard,
+        expectedValue: null,
+        value: "before",
+        upserts: [
+          { namespace: "chunks", key: "shared", embedding, payload: "before" },
+          { namespace: "chunks", key: "kept", embedding, payload: "kept" },
+        ],
+      });
+      await expect(
+        store.commitVectorIndexBatch({
+          ...guard,
+          expectedValue: "before",
+          value: "after",
+          deletes: [{ namespace: "chunks", key: "kept" }],
+          upserts: [
+            { namespace: "chunks", key: "shared", embedding, payload: "after" },
+            { namespace: "chunks", key: "inserted", embedding },
+            {
+              namespace: "chunks",
+              key: "invalid",
+              embedding: new Float32Array([1]),
+            },
+          ],
+        }),
+      ).rejects.toThrow(/dim|length/);
+      expect(await store.getVectorIndexProgress(scope)).toBe("before");
+      const rows = await store.searchVectors({
+        sessionId: "s1",
+        query: embedding,
+      });
+      expect(rows.map((row) => row.payload).sort()).toEqual(["before", "kept"]);
+      expect(
+        await store.commitVectorIndexBatch({
+          ...guard,
+          expectedValue: "before",
+          value: "after",
+          deletes: [{ namespace: "chunks", key: "kept" }],
+          upserts: [
+            { namespace: "chunks", key: "shared", embedding, payload: "after" },
+          ],
+        }),
+      ).toBe(true);
+      expect(await store.getVectorIndexProgress(scope)).toBe("after");
+      const committed = await store.searchVectors({
+        sessionId: "s1",
+        query: embedding,
+      });
+      expect(committed).toHaveLength(1);
+      expect(committed[0]).toMatchObject({ key: "shared", payload: "after" });
+    });
+
+    it("rejects stale batches without touching the recreated session's vectors or progress", async () => {
+      const target = await setupSessionWithModel(store, "s1", 2);
+      const session = (await store.getSession("s1"))!;
+      await store.deleteSession("s1");
+      const createdAt = "2030-01-01T00:00:00.000Z";
+      await store.createSession({
+        ...session,
+        createdAt,
+        embeddingModelId: undefined,
+        embeddingLockedAt: undefined,
+      });
+      await store.lockSessionEmbeddingModel("s1", target);
+      const scope = {
+        sessionId: "s1",
+        pluginId: "owner",
+        namespace: "progress",
+      };
+      const embedding = new Float32Array([1, 0]);
+      const upserts = [
+        { namespace: "chunks", key: "shared", embedding, payload: "new" },
+      ];
+      await store.commitVectorIndexBatch({
+        ...scope,
+        expectedSessionCreatedAt: createdAt,
+        expectedValue: null,
+        value: "new",
+        upserts,
+      });
+      await expect(
+        store.commitVectorIndexBatch({
+          ...scope,
+          expectedSessionCreatedAt: session.createdAt,
+          expectedValue: "new",
+          value: "old",
+          deletes: [{ namespace: "chunks", key: "shared" }],
+          upserts: [{ ...upserts[0], key: "stale", payload: "old" }],
+        }),
+      ).rejects.toThrow("incarnation changed");
+      expect(await store.getVectorIndexProgress(scope)).toBe("new");
+      const rows = await store.searchVectors({
+        sessionId: "s1",
+        query: embedding,
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ key: "shared", payload: "new" });
     });
 
     it("round-trips a single vector through search", async () => {

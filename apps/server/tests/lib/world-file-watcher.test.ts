@@ -4,7 +4,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 import { createWorldFileWatcher } from "../../src/world-file-watcher.js";

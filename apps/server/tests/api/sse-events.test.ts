@@ -5,7 +5,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { createEventBus, type EventBus } from "@covel/events";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { eventRoutes } from "../../src/routes/api/events.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import type { SubscriptionEvent } from "@covel/shared";

@@ -33,6 +33,45 @@
 
 > 关键差异：`/api/actions` **没有** `event:` 命名头，因此 `EventSource.addEventListener('narrative.delta', …)` 在 actions 流上**永远不会**触发。回合内事件请使用 `apps/web/src/services/api/actions.ts: sendAction` 的 ReadableStream 解析路径，或自行用 `fetch()` 读取 `data:` 行；命名事件订阅只对 `/api/events/stream` 有效。
 
+## 宿主执行与提交边界
+
+`@covel/runtime.executeTurn` 和 `resumeSuspendedRuntime` 返回 `{ result, commit }`。
+`result` 是可用于响应的执行结果；`commit` 是留在宿主的完整提交计划，包含顶层和递归结果、
+待提交命令、对话 journal、暂停记录、Hook 设置快照、回合计数责任和执行时加载的输出 schema。
+宿主调用 `commitExecution({ execution, store, completion, ...services })`，不再自行收集这些字段，
+也不在提交时重新加载插件。公开执行入口要求 `deps.store`。
+
+```ts
+const execution = await executeTurn(input, runtimes, deps);
+const outcome = await commitExecution({
+  store: deps.store,
+  execution,
+  completion: {
+    kind: "turn",
+    turnId: execution.result.turnId,
+    durationMs: execution.result.durationMs,
+  },
+});
+// Respond only after interpreting the durable commit outcome.
+return { result: execution.result, committed: outcome.status === "committed" };
+```
+
+宿主仍拥有鉴权、会话锁、请求取消和执行／恢复 claim；上述调用须遵循对应宿主的锁策略。
+玩家逻辑回合身份通过 `input.logicalTurnId` 显式传入。存在暂停记录时延迟计数，最后一个
+同逻辑回合的成功恢复通过 ledger 计数一次；失败恢复不能确认 continuation。
+后台执行在提交锁内重新检查激活集合，并通过 `commitExecution.activePluginIds` 缩小
+Hook 范围；该参数只能过滤执行时已捕获的插件，不能加入后来启用的插件，设置仍沿用执行快照。
+只应向客户端发送 `result`，不能发送或接受客户端提交的 `commit`。两者都不携带收尾函数。
+
+工具作者返回的显式 `PluginToolResult` 见 [工具结果协议](tools.md)。内核解包后将命令放在
+`RuntimeResult.pendingProposals`，业务内容保留在 `output`；命令不会出现在公开执行结果或
+持久化的 turn history 中。原 `collectExecutionJournal` / `collectExecutionSuspensions`
+不再是公开 API，`executeTurn` 返回值也不再直接是 `TurnResult`，调用方必须同步迁移。
+
+声明了 `output.recordAs` 的成功结果必须具有捕获的输出 schema；依赖缺失会使整次提交回滚，
+不会静默跳过导出。已加载 schema 对单次导出值的校验、媒体规范化与修订冲突处理仍遵循
+[事务契约](transactions.md)。执行结果成功不等于提交成功。
+
 ## 一、事件类型（CovelEvent）
 
 所有 server→client 事件收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相；事件名类型直接使用 `CovelEventType`。
@@ -242,11 +281,11 @@ Provider 图片输入矩阵：
 
 发射点对照：
 
-| 触发路径                           | 事件序列                                                | 来源                                                          |
-| ---------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
-| `executeTurn` 自动捕获             | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-executor/turn-result-finalizer.ts` |
-| `POST /api/sessions/:id/snapshots` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                     |
-| `POST /api/sessions/:id/fork`      | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                     |
+| 触发路径                           | 事件序列                                                | 来源                                              |
+| ---------------------------------- | ------------------------------------------------------- | ------------------------------------------------- |
+| `commitExecution` 提交后捕获       | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/commit/commit-execution.ts` |
+| `POST /api/sessions/:id/snapshots` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`         |
+| `POST /api/sessions/:id/fork`      | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`         |
 
 > 内置 Web 当前不提供 snapshot / fork 操作界面。外部客户端可从 `session` topic 消费上述事件。
 

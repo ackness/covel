@@ -1,6 +1,9 @@
-import { withPendingProposals } from "@covel/tools";
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
+import {
+  withPendingProposals,
+  makeProposal,
+  pickLocaleText as pick,
+} from "@covel/plugin-handlers-utils";
+
 import { resolveI18nText } from "@covel/shared";
 
 /**
@@ -15,7 +18,7 @@ import { resolveI18nText } from "@covel/shared";
  *
  * Data from OTHER sessions is never read — see the note at step 2b below.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {import('@covel/plugin-handlers-utils').PluginFunctionContext} ctx
  * @returns {Promise<Record<string, unknown>>}
  */
 /**

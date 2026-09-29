@@ -389,6 +389,8 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 网页刷新或 SSE 断开不会自动取消原回合。客户端仅查询状态并恢复已提交的消息、时钟和任务步骤，不自动重新调用模型。服务器进程停止会丢失前台内存执行；无活跃锁、无已提交工件且缺少终止记录时显示 `interrupted`。已经提交但来不及记录终止 trace 的回合仍为 `completed`。浏览器旧步骤只补充服务端快照缺失的信息，不能把终态覆盖为 `running`；`runtime.completed` 的 `payload.status` 决定成功、失败、跳过或挂起状态。
 
+`retryFromTurnId` 指向逻辑回合的顶层持久化记录。递归执行可能保存同一 turnId 的子记录，服务端不会将其选为重试源，也不会把同回合的子记录视为后续故事推进。actions 和 runtime RPC 使用同一筛选规则。
+
 用户显式重试时，使用 `retry` 描述、新 `requestId`，并在 payload 中附加 `recoverFromTurnId`。服务端在会话锁内再次核实源回合，重复点击或原回合已结束时不会再次执行；开场延续重试保留 `origin: continuation`，不增加玩家回合数。新回合的 `turn.started` 只记录恢复所需的动作输入，不记录请求头和凭据。旧日志只在同一请求的 traceId 能证明它是开场延续时提供无输入重试，否则要求玩家重新输入。批量辅助任务恢复使用 `retry_failed_runtimes`；中断后必须按 `retry` 描述恢复同一组目标，未提交的成功任务不能视作已恢复或用作上下文。
 
 ### Turn 执行

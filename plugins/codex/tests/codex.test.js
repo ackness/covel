@@ -1,5 +1,10 @@
 import { readFileSync as readContractFile } from "node:fs";
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+  commitToolResults,
+} from "@covel/plugin-test-utils";
 /**
  * codex plugin tests.
  *
@@ -8,7 +13,7 @@ import { bindToolStore } from "@covel/plugin-test-utils";
  * with local tools. These tests cover:
  *
  * 1. Local tools: `unlock-codex-entries` + `update-codex-entry` (pure,
- *    independent of runtime type — verified against an in-memory store stub)
+ *    independent of runtime type — verified against the real in-memory store and commit boundary)
  * 2. Plugin manifest: agent runtime shape, declares local tools,
  *    `input.inject` contains both `narrator` runtime inject and the
  *    plugin-data inject that feeds existing entries into the prompt.
@@ -29,10 +34,9 @@ import {
 import {
   getPendingProposals,
   getToolContent,
-  tool,
-  z,
   shortIdBatch,
-} from "@covel/tools";
+} from "@covel/plugin-handlers-utils";
+import { tool, z } from "@covel/tools";
 import createUnlockCodexEntries from "../tools/unlock-codex-entries.js";
 import createUpdateCodexEntry from "../tools/update-codex-entry.js";
 import createSyncCodexEntries from "../tools/sync-codex-entries.js";
@@ -40,90 +44,6 @@ import {
   CODEX_CATEGORY_METADATA,
   getCategoryMetadata,
 } from "../category-metadata.js";
-
-// In-memory mock store for plugin-data operations
-function createMockPluginDataStore() {
-  /** @type {Map<string, unknown>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const results = [];
-      for (const [k, v] of data) {
-        if (
-          k.startsWith(`${sessionId}:${pluginId}:`) &&
-          (!namespace || k.startsWith(`${sessionId}:${pluginId}:${namespace}:`))
-        ) {
-          results.push(v);
-        }
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type === "plugin.data") {
-      await store.setPluginData({
-        id: proposal.id,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: proposal.payload.namespace,
-        key: proposal.payload.key,
-        value: proposal.payload.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      });
-      continue;
-    }
-
-    if (proposal.type === "plugin.data.batch") {
-      await store.setPluginDataBatch(
-        proposal.payload.items.map((item, index) => ({
-          id: `${proposal.id}:${index}`,
-          sessionId: proposal.sessionId,
-          pluginId: proposal.source.pluginId,
-          namespace: item.namespace,
-          key: item.key,
-          value: item.value,
-          createdAt: proposal.timestamp,
-          updatedAt: proposal.timestamp,
-        })),
-      );
-    }
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
@@ -141,8 +61,8 @@ describe("codex tools", () => {
   let updateCodexEntryTool;
   let syncCodexEntriesTool;
 
-  beforeEach(() => {
-    mockStore = createMockPluginDataStore();
+  beforeEach(async () => {
+    mockStore = await createPluginTestStore(ctx);
     unlockCodexEntriesTool = bindToolStore(
       createUnlockCodexEntries({
         tool,
@@ -187,16 +107,16 @@ describe("codex tools", () => {
         mockStore,
       );
 
-      expect(result.unlocked).toBe(1);
-      expect(result.entries[0].title).toBe("青萍山");
-      expect(result.entries[0].entryId).toBeDefined();
+      expect(getToolContent(result).unlocked).toBe(1);
+      expect(getToolContent(result).entries[0].title).toBe("青萍山");
+      expect(getToolContent(result).entries[0].entryId).toBeDefined();
       // UI blocks use the generic `ui-spec` convention: the block carries a
       // self-contained json-render spec tree instead of a codex-specific type.
-      expect(result.ui[0].type).toBe("ui-spec");
-      expect(result.ui[0].spec.type).toBe("EntryCard");
-      expect(result.ui[0].spec.props.title).toBe("青萍山");
-      expect(result.ui[0].spec.props.category).toBe("location");
-      expect(result.ui[0].spec.props.isNew).toBe(true);
+      expect(getToolContent(result).ui[0].type).toBe("ui-spec");
+      expect(getToolContent(result).ui[0].spec.type).toBe("EntryCard");
+      expect(getToolContent(result).ui[0].spec.props.title).toBe("青萍山");
+      expect(getToolContent(result).ui[0].spec.props.category).toBe("location");
+      expect(getToolContent(result).ui[0].spec.props.isNew).toBe(true);
     });
 
     it("should persist entries to plugin-data store", async () => {
@@ -217,7 +137,7 @@ describe("codex tools", () => {
         mockStore,
       );
 
-      const entryId = result.entries[0].entryId;
+      const entryId = getToolContent(result).entries[0].entryId;
       const stored = await mockStore.getPluginData(
         "sess-1",
         "codex",
@@ -261,7 +181,7 @@ describe("codex tools", () => {
           "sess-1",
           "codex",
           "entries",
-          result.entries[i].entryId,
+          getToolContent(result).entries[i].entryId,
         );
         expect(stored.value.categoryMeta).toEqual(
           CODEX_CATEGORY_METADATA[category],
@@ -301,14 +221,14 @@ describe("codex tools", () => {
         mockStore,
       );
 
-      expect(result.unlocked).toBe(3);
-      expect(result.ui).toHaveLength(3);
+      expect(getToolContent(result).unlocked).toBe(3);
+      expect(getToolContent(result).ui).toHaveLength(3);
       // Each block is a generic ui-spec carrying an EntryCard spec.
       // Rarity is reflected in spec.props.rarity; the renderer handles
       // rarity → border/animation mapping (no plugin-side style tokens).
-      expect(result.ui[0].spec.props.rarity).toBe("uncommon");
-      expect(result.ui[1].spec.props.rarity).toBe("rare");
-      expect(result.ui[2].spec.props.rarity).toBe("common");
+      expect(getToolContent(result).ui[0].spec.props.rarity).toBe("uncommon");
+      expect(getToolContent(result).ui[1].spec.props.rarity).toBe("rare");
+      expect(getToolContent(result).ui[2].spec.props.rarity).toBe("common");
 
       const stored = await mockStore.listPluginData(
         "sess-1",
@@ -337,10 +257,10 @@ describe("codex tools", () => {
         mockStore,
       );
 
-      expect(result.ui[0].spec.props.rarity).toBe("legendary");
+      expect(getToolContent(result).ui[0].spec.props.rarity).toBe("legendary");
       // imageHint is kept in block `meta` so tools/traces can still see it,
       // without pushing codex-specific styling into the spec tree.
-      expect(result.ui[0].meta.imageHint).toBe(
+      expect(getToolContent(result).ui[0].meta.imageHint).toBe(
         "远古天空裂开，金色灵气如瀑布倾泻而下",
       );
     });
@@ -365,7 +285,7 @@ describe("codex tools", () => {
         mockStore,
       );
 
-      const entryId = unlockResult.entries[0].entryId;
+      const entryId = getToolContent(unlockResult).entries[0].entryId;
 
       const result = await executeAndCommit(
         updateCodexEntryTool,
@@ -377,11 +297,11 @@ describe("codex tools", () => {
         mockStore,
       );
 
-      expect(result.updated).toBe(true);
-      expect(result.entryId).toBe(entryId);
+      expect(getToolContent(result).updated).toBe(true);
+      expect(getToolContent(result).entryId).toBe(entryId);
       // Updates use the same generic ui-spec convention as unlocks.
-      expect(result.ui[0].type).toBe("ui-spec");
-      expect(result.ui[0].spec.type).toBe("EntryCard");
+      expect(getToolContent(result).ui[0].type).toBe("ui-spec");
+      expect(getToolContent(result).ui[0].spec.type).toBe("EntryCard");
 
       const stored = await mockStore.getPluginData(
         "sess-1",
@@ -447,7 +367,7 @@ describe("codex tools", () => {
         ctx,
       );
 
-      const entryId = unlockResult.entries[0].entryId;
+      const entryId = getToolContent(unlockResult).entries[0].entryId;
       const result = await updateCodexEntryTool.execute(
         {
           entryId,
@@ -459,11 +379,10 @@ describe("codex tools", () => {
         },
       );
 
-      expect(result.updated).toBe(true);
-      expect(result.entryId).toBe(entryId);
+      expect(getToolContent(result).updated).toBe(true);
+      expect(getToolContent(result).entryId).toBe(entryId);
 
-      await applyPendingPluginData(unlockResult, mockStore);
-      await applyPendingPluginData(result, mockStore);
+      await commitToolResults([unlockResult, result], ctx, mockStore);
 
       const stored = await mockStore.getPluginData(
         "sess-1",
@@ -485,8 +404,8 @@ describe("codex tools", () => {
         mockStore,
       );
 
-      expect(result.updated).toBe(false);
-      expect(result.error).toBeDefined();
+      expect(getToolContent(result).updated).toBe(false);
+      expect(getToolContent(result).error).toBeDefined();
     });
 
     it("should support rarity upgrade", async () => {
@@ -506,7 +425,7 @@ describe("codex tools", () => {
         ctx,
         mockStore,
       );
-      const entryId = unlockResult.entries[0].entryId;
+      const entryId = getToolContent(unlockResult).entries[0].entryId;
 
       const result = await executeAndCommit(
         updateCodexEntryTool,
@@ -522,8 +441,8 @@ describe("codex tools", () => {
       // rarityUpgrade lives in block meta (observability only). The spec
       // props surface the new rarity via `rarity`; the renderer handles the
       // visual treatment without any upgrade-specific plugin tokens.
-      expect(result.ui[0].meta.rarityUpgrade).toBe("legendary");
-      expect(result.ui[0].spec.props.rarity).toBe("legendary");
+      expect(getToolContent(result).ui[0].meta.rarityUpgrade).toBe("legendary");
+      expect(getToolContent(result).ui[0].spec.props.rarity).toBe("legendary");
 
       const stored = await mockStore.getPluginData(
         "sess-1",
@@ -563,7 +482,7 @@ describe("codex tools", () => {
         ctx,
         mockStore,
       );
-      const existingId = initial.entries[0].entryId;
+      const existingId = getToolContent(initial).entries[0].entryId;
 
       const rawResult = await executeAndCommit(
         syncCodexEntriesTool,
@@ -591,9 +510,9 @@ describe("codex tools", () => {
       );
       const result = getToolContent(rawResult);
 
-      expect(result.unlocked).toBe(1);
-      expect(result.updated).toBe(1);
-      expect(result.ui).toHaveLength(2);
+      expect(getToolContent(result).unlocked).toBe(1);
+      expect(getToolContent(result).updated).toBe(1);
+      expect(getToolContent(result).ui).toHaveLength(2);
       expect(getPendingProposals(rawResult)).toHaveLength(2);
 
       const updated = await mockStore.getPluginData(

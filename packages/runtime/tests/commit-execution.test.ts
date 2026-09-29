@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import type { RuntimeResult } from "@covel/shared";
 import {
@@ -36,23 +36,29 @@ async function fixture() {
   };
   const args: CommitExecutionArgs = {
     store,
-    sessionId: "session",
     eventBus,
-    executionContext: {
-      executionId: "run",
-      origin: "manual",
-      countPolicy: "none",
-    },
-    runtimes: [
-      {
-        name: "story",
-        pluginId: "story",
-        outputKind: "story",
-        outputContract: undefined,
+    execution: {
+      result,
+      commit: {
+        sessionId: "session",
+        executionContext: {
+          executionId: "run",
+          origin: "manual",
+          countPolicy: "none",
+        },
+        runtimes: [
+          {
+            name: "story",
+            pluginId: "story",
+            outputKind: "story",
+            outputContract: undefined,
+          },
+        ],
+        results: [result],
+        turnIds: [],
+        outputSchemas: {},
       },
-    ],
-    results: [result],
-    turnIds: [],
+    },
     completion: { kind: "turn", turnId: "turn", durationMs: 1 },
   };
   return { args, store, events, result };
@@ -123,9 +129,15 @@ describe("commitExecution lifecycle", () => {
         ...args,
         ...(kind === "suspended"
           ? {
-              results: [
-                { ...result, status: "suspended" as const, output: null },
-              ],
+              execution: {
+                ...args.execution,
+                commit: {
+                  ...args.execution.commit,
+                  results: [
+                    { ...result, status: "suspended" as const, output: null },
+                  ],
+                },
+              },
             }
           : { completion: { kind: "detached" as const, turnId: "turn" } }),
       });
@@ -147,15 +159,21 @@ describe("commitExecution lifecycle", () => {
         pluginId: "story",
         runtimeId: "story",
       },
-      runtimes: [
-        ...args.runtimes,
-        { name: "helper", pluginId: "helper", outputKind: "system" },
-      ],
-      results: [
-        result,
-        { ...result, turnId: "old-turn" },
-        { ...result, runtimeId: "helper" },
-      ],
+      execution: {
+        ...args.execution,
+        commit: {
+          ...args.execution.commit,
+          runtimes: [
+            ...args.execution.commit.runtimes,
+            { name: "helper", pluginId: "helper", outputKind: "system" },
+          ],
+          results: [
+            result,
+            { ...result, turnId: "old-turn" },
+            { ...result, runtimeId: "helper" },
+          ],
+        },
+      },
     });
     expect(outcome.status).toBe("committed");
     expect(events).toContain("turn.resumed");

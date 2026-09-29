@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../handler.js";
 
 function ctx(manualPayload, store = {}, pluginData) {
@@ -18,7 +22,7 @@ function ctx(manualPayload, store = {}, pluginData) {
 }
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business return
-// is under `result.value`; pending proposals stay on the envelope (result).
+// is under `getToolContent(result).value`; pending proposals stay on the envelope (result).
 describe("player-identity handler", () => {
   it("saves and activates a profile", async () => {
     const result = await handler(
@@ -32,7 +36,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       profileId: "wanderer",
       activated: true,
@@ -168,7 +172,7 @@ describe("player-identity handler", () => {
       ),
     );
 
-    expect(result.value.characterId).toBe("player-1");
+    expect(getToolContent(result).value.characterId).toBe("player-1");
     const proposals = getPendingProposals(result);
     expect(proposals[2]).toMatchObject({
       type: "character.upsert",
@@ -202,7 +206,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       profileId: "observer",
       activated: false,
@@ -230,7 +234,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       saved: true,
       profileId: "transfer-student",
       activated: true,
@@ -281,7 +285,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       saved: true,
       profileId: "player-transfer-student",
       activated: true,
@@ -307,7 +311,7 @@ describe("player-identity handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       profileId: "player-transfer-student",
       activated: false,

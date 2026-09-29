@@ -1,3 +1,8 @@
+import { createMemoryStore } from "@covel/store/memory";
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -6,18 +11,18 @@ import {
   loadRuntime,
 } from "@covel/plugin-loader";
 import {
-  createMemoryStore,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
 } from "@covel/store";
 import {
   executeTurn,
-  finalizeExecution,
+  commitExecution,
   createToolExecutor,
   createFunctionStoreView,
   createTrustedHandlerStore,
 } from "@covel/runtime";
-import { tool, getPendingProposals } from "@covel/tools";
+
+import { tool } from "@covel/tools";
 import createAdvance from "../tools/advance-world-time.js";
 import { DEFAULT_TIME, initialTick, loadTime } from "../clock.js";
 
@@ -117,17 +122,14 @@ async function fixture() {
       },
       options,
     );
-  const commit = (result, extraInTx) =>
-    finalizeExecution({
+  const commit = (execution, extraInTx) =>
+    commitExecution({
       store,
-      sessionId: "s",
-      runtimes,
-      results: result.runtimeResults,
-      turnIds: [],
-      executionContext: {
-        executionId: "e",
-        origin: "player",
-        countPolicy: "none",
+      execution,
+      completion: {
+        kind: "turn",
+        turnId: execution.result.turnId,
+        durationMs: 1,
       },
       extraInTx,
     });
@@ -139,7 +141,7 @@ describe("world-time pipeline", () => {
     const { store, run, commit, storyHandler, generate } = await fixture();
     const result = await run();
     expect(
-      result.runtimeResults.map((item) => [item.runtimeId, item.status]),
+      result.result.runtimeResults.map((item) => [item.runtimeId, item.status]),
     ).toEqual([
       ["world-time/context", "success"],
       ["story", "success"],
@@ -235,7 +237,7 @@ describe("world-time pipeline", () => {
     expect(storyHandler).toHaveBeenCalledOnce();
     expect(generate).not.toHaveBeenCalled();
     expect(
-      result.runtimeResults.find(
+      result.result.runtimeResults.find(
         (entry) => entry.runtimeId === "world-time/advance",
       ).status,
     ).toBe("skipped");
@@ -297,6 +299,6 @@ describe("world-time pipeline", () => {
       },
     );
     expect(getPendingProposals(second)).toHaveLength(0);
-    expect(second.tick).toBe(initialTick(DEFAULT_TIME) + 10);
+    expect(getToolContent(second).tick).toBe(initialTick(DEFAULT_TIME) + 10);
   });
 });

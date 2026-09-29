@@ -2,38 +2,37 @@ import { describe, expect, it, vi } from "vitest";
 import { createMemoryTools } from "../src/index.js";
 
 describe("kernel memory search", () => {
-  it("searches recall and archival within the bound session and merges ranked results", async () => {
-    const recall = vi.fn(async () => [
+  it("delegates ranking and scope to memory and only formats tool output", async () => {
+    const search = vi.fn(async () => [
       {
-        turnId: "t",
+        source: "recall",
         role: "user",
         content: "compass",
-        score: 1,
+        score: 0.2,
         timestamp: "today",
       },
-    ]);
-    const archival = vi.fn(async () => [
       {
+        source: "archival:character",
         key: "captain",
         content: "sapphire compass",
-        source: "character",
-        score: 2,
+        score: 1,
       },
     ]);
-    const tools = createMemoryTools({
-      recall: { search: recall },
-      archival: { search: archival },
-    });
-    expect(tools.map((tool) => tool.name)).toEqual(["memory-search"]);
-    const result = await tools[0]!.execute(
-      { query: "compass", limit: 1 },
+    const [tool] = createMemoryTools({ search });
+    const result = await tool!.execute(
+      { query: "compass", limit: 2 },
       { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p/r" },
     );
-    expect(recall).toHaveBeenCalledWith("s", "compass", 1);
-    expect(archival).toHaveBeenCalledWith("s", "compass", 1);
+    expect(search).toHaveBeenCalledExactlyOnceWith("s", "compass", {
+      scope: "all",
+      limit: 2,
+    });
     expect(result).toMatchObject({
-      resultCount: 1,
-      results: [{ source: "archival:character", key: "captain" }],
+      resultCount: 2,
+      results: [
+        { source: "recall", content: "[user] compass", score: 0.2 },
+        { source: "archival:character", key: "captain", score: 1 },
+      ],
     });
   });
 });

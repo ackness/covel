@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry } from "@covel/tools";
 import {
   createPluginRegistry,
@@ -557,6 +557,50 @@ describe("plugin generation reload", () => {
     f.revoke();
     await expect(f.manager.reload(f.id, "session")).rejects.toThrow("approval");
   });
+  it("keeps locale prose in its captured generation even when the caller locale differs from the session", async () => {
+    const f = await fixture(true);
+    const canonical = await fs.readFile(
+      path.join(f.root, "PLUGIN.md"),
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(f.root, "PLUGIN.en.md"),
+      canonical.replace("\nFixture\n", "\nEnglish generation one.\n"),
+    );
+    await f.manager.reload(f.id, "session");
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const old = f.manager.withSnapshot("session", async () => {
+      started.resolve();
+      await finish.promise;
+      const manifest = f.registry.getActiveRuntimes("session")[0]!;
+      expect(
+        (await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session"))
+          ?.promptTemplate,
+      ).toContain("English generation one.");
+      expect(
+        (
+          await f.runtimeLoader!.loadRuntimeFn(manifest, "zh-CN", "session")
+        )?.promptTemplate.trim(),
+      ).toBe("Fixture");
+    });
+    await started.promise;
+    await fs.writeFile(
+      path.join(f.root, "PLUGIN.en.md"),
+      canonical.replace("\nFixture\n", "\nEnglish generation two.\n"),
+    );
+    await f.manager.reload(f.id, "session");
+    finish.resolve();
+    await old;
+    await f.manager.withSnapshot("session", async () => {
+      const manifest = f.registry.getActiveRuntimes("session")[0]!;
+      expect(
+        (await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session"))
+          ?.promptTemplate,
+      ).toContain("English generation two.");
+    });
+  });
+
   it("captures handler and guard modules, validates new artifacts before publication, and keeps grants live", async () => {
     const f = await fixture(true);
     const started = Promise.withResolvers<void>();

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { mediaRoutes } from "../../src/routes/api/media.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import {

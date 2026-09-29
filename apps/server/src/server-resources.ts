@@ -1,7 +1,4 @@
-import {
-  awaitPendingMemoryBackgroundTasks,
-  pendingMemoryBackgroundTaskCount,
-} from "@covel/memory";
+import type { MemorySystem } from "@covel/memory";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { Sql } from "postgres";
 import type { ApiBootstrapResult } from "./routes/api/bootstrap.js";
@@ -17,6 +14,7 @@ export interface ServerResources {
     ApiBootstrapResult,
     "startupMaintenance" | "closePluginEntries" | "closeTools"
   > & {
+    memorySystem?: Pick<MemorySystem, "drain" | "pendingTaskCount">;
     applicationWork: Pick<ApplicationWork, "close">;
     runtimeJobWorker: Pick<ApiBootstrapResult["runtimeJobWorker"], "close">;
     pluginBackgroundQueue: Pick<
@@ -86,8 +84,8 @@ export function createServerResourceDrain(
     const memoryDrained = await drainPhase(
       "flush memory background tasks",
       async () => {
-        const result = await awaitPendingMemoryBackgroundTasks();
-        if (result.rejected > 0) {
+        const result = await api?.memorySystem?.drain();
+        if (result && result.rejected > 0) {
           console.warn(
             `[shutdown] ${result.rejected} memory background task(s) failed while draining`,
           );
@@ -95,7 +93,7 @@ export function createServerResourceDrain(
       },
       MEMORY_DRAIN_TIMEOUT_MS,
     );
-    const pending = pendingMemoryBackgroundTaskCount();
+    const pending = api?.memorySystem?.pendingTaskCount() ?? 0;
     if (pending > 0) {
       console.warn(
         `[shutdown] ${pending} memory background task(s) still pending; leaving dependencies open for process exit`,

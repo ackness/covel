@@ -22,8 +22,11 @@
  *     chat-area toast block can render them (guide's `__turnId` convention).
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
+
 import { AFFINITY_MIN, clampScore, getTier } from "../tier-metadata.js";
 
 const HISTORY_LIMIT = 10;

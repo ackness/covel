@@ -6,8 +6,9 @@ import {
   optionalString,
   readManualEntity,
   splitList,
+  shortId,
+  withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { shortId, withPendingProposals } from "@covel/tools";
 
 const RULE_NAMESPACE = "rules";
 const RULE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
@@ -23,8 +24,7 @@ const VALID_POSITIONS = new Set(["before_plugin", "after_plugin", "at_depth"]);
 const VALID_BUDGET_CLASSES = new Set(["sticky", "flexible", "droppable"]);
 
 /**
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   const payload = ctx.manualPayload ?? {};

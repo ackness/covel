@@ -12,11 +12,7 @@ import type {
 import { attachRuntimeJournal } from "../execution-journal.js";
 import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import {
-  buildContext,
-  buildContextAsync,
-  needsAsyncBuild,
-} from "@covel/context";
+import { buildContext } from "@covel/context";
 import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -189,9 +185,7 @@ export async function executeAgentRuntime({
         : {}),
     } as const;
 
-    return needsAsyncBuild({ manifest })
-      ? buildContextAsync({ ...buildParams, store: deps.store })
-      : Promise.resolve(buildContext(buildParams));
+    return buildContext({ ...buildParams, store: deps.store });
   };
 
   let assembled = await assembleContext();
@@ -386,6 +380,9 @@ export async function executeAgentRuntime({
     turnId: input.turnId,
     status: "success",
     output: finalized.output,
+    ...(finalized.pendingProposals
+      ? { pendingProposals: finalized.pendingProposals }
+      : {}),
     ...(finalized.effects ? { effects: finalized.effects } : {}),
     ...(finalized.completion ? { completion: finalized.completion } : {}),
     toolCalls: collectedToolCalls,

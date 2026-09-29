@@ -7,7 +7,7 @@
  */
 import makeRecordNote from "../tools/record-note.js";
 
-/** @param {import('@covel/runtime').PluginAPI} covel */
+/** @param {import('@covel/plugin-handlers-utils/plugin-api').PluginAPI} covel */
 export default function (covel) {
   covel.registerTool(makeRecordNote(covel.toolkit));
 }

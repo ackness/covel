@@ -9,11 +9,8 @@ import {
   discoverPlugins,
   loadPluginDefinition,
 } from "@covel/plugin-loader";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  type DataStore,
-} from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {
   applyPreparedWorldDataImportForSession,
   finalizeWorldDataMediaRefs,

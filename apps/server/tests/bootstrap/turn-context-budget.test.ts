@@ -7,7 +7,8 @@ import {
   type LLMAdapter,
   type LLMResponse,
 } from "@covel/runtime";
-import { createMemoryStore, type TurnMessageRecord } from "@covel/store";
+import { type TurnMessageRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   createBootstrapCompactorRunner,
   createTurnContextBudget,

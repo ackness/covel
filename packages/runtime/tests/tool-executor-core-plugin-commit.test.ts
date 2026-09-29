@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { tool, z } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";

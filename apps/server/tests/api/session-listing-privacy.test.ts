@@ -10,11 +10,8 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryStore,
-  type DataStore,
-  type StoreBackend,
-} from "@covel/store";
+import { type DataStore, type StoreBackend } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 
 function buildApp(store: DataStore, backend?: StoreBackend): Hono {

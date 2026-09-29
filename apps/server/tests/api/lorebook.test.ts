@@ -11,11 +11,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryStore,
-  type DataStore,
-  type LorebookEntryRecord,
-} from "@covel/store";
+import { type DataStore, type LorebookEntryRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { lorebookRoutes } from "../../src/routes/api/lorebook.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 

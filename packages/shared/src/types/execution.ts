@@ -63,6 +63,8 @@ export interface RuntimeResult {
   readonly output: Readonly<Record<string, unknown>> | null;
   /** Explicit effects consumed by event dispatch, interaction handling and commit. */
   readonly effects?: import("./handler-result.js").RuntimeEffects;
+  /** Validated execution-buffered commands, committed separately from business output. */
+  readonly pendingProposals?: readonly import("./proposal.js").Proposal[];
   /** Setup completion is independent of business output. */
   readonly completion?: "done" | "pending";
   /** Exact function value, including scalar/array values, for schemas and bindings. */

@@ -24,8 +24,10 @@
  *     failed) into the `message` namespace for the chat-feed block.
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 const MAX_QUESTS_PER_CALL = 5;
 

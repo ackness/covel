@@ -10,3 +10,9 @@ export { bindToolStore } from "./tool-store.js";
 export type { ManualFunctionContextOptions } from "./manual-context.js";
 export { expectAssetGenerated } from "./contract.js";
 export type { ExpectAssetGeneratedOptions } from "./contract.js";
+
+export {
+  createPluginTestStore,
+  executeToolAndCommit,
+  commitToolResults,
+} from "./tool-harness.js";

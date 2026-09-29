@@ -11,11 +11,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import {
-  createMemoryStore,
   type DataStore,
   type RuntimeOutputRecord,
   type InteractionRecordRow,
 } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { runtimeOutputRoutes } from "../../src/routes/api/runtime-outputs.js";
 
 type Env = { Variables: { store: DataStore } };

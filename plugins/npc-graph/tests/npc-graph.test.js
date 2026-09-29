@@ -1,4 +1,14 @@
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+  commitToolResults,
+} from "@covel/plugin-test-utils";
 /**
  * npc-graph plugin tests.
  *
@@ -16,77 +26,10 @@ import { bindToolStore } from "@covel/plugin-test-utils";
 import { describe, it, expect, beforeEach } from "vitest";
 import path from "node:path";
 import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpsertNpcGraph from "../tools/upsert-npc-graph.js";
 import createListNpcGraph from "../tools/list-npc-graph.js";
-
-// ── Minimal plugin_data mock store ────────────────────────────────
-
-function createMockStore() {
-  /** @type {Map<string, any>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const prefix = namespace
-        ? `${sessionId}:${pluginId}:${namespace}:`
-        : `${sessionId}:${pluginId}:`;
-      const results = [];
-      for (const [k, v] of data) {
-        if (k.startsWith(prefix)) results.push(v);
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type !== "plugin.data.batch") continue;
-    await store.setPluginDataBatch(
-      proposal.payload.items.map((item, index) => ({
-        id: `${proposal.id}:${index}`,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: item.namespace,
-        key: item.key,
-        value: item.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      })),
-    );
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
 
 const ctx = {
   sessionId: "sess-npc",
@@ -181,8 +124,8 @@ describe("upsert-npc-graph", () => {
   let upsertTool;
   let listTool;
 
-  beforeEach(() => {
-    store = createMockStore();
+  beforeEach(async () => {
+    store = await createPluginTestStore(ctx);
     upsertTool = bindToolStore(
       createUpsertNpcGraph({ tool, z, shortIdBatch }),
       store,
@@ -236,18 +179,20 @@ describe("upsert-npc-graph", () => {
       store,
     );
 
-    expect(result.nodes.created).toBe(2);
-    expect(result.nodes.updated).toBe(0);
-    expect(result.nodes.results).toHaveLength(2);
-    for (const r of result.nodes.results) {
+    expect(getToolContent(result).nodes.created).toBe(2);
+    expect(getToolContent(result).nodes.updated).toBe(0);
+    expect(getToolContent(result).nodes.results).toHaveLength(2);
+    for (const r of getToolContent(result).nodes.results) {
       expect(r.id).toMatch(/^npc-/);
     }
 
     const list = await listTool.execute({}, ctx);
-    expect(list.nodeCount).toBe(2);
-    expect(list.nodes.map((n) => n.name).sort()).toEqual(
-      ["萧衍笙", "碧波宗"].sort(),
-    );
+    expect(getToolContent(list).nodeCount).toBe(2);
+    expect(
+      getToolContent(list)
+        .nodes.map((n) => n.name)
+        .sort(),
+    ).toEqual(["萧衍笙", "碧波宗"].sort());
   });
 
   it("merges when a node with the same name is upserted twice", async () => {
@@ -278,13 +223,16 @@ describe("upsert-npc-graph", () => {
       store,
     );
 
-    expect(second.nodes.created).toBe(0);
-    expect(second.nodes.updated).toBe(1);
+    expect(getToolContent(second).nodes.created).toBe(0);
+    expect(getToolContent(second).nodes.updated).toBe(1);
 
     const list = await listTool.execute({}, ctx);
-    expect(list.nodeCount).toBe(1);
-    expect(list.nodes[0].labels).toEqual(["sect-leader", "researcher"]);
-    expect(list.nodes[0].summary).toMatch(/古老的阵法/);
+    expect(getToolContent(list).nodeCount).toBe(1);
+    expect(getToolContent(list).nodes[0].labels).toEqual([
+      "sect-leader",
+      "researcher",
+    ]);
+    expect(getToolContent(list).nodes[0].summary).toMatch(/古老的阵法/);
   });
 
   it("keeps an existing lastSeenTurn when a re-upsert carries no turnNumber", async () => {
@@ -298,7 +246,7 @@ describe("upsert-npc-graph", () => {
       { ...ctx, turnNumber: 5 },
       store,
     );
-    const nodeId = seeded.nodes.results[0].id;
+    const nodeId = getToolContent(seeded).nodes.results[0].id;
 
     // Re-upsert without turnNumber (currentTurn = -1). The node's real
     // lastSeenTurn must not regress to the "unknown" sentinel.
@@ -344,9 +292,9 @@ describe("upsert-npc-graph", () => {
       store,
     );
 
-    expect(out.nodes.created).toBe(2);
-    expect(out.edges.created).toBe(1);
-    const edgeRow = out.edges.results[0];
+    expect(getToolContent(out).nodes.created).toBe(2);
+    expect(getToolContent(out).edges.created).toBe(1);
+    const edgeRow = getToolContent(out).edges.results[0];
     expect(edgeRow.id).toMatch(/^edge-/);
 
     // Adjacency index must include the new edge
@@ -418,9 +366,11 @@ describe("upsert-npc-graph", () => {
       store,
     );
 
-    expect(dup.edges.created).toBe(0);
-    expect(dup.edges.skipped).toBe(1);
-    expect(dup.edges.results[0].skipped).toBe("unchanged relation");
+    expect(getToolContent(dup).edges.created).toBe(0);
+    expect(getToolContent(dup).edges.skipped).toBe(1);
+    expect(getToolContent(dup).edges.results[0].skipped).toBe(
+      "unchanged relation",
+    );
   });
 
   // Relationships evolve: the old code de-duplicated on (source, target,
@@ -429,7 +379,7 @@ describe("upsert-npc-graph", () => {
   // filled from the stored-edge COUNT, which measures graph size, not time.
   it("supersedes an existing relation when its strength or fact changes", async () => {
     const seeded = await seedTrustEdge();
-    const originalId = seeded.edges.results[0].id;
+    const originalId = getToolContent(seeded).edges.results[0].id;
 
     const updated = await executeAndCommit(
       upsertTool,
@@ -448,13 +398,17 @@ describe("upsert-npc-graph", () => {
       store,
     );
 
-    expect(updated.edges.created).toBe(1);
-    expect(updated.edges.skipped).toBe(0);
-    expect(updated.edges.results[0].supersedes).toBe(originalId);
+    expect(getToolContent(updated).edges.created).toBe(1);
+    expect(getToolContent(updated).edges.skipped).toBe(0);
+    expect(getToolContent(updated).edges.results[0].supersedes).toBe(
+      originalId,
+    );
 
     const list = await listTool.execute({}, ctx);
-    const previous = list.edges.find((e) => e.id === originalId);
-    const current = list.edges.find((e) => e.id !== originalId);
+    const previous = getToolContent(list).edges.find(
+      (e) => e.id === originalId,
+    );
+    const current = getToolContent(list).edges.find((e) => e.id !== originalId);
 
     // The old version is closed at the turn the new fact arrived; the new one
     // opens there. Both timestamps are real turn indices, not row counts.
@@ -467,7 +421,7 @@ describe("upsert-npc-graph", () => {
     // The superseded id is pruned from the adjacency index — a revised relation
     // nets zero index growth (new id in, closed id out) rather than piling up
     // closed ids forever.
-    const aNode = list.nodes.find((n) => n.name === "A");
+    const aNode = getToolContent(list).nodes.find((n) => n.name === "A");
     const idx = await store.getPluginData(
       ctx.sessionId,
       ctx.pluginId,
@@ -511,20 +465,21 @@ describe("upsert-npc-graph", () => {
     const r1 = await revise(0.5, "Initial trust.");
     const r2 = await revise(0.1, "Growing doubt.");
     const r3 = await revise(-0.6, "Open betrayal.");
-    for (const result of [r1, r2, r3])
-      await applyPendingPluginData(result, store);
+    await commitToolResults([r1, r2, r3], turn, store);
 
     const ids = [
-      r1.edges.results[0].id,
-      r2.edges.results[0].id,
-      r3.edges.results[0].id,
+      getToolContent(r1).edges.results[0].id,
+      getToolContent(r2).edges.results[0].id,
+      getToolContent(r3).edges.results[0].id,
     ];
     // All three ids are distinct — no version overwrote another.
     expect(new Set(ids).size).toBe(3);
 
     // Every version persisted: two closed at turn 7, one still open.
     const list = await listTool.execute({}, ctx);
-    const trustEdges = list.edges.filter((e) => e.relation === "TRUSTS");
+    const trustEdges = getToolContent(list).edges.filter(
+      (e) => e.relation === "TRUSTS",
+    );
     expect(trustEdges).toHaveLength(3);
     expect(trustEdges.filter((e) => e.invalidAt === undefined)).toHaveLength(1);
     expect(trustEdges.find((e) => e.invalidAt === undefined).strength).toBe(
@@ -593,7 +548,9 @@ describe("upsert-npc-graph", () => {
     );
 
     const list = await listTool.execute({}, ctx);
-    const trust = list.edges.filter((e) => e.relation === "TRUSTS");
+    const trust = getToolContent(list).edges.filter(
+      (e) => e.relation === "TRUSTS",
+    );
     const open = trust.filter((e) => e.invalidAt === undefined);
     // Exactly one open version survives — the brand-new revision.
     expect(open).toHaveLength(1);
@@ -635,7 +592,7 @@ describe("upsert-npc-graph", () => {
       { ...ctx, turnNumber: 4 },
       store,
     );
-    const originalId = seeded.edges.results[0].id;
+    const originalId = getToolContent(seeded).edges.results[0].id;
 
     const updated = await executeAndCommit(
       upsertTool,
@@ -651,15 +608,19 @@ describe("upsert-npc-graph", () => {
       { ...ctx, turnNumber: 11 },
       store,
     );
-    const newId = updated.edges.results[0].id;
+    const newId = getToolContent(updated).edges.results[0].id;
 
-    expect(updated.edges.results[0].supersedes).toBe(originalId);
+    expect(getToolContent(updated).edges.results[0].supersedes).toBe(
+      originalId,
+    );
     expect(newId).not.toBe(originalId);
 
     // Both versions coexist: the old one closed for provenance, the new open.
     const list = await listTool.execute({}, ctx);
-    const previous = list.edges.find((e) => e.id === originalId);
-    const current = list.edges.find((e) => e.id === newId);
+    const previous = getToolContent(list).edges.find(
+      (e) => e.id === originalId,
+    );
+    const current = getToolContent(list).edges.find((e) => e.id === newId);
     expect(previous).toBeDefined();
     expect(previous.invalidAt).toBe(11);
     expect(current.invalidAt).toBeUndefined();
@@ -721,7 +682,7 @@ describe("upsert-npc-graph", () => {
       store,
     );
 
-    expect(out.edges.results[0].supersedes).toBe("edge-legacy");
+    expect(getToolContent(out).edges.results[0].supersedes).toBe("edge-legacy");
     const legacy = await store.getPluginData(
       ctx.sessionId,
       ctx.pluginId,
@@ -748,8 +709,10 @@ describe("upsert-npc-graph", () => {
       ctx,
       store,
     );
-    expect(out.edges.created).toBe(0);
-    expect(out.edges.skipped).toBe(1);
-    expect(out.edges.results[0].skipped).toBe("missing endpoint node");
+    expect(getToolContent(out).edges.created).toBe(0);
+    expect(getToolContent(out).edges.skipped).toBe(1);
+    expect(getToolContent(out).edges.results[0].skipped).toBe(
+      "missing endpoint node",
+    );
   });
 });

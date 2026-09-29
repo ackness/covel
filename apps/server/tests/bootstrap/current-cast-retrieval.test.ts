@@ -6,7 +6,7 @@ import {
   loadRuntime,
 } from "@covel/plugin-loader";
 import { executeTurn } from "@covel/runtime";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 
 // Exercise the actual bundled manifests, schema loader, stage scheduler,
 // function contexts and input bindings, without a provider or early commit.
@@ -72,7 +72,7 @@ it("passes this turn's cast to graph retrieval while its stored cast is still un
   });
   await seed("index", "by-source:graph-alice", ["promise"]);
   const generate = vi.fn();
-  const result = await executeTurn(
+  const { result } = await executeTurn(
     {
       sessionId,
       turnId: "current-turn",

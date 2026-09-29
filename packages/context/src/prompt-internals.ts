@@ -223,7 +223,7 @@ async function resolvePluginDataInject(
   if (!params.store) {
     throw new Error(
       `[plugin-data inject] store is required for runtime "${params.manifest.name}" ` +
-        `but was not provided to buildContextAsync`,
+        `but was not provided to buildContext`,
     );
   }
 

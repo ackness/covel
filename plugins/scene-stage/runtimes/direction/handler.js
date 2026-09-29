@@ -1,5 +1,7 @@
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 const DIRECTION_NS = "direction";
 const DIRECTION_KEY = "current";
@@ -12,7 +14,7 @@ const POSITIONS = new Set([
   "right",
 ]);
 
-/** @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx */
+/** @param {import('@covel/plugin-handlers-utils').PluginFunctionContext} ctx */
 export default async function handler(ctx) {
   const evt = ctx.triggerEvent;
   const cues = Array.isArray(evt?.data?.cues) ? evt.data.cues : [];

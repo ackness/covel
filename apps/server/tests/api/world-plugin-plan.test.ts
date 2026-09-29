@@ -6,7 +6,8 @@ import {
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   resolveSessionPlugins,
   type PluginManifest,

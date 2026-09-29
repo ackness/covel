@@ -25,7 +25,8 @@
 
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   authoringTriggerConfigSchema,
   getRuntimeSpec,
@@ -1475,7 +1476,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       outputKind: "plugin",
       outputContract: undefined,
     } as RuntimeManifest;
-    const assembled = buildContext({
+    const assembled = await buildContext({
       promptTemplate: "You roll dice.",
       manifest: rollerAgent,
       turnInput: { sessionId: "s", turnId: "t", playerMessage: "go" },

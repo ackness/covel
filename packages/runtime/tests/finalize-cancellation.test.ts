@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookResult } from "../src/hooks/types.js";
 import {

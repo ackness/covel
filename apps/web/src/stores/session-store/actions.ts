@@ -9,6 +9,7 @@ import {
   type SessionWorkspace,
 } from "@/services/data-service.js";
 import {
+  dropPluginDataSession,
   resetPluginData,
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
@@ -235,6 +236,7 @@ export function useBuildSessionActions({
   const deleteSession = useCallback(
     async (sessionId: string) => {
       await ds.deleteSession(sessionId);
+      dropPluginDataSession(sessionId);
       dispatch({ type: "REMOVE_SESSION", sessionId });
     },
     [ds, dispatch],

@@ -15,11 +15,7 @@ import type {
 import { attachRuntimeJournal } from "../execution-journal.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type { SuspensionRecord } from "@covel/store";
-import {
-  getPendingProposals,
-  validateOutput,
-  withPendingProposals,
-} from "@covel/tools";
+import { validateOutput, getToolContent } from "@covel/tools";
 import {
   createPluginDataWriter,
   createPluginLogger,
@@ -152,7 +148,7 @@ export async function executeFunctionRuntime({
 
   // Execution write buffer: ctx.pluginData / ctx.store domain writes route
   // through this instead of hitting the store directly, and flush onto the
-  // result output at execution end so they commit in finalizeExecution's
+  // result pendingProposals at execution end so they commit in finalizeExecution's
   // single transaction (and roll back with it if the handler fails).
   const writeBuffer = createExecutionWriteBuffer();
 
@@ -297,7 +293,7 @@ export async function executeFunctionRuntime({
     ? isTrustedSource
       ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer, world)
       : createFunctionStoreView(deps.store, helperCtx, writeBuffer)
-    : undefined;
+    : createFunctionStoreView(undefined, helperCtx);
 
   // Trace plugin-owned provider HTTP calls (ctx.utils.fetchWithRetry — the wire
   // image plugins use) when an emitter is present; raw passthrough otherwise.
@@ -352,9 +348,7 @@ export async function executeFunctionRuntime({
   };
 
   const revocable = {
-    store: handlerStore
-      ? makeRevocableCapability(handlerStore, isRevoked, "store")
-      : undefined,
+    store: makeRevocableCapability(handlerStore, isRevoked, "store"),
     pluginData: pluginDataHandle
       ? makeRevocableCapability(pluginDataHandle, isRevoked, "pluginData")
       : undefined,
@@ -534,8 +528,9 @@ export async function executeFunctionRuntime({
     await drainRecursiveCalls();
   }
 
-  const { outcome: handlerOutcome, diagnostics } =
-    normalizeHandlerResult(output);
+  const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
+    getToolContent(output),
+  );
   for (const diagnostic of diagnostics) {
     console.warn(
       `[runtime] ${manifest.name}: ${diagnostic.code} — ${diagnostic.message}`,
@@ -619,7 +614,7 @@ export async function executeFunctionRuntime({
     !envelopeSchemaError && handlerOutcome.outcome === "success"
       ? materializeHandlerSuccess(handlerOutcome, output)
       : {
-          output: output as Record<string, unknown>,
+          output: getToolContent(output) as unknown as Record<string, unknown>,
           ...(!envelopeSchemaError &&
           (handlerOutcome.outcome === "failed" ||
             handlerOutcome.outcome === "skipped") &&
@@ -694,28 +689,23 @@ export async function executeFunctionRuntime({
     },
   );
 
-  // Flush execution-buffered domain writes onto the result output so
-  // processRuntimeResult → finalizeExecution commits them in the same
-  // transaction. Non-enumerable symbol attachment — JSON.stringify (turn
-  // message, tracing) ignores it. A failed handler rethrows above and never
-  // reaches here, so its buffer is discarded (stricter atomicity than the old
-  // direct-write path). Suspends return earlier and intentionally drop the
-  // buffer too — a suspended runtime is not done.
-  if (
-    result.status === "success" &&
-    writeBuffer.length > 0 &&
-    result.output &&
-    typeof result.output === "object"
-  ) {
-    withPendingProposals(result.output as Record<string, unknown>, [
-      ...getPendingProposals(result.output),
-      ...writeBuffer,
-    ]);
-  }
+  // Keep commands separate from business output; copying the result preserves them.
+  const completedResult: RuntimeResult =
+    result.status === "success" && writeBuffer.length > 0
+      ? {
+          ...result,
+          pendingProposals: [
+            ...(result.pendingProposals ?? []),
+            ...writeBuffer,
+          ],
+        }
+      : result;
 
-  const finalOutput = (result.output ?? output) as Record<string, unknown>;
+  const finalOutput = (completedResult.output ??
+    getToolContent(output)) as Record<string, unknown>;
 
-  if (deps.store) attachRuntimeJournal(result, input, manifest, finalOutput);
+  if (deps.store)
+    attachRuntimeJournal(completedResult, input, manifest, finalOutput);
 
-  return result;
+  return completedResult;
 }

@@ -1,4 +1,13 @@
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+} from "@covel/plugin-test-utils";
 /**
  * npc-graph end-to-end integration test (no real LLM).
  *
@@ -12,18 +21,19 @@ import { bindToolStore } from "@covel/plugin-test-utils";
  *   3. Assert the retrieved npcContext contains the expected facts and
  *      that 2-hop expansion surfaces the wider relationship cluster.
  *
- * No network calls, no LLM. Uses the same in-memory mock store as the
- * other plugin tests.
+ * No network calls or real LLM. Tool calls use the runtime executor and
+ * commit boundary against a real in-memory store.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpsertNpcGraph from "../tools/upsert-npc-graph.js";
 import retrieverHandler from "../runtimes/rag-retriever/handler.js";
 
 /**
  * Mirror of the kernel's PluginDataWriter handle (ctx.pluginData) over the
- * 4-arg mock store — the retriever reads plugin data through ctx.pluginData
+ * session-scoped test store — the retriever reads plugin data through ctx.pluginData
  * only, matching production wiring.
  */
 function makePluginDataView(store, sessionId, pluginId) {
@@ -43,70 +53,6 @@ function makePluginDataView(store, sessionId, pluginId) {
   };
 }
 
-function createMockStore() {
-  /** @type {Map<string, any>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const prefix = namespace
-        ? `${sessionId}:${pluginId}:${namespace}:`
-        : `${sessionId}:${pluginId}:`;
-      const out = [];
-      for (const [k, v] of data) {
-        if (k.startsWith(prefix)) out.push(v);
-      }
-      return out;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type !== "plugin.data.batch") continue;
-    await store.setPluginDataBatch(
-      proposal.payload.items.map((item, index) => ({
-        id: `${proposal.id}:${index}`,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: item.namespace,
-        key: item.key,
-        value: item.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      })),
-    );
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
-
 const SESSION = "sess-integration";
 const PLUGIN = "npc-graph";
 
@@ -114,8 +60,11 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
   let store;
   let upsertTool;
 
-  beforeEach(() => {
-    store = createMockStore();
+  beforeEach(async () => {
+    store = await createPluginTestStore({
+      sessionId: SESSION,
+      pluginId: PLUGIN,
+    });
     upsertTool = bindToolStore(
       createUpsertNpcGraph({ tool, z, shortIdBatch }),
       store,
@@ -176,8 +125,8 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
       store,
     );
 
-    expect(extractResult.nodes.created).toBe(3);
-    expect(extractResult.edges.created).toBe(2);
+    expect(getToolContent(extractResult).nodes.created).toBe(3);
+    expect(getToolContent(extractResult).edges.created).toBe(2);
 
     // ── Simulate Phase 3: retriever runs at the start of turn 4 ─
     // The player mentions Xiao Yansheng — retriever should surface
