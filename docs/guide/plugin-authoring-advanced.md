@@ -1,914 +1,132 @@
-# 插件开发指南 · 高级（TypeScript + 审批 + 发布）
+# 插件开发指南 · 多 Runtime、契约与发布
 
-> 面向**专业开发者**：要吃下完整类型系统、写手搓 turn-executor 的集成测试、自定义审批规则、拆多 runtime 插件，并最终发布到社区。
+根 `PLUGIN.md` 是包级契约，子 `RUNTIME.md` 是执行契约。加载器的内部执行字段不属于作者接口。完整字段和默认提供者规则见[插件契约参考](../reference/plugins.md)。
 
-> **前置要求**：先完成 [零代码](./plugin-authoring-zero-code.md) 和 [进阶（agent + 本地 JS）](./plugin-authoring-agent.md)。
+## 多 Runtime 布局
 
-> **读完你能做到**
->
-> - 从 `@covel/shared` / `@covel/plugin-loader` 导入并正确使用插件相关类型
-> - 用 MockLLM 的响应队列 + 自定义工具 + 多轮 harness 做复杂集成测试
-> - 用 `createApprovalPipeline` 定制工具审批规则（allow / ask / deny）
-> - 在一个插件里组织多个 runtime（`runtimes/*/PLUGIN.md`）
-> - 按发布 checklist 完成社区插件的上架准备
-> - 满足 `I18nText` 规范让插件 UI 文本双语化
-> - 为第三方 world 包约定 `plugin://<pluginId>/<namespace>` 数据 schema，并通过 `worldData` 导入插件数据
+```text
+fact-index/
+├── package.json
+├── README.md
+├── PLUGIN.md
+├── server/index.js
+├── schemas/facts.schema.json
+└── runtimes/
+    ├── extract/RUNTIME.md
+    └── query/
+        ├── RUNTIME.md
+        └── handler.js
+```
 
+根文件：
+
+```yaml
 ---
-
-## 1. 完整的类型系统
-
-所有插件相关类型都从 `@covel/shared` 导出：
-
-```typescript
-import type {
-  // 插件类型
-  PluginType, // 'core-plugin' | 'plugin'
-  PluginManifest, // 完整插件清单
-  RuntimeManifest, // 运行时清单（PLUGIN.md frontmatter 的解析结果）
-  PluginScopedManifestFields, // RuntimeManifest 中按“插件”而非按 runtime 消费的 9 个字段
-
-  // 触发系统
-  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'(枚举闭合,其余取值加载失败)
-  TriggerConfig, // { type, interval?, topic?, maxTriggerCount?, cooldownTurns?, startTurn? }
-
-  // 输入/输出
-  InputConfig, // { schema?, inject?, tools? }
-  InputInjectDecl, // 按 kind 分的联合：runtime | plugin-data | runtime-export
-  OutputConfig, // { schema?, recordAs? }
-
-  // 工具
-  ToolsConfig, // { builtin?, plugin?, defer? } —— 没有 local，声明即加载失败
-
-  // 玩家可调设置（PLUGIN.md `userSettings`）
-  PluginUserSettingSpec, // { key, type, default?, label, description?, min?, max?, step?, options? }
-
-  // 运行时数据
-  TurnInput, // 每轮输入
-  TurnResult, // 每轮输出
-  RuntimeResult, // 单个 runtime 的执行结果
-} from "@covel/shared";
-```
-
-从 `@covel/plugin-loader` 获取加载相关类型：
-
-```typescript
-import type {
-  ParsedPluginMd, // 解析后的 PLUGIN.md
-  ParsedReference, // 解析后的参考文件
-  PluginDiscoveryResult, // 发现结果
-  LoadedRuntime, // 完全加载的 runtime
-  PluginRegistryEntry, // 注册表条目
-  PluginSource, // 'builtin' | 'community'
-  PluginTrustInfo, // { source, requiresApproval, autoLoad }
-} from "@covel/plugin-loader";
-```
-
-统一服务端入口（`entry`）的 Public Plugin API 类型从 `@covel/runtime` 导出：
-
-```typescript
-import type {
-  PluginAPI, // entry 工厂接收的 facade（registerTool / on / registerRpc / registerService / registerWires）
-  PluginToolkit, // covel.toolkit 注入包 { tool, z, shortId, shortIdBatch, withPendingProposals }
-  PluginEntryFactory, // entry 模块 default export 的签名
-  PluginHookOptions, // covel.on 的 options
-  PluginRpcOptions, // covel.registerRpc 的 options
-} from "@covel/runtime";
-```
-
-## 2. 集成测试进阶
-
-**自定义 MockLLM 响应队列**（`responses[]` 按顺序消费，耗尽后回落 `defaultResponse`）：
-
-```typescript
-import { MockLLM } from "@covel/plugin-test-utils";
-
-const mockLLM = new MockLLM({
-  responses: [
-    {
-      content: "",
-      toolCalls: [
-        { id: "tc-1", name: "emit-event", arguments: '{"topic":"scene.set"}' },
-      ],
-      finishReason: "tool_calls",
-      usage: { inputTokens: 10, outputTokens: 5 },
-    },
-    {
-      content: "你来到了一片神秘的森林...",
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 100, outputTokens: 50 },
-    },
-  ],
-});
-```
-
-**手工装配完整执行**：需要验证 agent tool loop、同 turn event 链或 proposal commit 时，用 `@covel/runtime` 公开导出手工组装：`discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，再通过 `commitExecution` 一次提交顶层与递归结果、journal 和 suspension。作者工具中的 [`execution.ts`](../../packages/test-runtime/src/execution.ts) 展示完整提交参数；底层 event/proposal 组合测试不能替代宿主完整提交。入口选择见 [plugin-testing.md](./plugin-testing.md)。
-
-**断言 Store 状态**：MemoryStore 实现完整 `DataStore` 接口。先检查 `commitExecution` 的状态，再用 `store.listPluginData(...)` / `store.getState(...)` 断言持久化结果；执行成功与提交成功是不同结果。
-
-## 3. 审批管线
-
-工具调用经过 `ApprovalPipeline` 审批。当前默认规则：
-
-| 来源            | 规则  | 说明                   |
-| --------------- | ----- | ---------------------- |
-| `builtin:*`     | allow | 框架内置工具，始终放行 |
-| `local:*`       | allow | 插件本地工具，自动放行 |
-| `third-party:*` | deny  | 未知来源工具，拒绝执行 |
-
-**自定义审批规则（用于测试或特殊场景）：**
-
-```typescript
-import { createApprovalPipeline } from "@covel/approval";
-import type { PermissionRule } from "@covel/approval";
-
-const rules: PermissionRule[] = [
-  { pattern: "builtin:*", action: "allow" },
-  { pattern: "local:*", action: "allow" },
-  { pattern: "dangerous-tool", action: "deny" },
-  { pattern: "third-party:*", action: "deny" },
-];
-
-const pipeline = createApprovalPipeline(store, rules);
-
-// 检查工具是否需要审批
-const result = pipeline.check(
-  { toolName: "dangerous-tool", sessionId: "sess-1", turnId: "turn-1" },
-  "local",
-);
-// result: { needsApproval: true, reason: 'rule-deny' }
-```
-
-`ask` 动作目前不可用；它需要可持久化的审批决策与任务恢复机制。传入任何非
-`allow` / `deny` 动作都会在创建审批管线时抛错，不会在执行时静默降级。
-
-**审批规则匹配逻辑：**
-
-1. 按规则列表顺序匹配，第一个匹配的规则生效
-2. `builtin:*`、`local:*`、`third-party:*` 按工具来源分类匹配
-3. 具体工具名（如 `dangerous-tool`）精确匹配，不区分来源
-4. 无规则匹配时默认 allow
-
-**来源分类：**
-
-框架 bootstrap 时自动分类：
-
-- `builtinUITools` 中的工具 → `builtin`
-- 插件 `tools/` 目录加载的工具 → `local`
-- 其他 → `third-party`（预留给社区插件）
-
-新插件只需在 `entry` 模块里 `covel.registerTool`，bootstrap 自动注册并归类为 `local`，无需手动修改白名单。
-
-**社区（community）信任级别的特殊处理：** 框架 bootstrap 不会立即执行 community 插件的 `entry` 模块，而是延后到首次 `POST /api/approvals/:approvalId/decision` 决策为 `allow` 时（或下一次 plugin-rpc 执行时 just-in-time），通过 `ensurePluginEntry(pluginId)` 一次性执行并注册到 toolMap。激活是幂等的，社区插件作者无需做额外配置——entry 里注册 + 通过审批后即可执行。
-
-## 4. World Data Schema 契约
-
-插件要接收世界包或 override 包携带的数据，需要在 `PLUGIN.md` frontmatter 声明 `dataSchemas`。每个 namespace 对应一个插件根目录内的 JSON Schema 文件；world-data importer 会在 session 创建前校验目标插件启用状态、namespace 声明、schema URI 与 target namespace 兼容性，以及 source item schema。
-
-```yaml
-dataSchemas:
-  relationships:
-    schemaVersion: 1
-    acceptsWorldData: true
-    schema: ./schemas/relationships.schema.json
-    description: Importable relationship records.
-```
-
-world 包使用 `plugin://<pluginId>/<namespace>` 作为 schema URI，并用 `plugin:<pluginId>/<namespace>` 作为导入目标：
-
-```yaml
-sources:
-  relationships:
-    kind: yaml
-    path: data/social/relationships.yaml
-    schema: plugin://social-sim/relationships
-    to: plugin:social-sim/relationships
-    key: id
-```
-
-同一个 `PLUGIN.md` frontmatter 可以声明目录元数据：
-
-```yaml
-tags:
-  - mode:dialogue
-  - role:scene-state
-relations:
-  provides:
-    - scene-state
-  requires:
-    - chat-mode-narrator
-  conflicts:
-    - narrator
-```
-
-`tags` 用于玩家/作者筛选和世界 `pluginPolicy` 匹配；`capabilities` 仍表示框架可依赖的机器能力契约。世界包可通过 `pluginPolicy.preset` 引用内置服务端组合包 `traditional-story`、`dialogue-mode`、`low-cost`，也可在 `pluginPolicy.packs` 中声明自定义组合；服务端会通过 `GET /api/worlds/:id/plugin-plan` 返回解析后的默认集合。
-
-导入成功后，每条 `plugin_data`、`lorebook`、`character` 和 media index 都会写入 `world_data_import_ledger`。`POST /api/worlds/:id/sync-data` 基于 ledger 做 dry-run、hash 冲突检测和同步。完整格式见 [World Data reference](../reference/world-data.md)。
-
-## 5. 多 Runtime 插件
-
-一个插件可以包含多个 runtime（每个 runtime 一份独立的 PLUGIN.md），适用于复杂的游戏系统：
-
-```
-plugins/my-combat/
-├── PLUGIN.md              # 包级信息与共享声明，不作为 runtime
-├── runtimes/
-│   ├── combat-init/
-│   │   └── PLUGIN.md      # 战斗初始化 runtime（name: my-combat/combat-init）
-│   └── combat-resolve/
-│       └── PLUGIN.md      # 战斗结算 runtime（name: my-combat/combat-resolve）
-├── tools/
-│   └── roll-dice.js
-└── package.json
-```
-
-`runtimes/*/PLUGIN.md` 才是真正的 runtime，有自己的 stage、依赖边、触发条件和 LLM 提示词。它们可以：
-
-- 使用不同的 model slot（如战斗结算用 `balance`，初始化用 `fast`）
-- 设置不同的 trigger（如一个 auto，一个 event）
-- 通过 `input.inject` 互相传递数据
-- 共享 `tools/` 目录下的工具
-
-`discoverPlugins()` 在检测到 `runtimes/` 子目录后，只把 `runtimes/*/PLUGIN.md` 中的执行声明收集为 runtime。多 runtime 根清单不能包含执行字段，每个子清单则必须有实际执行声明。根 `PLUGIN.md` 提供包级信息与共享声明；其 `entry` 与子 runtime 声明的 entry 合并、按路径去重，并在插件激活时执行。根清单不参与调度，但其中的 UI、设置、命令、事件、数据 schema 等声明仍会加载。没有根清单时，展示名回退到 plugin id（如 `my-combat`）；建议提供根清单。详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
-
-没有 `runtimes/` 的单根布局也按声明内容判定：根 `PLUGIN.md` 含 `trigger`、`runtimeType`、`handler`、`model`、`stage` 等执行字段时，它是唯一 runtime；仅有 `entry`、UI、Hook 或数据契约等包级声明时，插件有 **0 个 runtime**，仍可提供这些能力。仅写 `capabilities`、`outputKind` 或 Markdown 正文不会创建 runtime；纯声明插件无须虚构 `trigger: { type: manual }`。包级 UI 描述符没有 `runtimeId`，使用面板时不要假定该字段存在。
-
-### 插件级字段的合并规则
-
-根 `PLUGIN.md` 可提供共享声明，子 runtime 也可贡献声明。框架在发现插件时统一校验；执行调度只使用真正的 runtime。字段归属参考 `@covel/shared` 的 `PLUGIN_SCOPED_FIELDS`。
-
-| 字段                              | 同一插件的合并规则                  | 冲突处理                                         |
-| --------------------------------- | ----------------------------------- | ------------------------------------------------ |
-| `entry`                           | 根与子 runtime 的路径去重后全部执行 | 注册失败会回滚整批                               |
-| `ui`                              | 保留声明目录，汇总面板              | 通过现有 UI 校验报告错误                         |
-| `userSettings`、`commands`        | 按设置 key、命令 name 合并          | 不一致则插件加载失败                             |
-| `dataSchemas`、`worldProjections` | 按 namespace、projection id 合并    | 不一致则插件加载失败                             |
-| `events`、`memoryBlocks`          | 按 topic、label 合并                | 同插件不一致则加载失败；跨插件保留现有优先级规则 |
-| `tags`、`relations`               | 集合合并                            | 去重                                             |
-| `displayName`、`version`          | 包展示信息优先取根                  | runtime 的展示信息属于各自 runtime               |
-
-共享设置的存储键仍为 `plugin.<pluginId>.<key>`。所有 runtime 使用同一份默认值与 schema；包级 UI 不会因 runtime 数量增加而重复。`entry` 可通过 `covel.registerWires()` 注册媒体能力，清单没有独立的 `wires` 字段。
-
-`PluginManifest` 类型反映了这种结构：
-
-```typescript
-interface PluginManifest {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly pluginType: PluginType;
-  /** 单 runtime 插件 */
-  readonly runtime?: RuntimeManifest;
-  /** 多 runtime 插件 */
-  readonly runtimes?: readonly RuntimeManifest[];
-}
-```
-
-### 大工具集：延迟加载（`tools.defer`）
-
-如果一个 runtime 的工具白名单很大（经验阈值 ~10 个以上），每次 LLM 调用都全量携带所有工具的 JSON schema 会持续挤占 prompt 预算。声明 `tools.defer` 可以把部分或全部工具改为**按需检索**：
-
-```yaml
-tools:
-  plugin: [attack, defend, cast-spell, brew-potion, forge-item, ...]
-  defer: true # 或 defer: [brew-potion, forge-item] 只延迟低频工具
-```
-
-行为：被延迟的工具不进初始工具清单，框架注入 `search-tools`；LLM 用能力关键词（中英文均可）检索，命中的工具**下一步起**直接可调用，激活持续到本 turn 结束。工具注册、信任门控、审批策略完全不变——只是 schema 广播时机变了。高频工具建议留在 `defer` 之外（省一步检索往返）。详细契约见 [tools.md 的 search-tools 小节](../reference/tools.md#search-tools框架注入延迟工具加载)。
-
-## 6. 函数 Runtime、手动触发与后台执行
-
-`runtimeType: function` 表示"跳过 LLM,直接执行 JS 模块"。用于调用外部 API、做纯计算、写 plugin-data 等不需要 LLM 推理的场景。
-
-### 函数 Runtime 的 Handler 签名
-
-`handler` 字段指向一个 ESM 模块,必须 default-export 一个**单参**异步函数。运行时只传 `ctx`,并直接返回 `HandlerResult`:
-
-```ts
-import type { FunctionHandlerContext } from "@covel/plugin-loader";
-import type { HandlerResult } from "@covel/shared";
-
-export default async function handler(
-  ctx: FunctionHandlerContext,
-): Promise<HandlerResult> {
-  return {
-    outcome: "success",
-    value: { result: "..." },
-    effects: {
-      events: [{ topic: "...", data: { value: "..." } }],
-      statePatches: [{ table: "...", field: "...", value: "..." }],
-      pluginData: [{ namespace: "...", key: "...", value: "..." }],
-    },
-  };
-}
-```
-
-> **注意**: 函数 runtime 返回值必须是 `HandlerResult`。领域写入放在 `success.effects` 中；`skipped` / `failed` 只能携带观测 effects。`proposals: [...]` 不是 handler 的公开返回字段。
-
-运行时的 `ctx.store` 和 `ctx.pluginData` 读取共享本次执行的待提交写入；返回对象是独立副本，修改它不等于保存。builtin handler 也不获得完整 DataStore，其额外领域写入必须经过 proposal 提交。RPC action 的写入则在会话锁内即时生效，后续异常不会自动回滚先前的写入；需要整批回滚时应通过 runtime 的 effects 执行。
-
-`FunctionHandlerContext` 暴露的字段(仅列和插件作者最相关的):
-
-| 字段                      | 类型                                      | 用途                                                                                                                                                                                                                                                                         |
-| ------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sessionId`               | `string`                                  | 当前 session ID                                                                                                                                                                                                                                                              |
-| `turnId`                  | `string`                                  | 当前 turn ID(触发该 runtime 的 turn)                                                                                                                                                                                                                                         |
-| `pluginId` / `runtimeId`  | `string`                                  | 本 runtime 的身份(和 manifest 里一致)                                                                                                                                                                                                                                        |
-| `locale`                  | `string`                                  | `zh-CN` / `en` / ...,来自 session / 请求                                                                                                                                                                                                                                     |
-| `store`                   | `FunctionStoreView`                       | 绑定当前 session/plugin 的只读 DataStore 视图：`getPluginData(namespace, key)` / `listPluginData(namespace)` / `getSession()` / `listTurnMessages(limit?)`(传 `limit` 时返回**最近** N 条 turn 消息、按时间正序；不传则全量)。写入使用 `ctx.pluginData` 或 `success.effects` |
-| `gateway`                 | `PluginRuntimeGateway?`                   | 文本/object 生成 + slot 解析。签名见下                                                                                                                                                                                                                                       |
-| `utils`                   | `PluginRuntimeUtils?`                     | SSRF 安全的 URL 校验 + 带重试的 fetch。插件自管 wire 时使用                                                                                                                                                                                                                  |
-| `media`                   | `MediaContext?`                           | `put` / `get` / `resolveUrl` / `ingestUrl`——媒体库读写原语，`ingestUrl` 内置 SSRF/MIME/超时校验                                                                                                                                                                              |
-| `images`                  | `ImagesContext?`                          | 统一图像生成原语（generate → 落库 → promptHash 去重），见下方图像生成小节。存在条件：executor 同时装配了 gateway 与 MediaStore                                                                                                                                               |
-| `speech`                  | `SpeechContext?`                          | 统一语音原语：`generate`（TTS → 落库 → promptHash 去重）+ `transcribe`（STT → 纯文本）。存在条件与 `images` 相同                                                                                                                                                             |
-| `manualPayload`           | `unknown?`                                | 仅在 `POST /plugin-rpc` 手动触发时注入,为请求体的 `payload` 字段                                                                                                                                                                                                             |
-| `resumeData`              | `unknown?`                                | function runtime 从 suspension 恢复时注入，值为 resume API 的 `data`；可以是符合 `resumeSchema` 的 primitive                                                                                                                                                                 |
-| `resumedFromSuspensionId` | `string?`                                 | 本次 function handler 恢复所对应的 suspension id；存在时可与普通自动/手动执行区分                                                                                                                                                                                            |
-| `triggerEvent`            | `{ topic, data }?`                        | 仅 event 触发时存在,包含触发该 runtime 的事件                                                                                                                                                                                                                                |
-| `tools`                   | `{ call(name, args): Promise<unknown> }?` | 调用 manifest 声明的工具；共用参数校验、审批、Hook 和事务提案管线，不授予完整 store 写权限                                                                                                                                                                                   |
-| `signal`                  | `AbortSignal?`                            | handler 的取消信号，关联回合中止和执行 deadline。长任务应继续向下传递；中止后能力调用被撤销，迟到的 handler 返回值不会作为成功结果提交。已在外部执行的副作用仍需要协作式取消，不能据此保证回滚                                                                               |
-
-> 上表描述正式 function handler。community agent guard 是只读的预执行判定面：不注入 `pluginData`、logger、gateway、utils、media、assetProgress，且 `recursiveCall` 会拒绝。需要网络、持久化、媒体或递归调用时，把逻辑移入 handler，并通过 `success.effects` / `ctx.pluginData` 进入提交管线。builtin guard 的异步能力会被 lease 跟踪，并受同一个总 deadline 约束。
-
-**`ctx.tools.call`:** 在 manifest 的 `tools` 中声明工具名后，function handler 可以
-`await ctx.tools.call(name, args)` 执行确定性操作。调用按顺序执行，后一个工具可以读取前面
-尚未提交的写入；成功调用产生的提案随本次执行进入提交管线。工具失败会使本次执行失败，
-即使 handler 捕获了错误也不会提交部分写入。测试宿主未提供工具执行器时调用会失败。
-community 插件同样受工具权限和审批约束；不要通过改写 `pluginType` 获取内置插件信任。
-完整字段见[工具参考](../reference/tools.md)，独立 ZIP 流程见[插件测试](./plugin-testing.md)。
-
-**`ctx.gateway`:** function runtime 调用 LLM 的入口。绝不允许直接 `fetch` 文本 provider URL 或导入文本 SDK —— 这样会跳过 slot 解析、密钥管理、SSRF 防护和 replay cache。
-
-```ts
-// 文本补全
-const res = await ctx.gateway.generateText({
-  presetId: "fast", // 可选;缺省走 manifest.model / default slot
-  messages: [{ role: "user", content: "..." }],
-});
-```
-
-> 图像生成不走 `generateText` —— 见下方"图像生成:`ctx.images`"小节。
-
-> **结构化 JSON 输出当前不适用于 function runtime:** `ctx.gateway.generateObject`
-> 需要宿主向 gateway 注入 JSON Schema → Zod 的转换器，server 组合根目前未接入。若需要
-> 结构化输出,请用 **agent runtime** 的 `output.schema` / `responseFormat` 路径 ——
-> 框架在那里自动处理 schema → provider-specific grammar。
-
-**`ctx.utils`:** 自管 wire(见下方逃生口小节)的插件必须经过这里调用网络,不要直接 `fetch`,以保持 SSRF 守卫和重试策略统一。`fetchWithRetry` 会在每次请求和重试前校验 DNS 的全部解析结果,并将连接固定到本次已验证的公网地址;媒体 URL 的每一跳重定向也会重新执行该流程,阻断私网 IPv4/IPv6 和 DNS rebinding。
-
-```ts
-const slot = ctx.gateway.resolveSlot({ presetId: "image", fallbackTag: "image" });
-if (!slot) throw new Error("image slot not configured");
-
-// SSRF 守卫 — 远端必须 https,loopback 才允许 http,阻断 RFC1918/169.254/cloud metadata
-const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
-if (!guard.ok) throw new Error(`Bad baseUrl: ${guard.reason}`);
-
-// fetch 包装 — 自动 429 / 5xx 指数退避重试,honor Retry-After
-const response = await ctx.utils.fetchWithRetry(`${slot.baseUrl}/...`, {
-  method: 'POST',
-  headers: { authorization: `Bearer ${slot.apiKey}` },
-  body: JSON.stringify({ ... }),
-  maxRetries: 3,                                    // 默认 3,设 0 禁用
-});
-```
-
-### 调度 ctx API:`inputs` / `exports` / `activation` / `execution` / `progress`
-
-调度重设计给 function handler 的 `ctx` 增加了五个字段,取代此前靠 `ctx.completedResults` 手工翻找上游结果、靠 `ctx.pluginData` 写进度占位的旧写法。均为可选字段:未装配对应依赖(或活动集里没有匹配的声明)时为 `undefined`,handler 必须先判空。
-
-**`ctx.inputs` — 同回合有类型输入绑定。** 对应 manifest 的 `inputs.<name>` 声明。每个 slot 都裹了溯源信息(`InputSlot`):`cardinality: "one"` 读 `.value`,`cardinality: "all"` 读 `.items[].value`。只有通过绑定门的 `stage` / `event` 激活才会填充;`manual` 激活会把回合绑定投影掉,此时 `ctx.inputs` 为空。
-
-```ts
-// manifest:
-//   inputs:
-//     narrative:
-//       from: { capability: narrative-engine, cardinality: one }
-//       select: "/narrativeOutput"   # RFC 6901 JSON Pointer,指进生产方成功 value
-//       required: false              # false→只排序不 gate;true→needs(turn) gate
-const narrative = ctx.inputs?.narrative?.value as string | undefined;
-```
-
-**`ctx.exports` — 跨回合导出消费。** 对应 `input.inject` 里 `kind: runtime-export` 的声明,读生产方在**本次执行开始前**提交的最新版本 `recordAs` 导出。形状与 `ctx.inputs` 相同(`.value` / `.items[]`)。
-
-**`ctx.activation` — 本次激活的规范描述。** `{ source: "stage" | "event" | "manual", detached: boolean, payload: JsonValue }`。`payload` 是经 `input.schema` 校验后的 manual / event 载荷(`stage` 激活为 `null`)。`ctx.manualPayload` / `ctx.triggerEvent.data` 是同一份值的兼容别名。
-
-**`ctx.execution` — 本次调度运行的身份。** `{ executionId, origin, logicalTurnId?, countPolicy }`。`origin` 区分 `player` / `continuation` / `manual` / `background` / `recursive` / `resume`;`countPolicy` 决定本次执行的 finalizer 是否在成功终止时结算玩家逻辑回合。用于日志关联与幂等判断,handler 一般只读。
-
-**`ctx.progress.report` — 长任务的唯一实时通道。** `report(effect)` 向内核 job-status 流追加一条事件并立即发出 SSE,让前端在回合 finalizer 跑完前就看到媒体生成等长任务的进度。它**不写游戏状态、不随领域事务回滚**;持久的领域产出仍走 handler 返回值 / proposal。`effect` 只带业务字段(`jobId` / `state` / `progress` / `message` / `data` / `sequence`),身份(session/scope/plugin/runtime)与时间戳由内核注入——handler 无法伪造别的插件或 runtime 的 job。按 `sequence` 幂等:重复或更旧的序号会被静默丢弃。进度是纯观测,上报失败绝不应拖垮已计费的工作,因此惯例是**判空 + 吞异常**:
-
-```ts
-try {
-  await ctx.progress?.report?.({
-    jobId: "bg-scene-42",
-    state: "running", // queued | running | progress | waiting-input | succeeded | failed | cancelled
-    progress: 40, // 0–100,可选
-    message: "生成夜景变体…",
-    sequence: nextSeq(), // 单调递增,去重键
-  });
-} catch {
-  // 进度仅观测,不能让上报失败中断长任务本身
-}
-```
-
-### Function handler 返回值（`HandlerResult`）
-
-每个 `runtimeType: function` 的 handler 都直接返回 `HandlerResult` 判别联合，通过 `outcome` 表达执行结果：
-
-| `outcome`   | 语义                | 可带字段                                                                |
-| ----------- | ------------------- | ----------------------------------------------------------------------- |
-| `success`   | 正常完成            | `value?`、`effects?`（领域 + 观测）、`completion?: "done" \| "pending"` |
-| `suspended` | 挂起等待续跑 / 审批 | `reason`（必需）、`resumeSchema?`                                       |
-| `skipped`   | 本次不产出          | `skipReason`、`effects?`（仅观测）                                      |
-| `failed`    | 业务失败            | `error`、`effects?`（仅观测）                                           |
-
-```ts
-import type { HandlerResult } from "@covel/shared";
-
-export default async function handler(ctx): Promise<HandlerResult> {
-  if (!ctx.inputs?.narrative)
-    return { outcome: "skipped", skipReason: "no upstream narrative" };
-  return {
-    outcome: "success",
-    value: { entries: [] },
-    effects: { pluginData: [] },
-  };
-}
-```
-
-`success.value` 必须是 JSON 值；领域 effects 只允许出现在 `success`，`skipped` / `failed` 只能携带 `jobStatus` 与 `diagnostics` 等观测 effects。框架会在提交前校验并物化这些结果。`resultFormat` 已移除；缺少 `outcome` 的旧式返回值会执行失败，不能通过增加兼容开关继续使用。setup function 完成时返回 `completion: "done"`；agent 的 setup 完成仍由结构化输出中的 `preGameDone: true` 表示。
-
-`ctx.pluginData.set/delete` 进入执行 buffer，只有成功提交才持久化并发送 SSE；失败、跳过或取消不会提交领域写入。运行中的进度应通过 `ctx.progress.report(...)` 发布，成功后的业务记录通过 `effects.pluginData` 或 buffer 提交。
-
-### `permissions.http`
-
-**`permissions.http`(声明式网络上界)**:列出本插件可经 Public Plugin API 访问的规范 HTTPS origin(`origin` 不带 path/query/凭据)与方法(缺省仅 `GET`)。
-
-```yaml
-permissions:
-  http:
-    - origin: https://api.example.com
-      methods: [GET, POST]
-```
-
-对 **community(第三方)插件**这是 **fail-closed 强制**的:`ctx.utils.fetchWithRetry` 只放行声明过的 origin+method,未声明的目标在请求发出前就抛错。这是叠加在 SSRF 守卫之上的额外白名单,不是替代——放行的 origin 仍要过私网 IP / DNS-rebinding 检查。builtin 插件受信任、不做此项强制(其调用已由 `utils.fetch.*` trace 审计)。
-
-### 图像生成:`ctx.images`(推荐路径)
-
-`ctx.images` 是框架统一的图像生成原语:选 wire、调 provider、落 `MediaStore`、按 `promptHash` 去重全部由框架完成 —— handler 只需要给 prompt 和业务 metadata,永远不接触字节流或供应商凭据。**新插件应该从这里开始,不要手写 HTTP 调用图像 provider。**
-
-```ts
-const { refs, warnings, cached } = await ctx.images.generate({
-  presetId: "image", // 可选;缺省走 image tag 解析(现有 tag-aware fallback)
-  prompt: "a rainy street at night, cinematic lighting",
-  negativePrompt: "blurry, low quality",
-  size: "1024x1024",
-  n: 1,
-  metadata: {
-    // 业务 key,自由定义;框架会在后面追加 pluginId/promptHash,插件传同名字段也不会覆盖它们
-    kind: "scene-background",
-    sceneId: ctx.triggerEvent?.data?.sceneId,
-  },
-});
-const [ref] = refs;
-if (!ref) throw new Error("image provider returned no usable media");
-```
-
-- `refs: MediaRef[]` 已经落库,可以直接放入 `HandlerResult.success.effects.assetGenerations` / `pluginData`。
-- `cached: true` 表示命中了同 `promptHash` 的既有资产,没有真的调用 provider(省钱,防重试风暴重复扣费)。
-- `metadata` 只在**首次**调用时落地——同一组生成参数的后续调用即使传了不同 `metadata` 也会命中缓存并沿用第一次的值。完整的 metadata 约定和 `promptHash` 语义见 [media-store.md § Metadata Conventions & Querying](../reference/media-store.md#metadata-conventions--querying)。
-- 存在条件:executor 同时装配了 gateway 与 `MediaStore`(生产环境始终满足;没接 store 的测试 harness 里 `ctx.images` 是 `undefined`,调用前按需 `ctx.images?.generate` 做空判断)。
-
-### 语音合成与转写:`ctx.speech`
-
-`ctx.speech` 是和 `ctx.images` 完全对称的语音原语。TTS 插件不再需要手写 HTTP wire、手动 `resolveSlot`、手动 `media.put`:
-
-```ts
-// TTS:文本 → 语音,返回已落库的 MediaRef
-const { refs, warnings, cached } = await ctx.speech.generate({
-  presetId: "mimo-tts", // 可选;缺省走 speech tag 解析
-  text: narrativeText,
-  voice: "mimo_default",
-  format: "mp3",
-  metadata: { turnId: ctx.turnId, triggeredBy: "auto" },
-});
-const [ref] = refs; // 单条音轨;数组形状与 images 对齐
-
-// STT:语音 → 文本(不落库、不去重)
-const { text } = await ctx.speech.transcribe({
-  presetId: "whisper", // 可选;缺省走 transcription tag 解析
-  audio: ref, // MediaRef,或 { data: Uint8Array, mimeType, fileName? }
-});
-```
-
-- `generate` 按 `sha256(presetId, text, voice, format)` 去重:同一段文本重复触发直接 `cached: true` 返回既有资产,不重复计费。
-- `transcribe` 输出纯文本直接返回 handler,无去重(需要缓存时插件可自行用 `ctx.pluginData` memoize)。
-- wire 选择:slot 的 `providerRequestMetadata.speechWire` / `transcriptionWire`,缺省 `openai-speech` / `openai-transcription`(标准 OpenAI `/audio/speech`、`/audio/transcriptions` 协议)。非标厂商用下方 entry 注册自定义 wire。
-- 存在条件与 `ctx.images` 相同,调用前 `ctx.speech?.generate` 空判断。
-
-### 自管 wire(逃生口):`ctx.gateway.resolveSlot`
-
-只有当框架内置的两个 wire(`openai-images` / `dashscope-wan`)都覆盖不了需求时才用这条路径 —— 比如要接一个响应形态特殊、`ctx.images` 尚未支持的 provider,或者单次调试性质、不想为它注册一个正式 wire。这时直接拿 slot 凭据自己发请求:
-
-```ts
-const slot = ctx.gateway.resolveSlot({
-  presetId: "image",
-  fallbackTag: "image",
-});
-if (slot) {
-  // slot = { presetId, provider, baseUrl, apiKey, model, tag, metadata, ... }
-  // 拿到凭据后用任意 SDK / fetch 调供应商(经 ctx.utils,见上)
-}
-```
-
-这条路径下框架不再帮你落库或去重 —— `resolveSlot` 只给凭据,provider 返回的 `b64_json` 或临时 URL 必须自己写入 `ctx.media.put()` 或 `ctx.media.ingestUrl()`,完成态从 `HandlerResult.success.effects.assetGenerations` 返回。
-
-### 注册自定义 wire:entry 里的 `covel.registerWires`
-
-如果是一个会被反复使用的新 provider 协议(而不是一次性调试),把它注册成正式的 wire —— 图像、TTS、STT 三个模态同一套机制,任何插件(包括 `~/.covel/plugins` 下的社区插件)都可以接入,不需要提交框架 PR:
-
-**1. 在 PLUGIN.md frontmatter 声明 `entry` 字段**(插件根目录相对路径,整个插件声明一次即可):
-
-```yaml
-entry: ./server/index.js
-```
-
-**2. 在 entry 工厂里调用 `covel.registerWires`**,传入 `{ image?, speech?, transcription? }` 三组 wire 数组(都可选)。框架的 SSRF 守卫和重试 fetch 经 `covel.http` 注入,插件零依赖:
-
-```js
-// server/index.js — 纯 JS,无需 import 任何框架包
-import makeWires from "../lib/wires.js";
-
-/** @param {import('@covel/runtime').PluginAPI} covel */
-export default function (covel) {
-  covel.registerWires(makeWires(covel.http));
-}
-```
-
-```js
-// lib/wires.js
-export default ({ fetchWithRetry, validateBaseUrl }) => ({
-  speech: [
-    {
-      id: "mimo", // 注册后自动加插件前缀 → "mimo-tts/mimo"
-      async synthesize(config, params) {
-        // config = { baseUrl, apiKey, ... }(来自 slot 解析,key 已注入)
-        // params = { model, text, voice?, format?, providerRequestMetadata? }
-        // 返回 { audio: { mimeType, data: Uint8Array }, usage, warnings }
-      },
-    },
-  ],
-  image: [/* { id, async generate(config, params) } */],
-  transcription: [/* { id, async transcribe(config, params) } */],
-});
-```
-
-- **命名空间:** 注册 id 强制加 `<pluginId>/` 前缀 —— 不会撞内置 wire,两个插件可以各自有同名 wire。
-- **加载时机与信任门控:** builtin 插件在服务启动时注册;community 插件在其 runtime 首次被加载时注册(与框架 `import()` 其 handler.js 同刻,时序必然早于 handler 里的任何 `ctx.images` / `ctx.speech` 调用)。
-- **容错:** 路径逃逸、文件缺失、条目形状不对都只 warn 并跳过,不会拖垮启动;重复注册(dev 双重启动)也只 warn。
-- bundled 插件如果更愿意直接 `import { registerImageWire } from "@covel/ai-provider"` 在模块顶层注册,仍然可行 —— entry 注册让拿不到 workspace 依赖的第三方插件也能接入这条路径。
-
-**3. 接上 slot:** 在 `llm.toml` 给对应 slot 的 `providerRequestMetadata` 指定 wire id(注意带插件前缀),`ctx.images` / `ctx.speech` / gateway 就会选中它:
-
-```toml
-[covel.mimo-tts]
-provider = "xiaomi"
-model = "mimo-v2.5-tts"
-tag = "speech"
-providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
-```
-
-不设置时的缺省 wire:`imageWire` → `openai-images`、`speechWire` → `openai-speech`、`transcriptionWire` → `openai-transcription`。完整 slot 配置参考见 [slots.md](../reference/slots.md)。
-
-### 手动触发: 前端 → RPC → 函数 Runtime
-
-典型的"玩家点按钮 → 触发插件 runtime"链路:
-
-多条记录要作为一次状态变更时，选 manual function runtime：`ctx.pluginData.set/delete` 写入执行 buffer，与返回的领域 effects 一起经 proposal 提交；任一提交失败会回滚本次领域写入。function handler 不需要 LLM，手动触发也不会自动运行叙事 runtime；显式声明的事件下游仍会执行。`invokePluginAction` 调用的 RPC action 则逐次即时写入，后续 handler 失败不回滚先前成功的写入。可参考 [`tabletop-rules/check` 的双记录写入](../../plugins/tabletop-rules/runtimes/check/handler.js)。
-
-1. 插件在 `ui/xxx.json` 里声明一个按钮,`on.click.action: "invokeRuntime"`,`params.runtimeId: "my-plugin/worker"`。**不需要**写任何 React 代码 —— `PluginPanel` 框架已经注册了 `invokeRuntime` 默认 handler。
-2. 用户点击后,前端发 `POST /api/sessions/:id/plugin-rpc` `{ pluginId, runtimeId, payload }`。
-3. 框架把 `payload` 注入到 `TurnInput.manualTrigger`,`executeTurn` 只跑目标 runtime 及其事件下游。
-4. 目标 runtime 的 handler 收到 `ctx.manualPayload = payload`。
-
-示例 UI spec(会自然被 `invokeRuntime` 默认 handler 处理):
-
-```json
-{
-  "component": "Button",
-  "props": { "label": "Generate" },
-  "on": {
-    "click": {
-      "action": "invokeRuntime",
-      "params": {
-        "runtimeId": "my-plugin/prompt-generator",
-        "payload": { "style": "cinematic" }
-      }
-    }
-  }
-}
-```
-
-### 事件契约声明与统一发射（`events` + `emit-event`）
-
-统一事件发射层让**任意声明了事件契约的插件**都能被**任意具备发射能力的叙事 / agent runtime**驱动，框架和叙事插件都不需要硬编码谁消费什么事件。分两端：
-
-**消费方：声明 `events` + 用 `trigger: { type: event }` 接住**
-
-```yaml
-# plugins/quest-tracker/PLUGIN.md frontmatter
-name: quest-tracker
-events:
-  - topic: quest.updated
-    schema: ./schemas/quest-updated.event.json
-    description:
-      zh: 任务状态更新
-      en: Quest status updated
-trigger:
-  type: event
-  topic: quest.updated
-runtimeType: function
-handler: ./handler.js
-```
-
-`schema`（插件根目录相对 JSON Schema 路径）校验事件的 `data` payload——同一份 schema 既供 `emit-event` 工具在执行前校验，也是作者自己核对契约的单一来源。`quest-tracker/handler.js` 通过 `ctx.triggerEvent.data` 读到事件负载：
-
-```ts
-export default async function handler(ctx) {
-  const { questId, status } = ctx.triggerEvent?.data ?? {};
-  // ... 更新 quest 状态
-}
-```
-
-**发射方：`advertiseEvents: true` + `tools.builtin: [emit-event]`**
-
-```yaml
-advertiseEvents: true
-tools:
-  builtin:
-    - emit-event
-```
-
-声明后，该 runtime 的 prompt 段 5 会自动收到当前 session 内所有 `advertise !== false` 事件的目录（`<available-events>` 块，逐条 `- topic: description (required: field1, field2)`），LLM 据此判断"当前叙事是否触发了某个已知领域事件"，命中时调用 `emit-event({ topic: "quest.updated", data: { questId: "q1", status: "completed" } })`（一次一个 topic）。校验失败（未知 topic / payload 不合 schema）会把可读错误文本原样回给 LLM 重试，不中断工具循环、也不产出重复事件。
-
-聚合范围是**当前 session 的激活插件集**——`quest-tracker` 未启用时，narrator 的 `<available-events>` 目录里不会出现 `quest.updated`，`emit-event` 也会拒绝该 topic。跨插件同 topic 不同 schema 时按插件优先级首胜。完整字段表、冲突规则见 [plugins.md #events 声明与 advertiseEvents](../reference/plugins.md#events-声明与-advertiseevents统一事件发射层)，工具校验流程见 [tools.md #emit-event](../reference/tools.md#emit-event)。
-
-> `narrator` / `chat-mode-narrator` 已接入为发射方参考实现。第一个落地的消费方是 `scene-stage/resolver`（`scene.set` 契约）：声明 `events`（含 `advertise: false` 的内部信令 topic）+ `trigger: {type: event, topic: scene.set}`，把事件解析成 `stage/current` 舞台状态并向后台生成 runtime 发内部事件——写事件消费方直接以 `plugins/scene-stage/runtimes/resolver/PLUGIN.md` 为参考实现。上面的 `quest.updated` 只是中性教学示例。
-
-### `execution: sync` vs `execution: background`
-
-```yaml
-runtimeType: function
-execution: background # 默认 sync
-trigger: { type: manual }
-handler: ./handler.js
-```
-
-- `sync`(默认):HTTP 响应阻塞到 runtime 完成。适合能秒级返回的任务。
-- `background`:立即返回 202 + `jobId`,任务在 `setImmediate` 后台跑。框架在 `plugin_data` 表下 `_jobs/<jobId>` 写入 `{status: 'pending' → 'done' | 'failed', ...}` 三态,每次写入都通过 `plugin-data.changed` SSE 广播,前端通过订阅 `_jobs` 命名空间或你自己的业务命名空间(如 `images`)拿到最终态。
-
-**background 下的四个强约束:**
-
-1. 插件**禁止**直接写 `_jobs` 命名空间，由框架独占。实时进度用 `ctx.progress.report(...)`；自己的命名空间（如 `images/{jobId}`）保存成功提交后的最终记录，不能用 buffer 中的 pending 写入代替实时进度。
-2. `setImmediate` 中抛出的异常**不会**映射为 5xx —— 响应已发。失败信息会被框架写入 `_jobs/<jobId>.value.error`,前端通过 SSE 感知。
-3. **handler 不持会话锁**。只有提交阶段进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。两个后果要写 handler 时记住:
-   - 同一 runtime 的并发执行由框架按 `<sessionId>::<runtimeId>` 串行,所以"这张图是不是已经生成过"这类 check-then-act **在同一 runtime 内是原子的**,不会重复计费;**跨 runtime 不保证**。
-   - handler 执行期间,并发的玩家回合可能改写会话数据。读-改-写**自己**的命名空间是安全的(读经 writeBuffer overlay、写在同一事务提交);但如果你把别处的状态读出来再写回去,要假设中途它已经变了。
-4. **进程重启不恢复,且框架不自动重跑**。后台任务由进程内队列驱动,没有持久队列。重启后开机扫描会把上个进程留下的 `pending` 行标为 `failed` + `reason: "orphaned"`,并保留 `payload` / `triggerEvent`。不自动重跑是有意的——重跑要再计一次费,且请求级 `userSettings` 没有持久化在任务行上,重跑等于换参数重新扣费。需要"一键重试"就自己读这行的 `triggerEvent` 提供入口。
-
-**事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会触发同一 turn 内订阅该 topic 的下游 runtime(同一事件的多个订阅者按 `name` 定序),不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
-
-### `turnCompletion: await` vs `turnCompletion: detached`
-
-`execution` 控制 manual/event 激活，`turnCompletion` 控制 stage scheduler 的前台完成屏障，两者互不替代。长耗时、没有前台消费者的 `post-turn` / `audit` function runtime 可以申请后台化：
-
-```yaml
-runtimeType: function
-stage: post-turn
-timeoutMs: 90000
-turnCompletion:
-  mode: detached
-  maxQueueMs: 120000
-  maxExecutionMs: 120000
-  overlap: serial
-  stalePolicy: reject
-effects:
-  reads: []
-  writes:
-    - assets:*
-    - media:*
-    - plugin-data:self:tracks
-```
-
-- `mode` 缺省 `await`。`detached` 通过检查后，原始回合只等待任务随领域写入一起持久化，不等待 handler；`maxQueueMs` 管排队，`maxExecutionMs` 管 claim 后的后台作业期限，runtime 自身仍受 `timeoutMs` 和 `ctx.signal` 约束。
-- 首版 `overlap` 只有 `serial`、`stalePolicy` 只有 `reject`。同一 session/runtime 串行；session incarnation、插件审批代次或插件版本变化后，旧任务不能开始或提交。
-- 后台输入是原始 DAG 层开始时冻结的 `RuntimeResult[]`、模型和设置快照。不要在 handler 中假定它代表任务真正执行时的最新会话状态。
-- 声明只是 opt-in。当前只接受 function、安全叶节点、显式且隔离的 effects；`recordAs`、event、live plugin-data prompt inject、story/interaction/state 等跨回合可观察写入不安全。静态检查失败会保留前台执行并发出诊断；实际 proposal 还要经过提交前 effect guard。
-- durable 记录位于框架保留的 `_runtime_jobs`，使用 CAS lease 和 `queued → claimed → running → committing → succeeded` 状态机，失败终态包括 `failed / timed_out / cancelled / stale / orphaned`。进程重启会继续执行未过期且从未 claim 的 queued 作业；超时队列和过期在途 lease 会进入失败终态，绝不自动重放可能已经计费的工作。
-- 入队时 `/api/actions` 与持久订阅都会收到 `runtime.deferred`；之后 `job-status.updated.data.originTurnId` 把 running、成功、失败或取消状态归属回原始 turn。插件不得直接读写 `_runtime_jobs`。
-
-官方社区插件参考实现是 [MiMo TTS](https://github.com/covel-ai/covel-plugins/tree/main/plugins/mimo-tts)。完整安全边界和字段表见 [plugins.md #turnCompletion](../reference/plugins.md#turncompletion调度-runtime-的回合完成屏障)。
-
-### 完整示例: 两段式图像生成插件
-
-```yaml
-# runtimes/prompt-generator/PLUGIN.md
-name: my-image-gen/prompt-generator
-runtimeType: agent # 用 LLM 生成 prompt
-trigger: { type: manual } # manual 不进阶段 DAG,不声明 stage
-# frontmatter 的 output 只接受 { schema, recordAs }(outputConfigSchema 是 strict)。
-# 事件由 agent 在 runtime output JSON 里输出 events[] 数组,normalizeOutput
-# 会转成 event.emit proposal。在 prompt 正文里要求模型输出:
-#   { "prompt": "...", "events": [{"topic": "image.generate.requested", "data": {"prompt": "..."}}] }
-```
-
-```yaml
-# runtimes/image-generator/PLUGIN.md
-name: my-image-gen/image-generator
-runtimeType: function # 纯 JS,直接调 provider;event follower 不声明 stage
-execution: background # 不阻塞 turn
-trigger:
-  type: event
-  topic: image.generate.requested
-handler: ./image-handler.js
-```
-
-```ts
-import type { HandlerResult } from "@covel/shared";
-
-// runtimes/image-generator/image-handler.js
-//
-// ctx.images 是框架统一的图像生成原语:选 wire、调 provider、落
-// MediaStore、按 promptHash 去重全部由框架完成。handler 只编排 prompt
-// 和业务 metadata,不接触字节流或供应商凭据、也不用管 openai-images 还是
-// dashscope-wan —— 那由 llm.toml 里 image slot 的 providerRequestMetadata.imageWire 决定。
-export default async function handler(ctx) {
-  const prompt = ctx.triggerEvent?.data?.prompt;
-  if (typeof prompt !== "string" || prompt.length === 0) {
-    return {
-      outcome: "failed",
-      error: "missing prompt",
-    };
-  }
-
-  const { refs, warnings, cached } = await ctx.images.generate({
-    presetId: "image",
-    prompt,
-    n: 1,
-    metadata: { kind: "illustration" },
-  });
-  const [ref] = refs;
-  if (!ref) throw new Error("image provider returned no usable media");
-
-  return {
-    outcome: "success",
-    value: { imageId: ctx.turnId, status: "done", ref },
-    effects: {
-      pluginData: [
-        {
-          namespace: "images",
-          key: ctx.turnId,
-          value: { status: "done", ref, prompt, cached, warnings },
-        },
-      ],
-      assetGenerations: [{ ref, modality: "image", meta: { prompt } }],
-    },
-  };
-}
-```
-
-> 需要接入 `openai-images` / `dashscope-wan` 都不支持的 provider?看上面"注册自定义 wire"小节,给它注册一个 `ImageWire` 再照常调 `ctx.images.generate()` —— handler 代码不用变。
-
-## 7. 发布和分享
-
-官方目录与投稿规范见 [covel-ai/covel-plugins](https://github.com/covel-ai/covel-plugins)。GitHub 链接安装、发布物要求、风险提示和 HTTP 契约见 [插件目录与安装](../reference/plugin-installation.md)。第三方插件保持独立仓库，通过索引 PR 收录。官方维护的外部扩展也遵循 community 授权规则。
-
-### 插件来源
-
-| 来源        | 标识          | 加载方式           |
-| ----------- | ------------- | ------------------ |
-| `builtin`   | 绿色徽章      | 自动加载，无需确认 |
-| `community` | 橙色/红色警告 | 需用户确认后加载   |
-
-### 插件最低要求
-
-一个可发布的插件至少需要：
-
-```
-my-plugin/
-├── README.md      # 必需：给人类 / 开发者看的插件说明
-├── PLUGIN.md       # 必需：frontmatter + 提示词
-└── package.json    # 必需：workspace 依赖声明
-```
-
-### 发布检查清单
-
-- [ ] `README.md` 说明插件用途、运行时组成、数据读写、测试方式和已知限制
-- [ ] `PLUGIN.md` frontmatter 通过 `runtimeManifestSchema` 校验
-- [ ] `name` 字段唯一，建议用 `your-prefix-` 前缀避免冲突
-- [ ] `description` 清晰描述插件功能
-- [ ] 本地工具都有 Zod schema 和 `.describe()` 注解
-- [ ] 不依赖内核内部 API（DB 表名、ORM 模型、内核私有模块）
-- [ ] 所有数据写入通过 proposal 或工具返回值，不直接操作 store
-- [ ] 有基本的集成测试
-- [ ] 大型世界资料通过 World Data / Lorebook 交付，并验证 `strategy` / `keys` 的激活边界
-
-### 插件作者约束
-
-**允许依赖的公开 API：**
-
-- PLUGIN.md manifest 格式
-- `@covel/tools` 的 `tool()` 包装函数
-- 内置工具（create-form、create-choices、create-notification）
-- `input.inject` 声明
-- 交互协议（interaction 返回值）
-- `@covel/plugin-test-utils` 测试工具
-
-**禁止依赖：**
-
-- 数据库表名或 ORM 模型
-- 内核调度器、路由器等内部模块
-- 前端组件（UI 通过 json-render spec 或交互协议集成）
-- 直接 SDK 调用（LLM 调用通过 model slot 绑定）
-
-## 8. 插件国际化（i18n）
-
-**所有面向玩家的 UI 字符串必须用 `I18nText` 对象（目标 locale + English fallback；中文可选）。** 详情见 [docs/reference/ui-panels.md 的「插件 UI 文本 I18nText 规范」](../reference/ui-panels.md#插件-ui-文本-i18ntext-规范)。
-
-适用范围：
-
-| 位置                        | 必须 I18nText 的字段                                                                                                        | 示例                                                |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| `plugins/<id>/ui/*.json`    | `label` / `groupLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer`                             | `{ "label": { "zh": "角色", "en": "Characters" } }` |
-| json-render spec 叶节点     | `Text.content` / `Button.label` / `Badge.label` / `Input.placeholder` / `FormField.label` / `Alert.title` / `Alert.message` | `{ "content": { "zh": "…", "en": "…" } }`           |
-| `world.yaml` / `WORLD.*.md` | `name` / `description` / dimension 描述字段                                                                                 | 世界包通过 `WORLD.zh.md` / `WORLD.en.md` 提供正文   |
-
-无需 i18n 的情形：纯标识符（`icon` 名称、`iconColor`、状态字符串、图像 URL）、多 locale 共用的短词（`"Ping"`、`"NEW"`）、数值或布尔常量。
-
-**回退逻辑**：`resolveI18n(value, locale)` 优先匹配当前 locale，其次语言前缀（`ru-RU` → `ru`），再按共享 Locale Registry 的 fallback chain（内置最终回退 English），最后取对象中任一字符串。切换语言时，json-render 子树会通过 `useI18nResolver()` 自动重渲染。
-
-**合规脚本**：
-
-- `node scripts/check-plugin-i18n.mjs` 扫描 `plugins/**/ui/*.json`，禁止出现没有 `en` 兄弟 key 的裸中文字符串
-- `pnpm check:i18n` 会同时跑应用代码（`apps/web`）与插件 JSON 两套扫描；CI 里应作为必选 gate
-
-复杂数据输入建议采用表单优先、JSON 进阶的双入口。常用字段放在 `Input` / `Textarea` / `Select` / `Switch` 中，插件 handler 把表单 payload 规范化为内部 JSON；完整导入、迁移或调试场景保留 `Textarea` JSON 入口。`character-blueprint` 的右侧面板采用这种模式：玩家可直接填写姓名、人设、标签、关系阶段，并通过同一个 handler 写入蓝图数据与角色镜像。
-
-**常见错误**：
-
-```json
-// ✗ 裸中文会被扫描拒绝
-{ "content": "已收录到图鉴" }
-
-// ✗ 只有目标 locale，没有 canonical English fallback
-{ "label": { "ru": "Мир" } }
-
-// ✓ 目标 locale + English fallback；中文并非必需
-{ "label": { "ru": "Мир", "en": "World" } }
-
-// ✓ 纯标识符（非自然语言），允许单字符串
-{ "icon": "book-open" }
-```
-
+id: fact-index
+kind: plugin
+description: Extracts and retrieves narrative facts.
+provides: [facts.index@1, facts.query@1]
+contracts:
+  facts.index@1:
+    schema: ./schemas/facts.schema.json
+contributes:
+  data:
+    facts:
+      version: 1
+      accepts: [facts.index@1]
+      schema: ./schemas/facts.schema.json
 ---
+```
 
-## 接入调度声明面（三方插件）
-
-`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。三方插件按下面几步接入,每一步都能独立发布。
-
-**① manifest 单声明。** `stage` 用命名阶段(语义见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。写完跑 `pnpm validate:plugin <插件目录>`——manifest schema 是闭集,未列出的 frontmatter 字段一律报错。
+`runtimes/extract/RUNTIME.md`：
 
 ```yaml
-stage: post-turn # 命名阶段
-needs: # 强依赖:排序 + 门控
-  - capability: narrative-engine
-inputs: # 读同回合上游数据的唯一通道
-  narrative:
-    from: { capability: narrative-engine, cardinality: one }
-    select: "/narrativeOutput"
-    required: false
-```
-
-**② handler:读 `ctx.inputs`。** 同回合上游数据只能通过 `inputs` 绑定进来(`manual` 激活不解析 turn 绑定,`ctx.inputs` 为空,手动场景把数据放 `manualPayload`)。
-
-```ts
-const narrative = ctx.inputs?.narrative?.value as string | undefined;
-```
-
-**③ 进度:用 `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。manual/event background 通道仍可与 `plugin-data` 的 `_jobs` 占位行并存；stage detached 的 `_runtime_jobs` 由框架独占，插件不应两边同写控制状态。
-
-**④ 确认是否真的需要 detached。** 只有不会影响本回合或下一回合调度结果的 function 叶节点才声明 `turnCompletion.mode: detached`。媒体衍生产物通常合适；世界状态、任务、角色、记忆及其他 runtime 依赖的输出继续用默认 `await`。
-
 ---
+type: agent
+schedule: { stage: post-turn }
+io:
+  inputs:
+    narrative:
+      from: { contract: narrative-engine@1 }
+      required: true
+      select: /narrativeOutput
+  output:
+    contract: facts.index@1
+    schema: ../../schemas/facts.schema.json
+    recordAs: extracted-facts
+agent: { model: plugin }
+---
+Extract only facts supported by runtime-inputs.narrative.value.
+```
 
-## 下一步
+`runtimes/query/RUNTIME.md`：
 
-- 想看所有已实现插件的完整 frontmatter、调度层级、本体设计？ → [插件注册表 `docs/reference/plugins.md`](../reference/plugins.md)
-- 想写交互 UI 面板的 json-render spec？ → [插件 UI 与 runtime 指南](./plugin-ui-runtime-guidelines.md)
-- 想跑 runtime cases、HTTP E2E 或真实 LLM 验证？ → [插件测试指南](./plugin-testing.md) · [E2E plugin verify](./e2e-plugin-verify.md)
-- 想回到入口？ → [插件开发指南 · 索引](./plugin-authoring.md)
+```yaml
+---
+type: function
+schedule:
+  trigger: { type: manual }
+  manual: { execution: sync }
+io:
+  output: { contract: facts.query@1 }
+function:
+  handler: ./handler.js
+  timeoutMs: 90000
+---
+```
 
-## 公共服务、Evaluation 与自带组件
+子 runtime 的 schema、handler、guard 路径相对其目录，根贡献路径相对包根。路径和符号链接不能逃出包。子 runtime 不接受 `contributes`、包身份、旧 `name` 或旧根字段；root 的设置和数据上下文由加载器显式提供，不合并多个来源。
 
-function runtime 支持 `ctx.gateway.evaluate` 和 `ctx.services.discover/call`；entry 通过 `covel.registerService` 导出公共函数。任意插件可自带独立 HTML 组件，通过 `webview.entry` 和通用挂载点接入 UI。参见 [插件扩展契约](../reference/plugin-extensions.md) 与 [Jev Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)，避免把业务输出 DTO 或组件加入框架。
+## 数据契约与世界导入
+
+`contracts` 定义 schema，`contributes.data.<namespace>.accepts` 声明接收哪些版本化数据契约。接收 schema 路径需与契约声明一致。相同契约的多个提供者必须使用一致 schema，冲突在加载或导入前报错。
+
+世界来源使用 `schema: contract:facts.index@1`、`to: contract:facts.index@1`，框架按当前活动插件声明分发。插件的私有 namespace 不作为跨插件 API，也不再使用 `plugin:<id>/<namespace>` 作为作者导入目标。投影通过根 `contributes.worldProjections` 声明，输出必须对应可导入的数据 namespace。详见[世界数据参考](../reference/world-data.md)。
+
+角色蓝图等业务格式由其插件拥有。框架处理通用 source/target 和 CharacterSchema/CharacterRecord，不按具体插件 ID 包装数据或制造角色镜像。
+
+## 服务与扩展
+
+服务是插件主动调用的公开 API，扩展是内核在固定阶段请求插件提供内容或策略的入口。两者均使用版本化契约、schema 校验、归属和执行快照。
+
+- 根 `contributes.services` 对应 `registerService`。
+- 根 `contributes.extensions` 对应 `provideExtension(point, id, ...)`。
+- 注册名称必须与清单双向匹配。
+- 静态 `contributes.prompt` 由宿主自动注册，不重复声明 `static-prompt`。
+- 多个 runtime 的局部提示词规则写在各自正文，包级静态段对整个插件生效。
+
+扩展 handler 的准确输入、输出、合并规则和错误语义见[插件扩展点参考](../reference/plugin-extensions.md)。不要自行增加内核分支或读取其他插件私有 namespace 来模拟公开扩展。
+
+## 后台工作与失败
+
+后台 function runtime 使用 `schedule.manual.execution: background`，事件 runtime 使用 `schedule.trigger: {type: event, topic: ...}`。`schedule.completion` 描述回合等待语义；不是所有组合都允许 detached，需通过当前 manifest 和运行时准入校验。
+
+Function 通过 `function.tools` 声明 `ctx.tools.call` 的白名单，不能额外声明 `agent` 组。外部 API 的超时放在 `function.timeoutMs`，agent 的步数、调用超时和重试放在 `agent.loop`。保持任务取消、错误结果、幂等与提交边界明确。仅把合法结果返回 proposal 管线；执行失败不能留下部分业务写入。
+
+网络调用使用 SDK 提供的受约束工具与 URL 验证；不要把任意玩家 URL 直接交给后端抓取。权限、审批与资源限额仍由宿主执行，作者声明不等于授予权限。
+
+## 世界模型与记忆
+
+`ctx.world` 是执行视图，包含 committed 状态和合法上游及当前 proposals。角色 schema 变更与角色写入走同一领域校验。不得把上游 proposals 复制到本 runtime 的提交缓冲。
+
+记忆块是 memory 插件的数据和服务；世界自定义块通过 `memory.blocks@1` 导入，默认定义由 `memory.block-definitions@1` 服务提供。历史压缩经 `history.compact@1` 扩展处理。框架不会读取 `memoryBlocks/summaryFocus` 作者字段或维护独立 working_memory 数据。
+
+## 本地化与加载快照
+
+根变体为 `PLUGIN.<locale>.md`，子变体为 `RUNTIME.<locale>.md`。变体可以省略不翻译的结构，loader 会从 canonical 继承；结构漂移被报告并保持 canonical 值。提示词段 ID、position、runtime 输入、工具和超时均属于结构。
+
+静态提示词语言版本在插件加载时捕获，执行期间不读磁盘。热重载替换后，新执行看到新定义，已开始的执行继续使用其捕获版本。不要在扩展 handler 内重新解析 manifest。
+
+## 测试与发布
+
+```sh
+pnpm validate:plugin plugins/fact-index
+pnpm validate:plugin plugins/fact-index/runtimes/query/RUNTIME.md
+pnpm --filter @covel/plugin-fact-index test
+pnpm lint
+pnpm test
+```
+
+测试重点是 schema 边界、数据归属、重复调用、失败后无部分提交，以及同一执行的写后读。UI spec 只能绑定所属插件的数据或动作；外部数据通过公开契约转换为自己的投影。
+
+README 应说明玩家可见行为、输入/输出契约、设置、权限、运行时组成和测试方式。`package.json` 应声明真实依赖，保持 ESM 和 NodeNext 路径约定，不提交密钥、生成数据或机器路径。发布与安装流程见[插件安装](../reference/plugin-installation.md)。

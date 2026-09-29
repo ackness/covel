@@ -17,7 +17,11 @@
  */
 
 import { createHash } from "node:crypto";
-import type { JsonValue, RuntimeExportRecord } from "@covel/shared";
+import type {
+  JsonValue,
+  RuntimeExportRecord,
+  RuntimeResult,
+} from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js";
 
@@ -40,6 +44,7 @@ interface PublishableResult {
   readonly runId?: string;
   readonly resultId?: string;
   readonly output?: unknown;
+  readonly canonicalValue?: RuntimeResult["canonicalValue"];
 }
 
 /** Per-runtime `recordAs` declaration plus producer provenance. */
@@ -123,7 +128,17 @@ export async function publishExecutionExports(
         );
         continue;
       }
-      let value = (result.output ?? null) as JsonValue;
+      let value = (
+        result.canonicalValue
+          ? result.canonicalValue.value
+          : (result.output ?? null)
+      ) as JsonValue | undefined;
+      if (value === undefined) {
+        console.warn(
+          `[runtime-export] ${result.runtimeId}: canonical value unavailable for recordAs "${decl.recordAs}" - export withheld`,
+        );
+        continue;
+      }
       // Canonicalize BEFORE schema validation (docs 02 §2): the stored value
       // has its transient url stripped and every MediaRef proven owned. A media
       // rejection withholds the export without touching the domain outcome.

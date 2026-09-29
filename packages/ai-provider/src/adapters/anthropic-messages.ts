@@ -17,6 +17,11 @@ import {
   defaultToolChoice,
 } from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
+import {
+  assertGenerationPayload,
+  assertStreamCompleted,
+  assertSuccessfulFinishReason,
+} from "./generation-completion.js";
 import type {
   ModelRequestContext,
   ProviderConfig,
@@ -352,6 +357,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       );
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
+      assertGenerationPayload(payload, "anthropic");
+      assertSuccessfulFinishReason(
+        String(payload.stop_reason ?? "stop"),
+        "anthropic",
+      );
 
       const toolCalls = readAnthropicToolCalls(payload);
       return {
@@ -401,6 +411,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       );
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
+      assertGenerationPayload(payload, "anthropic");
+      assertSuccessfulFinishReason(
+        String(payload.stop_reason ?? "stop"),
+        "anthropic",
+      );
 
       let rawObject: unknown;
       try {
@@ -466,6 +481,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
+      let completed = false;
       const thinkingBlocks = new Map<number, string>();
       const continuation = new AnthropicContinuationAccumulator();
       // Anthropic streams a tool call as `content_block_start` (id + name),
@@ -478,6 +494,8 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
+        assertGenerationPayload(payload, "anthropic-messages");
+        if (payload.type === "message_stop") completed = true;
         continuation.push(payload);
         const delta = payload.delta as Record<string, unknown> | undefined;
         if (
@@ -568,6 +586,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         }
       }
 
+      assertStreamCompleted(completed, "anthropic-messages");
       const reasoningContent = [...thinkingBlocks.entries()]
         .sort(([a], [b]) => a - b)
         .map(([, text]) => text)

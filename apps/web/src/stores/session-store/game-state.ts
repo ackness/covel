@@ -18,16 +18,7 @@ export function publishSessionGameState(
   dispatch({ type: "SET_GAME_STATE", state });
 }
 
-/**
- * Build the enriched gameState payload from a server snapshot.
- *
- * `characters` and `characterSchema` have no incremental SSE carrier from the
- * direct-write character path (char-creator tools / player-init guard mirror
- * to plugin_data and emit only `plugin-data.changed`; `character.upserted`
- * fires solely from the `character.upsert` proposal path). A snapshot pull is
- * the only refresh point for `characterSchema` outside start/restore/reconnect.
- * Centralised here so every resync site stays consistent.
- */
+/** Build the enriched World Model view from the current session snapshot. */
 export function enrichGameStateFromSnapshot(
   snapshot: GameStateSnapshotSlice,
 ): Record<string, unknown> {
@@ -35,9 +26,7 @@ export function enrichGameStateFromSnapshot(
     ...snapshot.gameState,
     characters: snapshot.characters,
   };
-  if (snapshot.characterSchema) {
-    enrichedState.characterSchema = snapshot.characterSchema;
-  }
+  enrichedState.characterSchema = snapshot.characterSchema ?? null;
   return enrichedState;
 }
 

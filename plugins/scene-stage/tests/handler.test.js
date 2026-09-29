@@ -46,6 +46,7 @@ function makeCtx({
   previous = null,
   generatedRows = [],
   userSettings = { autoGenerateScenes: true, maxGeneratedScenes: 10 },
+  images = { isAvailable: vi.fn().mockReturnValue(true) },
   noTriggerEvent = false,
 } = {}) {
   const get = vi.fn(async (namespace, key) => {
@@ -63,6 +64,7 @@ function makeCtx({
     sessionId: "sess-1",
     turnId: "turn-1",
     userSettings,
+    images,
     triggerEvent: noTriggerEvent
       ? undefined
       : {
@@ -227,6 +229,84 @@ describe("scene-stage resolver handler", () => {
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.value.source).toBe("none");
     expect(result.effects?.events).toBeUndefined();
+  });
+
+  it("skips missing image models without enqueueing, then generates after the slot is configured", async () => {
+    const location = "废弃天文台";
+    const images = { isAvailable: vi.fn().mockReturnValue(false) };
+    const first = await handler(makeCtx({ location, images }));
+    const unavailableStage = getPendingProposals(first)[0].payload.value;
+    expect(unavailableStage.source).toBe("none");
+    expect(first.effects?.events).toBeUndefined();
+
+    const repeated = await handler(
+      makeCtx({ location, previous: unavailableStage, images }),
+    );
+    expect(repeated.effects?.events).toBeUndefined();
+    expect(getPendingProposals(repeated)).toHaveLength(0);
+
+    images.isAvailable.mockReturnValue(true);
+    const configured = await handler(
+      makeCtx({ location, previous: unavailableStage, images }),
+    );
+    expect(getPendingProposals(configured)[0].payload.value.source).toBe(
+      "pending",
+    );
+    expect(configured.effects?.events).toHaveLength(1);
+    expect(images.isAvailable).toHaveBeenCalledWith("image");
+  });
+
+  it("checks the selected slot and clears a pending stage if it becomes unavailable", async () => {
+    const location = "废弃天文台";
+    const pending = await handler(makeCtx({ location }));
+    const pendingStage = getPendingProposals(pending)[0].payload.value;
+    const images = { isAvailable: vi.fn().mockReturnValue(false) };
+    const result = await handler(
+      makeCtx({
+        location,
+        previous: pendingStage,
+        images,
+        userSettings: { modelPresetId: "  illustration  " },
+      }),
+    );
+    expect(getPendingProposals(result)[0].payload.value.source).toBe("none");
+    expect(result.effects?.events).toBeUndefined();
+    expect(images.isAvailable).toHaveBeenCalledWith("illustration");
+  });
+
+  it("keeps world and cached art available without an image model", async () => {
+    const world = await handler(
+      makeCtx({ location: "二年 B 组教室", images: null }),
+    );
+    expect(getPendingProposals(world)[0].payload.value).toMatchObject({
+      source: "world",
+      resolved: CLASSROOM_DAY,
+    });
+    expect(world.effects?.events).toBeUndefined();
+
+    const cached = await handler(
+      makeCtx({
+        location: "地下室",
+        timeOfDay: "night",
+        images: null,
+        generatedRows: [
+          {
+            key: "gen-abcd1234",
+            value: {
+              sceneId: "gen-abcd1234",
+              location: "地下室",
+              day: SESSION_DAY,
+              night: null,
+            },
+          },
+        ],
+      }),
+    );
+    expect(getPendingProposals(cached)[0].payload.value).toMatchObject({
+      source: "session",
+      resolved: SESSION_DAY,
+    });
+    expect(cached.effects?.events).toBeUndefined();
   });
 
   it("7. session-generated scene match resolves source=session", async () => {

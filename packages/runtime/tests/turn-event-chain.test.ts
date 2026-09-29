@@ -24,7 +24,8 @@ function resultEmitting(
     runId: "run-1",
     turnId: "turn-1",
     status: "success",
-    output: { events: [{ topic, data }] },
+    output: {},
+    effects: { events: [{ topic, data }] },
     toolCalls: [],
     durationMs: 0,
     timestamp: "2024-01-01T00:00:00Z",
@@ -247,5 +248,86 @@ describe("runEventChain honours event-runtime throttling", () => {
       setupRuntimes: {},
     });
     expect(ran).toEqual(["setup/follower"]);
+  });
+});
+
+describe("event producer terminal status", () => {
+  it("does not trigger followers from business output named events", async () => {
+    const executeRuntime = vi.fn();
+    const deferred = await runEventChain({
+      activeRuntimes: [backgroundFollower, relay],
+      completedResults: new Map([
+        [
+          "seed/emitter",
+          {
+            ...resultEmitting("seed/emitter", "topic-x", {}),
+            output: { events: [{ topic: "topic-x", data: {} }] },
+            effects: undefined,
+          },
+        ],
+      ]),
+      executeRuntime,
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      turnNumber: 1,
+      logicalTurn: 1,
+      setupRuntimes: {},
+    });
+    expect(executeRuntime).not.toHaveBeenCalled();
+    expect(deferred).toEqual([]);
+  });
+
+  it.each(["failed", "suspended", "skipped"] as const)(
+    "does not admit sync or deferred followers from a %s producer",
+    async (status) => {
+      const executeRuntime = vi.fn();
+      const deferred = await runEventChain({
+        activeRuntimes: [backgroundFollower, relay],
+        completedResults: new Map([
+          [
+            "seed/emitter",
+            { ...resultEmitting("seed/emitter", "topic-x", {}), status },
+          ],
+        ]),
+        executeRuntime,
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        turnNumber: 1,
+        logicalTurn: 1,
+        setupRuntimes: {},
+      });
+      expect(executeRuntime).not.toHaveBeenCalled();
+      expect(deferred).toEqual([]);
+    },
+  );
+
+  it("blocks events retained by a failed follower at the next depth", async () => {
+    const next = {
+      ...relay,
+      name: "next/main",
+      trigger: { type: "event" as const, topic: "topic-y" },
+    };
+    const executeRuntime = vi.fn(async () => ({
+      ...resultEmitting(relay.name, "topic-y", {}),
+      status: "failed" as const,
+    }));
+    const deferred = await runEventChain({
+      activeRuntimes: [
+        relay,
+        next,
+        { ...backgroundFollower, trigger: { type: "event", topic: "topic-y" } },
+      ],
+      completedResults: new Map([
+        ["seed/emitter", resultEmitting("seed/emitter", "topic-x", {})],
+      ]),
+      executeRuntime,
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      turnNumber: 1,
+      logicalTurn: 1,
+      setupRuntimes: {},
+    });
+    expect(executeRuntime).toHaveBeenCalledTimes(1);
+    expect(deferred).toEqual([]);
   });
 });

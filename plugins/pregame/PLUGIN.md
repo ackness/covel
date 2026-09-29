@@ -1,22 +1,34 @@
 ---
-name: pregame
+id: pregame
+kind: core
 displayName:
   zh: 开局准备
   en: Pre-Game Setup
 description:
   zh: 在开局时读取世界资料，准备好第一段冒险。
-  en: Reads the world details at the start and prepares the first step of the adventure.
-pluginType: core-plugin
-stage: setup
-runtimeType: function
-outputKind: system
-handler: ./handler.js
+  en: >-
+    Reads the world details at the start and prepares the first step of the
+    adventure.
 tags:
-  - role:pre-game
-  - cost:function
-trigger:
-  type: auto # setup runtimes are auto-only; maxTriggerCount is the retry budget
-  maxTriggerCount: 1
+  - "cost:function"
+provides: [session.opening@1]
+contracts:
+  session.opening@1:
+    schema: ./schemas/opening.schema.json
+runtime:
+  type: function
+  schedule:
+    stage: setup
+    trigger:
+      type: auto
+      maxTriggerCount: 1
+  io:
+    output:
+      contract: session.opening@1
+      schema: ./schemas/opening.schema.json
+    visibility: system
+  function:
+    handler: ./handler.js
 ---
 
 # Pre-Game 初始化插件
@@ -33,13 +45,20 @@ trigger:
 2. 返回 narrativeOutput 给后续插件作为上下文
 3. 报告 `completion: "done"`，全部 setup 完成后内核把 `phase` 翻到 playing
 
-## 输出
+## Handler 返回值
 
 ```json
 {
-  "narrativeOutput": "世界观摘要文本...",
-  "notifications": [{ "level": "info", "title": "...", "message": "..." }],
-  "initialized": true,
-  "preGameDone": true
+  "outcome": "success",
+  "value": {
+    "narrativeOutput": "世界观摘要文本...",
+    "initialized": true
+  },
+  "effects": {
+    "notifications": [{ "level": "info", "title": "...", "message": "..." }]
+  },
+  "completion": "done"
 }
 ```
+
+RuntimeResult 的 `output` 保存 `value` 的业务内容，`effects` 保存通知，`completion` 保存准备阶段的完成信号。

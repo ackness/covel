@@ -1,3 +1,4 @@
+import type { StageChoicesModel } from "@covel/shared";
 /**
  * Decision panel for stage mode. It keeps the context, current question,
  * suggested replies, and free-text composer in one continuous surface so a
@@ -23,7 +24,7 @@ export interface StageChoicesProps {
   readonly visible: boolean;
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
-  readonly promptsNamespace: Readonly<Record<string, unknown>>;
+  readonly suggestions?: StageChoicesModel;
   /** Current-story fallback for legacy scene-prompts rows without `recap`. */
   readonly fallbackRecap?: string;
   readonly locale: string;
@@ -50,7 +51,7 @@ export function StageChoices({
   visible,
   executing,
   interactionChoices,
-  promptsNamespace,
+  suggestions,
   fallbackRecap,
   locale,
   onSubmitInteraction,
@@ -60,7 +61,7 @@ export function StageChoices({
   const [draft, setDraft] = useState("");
   const { items, groups, context } = mergeChoices(
     interactionChoices,
-    promptsNamespace,
+    suggestions,
     locale,
   );
 

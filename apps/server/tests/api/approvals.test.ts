@@ -99,7 +99,7 @@ async function seedSession(
     completedPlayerTurns: 1,
 
     locale: "zh-CN",
-    activePlugins: [],
+    activePlugins: ["untrusted"],
     createdAt: now,
     updatedAt: now,
   });

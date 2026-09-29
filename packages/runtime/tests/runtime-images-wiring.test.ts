@@ -54,6 +54,12 @@ function gatewayWithImages(): PluginRuntimeGateway {
     }),
     resolveSlot: () => null,
     generateImage: async () => ({
+      target: {
+        provider: "test",
+        model: "image-model",
+        protocol: "openai-chat-v1",
+        metadata: {},
+      },
       images: [
         { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
       ],

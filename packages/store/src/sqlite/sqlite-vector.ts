@@ -9,8 +9,8 @@
  *   - `vector_models` table: registry of known embedding models.
  *   - Each model gets one physical vec0 virtual table: `vec_mem_m{id}`.
  *   - `sessions.embedding_model_id` FK locks a session to one model.
- *   - Immutable model rows are cached; session bindings are read each time so
- *     delete/recreate of the same session id cannot reuse a stale target.
+ *   - Model rows and session bindings are read each time, including inside
+ *     caller transactions, so rollbacks cannot leave stale model/table caches.
  *
  * Layer 2 — Physical Table CRUD (VectorStoreCapability):
  *   - `upsertVector`: resolve session → model table → DELETE+INSERT.
@@ -132,16 +132,9 @@ export function createSqliteVectorCapability(
   // embedding_locked_at columns are owned by sqlite-store-mappers.ts.
   // We trust they exist by the time this factory runs.
 
-  // ── In-memory caches ────────────────────────────────────────────
-  // Keyed by modelRegistryId (number) → VectorTarget
-  const modelCache = new Map<number, VectorTarget>();
-  // Physical table IDs that have already been created in this process.
-  const createdTables = new Set<number>();
-
   // ── Helpers ──────────────────────────────────────────────────────
 
   function ensurePhysicalTable(target: VectorTarget): void {
-    if (createdTables.has(target.modelRegistryId)) return;
     const tname = physicalTableName(target.modelRegistryId);
     sqlite.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS ${tname} USING vec0(
@@ -153,7 +146,6 @@ export function createSqliteVectorCapability(
         embedding  float[${target.dim}]
       );
     `);
-    createdTables.add(target.modelRegistryId);
   }
 
   function rowToTarget(row: VectorModelRow): VectorTarget {
@@ -170,48 +162,51 @@ export function createSqliteVectorCapability(
   async function ensureVectorModel(
     identity: EmbeddingModelIdentity,
   ): Promise<VectorTarget> {
-    const now = Date.now();
+    return sqlite
+      .transaction(() => {
+        const now = Date.now();
 
-    // INSERT OR IGNORE — table_name is left to its DEFAULT '' so the
-    // schema-side AFTER INSERT trigger can backfill it as 'vec_mem_m{id}'
-    // atomically. Concurrent startups are safe because UNIQUE(model_id,
-    // dim) makes the second writer a no-op.
-    sqlite
-      .prepare(
-        `INSERT OR IGNORE INTO vector_models
+        // INSERT OR IGNORE — table_name is left to its DEFAULT '' so the
+        // schema-side AFTER INSERT trigger can backfill it as 'vec_mem_m{id}'
+        // atomically. Concurrent startups are safe because UNIQUE(model_id,
+        // dim) makes the second writer a no-op.
+        sqlite
+          .prepare(
+            `INSERT OR IGNORE INTO vector_models
           (model_id, provider, model_name, dim, created_at)
          VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(
-        identity.modelId,
-        identity.provider,
-        identity.modelName,
-        identity.dim,
-        now,
-      );
+          )
+          .run(
+            identity.modelId,
+            identity.provider,
+            identity.modelName,
+            identity.dim,
+            now,
+          );
 
-    // Read back the canonical row. By the time we get here the trigger
-    // has populated table_name (the trigger runs in the same transaction
-    // as the INSERT).
-    const row = sqlite
-      .prepare(
-        `SELECT id, model_id, provider, model_name, dim, table_name, created_at, last_used_at
+        // Read back the canonical row. By the time we get here the trigger
+        // has populated table_name (the trigger runs in the same transaction
+        // as the INSERT).
+        const row = sqlite
+          .prepare(
+            `SELECT id, model_id, provider, model_name, dim, table_name, created_at, last_used_at
            FROM vector_models
           WHERE model_id = ? AND dim = ?`,
-      )
-      .get(identity.modelId, identity.dim) as VectorModelRow | undefined;
+          )
+          .get(identity.modelId, identity.dim) as VectorModelRow | undefined;
 
-    if (!row) {
-      throw new Error(
-        `sqlite-vec: failed to find or create vector_models entry for ${identity.modelId}`,
-      );
-    }
+        if (!row) {
+          throw new Error(
+            `sqlite-vec: failed to find or create vector_models entry for ${identity.modelId}`,
+          );
+        }
 
-    const target = rowToTarget(row);
-    modelCache.set(target.modelRegistryId, target);
-    ensurePhysicalTable(target);
+        const target = rowToTarget(row);
+        ensurePhysicalTable(target);
 
-    return target;
+        return target;
+      })
+      .immediate();
   }
 
   async function lockSessionEmbeddingModel(
@@ -264,12 +259,6 @@ export function createSqliteVectorCapability(
 
     const modelId = sessionRow.embedding_model_id;
 
-    // Try in-memory model cache first.
-    const cached = modelCache.get(modelId);
-    if (cached) {
-      return cached;
-    }
-
     const modelRow = sqlite
       .prepare(
         `SELECT id, model_id, provider, model_name, dim, table_name, created_at, last_used_at
@@ -285,8 +274,6 @@ export function createSqliteVectorCapability(
     }
 
     const target = rowToTarget(modelRow);
-    modelCache.set(target.modelRegistryId, target);
-    ensurePhysicalTable(target);
     return target;
   }
 
@@ -335,7 +322,6 @@ export function createSqliteVectorCapability(
       );
     }
 
-    ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
 
     // vec0 has no native primary key on user columns. Emulate upsert via
@@ -407,7 +393,6 @@ export function createSqliteVectorCapability(
       );
     }
 
-    ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
 
     // Build WHERE dynamically. `k` must appear in WHERE for sqlite-vec.
@@ -459,7 +444,6 @@ export function createSqliteVectorCapability(
       return;
     }
 
-    ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
 
     if (input.namespace !== undefined) {

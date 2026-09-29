@@ -90,7 +90,8 @@ declare module "hono" {
     resolveModel: ResolveModelFn;
     compactorRunner: CompactorRunner;
     /** Request-visible memory system wired by the bootstrap composition root. */
-    memorySystem?: NonNullable<TurnExecutorDeps["memorySystem"]>;
+    memoryIngestLock?: import("./lib/session-lock.js").SessionLock;
+    memorySystem?: import("@covel/memory").MemorySystem;
     /**
      * Prompt-assembly hard-prune budget (`applyBudget`), derived from the
      * narrative slot's model capability. Optional so hand-built test DI
@@ -114,6 +115,10 @@ declare module "hono" {
     sessionLock: SessionLock;
     /** Durable scheduler-detached runtime queue worker. */
     runtimeJobWorker?: RuntimeJobWorker;
+    runtimeJobCredentials?: ReturnType<
+      typeof import("./routes/api/plugin-rpc/runtime-job-credentials.js").createRuntimeJobCredentials
+    >;
+    settledSessionLock?: import("./routes/api/plugin-rpc/settled-session-lock.js").SettledSessionLock;
     /** Bootstrap-owned legacy RPC/follower queue, including registration writes. */
     pluginBackgroundQueue: PluginBackgroundQueue;
     /**
@@ -170,9 +175,17 @@ declare module "hono" {
      * instead of a hard 404 (its registration lives inside the not-yet-run
      * entry). Optional so hand-built test DI need not wire it.
      */
+    withPluginSnapshot?: <T>(
+      sessionId: string,
+      fn: () => Promise<T>,
+      beforeCapture?: () => Promise<void>,
+    ) => Promise<T>;
     hasPendingPluginEntry?: (pluginId: string) => boolean;
+    isPluginEntryPublished?: (pluginId: string) => boolean;
     /** Public services exported by active, approved plugin entries. */
     pluginServices?: import("@covel/runtime").PluginServiceRegistry;
+    uiSlots?: import("./ui-slots/host.js").UiSlotHost;
+    pluginExtensions?: import("@covel/runtime").PluginExtensionHost;
     /**
      * Session event directory (unified event emission layer, plan task 4/5).
      * Threaded into `TurnExecutorDeps.eventDirectory` at each `executeTurn`

@@ -27,7 +27,7 @@ function fixture() {
   const store: CharacterStore = {
     listCharacters: async () => [existing],
     upsertCharacter: vi.fn(),
-    setPluginData: vi.fn(),
+    getCharacterSchema: async () => null,
   };
   const sync = createCharacterTools(store).find(
     (tool) => tool.name === "sync-characters",
@@ -102,6 +102,5 @@ describe("character batch idempotency", () => {
       ),
     ).rejects.toThrow("not found");
     expect(store.upsertCharacter).not.toHaveBeenCalled();
-    expect(store.setPluginData).not.toHaveBeenCalled();
   });
 });

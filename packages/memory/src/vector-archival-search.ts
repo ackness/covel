@@ -47,7 +47,10 @@ export function createVectorArchivalSearcher(deps: {
         if (!target) {
           return fallback.search(sessionId, query, limit);
         }
-        const [queryVec] = await embed([query]);
+        const [queryVec] = await embed([query], {
+          sessionId,
+          modelId: target.modelId,
+        });
         if (!queryVec || queryVec.length === 0) {
           return fallback.search(sessionId, query, limit);
         }

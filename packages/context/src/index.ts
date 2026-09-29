@@ -7,7 +7,6 @@ export type {
   SessionMeta,
   CharacterSummary,
   SummaryRecord,
-  WorkingMemoryEntry,
 } from "./types.js";
 
 // ── Context Builder ─────────────────────────────────────────────
@@ -45,14 +44,13 @@ export {
 export type { PromptLoader } from "./prompts-loader.js";
 
 // ── Compactor ────────────────────────────────────────────
-export { maybeCompact } from "./compactor.js";
+export { maybeCompact } from "./history-budget.js";
 export type {
   CompactorDeps,
   CompactorOptions,
   CompactorResult,
-  CompactorLLMAdapter,
   CompactorRunner,
-} from "./compactor.js";
+} from "./history-budget.js";
 
 // ── Session Context Snapshot (Sprint 1) ──────────────────────────
 export type {
@@ -60,8 +58,6 @@ export type {
   ContextContribution,
   SessionContextSnapshot,
   WorldContextView,
-  PersonaProfile,
-  CoreMemoryBlockView,
   LorebookEntryView,
 } from "./types.js";
 
@@ -70,7 +66,6 @@ export { buildSessionContextSnapshot } from "./session-context.js";
 export type { BuildSessionContextSnapshotOpts } from "./session-context.js";
 
 // ── Branch Reply History Projection ─────────────────────────────
-export { applyBranchReplyAcceptedCandidates } from "./branch-reply-history.js";
 
 // ── Narrow store interface (layering boundary) ──────────────────
 export type {

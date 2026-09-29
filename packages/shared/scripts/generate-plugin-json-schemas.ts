@@ -27,6 +27,9 @@ import {
   runtimeManifestAuthoringSchema,
 } from "../src/schemas/plugin.js";
 
+import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
+import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
+
 const TO_JSON_SCHEMA_OPTIONS = {
   target: "draft-7",
   io: "input",
@@ -118,10 +121,20 @@ function restoreRepresentableConstraints(
 }
 
 export function buildManifestJsonSchemas(): {
+  readonly plugin: Record<string, unknown>;
+  readonly runtime: Record<string, unknown>;
   readonly input: Record<string, unknown>;
   readonly authoring: Record<string, unknown>;
 } {
   return {
+    plugin: z.toJSONSchema(
+      pluginManifestSchema,
+      TO_JSON_SCHEMA_OPTIONS,
+    ) as Record<string, unknown>,
+    runtime: z.toJSONSchema(
+      runtimeAuthoringManifestSchema,
+      TO_JSON_SCHEMA_OPTIONS,
+    ) as Record<string, unknown>,
     input: toDocumentedJsonSchema(runtimeManifestInputSchema, INPUT_DOC),
     authoring: toDocumentedJsonSchema(
       runtimeManifestAuthoringSchema,
@@ -131,14 +144,29 @@ export function buildManifestJsonSchemas(): {
 }
 
 /** Path of a committed schema artifact, relative to this script. */
-export function schemaOutputPath(name: "input" | "authoring"): string {
+export function schemaOutputPath(
+  name: "input" | "authoring" | "plugin" | "runtime",
+): string {
   return fileURLToPath(
-    new URL(`../schemas/runtime-manifest.${name}.schema.json`, import.meta.url),
+    new URL(
+      name === "plugin" || name === "runtime"
+        ? `../schemas/${name}-manifest.schema.json`
+        : `../schemas/runtime-manifest.${name}.schema.json`,
+      import.meta.url,
+    ),
   );
 }
 
 function main(): void {
-  const { input, authoring } = buildManifestJsonSchemas();
+  const { input, authoring, plugin, runtime } = buildManifestJsonSchemas();
+  writeFileSync(
+    schemaOutputPath("plugin"),
+    `${JSON.stringify(plugin, null, 2)}\n`,
+  );
+  writeFileSync(
+    schemaOutputPath("runtime"),
+    `${JSON.stringify(runtime, null, 2)}\n`,
+  );
   writeFileSync(
     schemaOutputPath("input"),
     `${JSON.stringify(input, null, 2)}\n`,

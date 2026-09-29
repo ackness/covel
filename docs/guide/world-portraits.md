@@ -65,7 +65,7 @@ pnpm exec tsx scripts/generate-portraits.mjs haruka-academy --only shiina-kaho:u
 
 展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，舞台模式（stage mode）下作为立绘。三个世界的 `data/world.data.yaml` 已加好两条 source：
 
-- `media` source：导入 `media/portraits/` 下的图，按 **sha256 内容寻址**存入媒体库，`to: media` + `indexTo: plugin:character-presence/assets`；
+- `media` source：导入 `media/portraits/` 下的图，按 **sha256 内容寻址**存入媒体库，`to: media` + `indexTo: contract:character.portrait-assets@1`；
 - `presence` source（`media/presence.json`）：把与实例化角色匹配的 `characterId` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。
 
 `presence.json` 由 `scripts/emit-presence.mjs <world>` 从 `portraits/` 目录按 sha256 自动生成。角色条目可用 `visual` 描述默认图的 `id/outfit/expression/pose/stage`，并用 `variants[]` 添加同角色的其他服装、表情和姿势；脚本会写成 `character-presence.visuals` 目录，同时保留旧 `avatar` / `sprite`：

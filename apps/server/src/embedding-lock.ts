@@ -22,6 +22,8 @@
  * throws on re-lock attempts (ADR-005), so duplicate calls are safe.
  */
 
+import type { EmbedFn } from "@covel/memory";
+
 import type {
   DataStore,
   EmbeddingModelIdentity,
@@ -65,7 +67,7 @@ export function createEmbeddingLockHelper(opts: {
 
     try {
       const result = await ai.gateway.embed(
-        { values: ["covel-embed-probe"] },
+        { values: ["covel-embed-probe"], expectedModelId: cacheKey },
         // Boot-path keys are env-derived → origin-gated channel.
         apiKeys ? { envApiKeys: apiKeys } : undefined,
       );
@@ -143,5 +145,19 @@ export function createEmbeddingLockHelper(opts: {
     });
     inflight.set(sessionId, promise);
     await promise;
+  };
+}
+
+/** Bind every memory query and ingest to the caller's persisted model identity. */
+export function createMemoryEmbed(opts: {
+  ai: Pick<AiStack, "gateway">;
+  apiKeys?: Record<string, string>;
+}): EmbedFn {
+  return async (texts, context) => {
+    const result = await opts.ai.gateway.embed(
+      { values: [...texts], expectedModelId: context.modelId },
+      opts.apiKeys ? { envApiKeys: opts.apiKeys } : undefined,
+    );
+    return result.embeddings.map((vector) => Float32Array.from(vector));
   };
 }

@@ -198,40 +198,67 @@ async function generate(
   const deadline = Date.now() + timeoutMs;
   const pollPath = `/api/v1/tasks/${encodeURIComponent(taskId)}`;
 
-  while (Date.now() < deadline) {
-    const sleepMs = Math.min(
-      pollIntervalMs,
-      Math.max(0, deadline - Date.now()),
-    );
-    if (sleepMs > 0) await sleepWithAbort(sleepMs, config.signal);
+  const timeoutError = new Error(
+    `DashScope WAN: polling timed out after ${timeoutMs}ms`,
+  );
+  const timeoutController = new AbortController();
+  const pollSignal = config.signal
+    ? AbortSignal.any([config.signal, timeoutController.signal])
+    : timeoutController.signal;
+  const timeout = setTimeout(
+    () => timeoutController.abort(timeoutError),
+    timeoutMs,
+  );
+  timeout.unref();
+  try {
+    while (Date.now() < deadline) {
+      const sleepMs = Math.min(
+        pollIntervalMs,
+        Math.max(0, deadline - Date.now()),
+      );
+      if (sleepMs > 0) await sleepWithAbort(sleepMs, pollSignal);
 
-    const res = await getJson(config, pollPath);
-    if (!res.ok) {
-      if (isRetriableStatus(res.status)) continue; // transient — retry next tick
-      const errPayload = await parseJson(res);
-      assertSuccess(res, errPayload, "dashscope-wan");
-    }
-
-    const payload = await parseJson(res);
-    const output = asRecord(payload.output);
-    const status = output?.task_status;
-    if (status === "SUCCEEDED") {
-      const images = collectResults(output ?? {});
-      if (images.length === 0) {
-        throw new Error("DashScope WAN: SUCCEEDED but no images in response");
+      pollSignal.throwIfAborted();
+      const res = await getJson(config, pollPath, pollSignal);
+      if (!res.ok) {
+        if (isRetriableStatus(res.status)) {
+          await res.body?.cancel().catch(() => {});
+          continue;
+        }
+        const errPayload = await parseJson(res);
+        assertSuccess(res, errPayload, "dashscope-wan");
       }
-      return { images, usage: null, warnings };
+
+      const payload = await parseJson(res);
+      pollSignal.throwIfAborted();
+      const output = asRecord(payload.output);
+      const status = output?.task_status;
+      if (status === "SUCCEEDED") {
+        const images = collectResults(output ?? {});
+        if (images.length === 0) {
+          throw new Error("DashScope WAN: SUCCEEDED but no images in response");
+        }
+        return { images, usage: null, warnings };
+      }
+      // CANCELED / UNKNOWN are terminal too — without this they would poll
+      // until the timeout and surface a generic timeout instead of the cause.
+      if (
+        status === "FAILED" ||
+        status === "CANCELED" ||
+        status === "UNKNOWN"
+      ) {
+        const msg =
+          typeof output?.message === "string"
+            ? output.message
+            : `Task ${status}`;
+        throw new Error(`DashScope WAN generation ${status}: ${msg}`);
+      }
+      // PENDING / RUNNING (or a payload without task_status) → keep polling
     }
-    // CANCELED / UNKNOWN are terminal too — without this they would poll
-    // until the timeout and surface a generic timeout instead of the cause.
-    if (status === "FAILED" || status === "CANCELED" || status === "UNKNOWN") {
-      const msg =
-        typeof output?.message === "string" ? output.message : `Task ${status}`;
-      throw new Error(`DashScope WAN generation ${status}: ${msg}`);
-    }
-    // PENDING / RUNNING (or a payload without task_status) → keep polling
+    throw timeoutError;
+  } finally {
+    clearTimeout(timeout);
   }
-  throw new Error(`DashScope WAN: polling timed out after ${timeoutMs}ms`);
 }
 
 export const dashscopeWanWire = {

@@ -62,6 +62,8 @@ export interface ToolCall {
 }
 
 export interface ToolCallContext {
+  readonly world?: import("@covel/shared").WorldModelView;
+  readonly upstreamProposals?: readonly Proposal[];
   readonly signal?: AbortSignal;
   readonly sessionId: string;
   readonly turnId: string;

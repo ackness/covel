@@ -98,14 +98,18 @@ describe("enrichGameStateFromSnapshot", () => {
     expect(enriched.characters).toBe(characters);
   });
 
-  it("omits characterSchema when the snapshot has none", () => {
+  it("clears characterSchema when the authoritative snapshot has none", () => {
     const enriched = enrichGameStateFromSnapshot({
       gameState: { turn: 3 },
       characters: [],
     });
 
-    expect(enriched).toEqual({ turn: 3, characters: [] });
-    expect("characterSchema" in enriched).toBe(false);
+    expect(enriched).toEqual({
+      turn: 3,
+      characters: [],
+      characterSchema: null,
+    });
+    expect(enriched.characterSchema).toBeNull();
   });
 
   it("tolerates a missing gameState slice", () => {
@@ -113,7 +117,7 @@ describe("enrichGameStateFromSnapshot", () => {
 
     const enriched = enrichGameStateFromSnapshot({ characters });
 
-    expect(enriched).toEqual({ characters });
+    expect(enriched).toEqual({ characters, characterSchema: null });
   });
 });
 

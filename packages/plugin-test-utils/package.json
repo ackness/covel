@@ -18,7 +18,8 @@
     "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
-    "@covel/tools": "workspace:*"
+    "@covel/tools": "workspace:*",
+    "@covel/plugin-handlers-utils": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

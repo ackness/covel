@@ -104,6 +104,7 @@ describe("LocalDataService browser-authoritative sync", () => {
         [],
         "en-US",
         loreOverride,
+        [],
       );
       expect(
         (await vault.getLatestCheckpoint("sess-1"))?.session.metadata
@@ -306,28 +307,8 @@ describe("LocalDataService browser-authoritative sync", () => {
     });
   });
 
-  it("seeds portable generated characters and lorebook into a local checkpoint", async () => {
+  it("seeds portable lorebook with world ownership into a local checkpoint", async () => {
     const service = await serviceWithWorld("portable-world", {
-      characterBlueprints: [
-        {
-          schemaVersion: 1,
-          id: "thread-keeper",
-          name: "Thread Keeper",
-          role: "npc",
-          description: "Keeps promises visible.",
-          instantiate: {
-            characterId: "npc-thread-keeper",
-            name: "Keeper of Threads",
-            type: "companion",
-            description: "Makes every promise visible.",
-            fields: { faction: "Silver House", trust: 20 },
-          },
-        },
-        {
-          id: "missing-schema-version",
-          name: "Invalid Blueprint",
-        },
-      ],
       embeddedLorebook: [
         {
           id: "silver-threads",
@@ -343,18 +324,12 @@ describe("LocalDataService browser-authoritative sync", () => {
     await expect(
       vault.getLatestCheckpoint("sess-portable"),
     ).resolves.toMatchObject({
-      characters: [
-        {
-          id: "sess-portable-npc-thread-keeper",
-          name: "Keeper of Threads",
-          type: "companion",
-          description: "Makes every promise visible.",
-          fields: { faction: "Silver House", trust: 20 },
-        },
-      ],
+      characters: [],
+      characterSchema: null,
       lorebookEntries: [
         {
           id: "silver-threads",
+          owner: { kind: "world" },
           strategy: "constant",
           position: "before_plugin",
         },
@@ -374,6 +349,7 @@ describe("LocalDataService browser-authoritative sync", () => {
       [],
       "en-US",
       undefined,
+      [],
     );
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledOnce();
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(

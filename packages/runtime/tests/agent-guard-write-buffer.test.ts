@@ -40,14 +40,14 @@ const guardRuntime = {
   guard: "./guard.js",
   trigger: { type: "auto" },
   outputKind: "plugin",
-  capabilities: [],
+  outputContract: undefined,
 } as RuntimeManifest;
 
 const siblingRuntime = {
   name: "p/writer",
   pluginId: "p",
   outputKind: "plugin",
-  capabilities: [],
+  outputContract: undefined,
 } as unknown as RuntimeManifest;
 
 async function seedSetupSession(): Promise<DataStore> {
@@ -130,7 +130,8 @@ function failingSiblingResult(): Parameters<
     runId: crypto.randomUUID(),
     turnId: "t1",
     status: "success",
-    output: { statePatches: [{ field: "hp", value: 1 }] },
+    output: {},
+    effects: { statePatches: [{ field: "hp", value: 1 }] },
     toolCalls: [],
     durationMs: 1,
     timestamp: new Date().toISOString(),

@@ -177,6 +177,12 @@ export interface CharacterUpsertedPayload {
   readonly pluginId?: string;
 }
 
+export interface CharacterSchemaChangedPayload {
+  readonly schema: import("./world-model.js").CharacterSchemaRecord;
+  readonly runtimeId?: string;
+  readonly pluginId?: string;
+}
+
 export interface ErrorOccurredPayload {
   readonly message: string;
   /**
@@ -200,14 +206,6 @@ export interface TurnSuspendedPayload {
 export interface TurnResumedPayload {
   readonly suspensionId: string;
   readonly turnId?: string;
-  readonly runtimeId?: string;
-  readonly pluginId?: string;
-}
-
-export interface WorkingMemoryChangedPayload {
-  /** Working-memory scope mirrored from the committed `working_memory.set`. */
-  readonly scope: "player" | "story" | "shared";
-  readonly key: string;
   readonly runtimeId?: string;
   readonly pluginId?: string;
 }
@@ -313,21 +311,36 @@ export type CovelEvent =
     }
   // Character
   | {
+      readonly type: "ui.slot.changed";
+      readonly payload: {
+        readonly slot: string;
+        readonly key?: string;
+        readonly value: unknown;
+        readonly revision: string;
+      };
+    }
+  | {
+      readonly type: "ui.slot.preview";
+      readonly payload: {
+        readonly slot: string;
+        readonly key?: string;
+        readonly value: unknown;
+        readonly revision: string;
+        readonly turnId: string;
+      };
+    }
+  | {
+      readonly type: "ui.slot.cleared";
+      readonly payload: { readonly turnId: string };
+    }
+  | {
+      readonly type: "character-schema.changed";
+      readonly payload: CharacterSchemaChangedPayload;
+    }
+  | {
       readonly type: "character.upserted";
       readonly payload: CharacterUpsertedPayload;
     }
-  // Working memory. Emitted as a commit event (`working_memory.set` commit) and
-  // written straight onto the action stream — so it MUST be a union member even
-  // though the frontend action handler does not render it (UI reflects working
-  // memory via `state.changed`). Was previously emitted but absent from the
-  // union → hit the frontend `assertNeverEvent` guard on every commit.
-  | {
-      readonly type: "working_memory.changed";
-      readonly payload: WorkingMemoryChangedPayload;
-    }
-  // Commit outcome : a proposal that failed to commit
-  // is surfaced explicitly instead of being silently dropped. Written
-  // directly onto the action stream by the commit-owning route.
   | {
       readonly type: "proposal.failed";
       readonly payload: ProposalFailedPayload;
@@ -361,6 +374,10 @@ export type CovelEvent =
   | { readonly type: "hook.fired"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.rewrote"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.aborted"; readonly payload: CovelEventPayload }
+  | {
+      readonly type: "plugin.service.completed";
+      readonly payload: CovelEventPayload;
+    }
   // Slash-command lifecycle. Composer and plugin JSON-render UI actions share
   // this exact trace shape; `payload.source` is the only entry-point marker.
   | { readonly type: "command.invoked"; readonly payload: CovelEventPayload }
@@ -463,12 +480,15 @@ export const COVEL_EVENT_META = {
   "world.dimensions.changed": { forwardToActionStream: true },
   "plugin-data.changed": { forwardToActionStream: true },
   "character.upserted": { forwardToActionStream: true },
+  "character-schema.changed": { forwardToActionStream: true },
+  "ui.slot.changed": { forwardToActionStream: true },
+  "ui.slot.preview": { forwardToActionStream: true },
+  "ui.slot.cleared": { forwardToActionStream: true },
   // Commit event written directly onto the action stream (not via the eventBus
   // forward path), so forwardToActionStream stays false — the flag only governs
   // eventBus→action-stream forwarding, which this event does not use.
-  "working_memory.changed": { forwardToActionStream: false },
   // Direct write onto the action stream by the commit-owning route (like
-  // working_memory.changed) — the flag only governs eventBus forwarding.
+  // the flag only governs eventBus forwarding.
   "proposal.failed": { forwardToActionStream: false },
   "error.occurred": { forwardToActionStream: false },
   "connection.restored": { forwardToActionStream: false },
@@ -487,6 +507,7 @@ export const COVEL_EVENT_META = {
   "hook.fired": { forwardToActionStream: true },
   "hook.rewrote": { forwardToActionStream: true },
   "hook.aborted": { forwardToActionStream: true },
+  "plugin.service.completed": { forwardToActionStream: false },
   // Command lifecycle is consumed by traces/debug, not the gameplay stream.
   "command.invoked": { forwardToActionStream: false },
   "command.completed": { forwardToActionStream: false },

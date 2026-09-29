@@ -454,6 +454,20 @@ const compatMalformedRejections: readonly Fixture[] = [
     },
   },
   {
+    name: "turnCompletion maxSettleWaitMs exceeds the kernel ceiling",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      runtimeType: "function",
+      handler: "./handler.js",
+      turnCompletion: {
+        mode: "detached",
+        settle: "before-next-execution",
+        maxSettleWaitMs: 120_001,
+      },
+    },
+  },
+  {
     name: "turnCompletion unsupported overlap policy",
     manifest: {
       ...base,

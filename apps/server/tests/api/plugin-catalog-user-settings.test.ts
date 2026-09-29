@@ -1,87 +1,77 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PluginUserSettingSpec, RuntimeManifest } from "@covel/shared";
-import { mergePluginUserSettings } from "../../src/lib/plugin-descriptor.js";
+import { describe, expect, it } from "vitest";
+import path from "node:path";
+import {
+  discoverPlugins,
+  loadPluginDefinition,
+  parsePluginMd,
+  type PluginRegistryEntry,
+} from "@covel/plugin-loader";
+import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 
-function runtime(
-  name: string,
-  userSettings: readonly PluginUserSettingSpec[],
-): RuntimeManifest {
+function entry(root: ReturnType<typeof parsePluginMd>): PluginRegistryEntry {
   return {
-    name,
-    pluginId: name.split("/")[0]!,
-    description: "",
-    userSettings,
+    id: "probe",
+    summary: {
+      id: "probe",
+      name: "Probe",
+      description: "Probe",
+      pluginType: "plugin",
+      runtimeCount: 0,
+    },
+    packageManifest: root,
+    manifests: [],
+    loadedRuntimes: new Map(),
+    status: "registered",
+    source: "builtin",
   };
 }
-
-const VOICE: PluginUserSettingSpec = {
-  key: "voice",
-  type: "text",
-  default: "mimo_default",
-  label: { "zh-CN": "音色", "en-US": "Voice" },
-};
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe("mergePluginUserSettings", () => {
-  it("dedupes an identical key declared by two runtimes without warning", () => {
-    // Arrange — the same knob repeated on every runtime that reads it.
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const manifests = [
-      runtime("tts/auto", [VOICE]),
-      runtime("tts/manual", [{ ...VOICE }]),
+describe("plugin catalog settings", () => {
+  it("projects root settings for entry-only packages without runtime declarations", () => {
+    const root = parsePluginMd(
+      `---\nid: probe\nkind: plugin\ndescription: Probe\ncontributes:\n  settings:\n    - {key: voice, type: text, label: Voice, default: calm}\n---\n`,
+      "probe/PLUGIN.md",
+    );
+    expect(buildPluginSummary(entry(root)).userSettings).toEqual([
+      { key: "voice", type: "text", label: "Voice", default: "calm" },
+    ]);
+  });
+  it("does not discover settings from compiled runtime artifacts", () => {
+    const root = parsePluginMd(
+      "---\nid: probe\nkind: plugin\ndescription: Probe\n---\n",
+      "probe/PLUGIN.md",
+    );
+    const value = entry(root);
+    value.manifests = [
+      {
+        manifest: {
+          name: "probe/run",
+          description: "Run",
+          userSettings: [{ key: "stale", type: "text", label: "Stale" }],
+        },
+        promptTemplate: "",
+        rawFrontmatter: {},
+      },
     ];
-
-    // Act
-    const merged = mergePluginUserSettings("tts", manifests);
-
-    // Assert
-    expect(merged).toHaveLength(1);
-    expect(merged[0].key).toBe("voice");
-    expect(warn).not.toHaveBeenCalled();
+    expect(buildPluginSummary(value).userSettings).toEqual([]);
   });
-
-  it("treats field ordering as identical, not as a divergence", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const reordered: PluginUserSettingSpec = {
-      label: { "en-US": "Voice", "zh-CN": "音色" },
-      default: "mimo_default",
-      type: "text",
-      key: "voice",
+  it("exposes the real narrator narrative-person setting from the canonical package", async () => {
+    const discovery = (
+      await discoverPlugins(
+        path.resolve(import.meta.dirname, "../../../../plugins"),
+      )
+    ).find((plugin) => plugin.id === "narrator")!;
+    const definition = await loadPluginDefinition(discovery);
+    const value = {
+      ...entry(definition.packageManifest),
+      id: discovery.id,
+      manifests: definition.manifests,
     };
-
-    const merged = mergePluginUserSettings("tts", [
-      runtime("tts/auto", [VOICE]),
-      runtime("tts/manual", [reordered]),
-    ]);
-
-    expect(merged).toHaveLength(1);
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it("rejects different defaults for one plugin setting", () => {
-    expect(() =>
-      mergePluginUserSettings("tts", [
-        runtime("tts/auto", [VOICE]),
-        runtime("tts/manual", [{ ...VOICE, default: "other_voice" }]),
-      ]),
-    ).toThrow(/Conflicting userSettings.*tts\/auto.*tts\/manual/);
-  });
-
-  it("keeps distinct keys from different runtimes", () => {
-    const merged = mergePluginUserSettings("img", [
-      runtime("img/prompt", [{ ...VOICE, key: "composition" }]),
-      runtime("img/generate", [{ ...VOICE, key: "imageSize" }]),
-    ]);
-
-    expect(merged.map((s) => s.key)).toEqual(["composition", "imageSize"]);
-  });
-
-  it("returns an empty list when no runtime declares settings", () => {
-    expect(mergePluginUserSettings("plain", [runtime("plain", [])])).toEqual(
-      [],
+    expect(buildPluginSummary(value).userSettings).toContainEqual(
+      expect.objectContaining({
+        key: "narrativePerson",
+        type: "select",
+        default: "second",
+      }),
     );
   });
 });

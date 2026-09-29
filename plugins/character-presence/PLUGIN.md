@@ -1,41 +1,64 @@
 ---
-name: character-presence
+id: character-presence
+kind: plugin
 displayName:
   zh: 角色形象
   en: Character Presence
 description:
   zh: 保存角色头像、立绘和声音，让人物展示更有存在感。
-  en: Saves character portraits, images, and voices so characters feel more present.
-pluginType: plugin
-runtimeType: function
-outputKind: system
-handler: ./handler.js
-trigger:
-  type: manual
-capabilities:
-  - character-presence
+  en: >-
+    Saves character portraits, images, and voices so characters feel more
+    present.
 tags:
-  - role:character
-  - data:world-data
-  - data:characters
-  - data:media-assets
-  - cost:function
-  - ui:right-panel
-  - ui:manual-action
-dataSchemas:
-  presence:
-    schemaVersion: 1
-    acceptsWorldData: true
+  - "data:world-data"
+  - "data:characters"
+  - "data:media-assets"
+  - "cost:function"
+  - "ui:right-panel"
+  - "ui:manual-action"
+provides:
+  - character-presence@1
+entry: ./server/index.js
+contracts:
+  character.portraits@1:
     schema: ./schemas/presence.schema.json
-    description: Importable character media presence records.
-  assets:
-    schemaVersion: 1
-    acceptsWorldData: true
+  character.portrait-assets@1:
     schema: ./schemas/assets.schema.json
-    description: Media asset index records imported from world packages.
-ui:
-  right:
-    - ./ui/character-presence-panel.json
+contributes:
+  extensions:
+    - point: ui.slot@1
+      id: visuals
+      slot: character.visual@1
+      order: 0
+      watch:
+        - presence
+  data:
+    presence:
+      schema: ./schemas/presence.schema.json
+      description: Importable character media presence records.
+      version: 1
+      accepts:
+        - character.portraits@1
+    assets:
+      schema: ./schemas/assets.schema.json
+      description: Media asset index records imported from world packages.
+      version: 1
+      accepts:
+        - character.portrait-assets@1
+  ui:
+    right:
+      - ./ui/character-presence-panel.json
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+  io:
+    output:
+      contract: character-presence@1
+    visibility: system
+  function:
+    handler: ./handler.js
 ---
 
 # Character Presence

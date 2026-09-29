@@ -12,6 +12,9 @@
 
 // ── Record type re-exports (by domain) ───────────────────────────
 
+export type { CharacterSchemaRecord, LorebookOwner } from "@covel/shared";
+import type { CharacterSchemaRecord, LorebookOwner } from "@covel/shared";
+
 export type { WorldRecord } from "./records/world-records.js";
 export { normalizeWorldRecord } from "./records/world-records.js";
 
@@ -43,7 +46,6 @@ export type {
 } from "./records/plugin-records.js";
 
 export type {
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   TurnMessageRecord,
@@ -104,7 +106,6 @@ import type {
   TraceEventRecord,
 } from "./records/plugin-records.js";
 import type {
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   LorebookEntryRecord,
   TurnMessageRecord,
@@ -296,6 +297,8 @@ export interface MessageStore {
 
 /** Character records. Part of `sql-session-content-records`. */
 export interface CharacterStore {
+  getCharacterSchema(sessionId: string): Promise<CharacterSchemaRecord | null>;
+  upsertCharacterSchema(record: CharacterSchemaRecord): Promise<void>;
   /** Replace the complete snapshot, including timestamps. Null fields clear attributes. */
   upsertCharacter(record: CharacterRecord): Promise<void>;
   listCharacters(sessionId: string): Promise<CharacterRecord[]>;
@@ -479,22 +482,6 @@ export interface PlayerInputStore {
   listPlayerInputs(sessionId: string): Promise<PlayerInputRecord[]>;
 }
 
-/** Working memory KV (`common/sql-data-crud.ts`). */
-export interface WorkingMemoryStore {
-  upsertWorkingMemory(record: WorkingMemoryRecord): Promise<void>;
-  getWorkingMemory(
-    sessionId: string,
-    scope: WorkingMemoryRecord["scope"],
-    key: string,
-  ): Promise<WorkingMemoryRecord | null>;
-  listWorkingMemory(sessionId: string): Promise<readonly WorkingMemoryRecord[]>;
-  deleteWorkingMemory(
-    sessionId: string,
-    scope: WorkingMemoryRecord["scope"],
-    key: string,
-  ): Promise<void>;
-}
-
 /** World-data import ledger (`common/sql-data-crud.ts`). */
 export interface WorldDataImportLedgerStore {
   saveWorldDataImportLedgerBatch(
@@ -509,7 +496,7 @@ export interface WorldDataImportLedgerStore {
 /** Session-scoped lorebook entries (`common/sql-data-crud.ts`). */
 export interface LorebookStore {
   /**
-   * Upsert a batch of session-scoped lorebook entries. Same `(sessionId, id)`
+   * Upsert a batch of session-scoped lorebook entries. Same `(sessionId, owner, id)`
    * replaces the existing row. Used by the `lorebook.upsert` proposal commit
    * handler and by plugins that emit world data through the lorebook
    * pipeline.
@@ -524,8 +511,17 @@ export interface LorebookStore {
   listSessionLorebookEntries(
     sessionId: string,
   ): Promise<readonly LorebookEntryRecord[]>;
-  /** Delete one session-scoped lorebook entry by `(sessionId, id)`. */
-  deleteLorebookEntry(sessionId: string, id: string): Promise<void>;
+  getLorebookEntry(
+    sessionId: string,
+    owner: LorebookOwner,
+    id: string,
+  ): Promise<LorebookEntryRecord | null>;
+  /** Delete the exact owner-scoped entry. */
+  deleteLorebookEntry(
+    sessionId: string,
+    owner: LorebookOwner,
+    id: string,
+  ): Promise<void>;
 }
 
 /** Compactor summaries. Part of `sql-session-journal-records`. */
@@ -786,7 +782,6 @@ export interface DataStore
     TraceStore,
     TurnMessageStore,
     PlayerInputStore,
-    WorkingMemoryStore,
     WorldDataImportLedgerStore,
     LorebookStore,
     SessionSummaryStore,

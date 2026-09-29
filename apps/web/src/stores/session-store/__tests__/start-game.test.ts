@@ -114,6 +114,7 @@ describe("startGameSession bootstrap order", () => {
       undefined,
       "en-US",
       undefined,
+      undefined,
     );
   });
 

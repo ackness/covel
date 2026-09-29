@@ -4,9 +4,9 @@ import path from "node:path";
 import os from "node:os";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
   loadRuntime,
-  loadRuntimeUi,
+  loadPluginUi,
 } from "../src/index.js";
 
 describe("UI spec loading", () => {
@@ -22,14 +22,14 @@ describe("UI spec loading", () => {
     await fs.writeFile(
       path.join(pluginDir, "PLUGIN.md"),
       `---
-name: test-ui-plugin
+id: test-ui-plugin
+kind: plugin
 description: Plugin with UI specs
-stage: narrative
-ui:
-  right:
-    - ./ui/panel.json
-  message:
-    - ./ui/block.json
+runtime: {type: agent, schedule: {stage: narrative}}
+contributes:
+  ui:
+    right: [./ui/panel.json]
+    message: [./ui/block.json]
 ---
 
 Test prompt.
@@ -62,9 +62,10 @@ Test prompt.
     await fs.writeFile(
       path.join(noUiDir, "PLUGIN.md"),
       `---
-name: no-ui-plugin
+id: no-ui-plugin
+kind: plugin
 description: No UI
-stage: narrative
+runtime: {type: agent, schedule: {stage: narrative}}
 ---
 
 Prompt.
@@ -72,20 +73,22 @@ Prompt.
     );
 
     // Plugin with UI specs AND a function handler whose module import has a
-    // visible side effect — used to pin that loadRuntimeUi never runs plugin JS.
+    // visible side effect — used to pin that loadPluginUi never runs plugin JS.
     const handlerDir = path.join(tmpDir, "ui-handler-plugin");
     await fs.mkdir(path.join(handlerDir, "ui"), { recursive: true });
     await fs.writeFile(
       path.join(handlerDir, "PLUGIN.md"),
       `---
-name: ui-handler-plugin
+id: ui-handler-plugin
+kind: plugin
 description: UI plus handler
-stage: narrative
-runtimeType: function
-handler: ./handler.mjs
-ui:
-  right:
-    - ./ui/panel.json
+runtime:
+  type: function
+  schedule: {stage: narrative}
+  function: {handler: ./handler.mjs}
+contributes:
+  ui:
+    right: [./ui/panel.json]
 ---
 
 Prompt.
@@ -108,12 +111,13 @@ export default async function handler() { return { proposals: [] }; }
     await fs.writeFile(
       path.join(evilDir, "PLUGIN.md"),
       `---
-name: evil-plugin
+id: evil-plugin
+kind: plugin
 description: Evil
-stage: narrative
-ui:
-  right:
-    - ../../etc/passwd
+runtime: {type: agent, schedule: {stage: narrative}}
+contributes:
+  ui:
+    right: [../../etc/passwd]
 ---
 
 Prompt.
@@ -131,16 +135,16 @@ Prompt.
     const discovery = discoveries.find((d) => d.id === "test-ui-plugin");
     expect(discovery).toBeDefined();
 
-    const manifests = await loadPluginManifest(discovery!);
-    expect(manifests[0].manifest.ui).toBeDefined();
-    expect(manifests[0].manifest.ui?.right).toEqual(["./ui/panel.json"]);
-    expect(manifests[0].manifest.ui?.message).toEqual(["./ui/block.json"]);
+    const { packageManifest } = await loadPluginDefinition(discovery!);
+    expect(packageManifest.manifest.ui).toBeDefined();
+    expect(packageManifest.manifest.ui?.right).toEqual(["./ui/panel.json"]);
+    expect(packageManifest.manifest.ui?.message).toEqual(["./ui/block.json"]);
   });
 
-  it("should load UI spec JSON files in loadRuntime", async () => {
+  it("should load package UI specs independently of execution", async () => {
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "test-ui-plugin")!;
-    const loaded = await loadRuntime(discovery, "test-ui-plugin");
+    const loaded = await loadPluginUi(discovery);
 
     expect(loaded.uiSpecs).toBeDefined();
     expect(loaded.uiSpecs?.right).toHaveLength(1);
@@ -162,19 +166,14 @@ Prompt.
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "evil-plugin")!;
 
-    await expect(loadRuntime(discovery, "evil-plugin")).rejects.toThrow(
-      /path traversal/i,
-    );
-    await expect(loadRuntimeUi(discovery, "evil-plugin")).rejects.toThrow(
-      /path traversal/i,
-    );
+    await expect(loadPluginUi(discovery)).rejects.toThrow(/path traversal/i);
   });
 
-  it("loadRuntimeUi returns UI specs without importing handler JS", async () => {
+  it("loadPluginUi returns UI specs without importing handler JS", async () => {
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "ui-handler-plugin")!;
 
-    const loaded = await loadRuntimeUi(discovery, "ui-handler-plugin");
+    const loaded = await loadPluginUi(discovery);
 
     expect(loaded.uiSpecs?.right?.[0].id).toBe("handler-panel");
     expect(loaded.manifest.name).toBe("ui-handler-plugin");

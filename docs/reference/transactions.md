@@ -143,6 +143,33 @@ nested-call rejection) but differ in concurrency and isolation:
 > gap without a store-connection rearchitecture. Regression coverage:
 > `packages/store/tests/serialized-write-gate.test.ts`.
 
+### Vector index initialization and transfer
+
+A registered vector model guarantees its physical table exists. PostgreSQL initializes the registry row, optional vector extension, table, and indexes in one transaction, then publishes the in-process cache after commit. An advisory transaction lock serializes initialization across processes. SQLite uses an immediate transaction and reads model state directly so outer rollbacks cannot leave stale caches. Existing broken development registries must be recreated.
+
+Snapshots, forks, and browser checkpoint transfers exclude the reserved `__kernel:vector` partition. Its ingest cursors and hashes describe a local physical index, not transferable session data. Both producers and importers apply this rule; rebuilt sessions re-index their messages and lore. Ordinary plugin data with the same namespace names is retained.
+
+The server's shared commit entry point schedules best-effort ingestion only after
+`commitExecution` reports a durable commit. Player, manual, resumed, and detached
+executions use that entry point. Fork and browser checkpoint replacement also
+schedule ingestion. Bootstrap establishes the configured embedding model lock
+inside the ingestion lease before reading the corpus. A scheduled run continues
+through bounded provider batches until the current corpus is indexed; short or
+failed embeddings leave unfinished progress for a later run.
+
+Ingestion uses its own per-session lock (advisory across PostgreSQL hosts), never
+the turn lock. Lifecycle replacement and deletion acquire locks in this order:
+session, world when needed, ingestion, then storage transaction. They wait for
+all delayed vectors, cursor updates, hash updates, and archival deletions before
+replacing or deleting state, including checkpoints that retain `createdAt`.
+Ordinary turns can commit while embeddings run; the ingestor coalesces another
+pass to observe those commits. Shutdown drains tracked memory tasks before
+closing storage. Embedding failures do not change the committed turn outcome.
+
+Fork preserves character IDs because every backend keys characters by
+`(sessionId, id)`. Copied plugin references and the child's snapshot therefore
+identify the same characters as the child store.
+
 ### MediaStore transaction and concurrency fixes
 
 Media lifecycle mutations use per-resource atomicity alongside the DataStore
@@ -334,11 +361,18 @@ that ledger for dry-run, hash-based conflict detection, and explicit
 
 Media bytes live in `MediaStore`, which has a separate lifecycle from
 `DataStore`. World-data import validates media during preflight, writes the
-media object before the session-store media index row, and rolls back the
-`DataStore` transaction on failure. Sync deletion of importer-managed media
-index rows removes only the current session's explicit media ref; the
-content-addressed media asset is deleted only when the current session owns it
-and no refs remain.
+media object and a unique temporary reference atomically before the session-store
+media index row, and rolls back the `DataStore` transaction on failure. The
+reference protects unpublished bytes from concurrent GC. Finalization establishes
+session claims before releasing the temporary reference; failed preparation or
+publication releases only that attempt's temporary references. Sync deletion of
+importer-managed media index rows removes only the current session's explicit
+media ref. Lifecycle GC reclaims bytes after all ownership/ref claims are gone.
+Temporary-reference release failures are logged without masking the import
+outcome. Crashes may leave conservative pins that require operator cleanup;
+there is no automatic expiry or schema migration. If semantic data has committed
+but media finalization fails, temporary references remain to protect that data;
+creation rollback only releases them after the session deletion succeeds.
 
 ### Observability
 
@@ -381,13 +415,13 @@ the affected table in the relevant reference doc.
 
 ## World data 写入的一致性边界
 
-- **`POST /worlds/:id/sync-dimensions`** — 四阶段重写（删除过期 plugin-data 行 → 批量写入 → upsert lorebook → 删除过期 lorebook）在**一个 SessionLock + 一个 store transaction** 内完成。失败整体回滚并返回 500，不会让下一轮 prompt 读到「删了一半」的世界数据。
+- **`POST /worlds/:id/sync-dimensions`** — 世界所有的 Lorebook 条目更新（upsert 新条目 → 删除过期条目，不写插件私有数据）在**一个 SessionLock + 一个 store transaction** 内完成。失败整体回滚并返回 500，不会让下一轮 prompt 读到「删了一半」的世界数据。
 - **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑（新扫描会把该改动报为正常 conflict）或显式 `force`。路由同时持 SessionLock，挡住回合并发写。
-- **媒体副作用仍在 DB 事务内**（`deferMediaFinalize: false`）。DB 回滚无法撤销已写入的 media bytes，因此 materialize 过程使用**增量补偿栈**：每次 `put` 成功立即登记，中途失败也能清理已落盘的资产。
+- **媒体与 DataStore 分属不同生命周期**。session create 和 sync 在语义事务前准备媒体，`put` 原子建立本次导入专属临时引用。发布成功先建立 session claims 再释放临时引用；提交前失败只释放本次临时引用，无归属字节交给 GC，不强制删除内容。提交后 finalization 失败则保留保护，创建回滚成功删除会话后才可释放。兼容调用入口若在 DataStore 事务内 materialize，也遵守同一引用规则。进程崩溃可能留下无自动过期的临时引用，需确认导入已停止后人工清理。
 - **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。
 
-核心记忆恢复任务也进入 `commitExecution` 的故事事务：宿主可提供 `memorySystem.updater.stageAfterTurn(tx, input)`，将叙事、已提交角色事实及模型槽标识存入保留命名空间，不保存凭据。存储失败会使本次提交失败，避免出现已承诺故事但没有恢复任务的间隙。
+记忆抽取使用通用 detached runtime 作业。故事提交事务同时保存 `turn-digest@1` 和作业记录，凭据仅保留在进程内交接表；登记后事务失败必须清理对应凭据。Worker 将插件块的 proposal 与作业完成回执放在同一事务里提交。
 
-服务器在提交后异步处理任务，并在下一次回合或会话修改之前通过 `awaitPending` 补做中断任务。核心记忆使用独立的 `memory-core` 锁；PostgreSQL 宿主提供 advisory lock，向量摄取使用另一个锁键。最终核心块、面板镜像和任务删除在同一个事务中提交；存储失败保留任务，已完成任务不再提取。模型响应失败按既有错误状态和 trace 报告后终结，避免旧失败任务越过新故事重新写入。恢复使用下一请求的 adapter/slot，不保存或重放旧 API Key。进程重启后按会话访问恢复，不在启动时调用所有会话的模型。
+`completion.settle: before-next-execution` 在下一次执行入口等待这些作业。等待时不持 SessionLock，取得锁后再次检查；超过声明的等待预算会记录 trace 并继续。取消请求只中止等待。相同 session/runtime 的作业按源回合顺序处理，失败和超时作为终态放行，显式重试不会覆盖更新的源回合作业。进程崩溃后已 claim 的抽取不自动重放，避免重复调用和旧内容覆盖。
 
-恢复记录的会话归属取自存储行，payload 不冗余保存 sessionId；快照分支复制后仅处理子会话自身的任务与核心块。正常关机仍等待已登记的后台任务。独立消费者未提供 stageAfterTurn 时保留原有进程内 best-effort 更新行为。
+原请求服务优先，其次使用可用的服务端配置；只有请求头凭据的部署由后续授权请求补交服务。队列与快照不保存 API key。凭据表是进程内状态，不提供跨实例原请求优先保证。服务关闭停止 claim、取消尚未进入提交的任务，并等待 worker 持有的存储操作释放；已进入提交的事务允许完成。这不保证所有记忆提取成功排空。向量摄取仍是独立路径。

@@ -28,6 +28,7 @@ export default function (toolkit) {
       "Atomically initialize this session's character attribute schema and world reference entries. Submit exactly once with at least 15 attributes across all five categories and at least 5 world entries.",
     parameters: z
       .object({
+        types: z.array(z.string().min(1)).default(["npc", "companion"]),
         attributes: z
           .array(createWorldAttributeSchema(z))
           .min(15)
@@ -55,9 +56,9 @@ export default function (toolkit) {
           }
         }
       }),
-    execute: async ({ attributes, entries }, context) => {
+    execute: async ({ types, attributes, entries }, context) => {
       const schemaResult = await setWorldSchema.execute(
-        { attributes },
+        { types, attributes },
         context,
       );
       const schemaProposals = getPendingProposals(schemaResult);

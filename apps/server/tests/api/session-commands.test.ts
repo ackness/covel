@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createPluginRegistry,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
@@ -22,7 +22,7 @@ function manifest(
     description: "Inspector runtime",
     outputKind: "story",
     model: "story",
-    capabilities: ["narrative"],
+    outputContract: "narrative@1",
     commands: [
       {
         name: "inspect",
@@ -38,6 +38,23 @@ function manifest(
 function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
   return {
     id: "inspector",
+    packageManifest: {
+      plugin: {
+        id: "inspector",
+        kind: "plugin",
+        description: "Inspector",
+        contributes: { commands: manifests[0]?.commands ?? [] },
+      },
+      manifest: {
+        name: "inspector",
+        pluginId: "inspector",
+        description: "Inspector",
+        pluginType: "plugin",
+        commands: manifests[0]?.commands,
+      },
+      promptTemplate: "",
+      rawFrontmatter: {},
+    },
     summary: {
       id: "inspector",
       name: "Inspector",
@@ -48,7 +65,8 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
     status: "registered",
     source: "builtin",
     loadedRuntimes: new Map(),
-    manifests: manifests.map((runtime): ParsedPluginMd => ({
+    manifests: manifests.map((runtime): ParsedRuntimeMd => ({
+      runtime: { type: runtime.runtimeType ?? "agent" },
       manifest: runtime,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -67,15 +85,17 @@ const session = {
 } as SessionRecord;
 
 describe("session slash command directory", () => {
-  it("rejects conflicting command declarations instead of choosing by load order", () => {
-    expect(() =>
-      mergePluginCommands(
-        entry([
-          manifest("inspector/story"),
-          manifest("inspector/other", "Other"),
-        ]),
-      ),
-    ).toThrow(/Conflicting commands.*inspector\/story.*inspector\/other/);
+  it("reads commands only from the root contribution", () => {
+    const item = entry([
+      manifest("inspector/story"),
+      manifest("inspector/other", "Other"),
+    ]);
+    expect(mergePluginCommands(item)).toEqual(
+      manifest("inspector/story").commands,
+    );
+    expect(
+      mergePluginCommands({ ...item, packageManifest: undefined }),
+    ).toEqual([]);
   });
 
   it("returns framework commands plus commands from active plugins only", () => {

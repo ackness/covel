@@ -64,7 +64,10 @@ export function createKeywordArchivalSearcher(
                 content: content.slice(0, 500),
                 score,
                 source: "lorebook",
-                pluginId: entry.pluginId,
+                pluginId:
+                  entry.owner.kind === "plugin"
+                    ? entry.owner.pluginId
+                    : undefined,
               });
             }
           }

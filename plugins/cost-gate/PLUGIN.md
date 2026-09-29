@@ -1,42 +1,63 @@
 ---
-name: cost-gate
+id: cost-gate
+kind: plugin
 displayName:
   zh: 花费上限
   en: Cost Gate
 description:
   zh: 给每局设置 token 花费上限：接近上限时自动减少后台生成，达到上限时暂停本回合。
-  en: Caps token spend per session — trims background generation near the cap and pauses the turn at the cap.
-pluginType: plugin
-outputKind: system
-capabilities:
-  - cost-control
+  en: >-
+    Caps token spend per session — trims background generation near the cap and
+    pauses the turn at the cap.
 tags:
-  - role:budget
-  - cost:function
+  - "cost:function"
+provides:
+  - cost-control@1
 entry: ./server/index.js
-userSettings:
-  - key: softTokens
-    type: number
-    min: 1000
-    max: 10000000
-    step: 1000
-    label:
-      zh: 软上限（token）
-      en: Soft cap (tokens)
-    description:
-      zh: 本局累计 token 达到此值后，自动停掉后台生成，只保留主线叙事。留空则回退到 COST_GATE_SOFT_TOKENS 环境变量或默认 400000。
-      en: Once the session's accumulated tokens reach this value, background generation is trimmed and only story output keeps running. Leave unset to fall back to the COST_GATE_SOFT_TOKENS env var or the 400000 default.
-  - key: hardTokens
-    type: number
-    min: 1000
-    max: 10000000
-    step: 1000
-    label:
-      zh: 硬上限（token）
-      en: Hard cap (tokens)
-    description:
-      zh: 本局累计 token 达到此值后，暂停本回合（abort）。应大于软上限。留空则回退到 COST_GATE_HARD_TOKENS 环境变量或默认 600000。
-      en: Once the session's accumulated tokens reach this value, the turn is aborted. Keep it above the soft cap. Leave unset to fall back to the COST_GATE_HARD_TOKENS env var or the 600000 default.
+contributes:
+  settings:
+    - key: softTokens
+      type: number
+      min: 1000
+      max: 10000000
+      step: 1000
+      label:
+        zh: 软上限（token）
+        en: Soft cap (tokens)
+      description:
+        zh: >-
+          本局累计 token 达到此值后，自动停掉后台生成，只保留主线叙事。留空则回退到 COST_GATE_SOFT_TOKENS 环境变量或默认
+          400000。
+        en: >-
+          Once the session's accumulated tokens reach this value, background
+          generation is trimmed and only story output keeps running. Leave unset
+          to fall back to the COST_GATE_SOFT_TOKENS env var or the 400000
+          default.
+    - key: hardTokens
+      type: number
+      min: 1000
+      max: 10000000
+      step: 1000
+      label:
+        zh: 硬上限（token）
+        en: Hard cap (tokens)
+      description:
+        zh: >-
+          本局累计 token 达到此值后，暂停本回合（abort）。应大于软上限。留空则回退到 COST_GATE_HARD_TOKENS
+          环境变量或默认 600000。
+        en: >-
+          Once the session's accumulated tokens reach this value, the turn is
+          aborted. Keep it above the soft cap. Leave unset to fall back to the
+          COST_GATE_HARD_TOKENS env var or the 600000 default.
+  hooks:
+    - event: PostLLMResponse
+      enforce: post
+    - event: PreSchedule
+      enforce: normal
+    - event: TurnStart
+      enforce: pre
+    - event: SessionEnd
+      enforce: normal
 ---
 
 # Cost Gate

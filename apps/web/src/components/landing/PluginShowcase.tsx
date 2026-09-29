@@ -27,7 +27,7 @@ interface Tile {
 const TILES: readonly Tile[] = [
   {
     key: "narrator",
-    capability: "narrative",
+    capability: "narrative-engine@1",
     bandKey: "home.plugins.narratorBand",
     bandFallback: "Narrator · 500",
     span: "md:col-span-3 md:row-span-2",
@@ -35,7 +35,7 @@ const TILES: readonly Tile[] = [
   },
   {
     key: "world-init",
-    capability: "world-data-provider",
+    capability: "session.world-context@1",
     bandKey: "home.plugins.worldInitBand",
     bandFallback: "Pre-Game · 0–99",
     span: "md:col-span-2 md:row-span-1",
@@ -43,7 +43,7 @@ const TILES: readonly Tile[] = [
   },
   {
     key: "image",
-    capability: "image-generation",
+    capability: "media.image-flow@1",
     bandKey: "home.plugins.imageBand",
     bandFallback: "After-Turn · 700",
     span: "md:col-span-2 md:row-span-1",
@@ -51,7 +51,7 @@ const TILES: readonly Tile[] = [
   },
   {
     key: "memory",
-    capability: "memory-panel",
+    capability: "memory.block-definitions@1",
     bandKey: "home.plugins.memoryBand",
     bandFallback: "Audit · 1000",
     span: "md:col-span-2 md:row-span-1",
@@ -59,7 +59,7 @@ const TILES: readonly Tile[] = [
   },
   {
     key: "rules",
-    capability: "rules-engine",
+    capability: "world.rules@1",
     bandKey: "home.plugins.rulesBand",
     bandFallback: "Pre-Turn · 200",
     span: "md:col-span-2 md:row-span-1",
@@ -67,7 +67,7 @@ const TILES: readonly Tile[] = [
   },
   {
     key: "characters",
-    capability: "character-management",
+    capability: "character.blueprints@1",
     bandKey: "home.plugins.charactersBand",
     bandFallback: "After-Turn · 600",
     span: "md:col-span-3 md:row-span-1",
@@ -100,7 +100,9 @@ function indexByCapability(
   );
   const index = new Map<string, PluginMatch>();
   for (const p of sorted) {
-    for (const cap of p.capabilities ?? []) {
+    for (const cap of p.provides.map((entry) =>
+      typeof entry === "string" ? entry : entry.contract,
+    )) {
       if (!index.has(cap)) {
         index.set(cap, {
           id: p.id,

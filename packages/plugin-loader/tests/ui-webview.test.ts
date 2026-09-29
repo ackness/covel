@@ -28,21 +28,27 @@ describe("plugin-owned UI documents", () => {
         }),
       );
     await write("./view.html");
-    expect(await loadPluginUiSpec(plugin, spec)).toMatchObject({
+    expect(await loadPluginUiSpec(plugin, spec, "owner")).toMatchObject({
       webview: { html, height: 200 },
       surfaces: ["stage"],
     });
     await fs.writeFile(path.join(root, "outside.html"), "private");
     await write("../outside.html");
-    await expect(loadPluginUiSpec(plugin, spec)).rejects.toThrow("escapes");
+    await expect(loadPluginUiSpec(plugin, spec, "owner")).rejects.toThrow(
+      "escapes",
+    );
     await fs.symlink(
       path.join(root, "outside.html"),
       path.join(plugin, "link.html"),
     );
     await write("./link.html");
-    await expect(loadPluginUiSpec(plugin, spec)).rejects.toThrow("escapes");
+    await expect(loadPluginUiSpec(plugin, spec, "owner")).rejects.toThrow(
+      "escapes",
+    );
     await fs.writeFile(path.join(plugin, "view.html"), "x".repeat(524289));
     await write("./view.html");
-    await expect(loadPluginUiSpec(plugin, spec)).rejects.toThrow("512 KiB");
+    await expect(loadPluginUiSpec(plugin, spec, "owner")).rejects.toThrow(
+      "512 KiB",
+    );
   });
 });

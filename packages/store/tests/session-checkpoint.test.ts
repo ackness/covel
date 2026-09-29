@@ -8,6 +8,7 @@ import {
   makeCharacter,
   makeEvent,
   makeMessage,
+  makeLorebookEntry,
   makeRuntimeResult,
   makeSession,
   makeTurnResult,
@@ -67,6 +68,22 @@ describe("session checkpoint transfer", () => {
     await source.upsertCharacter(
       makeCharacter({ sessionId, id: "character-1" }),
     );
+    await source.upsertCharacterSchema({
+      sessionId,
+      version: 2,
+      types: ["enemy"],
+      attributes: [],
+      createdAt: "2026-08-25T00:00:00.000Z",
+      updatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    await source.upsertLorebookEntries([
+      makeLorebookEntry({ sessionId, id: "same", owner: { kind: "world" } }),
+      makeLorebookEntry({
+        sessionId,
+        id: "same",
+        owner: { kind: "plugin", pluginId: "writer" },
+      }),
+    ]);
     await source.setPluginData({
       id: "plugin-data-1",
       sessionId,
@@ -96,6 +113,12 @@ describe("session checkpoint transfer", () => {
     expect(await target.listEvents(sessionId)).toEqual(checkpoint.events);
     expect(await target.listCharacters(sessionId)).toEqual(
       checkpoint.characters,
+    );
+    expect(await target.getCharacterSchema(sessionId)).toEqual(
+      checkpoint.characterSchema,
+    );
+    expect(await target.listSessionLorebookEntries(sessionId)).toEqual(
+      checkpoint.lorebookEntries,
     );
     expect(await target.listPluginDataSessionScope(sessionId)).toEqual(
       checkpoint.pluginData,

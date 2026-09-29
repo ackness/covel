@@ -1,10 +1,10 @@
+import { commitExecution } from "../commit-execution.js";
 import {
   createTurnEmitter,
   collectExecutionJournal,
   collectExecutionSuspensions,
   createDetachedProposalGuard,
   executeTurn,
-  commitExecution,
   buildHookSettings,
   snapshotUserSettings,
   type HookScope,
@@ -30,6 +30,8 @@ import {
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
 import { buildSessionHookScope } from "../session/hook-scope.js";
+import { listSettlingRuntimeJobs } from "./jobs.js";
+import type { SettleWaitBudget } from "./settled-session-lock.js";
 
 export class SessionApprovalScopeChangedError extends Error {
   constructor() {
@@ -46,9 +48,22 @@ export class SessionNotActiveError extends Error {
 }
 
 export interface PluginRpcRuntimeTurnContext {
+  readonly memorySystem?: import("@covel/memory").MemorySystem;
   readonly store: DataStore;
   readonly eventBus: EventBus;
   readonly sessionLock: SessionLock;
+  readonly resolveImageFlowRuntimeIds?: () => Promise<
+    readonly string[] | undefined
+  >;
+  readonly withSettledLock?: <T>(
+    fn: () => Promise<T>,
+    waitBudget?: SettleWaitBudget,
+  ) => Promise<T>;
+  readonly withSnapshot?: <T>(
+    fn: () => Promise<T>,
+    /** Runs under the session lock immediately before artifact capture. */
+    beforeCapture?: () => Promise<void>,
+  ) => Promise<T>;
   readonly sessionId: string;
   readonly session: Pick<SessionRecord, "locale" | "runtimeModelOverrides">;
   readonly activeRuntimes: readonly RuntimeManifest[];
@@ -145,6 +160,22 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly commit: TurnCommitOutcome;
   }>;
 } {
+  function activeRuntimes(): readonly RuntimeManifest[] {
+    return (
+      ctx.pluginRegistry?.getActiveRuntimes(ctx.sessionId) ?? ctx.activeRuntimes
+    );
+  }
+
+  async function withSnapshot<T>(
+    fn: () => Promise<T>,
+    beforeCapture?: () => Promise<void>,
+  ): Promise<T> {
+    if (ctx.withSnapshot) return ctx.withSnapshot(fn, beforeCapture);
+    if (beforeCapture)
+      await ctx.sessionLock.withLock(ctx.sessionId, beforeCapture);
+    return fn();
+  }
+
   function executionControl(
     signal?: AbortSignal,
   ): TurnExecutorDeps["turnControl"] {
@@ -163,7 +194,7 @@ export function createPluginRpcRuntimeTurnRunner(
     session: SessionRecord,
     runtimeId: string,
   ): void {
-    const pluginId = ctx.activeRuntimes.find(
+    const pluginId = activeRuntimes().find(
       (runtime) => runtime.name === runtimeId,
     )?.pluginId;
     const expected = pluginId ? ctx.approvalScopes.get(pluginId) : undefined;
@@ -197,9 +228,9 @@ export function createPluginRpcRuntimeTurnRunner(
     if (!ctx.pluginRegistry) {
       return {
         activePluginIds: new Set(
-          ctx.activeRuntimes.map((runtime) => runtime.pluginId),
+          activeRuntimes().map((runtime) => runtime.pluginId),
         ),
-        settings: buildHookSettings(ctx.activeRuntimes, userSettings),
+        settings: buildHookSettings(activeRuntimes(), userSettings),
       };
     }
     return buildSessionHookScope({
@@ -228,6 +259,8 @@ export function createPluginRpcRuntimeTurnRunner(
     // turn_results row to `failed`; a clean run settles it `committed`, both
     // inside that transaction.
     const outcome = await commitExecution({
+      memorySystem: ctx.memorySystem,
+      imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(),
       signal: opts.executionSignal,
       completion:
         opts.completionKind === "detached"
@@ -237,8 +270,6 @@ export function createPluginRpcRuntimeTurnRunner(
               turnId: turnResult.turnId,
               durationMs: turnResult.durationMs,
             },
-      memorySystem: ctx.deps.memorySystem,
-      capabilityPluginIds: ctx.deps.capabilityPluginIds,
       onFinalized: async (outcome) => {
         // Commit failures must not report success. Surface each one as a
         // `proposal.failed` trace event (manual/background turns have no live
@@ -256,7 +287,7 @@ export function createPluginRpcRuntimeTurnRunner(
       store: ctx.store,
       sessionId: ctx.sessionId,
       executionContext: turnResult.executionContext,
-      runtimes: ctx.activeRuntimes,
+      runtimes: activeRuntimes(),
       activePluginIds: hookScope.activePluginIds,
       hookSettings: hookScope.settings,
       results: [
@@ -277,9 +308,10 @@ export function createPluginRpcRuntimeTurnRunner(
       // Publishes recordAs exports inside the commit transaction — a manual /
       // background execution can publish just like a player turn.
       loadOutputSchema: async (runtimeId) => {
-        const rt = ctx.activeRuntimes.find((r) => r.name === runtimeId);
+        const rt = activeRuntimes().find((r) => r.name === runtimeId);
         return rt
-          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale))?.outputSchema
+          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale, ctx.sessionId))
+              ?.outputSchema
           : undefined;
       },
       // MediaRef canonicalization / ownership for published export values.
@@ -321,6 +353,7 @@ export function createPluginRpcRuntimeTurnRunner(
     opts: {
       readonly expectedSessionIncarnation?: string;
       readonly expectedPluginVersion?: string;
+      readonly expectedPluginId?: string;
       readonly beforeCommit?: (args: {
         readonly backgroundTurnId: string;
         readonly backgroundExecutionId: string;
@@ -342,101 +375,167 @@ export function createPluginRpcRuntimeTurnRunner(
     const executionInput = { ...turnInput, userSettings };
     const turnControl = executionControl(opts.executionSignal);
     const executionSignal = turnControl?.executionSignal;
+    const waitBudget: SettleWaitBudget = {
+      startedAt: performance.now(),
+      deadline: Infinity,
+    };
+    const retryAdmission = Symbol(
+      "retry settled admission without runtime lock",
+    );
+    const needsSettle = !opts.expectedSessionIncarnation && ctx.withSettledLock;
+    let settleTimedOut = false;
     const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
-    return ctx.sessionLock.withLock(jobLockId, async () => {
-      executionSignal?.throwIfAborted();
-      // Detached work does not hold the main session lock during provider
-      // execution. Take it briefly to linearize authorization against a
-      // concurrent revoke/disable/delete before spending external work.
-      const executionScope = await ctx.sessionLock.withLock(ctx.sessionId, () =>
-        requireLiveApprovedSession(runtimeId).then(async (live) => {
-          if (
-            opts.expectedSessionIncarnation &&
-            sessionIncarnationIdentity(live) !== opts.expectedSessionIncarnation
-          ) {
-            throw new SessionApprovalScopeChangedError();
-          }
-          const target = ctx.activeRuntimes.find(
-            (runtime) => runtime.name === runtimeId,
-          );
-          if (
-            opts.expectedPluginVersion !== undefined &&
-            target?.version !== opts.expectedPluginVersion
-          ) {
-            throw new SessionApprovalScopeChangedError();
-          }
-          await opts.beforeExecute?.();
-          executionSignal?.throwIfAborted();
-          return hookScopeFor(live.activePlugins, userSettings);
-        }),
-      );
-      const result = await executeTurn(executionInput, ctx.activeRuntimes, {
-        ...ctx.deps,
-        hookScope: executionScope,
-        store: ctx.store,
-        eventBus: ctx.eventBus,
-        emitter,
-        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-        turnControl,
-      });
-      if (
-        opts.rejectSuspension === true &&
-        [...result.runtimeResults, ...(result.nestedRuntimeResults ?? [])].some(
-          (runtimeResult) => runtimeResult.status === "suspended",
-        )
-      ) {
-        throw new Error("detached stage runtimes cannot suspend for input");
+    for (;;) {
+      if (needsSettle) {
+        await ctx.withSettledLock!(async () => {
+          // The barrier admits pending jobs only after its wait budget expired.
+          // Remember that admission across the subsequent runtime-lock acquire.
+          settleTimedOut =
+            (await listSettlingRuntimeJobs(ctx.store, ctx.sessionId)).length >
+            0;
+        }, waitBudget);
       }
-      const outcome = await ctx.sessionLock.withLock(
-        ctx.sessionId,
-        async () => {
-          // Minutes can pass while the generation runs, so the session state
-          // read before it started is no longer trustworthy. Re-read under
-          // the lock and refuse to commit into a session the player has since
-          // paused or ended — the throw is caught by the background job
-          // runner, which settles the job row as failed.
-          const live = await ctx.store.getSession(ctx.sessionId);
-          if (!live) {
-            throw new SessionNotActiveError("deleted");
-          }
-          if (live.status !== "active") {
-            throw new SessionNotActiveError(live.status);
-          }
-          assertApprovalScope(live, runtimeId);
-          if (
-            opts.expectedSessionIncarnation &&
-            sessionIncarnationIdentity(live) !== opts.expectedSessionIncarnation
-          ) {
-            throw new SessionApprovalScopeChangedError();
-          }
-          if (opts.beforeCommit) {
-            await opts.beforeCommit({
-              backgroundTurnId: result.turnId,
-              backgroundExecutionId: result.executionContext.executionId,
-            });
-          }
-          const completeInTx = opts.completeInTx;
-          return processTurnResults(
-            result,
-            emitter,
-            hookScopeFor(live.activePlugins, userSettings),
-            {
-              executionSignal,
-              ...(completeInTx
-                ? { extraInTx: (tx) => completeInTx(tx, result) }
-                : {}),
-              ...(opts.proposalGuard
-                ? { proposalGuard: opts.proposalGuard }
-                : {}),
-              ...(opts.completionKind !== undefined
-                ? { completionKind: opts.completionKind }
-                : {}),
+      try {
+        return await ctx.sessionLock.withLock(jobLockId, () =>
+          withSnapshot(
+            async () => {
+              const target = activeRuntimes().find(
+                (runtime) => runtime.name === runtimeId,
+              );
+              if (
+                !target ||
+                (opts.expectedPluginId &&
+                  target.pluginId !== opts.expectedPluginId)
+              ) {
+                throw new SessionApprovalScopeChangedError();
+              }
+              const proposalGuard =
+                opts.completionKind === "detached"
+                  ? createDetachedProposalGuard(target)
+                  : opts.proposalGuard;
+              executionSignal?.throwIfAborted();
+              // Detached work does not hold the main session lock during provider
+              // execution. Take it briefly to linearize authorization against a
+              // concurrent revoke/disable/delete before spending external work.
+              const executionScope = await ctx.sessionLock.withLock(
+                ctx.sessionId,
+                async () => {
+                  const live = await requireLiveApprovedSession(runtimeId);
+                  if (
+                    opts.expectedSessionIncarnation &&
+                    sessionIncarnationIdentity(live) !==
+                      opts.expectedSessionIncarnation
+                  ) {
+                    throw new SessionApprovalScopeChangedError();
+                  }
+                  const target = activeRuntimes().find(
+                    (runtime) => runtime.name === runtimeId,
+                  );
+                  if (
+                    opts.expectedPluginVersion !== undefined &&
+                    target?.version !== opts.expectedPluginVersion
+                  ) {
+                    throw new SessionApprovalScopeChangedError();
+                  }
+                  await opts.beforeExecute?.();
+                  executionSignal?.throwIfAborted();
+                  return hookScopeFor(live.activePlugins, userSettings);
+                },
+              );
+              const result = await executeTurn(
+                executionInput,
+                activeRuntimes(),
+                {
+                  ...ctx.deps,
+                  hookScope: executionScope,
+                  store: ctx.store,
+                  eventBus: ctx.eventBus,
+                  emitter,
+                  ...(ctx.hookPipeline
+                    ? { hookPipeline: ctx.hookPipeline }
+                    : {}),
+                  turnControl,
+                },
+              );
+              if (
+                opts.rejectSuspension === true &&
+                [
+                  ...result.runtimeResults,
+                  ...(result.nestedRuntimeResults ?? []),
+                ].some((runtimeResult) => runtimeResult.status === "suspended")
+              ) {
+                throw new Error(
+                  "detached stage runtimes cannot suspend for input",
+                );
+              }
+              const outcome = await ctx.sessionLock.withLock(
+                ctx.sessionId,
+                async () => {
+                  // Minutes can pass while the generation runs, so the session state
+                  // read before it started is no longer trustworthy. Re-read under
+                  // the lock and refuse to commit into a session the player has since
+                  // paused or ended — the throw is caught by the background job
+                  // runner, which settles the job row as failed.
+                  const live = await ctx.store.getSession(ctx.sessionId);
+                  if (!live) {
+                    throw new SessionNotActiveError("deleted");
+                  }
+                  if (live.status !== "active") {
+                    throw new SessionNotActiveError(live.status);
+                  }
+                  assertApprovalScope(live, runtimeId);
+                  if (
+                    opts.expectedSessionIncarnation &&
+                    sessionIncarnationIdentity(live) !==
+                      opts.expectedSessionIncarnation
+                  ) {
+                    throw new SessionApprovalScopeChangedError();
+                  }
+                  if (opts.beforeCommit) {
+                    await opts.beforeCommit({
+                      backgroundTurnId: result.turnId,
+                      backgroundExecutionId:
+                        result.executionContext.executionId,
+                    });
+                  }
+                  const completeInTx = opts.completeInTx;
+                  return processTurnResults(
+                    result,
+                    emitter,
+                    hookScopeFor(live.activePlugins, userSettings),
+                    {
+                      executionSignal,
+                      ...(completeInTx
+                        ? { extraInTx: (tx) => completeInTx(tx, result) }
+                        : {}),
+                      ...(proposalGuard ? { proposalGuard } : {}),
+                      ...(opts.completionKind !== undefined
+                        ? { completionKind: opts.completionKind }
+                        : {}),
+                    },
+                  );
+                },
+              );
+              return { turnResult: result, commit: outcome };
             },
-          );
-        },
-      );
-      return { turnResult: result, commit: outcome };
-    });
+            needsSettle && !settleTimedOut
+              ? async () => {
+                  // The host invokes this under the same session lock as artifact
+                  // capture. Release the runtime lock before waiting on raced jobs:
+                  // the settling worker may need this same runtime key to finish.
+                  if (
+                    (await listSettlingRuntimeJobs(ctx.store, ctx.sessionId))
+                      .length
+                  )
+                    throw retryAdmission;
+                }
+              : undefined,
+          ),
+        );
+      } catch (error) {
+        if (error !== retryAdmission) throw error;
+      }
+    }
   }
 
   async function runManualTurn(
@@ -489,31 +588,36 @@ export function createPluginRpcRuntimeTurnRunner(
           result: r.turnResult,
           commit: r.commit,
         }))
-      : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
-          const live = await requireLiveApprovedSession(args.runtimeId);
-          const hookScope = hookScopeFor(live.activePlugins, userSettings);
-          executionSignal?.throwIfAborted();
-          const turnResult = await executeTurn(
-            executionInput,
-            ctx.activeRuntimes,
-            {
-              ...ctx.deps,
-              hookScope,
-              turnControl,
-              store: ctx.store,
-              eventBus: ctx.eventBus,
+      : await (
+          ctx.withSettledLock ??
+          ((fn) => ctx.sessionLock.withLock(ctx.sessionId, fn))
+        )(() =>
+          withSnapshot(async () => {
+            const live = await requireLiveApprovedSession(args.runtimeId);
+            const hookScope = hookScopeFor(live.activePlugins, userSettings);
+            executionSignal?.throwIfAborted();
+            const turnResult = await executeTurn(
+              executionInput,
+              activeRuntimes(),
+              {
+                ...ctx.deps,
+                hookScope,
+                turnControl,
+                store: ctx.store,
+                eventBus: ctx.eventBus,
+                emitter,
+                ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+              },
+            );
+            const outcome = await processTurnResults(
+              turnResult,
               emitter,
-              ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-            },
-          );
-          const outcome = await processTurnResults(
-            turnResult,
-            emitter,
-            hookScope,
-            { executionSignal },
-          );
-          return { result: turnResult, commit: outcome };
-        });
+              hookScope,
+              { executionSignal },
+            );
+            return { result: turnResult, commit: outcome };
+          }),
+        );
 
     return {
       commit,
@@ -572,12 +676,6 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
     readonly commit: TurnCommitOutcome;
   }> {
-    const target = ctx.activeRuntimes.find(
-      (runtime) => runtime.name === args.descriptor.runtimeId,
-    );
-    if (!target || target.pluginId !== args.descriptor.pluginId) {
-      throw new SessionApprovalScopeChangedError();
-    }
     const emitter = createTurnEmitter({
       store: ctx.store,
       eventBus: ctx.eventBus,
@@ -601,6 +699,7 @@ export function createPluginRpcRuntimeTurnRunner(
           ? { sourceLogicalTurnId: args.descriptor.sourceLogicalTurnId }
           : {}),
         upstreamResults: args.descriptor.upstreamResults,
+        turnDigest: args.descriptor.turnDigest,
       },
       ...(args.modelOverride ? { modelOverride: args.modelOverride } : {}),
       ...(args.runtimeModelOverrides
@@ -619,7 +718,7 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(args.executionSignal
         ? { executionSignal: args.executionSignal }
         : {}),
-      proposalGuard: createDetachedProposalGuard(target),
+      expectedPluginId: args.descriptor.pluginId,
       completionKind: "detached",
       rejectSuspension: true,
     });

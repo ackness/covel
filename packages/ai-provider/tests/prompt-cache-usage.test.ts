@@ -88,6 +88,7 @@ describe("prompt cache usage normalization", () => {
   it("requests and preserves usage for OpenAI Chat streaming", async () => {
     stubSse([
       { choices: [{ delta: { content: "ok" }, finish_reason: null }] },
+      { choices: [{ delta: {}, finish_reason: "stop" }] },
       {
         choices: [],
         usage: {
@@ -152,10 +153,7 @@ describe("prompt cache usage normalization", () => {
     });
   });
 
-  it.each([
-    ["response.incomplete", "incomplete", "length"],
-    ["response.failed", "failed", "error"],
-  ])(
+  it.each([["response.incomplete", "incomplete", "length"]])(
     "preserves usage and finish reason for %s streams",
     async (eventType, status, finishReason) => {
       stubSse([
@@ -235,6 +233,7 @@ describe("prompt cache usage normalization", () => {
         delta: { stop_reason: "end_turn" },
         usage: { output_tokens: 6 },
       },
+      { type: "message_stop" },
     ]);
 
     const done = await readDone(

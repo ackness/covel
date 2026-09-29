@@ -3,10 +3,12 @@ id: haruka-academy
 name:
   zh-CN: 遥风学园・春日薄荷
   en-US: Haruka Academy · Spring Mint
-version: "0.2.0"
+version: 0.2.0
 summary:
   zh-CN: 转入海边私立高中，在二十一天的学园祭倒计时里选择社团、守住约定，也回应那些没能说出口的喜欢。
-  en-US: Transfer to a seaside private high school, choose a club, keep your promises, and answer unspoken feelings during a twenty-one-day festival countdown.
+  en-US: Transfer to a seaside private high school, choose a club, keep your
+    promises, and answer unspoken feelings during a twenty-one-day festival
+    countdown.
 defaultLocale: zh-CN
 supportedLocales:
   - zh-CN
@@ -21,12 +23,18 @@ tags:
   - visual-novel
   - school-festival
 pluginPolicy:
-  preset: dialogue-mode
-  requiredPlugins:
+  presetId: dialogue-mode
+  preferredTags:
+    - mode:dialogue
+    - role:character
+    - role:world-rules
+  avoidedTags:
+    - mode:traditional-story
+  requested:
     - pregame
     - world-init
     - char-creator
-  recommendedPlugins:
+  recommended:
     - chat-mode-narrator
     - scene-cast
     - scene-stage
@@ -36,167 +44,136 @@ pluginPolicy:
     - living-world-rules
     - branch-reply
     - npc-graph
-  excludedPlugins:
-    - narrator
-    - guide
-    - codex
-  preferTags:
-    - mode:dialogue
-    - role:character
-    - role:world-rules
-  avoidTags:
-    - mode:traditional-story
-# World-authored defaults for plugin userSettings (players can still override
-# these in Settings). A slice-of-life school world leans dialogue-heavy and
-# keeps replies short and snappy.
 pluginSettings:
   chat-mode-narrator:
     dialogueRatio: 80
     proseLength: short
   scene-cast:
-    # 8-character ensemble — keep 2 speakers on stage per beat for intimate focus.
-    # Declared on scene-cast (which enforces cast size); a chat-mode-narrator
-    # key here would be orphaned since the knob lives on scene-cast now.
     activeSpeakerCount: 2
   scene-stage:
-    # Five authored day/night anchors cover the core school-town route. Keep
-    # generation available for deliberate detours without replacing the set.
     autoGenerateScenes: true
     maxGeneratedScenes: 6
-# World-authored core-memory blocks for a dialogue / slice-of-life romance.
-# Merged on top of plugin/framework blocks for this world's sessions only, so a
-# stage-mode (visual-novel) world tracks relationships, promises, rumors and
-# the festival countdown without forking a plugin.
-memoryBlocks:
-  - label: relationships
-    displayName:
-      zh-CN: 人物关系
-      en-US: Relationships
-    extractionHint:
-      zh-CN: 每名主要角色当前的关系阶段，以及好感、信任、压力、公开亲密度的变化、原因和对应的具体事件；没有事件依据时不要跨越关系阶段。
-      en-US: Each main character's current relationship stage, plus shifts in affection, trust, pressure, and public closeness, their causes, and the concrete event behind them; never skip stages without scene evidence.
-    icon: Heart
-    maxChars: 1800
-  - label: promises
-    displayName:
-      zh-CN: 约定
-      en-US: Promises
-    extractionHint:
-      zh-CN: 玩家对角色许下的承诺与约定（放学同行、帮忙、保密、赴约等），记录对象、期限、地点及兑现或失约情况。
-      en-US: Promises and commitments the player made to characters (walking home, helping out, keeping secrets, meeting up), including who, when, where, and whether they were kept or broken.
-    icon: Handshake
-    maxChars: 1200
-  - label: rumors
-    displayName:
-      zh-CN: 传闻
-      en-US: Rumors
-    extractionHint:
-      zh-CN: 当前在班级或校内流传的传闻、热度阶段、源头、传播地点、涉及角色，以及它被澄清、坐实或转向的结果。
-      en-US: Rumors circulating in class or school, their heat stage, source, where they spread, who they involve, and whether they were cleared, confirmed, or redirected.
-    icon: Megaphone
-    maxChars: 1400
-  - label: festival
-    displayName:
-      zh-CN: 学园祭
-      en-US: Festival
-    extractionHint:
-      zh-CN: 学园祭倒计时、各社团与二年 B 组的准备进度、玩家承担的筹备任务、截止时间，以及预算审查、截稿和彩排等未决节点。
-      en-US: The festival countdown, prep progress for each club and Class 2-B, the player's tasks and deadlines, and unresolved milestones such as budget review, print deadline, and rehearsal.
-    icon: CalendarDays
-    maxChars: 1600
-  - label: campusSchedule
-    displayName:
-      zh-CN: 校园日程
-      en-US: Campus Schedule
-    extractionHint:
-      zh-CN: 当前地点、天气、下一次铃声或闭校约定、可自然登场的角色和已经约好的去处。当前日期与时段以世界时间插件为准，不在记忆中维护另一份时钟。
-      en-US: Current location, weather, next bell or campus closing appointment, likely characters and scheduled destinations. The world-time plugin owns the current date and phase; do not maintain a second clock in memory.
-    icon: Clock
-    maxChars: 1000
-# World-declared character attributes. world-init writes these verbatim as the
-# session's `character-attributes` schema (no LLM, no dimension-derived
-# fallback), so the right panel shows authored bilingual labels that match the
-# fields on this world's cast cards (club / affection / trust / …).
-characterAttributes:
-  # 性格是角色卡的属性、在创角时设定（口吻由性格而来）——取代了被退役的
-  # player-identity 口吻编辑器。bio 类 + freeform，char-creator 创角表单会优先纳入它。
-  - id: persona
-    name: { zh-CN: 性格, en-US: Personality }
-    type: string
-    category: bio
-    description:
-      zh-CN: 主角的性格与说话方式（口吻由性格而来）——如「谨慎内向，紧张时话少，礼貌但有主见」。影响叙事如何刻画你的角色与对白。
-      en-US: The hero's personality and how they speak (voice follows from personality) — e.g. "cautious and reserved, terse when nervous, polite but opinionated." Shapes how the narrator portrays the character and their dialogue.
-  - id: club
-    name: { zh-CN: 社团, en-US: Club }
-    type: string
-    category: social
-    description: { zh-CN: 所属社团, en-US: Club membership }
-  - id: class
-    name: { zh-CN: 班级, en-US: Class }
-    type: string
-    category: bio
-    description: { zh-CN: 所在班级, en-US: Homeroom class }
-  - id: relationshipStage
-    name: { zh-CN: 关系阶段, en-US: Relationship }
-    type: string
-    category: social
-    description:
-      zh-CN: 与玩家的当前关系阶段
-      en-US: Current relationship stage with the player
-  - id: affection
-    name: { zh-CN: 好感度, en-US: Affection }
-    type: number
-    min: 0
-    max: 100
-    defaultValue: 0
-    category: social
-    description: { zh-CN: 对玩家的好感, en-US: Affection toward the player }
-  - id: trust
-    name: { zh-CN: 信任, en-US: Trust }
-    type: number
-    min: 0
-    max: 100
-    defaultValue: 0
-    category: social
-    description: { zh-CN: 对玩家的信任, en-US: Trust toward the player }
-  - id: pressure
-    name: { zh-CN: 压力, en-US: Pressure }
-    type: number
-    min: 0
-    max: 100
-    defaultValue: 0
-    category: stats
-    description:
-      { zh-CN: 当前承受的心理压力, en-US: Current psychological pressure }
-  - id: publicCloseness
-    name: { zh-CN: 公开亲密度, en-US: Public Closeness }
-    type: number
-    min: 0
-    max: 100
-    defaultValue: 0
-    category: social
-    description:
-      zh-CN: 在他人面前与玩家的亲密程度
-      en-US: How close to the player in public
-  - id: favoriteTopic
-    name: { zh-CN: 喜欢的话题, en-US: Favorite Topic }
-    type: string
-    category: bio
-    description:
-      { zh-CN: 感兴趣或容易聊开的话题, en-US: Topics they enjoy talking about }
-  - id: availability
-    name: { zh-CN: 常见行程, en-US: Usual Schedule }
-    type: string
-    category: bio
-    description:
-      zh-CN: 角色通常会在哪些时段和地点自然登场；临时变化应由剧情事件解释。
-      en-US: When and where the character usually appears; story events should explain temporary changes.
-  - id: currentConcern
-    name: { zh-CN: 当前牵挂, en-US: Current Concern }
-    type: string
-    category: social
-    description:
-      zh-CN: 角色此刻最在意的校园事件、关系或未完成目标。
-      en-US: The school event, relationship, or unfinished goal currently weighing most on the character.
+characterSchema:
+  types:
+    - npc
+    - companion
+  attributes:
+    - id: persona
+      name:
+        zh-CN: 性格
+        en-US: Personality
+      type: string
+      category: bio
+      description:
+        zh-CN: 主角的性格与说话方式（口吻由性格而来）——如「谨慎内向，紧张时话少，礼貌但有主见」。影响叙事如何刻画你的角色与对白。
+        en-US: The hero's personality and how they speak (voice follows from
+          personality) — e.g. "cautious and reserved, terse when nervous, polite
+          but opinionated." Shapes how the narrator portrays the character and
+          their dialogue.
+    - id: club
+      name:
+        zh-CN: 社团
+        en-US: Club
+      type: string
+      category: social
+      description:
+        zh-CN: 所属社团
+        en-US: Club membership
+    - id: class
+      name:
+        zh-CN: 班级
+        en-US: Class
+      type: string
+      category: bio
+      description:
+        zh-CN: 所在班级
+        en-US: Homeroom class
+    - id: relationshipStage
+      name:
+        zh-CN: 关系阶段
+        en-US: Relationship
+      type: string
+      category: social
+      description:
+        zh-CN: 与玩家的当前关系阶段
+        en-US: Current relationship stage with the player
+    - id: affection
+      name:
+        zh-CN: 好感度
+        en-US: Affection
+      type: number
+      min: 0
+      max: 100
+      defaultValue: 0
+      category: social
+      description:
+        zh-CN: 对玩家的好感
+        en-US: Affection toward the player
+    - id: trust
+      name:
+        zh-CN: 信任
+        en-US: Trust
+      type: number
+      min: 0
+      max: 100
+      defaultValue: 0
+      category: social
+      description:
+        zh-CN: 对玩家的信任
+        en-US: Trust toward the player
+    - id: pressure
+      name:
+        zh-CN: 压力
+        en-US: Pressure
+      type: number
+      min: 0
+      max: 100
+      defaultValue: 0
+      category: stats
+      description:
+        zh-CN: 当前承受的心理压力
+        en-US: Current psychological pressure
+    - id: publicCloseness
+      name:
+        zh-CN: 公开亲密度
+        en-US: Public Closeness
+      type: number
+      min: 0
+      max: 100
+      defaultValue: 0
+      category: social
+      description:
+        zh-CN: 在他人面前与玩家的亲密程度
+        en-US: How close to the player in public
+    - id: favoriteTopic
+      name:
+        zh-CN: 喜欢的话题
+        en-US: Favorite Topic
+      type: string
+      category: bio
+      description:
+        zh-CN: 感兴趣或容易聊开的话题
+        en-US: Topics they enjoy talking about
+    - id: availability
+      name:
+        zh-CN: 常见行程
+        en-US: Usual Schedule
+      type: string
+      category: bio
+      description:
+        zh-CN: 角色通常会在哪些时段和地点自然登场；临时变化应由剧情事件解释。
+        en-US:
+          When and where the character usually appears; story events should explain
+          temporary changes.
+    - id: currentConcern
+      name:
+        zh-CN: 当前牵挂
+        en-US: Current Concern
+      type: string
+      category: social
+      description:
+        zh-CN: 角色此刻最在意的校园事件、关系或未完成目标。
+        en-US:
+          The school event, relationship, or unfinished goal currently weighing
+          most on the character.
 worldData: data/world.data.yaml

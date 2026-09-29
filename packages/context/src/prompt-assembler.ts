@@ -1,3 +1,4 @@
+import { selectPromptSegments } from "./extension-segments.js";
 /**
  * Segment-based Prompt Assembler.
  *
@@ -31,24 +32,16 @@ import {
   buildInjectBlocksAsync,
   escapeXmlContent,
   interpolateTemplate,
-  renderCoreMemory,
-  renderWorkingMemory,
 } from "./prompt-internals.js";
 import { serializeSystemPrompt } from "./prompt-serialization.js";
 import {
   activeContributions,
-  collectAuthorsNotes,
   collectDepthContributions,
-  collectPostHistoryInstructions,
   renderSystemLoreContributions,
-  renderSystemPersonaContributions,
-  resolveActiveManifests,
 } from "./contribution-aggregator.js";
 import {
   buildMessageHistoryWithSummaries,
-  insertAuthorsNotes,
   insertDepthContributions,
-  type RenderedAuthorsNote,
   type RenderedDepthContribution,
 } from "./message-insertion.js";
 import type {
@@ -68,10 +61,11 @@ import type {
  */
 export interface PromptSegments {
   /** Segment 1 — framework preamble (session-stable header). */
+  readonly stableExtensions?: string;
+  readonly turnExtensions?: string;
+  readonly preHistoryExtensions?: readonly LLMMessage[];
   readonly frameworkPreamble: string;
-  /** Segment 2 — core memory + working memory. */
-  readonly workingMemory: string;
-  /** Segment 3 — interpolated PLUGIN.md body (with persona prepend/append). */
+  /** Segment 3 — interpolated PLUGIN.md body (with template interpolation). */
   readonly pluginInstructions: string;
   /** Segment 4 — lorebook `before-plugin` position. */
   readonly worldInfoBeforePlugin: string;
@@ -79,12 +73,6 @@ export interface PromptSegments {
   readonly upstreamInjects: string;
   /** Segment 6 — lorebook `after-plugin` position. */
   readonly worldInfoAfterPlugin: string;
-  /**
-   * Segment 9 — Author's notes aggregated across active plugins.
-   * Grouped by `(role, depth)`; each bundle is inserted before
-   * `messages[length - depth]` as its own message.
-   */
-  readonly authorsNotes: readonly RenderedAuthorsNote[];
   /**
    * Segment 10 — Post-history instructions aggregated across active
    * plugins. One message per unique role, appended at the
@@ -207,14 +195,6 @@ function buildPromptSegmentsCommon(
     variables,
   );
   const contributions = activeContributions(params);
-  const personaPrepend = renderSystemPersonaContributions(
-    contributions,
-    "seg3_prepend",
-  );
-  const personaAppend = renderSystemPersonaContributions(
-    contributions,
-    "seg3_append",
-  );
   const worldInfoBeforePlugin = renderSystemLoreContributions(
     contributions,
     "before_plugin",
@@ -223,14 +203,6 @@ function buildPromptSegmentsCommon(
     contributions,
     "after_plugin",
   );
-  const pluginInstructionsWithPersona = [
-    personaPrepend,
-    pluginInstructions,
-    personaAppend,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
   // Inject blocks are NOT re-interpolated. Their content is already
   // XML-escaped upstream (see resolveRuntimeInject / resolvePluginDataInject),
   // but `escapeXmlContent` does not touch `{}` — so a second
@@ -257,49 +229,64 @@ function buildPromptSegmentsCommon(
       !params.manifest.output?.schema,
     );
 
-  // Segment 2 — Core Memory (Letta-style) + Working Memory
-  const coreMemoryBudget =
-    params.estimator && params.contextBudget
-      ? (() => {
-          const limits = resolveBudgetOptions(params.contextBudget);
-          const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
-          return {
-            estimator: params.estimator!,
-            maxTokens: Math.min(
-              2_048,
-              Math.max(256, Math.floor(inputLimit * 0.15)),
-            ),
-          };
-        })()
-      : undefined;
-  const coreMemory = renderCoreMemory(
-    params.coreMemoryBlocks,
-    params.turnInput.locale,
-    coreMemoryBudget,
+  const extensionSegments = selectPromptSegments(
+    params.promptSegments,
+    params.manifest,
   );
-  const workingMemory = [coreMemory, renderWorkingMemory(params.workingMemory)]
-    .filter(Boolean)
-    .join("\n\n");
-
-  // Segments 9 & 10 — Author's Note + Post-History Instructions.
-  // Both segments aggregate across all active plugin manifests.
-  const activeManifests = resolveActiveManifests(params);
-  const authorsNotes = collectAuthorsNotes(activeManifests, variables);
-  const postHistoryInstructions = collectPostHistoryInstructions(
-    activeManifests,
-    variables,
+  const systemSegments = extensionSegments.filter(
+    (segment) =>
+      segment.position === "system" ||
+      (segment.position === "pre-history" &&
+        (segment.role ?? "system") === "system"),
   );
-
+  const preHistoryExtensions = extensionSegments
+    .filter(
+      (segment) =>
+        segment.position === "pre-history" &&
+        segment.role !== undefined &&
+        segment.role !== "system",
+    )
+    .map((segment) => ({
+      role: segment.role ?? "system",
+      content: segment.content,
+    }));
+  const extensionDepth = extensionSegments
+    .filter((segment) => typeof segment.position === "object")
+    .map((segment) => ({
+      depth: typeof segment.position === "object" ? segment.position.depth : 0,
+      role: segment.role ?? "system",
+      content: segment.content,
+      order: segment.order ?? 0,
+    }));
+  // volatility filters stable vs. turn-scoped extensions for cache boundary optimization.
+  // Currently only applies to system-position segments (see docs/reference/extension-points.md).
+  // Other positions (pre-history, post-history, depth) do not yet respect volatility—
+  // extending it requires confirming no cache-key drift from turn-local segments landing in the stable zone.
   return {
+    stableExtensions: systemSegments
+      .filter((segment) => segment.volatility !== "turn")
+      .map((segment) => segment.content)
+      .join("\n\n"),
+    turnExtensions: systemSegments
+      .filter((segment) => segment.volatility === "turn")
+      .map((segment) => segment.content)
+      .join("\n\n"),
+    preHistoryExtensions,
     frameworkPreamble,
-    workingMemory,
-    pluginInstructions: pluginInstructionsWithPersona,
+    pluginInstructions,
     worldInfoBeforePlugin,
     upstreamInjects,
     worldInfoAfterPlugin,
-    authorsNotes,
-    postHistoryInstructions,
-    depthContributions: collectDepthContributions(contributions),
+    postHistoryInstructions: extensionSegments
+      .filter((segment) => segment.position === "post-history")
+      .map((segment) => ({
+        role: segment.role ?? "system",
+        content: segment.content,
+      })),
+    depthContributions: [
+      ...collectDepthContributions(contributions),
+      ...extensionDepth,
+    ],
   };
 }
 
@@ -354,32 +341,25 @@ function finalizeSegmentedContext(
     params.summaries ?? [],
   );
 
-  // Base chat: history + current user turn. Authors notes (segment 9) are
-  // depth-positioned relative to this base, and post-history instructions
-  // (segment 10) are appended after.
+  // Pre-history segments precede history and the current user turn. Depth
+  // segments are inserted relative to this base, then post-history segments.
   const baseMessages: readonly LLMMessage[] = [
+    ...(segments.preHistoryExtensions ?? []),
     ...historyMessages,
     { role: "user", content: buildCurrentTurnUserMessage(params.turnInput) },
   ];
 
-  // Segment 8/9 — insert depth-positioned persona/lore contributions at their
-  // declared depth, then layer the author's notes on top.
+  // Insert depth-positioned lore and extension segments.
   const withDepthContributions = insertDepthContributions(
     baseMessages,
     segments.depthContributions,
   );
 
-  // Segment 9 — insert author's notes at their declared depth.
-  const withAuthorsNotes = insertAuthorsNotes(
-    withDepthContributions,
-    segments.authorsNotes,
-  );
-
   // Segment 10 — append post-history instructions after everything else.
   const messages: readonly LLMMessage[] =
     segments.postHistoryInstructions.length > 0
-      ? [...withAuthorsNotes, ...segments.postHistoryInstructions]
-      : withAuthorsNotes;
+      ? [...withDepthContributions, ...segments.postHistoryInstructions]
+      : withDepthContributions;
 
   const budgetEnabled =
     params.estimator !== undefined && params.contextBudget !== undefined;

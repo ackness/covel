@@ -62,10 +62,20 @@ interface LockManagerLike {
   ): Promise<T>;
 }
 
-function withSettingsLock<T>(operation: () => Promise<T>): Promise<T> {
+function withSettingsLock<T>(
+  operation: () => Promise<T>,
+  required = false,
+): Promise<T> {
   const locks = (
     globalThis.navigator as { locks?: LockManagerLike } | undefined
   )?.locks;
+  if (!locks && required) {
+    return Promise.reject(
+      new Error(
+        "Secret persistence requires Web Locks; use HTTPS or localhost in a supported browser",
+      ),
+    );
+  }
   // Browsers without Web Locks still compare the revision immediately before
   // setItem. That detects stale writers but cannot make localStorage a true
   // cross-tab CAS primitive.
@@ -106,8 +116,18 @@ export function createLocalStorageBackend(
     async loadSecrets() {
       return readSecrets(storage);
     },
-    async saveSecrets(keys) {
-      storage.setItem(LOCAL_STORAGE_KEYS_KEY, JSON.stringify(keys));
+    async saveSecrets(patch) {
+      await withSettingsLock(async () => {
+        const keys = new Map(Object.entries(readSecrets(storage)));
+        for (const [provider, value] of Object.entries(patch)) {
+          if (value === null) keys.delete(provider);
+          else keys.set(provider, value);
+        }
+        storage.setItem(
+          LOCAL_STORAGE_KEYS_KEY,
+          JSON.stringify(Object.fromEntries(keys)),
+        );
+      }, true);
     },
   };
 }

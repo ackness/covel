@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
+  compileInlineRuntime,
+  loadPluginUi,
   loadPluginManifest,
   loadRuntime,
   parsePluginMd,
@@ -23,19 +25,25 @@ describe("branch-reply manifest and UI loading", () => {
       name: "branch-reply",
       pluginId: "branch-reply",
       pluginType: "plugin",
+      extensions: [
+        { point: "prompt.history-transform@1", id: "accepted-branch" },
+      ],
+      ui: {
+        message: ["./ui/branch-reply-block.json"],
+      },
+    });
+    expect(compileInlineRuntime(parsed).manifest).toMatchObject({
+      name: "branch-reply",
+      pluginId: "branch-reply",
+      pluginType: "plugin",
       runtimeType: "function",
       outputKind: "system",
       stage: "post-turn",
       handler: "./handler.js",
-      // auto so the seed path runs after the narrative engines each turn;
-      // the manual createCandidates / acceptCandidate actions still arrive via
-      // plugin-rpc manualTrigger regardless of the declared trigger type.
+      // Auto-seed runs after narrative; manual actions still use plugin RPC.
       trigger: { type: "auto" },
-      capabilities: ["branch-reply", "prompt-history-rewriter"],
+      outputContract: "branch-reply@1",
       effects: { parallelSafe: true },
-      ui: {
-        message: ["./ui/branch-reply-block.json"],
-      },
     });
   });
 
@@ -50,15 +58,16 @@ describe("branch-reply manifest and UI loading", () => {
     expect(manifests).toHaveLength(1);
 
     const loaded = await loadRuntime(discovery, "branch-reply");
+    const ui = await loadPluginUi(discovery);
     expect(loaded.handler).toBeTypeOf("function");
-    expect(loaded.uiSpecs?.message).toHaveLength(1);
-    expect(loaded.uiSpecs?.message?.[0]).toMatchObject({
+    expect(ui.uiSpecs?.message).toHaveLength(1);
+    expect(ui.uiSpecs?.message?.[0]).toMatchObject({
       id: "branch-reply",
       dataSource: { namespace: "message" },
       view: {
-        component: "BranchReplyCandidates",
+        component: "CandidateList",
         props: {
-          pluginId: "branch-reply",
+          acceptAction: { pluginId: "branch-reply" },
         },
       },
     });

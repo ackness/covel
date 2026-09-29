@@ -16,12 +16,14 @@ async function containedFile(root: string, file: string): Promise<string> {
 export async function loadPluginUiSpec(
   root: string,
   file: string,
+  ownerPluginId: string,
 ): Promise<Record<string, unknown>> {
   const specPath = await containedFile(root, file);
   const spec = JSON.parse(await fs.readFile(specPath, "utf-8")) as Record<
     string,
     unknown
   >;
+  validateUiBindings(spec, ownerPluginId);
   const webview = spec.webview;
   if (webview && typeof webview === "object" && !Array.isArray(webview)) {
     const { entry, height } = webview as Record<string, unknown>;
@@ -39,4 +41,46 @@ export async function loadPluginUiSpec(
     };
   }
   return spec;
+}
+
+/** Every plugin binding is literal and owned; cross-plugin data uses kernel views. */
+export function validateUiBindings(
+  value: unknown,
+  ownerPluginId: string,
+): void {
+  if (Array.isArray(value)) {
+    for (const item of value) validateUiBindings(item, ownerPluginId);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, item] of Object.entries(value)) {
+    if (key === "dataSource" && item && typeof item === "object") {
+      const bindings = (item as Record<string, unknown>).bindings;
+      if (bindings !== undefined) {
+        if (
+          !bindings ||
+          typeof bindings !== "object" ||
+          Array.isArray(bindings) ||
+          Object.keys(bindings).length > 8 ||
+          Object.entries(bindings).some(
+            ([name, namespace]) =>
+              !/^[a-z][a-zA-Z0-9_]*$/.test(name) ||
+              typeof namespace !== "string" ||
+              !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(namespace),
+          )
+        )
+          throw new Error(
+            "UI dataSource.bindings must name explicit own namespaces",
+          );
+      }
+    }
+    if (
+      ["pluginId", "sourcePlugin", "sourcePluginId"].includes(key) &&
+      item !== ownerPluginId
+    )
+      throw new Error(
+        `UI binding ${key} must reference its owning plugin ${ownerPluginId}`,
+      );
+    validateUiBindings(item, ownerPluginId);
+  }
 }

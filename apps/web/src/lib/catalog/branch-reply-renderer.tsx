@@ -1,100 +1,39 @@
 import { useState } from "react";
+import { candidateListPropsSchema, type CatalogAction } from "@covel/shared";
+import { invokeCatalogAction } from "./catalog-actions.js";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import { Check, Loader2, RefreshCw } from "lucide-react";
-import { postPluginRpc as requestPluginRpc } from "@/services/api.js";
-import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
-import { asRecord, useI18nResolver } from "./helpers.js";
+import { resolvePath, useI18nResolver } from "./helpers.js";
 
-interface BranchReplyCandidate {
-  readonly id: string;
-  readonly runtimeId?: string;
-  readonly content: string;
-  readonly createdAt?: string;
-  readonly source?: string;
-  readonly traceId?: string;
+interface Candidate {
+  id: string;
+  content: string;
+  source?: string;
+  runtimeId?: string;
+  row: Record<string, unknown>;
 }
 
-function normalizeBranchReplyCandidates(value: unknown): {
-  turnId?: string;
-  acceptedCandidateId?: string;
-  candidates: BranchReplyCandidate[];
-} {
-  let data = asRecord(value);
-  if (!data) return { candidates: [] };
-
-  if (!Array.isArray(data.candidates)) {
-    for (const key of ["candidateSet", "replySet", "value", "data"]) {
-      const nested = asRecord(data[key]);
-      if (nested && Array.isArray(nested.candidates)) {
-        data = nested;
-        break;
-      }
-    }
-  }
-
-  const turnId = typeof data.turnId === "string" ? data.turnId : undefined;
-  const acceptedCandidateId =
-    typeof data.acceptedCandidateId === "string"
-      ? data.acceptedCandidateId
-      : undefined;
-  const rawCandidates = Array.isArray(data.candidates) ? data.candidates : [];
-  const candidates = rawCandidates.flatMap((raw): BranchReplyCandidate[] => {
-    const candidate = asRecord(raw);
-    if (!candidate) return [];
-    const id = String(candidate.id ?? "").trim();
-    const content = String(candidate.content ?? candidate.text ?? "").trim();
-    if (!id || !content) return [];
-    return [
-      {
-        id,
-        content,
-        runtimeId:
-          typeof candidate.runtimeId === "string"
-            ? candidate.runtimeId
-            : undefined,
-        createdAt:
-          typeof candidate.createdAt === "string"
-            ? candidate.createdAt
-            : undefined,
-        source:
-          typeof candidate.source === "string" ? candidate.source : undefined,
-        traceId:
-          typeof candidate.traceId === "string" ? candidate.traceId : undefined,
-      },
-    ];
-  });
-
-  return { turnId, acceptedCandidateId, candidates };
-}
-
-/**
- * BranchReplyCandidates — lightweight candidate-reply switcher for
- * branch-reply plugin data. Draft/send use the existing session draft path;
- * accept/regenerate call plugin-rpc directly for block-rendered candidate UI.
- */
-export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
+/** Candidate presentation and generic RPC actions supplied by the owning spec. */
+export const CandidateList: ComponentRenderer = ({ element }) => {
   const { t } = useTranslation();
   const resolve = useI18nResolver();
   const { state, sendMessage, upsertInteractionDraft } = useSession();
   const sessionId = state.session?.id;
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const props = element.props ?? {};
-  const payload =
-    props.value ?? props.candidateSet ?? props.replySet ?? props.data ?? props;
-  const { turnId, acceptedCandidateId, candidates } =
-    normalizeBranchReplyCandidates(payload);
-  // pluginId / runtimeId arrive as data from the plugin's own json-render spec
-  // (ui/branch-reply-block.json) — framework code must not hardcode plugin ids
-  // in control flow (isolation rule). Absent ids simply disable the RPC-backed
-  // actions (regenerate/accept); draft/send never touch the runtime.
-  const pluginId =
-    typeof props.pluginId === "string" ? props.pluginId : undefined;
-  const runtimeId =
-    typeof props.runtimeId === "string" ? props.runtimeId : undefined;
+  const parsed = candidateListPropsSchema.safeParse(props);
+  const data = parsed.success ? parsed.data : undefined;
+  const turnId = data?.turnId;
+  const acceptedCandidateId = data?.acceptedId;
+  const candidates: Candidate[] = (data?.candidates ?? []).flatMap((row) => {
+    const id = String(resolvePath(row, data!.idField) ?? "");
+    const content = String(resolvePath(row, data!.contentField) ?? "");
+    return id && content ? [{ id, content, row }] : [];
+  });
   const title =
     resolve(props.title) ||
     t("branchReply.replyCandidates", "Reply candidates");
@@ -108,23 +47,16 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
 
   if (candidates.length === 0) return null;
 
-  // The seeded "original" candidate IS the narrative message shown above — do
-  // NOT re-render it as a card (that would duplicate every reply). Only the
-  // LLM-generated alternatives get cards; the original anchors Regenerate and
-  // stays the committed reply until the player accepts a variant.
-  const variants = candidates.filter((c) => c.source !== "original");
-
-  const selectionGroup = turnId
-    ? `branch-reply:${turnId}`
-    : `branch-reply:${candidates[0]?.id ?? "candidate"}`;
-  const canInvokeRuntime = Boolean(
-    sessionId && turnId && pluginId && runtimeId,
+  const variants = candidates.filter(
+    (c) =>
+      !data?.hiddenWhen ||
+      resolvePath(c.row, data.hiddenWhen.field) !== data.hiddenWhen.equals,
   );
-
-  const draftCandidate = (candidate: BranchReplyCandidate) => {
+  const selectionGroup = `candidates:${turnId ?? candidates[0]?.id ?? "list"}`;
+  const draftCandidate = (candidate: Candidate) => {
     upsertInteractionDraft({
       id: `${selectionGroup}:${candidate.id}`,
-      turnId: turnId ?? "branch-reply",
+      turnId: turnId ?? "candidates",
       interactionId: selectionGroup,
       type: "suggestion",
       label: candidate.content,
@@ -133,62 +65,25 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
     });
   };
 
-  const sendCandidate = (candidate: BranchReplyCandidate) => {
+  const sendCandidate = (candidate: Candidate) => {
     const text = candidate.content.trim();
     if (text) sendMessage(text);
   };
 
-  const invokeBranchReplyAction = async (
-    action: "acceptCandidate" | "createCandidates",
-    payload: Record<string, unknown>,
+  const invokeAction = async (
+    name: string,
+    action: CatalogAction | undefined,
+    candidate?: Candidate,
   ) => {
-    if (!sessionId || !turnId || !pluginId || !runtimeId || pendingAction) {
-      return;
-    }
-    setPendingAction(action);
+    if (!sessionId || !action || pendingAction) return;
+    setPendingAction(name);
     try {
-      const res = await getSessionWorkspace().run(
+      await invokeCatalogAction({
         sessionId,
-        `plugin-rpc:${crypto.randomUUID()}`,
-        () =>
-          requestPluginRpc(sessionId, {
-            kind: "runtime",
-            pluginId,
-            runtimeId,
-            payload,
-          }),
-      );
-      if (res.status === "accepted") {
-        emitToast(
-          "info",
-          t("branchReply.jobSubmitted", {
-            jobId: res.jobId,
-            defaultValue: "Submitted branch-reply job: {{jobId}}",
-          }),
-        );
-      } else if (res.status === "approval-required") {
-        emitToast(
-          "error",
-          t(
-            "branchReply.approvalRequired",
-            "Branch reply action requires approval.",
-          ),
-        );
-      } else if (res.status === "ok") {
-        const runtimeError = res.runtimeResults?.find(
-          (r) =>
-            r.status === "failed" ||
-            (typeof r.error === "string" && r.error.length > 0),
-        )?.error;
-        if (runtimeError || res.abortReason) {
-          emitToast(
-            "error",
-            runtimeError ??
-              res.abortReason ??
-              t("branchReply.actionFailed", "Branch reply action failed"),
-          );
-        }
-      }
+        action,
+        scope: { props, item: candidate?.row },
+        t,
+      });
     } catch (err) {
       emitToast("error", err instanceof Error ? err.message : String(err));
     } finally {
@@ -202,29 +97,20 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
         <span className="ui-eyebrow text-[11px] text-muted-foreground">
           {title}
         </span>
-        {turnId && (
+        {data?.regenerateAction && (
           <button
             type="button"
             onClick={() =>
-              void invokeBranchReplyAction("createCandidates", {
-                action: "createCandidates",
-                turnId,
-                // candidates[0] is the original (seeded) reply; regenerate it
-                // into the original + up to 2 LLM variants. Use a fixed count
-                // because after seeding `candidates.length` is 1, which would
-                // otherwise request zero variants.
-                baseText: candidates[0]?.content,
-                count: 3,
-              })
+              void invokeAction("regenerate", data?.regenerateAction)
             }
-            disabled={!canInvokeRuntime || pendingAction !== null}
-            aria-busy={pendingAction === "createCandidates" || undefined}
+            disabled={!sessionId || pendingAction !== null}
+            aria-busy={pendingAction === "regenerate" || undefined}
             className="inline-flex items-center gap-1 rounded-(--radius-control) border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-foreground/40 hover:text-foreground transition-colors"
           >
             <RefreshCw
               className={clsx(
                 "w-3 h-3",
-                pendingAction === "createCandidates" && "animate-spin",
+                pendingAction === "regenerate" && "animate-spin",
               )}
             />
             <span>{regenerateLabel}</span>
@@ -279,14 +165,12 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
                 <button
                   type="button"
                   onClick={() =>
-                    void invokeBranchReplyAction("acceptCandidate", {
-                      action: "acceptCandidate",
-                      turnId,
-                      candidateId: candidate.id,
-                    })
+                    void invokeAction("accept", data?.acceptAction, candidate)
                   }
-                  disabled={!canInvokeRuntime || pendingAction !== null}
-                  aria-busy={pendingAction === "acceptCandidate" || undefined}
+                  disabled={
+                    !sessionId || !data?.acceptAction || pendingAction !== null
+                  }
+                  aria-busy={pendingAction === "accept" || undefined}
                   className={clsx(
                     "font-medium rounded-(--radius-control) transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] border",
                     accepted
@@ -295,7 +179,7 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
                     pendingAction !== null && "opacity-70 cursor-progress",
                   )}
                 >
-                  {pendingAction === "acceptCandidate" && (
+                  {pendingAction === "accept" && (
                     <Loader2
                       aria-hidden="true"
                       className="w-3 h-3 animate-spin"
@@ -303,19 +187,19 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
                   )}
                   {acceptLabel}
                 </button>
-                {(candidate.source || candidate.runtimeId) && (
+                {data?.detailFields?.length ? (
                   <span className="font-mono text-[9px] text-muted-foreground/60">
-                    {[candidate.source, candidate.runtimeId]
+                    {data.detailFields
+                      .map((field) => resolvePath(candidate.row, field))
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
           );
         })}
       </div>
-      <span className="sr-only">{pluginId}</span>
     </div>
   );
 };

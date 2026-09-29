@@ -38,14 +38,18 @@ const session = {
 } satisfies SessionRecord;
 
 const fixturePlugin: PluginSummary = {
+  requires: [],
+  optional: [],
+  conflicts: [],
+  extensions: [],
   id: "fixture",
   displayName: "Fixture",
   description: "Fixture plugin",
-  pluginType: "plugin",
+  kind: "plugin",
   source: "builtin",
-  status: "registered",
+  hostState: "loaded",
   runtimeCount: 1,
-  capabilities: [],
+  provides: [],
   tags: [],
   runtimes: [
     {
@@ -56,7 +60,7 @@ const fixturePlugin: PluginSummary = {
       execution: "sync",
       turnCompletion: { mode: "await" },
       outputKind: "plugin",
-      capabilities: [],
+      outputContract: undefined,
       tags: [],
     },
   ],
@@ -290,6 +294,8 @@ it("uses session metadata and exposes every agent runtime with text-only role ch
     ...fixturePlugin,
     displayName: "Current session plugin",
     active: true,
+    serverCodeApproved: true,
+    sessionState: "active" as const,
     locked: false,
     runtimes: [
       {

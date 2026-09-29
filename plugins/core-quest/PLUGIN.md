@@ -1,69 +1,86 @@
 ---
-name: core-quest
+id: core-quest
+kind: plugin
 displayName:
   zh: 任务日志
   en: Quest Log
 description:
   zh: 自动从叙事中登记和推进任务，随时回看目标、进度和报酬。
-  en: Automatically registers and advances quests from the narrative so goals, progress, and rewards stay visible.
-pluginType: plugin
-stage: post-turn
-outputKind: system
-model: plugin
-timeoutMs: 120000
-maxRetries: 0
-callTimeoutMs: 60000
-requireExplicitCompletion: true
-completeAfterTools: [upsert-quests]
+  en: >-
+    Automatically registers and advances quests from the narrative so goals,
+    progress, and rewards stay visible.
 tags:
-  - role:quest-log
-  - data:world-data
-  - cost:llm
-  - ui:right-panel
-  - ui:message-block
-trigger:
-  type: auto
-inputs:
-  worldIR:
-    from:
-      capability: world-ir-provider
-      cardinality: one
-    accepts: covel://world/ir/v1
-    required: true
-input:
-  inject:
-    - kind: plugin-data
-      namespace: quests
-      as: "<existing-quests>"
-      format: summary
-      maxEntries: 50
-relations:
-  requires:
-    - world-ir
+  - "data:world-data"
+  - "cost:llm"
+  - "ui:right-panel"
+  - "ui:message-block"
+requires:
+  - world-ir-provider@1
 entry: ./server/index.js
-tools:
-  plugin:
-    - upsert-quests
-dataSchemas:
-  quests:
-    schemaVersion: 1
-    acceptsWorldData: true
+contracts:
+  quests@1:
     schema: ./schemas/quests.schema.json
-    description: Importable quest records — world packs may preseed main/side quests; the upsert tool advances them by name.
-ui:
-  right:
-    - ./ui/quest-log-panel.json
-  message:
-    - ./ui/quest-changes-block.json
-postHistory:
-  role: system
-  content: |
-    本 runtime 工作流：
-    - 已有任务见 `<existing-quests>` 块（由框架在 prompt 构建时自动注入）
-    - 本轮叙事出现新任务信号或已有任务的进展，调用一次 `upsert-quests` 批量提交（新建与推进放同一次调用）
-    - 如果本轮没有符合标准的任务信号，不调用任何业务工具
-    - `upsert-quests` 成功后框架自动结束，不要再调用 `runtime-done`
-    - 决定不写入时，调用一次 `runtime-done` 结束
+contributes:
+  data:
+    quests:
+      schema: ./schemas/quests.schema.json
+      description: >-
+        Importable quest records — world packs may preseed main/side quests; the
+        upsert tool advances them by name.
+      version: 1
+      accepts:
+        - quests@1
+  ui:
+    right:
+      - ./ui/quest-log-panel.json
+    message:
+      - ./ui/quest-changes-block.json
+  prompt:
+    - id: post-history
+      content: |
+        本 runtime 工作流：
+        - 已有任务见 `<existing-quests>` 块（由框架在 prompt 构建时自动注入）
+        - 本轮叙事出现新任务信号或已有任务的进展，调用一次 `upsert-quests` 批量提交（新建与推进放同一次调用）
+        - 如果本轮没有符合标准的任务信号，不调用任何业务工具
+        - `upsert-quests` 成功后框架自动结束，不要再调用 `runtime-done`
+        - 决定不写入时，调用一次 `runtime-done` 结束
+      position: post-history
+      role: system
+  tools:
+    - upsert-quests
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+  io:
+    inputs:
+      worldIR:
+        from:
+          contract: world-ir-provider@1
+          cardinality: one
+        accepts: "contract:world-ir@1"
+        required: true
+    selfData:
+      - namespace: quests
+        as: <existing-quests>
+        format: summary
+        maxEntries: 50
+    visibility: system
+  agent:
+    model: plugin
+    tools:
+      plugin:
+        - upsert-quests
+    loop:
+      timeoutMs: 120000
+      callTimeoutMs: 60000
+      maxRetries: 0
+      completion:
+        require: explicit
+        afterTools:
+          - upsert-quests
 ---
 
 你是任务日志系统（Quest Log）。你的任务是判断本轮叙事里是否出现了**明确的任务信号**，并把它登记或推进为结构化任务。**宁可漏记，不可发明** —— 没有任务信号的回合什么都不用做。
@@ -72,7 +89,7 @@ postHistory:
 
 ### 本轮 WorldIR
 
-本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。任务信号主要在 `statements[type=quest]` 与 `events[type=quest_change]` 中；`summary`、相关 `entities` 和 attributes 提供委托人、目标、状态、报酬与证据。只处理 IR 明确表达的变化。
+本轮叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。任务信号主要在 `statements[type=quest]` 与 `events[type=quest_change]` 中；`summary`、相关 `entities` 和 attributes 提供委托人、目标、状态、报酬与证据。只处理 IR 明确表达的变化。
 
 ### 已有任务
 

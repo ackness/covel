@@ -1,7 +1,10 @@
 {
   "id": "character-blueprint",
   "group": "character",
-  "groupLabel": { "zh": "角色", "en": "Characters" },
+  "groupLabel": {
+    "zh": "角色",
+    "en": "Characters"
+  },
   "label": {
     "zh": "预设角色",
     "en": "Preset Characters"
@@ -12,7 +15,9 @@
   },
   "icon": "id-card",
   "groupOrder": 100,
-  "dataSource": { "namespace": "blueprints" },
+  "dataSource": {
+    "namespace": "blueprints"
+  },
   "emptyState": {
     "message": {
       "zh": "本世界没有预设角色。登场角色由世界作者写在世界包里（如 main-cast.json，经 world-data 导入）。",
@@ -21,7 +26,9 @@
   },
   "view": {
     "component": "Stack",
-    "props": { "gap": "md" },
+    "props": {
+      "gap": "md"
+    },
     "children": [
       {
         "component": "Text",
@@ -35,9 +42,25 @@
         }
       },
       {
-        "component": "CharacterBlueprintList",
+        "component": "EntryList",
         "props": {
-          "value": { "$state": "/entries" }
+          "items": {
+            "$state": "/entries"
+          },
+          "idField": "key",
+          "titleField": "value.name",
+          "descriptionFields": ["value.persona.summary", "value.description"],
+          "badgeFields": ["value.role", "value.aliases", "value.tags"],
+          "fields": [
+            {
+              "path": "value.attributes",
+              "label": {
+                "zh": "属性",
+                "en": "Attributes"
+              }
+            }
+          ],
+          "footerField": "value.id"
         }
       }
     ]

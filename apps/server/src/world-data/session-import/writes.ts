@@ -1,3 +1,4 @@
+import { validateWorldModel } from "@covel/shared";
 import { randomUUID } from "node:crypto";
 import type {
   LorebookEntryRecord,
@@ -6,9 +7,9 @@ import type {
   StoreTransaction,
 } from "@covel/store";
 import {
-  cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
+  releaseWorldDataMediaRefs,
 } from "./media-handling.js";
 import { ledgerForWrite, valueHashForWrite } from "./ledger.js";
 import { pluginWriteIdentity } from "./identity.js";
@@ -39,7 +40,11 @@ async function existingKeySet(options: {
       const entries = await options.store.listSessionLorebookEntries(
         options.sessionId,
       );
-      if (entries.some((entry) => entry.id === write.id)) {
+      if (
+        entries.some(
+          (entry) => entry.owner.kind === "world" && entry.id === write.id,
+        )
+      ) {
         existing.add(pluginWriteIdentity(write)!);
       }
     } else if (write.kind === "character") {
@@ -83,7 +88,7 @@ function toLorebookRecord(
   return {
     id: write.id,
     sessionId,
-    pluginId: write.pluginId,
+    owner: { kind: "world" },
     keys: Array.isArray(value.keys)
       ? value.keys.filter((key): key is string => typeof key === "string")
       : [],
@@ -147,20 +152,12 @@ export async function writeImportPlan(options: {
     selected.push(write);
   }
 
-  let materialized:
-    Awaited<ReturnType<typeof materializeMediaIndexWrites>> | undefined;
-  // Compensation stack filled as each media asset lands, so a failure PART
-  // WAY THROUGH materialization is still cleanable. `materialized` is only
-  // assigned on full success, so relying on it alone leaked every asset put
-  // before the throw.
-  const putMediaRefs: WorldDataImportedMediaRef[] = [];
+  const materialized = await materializeMediaIndexWrites({
+    mediaStore: options.mediaStore,
+    sessionId: options.sessionId,
+    writes: selected,
+  });
   try {
-    materialized = await materializeMediaIndexWrites({
-      mediaStore: options.mediaStore,
-      sessionId: options.sessionId,
-      writes: selected,
-      onMediaRef: (ref) => putMediaRefs.push(ref),
-    });
     const materializedWrites = materialized.writes;
 
     const pluginWrites = materializedWrites.filter(
@@ -196,6 +193,20 @@ export async function writeImportPlan(options: {
       await options.store.upsertLorebookEntries(lorebookRecords);
     }
 
+    const characterWrites = materializedWrites.filter(
+      (write): write is PlannedWrite & { kind: "character" } =>
+        write.kind === "character",
+    );
+    if (characterWrites.length > 0) {
+      const [characters, characterSchema] = await Promise.all([
+        options.store.listCharacters(options.sessionId),
+        options.store.getCharacterSchema(options.sessionId),
+      ]);
+      const merged = new Map(characters.map((record) => [record.id, record]));
+      for (const write of characterWrites)
+        merged.set(write.record.id, write.record);
+      validateWorldModel({ characters: [...merged.values()], characterSchema });
+    }
     for (const write of materializedWrites) {
       if (write.kind === "character") {
         await options.store.upsertCharacter(write.record);
@@ -223,23 +234,23 @@ export async function writeImportPlan(options: {
       });
     });
     await options.store.saveWorldDataImportLedgerBatch?.(ledger);
-    if (!options.deferMediaFinalize) {
-      await finalizeWorldDataMediaRefs({
-        mediaStore: options.mediaStore,
-        refs: materialized.mediaRefs,
-      });
-    }
-
-    return {
-      written: materializedWrites.length,
-      skipped,
-      mediaRefs: materialized.mediaRefs,
-    };
-  } catch (err) {
-    await cleanupWorldDataMediaRefs({
+  } catch (error) {
+    await releaseWorldDataMediaRefs({
       mediaStore: options.mediaStore,
-      refs: materialized?.mediaRefs ?? putMediaRefs,
+      refs: materialized.mediaRefs,
     });
-    throw err;
+    throw error;
   }
+  if (!options.deferMediaFinalize) {
+    await finalizeWorldDataMediaRefs({
+      mediaStore: options.mediaStore,
+      refs: materialized.mediaRefs,
+    });
+  }
+
+  return {
+    written: materialized.writes.length,
+    skipped,
+    mediaRefs: materialized.mediaRefs,
+  };
 }

@@ -23,6 +23,7 @@ export function registerNamespaced(
   pluginId: string,
   mod: WireModuleShape,
   onRegistered: (dispose: () => void) => void = () => {},
+  invoke: <T>(fn: () => T | Promise<T>) => Promise<T> = async (fn) => fn(),
 ): void {
   const groups: ReadonlyArray<{
     readonly wires: readonly { id: string }[] | undefined;
@@ -52,7 +53,15 @@ export function registerNamespaced(
           `expected { id: string, ${group.method}: function }`,
         );
       }
-      const namespaced = { ...wire, id: `${pluginId}/${wire.id}` };
+      const method = Reflect.get(wire, group.method) as (
+        ...args: unknown[]
+      ) => unknown;
+      const namespaced = {
+        ...wire,
+        id: `${pluginId}/${wire.id}`,
+        [group.method]: (...args: unknown[]) =>
+          invoke(() => Reflect.apply(method, wire, args) as unknown),
+      };
       try {
         onRegistered(group.register(namespaced as never));
       } catch (err) {

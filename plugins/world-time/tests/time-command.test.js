@@ -1,7 +1,7 @@
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
-import { worldTimeSchema } from "@covel/shared";
+import { discoverPlugins, loadPluginDefinition } from "@covel/plugin-loader";
+import { worldTimeSchema } from "../schema.js";
 import time from "../rpc/time.js";
 import register from "../server/index.js";
 import { DEFAULT_TIME, initialTick } from "../clock.js";
@@ -24,9 +24,9 @@ describe("world-time command", () => {
     const entry = (
       await discoverPlugins(path.resolve(import.meta.dirname, "../.."))
     ).find((plugin) => plugin.id === "world-time");
-    const manifests = await loadPluginManifest(entry);
     expect(
-      manifests.flatMap(({ manifest }) => manifest.commands ?? []),
+      (await loadPluginDefinition(entry)).packageManifest.plugin.contributes
+        .commands,
     ).toEqual([expect.objectContaining({ name: "time", action: "time" })]);
     const registerRpc = vi.fn();
     register({
@@ -70,12 +70,7 @@ describe("world-time command", () => {
       lastDelta: 60,
     });
     expect(value).toEqual(before);
-    expect(ctx.store.getPluginData).toHaveBeenCalledWith(
-      "session",
-      "world-time",
-      "clock",
-      "current",
-    );
+    expect(ctx.store.getPluginData).toHaveBeenCalledWith("clock", "current");
     expect(ctx.store.setPluginData).not.toHaveBeenCalled();
     expect(ctx.store.getWorld).not.toHaveBeenCalled();
   });

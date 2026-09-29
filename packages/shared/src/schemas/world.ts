@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
-import { worldTimeSchema } from "./world-time.js";
+import { characterSchemaSchema } from "./world-model.js";
 
 // ── Common ──────────────────────────────────────────────────────
 
@@ -231,7 +231,6 @@ export const worldStartingConditionsSchema = z
 
 export const worldDimensionsSchema = z
   .object({
-    time: worldTimeSchema.optional(),
     geography: worldGeographySchema.optional(),
     factions: z.array(worldFactionSchema).optional(),
     powerSystem: worldPowerSystemSchema.optional(),
@@ -248,7 +247,6 @@ export const worldDimensionsSchema = z
 
 /** Maps each dimension key to its Zod sub-schema for per-file validation. */
 export const DIMENSION_KEY_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
-  time: worldTimeSchema,
   geography: worldGeographySchema,
   factions: z.array(worldFactionSchema),
   powerSystem: worldPowerSystemSchema,
@@ -278,9 +276,8 @@ const pluginPackSchema = z
       }),
     label: i18nTextSchema,
     description: i18nTextSchema.optional(),
-    plugins: z.array(z.string().min(1)).optional(),
-    optionalPlugins: z.array(z.string().min(1)).optional(),
-    excludedPlugins: z.array(z.string().min(1)).optional(),
+    requested: z.array(z.string().min(1)).optional(),
+    recommended: z.array(z.string().min(1)).optional(),
     tags: z.array(z.string().min(1)).optional(),
     reason: i18nTextSchema.optional(),
   })
@@ -288,14 +285,12 @@ const pluginPackSchema = z
 
 const pluginPolicySchema = z
   .object({
-    preset: z.string().min(1).optional(),
+    presetId: z.string().min(1).optional(),
     packs: z.array(pluginPackSchema).optional(),
-    preferTags: z.array(z.string().min(1)).optional(),
-    avoidTags: z.array(z.string().min(1)).optional(),
-    requireCapabilities: z.array(z.string().min(1)).optional(),
-    requiredPlugins: z.array(z.string().min(1)).optional(),
-    recommendedPlugins: z.array(z.string().min(1)).optional(),
-    excludedPlugins: z.array(z.string().min(1)).optional(),
+    preferredTags: z.array(z.string().min(1)).optional(),
+    avoidedTags: z.array(z.string().min(1)).optional(),
+    requested: z.array(z.string().min(1)).optional(),
+    recommended: z.array(z.string().min(1)).optional(),
   })
   .strict();
 
@@ -360,19 +355,17 @@ export const worldManifestSchema = z
     defaultLocale: localeCodeSchema,
     supportedLocales: z.array(localeCodeSchema).min(1).optional(),
     tags: z.array(z.string()).optional(),
-    requiredPlugins: z.array(z.string()).optional(),
-    recommendedPlugins: z.array(z.string()).optional(),
-    excludedPlugins: z.array(z.string()).optional(),
     pluginPolicy: pluginPolicySchema.optional(),
     worldData: z.string().min(1).optional(),
-    characterBlueprintSources: z.array(z.string().min(1)).optional(),
     /**
      * World-declared character attribute definitions. When non-empty,
      * `world-init` writes this verbatim as the session's
-     * `character-attributes` schema (no LLM, no dimension-derived fallback),
+     * `character schema` schema (no LLM, no dimension-derived fallback),
      * so the right panel renders authored i18n labels.
      */
-    characterAttributes: z.array(attributeDefinitionSchema).optional(),
+    characterSchema: z
+      .lazy(() => characterSchemaSchema.omit({ version: true }))
+      .optional(),
     dimensions: worldDimensionsSchema.optional(),
     /** Map of dimension key → relative file path for external dimension files. */
     dimensionSources: z.record(z.string(), z.string().min(1)).optional(),
@@ -385,25 +378,6 @@ export const worldManifestSchema = z
      */
     pluginSettings: z
       .record(z.string(), z.record(z.string(), z.unknown()))
-      .optional(),
-    /**
-     * World-authored core-memory blocks (same shape as a plugin's
-     * `memoryBlocks`). Lets a world declare genre-specific memory dimensions
-     * (e.g. a detective world adding `clues` / `suspects`) without forking a
-     * plugin. Merged with plugin-declared blocks per session at memory time.
-     */
-    memoryBlocks: z
-      .array(
-        z
-          .object({
-            label: z.string().min(1),
-            displayName: i18nTextSchema,
-            extractionHint: i18nTextSchema,
-            icon: z.string().optional(),
-            maxChars: z.number().optional(),
-          })
-          .strict(),
-      )
       .optional(),
     /**
      * Preferred `GameViewMode` for new sessions of this world ("stage" =

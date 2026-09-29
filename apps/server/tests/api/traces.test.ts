@@ -73,6 +73,7 @@ function makeEntry(
   overrides?: Partial<PluginRegistryEntry>,
 ): PluginRegistryEntry {
   const parsed = {
+    runtime: { type: "function" as const },
     manifest: {
       name: "image-plugin",
       description: "Image plugin runtime",
@@ -114,7 +115,7 @@ function makeEntry(
   return {
     id: "image-plugin",
     summary: makeSummary(),
-    manifest: parsed,
+
     manifests: [parsed],
     dataSchemas: {
       images: {

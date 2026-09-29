@@ -27,8 +27,11 @@ class MemorySettingsAdapter implements SettingsBackendAdapter {
     return { ...this.secrets };
   }
 
-  async saveSecrets(keys: Record<string, string>): Promise<void> {
-    this.secrets = { ...keys };
+  async saveSecrets(keys: Record<string, string | null>): Promise<void> {
+    for (const [provider, value] of Object.entries(keys)) {
+      if (value === null) delete this.secrets[provider];
+      else this.secrets[provider] = value;
+    }
   }
 }
 

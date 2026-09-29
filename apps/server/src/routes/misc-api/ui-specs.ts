@@ -70,6 +70,7 @@ async function assertInsidePluginRoot(
 }
 
 async function loadSlot(
+  ownerPluginId: string,
   pluginRoot: string,
   runtimeDirectory: string,
   paths: readonly string[] | undefined,
@@ -80,7 +81,7 @@ async function loadSlot(
     const filePath = path.resolve(runtimeDirectory, declaredPath);
     await assertInsidePluginRoot(pluginRoot, filePath);
     if (filePath.endsWith(".json")) {
-      specs.push(await loadPluginUiSpec(pluginRoot, filePath));
+      specs.push(await loadPluginUiSpec(pluginRoot, filePath, ownerPluginId));
     } else {
       // The validator reports this unsupported declaration without hiding siblings.
       specs.push({ _componentPath: declaredPath });
@@ -97,9 +98,9 @@ async function loadDeclaredUiSpecs(
   const runtimeDirectory = pluginRuntimeDirectory(entry, runtimeName);
   if (!entry.rootPath || !runtimeDirectory) return undefined;
   const [right, message, left] = await Promise.all([
-    loadSlot(entry.rootPath, runtimeDirectory, ui.right),
-    loadSlot(entry.rootPath, runtimeDirectory, ui.message),
-    loadSlot(entry.rootPath, runtimeDirectory, ui.left),
+    loadSlot(entry.id, entry.rootPath, runtimeDirectory, ui.right),
+    loadSlot(entry.id, entry.rootPath, runtimeDirectory, ui.message),
+    loadSlot(entry.id, entry.rootPath, runtimeDirectory, ui.left),
   ]);
   if (!right && !message && !left) return undefined;
   return { right, message, left };

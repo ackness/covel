@@ -67,6 +67,8 @@ export type TurnCompletionMode = "await" | "detached";
 export interface TurnCompletionConfig {
   readonly mode?: TurnCompletionMode;
   /** Maximum time the job may remain queued before it expires. */
+  readonly settle?: "before-next-execution";
+  readonly maxSettleWaitMs?: number;
   readonly maxQueueMs?: number;
   /** Maximum time a claimed detached execution may run before it expires. */
   readonly maxExecutionMs?: number;
@@ -143,13 +145,17 @@ export interface RuntimeExportInjectDecl {
   readonly required?: boolean;
 }
 
-export type InputInjectDecl =
-  RuntimeInjectDecl | PluginDataInjectDecl | RuntimeExportInjectDecl;
-
-export interface InputToolDecl {
-  readonly plugin: string;
-  readonly runtime: string;
+export interface KernelInjectDecl {
+  readonly kind: "kernel";
+  readonly from: "turn-digest@1";
+  readonly name: string;
 }
+
+export type InputInjectDecl =
+  | RuntimeInjectDecl
+  | PluginDataInjectDecl
+  | RuntimeExportInjectDecl
+  | KernelInjectDecl;
 
 export interface InputConfig {
   /**
@@ -160,7 +166,6 @@ export interface InputConfig {
    */
   readonly schema?: string;
   readonly inject?: readonly InputInjectDecl[];
-  readonly tools?: readonly InputToolDecl[];
 }
 
 // ── Output declarations ──────────────────────────────────────────
@@ -172,137 +177,6 @@ export interface InputConfig {
  * - `system` — system-level output, not shown to the player.
  */
 export type OutputKind = "story" | "plugin" | "system";
-
-// ── Capability discovery ─────────────────────────────────────────
-
-/**
- * Capability tags the **framework itself** consumes to discover plugins by
- * capability instead of by hardcoded plugin ID. Use these constants in
- * framework code (server / runtime) instead of bare string literals so a
- * typo becomes a compile error rather than a silent `undefined` lookup.
- *
- * Plugins may declare arbitrary custom capability tags beyond this set; the
- * framework only acts on the ones listed here. Keep this in sync with the
- * capability table in `docs/reference/plugins.md`.
- */
-export const FrameworkCapability = {
-  /** Main narrative generator — identifies the primary story output source. */
-  Narrative: "narrative",
-  /** World data provider — loads world schema/entries into the turn context. */
-  WorldDataProvider: "world-data-provider",
-  /** Image generation — frontend shows the "generate image" affordance. */
-  ImageGeneration: "image-generation",
-  /** Core-memory panel host — memory system mirrors core blocks here. */
-  MemoryPanel: "memory-panel",
-  /** Player persona provider — supplies the active persona for context. */
-  PersonaProvider: "persona-provider",
-  /** Prompt history rewriter — folds adopted branches into projected history. */
-  PromptHistoryRewriter: "prompt-history-rewriter",
-  /** Visual-stage backdrop state provider. */
-  SceneStage: "scene-stage",
-  /** Visual-stage cast/speaker state provider. */
-  SceneCast: "scene-cast",
-  /** Visual-stage quick-reply provider. */
-  ScenePrompts: "scene-prompts",
-  /** Character portrait and sprite presence provider. */
-  CharacterPresence: "character-presence",
-  /** Structured actor placement and transition provider. */
-  StageDirection: "stage-direction",
-} as const;
-
-/** Union of the framework-consumed capability tag string values. */
-export type FrameworkCapabilityTag =
-  (typeof FrameworkCapability)[keyof typeof FrameworkCapability];
-
-/**
- * Runtime-level capability tags the **framework itself** consumes to discover a
- * specific *runtime within* a plugin — as opposed to {@link FrameworkCapability},
- * which is matched against the plugin manifest as a whole.
- *
- * These are used by the frontend image pipeline: a multi-step image plugin tags
- * its manual entry runtime `image-prompt` (prompt generator) and its background
- * follower runtime `image-generator` (turns a prompt into an image asset). The
- * framework discovers each runtime by these tags instead of a runtime-name
- * convention. Reference these constants in framework code (web / server) instead
- * of bare string literals so a typo becomes a compile error rather than a silent
- * `?.includes` miss that disables the feature.
- *
- * Plugins may declare arbitrary custom runtime capability tags beyond this set;
- * the framework only acts on the ones listed here.
- */
-export const FrameworkRuntimeCapability = {
-  /**
-   * Entry runtime of a multi-step image plugin — manual trigger, generates the
-   * image prompt and hands off to its background `image-generator` follower.
-   */
-  ImagePrompt: "image-prompt",
-  /**
-   * Background generator runtime that turns an image prompt into an image asset.
-   */
-  ImageGenerator: "image-generator",
-} as const;
-
-/** Union of the framework-consumed runtime-level capability tag string values. */
-export type FrameworkRuntimeCapabilityTag =
-  (typeof FrameworkRuntimeCapability)[keyof typeof FrameworkRuntimeCapability];
-
-/**
- * Every capability tag the framework itself acts on — the union of the
- * plugin-level {@link FrameworkCapability} and runtime-level
- * {@link FrameworkRuntimeCapability} values. Single source of truth for:
- *  - `validateRuntimeManifestSemantics`'s typo detection (warns at server
- *    bootstrap when a declared capability looks like a misspelled
- *    framework-known one), and
- *  - keeping the capability table in `docs/reference/plugins.md` honest.
- *
- * Plugins may still declare arbitrary custom capability tags beyond this set;
- * this list only enumerates the tags the framework discovers and dispatches on.
- *
- * Note: some tag literals (`scene-stage`, `scene-cast`, `scene-prompts`,
- * `character-presence`, …) are spelled identically to bundled plugin directory
- * names under `plugins/`. That is a coincidence of naming, not a hardcoded
- * plugin id — the framework matches on the capability tag, so any third-party
- * plugin declaring the same tag is an equivalent replacement.
- */
-export const FRAMEWORK_KNOWN_CAPABILITIES: readonly string[] = Object.freeze([
-  ...Object.values(FrameworkCapability),
-  ...Object.values(FrameworkRuntimeCapability),
-]);
-
-// ── Core-memory block schema (Letta-style memory) ───────────────
-
-/**
- * Declarative definition of a single core-memory block.
- *
- * Core memory (the `@covel/memory` framework primitive) is **schema-driven**:
- * the framework owns the mechanism (run an LLM extraction, persist, render)
- * but the *meaning* of each block — its label, display name and the
- * extraction guidance handed to the summarizer LLM — is plain data declared
- * by a plugin via the `memoryBlocks` manifest field (or by a world package).
- *
- * This is what lets a detective game declare `clues` / `suspects` / `timeline`
- * and a business sim declare `deals` / `rivals` without forking the framework:
- * the kernel never hardcodes block labels or their extraction prompts.
- */
-export interface MemoryBlockSchema {
-  /**
-   * Stable machine label. Used as the `working_memory` key, the prompt XML
-   * tag, and the mirror plugin-data key. Lowercase snake_case by convention.
-   */
-  readonly label: string;
-  /** Localized display name for UI panels and the prompt block heading. */
-  readonly displayName: import("./world.js").I18nText;
-  /**
-   * Per-block guidance injected into the memory summarizer's system prompt —
-   * tells the LLM what kind of information belongs in this block. Keep it
-   * world-agnostic; world-specific detail comes from the narrative itself.
-   */
-  readonly extractionHint: import("./world.js").I18nText;
-  /** Lucide icon name for UI panels. Defaults to `Info` when omitted. */
-  readonly icon?: string;
-  /** Optional per-block character cap, overriding the manager default. */
-  readonly maxChars?: number;
-}
 
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
@@ -390,13 +264,6 @@ export type PluginTag = string;
  * Capability-based *scheduling* dependencies are a separate, working
  * mechanism — see {@link RuntimeManifest.needs} / `after`.
  */
-export interface PluginRelations {
-  readonly provides?: readonly string[];
-  readonly requires?: readonly string[];
-  readonly recommends?: readonly string[];
-  readonly conflicts?: readonly string[];
-}
-
 // ── Tool declarations ────────────────────────────────────────────
 
 export interface ToolsConfig {
@@ -566,117 +433,9 @@ export interface SlashCommandInvocation {
 
 // ── Plugin-scoped manifest fields ────────────────────────────────
 
-/**
- * How a plugin-scoped field behaves when more than one runtime of the same
- * plugin declares it. See {@link PLUGIN_SCOPED_FIELDS} for the per-field
- * assignment and {@link PluginScopedManifestFields} for the fields themselves.
- */
-export type PluginScopedMergeKind =
-  /** Every declaration is loaded; duplicates collapse by value. */
-  | "union"
-  /** Declarations merge on a key; a divergent redeclaration is a conflict. */
-  | "keyed"
-  /** Only the root PLUGIN.md is read; runtime declarations are ignored. */
-  | "root-only";
-
-/**
- * The plugin-scoped manifest fields and how each one merges across a plugin's
- * runtimes — the single place that knowledge lives.
- *
- * These fields are declared on a *runtime* manifest (PLUGIN.md frontmatter is
- * one schema) but consumed at *plugin* scope, so a multi-runtime plugin can
- * declare the same field more than once and the framework has to decide what
- * that means. It decided differently for every field, in six different files,
- * and a new field added without noticing this is how `userSettings` shipped
- * with no conflict handling at all while `dataSchemas` throws.
- *
- * Adding a field to {@link PluginScopedManifestFields} without registering it
- * here is a compile error (see the exhaustiveness check below), which is the
- * point: you cannot add a plugin-scoped field without stating its merge rule.
- *
- * `conflict` documents what happens on a divergent redeclaration; `where`
- * points at the code that implements it, since none of this lives in one place.
- */
-export const PLUGIN_SCOPED_FIELDS = {
-  /** Every declared path runs, including the root's; the path set dedupes. */
-  entry: {
-    merge: "union",
-    conflict: "none — distinct paths all execute against the same pluginId",
-    where: "apps/server/src/routes/api/bootstrap/plugin-entry.ts",
-  },
-  /** Merged on `key`; all runtimes share `plugin.<pluginId>.<key>`. */
-  userSettings: {
-    merge: "keyed",
-    conflict: "throws - the plugin fails to register",
-    where: "packages/plugin-loader/src/declarations.ts",
-  },
-  /** Merged on command name; divergent declarations reject the package. */
-  commands: {
-    merge: "keyed",
-    conflict: "throws - the plugin fails to register",
-    where: "apps/server/src/routes/api/session/commands.ts",
-  },
-  /** Merged on namespace — the strictest of the set. */
-  dataSchemas: {
-    merge: "keyed",
-    conflict: "throws — the plugin fails to register",
-    where: "packages/plugin-loader/src/registry.ts",
-  },
-  /** Merged on projection id; handlers remain declarative until execution. */
-  worldProjections: {
-    merge: "keyed",
-    conflict: "throws — the plugin fails to register",
-    where: "packages/plugin-loader/src/registry.ts",
-  },
-  /** Merged on `label` across ALL plugins, not just this one. */
-  memoryBlocks: {
-    merge: "keyed",
-    conflict:
-      "throws within one plugin; across plugins higher trust wins, then first-wins",
-    where: "apps/server/src/routes/api/bootstrap/memory.ts",
-  },
-  /** Merged on `topic` across all active runtimes of the session. */
-  events: {
-    merge: "keyed",
-    conflict:
-      "throws within one plugin; across plugins first-wins with a warning",
-    where: "apps/server/src/routes/api/bootstrap/event-directory.ts",
-  },
-  /** Unioned and sorted for the catalogue. */
-  tags: {
-    merge: "union",
-    conflict: "none — deduped",
-    where: "apps/server/src/lib/plugin-descriptor.ts",
-  },
-  /**
-   * Unioned across the plugin summary and all runtime manifests.
-   */
-  relations: {
-    merge: "union",
-    conflict: "none — resolution unions all runtimes",
-    where:
-      "apps/server/src/lib/plugin-descriptor.ts + apps/server/src/routes/api/session/plugins.ts",
-  },
-  /** Read from the root PLUGIN.md only — see loadPluginSummary's comment. */
-  displayName: {
-    merge: "root-only",
-    conflict:
-      "n/a — a runtime's displayName names that runtime, not the plugin",
-    where: "packages/plugin-loader/src/load.ts",
-  },
-} as const satisfies Record<
-  string,
-  { merge: PluginScopedMergeKind; conflict: string; where: string }
->;
-
-/**
- * Fields declared per-runtime but consumed per-plugin. Split out of
- * {@link RuntimeManifest} so the distinction is visible in the type rather
- * than only in prose, and so {@link PLUGIN_SCOPED_FIELDS} has something to be
- * checked against. `RuntimeManifest` extends this, so every existing
- * `manifest.<field>` access is unaffected.
- */
+/** Root-owned contribution fields in the compiled execution record. */
 export interface PluginScopedManifestFields {
+  readonly extensions?: readonly import("../extension-points/index.js").ExtensionDeclaration[];
   /**
    * Friendly, player-facing name (I18nText). Distinct from `name` (the runtime
    * id). Surfaced via `PluginSummary.displayName` for plugin-list UIs so a
@@ -709,7 +468,6 @@ export interface PluginScopedManifestFields {
    * come from triggers, input.inject, and the scheduling declarations below.
    * Session-level resolution unions every runtime's declaration.
    */
-  readonly relations?: PluginRelations;
   /** Plugin-data schemas, merged on namespace — a divergent one throws. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
   /** World projections, merged on projection id — a divergent one throws. */
@@ -729,41 +487,7 @@ export interface PluginScopedManifestFields {
   readonly userSettings?: readonly PluginUserSettingSpec[];
   /** Player-facing slash commands contributed by this plugin. */
   readonly commands?: readonly SlashCommandSpec[];
-  /**
-   * Core-memory block definitions contributed by this plugin (or world).
-   *
-   * The framework's memory system (`@covel/memory`) aggregates `memoryBlocks`
-   * across all loaded plugins to drive post-turn extraction and prompt
-   * rendering — block labels and extraction prompts are therefore plain data,
-   * not hardcoded kernel behavior. The builtin `memory` plugin declares the
-   * default narrative blocks (`story_state` / `scene` /
-   * `character_relationships` / `player_profile`); any plugin or world can add
-   * its own (e.g. `clues` / `suspects` / `timeline`).
-   */
-  readonly memoryBlocks?: readonly MemoryBlockSchema[];
 }
-
-/**
- * Compile-time exhaustiveness: every key of {@link PluginScopedManifestFields}
- * must appear in {@link PLUGIN_SCOPED_FIELDS}, and vice versa. Adding a
- * plugin-scoped field without declaring how it merges breaks the build here.
- *
- * The assertion has to run through a constrained type parameter — a bare
- * conditional type alias just evaluates to its false branch and reports
- * nothing.
- */
-type AssertTrue<T extends true> = T;
-
-type _EveryScopedFieldDeclaresItsMerge = AssertTrue<
-  keyof PluginScopedManifestFields extends keyof typeof PLUGIN_SCOPED_FIELDS
-    ? true
-    : false
->;
-type _EveryRegisteredFieldExists = AssertTrue<
-  keyof typeof PLUGIN_SCOPED_FIELDS extends keyof PluginScopedManifestFields
-    ? true
-    : false
->;
 
 export interface RuntimeManifest extends PluginScopedManifestFields {
   readonly name: string;
@@ -871,14 +595,8 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    * Defaults to `'plugin'`. Only `'story'` outputs are shown in the main chat stream.
    */
   readonly outputKind?: OutputKind;
-  /**
-   * Capability tags declared by this plugin/runtime.
-   * The framework uses these to discover plugins by capability instead of by ID.
-   * Examples: `['narrative']`, `['world-data-provider']`, `['image-generation']`.
-   */
-  readonly capabilities?: readonly string[];
-  /** Default runtime yields when another active runtime provides this capability. */
-  readonly fallbackFor?: string;
+  readonly outputContract?: string;
+  readonly defaultProvider?: boolean;
   /**
    * Named scheduling stage. Required for `auto` / `scheduled` runtimes under
    * the strict authoring schema; forbidden for `event` / `manual`. Selects
@@ -963,75 +681,4 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
   readonly output?: OutputConfig;
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
-  /**
-   * Sections of the narrative/output this runtime considers important for
-   * history compaction (the Compactor). The compactor collects these
-   * across all active runtimes and asks the LLM to preserve those topics
-   * when summarising old message spans.
-   *
-   * Examples: `['narrative', 'character-state', 'world-facts']`
-   */
-  readonly summaryFocus?: readonly string[];
-  /**
-   * Author's Note prompt segment — director-grade instruction
-   * inserted near the end of the message history, just before the Nth-from-last
-   * message. Modeled after SillyTavern / NovelAI author's-note semantics.
-   *
-   * The content supports template interpolation (`{{ player.xxx }}`, etc.)
-   * identical to the plugin body. Multiple active plugins' notes are merged
-   * in (stage, name) order.
-   */
-  readonly authorsNote?: AuthorsNoteDecl;
-  /**
-   * Post-History Instructions prompt segment — final
-   * high-weight instruction appended after the last message. Used to
-   * re-anchor the model on output format, style constraints, or
-   * hard rules that should survive long histories.
-   */
-  readonly postHistory?: PostHistoryDecl;
-}
-
-// ── Author's note / Post-history declarations ───────────
-
-/**
- * Declaration for prompt segment 9 — "director's note" inserted
- * near the end of the message history.
- */
-export interface AuthorsNoteDecl {
-  /** Interpolated text to inject. Supports `{{ template }}` variables. */
-  readonly content: string;
-  /**
-   * Insertion depth measured from the END of the message array.
-   * A value of `4` places the note before `messages[length - 4]`.
-   * Defaults to `4` (SillyTavern default). Values `<= 0` mean "append at end".
-   */
-  readonly depth?: number;
-  /** Message role used to wrap the note. Defaults to `system`. */
-  readonly role?: "system" | "user" | "assistant";
-}
-
-/**
- * Declaration for prompt segment 10 — high-weight instruction appended
- * after the last message.
- */
-export interface PostHistoryDecl {
-  /** Interpolated text to inject. Supports `{{ template }}` variables. */
-  readonly content: string;
-  /** Message role used to wrap the note. Defaults to `system`. */
-  readonly role?: "system" | "user";
-}
-
-// ── Plugin manifest ──────────────────────────────────────────────
-
-export interface PluginManifest {
-  /** Plugin unique identifier (directory name). */
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly pluginType: PluginType;
-  readonly version?: string;
-  /** Single-runtime plugin: inline runtime config. */
-  readonly runtime?: RuntimeManifest;
-  /** Multi-runtime plugin: list of runtimes. */
-  readonly runtimes?: readonly RuntimeManifest[];
 }

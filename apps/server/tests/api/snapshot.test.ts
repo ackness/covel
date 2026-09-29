@@ -118,12 +118,14 @@ async function seedSessionData(store: DataStore, sessionId: string) {
     updatedAt: now,
   });
 
-  await store.upsertWorkingMemory({
-    id: `${sessionId}-wm-1`,
+  await store.setPluginData({
+    id: `${sessionId}-memory`,
     sessionId,
-    key: "mood",
-    scope: "player",
-    value: "curious",
+    pluginId: "memory",
+    namespace: "blocks",
+    key: "player",
+    value: { content: "curious" },
+    createdAt: now,
     updatedAt: now,
   });
 
@@ -199,7 +201,7 @@ describe("Snapshot routes", () => {
       expect((payload.pluginData as unknown[]).length).toBeGreaterThanOrEqual(
         1,
       );
-      expect((payload.workingMemory as unknown[]).length).toBe(1);
+      expect(payload).not.toHaveProperty("workingMemory");
       expect(payload.messagesCursor).toBe("sess-1-tm-1");
     });
 
@@ -672,9 +674,9 @@ describe("Snapshot routes", () => {
       expect(childPluginData.length).toBeGreaterThanOrEqual(1);
       expect(childPluginData[0]!.value).toEqual({ a: 1 });
 
-      const childWm = await store.listWorkingMemory(childId);
+      const childWm = await store.listPluginData(childId, "memory", "blocks");
       expect(childWm).toHaveLength(1);
-      expect(childWm[0]!.key).toBe("mood");
+      expect(childWm[0]!.key).toBe("player");
     });
 
     it("copies session-scoped lorebook entries to the child session", async () => {
@@ -682,7 +684,7 @@ describe("Snapshot routes", () => {
         {
           id: "sess-1-lore-1",
           sessionId: "sess-1",
-          pluginId: "test-plugin",
+          owner: { kind: "plugin", pluginId: "test-plugin" },
           keys: ["mist"],
           content: "The mist hides ancient ruins.",
           strategy: "selective",
@@ -755,9 +757,8 @@ describe("Snapshot routes", () => {
       ).toBe(2);
     });
 
-    it("remaps character-mirror plugin-data to the child's re-minted character ids", async () => {
-      // The mirror namespace keys a row by the character id and stores
-      // value.id = same id; characters are re-minted on fork, so both must move.
+    it("preserves character identifiers used by opaque plugin data", async () => {
+      // Plugin-owned values are opaque to the kernel, even if they resemble IDs.
       await store.setPluginData({
         id: "sess-1-charmirror",
         sessionId: "sess-1",
@@ -785,9 +786,13 @@ describe("Snapshot routes", () => {
         "characters",
       );
       expect(mirror).toHaveLength(1);
-      expect(mirror[0]!.key).toBe(childChar.id);
-      expect((mirror[0]!.value as { id: string }).id).toBe(childChar.id);
-      expect(mirror[0]!.key).not.toBe("sess-1-hero");
+      expect(mirror[0]!.key).toBe("sess-1-hero");
+      expect((mirror[0]!.value as { id: string }).id).toBe("sess-1-hero");
+      expect(childChar.id).toBe("sess-1-hero");
+      const childSnapshot = (await store.listSnapshots(childId))[0]!;
+      expect(childSnapshot.payload.characters).toEqual(
+        await store.listCharacters(childId),
+      );
     });
 
     it("copies media_refs for inherited MediaRefs on fork", async () => {

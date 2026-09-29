@@ -1771,9 +1771,22 @@
       "hooks": "Hooks",
       "actions": "Actions",
       "services": "Services",
+      "extensions": "Extensions",
       "commands": "Commands",
       "registered": "registered",
-      "unregistered": "unregistered"
+      "unregistered": "unregistered",
+      "extensionCalls": "Extension calls in this window",
+      "providerPoint": "Provider / point",
+      "callCounts": "Total / success / error / timeout / cancelled",
+      "hostState": "Host state",
+      "sessionState": "Session state",
+      "authorization": "Session authorization",
+      "approved": "Approved",
+      "notApproved": "Not approved",
+      "dependencies": "Dependencies",
+      "autoAdded": "Added by dependency resolution",
+      "rejection": "Resolution rejection",
+      "failure": "Load / activation error"
     },
     "cost": {
       "tab": "Cost",

@@ -3,7 +3,7 @@
  */
 
 import type { z, ZodType } from "zod";
-import type { InputSlot, Proposal } from "@covel/shared";
+import type { InputSlot, Proposal, WorldModelView } from "@covel/shared";
 import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import type { ToolExecutionEnvelope } from "./result.js";
 
@@ -16,6 +16,8 @@ export interface ToolExecutionContext {
   readonly runtimeId: string;
   /** Scoped, owned reads including earlier proposals; absent in stateless hosts. */
   readonly store?: FunctionStoreView;
+  readonly world?: WorldModelView;
+  readonly upstreamProposals?: readonly Proposal[];
   /** Cooperative cancellation; pass to external requests and check before effects. */
   readonly signal?: AbortSignal;
   /** Authoritative values of inputs explicitly declared by this runtime. */

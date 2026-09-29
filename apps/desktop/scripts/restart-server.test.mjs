@@ -32,9 +32,8 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     export const isTrustedStartupFrameUrl = () => false;
     export const buildAppMenu = () => {};
     export const writeLog = () => {};
-    export const buildKeysEnvPatch = () => {};
+    export const patchKeysEnv = () => {};
     export const loadKeysEnv = () => {};
-    export const saveKeysEnv = () => {};
     export const importAsset = () => {};
     export const writeDataRoot = () => {};
     export const setDesktopLocaleFromSettings = () => {};
@@ -160,4 +159,133 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     assert.equal(calls, 0);
     assert.deepEqual(navigation, []);
   });
+});
+
+test("automatic sidecar recovery owns readiness, navigation, and a finite restart budget", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "covel-recovery-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = path.join(root, "recovery.mjs");
+  await build({
+    entryPoints: [
+      fileURLToPath(new URL("../src/server-recovery.ts", import.meta.url)),
+    ],
+    outfile: output,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+  });
+  const { createServerRecovery, findStartablePort } = await import(
+    pathToFileURL(output).href
+  );
+  const waitUntil = async (predicate) => {
+    for (let i = 0; i < 100; i++) {
+      if (predicate()) return;
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    assert.fail("recovery state did not arrive");
+  };
+
+  const navigation = [];
+  const states = [];
+  let starts = 0;
+  let recovery;
+  recovery = createServerRecovery({
+    restart: async () => {
+      const number = ++starts;
+      recovery.ready(`child-${number}`);
+      return 5000 + number;
+    },
+    navigate: (port) => navigation.push(port),
+    status: (state, attempts) => states.push({ state, attempts }),
+    log: () => {},
+    retryBaseMs: 1,
+    stableMs: 30,
+  });
+  t.after(() => recovery.cancel());
+
+  // A boot process can live well beyond two seconds yet never become ready.
+  recovery.exited("unready-child");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(starts, 0);
+
+  recovery.ready("initial-child");
+  recovery.exited("initial-child");
+  await waitUntil(() => starts === 1 && navigation.length === 1);
+  assert.deepEqual(navigation, [5001]);
+
+  recovery.exited("child-1");
+  await waitUntil(() => starts === 2 && navigation.length === 2);
+  recovery.exited("child-2");
+  await waitUntil(() => starts === 3 && navigation.length === 3);
+  recovery.exited("child-3");
+  await waitUntil(() => states.at(-1)?.state === "down");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(starts, 3);
+  assert.deepEqual(navigation, [5001, 5002, 5003]);
+  assert.deepEqual(states.at(-1), { state: "down", attempts: 3 });
+
+  // A stable runtime earns a fresh budget after the prior budget was spent.
+  recovery.ready("stable-child");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  recovery.exited("stable-child");
+  await waitUntil(() => starts === 4 && navigation.length === 4);
+  assert.deepEqual(states.at(-1), { state: "up", attempts: 1 });
+
+  await recovery.cancel();
+  recovery.resetBudget();
+  recovery.ready("manual-child");
+  recovery.exited("manual-child");
+  await waitUntil(() => starts === 5 && navigation.length === 5);
+
+  const failedNavigation = [];
+  const failedStates = [];
+  let failedStarts = 0;
+  const failedRecovery = createServerRecovery({
+    restart: async () => {
+      failedStarts++;
+      throw new Error("Synthetic readiness failure");
+    },
+    navigate: (port) => failedNavigation.push(port),
+    status: (state) => failedStates.push(state),
+    log: () => {},
+    maxAttempts: 1,
+    retryBaseMs: 1,
+  });
+  t.after(() => failedRecovery.cancel());
+  failedRecovery.ready("failed-child");
+  failedRecovery.exited("failed-child");
+  await waitUntil(() => failedStates.at(-1) === "down");
+  assert.equal(failedStarts, 1);
+  assert.deepEqual(failedNavigation, []);
+
+  const pendingPort = Promise.withResolvers();
+  const cancelledNavigation = [];
+  let pendingStarts = 0;
+  const cancelledRecovery = createServerRecovery({
+    restart: async () => {
+      pendingStarts++;
+      return pendingPort.promise;
+    },
+    navigate: (port) => cancelledNavigation.push(port),
+    status: () => {},
+    log: () => {},
+    retryBaseMs: 1,
+  });
+  cancelledRecovery.ready("old-child");
+  cancelledRecovery.exited("old-child");
+  await waitUntil(() => pendingStarts === 1);
+  const stopped = cancelledRecovery.cancel();
+  pendingPort.resolve(5010);
+  await stopped;
+  assert.deepEqual(cancelledNavigation, []);
+
+  const discoveredPort = Promise.withResolvers();
+  let manuallyStopped = false;
+  const starting = findStartablePort(
+    () => discoveredPort.promise,
+    () => manuallyStopped,
+  );
+  manuallyStopped = true;
+  discoveredPort.resolve(5011);
+  await assert.rejects(starting, /shutting down/);
 });

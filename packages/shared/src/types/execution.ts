@@ -59,7 +59,14 @@ export interface RuntimeResult {
   readonly runId: string;
   readonly turnId: string;
   readonly status: RuntimeStatus;
+  /** Business output only; domain effects are never inferred from its keys. */
   readonly output: Readonly<Record<string, unknown>> | null;
+  /** Explicit effects consumed by event dispatch, interaction handling and commit. */
+  readonly effects?: import("./handler-result.js").RuntimeEffects;
+  /** Setup completion is independent of business output. */
+  readonly completion?: "done" | "pending";
+  /** Exact function value, including scalar/array values, for schemas and bindings. */
+  readonly canonicalValue?: { readonly value?: JsonValue };
   readonly toolCalls: readonly ToolCallRecord[];
   readonly durationMs: number;
   readonly tokenUsage?: TokenUsage;
@@ -87,6 +94,7 @@ export interface RuntimeRetryScope {
  * session state.
  */
 export interface DeferredRuntimeJob {
+  readonly turnDigest: TurnDigest;
   readonly jobId: string;
   readonly runtimeId: string;
   readonly pluginId: string;
@@ -108,6 +116,12 @@ export type DetachedStageInput = Pick<
   | "sourceExecutionStartedAt"
   | "sourceLogicalTurnId"
   | "upstreamResults"
+  | "turnDigest"
+>;
+
+/** Frozen source-turn facts supplied by the kernel, independent of provider IDs. */
+export type TurnDigest = import("zod").infer<
+  typeof import("../schemas/execution-snapshots.js").turnDigestSchema
 >;
 
 // ── Turn input / result ──────────────────────────────────────────

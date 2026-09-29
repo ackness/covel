@@ -98,7 +98,7 @@ export interface RanSetupRuntime {
   readonly generation: number;
   readonly executionId: string;
   readonly startedAt: string;
-  /** Did the result signal completion (preGameDone / guard skip)? */
+  /** Did the result signal completion (completion: done / guard skip)? */
   readonly doneSignal: boolean;
   /** Ledger terminal state derived from the result status (pre commit-outcome). */
   readonly ledgerState: Extract<

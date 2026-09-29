@@ -68,18 +68,26 @@ export default function (covel) {
 }
 ```
 
-**2. PLUGIN.md 里声明**——`entry` 指入口，`tools.plugin` 列**工具名**（不是路径）：
+**2. PLUGIN.md 里声明**——`entry` 指入口，`runtime.agent.tools.plugin` 列**工具名**（不是路径）：
 
 ```yaml
+id: sample-tool
+kind: plugin
 entry: ./server/index.js
-tools:
-  plugin:
-    - my-tool # 与工厂里 tool({ name: 'my-tool' }) 一致
+contributes:
+  tools: [my-tool]
+runtime:
+  type: agent
+  schedule:
+    trigger: {type: manual}
+  agent:
+    tools:
+      plugin: [my-tool]
 ```
 
-> 旧写法 `tools: { local: [./tools/my-tool.js] }` **已被移除**，schema strict 会直接判加载失败。工具名对不上 `tools.plugin` 的话，工具注册了但那个 runtime 的 LLM 看不到它。
+> 旧写法 `tools: { local: [./tools/my-tool.js] }` **已被移除**，schema strict 会直接判加载失败。工具名对不上 `runtime.agent.tools.plugin` 的话，工具注册了但那个 runtime 的 LLM 看不到它。
 
-工具作用域是 fail-closed 的：`tools.plugin` 里的工具只有声明它的插件能调，内置工具所有插件都能调。
+工具作用域是 fail-closed 的：`runtime.agent.tools.plugin` 里的工具只有声明它的插件能调，内置工具所有插件都能调。
 
 ## 参数设计原则
 

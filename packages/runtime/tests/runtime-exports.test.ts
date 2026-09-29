@@ -144,7 +144,7 @@ describe("resolveExportBindings", () => {
     ({
       name,
       pluginId: name.split("/")[0],
-      capabilities: ["cfg-provider"],
+      outputContract: "cfg-provider",
     }) as RuntimeManifest;
   const binding = (
     over?: Partial<RuntimeExportBinding>,
@@ -210,6 +210,69 @@ describe("resolveExportBindings", () => {
     expect(res).toMatchObject({
       ok: false,
       skipReason: "export-schema-invalid",
+    });
+  });
+  it.each([true, false])(
+    "validates a public export contract without accepts (required=%s)",
+    async (required) => {
+      const res = await resolveExportBindings({
+        consumerRuntimeId: "c/main",
+        exportBindings: {
+          cfg: binding({ from: { capability: "cfg-provider" }, required }),
+        },
+        activeRuntimes: [provider("p/gen")],
+        acceptsSchemas: {},
+        contractSchemas: { cfg: SCHEMA },
+        getFrozenExport: async () => record({ threshold: "invalid" }),
+      });
+      expect(res.ok).toBe(!required);
+      if (res.ok) expect(res.slots).toEqual({});
+      expect(res.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "contract-output-invalid",
+          severity: "error",
+        }),
+      );
+    },
+  );
+
+  it("validates the full public export before an additional consumer accepts check", async () => {
+    const res = await resolveExportBindings({
+      consumerRuntimeId: "c/main",
+      exportBindings: {
+        cfg: binding({ from: { capability: "cfg-provider" } }),
+      },
+      activeRuntimes: [provider("p/gen")],
+      acceptsSchemas: { cfg: { properties: { threshold: { minimum: 10 } } } },
+      contractSchemas: { cfg: SCHEMA },
+      getFrozenExport: async () => record({ threshold: 7 }),
+    });
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "export-schema-invalid",
+    });
+    expect(res.diagnostics[0]?.code).toBe("export-schema-invalid");
+  });
+
+  it("reports an unresolvable public schema reference as an export binding error", async () => {
+    const res = await resolveExportBindings({
+      consumerRuntimeId: "c/main",
+      exportBindings: {
+        cfg: binding({ from: { capability: "cfg-provider" } }),
+      },
+      activeRuntimes: [provider("p/gen")],
+      acceptsSchemas: {},
+      contractSchemas: { cfg: { $ref: "#/definitions/missing" } },
+      getFrozenExport: async () => record({ threshold: 7 }),
+    });
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "export-schema-invalid",
+    });
+    expect(res.diagnostics[0]).toMatchObject({
+      code: "contract-output-invalid",
+      severity: "error",
+      message: expect.stringContaining("schema validation failed"),
     });
   });
 
@@ -281,4 +344,37 @@ describe("agent export segment", () => {
     // Same JSON shape a function handler reads from ctx.exports.
     expect(JSON.parse(match![1]!)).toEqual(exportSlots);
   });
+});
+
+it("withholds invalid canonical values without growing an existing export revision", async () => {
+  const store = createMemoryStore();
+  const publish = (value: unknown) =>
+    publishExecutionExports({
+      sink: store,
+      sessionId: "canonical",
+      results: [
+        {
+          status: "success",
+          runtimeId: "p/main",
+          runId: "run",
+          output: { value },
+          canonicalValue: { value: value as import("@covel/shared").JsonValue },
+        },
+      ],
+      declFor: () => ({
+        recordAs: "number",
+        pluginId: "p",
+        pluginVersion: "1",
+      }),
+      loadOutputSchema: async () => ({ type: "number" }),
+      committedAt: "2026-01-01T00:00:00Z",
+    });
+  await publish(7);
+  await publish("invalid");
+  const latest = await store.getLatestRuntimeExport(
+    "canonical",
+    "p/main",
+    "number",
+  );
+  expect(latest).toMatchObject({ value: 7, revision: 1 });
 });

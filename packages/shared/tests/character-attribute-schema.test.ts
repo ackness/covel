@@ -16,7 +16,7 @@ describe("attributeDefinitionSchema", () => {
     expect(res.success).toBe(true);
   });
 
-  it("accepts a plain-string name (back-compat with derived schemas)", () => {
+  it("accepts a plain-string name for derived schemas", () => {
     const res = attributeDefinitionSchema.safeParse({
       id: "hp",
       name: "生命值",
@@ -55,7 +55,7 @@ describe("attributeDefinitionSchema", () => {
   });
 });
 
-describe("worldManifestSchema characterAttributes", () => {
+describe("worldManifestSchema characterSchema", () => {
   const base = {
     schemaVersion: "1.0",
     id: "demo-world",
@@ -64,31 +64,37 @@ describe("worldManifestSchema characterAttributes", () => {
     defaultLocale: "zh-CN",
   };
 
-  it("accepts a manifest declaring characterAttributes with i18n labels", () => {
+  it("accepts a manifest declaring characterSchema with i18n labels", () => {
     const res = validateWorldManifest({
       ...base,
-      characterAttributes: [
-        {
-          id: "affection",
-          name: { "zh-CN": "好感度", "en-US": "Affection" },
-          type: "number",
-          min: 0,
-          max: 100,
-          defaultValue: 0,
-          category: "social",
-        },
-      ],
+      characterSchema: {
+        types: ["npc", "companion"],
+        attributes: [
+          {
+            id: "affection",
+            name: { "zh-CN": "好感度", "en-US": "Affection" },
+            type: "number",
+            min: 0,
+            max: 100,
+            defaultValue: 0,
+            category: "social",
+          },
+        ],
+      },
     });
     expect(res.valid).toBe(true);
-    const ca = (res.data as { characterAttributes?: unknown[] })
-      .characterAttributes;
+    const ca = (res.data as { characterSchema?: { attributes: unknown[] } })
+      .characterSchema?.attributes;
     expect(Array.isArray(ca) && ca.length).toBe(1);
   });
 
-  it("rejects a malformed characterAttributes entry", () => {
+  it("rejects a malformed characterSchema entry", () => {
     const res = validateWorldManifest({
       ...base,
-      characterAttributes: [{ id: "broken", name: "X", category: "social" }], // missing `type`
+      characterSchema: {
+        types: ["npc", "companion"],
+        attributes: [{ id: "broken", name: "X", category: "social" }],
+      }, // missing `type`
     });
     expect(res.valid).toBe(false);
   });

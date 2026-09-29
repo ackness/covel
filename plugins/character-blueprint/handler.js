@@ -7,12 +7,10 @@ import {
   readManualEntity,
   splitList,
 } from "@covel/plugin-handlers-utils";
-import { characterBlueprintToCharacterUpsert } from "@covel/shared";
+import { characterBlueprintToCharacterUpsert } from "./types/blueprint.ts";
 import { shortId, withPendingProposals } from "@covel/tools";
 
 const BLUEPRINT_NAMESPACE = "blueprints";
-const DEFAULT_MIRROR_PLUGIN_ID = "character-blueprint";
-const CHARACTER_PANEL_PLUGIN_ID = "char-creator";
 const BLUEPRINT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
 
@@ -42,18 +40,7 @@ export default async function handler(ctx) {
     makeProposal(ctx, now, "plugin.data", {
       namespace: BLUEPRINT_NAMESPACE,
       key: blueprint.id,
-      value: {
-        blueprint,
-        importedAt: now,
-        ...(shouldInstantiate
-          ? {
-              instantiatedCharacterId: scopedCharacterIdForBlueprint(
-                ctx.sessionId,
-                blueprint,
-              ),
-            }
-          : {}),
-      },
+      value: blueprint,
     }),
   ];
 
@@ -63,12 +50,10 @@ export default async function handler(ctx) {
     const upsert = characterBlueprintToCharacterUpsert(blueprint, {
       characterId,
       now,
-      mirrorPluginId: DEFAULT_MIRROR_PLUGIN_ID,
     });
     proposals.push(
       makeProposal(ctx, now, "character.upsert", {
         ...upsert,
-        mirrorPluginIds: [CHARACTER_PANEL_PLUGIN_ID],
       }),
     );
   }

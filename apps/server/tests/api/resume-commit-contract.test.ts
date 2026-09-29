@@ -61,7 +61,14 @@ describe("resume commit composition", () => {
           pluginType: "plugin",
           runtimeCount: 1,
         },
-        manifests: [{ manifest, promptTemplate: "", rawFrontmatter: {} }],
+        manifests: [
+          {
+            runtime: { type: manifest.runtimeType ?? ("agent" as const) },
+            manifest,
+            promptTemplate: "",
+            rawFrontmatter: {},
+          },
+        ],
       });
       await store.saveSuspension({
         id: "suspension",
@@ -113,10 +120,6 @@ describe("resume commit composition", () => {
         if (shutdown === "commit") closing = applicationWork.close();
         return owned;
       });
-      const updateAfterTurn = vi.fn(async () => ({
-        updated: true,
-        blocksChanged: [],
-      }));
       const events: string[] = [];
       const eventBus = createEventBus();
       eventBus.onEmit((event) => events.push(event.type));
@@ -138,15 +141,6 @@ describe("resume commit composition", () => {
           lookup: async () => ({ mime: "image/png", size: 42 }),
           isReferencedBy,
         });
-        c.set("memorySystem", {
-          manager: {
-            loadBlocks: async () => [
-              { label: "scene", content: "Before resume", updatedAt: now },
-            ],
-            initializeDefaults: async () => {},
-          },
-          updater: { updateAfterTurn },
-        });
         await next();
       });
       app.route("/api/sessions", resumeRoutes);
@@ -167,7 +161,6 @@ describe("resume commit composition", () => {
         expect(await store.listRuntimeExports("session")).toEqual([]);
         expect(await store.listTurnMessages("session")).toEqual([]);
         expect(await store.listSnapshots("session")).toEqual([]);
-        expect(updateAfterTurn).not.toHaveBeenCalled();
         expect(events).not.toContain("turn.resumed");
         return;
       }
@@ -184,13 +177,6 @@ describe("resume commit composition", () => {
         (await store.getSuspension("suspension"))?.resolvedAt,
       ).toBeTruthy();
       expect(await store.listSnapshots("session")).toHaveLength(1);
-      expect(updateAfterTurn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: "session",
-          turnId: "turn",
-          narrativeText: value.narrativeOutput,
-        }),
-      );
       expect(events).toContain("turn.resumed");
       expect(events).not.toContain("turn.completed");
     },

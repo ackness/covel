@@ -9,7 +9,6 @@ import type {
   RuntimeResult,
   TurnInput,
   InputSlot,
-  PlayerIdentityCoordinate,
   RuntimeActivation,
 } from "@covel/shared";
 import type { SessionContextStore } from "./session-context-store.js";
@@ -112,15 +111,9 @@ export interface SessionMeta {
   readonly lastFormValues?: Readonly<Record<string, unknown>>;
 }
 
-/** A single Working Memory entry (minimal shape for context injection). */
-export interface WorkingMemoryEntry {
-  readonly scope: "player" | "story" | "shared";
-  readonly key: string;
-  readonly value: unknown;
-}
-
 /** Parameters for building an execution context. */
 export interface ContextBuildParams {
+  readonly promptSegments?: readonly import("@covel/shared").PromptSegment[];
   /** Runtime's prompt template. */
   readonly promptTemplate: string;
   /** Runtime's manifest. */
@@ -133,8 +126,6 @@ export interface ContextBuildParams {
   readonly messageHistory?: readonly MessageHistoryRecord[];
   /** Session-level metadata (turnNumber, characters, lastFormValues). */
   readonly sessionMeta?: SessionMeta;
-  /** Working memory entries. When absent or empty, no segment is rendered. */
-  readonly workingMemory?: readonly WorkingMemoryEntry[];
   /**
    * Token estimator injected by the caller for budget calculation. Optional.
    * When both this and {@link ContextBuildParams.contextBudget} are set, the
@@ -161,25 +152,6 @@ export interface ContextBuildParams {
    */
   readonly summaries?: readonly SummaryRecord[];
   /**
-   * Manifests whose `authorsNote` / `postHistory` feed segments 9 and 10.
-   *
-   * The builder merges every declaration it finds here in `(stage, name)` order
-   * (earlier stages render first). When omitted it falls back to
-   * `[params.manifest]`.
-   *
-   * The turn executor deliberately passes ONLY the executing runtime's own
-   * (locale-resolved) manifest, not the session's whole active set.
-   * `postHistory` is a runtime's private working instruction — its tool
-   * workflow, its termination contract — so aggregating across plugins would
-   * put one plugin's internal directives into another plugin's system prompt.
-   * That is a plugin-isolation leak, and it also lets an unrelated plugin's
-   * instructions steer a runtime whose author never opted in. The parameter
-   * stays plural because the builder is generic and a caller that genuinely
-   * wants a curated multi-manifest prompt can supply one; the framework's own
-   * turn path does not.
-   */
-  readonly activeManifests?: readonly RuntimeManifest[];
-  /**
    * Data store handle used by the async build path to resolve
    * `input.inject` entries of kind `plugin-data`. Only consulted when a
    * plugin-data inject is present in the manifest.
@@ -189,26 +161,7 @@ export interface ContextBuildParams {
    * `DataStore` from `@covel/store` satisfies this shape via structural typing.
    */
   readonly store?: SessionContextStore;
-  /**
-   * Core memory blocks (Letta-style in-context memory).
-   * When present, rendered as a `[Core Memory]` section in the prompt.
-   * Managed by `@covel/memory` — the context builder only consumes the data.
-   */
-  readonly coreMemoryBlocks?: readonly {
-    readonly label: string;
-    readonly content: string;
-    /**
-     * Localized display name, attached by `@covel/memory`'s manager from the
-     * active block schema. Used by the prompt renderer for the block heading;
-     * falls back to the raw label when absent.
-     */
-    readonly displayName?: I18nText;
-  }[];
-  /**
-   * Pre-assembled session context. When provided, prompt assembly reads
-   * session-level data from here instead of the scattered `sessionMeta` /
-   * `workingMemory` / `coreMemoryBlocks` fields.
-   */
+  /** Pre-assembled committed session context. */
   readonly sessionContext?: SessionContextSnapshot;
   /**
    * Player-authored settings for *this* runtime's plugin, already merged with
@@ -275,47 +228,19 @@ export interface WorldContextView {
 }
 
 /**
- * Captures the content of a Core Memory block (Letta-style in-context memory).
- *
- * Named counterpart to the inline anonymous shape already used on
- * {@link ContextBuildParams.coreMemoryBlocks}. A dedicated type exists
- * because `@covel/context` intentionally does not depend on `@covel/memory`
- * (see `packages/context/package.json`), so we cannot reuse
- * `@covel/memory`'s `CoreMemoryBlock` directly.
- */
-export interface CoreMemoryBlockView {
-  readonly label: string;
-  readonly content: string;
-  readonly updatedAt?: string;
-  /**
-   * Localized display name, attached by `@covel/memory`'s manager from the
-   * active block schema. Lets the prompt renderer and panels show a friendly
-   * heading without `@covel/context` depending on `@covel/memory`.
-   */
-  readonly displayName?: I18nText;
-}
-
-/**
  * Minimal view over a lorebook entry, mirroring the store's
  * `LorebookEntryRecord` but kept decoupled so `@covel/context` does not leak
  * DB record types into its consumers (same pattern as {@link SummaryRecord}).
  */
 export interface LorebookEntryView {
   readonly id: string;
-  readonly pluginId: string;
+  readonly owner: import("@covel/shared").LorebookOwner;
   readonly content: string;
   readonly keys?: readonly string[];
   readonly enabled?: boolean;
   /** Free-form extra carried verbatim from the stored record (strategy, position, timestamps, …). */
   readonly extra?: Readonly<Record<string, unknown>>;
 }
-
-/**
- * Persona-side prompt position (`seg3_prepend` / `seg3_append` / `at_depth`).
- * Derived from the shared {@link PlayerIdentityCoordinate} single source of
- * truth — do not re-declare the literal union here.
- */
-export type PersonaPromptPosition = PlayerIdentityCoordinate["position"];
 
 /**
  * Lorebook-side prompt position: lore renders before the PLUGIN.md segment,
@@ -329,35 +254,7 @@ export type LorebookPromptPosition =
  * of the persona-side and lorebook-side positions. Single named type shared
  * by the snapshot loader, the contribution aggregator, and the assembler.
  */
-export type PromptPosition = PersonaPromptPosition | LorebookPromptPosition;
-
-/**
- * Player persona descriptor.
- *
- * Loaded by `buildSessionContextSnapshot` from the persona-provider plugin's
- * `session-binding` / `profiles` namespaces (see `loadActivePersona`) and
- * compiled into a `persona_description` {@link ContextContribution} that the
- * prompt assembler renders into the system prompt.
- */
-export interface PersonaProfile {
-  readonly id: string;
-  readonly name: string;
-  readonly description?: string;
-  /**
-   * Optional coordinate hint for how the description injects.
-   *
-   * Field coupling:
-   * - `depth` is only meaningful when `position === 'at_depth'`. For
-   *   `'seg3_prepend'` and `'seg3_append'`, the assembler ignores `depth`.
-   * - `order` controls ordering when multiple contributions target the same
-   *   `(position, depth)` slot — lower numbers render first.
-   */
-  readonly promptCoordinate?: {
-    readonly position: PersonaPromptPosition;
-    readonly depth?: number;
-    readonly order?: number;
-  };
-}
+export type PromptPosition = LorebookPromptPosition;
 
 /**
  * The central session-level context snapshot.
@@ -376,10 +273,6 @@ export interface SessionContextSnapshot {
   readonly sessionMeta: SessionMeta;
   readonly world: WorldContextView;
   readonly characters: readonly CharacterSummary[];
-  /** Loaded from the persona-provider plugin; undefined when none is active. */
-  readonly activePersona?: PersonaProfile;
-  readonly workingMemory: readonly WorkingMemoryEntry[];
-  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[];
   readonly loreEntries: readonly LorebookEntryView[];
   readonly summaries: readonly SummaryRecord[];
   /** Compiled persona / lorebook contribution stream consumed by the assembler. */
@@ -391,9 +284,7 @@ export interface SessionContextSnapshot {
  * loader actually compiles — lorebook world rules and the player persona
  * description — each map to a segment position in the assembled prompt.
  */
-export type ContributionKind =
-  | "lore_entry" // lorebook world rules (before/after plugin, or at-depth)
-  | "persona_description"; // player persona injection (seg-3 prepend/append, or at-depth)
+export type ContributionKind = "lore_entry"; // lorebook world rules (before/after plugin, or at-depth)
 
 /**
  * A single piece of prompt content with provenance, a coordinate, and a debug
@@ -408,7 +299,7 @@ export type ContributionKind =
  */
 export interface ContextContribution {
   readonly kind: ContributionKind;
-  readonly sourceType: "persona" | "world";
+  readonly sourceType: "world";
   /** personaId (persona) / lorebook entry id (world). */
   readonly sourceId: string;
   readonly content: string;

@@ -14,7 +14,6 @@ import {
   type PluginDetail,
   type PluginRuntimeSummary,
   type PluginSummary,
-  type PluginUserSettingSpec,
   type RuntimeManifest,
   type RuntimePluginContract,
 } from "@covel/shared";
@@ -52,67 +51,17 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
     turnCompletion: effectiveTurnCompletion(manifest),
     ...(manifest.model ? { model: manifest.model } : {}),
     outputKind: manifest.outputKind ?? "plugin",
-    capabilities: [...(manifest.capabilities ?? [])],
+    ...(manifest.outputContract
+      ? { outputContract: manifest.outputContract }
+      : {}),
     tags: [...(manifest.tags ?? [])],
-    ...(manifest.relations ? { relations: manifest.relations } : {}),
   };
 }
 
-function mergeRelations(
-  manifests: readonly RuntimeManifest[],
-  summaryRelations?: PluginSummary["relations"],
-): PluginSummary["relations"] | undefined {
-  const sources = [
-    ...(summaryRelations ? [summaryRelations] : []),
-    ...manifests.flatMap((manifest) =>
-      manifest.relations ? [manifest.relations] : [],
-    ),
-  ];
-  const provides = uniqueSorted(
-    sources.flatMap((source) => source.provides ?? []),
-  );
-  const requires = uniqueSorted(
-    sources.flatMap((source) => source.requires ?? []),
-  );
-  const recommends = uniqueSorted(
-    sources.flatMap((source) => source.recommends ?? []),
-  );
-  const conflicts = uniqueSorted(
-    sources.flatMap((source) => source.conflicts ?? []),
-  );
-  if (
-    provides.length === 0 &&
-    requires.length === 0 &&
-    recommends.length === 0 &&
-    conflicts.length === 0
-  ) {
-    return undefined;
-  }
-  return {
-    ...(provides.length > 0 ? { provides } : {}),
-    ...(requires.length > 0 ? { requires } : {}),
-    ...(recommends.length > 0 ? { recommends } : {}),
-    ...(conflicts.length > 0 ? { conflicts } : {}),
-  };
-}
-
-/** Merge runtime declarations that share one plugin-scoped setting key. */
-export function mergePluginUserSettings(
-  pluginId: string,
-  manifests: readonly RuntimeManifest[],
-): PluginUserSettingSpec[] {
-  return [
-    ...resolvePluginDeclarations(
-      manifests.map((manifest) => ({
-        manifest: { ...manifest, pluginId },
-        promptTemplate: "",
-        rawFrontmatter: {},
-      })),
-    ).userSettings,
-  ];
-}
-
-export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
+export function buildPluginSummary(
+  entry: PluginRegistryEntry,
+  isEntryPublished?: (pluginId: string) => boolean,
+): PluginSummary {
   const manifests = pluginManifestRecords(entry).map(
     ({ manifest }) => manifest,
   );
@@ -121,7 +70,7 @@ export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
   );
   const runtimes = manifests.map(runtimeSummary);
   const source = getPluginTrustInfo(entry.id, entry.source).source;
-  const relations = mergeRelations(declarations, entry.summary.relations);
+  const plugin = entry.packageManifest?.plugin;
   const tools = manifests.flatMap((manifest) => [
     ...(manifest.tools?.builtin ?? []).map((id) => ({
       id,
@@ -139,25 +88,40 @@ export function buildPluginSummary(entry: PluginRegistryEntry): PluginSummary {
     id: entry.id,
     displayName: entry.summary.displayName ?? entry.summary.name ?? entry.id,
     description: entry.summary.description,
-    pluginType: entry.summary.pluginType,
+    kind: plugin?.kind ?? "plugin",
     source,
-    status: entry.status,
+    hostState: isEntryPublished?.(entry.id)
+      ? "loaded"
+      : entry.status === "error" || entry.error
+        ? "error"
+        : entry.status === "discovered"
+          ? "discovered"
+          : "installed",
     ...(entry.error ? { error: entry.error } : {}),
+    ...(entry.registrationError
+      ? { registrationError: { ...entry.registrationError } }
+      : {}),
     runtimeCount: runtimes.length,
     ...((entry.packageManifest?.manifest ?? manifests[0])?.version
       ? { version: (entry.packageManifest?.manifest ?? manifests[0])!.version }
       : {}),
-    capabilities: uniqueSorted(
-      declarations.flatMap((manifest) => manifest.capabilities ?? []),
-    ),
+    provides: plugin?.provides ?? [],
+    requires: plugin?.requires ?? [],
+    optional: plugin?.optional ?? [],
+    conflicts: plugin?.conflicts ?? [],
+    extensions: [
+      ...(plugin?.contributes?.extensions ?? []),
+      ...(plugin?.contributes?.prompt?.length
+        ? [{ point: "prompt.segment@1", id: "static-prompt" }]
+        : []),
+    ],
     tags: uniqueSorted([
       ...(entry.summary.tags ?? []),
       ...declarations.flatMap((manifest) => manifest.tags ?? []),
     ]),
-    ...(relations ? { relations } : {}),
     runtimes,
     tools,
-    userSettings: mergePluginUserSettings(entry.id, declarations),
+    userSettings: [...(plugin?.contributes?.settings ?? [])],
   };
 }
 
@@ -182,7 +146,7 @@ function runtimeContract(manifest: RuntimeManifest): RuntimePluginContract {
     },
     input: {
       inject: [...(manifest.input?.inject ?? [])],
-      tools: [...(manifest.input?.tools ?? [])],
+      tools: [],
     },
     inputs: { ...manifest.inputs },
     effects: {
@@ -206,8 +170,11 @@ function runtimeContract(manifest: RuntimeManifest): RuntimePluginContract {
   };
 }
 
-export function buildPluginDetail(entry: PluginRegistryEntry): PluginDetail {
-  const summary = buildPluginSummary(entry);
+export function buildPluginDetail(
+  entry: PluginRegistryEntry,
+  isEntryPublished?: (pluginId: string) => boolean,
+): PluginDetail {
+  const summary = buildPluginSummary(entry, isEntryPublished);
   const runtimes = pluginManifestRecords(entry).map(({ manifest }) =>
     runtimeContract(resolvePluginRuntimeManifest(entry, manifest)),
   );

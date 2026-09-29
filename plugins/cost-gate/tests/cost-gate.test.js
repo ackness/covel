@@ -261,12 +261,12 @@ describe("cost-gate hooks", () => {
     const md = fs.readFileSync(mdPath, "utf8");
     const frontmatter = md.split(/^---$/m)[1] ?? "";
     const lines = frontmatter.split("\n");
-    const start = lines.findIndex((l) => l.startsWith("userSettings:"));
+    const start = lines.findIndex((l) => l.startsWith("  settings:"));
     expect(start).toBeGreaterThanOrEqual(0);
     // The block runs until the next top-level (non-indented) key.
     let end = lines.length;
     for (let i = start + 1; i < lines.length; i++) {
-      if (/^[A-Za-z]/.test(lines[i])) {
+      if (/^(?:  )?[A-Za-z]/.test(lines[i])) {
         end = i;
         break;
       }

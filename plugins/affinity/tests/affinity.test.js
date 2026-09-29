@@ -1,3 +1,4 @@
+import { readFileSync as readContractFile } from "node:fs";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * affinity plugin tests.
@@ -22,7 +23,8 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import path from "node:path";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
+  loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
@@ -481,13 +483,30 @@ describe("affinity plugin manifest", () => {
   /** @type {import('@covel/shared').RuntimeManifest} */
   let manifest;
   let loaded;
+  let declaration;
+  let packageManifest;
+  let loadedUi;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const discovery = discoveries.find((d) => d.id === "affinity");
-    const manifests = await loadPluginManifest(discovery);
+    const definition = await loadPluginDefinition(discovery);
+    const manifests = definition.manifests;
+    packageManifest = definition.packageManifest.manifest;
+    loadedUi = await loadPluginUi(discovery, undefined, definition);
     manifest = manifests[0].manifest;
-    loaded = await loadRuntime(discovery, manifest.name);
+    declaration = definition.packageManifest.plugin;
+    loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
+      "world-ir@1": JSON.parse(
+        readContractFile(
+          new URL(
+            "../../world-ir/schemas/world-ir.schema.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ),
+    });
   });
 
   it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
@@ -497,13 +516,13 @@ describe("affinity plugin manifest", () => {
     expect(manifest.trigger?.type).toBe("auto");
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider", cardinality: "one" },
-      accepts: "covel://world/ir/v1",
+      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      accepts: "contract:world-ir@1",
       required: true,
     });
-    expect(manifest.relations?.requires).toContain("world-ir");
+    expect(declaration.requires).toContain("world-ir-provider@1");
     // Agent runtime — no `runtimeType` field means default 'agent'
-    expect(manifest.runtimeType).toBeUndefined();
+    expect(manifest.runtimeType).toBe("agent");
     expect(manifest.handler).toBeUndefined();
   });
 
@@ -523,14 +542,14 @@ describe("affinity plugin manifest", () => {
 
   it("declares the update-affinity plugin tool via the entry module", () => {
     expect(manifest.tools?.plugin).toEqual(["update-affinity"]);
-    expect(manifest.entry).toBe("./server/index.js");
+    expect(packageManifest.entry).toBe("./server/index.js");
     expect(manifest.completeAfterTools).toEqual(["update-affinity"]);
     expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
     expect(manifest.maxRetries).toBe(0);
   });
 
   it("accepts world data into the affinity namespace via dataSchemas", () => {
-    expect(manifest.dataSchemas?.affinity).toMatchObject({
+    expect(packageManifest.dataSchemas?.affinity).toMatchObject({
       schemaVersion: 1,
       acceptsWorldData: true,
       schema: "./schemas/affinity.schema.json",
@@ -538,16 +557,16 @@ describe("affinity plugin manifest", () => {
   });
 
   it("declares right panel and message UI specs", () => {
-    expect(manifest.ui?.right).toContain("./ui/affinity-panel.json");
-    expect(manifest.ui?.message).toContain("./ui/affinity-toast.json");
+    expect(packageManifest.ui?.right).toContain("./ui/affinity-panel.json");
+    expect(packageManifest.ui?.message).toContain("./ui/affinity-toast.json");
   });
 
   it("loads UI spec JSON with panel metadata", () => {
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0].id).toBe("affinity");
-    expect(loaded.uiSpecs?.right?.[0].icon).toBe("heart");
-    expect(loaded.uiSpecs?.message).toHaveLength(1);
-    expect(loaded.uiSpecs?.message?.[0].id).toBe("affinity-toast");
+    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
+    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("affinity");
+    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("heart");
+    expect(loadedUi.uiSpecs?.message).toHaveLength(1);
+    expect(loadedUi.uiSpecs?.message?.[0].id).toBe("affinity-toast");
   });
 
   it("loads PLUGIN.md body as the LLM prompt template", () => {

@@ -12,6 +12,33 @@ import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.
 
 afterEach(() => vi.useRealTimers());
 
+it("enforces the public output contract when an agent resumes", async () => {
+  const f = fixture();
+  const manifest = { ...f.manifest, outputContract: "prompt@1" };
+  const loaded = await f.deps.loadRuntime(
+    manifest,
+    undefined,
+    f.suspension.sessionId,
+  );
+  const result = await resumeSuspendedRuntime(f.suspension, {}, manifest, {
+    ...f.deps,
+    loadRuntime: async () => ({
+      ...loaded!,
+      outputContractSchema: {
+        type: "object",
+        required: ["prompt"],
+        properties: { prompt: { type: "string" } },
+      },
+    }),
+  });
+  expect(result).toMatchObject({
+    status: "failed",
+    output: null,
+    error: expect.stringContaining("contract-output-invalid"),
+  });
+  expect(f.failedEvents()).toHaveLength(1);
+});
+
 function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
   const manifest: RuntimeManifest = {
     name: "probe/main",

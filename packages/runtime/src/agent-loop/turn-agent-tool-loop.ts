@@ -1,3 +1,4 @@
+import { overlayWorldModelView } from "../function-runtime/world-model-view.js";
 import { createAgentLoopBudget } from "./agent-loop-budget.js";
 import type {
   Proposal,
@@ -63,7 +64,7 @@ export interface AgentToolLoopCompleted {
   readonly executedToolCalls: ExecutedToolCallState[];
   readonly failedToolCalls: FailedToolCallState[];
   readonly pendingProposals: Proposal[];
-  /** Domain events emitted via `emit-event` tool calls this loop — merged into `output.events` at finalize. */
+  /** Domain events emitted via `emit-event` tool calls this loop — merged into `effects.events` at finalize. */
   readonly emittedEvents: EmittedEvent[];
   readonly streamDeltaCount: number;
   readonly stoppedWithResponse: boolean;
@@ -87,6 +88,8 @@ export interface AgentToolLoopInitialState {
 }
 
 export interface RunAgentToolLoopOptions {
+  readonly worldBase?: import("@covel/shared").WorldModelView;
+  readonly upstreamProposals?: readonly Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   /** Authoritative logical turn number, forwarded into ToolCallContext. */
@@ -135,6 +138,8 @@ export async function runAgentToolLoop(
 
 async function runAgentToolLoopWithinBudget(
   {
+    upstreamProposals = [],
+    worldBase,
     manifest,
     input,
     turnNumber,
@@ -177,6 +182,11 @@ async function runAgentToolLoopWithinBudget(
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
   ];
+  const world = worldBase
+    ? overlayWorldModelView(worldBase, input.sessionId, pendingProposals, () =>
+        budget.assertLive(),
+      )
+    : undefined;
   const emittedEvents: EmittedEvent[] = [
     ...(initialState?.emittedEvents ?? []),
   ];
@@ -458,6 +468,8 @@ async function runAgentToolLoopWithinBudget(
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               pendingProposals: pendingProposals,
+              upstreamProposals,
+              world,
               signal: hookOpts.signal,
               inputSlots,
               emittedEventTopics: emittedEvents.map((e) => e.topic),
@@ -547,6 +559,7 @@ async function runAgentToolLoopWithinBudget(
                 );
               }
               return handleSuspension({
+                outputContractSchema: loaded.outputContractSchema,
                 sentinel: toolResult.parsedResult,
                 manifest,
                 input,

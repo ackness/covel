@@ -99,9 +99,9 @@ export function PluginContractsPanel({
               <span className="text-xs font-semibold font-mono">
                 {plugin.id}
               </span>
-              {plugin.status && (
+              {plugin.hostState && (
                 <Badge variant="outline" className="text-xs">
-                  {plugin.status}
+                  {plugin.hostState}
                 </Badge>
               )}
               {plugin.runtimeCount != null && (
@@ -120,8 +120,10 @@ export function PluginContractsPanel({
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <DiscoveryMetric
-                label={t("debugger.discovery.capabilities", "capabilities")}
-                values={plugin.capabilities ?? []}
+                label="provides"
+                values={plugin.provides.map((entry) =>
+                  typeof entry === "string" ? entry : entry.contract,
+                )}
               />
               <DiscoveryMetric
                 label="plugin_data"

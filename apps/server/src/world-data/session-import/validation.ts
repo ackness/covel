@@ -1,12 +1,11 @@
 import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import {
-  parsePluginSchemaUri,
   pluginSchemaUriForTarget,
-  resolveWorldDataSchema,
+  resolvePluginSchema,
   validateWorldDataSchemaValue,
   type WorldDataSchemaRef,
 } from "../schema-registry.js";
-import type { ParsedWorldDataTarget } from "../target-uri.js";
+import type { ResolvedWorldDataTarget } from "../contract-targets.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
 import { isRecord } from "./utils.js";
 import type {
@@ -73,16 +72,12 @@ export async function validatePluginDataValue(options: {
     options.schema.pluginId === options.target.pluginId &&
     options.schema.namespace === options.target.namespace
       ? options.schema
-      : await resolveWorldDataSchema({
-          source: {
-            ...options.source,
-            descriptor: {
-              ...options.source.descriptor,
-              schema: pluginSchemaUriForTarget(options.target),
-            },
-          },
-          deps: options.deps,
-        });
+      : await resolvePluginSchema(
+          pluginSchemaUriForTarget(options.target),
+          options.target.pluginId,
+          options.target.namespace,
+          options.deps,
+        );
   if (!schema || "level" in schema) return schema;
   return validateWorldDataSchemaValue({
     schema,
@@ -90,28 +85,6 @@ export async function validatePluginDataValue(options: {
     value: options.value,
     label: `worldData value for plugin "${options.target.pluginId}" namespace "${options.target.namespace}"`,
   });
-}
-
-export function pluginSchemaTargetCompatibilityDiagnostic(
-  source: OrderedWorldDataSource,
-  target: ParsedWorldDataTarget,
-): WorldDataDiagnostic | null {
-  const schemaUri = source.descriptor.schema;
-  if (!schemaUri || target.kind !== "plugin-data") return null;
-  const pluginSchema = parsePluginSchemaUri(schemaUri);
-  if (!pluginSchema) return null;
-  if (
-    pluginSchema.pluginId === target.pluginId &&
-    pluginSchema.namespace === target.namespace
-  ) {
-    return null;
-  }
-  return {
-    level: "error",
-    sourceId: source.id,
-    schema: schemaUri,
-    message: `worldData schema "${schemaUri}" is incompatible with target "${source.descriptor.to}"; plugin schema namespace must match the plugin target`,
-  };
 }
 
 function valuesForSourceSchemaValidation(
@@ -132,13 +105,13 @@ function valuesForSourceSchemaValidation(
 export function validateSourceSchemaValues(options: {
   readonly source: OrderedWorldDataSource;
   readonly schema: WorldDataSchemaRef | null;
-  readonly target: ParsedWorldDataTarget;
+  readonly target?: ResolvedWorldDataTarget;
   readonly value: unknown;
 }): readonly WorldDataDiagnostic[] {
   if (!options.schema) return [];
   if (
     options.schema.kind === "plugin" &&
-    options.target.kind === "plugin-data" &&
+    options.target?.kind === "plugin-data" &&
     options.schema.pluginId === options.target.pluginId &&
     options.schema.namespace === options.target.namespace
   ) {

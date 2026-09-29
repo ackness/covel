@@ -404,7 +404,8 @@ describe("runAgentToolLoop core", () => {
         yield { type: "text-delta", textDelta: "upon" };
         yield {
           type: "done",
-          response: prose("Once upon"),
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
         };
       } as never,
     };
@@ -429,6 +430,41 @@ describe("runAgentToolLoop core", () => {
     });
     expect(result.finalContent).toBe("Once upon");
   });
+
+  it.each(["error", "abort"])(
+    "rejects %s from the malformed-tool-arguments fallback",
+    async (failure) => {
+      const controller = new AbortController();
+      const { emitter, types } = recordingEmitter();
+      let calls = 0;
+      const llm: LLMAdapter = {
+        generate: async () => {
+          if (calls++ === 0)
+            throw new Error(
+              'The "function.arguments" parameter must be in JSON format.',
+            );
+          if (failure === "abort") controller.abort();
+          return {
+            ...prose("invalid fallback"),
+            finishReason: failure === "error" ? "error" : "stop",
+          };
+        },
+      };
+      await expect(
+        run({
+          llm,
+          deps: { emitter, turnControl: { signal: controller.signal } },
+        }),
+      ).rejects.toThrow();
+      expect(calls).toBe(2);
+      expect(types.filter((type) => type.startsWith("llm."))).toEqual([
+        "llm.calling",
+        "llm.responded",
+        "llm.calling",
+        "llm.responded",
+      ]);
+    },
+  );
 
   it("does NOT stream for plugin-output runtimes even when onDelta is wired", async () => {
     const streamSpy = vi.fn();
@@ -508,7 +544,7 @@ describe("runAgentToolLoop core", () => {
     expect(generateSpy).not.toHaveBeenCalled();
   });
 
-  it("abort mid-stream: bypasses the salvage path — no partial narrative survives", async () => {
+  it("abort mid-stream: bypasses fallback — no partial narrative survives", async () => {
     const controller = new AbortController();
     const { emitter, types } = recordingEmitter();
     const llm: LLMAdapter = {
@@ -534,7 +570,7 @@ describe("runAgentToolLoop core", () => {
         },
       }),
     ).rejects.toThrow(TurnAbortedError);
-    // Even though the abort short-circuits salvage/retry, the `llm.calling`
+    // Even though the abort short-circuits fallback/retry, the `llm.calling`
     // must still be paired with an `llm.responded` (error) so trace-viewer
     // pairing does not break.
     const llmEvents = types.filter((t) => t.startsWith("llm."));

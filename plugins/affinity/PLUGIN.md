@@ -1,69 +1,86 @@
 ---
-name: affinity
+id: affinity
+kind: plugin
 displayName:
   zh: 好感度
   en: Affinity
 description:
   zh: 追踪玩家与 NPC 之间的数值好感度，右栏展示分数、档位与最近变化。
-  en: Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes in the right panel.
-pluginType: plugin
-stage: post-turn
-outputKind: system
-model: plugin
-timeoutMs: 120000
-maxRetries: 0
-callTimeoutMs: 60000
-requireExplicitCompletion: true
-completeAfterTools: [update-affinity]
+  en: >-
+    Tracks numeric player-to-NPC affinity, with scores, tiers, and recent
+    changes in the right panel.
 tags:
-  - role:affinity
-  - data:characters
-  - cost:llm
-  - ui:right-panel
-  - ui:message-block
-trigger:
-  type: auto
-inputs:
-  worldIR:
-    from:
-      capability: world-ir-provider
-      cardinality: one
-    accepts: covel://world/ir/v1
-    required: true
-input:
-  inject:
-    - kind: plugin-data
-      namespace: affinity
-      as: "<existing-affinity>"
-      format: summary
-      maxEntries: 50
-relations:
-  requires:
-    - world-ir
+  - "data:characters"
+  - "cost:llm"
+  - "ui:right-panel"
+  - "ui:message-block"
+requires:
+  - world-ir-provider@1
 entry: ./server/index.js
-tools:
-  plugin:
-    - update-affinity
-dataSchemas:
-  affinity:
-    schemaVersion: 1
-    acceptsWorldData: true
+contracts:
+  character.affinity@1:
     schema: ./schemas/affinity.schema.json
-    description: Importable initial affinity records for key NPCs ({id, name, score, notes?}).
-ui:
-  right:
-    - ./ui/affinity-panel.json
-  message:
-    - ./ui/affinity-toast.json
-postHistory:
-  role: system
-  content: |
-    本 runtime 工作流：
-    - 已有好感记录见 `<existing-affinity>` 块（由框架在 prompt 构建时自动注入）
-    - 本轮叙事中玩家与 NPC 有明确互动且好感应当变化时，调用一次 `update-affinity`（可批量，至多 5 条）
-    - 本轮没有值得记录的变化时，不调用任何业务工具
-    - `update-affinity` 成功后框架自动结束，不要再调用 `runtime-done`
-    - 决定不写入时，调用一次 `runtime-done` 结束
+contributes:
+  data:
+    affinity:
+      schema: ./schemas/affinity.schema.json
+      description: >-
+        Importable initial affinity records for key NPCs ({id, name, score,
+        notes?}).
+      version: 1
+      accepts:
+        - character.affinity@1
+  ui:
+    right:
+      - ./ui/affinity-panel.json
+    message:
+      - ./ui/affinity-toast.json
+  prompt:
+    - id: post-history
+      content: |
+        本 runtime 工作流：
+        - 已有好感记录见 `<existing-affinity>` 块（由框架在 prompt 构建时自动注入）
+        - 本轮叙事中玩家与 NPC 有明确互动且好感应当变化时，调用一次 `update-affinity`（可批量，至多 5 条）
+        - 本轮没有值得记录的变化时，不调用任何业务工具
+        - `update-affinity` 成功后框架自动结束，不要再调用 `runtime-done`
+        - 决定不写入时，调用一次 `runtime-done` 结束
+      position: post-history
+      role: system
+  tools:
+    - update-affinity
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+  io:
+    inputs:
+      worldIR:
+        from:
+          contract: world-ir-provider@1
+          cardinality: one
+        accepts: "contract:world-ir@1"
+        required: true
+    selfData:
+      - namespace: affinity
+        as: <existing-affinity>
+        format: summary
+        maxEntries: 50
+    visibility: system
+  agent:
+    model: plugin
+    tools:
+      plugin:
+        - update-affinity
+    loop:
+      timeoutMs: 120000
+      callTimeoutMs: 60000
+      maxRetries: 0
+      completion:
+        require: explicit
+        afterTools:
+          - update-affinity
 ---
 
 你是好感度系统（Affinity Tracker）。你的任务是读取本轮叙事，判断玩家与哪些 NPC 之间发生了**明确互动**，并用 `update-affinity` 记录数值好感变化。**宁可少记，不可乱记** —— 很多回合根本没有值得记录的变化。
@@ -80,7 +97,7 @@ postHistory:
 
 ### 本轮 WorldIR
 
-本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。从 `events[type=interaction]`、关系变化和相关 entities 中判断玩家与 NPC 的明确互动；attributes 与 description 是本轮变化的证据。没有明确证据就不更新。
+本轮叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。从 `events[type=interaction]`、关系变化和相关 entities 中判断玩家与 NPC 的明确互动；attributes 与 description 是本轮变化的证据。没有明确证据就不更新。
 
 ### 已有好感记录
 

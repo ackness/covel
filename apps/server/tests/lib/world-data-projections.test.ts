@@ -1,4 +1,4 @@
-import { access, mkdtemp, writeFile } from "node:fs/promises";
+import { access, mkdtemp, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -497,7 +497,7 @@ describe("world data projections", () => {
       descriptor: {
         kind: "json",
         path: "facts.json",
-        to: "plugin:facts/facts",
+        to: "contract:facts.facts@1",
         key: "id",
       },
       order: 0,
@@ -557,12 +557,19 @@ describe("world data projections", () => {
       },
       namespaces: ["facts"],
     });
+    const inactive = await makePlugin({
+      root: pluginsRoot,
+      id: "inactive",
+      handlers: {},
+      projections: {},
+      namespaces: ["entries"],
+    });
     const baseSource = await makeSource(VALID_WORLD_IR);
     const source: OrderedWorldDataSource = {
       ...baseSource,
       descriptor: {
         ...baseSource.descriptor,
-        to: "plugin:inactive/entries",
+        to: "contract:inactive.entries@1",
       },
     };
 
@@ -573,7 +580,7 @@ describe("world data projections", () => {
       now: NOW,
       deps: {
         activePlugins: ["facts"],
-        registry: registry([plugin]),
+        registry: registry([plugin, inactive]),
       },
     });
 
@@ -581,8 +588,62 @@ describe("world data projections", () => {
       expect.objectContaining({ pluginId: "facts", key: "fanout" }),
     ]);
     expect(plan.diagnostics.map((item) => item.message).join("\n")).toContain(
-      "primary write",
+      "No active receiver",
     );
+  });
+
+  it("executes each projection once while a contract fans out to two receivers", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "covel-contract-fanout-"));
+    const calls = path.join(root, "calls.txt");
+    await writeFile(calls, "");
+    const first = await makePlugin({
+      root,
+      id: "first",
+      namespaces: ["records"],
+      contract: "shared.records@1",
+      handlers: {
+        "main.mjs": `import { appendFile } from "node:fs/promises"; export default async () => { await appendFile(${JSON.stringify(calls)}, "call\\n"); return { records: { id: "projected" } }; };`,
+      },
+      projections: {
+        main: {
+          from: "contract:shared.records@1",
+          handler: "./handlers/main.mjs",
+          outputs: { records: { namespace: "records", key: "id" } },
+        },
+      },
+    });
+    const second = await makePlugin({
+      root,
+      id: "second",
+      namespaces: ["records"],
+      contract: "shared.records@1",
+      handlers: {},
+      projections: {},
+    });
+    const source = await makeSource({ id: "seed" });
+    const plan = await buildImportPlan({
+      sessionId: "sess-1",
+      worldId: "world-1",
+      sources: [
+        {
+          ...source,
+          descriptor: {
+            ...source.descriptor,
+            schema: "contract:shared.records@1",
+            to: "contract:shared.records@1",
+            key: "id",
+          },
+        },
+      ],
+      now: NOW,
+      deps: {
+        activePlugins: ["first", "second"],
+        registry: registry([first, second]),
+      },
+    });
+    expect(plan.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+    expect(plan.writes).toHaveLength(3);
+    expect(await readFile(calls, "utf8")).toBe("call\n");
   });
 
   it("rejects a strict WorldIR schema violation before loading handlers", async () => {
@@ -619,7 +680,7 @@ describe("world data projections", () => {
 
     expect(plan.writes).toEqual([]);
     expect(plan.diagnostics.map((item) => item.message).join("\n")).toContain(
-      "invalid WorldIRV1",
+      "failed schema validation",
     );
     expect(
       plan.diagnostics.map((item) => item.message).join("\n"),

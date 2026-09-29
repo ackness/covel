@@ -17,6 +17,8 @@ import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
 
 /** Deterministic handlers use the same governed tools as agent runtimes. */
 export function createRuntimeTools(options: {
+  world?: import("@covel/shared").WorldModelView;
+  upstreamProposals?: readonly import("@covel/shared").Proposal[];
   manifest: RuntimeManifest;
   context: HandlerHelperContext;
   deps: TurnExecutorDeps;
@@ -75,6 +77,8 @@ export function createRuntimeTools(options: {
             signal,
             authorizedToolNames,
             pendingProposals: buffer,
+            upstreamProposals: options.upstreamProposals,
+            world: options.world,
             inputSlots: options.inputs,
             emittedEventTopics: events.map((event) => event.topic),
             emitter: deps.emitter,

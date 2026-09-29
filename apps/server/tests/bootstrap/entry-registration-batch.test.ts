@@ -22,7 +22,9 @@ function fixture() {
     rpcRegistry: createPluginRpcRegistry(),
     isCommunityHookApproved: () => true,
   };
-  const api = buildEntryApi(params, "batch-fixture", batch);
+  const api = buildEntryApi(params, "batch-fixture", batch, () => {
+    throw new Error("No extension declarations");
+  });
   return { batch, params, api };
 }
 

@@ -1,3 +1,4 @@
+import { loadLastPlayerInput } from "../turn-executor/session-state.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { DEFAULT_MAX_TOOL_STEPS } from "../agent-loop/agent-loop-policy.js";
 import type {
@@ -14,6 +15,7 @@ import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
+import { createAgentSchemaGate } from "../agent-loop/runtime-output-validator.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
 import { completionContractError } from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
@@ -117,6 +119,7 @@ async function executeResumedRuntime(
     finalizeRuntimeResult(deps, manifest, input, result, {
       lastTarget,
       deltaCount,
+      outputContractSchema: loaded?.outputContractSchema,
     });
 
   const preRuntime = await runRuntimePreHook(
@@ -161,7 +164,12 @@ async function executeResumedRuntime(
     // conversations. Feed resume data through the explicit handler context and
     // reuse the normal function finalizer so output normalization, hooks and
     // buffered proposals follow the same path as an ordinary invocation.
+    const lastPlayerInput = await loadLastPlayerInput(
+      deps.store,
+      input.sessionId,
+    );
     return executeFunctionRuntime({
+      lastPlayerInput,
       manifest,
       input,
       loaded,
@@ -317,9 +325,19 @@ async function executeResumedRuntime(
     finalContent,
     ...(finalToolOutput ? { preferredOutput: finalToolOutput } : {}),
     executedToolCalls,
+    priorToolCalls: pendingContinuation.toolCallsSoFar as ToolCallRecord[],
     failedToolCalls,
     pendingProposals,
     emittedEvents,
+    dedupeInteractions: true,
+    schemaGate: createAgentSchemaGate({
+      manifest,
+      input,
+      runId,
+      startTime,
+      collectedToolCalls,
+      outputSchema: loaded.outputSchema,
+    }),
   });
   if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
     return finalizeWithPostRuntime({
@@ -343,11 +361,8 @@ async function executeResumedRuntime(
     });
   }
   if (finalized.kind === "short-circuit") {
-    // Unreachable: resume passes no schemaGate. Defensive only.
     return finalizeWithPostRuntime(finalized.result);
   }
-  const output = finalized.output;
-
   // The runtime NO LONGER resolves the suspension or appends the
   // assistant turn message here. Those writes belong to the commit-owning
   // caller (apps/server resume route), which folds them into the SAME
@@ -363,7 +378,9 @@ async function executeResumedRuntime(
     runId,
     turnId: suspension.turnId,
     status: "success",
-    output,
+    output: finalized.output,
+    ...(finalized.effects ? { effects: finalized.effects } : {}),
+    ...(finalized.completion ? { completion: finalized.completion } : {}),
     toolCalls: collectedToolCalls,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),

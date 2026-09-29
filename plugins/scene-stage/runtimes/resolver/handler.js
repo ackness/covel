@@ -1,4 +1,5 @@
 import { withPendingProposals } from "@covel/tools";
+import { optionalString } from "@covel/plugin-handlers-utils";
 import { createHash } from "node:crypto";
 import {
   GENERATED_NS,
@@ -88,8 +89,10 @@ export default async function handler(ctx) {
     turnId: ctx.turnId,
   });
 
-  // A repeated scene.set for the same scene+variant is always a no-op,
-  // including while generation is pending. Background followers execute
+  // A repeated scene.set for the same scene+variant and source is a no-op,
+  // including while generation is pending. A source change (none -> pending
+  // after configuring an image slot, or pending -> none after removing it)
+  // must update the stage. Background followers execute
   // outside the cross-process session lock, so re-emitting here can enqueue
   // the same billed request on two pods before either one commits its cache.
   // Failed background jobs retain their triggerEvent and are retried through
@@ -98,7 +101,8 @@ export default async function handler(ctx) {
     previous &&
     typeof previous === "object" &&
     previous.sceneId === stage.sceneId &&
-    previous.variant === stage.variant;
+    previous.variant === stage.variant &&
+    previous.source === stage.source;
   if (isNoOp) {
     return {
       outcome: "success",
@@ -122,9 +126,8 @@ export default async function handler(ctx) {
   // this keeps the night art aligned with the day subject).
   const effectiveHint = visualHint ?? candidate.visualHint;
   const proposal = makeStageProposal(ctx, stage);
-  // Mixing split: `stage` is the business value, the generate-requested event
-  // is a domain effect. The kernel projects effects.events back to the legacy
-  // top-level `events` key that turn-event-chain / normalizeOutput read.
+  // `stage` is the business value; the generate-requested event is a domain
+  // effect consumed by the event chain after the runtime commits.
   const envelope =
     candidate.source === "pending" || needsVariantBackfill
       ? {
@@ -182,7 +185,9 @@ function isGenerationGateOpen(ctx, generatedRows) {
   const maxGenerated = resolveMaxGenerated(
     ctx.userSettings?.maxGeneratedScenes,
   );
-  return autoGenerate && generatedRows.length < maxGenerated;
+  if (!autoGenerate || generatedRows.length >= maxGenerated) return false;
+  const presetId = optionalString(ctx.userSettings?.modelPresetId) ?? "image";
+  return ctx.images ? ctx.images.isAvailable(presetId) : false;
 }
 
 /**

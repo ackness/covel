@@ -15,12 +15,14 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
   applyChanges,
+  getPluginNamespacesSnapshot,
   getPluginNamespaceSnapshot,
   loadPluginData,
   resetPluginData,
   replacePluginDataForSession,
   setActiveSession,
   usePluginData,
+  usePluginNamespaces,
   usePluginNamespace,
   __clearAllPluginDataForTest,
 } from "../plugin-data-store.js";
@@ -139,6 +141,33 @@ describe("plugin-data-store — sessionId-scoped isolation", () => {
 });
 
 describe("plugin-data-store — React hook integration", () => {
+  it("keeps the owner snapshot stable when another plugin writes", () => {
+    setActiveSession("session-a");
+    const { result } = renderHook(() => usePluginNamespaces("owner"));
+    const empty = result.current;
+    expect(getPluginNamespacesSnapshot("owner")).toBe(empty);
+    act(() => {
+      applyChanges("other", [
+        { namespace: "private", key: "x", value: 1, operation: "set" },
+      ]);
+    });
+    expect(result.current).toBe(empty);
+    act(() => {
+      applyChanges("owner", [
+        {
+          namespace: "nodes",
+          key: "a",
+          value: { name: "A" },
+          operation: "set",
+        },
+      ]);
+    });
+    expect(result.current).not.toBe(empty);
+    expect(result.current.nodes).toEqual({ a: { name: "A" } });
+    act(() => setActiveSession("session-b"));
+    expect(result.current).toBe(empty);
+  });
+
   it("usePluginData re-renders when the active session changes", () => {
     setActiveSession("session-a");
     applyChanges("codex", [
@@ -222,4 +251,21 @@ it("rejects a late plugin replacement or deletion for another active session", (
   expect(getPluginNamespaceSnapshot("provider", "message")).toEqual({
     value: "a",
   });
+});
+
+it("treats inherited plugin and namespace names as missing until explicitly loaded", () => {
+  setActiveSession("session-a");
+  const empty = getPluginNamespacesSnapshot("missing");
+  expect(getPluginNamespacesSnapshot("constructor")).toBe(empty);
+  expect(getPluginNamespaceSnapshot("constructor", "constructor")).toEqual({});
+  loadPluginData("constructor", "constructor", [
+    { key: "value", value: "owned" },
+  ]);
+  expect(getPluginNamespacesSnapshot("constructor")).toEqual({
+    constructor: { value: "owned" },
+  });
+  expect(getPluginNamespaceSnapshot("constructor", "constructor")).toEqual({
+    value: "owned",
+  });
+  expect(getPluginNamespaceSnapshot("constructor", "toString")).toEqual({});
 });

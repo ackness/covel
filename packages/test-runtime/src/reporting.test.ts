@@ -11,7 +11,8 @@ function runtimeResult(patch: Partial<RuntimeResult> = {}): RuntimeResult {
     turnId: "turn-1",
     status: "success",
     durationMs: 1,
-    output: {
+    output: {},
+    effects: {
       events: [{ topic: "asset.ready" }],
       assetGenerations: [{ modality: "image", ref: "media-1" }],
     },
@@ -51,6 +52,34 @@ describe("reporting helpers", () => {
       { status: "passed", message: "log:rendered" },
       { status: "passed", message: "pluginData:images" },
       { status: "passed", message: "assetGenerations:image" },
+    ]);
+  });
+
+  it("does not count business output fields as emitted effects", () => {
+    const assertions = evaluateExpectations(
+      {
+        events: ["asset.ready"],
+        assetGenerations: [{ modality: "image" }],
+      },
+      {
+        runtimeId: "plugin/main",
+        runtimeResults: [
+          runtimeResult({
+            effects: undefined,
+            output: {
+              events: [{ topic: "asset.ready" }],
+              assetGenerations: [{ modality: "image", ref: "media-1" }],
+            },
+          }),
+        ],
+        pluginData: {},
+        logs: [],
+      },
+    );
+
+    expect(assertions).toEqual([
+      { status: "failed", message: "event:asset.ready" },
+      { status: "failed", message: "assetGenerations:image" },
     ]);
   });
 

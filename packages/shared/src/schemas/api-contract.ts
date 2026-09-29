@@ -13,7 +13,6 @@ import type {
 } from "../types/plugin-api.js";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
 import {
-  pluginRelationsSchema,
   pluginUserSettingSpecSchema,
   stageSchema,
   triggerConfigSchema,
@@ -227,6 +226,8 @@ const effectiveTurnCompletionSchema = z.discriminatedUnion("mode", [
   z
     .object({
       mode: z.literal("detached"),
+      settle: z.literal("before-next-execution").optional(),
+      maxSettleWaitMs: z.number().int().positive().optional(),
       maxQueueMs: z.number().int().positive().optional(),
       maxExecutionMs: z.number().int().positive().optional(),
       overlap: z.literal("serial"),
@@ -245,9 +246,8 @@ const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
     turnCompletion: effectiveTurnCompletionSchema,
     model: z.string().optional(),
     outputKind: z.enum(["story", "plugin", "system"]),
-    capabilities: z.array(z.string()),
+    outputContract: z.string().optional(),
     tags: z.array(z.string()),
-    relations: pluginRelationsSchema.optional(),
   })
   .strict();
 
@@ -257,15 +257,43 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
     id: z.string().min(1),
     displayName: i18nTextSchema,
     description: i18nTextSchema,
-    pluginType: z.enum(["core-plugin", "plugin"]),
+    kind: z.enum(["core", "plugin"]),
     source: z.enum(["builtin", "community"]),
-    status: z.enum(["discovered", "registered", "active", "disabled", "error"]),
+    hostState: z.enum(["discovered", "installed", "loaded", "error"]),
     error: z.string().optional(),
+    registrationError: z
+      .object({
+        code: z.literal("plugin_registration_invalid"),
+        registration: z.string(),
+      })
+      .strict()
+      .optional(),
     runtimeCount: z.number().int().nonnegative(),
     version: z.string().optional(),
-    capabilities: z.array(z.string()),
+    provides: z.array(
+      z.union([
+        z.string(),
+        z
+          .object({ contract: z.string(), default: z.boolean().optional() })
+          .strict(),
+      ]),
+    ),
+    requires: z.array(z.string()),
+    optional: z.array(z.string()),
+    conflicts: z.array(z.string()),
+    extensions: z.array(
+      z
+        .object({
+          point: z.string(),
+          id: z.string(),
+          order: z.number().optional(),
+          slot: z.string().optional(),
+          watch: z.array(z.string()).optional(),
+          preview: z.array(z.string()).optional(),
+        })
+        .strict(),
+    ),
     tags: z.array(z.string()),
-    relations: pluginRelationsSchema.optional(),
     runtimes: z.array(pluginRuntimeSummarySchema),
     tools: z.array(
       z
@@ -280,14 +308,13 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
   })
   .strict();
 
-const pluginPackSchema = z
+export const pluginPackSchema = z
   .object({
     id: z.string().min(1),
     label: i18nTextSchema,
     description: i18nTextSchema.optional(),
-    pluginIds: z.array(z.string()),
-    optionalPluginIds: z.array(z.string()),
-    excludedPluginIds: z.array(z.string()),
+    requested: z.array(z.string()),
+    recommended: z.array(z.string()),
     tags: z.array(z.string()),
     reason: i18nTextSchema.optional(),
     source: z.enum(["builtin", "world"]),
@@ -304,10 +331,8 @@ export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
         presetId: z.string().optional(),
         preferredTags: z.array(z.string()),
         avoidedTags: z.array(z.string()),
-        requiredCapabilities: z.array(z.string()),
-        requiredPluginIds: z.array(z.string()),
-        recommendedPluginIds: z.array(z.string()),
-        excludedPluginIds: z.array(z.string()),
+        requested: z.array(z.string()),
+        recommended: z.array(z.string()),
       })
       .strict(),
     selectedPackId: z.string().optional(),
@@ -394,3 +419,14 @@ export const worldWireRecordSchema = z
     updatedAt: z.string().optional(),
   })
   .strict();
+
+/** Session creation preserves explicit opt-outs independently of resolved activation. */
+export const createSessionRequestSchema = z.strictObject({
+  id: z.string().optional(),
+  worldId: z.string().optional(),
+  plugins: z.array(z.string()).optional(),
+  excludedPlugins: z.array(z.string()).optional(),
+  locale: z.string().optional(),
+  loreOverride: z.string().optional(),
+});
+export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;

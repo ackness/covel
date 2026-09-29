@@ -10,6 +10,7 @@ import { pluginRoutes } from "../../src/routes/api/plugins.js";
 import { frameworkRoutes } from "../../src/routes/api/framework.js";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type PluginRegistry,
   type PluginSummary,
   type PluginRegistryEntry,
@@ -48,6 +49,7 @@ function makeParsedManifest(
   },
 ) {
   return {
+    runtime: { type: "agent" as const },
     manifest: {
       name: manifest.name,
       description: manifest.description ?? `${manifest.name} runtime`,
@@ -147,7 +149,7 @@ describe("Plugin Routes", () => {
       const body = await res.json();
       expect(body.id).toBe("my-plugin");
       expect(body.displayName).toBe("My Plugin");
-      expect(body.status).toBe("registered");
+      expect(body.hostState).toBe("installed");
     });
 
     it("should return 404 when plugin not found", async () => {
@@ -162,7 +164,7 @@ describe("Plugin Routes", () => {
     it("includes manifest-derived contracts in the plugin resource", async () => {
       const parsed = makeParsedManifest({
         name: "my-plugin/runner",
-        capabilities: ["image-generation"],
+        outputContract: "image-generation@1",
         runtimeType: "function",
         execution: "background",
         tools: {
@@ -183,10 +185,10 @@ describe("Plugin Routes", () => {
         inputs: {
           worldIR: {
             from: {
-              capability: "world-ir-provider",
+              capability: "world-ir-provider@1",
               cardinality: "one",
             },
-            accepts: "covel://world/ir/v1",
+            accepts: "contract:world-ir@1",
             required: true,
           },
         },
@@ -200,7 +202,7 @@ describe("Plugin Routes", () => {
         },
         worldProjections: {
           "images-from-world-ir": {
-            from: "covel://world/ir/v1",
+            from: "contract:world-ir@1",
             handler: "./server/project-world-ir.js",
             outputs: {
               images: { namespace: "images", key: "id" },
@@ -213,7 +215,19 @@ describe("Plugin Routes", () => {
         makeEntry({
           id: "my-plugin",
           summary: makeSummary({ id: "my-plugin", name: "My Plugin" }),
-          manifest: parsed,
+          packageManifest: {
+            ...parsePluginMd(
+              `---\nid: my-plugin\nkind: plugin\ndescription: My Plugin\nprovides: [image-generation@1]\n---\n`,
+              "my-plugin/PLUGIN.md",
+            ),
+            manifest: {
+              ...parsed.manifest,
+              name: "my-plugin",
+              pluginId: "my-plugin",
+              pluginType: "plugin",
+            },
+          },
+
           manifests: [parsed],
         }),
       );
@@ -223,7 +237,7 @@ describe("Plugin Routes", () => {
       const body = await res.json();
       expect(body).toMatchObject({
         id: "my-plugin",
-        capabilities: ["image-generation"],
+        provides: ["image-generation@1"],
         declaredPluginDataNamespaces: ["images"],
         dataSchemas: {
           images: {
@@ -234,7 +248,7 @@ describe("Plugin Routes", () => {
         },
         worldProjections: {
           "images-from-world-ir": {
-            from: "covel://world/ir/v1",
+            from: "contract:world-ir@1",
             outputs: {
               images: { namespace: "images", key: "id" },
             },
@@ -251,10 +265,10 @@ describe("Plugin Routes", () => {
         inputs: {
           worldIR: {
             from: {
-              capability: "world-ir-provider",
+              capability: "world-ir-provider@1",
               cardinality: "one",
             },
-            accepts: "covel://world/ir/v1",
+            accepts: "contract:world-ir@1",
             required: true,
           },
         },
@@ -292,25 +306,13 @@ describe("Plugin Routes", () => {
         "function-output:pluginData[]",
       );
       expect(body.framework.worldData.targetUris).toContain(
-        "plugin:<pluginId>/<namespace>",
+        "contract:<contractId>",
       );
       expect(body.framework.worldData.effects).toContain("projections");
       expect(body.framework.worldData.schemaUris).toContain(
-        "covel://world/ir/v1",
+        "contract:<contractId>",
       );
-      expect(
-        body.framework.worldData.schemas["covel://world/ir/v1"],
-      ).toMatchObject({
-        $id: "covel://world/ir/v1",
-        type: "object",
-        required: [
-          "schemaVersion",
-          "entities",
-          "relations",
-          "events",
-          "statements",
-        ],
-      });
+      expect(body.framework.worldData.schemas).toEqual({});
       expect(body.framework.proposals.pluginDataTypes).toEqual([
         "plugin.data",
         "plugin.data.batch",

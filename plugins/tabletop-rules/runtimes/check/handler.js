@@ -30,7 +30,7 @@ export default async function (ctx) {
   const sourceTurn = ctx.execution?.sourceTurnId ?? ctx.turnId;
   const previous = await ctx.pluginData.get("turn-checks", sourceTurn);
   if (previous) return settled(previous);
-  const submissions = await ctx.store.listPlayerInputs(ctx.sessionId);
+  const submissions = await ctx.store.listPlayerInputs();
   const submitted = submissions.findLast((input) =>
     input.formId.startsWith(`${ctx.pluginId}-check-`),
   );

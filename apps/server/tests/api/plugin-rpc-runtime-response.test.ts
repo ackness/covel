@@ -11,6 +11,97 @@ const COMMITTED = {
 } as const;
 
 describe("plugin-rpc runtime response helpers", () => {
+  it("completes intentional handler skips without losing the skipped runtime status", () => {
+    const output = {
+      outcome: "skipped",
+      skipReason: "optional model unavailable",
+    };
+    expect(
+      deriveFollowerRuntimeJobResult({
+        followerResult: {
+          runtimeId: "optional/work",
+          pluginId: "optional",
+          status: "skipped",
+          durationMs: 4,
+          output,
+        },
+        turnDurationMs: 8,
+        commit: COMMITTED,
+      }),
+    ).toEqual({
+      jobStatus: "done",
+      runtimeStatus: "skipped",
+      durationMs: 4,
+      output,
+    });
+  });
+
+  it.each([
+    {
+      output: {
+        skipped: true,
+        skippedBy: "framework:needs",
+        reason: "upstream not success",
+      },
+    },
+    {
+      output: {
+        outcome: "skipped",
+        skipReason: "optional",
+        error: "provider failed",
+      },
+    },
+    {
+      output: { outcome: "skipped", skipReason: "optional" },
+      error: "execution failed",
+    },
+  ])("keeps gated or erroneous skips failed: %j", ({ output, error }) => {
+    expect(
+      deriveFollowerRuntimeJobResult({
+        followerResult: {
+          runtimeId: "optional/work",
+          pluginId: "optional",
+          status: "skipped",
+          durationMs: 4,
+          output,
+          error,
+        },
+        turnDurationMs: 8,
+        commit: COMMITTED,
+      }),
+    ).toMatchObject({ jobStatus: "failed", runtimeStatus: "failed" });
+  });
+
+  it("keeps commit failures authoritative even when the handler deliberately skipped", () => {
+    expect(
+      deriveFollowerRuntimeJobResult({
+        followerResult: {
+          runtimeId: "optional/work",
+          pluginId: "optional",
+          status: "skipped",
+          durationMs: 4,
+          output: { outcome: "skipped", skipReason: "optional" },
+        },
+        turnDurationMs: 8,
+        commit: { ...COMMITTED, committed: false, failedProposalCount: 1 },
+      }),
+    ).toMatchObject({
+      jobStatus: "failed",
+      runtimeStatus: "failed",
+      error: "1 proposal(s) failed to commit",
+    });
+  });
+
+  it("fails a missing follower result", () => {
+    expect(
+      deriveFollowerRuntimeJobResult({ turnDurationMs: 8, commit: COMMITTED }),
+    ).toMatchObject({
+      jobStatus: "failed",
+      runtimeStatus: "failed",
+      error: "deferred follower produced no result",
+    });
+  });
+
   it("marks background jobs failed when any runtime summary failed", () => {
     expect(
       deriveBackgroundJobCompletion({

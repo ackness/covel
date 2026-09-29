@@ -1,5 +1,9 @@
 import { useMemo, useReducer, type ReactNode } from "react";
-import { getDataService, getSessionWorkspace } from "@/services/data-service";
+import {
+  getDataService,
+  getSessionWorkspace,
+  getStorageMode,
+} from "@/services/data-service";
 import { useBuildSessionActions } from "./session-store/actions.js";
 import {
   SessionActionsContext,
@@ -80,6 +84,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     state.sessionPlugins,
   );
   useSessionSubscription({
+    storageMode: getStorageMode(),
     sessionId,
     dispatch,
     workspace,

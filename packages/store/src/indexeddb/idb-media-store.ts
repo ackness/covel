@@ -1,7 +1,10 @@
 import type { MediaStore } from "@covel/shared";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { filterAssetsByMetadata } from "../media-store/filter.js";
-import { finalizeMediaCleanupResult } from "../media-store/cleanup-result.js";
+import {
+  claimedMediaIds,
+  finalizeMediaCleanupResult,
+} from "../media-store/cleanup-result.js";
 import {
   cloneMeta,
   type IdbMediaAssetRecord,
@@ -102,16 +105,31 @@ export async function createIndexedDbMediaStore(
   }
 
   return {
-    async put(value, mime, meta) {
+    async put(value, mime, meta, initialRef) {
       const { blob, bytes } = await toBlobAndBytes(value, mime);
       const id = await sha256(bytes);
       // Keep the first-writer check and insert in one native transaction.
       // Readwrite transactions touching this store are serialized by IDB, so a
       // concurrent put of the same digest observes the committed first record
       // instead of overwriting its MIME/metadata.
-      const tx = db.transaction(STORE_ASSETS, "readwrite");
-      const existing = await tx.store.get(id);
+      const tx = db.transaction([STORE_ASSETS, STORE_REFS], "readwrite");
+      const assets = tx.objectStore(STORE_ASSETS);
+      const claim = async () => {
+        if (!initialRef) return;
+        const refs = tx.objectStore(STORE_REFS);
+        const key = refKey(id, initialRef.sessionId);
+        if (!(await refs.getKey(key)))
+          await refs.put({
+            key,
+            mediaId: id,
+            sessionId: initialRef.sessionId,
+            pluginId: initialRef.pluginId ?? null,
+            createdAt: new Date().toISOString(),
+          });
+      };
+      const existing = await assets.get(id);
       if (existing) {
+        await claim();
         await tx.done;
         return toMediaRef(existing);
       }
@@ -126,7 +144,8 @@ export async function createIndexedDbMediaStore(
         ownerPluginId: null,
         createdAt: new Date().toISOString(),
       };
-      await tx.store.put(record);
+      await assets.put(record);
+      await claim();
       await tx.done;
       return toMediaRef(record);
     },
@@ -273,7 +292,11 @@ export async function createIndexedDbMediaStore(
       );
       const { result, idsToDelete } = planMediaCleanup(
         assets,
-        protectedIds,
+        claimedMediaIds(
+          protectedIds,
+          assets,
+          (await db.getAll(STORE_REFS)).map(toRefRecord),
+        ),
         policy,
       );
 

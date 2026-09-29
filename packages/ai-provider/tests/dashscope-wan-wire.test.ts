@@ -186,7 +186,7 @@ describe("dashscope-wan wire", () => {
     expect(result.images[0]).toMatchObject({ kind: "url" });
   });
 
-  it("passes the same AbortSignal to submit and poll requests", async () => {
+  it("preserves caller cancellation when polling adds its deadline", async () => {
     const calls = stubFetchSequence([
       { json: { output: { task_id: "t1" } } },
       {
@@ -206,7 +206,11 @@ describe("dashscope-wan wire", () => {
       { pollIntervalMs: 1, timeoutMs: 5_000 },
     );
     expect(calls[0]!.init!.signal).toBe(controller.signal);
-    expect(calls[1]!.init!.signal).toBe(controller.signal);
+    const pollSignal = calls[1]!.init!.signal;
+    expect(pollSignal?.aborted).toBe(false);
+    controller.abort(new Error("synthetic cancellation"));
+    expect(pollSignal?.aborted).toBe(true);
+    expect(pollSignal?.reason).toBe(controller.signal.reason);
   });
 
   it("warns for unsupported background and clamps n to 1", async () => {

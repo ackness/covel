@@ -68,7 +68,7 @@ describe("core plugin manifest contract", () => {
     expect(schemaGen).toMatchObject({
       pluginType: "core-plugin",
       stage: "setup",
-      after: ["pregame"],
+      after: [{ capability: "session.opening@1" }],
       model: "plugin",
       guard: "../../guard.js",
       trigger: { type: "auto", maxTriggerCount: 1 },
@@ -92,24 +92,16 @@ describe("core plugin manifest contract", () => {
       requireToolUse: true,
       completeAfterTools: ["create-character-form"],
       maxRetries: 0,
-      // Turn-scoped needs carry both the intra-stage order and the same-turn
-      // gate; the explicit stage picks the band.
-      needs: ["pregame", "world-init/schema-gen"],
+      // Order one-time setup providers without requiring them on form submission.
+      after: [
+        { capability: "session.opening@1" },
+        { capability: "world-data-provider@1" },
+      ],
     });
-    expect(playerInit.input?.inject).toEqual([
-      {
-        kind: "runtime",
-        from: "pregame",
-        field: "narrativeOutput",
-        as: "<pregame-opening>",
-      },
-      {
-        kind: "runtime",
-        from: "world-init/schema-gen",
-        field: "worldSchema",
-        as: "<same-turn-world-schema>",
-      },
-    ]);
+    expect(playerInit.inputs?.["pregame-opening"]).toMatchObject({
+      from: { capability: "session.opening@1" },
+      select: "/narrativeOutput",
+    });
 
     // All three resolve to the setup stage. pregame / schema-gen still ride the
     // priority-band derivation (the loader forbids `stage: setup` on their
@@ -155,29 +147,23 @@ describe("core plugin manifest contract", () => {
       outputKind: "story",
       trigger: { type: "auto" },
     });
-    expect(narrator.input?.inject).toEqual([
-      {
-        kind: "runtime",
-        from: "npc-graph/rag-retriever",
-        field: "npcContext",
-        as: "npc-relationships",
+    expect(narrator.inputs).toMatchObject({
+      "npc-relationships": {
+        from: { capability: "graph-rag@1" },
+        select: "/npcContext",
       },
-      {
-        kind: "runtime",
-        from: "dice-check/roller",
-        field: "checkContext",
-        as: "<check-results>",
+      "check-results": {
+        from: { capability: "dice-check@1" },
+        select: "/checkContext",
       },
-    ]);
+    });
     expect(narrator.tools?.builtin).toEqual([
-      "world-dimension-get",
       "list-characters",
       "get-character",
       "memory-search",
       "emit-event",
     ]);
     expect(chatModeNarrator.tools?.builtin).toEqual([
-      "world-dimension-get",
       "list-characters",
       "get-character",
       "memory-search",
@@ -215,28 +201,26 @@ describe("core plugin manifest contract", () => {
     // Presentation and tracker runtimes that still need the prose remain
     // engine-agnostic raw narrative consumers.
     for (const downstream of rawDownstreams) {
-      expect(downstream.needs).toEqual([{ capability: "narrative-engine" }]);
-      for (const engine of ["narrator", "chat-mode-narrator"]) {
-        expect(downstream.input?.inject).toContainEqual({
-          kind: "runtime",
-          from: engine,
-          field: "narrativeOutput",
-          as: expect.any(String),
-        });
-      }
+      expect(downstream.needs).toEqual([{ capability: "narrative-engine@1" }]);
+      expect(Object.values(downstream.inputs ?? {})).toContainEqual(
+        expect.objectContaining({
+          from: expect.objectContaining({ capability: "narrative-engine@1" }),
+          select: "/narrativeOutput",
+        }),
+      );
     }
 
     // The shared extractor owns the only typed narrative-to-WorldIR
     // conversion. State plugins consume its same-turn typed output and no
     // longer duplicate raw narrator injections.
-    expect(worldIr.capabilities).toContain("world-ir-provider");
+    expect(worldIr.outputContract).toBe("world-ir-provider@1");
     expect(worldIr.inputs?.narrative).toMatchObject({
-      from: { capability: "narrative-engine", cardinality: "one" },
+      from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       required: true,
     });
     expect(worldIr.output).toEqual({
-      schema: "covel://world/ir/v1",
+      schema: "contract:world-ir@1",
       recordAs: "world-ir-v1",
     });
     expect(worldIr.tools?.plugin).toEqual(["submit-world-facts"]);
@@ -249,8 +233,8 @@ describe("core plugin manifest contract", () => {
     for (const downstream of structuredDownstreams) {
       expect(downstream.needs).toBeUndefined();
       expect(downstream.inputs?.worldIR).toMatchObject({
-        from: { capability: "world-ir-provider", cardinality: "one" },
-        accepts: "covel://world/ir/v1",
+        from: { capability: "world-ir-provider@1", cardinality: "one" },
+        accepts: "contract:world-ir@1",
         required: true,
       });
       expect(

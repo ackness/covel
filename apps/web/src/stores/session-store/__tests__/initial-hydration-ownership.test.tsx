@@ -522,6 +522,7 @@ it.each(["restore", "reconnect"])(
       await (first === "restore" ? restoring : recovering);
     });
     expect(stateRef.current.gameState).toEqual({
+      characterSchema: null,
       ...currentView.gameState,
       characters: [],
     });
@@ -533,6 +534,7 @@ it.each(["restore", "reconnect"])(
       await Promise.all([restoring, recovering]);
     });
     expect(stateRef.current.gameState).toEqual({
+      characterSchema: null,
       ...currentView.gameState,
       characters: [],
     });
@@ -557,7 +559,10 @@ it("accepts an empty authoritative initial view after committed state was delete
     });
     await restoring;
   });
-  expect(stateRef.current.gameState).toEqual({ characters: [] });
+  expect(stateRef.current.gameState).toEqual({
+    characterSchema: null,
+    characters: [],
+  });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
 });
 
@@ -668,8 +673,34 @@ it("does not rebuild deleted fields from cached patches after an authoritative e
     ]);
     await restoring;
   });
-  expect(stateRef.current.gameState).toEqual({ characters: [] });
+  expect(stateRef.current.gameState).toEqual({
+    characterSchema: null,
+    characters: [],
+  });
   expect(stateRef.current.statePatches).toHaveLength(1);
+});
+
+it("applies the committed character-schema wire payload through the real reducer", () => {
+  const { send, flush, stateRef } = setup(true);
+  const payload = {
+    schema: {
+      sessionId: "schema-session",
+      version: 2,
+      types: ["npc", "companion"],
+      attributes: [],
+      createdAt: "2026-09-27T00:00:00Z",
+      updatedAt: "2026-09-27T00:01:00Z",
+    },
+    pluginId: "schema-provider",
+    runtimeId: "schema-provider/update",
+  } satisfies Extract<
+    import("@covel/shared").CovelEvent,
+    { type: "character-schema.changed" }
+  >["payload"];
+  send("action", "character-schema.changed", payload);
+  flush();
+  expect(stateRef.current.gameState.characterSchema).toEqual(payload.schema);
+  expect(stateRef.current.hasGameStateSnapshot).toBe(false);
 });
 
 it("preserves independent character commits delivered before React publishes the next state ref", () => {

@@ -3,16 +3,16 @@
  * (dashscope-image-gen / openai-image-gen).
  *
  * The whole trunk is provider-agnostic: extract the prompt from the trigger
- * event (manualPayload fallback), pre-write a pending gallery record, call
- * the framework pipeline `ctx.images.generate()`, fan the returned
- * `MediaRef[]` into per-image gallery records + `assetGenerations[]`, and
- * land every error path as a visible `failed` card. Per-plugin differences
+ * event (manualPayload fallback), check the named model before writing a
+ * pending gallery record, call the framework pipeline `ctx.images.generate()`,
+ * fan the returned `MediaRef[]` into per-image gallery records and
+ * `assetGenerations[]`, and show failures after generation begins. Per-plugin differences
  * (event topic, default preset, extra prompt fields, userSettings → request
  * mapping) come in through {@link ImageGenerationPluginConfig}.
  */
 
 import { abortSignalWithTimeout, optionalString } from "./index.js";
-import type { HandlerResult, JsonValue } from "@covel/shared";
+import type { ImageGenerationResult, JsonValue } from "./types.js";
 
 /** The slice of FunctionHandlerContext this trunk reads. */
 export interface ImageGenerationHandlerContext {
@@ -22,6 +22,7 @@ export interface ImageGenerationHandlerContext {
   readonly userSettings?: unknown;
   readonly signal?: AbortSignal;
   readonly images?: {
+    isAvailable(presetId?: string): boolean;
     generate(request: Record<string, unknown>): Promise<{
       refs: ReadonlyArray<{ id: string; mime: string; size: number }>;
       warnings: readonly string[];
@@ -122,12 +123,8 @@ export function extractImagePrompt(
   return readPromptPayload(ctx.manualPayload, extraFields);
 }
 
-function imageRecordKey(
-  imageId: string,
-  refs: readonly unknown[],
-  idx: number,
-): string {
-  return refs.length === 1 ? imageId : `${imageId}-${idx + 1}`;
+function imageRecordKey(imageId: string, idx: number): string {
+  return idx === 0 ? imageId : `${imageId}-${idx + 1}`;
 }
 
 function errorMessage(err: unknown): string {
@@ -142,7 +139,7 @@ async function failureRecord(
   ctx: ImageGenerationHandlerContext,
   baseRecord: Record<string, JsonValue> & { imageId: string },
   message: string,
-): Promise<HandlerResult> {
+): Promise<ImageGenerationResult> {
   const record = {
     ...baseRecord,
     status: "failed",
@@ -179,17 +176,7 @@ async function failureRecord(
 export async function runImageGeneration(
   ctx: ImageGenerationHandlerContext,
   config: ImageGenerationPluginConfig,
-): Promise<HandlerResult> {
-  if (!ctx.images) {
-    return {
-      outcome: "failed",
-      error:
-        "ctx.images is unavailable. This plugin requires the framework image pipeline: " +
-        "an image-tagged slot in llm.toml plus a configured MediaStore. Upgrade " +
-        '@covel/server / @covel/runtime and add a [covel.<slot>] block with tag = "image".',
-    };
-  }
-
+): Promise<ImageGenerationResult> {
   const extracted = extractImagePrompt(ctx, config);
   if (!extracted) {
     await ctx.logger?.warn?.("no-prompt-found", {
@@ -205,6 +192,10 @@ export async function runImageGeneration(
   const plan = config.planRequest(settings, extracted);
   const { prompt } = plan;
   const { promptMode, extras } = extracted;
+
+  if (!ctx.images?.isAvailable(plan.presetId)) {
+    return { outcome: "skipped", skipReason: "image model unavailable" };
+  }
 
   const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAt = new Date().toISOString();
@@ -258,10 +249,10 @@ export async function runImageGeneration(
 
     const completedAt = new Date().toISOString();
     const imageRecords = refs.map((ref, idx) => ({
-      key: imageRecordKey(imageId, refs, idx),
+      key: imageRecordKey(imageId, idx),
       value: {
         ...baseRecord,
-        imageId: imageRecordKey(imageId, refs, idx),
+        imageId: imageRecordKey(imageId, idx),
         batchId: imageId,
         imageIndex: idx,
         imageCount: refs.length,

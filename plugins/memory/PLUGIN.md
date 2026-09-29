@@ -1,47 +1,66 @@
 ---
-name: memory
+id: memory
+kind: core
 displayName:
   zh: 故事记忆
   en: Story Memory
 description:
   zh: 展示故事记住的重点，包括剧情、场景、人物关系和主角状态。
-  en: Shows what the story remembers, including plot, scene, relationships, and hero status.
-pluginType: core-plugin
-outputKind: system
-capabilities:
-  - memory-panel
+  en: >-
+    Shows what the story remembers, including plot, scene, relationships, and
+    hero status.
 tags:
-  - role:memory
-  - cost:ui-only
-  - ui:right-panel
-ui:
-  right:
-    - ./ui/memory-panel.json
-memoryBlocks:
-  - label: story_state
-    displayName: { zh: 剧情状态, en: Story State }
-    icon: BookOpen
-    extractionHint:
-      zh: 主线剧情摘要、已揭示的秘密、未解决的悬念、已完成的关键事件。
-      en: Main plot summary, revealed secrets, unresolved threads, key completed events.
-  - label: character_relationships
-    displayName: { zh: 角色关系, en: Character Relationships }
-    icon: Users
-    extractionHint:
-      zh: 主角（玩家）与关键角色之间的羁绊：好感、信任、压力、承诺与态度变化，以及对玩家的重要互动。只记录与玩家相关的关系；NPC 之间的结构性关系由关系图谱（npc-graph）负责，不在此重复。
-      en: The player character's bonds with key characters — affection, trust, pressure, promises, attitude shifts, and interactions toward the player. Track only player-centric bonds; NPC↔NPC structural relationships are owned by the relationship graph (npc-graph) and are not duplicated here.
-  - label: scene
-    displayName: { zh: 当前场景, en: Current Scene }
-    icon: MapPin
-    extractionHint:
-      zh: 当前所在位置、氛围与环境描写要点。可记录晨昏氛围，不维护当前日期或时刻；以世界时间插件的结构化状态为准。
-      en: Current location, atmosphere, and salient environmental details. Record ambient light, not an authoritative date or clock; structured world time owns those values.
-  - label: player_profile
-    displayName: { zh: 玩家状态, en: Player Profile }
-    icon: User
-    extractionHint:
-      zh: 玩家角色的当前状态摘要：能力、所持之物、处境与当前目标。
-      en: "Player character status summary: abilities, possessions, situation, and current objectives."
+  - "cost:llm"
+  - "ui:right-panel"
+entry: ./server/index.js
+contributes:
+  extensions:
+    - point: prompt.segment@1
+      id: memory
+  ui:
+    right:
+      - ./ui/memory-panel.json
+  services:
+    - memory.block-definitions@1
+  data:
+    definitions:
+      version: 1
+      accepts:
+        - memory.blocks@1
+      schema: ./schemas/block-definitions.schema.json
+    blocks:
+      version: 1
+      schema: ./schemas/blocks.schema.json
+contracts:
+  memory.blocks@1:
+    schema: ./schemas/block-definitions.schema.json
 ---
 
-纯 UI 插件。本插件声明右侧记忆面板，并通过 `memoryBlocks` 声明默认的四个通用记忆块（剧情状态 / 角色关系 / 当前场景 / 玩家状态）及其抽取提示词。核心记忆的读写由框架 Memory System（@covel/memory）在每轮结束后按这些块定义自动完成；`player_profile` 的已确认角色资料首行由框架根据已提交字段确定性维护。任意插件或世界包都可以声明自己的 `memoryBlocks`（如 `clues` / `suspects` / `timeline`），框架会聚合后驱动抽取与渲染，无需改动框架核心。
+Memory extraction runs as a detached post-turn function with a before-next-execution barrier. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.
+
+## Quality Characteristics
+
+**Extraction Reliability**: Memory extraction is **not guaranteed to be lossless**. The LLM may:
+
+- Miss important facts mentioned briefly in narrative
+- Misinterpret ambiguous phrasing
+- Prioritize recent events over older but significant details
+- Produce inconsistent extractions across similar contexts
+
+**Configuration Sensitivity**: The current default timeout (30s) and retry settings have **not been empirically validated** across diverse model speeds, narrative complexity, or session lengths. Deployments may need to tune these values based on:
+
+- Model choice (faster models like DeepSeek vs slower models like GPT-4)
+- Average turn length and narrative density
+- Acceptable latency budget for post-turn processing
+
+**Recall Accuracy**: Retrieved blocks reflect the quality of extraction. If a fact was not extracted or was extracted incorrectly, recall will not surface it. Consider combining with:
+
+- Explicit player note-taking mechanisms
+- Full-text search over raw narrative history for critical fact verification
+- Periodic manual review of extracted blocks
+
+**Best Practices**:
+
+- Monitor extraction failures and timeout rates in production
+- Validate memory accuracy during long sessions (>50 turns)
+- Use structured character/world updates for critical game state that must persist reliably

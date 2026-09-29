@@ -49,6 +49,7 @@ FROM dev-deps AS build-web
 COPY tsconfig.json turbo.json ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/
+RUN pnpm --filter @covel/plugin-handlers-utils build
 # TanStack Router generates routeTree.gen.ts during vite build,
 # but tsc -b runs first and fails without it. Skip tsc in Docker
 # (the dev workflow already catches type errors).
@@ -63,6 +64,7 @@ COPY tsconfig.json ./
 
 # Workspace packages (TS source — no build step, tsx handles runtime transpilation)
 COPY packages/ packages/
+COPY --from=build-web /app/packages/plugin-handlers-utils/dist/ packages/plugin-handlers-utils/dist/
 
 # Server source
 COPY apps/server/src/ apps/server/src/
@@ -76,6 +78,9 @@ COPY prompts/ prompts/
 
 # World packages (seed data loaded on first startup)
 COPY worlds/ worlds/
+
+# Product presets are declarative files loaded at runtime.
+COPY packs/ packs/
 
 # Model slot config. llm.toml is gitignored, so it is never in a CI/Render
 # build context — it is supplied at runtime by the compose mount (or any

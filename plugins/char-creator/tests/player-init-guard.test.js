@@ -1,234 +1,92 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
+import { getPendingProposals } from "@covel/tools";
 import guard from "../runtimes/player-init/guard.js";
 
-function createStore() {
-  const characters = [];
-  const pluginData = [];
-  const playerInputs = [];
-
+const schema = {
+  version: 1,
+  types: ["npc", "companion"],
+  attributes: [
+    {
+      id: "systems",
+      name: "Systems",
+      type: "number",
+      category: "abilities",
+      min: 0,
+      max: 5,
+      defaultValue: 2,
+    },
+  ],
+};
+function context(values, characters = []) {
   return {
-    characters,
-    pluginData,
-    playerInputs,
-    listCharacters: vi.fn(async (sessionId) =>
-      characters.filter((character) => character.sessionId === sessionId),
-    ),
-    listPlayerInputs: vi.fn(async (sessionId) =>
-      playerInputs.filter((input) => input.sessionId === sessionId),
-    ),
-    upsertCharacter: vi.fn(async (record) => {
-      const index = characters.findIndex(
-        (character) => character.id === record.id,
-      );
-      if (index >= 0) characters[index] = record;
-      else characters.push(record);
-    }),
-    setPluginData: vi.fn(async (record) => {
-      const index = pluginData.findIndex(
-        (row) =>
-          row.sessionId === record.sessionId &&
-          row.pluginId === record.pluginId &&
-          row.namespace === record.namespace &&
-          row.key === record.key,
-      );
-      if (index >= 0) pluginData[index] = record;
-      else pluginData.push(record);
-    }),
+    sessionId: "session",
+    turnId: "turn",
+    pluginId: "char-creator",
+    runtimeId: "char-creator/player-init",
+    world: { characterSchema: schema, characters },
+    store: { listPlayerInputs: async () => (values ? [{ values }] : []) },
   };
 }
 
-describe("char-creator/player-init guard character mirror", () => {
-  it("rejects a form-valid string that violates a numeric world attribute before any write", async () => {
-    const store = createStore();
+describe("player initialization World Model", () => {
+  it.each([null, { characterName: "Alex" }])(
+    "fails without a schema before producing a form or a player for input %j",
+    async (values) => {
+      const ctx = context(values);
+      ctx.world.characterSchema = null;
+      await expect(guard(ctx)).rejects.toThrow("Character schema is not ready");
+    },
+  );
+  it("accepts the retained submission after schema recovery and applies defaults", async () => {
+    const ctx = context({ characterName: "Alex" });
+    ctx.world.characterSchema = null;
+    await expect(guard(ctx)).rejects.toThrow("Character schema is not ready");
+    ctx.world.characterSchema = schema;
+    const result = await guard(ctx);
+    expect(result).toMatchObject({ preGameDone: true, playerExists: true });
+    expect(getPendingProposals(result)).toEqual([
+      expect.objectContaining({
+        type: "character.upsert",
+        payload: expect.objectContaining({
+          name: "Alex",
+          fields: { systems: 2 },
+        }),
+      }),
+    ]);
+  });
+  it("rejects an invalid submitted attribute without rewriting the submission", async () => {
     const values = { characterName: "Alex", systems: "self-taught" };
-    store.playerInputs.push({
-      id: "invalid-input",
-      sessionId: "sess-1",
-      values,
-    });
-    store.listPluginDataSessionScope = async () => [
-      {
-        namespace: "schema",
-        key: "character-attributes",
-        value: {
-          version: 1,
-          attributes: [
-            {
-              id: "systems",
-              name: "Systems",
-              type: "number",
-              category: "abilities",
-              min: 0,
-              max: 5,
-              defaultValue: 2,
-            },
-          ],
-        },
-      },
-    ];
-    await expect(guard({ sessionId: "sess-1", store })).rejects.toThrow(
-      /systems/,
+    await expect(guard(context(values))).rejects.toThrow(/systems/);
+    expect(values.systems).toBe("self-taught");
+  });
+  it("buffers a player with schema defaults and no plugin-data mirror", async () => {
+    const result = await guard(
+      context({ characterName: "Alex", background: "Explorer" }),
     );
-    expect(store.upsertCharacter).not.toHaveBeenCalled();
-    expect(store.setPluginData).not.toHaveBeenCalled();
-    expect(store.playerInputs[0].values).toEqual(values);
-  });
-  it("creates a submitted player and mirrors it for the character panel", async () => {
-    const store = createStore();
-    store.playerInputs.push({
-      id: "input-1",
-      sessionId: "sess-1",
-      values: {
-        characterName: "柳无痕",
-        background: "外门弟子，灵识敏锐",
-        hp: 100,
-        sect: "青萍宗",
-      },
-    });
-
-    const result = await guard({ sessionId: "sess-1", store });
-
     expect(result).toMatchObject({
       skip: true,
       playerExists: true,
-      playerName: "柳无痕",
       preGameDone: true,
     });
-    expect(store.characters).toHaveLength(1);
-    const character = store.characters[0];
-    expect(character).toMatchObject({
-      sessionId: "sess-1",
-      name: "柳无痕",
-      type: "player",
-      description: "外门弟子，灵识敏锐",
-      fields: { hp: 100, sect: "青萍宗" },
-      version: 1,
-    });
-    expect(store.pluginData).toHaveLength(1);
-    expect(store.pluginData[0]).toMatchObject({
-      id: `char-mirror-${character.id}`,
-      sessionId: "sess-1",
-      pluginId: "char-creator",
-      namespace: "characters",
-      key: character.id,
-    });
-    expect(store.pluginData[0].value).toMatchObject({
-      id: character.id,
-      name: "柳无痕",
-      type: "player",
-      description: "外门弟子，灵识敏锐",
-      fields: { hp: 100, sect: "青萍宗" },
-      version: 1,
-    });
+    expect(getPendingProposals(result)).toEqual([
+      expect.objectContaining({
+        type: "character.upsert",
+        payload: expect.objectContaining({
+          name: "Alex",
+          type: "player",
+          fields: { systems: 2, background: "Explorer" },
+        }),
+      }),
+    ]);
   });
-
-  it("merges declared schema defaults into the stored player fields", async () => {
-    const store = createStore();
-    // Schema discoverable by its well-known namespace/key under any pluginId.
-    store.pluginData.push({
-      sessionId: "sess-1",
-      pluginId: "world-init",
-      namespace: "schema",
-      key: "character-attributes",
-      value: {
-        version: 1,
-        attributes: [
-          {
-            id: "hp",
-            name: "HP",
-            type: "number",
-            defaultValue: 100,
-            category: "stats",
-          },
-          {
-            id: "trust",
-            name: "Trust",
-            type: "number",
-            defaultValue: 0,
-            category: "social",
-          },
-          { id: "club", name: "Club", type: "string", category: "social" },
-        ],
-      },
-    });
-    store.listPluginDataSessionScope = vi.fn(async () => store.pluginData);
-    store.playerInputs.push({
-      id: "input-1",
-      sessionId: "sess-1",
-      values: { characterName: "神代澪", club: "文艺部", trust: 30 },
-    });
-
-    await guard({ sessionId: "sess-1", store });
-
-    const character = store.characters[0];
-    // Player-set values kept; missing-default (hp) filled; no-default (club) kept; club kept.
-    expect(character.fields).toEqual({ club: "文艺部", trust: 30, hp: 100 });
+  it("reuses the player already visible in the execution", async () => {
+    const ctx = context(null, [{ id: "player", type: "player" }]);
+    ctx.world.characterSchema = null;
+    const result = await guard(ctx);
+    expect(result).toMatchObject({ skip: true, playerId: "player" });
+    expect(getPendingProposals(result)).toEqual([]);
   });
-
-  it("mirrors an existing player while keeping one character row", async () => {
-    const store = createStore();
-    store.characters.push({
-      id: "char-existing",
-      sessionId: "sess-1",
-      name: "赵铁山",
-      type: "player",
-      description: "体修弟子",
-      fields: { hp: 120 },
-      version: 1,
-      createdAt: "2026-04-25T00:00:00.000Z",
-      updatedAt: "2026-04-25T00:00:00.000Z",
-    });
-
-    const result = await guard({ sessionId: "sess-1", store });
-
-    expect(result).toMatchObject({
-      skip: true,
-      playerExists: true,
-      playerId: "char-existing",
-      preGameDone: true,
-    });
-    expect(store.characters).toHaveLength(1);
-    expect(store.upsertCharacter).toHaveBeenCalledTimes(0);
-    expect(store.pluginData).toHaveLength(1);
-    expect(store.pluginData[0]).toMatchObject({
-      id: "char-mirror-char-existing",
-      sessionId: "sess-1",
-      pluginId: "char-creator",
-      namespace: "characters",
-      key: "char-existing",
-    });
-    expect(store.pluginData[0].value).toMatchObject({
-      id: "char-existing",
-      name: "赵铁山",
-      type: "player",
-      fields: { hp: 120 },
-    });
-  });
-
-  it("repeated guard runs keep one player mirror row", async () => {
-    const store = createStore();
-    store.playerInputs.push({
-      id: "input-1",
-      sessionId: "sess-1",
-      values: {
-        name: "苏婉",
-        bio: "剑修弟子",
-        realm: "练气",
-      },
-    });
-
-    await guard({ sessionId: "sess-1", store });
-    await guard({ sessionId: "sess-1", store });
-
-    expect(store.characters).toHaveLength(1);
-    expect(store.pluginData).toHaveLength(1);
-    expect(store.pluginData[0].key).toBe(store.characters[0].id);
-    expect(store.pluginData[0].value).toMatchObject({
-      id: store.characters[0].id,
-      name: "苏婉",
-      type: "player",
-      description: "剑修弟子",
-      fields: { realm: "练气" },
-    });
+  it("continues to the opening form when no player input exists", async () => {
+    expect(await guard(context(null))).toEqual({ skip: false });
   });
 });

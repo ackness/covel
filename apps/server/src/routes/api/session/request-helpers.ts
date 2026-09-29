@@ -1,6 +1,9 @@
 import type { SessionRecord } from "@covel/store";
 import type { SessionStatus } from "@covel/shared";
-import { worldWireRecordSchema } from "@covel/shared";
+import {
+  worldWireRecordSchema,
+  createSessionRequestSchema,
+} from "@covel/shared";
 import {
   SAFE_WORLD_ID_RE,
   SAFE_SESSION_ID_RE,
@@ -22,6 +25,7 @@ type ParsedCreateSessionBody =
       worldId: string | undefined;
       id: string | undefined;
       requestedPlugins: string[];
+      excludedPlugins: string[];
       loreOverride: string | undefined;
     }
   | { ok: false; error: string };
@@ -29,6 +33,8 @@ type ParsedCreateSessionBody =
 export function parseCreateSessionBody(
   body: Record<string, unknown>,
 ): ParsedCreateSessionBody {
+  const request = createSessionRequestSchema.safeParse(body);
+  if (!request.success) return { ok: false, error: request.error.message };
   // Capture complete world documents; start-session action edits have a
   // separate length limit that must not reject an existing world's lore here.
   const loreOverride = worldWireRecordSchema.shape.lore.safeParse(
@@ -64,8 +70,15 @@ export function parseCreateSessionBody(
       )
     : [];
 
+  if (
+    body.excludedPlugins !== undefined &&
+    (!Array.isArray(body.excludedPlugins) ||
+      body.excludedPlugins.some((id) => typeof id !== "string"))
+  )
+    return { ok: false, error: "excludedPlugins must be a string array" };
   return {
     ok: true,
+    excludedPlugins: (body.excludedPlugins as string[] | undefined) ?? [],
     worldId: rawWorldId,
     id: rawId,
     requestedPlugins,
@@ -77,10 +90,7 @@ type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
 export type SessionPatchUpdates = Partial<
   Writable<
-    Pick<
-      SessionRecord,
-      "status" | "activePlugins" | "updatedAt" | "runtimeModelOverrides"
-    >
+    Pick<SessionRecord, "status" | "updatedAt" | "runtimeModelOverrides">
   >
 >;
 
@@ -91,6 +101,12 @@ export function buildSessionPatchUpdates(
   body: Record<string, unknown>,
   now: string,
 ): ParsedSessionPatch {
+  if (body.activePlugins !== undefined)
+    return {
+      ok: false,
+      error:
+        "Use the session plugin enable/disable routes to change plugin selection",
+    };
   const updates: SessionPatchUpdates = { updatedAt: now };
 
   // Validate status against the SessionStatus union. Pre-existing code

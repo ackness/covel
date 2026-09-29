@@ -5,15 +5,10 @@ import type {
   PluginRuntimeUtils,
   PluginSource,
 } from "@covel/shared/plugin-runtime";
-import type {
-  DataStore,
-  WorkingMemoryRecord,
-  StoreTransaction,
-} from "@covel/store";
+import type { DataStore, StoreTransaction } from "@covel/store";
 import type {
   BudgetOptions,
   CompactorRunner,
-  CoreMemoryBlockView,
   TokenEstimator,
 } from "@covel/context";
 import type { EventBus } from "@covel/events";
@@ -88,6 +83,10 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   /** Persisted session activation scope, including plugins without runtimes. */
   readonly hookScope?: HookScope;
   readonly services?: import("../plugin-services.js").PluginServiceRegistry;
+  readonly extensions?: import("../plugin-extensions.js").PluginExtensionHost;
+  readonly extensionExecution?: ReturnType<
+    import("../plugin-extensions.js").PluginExtensionHost["createExecution"]
+  >;
   /** Optional store used by the orchestration harness and function runtimes. */
   readonly store?: DataStore;
   /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */
@@ -166,74 +165,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly compactor?: CompactorRunner;
 
   /**
-   * Optional memory system (Letta-style three-tier memory).
-   * When present:
-   *   - Pre-turn: loads core memory blocks and passes to buildContext
-   *   - Post-turn: calls memory updater to refresh blocks from turn results
-   */
-  readonly memorySystem?: {
-    readonly manager: {
-      // Carries the schema-driven `displayName` (see CoreMemoryBlockView) so it
-      // is not erased at the deps boundary — the turn pipeline threads it intact
-      // through to renderCoreMemory. The optional `existing` param accepts the
-      // turn's single listWorkingMemory read so the manager skips its own
-      // re-read (R-13); it must be a fresh, complete list when provided.
-      loadBlocks(
-        sessionId: string,
-        existing?: readonly WorkingMemoryRecord[],
-      ): Promise<readonly CoreMemoryBlockView[]>;
-      initializeDefaults(
-        sessionId: string,
-        existing?: readonly WorkingMemoryRecord[],
-      ): Promise<void>;
-    };
-    readonly updater: {
-      updateAfterTurn(params: {
-        sessionId: string;
-        turnId?: string;
-        traceId?: string;
-        narrativeText: string;
-        toolCallSummaries?: readonly string[];
-        authoritativeFacts?: {
-          readonly playerCharacter?: {
-            readonly name: string;
-            readonly type: string;
-            readonly description?: string;
-            readonly fields?: Readonly<Record<string, unknown>>;
-          };
-          readonly playerFieldLabels?: Readonly<Record<string, string>>;
-          readonly lastFormValues?: Readonly<Record<string, unknown>>;
-        };
-        currentBlocks: readonly CoreMemoryBlockView[];
-        locale?: string;
-      }): Promise<{
-        updated: boolean;
-        blocksChanged: readonly string[];
-        error?: string;
-      }>;
-      /** Persist recovery intent inside the story transaction, when supported. */
-      stageAfterTurn?(
-        tx: Pick<StoreTransaction, "setPluginData">,
-        input: Parameters<
-          NonNullable<
-            TurnExecutorDeps["memorySystem"]
-          >["updater"]["updateAfterTurn"]
-        >[0],
-      ): Promise<void>;
-      /** Optional — await any pending updateAfterTurn for the session. */
-      awaitPending?(sessionId: string): Promise<void>;
-    };
-  };
-
-  /**
-   * Framework-capability plugin ids the turn pipeline consumes, discovered by
-   * the server via `pluginRegistry.findPluginByCapability` (framework never
-   * hardcodes plugin ids). Grouped so the resolver result flows as one object
-   * rather than three loose deps fields. Absent capability → feature off.
-   */
-  readonly capabilityPluginIds?: CapabilityPluginIds;
-
-  /**
    * Optional session event directory (unified event emission layer, plan
    * task 4/5). When present, an agent runtime whose manifest declares
    * `advertiseEvents: true` gets `catalogText`'s rendered output threaded
@@ -244,16 +175,6 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly eventDirectory?: {
     catalogText(sessionId: string, locale: string): Promise<string>;
   };
-}
-
-/** Plugin ids discovered by framework capability for the turn pipeline. */
-export interface CapabilityPluginIds {
-  /** `world-data-provider` — world dimensions / lorebook / opening scenario. */
-  readonly worldDataPluginId?: string;
-  /** `persona-provider` — the active player persona. */
-  readonly personaPluginId?: string;
-  /** `prompt-history-rewriter` — accepted branch-reply candidate projection. */
-  readonly promptHistoryRewriterPluginId?: string;
 }
 
 export interface TurnExecutorOptions {

@@ -68,6 +68,10 @@ function normalizeTurnCompletionPolicy(
   const declared = manifest.turnCompletion;
   return {
     mode: declared?.mode ?? "await",
+    ...(declared?.settle ? { settle: declared.settle } : {}),
+    ...(declared?.maxSettleWaitMs !== undefined
+      ? { maxSettleWaitMs: declared.maxSettleWaitMs }
+      : {}),
     ...(declared?.maxQueueMs !== undefined
       ? { maxQueueMs: declared.maxQueueMs }
       : {}),
@@ -166,6 +170,8 @@ export type EffectiveTurnCompletion =
   | { readonly mode: "await" }
   | {
       readonly mode: "detached";
+      readonly settle?: "before-next-execution";
+      readonly maxSettleWaitMs?: number;
       readonly maxQueueMs?: number;
       readonly maxExecutionMs?: number;
       readonly overlap: "serial";
@@ -184,6 +190,10 @@ export function effectiveTurnCompletion(
   return policy.mode === "detached"
     ? {
         mode: "detached",
+        ...(policy.settle ? { settle: policy.settle } : {}),
+        ...(policy.maxSettleWaitMs !== undefined
+          ? { maxSettleWaitMs: policy.maxSettleWaitMs }
+          : {}),
         ...(policy.maxQueueMs !== undefined
           ? { maxQueueMs: policy.maxQueueMs }
           : {}),

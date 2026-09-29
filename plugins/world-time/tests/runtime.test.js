@@ -15,6 +15,7 @@ import {
   finalizeExecution,
   createToolExecutor,
   createFunctionStoreView,
+  createTrustedHandlerStore,
 } from "@covel/runtime";
 import { tool, getPendingProposals } from "@covel/tools";
 import createAdvance from "../tools/advance-world-time.js";
@@ -56,11 +57,11 @@ async function fixture() {
     stage: "narrative",
     runtimeType: "function",
     outputKind: "story",
-    capabilities: ["narrative-engine"],
+    outputContract: "narrative-engine@1",
     trigger: { type: "auto" },
     inputs: {
       worldTime: {
-        from: { capability: "world-time-context", cardinality: "one" },
+        from: { capability: "world-time-context@1", cardinality: "one" },
         required: true,
       },
     },
@@ -162,16 +163,58 @@ describe("world-time pipeline", () => {
     });
     const restored = createMemoryStore();
     await replaceSessionFromCheckpoint(restored, checkpoint);
-    expect((await loadTime(restored, "s", "world-time", "en")).tick).toBe(
-      value.tick,
-    );
+    expect(
+      (
+        await loadTime(
+          createTrustedHandlerStore(
+            restored,
+            {
+              sessionId: "s",
+              pluginId: "world-time",
+              runtimeId: "world-time/context",
+              turnId: "test",
+            },
+            [],
+          ),
+          "en",
+        )
+      ).tick,
+    ).toBe(value.tick);
     await commit(await run("next-turn"));
-    expect((await loadTime(restored, "s", "world-time", "en")).tick).toBe(
-      value.tick,
-    );
-    expect((await loadTime(store, "s", "world-time", "en")).tick).toBe(
-      value.tick + 60,
-    );
+    expect(
+      (
+        await loadTime(
+          createTrustedHandlerStore(
+            restored,
+            {
+              sessionId: "s",
+              pluginId: "world-time",
+              runtimeId: "world-time/context",
+              turnId: "test",
+            },
+            [],
+          ),
+          "en",
+        )
+      ).tick,
+    ).toBe(value.tick);
+    expect(
+      (
+        await loadTime(
+          createTrustedHandlerStore(
+            store,
+            {
+              sessionId: "s",
+              pluginId: "world-time",
+              runtimeId: "world-time/context",
+              turnId: "test",
+            },
+            [],
+          ),
+          "en",
+        )
+      ).tick,
+    ).toBe(value.tick + 60);
   });
   it("rolls back time when a sibling commit fails", async () => {
     const { store, run, commit } = await fixture();
@@ -225,7 +268,19 @@ describe("world-time pipeline", () => {
     ctx.inputSlots = {
       currentTime: {
         cardinality: "one",
-        value: await loadTime(store, "s", "world-time", "en"),
+        value: await loadTime(
+          createTrustedHandlerStore(
+            store,
+            {
+              sessionId: "s",
+              pluginId: "world-time",
+              runtimeId: "world-time/context",
+              turnId: "test",
+            },
+            [],
+          ),
+          "en",
+        ),
       },
       narrative: { cardinality: "one", value: "A short conversation." },
     };

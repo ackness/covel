@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
@@ -42,14 +42,20 @@ describe("plugin-owned evaluation integration", () => {
     const tools = new Map<string, ToolModule>();
     for (const id of ["scene-prompts", "evaluation-consumer"]) {
       const discovery = discoveries.find((d) => d.id === id)!;
-      const [parsed] = await loadPluginManifest(discovery);
+      const definition = await loadPluginDefinition(discovery);
+      const [parsed] = definition.manifests;
       const runtime = await loadRuntime(discovery, parsed!.manifest.name);
       loaded.set(runtime.manifest.name, runtime);
       const entry = await import(
-        pathToFileURL(path.join(discovery.rootPath, parsed!.manifest.entry!))
-          .href
+        pathToFileURL(
+          path.join(
+            discovery.rootPath,
+            definition.packageManifest.manifest.entry!,
+          ),
+        ).href
       );
       entry.default({
+        provideExtension() {},
         toolkit: { tool, z, shortId, shortIdBatch, withPendingProposals },
         registerTool: (value: ToolModule) => tools.set(value.name, value),
         registerService: (
@@ -64,7 +70,7 @@ describe("plugin-owned evaluation integration", () => {
       stage: "narrative",
       runtimeType: "function",
       outputKind: "story",
-      capabilities: ["narrative-engine"],
+      outputContract: "narrative-engine@1",
       trigger: { type: "auto" },
     };
     loaded.set(narrator.name, {

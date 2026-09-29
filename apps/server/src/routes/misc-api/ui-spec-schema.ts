@@ -119,6 +119,13 @@ const uiSpecSchema = z
       .object({
         namespace: z.string().optional(),
         source: z.string().optional(),
+        bindings: z
+          .record(
+            z.string().regex(/^[a-z][a-zA-Z0-9_]*$/),
+            z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/),
+          )
+          .refine((bindings) => Object.keys(bindings).length <= 8)
+          .optional(),
       })
       .optional(),
     emptyState: z.object({ message: i18nTextSchema.optional() }).optional(),

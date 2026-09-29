@@ -183,6 +183,7 @@ describe("anthropic-messages tool calling", () => {
       },
       { type: "content_block_stop", index: 0 },
       { type: "message_delta", delta: { stop_reason: "tool_use" } },
+      { type: "message_stop" },
     ]);
     const adapter = createAnthropicMessagesAdapter();
 

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parse } from "yaml";
 import { expect, it, vi } from "vitest";
-import { createSqliteStore } from "@covel/store";
+import { createMemoryStore, createSqliteStore } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
 import {
   bootstrapApi,
@@ -96,7 +96,7 @@ for (const community of [false, true]) {
           ),
         );
         const attributes = [
-          ...(hasAbilities ? world.characterAttributes : []),
+          ...(hasAbilities ? world.characterSchema.attributes : []),
           {
             id: "persona",
             name: { "en-US": "Personality" },
@@ -111,7 +111,9 @@ for (const community of [false, true]) {
           name: "Opening Test World",
           description: "A synthetic opening world",
           createdAt: now,
-          metadata: { characterAttributes: attributes },
+          metadata: {
+            characterSchema: { types: ["npc", "companion"], attributes },
+          },
         });
         await store.createSession({
           id: sessionId,
@@ -210,6 +212,10 @@ for (const community of [false, true]) {
           content: "Ada begins.",
         });
         const player = (await store.listCharacters(sessionId))[0]!;
+        expect(
+          player,
+          JSON.stringify(creationTurn.runtimeResults),
+        ).toBeDefined();
         expect(player.name).toBe("Ada");
         expect(player.fields).toMatchObject({ persona: "Curious" });
         const allocation = await form(`${pluginId}-allocation`);
@@ -259,3 +265,90 @@ for (const community of [false, true]) {
     }, 30_000);
   }
 }
+
+it("does not publish a character form or create a player after schema initialization fails", async () => {
+  const project = path.resolve(import.meta.dirname, "../../../..");
+  const root = await mkdtemp(path.join(tmpdir(), "covel-opening-failure-"));
+  const store = createMemoryStore();
+  const sessionId = crypto.randomUUID();
+  const generate = vi.fn<LLMAdapter["generate"]>(async () => {
+    throw new Error("Synthetic schema generation failure");
+  });
+  let boot: ApiBootstrapResult | undefined;
+  vi.stubEnv("COVEL_USER_PLUGINS_DIR", root);
+  vi.stubEnv("NODE_ENV", "development");
+  try {
+    boot = await bootstrapApi({
+      pluginsDir: path.join(project, "plugins"),
+      pluginsDirs: [path.join(project, "plugins"), root],
+      store,
+      storeBackend: "memory",
+      llmAdapter: { generate },
+    });
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "no-schema",
+      name: "No schema",
+      description: "A synthetic world without dimensions or schema",
+      createdAt: now,
+    });
+    await store.createSession({
+      id: sessionId,
+      worldId: "no-schema",
+      status: "active",
+      phase: "setup",
+      setupRuntimes: {},
+      completedPlayerTurns: 0,
+      activePlugins: ["pregame", "world-init", "char-creator"],
+      locale: "en-US",
+      metadata: {
+        approvalScopeNonce: crypto.randomUUID(),
+        sessionIncarnationNonce: crypto.randomUUID(),
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const response = await boot.app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(),
+        sessionId,
+        type: "start_session",
+        payload: {},
+      }),
+    });
+    expect(response.status, await response.text()).toBe(200);
+    const results = (await store.listTurnResults(sessionId)).at(
+      -1,
+    )!.runtimeResults;
+    expect(results).toContainEqual(
+      expect.objectContaining({
+        runtimeId: "world-init/schema-gen",
+        status: "failed",
+      }),
+    );
+    expect(results).toContainEqual(
+      expect.objectContaining({
+        runtimeId: "char-creator/player-init",
+        status: "failed",
+        error: expect.stringContaining("Character schema is not ready"),
+      }),
+    );
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(await store.getCharacterSchema(sessionId)).toBeNull();
+    expect(await store.listCharacters(sessionId)).toEqual([]);
+    const messages = await store.listTurnMessages(sessionId);
+    expect(
+      messages.flatMap((message) =>
+        Array.isArray(message.pendingInput) ? message.pendingInput : [],
+      ),
+    ).toEqual([]);
+    expect((await store.getSession(sessionId))?.phase).toBe("setup");
+  } finally {
+    await closeTestApi(boot);
+    await store.close();
+    vi.unstubAllEnvs();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30_000);

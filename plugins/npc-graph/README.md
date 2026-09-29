@@ -8,7 +8,7 @@
 - `runtimes/rag-retriever/`：叙事前检索相关图谱上下文的函数 runtime。
 - `runtimes/extractor/`：叙事后抽取关系事实的 agent runtime。
 - `tools/`：图谱写入和查询工具。
-- `ui/npc-graph-panel.json`：右侧关系图面板。
+- `runtimes/extractor/ui/npc-graph-panel.json`：右侧关系图面板，通过具名自有 namespace 绑定向 `GraphCanvas` 传入节点和边，并声明字段及颜色映射。
 
 ## 数据与行为
 

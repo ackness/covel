@@ -48,7 +48,7 @@ memory 包保留进程内提取队列；server 为生产链路增加与故事同
 
 - `store/factory` 为数据和媒体选择后端，按需加载；`store/memory`、`store/sqlite`、`store/postgres` 是明确的后端入口。服务端值导入使用 factory/session/errors/capabilities/vector 子入口，测试 CLI 使用 memory。兼容根入口仍导出全部后端，禁止新增生产值导入；本次没有声称或测量启动速度提升。
 - `context` 快照只要求 `SessionContextReadStore`，压缩器使用带写入和事务的 `SessionContextStore`；事务视图可以直接构建只读快照。
-- `KernelStore` 的领域能力可缺省，但 `working_memory.set` 必须同时具有写入与配额查询能力，不能悄悄跳过数量限制。角色版本写入、plugin-data 与 lore 写入已有缺失能力拒绝路径。
+- `KernelStore` 的领域能力可缺省，角色和 schema 写入必须提供 World Model 查询与对应写入能力，不能跳过全体角色校验。角色版本写入、plugin-data 与 lore 写入已有缺失能力拒绝路径。
 - `plugin-handlers-utils` 根入口保留基础辅助函数；有副作用的完整图片流程经 `/image-generation` 导出。二者保留在同一个包内，避免增加无独立消费需求的包。
 - `settings` 的 IPC 环境探测由应用承担。REST 路径默认值仍服务于 Covel 协议，可通过 options 覆盖；没有为跨项目发布增加一层通用传输框架。
 - `runtime` 仍是 Covel 的集成内核，调度、递归与提交语义高度关联。本次不按行数机械拆分执行器；是否继续提取阶段模块由实际职责和测试成本决定。

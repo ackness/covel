@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const RULE_KINDS = new Set(["constant", "triggered", "evolving"]);
 const RULE_CATEGORIES = new Set([
   "character",
@@ -51,6 +53,11 @@ function projectCoordinate(value) {
 /**
  * Project plugin-neutral WorldIR statements into living-world-rules records.
  * Unknown attributes stay in the IR and are intentionally ignored here.
+ *
+ * This worldProjections handler is retained by design (see docs/reference/world-data.md):
+ * WorldIR hooks provide a declarative import surface that separates world authoring from plugin
+ * data schemas. While most runtime logic has migrated to extensions, this projection layer
+ * remains as an intentional design choice for world-data interop.
  */
 export default function projectWorldIR({ value }) {
   const rules = value.statements
@@ -67,7 +74,8 @@ export default function projectWorldIR({ value }) {
 
       return {
         schemaVersion: 1,
-        id: statement.id,
+        id: `world-ir-${createHash("sha256").update(statement.id).digest("hex")}`,
+        sourceStatementId: statement.id,
         content: statement.content,
         ...(title !== undefined ? { title } : {}),
         ...(kind !== undefined ? { kind } : {}),

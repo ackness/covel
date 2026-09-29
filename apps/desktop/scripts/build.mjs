@@ -199,7 +199,9 @@ function ensurePluginWorkspaceDeps() {
     return resolveInstalledPackagePath(name);
   };
 
-  const SKIP = new Set(["node_modules", "dist", ".turbo", "coverage", "tests"]);
+  // A plugin-only dependency may publish runtime imports from dist/ (not src/).
+  // Keep built output when copying workspace packages into the sidecar.
+  const SKIP = new Set(["node_modules", ".turbo", "coverage", "tests"]);
 
   const queue = [];
   for (const entry of fs.readdirSync(pluginsDir)) {
@@ -227,6 +229,18 @@ function ensurePluginWorkspaceDeps() {
       recursive: true,
       filter: (src) => !SKIP.has(path.basename(src)),
     });
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(target, "package.json"), "utf-8"),
+    );
+    for (const [subpath, exported] of Object.entries(pkg.exports ?? {})) {
+      const entry = typeof exported === "string" ? exported : exported?.import;
+      if (typeof entry !== "string" || !entry.startsWith("./dist/")) continue;
+      if (!fs.existsSync(path.join(target, entry))) {
+        throw new Error(
+          `Plugin workspace dependency ${name} is missing built export ${subpath}: ${entry}`,
+        );
+      }
+    }
     console.log(`  ✓ staged plugin workspace dep: ${name}`);
   }
 }
@@ -387,7 +401,7 @@ const EXCLUDE_DIRS = new Set([
   "tests",
   "__tests__",
 ]);
-const sideCarResources = ["plugins", "prompts", "worlds"];
+const sideCarResources = ["plugins", "prompts", "worlds", "packs"];
 for (const entry of sideCarResources) {
   const src = path.join(projectRoot, entry);
   const dest = path.join(serverStaging, entry);

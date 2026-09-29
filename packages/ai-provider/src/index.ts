@@ -92,6 +92,7 @@ export { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js
 export { createProviderRegistry } from "./provider-registry.js";
 export {
   configureOutboundProxy,
+  prepareOutboundProxy,
   getOutboundProxyStatus,
   normalizeOutboundProxyConfig,
   outboundFetch,
@@ -183,3 +184,8 @@ export {
   type ModelLookupCandidate,
   type ModelMatchKind,
 } from "./capability/index.js";
+
+export {
+  withWireRegistrySnapshot,
+  replacePluginWires,
+} from "./wire-lifecycle.js";

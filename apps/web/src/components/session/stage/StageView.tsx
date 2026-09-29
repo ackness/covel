@@ -1,19 +1,25 @@
 /**
  * Full-screen visual-novel stage (viewMode: "stage"). Composes the five stage
- * layers over a shared plugin-data feed and owns the small amount of
+ * layers over kernel UI projections and owns the small amount of
  * cross-layer state the pieces can't hold themselves: which turn's text is
  * fully read (switches narrative into the unified decision panel), auto-play,
  * and the history / pending-form modals.
  *
  * Absolute-positioned layers stack inside a `relative` bounded container in
  * DOM order Backdrop → Sprites → Hud → Dialog → Choices (z-index banded on
- * the components). Data all arrives through `usePluginNamespace`, so the
- * component stays thin — the real logic lives in `stage-selectors`.
+ * the components). UI slots supply committed values and turn previews.
  */
 import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
-import { FrameworkCapability } from "@covel/shared";
+import type {
+  StageBackdropModel,
+  StageCastModel,
+  StageChoicesModel,
+  StageDialogueModel,
+  CharacterVisualModel,
+} from "@covel/shared";
+import { useUiSlots } from "@/stores/ui-slot-store.js";
 import { pluginMessageTurnResolver } from "@/stores/session-store/plugin-message-turn.js";
 import {
   Dialog,
@@ -22,7 +28,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
-import { useDomainEventPreview } from "@/stores/domain-event-preview-store.js";
 import { useStreamingText } from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
@@ -40,23 +45,14 @@ import { StageDialog } from "./StageDialog.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
-import { resolveStageParagraphSpeakers } from "./stage-dialogue-selectors.js";
-import { useStageData, useStageNamespace } from "./use-stage-data.js";
 import {
-  applySceneSetPreview,
-  applyStageDirectionPreview,
   deriveDecisionRecapFallback,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
   initialStageReadStoryKey,
-  pluginIdForCapability,
-  resolveStageSpeakers,
   stageStoryKey,
   type PresenceRecord,
-  type StageCurrentRecord,
-  type StageDirectionRecord,
-  type StageSceneRegistry,
   type StageSpeaker,
 } from "./stage-selectors.js";
 
@@ -128,98 +124,42 @@ export function StageView(props: StageViewProps): ReactElement {
   const locale = i18n.language;
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
-  // ── Plugin-data feeds ─────────────────────────────────────────
-  // Resolve the ACTIVE plugin id for each stage capability from the session's
-  // plugin list (framework↔plugin isolation rule — no hardcoded plugin ids in
-  // framework code). `pluginIdForCapability` returns undefined when no active
-  // plugin provides the capability; `?? ""` keeps the hook call unconditional
-  // and resolves to an empty namespace, so the layer renders empty/disabled.
-  // Namespaces below ("stage", "active-cast", …) are intra-plugin data keys
-  // defined by the resolved plugin, not plugin ids.
-  const sceneStageId =
-    pluginIdForCapability(sessionPlugins, FrameworkCapability.SceneStage) ?? "";
-  const sceneCastId =
-    pluginIdForCapability(sessionPlugins, FrameworkCapability.SceneCast) ?? "";
-  const scenePromptsId =
-    pluginIdForCapability(sessionPlugins, FrameworkCapability.ScenePrompts) ??
-    "";
-  const presenceId =
-    pluginIdForCapability(
-      sessionPlugins,
-      FrameworkCapability.CharacterPresence,
-    ) ?? "";
-  const stageDirectionId =
-    pluginIdForCapability(sessionPlugins, FrameworkCapability.StageDirection) ??
-    "";
-
-  const initialData = useStageData(session.id, [
-    sceneStageId,
-    sceneCastId,
-    scenePromptsId,
-    presenceId,
-    stageDirectionId,
-  ]);
-  const sceneCurrent = useStageNamespace(initialData, sceneStageId, "stage")[
-    "current"
-  ] as StageCurrentRecord | undefined;
-  const sceneRegistry = useStageNamespace(initialData, sceneStageId, "scenes")[
-    "scene-registry"
-  ] as StageSceneRegistry | undefined;
-  const activeCast = useStageNamespace(initialData, sceneCastId, "active-cast")[
-    "current"
-  ] as { speakers?: readonly StageSpeaker[] } | undefined;
-  const directionCurrent = useStageNamespace(
-    initialData,
-    stageDirectionId,
-    "direction",
-  )["current"] as StageDirectionRecord | undefined;
-  const dialogueNamespace = useStageNamespace(
-    initialData,
-    stageDirectionId,
-    "dialogue",
+  const slots = useUiSlots(session.id);
+  const effectiveSceneCurrent = slots.find(
+    (entry) => entry.slot === "stage.backdrop@1",
+  )?.value as StageBackdropModel | undefined;
+  const cast = slots.find((entry) => entry.slot === "stage.cast@1")?.value as
+    StageCastModel | undefined;
+  const dialogue = slots.find((entry) => entry.slot === "stage.dialogue@1");
+  const dialogueValue = dialogue?.value as StageDialogueModel | undefined;
+  const suggestions = slots.find((entry) => entry.slot === "stage.choices@1")
+    ?.value as StageChoicesModel | undefined;
+  const speakers: readonly StageSpeaker[] = useMemo(
+    () =>
+      (cast?.actors ?? []).map((actor) => ({
+        id: actor.characterId,
+        name: actor.displayName,
+        visual: actor.visual,
+        active: actor.active,
+        position: actor.position,
+        transition: actor.transition,
+        exiting: actor.exiting,
+      })),
+    [cast],
   );
-  const promptsNamespace = useStageNamespace(
-    initialData,
-    scenePromptsId,
-    "message",
-  );
-  // Mirror portrait-gallery-panel: the presence namespace is consumed as a
-  // characterId-keyed record of `{ sprite, avatar, ... }`.
-  const presence = useStageNamespace(
-    initialData,
-    presenceId,
-    "presence",
-  ) as Readonly<Record<string, PresenceRecord | undefined>>;
-  const directionPreview = useDomainEventPreview(session.id, "stage.direction");
-  const scenePreview = useDomainEventPreview(session.id, "scene.set");
-  const effectiveSceneCurrent = useMemo(() => {
-    if (!scenePreview || sceneCurrent?.turnId === scenePreview.turnId) {
-      return sceneCurrent;
-    }
-    return applySceneSetPreview(
-      sceneCurrent,
-      sceneRegistry,
-      scenePreview.data,
-      scenePreview.turnId,
+  const presence: Readonly<Record<string, PresenceRecord | undefined>> =
+    useMemo(
+      () =>
+        Object.fromEntries(
+          slots
+            .filter(
+              (entry) =>
+                entry.slot === "character.visual@1" && entry.key && entry.value,
+            )
+            .map((entry) => [entry.key!, entry.value as CharacterVisualModel]),
+        ),
+      [slots],
     );
-  }, [sceneCurrent, sceneRegistry, scenePreview]);
-  const speakers = useMemo(() => {
-    const committed = resolveStageSpeakers(
-      directionCurrent,
-      activeCast?.speakers ?? [],
-    );
-    if (
-      !directionPreview ||
-      directionCurrent?.turnId === directionPreview.turnId
-    ) {
-      return committed;
-    }
-    return applyStageDirectionPreview(
-      committed,
-      presence,
-      directionPreview.data.cues,
-    );
-  }, [directionCurrent, activeCast, directionPreview, presence]);
 
   // ── Latest story text + stream state ──────────────────────────
   // Streaming tokens no longer live in `messages[].content` — the placeholder
@@ -232,14 +172,11 @@ export function StageView(props: StageViewProps): ReactElement {
   const storyKey = stageStoryKey(storyMsg);
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
-  const paragraphSpeakers = resolveStageParagraphSpeakers({
-    turnId: storyTurnId,
-    record: storyTurnId ? dialogueNamespace[storyTurnId] : undefined,
-    preview: directionPreview,
-    speakers,
-    presence,
-    isStreaming,
-  });
+  const paragraphSpeakers =
+    dialogueValue?.turnId === storyTurnId &&
+    (!isStreaming || dialogue?.previewTurnId === storyTurnId)
+      ? dialogueValue?.paragraphSpeakers
+      : undefined;
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
@@ -268,11 +205,11 @@ export function StageView(props: StageViewProps): ReactElement {
   const freshPrompts = useMemo(
     () =>
       filterStalePrompts(
-        promptsNamespace,
+        suggestions,
         storyTurnId,
         pluginMessageTurnResolver(props.executionSteps, messages),
       ),
-    [promptsNamespace, storyTurnId, props.executionSteps, messages],
+    [suggestions, storyTurnId, props.executionSteps, messages],
   );
   const stageTurnIds = useMemo(() => {
     const resolveTurn = pluginMessageTurnResolver(
@@ -317,9 +254,7 @@ export function StageView(props: StageViewProps): ReactElement {
         presence={presence}
         sessionId={session.id}
         dimmed={choicesVisible}
-        retainWhenEmpty={
-          directionCurrent === undefined && directionPreview === undefined
-        }
+        retainWhenEmpty={cast?.retainWhenEmpty ?? true}
       />
       <StageHud
         sceneCurrent={effectiveSceneCurrent}
@@ -359,7 +294,7 @@ export function StageView(props: StageViewProps): ReactElement {
         visible={choicesVisible}
         executing={executing}
         interactionChoices={interactionChoices}
-        promptsNamespace={freshPrompts}
+        suggestions={freshPrompts}
         fallbackRecap={fallbackRecap}
         locale={locale}
         onSubmitInteraction={onSubmitInteraction}

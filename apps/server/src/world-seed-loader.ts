@@ -29,7 +29,6 @@ import {
   localeLookupCandidates,
   resolveI18nText,
 } from "@covel/shared";
-import type { MemoryBlockSchema } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
@@ -186,39 +185,6 @@ async function loadExternalDimensions(
 }
 
 /**
- * Fold the deprecated top-level `requiredPlugins` / `recommendedPlugins` /
- * `excludedPlugins` into `pluginPolicy` (union, de-duplicated) so metadata
- * carries plugin selection in exactly one place — the prep page reads selection
- * only through `pluginPolicy`. The top-level fields stay valid in `world.yaml`
- * for back-compat but are no longer stored as separate metadata keys.
- * Returns undefined when neither source declares anything.
- */
-function foldSelectionIntoPluginPolicy(
-  manifest: Record<string, unknown>,
-): Record<string, unknown> | undefined {
-  const rawPolicy = manifest.pluginPolicy as
-    Record<string, unknown> | undefined;
-  const folded: Record<string, unknown> = { ...rawPolicy };
-  let hasSelection = rawPolicy !== undefined;
-  for (const key of [
-    "requiredPlugins",
-    "recommendedPlugins",
-    "excludedPlugins",
-  ] as const) {
-    const top = Array.isArray(manifest[key]) ? (manifest[key] as string[]) : [];
-    const inPolicy = Array.isArray(rawPolicy?.[key])
-      ? (rawPolicy![key] as string[])
-      : [];
-    const merged = [...new Set([...inPolicy, ...top])];
-    if (merged.length > 0) {
-      folded[key] = merged;
-      hasSelection = true;
-    }
-  }
-  return hasSelection ? folded : undefined;
-}
-
-/**
  * Load a single world package from its directory.
  * Returns a WorldRecord ready for upsert, or null if invalid/missing.
  */
@@ -251,11 +217,9 @@ export async function loadSingleWorld(
   const dimensionSources = manifest.dimensionSources as
     Record<string, string> | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
-  const pluginPolicy = foldSelectionIntoPluginPolicy(manifest);
+  const pluginPolicy = manifest.pluginPolicy;
   const pluginSettings = manifest.pluginSettings as
     Record<string, Record<string, unknown>> | undefined;
-  const memoryBlocks = manifest.memoryBlocks as
-    readonly MemoryBlockSchema[] | undefined;
   const defaultViewMode = manifest.defaultViewMode as string | undefined;
 
   // Merge inline + external dimensions (external wins for same key)
@@ -276,21 +240,7 @@ export async function loadSingleWorld(
   const lore = await readLore(worldDir, defaultLocale);
   const now = new Date().toISOString();
 
-  const characterBlueprintSources = Array.isArray(
-    manifest.characterBlueprintSources,
-  )
-    ? (manifest.characterBlueprintSources as string[])
-    : undefined;
-  const characterBlueprints =
-    characterBlueprintSources && !worldDataPath
-      ? await loadCharacterBlueprints(worldDir, characterBlueprintSources)
-      : undefined;
-
-  // World-declared character attribute schema (optional). Carried into
-  // metadata so `world-init`'s guard can write it verbatim and skip the LLM.
-  const characterAttributes = Array.isArray(manifest.characterAttributes)
-    ? (manifest.characterAttributes as unknown[])
-    : undefined;
+  const characterSchema = manifest.characterSchema;
 
   const packageReceipt = await readReceipt(worldDir).catch(() => null);
   const baseMetadata: Record<string, unknown> = {
@@ -312,11 +262,8 @@ export async function loadSingleWorld(
     dimensionSources: dimensionSources,
     pluginPolicy,
     pluginSettings,
-    memoryBlocks,
     worldDataPath,
-    characterBlueprintSources,
-    characterBlueprints,
-    characterAttributes,
+    characterSchema,
     ...(defaultViewMode ? { defaultViewMode } : {}),
   };
   const worldData = await loadWorldDataSummary({
@@ -352,26 +299,6 @@ export async function loadSingleWorld(
     createdAt: now,
     updatedAt: now,
   };
-}
-
-async function loadCharacterBlueprints(
-  worldDir: string,
-  sources: readonly string[],
-): Promise<unknown[]> {
-  const blueprints: unknown[] = [];
-  for (const source of sources) {
-    const fullPath = await resolveSafePath(worldDir, source);
-    if (!fullPath) {
-      throw new Error(
-        `characterBlueprintSources path escapes world dir: ${source}`,
-      );
-    }
-    const raw = await readFile(fullPath, "utf-8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed)) blueprints.push(...parsed);
-    else blueprints.push(parsed);
-  }
-  return blueprints;
 }
 
 /**

@@ -11,7 +11,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import type { InteractionPayload, InteractionType } from "@covel/shared";
 import {
-  submitFormHandler,
+  createSubmitFormHandler,
   RpcValidationError,
   VALID_TYPES,
 } from "../src/rpc-defaults/submit-form.js";
@@ -85,7 +85,7 @@ async function submitOne(
   },
   locale?: string,
 ): Promise<string> {
-  const result = (await submitFormHandler(
+  const result = (await createSubmitFormHandler(undefined, store)(
     { turnId: TURN, submissions: [sub] },
     makeCtx(store, locale),
   )) as { results: Array<{ filledNarrative: string }> };
@@ -394,7 +394,7 @@ describe("submitFormHandler (Epic A)", () => {
       prompt: "Choose",
       choices: [{ id: "x", label: "X" }],
     });
-    const result = (await submitFormHandler(
+    const result = (await createSubmitFormHandler(undefined, store)(
       {
         turnId: TURN,
         submissions: [
@@ -414,7 +414,7 @@ describe("submitFormHandler (Epic A)", () => {
     await seedTemplate(store, "p2", "", [
       { type: "number", name: "b", label: "B" },
     ]);
-    await submitFormHandler(
+    await createSubmitFormHandler(undefined, store)(
       {
         turnId: TURN,
         submissions: [
@@ -444,26 +444,32 @@ describe("submitFormHandler (Epic A)", () => {
 
   // ── validation errors ───────────────────────────────────────────
   it("throws when payload is not an object", async () => {
-    await expect(submitFormHandler(null, makeCtx(store))).rejects.toThrow(
-      RpcValidationError,
-    );
+    await expect(
+      createSubmitFormHandler(undefined, store)(null, makeCtx(store)),
+    ).rejects.toThrow(RpcValidationError);
   });
 
   it("throws when turnId is missing", async () => {
     await expect(
-      submitFormHandler({ submissions: [] }, makeCtx(store)),
+      createSubmitFormHandler(undefined, store)(
+        { submissions: [] },
+        makeCtx(store),
+      ),
     ).rejects.toThrow(RpcValidationError);
   });
 
   it("throws when submissions[] is empty", async () => {
     await expect(
-      submitFormHandler({ turnId: TURN, submissions: [] }, makeCtx(store)),
+      createSubmitFormHandler(undefined, store)(
+        { turnId: TURN, submissions: [] },
+        makeCtx(store),
+      ),
     ).rejects.toThrow(RpcValidationError);
   });
 
   it("throws when submissions is not an array", async () => {
     await expect(
-      submitFormHandler(
+      createSubmitFormHandler(undefined, store)(
         { turnId: TURN, submissions: { interactionId: "x" } },
         makeCtx(store),
       ),
@@ -472,13 +478,16 @@ describe("submitFormHandler (Epic A)", () => {
 
   it("throws when a submission is not an object", async () => {
     await expect(
-      submitFormHandler({ turnId: TURN, submissions: [null] }, makeCtx(store)),
+      createSubmitFormHandler(undefined, store)(
+        { turnId: TURN, submissions: [null] },
+        makeCtx(store),
+      ),
     ).rejects.toThrow(RpcValidationError);
   });
 
   it("throws when a submission interactionId is missing", async () => {
     await expect(
-      submitFormHandler(
+      createSubmitFormHandler(undefined, store)(
         { turnId: TURN, submissions: [{ type: "form", values: {} }] },
         makeCtx(store),
       ),
@@ -487,7 +496,7 @@ describe("submitFormHandler (Epic A)", () => {
 
   it("throws for an invalid submission type", async () => {
     await expect(
-      submitFormHandler(
+      createSubmitFormHandler(undefined, store)(
         {
           turnId: TURN,
           submissions: [{ interactionId: "x", type: "bogus", values: {} }],
@@ -499,7 +508,7 @@ describe("submitFormHandler (Epic A)", () => {
 
   it("throws when submission.values is an array", async () => {
     await expect(
-      submitFormHandler(
+      createSubmitFormHandler(undefined, store)(
         {
           turnId: TURN,
           submissions: [{ interactionId: "x", type: "form", values: [] }],
@@ -624,10 +633,16 @@ describe("submitFormHandler (Epic A)", () => {
         },
       ],
     };
-    const first = (await submitFormHandler(payload, makeCtx(store))) as {
+    const first = (await createSubmitFormHandler(undefined, store)(
+      payload,
+      makeCtx(store),
+    )) as {
       results: Array<{ submissionId: string }>;
     };
-    const replay = (await submitFormHandler(payload, makeCtx(store))) as {
+    const replay = (await createSubmitFormHandler(undefined, store)(
+      payload,
+      makeCtx(store),
+    )) as {
       results: Array<{ submissionId: string }>;
     };
     expect(replay.results[0]?.submissionId).toBe(
@@ -653,7 +668,7 @@ describe("submitFormHandler (Epic A)", () => {
       fields: [{ type: "text", name: "name", label: "Name", required: true }],
     });
     await expect(
-      submitFormHandler(
+      createSubmitFormHandler(undefined, store)(
         {
           turnId: TURN,
           submissions: [
@@ -709,7 +724,7 @@ describe("typed numeric form constraints", () => {
       { points: "3", ready: "false" },
       { points: 3, ready: false },
     ]) {
-      const result = (await submitFormHandler(
+      const result = (await createSubmitFormHandler(undefined, store)(
         {
           turnId: TURN,
           submissions: [{ interactionId: "legacy", type: "form", values }],

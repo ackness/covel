@@ -67,34 +67,32 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 ### 当前注册的面板
 
-| 插件/runtime                                                             | 面板 ID             | 图标               | group         | 数据 namespace | 描述                                                                                                |
-| ------------------------------------------------------------------------ | ------------------- | ------------------ | ------------- | -------------- | --------------------------------------------------------------------------------------------------- |
-| affinity                                                                 | affinity            | heart              | affinity      | affinity       | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因）                                      |
-| char-creator/player-init                                                 | character           | users              | character     | characters     | 角色列表（player + NPC + companion）                                                                |
-| character-blueprint                                                      | character-blueprint | id-card            | character     | blueprints     | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                           |
-| character-presence                                                       | character-presence  | image              | character-art | presence       | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像）                                    |
-| codex                                                                    | codex               | book-open          | codex         | entries        | 知识图鉴                                                                                            |
-| core-quest                                                               | core-quest          | scroll-text        | core-quest    | quests         | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组）                                     |
-| dice-check/recorder                                                      | dice-check-panel    | dices              | （无）        | checks         | 判定记录（倒序 🎲 回执列表：骰式 / 成败配色 / critical 强调）                                       |
-| inventory                                                                | inventory           | backpack           | inventory     | items          | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                 |
-| dashscope-image-gen/image-generator · openai-image-gen/image-generator   | `<plugin>-gallery`  | image              | image-studio  | images         | 剧情插图画廊（`ImageGallery`，`alwaysRender`）；两个图像插件各一套，合并进同一 `image-studio` 组    |
-| dashscope-image-gen/image-generator · openai-image-gen/image-generator   | `<plugin>-jobs`     | loader             | image-studio  | \_jobs         | 生成任务视图（`ImageJobs`，`alwaysRender`）                                                         |
-| dashscope-image-gen/prompt-generator · openai-image-gen/prompt-generator | `<plugin>-trigger`  | wand               | image-studio  | （无）         | 「生成图片」manual 触发入口按钮（`expectsBackgroundFollower`，`alwaysRender`）                      |
-| mimo-tts/auto-narrate                                                    | mimo-tts-audio-tab  | headphones         | tts-studio    | tracks         | 旁白语音 playlist（`AudioPlayer`，`alwaysRender`）                                                  |
-| living-world-rules                                                       | living-world-rules  | book-marked        | world-data    | rules          | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）             |
-| memory                                                                   | memory              | brain              | memory        | （框架托管）   | 核心记忆面板：剧情摘要 / 当前场景 / 角色关系 / 玩家状态。纯 UI，由 `@covel/memory` 在每轮结束后写入 |
-| npc-graph/extractor                                                      | npc-graph           | network            | npc-graph     | nodes + edges  | NPC 关系图（force-directed 可视化）                                                                 |
-| scene-cast                                                               | scene-cast          | users-round        | （无）        | active-cast    | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                              |
-| scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage          | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）       |
-| world-init/schema-gen                                                    | world-overview      | layout-dashboard   | world-data    | (汇总)         | 世界总览（词条 + 维度的概览页）                                                                     |
-| world-init/schema-gen                                                    | world-schema        | sliders-horizontal | world-data    | schema         | 角色属性 schema                                                                                     |
+| 插件/runtime                                                             | 面板 ID             | 图标               | group         | 数据 namespace     | 描述                                                                                             |
+| ------------------------------------------------------------------------ | ------------------- | ------------------ | ------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
+| affinity                                                                 | affinity            | heart              | affinity      | affinity           | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因）                                   |
+| char-creator/player-init                                                 | character           | users              | character     | session.characters | 角色列表（类型由当前角色 schema 定义）                                                           |
+| character-blueprint                                                      | character-blueprint | id-card            | character     | blueprints         | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                        |
+| character-presence                                                       | character-presence  | image              | character-art | presence           | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像）                                 |
+| codex                                                                    | codex               | book-open          | codex         | entries            | 知识图鉴                                                                                         |
+| core-quest                                                               | core-quest          | scroll-text        | core-quest    | quests             | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组）                                  |
+| dice-check/recorder                                                      | dice-check-panel    | dices              | （无）        | checks             | 判定记录（倒序 🎲 回执列表：骰式 / 成败配色 / critical 强调）                                    |
+| inventory                                                                | inventory           | backpack           | inventory     | items              | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                              |
+| dashscope-image-gen/image-generator · openai-image-gen/image-generator   | `<plugin>-gallery`  | image              | image-studio  | images             | 剧情插图画廊（`ImageGallery`，`alwaysRender`）；两个图像插件各一套，合并进同一 `image-studio` 组 |
+| dashscope-image-gen/image-generator · openai-image-gen/image-generator   | `<plugin>-jobs`     | loader             | image-studio  | \_jobs             | 生成任务视图（`ImageJobs`，`alwaysRender`）                                                      |
+| dashscope-image-gen/prompt-generator · openai-image-gen/prompt-generator | `<plugin>-trigger`  | wand               | image-studio  | （无）             | 「生成图片」manual 触发入口按钮（`expectsBackgroundFollower`，`alwaysRender`）                   |
+| mimo-tts/auto-narrate                                                    | mimo-tts-audio-tab  | headphones         | tts-studio    | tracks             | 旁白语音 playlist（`AudioPlayer`，`alwaysRender`）                                               |
+| living-world-rules                                                       | living-world-rules  | book-marked        | world-data    | rules              | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）          |
+| memory                                                                   | memory              | brain              | memory        | blocks             | 记忆插件在脱离回合的 post-turn function runtime 中更新自己的记忆块并展示                         |
+| npc-graph/extractor                                                      | npc-graph           | network            | npc-graph     | nodes + edges      | NPC 关系图（force-directed 可视化）                                                              |
+| scene-cast                                                               | scene-cast          | users-round        | （无）        | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                           |
+| scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）    |
+| world-init/schema-gen                                                    | world-overview      | layout-dashboard   | world-data    | (汇总)             | 世界总览（词条 + 维度的概览页）                                                                  |
+| world-init/schema-gen                                                    | world-schema        | sliders-horizontal | world-data    | schema             | 角色属性 schema                                                                                  |
 
 > `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则 之间切换。（旧 `world-entries` 子 Tab 已移除：对导入型世界它只是 `world-overview` 已格式化渲染的同一份 dimensions 的原始 JSON 重复；`entries` 的 lorebook/prompt 写入不变，`/debug` Data Explorer 仍可查看。）
-> `character` 组汇聚 `char-creator` 的 character-panel（活角色列表，character-tracker runtime 共享 namespace `characters`，由 `sync-characters` 原子批量写入；底层复用 `create-character` / `update-character`）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；同一批角色导入后会 mirror 成活的 `CharacterRecord`，两个子 Tab 分别呈现"源"与"当前"。
-> `npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
-> `memory` 是纯 UI 插件（`pluginType: core-plugin`，没有 stage/model，不参与自动执行）：插件自身不写入 plugin-data，框架的 Memory System (`@covel/memory`) 负责在每轮结束后更新核心记忆，并在启用向量后进行 recall / archival 索引，面板读取框架镜像的记忆块。
-
-框架按 `memory-panel` capability 发现宿主，将最近一次提取结果保存到保留 namespace `_memory` 的 `update` key。右侧面板在 `status: failed` 时展示提示和错误详情，成功后自动移除；该状态使用现有 plugin-data hydration/SSE 路径，按 session 隔离，不注入模型记忆块。没有记忆面板宿主时仍记录 trace，但不显示面板提示。
+> `character` 组汇聚 `char-creator` 的 character-panel（从会话 World Model 的 `session.characters` 读取活角色）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；角色创建或导入经 World Model 写入，不依靠跨插件角色镜像。
+> `npc-graph/extractor` 的 npc-graph-panel 通过 `dataSource.bindings` 把自身 `nodes` + `edges` 两个 namespace 注入面板状态，再作为 props 传给 `GraphCanvas` 呈现关系图（react-force-graph-2d 懒加载）。
+> `memory` 包注册 `prompt.segment@1`、`memory.block-definitions@1` 服务和右侧面板。`runtimes/extract/RUNTIME.md` 消费冻结的 `turn-digest@1`，以 `settle: before-next-execution` 的脱离回合任务更新本插件 `blocks` namespace。面板直接读取这些块；提示词片段位于缓存边界之后。禁用该插件的会话不运行提取、不等待它的任务，也不注入其记忆。
 
 ### 世界文档（框架自持 Tab）
 
@@ -165,6 +163,7 @@ ui:
 - `icon` — 框架允许列表内的 Lucide 图标名（kebab-case）；完整列表见
   [UI Components / Display](ui-components.md#display)
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
+- `dataSource.bindings` — 可选的至多 8 个具名自有 namespace 绑定，例如 `{ "nodes": "characters", "edges": "relations" }`；面板在 `/sources/nodes`、`/sources/edges` 暴露其当前会话数据供 `$state` 引用。名称与 namespace 必须为字面量，无法指定其他插件；切换会话时这些值随数据源刷新，缺失的 namespace 为空对象。主 `namespace` 仍决定普通面板数据和空态。
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件。当前 Web UI 只执行这类声明式 spec；`.tsx`、`.js` 等非 JSON UI 声明不受支持，API 会给出对应诊断并剔除该项
 
@@ -226,7 +225,7 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 | ---------------------- | --------------------------------------------------------- |
 | `character-panel.json` | 尚未创建角色，完成角色创建流程后将在此显示……              |
 | `codex-panel.json`     | 图鉴暂无词条，等待 narrator 发现新知识……                  |
-| `memory-panel.json`    | （核心记忆，由 `@covel/memory` 在每轮结束后写入）         |
+| `memory-panel.json`    | 记忆插件首轮提取前尚无记忆块                              |
 | `npc-graph-panel.json` | 尚未识别到角色或势力关系，narrator 推进剧情后将自动浮现…… |
 | `world-schema.json`    | 角色属性定义尚未生成，等待世界初始化……                    |
 
@@ -417,19 +416,23 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 ### 层级与数据源
 
-五层绝对定位、`z-index` 分档，DOM 顺序 Backdrop → Sprites → Hud → Dialog → Choices，全部套在一个 `relative` 有界容器里。数据全部经 `usePluginNamespace(pluginId, namespace)` 读取（`StageView` 保持薄，逻辑在 `stage-selectors.ts`）：
+五层绝对定位、`z-index` 分档，DOM 顺序 Backdrop → Sprites → Hud → Dialog → Choices，全部套在一个 `relative` 有界容器里。舞台消费服务端 `ui.slot@1` 投影；提供者从各自数据、领域事件和 World Model 构造通用槽位，前端不按插件 namespace 拼接舞台：
 
-| 层           | 数据源                                                                                                      | 选择器                                                                     |
-| ------------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **Backdrop** | `("scene-stage","stage")["current"]`                                                                        | `resolveBackdrop`（四档回退，见下）                                        |
-| **Sprites**  | `("scene-cast","active-cast")["current"].speakers` × `("character-presence","presence")`                    | `computeSpriteSlots`（站位/高亮，无立绘则过滤）                            |
-| **Hud**      | `("scene-stage","stage")["current"]`（`name` / `variant` / `sourceLabel` / `source`）                       | —（无状态，按钮回调上抛）                                                  |
-| **Dialog**   | 最新 story 的 `content` + stage-direction 提供方的 `dialogue/<turnId>`                                      | `use-typewriter` 与 `splitStageParagraphs`（共享分段边界、逐段署名）       |
-| **Choices**  | 未提交的 choice 类 interaction block + scene-prompts message namespace 的 `scene/recap/decision/prompt{N}*` | `extractInteractionChoices` + `mergeChoices`（保留问题分组并统一自由输入） |
+| 层           | 数据源                                                 | 前端用途                                         |
+| ------------ | ------------------------------------------------------ | ------------------------------------------------ |
+| **Backdrop** | `stage.backdrop@1`                                     | 展示背景、场景名称和状态；缺图时使用世界视觉回退 |
+| **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1` | 站位、高亮、立绘与无图时的占位                   |
+| **Hud**      | `stage.backdrop@1`                                     | 展示名称、变体和来源状态                         |
+| **Dialog**   | 最新 story 正文与 `stage.dialogue@1`                   | 打字、段落切分和逐段署名                         |
+| **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项与自由输入               |
 
 “流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示，逐段暂停等待点击；最后一段读完同样停一次等收尾点击（自动播放按停顿计时自动推进，正文尾部空段落不产生空白暂停），不会在打字追上流结束时自动跳到决策面板。读完且回合执行结束后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后立即隐藏整个旧决策面板，包括插件扩展区域；等待新叙事时显示生成状态，不重播已读的旧叙事。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版 scene-prompts 行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
 
-scene-prompts 数据既可能从当前 SSE 实时到达，也可能在会话恢复时从 `/plugin-data` 拉取。恢复水合必须同时写入 session reducer 与 `usePluginNamespace` 订阅的 external store；否则解析消息能看到数据，而舞台选择层仍会读到空 namespace。
+舞台槽位在当前执行中可接收预览事件，提交后由服务端重算并缓存；会话恢复时重新读取已提交槽位。`watch` 仅监听提供者自己的 namespace，预览失败或取消时丢弃，不把私有插件数据直接交给舞台。
+
+服务端槽位缓存按最近使用顺序保留最多 256 个会话。正在处理请求、排队投影或分发事件的会话不会被淘汰；并发期间允许暂时超过上限，工作结束后回收闲置条目。单次读取在释放会话状态前取得结果，缓存淘汰不会使已成功的投影返回空结果。
+
+`stage.cast@1` 中演员的可选 `active` 标记控制立绘高亮。只要有演员明确指定该标记，就按各自的布尔值显示；全部省略时默认高亮第一位未退场的演员。
 
 对白名牌读取当前回合 `dialogue/<turnId>.paragraphSpeakers`，由 `stage.direction` 显式提供角色 ID 并解析为 `{ characterId, displayName } | null`。同回合实时事件可以先行预览，旧的已提交映射不会在同回合重试的流式阶段复用。打字机与署名校验共用 `splitStageParagraphs`（CRLF 转 LF，三个以上换行视为一个空行分隔）；正文结束后的分段数量必须和映射一致。旁白、未知身份、旧消息无映射或回合不匹配时不显示人物名牌，演员焦点不参与署名。
 
@@ -437,12 +440,14 @@ scene-prompts 数据既可能从当前 SSE 实时到达，也可能在会话恢�
 
 ### 背景回退链（`resolveBackdrop`）
 
-| 档                 | 触发                                      | 表现                                        |
-| ------------------ | ----------------------------------------- | ------------------------------------------- |
-| `scene`            | `stage/current.resolved` 是 `MediaRef`    | 渲染场景图（换图 600ms crossfade）          |
-| `previous-or-hero` | `source === "pending"`（生成中）          | 保留上一帧场景图 + 呼吸徽标，无则退世界头图 |
-| `hero`             | `source === "none"` 或无 scene-stage 数据 | 世界头图（`worldVisual().image`）           |
-| `gradient`         | 理论兜底                                  | 世界 accent 渐变（选择器当前不返回）        |
+输入直接是 `stage.backdrop@1` 槽位值，符合 `stageBackdropSchema`；`label` 供状态文案展示，不控制回退。
+
+| 档                 | 触发                                         | 表现                                        |
+| ------------------ | -------------------------------------------- | ------------------------------------------- |
+| `scene`            | 槽位 `ref` 是 `MediaRef`                     | 渲染场景图（换图 600ms crossfade）          |
+| `previous-or-hero` | 无有效 `ref` 且 `pending: true`              | 保留上一帧场景图 + 呼吸徽标，无则退世界头图 |
+| `hero`             | 槽位缺失，或无有效 `ref` 且 `pending: false` | 世界头图（`worldVisual().image`）           |
+| `gradient`         | 理论兜底                                     | 世界 accent 渐变（选择器当前不返回）        |
 
 ### 履历抽屉与表单模态
 
@@ -514,4 +519,31 @@ Responsive panel resize callbacks use the supplied dimensions, avoiding imperati
 
 ## 插件自带组件与舞台挂载
 
-JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用隔离容器与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。
+JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用双层 opaque-origin sandbox iframe；可信外层的 CSP 禁止插件文档向网络地址自行导航，端口仅转交一次。内层保留内联脚本与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。
+
+## Kernel UI slots
+
+Plugins declare `contributes.extensions` providers for `ui.slot@1` and register
+handlers from their server entry. `slot` selects `stage.backdrop@1`,
+`stage.cast@1`, `stage.dialogue@1`, `stage.choices@1`, or `character.visual@1`.
+Providers compose in declared order, then plugin/provider ID order. Handlers
+receive `{ slot, previous, events }`, own scoped `ctx.pluginData`, and the kernel
+`ctx.world` view. The host validates each provider output against its slot model.
+A failing provider is skipped; it cannot replace the previous valid value.
+
+`watch` lists the provider's own namespaces. Their commits invalidate projections
+with a 50 ms debounce. `preview` lists validated domain-event topics that the
+provider can project before commit. Previews are ephemeral, scoped to the turn,
+and discarded on completion, failure, or cancellation. They never replace the
+committed cache. Late results after a terminal event are discarded.
+
+Character visual providers return `{ characters: CharacterVisualModel[] }`,
+including imported art before characters are created. Providers normalize IDs;
+the host emits one keyed `character.visual@1` snapshot per `characterId`.
+Front-end consumers join exact keys and do not infer plugin namespaces or ID
+suffixes. The stage, avatar, portrait gallery, and cast list read these slots.
+
+Panel data bindings and action `pluginId` fields may reference only the owning
+plugin. The loader rejects foreign or dynamic plugin targets. Use kernel slots
+or World Model for data shared between plugins. A component that reads kernel
+data before its namespace has records must set `alwaysRender: true`.

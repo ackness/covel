@@ -249,6 +249,15 @@ export const messages = pgTable(
 
 // ── Characters ──────────────────────────────────────────────────
 
+export const characterSchemas = pgTable("character_schemas", {
+  sessionId: text("session_id").primaryKey(),
+  version: integer("version").notNull(),
+  types: jsonb("types").notNull(),
+  attributes: jsonb("attributes").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const characters = pgTable(
   "characters",
   {
@@ -460,35 +469,12 @@ export const playerInputs = pgTable(
 
 // ── Working Memory ────────────────────────────────────
 
-export const workingMemory = pgTable(
-  "working_memory",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    key: text("key").notNull(),
-    scope: text("scope").notNull(), // 'player' | 'story' | 'shared'
-    value: jsonb("value"), // JSON
-    schemaRef: text("schema_ref"),
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("pg_working_memory_session_id_idx").on(table.sessionId),
-    uniqueIndex("pg_working_memory_unique_idx").on(
-      table.sessionId,
-      table.scope,
-      table.key,
-    ),
-  ],
-);
-
-// ── Lorebook Entries ──────────────────────────────────
-
 export const lorebookEntries = pgTable(
   "lorebook_entries",
   {
     id: text("id").notNull(),
     sessionId: text("session_id").notNull(),
-    pluginId: text("plugin_id").notNull(),
+    owner: text("owner").notNull(),
     keys: jsonb("keys").notNull(), // JSON string[]
     content: text("content").notNull(),
     strategy: text("strategy").notNull(), // 'constant' | 'selective'
@@ -500,12 +486,9 @@ export const lorebookEntries = pgTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.sessionId, table.id] }),
+    primaryKey({ columns: [table.sessionId, table.owner, table.id] }),
     index("pg_lorebook_entries_session_id_idx").on(table.sessionId),
-    index("pg_lorebook_entries_plugin_id_idx").on(
-      table.sessionId,
-      table.pluginId,
-    ),
+    index("pg_lorebook_entries_owner_idx").on(table.sessionId, table.owner),
   ],
 );
 

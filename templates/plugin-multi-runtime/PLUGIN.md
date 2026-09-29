@@ -1,10 +1,12 @@
 ---
-name: "{{pluginName}}"
+id: "{{pluginName}}"
+kind: plugin
 description: "{{pluginDescription}}"
-pluginType: plugin
-ui:
-  right:
-    - ./runtimes/note/ui/panel.json
+optional: [narrative-engine@1]
+contributes:
+  ui:
+    right:
+      - ./runtimes/note/ui/panel.json
 ---
 
 Shared package declarations. Executable runtimes live in runtimes/.

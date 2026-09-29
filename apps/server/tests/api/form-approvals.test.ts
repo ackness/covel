@@ -59,10 +59,11 @@ describe("form provider authorization", () => {
       updatedAt: now,
     });
     const plugins = createPluginRegistry();
-    rpc = createBootstrapPluginRpc();
+    rpc = createBootstrapPluginRpc(store);
     for (const [order, id] of providers.entries()) {
       const loaded = makeFakeLoadedRuntime({ name: id });
       const parsed = {
+        runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
         manifest: loaded.manifest,
         promptTemplate: loaded.promptTemplate,
         rawFrontmatter: {},
@@ -78,7 +79,7 @@ describe("form provider authorization", () => {
           pluginType: "plugin",
           runtimeCount: 1,
         },
-        manifest: parsed,
+
         manifests: [parsed],
         loadedRuntimes: new Map([[id, loaded]]),
       });

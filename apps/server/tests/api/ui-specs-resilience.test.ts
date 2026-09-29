@@ -26,17 +26,22 @@ const stubAi = {
 } as unknown as Parameters<typeof createMiscApiRoutes>[0];
 
 const manifestFor = (name: string): string => `---
-name: ${name}
+id: ${name}
+kind: plugin
 description: test
-pluginType: plugin
-runtimeType: function
-handler: ./handler.js
-outputKind: plugin
-trigger:
-  type: manual
-ui:
-  right:
-    - ./ui/panel.json
+contributes:
+  ui:
+    right:
+      - ./ui/panel.json
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+  io:
+    visibility: plugin
+  function:
+    handler: ./handler.js
 ---
 `;
 

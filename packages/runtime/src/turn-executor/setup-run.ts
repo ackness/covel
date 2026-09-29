@@ -27,7 +27,7 @@ import type { RanSetupRuntime } from "../commit/setup-settle.js";
 interface SetupResultClass {
   /** Did the runtime enter its guard/handler (i.e. spend an attempt)? */
   readonly ran: boolean;
-  /** Did it signal completion (preGameDone / guard skip)? */
+  /** Did it signal completion (completion: done / guard skip)? */
   readonly doneSignal: boolean;
   readonly ledgerState: "success" | "failed" | "skipped";
   readonly error?: string;
@@ -55,7 +55,7 @@ export function classifySetupResult(result: RuntimeResult): SetupResultClass {
   }
   return {
     ran: true,
-    doneSignal: output?.preGameDone === true,
+    doneSignal: result.completion === "done",
     ledgerState: "success",
   };
 }
@@ -145,7 +145,7 @@ export function detectSetupSessionCycles(
   const inScope = new Set(pendingSetup.map((r) => r.name));
   const capabilityProviders = new Map<string, string[]>();
   for (const rt of pendingSetup) {
-    for (const cap of rt.capabilities ?? []) {
+    for (const cap of rt.outputContract ? [rt.outputContract] : []) {
       const list = capabilityProviders.get(cap) ?? [];
       list.push(rt.name);
       capabilityProviders.set(cap, list);

@@ -5,40 +5,6 @@
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
 
-export interface WorkingMemoryRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly key: string;
-  readonly scope: "player" | "story" | "shared";
-  readonly value: unknown; // validated by schema_ref when present
-  readonly schemaRef?: string;
-  readonly updatedAt: string; // ISO
-}
-
-/**
- * Canonical working-memory ordering: by semantic scope (player → story →
- * shared) then key. Every backend's `listWorkingMemory` sorts with this so the
- * order entries are surfaced (and injected into prompts) is identical across
- * Memory / SQLite / PG / IDB — alphabetical scope ordering would put `shared`
- * before `story` only on the SQL backends, breaking parity.
- */
-export const WORKING_MEMORY_SCOPE_ORDER: Readonly<Record<string, number>> = {
-  player: 0,
-  story: 1,
-  shared: 2,
-};
-
-export function compareWorkingMemoryEntries(
-  a: { readonly scope: string; readonly key: string },
-  b: { readonly scope: string; readonly key: string },
-): number {
-  const scopeDiff =
-    (WORKING_MEMORY_SCOPE_ORDER[a.scope] ?? 99) -
-    (WORKING_MEMORY_SCOPE_ORDER[b.scope] ?? 99);
-  if (scopeDiff !== 0) return scopeDiff;
-  return a.key.localeCompare(b.key);
-}
-
 export interface WorldDataImportLedgerRecord {
   readonly id: string;
   readonly sessionId: string;
@@ -61,17 +27,18 @@ export interface WorldDataImportLedgerRecord {
  *
  * Plain record shape carrying all lorebook entry fields. The framework
  * routes and runtime/loader handle field-level semantics; the store layer
- * just persists and retrieves these records by (sessionId, id).
+ * just persists and retrieves these records by (sessionId, owner, id).
  *
  * Only session-source entries land here. World/plugin layer entries are
  * loaded from disk by the lorebook loaders and never persisted via this
  * table — A3 keeps them as authoring artefacts, not session state.
  */
+import type { LorebookOwner } from "@covel/shared";
+
 export interface LorebookEntryRecord {
   readonly id: string;
   readonly sessionId: string;
-  /** Plugin that owns this entry. Mirrors lorebook `pluginId` for traceability. */
-  readonly pluginId: string;
+  readonly owner: LorebookOwner;
   /** JSON string[] — keys for selective scanning (constant entries can pass `[]`). */
   readonly keys: readonly string[];
   readonly content: string;
@@ -121,7 +88,7 @@ export interface SessionSummaryRecord {
   readonly turnRangeEnd: string;
   /** The summary text produced by the fast-slot LLM. */
   readonly content: string;
-  /** Deduped list from plugin summaryFocus fields. */
+  /** Focus sections supplied by the history compaction strategy. */
   readonly focusSections: readonly string[];
   readonly createdAt: string;
 }

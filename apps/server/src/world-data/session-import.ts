@@ -1,10 +1,10 @@
+import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
-  cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
-  maybeDeleteOwnedUnreferencedMedia,
+  releaseWorldDataMediaRefs,
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
 import {
@@ -43,7 +43,7 @@ function deferredProjectionLedgerKey(
   return `${ledger.sourceId}\u0000${projection.slice("projection:".length)}\u0000${output.slice("output:".length)}`;
 }
 
-export { cleanupWorldDataMediaRefs, finalizeWorldDataMediaRefs };
+export { finalizeWorldDataMediaRefs, releaseWorldDataMediaRefs };
 
 export type {
   ImportWorldDataForSessionResult,
@@ -58,24 +58,29 @@ export type {
 export async function prepareWorldDataImportForSession(
   options: PrepareWorldDataImportForSessionOptions,
 ): Promise<PreparedWorldDataImport> {
-  if (!options.worldId || !options.worldsDirs?.length) {
+  if (!options.worldId) return { imported: false, diagnostics: [] };
+  const worldRoot = options.worldsDirs?.length
+    ? await resolveWorldRoot(options.worldId, options.worldsDirs)
+    : null;
+  const manifest = worldRoot ? await readWorldManifest(worldRoot) : null;
+  if (!worldRoot || !manifest?.worldData) {
+    const sources = portableContractSources(options.contractData);
+    if (options.contractData === undefined)
+      return { imported: false, diagnostics: [] };
+    const plan = await buildImportPlan({
+      sessionId: options.sessionId,
+      worldId: options.worldId,
+      sources,
+      deps: options.preflight,
+      now: options.now,
+      locale: options.locale,
+    });
     return {
-      imported: false,
-      diagnostics: [],
-    };
-  }
-  const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
-  if (!worldRoot) {
-    return {
-      imported: false,
-      diagnostics: [],
-    };
-  }
-  const manifest = await readWorldManifest(worldRoot);
-  if (!manifest.worldData) {
-    return {
-      imported: false,
-      diagnostics: [],
+      imported: true,
+      portableOnly: true,
+      diagnostics: [...plan.diagnostics, ...plan.mergeEvents],
+      plan,
+      mediaRefs: [],
     };
   }
 
@@ -107,21 +112,13 @@ export async function prepareWorldDataImportForSession(
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   let materializedWrites = plan.writes;
   if (options.mediaStore) {
-    try {
-      const materialized = await materializeMediaIndexWrites({
-        mediaStore: options.mediaStore,
-        sessionId: options.sessionId,
-        writes: plan.writes,
-        onMediaRef: (ref) => mediaRefs.push(ref),
-      });
-      materializedWrites = materialized.writes;
-    } catch (error) {
-      await cleanupWorldDataMediaRefs({
-        mediaStore: options.mediaStore,
-        refs: mediaRefs,
-      });
-      throw error;
-    }
+    const materialized = await materializeMediaIndexWrites({
+      mediaStore: options.mediaStore,
+      sessionId: options.sessionId,
+      writes: plan.writes,
+    });
+    mediaRefs.push(...materialized.mediaRefs);
+    materializedWrites = materialized.writes;
   }
   return {
     imported: true,
@@ -151,6 +148,7 @@ export async function applyPreparedWorldDataImportForSession(
       mediaRefs: [],
     };
   }
+  const mediaRefs = [...options.prepared.mediaRefs];
   let result: Awaited<ReturnType<typeof writeImportPlan>>;
   try {
     result = await writeImportPlan({
@@ -160,23 +158,22 @@ export async function applyPreparedWorldDataImportForSession(
       worldId: options.worldId,
       now: options.now,
       plan: options.prepared.plan,
-      deferMediaFinalize: options.deferMediaFinalize,
+      deferMediaFinalize: true,
     });
+    mediaRefs.push(...result.mediaRefs);
   } catch (error) {
-    await cleanupWorldDataMediaRefs({
+    await releaseWorldDataMediaRefs({
       mediaStore: options.mediaStore,
-      refs: options.prepared.mediaRefs,
+      refs: mediaRefs,
     });
     throw error;
   }
-  if (!options.deferMediaFinalize && options.prepared.mediaRefs.length > 0) {
+  if (!options.deferMediaFinalize) {
     await finalizeWorldDataMediaRefs({
       mediaStore: options.mediaStore,
-      refs: options.prepared.mediaRefs,
+      refs: mediaRefs,
     });
   }
-  const mediaRefs = [...options.prepared.mediaRefs, ...result.mediaRefs];
-
   return {
     imported: true,
     diagnostics: options.prepared.diagnostics,
@@ -195,6 +192,9 @@ export async function importWorldDataForSession(
       ? await options.store.getSession(options.sessionId)
       : null;
   const prepared = await prepareWorldDataImportForSession({
+    contractData: options.worldId
+      ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
+      : undefined,
     sessionId: options.sessionId,
     worldId: options.worldId,
     worldsDirs: options.worldsDirs,
@@ -225,30 +225,51 @@ export async function preflightWorldDataForSession(
   options: PreflightWorldDataForSessionOptions,
 ): Promise<PreflightWorldDataForSessionResult> {
   if (!options.worldId || !options.worldsDirs?.length) {
-    return {
-      imported: false,
-      diagnostics: [],
-      planned: 0,
-      targets: [],
-    };
+    const prepared = await prepareWorldDataImportForSession({
+      ...options,
+      worldsDirs: [],
+      preflight: { ...options.preflight, executeProjectionHandlers: false },
+    });
+    return prepared.imported
+      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
+      : {
+          imported: false,
+          diagnostics: prepared.diagnostics,
+          planned: 0,
+          targets: [],
+        };
   }
   const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
   if (!worldRoot) {
-    return {
-      imported: false,
-      diagnostics: [],
-      planned: 0,
-      targets: [],
-    };
+    const prepared = await prepareWorldDataImportForSession({
+      ...options,
+      worldsDirs: [],
+      preflight: { ...options.preflight, executeProjectionHandlers: false },
+    });
+    return prepared.imported
+      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
+      : {
+          imported: false,
+          diagnostics: prepared.diagnostics,
+          planned: 0,
+          targets: [],
+        };
   }
   const manifest = await readWorldManifest(worldRoot);
   if (!manifest.worldData) {
-    return {
-      imported: false,
-      diagnostics: [],
-      planned: 0,
-      targets: [],
-    };
+    const prepared = await prepareWorldDataImportForSession({
+      ...options,
+      worldsDirs: [],
+      preflight: { ...options.preflight, executeProjectionHandlers: false },
+    });
+    return prepared.imported
+      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
+      : {
+          imported: false,
+          diagnostics: prepared.diagnostics,
+          planned: 0,
+          targets: [],
+        };
   }
 
   const descriptor = await loadWorldDataDescriptor({
@@ -282,13 +303,20 @@ export async function preflightWorldDataForSession(
     locale: options.locale,
   });
 
+  return preflightPlanResult(plan, [
+    ...descriptor.diagnostics,
+    ...plan.diagnostics,
+    ...plan.mergeEvents,
+  ]);
+}
+
+function preflightPlanResult(
+  plan: PreparedWorldDataSync["plan"],
+  diagnostics: PreparedWorldDataSync["diagnostics"],
+): PreflightWorldDataForSessionResult {
   return {
     imported: true,
-    diagnostics: [
-      ...descriptor.diagnostics,
-      ...plan.diagnostics,
-      ...plan.mergeEvents,
-    ],
+    diagnostics,
     planned: plan.writes.length,
     targets: plan.writes.map((write) => ({
       kind: write.kind,
@@ -336,15 +364,15 @@ export async function prepareWorldDataSyncForSession(
   options: SyncWorldDataForSessionOptions,
 ): Promise<PreparedWorldDataSync> {
   if (!options.worldId || !options.worldsDirs?.length) {
-    return { imported: false, diagnostics: [], plan: emptyImportPlan() };
+    return preparePortableWorldDataSync(options);
   }
   const worldRoot = await resolveWorldRoot(options.worldId, options.worldsDirs);
   if (!worldRoot) {
-    return { imported: false, diagnostics: [], plan: emptyImportPlan() };
+    return preparePortableWorldDataSync(options);
   }
   const manifest = await readWorldManifest(worldRoot);
   if (!manifest.worldData) {
-    return { imported: false, diagnostics: [], plan: emptyImportPlan() };
+    return preparePortableWorldDataSync(options);
   }
 
   const descriptor = await loadWorldDataDescriptor({
@@ -387,6 +415,34 @@ export async function prepareWorldDataSyncForSession(
     ],
     plan,
   };
+}
+
+async function preparePortableWorldDataSync(
+  options: SyncWorldDataForSessionOptions,
+): Promise<PreparedWorldDataSync> {
+  const session = !options.preflight?.activePlugins
+    ? await options.store.getSession(options.sessionId)
+    : null;
+  const prepared = await prepareWorldDataImportForSession({
+    sessionId: options.sessionId,
+    worldId: options.worldId,
+    now: options.now,
+    locale: options.locale ?? session?.locale,
+    contractData: options.worldId
+      ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
+      : undefined,
+    preflight: {
+      ...options.preflight,
+      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
+    },
+  });
+  return prepared.imported
+    ? { imported: true, diagnostics: prepared.diagnostics, plan: prepared.plan }
+    : {
+        imported: false,
+        diagnostics: prepared.diagnostics,
+        plan: emptyImportPlan(),
+      };
 }
 
 export async function syncWorldDataForSession(
@@ -518,26 +574,19 @@ export async function syncWorldDataForSession(
   }
 
   const mediaRefs: WorldDataImportedMediaRef[] = [];
-  // Media ids unreferenced by ledger deletes inside the transaction. Their
-  // removeRef + owned-media delete (which does an irreversible rmSync) is
-  // finalized only AFTER commit — the mirror of the put-side deferral — so a
-  // mid-transaction abort rolls back the DB rows without having deleted a file
-  // the restored rows still point at.
+  // Drop references only after the semantic transaction commits.
   const pendingMediaUnrefs: string[] = [];
-  let materializedWritesToApply: readonly PlannedWrite[] = writesToApply;
+  const materialized = await materializeMediaIndexWrites({
+    mediaStore: options.mediaStore,
+    sessionId: options.sessionId,
+    writes: writesToApply,
+  });
+  mediaRefs.push(...materialized.mediaRefs);
+  const materializedWritesToApply = materialized.writes;
+  let committed = false;
   try {
-    const materialized = await materializeMediaIndexWrites({
-      mediaStore: options.mediaStore,
-      sessionId: options.sessionId,
-      writes: writesToApply,
-      onMediaRef: (ref) => mediaRefs.push(ref),
-    });
-    materializedWritesToApply = materialized.writes;
-
     // Scoped transaction: ledger deletes + plan writes commit atomically and a
-    // throw auto-rolls-back the DB. `mediaRefs` is collected on the outer array
-    // so the catch below can still clean up media written before the failure
-    // (media files live outside the DB transaction).
+    // throw rolls back the DB. Unclaimed materialized bytes remain for media GC.
     await options.store.withTransaction(async (tx) => {
       // Compare-and-swap. The conflict scan above ran BEFORE this transaction
       // opened, so anything it declared unmodified could have been edited in
@@ -593,50 +642,44 @@ export async function syncWorldDataForSession(
         mediaRefs.push(...writeResult.mediaRefs);
       }
     });
-  } catch (err) {
-    await cleanupWorldDataMediaRefs({
-      mediaStore: options.mediaStore,
-      refs: mediaRefs,
-    });
-    throw err;
-  }
 
-  // The transaction committed. Only now delete the media unreferenced by the
-  // ledger deletes: removeRef drops the ref row, and an owned asset with no
-  // remaining refs is deleted (files and all). A failure here leaks a ref/asset
-  // (a GC concern) rather than stranding a committed reference on a missing
-  // file, so each is best-effort and independent.
-  if (options.mediaStore && pendingMediaUnrefs.length > 0) {
-    for (const mediaId of pendingMediaUnrefs) {
-      try {
-        await options.mediaStore.removeRef(mediaId, options.sessionId);
-        await maybeDeleteOwnedUnreferencedMedia({
-          mediaStore: options.mediaStore,
-          mediaId,
-          sessionId: options.sessionId,
-        });
-      } catch {
-        // Continue finalizing the remaining unrefs.
+    committed = true;
+    // Release references after commit. Ownership/bytes remain for lifecycle GC;
+    // content-addressed media can be claimed by another session concurrently.
+    if (options.mediaStore && pendingMediaUnrefs.length > 0) {
+      for (const mediaId of pendingMediaUnrefs) {
+        try {
+          await options.mediaStore.removeRef(mediaId, options.sessionId);
+        } catch {
+          // Continue finalizing the remaining unrefs.
+        }
       }
     }
-  }
 
-  if (mediaRefs.length > 0) {
-    await finalizeWorldDataMediaRefs({
-      mediaStore: options.mediaStore,
-      refs: mediaRefs,
-    });
-  }
+    if (mediaRefs.length > 0) {
+      await finalizeWorldDataMediaRefs({
+        mediaStore: options.mediaStore,
+        refs: mediaRefs,
+      });
+    }
 
-  return {
-    imported: true,
-    dryRun,
-    diagnostics,
-    planned: plan.writes.length,
-    upserted,
-    deleted,
-    unchanged,
-    conflicts,
-    mediaRefs,
-  };
+    return {
+      imported: true,
+      dryRun,
+      diagnostics,
+      planned: plan.writes.length,
+      upserted,
+      deleted,
+      unchanged,
+      conflicts,
+      mediaRefs,
+    };
+  } finally {
+    // A committed index must stay pinned if permanent claims could not be saved.
+    if (!committed)
+      await releaseWorldDataMediaRefs({
+        mediaStore: options.mediaStore,
+        refs: mediaRefs,
+      });
+  }
 }

@@ -26,7 +26,6 @@ import {
   makeTraceEvent,
   makeTurnMessage,
   makeTurnResult,
-  makeWorkingMemory,
   makeWorld,
   makeWorldDataImportLedger,
   ts,
@@ -37,6 +36,54 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
 
   beforeEach(() => {
     store = getStore();
+  });
+
+  describe("Character schema", () => {
+    const record = {
+      sessionId: "schema-session",
+      version: 1,
+      types: ["merchant", "creature"],
+      attributes: [
+        {
+          id: "hp",
+          name: "Health",
+          type: "number" as const,
+          category: "stats" as const,
+          defaultValue: 10,
+        },
+      ],
+      createdAt: ts(),
+      updatedAt: ts(),
+    };
+
+    it("round-trips and replaces the session schema", async () => {
+      expect(await store.getCharacterSchema(record.sessionId)).toBeNull();
+      await store.upsertCharacterSchema(record);
+      expect(await store.getCharacterSchema(record.sessionId)).toEqual(record);
+      const updated = {
+        ...record,
+        version: 2,
+        types: ["enemy"],
+        updatedAt: ts(1),
+      };
+      await store.upsertCharacterSchema(updated);
+      expect(await store.getCharacterSchema(record.sessionId)).toEqual(updated);
+      expect(await store.getCharacterSchema("other-session")).toBeNull();
+    });
+
+    it("rolls schema updates back with the transaction and cascades session deletion", async () => {
+      await store.createSession(makeSession({ id: record.sessionId }));
+      await store.upsertCharacterSchema(record);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.upsertCharacterSchema({ ...record, version: 2 });
+          throw new Error("rollback schema");
+        }),
+      ).rejects.toThrow("rollback schema");
+      expect(await store.getCharacterSchema(record.sessionId)).toEqual(record);
+      await store.deleteSession(record.sessionId);
+      expect(await store.getCharacterSchema(record.sessionId)).toBeNull();
+    });
   });
 
   describe("Session", () => {

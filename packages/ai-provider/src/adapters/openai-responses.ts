@@ -13,6 +13,11 @@ import {
   defaultToolChoice,
 } from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
+import {
+  assertGenerationPayload,
+  assertStreamCompleted,
+  assertSuccessfulFinishReason,
+} from "./generation-completion.js";
 import type { UsageSummary } from "../types.js";
 import {
   postJson,
@@ -132,7 +137,7 @@ function mapResponseStatus(status: unknown): string {
     case "failed":
       return "error";
     default:
-      return "stop";
+      return "error";
   }
 }
 
@@ -296,6 +301,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/responses", body);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
+      assertGenerationPayload(payload, "openai-responses");
+      assertSuccessfulFinishReason(
+        mapResponseStatus(payload.status),
+        "openai-responses",
+      );
 
       return {
         text: readResponsesOutputText(payload),
@@ -327,6 +337,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
+      assertGenerationPayload(payload, "openai-responses");
+      assertSuccessfulFinishReason(
+        mapResponseStatus(payload.status),
+        "openai-responses",
+      );
 
       let rawObject: unknown;
       try {
@@ -384,6 +399,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let streamFinishReason = "stop";
+      let completed = false;
       const reasoning = new ResponsesReasoningAccumulator();
       const outputItems = new Map<number, unknown>();
       let completedOutput: unknown;
@@ -395,6 +411,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       >();
 
       for await (const payload of iterateSsePayloads(response)) {
+        assertGenerationPayload(payload, "openai-responses");
         if (payload.type === "response.output_item.done")
           outputItems.set(Number(payload.output_index ?? 0), payload.item);
         const reasoningDelta = reasoning.push(payload);
@@ -450,8 +467,15 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           streamFinishReason = mapResponseStatus(
             responseObj?.status ?? terminalStatus,
           );
+          assertGenerationPayload(
+            { error: streamFinishReason === "error" },
+            "openai-responses",
+          );
+          completed = true;
         }
       }
+
+      assertStreamCompleted(completed, "openai-responses");
 
       // Emit accumulated tool calls before done. The Responses API references
       // tool results by `call_id`, so that is the canonical id we surface;

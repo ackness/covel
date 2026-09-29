@@ -1,4 +1,23 @@
-import type { LLMMessage, LLMResponse } from "@covel/shared";
+interface ReviewMessage {
+  readonly role: "system" | "user" | "assistant" | "tool";
+  readonly content:
+    | string
+    | readonly (
+        | { readonly type: "text"; readonly text: string }
+        | {
+            readonly type: "image";
+            readonly image: {
+              readonly id: string;
+              readonly mime: string;
+              readonly size: number;
+            };
+          }
+      )[];
+}
+interface ReviewResponse {
+  readonly content: string | null;
+  readonly toolCalls: readonly { readonly name: string }[];
+}
 
 type Person = "first" | "second" | "third";
 type SettingsContext = {
@@ -7,8 +26,11 @@ type SettingsContext = {
   turnId?: string;
   runtimeId?: string;
 };
-type Request = { pluginId: string; messages: readonly LLMMessage[] };
-type Response = Request & { response: LLMResponse; correction?: string };
+type Request = { pluginId: string; messages: readonly ReviewMessage[] };
+type Response<T extends ReviewResponse> = Request & {
+  response: T;
+  correction?: string;
+};
 
 const perspectives = {
   first: {
@@ -145,7 +167,10 @@ export function createNarrativeReview(pluginId: string) {
         },
       };
     },
-    review(ctx: SettingsContext, payload: Response) {
+    review<T extends ReviewResponse>(
+      ctx: SettingsContext,
+      payload: Response<T>,
+    ) {
       if (payload.pluginId !== pluginId) return { action: "continue" as const };
       const response = payload.response;
       // Preparatory prose is not a story and must not seed the final response.

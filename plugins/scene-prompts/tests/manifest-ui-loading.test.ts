@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
+  compileInlineRuntime,
+  loadPluginUi,
   loadPluginManifest,
+  loadPluginDefinition,
   loadRuntime,
   parsePluginMd,
 } from "@covel/plugin-loader";
@@ -17,13 +20,21 @@ const pluginsDir = path.dirname(pluginDir);
 const pluginMdPath = path.join(pluginDir, "PLUGIN.md");
 
 describe("scene-prompts manifest and UI loading", () => {
-  it("parses PLUGIN.md through the strict runtime manifest schema", () => {
+  it("parses package contributions separately from its inline runtime", () => {
     const parsed = parsePluginMd(
       readFileSync(pluginMdPath, "utf-8"),
       pluginMdPath,
     );
 
     expect(parsed.manifest).toMatchObject({
+      name: "scene-prompts",
+      pluginId: "scene-prompts",
+      pluginType: "plugin",
+      entry: "./server/index.js",
+      ui: { message: ["./ui/scene-prompts-block.json"] },
+    });
+    expect(parsed.manifest).not.toHaveProperty("stage");
+    expect(compileInlineRuntime(parsed)?.manifest).toMatchObject({
       name: "scene-prompts",
       pluginId: "scene-prompts",
       pluginType: "plugin",
@@ -37,14 +48,10 @@ describe("scene-prompts manifest and UI loading", () => {
         type: "scheduled",
         interval: 1,
       },
-      entry: "./server/index.js",
       tools: {
         plugin: ["generate-scene-prompts"],
       },
       effects: { parallelSafe: true },
-      ui: {
-        message: ["./ui/scene-prompts-block.json"],
-      },
     });
   });
 
@@ -72,16 +79,13 @@ describe("scene-prompts manifest and UI loading", () => {
       inputs: {
         narrative: {
           from: {
-            capability: "narrative-engine",
+            capability: "narrative-engine@1",
             cardinality: "one",
           },
           select: "/narrativeOutput",
           accepts: "./schemas/narrative-output.schema.json",
           required: true,
         },
-      },
-      ui: {
-        message: ["./ui/scene-prompts-block.json"],
       },
     });
 
@@ -95,8 +99,9 @@ describe("scene-prompts manifest and UI loading", () => {
     expect(loaded.promptTemplate).toContain(
       "`decision` 用 8-120 个字符写出玩家当前需要回应的一个问题或决策点",
     );
-    expect(loaded.uiSpecs?.message).toHaveLength(1);
-    expect(loaded.uiSpecs?.message?.[0]).toMatchObject({
+    const ui = await loadPluginUi(discovery!);
+    expect(ui.uiSpecs?.message).toHaveLength(1);
+    expect(ui.uiSpecs?.message?.[0]).toMatchObject({
       id: "scene-prompts",
       dataSource: { namespace: "message" },
       view: {
@@ -115,7 +120,10 @@ describe("scene-prompts manifest and UI loading", () => {
     expect(loaded.promptTemplate).toContain("<runtime-inputs>");
     expect(loaded.promptTemplate).toContain("`recap`");
     expect(loaded.promptTemplate).toContain("`decision`");
-    const localizedPostHistory = JSON.stringify(loaded.manifest.postHistory);
+    const localizedPostHistory = JSON.stringify(
+      (await loadPluginDefinition(discovery!, "en-US")).packageManifest.plugin
+        .contributes?.prompt,
+    );
     expect(localizedPostHistory).toContain("Do not call `runtime-done`");
     expect(localizedPostHistory).not.toContain(
       "immediately call `runtime-done`",

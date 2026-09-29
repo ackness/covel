@@ -473,7 +473,11 @@ describe("TurnExecutor — agent runtime suspend", () => {
       toolCallId: "tc-event",
       name: "emit-event",
       result: '{"emitted":true}',
-      parsedResult: { emitted: true },
+      parsedResult: {
+        emitted: true,
+        interaction: { interactionId: "clue-form", type: "form" },
+        ui: [{ id: "clue-card", type: "form" }],
+      },
       emittedEvents: [{ topic: "clue.found", data: { id: 1 } }],
       success: true,
     });
@@ -547,9 +551,14 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(
       resumedMessages.find((message) => message.toolCallId === "tc-after"),
     ).toMatchObject({ role: "tool" });
-    expect((resumed.output as Record<string, unknown>).events).toEqual([
+    expect(resumed.effects?.events).toEqual([
       { topic: "clue.found", data: { id: 1 } },
     ]);
+    expect(resumed.effects?.interactions).toEqual([
+      { interactionId: "clue-form", type: "form" },
+    ]);
+    expect(resumed.effects?.ui).toEqual([{ id: "clue-card", type: "form" }]);
+    expect(resumed.output).not.toHaveProperty("ui");
   });
 
   it("should defer turn.suspended SSE until the artifact is committed", async () => {
@@ -1389,6 +1398,15 @@ describe("resumeSuspendedRuntime", () => {
       createdAt: new Date().toISOString(),
     });
 
+    const submittedForm = {
+      id: "resume-form",
+      sessionId: "sess-resume",
+      turnId: "turn-resume",
+      formId: "question",
+      values: { answer: "yes" },
+      createdAt: new Date().toISOString(),
+    };
+    await store.savePlayerInput(submittedForm);
     const llmGenerate = vi.fn(async () => {
       throw new Error("function resume must not call the LLM");
     });
@@ -1450,6 +1468,7 @@ describe("resumeSuspendedRuntime", () => {
       output: { narrativeOutput: "Resumed function." },
     });
     expect(receivedContext).toMatchObject({
+      session: { lastPlayerInput: submittedForm },
       resumeData: { answer: "yes" },
       resumedFromSuspensionId: id,
       execution: {

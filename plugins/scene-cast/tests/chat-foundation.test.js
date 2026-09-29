@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   discoverPlugins,
   loadPluginManifest,
+  loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { scheduleByDag } from "@covel/runtime";
@@ -16,6 +17,7 @@ describe("chat foundation manifests", () => {
   let chatNarrator;
   let loadedSceneCast;
   let loadedChatNarrator;
+  let sceneCastUi;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
@@ -32,6 +34,7 @@ describe("chat foundation manifests", () => {
     chatNarrator = (await loadPluginManifest(chatNarratorDiscovery))[0]
       .manifest;
     loadedSceneCast = await loadRuntime(sceneCastDiscovery, sceneCast.name);
+    sceneCastUi = await loadPluginUi(sceneCastDiscovery);
     loadedChatNarrator = await loadRuntime(
       chatNarratorDiscovery,
       chatNarrator.name,
@@ -47,13 +50,13 @@ describe("chat foundation manifests", () => {
       stage: "pre-turn",
       outputKind: "system",
     });
-    expect(sceneCast.capabilities).toContain("scene-cast");
+    expect(sceneCast.outputContract).toBe("scene-cast@1");
     expect(sceneCast.trigger).toMatchObject({ type: "scheduled", interval: 1 });
     expect(loadedSceneCast.handler).toBeTypeOf("function");
-    expect(loadedSceneCast.uiSpecs.right).toHaveLength(1);
+    expect(sceneCastUi.uiSpecs.right).toHaveLength(1);
   });
 
-  it("loads chat-mode-narrator with active cast runtime injection", () => {
+  it("loads chat-mode-narrator with active cast contract injection", () => {
     expect(chatNarrator).toMatchObject({
       name: "chat-mode-narrator",
       pluginType: "plugin",
@@ -61,27 +64,21 @@ describe("chat foundation manifests", () => {
       outputKind: "story",
       model: "story",
     });
-    expect(chatNarrator.capabilities).toEqual(
-      expect.arrayContaining(["narrative", "chat-mode"]),
-    );
-    expect(chatNarrator.input.inject[0]).toMatchObject({
-      kind: "runtime",
-      from: "scene-cast",
-      field: "activeCastContext",
-      as: "<active-cast>",
+    expect(chatNarrator.outputContract).toBe("narrative-engine@1");
+    expect(chatNarrator.inputs["active-cast"]).toMatchObject({
+      from: { capability: "scene-cast@1" },
+      select: "/activeCastContext",
+      required: false,
     });
-    expect(chatNarrator.summaryFocus).toEqual([
-      "character-intent",
-      "relationship-change",
-      "emotional-hook",
-    ]);
     // The body must NOT inline-interpolate the cast context — that would
     // double-inject (once inline, once via the input.inject segment-5 append).
     // The body references the <active-cast> tag; segment 5 fills it once.
     expect(loadedChatNarrator.promptTemplate).not.toContain(
       "{{ inputs.scene-cast.scene-cast.activeCastContext }}",
     );
-    expect(loadedChatNarrator.promptTemplate).toContain("<active-cast>");
+    expect(loadedChatNarrator.promptTemplate).toContain(
+      "runtime-inputs.active-cast.value",
+    );
   });
 
   it("schedules scene-cast before chat-mode-narrator in the DAG runtime layer", () => {

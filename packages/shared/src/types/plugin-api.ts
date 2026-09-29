@@ -6,12 +6,7 @@ import type {
   EffectResource,
   Stage,
 } from "./runtime-scheduling.js";
-import type {
-  PluginRelations,
-  PluginType,
-  PluginUserSettingSpec,
-  SessionSlashCommand,
-} from "./plugin.js";
+import type { PluginUserSettingSpec, SessionSlashCommand } from "./plugin.js";
 import type { I18nText } from "./world.js";
 
 export type PluginSource = "builtin" | "community";
@@ -37,9 +32,8 @@ export interface PluginRuntimeSummary {
   readonly turnCompletion: EffectiveTurnCompletion;
   readonly model?: string;
   readonly outputKind: "story" | "plugin" | "system";
-  readonly capabilities: readonly string[];
+  readonly outputContract?: string;
   readonly tags: readonly string[];
-  readonly relations?: PluginRelations;
 }
 
 export interface PluginToolSummary {
@@ -53,15 +47,25 @@ export interface PluginSummary {
   readonly id: string;
   readonly displayName: I18nText;
   readonly description: I18nText;
-  readonly pluginType: PluginType;
+  readonly kind: "core" | "plugin";
   readonly source: PluginSource;
-  readonly status: PluginStatus;
+  /** Process-wide entry publication; never implies session authorization. */
+  readonly hostState: "discovered" | "installed" | "loaded" | "error";
   readonly error?: string;
+  readonly registrationError?: {
+    readonly code: "plugin_registration_invalid";
+    readonly registration: string;
+  };
   readonly runtimeCount: number;
   readonly version?: string;
-  readonly capabilities: readonly string[];
+  readonly provides: NonNullable<
+    import("./plugin-manifest.js").PluginManifest["provides"]
+  >;
+  readonly requires: readonly string[];
+  readonly optional: readonly string[];
+  readonly conflicts: readonly string[];
+  readonly extensions: readonly import("../extension-points/index.js").ExtensionDeclaration[];
   readonly tags: readonly string[];
-  readonly relations?: PluginRelations;
   readonly runtimes: readonly PluginRuntimeSummary[];
   readonly tools: readonly PluginToolSummary[];
   readonly userSettings: readonly PluginUserSettingSpec[];
@@ -139,9 +143,15 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
 }
 
 export interface SessionPlugin extends PluginSummary {
+  /** Live authorization for this session, independent of host publication. */
+  readonly serverCodeApproved: boolean;
   /** Selected by the player but paused until this process receives approval. */
   readonly approvalRequired?: boolean;
   readonly active: boolean;
+  readonly sessionState:
+    "active" | "inactive" | "approval-required" | "rejected";
+  readonly autoAdded?: boolean;
+  readonly rejection?: import("../plugin-selection.js").PluginResolutionRejection;
   readonly locked: boolean;
 }
 
@@ -164,9 +174,8 @@ export interface PluginPack {
   readonly id: string;
   readonly label: I18nText;
   readonly description?: I18nText;
-  readonly pluginIds: readonly string[];
-  readonly optionalPluginIds: readonly string[];
-  readonly excludedPluginIds: readonly string[];
+  readonly requested: readonly string[];
+  readonly recommended: readonly string[];
   readonly tags: readonly string[];
   readonly reason?: I18nText;
   readonly source: "builtin" | "world";
@@ -176,10 +185,8 @@ export interface ResolvedWorldPluginPolicy {
   readonly presetId?: string;
   readonly preferredTags: readonly string[];
   readonly avoidedTags: readonly string[];
-  readonly requiredCapabilities: readonly string[];
-  readonly requiredPluginIds: readonly string[];
-  readonly recommendedPluginIds: readonly string[];
-  readonly excludedPluginIds: readonly string[];
+  readonly requested: readonly string[];
+  readonly recommended: readonly string[];
 }
 
 /** Server-resolved plugin selection plan for one world and live registry. */

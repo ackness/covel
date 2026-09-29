@@ -2,54 +2,58 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import { createMemoryStore, type DataStore } from "@covel/store";
-import type { PluginRelations, WorldPluginPlan } from "@covel/shared";
+import {
+  resolveSessionPlugins,
+  type PluginManifest,
+  type WorldPluginPlan,
+} from "@covel/shared";
+import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 import { worldPluginPlanRoutes } from "../../src/routes/api/worlds/plugin-plan.js";
-import { resolveSessionPlugins } from "../../src/routes/api/session/plugins.js";
+import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
 
-type Env = {
-  Variables: { store: DataStore; pluginRegistry: PluginRegistry };
-};
-
+type Env = { Variables: { store: DataStore; pluginRegistry: PluginRegistry } };
 function entry(
   id: string,
-  pluginType: "core-plugin" | "plugin",
-  tags: string[] = [],
-  relations?: PluginRelations,
+  fields: Partial<PluginManifest> = {},
   source: PluginRegistryEntry["source"] = "builtin",
 ): PluginRegistryEntry {
+  const plugin = { id, kind: "plugin", description: id, ...fields };
+  const root = parsePluginMd(
+    `---\n${JSON.stringify(plugin)}\n---\n`,
+    `${id}/PLUGIN.md`,
+  );
   return {
     id,
     summary: {
       id,
       name: id,
-      description: `${id} plugin`,
-      pluginType,
+      description: id,
+      pluginType: fields.kind === "core" ? "core-plugin" : "plugin",
       runtimeCount: 0,
-      tags,
-      ...(relations ? { relations } : {}),
+      tags: fields.tags ?? [],
     },
+    packageManifest: root,
     manifests: [],
     loadedRuntimes: new Map(),
     status: "registered",
     source,
   };
 }
-
 describe("GET /api/worlds/:id/plugin-plan", () => {
   let store: DataStore;
   let registry: PluginRegistry;
   let app: Hono<Env>;
-
-  beforeEach(async () => {
+  beforeEach(() => {
     store = createMemoryStore();
     registry = createPluginRegistry();
-    registry.register(entry("core", "core-plugin"));
-    registry.register(entry("dialogue", "plugin", ["mode:dialogue"]));
-    registry.register(entry("traditional", "plugin", ["mode:traditional"]));
+    registry.register(entry("core", { kind: "core" }));
+    registry.register(entry("dialogue", { tags: ["mode:dialogue"] }));
+    registry.register(entry("traditional", { tags: ["mode:traditional"] }));
     app = new Hono<Env>();
     app.use("*", async (c, next) => {
       c.set("store", store);
@@ -58,212 +62,143 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     });
     app.route("/api/worlds", worldPluginPlanRoutes);
   });
-
-  it("resolves world policy, custom packs, and defaults on the server", async () => {
-    await store.upsertWorld({
-      id: "dialogue-world",
-      name: "Dialogue world",
+  async function plan(
+    policy: Record<string, unknown>,
+  ): Promise<WorldPluginPlan> {
+    await store.createWorld({
+      id: "world",
+      name: "World",
       description: "",
-      metadata: {
-        pluginPolicy: {
-          preset: "custom-dialogue",
-          preferTags: ["mode:dialogue"],
-          avoidTags: ["mode:traditional"],
-          packs: [
-            {
-              id: "custom-dialogue",
-              label: { "zh-CN": "自定义对话", invalid: 42 },
-              plugins: ["dialogue"],
-              excludedPlugins: ["traditional", "core"],
-            },
-          ],
-        },
-      },
+      metadata: { pluginPolicy: policy },
       createdAt: new Date().toISOString(),
     });
-
-    const response = await app.request(
-      "/api/worlds/dialogue-world/plugin-plan",
-    );
+    const response = await app.request("/api/worlds/world/plugin-plan");
     expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      selectedPackId: string;
-      defaultPluginIds: string[];
-      packs: Array<{ id: string; label: Record<string, string> }>;
-    };
-    expect(body.selectedPackId).toBe("custom-dialogue");
-    expect(body.defaultPluginIds.toSorted()).toEqual(["core", "dialogue"]);
-    expect(body.packs[0]?.label).toEqual({ "zh-CN": "自定义对话" });
+    return response.json();
+  }
+  it("returns explicit requests from the preset and preferred tags without promoting core defaults", async () => {
+    const result = await plan({
+      presetId: "custom",
+      preferredTags: ["mode:dialogue"],
+      avoidedTags: ["mode:traditional"],
+      packs: [
+        {
+          id: "custom",
+          label: { "zh-CN": "自定义", invalid: 42 },
+          requested: ["dialogue"],
+          recommended: ["traditional"],
+        },
+      ],
+    });
+    expect(result.selectedPackId).toBe("custom");
+    expect(result.defaultPluginIds).toEqual(["dialogue"]);
+    expect(result.packs[0]).toMatchObject({
+      label: { "zh-CN": "自定义" },
+      requested: ["dialogue"],
+      recommended: ["traditional"],
+    });
     expect(
-      body.packs.find((pack) => pack.id === "dialogue-mode")?.label["ru-RU"],
-    ).toBe("Диалоговый режим");
+      resolveSessionPluginPlan(result.defaultPluginIds, registry).active,
+    ).toEqual(["dialogue", "core"]);
   });
-
-  it("returns a coded 404 for an unknown world", async () => {
-    const response = await app.request("/api/worlds/missing/plugin-plan");
-    expect(response.status).toBe(404);
-    await expect(response.json()).resolves.toMatchObject({
-      code: "world_not_found",
+  it("keeps recommendations inactive until explicitly requested", async () => {
+    const result = await plan({
+      recommended: ["dialogue"],
+      presetId: "recommendations",
+      packs: [
+        { id: "recommendations", requested: [], recommended: ["traditional"] },
+      ],
     });
+    expect(result.defaultPluginIds).toEqual([]);
+    expect(result.policy.recommended).toEqual(["dialogue"]);
   });
-
-  it.each([
-    {},
-    { pluginPolicy: { preferTags: ["mode:dialogue"] } },
-    { pluginPolicy: { requireCapabilities: ["choice-recommendations"] } },
-  ])("keeps demos optional for automatic selection: %j", async (metadata) => {
-    const demo = entry("choice-demo", "plugin", ["role:demo", "mode:dialogue"]);
-    registry.register({
-      ...demo,
-      summary: { ...demo.summary, capabilities: ["choice-recommendations"] },
+  it("preserves explicit requests despite avoided tag preferences", async () => {
+    const result = await plan({
+      requested: ["traditional"],
+      preferredTags: ["mode:dialogue"],
+      avoidedTags: ["mode:traditional"],
     });
-    await store.createWorld({
-      id: "demo-world",
-      name: "Demo world",
-      description: "",
-      metadata,
-      createdAt: new Date().toISOString(),
-    });
-    const response = await app.request("/api/worlds/demo-world/plugin-plan");
-    const plan = (await response.json()) as WorldPluginPlan;
-    expect(plan.defaultPluginIds).not.toContain("choice-demo");
-    expect(resolveSessionPlugins(["choice-demo"], registry)).toContain(
-      "choice-demo",
-    );
+    expect(result.defaultPluginIds).toEqual(["traditional", "dialogue"]);
   });
-
-  it.each([
-    { recommendedPlugins: ["choice-demo"] },
-    { requiredPlugins: ["choice-demo"] },
-    {
-      pluginPolicy: {
-        preset: "demo",
-        packs: [{ id: "demo", optionalPlugins: ["choice-demo"] }],
-      },
-    },
-  ])("honors explicit demo selection: %j", async (metadata) => {
-    registry.register(entry("choice-demo", "plugin", ["role:demo"]));
-    await store.createWorld({
-      id: "explicit-demo-world",
-      name: "Explicit demo world",
-      description: "",
-      metadata,
-      createdAt: new Date().toISOString(),
-    });
-    const response = await app.request(
-      "/api/worlds/explicit-demo-world/plugin-plan",
-    );
-    const plan = (await response.json()) as WorldPluginPlan;
-    expect(plan.defaultPluginIds).toContain("choice-demo");
-  });
-
-  it("preserves legacy metadata selection without a nested plugin policy", async () => {
-    await store.createWorld({
-      id: "legacy-world",
-      name: "Legacy world",
-      description: "",
-      metadata: {
-        requiredPlugins: ["dialogue"],
-        excludedPlugins: ["traditional", "dialogue"],
-      },
-      createdAt: new Date().toISOString(),
-    });
-
-    const response = await app.request("/api/worlds/legacy-world/plugin-plan");
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as WorldPluginPlan;
-    expect(body).toMatchObject({
-      policy: {
-        requiredPluginIds: ["dialogue"],
-        excludedPluginIds: ["traditional", "dialogue"],
-      },
-    });
-    expect(body.defaultPluginIds.toSorted()).toEqual(["core", "dialogue"]);
-  });
-
-  it("merges and deduplicates legacy and nested selection lists", async () => {
-    await store.createWorld({
-      id: "mixed-world",
-      name: "Mixed world",
-      description: "",
-      metadata: {
-        requiredPlugins: ["dialogue", "dialogue", "", 42],
-        recommendedPlugins: ["legacy-recommended"],
-        excludedPlugins: ["traditional"],
-        pluginPolicy: {
-          requiredPlugins: ["dialogue", "nested-required"],
-          recommendedPlugins: ["legacy-recommended", "nested-recommended"],
-          excludedPlugins: ["traditional", "nested-excluded"],
-        },
-      },
-      createdAt: new Date().toISOString(),
-    });
-
-    const response = await app.request("/api/worlds/mixed-world/plugin-plan");
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as WorldPluginPlan;
-    expect(body).toMatchObject({
-      policy: {
-        requiredPluginIds: ["dialogue", "nested-required"],
-        recommendedPluginIds: ["legacy-recommended", "nested-recommended"],
-        excludedPluginIds: ["traditional", "nested-excluded"],
-      },
-    });
-    expect(body.defaultPluginIds.toSorted()).toEqual(["core", "dialogue"]);
-  });
-
   it.each(["builtin", "community"] as const)(
-    "applies session dependency and core replacement rules to a %s provider",
+    "keeps a %s request distinct from dependency and authorization resolution",
     async (source) => {
       registry.register(
-        entry("core", "core-plugin", [], {
-          provides: ["story-provider"],
+        entry("core", {
+          kind: "core",
+          provides: [{ contract: "story@1", default: true }],
         }),
       );
       registry.register(
         entry(
           "replacement",
-          "plugin",
-          [],
-          {
-            provides: ["story-provider"],
-            conflicts: ["core"],
-            requires: ["dependency/helper"],
-          },
+          { provides: ["story@1"], requires: ["helper@1"] },
           source,
         ),
       );
-      registry.register(entry("dependency", "plugin"));
-      await store.createWorld({
-        id: "replacement-world",
-        name: "Replacement world",
-        description: "",
-        metadata: {
-          pluginPolicy: {
-            requiredPlugins: ["replacement"],
-            excludedPlugins: ["core"],
-          },
-        },
-        createdAt: new Date().toISOString(),
-      });
-
-      const response = await app.request(
-        "/api/worlds/replacement-world/plugin-plan",
+      registry.register(entry("dependency", { provides: ["helper@1"] }));
+      const result = await plan({ requested: ["replacement"] });
+      expect(result.defaultPluginIds).toEqual(["replacement"]);
+      const resolved = resolveSessionPluginPlan(
+        result.defaultPluginIds,
+        registry,
       );
-      expect(response.status).toBe(200);
-      const plan = (await response.json()) as WorldPluginPlan;
-      expect(plan.defaultPluginIds.toSorted()).toEqual(
-        resolveSessionPlugins(["replacement"], registry).toSorted(),
-      );
-      if (source === "builtin") {
-        expect(plan.defaultPluginIds.toSorted()).toEqual([
-          "dependency",
-          "replacement",
-        ]);
-      } else {
-        expect(plan.defaultPluginIds).toContain("core");
-        expect(plan.defaultPluginIds).not.toContain("replacement");
+      if (source === "builtin")
+        expect(resolved.active).toEqual(["replacement", "dependency"]);
+      else {
+        expect(resolved.active).toEqual(["core"]);
+        expect(resolved.rejected).toContainEqual(
+          expect.objectContaining({
+            pluginId: "replacement",
+            code: "approval-required",
+          }),
+        );
       }
     },
   );
+  it("returns a coded 404 for an unknown world", async () => {
+    const response = await app.request("/api/worlds/missing/plugin-plan");
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "world_not_found" });
+  });
+});
+
+describe("extension dependency session plans", () => {
+  it("uses the same implementation metadata for server and client candidates", () => {
+    const registry = createPluginRegistry();
+    registry.register(
+      entry("consumer", {
+        requires: ["prompt.segment@1", "character.visual@1"],
+      }),
+    );
+    registry.register(
+      entry("claim", { provides: ["prompt.segment@1", "character.visual@1"] }),
+    );
+    registry.register(
+      entry("prompt", {
+        contributes: {
+          prompt: [{ id: "note", content: "Note", position: "system" }],
+        },
+      }),
+    );
+    registry.register(
+      entry("visual", {
+        contributes: {
+          extensions: [
+            { point: "ui.slot@1", id: "visual", slot: "character.visual@1" },
+          ],
+        },
+      }),
+    );
+    const server = resolveSessionPluginPlan(["consumer"], registry);
+    const client = resolveSessionPlugins({
+      requested: ["consumer"],
+      plugins: [...registry.getAll().values()].map((plugin) => ({
+        ...buildPluginSummary(plugin),
+        authorized: true,
+      })),
+    });
+    expect(server.active).toEqual(["consumer", "prompt", "visual"]);
+    expect(client).toEqual(server);
+  });
 });

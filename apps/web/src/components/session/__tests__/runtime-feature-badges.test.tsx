@@ -1,6 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { FrameworkCapability } from "@covel/shared";
 import i18n from "@/i18n";
 import {
   deriveRuntimeFeatures,
@@ -20,10 +19,10 @@ describe("runtime feature badges", () => {
       deriveRuntimeFeatures({
         kind: "function",
         trigger: { type: "manual" },
-        capabilities: ["tts"],
+        outputKind: "plugin",
         execution: "background",
       }).map((feature) => feature.kind),
-    ).toEqual(["background", "function", "manual", "media"]);
+    ).toEqual(["background", "function", "manual", "auxiliary"]);
   });
 
   it("derives staged detached AI narrative features", () => {
@@ -31,7 +30,7 @@ describe("runtime feature badges", () => {
       deriveRuntimeFeatures({
         runtimeType: "agent",
         trigger: { type: "auto" },
-        capabilities: [FrameworkCapability.Narrative],
+        outputKind: "story",
         turnCompletion: { mode: "detached" },
       }).map((feature) => feature.kind),
     ).toEqual(["background", "agent", "automatic", "narrative"]);

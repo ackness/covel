@@ -4,26 +4,12 @@ import { dashscopeWanWire } from "./dashscope-wan-wire.js";
 
 export const DEFAULT_IMAGE_WIRE = "openai-images";
 
-// Deliberate runtime Map (unlike the folded protocol registry): plugin
-// registration is a designed extension point, not speculative flexibility.
-const wires = new Map<string, ImageWire>();
-
+import { registerWire, getWire } from "../wire-lifecycle.js";
 export function registerImageWire(wire: ImageWire): () => void {
-  if (wires.has(wire.id)) {
-    throw new Error(`image wire "${wire.id}" already registered`);
-  }
-  const id = wire.id;
-  wires.set(id, wire);
-  let disposed = false;
-  return () => {
-    if (disposed) return;
-    disposed = true;
-    if (wires.get(id) === wire) wires.delete(id);
-  };
+  return registerWire("image", wire);
 }
-
 export function getImageWire(id: string): ImageWire | null {
-  return wires.get(id) ?? null;
+  return getWire("image", id);
 }
 
 registerImageWire(openAiImagesWire);

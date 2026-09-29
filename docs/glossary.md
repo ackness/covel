@@ -44,7 +44,7 @@ See: `packages/settings/src/`.
 
 ## Proposal
 
-A kernel-validated write envelope emitted by a plugin (never a direct DB write). Types are derived from the single source of truth `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `working_memory.set`, `lorebook.upsert`.
+A kernel-validated write envelope emitted by a plugin (never a direct DB write). Types are derived from the single source of truth `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `character.schema.set`, `lorebook.upsert`.
 
 See: [docs/reference/transactions.md](./reference/transactions.md), [docs/architecture/flow.md](./architecture/flow.md).
 
@@ -56,7 +56,7 @@ See: `packages/ai-provider/`, [docs/reference/plugins.md](./reference/plugins.md
 
 ## Runtime
 
-The actual executable unit inside a plugin — either an `agent` (LLM-driven, loads `PLUGIN.md` as system prompt) or a `function` (pure JS handler). One plugin package may export multiple runtimes with different triggers, stages, and dependency edges.
+The actual executable unit inside a plugin — either an `agent` (LLM-driven, loads `RUNTIME.md` (or root inline runtime) as system prompt) or a `function` (pure JS handler). One plugin package may export multiple runtimes with different triggers, stages, and dependency edges.
 
 See: [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md), [docs/reference/plugins.md](./reference/plugins.md).
 

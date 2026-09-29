@@ -85,8 +85,8 @@ stateDiagram-v2
 - **phase 翻转**：所有 setup runtime 都报告完成后，Kernel 在 setup 提交事务内把 `phase` 从 `'setup'` 翻到 `'playing'`；该事务的 `completedPlayerTurns` 仍为 0。提交失败时 phase 翻转和 setup 镜像一并回滚。
 - **Setup completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先提交 setup，再以新的 `turnId` 和独立事务立即补跑主循环 runtime。接力事务成功后才把 `completedPlayerTurns` 从 0 推进到 1。玩家可直接看到第一段正式叙事；同一 SSE 流、trace 和 snapshot 会覆盖 setup completion 与 main-loop followup 两次执行。
 - **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、对话 execution journal（玩家/runtime `TurnMessage`）、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）、suspension artifact 和自动 snapshot 由同一 session lock 串行化；journal、proposal、时钟与 suspension 在同一 `finalizeExecution` transaction 中提交或回滚。`turn.suspended` 只在 commit 后发出。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。`execution.completed.committed` 是客户端收敛 optimistic 输出的终态信号。
-- **例外：legacy RPC/event 后台执行只有提交在锁内**。`execution: background` 的 runtime（deferred follower 与 background 模式的 manual 触发）把 handler 跑在 session lock **外**，只有 `processTurnResults`（finalize 事务 + auto-snapshot）进锁。这类 runtime 通常是几分钟的 provider 调用（出图、手动 TTS），持锁执行会让玩家的下一条消息一直排队，PG 部署下更会直接撞上 30s 的锁获取上限。之所以安全：这条路径不写会话时钟（不传 `sessionClock`，且 `completedPlayerTurns` 只数 `origin: "player"`），域写入经 writeBuffer 汇入同一个提交事务而非执行期零散落盘，也不追加对话消息。同一 runtime 的并发执行由 `<sessionId>::<runtimeId>` 作业锁串行，保住 handler 里"是否已生成"这类 check-then-act 的原子性（否则会重复计费）；提交前在锁内重读会话状态，玩家中途暂停/结束会话时结果被丢弃而非写入。
-- **staged detached 是独立的 durable 完成屏障**。`turnCompletion.mode: detached` 只对通过安全检查的 `post-turn` / `audit` function 叶节点生效，和 `execution` 正交。调度器在原 DAG 层开始时冻结上游结果，把 descriptor 随原始回合的 proposal/journal/session clock 原子写入 `_runtime_jobs`；提交后立即发 `runtime.deferred` 并释放玩家回合。worker 以 CAS lease claim，执行期间不持主 session lock，同一 runtime 串行；进入 commit 前必须从 `running` CAS 到 `committing`，并在 session lock 内重验 session/plugin incarnation、版本和实际 effects。任何取消、超时、stale 或 lease 失效都会让迟到结果无法提交。
+- **RPC/event 后台执行只有提交在锁内**。`schedule.manual.execution: background` 的 runtime（deferred follower 与 background 模式的 manual 触发）把 handler 跑在 session lock **外**，只有 `processTurnResults`（finalize 事务 + auto-snapshot）进锁。这类 runtime 通常是几分钟的 provider 调用（出图、手动 TTS），持锁执行会让玩家的下一条消息一直排队，PG 部署下更会直接撞上 30s 的锁获取上限。之所以安全：这条路径不写会话时钟（不传 `sessionClock`，且 `completedPlayerTurns` 只数 `origin: "player"`），域写入经 writeBuffer 汇入同一个提交事务而非执行期零散落盘，也不追加对话消息。同一 runtime 的并发执行由 `<sessionId>::<runtimeId>` 作业锁串行，保住 handler 里"是否已生成"这类 check-then-act 的原子性（否则会重复计费）；提交前在锁内重读会话状态，玩家中途暂停/结束会话时结果被丢弃而非写入。
+- **staged detached 是独立的 durable 完成屏障**。`schedule.completion.mode: detached` 只对通过安全检查的 `post-turn` / `audit` function 叶节点生效，和 `execution` 正交。调度器在原 DAG 层开始时冻结上游结果，把 descriptor 随原始回合的 proposal/journal/session clock 原子写入 `_runtime_jobs`；提交后立即发 `runtime.deferred` 并释放玩家回合。worker 以 CAS lease claim，执行期间不持主 session lock，同一 runtime 串行；进入 commit 前必须从 `running` CAS 到 `committing`，并在 session lock 内重验 session/plugin incarnation、版本和实际 effects。任何取消、超时、stale 或 lease 失效都会让迟到结果无法提交。
 - **Playing**：`status === 'active' && phase === 'playing'`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，按 `pre-turn → narrative → post-turn → audit` 四个 stage 依次运行（stage 间严格屏障）。`completedPlayerTurns` 只统计已提交的玩家回合——manual plugin-rpc、后台 follower、嵌套 `recursiveCall` 等非玩家执行各自落 `turn_results` 行，`origin` 为 `player` / `continuation` / `manual` / `background` / `recursive` / `resume` 之一，且不计数；多个执行共享一个 logical turn 时只计一次。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
 
@@ -96,7 +96,9 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TB
-    In(["POST /api/actions<br/>玩家输入 / 开始游戏"]) --> Exec[executeTurn]
+    In(["POST /api/actions<br/>玩家输入 / 开始游戏"]) --> Settle["等待 before-next-execution 作业<br/>锁外等待，锁内重查"]
+    Settle --> Capture["冻结 registry / extension generation<br/>加载 canonical 历史并投影"]
+    Capture --> Exec[executeTurn]
     Exec --> StartEvt["SSE: execution.started"]
     StartEvt --> Hook1[TurnStart hook]
     Hook1 --> Filter["selectTriggeredRuntimes<br/>manual: 按名字匹配（绕过 shouldTrigger）<br/>setup runtime: 按 setupRuntimes 镜像取 pending<br/>其余: shouldTrigger（auto / scheduled / event<br/>+ startTurn / maxTriggerCount / cooldownTurns）"]
@@ -114,17 +116,17 @@ flowchart TB
       G3 --> G1["guard? (agent runtime)"]
       G1 --> G2["SSE: runtime.started"]
       G2 --> RT{"runtimeType"}
-      RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，物化 success.value / effects"]
+      RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，分别保存 output / effects / completion"]
       F1 --> G6
-      RT -->|agent| G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
+      RT -->|agent| G4["buildContext<br/>runtime 正文 + prompt.segment 扩展段<br/>+ typed inputs + 投影历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
       G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse"]
-      G5 --> G6["normalizeOutput → Proposal[]"]
+      G5 -->|拆分 agent 协议| G6["RuntimeResult: output / effects / completion"]
       G6 --> G7["PostRuntime hook"]
       G7 --> Final["校验故事输出 / 超时 / 父级取消"]
       Final --> G8["唯一终态 + turnId / runId<br/>runtime.completed / runtime.failed / runtime.skipped"]
     end
 
-    Group --> Commit["CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
+    Group --> Commit["effects + story 输出 → Proposal[] → CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
     Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted / record.updated"]
     SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
     PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
@@ -137,15 +139,14 @@ flowchart TB
 
 | phase       | 可调度 stage                               | 语义                                                                                                                                                                                                                                                                                                  |
 | ----------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `'setup'`   | `setup`                                    | 游戏初始化（如 `pregame`、`world-init/schema-gen`、`char-creator/player-init`）；顺序完全由声明边决定（`schema-gen` 用 `after: [pregame]` 保持 `pregame → schema-gen` 串行）                                                                                                                          |
+| `'setup'`   | `setup`                                    | 游戏初始化（如 `pregame`、`world-init/schema-gen`、`char-creator/player-init`）；顺序完全由声明边决定（`schema-gen` 用 `schedule.after: [pregame]` 保持 `pregame → schema-gen` 串行）                                                                                                                 |
 | `'playing'` | `pre-turn → narrative → post-turn → audit` | 每轮依次跑四个 stage，stage 间严格屏障（上一 stage 全部 settle——成功/失败/skip——才进下一个）。同一 stage 内由 `needs` / `after` / `inputs` 绑定推导的 DAG 排序，独立 runtime 并行，`name` 做稳定 tiebreak。依赖成环的 runtime（及其下游）本回合被 `skipped: dependency-cycle`，不会回退成任意顺序执行 |
 
-**Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。
+**Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete`、`character.schema.set`、`character.upsert`、`lorebook.upsert`。
 
-**能力提供者选择**：进入触发与依赖调度前，`resolveRuntimeProviders` 从已启用 runtime 中处理
-`fallbackFor`。同能力的显式提供者替代默认 runtime，且必须使用相同 stage；多个显式提供者或
-多个默认提供者会报错。替代只影响对应 runtime，不禁用其包内其他功能。自动动作在执行前完成
-community server-code 和 runtime 授权；框架不按跑团、叙事或其他具体插件 ID 分支。
+**插件依赖与提供者选择**：会话以显式 `requested` / `excluded`、授权状态、core 声明和版本化 `provides` / `requires` 解析 active set。显式排除也适用于 core；缺失依赖先选择唯一普通 provider，再考虑唯一 default provider。显式替代默认 provider 的处理在冲突检测之前。`conflicts` 与 single 扩展点竞争会拒绝组合；普通输出契约可以有多个 provider，由 `cardinality: one | all` 说明消费者需求。启停后的显式选择保存在 `session.metadata.pluginSelection`，推荐列表本身不自动启用插件。
+
+进入触发与 DAG 调度前，`resolveRuntimeProviders` 按编译后的 `outputContract` / `defaultProvider` 去掉已被替代的默认 runtime。community server-code 和 runtime 授权仍单独校验，批准状态不由依赖声明授予。框架不按具体插件 ID 分支。
 
 **失败任务恢复**：单项和批量重试创建新执行 ID，保留原始故事回合作为 `sourceTurnId`。
 只有来源和已提交重试中成功的非目标结果，以及 guard 明确 `skip: true` 的输出，才能作为上游
@@ -156,7 +157,7 @@ community server-code 和 runtime 授权；框架不按跑团、叙事或其他�
 
 ```mermaid
 flowchart LR
-    DAG["post-turn / audit DAG level"] --> Plan{"turnCompletion: detached<br/>且 function + 安全叶节点?"}
+    DAG["post-turn / audit DAG level"] --> Plan{"schedule.completion: detached<br/>且 function + 安全叶节点?"}
     Plan -->|否| Foreground["保留前台执行<br/>不安全声明产生 diagnostic"]
     Plan -->|是| Freeze["冻结 upstream RuntimeResult[]<br/>execution / model / settings / plugin version"]
     Foreground --> Tx["finalizeExecution transaction"]
@@ -176,7 +177,15 @@ flowchart LR
 
 worker 进入提交屏障前排空自身续租；`extraInTx` 在领域提交事务内完成 job 的成功 CAS。业务失败、完成 CAS 失败和事务末尾失败均回滚领域写入及 job 成功。成功事件在事务外发布；事件丢失可从已持久化终态补齐，不重跑任务。worker 首次唤醒及后续 30 秒维护间隔扫描过期租约，扫描失败 1 秒后重试；维护不受执行槽满影响。`committing` 任务须先非阻塞取得同一提交锁，锁忙时留待下一轮。关闭会停止后续调度并等待在途扫描及锁回调。
 
-首版 effect contract 只允许显式声明的 assets/media、本插件非保留 plugin-data、UI 和 HTTP 资源，实际 proposal 在提交前再验证一次。由于输入是来源回合快照而非 live state，涉及状态、角色、任务、记忆、交互、event、`recordAs` 或存在前台消费者的 runtime 会留在 foreground。`mimo-tts/auto-narrate` 是首个 opt-in。
+detached runtime 必须声明 effects；框架允许隔离的 assets/media、本插件非保留 plugin-data、UI 和 HTTP effects，提交前再次验证实际 proposal。存在前台消费者、`recordAs` 导出、事件输出或直接修改角色、状态与交互等不安全行为时，调度器保留前台执行并发出 diagnostic。
+
+### 2.4 下一次执行前的 settle 屏障
+
+需要让下一轮读到结果的 post-turn/audit function 可声明 `schedule.completion.settle: before-next-execution` 和 `maxSettleWaitMs`。这类任务可读取自身 plugin-data，由 worker 按来源任务顺序串行处理；输入中的 `turn-digest@1` 是内核冻结的来源回合摘要，不需要绑定某个叙事插件。`memory/extract` 使用这一机制更新自己的记忆块。
+
+玩家动作、RPC、resume 和会话变更入口先查询 durable pending jobs，在主 session lock 外唤醒 worker 并等待。取得锁后再次查询，避免检查与入锁间新任务被漏过；worker 提交始终使用原始 session lock，不进入自己的等待屏障。到达最早等待期限仍未结束时记录 `execution.settle-timeout`，随后允许新执行继续，超时不代表后台任务已成功或被取消。
+
+通过屏障后才捕获 registry、工具、服务、hook 与扩展注册的执行版本。热重载发布新版本不改变已经开始的执行；授权撤销仍以 live 状态检查。嵌套调用沿用已准入的执行，不在持锁时重复等待。
 
 ## 三、消息翻译层（玩家 ↔ LLM Agent）
 
@@ -275,107 +284,52 @@ LLM: "调用 unlock-         ToolExecutor:
 
 ### 4.1 插件结构
 
-```
+```text
 plugins/my-plugin/
-│
-├── PLUGIN.md              ← 核心：frontmatter(配置) + markdown(LLM 指令)
-│   │
-│   │  frontmatter 定义：
-│   │  ┌─────────────────────────────────┐
-│   │  │ name, description               │ ← 身份
-│   │  │ stage, needs, after, inputs     │ ← 调度声明（阶段 + 依赖）
-│   │  │ trigger: { type, interval, ... } │ ← 何时触发
-│   │  │ model: "fast"                   │ ← 用哪个 LLM slot
-│   │  │ tools: { plugin: [...], builtin: [...] }│ ← 可用工具（名字列表）
-│   │  │ input: { inject: [...] }        │ ← 依赖上游输出
-│   │  │ ui: { right: [...], message: [...] }    │ ← 前端 UI
-│   │  │ capabilities: [...]             │ ← 能力标签（框架发现用）
-│   │  │ outputKind: story|plugin|system │ ← 输出可见性
-│   │  └─────────────────────────────────┘
-│   │
-│   │  markdown body = LLM System Prompt：
-│   │  ┌─────────────────────────────────┐
-│   │  │ 你是xxx agent。                  │
-│   │  │ ## 当前叙事                      │
-│   │  │ {{ player.message }}             │ ← 模板变量，运行时填充
-│   │  │ ## 你的任务                      │
-│   │  │ 1. 分析叙事...                   │
-│   │  │ 2. 调用 tool-name 工具...         │
-│   │  └─────────────────────────────────┘
-│
-├── server/index.js        ← 统一服务端入口（frontmatter `entry` 指向）
-│   └── export default function (covel) {
-│         covel.registerTool(makeMyTool(covel.toolkit));  // 工具注册
-│         covel.on("PostLLMResponse", handler);            // hook
-│         covel.registerRpc("my-action", handler);         // RPC
-│         covel.registerWires({ image: [myWire] });        // 媒体 wire
-│       }
-│
-├── tools/                 ← 工具实现（工厂式，参数即 covel.toolkit）
-│   └── my-tool.js
-│       export default function ({ tool, z, store, shortIdBatch }) {
-│         return tool({
-│           name: 'my-tool',
-│           parameters: z.object({ ... }),
-│           execute: async (params, context) => {
-│             // 写入 plugin-data（会触发 SSE 事件）
-│             await store.setPluginData({ ... });
-│             // 返回结果给 LLM + UI block 给前端
-│             return { data: ..., ui: [{ type: 'my-block', ... }] };
-│           },
-│         });
-│       }
-│
-├── ui/                    ← 前端 UI 声明（json-render spec）
-│   ├── my-panel.json      → 右侧面板
-│   └── my-block.json      → 消息区 block
-│
-└── package.json
+  PLUGIN.md                  包身份、contracts、contributes；可内联一个 runtime
+  PLUGIN.en.md               根自然语言字段与固定提示段的 locale 变体
+  runtimes/extract/
+    RUNTIME.md               独立 runtime 配置与正文
+    RUNTIME.en.md            runtime 正文的 locale 变体
+  server/index.js            声明过的 tools/actions/services/extensions 等注册
+  server/extract.js          function handler
+  schemas/                   输入、输出和 namespace JSON Schema
+  ui/                        json-render specs
+  package.json
 ```
+
+根清单以 `id`、`kind` 标识包，`provides` / `requires` / `optional` / `conflicts` 描述契约关系，`contracts` 声明 schema，`contributes` 声明工具、RPC actions、服务、扩展、设置、数据和 UI。`contributes.commands` 是 slash command 元数据，其 action 必须同时声明在 `contributes.actions`。entry 的实际注册必须与根清单匹配。
+
+runtime 作者格式固定分为 `schedule`、`io`、`agent` 或 `function`，另有 `guard`、`effects`、`permissions`。正文属于该 runtime；根内联 runtime 和 `runtimes/*/RUNTIME.md` 两种组织方式互斥。`agent.tools` 与 `function.tools` 都是工具白名单。`io.output.contract` 必须由所属包提供，同一个包内不能由两个 runtime 重复声明同一输出契约。
+
+包级字段只属于根，不从子 runtime 合并。旧平铺 frontmatter、子目录 `PLUGIN.md` 和专用记忆/提示字段均不接受。固定跨 runtime 指令通过根 `contributes.prompt`，动态内容通过 `prompt.segment@1`；旧开发数据需要重新创建。完整字段见 [插件参考](../reference/plugins.md)。
 
 ### 4.2 插件间通信
 
-```
-插件不直接通信。通过框架中介：
+插件通过版本化契约和宿主能力协作，不能读取其他插件的私有 namespace。
 
-  narrator（stage: narrative）           guide / codex / extractor / char-tracker（stage: post-turn）
-  ────────────────────                  ──────────────────────────────────
-  capabilities: [narrative-engine]       PLUGIN.md 声明:
-  输出: { narrativeOutput: "..." }         stage: post-turn
-          │                              needs:
-          │                                - capability: narrative-engine
-          │                              input.inject:
-          │                                - from: narrator
-          │                                  field: narrativeOutput
-          │                                  as: "<narrator-output>"
-          │                                     │
-          ▼                                     ▼
-  completedResults Map                   Context Builder
-  ┌────────────────────┐                 注入:
-  │ "narrator" →  │ ───────────────► <narrator-output>
-  │  { narrativeOutput │                   沼泽的雾气...
-  │    : "沼泽的雾气"}  │                  </narrator-output>
-  └────────────────────┘
+| 需求             | 接口                                                  | 边界                                                                      |
+| ---------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| 本轮上游输出     | `io.inputs`，`from: { contract: narrative-engine@1 }` | agent 获得 typed input 数据块，function 使用 `ctx.inputs`；保留来源信息。 |
+| 强依赖与顺序     | `schedule.needs` / `schedule.after`                   | needs 排序并门控；after 只排序。turn 输入绑定也形成 DAG 边。              |
+| 已提交导出       | `io.inputs` 的 `scope: committed`                     | 读取显式导出，不扫描其他插件存储。                                        |
+| 查询业务能力     | `ctx.services.discover/call`                          | 使用 service contract 与 provider 身份，不绑定私有表。                    |
+| 提示词、历史、UI | 声明并注册 extension point                            | collect、pipeline 或 single 决定组合方式和竞争规则。                      |
+| 世界角色         | 只读 `ctx.world` 与领域 proposal                      | schema 和角色由内核验证、提交；插件没有角色镜像。                         |
 
-  关键点：
-  · stage 屏障保证 narrative stage 全部结束后 post-turn stage 才开始；
-    同 post-turn stage 的 guide / codex / extractor / character-tracker
-    互相独立，并行执行。
-  · `needs`（强依赖：排序 + 门控）优先写 capability 形式——上面四个
-    下游都声明 `needs: [{ capability: narrative-engine }]`，同时适配
-    narrator（传统模式）与 chat-mode-narrator（对话模式）；叙事引擎
-    本轮失败时下游被 skipped。`after` 是弱排序（只排序、不设门）。
-  · `inputs` 绑定把上游输出升级为有类型的同回合绑定——例如
-    mimo-tts/auto-narrate 声明
-      inputs:
-        narrative:
-          from: { capability: narrative-engine, cardinality: one }
-          select: "/narrativeOutput"
-    function runtime 从 ctx.inputs.narrative.value 读取，不需要按
-    名字翻 completedResults（agent runtime 则注入保留 prompt 块）。
-  · `needs` 是唯一的上游门控声明；同一条依赖不需要、也无法
-    再用其他字段表达。
+```yaml
+io:
+  inputs:
+    narrative:
+      from: { contract: narrative-engine@1, cardinality: one }
+      scope: turn
+      select: /narrativeOutput
+      required: true
 ```
+
+stage 屏障保证 narrative 阶段结束后才运行 post-turn。stage 内独立 runtime 并行，输入和声明依赖确定先后；缺失 required input 会阻止消费者。可选输入明确使用 `required: false`，不把暂时缺失的 provider 变成必需依赖。
+
+领域读视图包含 committed CharacterSchema/Characters、已校验上游 proposal 和本 runtime 待提交写入，使工具写后读保持一致。扩展 provider 的 world / plugin-data 则在 execution 创建时冻结，避免同一扩展在并行 runtime 中看到不同内容。
 
 ### 4.3 插件触发决策树
 
@@ -601,7 +555,9 @@ plugins/my-plugin/
 │  ├── player_inputs     玩家表单/选择提交记录                     │
 │  │                                                              │
 │  游戏数据                                                       │
+│  ├── character_schemas  会话角色类型与属性定义、version          │
 │  ├── characters        角色记录 (name, type, fields)             │
+│  ├── lorebook_entries  世界 / 玩家 / 插件 owner 的世界书条目     │
 │  ├── state_schemas     动态状态表 schema                        │
 │  ├── state_entries     状态键值对                                │
 │  ├── state_changes     状态变更历史                              │
@@ -624,49 +580,22 @@ plugins/my-plugin/
 checkpoint，服务端 MemoryStore 只作为单次执行的临时工作区。
 ```
 
-### 6.2 plugin_data 隔离模型
+### 6.2 数据所有权与导入
 
-```
-plugin_data 表 (核心持久化接口):
+`plugin_data` 的内部主键为 `(sessionId, pluginId, namespace, key)`。插件公开 facade 已绑定 session 和自身身份，读取使用 `getPluginData(namespace, key)` / `listPluginData(namespace)`，写入只提供本插件记录。UI binding 与 action target 同样不能指定其他插件的身份。
 
-  ┌──────────────────────────────────────────────────────────┐
-  │  Primary Key: (sessionId, pluginId, namespace, key)      │
-  │                                                          │
-  │  session-1                                               │
-  │  ├── codex                                          │
-  │  │   └── entries                                         │
-  │  │       ├── codex-fire-magic → { title, category, ... } │
-  │  │       ├── codex-ice-shield → { ... }                  │
-  │  │       └── codex-dragon    → { ... }                   │
-  │  ├── world-init                                     │
-  │  │   ├── schema                                          │
-  │  │   │   └── character-attributes → { attributes: [...] }│
-  │  │   └── entries                                         │
-  │  │       ├── geography → { regions: [...] }              │
-  │  │       ├── factions  → { ... }                         │
-  │  │       └── history   → { ... }                         │
-  │  └── char-creator                                   │
-  │      └── character                                       │
-  │          └── player → { name, attributes, ... }          │
-  │                                                          │
-  │  session-2 (同 world, 不同 session)                       │
-  │  ├── world-init                                     │
-  │  │   └── (guard 只读世界声明 / dimensions 决定 schema，   │
-  │  │      **绝不从 session-1 复制** —— 跨 session 拷贝      │
-  │  │      等于泄露 + 投毒，见 world-data.md 快路径一节)     │
-  │  └── ...                                                 │
-  └──────────────────────────────────────────────────────────┘
+角色模型是一等领域数据：`CharacterSchema` 保存开放的角色 types 与属性定义，角色记录使用该 schema 校验；`player` 保持单例。`character.schema.set` 由内核增加版本并校验已有角色，`character.upsert` 使用同一验证器。插件不在私有数据中保存世界 schema 或角色副本。
 
-  写入: plugin-data-set / plugin-data-set-batch (builtin tools)
-        → 自动触发 plugin-data.changed SSE 事件
-  读取: plugin-data-get / plugin-data-list (builtin tools)
-  前端: pluginData[pluginId][namespace][key] = value
-```
+Lorebook 使用 `(sessionId, owner, id)` 标识条目；owner 为 world、player 或指定 plugin，因此相同 id 可以归属不同所有者。普通 HTTP 世界书编辑只写 player owner。snapshot/checkpoint 携带角色 schema 和带 owner 的世界书；旧开发存档需要重建。
+
+世界包的数据来源声明版本化 contract，插件通过 `contributes.data.<namespace>.accepts` 接收匹配数据。框架校验 contract 与 namespace schema，并向匹配的启用消费者分发；它不识别蓝图、立绘或规则插件的具体 ID，也不写某个插件的私有 wrapper。世界级 characterSchema、lore 和 metadata 是领域导入，业务数据由接收插件解释。
+
+例如，`character.blueprints@1` 承载原始蓝图记录，`memory.blocks@1` 承载 `{ id: "world", blocks: [...] }` 定义。`world-init` 通过 `session.world-context@1` 合并世界 metadata dimensions 和自己的 entries，玩家定制 entries 覆盖世界源。参见 [世界数据参考](../reference/world-data.md)。
 
 ### 6.3 消息历史模型
 
 ```
-turn_messages (追加式，永不删除):
+turn_messages (canonical 追加式执行日志):
 
   ┌────────┬──────────┬────────────┬──────────────────────────────┐
   │ turnId │ source   │ role       │ content                      │
@@ -682,9 +611,14 @@ turn_messages (追加式，永不删除):
   │ turn-2 │ runtime  │ assistant  │ (codex 分析结果)              │
   └────────┴──────────┴────────────┴──────────────────────────────┘
 
-  消息历史是 LLM 上下文的一部分。
-  每次 Turn 执行时，完整历史传给 Context Builder。
-  Context Builder 组装为 LLM messages[] 数组。
+  canonical 未压缩后缀
+    → prompt.history-transform@1 投影
+    → runtime 历史过滤与 summary substitution
+    → prompt.segment@1 + 世界书 + 当前玩家输入
+    → token budget → LLM messages[]
+
+  调度统计读取 canonical 日志；prompt 投影不改写它。
+  history.compact@1 生成摘要，框架原子保存摘要与压缩标记。
 
   注意：玩家输入只以 `user` 角色追加一行（叙事模板填充结果），
   框架不再为 player-input 生成合成的 `assistant` 镜像消息。
@@ -771,11 +705,12 @@ sequenceDiagram
         Server-->>Web: SSE: runtime.started
         alt function runtime
             Kernel->>Plugin: handler(ctx)
-            Plugin-->>Kernel: HandlerResult → 物化成功输出 → Proposal[]
+            Plugin-->>Kernel: HandlerResult → output / effects / completion
         else agent runtime
             Plugin->>LLM: buildContext + generate + tool loop
-            Plugin-->>Kernel: RuntimeOutput → normalizeOutput → Proposal[]
+            Plugin-->>Kernel: Agent 协议 → output / effects / completion
         end
+        Note over Kernel: 仅显式 effects 与 story 叙事生成 Proposal[]，统一提交
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
         Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
@@ -808,8 +743,9 @@ sequenceDiagram
 
 启动 → 插件发现              @covel/plugin-loader             扫描 plugins/ 目录
                              ├── discoverPlugins()            发现所有插件
-                             ├── loadPluginManifest()         解析 PLUGIN.md frontmatter
-                             ├── loadRuntime()                加载 prompt + tools + ui specs
+                             ├── loadPluginDefinition()       解析包声明与显式 runtime 列表
+                             ├── loadPluginUi()               加载包级静态 UI
+                             ├── loadRuntime()                加载 runtime prompt / handler / schemas
                              └── createPluginRegistry()       内存索引 + session 激活
 
 启动 → LLM 初始化            @covel/ai-provider               多供应商 LLM 抽象
@@ -914,7 +850,7 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 ```
   ✅ 框架代码中禁止出现具体插件 ID
-  ✅ 插件通过 capabilities 标签被发现（不是名字）
+  ✅ 插件通过版本化 contracts 和 extension points 被发现
   ✅ 工具通过注入获得依赖（不是 import）
   ✅ UI 通过 json-render spec 声明（不是 React 组件）
   ✅ 数据通过 pluginData namespace 隔离（不是共享 state key）
@@ -924,7 +860,7 @@ Turn 执行                    @covel/runtime                   核心执行引�
 ### 数据所有权
 
 ```
-  框架拥有:  session, characters, messages, state
+  框架拥有:  session, character schema, characters, messages, state, lorebook ownership
   插件拥有:  plugin_data (按 pluginId 隔离)
   世界拥有:  worlds, lore, dimensions
   玩家拥有:  player inputs, form submissions

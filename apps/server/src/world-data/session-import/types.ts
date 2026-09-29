@@ -5,13 +5,10 @@ import type {
   StoreTransaction,
 } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import type { ParsedWorldDataTarget } from "../target-uri.js";
+import type { ResolvedPluginDataTarget } from "../contract-targets.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
 
-export type PluginDataTarget = Extract<
-  ParsedWorldDataTarget,
-  { kind: "plugin-data" }
->;
+export type PluginDataTarget = ResolvedPluginDataTarget;
 
 export type PlannedWrite =
   | {
@@ -92,15 +89,16 @@ export interface PreparedWorldDataSync {
 }
 
 export interface WorldDataImportedMediaRef {
+  /** Private preparation claim, never a real session identity. */
+  readonly temporarySessionId: string;
   readonly id: string;
   readonly sessionId: string;
   readonly pluginId: string;
-  readonly cleanupOnFailure: boolean;
 }
 
 export interface WorldDataImportPreflightDeps {
   readonly activePlugins?: readonly string[];
-  readonly registry?: Pick<PluginRegistry, "get">;
+  readonly registry?: Pick<PluginRegistry, "get" | "getAll">;
   /**
    * Read-only planning never executes projection modules. Import/sync callers
    * leave this enabled and rely on `canExecuteProjection` for community code.
@@ -151,6 +149,8 @@ export type PreparedWorldDataImport =
     }
   | {
       readonly imported: true;
+      /** Portable contract records do not replace embedded character/lore imports. */
+      readonly portableOnly?: boolean;
       readonly diagnostics: readonly WorldDataDiagnostic[];
       readonly plan: ImportPlan;
       /** Media assets materialized before the database transaction opens. */
@@ -158,6 +158,7 @@ export type PreparedWorldDataImport =
     };
 
 export interface PrepareWorldDataImportForSessionOptions {
+  readonly contractData?: unknown;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];
@@ -179,6 +180,7 @@ export interface ApplyPreparedWorldDataImportForSessionOptions {
 }
 
 export interface PreflightWorldDataForSessionOptions {
+  readonly contractData?: unknown;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];

@@ -14,8 +14,9 @@ summary: 一个用于验证定向修复流程的世界。
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
 tags: [repair]
-requiredPlugins: []
-recommendedPlugins: []`;
+pluginPolicy:
+  requested: []
+  recommended: []`;
 
 const CLEAN_LORE = `# 修复世界
 
@@ -98,7 +99,7 @@ describe("createWorld WORLD.md repair", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     expect(llm.requests).toHaveLength(2);
     expect(messageText(llm.requests[1]!, 0)).toContain(
       "without changing the rest of its world package",
@@ -112,6 +113,41 @@ describe("createWorld WORLD.md repair", () => {
     await expect(
       readFile(path.join(outputDir, "repair-world", "world.yaml"), "utf8"),
     ).resolves.toContain("id: repair-world");
+  });
+
+  it("propagates caller cancellation during targeted lore repair", async () => {
+    const controller = new AbortController();
+    const reason = new Error("caller canceled targeted repair");
+    let calls = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        calls++;
+        if (calls === 1) {
+          return {
+            content: fullPackage(META_LORE),
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        }
+        controller.abort(reason);
+        throw new Error("repair provider failed");
+      },
+    };
+
+    await expect(
+      createWorld({
+        llm,
+        concept: "修复世界",
+        outputDir,
+        signal: controller.signal,
+        attemptTimeoutMs: 5_000,
+      }),
+    ).rejects.toBe(reason);
+    expect(calls).toBe(2);
+    await expect(
+      readFile(path.join(outputDir, "repair-world", "WORLD.md")),
+    ).rejects.toThrow();
   });
 
   it("keeps concurrent template sources isolated through repair and retry", async () => {
@@ -142,7 +178,7 @@ describe("createWorld WORLD.md repair", () => {
           loadPrompt: createPromptLoader(root),
           attemptTimeoutMs: 5_000,
         });
-        expect(result.success).toBe(true);
+        expect(result.success, JSON.stringify(result.errors)).toBe(true);
         expect(llm.requests).toHaveLength(4);
         expect(llm.requests.map((request) => messageText(request, 0))).toEqual([
           `${owner} generation: ${owner}`,
@@ -174,7 +210,7 @@ describe("createWorld WORLD.md repair", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     expect(llm.requests).toHaveLength(3);
     expect(messageText(llm.requests[2]!, 1)).toContain(
       "Regenerate the full package now",
@@ -195,7 +231,7 @@ describe("createWorld WORLD.md repair", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     expect(llm.requests).toHaveLength(1);
   });
 
@@ -212,7 +248,7 @@ describe("createWorld WORLD.md repair", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     expect(llm.requests).toHaveLength(2);
     expect(messageText(llm.requests[1]!, 1)).toContain(
       "Regenerate the full package now",

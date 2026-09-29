@@ -1,4 +1,5 @@
 import type { LLMResponseFormat, LLMRequestDefaults } from "@covel/shared";
+import type { ImageGenerationTarget } from "@covel/shared/plugin-runtime";
 import type { ZodType } from "zod";
 import type {
   EvaluationParams,
@@ -7,6 +8,7 @@ import type {
 } from "./evaluation/types.js";
 
 import { AiProviderError } from "./errors.js";
+import { assertSuccessfulFinishReason } from "./adapters/generation-completion.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
 import {
@@ -24,7 +26,10 @@ import {
   handleTargetFailure,
   prepareTarget,
 } from "./gateway-fallback-chain.js";
-import { createGatewaySlotResolution } from "./gateway-slot-resolution.js";
+import {
+  createGatewaySlotResolution,
+  targetMetadata,
+} from "./gateway-slot-resolution.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
 import { DEFAULT_IMAGE_WIRE, getImageWire } from "./image/wire-registry.js";
@@ -224,6 +229,10 @@ export function createGateway(deps: GatewayDependencies) {
             },
             { profile: target.profile, preset: target.preset, mode: "text" },
           );
+          assertSuccessfulFinishReason(
+            result.finishReason,
+            targetProvider(target),
+          );
           return {
             ...result,
             model: targetModel(target),
@@ -272,6 +281,10 @@ export function createGateway(deps: GatewayDependencies) {
               ),
             },
             { profile: target.profile, preset: target.preset, mode: "object" },
+          );
+          assertSuccessfulFinishReason(
+            result.finishReason,
+            targetProvider(target),
           );
           return {
             ...(result as {
@@ -353,7 +366,7 @@ export function createGateway(deps: GatewayDependencies) {
           targetModel(target),
           options?.traceId,
         );
-        let finalUsage: UsageSummary | null = null;
+        let completion: Extract<StreamEvent, { type: "done" }> | undefined;
 
         for await (const event of resolved.adapter.streamText(
           configWithSignal(resolved.config, options, {
@@ -382,8 +395,22 @@ export function createGateway(deps: GatewayDependencies) {
           ) {
             emittedDelta = true;
           }
-          if (event.type === "done") finalUsage = event.usage;
+          if (event.type === "done") {
+            assertSuccessfulFinishReason(event.finishReason, provider);
+            completion = event;
+            continue;
+          }
           yield event;
+        }
+
+        if (!completion) {
+          throw new AiProviderError({
+            code: "PROVIDER_ERROR",
+            message: "Provider stream ended without a done event",
+            provider,
+            model: targetModel(target),
+            retriable: true,
+          });
         }
 
         await notifySuccess(
@@ -392,10 +419,11 @@ export function createGateway(deps: GatewayDependencies) {
           resolved.protocol,
           "stream",
           targetModel(target),
-          finalUsage,
+          completion.usage,
           Date.now() - startTime,
           options?.traceId,
         );
+        yield completion;
         return;
       } catch (error) {
         // Once a delta has been emitted we can no longer retry on another
@@ -420,6 +448,8 @@ export function createGateway(deps: GatewayDependencies) {
     input: {
       presetId?: string;
       values: string[];
+      /** Reject configuration drift before sending vectors to a locked index. */
+      expectedModelId?: string;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
@@ -438,9 +468,25 @@ export function createGateway(deps: GatewayDependencies) {
         presetId: input.presetId,
         mode: "embed",
         fallbackTag: "embedding",
-        resolveTargets: (presetId) => [
-          deps.presetRegistry.resolveEmbeddingTarget({ presetId }),
-        ],
+        resolveTargets: (presetId) => {
+          const target = deps.presetRegistry.resolveEmbeddingTarget({
+            presetId,
+          });
+          const modelId = `${target.profile.provider}/${target.profile.model}`;
+          if (
+            input.expectedModelId !== undefined &&
+            input.expectedModelId !== modelId
+          ) {
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message: `Embedding model changed: expected ${input.expectedModelId}, resolved ${modelId}`,
+              provider: target.profile.provider,
+              model: target.profile.model,
+              retriable: false,
+            });
+          }
+          return [target];
+        },
         // Embed routes differently from the text path: via the preset (which
         // carries baseUrl/protocol) when available, else via the embed
         // profile's bare provider name — the provider registry fills in
@@ -625,13 +671,16 @@ export function createGateway(deps: GatewayDependencies) {
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
-  ): Promise<ImageGenerationResult & { model: string; provider: string }> {
+  ): Promise<
+    ImageGenerationResult & {
+      model: string;
+      provider: string;
+      target: ImageGenerationTarget;
+    }
+  > {
     return runOperation(
       {
-        // Default to the conventional "image" slot so an omitted presetId
-        // enters the named-slot → image-tag fallback chain instead of
-        // passing `undefined` through to the default (text) slot. Keeps
-        // the documented "defaults to image-tag resolution" contract true.
+        // The image role is an exact binding, independent of the text default.
         presetId: input.presetId ?? "image",
         mode: "image",
         fallbackTag: "image",
@@ -653,6 +702,13 @@ export function createGateway(deps: GatewayDependencies) {
               retriable: false,
             });
           }
+          const generationTarget: ImageGenerationTarget = {
+            provider: targetProvider(target),
+            model: targetModel(target),
+            protocol: target.preset?.protocol ?? resolved.protocol,
+            baseUrl: resolved.config.baseUrl ?? target.preset?.baseUrl,
+            metadata: structuredClone(targetMetadata(target)),
+          };
           const result = await wire.generate(
             configWithSignal(resolved.config, options),
             {
@@ -676,6 +732,7 @@ export function createGateway(deps: GatewayDependencies) {
           );
           return {
             ...result,
+            target: generationTarget,
             model: targetModel(target),
             provider: targetProvider(target),
           };

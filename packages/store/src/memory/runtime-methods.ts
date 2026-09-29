@@ -208,6 +208,14 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return applyCursorPage(sorted, opts);
     },
 
+    async getCharacterSchema(sessionId) {
+      return state.characterSchemas.get(sessionId) ?? null;
+    },
+
+    async upsertCharacterSchema(record) {
+      state.characterSchemas.set(record.sessionId, record);
+    },
+
     async upsertCharacter(record) {
       state.characters.set(characterKey(record.sessionId, record.id), {
         ...record,

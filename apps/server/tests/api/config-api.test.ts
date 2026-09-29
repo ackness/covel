@@ -5,10 +5,7 @@ import { spawn } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
-import {
-  buildKeysEnvPatch,
-  loadKeysEnv,
-} from "../../../desktop/src/env-files.js";
+import { loadKeysEnv } from "../../../desktop/src/env-files.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 
@@ -199,7 +196,7 @@ describe("config API env and file contracts", () => {
     ).not.toContain("_API_KEY=");
   });
 
-  it("applies complete desktop key snapshots as deletions, including clearing the last key", async () => {
+  it("applies explicit desktop key patches, preserving omissions and clearing the last key", async () => {
     process.env.COVEL_HOME = tmpHome;
     const file = path.join(tmpHome, "keys.env");
     fs.writeFileSync(
@@ -209,15 +206,32 @@ describe("config API env and file contracts", () => {
     );
     Object.assign(apiKeys, loadKeysEnv(file), { environment: "synthetic-env" });
     const app = buildApp(apiKeys);
-    for (const keys of [{ OPEN_ROUTER_API_KEY: "synthetic-new" }, {}]) {
+    const changes: Array<{
+      patch: Record<string, string | null>;
+      expected: Record<string, string>;
+    }> = [
+      {
+        patch: { OPEN_ROUTER_API_KEY: "synthetic-new" },
+        expected: { deepseek: "synthetic-old", "open-router": "synthetic-new" },
+      },
+      {
+        patch: {},
+        expected: { deepseek: "synthetic-old", "open-router": "synthetic-new" },
+      },
+      {
+        patch: { deepseek: null },
+        expected: { "open-router": "synthetic-new" },
+      },
+      { patch: { "open-router": null }, expected: {} },
+    ];
+    for (const { patch, expected } of changes) {
+      // The desktop IPC forwards this patch unchanged to its sidecar REST API.
       const response = await app.request("/api/config/keys", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildKeysEnvPatch(file, keys)),
+        body: JSON.stringify(patch),
       });
       expect(response.status).toBe(200);
-      const expected =
-        "OPEN_ROUTER_API_KEY" in keys ? { "open-router": "synthetic-new" } : {};
       expect(loadKeysEnv(file)).toEqual(expected);
       expect(apiKeys).toEqual({ ...expected, environment: "synthetic-env" });
     }

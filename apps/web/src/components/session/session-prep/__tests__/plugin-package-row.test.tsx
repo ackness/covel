@@ -9,14 +9,18 @@ import { PluginPackageRow } from "../plugin-package-row.js";
 const mocks = vi.hoisted(() => ({ store: null as unknown as SettingsStore }));
 vi.mock("@/settings/store.js", () => ({ getSettings: () => mocks.store }));
 const plugin: PluginSummary = {
+  requires: [],
+  optional: [],
+  conflicts: [],
+  extensions: [],
   id: "fixture",
   displayName: "Current plugin",
   description: "Current metadata",
-  pluginType: "plugin",
+  kind: "plugin",
   source: "builtin",
-  status: "registered",
+  hostState: "loaded",
   runtimeCount: 2,
-  capabilities: [],
+  provides: [],
   tags: [],
   tools: [],
   runtimes: ["narrative", "post-turn"].map((stage, index) => ({
@@ -28,7 +32,7 @@ const plugin: PluginSummary = {
     trigger: { type: "auto" },
     turnCompletion: { mode: "await" },
     outputKind: "plugin",
-    capabilities: [],
+    outputContract: undefined,
     tags: [],
   })),
   userSettings: [

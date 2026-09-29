@@ -23,6 +23,7 @@ interface StartGameOptions {
   world: api.WorldRecord;
   plugins?: string[];
   loreOverride?: string;
+  excludedPlugins?: string[];
 }
 
 async function hydrateInitialSnapshot(
@@ -77,6 +78,7 @@ export async function startGameSession({
   world,
   plugins,
   loreOverride,
+  excludedPlugins,
 }: StartGameOptions): Promise<void> {
   const generation = ++sessionGenerationRef.current;
   const previousSessionId = sessionIdRef.current;
@@ -93,6 +95,7 @@ export async function startGameSession({
       plugins,
       world.locale ?? i18n.language,
       loreOverride,
+      excludedPlugins,
     );
     createdSessionId = session.id;
     if (!isCurrent()) return;

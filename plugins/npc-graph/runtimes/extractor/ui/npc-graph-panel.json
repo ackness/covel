@@ -3,7 +3,10 @@
   "group": "npc-graph",
   "label": { "zh": "关系图谱", "en": "Relationship Graph" },
   "icon": "network",
-  "dataSource": { "namespace": "nodes" },
+  "dataSource": {
+    "namespace": "nodes",
+    "bindings": { "nodes": "nodes", "edges": "edges" }
+  },
   "emptyState": {
     "message": {
       "zh": "尚未发现角色或势力关系，继续推进故事后会自动出现……",
@@ -28,9 +31,35 @@
       {
         "component": "GraphCanvas",
         "props": {
-          "pluginId": "npc-graph",
-          "nodesNamespace": "nodes",
-          "edgesNamespace": "edges",
+          "nodes": { "$state": "/sources/nodes" },
+          "edges": { "$state": "/sources/edges" },
+          "node": {
+            "idField": "id",
+            "labelField": "name",
+            "typeField": "type",
+            "summaryField": "summary",
+            "labelsField": "labels",
+            "colors": {
+              "individual": "#60a5fa",
+              "group": "#a78bfa",
+              "faction": "#f59e0b"
+            },
+            "defaultColor": "#9ca3af"
+          },
+          "edge": {
+            "idField": "id",
+            "sourceField": "source",
+            "targetField": "target",
+            "relationField": "relation",
+            "strengthField": "strength",
+            "factField": "fact",
+            "inactiveField": "invalidAt",
+            "colors": {
+              "positive": "#22c55e",
+              "negative": "#ef4444",
+              "neutral": "#94a3b8"
+            }
+          },
           "height": 480
         }
       }

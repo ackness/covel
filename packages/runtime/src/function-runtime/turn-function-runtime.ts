@@ -1,3 +1,6 @@
+import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
+import { toJsonValueOrDiagnostic } from "@covel/shared";
+import { createWorldModelView } from "./world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import type {
   RuntimeManifest,
@@ -9,7 +12,6 @@ import type {
   ExecutionContext,
   InputSlot,
 } from "@covel/shared";
-import { validateWorldIRV1, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type { SuspensionRecord } from "@covel/store";
@@ -29,6 +31,7 @@ import {
 import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
 import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { materializeHandlerSuccess } from "../commit/materialize-handler-output.js";
+import { collectUiBlocks } from "../session/session-kernel-helpers.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -59,6 +62,9 @@ import {
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
 
 export interface ExecuteFunctionRuntimeOptions {
+  readonly lastPlayerInput?:
+    import("@covel/shared").PlayerInputSubmission | null;
+  readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -109,6 +115,8 @@ export interface ExecuteFunctionRuntimeOptions {
 }
 
 export async function executeFunctionRuntime({
+  lastPlayerInput = null,
+  upstreamProposals = [],
   manifest,
   input,
   loaded,
@@ -249,7 +257,10 @@ export async function executeFunctionRuntime({
   const imagesHandle =
     tracedGateway?.generateImage && deps.mediaStore && mediaHandle
       ? createRuntimeImagesContext(
-          { generateImage: tracedGateway.generateImage.bind(tracedGateway) },
+          {
+            generateImage: tracedGateway.generateImage.bind(tracedGateway),
+            resolveSlot: tracedGateway.resolveSlot.bind(tracedGateway),
+          },
           deps.mediaStore,
           mediaHandle,
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
@@ -273,9 +284,18 @@ export async function executeFunctionRuntime({
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
         )
       : undefined;
+  const world = deps.store
+    ? await createWorldModelView(
+        deps.store,
+        input.sessionId,
+        upstreamProposals,
+        writeBuffer,
+        () => handlerAbort.signal.throwIfAborted(),
+      )
+    : undefined;
   const handlerStore = deps.store
     ? isTrustedSource
-      ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer)
+      ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer, world)
       : createFunctionStoreView(deps.store, helperCtx, writeBuffer)
     : undefined;
 
@@ -305,6 +325,8 @@ export async function executeFunctionRuntime({
     context: helperCtx,
     deps: { ...deps, hookPipeline },
     buffer: writeBuffer,
+    world,
+    upstreamProposals,
     inputs,
     signal: handlerAbort.signal,
     assertLive: () => {
@@ -374,6 +396,7 @@ export async function executeFunctionRuntime({
       : undefined,
   };
   const serviceClient = deps.services?.createClient({
+    emitter: deps.emitter,
     sessionId: input.sessionId,
     turnId: input.turnId,
     runtimeId: manifest.name,
@@ -408,8 +431,12 @@ export async function executeFunctionRuntime({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
+      session: {
+        lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
+      },
       locale: input.locale,
       store: revocable.store,
+      world,
       tools: runtimeTools.tools,
       ...(services ? { services } : {}),
       ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
@@ -581,40 +608,47 @@ export async function executeFunctionRuntime({
       handlerOutcome.value,
       loaded.outputSchema,
     );
-    const semanticValidation =
-      validation.valid && loaded.outputSchema.$id === WORLD_IR_V1_SCHEMA_URI
-        ? validateWorldIRV1(handlerOutcome.value)
-        : undefined;
-    if (
-      !validation.valid ||
-      (semanticValidation && !semanticValidation.valid)
-    ) {
-      const errors = !validation.valid
-        ? (validation.errors ?? ["unknown schema validation error"])
-        : semanticValidation && !semanticValidation.valid
-          ? semanticValidation.errors.map(
-              (error) => `${error.path}: ${error.message}`,
-            )
-          : ["unknown semantic validation error"];
+    if (!validation.valid) {
+      const errors = validation.errors ?? ["unknown schema validation error"];
       const detail = errors.slice(0, 5).join("; ");
       envelopeSchemaError = `output-schema-invalid: ${detail}`;
     }
   }
 
-  const runtimeOutput =
+  const materialized: Pick<RuntimeResult, "output" | "effects" | "completion"> =
     !envelopeSchemaError && handlerOutcome.outcome === "success"
       ? materializeHandlerSuccess(handlerOutcome, output)
-      : (output as Record<string, unknown>);
+      : {
+          output: output as Record<string, unknown>,
+          ...(!envelopeSchemaError &&
+          (handlerOutcome.outcome === "failed" ||
+            handlerOutcome.outcome === "skipped") &&
+          handlerOutcome.effects
+            ? { effects: structuredClone(handlerOutcome.effects) }
+            : {}),
+        };
+
+  let effects = materialized.effects;
 
   if (
     !envelopeSchemaError &&
     handlerOutcome.outcome === "success" &&
     runtimeTools.events.length > 0
   ) {
-    runtimeOutput.events = [
-      ...(Array.isArray(runtimeOutput.events) ? runtimeOutput.events : []),
-      ...runtimeTools.events,
-    ];
+    effects = {
+      ...effects,
+      events: [
+        ...(Array.isArray(effects?.events) ? effects.events : []),
+        ...runtimeTools.events.map((event) =>
+          toJsonValueOrDiagnostic(event, "event"),
+        ),
+      ],
+    };
+  }
+  if (!envelopeSchemaError && handlerOutcome.outcome === "success") {
+    const ui = collectUiBlocks({ ui: effects?.ui }, runtimeTools.records);
+    if (ui.length > 0)
+      effects = { ...effects, ui: ui as import("@covel/shared").JsonValue[] };
   }
 
   // A failed schema gate overrides the handler outcome: the runtime
@@ -629,7 +663,16 @@ export async function executeFunctionRuntime({
       : handlerOutcome.outcome === "success"
         ? "success"
         : handlerOutcome.outcome,
-    output: runtimeOutput,
+    ...materialized,
+    ...(effects ? { effects } : {}),
+    ...(handlerOutcome.outcome === "success"
+      ? {
+          canonicalValue:
+            handlerOutcome.value === undefined
+              ? {}
+              : { value: structuredClone(handlerOutcome.value) },
+        }
+      : {}),
     toolCalls: runtimeTools.records,
     durationMs: Date.now() - startTime,
     ...(envelopeSchemaError
@@ -645,6 +688,10 @@ export async function executeFunctionRuntime({
     manifest,
     input,
     rawResult,
+    {
+      outputContractSchema: loaded.outputContractSchema,
+      outputSchema: loaded.outputSchema,
+    },
   );
 
   // Flush execution-buffered domain writes onto the result output so

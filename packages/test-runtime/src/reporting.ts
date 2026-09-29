@@ -261,9 +261,7 @@ function collectEventTopics(
 ): Set<string> {
   const topics = new Set<string>();
   for (const result of runtimeResults) {
-    const output = result.output;
-    if (!output || typeof output !== "object") continue;
-    const events = (output as { events?: unknown }).events;
+    const events = result.effects?.events;
     if (!Array.isArray(events)) continue;
     for (const event of events) {
       if (!event || typeof event !== "object") continue;
@@ -279,10 +277,7 @@ function collectAssetGenerations(
 ): ReadonlyArray<Record<string, unknown>> {
   const assets: Record<string, unknown>[] = [];
   for (const runtimeResult of runtimeResults) {
-    const output = runtimeResult.output;
-    if (!output || typeof output !== "object") continue;
-    const assetGenerations = (output as Record<string, unknown>)
-      .assetGenerations;
+    const assetGenerations = runtimeResult.effects?.assetGenerations;
     if (!Array.isArray(assetGenerations)) continue;
     for (const asset of assetGenerations) {
       if (asset && typeof asset === "object") {

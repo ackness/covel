@@ -438,6 +438,11 @@ export function reducer(
         ...state,
         gameState: upsertGameStateCharacter(state.gameState, action.character),
       };
+    case "SET_CHARACTER_SCHEMA":
+      return {
+        ...state,
+        gameState: { ...state.gameState, characterSchema: action.schema },
+      };
     case "SET_GAME_STATE":
       return {
         ...state,

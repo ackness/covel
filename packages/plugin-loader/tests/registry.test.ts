@@ -4,8 +4,9 @@ import type {
   LoadedRuntime,
   PluginRegistryEntry,
   PluginSummary,
-  ParsedPluginMd,
+  ParsedRuntimeMd,
   RegistryChangeEvent,
+  ParsedPluginMd,
 } from "../src/types.js";
 import { createPluginRegistry, type PluginRegistry } from "../src/registry.js";
 
@@ -32,6 +33,7 @@ function makeRuntimeManifest(
 ): RuntimeManifest {
   return {
     name,
+    pluginId: name.split("/")[0],
     description: `Runtime ${name}`,
     stage:
       priority <= 99
@@ -47,13 +49,34 @@ function makeRuntimeManifest(
   };
 }
 
-function makeParsedPluginMd(
+function makeParsedRuntimeMd(
+  name: string,
+  priority: number,
+  overrides?: Partial<RuntimeManifest>,
+): ParsedRuntimeMd {
+  return {
+    runtime: { type: overrides?.runtimeType ?? "agent" },
+    manifest: makeRuntimeManifest(name, priority, overrides),
+    promptTemplate: "",
+    rawFrontmatter: {},
+  };
+}
+
+function makePackageManifest(
   name: string,
   priority: number,
   overrides?: Partial<RuntimeManifest>,
 ): ParsedPluginMd {
   return {
-    manifest: makeRuntimeManifest(name, priority, overrides),
+    manifest: {
+      name,
+      pluginId: name,
+      description: name,
+      pluginType: "plugin",
+      dataSchemas: overrides?.dataSchemas,
+      worldProjections: overrides?.worldProjections,
+    },
+    plugin: { id: name, kind: "plugin", description: name },
     promptTemplate: "",
     rawFrontmatter: {},
   };
@@ -92,7 +115,7 @@ describe("PluginRegistry", () => {
       expect(result!.summary.name).toBe("Plugin alpha");
     });
 
-    it("should merge consistent runtime dataSchemas onto the registry entry", () => {
+    it("reads dataSchemas from the root declaration", () => {
       const relationships = {
         namespace: "relationships",
         schemaVersion: 1,
@@ -102,11 +125,14 @@ describe("PluginRegistry", () => {
       };
       const entry = makeEntry("world-data", {
         rootPath: "/plugins/world-data",
+        packageManifest: makePackageManifest("world-data", 400, {
+          dataSchemas: { relationships },
+        }),
         manifests: [
-          makeParsedPluginMd("world-data/extract", 400, {
+          makeParsedRuntimeMd("world-data/extract", 400, {
             dataSchemas: { relationships },
           }),
-          makeParsedPluginMd("world-data/import", 500, {
+          makeParsedRuntimeMd("world-data/import", 500, {
             dataSchemas: { relationships },
           }),
         ],
@@ -161,39 +187,26 @@ describe("PluginRegistry", () => {
       expect(registry.get("world-data")).toBeUndefined();
     });
 
-    it("should fail closed on conflicting runtime dataSchemas", () => {
-      const entry = makeEntry("world-data", {
-        manifests: [
-          makeParsedPluginMd("world-data/extract", 400, {
-            dataSchemas: {
-              relationships: {
-                namespace: "relationships",
-                schemaVersion: 1,
-                acceptsWorldData: true,
-                schema: "./schemas/relationships.schema.json",
+    it("does not collect data schema declarations from child execution records", () => {
+      registry.register(
+        makeEntry("world-data", {
+          manifests: [
+            makeParsedRuntimeMd("world-data/extract", 400, {
+              dataSchemas: {
+                facts: {
+                  namespace: "facts",
+                  schemaVersion: 1,
+                  schema: "./facts.json",
+                },
               },
-            },
-          }),
-          makeParsedPluginMd("world-data/import", 500, {
-            dataSchemas: {
-              relationships: {
-                namespace: "relationships",
-                schemaVersion: 2,
-                acceptsWorldData: true,
-                schema: "./schemas/relationships.schema.json",
-              },
-            },
-          }),
-        ],
-      });
-
-      expect(() => registry.register(entry)).toThrow(
-        /Conflicting dataSchemas declaration/,
+            }),
+          ],
+        }),
       );
-      expect(registry.get("world-data")).toBeUndefined();
+      expect(registry.get("world-data")?.dataSchemas).toBeUndefined();
     });
 
-    it("should merge identical runtime worldProjections onto the registry entry", () => {
+    it("reads and freezes world projections from the root declaration", () => {
       const characters = {
         from: "plugin://character-blueprint/blueprints",
         handler: "server/project-characters.js",
@@ -202,6 +215,9 @@ describe("PluginRegistry", () => {
         },
       };
       const entry = makeEntry("world-projector", {
+        packageManifest: makePackageManifest("world-projector", 50, {
+          worldProjections: { characters },
+        }),
         dataSchemas: {
           characters: {
             namespace: "characters",
@@ -211,10 +227,10 @@ describe("PluginRegistry", () => {
           },
         },
         manifests: [
-          makeParsedPluginMd("world-projector/setup", 50, {
+          makeParsedRuntimeMd("world-projector/setup", 50, {
             worldProjections: { characters },
           }),
-          makeParsedPluginMd("world-projector/audit", 1_100, {
+          makeParsedRuntimeMd("world-projector/audit", 1_100, {
             worldProjections: { characters },
           }),
         ],
@@ -237,7 +253,7 @@ describe("PluginRegistry", () => {
       const entry = makeEntry("world-projector", {
         worldProjections: {
           facts: {
-            from: "covel://world/ir/v1",
+            from: "contract:world-ir@1",
             handler: "server/project-facts.js",
             outputs: { facts: { namespace: "facts", key: "id" } },
           },
@@ -250,44 +266,23 @@ describe("PluginRegistry", () => {
       expect(registry.get("world-projector")).toBeUndefined();
     });
 
-    it("should fail closed on conflicting runtime worldProjections", () => {
-      const entry = makeEntry("world-projector", {
-        manifests: [
-          makeParsedPluginMd("world-projector/setup", 50, {
-            worldProjections: {
-              characters: {
-                from: "plugin://character-blueprint/blueprints",
-                handler: "server/project-characters.js",
-                outputs: {
-                  characters: {
-                    namespace: "characters",
-                    key: "characterId",
-                  },
+    it("does not collect projection declarations from child execution records", () => {
+      registry.register(
+        makeEntry("world-projector", {
+          manifests: [
+            makeParsedRuntimeMd("world-projector/setup", 50, {
+              worldProjections: {
+                facts: {
+                  from: "contract:world@1",
+                  handler: "./project.js",
+                  outputs: { facts: { namespace: "facts", key: "id" } },
                 },
               },
-            },
-          }),
-          makeParsedPluginMd("world-projector/audit", 1_100, {
-            worldProjections: {
-              characters: {
-                from: "plugin://character-blueprint/blueprints",
-                handler: "server/project-characters-v2.js",
-                outputs: {
-                  characters: {
-                    namespace: "characters",
-                    key: "characterId",
-                  },
-                },
-              },
-            },
-          }),
-        ],
-      });
-
-      expect(() => registry.register(entry)).toThrow(
-        /Conflicting worldProjections declaration/,
+            }),
+          ],
+        }),
       );
-      expect(registry.get("world-projector")).toBeUndefined();
+      expect(registry.get("world-projector")?.worldProjections).toBeUndefined();
     });
   });
 
@@ -374,12 +369,12 @@ describe("PluginRegistry", () => {
     it("removes every activation without affecting registered plugins", async () => {
       registry.register(
         makeEntry("alpha", {
-          manifest: makeParsedPluginMd("alpha/runtime", 500),
+          manifests: [makeParsedRuntimeMd("alpha/runtime", 500)],
         }),
       );
       registry.register(
         makeEntry("beta", {
-          manifest: makeParsedPluginMd("beta/runtime", 600),
+          manifests: [makeParsedRuntimeMd("beta/runtime", 600)],
         }),
       );
       await registry.applyPersistedActivations(
@@ -406,12 +401,12 @@ describe("PluginRegistry", () => {
     it("replaces stale activations without affecting other sessions", () => {
       registry.register(
         makeEntry("alpha", {
-          manifest: makeParsedPluginMd("alpha/runtime", 500),
+          manifests: [makeParsedRuntimeMd("alpha/runtime", 500)],
         }),
       );
       registry.register(
         makeEntry("beta", {
-          manifest: makeParsedPluginMd("beta/runtime", 600),
+          manifests: [makeParsedRuntimeMd("beta/runtime", 600)],
         }),
       );
       registry.syncSessionActivations("session-1", ["alpha"]);
@@ -430,12 +425,12 @@ describe("PluginRegistry", () => {
     it("hydrates persisted activation state without emitting lifecycle events", () => {
       registry.register(
         makeEntry("alpha", {
-          manifest: makeParsedPluginMd("alpha/runtime", 500),
+          manifests: [makeParsedRuntimeMd("alpha/runtime", 500)],
         }),
       );
       registry.register(
         makeEntry("beta", {
-          manifest: makeParsedPluginMd("beta/runtime", 600),
+          manifests: [makeParsedRuntimeMd("beta/runtime", 600)],
         }),
       );
       const handler = vi.fn<(event: RegistryChangeEvent) => void>();
@@ -453,15 +448,14 @@ describe("PluginRegistry", () => {
     });
   });
 
-  describe("findPluginByCapability", () => {
+  describe("declared runtime contracts", () => {
     it("searches every declared runtime without requiring loaded artifacts", () => {
       registry.register(
         makeEntry("image-plugin", {
-          manifest: makeParsedPluginMd("image-plugin/prompt", 500),
           manifests: [
-            makeParsedPluginMd("image-plugin/prompt", 500),
-            makeParsedPluginMd("image-plugin/generator", 600, {
-              capabilities: ["image-generator"],
+            makeParsedRuntimeMd("image-plugin/prompt", 500),
+            makeParsedRuntimeMd("image-plugin/generator", 600, {
+              outputContract: "image-generator@1",
             }),
           ],
           loadedRuntimes: new Map(),
@@ -470,34 +464,33 @@ describe("PluginRegistry", () => {
       registry.syncSessionActivations("session-capability", ["image-plugin"]);
 
       expect(
-        registry.findPluginByCapability(
-          "session-capability",
-          "image-generator",
-        ),
+        registry
+          .getActiveRuntimes("session-capability")
+          .find((manifest) => manifest.outputContract === "image-generator@1")
+          ?.pluginId,
       ).toBe("image-plugin");
     });
 
     it("does not infer declared capabilities from loaded artifacts", () => {
       const loadedOnly = {
         manifest: makeRuntimeManifest("artifact-only/runtime", 500, {
-          capabilities: ["artifact-only-capability"],
+          outputContract: "artifact-only@1",
         }),
         promptTemplate: "",
       } satisfies LoadedRuntime;
       registry.register(
         makeEntry("artifact-only", {
-          manifest: makeParsedPluginMd("artifact-only/runtime", 500),
-          manifests: [makeParsedPluginMd("artifact-only/runtime", 500)],
+          manifests: [makeParsedRuntimeMd("artifact-only/runtime", 500)],
           loadedRuntimes: new Map([["artifact-only/runtime", loadedOnly]]),
         }),
       );
       registry.syncSessionActivations("session-artifact", ["artifact-only"]);
 
       expect(
-        registry.findPluginByCapability(
-          "session-artifact",
-          "artifact-only-capability",
-        ),
+        registry
+          .getActiveRuntimes("session-artifact")
+          .find((manifest) => manifest.outputContract === "artifact-only@1")
+          ?.pluginId,
       ).toBeUndefined();
     });
   });
@@ -558,13 +551,13 @@ describe("PluginRegistry", () => {
     it("should return runtime manifests from active plugins sorted by stage ascending", () => {
       // Distinct stages: high(100)=pre-turn, mid(500)=narrative, low(800)=post-turn.
       const entryLow = makeEntry("low", {
-        manifest: makeParsedPluginMd("low-runtime", 800),
+        manifests: [makeParsedRuntimeMd("low-runtime", 800)],
       });
       const entryHigh = makeEntry("high", {
-        manifest: makeParsedPluginMd("high-runtime", 100),
+        manifests: [makeParsedRuntimeMd("high-runtime", 100)],
       });
       const entryMid = makeEntry("mid", {
-        manifest: makeParsedPluginMd("mid-runtime", 500),
+        manifests: [makeParsedRuntimeMd("mid-runtime", 500)],
       });
 
       registry.register(entryLow);
@@ -585,10 +578,14 @@ describe("PluginRegistry", () => {
       // Both post-turn (501-999); priority order would be zeta(600) < alpha(800),
       // but the (stage, name) sort orders alpha before zeta.
       registry.register(
-        makeEntry("z", { manifest: makeParsedPluginMd("zeta-runtime", 600) }),
+        makeEntry("z", {
+          manifests: [makeParsedRuntimeMd("zeta-runtime", 600)],
+        }),
       );
       registry.register(
-        makeEntry("a", { manifest: makeParsedPluginMd("alpha-runtime", 800) }),
+        makeEntry("a", {
+          manifests: [makeParsedRuntimeMd("alpha-runtime", 800)],
+        }),
       );
       registry.syncSessionActivations("session-2", ["z", "a"]);
 
@@ -605,7 +602,7 @@ describe("PluginRegistry", () => {
 
     it("should not include inactive plugins", () => {
       const entry = makeEntry("alpha", {
-        manifest: makeParsedPluginMd("alpha-runtime", 500),
+        manifests: [makeParsedRuntimeMd("alpha-runtime", 500)],
       });
       registry.register(entry);
       // Not activated for session-1

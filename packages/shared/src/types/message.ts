@@ -76,16 +76,9 @@ export interface TurnMessage {
 
 // ── Player input submission ──────────────────────────────────────
 
-export interface PlayerInputSubmission {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  /** Which form this submission responds to. */
-  readonly formId: string;
-  /** The values the player filled in. */
-  readonly values: Readonly<Record<string, unknown>>;
-  readonly createdAt: string;
-}
+export type PlayerInputSubmission = import("zod").infer<
+  typeof import("../schemas/execution-snapshots.js").playerInputSubmissionSchema
+>;
 
 // ── Wire-format Message ──────────────────────────────────────────
 

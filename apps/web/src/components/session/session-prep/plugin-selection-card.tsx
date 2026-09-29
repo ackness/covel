@@ -88,7 +88,7 @@ function PluginPackSelector({
                 variant={isActive ? "secondary" : "outline"}
                 className="text-xs shrink-0"
               >
-                {pack.pluginIds.length}
+                {pack.requested.length}
               </Badge>
             </div>
             {pack.description && (

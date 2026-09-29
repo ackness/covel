@@ -1,3 +1,5 @@
+import { withMemoryIngestLock } from "../../lib/memory-ingest-lock.js";
+import { scheduleMemoryIngest } from "./commit-execution.js";
 import {
   isWorldDeleting,
   withoutWorldDeletion,
@@ -272,24 +274,26 @@ export function createBrowserWorkspaceRoutes(
                 : null,
             };
             try {
-              await replaceSessionFromCheckpoint(
-                c.get("store"),
-                admittedCheckpoint,
-                {
-                  writeWorld,
-                  session: {
-                    ...checkpoint.session,
-                    createdAt: live.createdAt,
-                    phase: checkpoint.session.phase,
-                    completedPlayerTurns:
-                      checkpoint.session.completedPlayerTurns,
-                    setupRuntimes: checkpoint.session.setupRuntimes,
-                    metadata: {
-                      ...publicSessionMetadata(checkpoint.session.metadata),
-                      ...live.metadata,
+              await withMemoryIngestLock(c, sessionId, () =>
+                replaceSessionFromCheckpoint(
+                  c.get("store"),
+                  admittedCheckpoint,
+                  {
+                    writeWorld,
+                    session: {
+                      ...checkpoint.session,
+                      createdAt: live.createdAt,
+                      phase: checkpoint.session.phase,
+                      completedPlayerTurns:
+                        checkpoint.session.completedPlayerTurns,
+                      setupRuntimes: checkpoint.session.setupRuntimes,
+                      metadata: {
+                        ...publicSessionMetadata(checkpoint.session.metadata),
+                        ...live.metadata,
+                      },
                     },
                   },
-                },
+                ),
               );
             } catch (error) {
               if (error instanceof SessionRecordScopeConflictError) {
@@ -300,12 +304,19 @@ export function createBrowserWorkspaceRoutes(
               }
               throw error;
             }
+            c.get("pluginRegistry")?.syncSessionActivations(
+              sessionId,
+              checkpoint.session.activePlugins,
+            );
+            c.get("uiSlots")?.clearSession(sessionId);
+            c.get("uiSlots")?.invalidateSession(sessionId);
             cache.set(sessionId, {
               incarnation,
               revision: checkpoint.revision,
               actionId: checkpoint.actionId,
               commits: new Map(),
             });
+            scheduleMemoryIngest(c.get("memorySystem"), sessionId);
             return c.json({ ok: true, revision: checkpoint.revision });
           });
       },

@@ -1,6 +1,7 @@
+import { applyUiSlotEvent, recoverUiSlots } from "@/stores/ui-slot-store.js";
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
-import type { SessionWorkspace } from "@/services/data-service.js";
+import type { SessionWorkspace, StorageMode } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   createSessionSubscription,
@@ -44,6 +45,7 @@ interface UseSessionSubscriptionOptions {
   sessionId: string | null | undefined;
   dispatch: (action: SessionAction) => void;
   workspace: SessionWorkspace;
+  storageMode: StorageMode;
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
   stateRef: MutableRef<SessionState>;
@@ -101,6 +103,7 @@ export function createSubscriptionEventHandler(
 ) {
   return (event: SubscriptionEvent): void => {
     if (!options.isCurrent()) return;
+    if (applyUiSlotEvent(event.sessionId, event.type, event.payload)) return;
     switch (event.type) {
       case "interaction.requested":
       case "ui.rendered": {
@@ -380,6 +383,7 @@ export function useSessionSubscription({
   sessionId,
   dispatch,
   workspace,
+  storageMode,
   sessionIdRef,
   sessionGenerationRef,
   stateRef,
@@ -491,7 +495,8 @@ export function useSessionSubscription({
       }
       if (
         event.type === "state.changed" ||
-        event.type === "character.upserted"
+        event.type === "character.upserted" ||
+        event.type === "character-schema.changed"
       ) {
         // These are committed state notifications. Reuse the in-flight snapshot
         // read instead of buffering reset triggers or duplicating action-stream
@@ -500,6 +505,9 @@ export function useSessionSubscription({
         if (recovering) stateRefreshPending = true;
         else startRecovery();
       } else if (event.type === "system.reset") {
+        void recoverUiSlots(sessionId).catch(
+          ignoreError("refresh UI slots after reset"),
+        );
         startRecovery();
       } else if (recovering) {
         // Apply live changes after the authoritative snapshot so an older HTTP
@@ -520,6 +528,9 @@ export function useSessionSubscription({
         const reconnected = hasConnected;
         hasConnected = true;
         if (reconnected && sessionIdRef.current === sessionId) {
+          void recoverUiSlots(sessionId).catch(
+            ignoreError("refresh UI slots after reconnect"),
+          );
           startRecovery();
         }
       }
@@ -530,6 +541,13 @@ export function useSessionSubscription({
     const sub = createSessionSubscription(sessionId, {
       topics: ["plugin", "system", "game", "runtime", "job", "state"],
       onStateChange: handleConnectionStateChange,
+      recoverMissingSession:
+        storageMode === "local"
+          ? async () => {
+              if (isCurrent())
+                await workspace.hydrate(sessionId, { isCurrent });
+            }
+          : undefined,
     });
     subscriptionRef.current = sub;
 
@@ -549,6 +567,7 @@ export function useSessionSubscription({
     sessionGenerationRef,
     dispatch,
     workspace,
+    storageMode,
     sessionIdRef,
     stateRef,
     activeTurnIdRef,

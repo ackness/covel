@@ -87,16 +87,14 @@ describe("world-init local tools", () => {
         "currency",
       ],
       worldSchema: {
-        "character-attributes": {
-          version: 1,
-          attributes: expect.any(Array),
-        },
+        types: ["npc", "companion"],
+        attributes: expect.any(Array),
       },
       preGameDone: true,
     });
     expect(
       getPendingProposals(rawResult).map((proposal) => proposal.type),
-    ).toEqual(["plugin.data", "plugin.data.batch", "lorebook.upsert"]);
+    ).toEqual(["character.schema.set", "plugin.data.batch", "lorebook.upsert"]);
   });
 
   it("rejects incomplete input before exposing any pending write", async () => {
@@ -171,38 +169,31 @@ describe("world-init local tools", () => {
       attributeCount: 2,
       categories: ["stats", "social"],
       worldSchema: {
-        "character-attributes": {
-          version: 1,
-          attributes: expect.any(Array),
-        },
+        types: ["npc", "companion"],
+        attributes: expect.any(Array),
       },
     });
 
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(1);
     expect(proposals[0]).toMatchObject({
-      type: "plugin.data",
+      type: "character.schema.set",
       sessionId: context.sessionId,
-      turnId: context.turnId,
       source: { pluginId: "world-init", runtimeId: "world-init/schema-gen" },
       payload: {
-        namespace: "schema",
-        key: "character-attributes",
-        value: {
-          version: 1,
-          attributes: [
-            expect.objectContaining({
-              id: "hp",
-              type: "number",
-              category: "stats",
-            }),
-            expect.objectContaining({
-              id: "relationships",
-              type: "map",
-              category: "social",
-            }),
-          ],
-        },
+        types: ["npc", "companion"],
+        attributes: [
+          expect.objectContaining({
+            id: "hp",
+            type: "number",
+            category: "stats",
+          }),
+          expect.objectContaining({
+            id: "relationships",
+            type: "map",
+            category: "social",
+          }),
+        ],
       },
     });
   });
@@ -241,10 +232,8 @@ describe("world-init local tools", () => {
       keys: ["geography", "factions"],
       preGameDone: true,
       worldSchema: {
-        "character-attributes": {
-          version: 1,
-          attributes: [expect.objectContaining({ id: "hp" })],
-        },
+        types: ["npc", "companion"],
+        attributes: [expect.objectContaining({ id: "hp" })],
       },
     });
 
@@ -352,7 +341,7 @@ describe("world-init local tools", () => {
     expect(lorebook).toHaveLength(2);
     expect(lorebook[0]).toMatchObject({
       id: "world-entry:geography",
-      pluginId: "world-init",
+      owner: { kind: "plugin", pluginId: "world-init" },
       keys: ["geography"],
       strategy: "constant",
       position: "after_char_defs",

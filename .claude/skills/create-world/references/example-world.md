@@ -17,9 +17,9 @@ tags:
   - political-intrigue
 
 pluginPolicy:
-  preset: traditional-story
-  preferTags: [mode:traditional-story, role:codex, role:world-rules]
-  avoidTags: [mode:dialogue]
+  presetId: traditional-story
+  preferredTags: [mode:traditional-story, role:codex, role:world-rules]
+  avoidedTags: [mode:dialogue]
 recommendedPlugins:
   - affinity
 
@@ -115,7 +115,7 @@ dimensions:
 
 | 世界                    | 风格                                | 值得抄的部分                                                                                                                       |
 | ----------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 传统叙事                            | 完整 worldData 管线（`data/dimensions.yaml` 外置维度 + 角色蓝图 + 世界规则 + 立绘 presence）、`pluginSettings` / `memoryBlocks` / `characterAttributes`、`WORLD.en.md` + `WORLD.zh.md` 双语 lore |
+| `worlds/mistport`       | 传统叙事                            | 完整 worldData 管线（`data/dimensions.yaml` 外置维度 + 角色蓝图 + 世界规则 + 立绘 presence）、`pluginSettings` / memory.blocks@1 数据 / `characterSchema`、`WORLD.en.md` + `WORLD.zh.md` 双语 lore |
 | `worlds/haruka-academy` | **视觉小说**（`defaultViewMode: stage`） | 对话模式插件集、立绘 + 场景背景资产管线（`media/portraits` + `media/scenes` + 双注册表 JSON）                                        |
 
 两个世界的 `data/world.data.yaml` 都很短（1KB 上下），是 worldData descriptor 最好的模板——直接读。

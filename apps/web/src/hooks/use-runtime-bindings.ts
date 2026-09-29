@@ -58,7 +58,7 @@ export function useRuntimeBindings(
 
     if (plugins.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
       for (const sp of sessionPlugins) {
-        if (sp.status === "error") continue;
+        if (sp.hostState === "error") continue;
         for (const runtime of sp.runtimes) {
           if (runtime.runtimeType === "function" || !runtime.model) continue;
           result.push({

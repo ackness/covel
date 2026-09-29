@@ -1,5 +1,12 @@
+import registerCompaction from "../../../../plugins/history-compaction/server/index.js";
 import { describe, it, expect, vi } from "vitest";
-import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import {
+  PluginExtensionHost,
+  PluginServiceRegistry,
+  createTurnEmitter,
+  type LLMAdapter,
+  type LLMResponse,
+} from "@covel/runtime";
 import { createMemoryStore, type TurnMessageRecord } from "@covel/store";
 import {
   createBootstrapCompactorRunner,
@@ -49,23 +56,76 @@ describe("createBootstrapCompactorRunner", () => {
         sessionId: "session-1",
         turnId: `turn-${index}`,
         role: index % 2 === 0 ? "user" : "assistant",
+        sourceType: index % 2 === 0 ? "player" : "narrative",
+        order: index,
         content: "x".repeat(200),
         createdAt: new Date(index).toISOString(),
       }),
     );
 
+    const services = new PluginServiceRegistry({
+      list: async () => ["history-compaction"],
+      ensure: async () => {},
+    });
+    const extensions = new PluginExtensionHost(services);
+    registerCompaction({
+      provideExtension(point, id, implementation) {
+        extensions.register(
+          "history-compaction",
+          { point, id },
+          implementation,
+        );
+      },
+    });
     const runner = createBootstrapCompactorRunner({
-      manifestCache: new Map(),
+      extensions,
       store,
       llmAdapter,
     });
 
-    const result = await runner.run("session-1", "", messages, "en-US");
+    const emitter = createTurnEmitter({
+      store,
+      sessionId: "session-1",
+      turnId: "current-turn",
+      traceId: "current-flow",
+    });
+    await emitter.emit("hook.fired", {});
+    const result = await runner.run(
+      "session-1",
+      "",
+      messages,
+      "en-US",
+      emitter.traceId,
+      emitter,
+    );
+    await emitter.emit("hook.fired", {});
 
     expect(result.compacted).toBe(true);
     expect(resolveBudget).toHaveBeenCalledWith("fast");
     expect(generate).toHaveBeenCalledWith(
       expect.objectContaining({ model: "fast", maxOutputTokens: 400 }),
     );
+    const traces = await store.listTraceEvents("session-1");
+    expect(
+      traces.find((trace) => trace.type === "plugin.service.completed"),
+    ).toMatchObject({
+      turnId: "current-turn",
+      traceId: "current-flow",
+      payload: {
+        outcome: "success",
+        extension: { point: "history.compact@1" },
+        seq: 1,
+      },
+    });
+    expect(
+      traces
+        .filter(
+          (trace) =>
+            trace.type === "hook.fired" ||
+            trace.type === "plugin.service.completed",
+        )
+        .map((trace) => (trace.payload as { seq: number }).seq),
+    ).toEqual([0, 1, 2]);
+    await store.close();
   });
 });

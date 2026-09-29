@@ -5,7 +5,7 @@
 export interface ForceNode {
   id: string;
   name: string;
-  type: "individual" | "group" | "faction";
+  type: string;
   summary: string;
   labels: string[];
   color: string;

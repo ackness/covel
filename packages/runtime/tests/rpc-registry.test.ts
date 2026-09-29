@@ -288,8 +288,8 @@ describe("createRpcHandlerStoreView", () => {
       pluginId: "plugin-real",
     });
 
-    await scoped.getSession("sess-attacker");
-    await scoped.listTurnMessages("sess-attacker");
+    await scoped.getSession();
+    await scoped.listTurnMessages();
     await scoped.savePlayerInput({
       id: "input-1",
       sessionId: "sess-attacker",
@@ -307,13 +307,8 @@ describe("createRpcHandlerStoreView", () => {
       createdAt: "2026-04-30T00:00:00.000Z",
       updatedAt: "2026-04-30T00:00:00.000Z",
     });
-    await scoped.getPluginData?.(
-      "sess-attacker",
-      "plugin-attacker",
-      "ns",
-      "key",
-    );
-    await scoped.listPluginData?.("sess-attacker", "plugin-attacker", "ns");
+    await scoped.getPluginData?.("ns", "key");
+    await scoped.listPluginData?.("ns");
 
     expect(store.getSession).toHaveBeenCalledWith("sess-real");
     expect(store.listTurnMessages).toHaveBeenCalledWith("sess-real");

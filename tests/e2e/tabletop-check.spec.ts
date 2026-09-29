@@ -7,7 +7,7 @@ import {
 import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
 import { createFormTool } from "../../packages/tools/src/builtin/ui-tools.js";
 import { createMemoryStore } from "../../packages/store/src/index.js";
-import { submitFormHandler } from "../../packages/runtime/src/rpc-defaults/submit-form.js";
+import { createSubmitFormHandler } from "../../packages/runtime/src/rpc-defaults/submit-form.js";
 
 // API tests exercise ZIP installation, authorization and durable commits. Here the
 // real plugin handler and form validator feed the browser without a live model.
@@ -22,6 +22,7 @@ for (const width of [1512, 390]) {
     ).json();
     const pluginId = "tabletop-probe";
     const store = createMemoryStore();
+    const submitFormHandler = createSubmitFormHandler(undefined, store);
     const data = new Map<string, unknown>([
       [
         "setup/rules",
@@ -36,7 +37,7 @@ for (const width of [1512, 390]) {
       sessionId: fixture.id,
       turnId: "ordinary",
       locale: "en-US",
-      store,
+      store: { listPlayerInputs: () => store.listPlayerInputs(fixture.id) },
       pluginData: {
         get: async (ns: string, key: string) => data.get(`${ns}/${key}`),
         set: async (ns: string, key: string, value: unknown) => {

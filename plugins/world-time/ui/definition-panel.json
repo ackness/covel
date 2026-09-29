@@ -1,0 +1,52 @@
+{
+  "id": "time-definition",
+  "label": {
+    "zh": "时间规则",
+    "en": "Time rules"
+  },
+  "icon": "calendar-days",
+  "groupOrder": 101,
+  "dataSource": {
+    "namespace": "definitions"
+  },
+  "emptyState": {
+    "message": {
+      "zh": "使用通用世界历：每年12个月，每月30天，24小时制；起点为第1年1月1日08:00。",
+      "en": "Uses the default world calendar: 12 months of 30 days, 24-hour days; starts at year 1, month 1, day 1, 08:00."
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": {
+      "gap": "sm"
+    },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "$state": "/world/definition/name"
+          },
+          "size": "lg"
+        }
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "$state": "/world/definition/evolution/prompt"
+          },
+          "size": "sm"
+        }
+      },
+      {
+        "component": "JsonView",
+        "props": {
+          "value": {
+            "$state": "/world/definition"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -11,7 +11,10 @@ import type {
   RuntimeResult,
   TurnInput,
 } from "@covel/shared";
-import { WORLD_IR_V1_JSON_SCHEMA, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
+import {
+  WORLD_IR_V1_JSON_SCHEMA,
+  WORLD_IR_V1_SCHEMA_URI,
+} from "../../../plugins/world-ir/schemas/world-ir.js";
 import {
   deriveActivation,
   hasIllegalDetachedContract,
@@ -29,7 +32,7 @@ type Schema = Readonly<Record<string, unknown>>;
 function rt(
   name: string,
   opts: {
-    capabilities?: readonly string[];
+    outputContract?: string;
     inputs?: RuntimeManifest["inputs"];
     execution?: "sync" | "background";
     trigger?: RuntimeManifest["trigger"];
@@ -45,7 +48,7 @@ function rt(
     handler: "./h.js",
     trigger: opts.trigger ?? { type: "auto" },
     outputKind: "plugin",
-    capabilities: opts.capabilities ?? [],
+    outputContract: opts.outputContract,
     ...(opts.inputs ? { inputs: opts.inputs } : {}),
     ...(opts.execution ? { execution: opts.execution } : {}),
   } as RuntimeManifest;
@@ -238,7 +241,7 @@ describe("resolveInputBindings — cardinality & providers", () => {
   });
 
   it("1 provider → resolved slot with provenance", async () => {
-    const provider = rt("p/gen", { capabilities: ["prov"] });
+    const provider = rt("p/gen", { outputContract: "prov" });
     const res = await resolveInputBindings(
       baseArgs({
         manifest: rt("c/main", {
@@ -267,8 +270,8 @@ describe("resolveInputBindings — cardinality & providers", () => {
       baseArgs({
         manifest: consumerOne,
         activeRuntimes: [
-          rt("p/a", { capabilities: ["prov"] }),
-          rt("p/b", { capabilities: ["prov"] }),
+          rt("p/a", { outputContract: "prov" }),
+          rt("p/b", { outputContract: "prov" }),
         ],
         completedResults: new Map([
           ["p/a", success("p/a", {})],
@@ -294,8 +297,8 @@ describe("resolveInputBindings — cardinality & providers", () => {
           },
         }),
         activeRuntimes: [
-          rt("p/b", { capabilities: ["prov"] }),
-          rt("p/a", { capabilities: ["prov"] }),
+          rt("p/b", { outputContract: "prov" }),
+          rt("p/a", { outputContract: "prov" }),
         ],
         completedResults: new Map([
           ["p/a", success("p/a", { v: "A" })],
@@ -325,8 +328,8 @@ describe("resolveInputBindings — cardinality & providers", () => {
           },
         }),
         activeRuntimes: [
-          rt("p/a", { capabilities: ["prov"] }),
-          rt("p/b", { capabilities: ["prov"] }),
+          rt("p/a", { outputContract: "prov" }),
+          rt("p/b", { outputContract: "prov" }),
         ],
         completedResults: new Map([["p/a", success("p/a", {})]]), // p/b never ran
       }),
@@ -409,7 +412,7 @@ describe("resolveInputBindings — select & required/optional", () => {
 });
 
 describe("resolveInputBindings — accepts double layer", () => {
-  const provider = rt("p/gen", { capabilities: ["prov"] });
+  const provider = rt("p/gen", { outputContract: "prov" });
   const args = (
     accepts: Schema,
     producerSchema: Schema,
@@ -495,8 +498,8 @@ describe("resolveInputBindings — accepts double layer", () => {
           },
         }),
         activeRuntimes: [
-          rt("p/a", { capabilities: ["prov"] }),
-          rt("p/b", { capabilities: ["prov"] }),
+          rt("p/a", { outputContract: "prov" }),
+          rt("p/b", { outputContract: "prov" }),
         ],
         completedResults: new Map([
           ["p/a", success("p/a", "A")],
@@ -520,7 +523,7 @@ describe("resolveInputBindings — accepts double layer", () => {
             },
           },
         }),
-        activeRuntimes: [rt("p/a", { capabilities: ["prov"] })],
+        activeRuntimes: [rt("p/a", { outputContract: "prov" })],
         completedResults: new Map([["p/a", success("p/a", 7)]]),
         acceptsSchemas: { data: accepts },
         loadProducerSchema: async () => ({ type: "string" }),
@@ -532,7 +535,7 @@ describe("resolveInputBindings — accepts double layer", () => {
     });
   });
 
-  it("rejects structurally valid WorldIR with dangling semantic references", async () => {
+  it("leaves plugin-specific semantic checks to the producing plugin", async () => {
     const invalidWorldIR = {
       schemaVersion: 1,
       entities: [{ id: "known", type: "character" }],
@@ -566,20 +569,97 @@ describe("resolveInputBindings — accepts double layer", () => {
       }),
     );
 
+    expect(res.ok).toBe(true);
+  });
+});
+
+describe("resolveInputBindings — published contract schema", () => {
+  const contract = {
+    type: "object",
+    required: ["npcContext"],
+    properties: { npcContext: { type: "string" } },
+  } as const;
+  const args = (output: unknown, required: boolean) => ({
+    ...baseArgs({
+      manifest: rt("c/main", {
+        inputs: {
+          graph: {
+            from: { capability: "graph-rag@1" },
+            select: "/npcContext",
+            required,
+          },
+        },
+      }),
+      activeRuntimes: [
+        rt("third/retriever", { outputContract: "graph-rag@1" }),
+      ],
+      completedResults: new Map([
+        ["third/retriever", success("third/retriever", output)],
+      ]),
+    }),
+    contractSchemas: { graph: contract },
+  });
+
+  it("injects a conforming provider's selected value", async () => {
+    const res = await resolveInputBindings(
+      args({ npcContext: "A knows B", extra: 1 }, true),
+    );
+    expect(res).toMatchObject({
+      ok: true,
+      slots: { graph: { cardinality: "one", value: "A knows B" } },
+    });
+  });
+
+  it.each([true, false])(
+    "reports a contract violation as a provider error (required=%s)",
+    async (required) => {
+      const res = await resolveInputBindings(
+        args({ context: "renamed field" }, required),
+      );
+      expect(res.ok).toBe(!required);
+      if (!res.ok) expect(res.skipReason).toBe("contract-output-invalid");
+      expect(res.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "contract-output-invalid",
+          severity: "error",
+          message: expect.stringContaining("third/retriever"),
+        }),
+      );
+    },
+  );
+
+  it("uses the contract as producer schema for accepts compatibility", async () => {
+    const res = await resolveInputBindings({
+      ...args({ npcContext: "text" }, true),
+      acceptsSchemas: { graph: { type: "number" } },
+    });
     expect(res).toMatchObject({
       ok: false,
-      skipReason: "input-schema-invalid",
+      skipReason: "input-schema-incompatible",
     });
-    expect(res.diagnostics.map((item) => item.message).join("\n")).toContain(
-      "does not exist",
-    );
+  });
+
+  it("reports an unresolvable public schema reference as a binding error", async () => {
+    const res = await resolveInputBindings({
+      ...args({ npcContext: "text" }, true),
+      contractSchemas: { graph: { $ref: "#/definitions/missing" } },
+    });
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "contract-output-invalid",
+    });
+    expect(res.diagnostics[0]).toMatchObject({
+      code: "contract-output-invalid",
+      severity: "error",
+      message: expect.stringContaining("schema validation failed"),
+    });
   });
 });
 
 describe("bindings imply DAG ordering edges", () => {
   it("a capability binding places the consumer after its provider", () => {
     const provider = rt("p/gen", {
-      capabilities: ["prov"],
+      outputContract: "prov",
       stage: "post-turn",
     });
     const consumer = rt("c/main", {

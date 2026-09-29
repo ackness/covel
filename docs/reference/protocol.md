@@ -148,7 +148,7 @@ type AssetGeneration = {
 
 图像画廊类插件仍可用 `plugin_data.images` 保存查询索引,索引值保存 `{ status, ref, prompt, ... }`。`Image` / `Media` 组件消费 `MediaRef`,由框架解析为展示 URL。
 
-声明 `image-generation` capability 的插件在完成态缺少 `assetGenerations[]` 时会产生 `image.generate.asset_missing` error。`plugin_data.images` 中出现 `url` / `base64` / `dataUrl` 字段时会产生 `image.generate.plugin_data_inline_media` error；框架不会从这些旧字段合成 `asset.generated` 事件。
+由活跃 `media.image-flow@1` 扩展声明的 asset runtime在完成态缺少 `assetGenerations[]` 时会产生 `image.generate.asset_missing` error。`plugin_data.images` 中出现 `url` / `base64` / `dataUrl` 字段时会产生 `image.generate.plugin_data_inline_media` error；框架不会从这些旧字段合成 `asset.generated` 事件。
 
 ### LLM content parts
 
@@ -244,21 +244,23 @@ Provider 图片输入矩阵：
 
 > 内置 Web 当前不提供 snapshot / fork 操作界面。外部客户端可从 `session` topic 消费上述事件。
 
-### Working Memory / 上下文压缩事件
+### 世界模型、插件记忆与上下文压缩事件
 
-`working_memory.changed` 由 commit chain 在提交 `working_memory.set` proposal 后通过 `makeEvent` 产出，作为 commit event **直接写入 `/api/actions` 流**（与 `narrative.completed` 等同走 commit-direct 路径，不经 `FORWARDED_EVENT_TYPES` 白名单）。因此它**是 `CovelEvent` union 的成员**（`COVEL_EVENT_META` 中 `forwardToActionStream: false`——该 flag 只管 eventBus→action-stream 转发，对 commit-direct 事件无效）。前端 actions handler **显式不渲染**它（UI 通过 `state.changed` 感知 working memory 变化）；闭合 union 会强制新增事件在前端选择处理或忽略。
+`character-schema.changed` 在 `character.schema.set` 提交后发出，payload 为 `{schema: CharacterSchemaRecord}`。`character.upserted` 承载 `{character}`。客户端按领域记录更新角色与字段定义，不读取某个插件的数据镜像。
 
-`memory.updated` 是后台核心记忆提取的完成记录，写入 `trace_events`，沿用来源回合的 `turnId` / `traceId`。payload 包含 `status: succeeded | failed`、`slot`、`updated`、`blocksChanged`、可选 `error` 和 `updatedAt`。它不转发到已结束的 action stream；界面通过记忆宿主插件的 `_memory/update` 数据及现有 `plugin-data.changed` 订阅显示失败，重连时从持久化数据恢复。
+插件记忆与其他插件数据一样，在提交后发出 `plugin-data.changed`，由所属插件的 namespace 决定更新内容。detached 提取的失败与完成状态通过通用 job/执行记录恢复；后续执行在 `before-next-execution` 屏障后读取已提交快照。没有独立的工作记忆变更事件。
 
-`context.compacted` 是 **trace-only** 事件：由 Compactor 完成摘要写入后写入 `trace_events` 表，不进入 `CovelEvent` union，仅可通过 `/api/traces/:sessionId` 离线查询。
+`context.compacted` 是 trace-only 事件，由历史压缩编排写入 `trace_events`，不进入 `CovelEvent` union。摘要策略通过 `history.compact@1` 扩展提供。`recursive.calling/completed/failed` 是 union 内 trace 事件，仅由订阅 topic `trace` 下发，不转发到 `/api/actions`。
 
-`recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。
+| 事件                       | 触发点                | payload                                                    |
+| -------------------------- | --------------------- | ---------------------------------------------------------- |
+| `character-schema.changed` | domain schema 提交    | `{schema}`                                                 |
+| `character.upserted`       | domain character 提交 | `{character}`                                              |
+| `plugin-data.changed`      | 所属插件数据提交      | pluginId、namespace 和受影响 key                           |
+| `proposal.failed`          | proposal 提交失败     | `{proposalId,proposalType,runtimeId,pluginId,error}`       |
+| `context.compacted`        | 压缩摘要保存          | `{summaryId,messagesCompacted,tokenSavings,focusSections}` |
 
-| 事件                     | 触发点                                             | 当前出口                                                                | payload                                                         | 备注                                                                                                       |
-| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union）                       | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                                                     |
-| `proposal.failed`        | proposal 提交失败时（每个失败一条）                | commit-direct → `/api/actions`；manual/background 路径写 `trace_events` | `{ proposalId, proposalType, runtimeId, pluginId, error }`      | 任一失败都会扣留完成屏障（`turn.completed` / 记忆摄入 / auto-snapshot 均不触发），前端映射为可见的执行错误 |
-| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                                       | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查                                     |
+提交失败会扣留执行完成屏障；客户端将错误呈现为执行失败。后台结果不能重新打开已经结束的 action stream，重连使用持久化会话状态恢复。
 
 ### SSE 帧格式按通道区分
 
@@ -651,3 +653,30 @@ remain buffered until commit and are discarded on rollback.
 Browser media-resolution warnings identify the session, media id and HTTP
 status or error type. They omit signed URLs and exception messages so media
 access tokens do not enter diagnostic logs.
+
+### UI slot projection events
+
+- `ui.slot.changed { slot, key?, value, revision }` updates committed UI state.
+- `ui.slot.preview { slot, key?, value, revision, turnId }` temporarily overlays
+  one turn's projection without changing committed state.
+- `ui.slot.cleared { turnId }` removes that turn's preview overlay.
+
+These events are forwarded to both the action stream and background
+subscription. Completion, failure, and cancellation also clear previews on the
+client. A late preview for an ended turn is ignored; an explicit new execution
+start permits the same turn ID to be retried. A GET started before newer SSE
+updates must not overwrite those updates when its response arrives.
+
+## 来源执行快照
+
+`ctx.playerMessage` 保持当前执行的文本命令。`ctx.session.lastPlayerInput` 为源执行准入后捕获的最近结构化提交，形状为 `{ id, sessionId, turnId, formId, values, createdAt }`，无提交时为 `null`。以持久 UTC `createdAt` 确定最近提交，相同时间戳以 `id` 字典序作稳定决胜，不依赖数据库枚举顺序。`values` 只接受 JSON 数据，表单可能来自更早回合；消费者按来源标识解释，不自动把旧表单当成本次命令。
+
+`turn-digest@1` 包含 `turnId/playerMessage/locale/narrativeText/toolCallSummaries/lastPlayerInput/runtimeResults`。`runtimeResults` 仅列捕获时来源回合已经观察到的 `runtimeId` 与 `success/failed/skipped/suspended` 状态，不含尚未运行的消费者或其他回合的重试种子。只有成功的故事和已接受工具调用进入文本摘要。
+
+内核复制并冻结提交和摘要，在作业事务中保存同一份来源快照；worker 恢复时用共享 schema 校验，不能重新查最新表单。正常、manual 和 resume 在各自新执行准入后捕获一次。此开发期契约采用 current-only 升级：缺少新字段的旧作业及旧会话快照需要重建，不提供旧字符串格式兼容。
+
+## 插件调用 trace
+
+`plugin.service.completed` 是 trace-only 事件，`forwardToActionStream: false`。payload 包含 `callId/parentCallId?/sessionId/turnId?/runtimeId?/callerPluginId/providerPluginId/name/contract/durationMs/outcome/errorCode?`；扩展调用另含宿主注册元数据 `extension: { point, id, slot? }`。不记录输入、输出、原始异常或私有 `diagnosticScope`。
+
+输出的原始校验、归属处理 `attributeOutput` 和最终校验在同一次调用的完成边界内进行，失败记为一次 `output-validation`；缓存命中不新增调用。具有真实 TurnEmitter 的执行复用其 `traceId/retryScope/seq` 并等待持久化尝试，`durationMs` 不包含 trace I/O；观察失败只发固定警告，不改变插件结果。没有回合 emitter 的 UI 后台投影仅进入有界进程窗口，不伪造回合 trace。

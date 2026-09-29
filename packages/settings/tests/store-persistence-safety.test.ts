@@ -91,6 +91,33 @@ describe("set() rollback on a failed write", () => {
     expect(store.snapshotSecrets()).toEqual({ openai: "sk-old" });
     expect(adapter.readSecrets()).toEqual({ openai: "sk-old" });
   });
+
+  it("retains unconfirmed secret edits in a later queued save without rewriting untouched keys", async () => {
+    const adapter = createMemoryAdapter({}, { retained: "synthetic-retained" });
+    const store = new SettingsStore(adapter);
+    await store.init();
+    const save = vi
+      .spyOn(adapter, "saveSecrets")
+      .mockRejectedValueOnce(new Error("synthetic-write-failure"));
+    const results = await Promise.allSettled([
+      store.set("keys.first", "synthetic-first"),
+      store.set("keys.second", "synthetic-second"),
+    ]);
+    expect(results.map((result) => result.status)).toEqual([
+      "rejected",
+      "fulfilled",
+    ]);
+    expect(save.mock.calls[1]?.[0]).toEqual({
+      first: "synthetic-first",
+      second: "synthetic-second",
+    });
+    expect(store.snapshotSecrets()).toEqual(adapter.readSecrets());
+    expect(adapter.readSecrets()).toEqual({
+      retained: "synthetic-retained",
+      first: "synthetic-first",
+      second: "synthetic-second",
+    });
+  });
 });
 
 describe("failed hydration", () => {
@@ -402,7 +429,7 @@ describe("concurrent writes", () => {
     expect(entries).toEqual({ "a.one": 1, "a.two": 2 });
   });
 
-  it("serialises full secret snapshots", async () => {
+  it("serialises secret patches", async () => {
     let secrets: Record<string, string> = {};
     let saveCalls = 0;
     let releaseFirst!: () => void;
@@ -420,7 +447,10 @@ describe("concurrent writes", () => {
       async saveSecrets(next) {
         saveCalls += 1;
         if (saveCalls === 1) await firstGate;
-        secrets = { ...next };
+        for (const [provider, value] of Object.entries(next)) {
+          if (value === null) delete secrets[provider];
+          else secrets[provider] = value;
+        }
       },
     };
     const store = new SettingsStore(adapter);

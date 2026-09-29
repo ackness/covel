@@ -178,12 +178,12 @@ describe("tabletop package installed as a third-party ZIP", () => {
     // allocation layers on top of its player instead of replacing it.
     await writeFile(
       path.join(root, "builtin/core-fixture/PLUGIN.md"),
-      "---\nname: core-fixture\ndescription: Core fixture\npluginType: core-plugin\n---\n",
+      "---\nid: core-fixture\nkind: core\ndescription: Core fixture\nentry: ./entry.mjs\nprovides: [character-creation@1, world-data-provider@1]\ncontributes:\n  tools: [set-schema]\n---\n",
     );
     for (const [name, declaration, handler] of [
       [
         "create",
-        "stage: setup\ntrigger: { type: auto }\ncapabilities: [character-creation]\nfallbackFor: character-creation",
+        "schedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: character-creation@1}",
         `export default async function (ctx) {
   const characters = await ctx.store.listCharacters(ctx.sessionId);
   const existing = Array.isArray(characters)
@@ -210,31 +210,41 @@ describe("tabletop package installed as a third-party ZIP", () => {
       ],
       [
         "track",
-        "trigger: { type: manual }",
+        "schedule:\n  trigger: { type: manual }",
         'export default async function () { return { outcome: "success" }; }\n',
       ],
     ] as const) {
       const dir = path.join(root, "builtin/core-fixture/runtimes", name!);
       await mkdir(dir, { recursive: true });
       await writeFile(
-        path.join(dir, "PLUGIN.md"),
-        `---\nname: core-fixture/${name}\ndescription: Test default\npluginType: core-plugin\nruntimeType: function\nhandler: ./handler.js\n${declaration}\n---\n`,
+        path.join(dir, "RUNTIME.md"),
+        `---\ntype: function\ndescription: Test default\nfunction:\n  handler: ./handler.js\n${declaration}\n---\n`,
       );
       await writeFile(path.join(dir, "handler.js"), handler);
     }
     const world = parseYaml(
       await readFile(path.join(project, "worlds/mistport/world.yaml"), "utf8"),
     );
-    const schema = { version: 1, attributes: world.characterAttributes };
+    const schema = { version: 1, attributes: world.characterSchema.attributes };
     const providerDir = path.join(root, "builtin/core-fixture/runtimes/schema");
     await mkdir(providerDir, { recursive: true });
     await writeFile(
-      path.join(providerDir, "PLUGIN.md"),
-      "---\nname: core-fixture/schema\ndescription: Schema provider\npluginType: core-plugin\nruntimeType: function\nhandler: ./handler.js\nstage: setup\ntrigger: { type: auto }\ncapabilities: [world-data-provider]\n---\n",
+      path.join(providerDir, "RUNTIME.md"),
+      "---\ntype: function\ndescription: Schema provider\nfunction:\n  handler: ./handler.js\n  tools:\n    plugin: [set-schema]\nschedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: world-data-provider@1}\n---\n",
     );
+    // The public output contract has an explicit empty business value; the
+    // character schema itself is committed through the tool's domain proposal.
     await writeFile(
       path.join(providerDir, "handler.js"),
-      `export default async function () { const worldSchema = ${JSON.stringify(schema)}; return { outcome: "success", completion: "done", value: { worldSchema }, effects: { pluginData: [{ namespace: "schema", key: "character-attributes", value: worldSchema }] } }; }`,
+      `export default async function (ctx) { await ctx.tools.call("set-schema", {}); return {outcome: "success", value: {}, completion: "done"}; }`,
+    );
+    await writeFile(
+      path.join(root, "builtin/core-fixture/entry.mjs"),
+      `
+      export default function(api) {
+        api.registerTool(api.toolkit.tool({name: "set-schema", description: "Set fixture schema", parameters: api.toolkit.z.object({}), execute: (_args, ctx) => api.toolkit.withPendingProposals({}, [{id: crypto.randomUUID(), type: "character.schema.set", sessionId: ctx.sessionId, turnId: ctx.turnId, source: {pluginId: ctx.pluginId, runtimeId: ctx.runtimeId}, timestamp: new Date().toISOString(), payload: ${JSON.stringify({ types: ["npc", "companion"], attributes: schema.attributes })}}])}));
+      }
+    `,
     );
     await cp(
       path.join(project, "plugins/narrator"),
@@ -247,6 +257,16 @@ describe("tabletop package installed as a third-party ZIP", () => {
     await symlink(
       path.join(project, "plugins/narrator/node_modules"),
       path.join(root, "builtin/narrator/node_modules"),
+      "junction",
+    );
+    await cp(
+      path.join(project, "plugins/dice-check"),
+      path.join(root, "builtin/dice-check"),
+      { recursive: true, filter: (source) => !source.includes("node_modules") },
+    );
+    await symlink(
+      path.join(project, "plugins/dice-check/node_modules"),
+      path.join(root, "builtin/dice-check/node_modules"),
       "junction",
     );
     vi.stubEnv("COVEL_USER_PLUGINS_DIR", path.join(root, "user"));
@@ -301,8 +321,8 @@ sources:
   tabletop:
     kind: json
     path: rules.json
-    schema: plugin://${pluginId}/rules
-    to: plugin:${pluginId}/rules
+    schema: contract:${pluginId}.rules.initial@1
+    to: contract:${pluginId}.rules.initial@1
     key: id
 `,
     );
@@ -690,6 +710,169 @@ sources:
     expect(await store.listCharacters(sessionId)).toHaveLength(1);
     expect(
       await store.listPluginData(sessionId, pluginId, "checks"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps a submitted tabletop check separate from dice-pool receipts in the following turn", async () => {
+    await action("start_session", {});
+    const allocation = await latestForm();
+    expect(
+      (await submit(allocation, { tideReading: 4, combat: 2 })).status,
+    ).toBe(200);
+    await action("send_message", { content: "Begin" });
+    const enabledDice = await request(
+      `${sessionPath}/plugins/dice-check`,
+      "PUT",
+    );
+    expect(enabledDice.status, await enabledDice.text()).toBe(200);
+
+    const opened = await request(`${sessionPath}/plugin-rpc`, "POST", {
+      kind: "runtime",
+      pluginId,
+      runtimeId: `${pluginId}/check`,
+      payload: { openForm: true },
+    });
+    expect(opened.status, await opened.text()).toBe(200);
+    const check = await latestForm();
+    expect(
+      (
+        await submit(check, {
+          action: "Check the receiver wiring for a loose connection",
+          attribute: "tideReading",
+          difficulty: "12",
+        })
+      ).status,
+    ).toBe(200);
+
+    let emit = true;
+    let expectTabletopReceipt = true;
+    generate.mockImplementation(async (request) => {
+      if (!request.tools?.some((tool) => tool.name === "emit-event") || !emit) {
+        return {
+          content: "The receiver responds.",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      }
+      const prompt = request.messages
+        .map((message) =>
+          typeof message.content === "string" ? message.content : "",
+        )
+        .join("\n");
+      const inputBlock = prompt.match(
+        /<runtime-inputs>\s*(\{[^\n]+\})\s*<\/runtime-inputs>/,
+      );
+      const slots = inputBlock
+        ? (JSON.parse(inputBlock[1]!) as {
+            tabletopCheck?: { value?: string };
+            "check-results"?: { value?: string };
+          })
+        : {};
+      const tabletop = slots.tabletopCheck?.value?.match(
+        /Settled tabletop check \(do not reroll or change the result\): (\{.*\})/,
+      );
+      const receipt = tabletop
+        ? (JSON.parse(tabletop[1]!) as {
+            action: string;
+            attribute: string;
+            die: number;
+            modifier: number;
+            difficulty: number;
+            total: number;
+            outcome: string;
+          })
+        : null;
+      expect(Boolean(receipt)).toBe(expectTabletopReceipt);
+      const pool = slots["check-results"]?.value?.match(
+        /Pre-rolled d20s: #1: (\d+)/,
+      );
+      const roll = receipt?.die ?? Number(pool?.[1]);
+      expect(Number.isInteger(roll)).toBe(true);
+      const modifier = receipt?.modifier ?? 0;
+      const dc = receipt?.difficulty ?? 12;
+      const outcome =
+        receipt?.outcome ??
+        (roll === 20
+          ? "critical-success"
+          : roll === 1
+            ? "critical-failure"
+            : roll + modifier >= dc
+              ? "success"
+              : "failure");
+      emit = false;
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `check-${crypto.randomUUID()}`,
+            name: "emit-event",
+            arguments: JSON.stringify({
+              topic: "check.resolved",
+              data: {
+                checks: [
+                  {
+                    action: receipt?.action ?? "Inspect the receiver",
+                    attribute: receipt?.attribute ?? "tideReading",
+                    roll,
+                    modifier,
+                    dc,
+                    difficulty: "normal",
+                    total: roll + modifier,
+                    outcome,
+                  },
+                ],
+              },
+            }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    });
+
+    const settled = await action("send_message", {
+      content: "Resolve the submitted check",
+    });
+    expect(settled.runtimeResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtimeId: `${pluginId}/check`,
+          status: "success",
+        }),
+        expect.objectContaining({
+          runtimeId: "dice-check/recorder",
+          status: "skipped",
+        }),
+      ]),
+    );
+    expect(
+      settled.runtimeResults
+        .find((result) => result.runtimeId === "narrator")
+        ?.toolCalls.map((call) => call.toolName),
+    ).toContain("emit-event");
+    expect(
+      await store.listPluginData(sessionId, pluginId, "checks"),
+    ).toHaveLength(1);
+    expect(
+      await store.listPluginData(sessionId, "dice-check", "checks"),
+    ).toHaveLength(0);
+
+    emit = true;
+    expectTabletopReceipt = false;
+    const ordinary = await action("send_message", {
+      content: "Inspect the receiver again",
+    });
+    expect(ordinary.runtimeResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtimeId: "dice-check/recorder",
+          status: "success",
+        }),
+      ]),
+    );
+    expect(
+      await store.listPluginData(sessionId, "dice-check", "checks"),
     ).toHaveLength(1);
   });
 });

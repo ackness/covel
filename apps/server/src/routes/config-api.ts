@@ -56,6 +56,7 @@ import {
   configureOutboundProxy,
   getOutboundProxyStatus,
   normalizeOutboundProxyConfig,
+  prepareOutboundProxy,
   type OutboundProxyMode,
 } from "@covel/ai-provider";
 import {
@@ -376,15 +377,19 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       // Fail before hot-applying when a hand-edited config is malformed. The
       // focused writer must never replace the only recoverable source copy.
       readDesktopConfigFile(join(covelHome, "config.toml"));
-      const status = configureOutboundProxy({
+      const prepared = prepareOutboundProxy({
         ...config,
         systemProxyUrl: readRuntimeEnv().systemProxyUrl,
         resolveSystemProxy,
       });
-      // ProxyAgent construction above validates transport-specific details
-      // such as credential escaping before the new value reaches disk.
-      writeStoredProxyConfig(covelHome, config);
-      return c.json(status);
+      // Keep the live dispatcher unchanged if the atomic config write fails.
+      try {
+        writeStoredProxyConfig(covelHome, config);
+      } catch (error) {
+        prepared.dispose();
+        throw error;
+      }
+      return c.json(prepared.commit());
     } catch (error) {
       return c.json(
         errorBody(error instanceof Error ? error.message : String(error), {

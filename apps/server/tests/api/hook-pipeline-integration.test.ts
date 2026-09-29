@@ -46,6 +46,7 @@ function makeEntry(args: {
   loaded: LoadedRuntime;
 }): PluginRegistryEntry {
   const parsed = {
+    runtime: { type: args.loaded.manifest.runtimeType ?? ("agent" as const) },
     manifest: args.loaded.manifest,
     promptTemplate: args.loaded.promptTemplate,
     rawFrontmatter: {},
@@ -54,7 +55,18 @@ function makeEntry(args: {
     id: args.id,
     source: "builtin",
     summary: makeSummary({ id: args.id, name: args.id }),
-    manifest: parsed,
+    packageManifest: {
+      plugin: { id: args.id, kind: "plugin", description: "Hook fixture" },
+      manifest: {
+        name: args.id,
+        pluginId: args.id,
+        pluginType: "plugin",
+        description: "Hook fixture",
+        userSettings: args.loaded.manifest.userSettings,
+      },
+      promptTemplate: "",
+      rawFrontmatter: {},
+    },
     manifests: [parsed],
     loadedRuntimes: new Map([[args.loaded.manifest.name, args.loaded]]),
     status: "registered",

@@ -84,6 +84,7 @@ function setup() {
     },
   );
   const options = {
+    storageMode: "local" as const,
     sessionId: session.id,
     sessionIdRef: { current: session.id as string | null },
     sessionGenerationRef: { current: 1 },
@@ -260,6 +261,7 @@ it("coalesces committed state notices during a snapshot read without replaying t
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(options.stateRef.current.gameState).toEqual({
+    characterSchema: null,
     ...current.gameState,
     characters: current.characters,
   });
@@ -292,6 +294,7 @@ it("refreshes once when a state commit follows snapshot publication but other re
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(options.stateRef.current.gameState).toEqual({
+    characterSchema: null,
     stats: { hp: 9, mp: 3 },
     weather: { sky: "clear" },
     characters: [],
@@ -353,6 +356,7 @@ it("does not duplicate action-stream patch history when the subscription observe
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
   expect(options.stateRef.current.gameState).toEqual({
+    characterSchema: null,
     ...current.gameState,
     characters: [],
   });
@@ -482,3 +486,22 @@ it.each(["session switch", "revisit", "cross-session envelope", "unmount"])(
     expect(api.getSessionView).not.toHaveBeenCalled();
   },
 );
+
+it("only hydrates the currently owned local session after a subscription 404", async () => {
+  const { options, unmount } = setup();
+  const callback =
+    subscription.createSessionSubscription.mock.calls.at(-1)![1]
+      .recoverMissingSession;
+  expect(callback).toBeTypeOf("function");
+  await callback();
+  expect(options.workspace.hydrate).toHaveBeenCalledWith(session.id, {
+    isCurrent: expect.any(Function),
+  });
+  const guard = options.workspace.hydrate.mock.calls[0]![1]!.isCurrent!;
+  expect(guard()).toBe(true);
+  options.sessionIdRef.current = "another-session";
+  expect(guard()).toBe(false);
+  await callback();
+  expect(options.workspace.hydrate).toHaveBeenCalledOnce();
+  unmount();
+});

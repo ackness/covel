@@ -116,6 +116,30 @@ describe("SessionWorkspace", () => {
     ]);
   });
 
+  it("skips a mirror recovery superseded while waiting for workspace ownership", async () => {
+    const order: string[] = [];
+    const workspace = createSessionWorkspace(makeService(order), "local");
+    let start!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = workspace.run("session", "active", async () => {
+      start();
+      await hold;
+    });
+    await started;
+    let current = true;
+    const queued = workspace.hydrate("session", { isCurrent: () => current });
+    current = false;
+    release();
+    await Promise.all([first, queued]);
+    expect(order).toEqual(["hydrate", "stage:active", "checkpoint:active"]);
+  });
+
   it("does not dispatch an action when input persistence fails", async () => {
     const order: string[] = [];
     const service = makeService(order);

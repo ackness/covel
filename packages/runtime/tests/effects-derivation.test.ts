@@ -57,13 +57,6 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(asSet(sync.writes)).toEqual(["characters:*"]);
   });
 
-  it("maps memory-update-block to working-memory:* write", () => {
-    const e = deriveEffects(
-      manifest({ tools: { builtin: ["memory-update-block"] } }),
-    );
-    expect(asSet(e.writes)).toEqual(["working-memory:*"]);
-  });
-
   it("maps ui tools: render-ui/create-notification → ui:*, create-form/create-choices → interaction:*", () => {
     const e = deriveEffects(
       manifest({
@@ -78,13 +71,6 @@ describe("deriveEffects — builtin tool mapping table", () => {
       }),
     );
     expect(asSet(e.writes)).toEqual(["interaction:*", "ui:*"]);
-  });
-
-  it("maps world-dimension-get to a state:* read", () => {
-    const e = deriveEffects(
-      manifest({ tools: { builtin: ["world-dimension-get"] } }),
-    );
-    expect(asSet(e.reads)).toEqual(["state:*"]);
   });
 
   it("maps plugin-data-set to per-namespace self keys when dataSchemas are declared", () => {

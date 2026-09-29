@@ -10,9 +10,7 @@ export interface ExpectAssetGeneratedOptions {
   readonly modality?: string;
 }
 
-type RuntimeOutput = Readonly<Record<string, unknown>>;
-type AssertionSource =
-  TurnResult | RuntimeResult | RuntimeOutput | readonly RuntimeResult[];
+type AssertionSource = TurnResult | RuntimeResult | readonly RuntimeResult[];
 
 interface AssetCandidate {
   readonly value: unknown;
@@ -22,8 +20,7 @@ interface AssetCandidate {
 /**
  * Assert that a runtime result or turn result emitted an `asset.generate` payload.
  *
- * Accepts the output shape consumed by the runtime normalizer:
- * `output.assetGenerations[]`.
+ * Reads explicit runtime effects from `RuntimeResult.effects.assetGenerations`.
  *
  * @returns The first matching asset payload.
  *
@@ -44,7 +41,7 @@ export function expectAssetGenerated(
 
   if (candidates.length === 0) {
     throw new Error(
-      "Expected asset.generate output in output.assetGenerations[]",
+      "Expected asset.generate effect in effects.assetGenerations[]",
     );
   }
 
@@ -93,28 +90,17 @@ function collectAssetCandidates(source: AssertionSource): AssetCandidate[] {
     );
   }
 
-  if (isRuntimeResult(source)) {
-    return collectFromRuntimeResult(source, "runtimeResult");
-  }
-
-  return collectFromOutput(source, "output");
+  return collectFromRuntimeResult(source, "runtimeResult");
 }
 
 function collectFromRuntimeResult(
   result: RuntimeResult,
   path: string,
 ): AssetCandidate[] {
-  if (!result.output) {
-    return [];
-  }
-  return collectFromOutput(result.output, `${path}.output`);
-}
-
-function collectFromOutput(
-  output: RuntimeOutput,
-  path: string,
-): AssetCandidate[] {
-  return collectArray(output.assetGenerations, `${path}.assetGenerations`);
+  return collectArray(
+    result.effects?.assetGenerations,
+    `${path}.effects.assetGenerations`,
+  );
 }
 
 function collectArray(value: unknown, path: string): AssetCandidate[] {
@@ -162,16 +148,7 @@ function isTurnResult(value: unknown): value is TurnResult {
   return isRecord(value) && Array.isArray(value.runtimeResults);
 }
 
-function isRuntimeResult(value: unknown): value is RuntimeResult {
-  return (
-    isRecord(value) &&
-    "runtimeId" in value &&
-    "pluginId" in value &&
-    "output" in value
-  );
-}
-
-function isRecord(value: unknown): value is RuntimeOutput {
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 

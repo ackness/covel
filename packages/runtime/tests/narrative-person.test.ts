@@ -1,7 +1,14 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildContext } from "@covel/context";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
+import {
+  discoverPlugins,
+  loadPluginManifest,
+  loadPluginEntryDefinition,
+  loadPluginDefinition,
+  pluginDeclarations,
+  resolvePluginRuntimeManifest,
+} from "@covel/plugin-loader";
 import { resolveUserSettings } from "../src/turn-executor/turn-executor-helpers.js";
 
 const root = path.resolve(import.meta.dirname, "../../../plugins");
@@ -16,7 +23,15 @@ describe.each(["narrator", "chat-mode-narrator"])(
           (entry) => entry.id === id,
         )!;
         const [loaded] = await loadPluginManifest(discovery, locale);
-        const manifest = loaded!.manifest;
+        const definition = await loadPluginDefinition(discovery, locale);
+        const manifest = resolvePluginRuntimeManifest(
+          definition,
+          loaded!.manifest,
+        );
+        const { staticPromptSegments } = await loadPluginEntryDefinition(
+          discovery,
+          pluginDeclarations(definition),
+        );
         for (const [supplied, expected] of [
           ["first", "first"],
           ["second", "second"],
@@ -45,6 +60,12 @@ describe.each(["narrator", "chat-mode-narrator"])(
               { role: "assistant", content: "You reach the door." },
             ],
             userSettings,
+            promptSegments: staticPromptSegments.map((s) => ({
+              ...s,
+              audience: "self",
+              volatility: "turn",
+              providerPluginId: id,
+            })),
           });
           expect(context.systemPrompt).toContain(
             locale === "zh-CN"
@@ -58,8 +79,8 @@ describe.each(["narrator", "chat-mode-narrator"])(
           expect(finalInstruction?.role).toBe("system");
           expect(finalInstruction?.content).toContain(
             locale === "zh-CN"
-              ? `本轮旁白人称固定为 ${expected}`
-              : `This turn's narration uses ${expected}`,
+              ? "本轮旁白人称固定为 上文指定的人称"
+              : "This turn's narration uses the perspective configured above",
           );
           expect(context.messages).toContainEqual({
             role: "assistant",

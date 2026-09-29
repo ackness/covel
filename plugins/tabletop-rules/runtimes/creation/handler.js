@@ -5,25 +5,15 @@ import {
 } from "../../lib/rules.js";
 
 export default async function (ctx) {
-  // Pass the session id explicitly: builtin installs receive the full
-  // DataStore (getSession(id)), community installs the session-bound
-  // FunctionStoreView (getSession()) — the argument is accepted by both.
-  const session = await ctx.store.getSession(ctx.sessionId);
+  const session = await ctx.store.getSession();
   const inSetup = session?.phase === "setup";
   const storedRules = await ctx.pluginData.get("setup", "rules");
   const allocated = await ctx.pluginData.get("setup", "allocated");
   const offered = await ctx.pluginData.get("setup", "offered");
-  const { characters } = await ctx.tools.call("list-characters", {
-    type: "player",
-  });
-  const player = characters[0];
-  // The character-creation provider's same-turn output: its guard may have
-  // just buffered the player as a proposal, which list-characters cannot see
-  // until the turn commits, so the id travels through the runtime output.
-  const createdThisTurn = ctx.inputs?.playerId?.value;
-  const playerId =
-    player?.id ??
-    (typeof createdThisTurn === "string" ? createdThisTurn : undefined);
+  const player = ctx.world.characters.find(
+    (character) => character.type === "player",
+  );
+  const playerId = player?.id;
 
   // Derive and freeze the rules as soon as they are available — the
   // world-data provider's same-turn schema output first, then the committed
@@ -39,7 +29,7 @@ export default async function (ctx) {
   if (!storedRules && rules) await ctx.pluginData.set("setup", "rules", rules);
 
   const formId = `${ctx.pluginId}-allocation`;
-  const submissions = await ctx.store.listPlayerInputs(ctx.sessionId);
+  const submissions = await ctx.store.listPlayerInputs();
   const submitted = submissions.findLast((input) => input.formId === formId);
 
   if (submitted && allocated?.submissionId !== submitted.id) {
@@ -154,15 +144,7 @@ export default async function (ctx) {
   };
 }
 
-/**
- * Resolve the world character-attributes schema for rule derivation: the
- * same-turn world-data-provider output first, then the committed schema via
- * the public read tool (producers that already finished do not re-run).
- */
+/** Read the execution view, including the schema generated upstream. */
 async function resolveSchema(ctx) {
-  const schemaValue =
-    ctx.inputs?.schema?.value ??
-    (await ctx.tools.call("get-character-schema", {})).schema;
-  // World providers publish a schema map; the read tool returns one schema.
-  return schemaValue?.["character-attributes"] ?? schemaValue;
+  return ctx.world.characterSchema;
 }

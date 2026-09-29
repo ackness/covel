@@ -8,7 +8,7 @@ import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
  *   - invalid manifest rejection
  *   - overwrite rejection (409 when target exists)
  *   - missing multipart field (400)
- *   - multi-runtime plugin layout (runtimes/<sub>/PLUGIN.md)
+ *   - multi-runtime plugin layout (runtimes/<sub>/RUNTIME.md)
  */
 
 import {
@@ -167,11 +167,14 @@ async function dirExists(p: string): Promise<boolean> {
 // ── Fixtures ────────────────────────────────────────────────────
 
 const VALID_PLUGIN_MD = `---
-name: test-plugin
-pluginType: plugin
+id: test-plugin
+kind: plugin
 description: A test plugin
-trigger:
-  type: manual
+runtime:
+  type: agent
+  schedule:
+    trigger:
+      type: manual
 ---
 
 # Test Plugin
@@ -359,22 +362,20 @@ describe("POST /api/install/plugin", () => {
 
     const installedPlugin = path.join(pluginsDir, "test-plugin", "PLUGIN.md");
     await expect(readFile(installedPlugin, "utf-8")).resolves.toContain(
-      "name: test-plugin",
+      "id: test-plugin",
     );
   });
 
-  it("accepts a multi-runtime layout (no root PLUGIN.md)", async () => {
+  it("accepts a multi-runtime layout with a required root PLUGIN.md", async () => {
     const app = createTestApp();
     const zip = await buildZip({
       "package.json": JSON.stringify({ name: "multi-plugin" }),
-      "runtimes/a/PLUGIN.md": VALID_PLUGIN_MD.replace(
-        "test-plugin",
-        "multi-plugin/a",
-      ),
-      "runtimes/b/PLUGIN.md": VALID_PLUGIN_MD.replace(
-        "test-plugin",
-        "multi-plugin/b",
-      ),
+      "PLUGIN.md":
+        "---\nid: multi-plugin\nkind: plugin\ndescription: Multi runtime fixture\n---\n",
+      "runtimes/a/RUNTIME.md":
+        "---\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n",
+      "runtimes/b/RUNTIME.md":
+        "---\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n",
     });
     const res = await postZip(app, "/api/install/plugin", zip);
     expect(res.status).toBe(201);
@@ -384,6 +385,57 @@ describe("POST /api/install/plugin", () => {
       await dirExists(path.join(pluginsDir, "multi-plugin", "runtimes", "a")),
     ).toBe(true);
   });
+
+  it.each([
+    {
+      name: "missing root",
+      files: { "runtimes/worker/RUNTIME.md": "---\ntype: agent\n---\n" },
+      error: /root PLUGIN/,
+    },
+    {
+      name: "legacy child",
+      files: {
+        "PLUGIN.md":
+          "---\nid: test-plugin\nkind: plugin\ndescription: Fixture\n---\n",
+        "runtimes/worker/PLUGIN.md": "---\ntype: agent\n---\n",
+      },
+      error: /RUNTIME.md/,
+    },
+    {
+      name: "mixed inline and child",
+      files: {
+        "PLUGIN.md": VALID_PLUGIN_MD,
+        "runtimes/worker/RUNTIME.md": "---\ntype: agent\n---\n",
+      },
+      error: /cannot coexist/,
+    },
+    {
+      name: "undeclared output",
+      files: {
+        "PLUGIN.md": VALID_PLUGIN_MD.replace(
+          "  type: agent",
+          "  type: agent\n  io:\n    output: {contract: undeclared@1}",
+        ),
+      },
+      error: /not declared/,
+    },
+  ])(
+    "rejects invalid current-format bundle: $name",
+    async ({ files, error }) => {
+      const zip = await buildZip({
+        ...files,
+        "package.json": VALID_PACKAGE_JSON,
+      });
+      const response = await postZip(
+        createTestApp(),
+        "/api/install/plugin",
+        zip,
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toMatch(error);
+      expect(await dirExists(path.join(pluginsDir, "test-plugin"))).toBe(false);
+    },
+  );
 
   it("rejects zip-slip entries", async () => {
     const app = createTestApp();
@@ -508,8 +560,8 @@ describe("POST /api/install/plugin", () => {
   it("rejects mismatched plugin id (package.json name ≠ PLUGIN.md name)", async () => {
     const app = createTestApp();
     const mismatched = VALID_PLUGIN_MD.replace(
-      "name: test-plugin",
-      "name: other-plugin",
+      "id: test-plugin",
+      "id: other-plugin",
     );
     const zip = await buildZip({
       "PLUGIN.md": mismatched,
@@ -527,10 +579,7 @@ describe("POST /api/install/plugin", () => {
     // directory id and shadow that plugin's plugin_data namespace.
     const app = createReservedTestApp(new Set(["narrator"]));
     const zip = await buildZip({
-      "PLUGIN.md": VALID_PLUGIN_MD.replace(
-        "name: test-plugin",
-        "name: narrator",
-      ),
+      "PLUGIN.md": VALID_PLUGIN_MD.replace("id: test-plugin", "id: narrator"),
       "package.json": JSON.stringify({
         name: "narrator",
         version: "0.0.1",
@@ -550,10 +599,7 @@ describe("POST /api/install/plugin", () => {
     // bundle impersonate the builtin narrator's store/proposal/hook identity.
     const app = createReservedTestApp(new Set(["narrator"]));
     const zip = await buildZip({
-      "PLUGIN.md": VALID_PLUGIN_MD.replace(
-        "name: test-plugin",
-        "name: narrator",
-      ),
+      "PLUGIN.md": VALID_PLUGIN_MD.replace("id: test-plugin", "id: narrator"),
       "package.json": JSON.stringify({
         name: "@covel/plugin-narrator",
         version: "0.0.1",
@@ -570,10 +616,7 @@ describe("POST /api/install/plugin", () => {
     // Dir/package id says "innocent" but the loader would register "narrator".
     const app = createReservedTestApp(new Set(["narrator"]));
     const zip = await buildZip({
-      "PLUGIN.md": VALID_PLUGIN_MD.replace(
-        "name: test-plugin",
-        "name: narrator",
-      ),
+      "PLUGIN.md": VALID_PLUGIN_MD.replace("id: test-plugin", "id: narrator"),
       "package.json": JSON.stringify({
         name: "@covel/plugin-innocent",
         version: "0.0.1",
@@ -665,7 +708,7 @@ describe("POST /api/install/plugin", () => {
     // The winning install must leave a valid plugin on disk.
     const installed = path.join(pluginsDir, "test-plugin", "PLUGIN.md");
     await expect(readFile(installed, "utf-8")).resolves.toContain(
-      "name: test-plugin",
+      "id: test-plugin",
     );
   });
 });

@@ -1,6 +1,7 @@
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
 import { getBuiltinProviderConnection } from "@covel/shared";
 import { getProtocolDefinition } from "./protocol-registry.js";
+import { ModelConfigurationError } from "./errors.js";
 import type {
   CacheStrategy,
   OperationMode,
@@ -148,7 +149,7 @@ export function createProviderRegistry(options?: {
     const stored = providers.get(target.provider);
     const builtinDefaults = getBuiltinProviderConnection(target.provider);
     if (!stored && !builtinDefaults && !target.requestScoped) {
-      throw new Error(
+      throw new ModelConfigurationError(
         `Provider registry: provider "${target.provider}" is not registered.`,
       );
     }
@@ -170,7 +171,7 @@ export function createProviderRegistry(options?: {
       protocolRoute?.adapter ?? registered.adapter ?? builtinAdapter(protocol);
 
     if (!adapter) {
-      throw new Error(
+      throw new ModelConfigurationError(
         `Provider registry: protocol "${protocol}" not supported for "${target.provider}".`,
       );
     }

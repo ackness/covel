@@ -27,12 +27,7 @@ export default async function itemOp(payload, ctx) {
     };
   }
 
-  const row = await ctx.store.getPluginData(
-    ctx.sessionId,
-    ctx.pluginId,
-    NAMESPACE,
-    itemId,
-  );
+  const row = await ctx.store.getPluginData(NAMESPACE, itemId);
   const item = row?.value;
   if (!item || typeof item !== "object" || item.removed === true) {
     return { ok: false, reason: `item "${itemId}" not found` };
@@ -43,13 +38,6 @@ export default async function itemOp(payload, ctx) {
       ? { ...item, quantity: 0, equipped: false, removed: true }
       : { ...item, equipped: op === "equip" };
 
-  // Direct-store writes need the FULL PluginDataRecord (id/createdAt/…) —
-  // spread the loaded row so the upsert keeps its identity and timestamps,
-  // only the value and updatedAt change.
-  await ctx.store.setPluginData({
-    ...row,
-    value,
-    updatedAt: new Date().toISOString(),
-  });
+  await ctx.store.setPluginData({ namespace: NAMESPACE, key: itemId, value });
   return { ok: true, op, item: value };
 }

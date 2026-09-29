@@ -6,6 +6,8 @@ export interface LoadedRuntime {
   readonly manifest: RuntimeManifest;
   readonly promptTemplate: string;
   readonly outputSchema?: Readonly<Record<string, unknown>>;
+  /** Published contract of the complete output, independent of output.schema. */
+  readonly outputContractSchema?: Readonly<Record<string, unknown>>;
   /**
    * Activation-payload JSON Schema loaded from `input.schema` — enforced on
    * `RuntimeActivation.payload` before dispatch for both function and agent
@@ -20,11 +22,22 @@ export interface LoadedRuntime {
     Record<string, Readonly<Record<string, unknown>>>
   >;
   /**
+   * Published schemas of contract-sourced `inputs` bindings, keyed by binding
+   * name. Each provider's full output must satisfy its contract before `select`.
+   */
+  readonly bindingContractSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  /**
    * Per-export-binding `accepts` JSON Schemas, keyed by the `input.inject`
    * runtime-export `name`. Validates the frozen cross-execution export value at
    * consume time (docs 02 §3.4.4).
    */
   readonly exportAcceptsSchemas?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  /** Published contracts for complete committed export values, keyed by binding. */
+  readonly exportContractSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
   /** Handler function for `runtimeType: 'function'` runtimes. */

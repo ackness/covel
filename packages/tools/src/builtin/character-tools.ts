@@ -4,9 +4,7 @@
  * These tools are the canonical way for plugin LLM agents to create and update
  * characters (players, NPCs, companions) in the current session. They return
  * buffered character proposals; the commit handler writes the character table
- * and mirrors to `plugin_data[pluginId][namespace="characters"][key=charId]` so that
- * right-panel specs subscribing to plugin data receive live updates through the
- * existing SSE `plugin-data.changed` channel.
+ * and publishes World Model changes to the session.
  *
  * Text-first output convention:
  *   All tools return an object with a `_text` string field that holds a
@@ -24,7 +22,7 @@
  */
 
 import type {
-  CharacterAttributeSchema,
+  CharacterSchema,
   CharacterRecord,
   CharacterUpsertPayload,
   Proposal,
@@ -52,17 +50,12 @@ import {
   toSnapshot,
   truncate,
   type CharacterStore,
-  type CharacterToolDeps,
 } from "./character-tool-helpers.js";
 
-export {
-  mirrorCharacterToPluginData,
-  mergeSchemaDefaults,
-} from "./character-tool-helpers.js";
+export { mergeSchemaDefaults } from "./character-tool-helpers.js";
 export type {
   CharacterSnapshot,
   CharacterStore,
-  CharacterToolDeps,
 } from "./character-tool-helpers.js";
 
 // ── Buffered write plumbing ──────────────────────────────────────
@@ -80,22 +73,21 @@ async function mergeCharacterViews(
   store: CharacterStore,
   context: ToolExecutionContext,
 ): Promise<CharacterRecord[]> {
+  if (context.world) return structuredClone([...context.world.characters]);
   const stored = await store.listCharacters(context.sessionId);
   return [
     ...overlayCharacters(
-      context.pendingProposals ?? [],
+      [
+        ...(context.upstreamProposals ?? []),
+        ...(context.pendingProposals ?? []),
+      ],
       stored,
       context.sessionId,
     ).values(),
   ];
 }
 
-/**
- * Build the `character.upsert` proposal that replaces the old direct
- * `upsertCharacter` + `mirrorCharacterToPluginData` writes. `mirrorPluginId`
- * makes the commit handler mirror the snapshot into the caller plugin's
- * `characters` namespace, preserving panel reactivity.
- */
+/** Build a session-scoped character proposal. */
 function makeCharacterUpsertProposal(
   context: ToolExecutionContext,
   payload: CharacterUpsertPayload,
@@ -117,10 +109,10 @@ function makeCharacterUpsertProposal(
 const CREATE_DESCRIPTION =
   "创建角色；同 session 的同名同类型会去重。fields 按世界 schema 合并默认值并返回校验 warning。";
 
-function createCharacterParametersSchema() {
+function createCharacterParametersSchema(schema?: CharacterSchema) {
   return z.object({
     name: z.string().min(1).describe("角色名"),
-    type: characterTypeSchema,
+    type: characterTypeSchema(schema),
     description: z.string().optional().describe("简短描述"),
     fields: buildFieldsZod(null)
       .optional()
@@ -130,13 +122,12 @@ function createCharacterParametersSchema() {
 
 function createCreateCharacterTool(
   store: CharacterStore,
-  deps: CharacterToolDeps,
-  schema?: CharacterAttributeSchema,
+  schema?: CharacterSchema,
 ): ToolModule {
   return tool({
     name: "create-character",
     description: CREATE_DESCRIPTION + characterFieldsHint(schema),
-    parameters: createCharacterParametersSchema(),
+    parameters: createCharacterParametersSchema(schema),
     execute: async (params, context) => {
       const now = new Date().toISOString();
 
@@ -162,18 +153,27 @@ function createCreateCharacterTool(
       // into the stored fields — keeping the panel (which overlays defaults at
       // render time) in sync with what the model later reads via get-character
       // and prompt context. A null schema leaves fields untouched.
-      const schema = await loadCharacterSchema(
-        store,
-        deps,
-        context.sessionId,
-        context.pendingProposals,
-      );
+      const schema = await loadCharacterSchema(store, context.sessionId, [
+        ...(context.upstreamProposals ?? []),
+        ...(context.pendingProposals ?? []),
+      ]);
+      const allowedTypes = new Set([
+        "player",
+        ...(schema?.types ?? ["npc", "companion"]),
+      ]);
+      if (!allowedTypes.has(params.type))
+        throw new Error(`Unknown character type: ${params.type}`);
+      if (
+        params.type === "player" &&
+        existing.some((character) => character.type === "player")
+      ) {
+        throw new Error("A session may have at most one player character");
+      }
       const fields = mergeSchemaDefaults(params.fields, schema);
 
       const id = `char-${crypto.randomUUID()}`;
       // Write buffers into a character.upsert proposal — the commit handler
-      // performs the character write AND the plugin-data mirror (mirrorPluginId)
-      // inside the execution's single transaction, so a rollback undoes both.
+      // persists the character inside the execution transaction.
       const proposal = makeCharacterUpsertProposal(
         context,
         {
@@ -186,7 +186,6 @@ function createCreateCharacterTool(
           fields,
           version: 1,
           createdAt: now,
-          mirrorPluginId: context.pluginId,
         },
         now,
       );
@@ -231,8 +230,7 @@ function createUpdateCharacterParametersSchema() {
 
 function createUpdateCharacterTool(
   store: CharacterStore,
-  deps: CharacterToolDeps,
-  schema?: CharacterAttributeSchema,
+  schema?: CharacterSchema,
 ): ToolModule {
   return tool({
     name: "update-character",
@@ -258,19 +256,17 @@ function createUpdateCharacterTool(
           ? { ...prevFields, ...params.fields }
           : existing.fields;
       const newVersion = existing.version + 1;
-      const schema = await loadCharacterSchema(
-        store,
-        deps,
-        context.sessionId,
-        context.pendingProposals,
-      );
+      const schema = await loadCharacterSchema(store, context.sessionId, [
+        ...(context.upstreamProposals ?? []),
+        ...(context.pendingProposals ?? []),
+      ]);
       // Validate the supplied patch, so correcting one legacy field does not
       // require rewriting unrelated attributes that were already malformed.
       if (params.fields !== undefined)
         assertCharacterFields(params.fields, schema);
 
       // Buffer the upsert as a proposal (commit handler does the write +
-      // mirror). `existing` may itself be a buffered create from earlier in
+      // record). `existing` may itself be a buffered create from earlier in
       // this loop, so the merged view above is what makes chained
       // create→update land the right base state.
       const proposal = makeCharacterUpsertProposal(
@@ -286,7 +282,6 @@ function createUpdateCharacterTool(
           version: newVersion,
           expectedVersion: existing.version,
           createdAt: existing.createdAt,
-          mirrorPluginId: context.pluginId,
         },
         now,
       );
@@ -347,11 +342,10 @@ interface CharacterWriteOutput {
 
 function createSyncCharactersTool(
   store: CharacterStore,
-  deps: CharacterToolDeps,
-  schema?: CharacterAttributeSchema,
+  schema?: CharacterSchema,
 ): ToolModule {
-  const createCharacter = createCreateCharacterTool(store, deps);
-  const updateCharacter = createUpdateCharacterTool(store, deps);
+  const createCharacter = createCreateCharacterTool(store, schema);
+  const updateCharacter = createUpdateCharacterTool(store, schema);
 
   return tool({
     name: "sync-characters",
@@ -361,7 +355,7 @@ function createSyncCharactersTool(
     parameters: z
       .object({
         creates: z
-          .array(createCharacterParametersSchema())
+          .array(createCharacterParametersSchema(schema))
           .max(5)
           .default([])
           .describe("Up to 5 named, plot-relevant new NPCs."),
@@ -446,7 +440,7 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
   return tool({
     name: "list-characters",
     description:
-      "列出本 session 中的所有角色（session 作用域，跨插件可见）。输出按频率降序排序（version 越高表示被交互得越频繁），频率相同时按最近更新时间降序排序。可按 type 过滤：player / npc / companion。返回紧凑的文本列表——每个角色一行，包含 id / 名字 / 类型 / 版本 / 简短描述。需要完整属性时调用 get-character。",
+      "列出本 session 中的所有角色（session 作用域，跨插件可见）。输出按频率降序排序（version 越高表示被交互得越频繁），频率相同时按最近更新时间降序排序。可按世界 schema 声明的 type 过滤。返回紧凑的文本列表——每个角色一行，包含 id / 名字 / 类型 / 版本 / 简短描述。需要完整属性时调用 get-character。",
     parameters: z.object({
       type: z
         .preprocess((value) => {
@@ -462,7 +456,7 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
             return undefined;
           }
           return normalized;
-        }, characterTypeSchema.optional().nullable())
+        }, z.string().min(1).optional().nullable())
         .describe("按类型过滤（可选）"),
     }),
     execute: async (params, context) => {
@@ -555,28 +549,21 @@ function createGetCharacterTool(store: CharacterStore): ToolModule {
  * Create the full set of builtin character tools bound to a DataStore instance.
  * Call this during bootstrap when the store is available.
  *
- * `deps.findWorldDataPluginId` is optional: when omitted (e.g. from tests),
- * the create/update tools skip soft schema validation but still function
- * normally. When present, write tools emit `_text` warnings about
- * off-schema keys and type mismatches so the LLM can self-correct.
+ * Schema validation uses the authoritative session World Model.
  */
 export function createCharacterTools(
   store: CharacterStore,
-  deps: CharacterToolDeps = {},
 ): readonly ToolModule[] {
   return [
     tool({
       name: "get-character-schema",
-      description:
-        "Read the current session's character attribute schema from its active world-data provider.",
+      description: "Read the current session's authoritative character schema.",
       parameters: z.object({}),
       execute: async (_params, context) => {
-        const schema = await loadCharacterSchema(
-          store,
-          deps,
-          context.sessionId,
-          context.pendingProposals,
-        );
+        const schema = await loadCharacterSchema(store, context.sessionId, [
+          ...(context.upstreamProposals ?? []),
+          ...(context.pendingProposals ?? []),
+        ]);
         return {
           _text: schema
             ? JSON.stringify(schema)
@@ -585,9 +572,9 @@ export function createCharacterTools(
         };
       },
     }),
-    createCreateCharacterTool(store, deps),
-    createUpdateCharacterTool(store, deps),
-    createSyncCharactersTool(store, deps),
+    createCreateCharacterTool(store),
+    createUpdateCharacterTool(store),
+    createSyncCharactersTool(store),
     createListCharactersTool(store),
     createGetCharacterTool(store),
   ];
@@ -606,12 +593,11 @@ export function createCharacterTools(
  */
 export function buildSessionCharacterWriteTools(
   store: CharacterStore,
-  deps: CharacterToolDeps,
-  schema: CharacterAttributeSchema,
+  schema: CharacterSchema,
 ): readonly ToolModule[] {
   return [
-    createCreateCharacterTool(store, deps, schema),
-    createUpdateCharacterTool(store, deps, schema),
-    createSyncCharactersTool(store, deps, schema),
+    createCreateCharacterTool(store, schema),
+    createUpdateCharacterTool(store, schema),
+    createSyncCharactersTool(store, schema),
   ];
 }

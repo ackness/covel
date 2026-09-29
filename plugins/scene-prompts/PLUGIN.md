@@ -1,75 +1,85 @@
 ---
-name: scene-prompts
+id: scene-prompts
+kind: plugin
 displayName:
   zh: 场景快捷回复
   en: Scene Prompts
 description:
   zh: 衔接相关前情，明确当前决策，并给出可直接采用的行动短句。
-  en: Recaps relevant context, states the current decision, and suggests ready-to-use actions.
-pluginType: plugin
-stage: post-turn
-model: plugin
-llm:
-  reasoningEffort: disabled
-  toolChoice: { name: generate-scene-prompts }
-outputKind: system
-timeoutMs: 120000
-maxRetries: 0
-callTimeoutMs: 60000
-# This runtime's only job is to call generate-scene-prompts. Some models drift
-# into continuing the narrative and finish with zero tool calls; the gate gives
-# one corrective retry before releasing so the choices don't silently vanish.
-requireToolUse: true
-# The successful generator call is the complete result. Avoid a second LLM
-# request whose only purpose would be to emit runtime-done.
-completeAfterTools: [generate-scene-prompts]
-output:
-  schema: ./schemas/scene-prompts-output.schema.json
-# Discovered by the stage choices layer via this capability (not a hardcoded
-# plugin id — framework↔plugin isolation rule). A third-party plugin declaring
-# `scene-prompts` transparently replaces this one as the stage's prompt source.
-capabilities:
-  - scene-prompts
+  en: >-
+    Recaps relevant context, states the current decision, and suggests
+    ready-to-use actions.
 tags:
-  - mode:dialogue
-  - role:quick-reply
-  - cost:llm
-  - ui:message-block
-trigger:
-  type: scheduled
-  interval: 1
-# Bind the current narrative by capability instead of enumerating known engine
-# ids. `required: true` is both the same-turn gate and the DAG edge; `accepts`
-# rejects a provider that advertises the capability but violates its output
-# contract. Agent prompts receive the provenance-wrapped value in
-# `<runtime-inputs>` at `narrative.value`.
-inputs:
-  narrative:
-    from:
-      capability: narrative-engine
-      cardinality: one
-    select: "/narrativeOutput"
-    accepts: ./schemas/narrative-output.schema.json
-    required: true
+  - "mode:dialogue"
+  - "cost:llm"
+  - "ui:message-block"
+provides:
+  - scene-prompts@1
+requires:
+  - narrative-engine@1
 entry: ./server/index.js
-tools:
-  plugin:
+contributes:
+  extensions:
+    - point: ui.slot@1
+      id: choices
+      slot: stage.choices@1
+      order: 0
+      watch:
+        - message
+  ui:
+    message:
+      - ./ui/scene-prompts-block.json
+  prompt:
+    - id: post-history
+      content: |
+        本 runtime 工作流：
+        - 必须完成且只完成一次成功的 `generate-scene-prompts` 调用，根据最新叙事生成前情摘要、当前决策和场景化玩家行动短句
+        - 如果工具返回参数校验错误，修正参数后重试；成功后不要重复调用
+        - 工具成功后框架会自动结束 runtime，不要再调用 `runtime-done`
+        - 调用工具前后都不要输出额外文本
+      position: post-history
+      role: system
+  tools:
     - generate-scene-prompts
-ui:
-  message:
-    - ./ui/scene-prompts-block.json
-# The tool writes scene-prompts-owned plugin data; ui.message is a declarative
-# projection and does not mutate another message-block plugin's state.
-effects:
-  parallelSafe: true
-postHistory:
-  role: system
-  content: |
-    本 runtime 工作流：
-    - 必须完成且只完成一次成功的 `generate-scene-prompts` 调用，根据最新叙事生成前情摘要、当前决策和场景化玩家行动短句
-    - 如果工具返回参数校验错误，修正参数后重试；成功后不要重复调用
-    - 工具成功后框架会自动结束 runtime，不要再调用 `runtime-done`
-    - 调用工具前后都不要输出额外文本
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: scheduled
+      interval: 1
+  io:
+    inputs:
+      narrative:
+        from:
+          contract: narrative-engine@1
+          cardinality: one
+        select: /narrativeOutput
+        accepts: ./schemas/narrative-output.schema.json
+        required: true
+    output:
+      schema: ./schemas/scene-prompts-output.schema.json
+      contract: scene-prompts@1
+    visibility: system
+  agent:
+    model: plugin
+    llm:
+      reasoningEffort: disabled
+      toolChoice:
+        name: generate-scene-prompts
+    tools:
+      plugin:
+        - generate-scene-prompts
+    loop:
+      timeoutMs: 120000
+      callTimeoutMs: 60000
+      maxRetries: 0
+      completion:
+        require: tool-use
+        afterTools:
+          - generate-scene-prompts
+  effects:
+    parallelSafe: true
 ---
 
 你是 Scene Prompts agent。你的任务是在叙事推进后，简要衔接此前信息，并为玩家提供一组可直接作为下一条玩家消息的场景化短句。

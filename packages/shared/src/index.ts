@@ -1,3 +1,19 @@
+export {
+  playerInputSubmissionSchema,
+  turnDigestSchema,
+} from "./schemas/execution-snapshots.js";
+export * from "./extension-points/index.js";
+export type {
+  CharacterSchema,
+  CharacterSchemaRecord,
+  LorebookOwner,
+} from "./types/world-model.js";
+export {
+  characterSchemaSchema,
+  characterSchemaRecordSchema,
+  lorebookOwnerSchema,
+} from "./schemas/world-model.js";
+
 // ── Types ─────────────────────────────────────────────────────────
 export * from "./types/index.js";
 export type {
@@ -19,6 +35,14 @@ export {
 } from "./model-capabilities.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
+export {
+  materializeWorldModel,
+  validateWorldModel,
+  characterSchemaSetPayloadSchema,
+  characterUpsertPayloadSchema,
+} from "./proposals/world-model.js";
+export type { WorldModelView } from "./proposals/world-model.js";
+export { buildFieldsZodFromSchema } from "./schemas/character-fields.js";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
@@ -73,12 +97,6 @@ export type {
   SystemProxyResolveRequest,
   SystemProxyResolveResponse,
 } from "./system-proxy-ipc.js";
-export {
-  MAX_WORKING_MEMORY_ENTRIES,
-  MAX_WORKING_MEMORY_VALUE_CHARS,
-  workingMemoryQuotaViolation,
-} from "./utils/working-memory-quota.js";
-export type { WorkingMemoryQuotaViolation } from "./utils/working-memory-quota.js";
 export {
   MAX_CACHE_BREAKPOINTS,
   PROMPT_CACHE_BREAKPOINT_MARKER,
@@ -136,7 +154,6 @@ export {
   triggerTypeSchema,
   triggerConfigSchema,
   inputInjectDeclSchema,
-  inputToolDeclSchema,
   inputConfigSchema,
   outputKindSchema,
   outputConfigSchema,
@@ -147,16 +164,13 @@ export {
   worldProjectionMapSchema,
   toolsConfigSchema,
   hookDeclarationSchema,
-  authorsNoteDeclSchema,
-  postHistoryDeclSchema,
-  memoryBlockDeclSchema,
   pluginEventDeclSchema,
-  pluginRelationsSchema,
   runtimeManifestInputSchema,
   runtimeManifestAuthoringSchema,
   authoringTriggerConfigSchema,
   stageSchema,
   turnCompletionConfigSchema,
+  MAX_SETTLE_WAIT_MS,
   afterRefSchema,
   needsRefSchema,
   runtimeBindingSchema,
@@ -193,13 +207,11 @@ export {
 } from "./schemas/world.js";
 
 export type { WorldManifestInput } from "./schemas/world.js";
-export {
-  worldTimeSchema,
-  type WorldTimeDefinition,
-} from "./schemas/world-time.js";
 
 // ── API Transport Contracts ────────────────────────────────────
 export {
+  createSessionRequestSchema,
+  type CreateSessionRequest,
   actionRequestSchema,
   actionTypeSchema,
   apiListResponseSchema,
@@ -209,21 +221,13 @@ export {
   suspensionSummarySchema,
   validateActionRequest,
   worldPluginPlanSchema,
+  pluginPackSchema,
   worldCreateRequestSchema,
   worldPatchRequestSchema,
   worldWireRecordSchema,
 } from "./schemas/api-contract.js";
 
 export {
-  WORLD_IR_V1_SCHEMA_URI,
-  WORLD_IR_V1_JSON_SCHEMA,
-  worldIRJsonValueSchema,
-  worldIRV1EntitySchema,
-  worldIRV1RelationSchema,
-  worldIRV1EventSchema,
-  worldIRV1StatementSchema,
-  worldIRV1Schema,
-  validateWorldIRV1,
   worldDataSourceIdRegex,
   worldDataSourceIdSchema,
   worldDataSourceKindSchema,
@@ -239,8 +243,6 @@ export {
 } from "./schemas/world-data.js";
 
 export type {
-  WorldIRV1ValidationError,
-  WorldIRV1ValidationResult,
   WorldDataDescriptorInput,
   WorldDataDescriptorOverrideInput,
 } from "./schemas/world-data.js";
@@ -296,7 +298,12 @@ export type {
   AssetGenerateLLMTextPart,
   AssetGenerateView,
 } from "./proposals/asset-generate.js";
-export { resolvePluginSelection } from "./plugin-selection.js";
+export { resolveSessionPlugins } from "./plugin-selection.js";
+export type {
+  SessionPluginCandidate,
+  SessionPluginResolution,
+  PluginResolutionRejection,
+} from "./plugin-selection.js";
 
 export type { LLMProviderRequest } from "./types/llm-provider-request.js";
 export {
@@ -324,3 +331,11 @@ export {
   type PluginInstallation,
   type GithubPluginPreview,
 } from "./schemas/plugin-install.js";
+
+export { pluginManifestSchema } from "./schemas/plugin-manifest.js";
+export {
+  runtimeAuthoringManifestSchema,
+  contractIdSchema,
+} from "./schemas/runtime-manifest.js";
+
+export * from "./schemas/catalog.js";

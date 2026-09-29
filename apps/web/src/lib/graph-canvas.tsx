@@ -1,8 +1,8 @@
 /**
  * GraphCanvas — react-force-graph-2d wrapper for json-render catalog.
  *
- * Renders a force-directed relationship graph from the live pluginData
- * store. Lazy-loaded so the force-graph + d3 bundle is only pulled in
+ * Renders a force-directed relationship graph from panel-bound props.
+ * Lazy-loaded so the force-graph + d3 bundle is only pulled in
  * when the user actually opens the NPC tab.
  */
 
@@ -28,7 +28,7 @@ import { buildNodes, buildLinks, drawNodeLabel } from "./graph-canvas-model.js";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import type { ForceGraphMethods } from "react-force-graph-2d";
-import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import { graphCanvasPropsSchema, type GraphCanvasProps } from "@covel/shared";
 import type { ForceLink, ForceNode, MutableForceNode } from "./graph-types.js";
 import { createGraphDataPools, syncGraphData } from "./graph-canvas-sync.js";
 
@@ -41,37 +41,23 @@ const ForceGraph2D = lazy(async () => {
   return { default: mod.default as ComponentType<Props> };
 });
 
-interface GraphCanvasProps {
-  pluginId: string;
-  nodesNamespace: string;
-  edgesNamespace: string;
-  height?: number;
-}
-
-const Inner = ({
-  pluginId,
-  nodesNamespace,
-  edgesNamespace,
-  height = 480,
-}: GraphCanvasProps) => {
+const Inner = ({ nodes, edges, node, edge, height }: GraphCanvasProps) => {
   const { t } = useTranslation();
-  const nodes = usePluginNamespace(pluginId, nodesNamespace);
-  const edges = usePluginNamespace(pluginId, edgesNamespace);
   // Keep the library's default structural node/link generics at the ref boundary.
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
 
   const [selectedId, setSelectedId] = useState<string>();
   // React consumes immutable metadata; the simulation keeps its mutable pool.
   const viewData = useMemo(() => {
-    const builtNodes = buildNodes(nodes);
+    const builtNodes = buildNodes(nodes, node);
     const ids = new Set(builtNodes.map((node) => node.id));
     return {
       nodes: builtNodes,
-      links: buildLinks(edges).filter(
+      links: buildLinks(edges, edge).filter(
         (link) => ids.has(String(link.source)) && ids.has(String(link.target)),
       ),
     };
-  }, [nodes, edges]);
+  }, [nodes, edges, node, edge]);
   const selected = viewData.nodes.find((node) => node.id === selectedId);
   const connectedIds = useMemo(
     () => connectedNodeIds(viewData.links, selectedId),
@@ -368,21 +354,6 @@ const Inner = ({
 };
 
 export const GraphCanvas: ComponentRenderer = ({ element }) => {
-  const props = (element.props ?? {}) as Partial<GraphCanvasProps>;
-  if (!props.pluginId || !props.nodesNamespace || !props.edgesNamespace) {
-    return (
-      <div className="text-xs text-red-500 italic">
-        GraphCanvas: missing required props (pluginId, nodesNamespace,
-        edgesNamespace)
-      </div>
-    );
-  }
-  return (
-    <Inner
-      pluginId={props.pluginId}
-      nodesNamespace={props.nodesNamespace}
-      edgesNamespace={props.edgesNamespace}
-      height={props.height}
-    />
-  );
+  const parsed = graphCanvasPropsSchema.safeParse(element.props);
+  return parsed.success ? <Inner {...parsed.data} /> : null;
 };

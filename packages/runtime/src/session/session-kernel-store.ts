@@ -3,6 +3,12 @@
  */
 
 export interface KernelStore {
+  getCharacterSchema?(
+    sessionId: string,
+  ): Promise<import("@covel/shared").CharacterSchemaRecord | null>;
+  upsertCharacterSchema?(
+    record: import("@covel/shared").CharacterSchemaRecord,
+  ): Promise<void>;
   addMessage(record: {
     id: string;
     sessionId: string;
@@ -100,38 +106,16 @@ export interface KernelStore {
     namespace: string,
     key: string,
   ): Promise<void>;
-  /**
-   * Working Memory capability. Adapters without it reject working-memory
-   * proposals. Writable adapters must also implement listWorkingMemory.
-   */
-  upsertWorkingMemory?(record: {
-    id: string;
-    sessionId: string;
-    key: string;
-    scope: "player" | "story" | "shared";
-    value: unknown;
-    schemaRef?: string;
-    updatedAt: string;
-  }): Promise<void>;
-  /**
-   * Working Memory listing — used by the `working_memory.set` commit handler to
-   * enforce the per-session entry quota. A write is rejected when absent.
-   */
-  listWorkingMemory?(sessionId: string): Promise<
-    readonly {
-      key: string;
-      scope: "player" | "story" | "shared";
-    }[]
-  >;
-  /**
-   * Session lorebook upsert. Optional for the same reason as
-   * upsertWorkingMemory — thin mock stores may not implement it.
-   */
+  getLorebookEntry?(
+    sessionId: string,
+    owner: import("@covel/shared").LorebookOwner,
+    id: string,
+  ): Promise<{ readonly createdAt: string } | null>;
   upsertLorebookEntries?(
     records: ReadonlyArray<{
       id: string;
       sessionId: string;
-      pluginId: string;
+      owner: import("@covel/shared").LorebookOwner;
       keys: readonly string[];
       content: string;
       strategy: "constant" | "selective";

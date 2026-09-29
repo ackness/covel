@@ -7,6 +7,9 @@ import type { DataStore } from "@covel/store";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import {
   PluginEntryScope,
+  PluginExtensionHost,
+  createExtensionRegistration,
+  enforcePluginRegistrationContract,
   PluginServiceRegistry,
   type PluginAPI,
 } from "@covel/runtime";
@@ -46,6 +49,7 @@ export interface RuntimeLoadResult {
   /** Tools registered by the selected packages' entry modules. */
   readonly entryTools: readonly { pluginId: string; tool: ToolModule }[];
   readonly services: PluginServiceRegistry;
+  readonly extensions: PluginExtensionHost;
   close(): Promise<void>;
 }
 
@@ -117,6 +121,9 @@ export async function loadRuntimeCache(args: {
   readonly rawManifests: readonly RuntimeManifest[];
   readonly definition: PluginDefinition;
   readonly locale: string;
+  readonly contracts?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
 }): Promise<Map<string, LoadedRuntime>> {
   const loadedCache = new Map<string, LoadedRuntime>();
   for (const manifest of args.rawManifests) {
@@ -125,6 +132,7 @@ export async function loadRuntimeCache(args: {
       manifest.name,
       args.locale,
       args.definition,
+      args.contracts,
     );
     loadedCache.set(manifest.name, {
       ...loaded,
@@ -208,6 +216,11 @@ export async function loadRuntimeBundle(args: {
         resolvePluginRuntimeManifest(definition, manifest),
       ),
       locale: args.locale,
+      contracts: Object.fromEntries(
+        [...definitions.values()].flatMap((d) =>
+          Object.entries(d.packageManifest?.contractSchemas ?? {}),
+        ),
+      ),
     });
     for (const [name, loaded] of cache) loadedCache.set(name, loaded);
   }
@@ -231,6 +244,7 @@ export async function loadRuntimeBundle(args: {
       }
     },
   });
+  const extensions = new PluginExtensionHost(services);
   const entries: Awaited<ReturnType<typeof loadEntryTools>>[] = [];
   const entryTools: { pluginId: string; tool: ToolModule }[] = [];
   const close = async () => {
@@ -253,6 +267,7 @@ export async function loadRuntimeBundle(args: {
         discoveries.get(id)!,
         definitions.get(id)!,
         services,
+        extensions,
       );
       entries.push(entry);
       entryTools.push(...entry.tools.map((tool) => ({ pluginId: id, tool })));
@@ -287,6 +302,7 @@ export async function loadRuntimeBundle(args: {
     loadedCache,
     entryTools,
     services,
+    extensions,
     close,
   };
 }
@@ -304,17 +320,39 @@ export async function loadEntryTools(
   discovery: PluginDiscoveryResult,
   definition: PluginDefinition,
   services?: PluginServiceRegistry,
+  extensions?: PluginExtensionHost,
 ): Promise<{ tools: readonly ToolModule[]; close(): Promise<void> }> {
-  const { entryPaths } = await loadPluginEntryDefinition(
+  const {
+    entryPaths,
+    extensions: declarations,
+    staticPromptSegments,
+    staticPromptVariants,
+    contributions,
+  } = await loadPluginEntryDefinition(
     discovery,
     pluginDeclarations(definition),
   );
-  if (entryPaths.length === 0) return { tools: [], close: async () => {} };
+  if (
+    entryPaths.length === 0 &&
+    declarations.length === 0 &&
+    staticPromptSegments.length === 0
+  )
+    return { tools: [], close: async () => {} };
 
   const tools = new ToolRegistry();
   const scope = new PluginEntryScope();
+  const registration = createExtensionRegistration(
+    extensions,
+    discovery.id,
+    declarations,
+    scope,
+    undefined,
+    staticPromptSegments,
+    staticPromptVariants,
+  );
   const covel: PluginAPI = {
     pluginId: discovery.id,
+    provideExtension: registration.provideExtension,
     signal: scope.signal,
     onDispose(callback) {
       scope.onDispose(callback);
@@ -344,6 +382,7 @@ export async function loadEntryTools(
     registerWires() {},
   };
 
+  const checked = enforcePluginRegistrationContract(covel, contributions);
   try {
     const realRoot = await fs.promises.realpath(discovery.rootPath);
     for (const entryPath of entryPaths) {
@@ -368,10 +407,12 @@ export async function loadEntryTools(
           `entry module must default-export a function: ${fullPath}`,
         );
       }
-      await factory(covel);
+      await factory(checked.api);
     }
     // Match production publication: invalid declarations fail the activation
     // after factories return, even if plugin code catches registration errors.
+    checked.validate();
+    registration.validate();
     scope.commit();
   } catch (error) {
     scope.abort(error);

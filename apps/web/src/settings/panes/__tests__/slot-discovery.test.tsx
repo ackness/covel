@@ -71,14 +71,18 @@ beforeEach(async () => {
   };
   mocks.plugins = [
     {
+      requires: [],
+      optional: [],
+      conflicts: [],
+      extensions: [],
       id: "fixture",
       displayName: "Fixture",
       description: "Fixture",
-      pluginType: "plugin",
+      kind: "plugin",
       source: "builtin",
-      status: "registered",
+      hostState: "loaded",
       runtimeCount: 1,
-      capabilities: [],
+      provides: [],
       tags: [],
       tools: [],
       runtimes: [
@@ -90,7 +94,7 @@ beforeEach(async () => {
           execution: "sync",
           turnCompletion: { mode: "await" },
           outputKind: "plugin",
-          capabilities: [],
+          outputContract: undefined,
           tags: [],
         },
       ],

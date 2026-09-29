@@ -10,7 +10,6 @@ import {
   RECALL_NAMESPACE,
   type EmbedFn,
 } from "../src/vector-common.js";
-import type { MemoryLLMAdapter } from "../src/types.js";
 
 // ── Deterministic test embedding ─────────────────────────────────
 // Char-bag-of-words into a fixed dim, L2-normalized. Texts that share
@@ -42,10 +41,6 @@ function spyEmbed(): { fn: EmbedFn; calls: string[][] } {
   };
   return { fn, calls };
 }
-
-const llm: MemoryLLMAdapter = {
-  complete: vi.fn(async () => ({ content: "{}" })),
-};
 
 // ── Store seeding helpers ────────────────────────────────────────
 
@@ -130,7 +125,7 @@ async function addLorebook(
     {
       id,
       sessionId,
-      pluginId: "lore-plugin",
+      owner: { kind: "plugin", pluginId: "lore-plugin" },
       keys: [keyword],
       content,
       strategy: "selective",
@@ -183,7 +178,7 @@ describe("vector recall (semantic)", () => {
   });
 
   it("ranks the semantically closest message first", async () => {
-    const system = createMemorySystem({ store, llm, embed });
+    const system = createMemorySystem({ store, embed });
     await system.ingest(sessionId);
 
     const results = await system.recall.search(sessionId, "dragon fire", 3);
@@ -530,7 +525,7 @@ describe("vector archival (semantic over lorebook + characters)", () => {
   });
 
   it("finds the most relevant archival record by semantics", async () => {
-    const system = createMemorySystem({ store, llm, embed });
+    const system = createMemorySystem({ store, embed });
     const ingest = await system.ingest(sessionId);
     expect(ingest.archival).toBe(3);
 
@@ -633,7 +628,11 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     expect((await ingestor.ingest(sessionId)).archival).toBe(3);
     await store.deleteCharacter(sessionId, "c1");
     await store.deleteCharacter(sessionId, "c2");
-    await store.deleteLorebookEntry(sessionId, "l1");
+    await store.deleteLorebookEntry(
+      sessionId,
+      { kind: "plugin", pluginId: "lore-plugin" },
+      "l1",
+    );
 
     expect((await ingestor.ingest(sessionId)).archival).toBe(0);
     expect(
@@ -669,7 +668,7 @@ describe("graceful degradation", () => {
     await addMessage(store, sessionId, "assistant", "a merchant sold apples");
 
     const { fn, calls } = spyEmbed();
-    const system = createMemorySystem({ store, llm, embed: fn });
+    const system = createMemorySystem({ store, embed: fn });
 
     // Ingest skips cleanly.
     const ingest = await system.ingest(sessionId);
@@ -693,7 +692,7 @@ describe("graceful degradation", () => {
     const boom: EmbedFn = async () => {
       throw new Error("embedding provider down");
     };
-    const system = createMemorySystem({ store, llm, embed: boom });
+    const system = createMemorySystem({ store, embed: boom });
 
     // Query embed throws → must degrade to keyword, not reject.
     const results = await system.recall.search(sessionId, "dragon", 5);
@@ -730,7 +729,6 @@ describe("graceful degradation", () => {
     });
     const system = createMemorySystem({
       store: failingStore,
-      llm,
       embed,
     });
 
@@ -749,7 +747,7 @@ describe("graceful degradation", () => {
     order = 0;
     await addMessage(store, sessionId, "assistant", "the dragon breathed fire");
 
-    const system = createMemorySystem({ store, llm }); // no embed
+    const system = createMemorySystem({ store }); // no embed
     const ingest = await system.ingest(sessionId);
     expect(ingest.skipped).toBe(true);
     expect(ingest.recall).toBe(0);
@@ -830,7 +828,7 @@ describe("vector recall", () => {
       }),
     });
 
-    const system = createMemorySystem({ store, llm, embed });
+    const system = createMemorySystem({ store, embed });
     const results = await system.recall.search(sessionId, "dragon", 3);
     // Vector had 1 hit; keyword tops it up to cover the un-indexed recent ones.
     expect(results.length).toBeGreaterThan(1);

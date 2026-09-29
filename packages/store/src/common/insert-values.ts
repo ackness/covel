@@ -15,6 +15,7 @@
 
 import type {
   CharacterRecord,
+  CharacterSchemaRecord,
   EventRecord,
   InteractionRecordRow,
   JobStatusRecord,
@@ -38,10 +39,10 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   TurnResultRecord,
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
 } from "../types.js";
+import { lorebookOwnerKey } from "./lorebook-owner.js";
 import { normalizeWorldRecord } from "../records/world-records.js";
 
 /**
@@ -97,8 +98,6 @@ export interface InsertValueBuilders {
   interactionRecordInsert(
     record: InteractionRecordRow,
   ): Record<string, unknown>;
-  workingMemoryInsert(record: WorkingMemoryRecord): Record<string, unknown>;
-  workingMemoryUpdate(record: WorkingMemoryRecord): Record<string, unknown>;
   worldDataLedgerInsert(
     record: WorldDataImportLedgerRecord,
   ): Record<string, unknown>;
@@ -111,6 +110,7 @@ export interface InsertValueBuilders {
   worldUpdate(record: WorldRecord): Record<string, unknown>;
   eventInsert(record: EventRecord): Record<string, unknown>;
   messageInsert(record: MessageRecord): Record<string, unknown>;
+  characterSchemaInsert(record: CharacterSchemaRecord): Record<string, unknown>;
   characterInsert(record: CharacterRecord): Record<string, unknown>;
   characterUpdate(record: CharacterRecord): Record<string, unknown>;
   traceEventInsert(record: TraceEventRecord): Record<string, unknown>;
@@ -287,26 +287,6 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
       };
     },
 
-    workingMemoryInsert(record) {
-      return {
-        id: record.id,
-        sessionId: record.sessionId,
-        key: record.key,
-        scope: record.scope,
-        value: json.writeJson(record.value),
-        schemaRef: record.schemaRef ?? null,
-        updatedAt: record.updatedAt,
-      };
-    },
-    workingMemoryUpdate(record) {
-      return {
-        id: record.id,
-        value: json.writeJson(record.value),
-        schemaRef: record.schemaRef ?? null,
-        updatedAt: record.updatedAt,
-      };
-    },
-
     worldDataLedgerInsert(record) {
       return {
         id: record.id,
@@ -347,7 +327,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
       return {
         id: record.id,
         sessionId: record.sessionId,
-        pluginId: record.pluginId,
+        owner: lorebookOwnerKey(record.owner),
         keys: json.writeJson(record.keys),
         content: record.content,
         strategy: record.strategy,
@@ -361,7 +341,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
     },
     lorebookEntryUpdate(record) {
       return {
-        pluginId: record.pluginId,
+        owner: lorebookOwnerKey(record.owner),
         keys: json.writeJson(record.keys),
         content: record.content,
         strategy: record.strategy,
@@ -428,6 +408,14 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         content: record.content,
         metadata: json.writeNullableJson(record.metadata),
         createdAt: record.createdAt,
+      };
+    },
+
+    characterSchemaInsert(record) {
+      return {
+        ...record,
+        types: json.writeJson(record.types),
+        attributes: json.writeJson(record.attributes),
       };
     },
 

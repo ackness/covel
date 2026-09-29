@@ -1,3 +1,4 @@
+import type { WorldGenerationDataContract } from "./types.js";
 import { interpolate, loadPrompt, type PromptLoader } from "@covel/context";
 import type {
   WorldCreationBrief,
@@ -22,6 +23,7 @@ export async function buildWorldPrompt(
   locale: string,
   brief?: WorldCreationBrief,
   loader: PromptLoader = loadPrompt,
+  dataContracts: readonly WorldGenerationDataContract[] = [],
 ): Promise<string> {
   const promptLocale = resolvePromptLocale(locale);
 
@@ -34,7 +36,13 @@ export async function buildWorldPrompt(
     concept,
     locale: promptLocale.locale,
     language: promptLocale.language,
-    creationBrief: formatCreationBrief(brief),
+    creationBrief: [
+      formatCreationBrief(brief),
+      "WORLD_PACKAGE_YAML may include contractData: [{contract, key, value}]. Use only the loaded public schemas below; value.id must equal key. Author useful world-specific definitions when appropriate. Omit unsupported contracts. Never place plugin data in dimensions.",
+      JSON.stringify(
+        dataContracts.map(({ contract, schema }) => ({ contract, schema })),
+      ),
+    ].join("\n"),
   });
 }
 
@@ -76,7 +84,7 @@ function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
     return [
       "Experience preset: traditional-story.",
       "No optional package supplements were explicitly requested.",
-      "Return empty characters/lorebook/rules arrays.",
+      "Return empty characters/lorebook/rules/memoryDefinitions arrays.",
     ].join("\n");
   }
   const requested = new Set(brief.content ?? []);
@@ -100,7 +108,7 @@ function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
     requestedLine(
       requested,
       "memory",
-      "2-4 genre-specific memoryBlocks in world.yaml (do not repeat generic story/scene/player blocks).",
+      "2-4 genre-specific memoryDefinitions in WORLD_PACKAGE_YAML (do not repeat generic story/scene/player blocks).",
     ),
     requestedLine(
       requested,

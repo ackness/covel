@@ -1,11 +1,13 @@
 import type {
   AttributeDefinition,
   CharacterAttributeSchema,
+  CharacterSchema,
+  CharacterSchemaRecord,
   Proposal,
 } from "@covel/shared";
+import { materializeWorldModel } from "@covel/shared";
 import { z, type ZodType } from "zod";
 import { buildFieldsZodFromSchema } from "../schema-to-zod.js";
-import { overlayPluginDataValue } from "../proposal-overlay.js";
 
 /**
  * Minimal store interface needed by the character tools. Kept local to avoid
@@ -36,50 +38,14 @@ export interface CharacterStore {
       updatedAt: string;
     }>
   >;
-  setPluginData(record: {
-    id: string;
-    sessionId: string;
-    pluginId: string;
-    namespace: string;
-    key: string;
-    value: unknown;
-    createdAt: string;
-    updatedAt: string;
-  }): Promise<void>;
-  /**
-   * Fetch a single plugin-data row. Used to load the character-attribute
-   * schema for attribute validation during create/update. Optional so existing
-   * test stores that don't provide it gracefully skip validation.
-   */
-  getPluginData?(
-    sessionId: string,
-    pluginId: string,
-    namespace: string,
-    key: string,
-  ): Promise<{ value: unknown; updatedAt: string } | null>;
+  getCharacterSchema(sessionId: string): Promise<CharacterSchemaRecord | null>;
 }
 
-/**
- * Factory-level dependencies. Kept as a separate bag so the ctor stays
- * positional and existing test call sites (which pass only a store) still
- * work — schema validation silently becomes a no-op when the plugin
- * resolver isn't provided.
- */
-export interface CharacterToolDeps {
-  /**
-   * Resolve the active plugin package id that holds the character-attribute
-   * schema for this session. Injected so `@covel/tools` stays free of a
-   * runtime dependency on `@covel/plugin-loader` (same pattern as
-   * `createWorldDimensionTools`). Return `undefined` to skip validation.
-   */
-  findWorldDataPluginId?(sessionId: string): string | undefined;
+export function characterTypeSchema(schema?: CharacterSchema | null) {
+  return (
+    schema ? z.enum(["player", ...schema.types]) : z.string().min(1)
+  ).describe("Character type declared by the current world schema");
 }
-
-export const CHARACTER_NAMESPACE = "characters";
-
-export const characterTypeSchema = z
-  .enum(["player", "npc", "companion"])
-  .describe("角色类型：player=玩家，npc=NPC，companion=同伴");
 
 export interface CharacterSnapshot {
   readonly id: string;
@@ -122,34 +88,17 @@ export function toSnapshot(record: {
  */
 export async function loadCharacterSchema(
   store: CharacterStore,
-  deps: CharacterToolDeps,
   sessionId: string,
-  pendingProposals: readonly Proposal[] = [],
-): Promise<CharacterAttributeSchema | null> {
-  const worldPluginId = deps.findWorldDataPluginId?.(sessionId);
-  if (!worldPluginId) return null;
-  const pending = overlayPluginDataValue(
-    pendingProposals.filter((proposal) => proposal.sessionId === sessionId),
-    worldPluginId,
-    "schema",
-    "character-attributes",
-  );
-  const row = pending.hit
-    ? pending.deleted
-      ? null
-      : { value: pending.value }
-    : await store.getPluginData?.(
-        sessionId,
-        worldPluginId,
-        "schema",
-        "character-attributes",
-      );
-  if (!row) return null;
-  const value = row.value;
-  if (!value || typeof value !== "object") return null;
-  const shape = value as { version?: unknown; attributes?: unknown };
-  if (!Array.isArray(shape.attributes)) return null;
-  return value as CharacterAttributeSchema;
+  proposals: readonly Proposal[] = [],
+): Promise<CharacterSchemaRecord | null> {
+  return materializeWorldModel(
+    {
+      characterSchema: await store.getCharacterSchema(sessionId),
+      characters: await store.listCharacters(sessionId),
+    },
+    proposals,
+    sessionId,
+  ).characterSchema;
 }
 
 /**
@@ -211,25 +160,6 @@ export function assertCharacterFields(
       })),
     );
   }
-}
-
-export async function mirrorCharacterToPluginData(
-  store: CharacterStore,
-  sessionId: string,
-  pluginId: string,
-  character: CharacterSnapshot,
-): Promise<void> {
-  const now = new Date().toISOString();
-  await store.setPluginData({
-    id: `char-mirror-${character.id}`,
-    sessionId,
-    pluginId,
-    namespace: CHARACTER_NAMESPACE,
-    key: character.id,
-    value: character,
-    createdAt: now,
-    updatedAt: now,
-  });
 }
 
 /**

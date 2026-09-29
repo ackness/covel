@@ -1,15 +1,17 @@
+import { snapshotPlayerInput } from "./turn-digest.js";
 import type {
+  PlayerInputSubmission,
   RuntimeManifest,
   SetupRuntimeState,
   TurnInput,
 } from "@covel/shared";
-import { isSetupRuntime } from "@covel/shared";
-import { applyBranchReplyAcceptedCandidates } from "@covel/context";
-import type { CoreMemoryBlockView } from "@covel/context";
+import {
+  isSetupRuntime,
+  promptHistoryTransformV1,
+  turnDigestSchema,
+} from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
-import { getTurnExecutionSignal } from "./turn-control.js";
-import { awaitPendingMemory } from "./memory-barrier.js";
 
 export interface TurnSessionCharacter {
   readonly id?: string;
@@ -22,23 +24,9 @@ export interface TurnSessionCharacter {
 export interface TurnSessionMeta {
   readonly turnNumber: number;
   readonly characters: readonly TurnSessionCharacter[];
+  readonly lastPlayerInput: PlayerInputSubmission | null;
   readonly lastFormValues: Record<string, unknown> | undefined;
 }
-
-/**
- * Runtime-local name for the authoritative core-memory block view.
- *
- * Aliases `@covel/context`'s {@link CoreMemoryBlockView} so the whole turn
- * pipeline threads a single named type — crucially one that carries the
- * schema-driven `displayName` (attached by `@covel/memory`'s manager) all the
- * way to `renderCoreMemory`. Previously this was a narrowed
- * `{ label; content; updatedAt }` shape, which erased `displayName` from the
- * type at the source: the value only survived by object reference, and any
- * explicit `.map()` reconstruction would silently drop it with no type error.
- * Keeping the name re-exported (rather than inlined) means `session-context.ts`
- * and `post-turn-memory.ts` keep their existing import unchanged.
- */
-export type CoreMemoryBlock = CoreMemoryBlockView;
 
 export interface LoadedTurnSessionState {
   readonly messageHistory: readonly TurnMessageRecord[];
@@ -62,12 +50,6 @@ export async function loadTurnSessionState(args: {
   readonly shouldAppendPlayerMessage: boolean;
 }): Promise<LoadedTurnSessionState> {
   const { input, deps, shouldAppendPlayerMessage } = args;
-
-  await awaitPendingMemory(
-    deps.memorySystem?.updater,
-    input.sessionId,
-    getTurnExecutionSignal(deps.turnControl),
-  );
 
   // Bounded per-turn reads: counts come from a store-side aggregate over the
   // FULL log, while the in-memory history is only the uncompacted suffix —
@@ -108,7 +90,22 @@ export async function loadTurnSessionState(args: {
   let completedPlayerTurns = 0;
   let setupRuntimes: Readonly<Record<string, SetupRuntimeState>> = {};
   let sessionCharacters: TurnSessionCharacter[] = [];
-  let lastFormValues: Record<string, unknown> | undefined;
+  const sourceDigest = input.detachedStage
+    ? turnDigestSchema.parse(input.detachedStage.turnDigest)
+    : null;
+  if (
+    sourceDigest &&
+    (sourceDigest.turnId !== input.detachedStage?.sourceTurnId ||
+      (sourceDigest.lastPlayerInput &&
+        sourceDigest.lastPlayerInput.sessionId !== input.sessionId))
+  ) {
+    throw new Error(
+      "Detached source snapshot does not belong to this execution",
+    );
+  }
+  let lastPlayerInput: PlayerInputSubmission | null = snapshotPlayerInput(
+    sourceDigest?.lastPlayerInput ?? null,
+  );
 
   if (deps.store) {
     const session = await deps.store.getSession(input.sessionId);
@@ -128,16 +125,8 @@ export async function loadTurnSessionState(args: {
       fields: c.fields as Record<string, unknown>,
     }));
 
-    try {
-      const inputs = await deps.store.listPlayerInputs(input.sessionId);
-      if (inputs.length > 0) {
-        const latest = inputs[inputs.length - 1];
-        if (latest?.values && typeof latest.values === "object") {
-          lastFormValues = latest.values as Record<string, unknown>;
-        }
-      }
-    } catch {
-      // Non-critical: player inputs may not exist yet.
+    if (!input.detachedStage) {
+      lastPlayerInput = await loadLastPlayerInput(deps.store, input.sessionId);
     }
   }
 
@@ -148,7 +137,8 @@ export async function loadTurnSessionState(args: {
     sessionMeta: {
       turnNumber,
       characters: sessionCharacters,
-      lastFormValues,
+      lastPlayerInput,
+      lastFormValues: lastPlayerInput?.values,
     },
     sessionStatus,
     turnNumber,
@@ -168,24 +158,12 @@ export async function buildProjectedPromptHistory(args: {
     (msg) => !(msg.turnId === input.turnId && msg.sourceType === "player"),
   );
 
-  // Prompt-history rewriter is discovered by the `prompt-history-rewriter`
-  // capability (resolved server-side). When no such plugin is active for the
-  // session, the projected history passes through unchanged — the framework
-  // never assumes a specific plugin id.
-  const rewriterPluginId =
-    deps.capabilityPluginIds?.promptHistoryRewriterPluginId;
-  if (!deps.store || !rewriterPluginId) return promptHistory;
-
-  try {
-    const rewriterTurns = await deps.store.listPluginData(
-      input.sessionId,
-      rewriterPluginId,
-      "turns",
-    );
-    return applyBranchReplyAcceptedCandidates(promptHistory, rewriterTurns);
-  } catch {
-    return promptHistory;
-  }
+  if (!deps.extensionExecution) return promptHistory;
+  const result = await deps.extensionExecution.run(promptHistoryTransformV1, {
+    messages: promptHistory,
+    turnId: input.turnId,
+  });
+  return result.messages;
 }
 
 /**
@@ -205,4 +183,26 @@ export function getPreGameRuntimeState(
   const preGameRuntimes = activeRuntimes.filter(isSetupRuntime);
   const isPreGamePending = phase === "setup";
   return { preGameRuntimes, isPreGamePending };
+}
+
+/** Called once after execution admission, including a new resume invocation. */
+export async function loadLastPlayerInput(
+  store: import("@covel/store").DataStore | undefined,
+  sessionId: string,
+): Promise<PlayerInputSubmission | null> {
+  const inputs = await store?.listPlayerInputs(sessionId);
+  // Store enumeration order is not chronological (SQL has no ORDER BY).
+  // Persisted UTC timestamps define recency; IDs break equal-time ties stably.
+  const latest = inputs?.reduce<
+    import("@covel/store").PlayerInputRecord | null
+  >(
+    (current, candidate) =>
+      !current ||
+      candidate.createdAt > current.createdAt ||
+      (candidate.createdAt === current.createdAt && candidate.id > current.id)
+        ? candidate
+        : current,
+    null,
+  );
+  return snapshotPlayerInput(latest ?? null);
 }

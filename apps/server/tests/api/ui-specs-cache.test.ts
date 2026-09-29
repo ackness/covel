@@ -25,18 +25,24 @@ const stubAi = {
 } as unknown as Parameters<typeof createMiscApiRoutes>[0];
 
 const MANIFEST = `---
-name: panel-plugin
+id: panel-plugin
+kind: plugin
 description: Panel plugin
-pluginType: plugin
-runtimeType: function
-handler: ./handler.js
-outputKind: plugin
-execution: sync
-trigger:
-  type: manual
-ui:
-  right:
-    - ./ui/panel.json
+contributes:
+  ui:
+    right:
+      - ./ui/panel.json
+runtime:
+  type: function
+  schedule:
+    trigger:
+      type: manual
+    manual:
+      execution: sync
+  io:
+    visibility: plugin
+  function:
+    handler: ./handler.js
 ---
 `;
 
@@ -179,9 +185,9 @@ describe("GET /api/ui-specs — registry snapshot", () => {
     await symlink(join(dir, "panel-plugin"), alias, "dir");
     const entry = registry.get("panel-plugin")!;
     const parsed = {
-      ...entry.manifest!,
+      ...entry.packageManifest!,
       manifest: {
-        ...entry.manifest!.manifest,
+        ...entry.packageManifest!.manifest,
         ui: { right: ["./ui/panel.json", "./ui/client-only.tsx"] },
       },
     };
@@ -189,8 +195,6 @@ describe("GET /api/ui-specs — registry snapshot", () => {
       ...entry,
       rootPath: alias,
       packageManifest: parsed,
-      manifest: parsed,
-      manifests: [parsed],
     });
 
     const response = await app.request("/api/ui-specs");

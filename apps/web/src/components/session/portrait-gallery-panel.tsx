@@ -1,102 +1,64 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ImageIcon, Loader2, Upload } from "lucide-react";
-import type { MediaRef } from "@covel/shared";
+import type {
+  MediaRef,
+  CharacterVisualModel,
+  CatalogAction,
+} from "@covel/shared";
 import { Media } from "@/components/Media.js";
 import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
-import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import { useUiSlots } from "@/stores/ui-slot-store.js";
+import { invokeCatalogAction } from "@/lib/catalog/catalog-actions.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
 import { uploadSessionMedia } from "@/services/api.js";
-import {
-  postPluginRpcWithApproval,
-  emitPluginRpcRuntimeResponse,
-} from "./plugin-rpc-ui.js";
-import { requestConfirm } from "@/lib/confirm-channel.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import {
-  replaceDefaultCharacterVisual,
-  resolveCharacterVisual,
-  type PresenceRecord,
-} from "@/lib/character-visuals.js";
+import { resolveCharacterVisual } from "@/lib/character-visuals.js";
 
 interface PresenceEntry {
   readonly key: string;
-  readonly value: PresenceRecord;
+  readonly value: CharacterVisualModel;
 }
 
-/**
- * PortraitGalleryPanel — player-facing character portrait gallery.
- *
- * Shows each character's portrait as a framed, click-to-enlarge thumbnail, and
- * lets the player replace it by picking an image file. The file is uploaded as
- * session-owned media (`uploadSessionMedia`), then the resulting `MediaRef` is
- * written back as the character's presence via the plugin's own runtime
- * (`postPluginRpc` → `presence` payload) — no sha256 / MIME / size hand-entry.
- *
- * `pluginId` comes from the panel spec (the plugin names itself), so this stays
- * a generic framework component with no hard-coded plugin id.
- */
+/** The gallery consumes projected imagery; upload actions are declared by its owner. */
 export function PortraitGalleryPanel({
-  pluginId,
-  runtimeId = pluginId,
+  replaceAction,
 }: {
-  pluginId: string;
-  runtimeId?: string;
+  replaceAction?: CatalogAction;
 }) {
   const { t } = useTranslation();
   const sessionId = useActiveSessionId();
-  const presence = usePluginNamespace(pluginId, "presence");
+  const slots = useUiSlots(sessionId ?? "", "character.visual@1");
   const [preview, setPreview] = useState<MediaRef | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const uploading = useRef(false);
 
   const entries = useMemo<PresenceEntry[]>(
     () =>
-      Object.entries(presence).map(([key, value]) => ({
-        key,
-        value: (value ?? {}) as PresenceRecord,
-      })),
-    [presence],
+      slots.flatMap((slot) =>
+        slot.value && slot.key
+          ? [{ key: slot.key, value: slot.value as CharacterVisualModel }]
+          : [],
+      ),
+    [slots],
   );
 
   async function replacePortrait(entry: PresenceEntry, file: File) {
     const characterId = entry.value.characterId;
-    if (!sessionId || !characterId || uploading.current) return;
+    if (!sessionId || !characterId || !replaceAction || uploading.current)
+      return;
     uploading.current = true;
     setUploadingKey(entry.key);
     try {
-      let ref: MediaRef | undefined;
-      const response = await postPluginRpcWithApproval({
+      await invokeCatalogAction({
         sessionId,
-        pluginId,
-        actionLabel: t("characterPresence.replace", "Replace"),
-        confirm: requestConfirm,
+        action: replaceAction,
+        scope: { item: entry.value },
         t,
-        request: async () => {
-          // Upload only after hydration, and reuse the media across approval retries.
-          ref ??= await uploadSessionMedia(sessionId, file);
-          return {
-            kind: "runtime",
-            pluginId,
-            runtimeId,
-            payload: {
-              presence: {
-                schemaVersion: 1,
-                characterId,
-                ...(entry.value.displayName
-                  ? { displayName: entry.value.displayName }
-                  : {}),
-                avatar: { id: ref.id, mime: ref.mime, size: ref.size },
-                sprite: { id: ref.id, mime: ref.mime, size: ref.size },
-                visuals: replaceDefaultCharacterVisual(entry.value, ref),
-              },
-            },
-          };
-        },
+        prepare: async () => ({
+          upload: await uploadSessionMedia(sessionId, file),
+        }),
       });
-      if (response) emitPluginRpcRuntimeResponse({ response, t, runtimeId });
-      // The plugin.data commit emits `plugin-data.changed`, which refreshes the
-      // presence store and re-renders this gallery with the new portrait.
     } catch (err) {
       emitToast("error", err instanceof Error ? err.message : String(err));
     } finally {
@@ -159,27 +121,29 @@ export function PortraitGalleryPanel({
                     </div>
                   )}
                 </button>
-                <label className="absolute inset-x-0 bottom-0 flex cursor-pointer items-center justify-center gap-1 bg-black/60 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                  {busy ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Upload className="h-3 w-3" />
-                  )}
-                  {busy
-                    ? t("characterPresence.uploading", "Uploading…")
-                    : t("characterPresence.replace", "Replace")}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingKey !== null || !sessionId}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (file) void replacePortrait(entry, file);
-                    }}
-                  />
-                </label>
+                {replaceAction && (
+                  <label className="absolute inset-x-0 bottom-0 flex cursor-pointer items-center justify-center gap-1 bg-black/60 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    {busy ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Upload className="h-3 w-3" />
+                    )}
+                    {busy
+                      ? t("characterPresence.uploading", "Uploading…")
+                      : t("characterPresence.replace", "Replace")}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingKey !== null || !sessionId}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) void replacePortrait(entry, file);
+                      }}
+                    />
+                  </label>
+                )}
               </div>
               <span className="block truncate text-xs text-muted-foreground">
                 {entry.value.displayName}

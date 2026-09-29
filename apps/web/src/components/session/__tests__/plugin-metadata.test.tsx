@@ -13,14 +13,18 @@ function plugin(
   runtimeType: "agent" | "function" = "agent",
 ): PluginSummary {
   return {
+    requires: [],
+    optional: [],
+    conflicts: [],
+    extensions: [],
     id,
     displayName: `${id[0]!.toUpperCase()}${id.slice(1)} Plugin`,
     description: `${id} plugin`,
-    pluginType: "plugin",
+    kind: "plugin",
     source: "builtin",
-    status: "registered",
+    hostState: "loaded",
     runtimeCount: 1,
-    capabilities: [],
+    provides: [],
     tags: [],
     runtimes: [
       {
@@ -30,7 +34,7 @@ function plugin(
         execution: "sync",
         turnCompletion: { mode: "await" },
         outputKind: "plugin",
-        capabilities: [],
+        outputContract: undefined,
         tags: [],
       },
     ],
@@ -41,15 +45,13 @@ function plugin(
 
 describe("session plugin metadata UI", () => {
   it("locks only builtin core plugins during session prep", () => {
-    expect(
-      isLockedCorePackage({ pluginType: "core-plugin", source: "builtin" }),
-    ).toBe(true);
-    expect(
-      isLockedCorePackage({ pluginType: "core-plugin", source: "community" }),
-    ).toBe(false);
-    expect(
-      isLockedCorePackage({ pluginType: "plugin", source: "builtin" }),
-    ).toBe(false);
+    expect(isLockedCorePackage({ kind: "core", source: "builtin" })).toBe(true);
+    expect(isLockedCorePackage({ kind: "core", source: "community" })).toBe(
+      false,
+    );
+    expect(isLockedCorePackage({ kind: "plugin", source: "builtin" })).toBe(
+      false,
+    );
   });
 
   it("labels world storage locations", async () => {

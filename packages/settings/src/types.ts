@@ -53,7 +53,8 @@ export interface SettingsBackendAdapter {
   load(): Promise<Record<SettingKey, unknown>>;
   save(entries: Record<SettingKey, unknown>): Promise<void>;
   loadSecrets(): Promise<Record<string, string>>;
-  saveSecrets(keys: Record<string, string>): Promise<void>;
+  /** Atomically patch providers: omitted keys are unchanged; null deletes. */
+  saveSecrets(patch: Record<string, string | null>): Promise<void>;
   /** Optional v2 persistence protocol. Legacy custom adapters remain valid. */
   loadWithRevision?(): Promise<SettingsPersistenceBundle>;
   saveWithRevision?(

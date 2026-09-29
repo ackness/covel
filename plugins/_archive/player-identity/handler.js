@@ -7,7 +7,7 @@ import {
   readManualEntity,
   splitList,
 } from "@covel/plugin-handlers-utils";
-import { playerIdentityToCharacterUpsert } from "@covel/shared";
+import { playerIdentityToCharacterUpsert } from "./types/identity.ts";
 import { shortId, withPendingProposals } from "@covel/tools";
 
 const PROFILE_NAMESPACE = "profiles";

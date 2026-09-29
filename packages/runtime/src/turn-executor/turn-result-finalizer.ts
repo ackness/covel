@@ -33,9 +33,9 @@ function collectPendingInputs(
 ): PendingInputInfo[] {
   const pendingInputs: PendingInputInfo[] = [];
   for (const [, result] of completedResults) {
-    if (!result.output) continue;
+    if (result.status !== "success" || !result.output) continue;
     const out = result.output as Record<string, unknown>;
-    const interactions = out.interactions as
+    const interactions = result.effects?.interactions as
       Array<Record<string, unknown>> | undefined;
     const narrativeFallback =
       typeof out.narrativeTemplate === "string"

@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import {
@@ -384,6 +385,24 @@ worldData: data/world.data.yaml
 
 function registerPresenceAssetsPlugin(pluginRegistry: PluginRegistry): void {
   pluginRegistry.register({
+    packageManifest: parsePluginMd(
+      `---
+id: character-presence
+kind: plugin
+description: Presence assets
+contracts:
+  character.portrait-assets@1:
+    schema: ./schemas/assets.schema.json
+contributes:
+  data:
+    assets:
+      schema: ./schemas/assets.schema.json
+      version: 1
+      accepts: [character.portrait-assets@1]
+---
+`,
+      "PLUGIN.md",
+    ),
     id: "character-presence",
     rootPath: path.resolve(
       import.meta.dirname,
@@ -579,12 +598,11 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
       name: "Rollback World",
       description: "Test world",
       metadata: {
-        characterBlueprints: [
+        embeddedCharacters: [
           {
-            schemaVersion: 1,
             id: "rollback-heroine",
             name: "Rollback Heroine",
-            role: "npc",
+            type: "npc",
           },
         ],
       },
@@ -605,7 +623,7 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
     expect(await store.listCharacters("sess-rollback")).toEqual([]);
   });
 
-  it("deletes the committed session and imported media when media finalization fails", async () => {
+  it("deletes the failed session and releases its media claims for GC", async () => {
     const world = await makeWorldPackage({
       id: "media-finalize-world",
       descriptor: `schemaVersion: 1
@@ -614,7 +632,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: {
@@ -669,6 +687,10 @@ sources:
     expect(
       await store.listWorldDataImportLedger("sess-media-finalize"),
     ).toEqual([]);
+    expect(await mediaStore.listAssets()).toEqual([
+      expect.objectContaining({ ownerSessionId: null }),
+    ]);
+    await mediaStore.cleanup(new Set(), { maxAgeMs: 0 });
     expect(await mediaStore.listAssets()).toEqual([]);
     expect(await mediaStore.listRefs()).toEqual([]);
   });
@@ -682,7 +704,7 @@ sources:
     kind: media
     path: media/portraits
     to: media
-    indexTo: plugin:character-presence/assets
+    indexTo: contract:character.portrait-assets@1
     key: filename
 `,
       files: { "media/portraits/mio.png": "png-ish" },
@@ -750,6 +772,10 @@ sources:
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ code: "world_not_found" });
     expect(await store.getSession("delayed-create")).toBeNull();
+    expect(await mediaStore.listAssets()).toEqual([
+      expect.objectContaining({ ownerSessionId: null }),
+    ]);
+    await mediaStore.cleanup(new Set(), { maxAgeMs: 0 });
     expect(await mediaStore.listAssets()).toEqual([]);
     expect(await mediaStore.listRefs()).toEqual([]);
   });

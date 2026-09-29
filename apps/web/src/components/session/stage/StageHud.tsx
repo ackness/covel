@@ -42,9 +42,9 @@ export function StageHud({
   onExit,
 }: StageHudProps): ReactElement {
   const { t } = useTranslation();
-  const isPending = sceneCurrent?.source === "pending";
+  const isPending = sceneCurrent?.pending;
   const isNight = sceneCurrent?.variant === "night";
-  const sourceLabel = sceneCurrent?.sourceLabel;
+  const sourceLabel = sceneCurrent?.label;
 
   return (
     <div

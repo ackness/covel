@@ -1,103 +1,74 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { getPendingProposals, withPendingProposals } from "@covel/tools";
 import type { Proposal } from "@covel/shared";
 import { materializeHandlerSuccess } from "../src/commit/materialize-handler-output.js";
 
 describe("materializeHandlerSuccess", () => {
-  it("flattens a plain-object value to the top level", () => {
-    const out = materializeHandlerSuccess(
-      { outcome: "success", value: { saved: true, id: "x" } },
+  it("keeps identically named business data and effects independent", () => {
+    const value = {
+      events: [{ topic: "business.only", data: { count: 1 } }],
+      pluginData: [{ namespace: "facts", key: "business", value: true }],
+      preGameDone: true,
+    };
+    const effects = { events: [{ topic: "published", data: {} }] };
+    const result = materializeHandlerSuccess(
+      { outcome: "success", value, effects, completion: "pending" },
       {},
     );
-    expect(out).toEqual({ saved: true, id: "x" });
+    expect(result.output).toEqual(value);
+    expect(result.effects).toEqual(effects);
+    expect(result.completion).toBe("pending");
+    value.events[0].data.count = 2;
+    effects.events[0].topic = "changed";
+    expect(result.output?.events).toEqual([
+      { topic: "business.only", data: { count: 1 } },
+    ]);
+    expect(result.effects?.events).toEqual([{ topic: "published", data: {} }]);
   });
 
-  it("keeps a non-object value under a `value` key", () => {
-    expect(
-      materializeHandlerSuccess({ outcome: "success", value: 42 }, {}),
-    ).toEqual({ value: 42 });
-    expect(
-      materializeHandlerSuccess({ outcome: "success", value: ["a", "b"] }, {}),
-    ).toEqual({ value: ["a", "b"] });
-  });
+  it.each([42, ["a", "b"], null])(
+    "projects non-object business value %j",
+    (value) => {
+      expect(
+        materializeHandlerSuccess({ outcome: "success", value }, {}),
+      ).toEqual({
+        output: { value },
+      });
+    },
+  );
 
-  it("hoists effects domain keys to the top level, not obs channels", () => {
-    const out = materializeHandlerSuccess(
+  it("does not add completion or effect fields to the business value", () => {
+    const result = materializeHandlerSuccess(
       {
         outcome: "success",
-        value: { stage: "s" },
-        effects: {
-          events: [{ topic: "t", data: {} }],
-          assetGenerations: [{ ref: "r", modality: "image" }],
-          jobStatus: [{ jobId: "j", state: "succeeded", sequence: 1 }],
-          diagnostics: [{ code: "c", message: "m" }],
-        },
+        value: { initialized: true },
+        completion: "done",
+        effects: { notifications: [{ message: "Ready" }] },
       },
       {},
     );
-    expect(out.stage).toBe("s");
-    expect(out.events).toEqual([{ topic: "t", data: {} }]);
-    expect(out.assetGenerations).toEqual([{ ref: "r", modality: "image" }]);
-    // Observability channels are NOT read by normalizeOutput — keep them out.
-    expect("jobStatus" in out).toBe(false);
-    expect("diagnostics" in out).toBe(false);
+    expect(result).toEqual({
+      output: { initialized: true },
+      completion: "done",
+      effects: { notifications: [{ message: "Ready" }] },
+    });
   });
 
-  it("lets effects win a value key clash and warns", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const out = materializeHandlerSuccess(
-      {
-        outcome: "success",
-        value: { events: "from-value" },
-        effects: { events: [{ topic: "t", data: {} }] },
-      },
-      {},
-    );
-    expect(out.events).toEqual([{ topic: "t", data: {} }]);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("effects.events overrides value.events"),
-    );
-    warn.mockRestore();
-  });
-
-  it('maps completion:"done" to the internal preGameDone signal', () => {
-    expect(
-      materializeHandlerSuccess(
-        {
-          outcome: "success",
-          value: { initialized: true },
-          completion: "done",
-        },
-        {},
-      ),
-    ).toEqual({ initialized: true, preGameDone: true });
-
-    // completion:"pending" is not the done signal.
-    const pending = materializeHandlerSuccess(
-      { outcome: "success", value: {}, completion: "pending" },
-      {},
-    );
-    expect("preGameDone" in pending).toBe(false);
-  });
-
-  it("carries the raw return's pending-proposals Symbol onto the new object", () => {
+  it("retains proposal-backed commands without serializing them as business data", () => {
     const proposal = { id: "p1", type: "plugin.data" } as unknown as Proposal;
-    const raw = withPendingProposals({ x: 1 }, [proposal]);
-    const out = materializeHandlerSuccess(
+    const raw = withPendingProposals({}, [proposal]);
+    const result = materializeHandlerSuccess(
       { outcome: "success", value: { saved: true } },
       raw,
     );
-    expect(getPendingProposals(out)).toEqual([proposal]);
-    // The projected object is fresh — the value shape, not the raw's.
-    expect(out).toMatchObject({ saved: true });
-    expect("x" in out).toBe(false);
+    expect(getPendingProposals(result.output)).toEqual([proposal]);
+    expect(JSON.stringify(result.output)).toBe('{"saved":true}');
   });
 
-  it("returns a bare object when the raw carries no pending proposals", () => {
-    const out = materializeHandlerSuccess(
-      { outcome: "success", value: { a: 1 } },
-      {},
-    );
-    expect(getPendingProposals(out)).toEqual([]);
+  it("preserves special JSON keys as data without changing the output prototype", () => {
+    const value = JSON.parse('{"__proto__":{"polluted":true}}');
+    const result = materializeHandlerSuccess({ outcome: "success", value }, {});
+    expect(Object.hasOwn(result.output!, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(result.output)).toBe(Object.prototype);
   });
 });

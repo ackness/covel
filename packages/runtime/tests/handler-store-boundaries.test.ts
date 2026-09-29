@@ -73,9 +73,9 @@ describe("handler store ownership", () => {
     const readSession = (value: unknown) =>
       value as { status: string; activePlugins: string[] };
     for (const session of [
-      await trusted.getSession(ctx.sessionId),
+      await trusted.getSession(),
       await scoped.getSession(),
-      await rpc.getSession(ctx.sessionId),
+      await rpc.getSession(),
     ]) {
       readSession(session).status = "ended";
       readSession(session).activePlugins.length = 0;
@@ -104,25 +104,18 @@ describe("handler store ownership", () => {
     change(await writer.get("items", "single"));
     change((await scoped.getPluginData("items", "single"))!.value);
     change((await writer.list("items"))[0]!.value);
-    change((await trusted.listPluginDataSessionScope(ctx.sessionId))[0]!.value);
-    (await trusted.listCharacters(ctx.sessionId))[0]!.fields!.hp = 42;
+    change((await trusted.listPluginData())[0]!.value);
+    (await trusted.listCharacters())[0]!.fields!.hp = 42;
     expect(await writer.get("items", "single")).toEqual({ count: 1 });
     expect(await writer.get("items", "batch")).toEqual({ count: 2 });
-    expect((await trusted.listCharacters(ctx.sessionId))[0]!.fields).toEqual({
+    expect((await trusted.listCharacters())[0]!.fields).toEqual({
       hp: 1,
     });
     expect(await store.listPluginData(ctx.sessionId, ctx.pluginId)).toEqual([]);
     expect(await store.listCharacters(ctx.sessionId)).toEqual([]);
 
     await store.setPluginData(row("persisted", { count: 3 }));
-    change(
-      (await trusted.getPluginData(
-        ctx.sessionId,
-        ctx.pluginId,
-        "items",
-        "persisted",
-      ))!.value,
-    );
+    change((await trusted.getPluginData("items", "persisted"))!.value);
     expect(
       (await store.getPluginData(
         ctx.sessionId,
@@ -151,26 +144,38 @@ describe("handler store ownership", () => {
     ]);
     expect(
       (
-        await trusted.listPluginData(ctx.sessionId, ctx.pluginId, "items", {
+        await trusted.listPluginData("items", {
           limit: 1,
         })
       ).map((r) => r.key),
     ).toEqual(["b"]);
     expect(
       (
-        await trusted.listPluginDataSessionScope(ctx.sessionId, {
+        await trusted.listPluginData("items", {
           offset: 1,
           limit: 1,
         })
       ).map((r) => r.key),
     ).toEqual(["c"]);
+    // Extra forged identity arguments cannot alter the bound store authority.
     expect(
-      (await trusted.getPluginData("other", ctx.pluginId, "items", "a"))!.value,
-    ).toBe("other");
-    expect(
-      (await trusted.listPluginData("other", ctx.pluginId)).map((r) => r.value),
-    ).toEqual(["other"]);
-    expect((await trusted.listCharacters("other"))[0]!.name).toBe("Hero");
+      await Reflect.apply(trusted.getPluginData, trusted, [
+        "other",
+        ctx.pluginId,
+        "items",
+        "a",
+      ]),
+    ).toBeNull();
+    for (const records of [
+      await Reflect.apply(trusted.listCharacters, trusted, ["other"]),
+      await trusted.listCharacters(),
+    ]) {
+      // Overlay reads derive updatedAt independently; authority must stay bound.
+      expect(records).toEqual([
+        { ...character(), name: "Buffered", updatedAt: expect.any(String) },
+      ]);
+    }
+    expect(Reflect.get(trusted, "listPluginDataSessionScope")).toBeUndefined();
     expect(
       (await store.getPluginData(ctx.sessionId, ctx.pluginId, "items", "a"))!
         .value,

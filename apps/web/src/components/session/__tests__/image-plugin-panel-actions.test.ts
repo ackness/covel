@@ -1,52 +1,43 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  invokeCatalogAction,
+  resolveCatalogPayload,
+} from "@/lib/catalog/catalog-actions.js";
 import { postPluginRpcWithApproval } from "../plugin-rpc-ui.js";
-import { rerunImagePrompt } from "../image-plugin-panels/actions.js";
-
-vi.mock("../plugin-rpc-ui.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../plugin-rpc-ui.js")>()),
-  postPluginRpcWithApproval: vi.fn(),
+vi.mock("../plugin-rpc-ui.js", () => ({
+  postPluginRpcWithApproval: vi.fn(async () => null),
+  emitPluginRpcRuntimeResponse: vi.fn(),
 }));
-
-describe("image plugin panel actions", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("uses the bounded shared approval flow when rerunning an image", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(postPluginRpcWithApproval).mockImplementation(async (params) => {
-      const approved = await params.confirm({
-        title: "Authorize",
-        message: "Authorize the second stage",
-        confirmLabel: "Allow",
-        cancelLabel: "Deny",
-      });
-      expect(approved).toBe(true);
-      return null;
-    });
-
-    rerunImagePrompt({
-      sessionId: "session-1",
-      pluginId: "image-plugin",
-      runtimeId: "image-plugin/generate",
-      payload: { prompt: "a lighthouse" },
-    });
-
-    await vi.waitFor(() =>
-      expect(postPluginRpcWithApproval).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: "session-1",
-          pluginId: "image-plugin",
-          actionLabel: "runtime image-plugin/generate",
-          request: {
-            kind: "runtime",
-            pluginId: "image-plugin",
-            runtimeId: "image-plugin/generate",
-            payload: { prompt: "a lighthouse" },
-          },
-        }),
+describe("catalog actions", () => {
+  it("maps explicit selectors and preserves literal payloads", () => {
+    expect(
+      resolveCatalogPayload(
+        { prompt: { from: "item.prompt" }, count: 3, action: "generate" },
+        { item: { prompt: "a lighthouse" } },
       ),
-    );
-    expect(confirm).toHaveBeenCalledWith("Authorize the second stage");
+    ).toEqual({ prompt: "a lighthouse", count: 3, action: "generate" });
+  });
+  it("uses shared approval flow and lazily prepares upload only once", async () => {
+    const prepare = vi.fn(async () => ({ upload: "media" }));
+    await invokeCatalogAction({
+      sessionId: "s",
+      action: {
+        pluginId: "owner",
+        runtimeId: "owner/generate",
+        payload: { ref: { from: "upload" } },
+      },
+      scope: {},
+      prepare,
+      t: (key) => key,
+    });
+    const args = vi.mocked(postPluginRpcWithApproval).mock.calls.at(-1)![0];
+    expect(prepare).not.toHaveBeenCalled();
+    const request = args.request as () => Promise<unknown>;
+    expect(await request()).toMatchObject({
+      pluginId: "owner",
+      payload: { ref: "media" },
+    });
+    await request();
+    expect(prepare).toHaveBeenCalledOnce();
   });
 });

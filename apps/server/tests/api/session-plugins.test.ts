@@ -7,7 +7,7 @@
  * inline that drifted from the real implementation.)
  *
  * Covers:
- * - H1: core-plugin cannot be disabled (enforced by manifest.pluginType,
+ * - explicit plugin selection and core defaults (enforced by manifest.pluginType,
  *       not hardcoded plugin IDs — see CLAUDE.md framework-plugin isolation)
  * - H3: pluginId body validation
  */
@@ -21,6 +21,7 @@ import {
 } from "@covel/approval";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type PluginRegistry,
   type PluginSummary,
   type PluginRegistryEntry,
@@ -32,7 +33,12 @@ import { sessionApprovalScope } from "../../src/routes/api/session/session-guard
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function makeSummary(overrides?: Partial<PluginSummary>): PluginSummary {
+type TestSummary = PluginSummary &
+  Pick<
+    import("@covel/shared").PluginManifest,
+    "provides" | "requires" | "conflicts"
+  >;
+function makeSummary(overrides?: Partial<TestSummary>): TestSummary {
   return {
     id: "test-plugin",
     name: "Test Plugin",
@@ -46,8 +52,16 @@ function makeSummary(overrides?: Partial<PluginSummary>): PluginSummary {
 function makeEntry(
   overrides?: Partial<PluginRegistryEntry>,
 ): PluginRegistryEntry {
+  const id = overrides?.id ?? "test-plugin";
+  const summary = (overrides?.summary ?? makeSummary()) as TestSummary;
+  const root = parsePluginMd(
+    `---\n${JSON.stringify({ id, kind: summary.pluginType === "core-plugin" ? "core" : "plugin", description: summary.description, provides: [...(summary.provides ?? []).map((value) => (typeof value === "string" && summary.pluginType === "core-plugin" ? { contract: value, default: true } : value)), `${id}@1`], requires: summary.requires, conflicts: summary.conflicts })}\n---\n`,
+    `${id}/PLUGIN.md`,
+  );
   return {
     id: "test-plugin",
+    packageManifest: root,
+    manifests: [],
     summary: makeSummary(),
     loadedRuntimes: new Map(),
     status: "registered",
@@ -103,7 +117,11 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     });
     expect(response.status).toBe(201);
     const session = (await store.getSession("selected-community"))!;
-    expect(session.activePlugins).toContain("optional-plugin");
+    expect(session.activePlugins).not.toContain("optional-plugin");
+    expect(session.metadata?.pluginSelection).toEqual({
+      requested: ["optional-plugin"],
+      excluded: [],
+    });
     expect(activated).not.toHaveBeenCalled();
     const list = async () =>
       (
@@ -145,7 +163,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect.objectContaining({
         id: "optional-plugin",
         active: true,
-        approvalRequired: false,
+        sessionState: "active",
       }),
     );
     app = createTestApp(registry, store, createRpcApprovalGate(), activated);
@@ -168,7 +186,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect.objectContaining({
         id: "optional-plugin",
         active: false,
-        approvalRequired: false,
+        sessionState: "inactive",
       }),
     );
   });
@@ -189,10 +207,8 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           id: "narrator",
           name: "Core Narrator",
           pluginType: "core-plugin",
-          relations: {
-            provides: ["narrative-engine"],
-            conflicts: ["chat-mode-narrator"],
-          },
+          provides: ["narrative-engine@1"],
+          conflicts: ["chat-mode-narrator@1"],
         }),
         source: "builtin",
       }),
@@ -226,19 +242,17 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           id: "chat-mode-narrator",
           name: "Chat Mode Narrator",
           pluginType: "plugin",
-          relations: {
-            provides: ["narrative-engine"],
-            requires: [
-              "scene-cast",
-              "scene-prompts",
-              "character-blueprint",
-              "character-presence",
-              "player-identity",
-              "living-world-rules",
-              "branch-reply",
-            ],
-            conflicts: ["narrator"],
-          },
+          provides: ["narrative-engine@1"],
+          requires: [
+            "scene-cast@1",
+            "scene-prompts@1",
+            "character-blueprint@1",
+            "character-presence@1",
+            "player-identity@1",
+            "living-world-rules@1",
+            "branch-reply@1",
+          ],
+          conflicts: ["narrator@1"],
         }),
         source: "builtin",
       }),
@@ -341,6 +355,10 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       phase: "playing",
       setupRuntimes: {},
       metadata: {
+        pluginSelection: {
+          requested: ["narrator", "optional-plugin"],
+          excluded: [],
+        },
         approvalScopeNonce: globalThis.crypto.randomUUID(),
         sessionIncarnationNonce: globalThis.crypto.randomUUID(),
       },
@@ -380,7 +398,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     });
   });
 
-  describe("H1: core-plugin cannot be disabled", () => {
+  describe("explicit plugin selection and core defaults", () => {
     it("includes required core plugins when creating a session from a partial plugin list", async () => {
       const res = await app.request("/api/sessions", {
         method: "POST",
@@ -396,13 +414,13 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).toEqual(
         expect.arrayContaining(["narrator", "pregame"]),
       );
-      expect(body.activePlugins).toContain("optional-plugin");
+      expect(body.activePlugins).not.toContain("optional-plugin");
 
       const session = await store.getSession("sess-core-create");
       expect(session?.activePlugins).toEqual(
         expect.arrayContaining(["narrator", "pregame"]),
       );
-      expect(session?.activePlugins).toContain("optional-plugin");
+      expect(session?.activePlugins).not.toContain("optional-plugin");
     });
 
     it("uses chat-mode-narrator instead of the default narrator when requested", async () => {
@@ -425,7 +443,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).toContain("player-identity");
       expect(body.activePlugins).toContain("living-world-rules");
       expect(body.activePlugins).toContain("branch-reply");
-      expect(body.activePlugins).toContain("optional-plugin");
+      expect(body.activePlugins).not.toContain("optional-plugin");
       expect(body.activePlugins).not.toContain("narrator");
 
       const session = await store.getSession("sess-chat-create");
@@ -440,17 +458,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(session?.activePlugins).not.toContain("narrator");
     });
 
-    it("resolves plugin dependencies and conflicts from manifest relations", async () => {
+    it("resolves versioned required contracts from explicit package declarations", async () => {
       registry.register(
         makeEntry({
           id: "relation-source",
           summary: makeSummary({
             id: "relation-source",
             name: "Relation Source",
-            relations: {
-              requires: ["relation-required"],
-              conflicts: ["relation-conflict"],
-            },
+            requires: ["relation-required@1"],
+            conflicts: ["relation-conflict@1"],
           }),
           source: "builtin",
         }),
@@ -481,7 +497,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: "sess-relations-create",
-          plugins: ["relation-source", "relation-conflict"],
+          plugins: ["relation-source"],
         }),
       });
 
@@ -499,9 +515,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           summary: makeSummary({
             id: "default-engine",
             name: "Default Engine",
-            relations: {
-              conflicts: ["alternate-engine"],
-            },
+            conflicts: ["alternate-engine@1"],
           }),
           source: "community",
         }),
@@ -580,9 +594,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           summary: makeSummary({
             id: "unsafe-community",
             name: "Unsafe Community",
-            relations: {
-              conflicts: ["pregame"],
-            },
+            conflicts: ["pregame@1"],
           }),
           source: "community",
         }),
@@ -604,16 +616,14 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).not.toContain("unsafe-community");
     });
 
-    it("removes plugins whose required dependencies were removed by conflicts", async () => {
+    it("rejects creation when conflicts make a requested dependency unavailable", async () => {
       registry.register(
         makeEntry({
           id: "dependent-plugin",
           summary: makeSummary({
             id: "dependent-plugin",
             name: "Dependent Plugin",
-            relations: {
-              requires: ["required-plugin"],
-            },
+            requires: ["required-plugin@1"],
           }),
           source: "builtin",
         }),
@@ -634,9 +644,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           summary: makeSummary({
             id: "conflicting-plugin",
             name: "Conflicting Plugin",
-            relations: {
-              conflicts: ["required-plugin"],
-            },
+            conflicts: ["required-plugin@1"],
           }),
           source: "builtin",
         }),
@@ -651,87 +659,11 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(201);
-      const body = (await res.json()) as { activePlugins: string[] };
-      expect(body.activePlugins).toContain("conflicting-plugin");
-      expect(body.activePlugins).not.toContain("required-plugin");
-      expect(body.activePlugins).not.toContain("dependent-plugin");
-    });
-
-    it("imports world character blueprints when creating a session", async () => {
-      await store.upsertWorld({
-        id: "academy-world",
-        name: "Academy World",
-        description: "Test world",
-        metadata: {
-          characterBlueprints: [
-            {
-              schemaVersion: 1,
-              id: "test-heroine",
-              name: "Test Heroine",
-              role: "npc",
-              description: "A seeded NPC.",
-              attributes: { affection: 10 },
-              instantiate: {
-                characterId: "npc-test-heroine",
-                type: "npc",
-              },
-            },
-          ],
-        },
-        createdAt: new Date().toISOString(),
-      });
-
-      const res = await app.request("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: "sess-academy",
-          worldId: "academy-world",
-          plugins: ["chat-mode-narrator"],
-        }),
-      });
-
-      expect(res.status).toBe(201);
-      const characters = await store.listCharacters("sess-academy");
-      expect(characters).toEqual([
-        expect.objectContaining({
-          id: "sess-academy-npc-test-heroine",
-          name: "Test Heroine",
-          type: "npc",
-          description: "A seeded NPC.",
-          fields: { affection: 10 },
-        }),
-      ]);
-
-      const blueprint = await store.getPluginData(
-        "sess-academy",
-        "character-blueprint",
-        "blueprints",
-        "test-heroine",
-      );
-      expect(blueprint?.value).toMatchObject({
-        sourceWorldId: "academy-world",
-        instantiatedCharacterId: "sess-academy-npc-test-heroine",
-        blueprint: {
-          id: "test-heroine",
-          name: "Test Heroine",
-        },
-      });
-      const blueprintMirror = await store.getPluginData(
-        "sess-academy",
-        "character-blueprint",
-        "characters",
-        "sess-academy-npc-test-heroine",
-      );
-      expect(blueprintMirror?.value).toMatchObject({
-        id: "sess-academy-npc-test-heroine",
-        name: "Test Heroine",
-      });
-      // Mirror targets are capability-discovered (dataSchemas.characters
-      // .acceptsWorldData). char-creator does not declare it and reads the
-      // canonical `session.characters` table, so it receives no plugin-data
-      // mirror — the framework no longer hardcodes a char-creator write.
+      expect(res.status).toBe(400);
+      expect(
+        await store.getSession("sess-unsatisfied-requires-create"),
+      ).toBeNull();
+      expect(await res.text()).toContain("Conflicts");
     });
 
     it("imports portable lorebook entries from a store-only generated world", async () => {
@@ -789,57 +721,6 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       );
     });
 
-    it("scopes imported blueprint character ids per session", async () => {
-      await store.upsertWorld({
-        id: "academy-world-scoped",
-        name: "Academy World Scoped",
-        description: "Test world",
-        metadata: {
-          characterBlueprints: [
-            {
-              schemaVersion: 1,
-              id: "test-heroine-scoped",
-              name: "Test Heroine Scoped",
-              role: "npc",
-              instantiate: {
-                characterId: "npc-test-heroine-scoped",
-                type: "npc",
-              },
-            },
-          ],
-        },
-        createdAt: new Date().toISOString(),
-      });
-
-      for (const sessionId of ["sess-academy-a", "sess-academy-b"]) {
-        const res = await app.request("/api/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: sessionId,
-            worldId: "academy-world-scoped",
-            plugins: ["chat-mode-narrator"],
-          }),
-        });
-        expect(res.status).toBe(201);
-        const scopedId = `${sessionId}-npc-test-heroine-scoped`;
-        const characters = await store.listCharacters(sessionId);
-        expect(characters.map((character) => character.id)).toContain(scopedId);
-        // Mirror lands in capability-discovered targets (character-blueprint
-        // declares dataSchemas.characters.acceptsWorldData), scoped per session.
-        const blueprintMirror = await store.getPluginData(
-          sessionId,
-          "character-blueprint",
-          "characters",
-          scopedId,
-        );
-        expect(blueprintMirror?.value).toMatchObject({
-          id: scopedId,
-          name: "Test Heroine Scoped",
-        });
-      }
-    });
-
     it("enabling chat-mode-narrator replaces default narrator and adds the chat mode bundle", async () => {
       const res = await app.request(
         `/api/sessions/${SESSION_ID}/plugins/chat-mode-narrator`,
@@ -858,7 +739,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePluginIds).toContain("player-identity");
       expect(body.activePluginIds).toContain("living-world-rules");
       expect(body.activePluginIds).toContain("branch-reply");
-      expect(body.activePluginIds).toContain("optional-plugin");
+      expect(body.activePluginIds).not.toContain("optional-plugin");
       expect(body.activePluginIds).not.toContain("narrator");
 
       const session = await store.getSession(SESSION_ID);
@@ -994,16 +875,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       ).toBe(true);
     });
 
-    it("should return 403 when attempting to disable a core-plugin", async () => {
+    it("disables a core plugin and persists an explicit exclusion", async () => {
       const res = await app.request(
         `/api/sessions/${SESSION_ID}/plugins/narrator`,
-        {
-          method: "DELETE",
-        },
+        { method: "DELETE" },
       );
-      expect(res.status).toBe(403);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/core/i);
+      expect(res.status).toBe(200);
+      expect(
+        (await store.getSession(SESSION_ID))?.metadata?.pluginSelection,
+      ).toEqual({ requested: ["optional-plugin"], excluded: ["narrator"] });
     });
 
     it("should allow disabling a non-core plugin", async () => {
@@ -1049,12 +929,12 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       );
     });
 
-    it("should still include narrator in active list after failed disable", async () => {
+    it("keeps an explicitly disabled core out of subsequent projections", async () => {
       await app.request(`/api/sessions/${SESSION_ID}/plugins/narrator`, {
         method: "DELETE",
       });
       const session = await store.getSession(SESSION_ID);
-      expect(session!.activePlugins).toContain("narrator");
+      expect(session!.activePlugins).not.toContain("narrator");
     });
 
     it("uses discovery trust metadata when deciding whether a plugin is core", async () => {
@@ -1083,7 +963,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as { activePluginIds: string[] };
-      expect(body.activePluginIds).toEqual(["narrator", "optional-plugin"]);
+      expect(body.activePluginIds).toEqual(["narrator", "pregame"]);
     });
   });
 

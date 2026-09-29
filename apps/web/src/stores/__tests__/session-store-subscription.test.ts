@@ -25,19 +25,25 @@ import { reducer as sessionReducer } from "../session-store/reducer.js";
 
 function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
   return {
+    requires: [],
+    optional: [],
+    conflicts: [],
+    extensions: [],
     id,
     displayName: id === "p1" ? "P1" : "Off",
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     source: "builtin",
-    status: "registered",
+    hostState: "loaded",
     runtimeCount: 0,
-    capabilities: [],
+    provides: [],
     tags: [],
     runtimes: [],
     tools: [],
     userSettings: [],
     active,
+    serverCodeApproved: true,
+    sessionState: active ? "active" : "inactive",
     locked: false,
   };
 }

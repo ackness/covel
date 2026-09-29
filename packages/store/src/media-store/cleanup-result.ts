@@ -1,4 +1,8 @@
-import type { MediaAssetRecord, MediaCleanupResult } from "@covel/shared";
+import type {
+  MediaAssetRecord,
+  MediaCleanupResult,
+  MediaRefRecord,
+} from "@covel/shared";
 
 /** Reconcile a cleanup plan with candidates that passed the final ref check. */
 export function finalizeMediaCleanupResult(
@@ -18,4 +22,19 @@ export function finalizeMediaCleanupResult(
     bytesRetained: planned.totalBytes - bytesDeleted,
     deletedIds: [...deletedIds],
   };
+}
+
+/** Include current claims in dry-run plans as well as the final deletion gate. */
+export function claimedMediaIds(
+  protectedIds: ReadonlySet<string>,
+  assets: readonly MediaAssetRecord[],
+  refs: readonly MediaRefRecord[],
+): ReadonlySet<string> {
+  return new Set([
+    ...protectedIds,
+    ...assets
+      .filter((asset) => asset.ownerSessionId !== null)
+      .map((asset) => asset.id),
+    ...refs.map((ref) => ref.mediaId),
+  ]);
 }

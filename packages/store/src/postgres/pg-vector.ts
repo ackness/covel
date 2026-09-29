@@ -28,14 +28,12 @@
  *
  * Schema ownership
  * ────────────────
- * The `vector_models` table, the `sessions.embedding_model_id` column,
- * and the `vector` extension itself are all created by `pg-store-mappers.ts`
- * during store initialization. This module ONLY creates per-model physical
- * tables on demand — it does not duplicate the registry or session-column
- * DDL, and it does not run `CREATE EXTENSION`.
+ * The `vector_models` table and `sessions.embedding_model_id` column are
+ * created by `pg-store-mappers.ts`. This module enables the optional vector
+ * extension and creates physical tables atomically with registry publication.
  */
 
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 
 import type {
   VectorStoreCapability,
@@ -80,8 +78,8 @@ function toVectorString(v: Float32Array): string {
 // ── Factory ──────────────────────────────────────────────────────
 
 /**
- * Build the vector capability. Always returns an implementation — pgvector
- * extension availability is assumed (handled by the caller's bootstrap step).
+ * Build the vector capability. Non-vector deployments can boot without
+ * pgvector; first model initialization verifies extension availability.
  */
 export function createPgVectorCapability(
   client: Sql,
@@ -90,29 +88,13 @@ export function createPgVectorCapability(
   // cached: another Pod may delete/recreate the same session id, and a stale
   // positive cache would route the new incarnation into the old model/table.
   const modelCache = new Map<number, VectorTarget>();
-  const createdTables = new Set<number>();
-
-  // NOTE: vector_models table and sessions.embedding_model_id column are
-  // owned by pg-store-mappers.ts. We do not duplicate that DDL here.
-  //
-  // The `vector` extension itself is enabled lazily on first vector op so
-  // that stores which never touch RAG (test fixtures, vector-disabled
-  // deployments) can boot against plain postgres without superuser
-  // privileges. ADR-002 still requires pgvector for any production PG
-  // deployment that uses RAG plugins — it just fails at first call
-  // instead of at boot.
-  let extensionReady = false;
-  async function ensureVectorExtension(): Promise<void> {
-    if (extensionReady) return;
-    await client.unsafe(`CREATE EXTENSION IF NOT EXISTS vector;`);
-    extensionReady = true;
-  }
-
   // ── Physical table management ────────────────────────────────────
 
-  async function ensurePhysicalTable(target: VectorTarget): Promise<void> {
-    if (createdTables.has(target.modelRegistryId)) return;
-    await ensureVectorExtension();
+  async function ensurePhysicalTable(
+    client: TransactionSql,
+    target: VectorTarget,
+  ): Promise<void> {
+    await client.unsafe(`CREATE EXTENSION IF NOT EXISTS vector;`);
     const tname = physicalTableName(target.modelRegistryId);
 
     await client.unsafe(`
@@ -133,8 +115,6 @@ export function createPgVectorCapability(
       CREATE INDEX IF NOT EXISTS idx_${tname}_session
         ON ${tname} (session_id, plugin_id, namespace);
     `);
-
-    createdTables.add(target.modelRegistryId);
   }
 
   // ── VectorModelOps ───────────────────────────────────────────────
@@ -142,55 +122,60 @@ export function createPgVectorCapability(
   async function ensureVectorModel(
     identity: EmbeddingModelIdentity,
   ): Promise<VectorTarget> {
-    const now = Date.now();
+    const target = await client.begin(async (tx) => {
+      // Serialize extension/table initialization across models and processes.
+      await tx`SELECT pg_advisory_xact_lock(hashtext('covel:vector-model-initialization'))`;
+      const now = Date.now();
 
-    // INSERT ON CONFLICT DO NOTHING — table_name is left to its DEFAULT
-    // ''; the schema-side BEFORE INSERT trigger backfills it from NEW.id
-    // before the row hits the table. UNIQUE(model_id, dim) makes
-    // concurrent inserts safe.
-    await client`
+      // INSERT ON CONFLICT DO NOTHING — table_name is left to its DEFAULT
+      // ''; the schema-side BEFORE INSERT trigger backfills it from NEW.id
+      // before the row hits the table. UNIQUE(model_id, dim) makes
+      // concurrent inserts safe.
+      await tx`
       INSERT INTO vector_models (model_id, provider, model_name, dim, created_at)
       VALUES (${identity.modelId}, ${identity.provider}, ${identity.modelName}, ${identity.dim}, ${now})
       ON CONFLICT (model_id, dim) DO NOTHING
     `;
 
-    // Read back the canonical row. By the time we get here the trigger
-    // has populated table_name.
-    const rows = await client<
-      Array<{
-        id: number;
-        model_id: string;
-        provider: string;
-        model_name: string;
-        dim: number;
-        table_name: string;
-        created_at: string;
-        last_used_at: string | null;
-      }>
-    >`
+      // Read back the canonical row. By the time we get here the trigger
+      // has populated table_name.
+      const rows = await tx<
+        Array<{
+          id: number;
+          model_id: string;
+          provider: string;
+          model_name: string;
+          dim: number;
+          table_name: string;
+          created_at: string;
+          last_used_at: string | null;
+        }>
+      >`
       SELECT id, model_id, provider, model_name, dim, table_name, created_at, last_used_at
         FROM vector_models
        WHERE model_id = ${identity.modelId} AND dim = ${identity.dim}
     `;
 
-    if (rows.length === 0) {
-      throw new Error(
-        `pg-vector: failed to find or create vector_models entry for ${identity.modelId}`,
-      );
-    }
+      if (rows.length === 0) {
+        throw new Error(
+          `pg-vector: failed to find or create vector_models entry for ${identity.modelId}`,
+        );
+      }
 
-    const row = rows[0];
+      const row = rows[0];
 
-    const target: VectorTarget = {
-      modelRegistryId: row.id,
-      modelId: row.model_id,
-      dim: row.dim,
-      tableName: requireCurrentTableName(row.id, row.table_name),
-    };
+      const target: VectorTarget = {
+        modelRegistryId: row.id,
+        modelId: row.model_id,
+        dim: row.dim,
+        tableName: requireCurrentTableName(row.id, row.table_name),
+      };
 
+      await ensurePhysicalTable(tx, target);
+      return target;
+    });
+    // Publish only after both registry and physical DDL have committed.
     modelCache.set(target.modelRegistryId, target);
-    await ensurePhysicalTable(target);
-
     return target;
   }
 
@@ -284,7 +269,6 @@ export function createPgVectorCapability(
     };
 
     modelCache.set(target.modelRegistryId, target);
-    await ensurePhysicalTable(target);
 
     return target;
   }
@@ -334,7 +318,6 @@ export function createPgVectorCapability(
     // The extension and physical tables are created by ensureVectorModel. Do
     // not resolve a session binding here: the binding, model row, incarnation
     // guard, and INSERT must all be observed under one parent-row lock.
-    await ensureVectorExtension();
     const vecStr = toVectorString(input.embedding);
 
     await client.begin(async (tx) => {
@@ -441,7 +424,6 @@ export function createPgVectorCapability(
       );
     }
 
-    await ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
     const vecStr = toVectorString(input.query);
 
@@ -494,7 +476,6 @@ export function createPgVectorCapability(
       return;
     }
 
-    await ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
 
     if (input.namespace !== undefined) {

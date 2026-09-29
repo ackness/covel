@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "contract:tabletop-check@1",
+  "title": "Covel settled tabletop check output v1",
+  "type": "object",
+  "properties": {
+    "receipt": { "type": ["object", "null"] },
+    "checkContext": { "type": "string" }
+  },
+  "additionalProperties": true
+}

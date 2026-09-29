@@ -1,11 +1,13 @@
 ---
-name: pregame
+id: pregame
 displayName:
   zh: 开局准备
   en: Pre-Game Setup
 description:
   zh: 在开局时读取世界资料，准备好第一段冒险。
-  en: Reads the world details at the start and prepares the first step of the adventure.
+  en: >-
+    Reads the world details at the start and prepares the first step of the
+    adventure.
 ---
 
 # Pre-Game Initialization Plugin
@@ -22,13 +24,20 @@ This is a `runtimeType: function` plugin. It does NOT call the LLM — it runs t
 2. Return `narrativeOutput` so later plugins have context
 3. Report `completion: "done"`; once every setup runtime is done the kernel flips `phase` to playing
 
-## Output
+## Handler result
 
 ```json
 {
-  "narrativeOutput": "World overview text ...",
-  "notifications": [{ "level": "info", "title": "...", "message": "..." }],
-  "initialized": true,
-  "preGameDone": true
+  "outcome": "success",
+  "value": {
+    "narrativeOutput": "World overview text ...",
+    "initialized": true
+  },
+  "effects": {
+    "notifications": [{ "level": "info", "title": "...", "message": "..." }]
+  },
+  "completion": "done"
 }
 ```
+
+`RuntimeResult.output` stores the business value, `effects` stores the notification, and `completion` stores the setup completion signal.

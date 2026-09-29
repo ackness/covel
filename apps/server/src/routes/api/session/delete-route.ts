@@ -1,3 +1,5 @@
+import { withMemoryIngestLock } from "../../../lib/memory-ingest-lock.js";
+import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { randomUUID } from "node:crypto";
 import { decodePluginUserSettingsHeader } from "../plugin-user-settings.js";
 import { loadSessionHookScope } from "./hook-scope.js";
@@ -62,13 +64,14 @@ export async function deleteSessionWithLifecycle(
         );
       }
     });
+    c.get("runtimeJobCredentials")?.clearSession(id);
+    c.get("uiSlots")?.clearSession(id);
     c.get("rpcApprovalGate")?.revoke(id);
     c.get("clearSessionToolOverrides")?.(id);
     c.get("clearBrowserWorkspace")?.(id);
   };
 
-  const prepared = await sessionLock.withLock(id, async () => {
-    await c.get("memorySystem")?.updater.awaitPending?.(id);
+  const prepared = await withSettledSessionLock(c, id, async () => {
     const lockedGuard = await resolveSessionById(c, id);
     if (!lockedGuard.ok) return lockedGuard.response;
     const session = lockedGuard.session;
@@ -253,7 +256,7 @@ export async function deleteSessionWithLifecycle(
 
       try {
         await c.get("mediaStore")?.releaseSession(id);
-        await store.deleteSession(id);
+        await withMemoryIngestLock(c, id, () => store.deleteSession(id));
       } catch (error) {
         const live = await store.getSession(id);
         if (!live) {

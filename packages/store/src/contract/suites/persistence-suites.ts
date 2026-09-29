@@ -27,7 +27,6 @@ import {
   makeTraceEvent,
   makeTurnMessage,
   makeTurnResult,
-  makeWorkingMemory,
   makeWorld,
   makeWorldDataImportLedger,
   ts,
@@ -306,6 +305,47 @@ export function registerPersistenceStoreSuites(
       expect(list[0].insertionOrder).toBe(50);
     });
 
+    it("isolates identical ids across owners for reads, updates, and deletes", async () => {
+      const owners = [
+        { kind: "world" as const },
+        { kind: "player" as const },
+        { kind: "plugin" as const, pluginId: "plugin:a" },
+        { kind: "plugin" as const, pluginId: "plugin:b" },
+      ];
+      await store.upsertLorebookEntries(
+        owners.map((owner, index) =>
+          makeLorebookEntry({
+            sessionId: "owner-test",
+            id: "shared-id",
+            owner,
+            content: `owner-${index}`,
+          }),
+        ),
+      );
+      for (const [index, owner] of owners.entries()) {
+        expect(
+          await store.getLorebookEntry("owner-test", owner, "shared-id"),
+        ).toMatchObject({ owner, content: `owner-${index}` });
+      }
+      const own = await store.getLorebookEntry(
+        "owner-test",
+        owners[2],
+        "shared-id",
+      );
+      await store.upsertLorebookEntries([{ ...own!, content: "updated" }]);
+      expect(
+        (await store.getLorebookEntry("owner-test", owners[3], "shared-id"))
+          ?.content,
+      ).toBe("owner-3");
+      await store.deleteLorebookEntry("owner-test", owners[2], "shared-id");
+      expect(
+        await store.getLorebookEntry("owner-test", owners[2], "shared-id"),
+      ).toBeNull();
+      expect(await store.listSessionLorebookEntries("owner-test")).toHaveLength(
+        3,
+      );
+    });
+
     it("isolates entries by sessionId", async () => {
       await store.upsertLorebookEntries([
         makeLorebookEntry({
@@ -332,7 +372,11 @@ export function registerPersistenceStoreSuites(
         makeLorebookEntry({ id: "lore-drop", sessionId: "sess-lore-del" }),
       ]);
 
-      await store.deleteLorebookEntry("sess-lore-del", "lore-drop");
+      await store.deleteLorebookEntry(
+        "sess-lore-del",
+        { kind: "plugin", pluginId: "plugin-1" },
+        "lore-drop",
+      );
       const list = await store.listSessionLorebookEntries("sess-lore-del");
       expect(list.map((r) => r.id)).toEqual(["lore-keep"]);
     });
@@ -378,6 +422,7 @@ export function registerPersistenceStoreSuites(
 
     it("should persist all payload slices verbatim", async () => {
       const payload = makeSnapshotPayload({
+        characterSchema: null,
         characters: [
           {
             id: "char-1",
@@ -411,16 +456,6 @@ export function registerPersistenceStoreSuites(
             updatedAt: ts(),
           },
         ],
-        workingMemory: [
-          {
-            id: "wm-1",
-            sessionId: "sess-snap-pay",
-            key: "mood",
-            scope: "player",
-            value: "curious",
-            updatedAt: ts(),
-          },
-        ],
         sessionSummaries: [
           makeSessionSummary({
             id: "summary-1",
@@ -438,7 +473,6 @@ export function registerPersistenceStoreSuites(
       expect(result!.payload.characters[0].name).toBe("Hero");
       expect(result!.payload.stateEntries[0].value).toBe(100);
       expect(result!.payload.pluginData[0].value).toEqual({ a: 1 });
-      expect(result!.payload.workingMemory[0].scope).toBe("player");
       expect(result!.payload.sessionSummaries).toEqual([
         expect.objectContaining({ id: "summary-1" }),
       ]);
@@ -502,6 +536,7 @@ export function registerPersistenceStoreSuites(
     it("returns metadata WITHOUT the payload, sized > 0", async () => {
       const sessionId = "sess-snap-meta";
       const big = makeSnapshotPayload({
+        characterSchema: null,
         characters: Array.from({ length: 20 }, (_, i) => ({
           id: `char-${i}`,
           sessionId,

@@ -33,6 +33,7 @@ export interface PluginDataChange {
 }
 
 const EMPTY_DATA: PluginData = Object.freeze({}) as PluginData;
+const EMPTY_PLUGIN: Record<string, Record<string, unknown>> = Object.freeze({});
 const EMPTY_NAMESPACE: Record<string, unknown> = Object.freeze({});
 
 let activeSessionId: string | null = null;
@@ -84,8 +85,16 @@ export function getPluginNamespaceSnapshot(
   pluginId: string,
   namespace: string,
 ): Record<string, unknown> {
+  const data = getPluginNamespacesSnapshot(pluginId);
+  return Object.hasOwn(data, namespace) ? data[namespace]! : EMPTY_NAMESPACE;
+}
+
+/** Stable owner slice; writes by other plugins keep this reference unchanged. */
+export function getPluginNamespacesSnapshot(
+  pluginId: string,
+): Record<string, Record<string, unknown>> {
   const data = getActiveData();
-  return data[pluginId]?.[namespace] ?? EMPTY_NAMESPACE;
+  return Object.hasOwn(data, pluginId) ? data[pluginId]! : EMPTY_PLUGIN;
 }
 
 /** Apply a batch of changes from a plugin-data.changed event. */
@@ -178,6 +187,15 @@ export function usePluginData(): PluginData {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
+/** Subscribe to all namespaces of one plugin without rendering on other owners' writes. */
+export function usePluginNamespaces(
+  pluginId: string,
+): Record<string, Record<string, unknown>> {
+  return useSyncExternalStore(subscribe, () =>
+    getPluginNamespacesSnapshot(pluginId),
+  );
+}
+
 /**
  * React hook — returns data for a specific plugin + namespace.
  *
@@ -258,25 +276,3 @@ export function usePluginJobs(pluginId: string): readonly PluginJobRecord[] {
 }
 
 const EMPTY_JOBS: readonly PluginJobRecord[] = Object.freeze([]);
-
-/**
- * React hook — discovers the character-attribute schema written by whichever
- * plugin declares `capabilities: [world-data-provider]`. The schema lives
- * under the well-known path `(*, 'schema', 'character-attributes')`, so we
- * scan across all pluginIds and return the first match instead of hardcoding
- * `world-init` (framework/plugin isolation rule).
- *
- * Returns `null` when no world has produced a schema yet.
- */
-export function useCharacterAttributeSchema(): unknown {
-  // Snapshot is the schema value itself (stable reference while untouched),
-  // so unrelated plugin-data writes don't re-render consumers.
-  return useSyncExternalStore(subscribe, () => {
-    const all = getActiveData();
-    for (const pluginId of Object.keys(all)) {
-      const value = all[pluginId]?.["schema"]?.["character-attributes"];
-      if (value) return value;
-    }
-    return null;
-  });
-}

@@ -18,14 +18,22 @@ describe("StageChoices", () => {
     render(
       <StageChoices
         {...baseProps}
-        promptsNamespace={{
+        suggestions={{
           scene: "旧校舍门前",
           recap: "你答应夏帆放学后一起调查旧校舍，门内刚传来脚步声。",
           decision: "你要直接推门，还是先确认里面的人？",
-          prompt1Text: "我先贴近门缝听清脚步声",
-          prompt1Label: { zh: "观察", en: "Observe" },
-          prompt2Text: "我小声问夏帆有没有看见人影",
-          prompt2Label: { zh: "追问", en: "Ask" },
+          choices: [
+            {
+              id: "prompt:1",
+              text: "我先贴近门缝听清脚步声",
+              label: { zh: "观察", en: "Observe" },
+            },
+            {
+              id: "prompt:2",
+              text: "我小声问夏帆有没有看见人影",
+              label: { zh: "追问", en: "Ask" },
+            },
+          ],
         }}
         onSendMessage={onSendMessage}
       />,
@@ -60,7 +68,7 @@ describe("StageChoices", () => {
             choices: [{ id: "accept", label: "答应替她保守秘密" }],
           },
         ]}
-        promptsNamespace={{}}
+        suggestions={{ choices: [] }}
         onSubmitInteraction={onSubmitInteraction}
       />,
     );
@@ -82,7 +90,7 @@ describe("StageChoices", () => {
     render(
       <StageChoices
         {...baseProps}
-        promptsNamespace={{ prompt1Text: "继续追问" }}
+        suggestions={{ choices: [{ id: "prompt:1", text: "继续追问" }] }}
         onSendMessage={onSendMessage}
       />,
     );
@@ -102,7 +110,7 @@ describe("StageChoices", () => {
     render(
       <StageChoices
         {...baseProps}
-        promptsNamespace={{}}
+        suggestions={{ choices: [] }}
         onSendMessage={onSendMessage}
       />,
     );
@@ -120,9 +128,9 @@ describe("StageChoices", () => {
       <StageChoices
         {...baseProps}
         fallbackRecap="纸还在你手里。被划掉的那半句，你其实认得字。"
-        promptsNamespace={{
+        suggestions={{
           scene: "开学第一天：先回应谁",
-          prompt1Text: "先问凛刚才记下了什么",
+          choices: [{ id: "prompt:1", text: "先问凛刚才记下了什么" }],
         }}
       />,
     );
@@ -142,7 +150,7 @@ describe("StageChoices", () => {
       <StageChoices
         {...baseProps}
         executing
-        promptsNamespace={{ prompt1Text: "继续追问" }}
+        suggestions={{ choices: [{ id: "prompt:1", text: "继续追问" }] }}
       />,
     );
 
@@ -162,9 +170,9 @@ describe("StageChoices", () => {
     render(
       <StageChoices
         {...baseProps}
-        promptsNamespace={{
+        suggestions={{
           recap: "A long recap. ".repeat(80),
-          prompt1Text: "Ask Rin",
+          choices: [{ id: "prompt:1", text: "Ask Rin" }],
         }}
         onSendMessage={onSendMessage}
       />,

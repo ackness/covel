@@ -1,16 +1,26 @@
 ---
-name: guide
+id: guide
+kind: plugin
 displayName:
   zh: 行动引导
   en: Action Guide
 description:
   zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
-  en: Suggests a few possible actions after each story beat so you can choose your next move faster.
-postHistory:
-  role: system
-  content: |
-    This runtime has one step: you MUST call `generate-guide` exactly once. Even when the narrative seems "calm", provide wait/probe/prepare style suggestions.
-    The framework finishes the runtime after the tool succeeds. Do not skip or repeat the tool, and do not emit prose.
+  en: >-
+    Suggests a few possible actions after each story beat so you can choose your
+    next move faster.
+contributes:
+  prompt:
+    - id: post-history
+      content: >
+        This runtime has one step: you MUST call `generate-guide` exactly once.
+        Even when the narrative seems "calm", provide wait/probe/prepare style
+        suggestions.
+
+        The framework finishes the runtime after the tool succeeds. Do not skip
+        or repeat the tool, and do not emit prose.
+      position: post-history
+      role: system
 ---
 
 You are the Action Guide agent. After each narrative turn you provide the player with multi-style action suggestions.

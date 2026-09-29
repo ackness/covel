@@ -1,0 +1,53 @@
+[
+  {
+    "id": "char-tomas-reed",
+    "name": "Tomas Reed",
+    "type": "npc",
+    "description": "Emberback's fifty-eight-year-old chief technician, elected shift lead, and your mentor. Tomas can repair almost anything without making the person who broke it feel small. He trusts evidence, public process, and the idea that panic is just a problem with too many steps at once.",
+    "fields": {
+      "community": "Emberback Relay Cooperative",
+      "duty": "Chief technician and shift lead",
+      "specialty": "Grid repair and emergency coordination",
+      "grit": 3,
+      "systems": 5,
+      "fieldcraft": 3,
+      "insight": 4,
+      "rapport": 4,
+      "signature": "Cream-and-cobalt coveralls, an analog field radio, and an enamel mug of famously bad coffee"
+    }
+  },
+  {
+    "id": "char-june-okafor",
+    "name": "June Okafor",
+    "type": "npc",
+    "description": "A thirty-one-year-old Sunrunner courier and Emberback's best crawler pilot. June moves medicine, mail, and stranded travelers across routes that maps describe too confidently. She is escorting the medical convoy toward Mile Seventeen when your future warning arrives.",
+    "fields": {
+      "community": "Sunrunners",
+      "duty": "Courier and convoy pilot",
+      "specialty": "Brightward routes and high-speed recovery",
+      "grit": 4,
+      "systems": 3,
+      "fieldcraft": 5,
+      "insight": 3,
+      "rapport": 4,
+      "signature": "Teal driving jacket, coral scarf, amber goggles, and a ring of crawler keys"
+    }
+  },
+  {
+    "id": "char-mina-park",
+    "name": "Dr. Mina Park",
+    "type": "npc",
+    "description": "A forty-two-year-old atmospheric physicist who leads the Nightglass Observatory. Mina has spent months documenting radio echoes that arrive before their source transmissions. She is climbing Emberback's main mast with a storm reader when the future call warns you to keep her off the tower.",
+    "fields": {
+      "community": "Nightglass Observatory",
+      "duty": "Lead atmospheric physicist",
+      "specialty": "Crownfire modeling and temporal signal analysis",
+      "grit": 2,
+      "systems": 4,
+      "fieldcraft": 2,
+      "insight": 5,
+      "rapport": 2,
+      "signature": "Mustard field coat, portable spectrum analyzer, and color-coded paper notes tucked into every pocket"
+    }
+  }
+]

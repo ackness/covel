@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRuntimeImagesContext } from "../src/function-runtime/runtime-images-context.js";
+import type { ResolvedSlotForPlugin } from "@covel/shared/plugin-runtime";
+import { AiProviderError } from "@covel/ai-provider";
 
 interface StoredAsset {
   readonly id: string;
@@ -64,10 +66,166 @@ function makeGatewayStub(
   >,
   warnings: readonly string[] = [],
 ) {
-  return { generateImage: vi.fn(async () => ({ images, warnings })) };
+  const resolveSlot = vi.fn((): ResolvedSlotForPlugin | null => ({
+    presetId: "slot-image",
+    provider: "test",
+    model: "image-model",
+    protocol: "openai-chat-v1",
+    baseUrl: "https://images.test/v1",
+    tag: "image",
+    metadata: { imageWire: "openai-images" },
+  }));
+  return {
+    resolveSlot,
+    generateImage: vi.fn(async () => ({
+      target: resolveSlot()!,
+      images,
+      warnings,
+    })),
+  };
 }
 
 describe("createRuntimeImagesContext", () => {
+  it("checks availability without generating and propagates unexpected errors", () => {
+    const { media, mediaStore } = makeMediaStub();
+    const gateway = makeGatewayStub([]);
+    const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+      sessionId: "s",
+      pluginId: "p",
+    });
+    expect(ctx.isAvailable()).toBe(true);
+    expect(gateway.resolveSlot).toHaveBeenCalledWith({
+      presetId: "image",
+      fallbackTag: "image",
+    });
+    gateway.resolveSlot.mockReturnValue(null);
+    expect(ctx.isAvailable("background")).toBe(false);
+    gateway.resolveSlot.mockImplementation(() => {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        provider: "test",
+        message: "missing image role",
+        retriable: false,
+      });
+    });
+    expect(ctx.isAvailable()).toBe(false);
+    gateway.resolveSlot.mockImplementation(() => {
+      throw new Error("unexpected resolution failure");
+    });
+    expect(() => ctx.isAvailable()).toThrow("unexpected resolution failure");
+    expect(gateway.generateImage).not.toHaveBeenCalled();
+    expect(mediaStore.listByMetadata).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "caches the dispatched target when the role changes during lookup (ABA=%s)",
+    async (aba) => {
+      const { media, mediaStore } = makeMediaStub();
+      const gateway = makeGatewayStub([
+        { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+      ]);
+      const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+        sessionId: "s",
+        pluginId: "p",
+      });
+      const targetA = gateway.resolveSlot()!;
+      const targetB = { ...targetA, model: "model-b" };
+      mediaStore.listByMetadata.mockImplementationOnce(async () => {
+        gateway.resolveSlot.mockReturnValue(targetB);
+        return [];
+      });
+      if (aba)
+        gateway.generateImage.mockImplementationOnce(async () => {
+          gateway.resolveSlot.mockReturnValue(targetA);
+          return {
+            target: targetB,
+            images: [
+              { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+            ],
+            warnings: [],
+          };
+        });
+      const generatedB = await ctx.generate({ prompt: "same scene" });
+      gateway.resolveSlot.mockReturnValue(targetA);
+      expect((await ctx.generate({ prompt: "same scene" })).cached).toBe(false);
+      gateway.resolveSlot.mockReturnValue(targetB);
+      const cachedB = await ctx.generate({ prompt: "same scene" });
+      expect(cachedB.cached).toBe(true);
+      expect(cachedB.refs[0]!.id).toBe(generatedB.refs[0]!.id);
+      expect(gateway.generateImage).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(["model", "provider", "baseUrl", "metadata"] as const)(
+    "invalidates cached images when resolved %s changes under the same role",
+    async (field) => {
+      const { media, mediaStore } = makeMediaStub();
+      const gateway = makeGatewayStub([
+        { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+      ]);
+      const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+        sessionId: "sess-1",
+        pluginId: "image-workflow",
+      });
+      const target = gateway.resolveSlot()!;
+      await ctx.generate({ prompt: "same scene" });
+      gateway.resolveSlot.mockReturnValue({
+        ...target,
+        [field]:
+          field === "metadata" ? { imageWire: "community/custom" } : "changed",
+      });
+
+      const result = await ctx.generate({ prompt: "same scene" });
+
+      expect(result.cached).toBe(false);
+      expect(gateway.generateImage).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("keeps credentials out of cache identity and does not depend on metadata key order", async () => {
+    const { media, mediaStore, assets } = makeMediaStub();
+    const gateway = makeGatewayStub([
+      { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+    ]);
+    const target = gateway.resolveSlot()!;
+    gateway.resolveSlot.mockReturnValue({
+      ...target,
+      apiKey: "synthetic-key-one",
+      metadata: { imageWire: "openai-images", style: "vivid" },
+    });
+    const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+      sessionId: "sess-1",
+      pluginId: "image-workflow",
+    });
+    await ctx.generate({ prompt: "same scene" });
+    gateway.resolveSlot.mockReturnValue({
+      ...target,
+      apiKey: "synthetic-key-two",
+      metadata: { style: "vivid", imageWire: "openai-images" },
+    });
+    expect((await ctx.generate({ prompt: "same scene" })).cached).toBe(true);
+    expect(JSON.stringify(assets)).not.toContain("synthetic-key");
+    expect(gateway.generateImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires a valid model binding even when a previous image was cached", async () => {
+    const { media, mediaStore } = makeMediaStub();
+    const gateway = makeGatewayStub([
+      { kind: "bytes", bytes: new Uint8Array([1]), mime: "image/png" },
+    ]);
+    const ctx = createRuntimeImagesContext(gateway, mediaStore, media, {
+      sessionId: "sess-1",
+      pluginId: "image-workflow",
+    });
+    await ctx.generate({ prompt: "same scene" });
+    gateway.resolveSlot.mockReturnValue(null);
+    await expect(ctx.generate({ prompt: "same scene" })).rejects.toMatchObject({
+      code: "CONFIG_ERROR",
+      retriable: false,
+    });
+    expect(gateway.generateImage).toHaveBeenCalledTimes(1);
+  });
+
   it("persists bytes via put and URLs via ingestUrl, stamping framework metadata", async () => {
     const { media, mediaStore } = makeMediaStub();
     const gateway = makeGatewayStub(

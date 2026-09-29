@@ -1,101 +1,66 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import type { MediaRef } from "@covel/shared";
-import {
-  __clearAllPluginDataForTest,
-  loadPluginData,
-  setActiveSession,
-} from "@/stores/plugin-data-store.js";
+import type { UiSlotSnapshot } from "@covel/shared";
 import { useStageMediaPreload } from "../use-stage-media-preload.js";
-
-vi.mock("@/lib/media-resolve.js", () => ({
-  resolveMediaSrc: vi.fn(async () => ({
-    url: "data:image/png;base64,",
-    fromCache: false,
-    ok: true,
-  })),
+const mocks = vi.hoisted(() => ({
+  slots: [] as UiSlotSnapshot[],
+  resolve: vi.fn(
+    async (_ref: { id: string }, _options: { sessionId: string }) => ({
+      url: "data:image/png;base64,",
+      ok: true,
+    }),
+  ),
 }));
-vi.mock("@/services/api/plugin-data.js", () => ({
-  listPluginData: vi.fn(async () => [
-    {
-      namespace: "scenes",
-      key: "scene-registry",
-      value: {
-        scenes: [
-          { sceneId: "sc1", name: "Gate", day: ref("d".repeat(64)) },
-          {
-            sceneId: "sc2",
-            name: "Hall",
-            day: ref("e".repeat(64)),
-            night: null,
-          },
-        ],
-      },
-      updatedAt: "",
-    },
-  ]),
-}));
-
-import { resolveMediaSrc } from "@/lib/media-resolve.js";
-
-function ref(id: string, mime = "image/png"): MediaRef {
-  return { id, mime, size: 1 } as MediaRef;
-}
-
-const PLUGINS = [
-  {
-    id: "character-presence",
-    active: true,
-    capabilities: ["character-presence"],
-  },
-  { id: "scene-stage", active: true, capabilities: ["scene-stage"] },
-];
-
+vi.mock("@/stores/ui-slot-store.js", () => ({ useUiSlots: () => mocks.slots }));
+vi.mock("@/lib/media-resolve.js", () => ({ resolveMediaSrc: mocks.resolve }));
+const ref = (id: string, mime = "image/png") => ({ id, mime, size: 1 });
+beforeEach(() => {
+  mocks.resolve.mockClear();
+  mocks.slots = [];
+});
 describe("useStageMediaPreload", () => {
-  beforeEach(() => {
-    setActiveSession("s1");
-    loadPluginData("character-presence", "presence", [
+  it("warms all projected visual variants and registry backdrops once per session", async () => {
+    mocks.slots = [
       {
+        slot: "character.visual@1",
         key: "hero",
+        revision: "1",
         value: {
           characterId: "hero",
-          sprite: ref("a".repeat(64)),
-          avatar: ref("b".repeat(64)),
-          voice: ref("c".repeat(64), "audio/wav"),
+          avatar: ref("avatar"),
+          sprite: ref("sprite"),
+          visuals: { variants: [{ id: "night", sprite: ref("night") }] },
         },
       },
-    ]);
-  });
-
-  afterEach(() => {
-    __clearAllPluginDataForTest();
-    vi.clearAllMocks();
-  });
-
-  it("warms presence sprites/avatars and scene registry backdrops, images only", async () => {
-    renderHook(() => useStageMediaPreload("s1", PLUGINS));
-
-    await waitFor(() => {
-      const warmedIds = vi
-        .mocked(resolveMediaSrc)
-        .mock.calls.map(([r]) => r.id)
-        .sort();
-      expect(warmedIds).toEqual([
-        "a".repeat(64),
-        "b".repeat(64),
-        "d".repeat(64),
-        "e".repeat(64),
-      ]);
-    });
-  });
-
-  it("skips everything when no capability provider is active", async () => {
-    renderHook(() =>
-      useStageMediaPreload("s1", [
-        { id: "narrator", active: true, capabilities: ["narrative"] },
-      ]),
+      {
+        slot: "stage.backdrop@1",
+        revision: "1",
+        value: {
+          pending: false,
+          ref: ref("gate"),
+          preload: [ref("gate"), ref("hall"), ref("audio", "audio/wav")],
+        },
+      },
+    ];
+    const { rerender } = renderHook(
+      ({ sessionId }) => useStageMediaPreload(sessionId),
+      { initialProps: { sessionId: "s1" } },
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(resolveMediaSrc).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(5));
+    expect(mocks.resolve.mock.calls.map(([r]) => r.id).sort()).toEqual([
+      "avatar",
+      "gate",
+      "hall",
+      "night",
+      "sprite",
+    ]);
+    rerender({ sessionId: "s1" });
+    expect(mocks.resolve).toHaveBeenCalledTimes(5);
+    rerender({ sessionId: "s2" });
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledTimes(10));
+  });
+  it("does not warm imagery without projections", () => {
+    renderHook(() => useStageMediaPreload("s1"));
+    expect(mocks.resolve).not.toHaveBeenCalled();
   });
 });

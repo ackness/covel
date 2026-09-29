@@ -10,7 +10,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-import { FrameworkCapability } from "@covel/shared";
 import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import {
   prepareWorldDataSyncForSession,
@@ -72,6 +71,7 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
       : [];
 
   const result = await preflightWorldDataForSession({
+    contractData: (await store.getWorld(worldId))?.metadata?.contractData,
     sessionId,
     worldId,
     worldsDirs,
@@ -283,48 +283,15 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const now = new Date().toISOString();
   const nextKeys = new Set(Object.keys(dimensions));
 
-  // Re-importing dimensions is a four-phase rewrite: delete stale plugin-data
-  // rows, batch-set the new ones, upsert lorebook entries, delete stale
-  // lorebook entries. Run bare, a failure between phases — or a turn
-  // executing concurrently — could observe half the canonical world data
-  // (e.g. entries deleted but not yet rewritten), which feeds straight into
-  // the next prompt. The session lock keeps a turn from interleaving; the
-  // transaction makes the four phases all-or-nothing.
+  // World-owned lore is replaced atomically; plugin data stays plugin-owned.
   const applyDimensionSync = async (
-    s: import("@covel/store").StoreTransaction | typeof store,
-    worldDataPluginId: string,
+    s: import("@covel/store").StoreTransaction,
   ): Promise<void> => {
-    const existingRecords = await s.listPluginData(
-      sessionId,
-      worldDataPluginId,
-      "entries",
-    );
-    const stalePluginDataKeys = existingRecords
-      .filter((record) => !nextKeys.has(record.key))
-      .map((record) => record.key);
-    const records = Object.entries(dimensions).map(([key, value]) => ({
-      id: crypto.randomUUID(),
-      sessionId,
-      pluginId: worldDataPluginId,
-      namespace: "entries",
-      key,
-      value,
-      createdAt: now,
-      updatedAt: now,
-    }));
-
-    for (const key of stalePluginDataKeys) {
-      await s.deletePluginData(sessionId, worldDataPluginId, "entries", key);
-    }
-    await s.setPluginDataBatch(records);
-
-    if (typeof s.upsertLorebookEntries !== "function") return;
-
     const lorebookRecords = Object.entries(dimensions).map(
       ([key, value], idx) => ({
         id: `world-entry:${key}`,
         sessionId,
-        pluginId: worldDataPluginId,
+        owner: { kind: "world" } as const,
         keys: [key],
         content: formatWorldEntryContent(key, value),
         strategy: "constant" as const,
@@ -346,14 +313,14 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     const staleLorebookEntries = (
       await s.listSessionLorebookEntries(sessionId)
     ).filter((entry) => {
-      if (entry.pluginId !== worldDataPluginId || entry.strategy !== "constant")
+      if (entry.owner.kind !== "world" || entry.strategy !== "constant")
         return false;
       if (!entry.id.startsWith("world-entry:")) return false;
       const key = entry.keys[0] ?? entry.id.slice("world-entry:".length);
       return !nextKeys.has(key);
     });
     for (const entry of staleLorebookEntries) {
-      await s.deleteLorebookEntry(sessionId, entry.id);
+      await s.deleteLorebookEntry(sessionId, { kind: "world" }, entry.id);
     }
   };
 
@@ -369,21 +336,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
         liveSession.activePlugins,
       );
     }
-    // Discover world-data-provider plugin by capability (not hardcoded ID)
-    // only after the persisted active set has been re-read under the lock.
-    const worldDataPluginId = pluginRegistry.findPluginByCapability(
-      sessionId,
-      FrameworkCapability.WorldDataProvider,
-    );
-    if (!worldDataPluginId) {
-      return c.json(
-        errorBody("No world-data-provider plugin active in session"),
-        422,
-      );
-    }
-    await store.withTransaction((tx) =>
-      applyDimensionSync(tx, worldDataPluginId),
-    );
+    await store.withTransaction(applyDimensionSync);
     return undefined;
   };
 

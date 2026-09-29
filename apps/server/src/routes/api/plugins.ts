@@ -32,7 +32,11 @@ export const pluginRoutes = new Hono<Env>();
 pluginRoutes.get("/", async (c) => {
   const registry = c.get("pluginRegistry");
   return c.json(
-    listBody([...registry.getAll().values()].map(buildPluginSummary)),
+    listBody(
+      [...registry.getAll().values()].map((entry) =>
+        buildPluginSummary(entry, c.get("isPluginEntryPublished")),
+      ),
+    ),
   );
 });
 
@@ -47,7 +51,7 @@ pluginRoutes.get("/:id", async (c) => {
       404,
     );
   }
-  return c.json(buildPluginDetail(entry));
+  return c.json(buildPluginDetail(entry, c.get("isPluginEntryPublished")));
 });
 
 // DELETE /plugins/:id — uninstall a third-party plugin from the user plugins

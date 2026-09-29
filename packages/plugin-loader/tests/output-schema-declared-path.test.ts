@@ -6,12 +6,12 @@ import { discoverPlugins } from "../src/discover.js";
 import { loadRuntime } from "../src/load.js";
 
 function makeFrontmatter(overrides: Record<string, unknown>): string {
-  const base = {
-    name: "test-plugin",
+  const merged = {
+    id: "test-plugin",
+    kind: "plugin",
     description: "A test plugin",
-    stage: "narrative",
+    runtime: { type: "agent", schedule: { stage: "narrative" }, io: overrides },
   };
-  const merged = { ...base, ...overrides };
   const yaml = Object.entries(merged)
     .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join("\n");
@@ -40,7 +40,7 @@ afterEach(async () => {
 
 describe("loadRuntime output schema resolution", () => {
   it("loads schema from the declared output.schema path", async () => {
-    const pluginDir = path.join(tmpDir, "declared");
+    const pluginDir = path.join(tmpDir, "test-plugin");
     await fs.mkdir(path.join(pluginDir, "schemas"), { recursive: true });
     await fs.writeFile(
       path.join(pluginDir, "PLUGIN.md"),
@@ -63,7 +63,7 @@ describe("loadRuntime output schema resolution", () => {
   });
 
   it("falls back to the output.schema.json convention when undeclared", async () => {
-    const pluginDir = path.join(tmpDir, "convention");
+    const pluginDir = path.join(tmpDir, "test-plugin");
     await fs.mkdir(pluginDir, { recursive: true });
     await fs.writeFile(path.join(pluginDir, "PLUGIN.md"), makeFrontmatter({}));
     await fs.writeFile(
@@ -78,7 +78,7 @@ describe("loadRuntime output schema resolution", () => {
   });
 
   it("rejects a declared path that escapes the plugin root", async () => {
-    const pluginDir = path.join(tmpDir, "escape");
+    const pluginDir = path.join(tmpDir, "test-plugin");
     await fs.mkdir(pluginDir, { recursive: true });
     await fs.writeFile(
       path.join(pluginDir, "PLUGIN.md"),
@@ -98,7 +98,7 @@ describe("loadRuntime output schema resolution", () => {
   });
 
   it("warns and does not crash when the declared file is missing", async () => {
-    const pluginDir = path.join(tmpDir, "missing");
+    const pluginDir = path.join(tmpDir, "test-plugin");
     await fs.mkdir(pluginDir, { recursive: true });
     await fs.writeFile(
       path.join(pluginDir, "PLUGIN.md"),

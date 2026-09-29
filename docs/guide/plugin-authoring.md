@@ -1,339 +1,82 @@
 # Covel 插件开发指南
 
-> Covel 是一个 AI RPG 框架，核心理念：**插件承载游戏逻辑，内核提供原语和编排**。`PLUGIN.md` 是运行时文件：YAML frontmatter 定义元信息，agent runtime 的 Markdown 正文会进入模型提示词。`README.md` 是人类文档，用来说明插件用途、实现情况和维护方式。
+先选择扩展入口，再写插件包。需要生成文字时使用 agent runtime；确定性的计算、导入或外部 API 调用使用 function runtime；提示词片段、历史变换、压缩和世界上下文使用公开扩展点。
 
-这份指南按三个难度层次拆成三份文档。先决定自己属于哪条路径，再从对应的文档开始读。
-
-要从按钮写入插件数据时，先选入口：`invokePluginAction` 的 RPC action 写入即时生效，后续失败不回滚已成功的写入；多条记录需要一起成功或失败时，用 `invokeRuntime` 触发 manual function runtime，让写入随 proposal 原子提交。function handler 直接运行 JS，不需要 LLM；手动触发不会自动运行叙事 runtime。详见[进阶指南的 RPC action](./plugin-authoring-agent.md#4-暴露-rpc-action)和[高级指南的手动触发](./plugin-authoring-advanced.md#手动触发-前端--rpc--函数-runtime)。
-
-只提供面板、命令、设置或 entry Hook 时，在根 `PLUGIN.md` 声明即可，无需添加 runtime 或 LLM。需要确定性执行或 agent 执行时，再声明执行字段或增加子 runtime。多 runtime 的公共设置、schema 和 UI 可集中在根清单；同一键的不同定义会在加载时直接报错。
+本指南对应当前作者格式。根文件为 `PLUGIN.md`，多 runtime 子文件为 `RUNTIME.md`。旧平铺字段、子目录 `PLUGIN.md`、`relations` 和框架记忆专用字段均不再接受；旧开发会话和 checkpoint 应重建。
 
 ## 三条路径
 
-| 路径                                 | 面向的人                       | 前置要求                                                             | 你将产出什么                                                                                             | 文档                                                             |
-| ------------------------------------ | ------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **零代码**                           | 内容创作者，只写 Markdown      | 会用 YAML + Markdown                                                 | 一个只含 `PLUGIN.md` 的插件，能自动触发、调用内置 UI 工具，并用 World Data / Lorebook 交付世界资料       | [plugin-authoring-zero-code.md](./plugin-authoring-zero-code.md) |
-| **进阶（agent + 本地 JS）**          | 已经会零代码，要加一点 JS      | 会写基础 JS/TS、会用 Zod                                             | 本地 `tools/*.js`、`interaction` 返回的玩家交互块、`input.inject` 跨插件注入、entry RPC action、集成测试 | [plugin-authoring-agent.md](./plugin-authoring-agent.md)         |
-| **高级（TypeScript + 审批 + 发布）** | 要发布社区插件或做复杂游戏系统 | 熟悉 TS 类型系统、vitest、SillyTavern/NovelAI 之类的 prompt 工程概念 | 完整 TS 类型约束、多 runtime 插件、自定义审批、`I18nText` 合规、发布 checklist                           | [plugin-authoring-advanced.md](./plugin-authoring-advanced.md)   |
+| 需求                             | 指南                                          |
+| -------------------------------- | --------------------------------------------- |
+| 只写 YAML 和提示词               | [零代码插件](plugin-authoring-zero-code.md)   |
+| agent 配合本地工具或 RPC         | [Agent 与本地代码](plugin-authoring-agent.md) |
+| 多 runtime、数据契约、权限和发布 | [高级作者指南](plugin-authoring-advanced.md)  |
 
-## 先走哪条路径
+完整字段和内置示例见[插件契约参考](../reference/plugins.md)，公开扩展点见[插件扩展点](../reference/plugin-extensions.md)。
 
-- 只需要一个提示词 runtime、内置工具和少量 `userSettings`：走**零代码**。放在 `~/.covel/plugins/` 的本地用户插件最小只需 `PLUGIN.md`，不需要构建步骤；提交到仓库 `plugins/<name>/` 的内置包仍必须带 `package.json`。
-- 需要确定性计算、插件本地 tool、玩家按钮或 RPC：走**进阶**。用 `entry` 注册 JS handler，再在 runtime 的 `tools.plugin` 中列出工具名。
-- 需要多个 runtime、审批/生命周期 hook、复杂类型或准备发布社区插件：走**高级**。先用进阶路径跑通一个最小闭环，再拆分 runtime。
+## 最小闭环
 
-不确定时，先从零代码开始；只有当提示词无法可靠完成确定性逻辑或外部动作时，才增加 `entry` 和 JS。
-
-## 先确定扩展属于哪一层
-
-- 世界观、角色、开局数据和插件默认组合放在世界包，使用 [WorldData](../reference/world-data.md)。
-- 可复用规则、创角校验、叙事策略和界面放在第三方插件。框架已有类型化表单、工具调用、Hook、数据 namespace 和 capability 选择，无需为了某个玩法修改内核。
-- 只有现有公共接口无法表达且多个插件都需要的能力，才讨论框架契约扩展；同时更新 reference 和社区包回归测试。
-
-例如 [`tabletop-rules`](../../plugins/tabletop-rules/README.md) 的配点与检定是可选插件，
-其他规则包可以使用相同接口实现不同算法。交付前按[独立插件测试](./plugin-testing.md)覆盖
-ZIP 安装、授权、实际调用、重启和卸载，不依赖仓库内置插件的信任或目录布局。
-
-## 最小闭环（目录 → 验证 → 加载）
-
-1. 创建插件目录并写入 `PLUGIN.md`（至少需要 `name`、`description`；未声明 `trigger` 时按 schema 默认行为处理，`auto` / `scheduled` runtime 需要 `stage`）。仓库内置插件同时创建 `package.json`，本地用户目录则可只放 manifest 与它实际引用的资源。
-2. 在仓库根目录运行 `pnpm validate:plugin <插件目录>`。预期看到每个 manifest 的 `✓`；解析失败会标记 `(loader parse)`，字段/组合不合法会标记 `(authoring schema)` 并列出字段路径。
-3. 在 `COVEL_USER_PLUGINS_DIR` 下放置插件（未设置时使用 `$COVEL_HOME/plugins`，再回退到 `~/.covel/plugins`），重启 server 后即可发现；也可在 runtime case 中显式传 `--plugins-dir <目录>`。多 runtime 扫描 `runtimes/*/PLUGIN.md`。
-4. 用 `pnpm test:runtime -- <plugin-id> --plugins-dir <目录> --pretty` 跑 mock case；没有 case 时，用 `<plugin-id>/<runtime-id>` 直接调试，并按需传 `--payload` / `--show-prompts`。
-
-也可以从仓库根直接生成带 mock cases 的骨架：
-
-```bash
-pnpm create-plugin session-notes
-pnpm test:runtime -- session-notes --pretty
+```sh
+pnpm create-plugin
+pnpm validate:plugin plugins/my-plugin
+pnpm --filter @covel/plugin-my-plugin test
 ```
 
-默认生成 `note` function 与 `analyst` agent 两个 runtime。使用 `--runtimes recorder:function,analyst:agent` 自定义组合，或 `--target ./plugins` 指定父目录；指定目录后测试时同步传 `--plugins-dir ./plugins`。默认目录与 server 用户插件目录一致。`--with-tools` 生成带 entry 注册工具的单 agent runtime，固定写入仓库 `plugins/`，不能与 `--target` / `--runtimes` 混用。
+按生成器提示选择模板。包至少包含 `package.json`、`PLUGIN.md`，并为维护者提供 `README.md`。根清单的 `id` 必须与目录一致，单 runtime 使用根 `runtime`，多 runtime 使用 `runtimes/<id>/RUNTIME.md`，不要同时声明两种布局。
 
-function handler 返回 `{ outcome: "success", value, effects }`，失败使用 `{ outcome: "failed", error }`；`ctx.pluginData` 的写入在成功提交后才可见。完整协议见[函数 runtime 返回值](./plugin-authoring-advanced.md#function-handler-返回值handlerresult)，不要把 agent 的结构化输出直接当作 function 返回值。
-
-需要检查真实 HTTP、SSE 或审批时，再运行 `scripts/e2e-plugin-verify.ts`（见 [plugin-testing.md](./plugin-testing.md)）。
-
-## 交叉引用
-
-| 你想做的事                                                       | 看这里                                                                                                                                                                                                                                                     |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 先理解为什么这么设计、agent/function/组合三种写法怎么选          | [docs/architecture/design-principles.md](../architecture/design-principles.md)                                                                                                                                                                             |
-| 看所有已实现插件的 frontmatter、调度层级、capabilities 标签      | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                                                                                                       |
-| 写 json-render UI 面板（`ui.right` / `ui.message`）              | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                                                                                                            |
-| 让 `ui.message` block 首次出现（避免"只有手动按钮无法自举"死锁） | [docs/reference/ui-panels.md#消息-block-声明](../reference/ui-panels.md#消息-block-声明)                                                                                                                                                                   |
-| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#entry统一服务端入口](../reference/plugins.md#entry统一服务端入口)                                                                                                                                                               |
-| 写图像生成 / 媒体资产插件                                        | [docs/guide/plugin-authoring-advanced.md 第 6 节](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)（`ctx.images` 契约 + `registerImageWire`）· [docs/reference/media-store.md](../reference/media-store.md#metadata-conventions--querying) |
-| 让插件配套世界数据、角色卡、媒体或 override 包                   | [docs/reference/world-data.md](../reference/world-data.md)                                                                                                                                                                                                 |
-| 写单元 / 集成 / 真实 LLM E2E 测试                                | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                                                                                                            |
-| 看内置工具完整清单 + 审批策略                                    | [docs/reference/tools.md](../reference/tools.md)                                                                                                                                                                                                           |
-| 看 prompt 如何组装（10 段 + cache_control）                      | [docs/reference/prompt-structure.md](../reference/prompt-structure.md)                                                                                                                                                                                     |
-| 程序化发现框架和插件提供哪些字段、工具、数据 namespace           | [docs/reference/api.md 插件管理](../reference/api.md#插件管理)                                                                                                                                                                                             |
-
+```yaml
 ---
-
-## World Data 与插件数据契约
-
-插件可以通过 `PLUGIN.md` frontmatter 的 `dataSchemas` 声明可导入的 `plugin_data` namespace。世界包在 `data/world.data.yaml` 中使用 `schema: plugin://<pluginId>/<namespace>` 和 `to: plugin:<pluginId>/<namespace>` 引用该契约；服务器会在创建 session 前做 preflight，确认 schema URI 与 target namespace 兼容，并用插件包内 JSON Schema 校验每条 source item。
-
-```yaml
-dataSchemas:
-  relationships:
-    schemaVersion: 1
-    acceptsWorldData: true
-    schema: ./schemas/relationships.schema.json
-    description: Importable relationship records.
+id: my-plugin
+kind: plugin
+description: Adds a brief observation after narration.
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+  io:
+    inputs:
+      narrative:
+        from: { contract: narrative-engine@1 }
+        select: /narrativeOutput
+        required: true
+    visibility: plugin
+  agent:
+    model: plugin
+---
+Write one observation grounded in runtime-inputs.narrative.value.
 ```
 
-字段规则：
+通过校验后从插件管理界面安装并启用。社区插件的服务端代码需要授权，作者清单本身不会授予权限。安装位置和包管理流程见[插件安装](../reference/plugin-installation.md)。
 
-- `schema` 相对插件根目录，并经过 realpath containment 校验。
-- 多 runtime 插件的 `dataSchemas` 会合并为 plugin-level registry；同一 namespace 的声明需要完全一致。
-- world-data importer 只接受 `acceptsWorldData: true` 的 namespace。
-- 导入的数据写入 `plugin_data`、`lorebook`、`characters` 或 media index 后，会记录到 `world_data_import_ledger`，供 `/api/worlds/:id/sync-data` 做 dry-run、冲突检测和同步。
+## 声明与实现对齐
 
-世界包引用示例：
+所有包级贡献写在根 `contributes`。entry 模块注册工具、RPC action、服务、扩展、hook、wire 或 form 时，名称必须与清单一致。`contributes.commands` 是玩家命令元数据，实际 RPC 名还必须列在 `contributes.actions`。
 
-```yaml
-sources:
-  social-links:
-    kind: yaml
-    path: data/social/links.yaml
-    schema: plugin://social-sim/relationships
-    to: plugin:social-sim/relationships
-    key: id
-```
+只在运行时需要的工具放进 `agent.tools`。这份白名单控制 agent 能调用什么；`contributes.tools` 声明包实际注册什么。两者用途不同。
 
-完整 target URI、override 目录、preflight 和 sync API 见 [World Data reference](../reference/world-data.md)。
+跨插件调用使用版本化契约，例如 `narrative-engine@1`。根 `requires` 驱动会话依赖解析，`io.inputs` 绑定执行结果，`schedule.needs` 控制运行条件。普通契约可以有多个提供者；用 `cardinality: one/all` 指定输入要求，用显式 `conflicts` 或单提供者扩展点表达互斥。
 
-## 声明核心记忆块（`memoryBlocks`）
+**跨包依赖边界**：`needs`、`after` 和 `io.inputs` 的跨包引用必须使用版本化契约（如 `narrative-engine@1`），不允许直接引用其他插件的 runtime 名称（如 `other-plugin/some-runtime`）。包内多个 runtime 之间可以使用 runtime 名称建立排序和输入关系，但跨包必须通过公开契约解耦。违反此规则的 manifest 加载时会被拒绝。
 
-核心记忆（Letta 式 in-context memory）是框架原语：`@covel/memory` 负责「按块定义跑一次 LLM 抽取 + 持久化 + 渲染」，**块的语义（标签、显示名、抽取提示词）由插件以数据声明**，框架不硬编码任何块。插件在 `PLUGIN.md` frontmatter 用 `memoryBlocks` 声明自己的块，框架会聚合所有插件的声明来驱动每轮记忆更新。
+## 数据归属
 
-```yaml
-memoryBlocks:
-  - label: suspects
-    displayName: { zh: 嫌疑人, en: Suspects }
-    icon: UserSearch
-    extractionHint:
-      zh: 已知嫌疑人、其动机、不在场证明与可信度变化。
-      en: Known suspects, their motives, alibis, and shifts in credibility.
-```
+角色和角色 schema 读取 `ctx.world`，角色写入通过 proposals。不要把角色复制到本插件的 `characters` namespace，也不要扫描其他插件私有 schema。
 
-builtin `memory` 插件声明默认四块（`story_state` / `character_relationships` / `scene` / `player_profile`）。换一种游戏类型只需声明你自己的块，无需改动框架。字段规则（`label` / `displayName` / `extractionHint` / `icon` / `maxChars`）见 [plugins.md #memoryblocks核心记忆块](../reference/plugins.md#memoryblocks核心记忆块)。**世界包**也能在 `world.yaml` 顶层声明 `memoryBlocks`（按 session 合并到插件块之上），让题材专属的记忆维度随世界走——见 [world-data.md #世界记忆块memoryblocks](../reference/world-data.md#世界记忆块memoryblocks)。
+插件私有数据使用绑定 store：`getPluginData(namespace, key)`、`listPluginData(namespace?)`。不同插件共享数据必须声明公开契约。可导入世界数据的 namespace 在 `contributes.data` 声明 `version/schema/accepts`，其契约 schema 放在根 `contracts`。见 [World Data](../reference/world-data.md)。
 
-## 运行时文案的 i18n（重要）
+记忆语义由 memory 插件和其 `memory.block-definitions@1` 服务拥有。世界自定义记忆块通过 `memory.blocks@1` 导入。不要新增 `memoryBlocks` 或 `summaryFocus` 根字段。
 
-CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，**以及** 工具/hook handler `.js` 里 `label:` / `title:` / `placeholder:` 的裸 CJK 字面量。但工具/handler **写入 plugin_data 或 prompt 的运行时文案**仍需作者自觉处理，否则 en 会话会看到中文：
+## 提示词与本地化
 
-- **写给前端展示的标签**（如徽标 label）：存成 `I18nText` 对象（目标 locale + English fallback），前端的 `Badge`/`Text` 等组件经 `resolveI18n` 按 locale 解析。例：`scene-prompts` 的 `prompt{N}Label`、`guide` 的 `category{N}Label`。
-- **写给模型 / 通知的纯文本**（如 prompt 前言、欢迎通知）：用 `ctx.locale`（function runtime）或 hook payload 的 `locale` 在写入时解析成单一语言。例：`director` 的导演前言、`pregame` 的欢迎语。
-- **agent runtime 的 `PLUGIN.md` 正文**（agent skill prompt）按 exact locale → script 兼容的 primary language → English → canonical `PLUGIN.md` 解析。新增俄语可提供 `PLUGIN.ru-RU.md` 或 `PLUGIN.ru.md`；至少提供 `PLUGIN.en.md`（如 `narrator` / `chat-mode-narrator`），确保其他目标语言在缺少专属翻译时不会直接收到中文指令。`zh-Hant` 不会命中简体中文的 `PLUGIN.zh.md`。
+Agent 正文放在相应 `PLUGIN.md` 或 `RUNTIME.md`。静态附加段用根 `contributes.prompt`，动态内容用 `prompt.segment@1`。同包静态段不按 runtime 筛选，多 runtime 的局部规则应写在各自正文中。
 
-> **`PLUGIN.<locale>.md` 只能翻译，不能改契约。** 语言变体的正文和自然语言字段（`description` / `displayName` / `label` / `authorsNote.content` / `postHistory.content` / `i18n` 等）取自变体文件；`stage`、`needs`、`trigger`、`capabilities`、`tags`、`tools`、`input.inject`、`dataSchemas`、超时参数等**结构字段一律取自 canonical `PLUGIN.md`**。loader 每次加载语言变体时都会比对，逐字段报告差异并用 canonical 值覆盖（`[plugin-loader] … locale variant diverges from PLUGIN.md on non-translatable field(s) …`）。
->
-> 这条规则的原因很直接：如果变体能改结构字段，同一个 runtime 会因为玩家界面语言不同而被排进不同 stage、拿到不同的工具白名单。看到这条 warning 就把改动挪回 `PLUGIN.md`。
->
-> **变体应当只写需要翻译的字段。** 未声明的字段直接继承 canonical，不算差异、不会 warn——所以不要把 `PLUGIN.md` 整份复制过来再改几句译文：复制出来的结构字段不会生效，却会在 canonical 演进后变成过期副本，而 warning 只在值**不同**时才出现，漏改的那份会一直静默。一个健康的 `PLUGIN.en.md` 通常只有 `name` + `description` + `postHistory.content` 之类的自然语言字段，加上翻译好的正文。
->
-> 注意变体仍要独立通过 frontmatter schema 校验：嵌套结构（如 `dataSchemas.<ns>`）一旦出现就必须写完整。只想翻译其中一句 `description` 时，通常更划算的做法是整块省略、继承 canonical。
+翻译文件分别为 `PLUGIN.en.md`、`RUNTIME.en.md` 等。只翻译正文与自然语言字段，未出现的字段继承 canonical。工具、依赖、契约、提示词段 ID 和位置不能由翻译覆盖。运行时生成的消息使用 `ctx.locale` 选择文案；不要只翻译清单而遗漏工具返回值。
 
-## 程序化发现能力
+## 验证与发现
 
-第三方开发者和 AI Agent 可以先调用 discovery API，再决定该读哪份文档或写哪个字段：
+- `pnpm validate:plugin <目录 | PLUGIN.md | RUNTIME.md>` 验证整个包，包括其他子 runtime。
+- `GET /api/plugins/:id` 返回包的契约、设置、runtime、工具、UI 和数据声明。
+- `GET /api/framework/capabilities` 返回框架原语和发现入口。
+- `GET /api/worlds/:id/plugin-plan` 返回世界策略和显式默认请求。
 
-- `GET /api/framework/capabilities`：框架支持的 manifest 枚举、builtin tools、proposal types、world-data target/schema URI、plugin-data 写入路径。
-- `GET /api/plugins/:id`：某个插件的 canonical 描述，以及 runtimes、capabilities、tools、UI slots、`dataSchemas` 和 plugin-data namespace/schema 契约。
-- `GET /api/sessions/:id/plugin-data/:pluginId/_index`：某个 session 下插件实际已有的 namespace/key 索引，不返回 value。
-
-这组 API 回答“当前框架和插件声明支持什么”；具体字段含义仍以 `docs/reference/`、插件 JSON Schema 和插件自己的 `PLUGIN.md` 为准。
-
-## 调度声明
-
-调度由命名的**阶段 + 依赖**声明表达，这是唯一的调度权威。写可调度 runtime（`auto` / `scheduled`）请直接用下面的字段；`event` / `manual` runtime 不写 `stage`。字段的完整语义与边界见 [plugins.md 调度层级](../reference/plugins.md#调度层级)。
-
-- **`stage`** — 五个命名阶段之一：`setup`（游戏初始化）· `pre-turn`（玩家操作前）· `narrative`（主叙事）· `post-turn`（叙事后处理）· `audit`（审计）。阶段之间是**严格屏障**（前一阶段全部结束才进下一阶段）；同阶段内部的先后**只由依赖决定**，无依赖的 runtime 并发执行。
-- **`after`** — 弱排序依赖（**只排序、不设门**）：目标失败或缺席都不会拦住本 runtime。
-- **`needs`** — 强依赖（**排序 + 门控**）：目标本次未成功则本 runtime 被 `skipped`。每项可以是 runtime id，或 `{ capability, cardinality }`（`cardinality: one` = 在场任一提供者成功即可，`all` = 全部成功）。`scope: turn`（默认）要求同一次执行内成功，同时是同一 pass 内的 DAG 排序边；`scope: session` 对准执行开始时冻结的持久快照判定（仅 setup 用）。
-- **`inputs`** — 把某条隐式上游依赖升级为**有类型的同回合绑定**，解析进 function 的 `ctx.inputs.<name>`（agent 则注入一个保留 prompt 块）。每项：`from`（`{ runtime }` 或 `{ capability, cardinality }`）· `select`（RFC 6901 JSON Pointer，指进生产方成功 value）· `required`（`true` 蕴含 `needs(turn)` 门，`false` 蕴含 `after`）· `accepts`（runtime 目录相对的 JSON Schema 路径，校验最终注入值）。
-- **`input.schema`** — runtime 目录相对的 JSON Schema，校验本 runtime 的**激活载荷**（manual RPC / event payload），派发前强制执行。
-
-上面这组字段就是全部调度声明面，schema 对 frontmatter 做闭集校验，未列出的字段一律加载失败。所有 bundled 插件均单声明 `stage` + `needs`/`after`，无任何例外——`setup` 链是 `stage: setup` + `trigger: auto`，schema-gen 用显式 `after: [pregame]` 保持串行；同阶段内先后完全由声明边决定。
-
-**trigger 取值**：`auto` / `manual` / `scheduled` / `event` 四种，枚举闭合。
-
-**校验**：写完 manifest 跑 `pnpm validate:plugin <PLUGIN.md | 插件目录>`——一次执行 loader 解析（能否加载，报错带行号）+ strict authoring schema（`auto` / `scheduled` 缺 `stage` 直接报错）。`runtimeType: function` 必须同时声明 `handler`，且模块必须 `export default` 一个函数；缺声明或导出对象会在加载期直接失败。另外 server 启动装载插件时会对「`auto` / `scheduled` 却没有 `stage`、又不是纯 UI / entry 注册面」的 runtime 打 `schedulable-missing-stage` warning——这类声明会被当作 UI-only 习语永不调度。
-
-## 附录
-
-### A. 内置 UI 工具快速参考
-
-| 工具                  | 参数                                                    | 用途         |
-| --------------------- | ------------------------------------------------------- | ------------ |
-| `create-form`         | formId, title, fields[], submitLabel, narrativeTemplate | 创建玩家表单 |
-| `create-choices`      | choiceId, prompt, choices[]                             | 创建选项列表 |
-| `create-notification` | level, title, message, icon?                            | 显示通知消息 |
-
-完整工具清单（含 `plugin-data-*`、`create-character` 等）见 [docs/reference/tools.md](../reference/tools.md)。
-
-### B. 现有插件参考
-
-来源：当前 `plugins/**/PLUGIN.md` 的 frontmatter；下表列出代表性 runtime，并非完整清单。
-
-| Runtime                          | Stage       | 触发                                  | 类型          | 工具 / 关键能力                                  | 学习价值                          |
-| -------------------------------- | ----------- | ------------------------------------- | ------------- | ------------------------------------------------ | --------------------------------- |
-| `pregame`                        | `setup`     | `auto`（`maxTriggerCount: 1`）        | function      | 无                                               | 最简 function runtime,纯初始化    |
-| `world-init/schema-gen`          | `setup`     | `auto`（`maxTriggerCount: 1`）        | agent + guard | `tools.plugin`（initialize-world）               | guard 门控 + 原子单工具结构化输出 |
-| `char-creator/player-init`       | `setup`     | `auto`（guard 门控）                  | agent         | builtin `create-form`                            | 首轮表单 + setup 闸门             |
-| `npc-graph/rag-retriever`        | `pre-turn`  | `scheduled`（interval 1）             | function      | —                                                | 给 narrator 预拉结构化检索        |
-| `narrator`                       | `narrative` | `auto`                                | agent         | builtin `world-dimension-get` / `emit-event`     | 零代码主叙事 + 事件发射           |
-| `codex`                          | `post-turn` | `auto`                                | agent         | `sync-codex-entries` + plugin-data inject        | 新增/更新原子批量提交             |
-| `guide`                          | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（generate-guide）                 | inject narrator output 生成选项   |
-| `npc-graph/extractor`            | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `upsert-npc-graph` + 图谱预注入                  | 单次批量关系写入                  |
-| `char-creator/character-tracker` | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | builtin sync-characters / deferred get-character | 原子跟踪 NPC 状态变化             |
-| `memory`                         | —           | UI only（无 trigger）                 | UI            | —                                                | 纯前端面板,不占调度槽             |
-
-> 上表的 `guide` 与 `character-tracker` 用 `needs: [{ capability: narrative-engine }]` 直接门控当前叙事引擎；`codex` 与 `npc-graph/extractor` 则消费 `world-ir-provider` typed input，由它间接形成叙事依赖与失败 gate。两条路径都按 capability 发现 provider，因此传统模式（`narrator`）与对话模式（`chat-mode-narrator`）通用。
-
-完整注册表（含 stage 分带、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
-
-> **手动按钮 / 后台任务 / 多 runtime 协作**：可参考内置 `scene-stage`、[官方社区插件 MiMo TTS](https://github.com/covel-ai/covel-plugins/tree/main/plugins/mimo-tts)，或查看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例（注意：该样例的图像生成部分示范的是 `resolveSlot` 自管 wire 这条逃生口路径；新插件写**图像生成**本身请优先看 [plugin-authoring-advanced.md 第 6 节的 `ctx.images`](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)）。
-
-### C. Hook 组合行为
-
-hook 在统一服务端入口（frontmatter `entry` 字段指向的模块）里用 `covel.on` 注册，接入工具调用、runtime 执行、状态提交、回合开始和结束等生命周期点：
-
-```js
-// server/index.js（PLUGIN.md: entry: ./server/index.js）
-import validateTool from "../hooks/validate-tool.js";
-
-export default function (covel) {
-  covel.on("PreToolUse", validateTool, { enforce: "pre", timeoutMs: 3000 });
-}
-```
-
-entry 工厂的完整类型（`PluginAPI` / `PluginToolkit` / `PluginEntryFactory`）从 `@covel/runtime` 导入：JS 用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel`，TS 直接 `import type { PluginAPI } from "@covel/runtime"`——服务端实现按同一类型做编译期对齐，作者代码与框架不会悄悄漂移。
-
-`PreRuntime`、`PostContextAssembly`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止后续 handler；各入口按事件契约决定是否阻止动作，`PreLLMCall` / `PostLLMResponse` 是转换型入口，abort 时保留原请求/响应。
-
-围绕上下文与 LLM 调用的几个事件可改写模型交互本身：`PostContextAssembly` 在 `buildContext` 之后、进 loop 之前 turn 级（每 runtime 一次）改写已装配的 `systemPrompt` / 投影历史；`PreLLMCall` 在每次调用前非破坏性改写发往模型的 `messages` / `model` / `tools`（不动底层 transcript）；`PostLLMResponse` 在响应返回后、工具派发前 patch `content` / `toolCalls`。`PostToolUse` 还可用 `replace.terminate: true` 在记录工具结果后提前结束工具循环。
-
-回合级还有一对压缩 hook：`PreCompaction`（`sequential`，`abort` 可让本回合跳过历史压缩、保留完整上下文）与 `PostCompaction`（`parallel`，观察压缩结果 `compacted` / `summaryId`）。另有 `PreSchedule`（`sequential`）：在触发选择之后、调度之前用 `replace.triggered` 收窄本回合实际运行的 runtime 集（条件门控 / 成本控制）。
-
-会话级（无回合）有 `SessionStart`（会话创建后,payload `{sessionId, worldId}`）与 `SessionEnd`（状态→`ended` 或 DELETE,payload `{sessionId, reason}`）两个 `parallel` 观察 hook,适合 session 级初始化 / 清理。它们在 server 的 session 路由触发,`turnId` 为空。
-
-Hook 的 `ctx.signal` 在超时或父执行取消时触发；把它传给 `fetch` 等协作式 I/O。超时会结束框架等待，迟到返回值不再被采用，但不能强制停止任意 JS 代码。`TurnStart` 与 `PostRuntime` 使用顺序语义；收尾观察 Hook 仍受各自超时约束。
-
-entry 必须在返回前完成注册（异步初始化需要 await）。所有 entry 成功后注册才发布；失败不残留本次注册，允许下次激活重试。不要在工厂返回后的定时器或 RPC 中调用注册 API。详见 [entry 生命周期](../reference/plugins.md#entry统一服务端入口)。
-
-**所有 hook 都是 session 作用域的**：pipeline 虽是全局单例,但执行时按当前 session 的激活插件集过滤——你的 hook **只对启用了你插件的 session 触发**(框架 hook 始终触发)。无需在 handler 里自行判断插件是否激活;`HookContext.activePluginIds` 可读当前激活集。
-
-> **community 插件注意**：`entry` 里注册的 hook 从**插件激活时**（审批通过 / 首次 runtime 调度）起生效，而非 boot 时——激活点之前发生的早期事件（如本会话的 `SessionStart`）收不到。builtin 的 entry 在 boot 时运行,无此限制。
-
-**读取本插件的会话级设置（`ctx.getOwnSettings`）**：hook handler 的 `ctx` 上有一个只读取数器 `getOwnSettings`，让 hook 行为可以「每会话可配」——无需声明 inject、也无需做工具调用往返。它复用了上面的 session 作用域（与 `activePluginIds` 同一个 ALS scope），由 pipeline 在调用每个 handler 前按其 `pluginId` 注入：
-
-```ts
-// hooks/validate-tool.ts
-export default async function validateTool(ctx, payload) {
-  const settings = ctx.getOwnSettings?.() ?? {};
-  if (settings.strictMode === true) {
-    // 按玩家保存的设置改变 hook 行为
-    return { action: "abort", reason: "strict mode blocks this tool" };
-  }
-  return { action: "continue" };
-}
-```
-
-约定与边界：
-
-- **只读**：返回的是冻结快照（`Object.freeze`），不能写；hook 仍然只能 guard / rewrite / audit，没有任何写库或 eventBus 通道。
-- **只看自己**：仅暴露 handler 所属插件的 `userSettings`（请求覆盖、世界配置与 manifest 默认值合并后的结果），读不到其它插件的设置。
-- **操作快照**：执行与提交共享本次操作的配置值；恢复、会话创建/结束/删除和角色编辑也提供配置，按各自请求开始时的值解析。快照不保留调用方的可变引用。后台任务沿用入队配置。具体时点见 [Hook 配置契约](../reference/plugins.md)。
-- **安全降级**：框架 / 全局 hook（无 `pluginId`）或没有声明配置的插件返回 `{}`；自定义宿主省略 scope 配置时也返回 `{}`。完全无作用域（例如单测直接调 `pipeline.run`）时 `ctx.getOwnSettings` 可能为 `undefined`——务必写成 `ctx.getOwnSettings?.() ?? {}`。
-
-`SessionStart`、`SessionEnd`、`PostCompaction`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
-
-排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / entry](../reference/plugins.md#entry统一服务端入口)。
-
-### D. 文件结构速查
-
-```
-plugins/<plugin-id>/
-├── README.md             # 必需：给人类 / 开发者看的插件说明
-├── PLUGIN.md              # 必需：frontmatter + 提示词
-├── output.schema.json     # 可选：agent runtime 结构化输出的 JSON Schema（默认约定文件名）
-├── package.json           # 必需：workspace 依赖
-├── .npmrc                 # 必需：供应链防护（minimum-release-age=10080）
-├── vitest.config.ts       # 可选：测试配置
-├── server/                # 可选：统一服务端入口（frontmatter entry 指向）
-│   └── index.js           #   export default function (covel) { 注册工具/hook/RPC/wire }
-├── tools/                 # 可选：本地工具（由 server/index.js 导入并 registerTool）
-│   └── my-tool.ts
-├── tests/                 # 可选：测试文件
-│   └── my-plugin.test.ts
-├── references/            # 可选：维护者参考文件；框架不会自动加载
-│   └── design-notes.md
-└── runtimes/              # 可选：多 runtime 子目录
-    └── sub-runtime/
-        └── PLUGIN.md
-```
-
-`README.md` 写给人类和开发者，建议包含：插件用途、玩家能看到什么、运行时组成、数据读写位置、主要文件、测试方式和已知限制。`PLUGIN.md` 写给框架和模型；单 runtime 插件的正文是提示词，多 runtime 插件的子目录 `PLUGIN.md` 正文才是各 runtime 的提示词。
-
-> **多 runtime 插件的根 PLUGIN.md**：当 `runtimes/` 存在时，框架不再把根 `PLUGIN.md` 当成 runtime——但仍会读它的 frontmatter `name`/`description` 作为整个插件的展示信息。**没有**根 PLUGIN.md 时，UI 会回退显示 plugin id（如 `dashscope-image-gen`），不直观。详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
-
-> **`output.schema`**：frontmatter 的 `output.schema` 接受一个相对该 runtime 目录的路径（如 `./schemas/out.schema.json`），loader 会按声明加载并做 realpath containment 校验（阻断 `../` 逃逸）。未声明时回落到同目录 `output.schema.json` 约定文件。声明了路径但文件缺失只会 `console.warn` 而不中断加载。
-
-> **单批工具 runtime**：如果某个工具成功就是 agent 的最终产物，可在 frontmatter 设置 `completeAfterTools: [save-result]`。框架会执行完模型同一响应中的全部业务工具，并在指定工具成功且该批无失败时直接结束，省去只输出 `runtime-done` 的第二次模型调用。不要把需要读取结果后继续决策的查询工具列入；无更新分支仍可显式调用 `runtime-done`。非 story runtime 同时配置 `output.schema` 与 `requireToolUse: true` 时，成功终结工具的对象结果会直接作为 runtime 输出并再次经过 schema gate，因此可用工具参数承担结构化输出，避免同时要求模型返回 JSON 文本。
-
-### E. 供应链防护（`.npmrc`）
-
-每个插件根目录必须包含 `.npmrc`，内容固定为：
-
-```ini
-# 供应链防护：拒绝安装发布不足 7 天的依赖版本（10080 分钟）
-# 仅在本插件作为独立项目安装时生效；在 Covel 主仓 workspace 内会被根配置接管。
-minimum-release-age=10080
-```
-
-**为什么需要每个插件单独配置：**
-
-- `minimumReleaseAge` 是**安装方**（consumer-side）的策略，不是发布到 npm 的元数据；它由"谁在跑 `pnpm install`"决定，不会随 package 元信息分发。
-- 在 Covel 主仓 workspace 内，根 `pnpm-workspace.yaml` 已声明 `minimumReleaseAge: 10080`，覆盖所有 workspace member。本字段对 workspace 内插件是冗余但无害。
-- 当插件被**第三方独立 clone / 安装 / 作为 community plugin 通过 `COVEL_USER_PLUGINS_DIR` 加载**时，下游用户在插件目录里跑 `pnpm install` 会读到本 `.npmrc`，7 天延迟规则即时生效。这是阻断"刚发布的恶意包"进入插件运行环境的最后一道防线。
-
-**注意：**
-
-- `.npmrc` 用 kebab-case (`minimum-release-age`)；`pnpm-workspace.yaml` 用 camelCase (`minimumReleaseAge`)。pnpm 两边都吃，但**不要混写**。
-- `scripts/create-plugin.js` 生成的新插件骨架已自动带上此文件；如果是从已有插件 fork，请手动补齐。
-- 如需为内部 scope 例外（例如自家 `@covel/*` 私包要立即生效），追加：
-  ```ini
-  minimum-release-age-exclude[]=@covel/*
-  ```
-
-### F. 依赖分层与复用规范
-
-插件依赖声明的位置不是随意的——它由两条硬约束决定：**插件由玩家按需启用**，且**桌面打包只 stage 插件的 `dependencies`**（`apps/desktop/scripts/build.mjs` 的 `ensurePluginWorkspaceDeps`）。声明错位置 = 玩家启用该插件时 `ERR_MODULE_NOT_FOUND`。
-
-**依赖分层（哪些进 `dependencies`、哪些进 `devDependencies`）：**
-
-| 用途                                    | 位置              | 例子                                               |
-| --------------------------------------- | ----------------- | -------------------------------------------------- |
-| handler.js / guard.js **运行时 import** | `dependencies`    | `@covel/plugin-handlers-utils`、`@covel/tools`     |
-| 仅 JSDoc / `import type` 引用的类型     | `devDependencies` | `@covel/plugin-loader`（`FunctionHandlerContext`） |
-| 仅测试用                                | `devDependencies` | `@covel/plugin-test-utils`、`vitest`               |
-
-- `function` runtime 必须把 handler 运行时依赖放 `dependencies`；`agent` / `zero-code` 没有 handler.js，通常不声明任何 `@covel` 运行时依赖。
-- 脚手架（`scripts/create-plugin.js`）已按模板生成正确分层；从已有插件 fork 时手动核对，**不要把运行时依赖留在 `devDependencies`**（dev 能跑、打包后会缺）。
-
-**共用包提取阈值（避免过度抽象）：**
-
-`@covel/plugin-handlers-utils` 收纳 function-runtime handler 的纯函数 helper（输入规范化 + `makeProposal`）。提取门槛是经验法则：
-
-- **≥3 个插件真实复用** → 提取到 `plugin-handlers-utils`。
-- **1–2 个插件用** → 内联在插件本地，接受少量重复——去重收益只有在 3 个以上调用方时才盖过"多一条依赖边 + 多一处声明"的成本（YAGNI）。
-- 有合法定制需求时（例如 `branch-reply` 的本地 `normalizeRequiredString` 额外强制长度上限）→ 本地定义优先，加一行注释说明为何不用共用版本。
-
-**类型依赖显式化：** 只用到类型的 `@covel` 包，`.ts` 里用 `import type`、`.js` 里用 JSDoc `@param {import('@covel/...').Type}`，并放 `devDependencies`。这样 `package.json` 自我说明：`dependencies` = 运行时真需要，`devDependencies` = 开发期才需要。
-
-**依赖卫生（自动对账）：** CI 的 `pnpm deps:check`（knip）拦截 unused / missing 依赖——声明了不用、或用了没声明都会让 CI 失败。knip 能识别 JSDoc 类型引用和测试文件，type-only / test-only 依赖不会被误判。本地可随时 `pnpm deps:check` 自查。
+测试应验证用户可观察的结果、非法输入、数据归属，以及失败时不发生部分提交。CI 前运行项目的 `pnpm lint` 和 `pnpm test`；涉及玩家 UI 流程时补相应浏览器验收。

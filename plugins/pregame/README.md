@@ -11,7 +11,7 @@
 
 - 在 Pre-Game 阶段执行一次。
 - 准备欢迎叙事和通知。
-- 返回 `preGameDone: true`，让框架推进准备状态。
+- 返回 `completion: "done"`，让框架推进准备状态。
 
 ## 开发
 

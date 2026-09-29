@@ -1,4 +1,8 @@
-import { i18nTextSchema, worldDimensionsSchema } from "@covel/shared";
+import {
+  characterSchemaRecordSchema,
+  i18nTextSchema,
+  worldDimensionsSchema,
+} from "@covel/shared";
 import { z } from "zod";
 import {
   checkpointRecordArrays,
@@ -44,6 +48,7 @@ export const checkpointDomainsSchema = z
       })
       .nullable(),
     ...recordArrays,
+    characterSchema: characterSchemaRecordSchema.nullable(),
     state: state.optional(),
   })
   .superRefine((checkpoint, context) => {
@@ -78,12 +83,32 @@ export const checkpointDomainsSchema = z
     ) as (keyof typeof recordArrays)[]) {
       validateOwnership(checkpoint[key], [key]);
     }
+    if (
+      checkpoint.characterSchema &&
+      checkpoint.characterSchema.sessionId !== sessionId
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["characterSchema", "sessionId"],
+        message: "must match checkpoint.sessionId",
+      });
+    }
     if (checkpoint.state) {
       for (const key of ["schemas", "entries", "changes"] as const) {
         validateOwnership(checkpoint.state[key], ["state", key]);
       }
     }
     checkpoint.snapshots.forEach((snapshot, index) => {
+      if (
+        snapshot.payload.characterSchema &&
+        snapshot.payload.characterSchema.sessionId !== sessionId
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["snapshots", index, "payload", "characterSchema", "sessionId"],
+          message: "must match checkpoint.sessionId",
+        });
+      }
       for (const key of Object.keys(
         snapshotRecordArrays,
       ) as (keyof typeof snapshotRecordArrays)[]) {

@@ -74,6 +74,7 @@ export default function ({ tool, z }) {
     description:
       "Define the world's character attribute schema. Pass all attribute definitions in a single call. Supported types: string | number (may set min/max/defaultValue) | boolean | enum (needs options) | array (needs itemType) | object (needs subSchema to describe sub-fields) | map (optional valueType). Cover at least the core mechanics that recur throughout the worldbuilding document.",
     parameters: z.object({
+      types: z.array(z.string().min(1)).default(["npc", "companion"]),
       attributes: z
         .array(attributeSchema)
         .min(1)
@@ -82,10 +83,8 @@ export default function ({ tool, z }) {
     execute: async (params, context) => {
       const now = new Date().toISOString();
       const worldSchema = {
-        "character-attributes": {
-          version: 1,
-          attributes: params.attributes,
-        },
+        types: params.types ?? ["npc", "companion"],
+        attributes: params.attributes,
       };
       return withPendingProposals(
         {
@@ -94,13 +93,7 @@ export default function ({ tool, z }) {
           categories: [...new Set(params.attributes.map((a) => a.category))],
           worldSchema,
         },
-        [
-          makeProposal(context, now, "plugin.data", {
-            namespace: "schema",
-            key: "character-attributes",
-            value: worldSchema["character-attributes"],
-          }),
-        ],
+        [makeProposal(context, now, "character.schema.set", worldSchema)],
       );
     },
   });

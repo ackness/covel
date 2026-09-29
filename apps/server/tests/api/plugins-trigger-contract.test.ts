@@ -28,11 +28,14 @@ describe("plugin trigger discovery contract", () => {
           pluginType: "plugin",
           runtimeCount: 1,
         },
-        manifest: {
-          manifest: { ...authored, pluginId: authored.name, description },
-          promptTemplate: "",
-          rawFrontmatter: {},
-        },
+        manifests: [
+          {
+            runtime: { type: "agent" as const },
+            manifest: { ...authored, pluginId: authored.name, description },
+            promptTemplate: "",
+            rawFrontmatter: {},
+          },
+        ],
         loadedRuntimes: new Map(),
       });
 

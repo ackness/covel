@@ -56,16 +56,40 @@ afterEach(() => {
 });
 
 function renderBranchReply(value: Record<string, unknown>) {
-  const BranchReplyCandidates = covelRegistry.BranchReplyCandidates;
+  const CandidateList = covelRegistry.CandidateList;
   return render(
     <JSONUIProvider registry={covelRegistry}>
-      <BranchReplyCandidates
+      <CandidateList
         element={{
-          type: "BranchReplyCandidates",
+          type: "CandidateList",
           props: {
-            pluginId: "branch-reply",
-            runtimeId: "branch-reply",
-            value,
+            candidates: value.candidates,
+            contentField: "text",
+            turnId: value.turnId,
+            hiddenWhen: { field: "source", equals: "original" },
+            acceptAction: value.turnId
+              ? {
+                  pluginId: "branch-reply",
+                  runtimeId: "branch-reply",
+                  payload: {
+                    action: "acceptCandidate",
+                    turnId: { from: "props.turnId" },
+                    candidateId: { from: "item.id" },
+                  },
+                }
+              : undefined,
+            regenerateAction: value.turnId
+              ? {
+                  pluginId: "branch-reply",
+                  runtimeId: "branch-reply",
+                  payload: {
+                    action: "createCandidates",
+                    turnId: { from: "props.turnId" },
+                    baseText: { from: "props.candidates.0.text" },
+                    count: 3,
+                  },
+                }
+              : undefined,
             title: "Reply candidates",
             draftLabel: "Draft",
             sendLabel: "Send",
@@ -84,7 +108,7 @@ function renderBranchReply(value: Record<string, unknown>) {
   );
 }
 
-describe("BranchReplyCandidates", () => {
+describe("CandidateList", () => {
   const candidateSet = {
     turnId: "turn-42",
     candidates: [
@@ -176,7 +200,7 @@ describe("BranchReplyCandidates", () => {
     expect(sessionMock.current.upsertInteractionDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         turnId: "turn-42",
-        selectionGroup: "branch-reply:turn-42",
+        selectionGroup: "candidates:turn-42",
         values: {
           text: "Ask about the sealed door.",
           candidateId: "turn-42-candidate-1",

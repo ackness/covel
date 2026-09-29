@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { WorldVisual } from "@/lib/world-visuals.js";
 import {
-  applySceneSetPreview,
-  applyStageDirectionPreview,
   assignStations,
   computeSpriteLanes,
   computeSpriteSlots,
@@ -14,9 +12,7 @@ import {
   hasSubmittedForm,
   initialStageReadStoryKey,
   mergeChoices,
-  pluginIdForCapability,
   resolveBackdrop,
-  resolveStageSpeakers,
   stageStoryKey,
   type SpritePosition,
   type StageCurrentRecord,
@@ -56,8 +52,8 @@ describe("resolveBackdrop", () => {
   it("有图: a resolved MediaRef renders the scene", () => {
     const stage: StageCurrentRecord = {
       name: "教室",
-      source: "world",
-      resolved: ref("scene-1"),
+      pending: false,
+      ref: ref("scene-1"),
     };
     expect(resolveBackdrop(stage, worldVisual)).toEqual({
       kind: "scene",
@@ -68,8 +64,7 @@ describe("resolveBackdrop", () => {
   it("pending: generating keeps the previous frame (or hero) with a badge", () => {
     const stage: StageCurrentRecord = {
       name: "unknown-alley",
-      source: "pending",
-      resolved: null,
+      pending: true,
     };
     expect(resolveBackdrop(stage, worldVisual)).toEqual({
       kind: "previous-or-hero",
@@ -80,8 +75,7 @@ describe("resolveBackdrop", () => {
   it("none: explicit no-art location falls back to the world hero image", () => {
     const stage: StageCurrentRecord = {
       name: "storage-closet",
-      source: "none",
-      resolved: null,
+      pending: false,
     };
     expect(resolveBackdrop(stage, worldVisual)).toEqual({
       kind: "hero",
@@ -101,67 +95,8 @@ describe("resolveBackdrop", () => {
   });
 });
 
-describe("applySceneSetPreview", () => {
-  const registry = {
-    scenes: [
-      {
-        sceneId: "classroom",
-        name: "二年 B 组",
-        locationRef: "教室",
-        day: ref("classroom-day"),
-        night: ref("classroom-night"),
-      },
-    ],
-  };
-
-  it("switches to imported day/night art immediately", () => {
-    expect(
-      applySceneSetPreview(
-        undefined,
-        registry,
-        { location: "二年 B 组", timeOfDay: "night" },
-        "turn-2",
-      ),
-    ).toMatchObject({
-      sceneId: "classroom",
-      name: "二年 B 组",
-      variant: "night",
-      source: "world",
-      resolved: ref("classroom-night"),
-      turnId: "turn-2",
-    });
-  });
-
-  it("uses normalized locationRef matching", () => {
-    expect(
-      applySceneSetPreview(undefined, registry, {
-        location: " 教 室 ",
-        timeOfDay: "day",
-      }),
-    ).toMatchObject({ resolved: ref("classroom-day") });
-  });
-
-  it("keeps the previous frame while an unknown scene awaits resolution", () => {
-    const previous: StageCurrentRecord = {
-      sceneId: "classroom",
-      name: "二年 B 组",
-      source: "world",
-      resolved: ref("classroom-day"),
-    };
-    expect(
-      applySceneSetPreview(previous, registry, {
-        location: "学生会室",
-        timeOfDay: "day",
-      }),
-    ).toMatchObject({ name: "学生会室", source: "pending" });
-  });
-});
-
 describe("computeSpriteSlots", () => {
-  // Real shapes: scene-cast keys speakers by the scoped `<sessionId>-<id>`
-  // (scopedCharacterId), while character-presence keys records by the bare
-  // `characterId`. The join must reconcile the two — a same-string fixture
-  // would mask the break.
+  // Projections supply canonical character ids to both slots.
   const SESSION = "haruka-academy-1a2b3c4d";
   const speakers: StageSpeaker[] = [
     { id: `${SESSION}-lin`, name: "林月" },
@@ -169,8 +104,13 @@ describe("computeSpriteSlots", () => {
     { id: `${SESSION}-ghost`, name: "无立绘的角色" },
   ];
 
-  it("joins a scoped speaker id to a bare-keyed presence record", () => {
-    const presence = { lin: { characterId: "lin", sprite: ref("lin-sprite") } };
+  it("joins canonical projected visual and actor ids", () => {
+    const presence = {
+      [`${SESSION}-lin`]: {
+        characterId: `${SESSION}-lin`,
+        sprite: ref("lin-sprite"),
+      },
+    };
     const slots = computeSpriteSlots(speakers.slice(0, 1), presence);
     expect(slots).toEqual([
       {
@@ -192,8 +132,14 @@ describe("computeSpriteSlots", () => {
 
   it("2 speakers split left/right", () => {
     const presence = {
-      lin: { characterId: "lin", sprite: ref("lin-sprite") },
-      archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
+      [`${SESSION}-lin`]: {
+        characterId: `${SESSION}-lin`,
+        sprite: ref("lin-sprite"),
+      },
+      [`${SESSION}-archivist`]: {
+        characterId: `${SESSION}-archivist`,
+        sprite: ref("archivist-sprite"),
+      },
     };
     const slots = computeSpriteSlots(speakers.slice(0, 2), presence);
     expect(slots.map((s) => s.pos)).toEqual(["left", "right"]);
@@ -201,9 +147,18 @@ describe("computeSpriteSlots", () => {
 
   it("3 speakers: fresh layout centers the primary, wings the rest", () => {
     const presence = {
-      lin: { characterId: "lin", sprite: ref("lin-sprite") },
-      archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
-      ghost: { characterId: "ghost", sprite: ref("ghost-sprite") },
+      [`${SESSION}-lin`]: {
+        characterId: `${SESSION}-lin`,
+        sprite: ref("lin-sprite"),
+      },
+      [`${SESSION}-archivist`]: {
+        characterId: `${SESSION}-archivist`,
+        sprite: ref("archivist-sprite"),
+      },
+      [`${SESSION}-ghost`]: {
+        characterId: `${SESSION}-ghost`,
+        sprite: ref("ghost-sprite"),
+      },
     };
     const slots = computeSpriteSlots(speakers, presence);
     // Newcomers gravitate to center in salience order (ties break left):
@@ -213,8 +168,14 @@ describe("computeSpriteSlots", () => {
 
   it("marks speakers[0] active, falls back to avatar, and keeps artless speakers as null slots", () => {
     const presence = {
-      lin: { characterId: "lin", sprite: ref("lin-sprite") },
-      archivist: { characterId: "archivist", avatar: ref("archivist-avatar") }, // falls back to avatar
+      [`${SESSION}-lin`]: {
+        characterId: `${SESSION}-lin`,
+        sprite: ref("lin-sprite"),
+      },
+      [`${SESSION}-archivist`]: {
+        characterId: `${SESSION}-archivist`,
+        avatar: ref("archivist-avatar"),
+      }, // falls back to avatar
       // ghost has no presence entry at all — kept on stage with ref: null
     };
     const slots = computeSpriteSlots(speakers, presence);
@@ -239,7 +200,10 @@ describe("computeSpriteSlots", () => {
     // The bug: speakers[0] (林月) has no art, only the second speaker does.
     // Dropping 林月 left 档案员's sprite alone while the nameplate said 林月.
     const presence = {
-      archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
+      [`${SESSION}-archivist`]: {
+        characterId: `${SESSION}-archivist`,
+        sprite: ref("archivist-sprite"),
+      },
     };
     const slots = computeSpriteSlots(speakers.slice(0, 2), presence);
     expect(slots).toHaveLength(2);
@@ -264,196 +228,27 @@ describe("computeSpriteSlots", () => {
     expect(slots[0]).toMatchObject({ exiting: true, active: false });
     expect(slots[1]).toMatchObject({ active: true });
   });
-});
 
-describe("resolveStageSpeakers", () => {
-  const fallback: StageSpeaker[] = [{ id: "legacy-rin", name: "朝仓凛" }];
-
-  it("uses scene-cast until direction state exists", () => {
-    expect(resolveStageSpeakers(undefined, fallback)).toEqual(fallback);
-  });
-
-  it("treats an explicit empty actor list as an authoritative stage clear", () => {
-    expect(resolveStageSpeakers({ actors: [] }, fallback)).toEqual([]);
-  });
-
-  it("moves the focused actor first and preserves visual requests", () => {
-    expect(
-      resolveStageSpeakers(
-        {
-          actors: [
-            {
-              characterId: "rin",
-              displayName: "朝仓凛",
-              position: "left",
-              visual: { outfit: "uniform", expression: "neutral" },
-            },
-            {
-              characterId: "kaho",
-              displayName: "椎名夏帆",
-              active: true,
-              position: "right",
-              transition: "dissolve",
-              visual: { variantId: "summer-smile" },
-            },
-          ],
-        },
-        fallback,
-      ),
-    ).toEqual([
-      {
-        id: "kaho",
-        name: "椎名夏帆",
-        position: "right",
-        transition: "dissolve",
-        visual: { variantId: "summer-smile" },
-      },
-      {
-        id: "rin",
-        name: "朝仓凛",
-        position: "left",
-        visual: { outfit: "uniform", expression: "neutral" },
-      },
-    ]);
-  });
-
-  it("drops duplicate or invalid explicit positions for automatic placement", () => {
-    expect(
-      resolveStageSpeakers(
-        {
-          actors: [
-            { characterId: "a", displayName: "A", position: "left" },
-            { characterId: "b", displayName: "B", position: "left" },
-            { characterId: "c", displayName: "C", position: "ceiling" },
-          ],
-        },
-        fallback,
-      ),
-    ).toEqual([
-      { id: "a", name: "A", position: "left" },
-      { id: "b", name: "B" },
-      { id: "c", name: "C" },
-    ]);
-  });
-});
-
-describe("applyStageDirectionPreview", () => {
-  const presence = {
-    rin: { characterId: "rin", displayName: "朝仓凛" },
-    kaho: { characterId: "kaho", displayName: "椎名夏帆" },
-  };
-
-  it("applies enter, visual, position and focus cues before commit", () => {
-    const result = applyStageDirectionPreview(
+  it("respects explicit focus on the second actor", () => {
+    const slots = computeSpriteSlots(
       [
-        {
-          id: "rin",
-          name: "朝仓凛",
-          position: "left",
-          visual: { variantId: "uniform-playful", outfit: "uniform" },
-        },
+        { id: "first", name: "First", active: false },
+        { id: "second", name: "Second", active: true },
       ],
-      presence,
-      [
-        {
-          type: "actor.update",
-          character: "凛",
-          expression: "surprised",
-        },
-        {
-          type: "actor.enter",
-          character: "椎名夏帆",
-          position: "right",
-          variantId: "summer-smile",
-          transition: "slide-right",
-          focus: true,
-        },
-      ],
+      {},
     );
-    expect(result).toEqual([
-      {
-        id: "kaho",
-        name: "椎名夏帆",
-        position: "right",
-        visual: { variantId: "summer-smile" },
-        transition: "slide-right",
-      },
-      {
-        id: "rin",
-        name: "朝仓凛",
-        position: "left",
-        visual: { outfit: "uniform", expression: "surprised" },
-      },
-    ]);
+    expect(slots.map((slot) => slot.active)).toEqual([false, true]);
   });
 
-  it("previews an authoritative clear with exits and ignores unresolved actors", () => {
-    expect(
-      applyStageDirectionPreview([{ id: "rin", name: "朝仓凛" }], presence, [
-        { type: "actor.update", character: "不存在", expression: "smile" },
-        { type: "stage.clear" },
-      ]),
-    ).toEqual([
-      {
-        id: "rin",
-        name: "朝仓凛",
-        exiting: true,
-        transition: "fade",
-      },
-    ]);
-  });
-
-  it("admits new actors after a full stage is cleared in the same event", () => {
-    const fullStage = ["a", "b", "c", "d"].map((id) => ({
-      id,
-      name: id.toUpperCase(),
-    }));
-    const result = applyStageDirectionPreview(
-      fullStage,
-      {
-        ...presence,
-        newcomer: { characterId: "newcomer", displayName: "Newcomer" },
-      },
+  it("keeps every actor dim when all active flags are false", () => {
+    const slots = computeSpriteSlots(
       [
-        { type: "stage.clear", transition: "fade" },
-        { type: "actor.enter", character: "Newcomer", focus: true },
+        { id: "first", name: "First", active: false },
+        { id: "second", name: "Second", active: false },
       ],
+      {},
     );
-
-    expect(result).toHaveLength(4);
-    expect(result[0]).toMatchObject({
-      id: "newcomer",
-      name: "Newcomer",
-    });
-    expect(result.filter((actor) => actor.exiting)).toHaveLength(3);
-  });
-
-  it("keeps a leaving actor for the requested speculative exit animation", () => {
-    expect(
-      applyStageDirectionPreview(
-        [
-          { id: "rin", name: "朝仓凛", position: "left" },
-          { id: "kaho", name: "椎名夏帆", position: "right" },
-        ],
-        presence,
-        [
-          {
-            type: "actor.leave",
-            character: "朝仓凛",
-            transition: "slide-left",
-          },
-        ],
-      ),
-    ).toEqual([
-      {
-        id: "rin",
-        name: "朝仓凛",
-        position: "left",
-        exiting: true,
-        transition: "slide-left",
-      },
-      { id: "kaho", name: "椎名夏帆", position: "right" },
-    ]);
+    expect(slots.map((slot) => slot.active)).toEqual([false, false]);
   });
 });
 
@@ -732,10 +527,18 @@ describe("mergeChoices", () => {
       scene: "library",
       recap: "You followed the archivist into the restricted library.",
       decision: "What will you investigate first?",
-      prompt2Text: "追问档案员",
-      prompt2Label: { zh: "追问", en: "Ask" },
-      prompt1Text: "环顾四周",
-      prompt1Label: { zh: "观察", en: "Observe" },
+      choices: [
+        {
+          id: "prompt:1",
+          text: "环顾四周",
+          label: { zh: "观察", en: "Observe" },
+        },
+        {
+          id: "prompt:2",
+          text: "追问档案员",
+          label: { zh: "追问", en: "Ask" },
+        },
+      ],
     };
     const merged = mergeChoices(interactionChoices, prompts, "zh-CN");
 
@@ -760,7 +563,7 @@ describe("mergeChoices", () => {
       prompt: "How do you respond?",
     });
     expect(merged.groups[1]).toMatchObject({
-      id: "scene-prompts",
+      id: "suggestions",
       prompt: "What will you investigate first?",
     });
     expect(merged.twoColumn).toBe(false);
@@ -779,7 +582,7 @@ describe("mergeChoices", () => {
           zh: "你要从哪一侧进入？",
           en: "Which side will you enter?",
         },
-        prompt1Text: "从亮着灯的正门进去",
+        choices: [{ id: "prompt:1", text: "从亮着灯的正门进去" }],
       },
       "zh-CN",
     );
@@ -790,18 +593,26 @@ describe("mergeChoices", () => {
       decision: "你要从哪一侧进入？",
     });
     expect(merged.groups).toEqual([
-      expect.objectContaining({ id: "scene-prompts", prompt: undefined }),
+      expect.objectContaining({ id: "suggestions", prompt: undefined }),
     ]);
   });
 
   it("skips empty prompt slots", () => {
     const prompts = {
-      prompt1Text: "环顾四周",
-      prompt1Label: { zh: "观察", en: "Observe" },
-      prompt2Text: "",
-      prompt3Text: "   ",
-      prompt4Text: "追问档案员",
-      prompt4Label: { zh: "追问", en: "Ask" },
+      choices: [
+        {
+          id: "prompt:1",
+          text: "环顾四周",
+          label: { zh: "观察", en: "Observe" },
+        },
+        { id: "prompt:2", text: "" },
+        { id: "prompt:3", text: "   " },
+        {
+          id: "prompt:4",
+          text: "追问档案员",
+          label: { zh: "追问", en: "Ask" },
+        },
+      ],
     };
     const merged = mergeChoices([], prompts, "zh-CN");
     expect(merged.items.map((i) => i.label)).toEqual([
@@ -812,12 +623,14 @@ describe("mergeChoices", () => {
 
   it("marks the list two-column once combined items exceed 6", () => {
     const prompts = {
-      prompt1Text: "p1",
-      prompt2Text: "p2",
-      prompt3Text: "p3",
-      prompt4Text: "p4",
-      prompt5Text: "p5",
-      prompt6Text: "p6",
+      choices: [
+        { id: "prompt:1", text: "p1" },
+        { id: "prompt:2", text: "p2" },
+        { id: "prompt:3", text: "p3" },
+        { id: "prompt:4", text: "p4" },
+        { id: "prompt:5", text: "p5" },
+        { id: "prompt:6", text: "p6" },
+      ],
     };
     const manyInteraction = [
       {
@@ -868,56 +681,23 @@ describe("deriveDecisionRecapFallback", () => {
 
 describe("filterStalePrompts", () => {
   it("keeps prompts stamped with the current turn", () => {
-    const ns = { __turnId: "turn-5", prompt1Text: "环顾四周" };
+    const ns = {
+      turnId: "turn-5",
+      choices: [{ id: "prompt:1", text: "环顾四周" }],
+    };
     expect(filterStalePrompts(ns, "turn-5")).toBe(ns);
   });
 
   it("drops prompts stamped with a past turn", () => {
-    const ns = { __turnId: "turn-4", prompt1Text: "环顾四周" };
-    expect(filterStalePrompts(ns, "turn-5")).toEqual({});
+    const ns = {
+      turnId: "turn-4",
+      choices: [{ id: "prompt:1", text: "环顾四周" }],
+    };
+    expect(filterStalePrompts(ns, "turn-5")).toBeUndefined();
   });
 
   it("keeps prompts with no __turnId stamp (back-compat with old data)", () => {
-    const ns = { prompt1Text: "环顾四周" };
+    const ns = { choices: [{ id: "prompt:1", text: "环顾四周" }] };
     expect(filterStalePrompts(ns, "turn-5")).toBe(ns);
-  });
-});
-
-describe("pluginIdForCapability", () => {
-  const carrier = (id: string, active: boolean, capabilities: string[]) => ({
-    id,
-    active,
-    capabilities,
-  });
-
-  it("returns the active plugin that declares the capability", () => {
-    const plugins = [
-      carrier("scene-stage", true, ["scene-stage"]),
-      carrier("other", true, ["something-else"]),
-    ];
-    expect(pluginIdForCapability(plugins, "scene-stage")).toBe("scene-stage");
-  });
-
-  it("skips an inactive provider even when it declares the capability", () => {
-    const plugins = [carrier("scene-stage", false, ["scene-stage"])];
-    expect(pluginIdForCapability(plugins, "scene-stage")).toBeUndefined();
-  });
-
-  it("returns undefined when no active plugin provides the capability", () => {
-    const plugins = [carrier("other", true, ["something-else"])];
-    // No fall back to the capability name as an id.
-    expect(pluginIdForCapability(plugins, "scene-stage")).toBeUndefined();
-  });
-
-  it("picks the lexicographically smallest id among active matches", () => {
-    // Deterministic regardless of input order.
-    const plugins = [
-      carrier("zeta-stage", true, ["scene-stage"]),
-      carrier("alpha-stage", true, ["scene-stage"]),
-    ];
-    expect(pluginIdForCapability(plugins, "scene-stage")).toBe("alpha-stage");
-    expect(pluginIdForCapability([...plugins].reverse(), "scene-stage")).toBe(
-      "alpha-stage",
-    );
   });
 });

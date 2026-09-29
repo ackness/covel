@@ -26,7 +26,6 @@ import {
   makeTraceEvent,
   makeTurnMessage,
   makeTurnResult,
-  makeWorkingMemory,
   makeWorld,
   makeWorldDataImportLedger,
   ts,
@@ -62,7 +61,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       await store.saveInteractionRecord(makeInteractionRecord({ sessionId }));
       await store.appendTurnMessage(makeTurnMessage({ sessionId }));
       await store.savePlayerInput(makePlayerInput({ sessionId }));
-      await store.upsertWorkingMemory(makeWorkingMemory({ sessionId }));
       await store.saveWorldDataImportLedgerBatch([
         makeWorldDataImportLedger({ sessionId }),
       ]);
@@ -84,9 +82,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       // Seed a parallel session to prove the cascade is scoped.
       await store.saveTurnResult(makeTurnResult({ sessionId: otherId }));
       await store.saveSuspension(makeSuspension({ sessionId: otherId }));
-      await store.upsertWorkingMemory(
-        makeWorkingMemory({ sessionId: otherId }),
-      );
       await store.upsertLorebookEntries([
         makeLorebookEntry({ sessionId: otherId }),
       ]);
@@ -114,7 +109,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       expect(await store.listInteractionRecords(sessionId)).toHaveLength(0);
       expect(await store.listTurnMessages(sessionId)).toHaveLength(0);
       expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
-      expect(await store.listWorkingMemory(sessionId)).toHaveLength(0);
       expect(await store.listWorldDataImportLedger(sessionId)).toHaveLength(0);
       expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(0);
       expect(await store.listSessionSummaries(sessionId)).toHaveLength(0);
@@ -126,7 +120,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       expect(await store.getSession(otherId)).not.toBeNull();
       expect(await store.listTurnResults(otherId)).toHaveLength(1);
       expect(await store.listSuspensions(otherId)).toHaveLength(1);
-      expect(await store.listWorkingMemory(otherId)).toHaveLength(1);
       expect(await store.listSessionLorebookEntries(otherId)).toHaveLength(1);
     });
   });

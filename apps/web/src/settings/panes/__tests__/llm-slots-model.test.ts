@@ -22,7 +22,7 @@ describe("llm slots model", () => {
             turnCompletion: { mode: "await" },
             model: "image",
             outputKind: "plugin",
-            capabilities: [],
+            outputContract: undefined,
             tags: [],
           },
           {
@@ -33,7 +33,7 @@ describe("llm slots model", () => {
             turnCompletion: { mode: "await" },
             model: "plugin",
             outputKind: "plugin",
-            capabilities: [],
+            outputContract: undefined,
             tags: [],
           },
           {
@@ -44,7 +44,7 @@ describe("llm slots model", () => {
             turnCompletion: { mode: "await" },
             model: "text",
             outputKind: "plugin",
-            capabilities: [],
+            outputContract: undefined,
             tags: [],
           },
           {
@@ -55,7 +55,7 @@ describe("llm slots model", () => {
             turnCompletion: { mode: "await" },
             model: "ignored-function-slot",
             outputKind: "plugin",
-            capabilities: [],
+            outputContract: undefined,
             tags: [],
           },
         ],

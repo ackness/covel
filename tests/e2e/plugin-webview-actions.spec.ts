@@ -155,7 +155,9 @@ test("package webview receives runtime outcomes and sanitized transport errors",
     await page
       .getByRole("tab", { name: "Webview Fixture", exact: true })
       .click();
-    const frame = page.frameLocator('iframe[title="Webview Fixture"]');
+    const frame = page
+      .frameLocator('iframe[title="Webview Fixture"]')
+      .frameLocator("iframe");
     await expect(frame.locator("#state")).toHaveText(
       JSON.stringify({ current: { value: "fixture state" } }),
     );
@@ -172,7 +174,9 @@ test("package webview receives runtime outcomes and sanitized transport errors",
     await expect(page.locator('iframe[title="Webview Fixture"]')).toHaveCount(
       0,
     );
-    const other = page.frameLocator('iframe[title="Other Fixture"]');
+    const other = page
+      .frameLocator('iframe[title="Other Fixture"]')
+      .frameLocator("iframe");
     await expect(other.getByRole("textbox", { name: "Draft" })).toHaveValue("");
     await page
       .getByRole("tab", { name: "Webview Fixture", exact: true })

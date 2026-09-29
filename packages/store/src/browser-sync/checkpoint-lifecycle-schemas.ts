@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { characterSchemaRecordSchema } from "@covel/shared";
 import {
   characters,
   createdRow,
@@ -12,7 +13,6 @@ import {
   stateEntries,
   stateSchemas,
   timestamp,
-  workingMemory,
 } from "./checkpoint-record-schemas.js";
 
 const setupStateFields = {
@@ -147,7 +147,6 @@ export const snapshotRecordArrays = {
   runtimeExports: z.array(runtimeExport),
   stateEntries: z.array(stateEntries),
   pluginData: z.array(pluginData),
-  workingMemory: z.array(workingMemory),
   sessionSummaries: z.array(sessionSummaries),
   lorebookEntries: z.array(lorebookEntries),
   suspensions: z.array(suspensions),
@@ -159,6 +158,7 @@ export const snapshotPayloadSchema = z
     turnId: z.string(),
     session: snapshotSession,
     ...snapshotRecordArrays,
+    characterSchema: characterSchemaRecordSchema.nullable(),
     compactedMessageSummaryIds: z.record(z.string(), z.string()),
     messagesCursor: z.string(),
     displayMessagesBoundary: z

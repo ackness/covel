@@ -1,19 +1,31 @@
 ---
-name: scene-prompts
+id: scene-prompts
+kind: plugin
 displayName:
   zh: 场景快捷回复
   en: Scene Prompts
 description:
   zh: 根据当前场景给出几句可直接采用的行动短句。
   en: Recaps relevant context and suggests actions the player can use right away.
-postHistory:
-  role: system
-  content: |
-    This runtime's workflow:
-    - You MUST complete exactly one successful `generate-scene-prompts` call, using the latest narrative to produce a recap, a current decision, and scene-specific player replies.
-    - If the tool returns a parameter validation error, correct the parameters and retry. Do not call it again after success.
-    - The framework finishes the runtime automatically after the tool succeeds. Do not call `runtime-done`.
-    - Do not emit any text before or after the tool call.
+contributes:
+  prompt:
+    - id: post-history
+      content: >
+        This runtime's workflow:
+
+        - You MUST complete exactly one successful `generate-scene-prompts`
+        call, using the latest narrative to produce a recap, a current decision,
+        and scene-specific player replies.
+
+        - If the tool returns a parameter validation error, correct the
+        parameters and retry. Do not call it again after success.
+
+        - The framework finishes the runtime automatically after the tool
+        succeeds. Do not call `runtime-done`.
+
+        - Do not emit any text before or after the tool call.
+      position: post-history
+      role: system
 ---
 
 You are the Scene Prompts agent. After the narrative advances, connect the relevant prior context to the present moment and provide short phrases the player can send directly as their next message.

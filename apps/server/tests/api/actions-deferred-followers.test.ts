@@ -126,11 +126,13 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     };
 
     const parsedTarget = {
+      runtime: { type: targetManifest.runtimeType ?? ("agent" as const) },
       manifest: targetManifest,
       promptTemplate: "",
       rawFrontmatter: {},
     };
     const parsedFollower = {
+      runtime: { type: followerManifest.runtimeType ?? ("agent" as const) },
       manifest: followerManifest,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -138,7 +140,7 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     pluginRegistry.register({
       id: PLUGIN_ID,
       summary: makeSummary(PLUGIN_ID),
-      manifest: parsedTarget,
+
       manifests: [parsedTarget, parsedFollower],
       loadedRuntimes: new Map([
         [TARGET, targetLoaded],
@@ -295,11 +297,13 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     };
 
     const parsedTarget = {
+      runtime: { type: targetManifest.runtimeType ?? ("agent" as const) },
       manifest: targetManifest,
       promptTemplate: "",
       rawFrontmatter: {},
     };
     const parsedFollower = {
+      runtime: { type: followerManifest.runtimeType ?? ("agent" as const) },
       manifest: followerManifest,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -307,7 +311,7 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     pluginRegistry.register({
       id: PLUGIN_ID,
       summary: makeSummary(PLUGIN_ID),
-      manifest: parsedTarget,
+
       manifests: [parsedTarget, parsedFollower],
       loadedRuntimes: new Map([
         [TARGET, targetLoaded],

@@ -766,14 +766,21 @@ describe.each([
     const claim = vi.fn(async () => {
       await blocked;
     });
-    const compare = store.compareAndSetPluginData.bind(store);
+    const transact = store.withTransaction.bind(store);
     const intercepted = vi
-      .spyOn(store, "compareAndSetPluginData")
-      .mockImplementation(async (record, revision) => {
-        if ((record.value as { status?: string }).status === "claimed")
-          await claim();
-        return compare(record, revision);
-      });
+      .spyOn(store, "withTransaction")
+      .mockImplementation((fn) =>
+        transact((tx) =>
+          fn({
+            ...tx,
+            compareAndSetPluginData: async (record, revision) => {
+              if ((record.value as { status?: string }).status === "claimed")
+                await claim();
+              return tx.compareAndSetPluginData(record, revision);
+            },
+          }),
+        ),
+      );
     const execute = vi.fn();
     const worker = createRuntimeJobWorker({
       tryWithCommitLock,
@@ -949,7 +956,12 @@ describe.each([
       store,
       job("session-a", "queued-expired", { maxQueueMs: 1_000 }),
     );
-    await createRuntimeJob(store, job("session-a", "lease-expired"));
+    await createRuntimeJob(
+      store,
+      job("session-a", "lease-expired", {
+        runtimeId: "mimo-tts/other-runtime",
+      }),
+    );
     await claimRuntimeJob(store, {
       sessionId: "session-a",
       pluginId: "mimo-tts",

@@ -1,13 +1,13 @@
 import { parse } from "yaml";
 import {
   parsePluginMd,
-  hasRuntimeDeclaration,
+  compileInlineRuntime,
+  parseRuntimeMd,
   validatePluginDeclarations,
   multiRuntimeRootDiagnostics,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
 } from "@covel/plugin-loader";
 import { z } from "zod";
-import { validatePluginManifest, formatValidationErrors } from "@covel/shared";
 import { httpError, type ExtractedEntry } from "./shared.js";
 
 /** Installation parses data only; gray-matter also supports executable JS engines. */
@@ -29,19 +29,6 @@ interface PluginManifestSummary {
   readonly pluginId: string;
 }
 
-function findPluginManifestEntry(
-  entries: readonly ExtractedEntry[],
-): ExtractedEntry | null {
-  // Root-level PLUGIN.md (single-runtime layout).
-  const root = entries.find((e) => e.relativePath === "PLUGIN.md");
-  if (root) return root;
-  // Multi-runtime layout: at least one runtimes/<sub>/PLUGIN.md must exist.
-  const runtimeManifest = entries.find((e) =>
-    /^runtimes\/[^/]+\/PLUGIN\.md$/.test(e.relativePath),
-  );
-  return runtimeManifest ?? null;
-}
-
 function readPackageId(entries: readonly ExtractedEntry[]): string | null {
   const pkg = entries.find((e) => e.relativePath === "package.json");
   if (!pkg) return null;
@@ -59,17 +46,11 @@ function readPackageId(entries: readonly ExtractedEntry[]): string | null {
   }
 }
 
-/** Root segment of a plugin manifest `name` — handles `scope/sub` multi-runtime layouts. */
-function manifestRootId(name: string): string {
-  const trimmed = name.trim();
-  return trimmed.includes("/") ? (trimmed.split("/")[0] ?? trimmed) : trimmed;
-}
-
 /**
  * Canonical plugin ID for an npm basename: the Covel convention names the
- * package `@covel/plugin-<id>` while `PLUGIN.md` declares `name: <id>`, so a
+ * package `@covel/plugin-<id>` while `PLUGIN.md` declares `id: <id>`, so a
  * single exact `plugin-` prefix is stripped for identity comparison. Nothing
- * else is normalized — the runtime identity IS the manifest root name.
+ * else is normalized — the runtime identity IS the root manifest id.
  */
 function canonicalFromPackageId(pkgId: string): string {
   return pkgId.startsWith("plugin-") ? pkgId.slice("plugin-".length) : pkgId;
@@ -90,7 +71,7 @@ export function validatePluginBundle(
   // before session execution approval. Do not let one smuggle a JS engine.
   for (const entry of entries) {
     if (
-      /^(?:runtimes\/[^/]+\/)?PLUGIN(?:\.[a-zA-Z0-9-]+)?\.md$/.test(
+      /^(?:PLUGIN(?:\.[a-zA-Z0-9-]+)?|runtimes\/[^/]+\/(?:PLUGIN|RUNTIME)(?:\.[a-zA-Z0-9-]+)?)\.md$/.test(
         entry.relativePath,
       )
     )
@@ -107,16 +88,18 @@ export function validatePluginBundle(
     );
   }
 
-  const manifestEntry = findPluginManifestEntry(entries);
+  const manifestEntry = entries.find(
+    (entry) => entry.relativePath === "PLUGIN.md",
+  );
   if (!manifestEntry) {
     throw httpError(
       400,
-      "no PLUGIN.md found (expected root PLUGIN.md or runtimes/<sub>/PLUGIN.md)",
+      "no root PLUGIN.md found; every plugin requires a root declaration",
     );
   }
 
   // Single canonical identity : the runtime, store, proposals, hooks and
-  // trust checks all key on the manifest root name — so THAT is the identity
+  // trust checks all key on the root manifest id — so THAT is the identity
   // the reserved-ID check, install dir, and API response must use. The
   // package.json basename only participates as a consistency check after
   // stripping the exact `plugin-` prefix. The old code checked reserved IDs
@@ -133,67 +116,94 @@ export function validatePluginBundle(
     );
   }
 
-  // Validate every PLUGIN.md we find — multi-runtime layouts must all be
-  // valid — AND enforce that each manifest's root `name` equals the canonical
-  // ID. Any mismatch is a hard failure: the loader keys everything on the
-  // manifest name, so a divergent package.json identity would let the check
-  // above and the runtime identity disagree.
-  const manifests = entries.filter(
-    (e) =>
-      e.relativePath === "PLUGIN.md" ||
-      /^runtimes\/[^/]+\/PLUGIN\.md$/.test(e.relativePath),
+  const legacy = entries.find((entry) =>
+    /^runtimes\/[^/]+\/PLUGIN(?:\.[a-zA-Z0-9-]+)?\.md$/.test(
+      entry.relativePath,
+    ),
   );
-  const declarations: ParsedPluginMd[] = [];
-  const isMultiRuntime = manifests.some((m) =>
-    m.relativePath.startsWith("runtimes/"),
-  );
-  for (const m of manifests) {
-    const parsed = readPluginFrontmatter(m.content.toString("utf-8"));
-    if (isMultiRuntime && m.relativePath === "PLUGIN.md") {
-      const diagnostics = multiRuntimeRootDiagnostics(parsed);
-      if (diagnostics.length)
-        throw httpError(
-          400,
-          diagnostics.map((d) => `${m.relativePath}: ${d.message}`).join("\n"),
-        );
-    }
-    if (
-      m.relativePath.startsWith("runtimes/") &&
-      !hasRuntimeDeclaration(parsed)
-    ) {
-      throw httpError(
-        400,
-        `${m.relativePath}: runtime declaration requires execution fields; move package-only declarations to the root PLUGIN.md`,
-      );
-    }
-    const result = validatePluginManifest(parsed);
-    if (!result.valid) {
-      throw httpError(
-        400,
-        `invalid frontmatter in ${m.relativePath}:\n${formatValidationErrors(result.errors ?? [])}`,
-      );
-    }
-    declarations.push(
-      parsePluginMd(m.content.toString("utf-8"), m.relativePath),
+  if (legacy)
+    throw httpError(
+      400,
+      `${legacy.relativePath}: runtime manifests must be named RUNTIME.md`,
     );
-    const declared = (result.data as { name?: unknown }).name;
-    if (typeof declared !== "string" || declared.trim() === "") {
-      throw httpError(
-        400,
-        `PLUGIN.md frontmatter in ${m.relativePath} missing "name"`,
-      );
-    }
-    const declaredRoot = manifestRootId(declared);
-    if (declaredRoot !== canonicalId) {
-      throw httpError(
-        400,
-        `plugin id mismatch: package.json name resolves to canonical id "${canonicalId}" but ${m.relativePath} declares "${declaredRoot}"`,
-      );
-    }
-  }
-
+  const children = entries.filter((entry) =>
+    /^runtimes\/[^/]+\/RUNTIME\.md$/.test(entry.relativePath),
+  );
   try {
-    validatePluginDeclarations(declarations);
+    const root = parsePluginMd(
+      manifestEntry.content.toString("utf8"),
+      `${canonicalId}/PLUGIN.md`,
+    );
+    if (root.plugin!.id !== canonicalId)
+      throw new Error(
+        `plugin id mismatch: package.json resolves to "${canonicalId}" but PLUGIN.md declares "${root.plugin!.id}"`,
+      );
+    if (entries.some((entry) => entry.relativePath.startsWith("runtimes/"))) {
+      const diagnostics = multiRuntimeRootDiagnostics(root.rawFrontmatter);
+      if (diagnostics.length)
+        throw new Error(diagnostics.map((d) => d.message).join("\n"));
+    }
+    const inline = compileInlineRuntime(root);
+    const declarations: ParsedRuntimeMd[] = inline ? [inline] : [];
+    for (const child of children)
+      declarations.push(
+        parseRuntimeMd(
+          child.content.toString("utf8"),
+          `${canonicalId}/${child.relativePath}`,
+          root.plugin!,
+        ),
+      );
+    validatePluginDeclarations([root]);
+    const provided = new Set(
+      (root.plugin!.provides ?? []).map((value) =>
+        typeof value === "string" ? value : value.contract,
+      ),
+    );
+    const outputs = new Set<string>();
+    for (const record of declarations) {
+      const contract = record.runtime?.io?.output?.contract;
+      if (!contract) continue;
+      if (!provided.has(contract))
+        throw new Error(
+          `Output contract ${contract} is not declared in root provides`,
+        );
+      if (outputs.has(contract))
+        throw new Error(
+          `Ambiguous output contract ${contract}; only one runtime may provide it`,
+        );
+      outputs.add(contract);
+    }
+    // Localizations may change presentation only; identity and code declarations
+    // are reconciled against the canonical document before installation.
+    for (const entry of entries) {
+      if (/^PLUGIN\.[a-zA-Z0-9-]+\.md$/.test(entry.relativePath)) {
+        parsePluginMd(
+          entry.content.toString("utf8"),
+          `${canonicalId}/${entry.relativePath}`,
+          root.rawFrontmatter,
+        );
+      } else if (
+        /^runtimes\/[^/]+\/RUNTIME\.[a-zA-Z0-9-]+\.md$/.test(entry.relativePath)
+      ) {
+        const canonicalPath = entry.relativePath.replace(
+          /RUNTIME\.[^.]+\.md$/,
+          "RUNTIME.md",
+        );
+        const canonical = declarations.find(
+          (record) => record.sourcePath === `${canonicalId}/${canonicalPath}`,
+        );
+        if (!canonical)
+          throw new Error(
+            `Localized runtime has no canonical RUNTIME.md: ${entry.relativePath}`,
+          );
+        parseRuntimeMd(
+          entry.content.toString("utf8"),
+          `${canonicalId}/${entry.relativePath}`,
+          root.plugin!,
+          canonical.rawFrontmatter,
+        );
+      }
+    }
   } catch (error) {
     throw httpError(
       400,

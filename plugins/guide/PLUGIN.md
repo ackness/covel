@@ -1,76 +1,76 @@
 ---
-name: guide
+id: guide
+kind: plugin
 displayName:
   zh: 行动引导
   en: Action Guide
 description:
   zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
-  en: Suggests a few possible actions after each story beat so you can choose your next move faster.
-pluginType: plugin
-# Narrator-downstream layer — runs in the post-turn stage alongside codex,
-# npc-graph extractor, and character-tracker; independent runtimes in the same
-# stage run in parallel. They depend only on the active narrative engine's
-# output (gated via needs: capability narrative-engine below); they do not read
-# each other's writes.
-stage: post-turn
-model: plugin
-llm:
-  reasoningEffort: disabled
-  toolChoice: { name: generate-guide }
-outputKind: system
-timeoutMs: 120000
-maxRetries: 0
-callTimeoutMs: 60000
-requireToolUse: true
-completeAfterTools: [generate-guide]
+  en: >-
+    Suggests a few possible actions after each story beat so you can choose your
+    next move faster.
 tags:
-  - mode:traditional-story
-  - role:guide
-  - role:quick-reply
-  - cost:llm
-  - ui:message-block
-trigger:
-  type: scheduled
-  interval: 1
-  cooldownTurns: 1
-# Engine-agnostic guidance. The upstream gate discovers the active narrative
-# engine by capability (narrative-engine → narrator in traditional,
-# chat-mode-narrator in dialogue) instead of naming one, so the same plugin
-# gates correctly in either mode and still skips when that engine failed. The
-# inject lists both known engines; the absent one resolves to nothing, so
-# exactly the active engine's fresh prose fills <narrator-output>.
-# Gate on the active narrative engine's success, discovered by capability.
-needs:
-  - capability: narrative-engine
-input:
-  inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
+  - "mode:traditional-story"
+  - "cost:llm"
+  - "ui:message-block"
+requires:
+  - narrative-engine@1
 entry: ./server/index.js
-tools:
-  plugin:
+contributes:
+  ui:
+    message:
+      - ./ui/action-guide-block.json
+  prompt:
+    - id: post-history
+      content: |
+        本 runtime 只执行一步：必须调用一次 `generate-guide`。即使叙事看起来"平静"也要给出观望/试探/准备类建议。
+        工具成功后框架自动结束。禁止跳过工具、重复调用或输出纯文本。
+      position: post-history
+      role: system
+  tools:
     - generate-guide
-ui:
-  message:
-    - ./ui/action-guide-block.json
-postHistory:
-  role: system
-  content: |
-    本 runtime 只执行一步：必须调用一次 `generate-guide`。即使叙事看起来"平静"也要给出观望/试探/准备类建议。
-    工具成功后框架自动结束。禁止跳过工具、重复调用或输出纯文本。
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: scheduled
+      interval: 1
+      cooldownTurns: 1
+    needs:
+      - contract: narrative-engine@1
+  io:
+    inputs:
+      narrator-output:
+        from:
+          contract: narrative-engine@1
+        select: /narrativeOutput
+        required: false
+    visibility: system
+  agent:
+    model: plugin
+    llm:
+      reasoningEffort: disabled
+      toolChoice:
+        name: generate-guide
+    tools:
+      plugin:
+        - generate-guide
+    loop:
+      timeoutMs: 120000
+      callTimeoutMs: 60000
+      maxRetries: 0
+      completion:
+        require: tool-use
+        afterTools:
+          - generate-guide
 ---
 
 你是行动引导 agent。你的任务是在叙事推进后，为玩家提供多风格的行动建议。
 
 ## 当前叙事结果
 
-最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。分析叙事的决策点，用 `generate-guide` 提供 3 个风格分类的建议。工具成功后本 runtime 自动结束。
+最新一轮叙事见上方 `runtime-inputs.narrator-output.value` 区块（由当前模式的叙事引擎注入）。分析叙事的决策点，用 `generate-guide` 提供 3 个风格分类的建议。工具成功后本 runtime 自动结束。
 
 ## 风格分类
 

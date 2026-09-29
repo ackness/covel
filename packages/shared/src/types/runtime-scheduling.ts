@@ -147,7 +147,6 @@ export type EffectResource =
   | "characters:*"
   | "assets:*"
   | "media:*"
-  | "working-memory:*"
   | "lorebook:*"
   | `ui:${string}`
   | "interaction:*"
@@ -189,6 +188,8 @@ export type TriggerSpec = TriggerConfig;
 /** Canonical turn-barrier policy after manifest defaults are applied. */
 export interface TurnCompletionPolicy {
   readonly mode: "await" | "detached";
+  readonly settle?: "before-next-execution";
+  readonly maxSettleWaitMs?: number;
   readonly maxQueueMs?: number;
   readonly maxExecutionMs?: number;
   readonly overlap: "serial";

@@ -7,7 +7,7 @@
 
 import { getPendingProposals } from "@covel/tools";
 import type { EventBus } from "@covel/events";
-import type { Proposal, SessionEvent } from "@covel/shared";
+import type { Proposal, RuntimeEffects, SessionEvent } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
   createCommitPipeline,
@@ -49,6 +49,7 @@ export async function processRuntimeResult(
     turnId: string;
     status: string;
     output: Record<string, unknown> | null;
+    effects?: RuntimeEffects;
     toolCalls?: ReadonlyArray<{ output?: unknown }>;
   },
   store: KernelStore,
@@ -59,7 +60,7 @@ export async function processRuntimeResult(
     readonly hookPipeline?: HookPipeline;
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
-    readonly capabilities?: readonly string[];
+    readonly enforceImageFlow?: boolean;
     /** Source content anchor supplied by the execution finalizer for retries. */
     readonly messageSourceTurnId?: string;
     /**
@@ -117,7 +118,7 @@ export async function processRuntimeResult(
     result.turnId,
     sessionId,
     outputKind,
-    result.toolCalls,
+    result.effects,
   );
   proposals.push(...pendingProposals);
 
@@ -128,7 +129,7 @@ export async function processRuntimeResult(
     store,
     sessionId,
     proposals,
-    opts?.capabilities,
+    opts?.enforceImageFlow,
   );
   if (missingAssetFailure) {
     imageGenerationFailures.push(missingAssetFailure);
@@ -138,7 +139,7 @@ export async function processRuntimeResult(
     store,
     sessionId,
     proposals,
-    opts?.capabilities,
+    opts?.enforceImageFlow,
   );
   imageGenerationFailures.push(...inlineMediaFailures);
   if (inlineMediaFailures.length > 0) {

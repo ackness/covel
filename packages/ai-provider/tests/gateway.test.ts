@@ -129,6 +129,48 @@ describe("gateway", () => {
     expect(result.provider).toBe("test");
   });
 
+  it("rejects embedding model drift before the adapter runs", async () => {
+    const embed = vi.fn().mockResolvedValue({
+      embeddings: [[1]],
+      usage: { inputTokens: 1, outputTokens: 0 },
+    });
+    const { gateway } = setup({ embed });
+    await expect(
+      gateway.embed({ values: ["text"], expectedModelId: "test/old-model" }),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+    expect(embed).not.toHaveBeenCalled();
+    await expect(
+      gateway.embed({ values: ["text"], expectedModelId: "test/embed-model" }),
+    ).resolves.toMatchObject({ embeddings: [[1]] });
+    expect(embed).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["missing", "error", "throw-after-done"])(
+    "does not publish success for a %s stream terminal",
+    async (terminal) => {
+      const streamText = vi.fn(async function* () {
+        yield { type: "text-delta" as const, textDelta: "partial" };
+        if (terminal !== "missing")
+          yield {
+            type: "done" as const,
+            finishReason: terminal === "error" ? "error" : "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        if (terminal === "throw-after-done")
+          throw new Error("transport failed");
+      });
+      const { gateway } = setup({ streamText });
+      const events: StreamEvent[] = [];
+      const consume = async () => {
+        for await (const event of gateway.streamText({ messages: [] }))
+          events.push(event);
+      };
+      await expect(consume()).rejects.toThrow();
+      expect(events).toEqual([{ type: "text-delta", textDelta: "partial" }]);
+      expect(streamText).toHaveBeenCalledTimes(1);
+    },
+  );
+
   describe.each(["generateText", "generateObject", "streamText"] as const)(
     "%s fallback policy",
     (operation) => {

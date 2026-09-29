@@ -1771,9 +1771,22 @@
       "hooks": "钩子",
       "actions": "动作",
       "services": "服务",
+      "extensions": "扩展",
       "commands": "命令",
       "registered": "已注册",
-      "unregistered": "未注册"
+      "unregistered": "未注册",
+      "extensionCalls": "当前窗口中的扩展调用",
+      "providerPoint": "提供者 / 扩展点",
+      "callCounts": "总数 / 成功 / 错误 / 超时 / 取消",
+      "hostState": "宿主状态",
+      "sessionState": "会话状态",
+      "authorization": "会话授权",
+      "approved": "已授权",
+      "notApproved": "未授权",
+      "dependencies": "依赖",
+      "autoAdded": "由依赖解析补齐",
+      "rejection": "依赖解析拒绝",
+      "failure": "加载 / 激活错误"
     },
     "cost": {
       "tab": "成本",

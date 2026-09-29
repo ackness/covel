@@ -4,15 +4,106 @@
  *
  * These were previously duplicated verbatim across several plugins. They are
  * side-effect-free pure functions plus a single proposal factory, and depend
- * only on the Public Plugin API types (`@covel/shared`). No DB, ORM, kernel
+ * only on the Public Plugin API types (structural SDK types). No DB, ORM, kernel
  * internals, or framework components are referenced.
  */
 
-import {
-  isDefaultLocale,
-  type Proposal,
-  type ProposalType,
-} from "@covel/shared";
+export type { JsonValue, ImageGenerationResult } from "./types.js";
+export type {
+  PluginAPI,
+  PluginEntryFactory,
+  PluginToolkit,
+  PluginToolDefinition,
+  PluginToolModule,
+  PluginToolContext,
+  PluginToolStore,
+  PluginToolResult,
+  PluginProposal,
+  PluginProposalFor,
+  PluginProposalPayloads,
+  PluginProposalType,
+  PluginInputSlot,
+  PluginInputSource,
+  PluginHookContext,
+  PluginHookHandler,
+  PluginHookResult,
+  PluginHookOptions,
+  HookEventName,
+  HookEnforce,
+  PluginRpcContext,
+  PluginRpcStore,
+  PluginRpcHandler,
+  PluginRpcOptions,
+  PluginFormValidator,
+  PluginServiceDefinition,
+  PluginServiceContext,
+  PluginServiceClient,
+  PluginServiceGateway,
+  PluginEvaluationJson,
+  PluginEvaluationValue,
+  PluginEvaluationQuestion,
+  PluginEvaluationQuestions,
+  PluginEvaluationAnswer,
+  PluginHttp,
+  PluginWireModule,
+  PluginImageWire,
+  PluginSpeechWire,
+  PluginTranscriptionWire,
+  PluginProviderConfig,
+  PluginModelCapability,
+  PluginModelRequestContext,
+  PluginUsageSummary,
+} from "./plugin-api.js";
+
+export type {
+  ExtensionPointIo,
+  ExtensionPointId,
+  ExtensionPointHandler,
+  ExtensionHandlerContext,
+  ExtensionPluginDataRecord,
+  ExtensionServiceClient,
+  ExtensionServiceDescriptor,
+  ExtensionWorldModel,
+  ExtensionWorldRecord,
+  ExtensionWorldDimensions,
+  ExtensionWorldI18nText,
+  ExtensionWorldLandmark,
+  ExtensionWorldRegion,
+  ExtensionWorldGeography,
+  ExtensionWorldFaction,
+  ExtensionWorldPowerSystem,
+  ExtensionWorldHistoryEvent,
+  ExtensionWorldEconomy,
+  ExtensionWorldSocialStructure,
+  ExtensionWorldTone,
+  ExtensionWorldMechanics,
+  ExtensionWorldStartingConditions,
+  ExtensionWorldCharacter,
+  ExtensionCharacterSchema,
+  ExtensionAttributeDefinition,
+  PluginExtensionApi,
+  PluginExtensionDefinition,
+  I18nText,
+  PromptSegment,
+  PromptSegmentInput,
+  ExtensionHistoryMessage,
+  PromptHistoryTransformInput,
+  PromptHistoryTransformOutput,
+  HistoryCompactInput,
+  HistoryCompactOutput,
+  HistoryCompactSummary,
+  MediaImageFlow,
+  SessionWorldContextOutput,
+  UiSlotName,
+  UiSlotValue,
+  UiSlotProjectionInput,
+  StageBackdropModel,
+  StageCastModel,
+  StageDialogueModel,
+  StageChoicesModel,
+  CharacterVisualModel,
+  CharacterVisualCollectionModel,
+} from "./extension-points.js";
 
 export {
   createNarrativeReview,
@@ -229,14 +320,19 @@ export function pickLocaleText(
   zh: string,
   en: string,
 ): string {
-  return isDefaultLocale(locale) ? zh : en;
+  const normalized = locale?.trim().replaceAll("_", "-").toLowerCase();
+  return normalized === "zh" ||
+    normalized === "zh-cn" ||
+    normalized === "zh-hans"
+    ? zh
+    : en;
 }
 
 // ── Proposal factory ─────────────────────────────────────────────
 
 /**
  * Minimal handler-context shape required to build a proposal. A structural
- * subset of `FunctionHandlerContext` from `@covel/plugin-loader` — kept local
+ * subset of `FunctionHandlerContext` from the public runtime contract — kept local
  * so this package stays dependency-light and Public-API-only.
  */
 export interface ProposalContext {
@@ -257,16 +353,11 @@ export interface ProposalContext {
  * @param type - Proposal type.
  * @param payload - Proposal payload.
  */
-export function makeProposal(
-  ctx: ProposalContext,
-  now: string,
-  type: ProposalType,
-  payload: Record<string, unknown>,
-): Proposal {
-  // `Proposal` is a discriminated union; this factory accepts a generic
-  // payload because plugin handlers build proposals from loosely-typed data
-  // that the commit handlers validate at commit time. The single cast is the
-  // construction boundary.
+export function makeProposal<
+  const T extends string,
+  P extends Record<string, unknown>,
+>(ctx: ProposalContext, now: string, type: T, payload: P) {
+  // Preserve the caller's type and payload; the kernel validates the domain write.
   return {
     id: crypto.randomUUID(),
     type,
@@ -278,5 +369,5 @@ export function makeProposal(
     sessionId: ctx.sessionId,
     payload,
     timestamp: now,
-  } as unknown as Proposal;
+  };
 }

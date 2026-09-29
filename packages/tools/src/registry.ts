@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ToolModule, ToolSource } from "./types.js";
 
 /** Reserved even when a host does not install an optional or virtual builtin. */
@@ -20,10 +21,7 @@ export const FRAMEWORK_TOOL_NAMES = [
   "list-characters",
   "get-character",
   "get-character-schema",
-  "world-dimension-get",
   "memory-search",
-  "memory-get-block",
-  "memory-update-block",
 ] as const;
 
 const reservedNames: ReadonlySet<string> = new Set(FRAMEWORK_TOOL_NAMES);
@@ -31,7 +29,33 @@ const reservedNames: ReadonlySet<string> = new Set(FRAMEWORK_TOOL_NAMES);
 /** Tool names stay local to the calling plugin, including LLM-facing names. */
 export class ToolRegistry {
   readonly builtinTools = new Map<string, ToolModule>();
-  readonly pluginTools = new Map<string, Map<string, ToolModule>>();
+  private readonly livePluginTools = new Map<string, Map<string, ToolModule>>();
+  private readonly snapshots = new AsyncLocalStorage<
+    Map<string, Map<string, ToolModule>>
+  >();
+  get pluginTools(): Map<string, Map<string, ToolModule>> {
+    return this.snapshots.getStore() ?? this.livePluginTools;
+  }
+  withSnapshot<T>(fn: () => T): T {
+    if (this.snapshots.getStore()) return fn();
+    return this.snapshots.run(
+      new Map(
+        [...this.livePluginTools].map(([id, tools]) => [id, new Map(tools)]),
+      ),
+      fn,
+    );
+  }
+  replacePlugin<T>(pluginId: string, publish: () => T): T {
+    const previous = this.livePluginTools.get(pluginId);
+    this.livePluginTools.delete(pluginId);
+    try {
+      return publish();
+    } catch (error) {
+      this.livePluginTools.delete(pluginId);
+      if (previous) this.livePluginTools.set(pluginId, previous);
+      throw error;
+    }
+  }
 
   registerBuiltin(module: ToolModule): void {
     if (!reservedNames.has(module.name)) {
@@ -59,7 +83,7 @@ export class ToolRegistry {
     if (reservedNames.has(module.name)) {
       throw new Error(`tool "${module.name}" is reserved by the framework`);
     }
-    let tools = this.pluginTools.get(pluginId);
+    let tools = this.livePluginTools.get(pluginId);
     if (tools?.has(module.name)) {
       throw new Error(
         `tool "${module.name}" is already registered by plugin "${pluginId}"`,
@@ -67,7 +91,7 @@ export class ToolRegistry {
     }
     if (!tools) {
       tools = new Map();
-      this.pluginTools.set(pluginId, tools);
+      this.livePluginTools.set(pluginId, tools);
     }
     const name = module.name;
     tools.set(name, module);
@@ -75,8 +99,8 @@ export class ToolRegistry {
     return () => {
       if (owned.get(name) !== module) return;
       owned.delete(name);
-      if (owned.size === 0 && this.pluginTools.get(pluginId) === owned) {
-        this.pluginTools.delete(pluginId);
+      if (owned.size === 0 && this.livePluginTools.get(pluginId) === owned) {
+        this.livePluginTools.delete(pluginId);
       }
     };
   }

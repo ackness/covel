@@ -13,13 +13,12 @@
  */
 
 import {
-  validateWorldIRV1,
-  WORLD_IR_V1_SCHEMA_URI,
   type RuntimeManifest,
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
 import type { ToolCallRecord } from "@covel/shared";
+import type { FinalizeAgentOutputParams } from "./finalize-agent-output.js";
 import { validateOutput } from "@covel/tools";
 import { extractRequiredFields } from "../turn-executor/turn-output-helpers.js";
 
@@ -112,17 +111,9 @@ export function checkSchemaValidation(
     outputSchema,
   } = ctx;
   const validation = validateOutput(output, outputSchema);
-  const semanticValidation =
-    validation.valid && outputSchema.$id === WORLD_IR_V1_SCHEMA_URI
-      ? validateWorldIRV1(output)
-      : undefined;
   let validationErrors: readonly string[];
   if (!validation.valid) {
     validationErrors = validation.errors ?? ["unknown schema validation error"];
-  } else if (semanticValidation && !semanticValidation.valid) {
-    validationErrors = semanticValidation.errors.map(
-      (error) => `${error.path}: ${error.message}`,
-    );
   } else {
     return undefined;
   }
@@ -143,3 +134,25 @@ export function checkSchemaValidation(
 }
 
 export type { ValidatorContext };
+
+/** The same private output.schema gate applies to ordinary and resumed agents. */
+export function createAgentSchemaGate(
+  ctx: Omit<ValidatorContext, "outputSchema"> & {
+    readonly outputSchema?: Record<string, unknown>;
+  },
+): FinalizeAgentOutputParams["schemaGate"] {
+  if (!ctx.outputSchema || ctx.manifest.outputKind === "story")
+    return undefined;
+  const context: ValidatorContext = { ...ctx, outputSchema: ctx.outputSchema };
+  return ({ output, parsedAsJson, finalContent }) => {
+    if (finalContent !== null) {
+      const failure = checkSchemaProseFailure(
+        context,
+        finalContent,
+        parsedAsJson,
+      );
+      if (failure) return failure;
+    }
+    return checkSchemaValidation(context, output);
+  };
+}

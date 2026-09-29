@@ -190,10 +190,12 @@ export function normalizeOutboundProxyConfig(
   }
 }
 
-/** Apply a new process-wide transport selection for framework-owned requests. */
-export function configureOutboundProxy(
-  input: ConfigureOutboundProxyInput,
-): OutboundProxyStatus {
+/** Build and validate a transport without changing the active selection. */
+export function prepareOutboundProxy(input: ConfigureOutboundProxyInput): {
+  readonly status: OutboundProxyStatus;
+  commit(): OutboundProxyStatus;
+  dispose(): void;
+} {
   const normalized = normalizeOutboundProxyConfig(input);
   const nextSystemProxyUrl = systemProxyUrl(input.systemProxyUrl);
   const effectiveProxyUrl =
@@ -203,15 +205,49 @@ export function configureOutboundProxy(
   const nextDispatcher = effectiveProxyUrl
     ? createProxyDispatcher(effectiveProxyUrl)
     : undefined;
-  const previous = proxyDispatcher;
+  const status: OutboundProxyStatus = {
+    ...normalized,
+    effective:
+      normalized.mode === "system" && input.resolveSystemProxy
+        ? "system"
+        : nextDispatcher
+          ? "proxy"
+          : "direct",
+    systemAvailable:
+      input.resolveSystemProxy !== undefined ||
+      nextSystemProxyUrl !== undefined,
+  };
+  let published = false;
+  let disposed = false;
+  return {
+    status,
+    commit() {
+      if (published || disposed) {
+        throw new Error("Proxy transport has already been used.");
+      }
+      published = true;
+      const previous = proxyDispatcher;
+      currentConfig = normalized;
+      currentSystemProxyUrl = nextSystemProxyUrl;
+      currentSystemProxyResolver = input.resolveSystemProxy;
+      proxyDispatcher = nextDispatcher;
+      closeSystemProxyDispatchers();
+      if (previous) void previous.close().catch(() => undefined);
+      return status;
+    },
+    dispose() {
+      if (published || disposed) return;
+      disposed = true;
+      if (nextDispatcher) void nextDispatcher.close().catch(() => undefined);
+    },
+  };
+}
 
-  currentConfig = normalized;
-  currentSystemProxyUrl = nextSystemProxyUrl;
-  currentSystemProxyResolver = input.resolveSystemProxy;
-  proxyDispatcher = nextDispatcher;
-  closeSystemProxyDispatchers();
-  if (previous) void previous.close().catch(() => undefined);
-  return getOutboundProxyStatus();
+/** Apply a new process-wide transport selection for framework-owned requests. */
+export function configureOutboundProxy(
+  input: ConfigureOutboundProxyInput,
+): OutboundProxyStatus {
+  return prepareOutboundProxy(input).commit();
 }
 
 export function getOutboundProxyStatus(): OutboundProxyStatus {

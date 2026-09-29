@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertNoPluginLoadErrors } from "./plugin-load-check.mjs";
+import {
+  assertLoadedBuiltinPluginEntries,
+  assertNoPluginLoadErrors,
+} from "./plugin-load-check.mjs";
 
 for (const failure of [
   'Error: [plugin-entry] plugins/fixture/PLUGIN.md: failed to activate entry "entry.js"',
@@ -34,5 +37,26 @@ test("allows startup messages and recoverable registration warnings", () => {
       "[plugin-entry] fixture: unknown hook event — skipping\n",
       "Health ready\n",
     ]),
+  );
+});
+
+test("requires staged builtin entries that import plugin-only workspace packages", () => {
+  const items = ["affinity", "codex", "core-quest", "dice-check"].map((id) => ({
+    id,
+    source: "builtin",
+    hostState: "loaded",
+  }));
+  assert.doesNotThrow(() => assertLoadedBuiltinPluginEntries(items));
+  assert.throws(
+    () => assertLoadedBuiltinPluginEntries(items.slice(1)),
+    /affinity is not loaded/,
+  );
+  assert.throws(
+    () =>
+      assertLoadedBuiltinPluginEntries([
+        { ...items[0], hostState: "error" },
+        ...items.slice(1),
+      ]),
+    /affinity is not loaded/,
   );
 });

@@ -59,8 +59,9 @@ async function commit(
     status: "success",
     toolCalls: [],
     output: options.functionOutput
-      ? { pluginData: items }
+      ? {}
       : withPendingProposals({}, [proposal(items)]),
+    ...(options.functionOutput ? { effects: { pluginData: items } } : {}),
   };
   const outcome = await finalizeExecution({
     store,
@@ -150,7 +151,7 @@ describe("third-party message anchors at the commit boundary", () => {
       ).toBe(turnId);
       expect(card.turnId).toBe(turnId);
       const original = functionOutput
-        ? card.output
+        ? card.effects
         : getPendingProposals(card.output);
       expect(JSON.stringify(original)).toContain(turnId);
     },

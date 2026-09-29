@@ -12,15 +12,19 @@ import i18n from "@/i18n";
 import { PackagesPane } from "../PackagesPane.js";
 
 const brokenPlugin: PluginSummary = {
+  requires: [],
+  optional: [],
+  conflicts: [],
+  extensions: [],
   id: "broken-plugin",
   displayName: "Broken plugin",
   description: "",
   source: "community",
-  pluginType: "plugin",
-  status: "error",
+  kind: "plugin",
+  hostState: "error",
   error: "Invalid manifest",
   runtimeCount: 0,
-  capabilities: [],
+  provides: [],
   tags: [],
   runtimes: [],
   tools: [],

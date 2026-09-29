@@ -1,3 +1,4 @@
+import type { DataStore } from "@covel/store";
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
   createPluginRpcRegistry,
@@ -6,7 +7,7 @@ import {
   type PluginRpcRegistry,
   type RpcExecutor,
 } from "@covel/runtime";
-import { FrameworkCapability, isDefaultLocale } from "@covel/shared";
+import { isDefaultLocale } from "@covel/shared";
 
 export interface BootstrapPluginRpc {
   readonly rpcRegistry: PluginRpcRegistry;
@@ -14,7 +15,7 @@ export interface BootstrapPluginRpc {
   readonly rpcApprovalGate: RpcApprovalGate;
 }
 
-export function createBootstrapPluginRpc(): BootstrapPluginRpc {
+export function createBootstrapPluginRpc(store: DataStore): BootstrapPluginRpc {
   const rpcRegistry: PluginRpcRegistry = createPluginRpcRegistry();
   rpcRegistry.registerFrameworkDefault(
     "submit-form",
@@ -28,7 +29,7 @@ export function createBootstrapPluginRpc(): BootstrapPluginRpc {
           "Form validator is unavailable; activate and approve its plugin first",
         );
       return validator(request);
-    }),
+    }, store),
     {
       description:
         "Persist player input submissions and fill the originating template message.",
@@ -39,11 +40,7 @@ export function createBootstrapPluginRpc(): BootstrapPluginRpc {
     async (_payload, context) => {
       const runtimes = context.environment?.activeRuntimes ?? [];
       const storyModels = runtimes
-        .filter(
-          (runtime) =>
-            runtime.outputKind === "story" ||
-            runtime.capabilities.includes(FrameworkCapability.Narrative),
-        )
+        .filter((runtime) => runtime.outputKind === "story")
         .map((runtime) => runtime.model?.resolved ?? runtime.model?.slot)
         .filter((model): model is string => Boolean(model));
       const chinese = isDefaultLocale(context.locale);

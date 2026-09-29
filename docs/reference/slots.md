@@ -49,11 +49,13 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 ## Slot 解析链
 
-1. **具名命中** — 请求指定 `presetId`（如 `ctx.images.generate({ presetId: "image" })`）时直接按名解析；`default` 自动别名到 llm.toml 里定义的第一个 slot。
-2. **Tag-aware fallback** — 具名未命中时，回落到第一个**同 tag** 的 slot（`gateway-slot-resolution.ts`）。**跨 tag fallback 被禁止**：image 请求永远不会静默路由到 text slot。
-3. **省略 presetId** — 媒体操作有约定默认名：`generateImage` → `"image"`、`synthesizeSpeech` → `"speech"`、`transcribeAudio` → `"transcription"`，保证进入同 tag fallback 链而不是落到默认 text slot。
-4. **Per-runtime 覆盖** — `sessions.runtime_model_overrides`（runtimeId → slot 名）先于 `manifest.model` 与 gateway 默认（`packages/runtime/src/agent-loop/agent-loop-policy.ts`；请求级 `modelOverride` 只对 `outputKind: story` 的 runtime 优先于它）。
-5. **Per-request 覆盖** — 前端经 `X-Slot-Config.slotBindings` 明确选择本地 `modelRef` 或服务端 `presetId`，并由 `X-Provider-Keys` 提供本次请求的连接密钥。两种模型身份可同名，临时配置不会替换服务端预设。
+1. **请求绑定** — `X-Slot-Config.slotBindings` 优先，区分本地 `modelRef` 与服务端 `presetId`；本地模型必须随请求声明。密钥经 `X-Provider-Keys` 提供，不写入插件或世界包。
+2. **具名命中** — 按 preset ID 或具名 slot 解析。图片调用要求精确命中且目标具有 image 输出能力；拼错名称、缺配置或选到文本模型均返回 `CONFIG_ERROR`，不调用服务商。
+3. **省略名称** — `generateImage` 与 `resolveSlot({ fallbackTag: "image" })` 都使用 `image`。不会自动挑选其它图像用途，也不会使用默认文本模型。语音与转写保留各自 `speech` / `transcription` 默认名及原有同 tag 解析。
+4. **非图片同 tag 回退** — 文本等既有调用具名未命中时可回落到同 tag slot；不跨 tag 回退。图片用途不适用此规则。
+5. **任务选择用途** — Agent 的 `runtimeModelOverrides` 优先于 `manifest.model`；function 图片任务由插件的 `modelPresetId` 设置选择用途。两者最终使用同一请求级模型绑定。
+
+场景补图、社区插画插件、世界素材与协议的关系见 [图像生成](image-generation.md)。
 
 模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：请求级 operational 覆盖 → `llm.toml` 手动字段 → 内置模型资料 → 版本化 LiteLLM 快照 → 协议默认。请求覆盖经 `X-Slot-Config.capabilityOverrides` 下发，只包含 input/output/features/contextWindow/maxOutputTokens；价格覆盖仅供客户端显示，绝不进入服务端信任边界。`self` 部署允许本机用户扩张能力；`demo` / `commercial` 只接受基础能力的非空子集，并对 token 上限取服务端值与请求值的较小者。每次请求只克隆 effective target，不修改全局 registry。每次 agent 调用在 `PreLLMCall` 之后通过 `LLMAdapter.resolveBudget(slot)` 读取实际用途的 `contextWindow`、`maxOutputTokens` 和用户请求的 `requestedMaxOutputTokens`，再预留输出并裁剪输入；上下文组装和 `PostContextAssembly` 不再提前按其他模型的窗口裁剪历史。story / plugin 各自使用实际目标的窗口，compactor 使用 `fast` 的当前配置；请求覆盖与 `llm.toml` 热更新都通过同一 adapter 解析。`createTurnContextBudget` 仅提供未知模型的 32,768 窗口回退值；显式 `COVEL_COMPACTOR_CONTEXT_WINDOW` 通过 `BudgetOptions.contextWindowLimit` 保留为部署上限，不能扩大模型自身能力。
 
@@ -80,11 +82,9 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 连接测试通过与回合执行相同的请求头校验、用途绑定、参数覆盖和能力限制；用途测试保留 slot 名，不能先替换成 preset ID 后丢失该用途的配置。`GET /api/presets` 与 `GET /api/llm-config` 返回模型能力和白名单中的 `parameterOverrides` 默认值，设置页据此显示 TOML 默认值及恢复默认后的预算，不返回任意 provider metadata。新旧 token 设置入口共用覆盖数据与 `resolveLlmTokenLimits`；页面同时显示有效输出预算和剩余输入预算，并提示上下文与输出冲突。未知模型的协议默认值只声明模态和特性，不推测具体模型的 token 上限。
 
-后台记忆更新使用触发它的请求 adapter，切换模型或调整输出参数后重试同样生效。请求包装器共享记忆管理器及按 session 串行的 pending 队列：`MemoryUpdater.updateAfterTurn(params, llmOverride?)` 捕获本次 adapter，`awaitPending(sessionId)` 仍等待同一队列。恢复暂停任务时重新使用当前请求的上下文预算。调用前预算超限、provider 初始化失败和上游请求失败均在错误详情保留实际 provider/model；无效输出参数归为不可重试的配置错误。
+记忆由 `memory` 插件的 post-turn function runtime 提取。它消费冻结的 `turn-digest@1`，作为 `completion.mode: detached` 作业执行；`settle: before-next-execution` 使下一次执行在获取新快照前等待已入队作业，最长等待由 `maxSettleWaitMs` 控制。作业通过当前请求的 gateway 使用 `memory` 用途和 `reasoningEffort: disabled` 默认值；请求上下文中的模型绑定、参数覆盖和授权仍经普通 gateway 解析。模型调用失败不回滚已提交剧情，失败或取消的提取不提交部分记忆。
 
-记忆提取是框架服务。用途分配始终列出 `memory`，即使服务端未定义该 slot：浏览器显式绑定优先；未绑定时服务端依次选择 `memory`、`plugin`、`story`、首个 text slot。每次任务读取最新基础配置，支持热重载；排队任务保留各自请求的 adapter 和 slot。纯 UI、无 model/stage 的自动声明不会在会话插件列表显示无效的 runtime 模型选择器。
-
-记忆请求每次调用的整体超时为 120 秒（包含该调用内部的传输重试），默认关闭额外思考以降低事实提取耗时；用户显式配置的思考参数仍优先。memory 库保留有限瞬态重试，gateway 返回的不可重试错误（包括整体超时）不会重试。`{}` 表示合法的无变化；非法 JSON、非对象或没有有效记忆块的非空结果均记录失败。结果以 `memory.updated` 写入该回合 trace，并在 `memory-panel` capability 的宿主下持久化 `_memory/update` 状态。已结束的 provider / 解析失败会清除该任务的待恢复记录，下一轮不会立即重复同一失败请求；进程中断或持久化失败的任务仍保留恢复能力。失败不回滚已提交剧情；下一次有叙事输出的成功回合会提取新剧情，成功后清除失败提示。
+成功的提取写入 `memory` 插件自己的 `blocks` namespace，面板直接读取该数据；提示词由其 `prompt.segment@1` 扩展注入。没有独立的框架记忆服务、`memory-panel` capability 或 `_memory/update` 镜像。`memory` 用途仍可在模型配置中显式绑定；具体解析与回退遵循本页通用 slot 规则。
 
 ## 请求中的模型身份
 
@@ -188,6 +188,10 @@ providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 
 三个文本协议共用的 SSE 解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
 
+文本流必须包含协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。
+
+嵌入调用可传 `expectedModelId`（`provider/model`）；Gateway 在解析目标后、网络请求前校验它。Memory 的 `EmbedFn(texts, { sessionId, modelId })` 必须使用会话锁定的模型身份。修改当前配置不能把同维度的另一个模型写入旧索引；不匹配时查询降级为关键词检索，摄入不推进进度。恢复原模型配置后可继续补录；需要切换模型时重建开发期会话及索引，已混入错误向量的数据也需重建。
+
 ## API Key 流转
 
 Key 永远不进 `llm.toml`：dev 放 `.env.llm`，桌面端放 `~/.covel/keys.env`（mode 600），纯 web 放 localStorage（`covel:keys`）。每次 AI 请求经 `X-Provider-Keys` header（base64 JSON `{provider: key}`）到达服务端，按目标 slot 的 `provider` 名分发绑定 —— wire 拿到的 `config.apiKey` 已是该 slot provider 的 key，客户端 key 覆盖 env key。
@@ -201,3 +205,5 @@ Provider and plugin HTTP helpers cancel rejected response bodies before retrying
 错误详情保留失败请求实际使用的 `provider` 和 `model`，包含备用模型最终失败的情况；后续修改配置不会改变已记录的失败目标。可在失败任务上打开“更换模型 / 调整参数”，进入模型用途选择服务商和模型，并展开“生成参数”调整上下文窗口、模型最大输出能力、单次输出、温度、采样和思考强度；能力字段也可以通过原“编辑能力”入口覆盖，包括仅在前端配置的模型用途。两处复用同一个 token 编辑组件，并沿用 `llm.capabilityOverrides` / `llm.paramOverrides`，无需迁移旧设置。资料库输出上限仅供参考，不阻止输入符合设置范围的手动参数。
 
 关闭设置后点击“重试此任务”，请求重新读取当前模型和参数；已提交的剧情和其他成功任务仍保留。最大输出限制与输入上下文窗口是两个独立的设置，调低输出不会删除会话历史。
+
+非流式文本与对象生成同样拒绝 provider 错误正文或 `finishReason: error`，即使 HTTP 为 200、正文仍可解析，也不会上报成功或交给函数插件写入记忆。Responses 必须处于 `completed` 或 `incomplete` 终态；排队、处理中、取消、失败或缺失状态均按 provider error 处理。`incomplete` 仍映射为 `length`，保留调用方既有截断策略。无输出的 provider error 可按已配置的备用模型策略回退。

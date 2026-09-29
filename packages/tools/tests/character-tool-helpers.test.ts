@@ -7,7 +7,6 @@ import {
   formatFieldValue,
   loadCharacterSchema,
   mergeSchemaDefaults,
-  mirrorCharacterToPluginData,
   sortByFrequencyThenRecency,
   toSnapshot,
   truncate,
@@ -32,7 +31,7 @@ function createStore(overrides: Partial<CharacterStore> = {}): CharacterStore {
   return {
     upsertCharacter: async () => {},
     listCharacters: async () => [],
-    setPluginData: async () => {},
+    getCharacterSchema: async () => null,
     ...overrides,
   };
 }
@@ -103,77 +102,26 @@ describe("character tool helpers", () => {
     });
   });
 
-  it("mirrors character snapshots to plugin data with stable row identity", async () => {
-    const setPluginData = vi.fn();
-    const store = createStore({ setPluginData });
-
-    await mirrorCharacterToPluginData(store, "session-1", "plugin-a", {
-      id: "char-1",
-      name: "Mira",
-      type: "npc",
-      version: 1,
+  it("loads the authoritative session character schema", async () => {
+    const schema = {
+      ...sampleSchema,
+      types: ["enemy"],
+      sessionId: "session-1",
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    expect(setPluginData).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "char-mirror-char-1",
-        sessionId: "session-1",
-        pluginId: "plugin-a",
-        namespace: "characters",
-        key: "char-1",
-      }),
-    );
-  });
-
-  it("loads character schema through the resolved world-data provider", async () => {
-    const getPluginData = vi.fn(async () => ({
-      value: sampleSchema,
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    }));
-    const store = createStore({ getPluginData });
-
-    const result = await loadCharacterSchema(
-      store,
-      { findWorldDataPluginId: () => "world-provider" },
-      "session-1",
-    );
-
-    expect(result).toBe(sampleSchema);
-    expect(getPluginData).toHaveBeenCalledWith(
-      "session-1",
-      "world-provider",
-      "schema",
-      "character-attributes",
-    );
-  });
-
-  it("treats missing schema dependencies or invalid rows as no schema", async () => {
-    await expect(
-      loadCharacterSchema(createStore(), {}, "session-1"),
-    ).resolves.toBeNull();
-
-    await expect(
-      loadCharacterSchema(
-        createStore({ getPluginData: async () => null }),
-        { findWorldDataPluginId: () => "world-provider" },
+    };
+    const getCharacterSchema = vi.fn(async () => schema);
+    expect(
+      await loadCharacterSchema(
+        createStore({ getCharacterSchema }),
         "session-1",
       ),
-    ).resolves.toBeNull();
+    ).toEqual(schema);
+    expect(getCharacterSchema).toHaveBeenCalledWith("session-1");
+  });
 
-    await expect(
-      loadCharacterSchema(
-        createStore({
-          getPluginData: async () => ({
-            value: { version: 1, attributes: "bad" },
-            updatedAt: "2026-01-01T00:00:00.000Z",
-          }),
-        }),
-        { findWorldDataPluginId: () => "world-provider" },
-        "session-1",
-      ),
-    ).resolves.toBeNull();
+  it("returns null when the session has no schema", async () => {
+    expect(await loadCharacterSchema(createStore(), "session-1")).toBeNull();
   });
 
   it("merges declared schema defaults into stored fields without mutating input", () => {

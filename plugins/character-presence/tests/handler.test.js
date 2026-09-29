@@ -265,3 +265,30 @@ describe("character-presence handler", () => {
     ).rejects.toThrow("presence is too large");
   });
 });
+
+it("replaces a projected portrait without losing named variants or voice", async () => {
+  const old = {
+    schemaVersion: 1,
+    characterId: "hero",
+    voice: { id: "c".repeat(64), mime: "audio/wav", size: 1 },
+    visuals: {
+      defaultVariant: "normal",
+      variants: [
+        { id: "normal", sprite: avatar },
+        { id: "smile", sprite: avatar },
+      ],
+    },
+  };
+  const next = { id: "d".repeat(64), mime: "image/png", size: 5 };
+  const result = await handler({
+    ...ctx({ action: "replacePortrait", characterId: "sess-hero", ref: next }),
+    store: { listPluginData: async () => [{ key: "hero", value: old }] },
+  });
+  const value = getPendingProposals(result)[0].payload.value;
+  expect(value.characterId).toBe("hero");
+  expect(value.voice).toEqual(old.voice);
+  expect(value.visuals.variants).toEqual([
+    { id: "normal", sprite: next },
+    { id: "smile", sprite: avatar },
+  ]);
+});

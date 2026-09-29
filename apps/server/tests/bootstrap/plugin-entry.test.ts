@@ -8,6 +8,8 @@ import {
   loadPluginDefinition,
   loadPluginSummary,
   type ParsedPluginMd,
+  type ParsedRuntimeMd,
+  type PackageManifest,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import {
@@ -16,7 +18,7 @@ import {
   createPluginRpcRegistry,
   type HookContext,
 } from "@covel/runtime";
-import type { RuntimeManifest } from "@covel/shared";
+import type { PluginManifest, RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
@@ -50,7 +52,7 @@ function writePlugin(
     pluginId,
     description: pluginId,
     entry: entryPath,
-  } as unknown as RuntimeManifest;
+  } as PackageManifest;
   return {
     discovery: {
       id: pluginId,
@@ -59,8 +61,38 @@ function writePlugin(
       pluginMdPaths: [path.join(rootPath, "PLUGIN.md")],
       source: opts.source ?? "builtin",
     },
-    parsed: { manifest, promptTemplate: "", rawFrontmatter: {} },
+    parsed: {
+      manifest,
+      plugin: {
+        id: pluginId,
+        kind: "plugin",
+        description: pluginId,
+        entry: entryPath,
+        contributes: fixtureContributions(entrySource ?? ""),
+      },
+      promptTemplate: "",
+      rawFrontmatter: {},
+    },
   };
+}
+
+// These are synthetic registry fixtures: declarations mirror the literal
+// registrations in each fixture source; malformed calls still reach API validation.
+function fixtureContributions(
+  source: string,
+): NonNullable<PluginManifest["contributes"]> {
+  const matches = (pattern: RegExp) => [
+    ...new Set([...source.matchAll(pattern)].map((match) => match[1]!)),
+  ];
+  return {
+    tools: matches(
+      /registerTool\(\s*(?:\w+\.toolkit\.tool\()?\s*\{\s*name:\s*["']([^"']+)["']/g,
+    ).map((name) => (name.endsWith("-tool-") ? `${name}1` : name)),
+    actions: matches(/registerRpc\(["']([^"']+)["']/g),
+    services: matches(/\bcontract:\s*["']([^"']+)["']/g),
+    wires: matches(/\bid:\s*["']([^"']+)["']/g),
+    hooks: matches(/\.on\(["']([^"']+)["']/g).map((event) => ({ event })),
+  } as NonNullable<PluginManifest["contributes"]>;
 }
 
 function makeParams(entries: ReturnType<typeof writePlugin>[]) {
@@ -75,7 +107,8 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
         pluginType: "plugin",
         runtimeCount: 0,
       },
-      manifests: [entry.parsed],
+      packageManifest: entry.parsed,
+      manifests: [],
       status: "registered",
       loadedRuntimes: new Map(),
       source: entry.discovery.source,
@@ -84,7 +117,9 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
   return {
     pluginRegistry,
     discoveryMap: new Map(entries.map((e) => [e.discovery.id, e.discovery])),
-    manifestCache: new Map(entries.map((e) => [e.discovery.id, [e.parsed]])),
+    manifestCache: new Map<string, readonly ParsedRuntimeMd[]>(
+      entries.map((e) => [e.discovery.id, []]),
+    ),
     store: createMemoryStore(),
     tools: new ToolRegistry(),
     hookPipeline: createHookPipeline(),
@@ -125,12 +160,11 @@ const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
 describe("createBootstrapPluginEntries", () => {
   it.each([false, true])(
-    "closes pending factories without starting later entries, cleanupFailure=%s",
+    "closes pending package factories and runs their cleanup, cleanupFailure=%s",
     async (cleanupFailure) => {
       const state = {
         started: Promise.withResolvers<void>(),
         cleaned: false,
-        lateStarted: false,
         cleanupFailure,
         signal: undefined as AbortSignal | undefined,
       };
@@ -156,22 +190,6 @@ describe("createBootstrapPluginEntries", () => {
         { source: "community" },
       );
       const params = makeParams([plugin]);
-      const second = {
-        ...plugin.parsed,
-        manifest: {
-          ...plugin.parsed.manifest,
-          name: `${pluginId}/second`,
-          entry: "server/second.mjs",
-        },
-      };
-      fs.writeFileSync(
-        path.join(plugin.discovery.rootPath, "server/second.mjs"),
-        "export default api => { globalThis.__covelEntryAbort.lateStarted = true; };",
-      );
-      params.pluginRegistry.register({
-        ...params.pluginRegistry.get(pluginId)!,
-        manifests: [plugin.parsed, second],
-      });
       const entries = await createBootstrapPluginEntries(params);
       try {
         const activation = entries.ensurePluginEntry(pluginId, "session");
@@ -185,7 +203,6 @@ describe("createBootstrapPluginEntries", () => {
         await rejected;
         expect(state.signal?.aborted).toBe(true);
         expect(state.cleaned).toBe(true);
-        expect(state.lateStarted).toBe(false);
         expect(params.rpcRegistry.list()).toEqual([]);
       } finally {
         await entries.close().catch(() => {});
@@ -193,6 +210,231 @@ describe("createBootstrapPluginEntries", () => {
       }
     },
   );
+
+  it("bounds a stalled factory without blocking later activations", async () => {
+    const state = { signal: undefined as AbortSignal | undefined };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelEntryStall = state;
+    const stalled = writePlugin(
+      "entry-stalled",
+      `
+      export default async function(api) {
+        globalThis.__covelEntryStall.signal = api.signal;
+        await new Promise(() => {});
+      }
+    `,
+      { source: "community" },
+    );
+    const healthy = writePlugin(
+      "entry-after-stall",
+      `export default function(api) { api.registerRpc("ready", async () => true); }`,
+      { source: "community" },
+    );
+    const params = {
+      ...makeParams([stalled, healthy]),
+      entryActivationTimeoutMs: 50,
+      entryRetryDelayMs: 60_000,
+    };
+    const entries = await createBootstrapPluginEntries(params);
+    try {
+      const first = entries.ensurePluginEntry("entry-stalled", "s");
+      const second = entries.ensurePluginEntry("entry-after-stall", "s");
+      await expect(first).rejects.toThrow("activation-timeout");
+      await second;
+      expect(state.signal?.aborted).toBe(true);
+      expect(entries.isEntryRetryDeferred("entry-stalled")).toBe(true);
+      expect(entries.isEntryRetryDeferred("entry-after-stall")).toBe(false);
+      expect(
+        params.rpcRegistry.getPluginAction("entry-after-stall", "ready"),
+      ).toBeDefined();
+    } finally {
+      await entries.close();
+      delete globals.__covelEntryStall;
+    }
+  });
+
+  it("clears retry deferral after an explicit successful retry", async () => {
+    const state = { calls: 0 };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelEntryDeferral = state;
+    const plugin = writePlugin(
+      "entry-deferral",
+      `
+      export default function(api) {
+        if (globalThis.__covelEntryDeferral.calls++ === 0) throw new Error("first failure");
+        api.registerRpc("ready", async () => true);
+      }
+    `,
+      { source: "community" },
+    );
+    const entries = await createBootstrapPluginEntries({
+      ...makeParams([plugin]),
+      entryRetryDelayMs: 60_000,
+    });
+    try {
+      await expect(
+        entries.ensurePluginEntry("entry-deferral", "s"),
+      ).rejects.toThrow("failed to activate");
+      expect(entries.isEntryRetryDeferred("entry-deferral")).toBe(true);
+      await entries.ensurePluginEntry("entry-deferral", "s");
+      expect(entries.isEntryRetryDeferred("entry-deferral")).toBe(false);
+      expect(state.calls).toBe(2);
+    } finally {
+      await entries.close();
+      delete globals.__covelEntryDeferral;
+    }
+  });
+
+  it("isolates pending factories from other plugins and session captures", async () => {
+    const state = {
+      started: Promise.withResolvers<void>(),
+      release: Promise.withResolvers<void>(),
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelIsolatedEntry = state;
+    const pending = writePlugin(
+      "entry-isolated-pending",
+      `
+      export default async function(api) {
+        globalThis.__covelIsolatedEntry.started.resolve();
+        await globalThis.__covelIsolatedEntry.release.promise;
+        api.registerRpc("ready", async () => true);
+      }
+    `,
+      { source: "community" },
+    );
+    const healthy = writePlugin(
+      "entry-isolated-healthy",
+      'export default function(api) { api.registerRpc("ready", async () => true); }',
+      { source: "community" },
+    );
+    const params = makeParams([pending, healthy]);
+    const entries = await createBootstrapPluginEntries(params);
+    const activation = entries.ensurePluginEntry(
+      "entry-isolated-pending",
+      "slow",
+    );
+    try {
+      await state.started.promise;
+      await entries.ensurePluginEntry("entry-isolated-healthy", "other");
+      await entries.withSnapshot("other", async () => {
+        expect(
+          params.rpcRegistry.getPluginAction("entry-isolated-healthy", "ready"),
+        ).toBeDefined();
+        expect(
+          params.rpcRegistry.getPluginAction("entry-isolated-pending", "ready"),
+        ).toBeUndefined();
+      });
+      expect(entries.isEntryPublished("entry-isolated-pending")).toBe(false);
+    } finally {
+      state.release.resolve();
+      await activation;
+      await entries.close();
+      delete globals.__covelIsolatedEntry;
+    }
+  });
+
+  it("bounds stalled rollback cleanup and retains its shutdown diagnostic", async () => {
+    const started = Promise.withResolvers<void>();
+    const globals = globalThis as typeof globalThis & {
+      __covelCleanupStarted?: () => void;
+    };
+    globals.__covelCleanupStarted = started.resolve;
+    const plugin = writePlugin(
+      "entry-stalled-cleanup",
+      `
+      export default async function(api) {
+        api.onDispose(() => new Promise(() => {}));
+        api.registerRpc("pending", async () => true);
+        globalThis.__covelCleanupStarted();
+        await new Promise(() => {});
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      entryActivationTimeoutMs: 20,
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const pendingFailure = entries
+        .ensurePluginEntry("entry-stalled-cleanup", "slow")
+        .catch((error: unknown) => error);
+      // The budget must expire after the fixture registers cleanup, not
+      // during a slow module import on a busy CI worker.
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(40);
+      const failure = await pendingFailure;
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        expect.objectContaining({
+          message: expect.stringContaining("activation-timeout"),
+        }),
+        expect.objectContaining({ message: "plugin entry cleanup timed out" }),
+      ]);
+      expect(entries.isEntryRetryDeferred("entry-stalled-cleanup")).toBe(true);
+      await entries.withSnapshot("other", async () => {
+        expect(params.rpcRegistry.list()).toEqual([]);
+      });
+      await expect(entries.close()).rejects.toThrow(
+        "plugin entry cleanup failed",
+      );
+    } finally {
+      await entries.close().catch(() => {});
+      vi.useRealTimers();
+      delete globals.__covelCleanupStarted;
+    }
+  });
+
+  it("rechecks approval when a prepared first entry is published", async () => {
+    const state = {
+      started: Promise.withResolvers<void>(),
+      release: Promise.withResolvers<void>(),
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelRevokedEntry = state;
+    const plugin = writePlugin(
+      "entry-revoked-publication",
+      `
+      export default async function(api) {
+        api.registerRpc("ready", async () => true);
+        globalThis.__covelRevokedEntry.started.resolve();
+        await globalThis.__covelRevokedEntry.release.promise;
+      }
+    `,
+      { source: "community" },
+    );
+    let approved = true;
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      isCommunityServerCodeApproved: () => approved,
+    });
+    const activation = entries.ensurePluginEntry(
+      "entry-revoked-publication",
+      "session",
+    );
+    const rejected = expect(activation).rejects.toMatchObject({
+      cause: expect.objectContaining({
+        message: "Plugin entry approval was revoked before publication",
+      }),
+    });
+    try {
+      await state.started.promise;
+      approved = false;
+      state.release.resolve();
+      await rejected;
+      expect(params.rpcRegistry.list()).toEqual([]);
+      expect(entries.isEntryPublished("entry-revoked-publication")).toBe(false);
+    } finally {
+      state.release.resolve();
+      await activation.catch(() => {});
+      await entries.close();
+      delete globals.__covelRevokedEntry;
+    }
+  });
 
   it("cleans a failed activation before retrying with a fresh signal", async () => {
     const state = { signals: [] as AbortSignal[], cleanups: 0 };
@@ -388,7 +630,7 @@ describe("createBootstrapPluginEntries", () => {
     // only the sub-runtime manifest (no entry) — exactly the multi-runtime shape.
     fs.writeFileSync(
       path.join(rootPath, "PLUGIN.md"),
-      `---\nname: ${pluginId}\ndescription: multi-runtime root\npluginType: plugin\nentry: ./server/index.mjs\n---\n\n# Multi\n`,
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: multi-runtime root\nentry: ./server/index.mjs\ncontributes:\n  tools: [root-entry-tool]\n---\n\n# Multi\n`,
     );
     const subManifest = {
       name: `${pluginId}/worker`,
@@ -401,17 +643,22 @@ describe("createBootstrapPluginEntries", () => {
       id: pluginId,
       rootPath,
       isMultiRuntime: true,
-      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "PLUGIN.md")],
+      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "RUNTIME.md")],
       source: "builtin",
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
-      { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
+      {
+        runtime: { type: "agent" },
+        manifest: subManifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      },
     ]);
     const discovery = params.discoveryMap.get(pluginId)!;
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
     fs.writeFileSync(
       discovery.pluginMdPaths[0]!,
-      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+      `---\ndescription: Worker\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n`,
     );
     const definition = await loadPluginDefinition(discovery);
     params.pluginRegistry.register({
@@ -440,7 +687,7 @@ describe("createBootstrapPluginEntries", () => {
     );
     fs.writeFileSync(
       path.join(rootPath, "PLUGIN.md"),
-      `---\nname: ${pluginId}\ndescription: community multi-runtime root\npluginType: plugin\nentry: ./server/index.mjs\n---\n`,
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: community multi-runtime root\nentry: ./server/index.mjs\ncontributes:\n  actions: [root-action]\n---\n`,
     );
 
     const subManifest = {
@@ -453,17 +700,22 @@ describe("createBootstrapPluginEntries", () => {
       id: pluginId,
       rootPath,
       isMultiRuntime: true,
-      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "PLUGIN.md")],
+      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "RUNTIME.md")],
       source: "community",
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
-      { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
+      {
+        runtime: { type: "agent" },
+        manifest: subManifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      },
     ]);
     const discovery = params.discoveryMap.get(pluginId)!;
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
     fs.writeFileSync(
       discovery.pluginMdPaths[0]!,
-      `---\nname: ${subManifest.name}\ndescription: Worker\ntrigger: {type: manual}\n---\n`,
+      `---\ndescription: Worker\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n`,
     );
     const definition = await loadPluginDefinition(discovery);
     params.pluginRegistry.register({
@@ -561,12 +813,6 @@ export default function (covel) {
       path.join(outsideDir, "evil.mjs"),
       path.join(rootPath, "server", "index.mjs"),
     );
-    const manifest = {
-      name: pluginId,
-      pluginId,
-      description: pluginId,
-      entry: "server/index.mjs",
-    } as unknown as RuntimeManifest;
     const params = makeParams([]);
     params.discoveryMap.set(pluginId, {
       id: pluginId,
@@ -575,9 +821,10 @@ export default function (covel) {
       pluginMdPaths: [path.join(rootPath, "PLUGIN.md")],
       source: "community",
     });
-    params.manifestCache.set(pluginId, [
-      { manifest, promptTemplate: "", rawFrontmatter: {} },
-    ]);
+    fs.writeFileSync(
+      path.join(rootPath, "PLUGIN.md"),
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: Symlink test\nentry: ./server/index.mjs\ncontributes:\n  actions: [escaped]\n---\n`,
+    );
 
     const { ensurePluginEntry } = await createBootstrapPluginEntries(params);
     const failure = await ensurePluginEntry(pluginId, "session").then(
@@ -612,7 +859,7 @@ export default async function (covel) {
     ).toBeDefined();
   });
 
-  it("keeps a failed multi-entry activation pending and retries the entire batch", async () => {
+  it("keeps a partially initialized package pending and retries its entry", async () => {
     const p = writePlugin(
       "entry-retry-batch",
       `
@@ -633,21 +880,14 @@ export default async function (covel) {
     `,
     );
     const params = makeParams([p]);
-    params.manifestCache.set(p.discovery.id, [
-      p.parsed,
-      {
-        ...p.parsed,
-        manifest: {
-          ...p.parsed.manifest,
-          name: "entry-retry-batch/second",
-          entry: "server/second.mjs",
-        },
-      },
-    ]);
-    params.pluginRegistry.register({
-      ...params.pluginRegistry.get(p.discovery.id)!,
-      manifests: params.manifestCache.get(p.discovery.id),
-    });
+    const entryPath = path.join(p.discovery.rootPath, "server/index.mjs");
+    fs.writeFileSync(
+      entryPath,
+      fs
+        .readFileSync(entryPath, "utf8")
+        .replace("export default function (covel)", "function prepare(covel)") +
+        '\nimport second from "./second.mjs";\nexport default api => { prepare(api); second(api); };',
+    );
     const entries = await createBootstrapPluginEntries(params);
     const attempts = await Promise.allSettled([
       entries.ensurePluginEntry(p.discovery.id),
@@ -793,6 +1033,15 @@ export default async function (covel) {
     "rolls back the complete batch and reports invalid $name registrations",
     async ({ name, call, operation }) => {
       const pluginId = `entry-invalid-${name}`;
+      const expectedOperation = [
+        "hook-enforce",
+        "rpc-duplicate",
+        "wire-module",
+        "wire-group",
+        "wire-duplicate",
+      ].includes(name)
+        ? "declarations"
+        : operation;
       const source = FULL_ENTRY_SRC.replace(
         'action: "continue"',
         'action: "abort", reason: "leaked hook"',
@@ -806,7 +1055,7 @@ export default async function (covel) {
         ).rejects.toMatchObject({
           cause: {
             code: "plugin_registration_invalid",
-            registration: operation,
+            registration: expectedOperation,
           },
         });
         expect(entries.hasPendingEntry(pluginId)).toBe(true);
@@ -819,7 +1068,7 @@ export default async function (covel) {
         expect(params.pluginRegistry.get(pluginId)).toMatchObject({
           status: "registered",
           error: expect.stringContaining(
-            `[plugin_registration_invalid] ${operation}:`,
+            `[plugin_registration_invalid] ${expectedOperation}:`,
           ),
         });
       } finally {

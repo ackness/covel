@@ -21,6 +21,12 @@ import type {
  * The handler receives this context and returns a Record<string, unknown> output.
  */
 export interface FunctionHandlerContext {
+  readonly session?: {
+    readonly lastPlayerInput:
+      import("../types/message.js").PlayerInputSubmission | null;
+  };
+  /** Committed world records plus validated execution-local proposals. */
+  readonly world?: import("../proposals/world-model.js").WorldModelView;
   /** Public, schema-validated services exported by active plugins. */
   readonly services?: import("./plugin-services.js").PluginServiceClient;
   readonly sessionId: string;
@@ -112,7 +118,7 @@ export interface FunctionHandlerContext {
   /**
    * Optional trigger-event descriptor — only populated when this runtime
    * was activated by the in-turn event chain (an earlier runtime in the
-   * same turn emitted `output.events: [{ topic, data }]` matching this
+   * same turn emitted `effects.events: [{ topic, data }]` matching this
    * runtime's `trigger: { type: 'event', topic }`). Absent for manual,
    * scheduled, and auto-trigger activations.
    */
@@ -211,7 +217,7 @@ export interface FunctionStoreView {
     namespace: string,
   ): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;
   /** Read accepted inputs for this session; values remain immutable. */
-  listPlayerInputs(sessionId?: string): Promise<
+  listPlayerInputs(): Promise<
     readonly {
       readonly id: string;
       readonly formId: string;

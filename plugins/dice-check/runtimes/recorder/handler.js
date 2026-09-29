@@ -53,6 +53,15 @@ export default async function handler(ctx) {
   if (!ctx.triggerEvent) {
     return { outcome: "skipped", skipReason: "No check event to record" };
   }
+  // A settled tabletop form owns checks in its source turn. Its independent
+  // die must never be reinterpreted as one from this plugin's pre-rolled pool.
+  const sourceTurnId = ctx.execution?.sourceTurnId ?? ctx.turnId;
+  if (ctx.inputs?.tabletopCheck?.value?.resolvedTurnId === sourceTurnId) {
+    return {
+      outcome: "skipped",
+      skipReason: "The tabletop check already settled this turn",
+    };
+  }
   const data = ctx.triggerEvent?.data;
   // Tolerate a bare single-check payload (schema forbids it, but a hand-made
   // event should degrade to "one check" rather than a skip).

@@ -72,7 +72,7 @@ describe("trusted function-runtime store handle", () => {
     let writeError: unknown;
 
     await runTrustedHandler(store, async (ctx) => {
-      const handlerStore = ctx.store as DataStore;
+      const handlerStore = ctx.store;
       try {
         await handlerStore.setPluginData({
           id: `${SESSION_ID}:builtin-plugin:_jobs:forged`,
@@ -116,13 +116,8 @@ describe("trusted function-runtime store handle", () => {
 
     let observedJob: unknown;
     const result = await runTrustedHandler(store, async (ctx) => {
-      const handlerStore = ctx.store as DataStore;
-      const row = await handlerStore.getPluginData(
-        SESSION_ID,
-        "builtin-plugin",
-        "_jobs",
-        "job-1",
-      );
+      const handlerStore = ctx.store;
+      const row = await handlerStore.getPluginData("_jobs", "job-1");
       observedJob = row?.value;
       await handlerStore.setPluginData({
         id: `${SESSION_ID}:builtin-plugin:state:progress`,

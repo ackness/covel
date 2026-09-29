@@ -66,15 +66,10 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
       await createCommitPipeline(store).commitAll(proposals);
     expect(commitResults.every((result) => result.committed)).toBe(true);
 
-    const schema = await store.getPluginData(
-      context.sessionId,
-      context.pluginId,
-      "schema",
-      "character-attributes",
-    );
-    expect(schema?.value).toMatchObject({ version: 1 });
-    expect(schema?.value.attributes).toHaveLength(15);
-    expect(schema?.value.attributes.slice(0, 2)).toEqual([
+    const schema = await store.getCharacterSchema(context.sessionId);
+    expect(schema).toMatchObject({ version: 1 });
+    expect(schema?.attributes).toHaveLength(15);
+    expect(schema?.attributes.slice(0, 2)).toEqual([
       expect.objectContaining({ id: "field1", category: "stats" }),
       expect.objectContaining({ id: "field2", category: "bio" }),
     ]);
@@ -101,7 +96,7 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
       "world-entry:currency",
     ]);
     expect(lorebook[0]).toMatchObject({
-      pluginId: "world-init",
+      owner: { kind: "plugin", pluginId: "world-init" },
       keys: ["geography"],
       strategy: "constant",
       insertionOrder: 100,

@@ -4,7 +4,24 @@
 
 ## Definition
 
-世界包在 `dimensions.time` 声明时间，也可以在 `dimensionSources.time` 引用单独文件，或使用 `worldData` 中指向 `world:metadata.dimensions` 的数据源。导入、导出和维度校验共用 `worldTimeSchema`。世界作者提供规则和 prompt，插件提供演进逻辑；框架只处理调度、输入绑定和事务。
+世界包通过公开数据契约 `world.time-definition@1` 声明时间。`world-time` 插件拥有定义 schema、历法和演进逻辑；框架只负责通用契约导入、调度、输入绑定和事务。其他实现可通过相同契约接收世界数据，无须沿用插件 ID 或 namespace。
+
+在 `world.data.yaml` 中声明：
+
+```yaml
+schemaVersion: 1
+sources:
+  timeDefinition:
+    kind: yaml
+    path: data/time.yaml
+    schema: contract:world.time-definition@1
+    to: contract:world.time-definition@1
+    key: id
+```
+
+`data/time.yaml` 的记录为 `{ id: world, definition: ... }`。导入写入接收插件的 `definitions/world`；JSON Schema 位于 `plugins/world-time/schemas/time-definition.schema.json`，从同目录插件的 `schema.js` 生成。字段结构由导入器校验，跨字段历法约束由插件在使用定义时校验。世界维度不再接受 `time`；已有开发世界需重建为契约数据文件，不提供旧字段兼容读取。
+
+AI 世界生成使用调用方提供的公开数据 schema，在 `WORLD_PACKAGE_YAML.contractData` 产生 `{ contract, key, value }`；`key` 与 `value.id` 一致。文件保存生成契约数据源，store-only 和 return-only 保存 `metadata.contractData`，浏览器同步后仍走同一导入校验和接收者解析。生成器不内置时间 schema。
 
 两种时间模型：
 
@@ -32,7 +49,8 @@
 粗粒度倒流示例：
 
 ```yaml
-time:
+id: world
+definition:
   kind: phases
   name: 梦境时间
   cycleLabel: 梦回
@@ -62,21 +80,22 @@ evolution:
 
 内置 `world-time` 是 core-plugin，包含两个 runtime：
 
-1. `world-time/context`（pre-turn function）读取会话时钟或世界初值，发布 `world-time-context` capability。初值和本地化显示更新通过 proposal 暂存。
+1. `world-time/context`（pre-turn function）读取会话时钟或世界初值，发布 `world-time-context@1` 契约输出。初值和本地化显示更新通过 proposal 暂存。导入定义面板在首次叙事前即显示规则；未导入定义时显示默认历法说明。
 2. `world-time/advance`（post-turn agent）通过 required inputs 读取本轮成功叙事和时间起点，调用 `advance-world-time`。模型只提议跨度/方向，插件完成历法运算和策略校验。工具成功即结束；默认 20 步工具预算、超时和循环检测仍有效。
 
-叙事插件接入：
+叙事插件的 `RUNTIME.md` 接入：
 
 ```yaml
-inputs:
-  worldTime:
-    from: { capability: world-time-context, cardinality: one }
-    required: false
+io:
+  inputs:
+    worldTime:
+      from: { contract: world-time-context@1, cardinality: one }
+      required: false
 ```
 
 `worldTime.value` 包含 `definition`、整数 `tick`、`display`，以及 calendar 的年月日时分或 phases 的 cycle/phase。它是本轮起点。叙事遵循世界的 prompt，明确耗时/转场；post-turn 阶段再结算结束时间。旧记忆和历史叙事不能覆盖该起点。`scene` 记忆仅描述氛围，当前日期和时刻由结构化时钟维护。
 
-状态存放在插件的 `clock/current` 行，随普通会话数据进入快照、检查点和分支。定义在首次提交时复制到会话，后续世界编辑仅影响新会话；读档不因全局世界文件变化而重解释旧刻度。`lastTurnId` 防止同轮重复工具调用，`lastDelta` 和 `reason` 记录本次变化。所有写入都经过已有 proposal 事务；叙事失败、提案提交失败均回滚时间。递归子叙事不独立结算。
+状态存放在插件的 `clock/current` 行，随普通会话数据进入快照、检查点和分支。定义在首次提交时复制到会话，后续世界编辑或定义重新导入不会重置已有时钟；读档不因全局世界文件变化而重解释旧刻度。`lastTurnId` 防止同轮重复工具调用，`lastDelta` 和 `reason` 记录本次变化。所有写入都经过已有 proposal 事务；叙事失败、提案提交失败均回滚时间。递归子叙事不独立结算。
 
 输入 `/time` 调用插件声明的 `world-time:time` 命令，直接展示当前已提交的时钟。它使用会话 locale 格式化存档中的时间定义，不读取后来修改的世界初值，不调用模型、不生成叙事、不推进玩家回合或时钟；随机模式也不会重新抽样。尚无时钟记录时返回明确提示，命令本身不初始化状态。RPC 返回 `{ ok, message, data }`，`data.initialized` 区分未记录与已记录；已记录时还包含结构化时钟和最近演进信息。命令执行遵循已有的插件命令发现、参数校验和审计链路。
 

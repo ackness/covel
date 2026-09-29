@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createPluginRegistry,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
@@ -10,7 +10,8 @@ import { buildPluginDetail } from "../../src/lib/plugin-descriptor.js";
 import { buildAvailablePluginList } from "../../src/routes/api/session/plugins.js";
 
 function makeEntry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
-  const parsed: ParsedPluginMd[] = manifests.map((manifest) => ({
+  const parsed: ParsedRuntimeMd[] = manifests.map((manifest) => ({
+    runtime: { type: manifest.runtimeType ?? "agent" },
     manifest,
     promptTemplate: "",
     rawFrontmatter: {},
@@ -25,7 +26,7 @@ function makeEntry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
       runtimeCount: parsed.length,
     },
     manifests: parsed,
-    manifest: parsed[0],
+
     loadedRuntimes: new Map(
       parsed.map((item) => [
         item.manifest.name,

@@ -1,3 +1,4 @@
+import { parseLorebookOwnerKey } from "../lorebook-owner.js";
 /**
  * Backend-agnostic canonical row→record mappers for the memory domain
  * (turn messages, player inputs, working memory, world-data import ledger,
@@ -9,7 +10,6 @@ import type {
   PlayerInputRecord,
   SessionSummaryRecord,
   TurnMessageRecord,
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
 } from "../../types.js";
 import { asBoolean, type JsonReader } from "./json-reader.js";
@@ -40,16 +40,6 @@ export interface PlayerInputRow {
   createdAt: string;
 }
 
-export interface WorkingMemoryRow {
-  id: string;
-  sessionId: string;
-  key: string;
-  scope: string;
-  value: unknown;
-  schemaRef: string | null;
-  updatedAt: string;
-}
-
 export interface WorldDataLedgerRow {
   id: string;
   sessionId: string;
@@ -70,7 +60,7 @@ export interface WorldDataLedgerRow {
 export interface LorebookEntryRow {
   id: string;
   sessionId: string;
-  pluginId: string;
+  owner: string;
   keys: unknown;
   content: string;
   strategy: string;
@@ -128,21 +118,6 @@ export function toPlayerInputRecord(
   };
 }
 
-export function toWorkingMemoryRecord(
-  row: WorkingMemoryRow,
-  json: JsonReader,
-): WorkingMemoryRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    key: row.key,
-    scope: row.scope as WorkingMemoryRecord["scope"],
-    value: json.readRequired(row.value),
-    schemaRef: row.schemaRef ?? undefined,
-    updatedAt: row.updatedAt,
-  };
-}
-
 export function toWorldDataImportLedgerRecord(
   row: WorldDataLedgerRow,
   json: JsonReader,
@@ -175,7 +150,7 @@ export function toLorebookEntryRecord(
   return {
     id: row.id,
     sessionId: row.sessionId,
-    pluginId: row.pluginId,
+    owner: parseLorebookOwnerKey(row.owner),
     keys: ((json.readRequired(row.keys) as string[] | null) ??
       []) as readonly string[],
     content: row.content,

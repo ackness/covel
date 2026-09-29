@@ -23,7 +23,6 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   TurnResultRecord,
-  WorkingMemoryRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
 } from "../types.js";
@@ -287,20 +286,6 @@ export function makePlayerInput(
   };
 }
 
-export function makeWorkingMemory(
-  overrides?: Partial<WorkingMemoryRecord>,
-): WorkingMemoryRecord {
-  return {
-    id: id(),
-    sessionId: "sess-1",
-    key: "testKey",
-    scope: "player",
-    value: { data: "test" },
-    updatedAt: ts(),
-    ...overrides,
-  };
-}
-
 export function makeWorldDataImportLedger(
   overrides?: Partial<WorldDataImportLedgerRecord>,
 ): WorldDataImportLedgerRecord {
@@ -378,7 +363,7 @@ export function makeLorebookEntry(
   return {
     id: id(),
     sessionId: "sess-1",
-    pluginId: "plugin-1",
+    owner: { kind: "plugin", pluginId: "plugin-1" },
     keys: [],
     content: "Some lore content",
     strategy: "constant",
@@ -399,13 +384,13 @@ export function makeSnapshotPayload(
     schemaVersion: 3,
     turnId: "turn-1",
     characters: [],
+    characterSchema: null,
     stateSchemas: [],
     runtimeExports: [],
     compactedMessageSummaryIds: {},
     displayMessagesBoundary: null,
     stateEntries: [],
     pluginData: [],
-    workingMemory: [],
     sessionSummaries: [],
     lorebookEntries: [],
     suspensions: [],

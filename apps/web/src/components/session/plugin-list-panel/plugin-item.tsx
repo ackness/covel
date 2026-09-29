@@ -31,7 +31,7 @@ export function PluginItem({
   const description = text(pkg.description);
   const runtimes = pkg.runtimes ?? [];
   const tools = pkg.tools ?? [];
-  const requires = pkg.relations?.requires ?? [];
+  const requires = pkg.requires;
 
   const hasSessionScope = sessionPlugin !== undefined;
   const isActive = sessionPlugin?.active ?? true;

@@ -7,7 +7,6 @@ import type {
   PlayerInputRecord,
   PluginDataRecord,
   SessionRecord,
-  WorkingMemoryRecord,
   WorldRecord,
 } from "@covel/store";
 import { buildSessionContextSnapshot } from "@covel/context";
@@ -86,7 +85,7 @@ function makeLorebookEntry(
 ): LorebookEntryRecord {
   return {
     sessionId: "sess-1",
-    pluginId: "world-data",
+    owner: { kind: "world" },
     keys: [],
     content: "lorebook content",
     strategy: "constant",
@@ -94,19 +93,6 @@ function makeLorebookEntry(
     insertionOrder: 100,
     enabled: true,
     createdAt: ts(),
-    updatedAt: ts(),
-    ...overrides,
-  };
-}
-
-function makeWorkingMemory(
-  overrides: Partial<WorkingMemoryRecord> & { id: string },
-): WorkingMemoryRecord {
-  return {
-    sessionId: "sess-1",
-    key: "foo",
-    scope: "shared",
-    value: "bar",
     updatedAt: ts(),
     ...overrides,
   };
@@ -147,8 +133,6 @@ describe("buildSessionContextSnapshot — basic shape", () => {
     expect(snapshot.world.id).toBe("");
 
     expect(snapshot.characters).toEqual([]);
-    expect(snapshot.workingMemory).toEqual([]);
-    expect(snapshot.coreMemoryBlocks).toEqual([]);
     expect(snapshot.loreEntries).toEqual([]);
     expect(snapshot.summaries).toEqual([]);
     expect(snapshot.contributions).toEqual([]);
@@ -222,7 +206,12 @@ describe("buildSessionContextSnapshot — world context", () => {
       locale: "zh-CN",
       turnNumber: 0,
       worldId: "w1",
-      worldDataPluginId: "world-data",
+      worldContext: {
+        schema: {
+          dimensions: { tone: "noir" },
+          startingConditions: { openingScenario: "X" },
+        },
+      },
     });
 
     expect(snapshot.world.id).toBe("w1");
@@ -264,7 +253,6 @@ describe("buildSessionContextSnapshot — world context", () => {
       locale: "zh-CN",
       turnNumber: 0,
       worldId: "w2",
-      worldDataPluginId: "world-data",
     });
 
     expect(snapshot.world.entries).toEqual([]);
@@ -274,25 +262,14 @@ describe("buildSessionContextSnapshot — world context", () => {
 // ── Test C: Working memory + core memory + summaries ────────────
 
 describe("buildSessionContextSnapshot — memory + summaries wiring", () => {
-  it("threads workingMemory, coreMemoryBlocks and summaries through correctly", async () => {
+  it("threads summaries and committed character state through correctly", async () => {
     const store = createMemoryStore();
     await store.createSession(makeSession());
     await store.upsertCharacter(makeCharacter());
-    await store.upsertWorkingMemory(
-      makeWorkingMemory({
-        id: "wm-1",
-        key: "foo",
-        scope: "shared",
-        value: "bar",
-      }),
-    );
     await store.savePlayerInput(
       makePlayerInput({ id: "pi-1", values: { choice: "left" } }),
     );
 
-    const coreMemoryBlocks = [
-      { label: "persona", content: "X", updatedAt: "2026-01-01" },
-    ] as const;
     const summaries = [
       { id: "s1", content: "summary text", focusSections: ["scene"] },
     ] as const;
@@ -300,14 +277,9 @@ describe("buildSessionContextSnapshot — memory + summaries wiring", () => {
     const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
       locale: "zh-CN",
       turnNumber: 3,
-      coreMemoryBlocks,
       summaries,
     });
 
-    expect(snapshot.workingMemory).toEqual([
-      { scope: "shared", key: "foo", value: "bar" },
-    ]);
-    expect(snapshot.coreMemoryBlocks).toEqual(coreMemoryBlocks);
     expect(snapshot.summaries).toEqual(summaries);
 
     // Character + player input wiring
@@ -326,67 +298,6 @@ describe("buildSessionContextSnapshot — memory + summaries wiring", () => {
 });
 
 describe("buildSessionContextSnapshot — player identity wiring", () => {
-  it("loads active player identity from plugin data and compiles a persona contribution", async () => {
-    const store = createMemoryStore();
-    await store.createSession(makeSession());
-    await store.setPluginData(
-      makePluginData({
-        pluginId: "player-identity",
-        namespace: "profiles",
-        key: "wanderer",
-        value: {
-          profile: {
-            schemaVersion: 1,
-            id: "wanderer",
-            name: "Wanderer",
-            description: "A cautious outsider with a hidden map.",
-            promptCoordinate: { position: "seg3_prepend", order: 2 },
-          },
-          updatedAt: ts(),
-        },
-      }),
-    );
-    await store.setPluginData(
-      makePluginData({
-        pluginId: "player-identity",
-        namespace: "session-binding",
-        key: "current",
-        value: {
-          profileId: "wanderer",
-          characterId: "player-wanderer",
-          updatedAt: ts(),
-        },
-      }),
-    );
-
-    const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
-      locale: "zh-CN",
-      turnNumber: 4,
-      personaPluginId: "player-identity",
-    });
-
-    expect(snapshot.activePersona).toEqual({
-      id: "wanderer",
-      name: "Wanderer",
-      description: "A cautious outsider with a hidden map.",
-      promptCoordinate: { position: "seg3_prepend", order: 2 },
-    });
-    expect(snapshot.contributions).toEqual([
-      {
-        kind: "persona_description",
-        sourceType: "persona",
-        sourceId: "wanderer",
-        content: [
-          "[Player Persona]",
-          "Name: Wanderer",
-          "Description: A cautious outsider with a hidden map.",
-        ].join("\n"),
-        position: "seg3_prepend",
-        order: 2,
-      },
-    ]);
-  });
-
   it("loads no persona when no persona-provider plugin id is supplied", async () => {
     const store = createMemoryStore();
     await store.createSession(makeSession());
@@ -399,8 +310,7 @@ describe("buildSessionContextSnapshot — player identity wiring", () => {
       }),
     );
 
-    // Framework discovered no `persona-provider` capability → personaPluginId
-    // omitted → persona stays off, never hardcoded to a specific plugin.
+    // Private plugin records never implicitly enter the kernel context.
     const snapshot = await buildSessionContextSnapshot(store, "sess-1", {
       locale: "zh-CN",
       turnNumber: 4,
@@ -420,7 +330,7 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
     await store.upsertLorebookEntries([
       makeLorebookEntry({
         id: "rule-before",
-        pluginId: "living-world-rules",
+        owner: { kind: "plugin", pluginId: "living-world-rules" },
         content: "雨市里没人会直接说出真实姓名。",
         position: "before_plugin",
         insertionOrder: 20,
@@ -446,7 +356,7 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
       position: "before_plugin",
       order: 20,
       debugTrace: {
-        pluginId: "living-world-rules",
+        owner: { kind: "plugin", pluginId: "living-world-rules" },
         strategy: "constant",
         keys: [],
         sourceRuleId: "rain-market",
@@ -460,7 +370,7 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
     await store.upsertLorebookEntries([
       makeLorebookEntry({
         id: "sealed-door",
-        pluginId: "living-world-rules",
+        owner: { kind: "plugin", pluginId: "living-world-rules" },
         content: "封印门只回应血脉、月光和旧誓。",
         strategy: "selective",
         keys: ["封印门"],
@@ -472,7 +382,7 @@ describe("buildSessionContextSnapshot — lorebook contributions", () => {
       }),
       makeLorebookEntry({
         id: "silent-rule",
-        pluginId: "living-world-rules",
+        owner: { kind: "plugin", pluginId: "living-world-rules" },
         content: "Unmatched rule",
         strategy: "selective",
         keys: ["不会命中"],
@@ -583,9 +493,6 @@ describe("buildSessionContextSnapshot — graceful degradation", () => {
       listPlayerInputs: async () => {
         throw new Error("boom");
       },
-      listWorkingMemory: async () => {
-        throw new Error("boom");
-      },
       listSessionLorebookEntries: async () => {
         throw new Error("boom");
       },
@@ -604,12 +511,10 @@ describe("buildSessionContextSnapshot — graceful degradation", () => {
         locale: "zh-CN",
         turnNumber: 0,
         worldId: "w-broken",
-        worldDataPluginId: "world-data",
       },
     );
 
     expect(snapshot.characters).toEqual([]);
-    expect(snapshot.workingMemory).toEqual([]);
     expect(snapshot.loreEntries).toEqual([]);
     expect(snapshot.world).toEqual({ id: "w-broken", entries: [] });
     expect(snapshot.sessionMeta.lastFormValues).toBeUndefined();

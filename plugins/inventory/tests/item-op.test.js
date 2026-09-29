@@ -11,7 +11,7 @@ function makeCtx(existing) {
       store: {
         // Full PluginDataRecord shape — the handler spreads the loaded row
         // into its upsert, so the mock must carry the identity fields too.
-        getPluginData: vi.fn(async (_s, _p, _ns, key) =>
+        getPluginData: vi.fn(async (_ns, key) =>
           existing[key]
             ? {
                 id: `row-${key}`,
@@ -48,10 +48,11 @@ describe("inventory item-op rpc", () => {
     expect(result.ok).toBe(true);
     expect(writes[0].value.equipped).toBe(true);
     expect(writes[0].namespace).toBe("items");
-    // Row identity survives the upsert; only updatedAt moves.
-    expect(writes[0].id).toBe("row-item-1");
-    expect(writes[0].createdAt).toBe("2026-08-01T00:00:00.000Z");
-    expect(writes[0].updatedAt).not.toBe("2026-08-01T00:00:00.000Z");
+    expect(Object.keys(writes[0]).sort()).toEqual([
+      "key",
+      "namespace",
+      "value",
+    ]);
   });
 
   it("unequips an equipped item", async () => {

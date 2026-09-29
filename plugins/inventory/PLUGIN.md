@@ -1,76 +1,97 @@
 ---
-name: inventory
+id: inventory
+kind: plugin
 displayName:
   zh: 行囊
   en: Inventory
 description:
   zh: 每回合从叙事中记录明确的物品得失与装备变化，右栏随时可查背包。
-  en: Records explicit item gains, losses, and equipment changes from each turn's narrative, with an always-available bag panel.
-pluginType: plugin
-commands:
-  - name: bag
-    aliases: [inventory]
-    description:
-      zh: 查看当前背包并打开行囊面板。
-      en: View the current bag and open the inventory panel.
-    action: open-bag
-stage: post-turn
-outputKind: system
-model: plugin
-timeoutMs: 120000
-maxRetries: 0
-callTimeoutMs: 60000
-requireExplicitCompletion: true
-completeAfterTools: [update-inventory]
+  en: >-
+    Records explicit item gains, losses, and equipment changes from each turn's
+    narrative, with an always-available bag panel.
 tags:
-  - role:inventory
-  - data:world-data
-  - cost:llm
-  - ui:right-panel
-  - ui:message-block
-trigger:
-  type: auto
-inputs:
-  worldIR:
-    from:
-      capability: world-ir-provider
-      cardinality: one
-    accepts: covel://world/ir/v1
-    required: true
-input:
-  inject:
-    - kind: plugin-data
-      namespace: items
-      as: "<existing-inventory>"
-      format: summary
-      maxEntries: 80
-relations:
-  requires:
-    - world-ir
+  - "data:world-data"
+  - "cost:llm"
+  - "ui:right-panel"
+  - "ui:message-block"
+requires:
+  - world-ir-provider@1
 entry: ./server/index.js
-tools:
-  plugin:
-    - update-inventory
-dataSchemas:
-  items:
-    schemaVersion: 1
-    acceptsWorldData: true
+contracts:
+  inventory.items@1:
     schema: ./schemas/items.schema.json
-    description: Importable inventory items — world packages can seed the player's opening gear.
-ui:
-  right:
-    - ./ui/inventory-panel.json
-  message:
-    - ./ui/inventory-message.json
-postHistory:
-  role: system
-  content: |
-    本 runtime 工作流：
-    - 当前背包见 `<existing-inventory>` 块（由框架在 prompt 构建时自动注入）
-    - 如果本轮叙事有明确的获得/失去/消耗/装备变化，调用 `update-inventory` 一次性批量提交（最多 8 条）
-    - 如果本轮没有明确变化，不调用任何业务工具
-    - `update-inventory` 成功后框架自动结束，不要再调用 `runtime-done`
-    - 决定不写入时，调用一次 `runtime-done` 结束
+contributes:
+  commands:
+    - name: bag
+      aliases:
+        - inventory
+      description:
+        zh: 查看当前背包并打开行囊面板。
+        en: View the current bag and open the inventory panel.
+      action: open-bag
+  data:
+    items:
+      schema: ./schemas/items.schema.json
+      description: >-
+        Importable inventory items — world packages can seed the player's
+        opening gear.
+      version: 1
+      accepts:
+        - inventory.items@1
+  ui:
+    right:
+      - ./ui/inventory-panel.json
+    message:
+      - ./ui/inventory-message.json
+  prompt:
+    - id: post-history
+      content: |
+        本 runtime 工作流：
+        - 当前背包见 `<existing-inventory>` 块（由框架在 prompt 构建时自动注入）
+        - 如果本轮叙事有明确的获得/失去/消耗/装备变化，调用 `update-inventory` 一次性批量提交（最多 8 条）
+        - 如果本轮没有明确变化，不调用任何业务工具
+        - `update-inventory` 成功后框架自动结束，不要再调用 `runtime-done`
+        - 决定不写入时，调用一次 `runtime-done` 结束
+      position: post-history
+      role: system
+  tools:
+    - update-inventory
+  actions:
+    - item-op
+    - open-bag
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+  io:
+    inputs:
+      worldIR:
+        from:
+          contract: world-ir-provider@1
+          cardinality: one
+        accepts: "contract:world-ir@1"
+        required: true
+    selfData:
+      - namespace: items
+        as: <existing-inventory>
+        format: summary
+        maxEntries: 80
+    visibility: system
+  agent:
+    model: plugin
+    tools:
+      plugin:
+        - update-inventory
+    loop:
+      timeoutMs: 120000
+      callTimeoutMs: 60000
+      maxRetries: 0
+      completion:
+        require: explicit
+        afterTools:
+          - update-inventory
 ---
 
 你是行囊记录员（Inventory Ledger）。你的任务是判断本轮叙事里是否发生了**明确的**物品得失或装备变化，并维护一份干净、准确的背包台账。**宁可漏记，不可乱记** —— 很多回合都没有任何物品变化。
@@ -79,7 +100,7 @@ postHistory:
 
 ### 本轮 WorldIR
 
-本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。物品得失与装备变化主要在 `events[type=inventory_change]` 中；相关 item entities 和 attributes 提供名称、数量、operation 与证据。只记录 IR 明确表达为已经发生的变化。
+本轮叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。物品得失与装备变化主要在 `events[type=inventory_change]` 中；相关 item entities 和 attributes 提供名称、数量、operation 与证据。只记录 IR 明确表达为已经发生的变化。
 
 ### 当前背包
 

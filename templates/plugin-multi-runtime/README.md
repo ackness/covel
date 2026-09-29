@@ -21,7 +21,7 @@
 
 ```bash
 cp -r {{pluginName}}/ ~/.covel/plugins/
-pnpm install --dir ~/.covel/plugins/{{pluginName}}   # 如果有依赖
+
 ```
 
 ## 测试
@@ -35,17 +35,19 @@ pnpm test:runtime -- {{pluginName}} --pretty
 ## 文档分工
 
 - `README.md` 面向人类和开发者，说明插件用途、实现方式、运行时划分和维护信息。
-- `PLUGIN.md` 面向框架和模型，保存展示元信息、触发条件、工具声明和 agent runtime 的提示词。
+- 根 `PLUGIN.md` 声明包身份、契约与 `contributes`；子 `RUNTIME.md` 使用 `type`、`schedule`、`io`、`agent`/`function` 分组，其正文保存 agent 提示词。
 
 ## 下一步
 
 - 改 `runtimes/note/handler.js`，把 `notes` 记录结构替换为你的插件状态。
-- 改 `runtimes/analyst/PLUGIN.md`，把“观察剧情并记录 actionable note”替换为你的实际任务。
+- 改 `runtimes/analyst/RUNTIME.md`，把“观察剧情并记录 actionable note”替换为你的实际任务。
 - 改 `runtimes/note/ui/panel.json`，调整面板布局或加入更多组件（参考 `docs/reference/ui-components.md`）。
-- 加新 runtime：在 `runtimes/` 下新建子目录，里面放 `PLUGIN.md`（agent 模式）或 `PLUGIN.md` + `handler.js`（function 模式）。
+- 加新 runtime：在 `runtimes/` 下新建子目录，里面放 `RUNTIME.md`（agent 模式）或 `RUNTIME.md` + `handler.js`（function 模式）。
 
 ## 参考
 
 - [docs/guide/plugin-authoring.md](https://github.com/AcKnEsS/covel/blob/main/docs/guide/plugin-authoring.md) —— 插件作者指南
 - [docs/reference/plugins.md](https://github.com/AcKnEsS/covel/blob/main/docs/reference/plugins.md) —— frontmatter 字段全表
 - [docs/reference/ui-components.md](https://github.com/AcKnEsS/covel/blob/main/docs/reference/ui-components.md) —— UI 组件目录
+
+发布给安装器的目录必须自包含，不携带 workspace 运行时依赖；需要的 SDK helpers 在发布前打包。

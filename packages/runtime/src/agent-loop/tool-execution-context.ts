@@ -63,6 +63,8 @@ export function createToolExecutionContext(
     ...identity,
     inputSlots: structuredClone(caller.inputSlots),
     pendingProposals: structuredClone(pending),
+    upstreamProposals: structuredClone(caller.upstreamProposals),
+    world: structuredClone(caller.world),
     emittedEventTopics: structuredClone(caller.emittedEventTopics),
     ...(caller.turnNumber !== undefined
       ? { turnNumber: caller.turnNumber }

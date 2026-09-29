@@ -3,7 +3,7 @@ import { z } from "zod";
 export default function register(covel) {
   covel.registerService({
     name: "evaluate",
-    contract: "test/evaluation@1",
+    contract: "test.evaluation@1",
     input: z.object({
       state: z.json(),
       options: z.array(z.object({ id: z.string(), text: z.string() })),

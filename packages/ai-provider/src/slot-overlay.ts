@@ -1,4 +1,5 @@
 import { modelOutputTag, type LlmModelBinding } from "@covel/shared";
+import { ModelConfigurationError } from "./errors.js";
 /**
  * Per-request overlay for the preset registry.
  *
@@ -303,7 +304,9 @@ export function resolveOverlayPresetId(
         isUsableCustomPreset(preset) && overlayPresetKey(preset) === presetId,
     );
     if (!owned || !hasPreset?.(presetId))
-      throw new Error("Preset does not belong to this request");
+      throw new ModelConfigurationError(
+        "Preset does not belong to this request",
+      );
     return presetId;
   }
   if (!presetId || !hasPreset || hasPreset(presetId)) return presetId;
@@ -328,7 +331,7 @@ export function resolveModelBinding(
 ): string {
   if (binding.presetId !== undefined) {
     if (binding.presetId.includes("\u0000"))
-      throw new Error("Invalid server preset ID");
+      throw new ModelConfigurationError("Invalid server preset ID");
     return binding.presetId;
   }
   const preset = overrides?.customPresets?.find(
@@ -338,7 +341,7 @@ export function resolveModelBinding(
     const key = overlayPresetKey(preset);
     if (hasPreset(key)) return key;
   }
-  throw new Error(
+  throw new ModelConfigurationError(
     `Local model reference "${binding.modelRef}" is not available`,
   );
 }

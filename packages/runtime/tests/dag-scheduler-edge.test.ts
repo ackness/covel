@@ -184,3 +184,35 @@ describe("scheduleByDag — multi-runtime plugin identity", () => {
     expect(groups).toHaveLength(1);
   });
 });
+
+describe("scheduleByDag capability-one edge provenance", () => {
+  const need = { capability: "data@1", cardinality: "one" as const };
+  it.each([
+    { after: ["p/b"] },
+    { needs: [need, "p/b"] },
+    { inputs: { data: { from: { runtime: "p/b" }, required: false } } },
+    injectRuntime("p/b"),
+    { needs: [need, { capability: "data@1", cardinality: "all" as const }] },
+  ])("preserves independent hard ordering constraints: %j", (hard) => {
+    const a = rt("p/a", 600, { outputContract: "data@1" });
+    const b = rt("p/b", 600, { outputContract: "data@1", after: ["p/c"] });
+    const c = rt("p/c", 600, { needs: [need], ...hard });
+    const result = scheduleByDag([a, b, c]);
+    expect(
+      result.groups.map((group) => group.runtimes.map((r) => r.name)),
+    ).toEqual([["p/a"]]);
+    expect(result.cyclic?.map((r) => r.name)).toEqual(["p/b", "p/c"]);
+  });
+
+  it("still relaxes a pure OR provider barrier once an alternative completes", () => {
+    const result = scheduleByDag([
+      rt("p/a", 600, { outputContract: "data@1" }),
+      rt("p/b", 600, { outputContract: "data@1", after: ["p/c"] }),
+      rt("p/c", 600, { needs: [need] }),
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(
+      result.groups.map((group) => group.runtimes.map((r) => r.name)),
+    ).toEqual([["p/a"], ["p/c"], ["p/b"]]);
+  });
+});

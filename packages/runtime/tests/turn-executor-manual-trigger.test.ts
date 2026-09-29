@@ -88,6 +88,7 @@ async function runTurn(
   handlers: Record<string, Handler>,
   turnInput: TurnInput,
   extraDeps: Partial<TurnExecutorDeps> = {},
+  runtimeEffects: Record<string, import("@covel/shared").RuntimeEffects> = {},
 ): Promise<{
   result: Awaited<ReturnType<typeof executeTurn>>;
   store: DataStore;
@@ -105,6 +106,7 @@ async function runTurn(
         return {
           outcome: "success",
           value: (await handlers[m.name]!(recorded)) as never,
+          effects: runtimeEffects[m.name],
         };
       },
     }),
@@ -573,7 +575,6 @@ describe("executeTurn: manual trigger", () => {
       {
         "plug/target": async () => ({
           prompt: "sunset",
-          events: [{ topic: "image.prompt.ready", data: { prompt: "sunset" } }],
         }),
         "plug/follower": async () => ({ ok: true }),
         "plug/other-event": async () => {
@@ -585,6 +586,12 @@ describe("executeTurn: manual trigger", () => {
         turnId: "turn-1",
         playerMessage: "",
         manualTrigger: { runtimeId: "plug/target" },
+      },
+      {},
+      {
+        "plug/target": {
+          events: [{ topic: "image.prompt.ready", data: { prompt: "sunset" } }],
+        },
       },
     );
 

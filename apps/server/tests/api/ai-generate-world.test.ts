@@ -1,3 +1,16 @@
+import {
+  createPluginRegistry,
+  parsePluginMd,
+  discoverPlugins,
+  loadPluginDefinition,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
+import {
+  importWorldDataForSession,
+  preflightWorldDataForSession,
+  syncWorldDataForSession,
+} from "../../src/world-data/session-import.js";
+import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -79,17 +92,20 @@ type Env = {
 function createTestApp(
   store: DataStore,
   llm: LLMAdapter = new FixedLlm(),
+  registry?: PluginRegistry,
 ): Hono<Env> {
   const app = new Hono<Env>();
   const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("llmAdapter", llm);
     c.set("store", store);
+    if (registry) c.set("pluginRegistry", registry);
     c.set("sessionLock", sessionLock);
     c.set("storeBackend", "memory");
     await next();
   });
   app.route("/api/ai", aiRoutes);
+  app.route("/api/worlds", worldCrudRoutes);
   return app;
 }
 
@@ -147,6 +163,197 @@ describe("ai world generation route", () => {
     }
     await rm(worldsDir, { recursive: true, force: true });
   });
+
+  it.each(["server-file", "server-store", "return-only"] as const)(
+    "%s preserves generated time contracts through session import",
+    async (saveTarget) => {
+      const discoveries = await discoverPlugins(
+        path.resolve(import.meta.dirname, "../../../../plugins"),
+      );
+      const discovery = discoveries.find((item) => item.id === "world-time")!;
+      const definition = await loadPluginDefinition(discovery);
+      const registry = createPluginRegistry();
+      // A different receiver ID must work without changes to world data.
+      const pluginId =
+        saveTarget === "return-only" ? "alternate-clock" : "world-time";
+      const namespace =
+        saveTarget === "return-only" ? "calendars" : "definitions";
+      registry.register({
+        id: pluginId,
+        summary: {
+          id: pluginId,
+          name: pluginId,
+          description: "",
+          pluginType: "plugin",
+          runtimeCount: 0,
+        },
+        rootPath: discovery.rootPath,
+        manifests: [],
+        packageManifest: parsePluginMd(
+          `---\n${JSON.stringify({ ...definition.packageManifest.plugin, id: pluginId, contributes: { ...definition.packageManifest.plugin.contributes, data: { [namespace]: definition.packageManifest.plugin.contributes.data!.definitions! } } })}\n---`,
+          "fixture/PLUGIN.md",
+        ),
+        loadedRuntimes: new Map(),
+        status: "registered",
+      });
+      const value = {
+        id: "world",
+        definition: {
+          kind: "phases",
+          name: "Tide time",
+          phases: ["Rise", "Fall"],
+          cycleLabel: "Tide",
+          initial: { cycle: 3, phase: 1 },
+          evolution: { mode: "forward", defaultStep: 1, maxStep: 4 },
+        },
+      };
+      const records = [
+        { contract: "world.time-definition@1", key: "world", value },
+      ];
+      const llm = new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${JSON.stringify({ contractData: records })}\n===END===`,
+      );
+      const generate = vi.spyOn(llm, "generate");
+      app = createTestApp(store, llm, registry);
+      const response = await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concept: "A tidal city", saveTarget }),
+      });
+      const events = await readSseJson(response);
+      const done = events.find((event) => event.type === "done") as
+        { world: import("@covel/store").WorldRecord } | undefined;
+      expect(events.filter((event) => event.type === "error")).toEqual([]);
+      expect(done?.world.metadata?.contractData).toEqual(records);
+      expect(JSON.stringify(generate.mock.calls)).toContain(
+        "world.time-definition@1",
+      );
+      if (saveTarget === "return-only") {
+        expect(await store.getWorld("generated-world")).toBeNull();
+        // Browser-private worlds sync the returned metadata through the world API.
+        const created = await app.request("/api/worlds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: done!.world.id,
+            name: "Tidal city",
+            metadata: done!.world.metadata,
+          }),
+        });
+        expect(created.status).toBe(201);
+      }
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: "clock-session",
+        worldId: "generated-world",
+        status: "active",
+        phase: "playing",
+        setupRuntimes: {},
+        locale: "en-US",
+        activePlugins: [pluginId],
+        completedPlayerTurns: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const imported = await importWorldDataForSession({
+        store,
+        sessionId: "clock-session",
+        worldId: "generated-world",
+        worldsDirs: [worldsDir],
+        now,
+        preflight: { registry, activePlugins: [pluginId] },
+      });
+      expect(
+        imported.diagnostics.filter((item) => item.level === "error"),
+      ).toEqual([]);
+      expect(
+        (
+          await store.getPluginData(
+            "clock-session",
+            pluginId,
+            namespace,
+            "world",
+          )
+        )?.value,
+      ).toEqual(value);
+      expect(
+        await store.getPluginData(
+          "clock-session",
+          pluginId,
+          "clock",
+          "current",
+        ),
+      ).toBeNull();
+      if (saveTarget !== "server-file") {
+        expect(await readdir(worldsDir)).toEqual([]);
+        const preflight = await preflightWorldDataForSession({
+          sessionId: "clock-session",
+          worldId: "generated-world",
+          contractData: records,
+          now,
+          preflight: { registry, activePlugins: [pluginId] },
+        });
+        expect(preflight.targets).toContainEqual(
+          expect.objectContaining({ pluginId, namespace, key: "world" }),
+        );
+        const world = (await store.getWorld("generated-world"))!;
+        const updated = {
+          ...value,
+          definition: { ...value.definition, initial: { cycle: 8, phase: 0 } },
+        };
+        await store.upsertWorld({
+          ...world,
+          metadata: {
+            ...world.metadata,
+            contractData: [{ ...records[0], value: updated }],
+          },
+        });
+        const clock = {
+          schemaVersion: 1,
+          definition: value.definition,
+          tick: 7,
+        };
+        await store.setPluginData({
+          id: "existing-clock",
+          sessionId: "clock-session",
+          pluginId,
+          namespace: "clock",
+          key: "current",
+          value: clock,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const sync = await syncWorldDataForSession({
+          store,
+          sessionId: "clock-session",
+          worldId: "generated-world",
+          now,
+          preflight: { registry, activePlugins: [pluginId] },
+        });
+        expect(sync.upserted).toBe(1);
+        expect(
+          (
+            await store.getPluginData(
+              "clock-session",
+              pluginId,
+              namespace,
+              "world",
+            )
+          )?.value,
+        ).toEqual(updated);
+        expect(
+          (
+            await store.getPluginData(
+              "clock-session",
+              pluginId,
+              "clock",
+              "current",
+            )
+          )?.value,
+        ).toEqual(clock);
+      }
+    },
+  );
 
   it("cancels world generation on host shutdown without another provider attempt", async () => {
     const work = createApplicationWork();

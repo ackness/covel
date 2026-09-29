@@ -27,7 +27,7 @@ export async function registerTestPlugins(
         ]),
       ),
       packageManifest,
-      manifest: manifests[0],
+
       manifests,
       loadedRuntimes: new Map(),
       status: "registered",

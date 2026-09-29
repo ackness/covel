@@ -5,7 +5,7 @@ import type { LLMProviderRequest, LLMTargetIdentity } from "@covel/shared";
  * One agent step issues exactly one LLM response. Depending on the runtime it
  * goes through one of three paths:
  *   - streaming (story runtimes) — with a non-stream fallback when the stream
- *     exhausts retries or finishes with tool_calls but no parsed calls;
+ *     exhausts retries or finishes empty with tool_calls but no parsed calls;
  *   - non-streaming — with a narrow secondary retry for DeepSeek's malformed
  *     tool-arguments error.
  *
@@ -36,6 +36,7 @@ import type {
 import {
   combineAbortSignals,
   getTurnExecutionSignal,
+  throwIfTurnExecutionAborted,
 } from "../turn-executor/turn-control.js";
 
 export interface RequestLLMResponseOptions {
@@ -130,11 +131,12 @@ async function requestStreaming(
 ): Promise<LLMResponse> {
   const { manifest, deadline, toolDefs } = opts;
   let response: LLMResponse;
+  let usedNonStreamFallback = false;
 
   // Streaming path: helper enforces per-attempt call-timeout + first-token
   // (TTFB) guard, retries on transient failures, and forwards text deltas to
   // the caller on the first attempt. If streaming exhausts its retries with a
-  // transient failure, fall back to a single non-stream call.
+  // failure before producing output, fall back to a non-stream call.
   try {
     const streamed = await streamLLMWithRetry({
       ...callParams,
@@ -142,24 +144,43 @@ async function requestStreaming(
     });
     response = streamed.response;
   } catch (streamError) {
-    if (streamError instanceof LLMRetryError && Date.now() < deadline) {
+    if (
+      streamError instanceof LLMRetryError &&
+      !streamError.hasPartialOutput &&
+      Date.now() < deadline
+    ) {
       console.warn(
         `[stream-recovery] ${manifest.name} streaming exhausted (reason=${streamError.reason}); falling back to non-stream generate()`,
       );
       response = await callLLMWithRetry(callParams);
+      usedNonStreamFallback = true;
     } else {
       throw streamError;
     }
   }
 
-  // If the stream finished with tool_calls but our adapter could not parse
-  // structured calls out of delta chunks (some providers don't deliver them on
-  // SSE), fall back to a non-stream call to get the structured payload.
+  // Some providers finish with tool_calls but omit the structured payload on
+  // SSE. Only an entirely empty stream can be replaced: text has already been
+  // forwarded to the player, and reasoning is part of this response's output.
   if (
     response.finishReason === "tool_calls" &&
     response.toolCalls.length === 0 &&
     toolDefs
   ) {
+    if (response.content || response.reasoningContent) {
+      throw new Error(
+        "PROVIDER_ERROR: model stream ended with tool_calls but no structured calls after producing output",
+      );
+    }
+    if (
+      usedNonStreamFallback ||
+      !opts.deps.llm.stream ||
+      Date.now() >= deadline
+    ) {
+      throw new Error(
+        "PROVIDER_ERROR: model response ended with tool_calls but no structured calls",
+      );
+    }
     response = await callLLMWithRetry(callParams);
   }
   return response;
@@ -289,6 +310,13 @@ async function malformedToolArgsFallback(args: {
         ),
       ),
     });
+    throwIfTurnExecutionAborted(
+      deps.turnControl,
+      "malformed tool arguments fallback",
+    );
+    if (response.finishReason === "error") {
+      throw new Error("PROVIDER_ERROR: model generation ended with an error");
+    }
     await ensureCalling();
   } catch (fallbackErr) {
     // Pair every `llm.calling` with an `llm.responded` on the error path so

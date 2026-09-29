@@ -234,6 +234,7 @@ export async function createSession(
   plugins?: string[],
   locale?: string,
   loreOverride?: string,
+  excludedPlugins?: string[],
 ): Promise<SessionRecord> {
   // Open credential storage before creating server state, and capture any
   // previous authority before the HTTP request can overlap another creation.
@@ -247,6 +248,7 @@ export async function createSession(
         id,
         worldId,
         ...(plugins ? { plugins } : {}),
+        ...(excludedPlugins ? { excludedPlugins } : {}),
         ...(locale ? { locale } : {}),
         ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),

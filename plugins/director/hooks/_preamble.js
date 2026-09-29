@@ -1,6 +1,6 @@
 /**
  * Director preamble appended to the story runtime's assembled system prompt by
- * ./inject-preamble.js. Plain frozen text constants — no runtime state, no I/O.
+ * ../server/index.js. Plain frozen text constants — no runtime state, no I/O.
  * Kept in its own module so the handler and tests share one source of truth.
  *
  * Localized: the story prompt is otherwise resolved to the session locale, so a

@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "contract:graph-rag@1",
+  "title": "Covel relationship retrieval output v1",
+  "type": "object",
+  "required": ["npcContext", "matchedNodes", "edgeCount"],
+  "properties": {
+    "npcContext": { "type": "string" },
+    "matchedNodes": { "type": "array", "items": { "type": "string" } },
+    "edgeCount": { "type": "integer", "minimum": 0 },
+    "error": { "type": "string" }
+  },
+  "additionalProperties": true
+}

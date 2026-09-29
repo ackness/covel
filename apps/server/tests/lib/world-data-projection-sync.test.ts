@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   createPluginRegistry,
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
 } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import {
@@ -20,6 +20,7 @@ import {
   registry,
   VALID_WORLD_IR,
   WORLD_IR_SCHEMA,
+  worldIrEntry,
 } from "./world-data-projection-fixtures.js";
 
 describe("world data projections", () => {
@@ -32,8 +33,11 @@ describe("world data projections", () => {
       (candidate) => candidate.id === "living-world-rules",
     );
     expect(discovery).toBeDefined();
-    const manifests = await loadPluginManifest(discovery!);
+    const { manifests, packageManifest } = await loadPluginDefinition(
+      discovery!,
+    );
     const pluginRegistry = createPluginRegistry();
+    pluginRegistry.register(worldIrEntry());
     pluginRegistry.register({
       id: discovery!.id,
       source: "builtin",
@@ -45,8 +49,9 @@ describe("world data projections", () => {
         pluginType: "plugin",
         runtimeCount: manifests.length,
       },
-      manifest: manifests[0],
+
       manifests,
+      packageManifest,
       loadedRuntimes: new Map(),
       status: "registered",
     });
@@ -70,10 +75,11 @@ describe("world data projections", () => {
         kind: "plugin-data",
         pluginId: "living-world-rules",
         namespace: "rules",
-        key: "harbor-rule",
+        key: "world-ir-2fb4c2351724c02c43f29b38ec334758de9b4030ed8dffb8565f35517b424343",
         value: {
           schemaVersion: 1,
-          id: "harbor-rule",
+          id: "world-ir-2fb4c2351724c02c43f29b38ec334758de9b4030ed8dffb8565f35517b424343",
+          sourceStatementId: "harbor-rule",
           content: "The harbor closes at dusk.",
         },
       }),

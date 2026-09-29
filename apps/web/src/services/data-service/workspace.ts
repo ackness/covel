@@ -14,7 +14,10 @@ interface WorkspaceRunOptions {
  * FIFO job so two operations never export from the same revision.
  */
 export interface SessionWorkspace {
-  hydrate(sessionId: string): Promise<void>;
+  hydrate(
+    sessionId: string,
+    options?: Pick<WorkspaceRunOptions, "isCurrent">,
+  ): Promise<void>;
   run<T>(
     sessionId: string,
     actionId: string,
@@ -123,10 +126,14 @@ class LocalSessionWorkspace implements SessionWorkspace {
     }
   }
 
-  hydrate(sessionId: string): Promise<void> {
-    return this.enqueue(sessionId, (workspace) =>
-      this.prepare(sessionId, workspace),
-    );
+  hydrate(
+    sessionId: string,
+    options?: Pick<WorkspaceRunOptions, "isCurrent">,
+  ): Promise<void> {
+    return this.enqueue(sessionId, async (workspace) => {
+      if (options?.isCurrent && !options.isCurrent()) return;
+      await this.prepare(sessionId, workspace);
+    });
   }
 
   run<T>(

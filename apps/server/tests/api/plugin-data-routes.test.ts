@@ -67,7 +67,7 @@ function registerPlugin(
     },
     loadedRuntimes: new Map(),
     status: "registered",
-    manifest: parsed,
+
     manifests: [parsed],
   });
 }
@@ -333,16 +333,19 @@ describe("Plugin Data write guards", () => {
       },
     );
 
-  it("rejects writes to framework-reserved `_` namespaces", async () => {
-    // `_jobs` drives background-job scheduling: a player-issued write there
-    // could fabricate or rewrite a job record.
-    const res = await put(pluginId, "_jobs", "job-1");
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/reserved/i);
-    expect(
-      await store.getPluginData(sessionId, pluginId, "_jobs", "job-1"),
-    ).toBeFalsy();
-  });
+  it.each(["_jobs", "_runtime_jobs", "_logs", "_memory", "_future"])(
+    "rejects writes to reserved namespace %s",
+    async (namespace) => {
+      // `_jobs` drives background-job scheduling: a player-issued write there
+      // could fabricate or rewrite a job record.
+      const res = await put(pluginId, namespace, "job-1");
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toMatch(/reserved/i);
+      expect(
+        await store.getPluginData(sessionId, pluginId, namespace, "job-1"),
+      ).toBeFalsy();
+    },
+  );
 
   it("rejects deletes from framework-reserved `_` namespaces", async () => {
     const res = await app.request(

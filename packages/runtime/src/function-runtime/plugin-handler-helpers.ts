@@ -16,6 +16,7 @@ import type {
 import {
   reservedPluginDataNamespaceError,
   type RpcHandlerStore,
+  type WorldModelView,
 } from "@covel/shared";
 import { overlayPluginDataValue } from "@covel/tools";
 import {
@@ -94,58 +95,60 @@ function assertWritableNamespace(namespace: string): void {
 }
 
 /** Builtin runtime reads and proposal-backed writes; host control stays private. */
-export type TrustedHandlerStore = Pick<
-  DataStore,
-  | "getSession"
-  | "getWorld"
-  | "listPlayerInputs"
-  | "listTurnMessages"
-  | "listRecentTurnMessages"
-  | "getPluginData"
-  | "listPluginData"
-  | "listPluginDataSessionScope"
-  | "listCharacters"
-  | "setPluginData"
-  | "setPluginDataBatch"
-  | "deletePluginData"
-  | "upsertCharacter"
->;
+export interface TrustedHandlerStore extends FunctionStoreView {
+  getWorld(): ReturnType<DataStore["getWorld"]>;
+  listCharacters(): ReturnType<DataStore["listCharacters"]>;
+  getPluginData(
+    namespace: string,
+    key: string,
+  ): ReturnType<DataStore["getPluginData"]>;
+  listPluginData(
+    namespace?: string,
+    pagination?: { limit?: number; offset?: number },
+  ): ReturnType<DataStore["listPluginData"]>;
+  setPluginData(record: {
+    namespace: string;
+    key: string;
+    value: unknown;
+  }): Promise<void>;
+  setPluginDataBatch(
+    records: readonly { namespace: string; key: string; value: unknown }[],
+  ): Promise<void>;
+  deletePluginData(namespace: string, key: string): Promise<void>;
+  upsertCharacter(
+    record: Omit<import("@covel/store").CharacterRecord, "sessionId">,
+  ): Promise<void>;
+}
 
-/**
- * Explicit execution capability: every write becomes a proposal. No raw-store
- * passthrough, transaction, session mutation, or disposal method is exposed.
- * Reads own their returned values, including with the live MemoryStore backend.
- */
+/** Bound read authority and proposal-backed writes for builtin handlers. */
 export function createTrustedHandlerStore(
   store: DataStore,
   ctx: HandlerHelperContext,
   buffer: ExecutionWriteBuffer,
+  world?: WorldModelView,
 ): TrustedHandlerStore {
-  if (!ctx || !buffer) {
+  if (!ctx || !buffer)
     throw new Error(
       "Runtime store requires an execution context and write buffer",
     );
-  }
-  const page = <T>(
-    rows: T[],
-    pagination?: { limit?: number; offset?: number },
-  ): T[] => {
-    const offset = pagination?.offset ?? 0;
-    return rows.slice(
-      offset,
-      pagination?.limit === undefined ? undefined : offset + pagination.limit,
-    );
-  };
+  const { sessionId, pluginId } = ctx;
   return {
-    getSession: async (...args) =>
-      structuredClone(await store.getSession(...args)),
-    getWorld: async (...args) => structuredClone(await store.getWorld(...args)),
-    listPlayerInputs: async (...args) =>
-      structuredClone(await store.listPlayerInputs(...args)),
-    listTurnMessages: async (...args) =>
-      structuredClone(await store.listTurnMessages(...args)),
-    listRecentTurnMessages: async (...args) =>
-      structuredClone(await store.listRecentTurnMessages(...args)),
+    getSession: async () => structuredClone(await store.getSession(sessionId)),
+    getWorld: async () => {
+      if (world) return structuredClone(world.worldRecord ?? null);
+      const session = await store.getSession(sessionId);
+      return session?.worldId
+        ? structuredClone(await store.getWorld(session.worldId))
+        : null;
+    },
+    listPlayerInputs: async () =>
+      structuredClone(await store.listPlayerInputs(sessionId)),
+    listTurnMessages: async (limit) =>
+      structuredClone(
+        typeof limit === "number"
+          ? await store.listRecentTurnMessages(sessionId, limit)
+          : await store.listTurnMessages(sessionId),
+      ),
     setPluginData(record) {
       assertWritableNamespace(record.namespace);
       bufferPluginData(buffer, ctx, record.namespace, record.key, record.value);
@@ -157,69 +160,56 @@ export function createTrustedHandlerStore(
       return Promise.resolve();
     },
     upsertCharacter(record) {
-      bufferCharacterUpsert(buffer, ctx, record);
+      bufferCharacterUpsert(buffer, ctx, { ...record, sessionId });
       return Promise.resolve();
     },
-    deletePluginData(_sessionId, _pluginId, namespace, key) {
+    deletePluginData(namespace, key) {
       assertWritableNamespace(namespace);
       bufferPluginDataDelete(buffer, ctx, namespace, key);
       return Promise.resolve();
     },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      if (sessionId === ctx.sessionId) {
-        const hit = overlayPluginDataValue(buffer, pluginId, namespace, key);
-        if (hit.hit) {
-          if (hit.deleted) return null;
-          const now = new Date().toISOString();
-          return {
-            id: `${sessionId}:${pluginId}:${namespace}:${key}`,
-            sessionId,
-            pluginId,
-            namespace,
-            key,
-            value: structuredClone(hit.value),
-            createdAt: now,
-            updatedAt: now,
-          };
-        }
+    async getPluginData(namespace, key) {
+      const hit = overlayPluginDataValue(buffer, pluginId, namespace, key);
+      if (hit.hit) {
+        if (hit.deleted) return null;
+        const now = new Date().toISOString();
+        return {
+          id: `${sessionId}:${pluginId}:${namespace}:${key}`,
+          sessionId,
+          pluginId,
+          namespace,
+          key,
+          value: structuredClone(hit.value),
+          createdAt: now,
+          updatedAt: now,
+        };
       }
       return structuredClone(
         await store.getPluginData(sessionId, pluginId, namespace, key),
       );
     },
-    async listPluginData(sessionId, pluginId, namespace, pagination) {
-      if (sessionId !== ctx.sessionId || buffer.length === 0) {
-        return structuredClone(
-          await store.listPluginData(
-            sessionId,
-            pluginId,
-            namespace,
-            pagination,
-          ),
-        );
-      }
-      // Apply pagination after overlaying: a deleted row must not leave a hole,
-      // and appended buffered rows must not exceed the requested page size.
+    async listPluginData(namespace, pagination) {
       const stored = await store.listPluginData(sessionId, pluginId, namespace);
-      return page(
-        mergePluginDataRows(stored, buffer, sessionId, pluginId, namespace),
-        pagination,
+      const rows = mergePluginDataRows(
+        stored,
+        buffer,
+        sessionId,
+        pluginId,
+        namespace,
+      );
+      const offset = pagination?.offset ?? 0;
+      return rows.slice(
+        offset,
+        pagination?.limit === undefined ? undefined : offset + pagination.limit,
       );
     },
-    async listPluginDataSessionScope(sessionId, pagination) {
-      if (sessionId !== ctx.sessionId || buffer.length === 0) {
-        return structuredClone(
-          await store.listPluginDataSessionScope(sessionId, pagination),
-        );
-      }
-      const stored = await store.listPluginDataSessionScope(sessionId);
-      return page(mergePluginDataRows(stored, buffer, sessionId), pagination);
-    },
-    async listCharacters(sessionId) {
-      const stored = await store.listCharacters(sessionId);
-      return sessionId === ctx.sessionId
-        ? mergeCharacterRecords(stored, buffer, sessionId)
-        : structuredClone(stored);
+    async listCharacters() {
+      if (world) return structuredClone([...world.characters]);
+      return mergeCharacterRecords(
+        await store.listCharacters(sessionId),
+        buffer,
+        sessionId,
+      );
     },
   };
 }
@@ -408,25 +398,23 @@ export function createFunctionStoreView(
   const reads = createTrustedHandlerStore(store, ctx, buffer ?? []);
   return {
     getPluginData(namespace, key) {
-      return reads.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
+      return reads.getPluginData(namespace, key);
     },
     listPluginData(namespace) {
-      return reads.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
+      return reads.listPluginData(namespace);
     },
     getSession() {
-      return reads.getSession(ctx.sessionId);
+      return reads.getSession();
     },
     listPlayerInputs() {
-      return reads.listPlayerInputs(ctx.sessionId);
+      return reads.listPlayerInputs();
     },
     listTurnMessages(limit) {
       // A bounded read from inside a runtime handler means "recent context":
       // plugins asking for `limit` turn messages want the MOST RECENT ones.
       // `listTurnMessages(sessionId, { limit })` would return the OLDEST N, so
       // route a numeric limit through the tail query. No limit → full history.
-      return typeof limit === "number"
-        ? reads.listRecentTurnMessages(ctx.sessionId, limit)
-        : reads.listTurnMessages(ctx.sessionId);
+      return reads.listTurnMessages(limit);
     },
   };
 }
@@ -445,7 +433,7 @@ export function createRpcHandlerStoreView(
     async getSession() {
       return structuredClone(await store.getSession(ctx.sessionId));
     },
-    async listTurnMessages(_sessionId: string) {
+    async listTurnMessages() {
       return structuredClone(await store.listTurnMessages(ctx.sessionId));
     },
     savePlayerInput(input) {
@@ -478,12 +466,12 @@ export function createRpcHandlerStoreView(
         updatedAt: input.updatedAt ?? now,
       });
     },
-    async getPluginData(_sessionId, _pluginId, namespace, key) {
+    async getPluginData(namespace, key) {
       return structuredClone(
         await store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key),
       );
     },
-    async listPluginData(_sessionId, _pluginId, namespace) {
+    async listPluginData(namespace) {
       return structuredClone(
         await store.listPluginData(ctx.sessionId, ctx.pluginId, namespace),
       );

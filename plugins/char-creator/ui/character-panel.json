@@ -1,11 +1,20 @@
 {
   "id": "character",
   "group": "character",
-  "groupLabel": { "zh": "角色", "en": "Characters" },
+  "groupLabel": {
+    "zh": "角色",
+    "en": "Characters"
+  },
   "groupOrder": 100,
-  "label": { "zh": "角色", "en": "Characters" },
+  "label": {
+    "zh": "角色",
+    "en": "Characters"
+  },
   "icon": "users",
-  "dataSource": { "source": "session.characters", "namespace": "characters" },
+  "dataSource": {
+    "source": "session.characters",
+    "namespace": "characters"
+  },
   "emptyState": {
     "message": {
       "zh": "尚未创建角色，完成角色创建流程后将在此显示……",
@@ -14,12 +23,17 @@
   },
   "view": {
     "component": "Stack",
-    "props": { "gap": "sm" },
+    "props": {
+      "gap": "sm"
+    },
     "children": [
       {
         "component": "Text",
         "props": {
-          "content": { "zh": "所有角色", "en": "All Characters" },
+          "content": {
+            "zh": "所有角色",
+            "en": "All Characters"
+          },
           "weight": "bold",
           "size": "sm"
         }
@@ -29,33 +43,46 @@
       },
       {
         "component": "CardList",
-        "repeat": { "statePath": "/entries", "key": "key" },
+        "repeat": {
+          "statePath": "/entries",
+          "key": "key"
+        },
         "children": [
           {
             "component": "Card",
-            "props": { "collapsible": true, "defaultExpanded": false },
+            "props": {
+              "collapsible": true,
+              "defaultExpanded": false
+            },
             "children": [
               {
                 "component": "Row",
-                "props": { "gap": "sm" },
+                "props": {
+                  "gap": "sm"
+                },
                 "children": [
                   {
                     "component": "CharacterAvatar",
                     "props": {
-                      "characterId": { "$item": "value/id" },
-                      "sourcePlugin": "character-presence",
-                      "sourceNamespace": "presence",
+                      "characterId": {
+                        "$item": "value/id"
+                      },
                       "size": 28
                     }
                   },
                   {
                     "component": "Icon",
-                    "props": { "name": "user", "size": "sm" }
+                    "props": {
+                      "name": "user",
+                      "size": "sm"
+                    }
                   },
                   {
                     "component": "Text",
                     "props": {
-                      "content": { "$item": "value/name" },
+                      "content": {
+                        "$item": "value/name"
+                      },
                       "weight": "bold",
                       "size": "sm"
                     }
@@ -63,7 +90,9 @@
                   {
                     "component": "Badge",
                     "props": {
-                      "label": { "$item": "value/type" },
+                      "label": {
+                        "$item": "value/type"
+                      },
                       "color": "blue"
                     }
                   }
@@ -72,7 +101,9 @@
               {
                 "component": "Text",
                 "props": {
-                  "content": { "$item": "value/description" },
+                  "content": {
+                    "$item": "value/description"
+                  },
                   "variant": "muted",
                   "size": "xs"
                 }
@@ -80,7 +111,9 @@
               {
                 "component": "CharacterFieldsView",
                 "props": {
-                  "value": { "$item": "value/fields" }
+                  "value": {
+                    "$item": "value/fields"
+                  }
                 }
               }
             ]

@@ -1,10 +1,5 @@
 import { relative } from "node:path";
-import {
-  DEFAULT_LOCALE,
-  FrameworkCapability,
-  resolveI18nText,
-  type Stage,
-} from "@covel/shared";
+import { DEFAULT_LOCALE, resolveI18nText, type Stage } from "@covel/shared";
 
 // Flow segments are the named stages plus one bucket for stage-less runtimes
 // (event / manual). The frontend groups steps by `step.segmentId === segment.id`
@@ -57,8 +52,5 @@ export function isStoryRuntime(manifest: {
   outputKind?: string;
   capabilities?: readonly string[];
 }): boolean {
-  return (
-    manifest.outputKind === "story" ||
-    manifest.capabilities?.includes(FrameworkCapability.Narrative) === true
-  );
+  return manifest.outputKind === "story";
 }

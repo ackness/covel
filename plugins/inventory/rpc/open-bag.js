@@ -6,14 +6,10 @@ const NAMESPACE = "items";
  * Player-facing `/bag` command action.
  *
  * @param {unknown} _payload
- * @param {{ sessionId: string, pluginId: string, locale?: string, store: { listPluginData(sessionId: string, pluginId: string, namespace: string): Promise<Array<{ value?: unknown }>> } }} ctx
+ * @param {{ sessionId: string, pluginId: string, locale?: string, store: { listPluginData(namespace: string): Promise<Array<{ value?: unknown }>> } }} ctx
  */
 export default async function openBag(_payload, ctx) {
-  const rows = await ctx.store.listPluginData(
-    ctx.sessionId,
-    ctx.pluginId,
-    NAMESPACE,
-  );
+  const rows = await ctx.store.listPluginData(NAMESPACE);
   const itemCount = rows.filter((row) => {
     const value = row?.value;
     return value && typeof value === "object" && value.removed !== true;

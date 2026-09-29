@@ -1,48 +1,49 @@
 ---
-name: branch-reply
+id: branch-reply
+kind: plugin
 displayName:
   zh: 回复变体
   en: Reply Variants
 description:
   zh: 提供多条可切换的回复，让你挑选更合适的说法。
   en: Offers several reply options so you can choose the one that fits best.
-pluginType: plugin
-runtimeType: function
-outputKind: system
-stage: post-turn
-handler: ./handler.js
-trigger:
-  type: auto
-capabilities:
-  - branch-reply
-  - prompt-history-rewriter
-# Promotes branch-reply's implicit narrator dependency into a declared
-# binding (04 §1). The handler today scans `completedResults` for the
-# longest non-empty `narrativeOutput`; `inputs.narrative` names that source
-# by capability. `select: /narrativeOutput` points into the narrative
-# engine's success value (`RuntimeResult.output.narrativeOutput`).
-# `required: false` preserves current behavior: branch-reply has no
-# `upstreamRequired` today and still runs when the narrator fails, so the
-# binding must not gate. Handler switch to `ctx.inputs` is a later step.
-inputs:
-  narrative:
-    from:
-      capability: narrative-engine
-      cardinality: one
-    select: "/narrativeOutput"
-    required: false
 tags:
-  - role:branching
-  - cost:function
-  - ui:message-block
-  - ui:manual-action
-ui:
-  message:
-    - ./ui/branch-reply-block.json
-# This runtime only writes its own plugin-data namespaces. Its message block is
-# a declarative projection, so it commutes with other message-block producers.
-effects:
-  parallelSafe: true
+  - "cost:function"
+  - "ui:message-block"
+  - "ui:manual-action"
+provides:
+  - branch-reply@1
+optional:
+  - narrative-engine@1
+entry: ./server/index.js
+contributes:
+  extensions:
+    - point: prompt.history-transform@1
+      id: accepted-branch
+  ui:
+    message:
+      - ./ui/branch-reply-block.json
+runtime:
+  type: function
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+  io:
+    inputs:
+      narrative:
+        from:
+          contract: narrative-engine@1
+          cardinality: one
+        select: /narrativeOutput
+        required: false
+    output:
+      contract: branch-reply@1
+    visibility: system
+  function:
+    handler: ./handler.js
+  effects:
+    parallelSafe: true
 ---
 
 # Branch Reply

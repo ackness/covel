@@ -1,183 +1,164 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, ExternalLink, ImageIcon } from "lucide-react";
+import { mediaGalleryPropsSchema } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
-import { Badge } from "@/components/ui/badge.js";
 import { Media } from "@/components/Media.js";
-import { usePluginNamespace } from "@/stores/plugin-data-store.js";
-import { useSession } from "@/stores/session-store.js";
+import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
+import type { MediaRef } from "@covel/shared";
+import { isMediaRef } from "@/lib/media-ref-utils.js";
 import {
-  compactJobId,
-  formatJobDuration,
-  jobStatusBadgeVariant,
-} from "@/lib/job-ui.js";
-import {
-  downloadImage,
-  findImageGeneratorRuntimeId,
-  rerunImagePrompt,
-} from "./actions.js";
-import { ImagePreviewDialog } from "./image-preview-dialog.js";
-import {
-  getImageRef,
-  parseImageRows,
-  type ImageRecord,
-} from "./image-records.js";
+  catalogItems,
+  invokeCatalogAction,
+} from "@/lib/catalog/catalog-actions.js";
+import { resolvePath, useI18nResolver } from "@/lib/catalog/helpers.js";
+import { useActiveSessionId } from "@/lib/catalog/session-context.js";
+import { emitToast } from "@/lib/toast-channel.js";
+import { formatJobDuration } from "@/lib/job-ui.js";
+import { downloadImage } from "./actions.js";
 
-export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
+export function MediaGalleryPanel({
+  props: input,
+}: {
+  props: Record<string, unknown>;
+}) {
   const { t } = useTranslation();
-  const { state } = useSession();
-  const sessionId = state.session?.id;
-  const data = usePluginNamespace(pluginId, "images");
-  const [preview, setPreview] = useState<ImageRecord | null>(null);
-  const generatorRuntimeId = useMemo(
-    () =>
-      findImageGeneratorRuntimeId(
-        state.sessionPlugins.find((p) => p.id === pluginId),
-      ),
-    [pluginId, state.sessionPlugins],
-  );
-  const images = useMemo(() => parseImageRows(data), [data]);
-
-  if (images.length === 0) {
+  const resolve = useI18nResolver();
+  const sessionId = useActiveSessionId();
+  const [preview, setPreview] = useState<MediaRef | null>(null);
+  const [busy, setBusy] = useState(false);
+  const parsed = mediaGalleryPropsSchema.safeParse(input);
+  if (!parsed.success) return null;
+  const props = parsed.data;
+  const items = catalogItems(props.items);
+  if (!items.length)
     return (
-      <p className="text-xs text-muted-foreground italic text-center leading-relaxed px-4 pt-6">
-        {t("coreImage.panel.noImagesYet")}
+      <p className="text-xs text-muted-foreground italic text-center px-4 pt-6">
+        {resolve(input.emptyText) || t("coreImage.panel.noImagesYet")}
       </p>
     );
-  }
-
   return (
     <div className="space-y-2">
-      <p className="text-[11px] text-muted-foreground">
-        {t("coreImage.panel.galleryHint")}
-      </p>
       <div className="grid grid-cols-1 gap-2">
-        {images.map(({ key, value }) => {
-          const ref = getImageRef(value);
+        {items.map((item, index) => {
+          const value = resolvePath(item, props.refField);
+          const ref = isMediaRef(value) ? value : null;
+          const id = String(resolvePath(item, props.idField) ?? index);
+          const title = String(
+            props.titleField ? (resolvePath(item, props.titleField) ?? id) : id,
+          );
+          const error = props.errorField && resolvePath(item, props.errorField);
+          const status =
+            props.statusField && resolvePath(item, props.statusField);
+          const duration =
+            props.durationField && resolvePath(item, props.durationField);
           return (
             <div
-              key={key}
+              key={id}
               className="image-gallery-row rounded-lg border border-border bg-card/60 overflow-hidden"
             >
               <button
                 type="button"
                 className="block w-full text-left"
-                onClick={() => ref && setPreview(value)}
+                onClick={() => ref && setPreview(ref)}
                 disabled={!ref}
-                title={ref ? t("coreImage.panel.viewLarge") : undefined}
               >
                 {ref ? (
                   <Media
                     src={ref}
-                    sessionId={sessionId ?? ""}
-                    alt={value.imageId ?? key}
+                    sessionId={sessionId}
+                    alt={title}
                     aspectRatio="1/1"
                     rounded="none"
                     fit="cover"
                   />
                 ) : (
-                  <div className="aspect-square flex items-center justify-center bg-muted text-muted-foreground text-xs">
-                    <ImageIcon className="w-4 h-4 mr-1" /> no image
+                  <div className="aspect-square flex items-center justify-center text-muted-foreground">
+                    <ImageIcon className="w-4 h-4" />
                   </div>
                 )}
               </button>
               <div className="p-2 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1 min-w-0">
-                    <Badge
-                      variant={jobStatusBadgeVariant(value.status)}
-                      className="text-[9px] h-4 px-1.5"
+                <div className="flex justify-between gap-2 text-[10px] text-muted-foreground">
+                  <span>{title}</span>
+                  {status ? <span>{String(status)}</span> : null}
+                  {typeof duration === "number" ? (
+                    <span>{formatJobDuration(duration)}</span>
+                  ) : null}
+                </div>
+                {props.fields?.map((field) => {
+                  const value = resolvePath(item, field.path);
+                  return value == null ? null : (
+                    <p
+                      key={field.path}
+                      className="text-[11px] text-muted-foreground whitespace-pre-wrap"
                     >
-                      {value.status ?? "unknown"}
-                    </Badge>
-                    <span className="font-mono text-[10px] text-muted-foreground truncate">
-                      {compactJobId(value.imageId ?? key)}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
-                    {formatJobDuration(value.durationMs)}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {value.composition && (
-                    <Badge variant="outline" className="text-[9px] h-4 px-1.5">
-                      {value.composition}
-                    </Badge>
-                  )}
-                  {value.model && (
-                    <Badge variant="outline" className="text-[9px] h-4 px-1.5">
-                      {value.model}
-                    </Badge>
-                  )}
-                  {value.imageSize && (
-                    <Badge variant="outline" className="text-[9px] h-4 px-1.5">
-                      {value.imageSize}
-                    </Badge>
-                  )}
-                </div>
-                {value.error && (
-                  <p className="text-[10px] text-destructive leading-relaxed line-clamp-2">
-                    {value.error}
+                      {resolve(field.label)} {String(value)}
+                    </p>
+                  );
+                })}
+                {error ? (
+                  <p className="text-[10px] text-destructive">
+                    {String(error)}
                   </p>
-                )}
+                ) : null}
                 <div className="flex gap-1.5">
-                  {ref && (
+                  {ref ? (
                     <>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-[10px] flex-1"
-                        onClick={() => setPreview(value)}
+                        onClick={() => setPreview(ref)}
                       >
-                        <ExternalLink className="w-3 h-3 mr-1" />{" "}
+                        <ExternalLink className="w-3 h-3" />
                         {t("coreImage.panel.viewLargeAction")}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-[10px] flex-1"
-                        onClick={() => {
+                        onClick={() =>
                           downloadImage({
                             ref,
                             sessionId,
-                            filename: `${value.imageId ?? key}.png`,
-                          });
-                        }}
+                            filename: `${id}.png`,
+                          })
+                        }
                       >
-                        <Download className="w-3 h-3 mr-1" />{" "}
+                        <Download className="w-3 h-3" />
                         {t("coreImage.panel.download")}
                       </Button>
                     </>
-                  )}
-                  {value.prompt && (
+                  ) : null}
+                  {props.rerunAction ? (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 px-2 text-[10px] flex-1"
+                      disabled={busy || !sessionId}
                       onClick={() => {
-                        rerunImagePrompt({
+                        if (!sessionId || !props.rerunAction) return;
+                        setBusy(true);
+                        void invokeCatalogAction({
                           sessionId,
-                          pluginId,
-                          runtimeId: generatorRuntimeId,
-                          payload: {
-                            prompt: value.prompt!,
-                            promptMode: value.promptMode ?? "text",
-                            composition: value.composition ?? "single-scene",
-                          },
-                        });
+                          action: props.rerunAction,
+                          scope: { item, props: input },
+                          t,
+                        })
+                          .catch((err) => emitToast("error", String(err)))
+                          .finally(() => setBusy(false));
                       }}
                     >
-                      {t("coreImage.panel.rerun")}
+                      {resolve(props.rerunAction.label) ||
+                        t("coreImage.panel.rerun")}
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
           );
         })}
       </div>
-      <ImagePreviewDialog
-        preview={preview}
+      <MediaPreviewDialog
+        mediaRef={preview}
         sessionId={sessionId}
         onClose={() => setPreview(null)}
       />

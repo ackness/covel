@@ -8,7 +8,6 @@ import type {
 import { errorBody } from "../../../api-error.js";
 import { BUILTIN_PLUGIN_PACKS } from "../../../config/plugin-packs.js";
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
-import { resolveSessionPlugins } from "../session/plugins.js";
 import { isRecord, type WorldEnv } from "./shared.js";
 
 export const worldPluginPlanRoutes = new Hono<WorldEnv>();
@@ -43,13 +42,8 @@ function worldPack(value: unknown): PluginPack | undefined {
     id: value.id,
     label,
     ...(description ? { description } : {}),
-    pluginIds: stringArray(value.plugins ?? value.pluginIds),
-    optionalPluginIds: stringArray(
-      value.optionalPlugins ?? value.optionalPluginIds,
-    ),
-    excludedPluginIds: stringArray(
-      value.excludedPlugins ?? value.excludedPluginIds,
-    ),
+    requested: stringArray(value.requested),
+    recommended: stringArray(value.recommended),
     tags: stringArray(value.tags),
     ...(reason ? { reason } : {}),
     source: "world",
@@ -63,11 +57,6 @@ function resolvePolicy(
   packs: PluginPack[];
 } {
   const raw = isRecord(metadata?.pluginPolicy) ? metadata.pluginPolicy : {};
-  const selectionIds = (
-    key: "requiredPlugins" | "recommendedPlugins" | "excludedPlugins",
-  ): string[] => [
-    ...new Set([...stringArray(metadata?.[key]), ...stringArray(raw[key])]),
-  ];
   const worldPacks = Array.isArray(raw.packs)
     ? raw.packs
         .map(worldPack)
@@ -76,13 +65,11 @@ function resolvePolicy(
   const worldPackIds = new Set(worldPacks.map((pack) => pack.id));
   return {
     policy: {
-      ...(typeof raw.preset === "string" ? { presetId: raw.preset } : {}),
-      preferredTags: stringArray(raw.preferTags),
-      avoidedTags: stringArray(raw.avoidTags),
-      requiredCapabilities: stringArray(raw.requireCapabilities),
-      requiredPluginIds: selectionIds("requiredPlugins"),
-      recommendedPluginIds: selectionIds("recommendedPlugins"),
-      excludedPluginIds: selectionIds("excludedPlugins"),
+      ...(typeof raw.presetId === "string" ? { presetId: raw.presetId } : {}),
+      preferredTags: stringArray(raw.preferredTags),
+      avoidedTags: stringArray(raw.avoidedTags),
+      requested: stringArray(raw.requested),
+      recommended: stringArray(raw.recommended),
     },
     packs: [
       ...worldPacks,
@@ -96,53 +83,20 @@ function defaultPluginIds(
   policy: ResolvedWorldPluginPolicy,
   selectedPack: PluginPack | undefined,
 ): string[] {
-  const required = new Set(policy.requiredPluginIds);
-  const recommended = new Set(policy.recommendedPluginIds);
-  const excluded = new Set(policy.excludedPluginIds);
-  for (const id of selectedPack?.pluginIds ?? []) required.add(id);
-  for (const id of selectedPack?.optionalPluginIds ?? []) recommended.add(id);
-  for (const id of selectedPack?.excludedPluginIds ?? []) excluded.add(id);
-
+  const requested = new Set([
+    ...policy.requested,
+    ...(selectedPack?.requested ?? []),
+  ]);
   for (const plugin of plugins) {
-    if (policy.avoidedTags.some((tag) => plugin.tags.includes(tag))) {
-      excluded.add(plugin.id);
-    }
-    // Demo packages require an explicit selection, not a broad tag or
-    // capability match. World and pack declarations can still opt them in.
-    if (plugin.tags.includes("role:demo")) continue;
-    if (policy.preferredTags.some((tag) => plugin.tags.includes(tag))) {
-      recommended.add(plugin.id);
-    }
     if (
-      policy.requiredCapabilities.some((capability) =>
-        plugin.capabilities.includes(capability),
-      )
-    ) {
-      recommended.add(plugin.id);
-    }
+      plugin.hostState === "error" ||
+      policy.avoidedTags.some((tag) => plugin.tags.includes(tag))
+    )
+      continue;
+    if (policy.preferredTags.some((tag) => plugin.tags.includes(tag)))
+      requested.add(plugin.id);
   }
-
-  const hasPolicy =
-    required.size > 0 ||
-    recommended.size > 0 ||
-    excluded.size > 0 ||
-    policy.preferredTags.length > 0 ||
-    policy.avoidedTags.length > 0 ||
-    policy.requiredCapabilities.length > 0 ||
-    selectedPack !== undefined;
-
-  return plugins
-    .filter((plugin) => plugin.status !== "error")
-    .filter((plugin) => {
-      const locked =
-        plugin.pluginType === "core-plugin" && plugin.source === "builtin";
-      if (required.has(plugin.id)) return true;
-      if (excluded.has(plugin.id)) return false;
-      if (locked) return true;
-      if (plugin.tags.includes("role:demo")) return recommended.has(plugin.id);
-      return hasPolicy ? recommended.has(plugin.id) : true;
-    })
-    .map((plugin) => plugin.id);
+  return [...requested];
 }
 
 worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
@@ -154,8 +108,8 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
       404,
     );
   }
-  const plugins = [...c.get("pluginRegistry").getAll().values()].map(
-    buildPluginSummary,
+  const plugins = [...c.get("pluginRegistry").getAll().values()].map((entry) =>
+    buildPluginSummary(entry, c.get("isPluginEntryPublished")),
   );
   const { policy, packs } = resolvePolicy(world.metadata);
   const selectedPack = policy.presetId
@@ -166,10 +120,7 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
     packs,
     policy,
     ...(selectedPack ? { selectedPackId: selectedPack.id } : {}),
-    defaultPluginIds: resolveSessionPlugins(
-      defaultPluginIds(plugins, policy, selectedPack),
-      c.get("pluginRegistry"),
-    ),
+    defaultPluginIds: defaultPluginIds(plugins, policy, selectedPack),
   };
   return c.json(plan);
 });

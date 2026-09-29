@@ -19,7 +19,10 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { assertNoPrivateConfig } from "./private-config.mjs";
-import { assertNoPluginLoadErrors } from "./plugin-load-check.mjs";
+import {
+  assertLoadedBuiltinPluginEntries,
+  assertNoPluginLoadErrors,
+} from "./plugin-load-check.mjs";
 
 const require = createRequire(import.meta.url);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -230,8 +233,11 @@ try {
   await new Promise((r) => setTimeout(r, 500));
   assertNoStartupPathErrors();
   assertNoPluginLoadErrors(stderrBuf);
+  const pluginsResponse = await fetch(`http://127.0.0.1:${port}/api/plugins`);
+  if (!pluginsResponse.ok) throw new Error("staged /api/plugins unavailable");
+  assertLoadedBuiltinPluginEntries((await pluginsResponse.json()).items);
   booted = true;
-  console.log("[smoke] ✓ /api/health OK");
+  console.log("[smoke] ✓ /api/health and builtin plugin entries OK");
 } catch (err) {
   const tail = stderrBuf.slice(-80).join("");
   child.kill("SIGKILL");

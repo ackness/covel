@@ -23,9 +23,6 @@ async function fixture() {
   const eventBus = createEventBus();
   const events: string[] = [];
   eventBus.onEmit((event) => events.push(event.type));
-  const updateAfterTurn = vi
-    .fn()
-    .mockResolvedValue({ updated: true, blocksChanged: [] });
   const result: RuntimeResult = {
     runtimeId: "story",
     pluginId: "story",
@@ -51,88 +48,22 @@ async function fixture() {
         name: "story",
         pluginId: "story",
         outputKind: "story",
-        capabilities: [],
+        outputContract: undefined,
       },
     ],
     results: [result],
     turnIds: [],
     completion: { kind: "turn", turnId: "turn", durationMs: 1 },
-    memorySystem: {
-      manager: {
-        initializeDefaults: async () => {},
-        loadBlocks: async () => [
-          { label: "scene", content: "old", updatedAt: "today" },
-        ],
-      },
-      updater: { updateAfterTurn },
-    },
   };
-  return { args, store, events, updateAfterTurn, result };
+  return { args, store, events, result };
 }
 
 describe("commitExecution lifecycle", () => {
-  it("settles an aborted commit without waiting for prior memory or writing game state", async () => {
-    const { args, store, updateAfterTurn } = await fixture();
-    const controller = new AbortController();
-    const waiting = Promise.withResolvers<void>();
-    const memory = Promise.withResolvers<void>();
-    const extraInTx = vi.fn();
-    let settled = false;
-    const commit = commitExecution({
-      ...args,
-      signal: controller.signal,
-      extraInTx,
-      memorySystem: {
-        ...args.memorySystem!,
-        updater: {
-          updateAfterTurn,
-          awaitPending: () => {
-            waiting.resolve();
-            return memory.promise;
-          },
-        },
-      },
-    }).then((result) => {
-      settled = true;
-      return result;
-    });
-    await waiting.promise;
-    controller.abort();
-    try {
-      await vi.waitFor(() => expect(settled).toBe(true), { timeout: 200 });
-      expect(await commit).toMatchObject({
-        status: "failed",
-        snapshotFailed: false,
-      });
-      expect(extraInTx).not.toHaveBeenCalled();
-      expect(updateAfterTurn).not.toHaveBeenCalled();
-      expect(await store.listMessages("session")).toEqual([]);
-      expect(await store.listSnapshots("session")).toEqual([]);
-    } finally {
-      memory.resolve();
-      await commit;
-    }
-  });
-
-  it("drains prior memory before committing and publishes completion after the snapshot", async () => {
-    const { args, store, events, updateAfterTurn } = await fixture();
+  it("publishes completion after durable delivery and the snapshot", async () => {
+    const { args, events } = await fixture();
     const order: string[] = [];
     const outcome = await commitExecution({
       ...args,
-      memorySystem: {
-        ...args.memorySystem!,
-        updater: {
-          updateAfterTurn: async (input) => {
-            order.push("memory");
-            expect(events).toContain("turn.completed");
-            expect(await store.listSnapshots("session")).toHaveLength(1);
-            return updateAfterTurn(input);
-          },
-          awaitPending: async () => {
-            order.push("drain");
-          },
-        },
-      },
       extraInTx: async () => {
         order.push("commit");
       },
@@ -141,14 +72,14 @@ describe("commitExecution lifecycle", () => {
       },
     });
     expect(outcome.status).toBe("committed");
-    expect(order).toEqual(["drain", "commit", "delivery", "memory"]);
+    expect(order).toEqual(["commit", "delivery"]);
     expect(events.indexOf("state.snapshot.created")).toBeLessThan(
       events.indexOf("turn.completed"),
     );
   });
 
   it("rolls back all writes and withholds every follow-up when the transaction fails", async () => {
-    const { args, store, events, updateAfterTurn } = await fixture();
+    const { args, store, events } = await fixture();
     const outcome = await commitExecution({
       ...args,
       extraInTx: async () => {
@@ -159,11 +90,10 @@ describe("commitExecution lifecycle", () => {
     expect(await store.listMessages("session")).toEqual([]);
     expect(await store.listSnapshots("session")).toEqual([]);
     expect(events).not.toContain("turn.completed");
-    expect(updateAfterTurn).not.toHaveBeenCalled();
   });
 
-  it("isolates transport and snapshot failures from durable success and memory", async () => {
-    const { args, store, events, updateAfterTurn } = await fixture();
+  it("isolates transport and snapshot failures from durable success", async () => {
+    const { args, store, events } = await fixture();
     const outcome = await commitExecution({
       ...args,
       store: {
@@ -183,31 +113,12 @@ describe("commitExecution lifecycle", () => {
     expect(events.filter((event) => event === "turn.completed")).toHaveLength(
       1,
     );
-    expect(updateAfterTurn).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not make a committed execution retryable when memory preparation fails", async () => {
-    const { args, events } = await fixture();
-    const outcome = await commitExecution({
-      ...args,
-      memorySystem: {
-        ...args.memorySystem!,
-        manager: {
-          initializeDefaults: async () => {},
-          loadBlocks: async () => {
-            throw new Error("memory unavailable");
-          },
-        },
-      },
-    });
-    expect(outcome.status).toBe("committed");
-    expect(events).toContain("turn.completed");
   });
 
   it.each(["suspended", "detached"] as const)(
     "checkpoints %s work without completing or ingesting it",
     async (kind) => {
-      const { args, result, events, updateAfterTurn } = await fixture();
+      const { args, result, events } = await fixture();
       const outcome = await commitExecution({
         ...args,
         ...(kind === "suspended"
@@ -221,12 +132,11 @@ describe("commitExecution lifecycle", () => {
       expect(outcome.status).toBe("committed");
       expect(events).toContain("state.snapshot.created");
       expect(events).not.toContain("turn.completed");
-      expect(updateAfterTurn).not.toHaveBeenCalled();
     },
   );
 
-  it("forces a resumed checkpoint and only ingests current successful story results", async () => {
-    const { args, result, store, events, updateAfterTurn } = await fixture();
+  it("forces a resumed checkpoint", async () => {
+    const { args, result, store, events } = await fixture();
     await store.updateSession("session", { completedPlayerTurns: 2 });
     const outcome = await commitExecution({
       ...args,
@@ -251,8 +161,5 @@ describe("commitExecution lifecycle", () => {
     expect(events).toContain("turn.resumed");
     expect(events).not.toContain("turn.completed");
     expect(await store.listSnapshots("session")).toHaveLength(1);
-    expect(updateAfterTurn.mock.calls[0][0].narrativeText).toBe(
-      "Committed story.",
-    );
   });
 });

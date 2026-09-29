@@ -70,36 +70,48 @@ function refToNames(
 function collectDependencies(
   manifest: RuntimeManifest,
   capabilityProviders: ReadonlyMap<string, readonly string[]>,
-): readonly string[] {
+): { readonly all: ReadonlySet<string>; readonly hard: ReadonlySet<string> } {
   const deps = new Set<string>();
+  const hard = new Set<string>();
+  const addHard = (name: string): void => {
+    deps.add(name);
+    hard.add(name);
+  };
   const spec = getRuntimeSpec(manifest);
 
   for (const decl of manifest.input?.inject ?? []) {
-    if (decl.kind === "runtime" && decl.from.length > 0) deps.add(decl.from);
+    if (decl.kind === "runtime" && decl.from.length > 0) addHard(decl.from);
   }
   for (const need of spec.deps.needs) {
     for (const name of refToNames(need, "needs", capabilityProviders)) {
       deps.add(name);
+      if (
+        typeof need === "string" ||
+        "runtime" in need ||
+        need.cardinality === "all"
+      ) {
+        hard.add(name);
+      }
     }
   }
   for (const after of spec.deps.after) {
     for (const name of refToNames(after, "after", capabilityProviders)) {
-      deps.add(name);
+      addHard(name);
     }
   }
   // Typed `inputs` bindings imply the same ordering edge: `required: true` →
   // needs(turn), `false` → after — both need the producer scheduled first.
   for (const binding of Object.values(spec.bindings)) {
     if ("runtime" in binding.from) {
-      if (binding.from.runtime.length > 0) deps.add(binding.from.runtime);
+      if (binding.from.runtime.length > 0) addHard(binding.from.runtime);
     } else {
       for (const name of capabilityProviders.get(binding.from.capability) ??
         []) {
-        deps.add(name);
+        addHard(name);
       }
     }
   }
-  return [...deps];
+  return { all: deps, hard };
 }
 
 /**
@@ -133,7 +145,7 @@ function buildCapabilityProviders(
 ): Map<string, string[]> {
   const capabilityProviders = new Map<string, string[]>();
   for (const rt of runtimes) {
-    for (const cap of rt.capabilities ?? []) {
+    for (const cap of rt.outputContract ? [rt.outputContract] : []) {
       const list = capabilityProviders.get(cap) ?? [];
       list.push(rt.name);
       capabilityProviders.set(cap, list);
@@ -152,6 +164,7 @@ export function scheduleByDag(
   const inDegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
   const directDependencies = new Map<string, Set<string>>();
+  const hardDependencies = new Map<string, ReadonlySet<string>>();
   const oneProviderGroups = new Map<string, readonly (readonly string[])[]>();
   const byName = new Map<string, RuntimeManifest>();
   const capabilityProviders = buildCapabilityProviders(runtimes);
@@ -163,8 +176,11 @@ export function scheduleByDag(
   }
 
   for (const rt of runtimes) {
-    const deps = new Set(collectDependencies(rt, capabilityProviders));
-    const inScopeDeps = new Set([...deps].filter((dep) => inScope.has(dep)));
+    const deps = collectDependencies(rt, capabilityProviders);
+    const inScopeDeps = new Set(
+      [...deps.all].filter((dep) => inScope.has(dep)),
+    );
+    hardDependencies.set(rt.name, deps.hard);
     directDependencies.set(rt.name, inScopeDeps);
     oneProviderGroups.set(
       rt.name,
@@ -220,7 +236,10 @@ export function scheduleByDag(
         );
         if (
           !hasUnsatisfiedGroup &&
-          remaining.every((dep) => relaxable.has(dep))
+          remaining.every(
+            (dep) =>
+              relaxable.has(dep) && !hardDependencies.get(name)?.has(dep),
+          )
         ) {
           inDegree.set(name, 0);
         }

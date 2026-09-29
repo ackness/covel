@@ -440,13 +440,17 @@ export class RpcValidationError extends Error {
 }
 
 export function createSubmitFormHandler(
-  validatePluginForm?: ValidatePluginForm,
+  validatePluginForm: ValidatePluginForm | undefined,
+  frameworkStore: Pick<
+    DataStore,
+    "listPlayerInputs" | "listTurnMessages" | "withTransaction"
+  >,
 ): RpcHandler {
   return async (
     payload: unknown,
     context: RpcHandlerContext,
   ): Promise<SubmitFormResult> => {
-    const { sessionId, store, locale } = context;
+    const { sessionId, locale } = context;
     const labels = resolveLabels(locale);
 
     if (!payload || typeof payload !== "object") {
@@ -494,11 +498,6 @@ export function createSubmitFormHandler(
       submissions.push(sub);
     }
 
-    // The host gives registered framework defaults its transaction-owning store.
-    // Plugin actions receive the narrower RpcHandlerStore capability instead.
-    // Keep this cast limited to the two framework-only methods used here.
-    const frameworkStore = store as typeof store &
-      Pick<DataStore, "listPlayerInputs" | "withTransaction">;
     const messages = (await frameworkStore.listTurnMessages(
       sessionId,
     )) as readonly MessageLike[];
@@ -630,5 +629,3 @@ export function createSubmitFormHandler(
     };
   };
 }
-
-export const submitFormHandler = createSubmitFormHandler();

@@ -1,3 +1,4 @@
+import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
@@ -9,17 +10,14 @@ import type {
   InputSlot,
 } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
-import { DEFAULT_LOCALE } from "@covel/shared";
+import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   buildContext,
   buildContextAsync,
   needsAsyncBuild,
 } from "@covel/context";
-import type {
-  CoreMemoryBlockView,
-  SessionContextSnapshot,
-} from "@covel/context";
+import type { SessionContextSnapshot } from "@covel/context";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
@@ -28,10 +26,7 @@ import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { agentInputSlots } from "./runtime-input-slots.js";
 import { filterRuntimeHistory } from "./message-filter.js";
-import {
-  checkSchemaProseFailure,
-  checkSchemaValidation,
-} from "./runtime-output-validator.js";
+import { createAgentSchemaGate } from "./runtime-output-validator.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
@@ -44,6 +39,7 @@ export interface AgentCompactionRefresh {
 }
 
 export interface ExecuteAgentRuntimeOptions {
+  readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -76,9 +72,7 @@ export interface ExecuteAgentRuntimeOptions {
   readonly prepareCompactedContext?: (
     systemPromptPreview: string,
   ) => Promise<AgentCompactionRefresh>;
-  readonly workingMemory:
-    readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
-  readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
+
   readonly sessionContext: SessionContextSnapshot | undefined;
   /** Canonical activation — rendered into the reserved prompt segment. */
   readonly activation?: RuntimeActivation;
@@ -93,6 +87,7 @@ export interface ExecuteAgentRuntimeOptions {
 }
 
 export async function executeAgentRuntime({
+  upstreamProposals = [],
   manifest,
   input,
   loaded,
@@ -105,8 +100,6 @@ export async function executeAgentRuntime({
   hookPipeline,
   sessionSummaries,
   prepareCompactedContext,
-  workingMemory,
-  coreMemoryBlocks,
   sessionContext,
   activation,
   inputs,
@@ -162,16 +155,18 @@ export async function executeAgentRuntime({
         )
       : undefined;
 
-  const assembleContext = () => {
+  const assembleContext = async () => {
+    const promptSegments =
+      (
+        await deps.extensionExecution?.run(promptSegmentV1, {
+          turnId: input.turnId,
+          playerMessage: input.playerMessage,
+        })
+      )?.flat() ?? [];
     const buildParams = {
+      promptSegments,
       promptTemplate: loaded.promptTemplate,
       manifest,
-      // Segments 9/10 (Author's Note + Post-History) read authorsNote/postHistory
-      // from activeManifests. Use the locale-resolved `loaded.manifest` (parsed
-      // from PLUGIN.<locale>.md) so an en session gets the localized notes, while
-      // `manifest` (the canonical registry manifest) still drives inject/execution
-      // semantics — avoids any PLUGIN.en.md frontmatter drift leaking into scheduling.
-      activeManifests: [loaded.manifest],
       turnInput: input,
       completedResults,
       messageHistory: filterRuntimeHistory(
@@ -180,8 +175,6 @@ export async function executeAgentRuntime({
       ),
       sessionMeta,
       summaries: effectiveSessionSummaries,
-      workingMemory: workingMemory ?? [],
-      coreMemoryBlocks: coreMemoryBlocks ?? [],
       // Thread the unified snapshot into context building so templates can
       // read structured session data via `world`, `session`, and `player`.
       ...(sessionContext ? { sessionContext } : {}),
@@ -252,7 +245,12 @@ export async function executeAgentRuntime({
     ...shapedContext.messages,
   ];
 
+  const worldBase = deps.store
+    ? await createWorldModelView(deps.store, input.sessionId, upstreamProposals)
+    : undefined;
   const toolLoop = await runAgentToolLoop({
+    worldBase,
+    upstreamProposals,
     manifest,
     input,
     ...(sessionMeta?.turnNumber !== undefined
@@ -292,6 +290,7 @@ export async function executeAgentRuntime({
     finalizeRuntimeResult({ ...deps, hookPipeline }, manifest, input, result, {
       lastTarget: toolLoop.lastTarget,
       deltaCount: streamDeltaCount,
+      outputContractSchema: loaded.outputContractSchema,
     });
 
   if (!stoppedWithResponse && !finalContent) {
@@ -336,13 +335,7 @@ export async function executeAgentRuntime({
     });
   }
 
-  // Build the runtime output from final content + tool results. This shares the
-  // exact transform with the resume path (finalizeAgentOutput). The schema gate
-  // below runs the two schema-declared-runtime checks — prose-instead-of-JSON
-  // and schema validation — that the resume path intentionally skips. A
-  // schema-declared runtime that returns unparseable prose or a non-conforming
-  // envelope surfaces a real `failed` result with a diagnostic instead of
-  // silently falling back to narrativeOutput.
+  // Ordinary execution and resume share both output construction and schema policy.
   const finalized = finalizeAgentOutput({
     manifest,
     finalContent,
@@ -352,37 +345,14 @@ export async function executeAgentRuntime({
     pendingProposals,
     emittedEvents,
     dedupeInteractions: true,
-    schemaGate:
-      loaded.outputSchema && manifest.outputKind !== "story"
-        ? ({ output: built, parsedAsJson, finalContent: content }) => {
-            const ctx = {
-              manifest,
-              input,
-              runId,
-              startTime,
-              collectedToolCalls,
-              outputSchema: loaded.outputSchema!,
-            };
-            if (content !== null) {
-              const proseFailure = checkSchemaProseFailure(
-                ctx,
-                content,
-                parsedAsJson,
-              );
-              if (proseFailure) {
-                // Emission happens in finalizeFailure (the short-circuit
-                // result routes through it) — emitting here too would
-                // double-fire.
-                return proseFailure;
-              }
-            }
-            const schemaFailure = checkSchemaValidation(ctx, built);
-            if (schemaFailure) {
-              return schemaFailure;
-            }
-            return undefined;
-          }
-        : undefined,
+    schemaGate: createAgentSchemaGate({
+      manifest,
+      input,
+      runId,
+      startTime,
+      collectedToolCalls,
+      outputSchema: loaded.outputSchema,
+    }),
   });
 
   if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
@@ -409,15 +379,15 @@ export async function executeAgentRuntime({
   if (finalized.kind === "short-circuit") {
     return finalizeFailure(finalized.result);
   }
-  const output = finalized.output;
-
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
     runId,
     turnId: input.turnId,
     status: "success",
-    output,
+    output: finalized.output,
+    ...(finalized.effects ? { effects: finalized.effects } : {}),
+    ...(finalized.completion ? { completion: finalized.completion } : {}),
     toolCalls: collectedToolCalls,
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),
@@ -428,7 +398,11 @@ export async function executeAgentRuntime({
     manifest,
     input,
     rawResult,
-    { lastTarget: toolLoop.lastTarget, deltaCount: streamDeltaCount },
+    {
+      lastTarget: toolLoop.lastTarget,
+      deltaCount: streamDeltaCount,
+      outputContractSchema: loaded.outputContractSchema,
+    },
   );
   if (deps.store && result.output) {
     attachRuntimeJournal(

@@ -4,6 +4,9 @@ export type AiProviderErrorCode =
   | "PROVIDER_ERROR"
   | "CONFIG_ERROR";
 
+/** A known invalid model binding/configuration, distinct from unexpected failures. */
+export class ModelConfigurationError extends Error {}
+
 export class AiProviderError extends Error {
   public readonly code: AiProviderErrorCode;
   public readonly provider: string;

@@ -93,7 +93,9 @@ export function createVectorIngestor(deps: {
   }
   const pendingBySession = new Map<string, PendingIngest>();
 
-  const runSweep = async (sessionId: string): Promise<IngestResult> => {
+  const runSweep = async (
+    sessionId: string,
+  ): Promise<IngestResult & { more?: boolean }> => {
     if (!supportsVector(store)) return SKIPPED;
 
     const session = await store.getSession(sessionId);
@@ -116,27 +118,32 @@ export function createVectorIngestor(deps: {
 
     let recall = 0;
     let archival = 0;
+    let more = false;
     try {
-      recall = await ingestRecall(
+      const result = await ingestRecall(
         store,
-        embed,
+        (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
         expectedSessionCreatedAt,
       );
+      recall = result.written;
+      more ||= result.more;
     } catch (err) {
       warn("recall", sessionId, err);
     }
     try {
-      archival = await ingestArchival(
+      const result = await ingestArchival(
         store,
-        embed,
+        (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
         expectedSessionCreatedAt,
       );
+      archival = result.written;
+      more ||= result.more;
     } catch (err) {
       warn("archival", sessionId, err);
     }
-    return { skipped: false, recall, archival };
+    return { skipped: false, recall, archival, more };
   };
 
   return {
@@ -164,6 +171,7 @@ export function createVectorIngestor(deps: {
           skipped = skipped && result.skipped;
           recall += result.recall;
           archival += result.archival;
+          state.dirty ||= result.more ?? false;
         } while (state.dirty);
         return { skipped, recall, archival };
       };
@@ -190,10 +198,10 @@ export function createVectorIngestor(deps: {
 
 async function ingestRecall(
   store: VectorStore,
-  embed: EmbedFn,
+  embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
   expectedSessionCreatedAt: string,
-): Promise<number> {
+): Promise<{ written: number; more: boolean }> {
   const cursor = await readPluginJson<RecallCursor>(
     store,
     sessionId,
@@ -209,7 +217,7 @@ async function ingestRecall(
     cursor,
     MAX_INGEST_BATCH,
   );
-  if (batch.length === 0) return 0;
+  if (batch.length === 0) return { written: 0, more: false };
 
   const isEmbeddable = (m: { content?: unknown }): boolean =>
     Boolean(String(m.content ?? "").trim());
@@ -267,7 +275,11 @@ async function ingestRecall(
       lastHandled,
     );
   }
-  return written;
+  return {
+    written,
+    more:
+      batch.length === MAX_INGEST_BATCH && lastHandled?.id === batch.at(-1)?.id,
+  };
 }
 
 // ── Archival (lorebook + characters, hash-incremental) ───────────
@@ -282,10 +294,10 @@ interface ArchivalItem {
 
 async function ingestArchival(
   store: VectorStore,
-  embed: EmbedFn,
+  embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
   expectedSessionCreatedAt: string,
-): Promise<number> {
+): Promise<{ written: number; more: boolean }> {
   const items = await collectArchivalItems(store, sessionId);
 
   let hashes =
@@ -324,14 +336,14 @@ async function ingestArchival(
         {},
       );
     }
-    return 0;
+    return { written: 0, more: false };
   }
 
   // Embed only items whose content fingerprint is new or changed.
   const changed = items.filter(
     (it) => hashes[it.vecKey] !== contentHash(it.text),
   );
-  if (changed.length === 0) return 0;
+  if (changed.length === 0) return { written: 0, more: false };
 
   const batch = changed.slice(0, MAX_INGEST_BATCH);
   const vectors = await embedWithRetry(
@@ -372,7 +384,10 @@ async function ingestArchival(
     HASHES_KEY,
     nextHashes,
   );
-  return written;
+  return {
+    written,
+    more: changed.length > batch.length && written === batch.length,
+  };
 }
 
 async function collectArchivalItems(
@@ -391,11 +406,13 @@ async function collectArchivalItems(
     const content = String(entry.content ?? "").trim();
     if (!content) continue;
     items.push({
-      vecKey: `lorebook:${entry.id}`,
+      vecKey: `lorebook:${JSON.stringify(entry.owner)}:${entry.id}`,
       displayKey: entry.keys?.[0] ?? entry.id,
       text: content,
       source: "lorebook",
-      ...(entry.pluginId ? { pluginId: entry.pluginId } : {}),
+      ...(entry.owner.kind === "plugin"
+        ? { pluginId: entry.owner.pluginId }
+        : {}),
     });
   }
 
@@ -463,7 +480,7 @@ function warn(kind: string, sessionId: string, err: unknown): void {
 }
 
 async function embedWithRetry(
-  embed: EmbedFn,
+  embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   texts: readonly string[],
   sessionId: string,
   kind: "recall" | "archival",

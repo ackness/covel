@@ -1,7 +1,6 @@
-/** Commit handlers for `working_memory.set` and `lorebook.upsert`. */
+/** Authoritative lorebook commit handler. */
 
 import type { CommitResult, ProposalFor } from "@covel/shared";
-import { workingMemoryQuotaViolation } from "@covel/shared";
 import { makeEvent } from "../session/session-kernel-helpers.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
@@ -13,101 +12,9 @@ import {
   requireOptionalString,
 } from "./commit-validators.js";
 
-/**
- * Storage-quota check shared with the REST working-memory route — the limits
- * and off-by-one semantics live in `@covel/shared` (`working-memory-quota.ts`)
- * so the two write paths cannot drift apart. A writable adapter must supply
- * the listing capability too; otherwise the entry-count invariant is unknown.
- */
-async function workingMemoryQuotaFailure(
-  store: KernelStore,
-  sessionId: string,
-  scope: string,
-  key: string,
-  value: unknown,
-): Promise<CommitResult | undefined> {
-  if (!store.listWorkingMemory) {
-    return commitError(
-      "working_memory.set: store does not support working memory quota checks",
-    );
-  }
-  const existing = await store.listWorkingMemory(sessionId);
-  const violation = workingMemoryQuotaViolation(scope, key, value, existing);
-  return violation
-    ? commitError(`working_memory.set: ${violation.message}`)
-    : undefined;
-}
-
 export function createMemoryLoreCommitHandlers(
   store: KernelStore,
-): Pick<CommitHandlerMap, "working_memory.set" | "lorebook.upsert"> {
-  async function commitWorkingMemory(
-    proposal: ProposalFor<"working_memory.set">,
-  ): Promise<CommitResult> {
-    const payload = proposal.payload;
-
-    const validScopes = new Set(["player", "story", "shared"]);
-    const scopeInvalid =
-      typeof payload.scope !== "string" || !validScopes.has(payload.scope)
-        ? commitError(
-            `working_memory.set: invalid scope "${String(payload.scope)}"`,
-          )
-        : undefined;
-    const invalid = firstFailure(
-      scopeInvalid,
-      requireNonEmptyString(
-        payload.key,
-        "working_memory.set: key must be a non-empty string",
-      ),
-      payload.value === undefined
-        ? commitError("working_memory.set: value must not be undefined")
-        : undefined,
-      // TODO: resolve schemaRef against a framework-level Zod schema
-      // registry and validate payload.value against the schema.
-      // For now, schemaRef is accepted as an opaque string.
-      requireOptionalString(
-        payload.schemaRef,
-        "working_memory.set: schemaRef must be a string when provided",
-      ),
-    );
-    if (invalid) return invalid;
-
-    const upsertWorkingMemory = store.upsertWorkingMemory;
-    if (!upsertWorkingMemory) {
-      return commitError(
-        "working_memory.set: store does not support working memory",
-      );
-    }
-
-    const { scope, key } = payload;
-    const overQuota = await workingMemoryQuotaFailure(
-      store,
-      proposal.sessionId,
-      scope,
-      key,
-      payload.value,
-    );
-    if (overQuota) return overQuota;
-
-    await upsertWorkingMemory({
-      id: crypto.randomUUID(),
-      sessionId: proposal.sessionId,
-      key,
-      scope,
-      value: payload.value,
-      schemaRef: payload.schemaRef,
-      updatedAt: new Date().toISOString(),
-    });
-
-    // Emit working_memory.changed session event so subscribers can react
-    const wmEvent = makeEvent("working_memory.changed", proposal, {
-      scope,
-      key,
-    });
-
-    return { committed: true, event: wmEvent };
-  }
-
+): Pick<CommitHandlerMap, "lorebook.upsert"> {
   async function commitLorebookUpsert(
     proposal: ProposalFor<"lorebook.upsert">,
   ): Promise<CommitResult> {
@@ -131,7 +38,7 @@ export function createMemoryLoreCommitHandlers(
     const records: Array<{
       id: string;
       sessionId: string;
-      pluginId: string;
+      owner: import("@covel/shared").LorebookOwner;
       keys: readonly string[];
       content: string;
       strategy: "constant" | "selective";
@@ -167,10 +74,30 @@ export function createMemoryLoreCommitHandlers(
             (k): k is string => typeof k === "string",
           )
         : [];
+      const owner = {
+        kind: "plugin",
+        pluginId: proposal.source.pluginId,
+      } as const;
+      if (entry.owner !== undefined) {
+        const requested = entry.owner as Record<string, unknown> | null;
+        if (
+          !requested ||
+          requested.kind !== "plugin" ||
+          requested.pluginId !== owner.pluginId
+        )
+          return commitError(
+            "lorebook.upsert: cannot modify another owner's entry",
+          );
+      }
+      const existing = await store.getLorebookEntry?.(
+        proposal.sessionId,
+        owner,
+        entry.id as string,
+      );
       records.push({
         id: entry.id as string,
         sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
+        owner: { kind: "plugin", pluginId: proposal.source.pluginId },
         keys,
         content: entry.content,
         strategy: entry.strategy,
@@ -182,7 +109,7 @@ export function createMemoryLoreCommitHandlers(
           typeof entry.insertionOrder === "number" ? entry.insertionOrder : 100,
         enabled: typeof entry.enabled === "boolean" ? entry.enabled : true,
         extra: entry.extra,
-        createdAt: now,
+        createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       });
     }
@@ -193,7 +120,6 @@ export function createMemoryLoreCommitHandlers(
   }
 
   return {
-    "working_memory.set": commitWorkingMemory,
     "lorebook.upsert": commitLorebookUpsert,
   };
 }

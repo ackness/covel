@@ -5,11 +5,11 @@ import { Media as MediaComponent } from "@/components/Media.js";
 import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { AudioPlayer as AudioPlayerComponent } from "@/components/AudioPlayer.js";
 import {
-  ImageGalleryPanel,
-  ImageJobsPanel,
+  MediaGalleryPanel,
+  JobListPanel,
 } from "@/components/session/image-plugin-panels.js";
 import { PortraitGalleryPanel } from "@/components/session/portrait-gallery-panel.js";
-import type { MediaRef } from "@covel/shared";
+import { catalogActionSchema, type MediaRef } from "@covel/shared";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { useActiveSessionId } from "./session-context.js";
 
@@ -232,25 +232,20 @@ export const AudioPlayerCatalogComponent: ComponentRenderer = ({ element }) => {
 };
 
 /** Source — subtle source attribution label. */
-export const ImageGallery: ComponentRenderer = ({ element }) => {
-  const pluginId = element.props?.pluginId as string | undefined;
-  return pluginId ? <ImageGalleryPanel pluginId={pluginId} /> : null;
-};
-
-export const ImageJobs: ComponentRenderer = ({ element }) => {
-  const pluginId = element.props?.pluginId as string | undefined;
-  return pluginId ? <ImageJobsPanel pluginId={pluginId} /> : null;
-};
+export const MediaGallery: ComponentRenderer = ({ element }) => (
+  <MediaGalleryPanel props={element.props ?? {}} />
+);
+export const JobList: ComponentRenderer = ({ element }) => (
+  <JobListPanel props={element.props ?? {}} />
+);
 
 export const PortraitGallery: ComponentRenderer = ({ element }) => {
-  const pluginId = element.props?.pluginId as string | undefined;
-  const runtimeId =
-    typeof element.props?.runtimeId === "string"
-      ? element.props.runtimeId
-      : undefined;
-  return pluginId ? (
-    <PortraitGalleryPanel pluginId={pluginId} runtimeId={runtimeId} />
-  ) : null;
+  const action = catalogActionSchema.safeParse(element.props?.replaceAction);
+  return (
+    <PortraitGalleryPanel
+      replaceAction={action.success ? action.data : undefined}
+    />
+  );
 };
 
 export const Source: ComponentRenderer = ({ element }) => {

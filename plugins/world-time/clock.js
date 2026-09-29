@@ -1,4 +1,5 @@
-import { resolveI18nText, worldTimeSchema } from "@covel/shared";
+import { resolveI18nText } from "@covel/shared";
+import { worldTimeSchema, timeDefinitionRecordSchema } from "./schema.js";
 
 export const DEFAULT_TIME = worldTimeSchema.parse({
   kind: "calendar",
@@ -168,13 +169,8 @@ export function advanceTime(definition, tick, request, turnId) {
   return { tick: safe(tick + delta), delta };
 }
 
-export async function loadTime(store, sessionId, pluginId, locale) {
-  const stored = await store.getPluginData(
-    sessionId,
-    pluginId,
-    "clock",
-    "current",
-  );
+export async function loadTime(store, locale) {
+  const stored = await store.getPluginData("clock", "current");
   if (stored) {
     const state = stored.value;
     if (
@@ -191,10 +187,10 @@ export async function loadTime(store, sessionId, pluginId, locale) {
       locale,
     };
   }
-  const session = await store.getSession(sessionId);
-  const world = session?.worldId ? await store.getWorld(session.worldId) : null;
-  const declared = world?.metadata?.dimensions?.time ?? world?.dimensions?.time;
-  const definition = worldTimeSchema.parse(declared ?? DEFAULT_TIME);
+  const imported = await store.getPluginData("definitions", "world");
+  const definition = imported
+    ? timeDefinitionRecordSchema.parse(imported.value).definition
+    : DEFAULT_TIME;
   const tick = initialTick(definition);
   return {
     schemaVersion: 1,

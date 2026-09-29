@@ -50,6 +50,8 @@ export type ConnectionStateHandler = (state: ConnectionState) => void;
 export interface SessionSubscriptionOptions {
   topics?: string[];
   onStateChange?: ConnectionStateHandler;
+  /** Local storage can rebuild a missing server mirror before reconnecting. */
+  recoverMissingSession?: () => Promise<void>;
 }
 
 export interface SessionSubscription {
@@ -115,6 +117,7 @@ export function createSessionSubscription(
   let closed = false;
   let paused = shouldPause();
   let clientErrorStreak = 0;
+  let mirrorRecovery: Promise<boolean> | null = null;
 
   // Topic -> Set<handler>
   const handlers = new Map<string, Set<SubscriptionEventHandler>>();
@@ -175,6 +178,10 @@ export function createSessionSubscription(
       // Keep connection backoff in this client, while sharing credential and
       // HTTP error handling with every other API request. Passing sessionId is
       // required because this endpoint carries it in the query string.
+      // A visibility/action pause may supersede the failed request while its
+      // workspace upload is still pending. Reuse that upload before any stream.
+      await mirrorRecovery;
+      if (closed || paused || controller !== abortController) return;
       const res = await requestResponse(buildUrl(), {
         signal: controller.signal,
         headers: { Accept: "text/event-stream" },
@@ -252,9 +259,38 @@ export function createSessionSubscription(
         // A hidden/closed tab or superseded stream must never reconnect itself.
         return;
       }
-      if (err instanceof ApiError && isClientError(err.status)) {
-        clientErrorStreak += 1;
-        if (clientErrorStreak >= MAX_CLIENT_ERROR_RETRIES) {
+      const clientError = err instanceof ApiError && isClientError(err.status);
+      if (clientError) clientErrorStreak += 1;
+      let mirrorRestored = false;
+      if (
+        err instanceof ApiError &&
+        err.status === 404 &&
+        clientErrorStreak <= MAX_CLIENT_ERROR_RETRIES &&
+        options?.recoverMissingSession
+      ) {
+        setState("reconnecting");
+        mirrorRecovery ??= Promise.resolve()
+          .then(options.recoverMissingSession)
+          .then(() => {
+            lastEventId = "";
+            return true;
+          })
+          .catch(() => {
+            // Retry with the normal bounded backoff. Never leak upload errors
+            // (which may contain private checkpoint content) into the UI/log.
+            return false;
+          })
+          .finally(() => {
+            mirrorRecovery = null;
+          });
+        mirrorRestored = await mirrorRecovery;
+        if (closed || paused || controller !== abortController) return;
+      }
+      if (clientError) {
+        // A successful final upload gets one stream attempt to verify it.
+        // Only an actual stream connection resets the error budget: a callback
+        // that resolves without restoring the mirror must not retry forever.
+        if (clientErrorStreak >= MAX_CLIENT_ERROR_RETRIES && !mirrorRestored) {
           // Not self-healing: the session is really gone, or the token is
           // really wrong. Retrying every 30s for the life of the tab just
           // leaves the UI stuck on "reconnecting" forever.

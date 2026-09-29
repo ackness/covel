@@ -58,6 +58,7 @@ export function buildEntryApi(
   params: BootstrapPluginEntriesParams,
   pluginId: string,
   batch: PluginEntryScope,
+  provideExtension: PluginAPI["provideExtension"],
 ): PluginAPI {
   const {
     discoveryMap,
@@ -86,6 +87,7 @@ export function buildEntryApi(
 
   return {
     pluginId,
+    provideExtension,
     signal: batch.signal,
     onDispose(cleanup) {
       batch.onDispose(cleanup);
@@ -97,7 +99,13 @@ export function buildEntryApi(
         throw new Error("Plugin service registry is unavailable");
       batch.stage(() => {
         try {
-          batch.track(params.services!.register(pluginId, definition));
+          batch.track(
+            params.services!.register(pluginId, {
+              ...definition,
+              handler: (input, context) =>
+                batch.invoke(() => definition.handler(input, context)),
+            }),
+          );
         } catch (error) {
           throw new PluginRegistrationError(
             "registerService",
@@ -109,7 +117,13 @@ export function buildEntryApi(
     registerTool(toolModule) {
       batch.stage(() => {
         try {
-          batch.track(tools.registerPlugin(pluginId, toolModule));
+          batch.track(
+            tools.registerPlugin(pluginId, {
+              ...toolModule,
+              execute: (input, context) =>
+                batch.invoke(() => toolModule.execute(input, context)),
+            }),
+          );
         } catch (error) {
           throw new PluginRegistrationError(
             "registerTool",
@@ -142,7 +156,7 @@ export function buildEntryApi(
             return { action: "continue" };
           }
           ctx.signal?.throwIfAborted();
-          return handler(ctx, payload);
+          return batch.invoke(() => handler(ctx, payload));
         };
         batch.track(
           hookPipeline.register({
@@ -182,7 +196,7 @@ export function buildEntryApi(
           rpcRegistry.registerPluginHandler(
             pluginId,
             action,
-            handler,
+            (request, context) => batch.invoke(() => handler(request, context)),
             options ?? {},
             pluginTrust,
           ),
@@ -214,9 +228,11 @@ export function buildEntryApi(
             ) {
               throw new Error("Form provider requires server-code approval");
             }
-            return validator(
-              Object.freeze(structuredClone(request.values)),
-              structuredClone(request.data),
+            return batch.invoke(() =>
+              validator(
+                Object.freeze(structuredClone(request.values)),
+                structuredClone(request.data),
+              ),
             );
           }),
         );
@@ -230,7 +246,12 @@ export function buildEntryApi(
             "expected { image?, speech?, transcription? }",
           );
         }
-        registerNamespaced(pluginId, wires, (dispose) => batch.track(dispose));
+        registerNamespaced(
+          pluginId,
+          wires,
+          (dispose) => batch.track(dispose),
+          (fn) => batch.invoke(fn),
+        );
       });
     },
   };

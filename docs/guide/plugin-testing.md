@@ -6,14 +6,14 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 
 ## 选择测试入口
 
-| 入口            | 包 / 脚本                                              | 适合验证什么                                                                                                                                                                                                                                                                                                                                                                                                   | 需要 server / API key       |
-| --------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Manifest schema | `pnpm validate:plugin <file \| plugin-dir>`            | `PLUGIN.md` frontmatter：loader 解析 + 原始 frontmatter 的 strict authoring schema（拒绝非法字段及 `auto`/`scheduled` 缺 `stage`，保留 Hook/UI-only 和 multi-runtime 元数据声明）。传插件目录、根 `PLUGIN.md` 或 `runtimes/<id>/PLUGIN.md` 时均收集完整包，检查共享声明引用和跨 runtime 冲突（插件级字段的完整合并规则见 [plugin-authoring-advanced.md](./plugin-authoring-advanced.md#插件级字段的合并规则)） | 否                          |
-| 单元测试        | Vitest + `@covel/plugin-test-utils`                    | 纯函数、local tool、function handler、trigger helper                                                                                                                                                                                                                                                                                                                                                           | 否                          |
-| In-process turn | `@covel/runtime` `executeTurn` + `MockLLM`             | agent runtime、tool loop、plugin_data 写入、跨 runtime 协作                                                                                                                                                                                                                                                                                                                                                    | 否                          |
-| Runtime cases   | `@covel/test-runtime` / `pnpm test:runtime`            | 插件自带 `tests/runtime-cases.json`、外部 `~/.covel/plugins` 调试、mock/live 切换                                                                                                                                                                                                                                                                                                                              | mock 否，live 需要 key      |
-| HTTP E2E        | `scripts/e2e-plugin-verify.ts`                         | 真实 API、SSE、session kernel、approval、store 路径                                                                                                                                                                                                                                                                                                                                                            | 需要 server，可用 mock slot |
-| 第三方 ZIP      | `pnpm pack:test-plugin` / `pnpm test:plugin-lifecycle` | 安装、重复导入、community 授权、重启发现、运行、禁用、卸载和重新安装                                                                                                                                                                                                                                                                                                                                           | 自动测试不需要外部 key      |
+| 入口            | 包 / 脚本                                              | 适合验证什么                                                                                                                                                                                                                                                                                                                                                                                          | 需要 server / API key       |
+| --------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Manifest schema | `pnpm validate:plugin <file \| plugin-dir>`            | `PLUGIN.md` frontmatter：loader 解析 + 原始 frontmatter 的 strict authoring schema（拒绝非法字段及 `auto`/`scheduled` 缺 `stage`，保留 Hook/UI-only 和 multi-runtime 元数据声明）。传插件目录、根 `PLUGIN.md` 或 `runtimes/<id>/RUNTIME.md` 时均收集完整包，检查共享声明引用和跨 runtime 冲突（插件级贡献由根 PLUGIN.md 唯一声明，见 [plugin-authoring-advanced.md](./plugin-authoring-advanced.md)） | 否                          |
+| 单元测试        | Vitest + `@covel/plugin-test-utils`                    | 纯函数、local tool、function handler、trigger helper                                                                                                                                                                                                                                                                                                                                                  | 否                          |
+| In-process turn | `@covel/runtime` `executeTurn` + `MockLLM`             | agent runtime、tool loop、plugin_data 写入、跨 runtime 协作                                                                                                                                                                                                                                                                                                                                           | 否                          |
+| Runtime cases   | `@covel/test-runtime` / `pnpm test:runtime`            | 插件自带 `tests/runtime-cases.json`、外部 `~/.covel/plugins` 调试、mock/live 切换                                                                                                                                                                                                                                                                                                                     | mock 否，live 需要 key      |
+| HTTP E2E        | `scripts/e2e-plugin-verify.ts`                         | 真实 API、SSE、session kernel、approval、store 路径                                                                                                                                                                                                                                                                                                                                                   | 需要 server，可用 mock slot |
+| 第三方 ZIP      | `pnpm pack:test-plugin` / `pnpm test:plugin-lifecycle` | 安装、重复导入、community 授权、重启发现、运行、禁用、卸载和重新安装                                                                                                                                                                                                                                                                                                                                  | 自动测试不需要外部 key      |
 
 ## 推荐反馈环
 
@@ -34,9 +34,9 @@ runtime；`--ignore-upstreams` 可隔离该门控，但不会替你生成所需�
 
 默认组合：
 
-- 只改 `PLUGIN.md`：跑 `pnpm validate:plugin plugins/<id>`（也可传根或子 runtime 的 `PLUGIN.md`，会校验整个所属包）。
+- 只改 `PLUGIN.md`：跑 `pnpm validate:plugin plugins/<id>`（也可传根或子 runtime 的 `RUNTIME.md`，会校验整个所属包）。
 - 写了 `tools/*.js`、`handler.js`、`hooks/*.js`：加 Vitest 单元测试。
-- 涉及 agent tool loop、`input.inject`、多 runtime 或 event 链：手搓 turn-executor 集成测试（见下）或 `pnpm test:runtime`。
+- 涉及 agent tool loop、`io.inputs`、多 runtime 或 event 链：手搓 turn-executor 集成测试（见下）或 `pnpm test:runtime`。
 - 发布前要验证完整 HTTP 行为：跑 `scripts/e2e-plugin-verify.ts`，并完成下面的第三方包和玩家流程验证。
 
 ## 可操作的组合示例
@@ -73,12 +73,12 @@ agent/function/background runtime、entry、工具、RPC、Hook、设置、UI、
 
 主要导出：
 
-| 导出                                                         | 用途                                                               |
-| ------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `MockLLM`                                                    | 记录 LLM 调用；支持 `defaultResponse` 和按顺序消费的 `responses[]` |
-| `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult` | 减少 fixture 样板代码                                              |
-| `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                  |
-| `expectAssetGenerated`                                       | 断言 runtime output 的 `assetGenerations[]` 中有合法 MediaRef      |
+| 导出                                                         | 用途                                                                 |
+| ------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `MockLLM`                                                    | 记录 LLM 调用；支持 `defaultResponse` 和按顺序消费的 `responses[]`   |
+| `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult` | 减少 fixture 样板代码                                                |
+| `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                    |
+| `expectAssetGenerated`                                       | 断言 RuntimeResult 的 `effects.assetGenerations[]` 中有合法 MediaRef |
 
 function handler 单元测试（真实范例：[`plugins/character-presence/tests/handler.test.js`](../../plugins/character-presence/tests/handler.test.js)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
 
@@ -101,11 +101,11 @@ it("saves data via a plugin.data proposal", async () => {
 });
 ```
 
-事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），并用 `expectAssetGenerated` 断言产物——完整范例见 [`plugins/scene-stage/tests/background-gen.test.js`](../../plugins/scene-stage/tests/background-gen.test.js)。
+事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），直接断言 `HandlerResult.effects` 的产物，范例见 [`plugins/scene-stage/tests/background-gen.test.js`](../../plugins/scene-stage/tests/background-gen.test.js)。`expectAssetGenerated` 接受 `RuntimeResult`、结果数组或 `TurnResult`，只检查显式 effects，不接受裸业务输出。
 
 ### In-process turn（手搓 turn-executor）
 
-需要跑完整 turn（agent tool loop、event 链、proposal commit）时，直接用 `@covel/runtime` 的公开导出手工组装：`discoverPlugins` / `loadPluginManifest` / `loadRuntime`（`@covel/plugin-loader`）发现并加载真实 runtime，`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，LLM 用 `MockLLM` 或按步骤出 tool-call 的自定义 `LLMAdapter`。提交时通过 `commitExecution` 一次处理 `runtimeResults`、`nestedRuntimeResults`、`collectExecutionJournal` 和 `collectExecutionSuspensions`；不能只遍历顶层结果逐个落库，否则会遗漏递归写入并丢失整次执行的事务边界。当前作者工具的组装见 [`packages/test-runtime/src/execution.ts`](../../packages/test-runtime/src/execution.ts)。下面的低层测试范例用于理解 event 链和 proposal：
+需要跑完整 turn（agent tool loop、event 链、proposal commit）时，直接用 `@covel/runtime` 的公开导出手工组装：`discoverPlugins` / `loadPluginDefinition` / `loadRuntime`（`@covel/plugin-loader`）发现并加载真实 runtime，从定义的 `manifests` 选择执行项，从 `packageManifest` 读取包级 entry 与贡献。`createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，LLM 用 `MockLLM` 或按步骤出 tool-call 的自定义 `LLMAdapter`。提交时通过 `commitExecution` 一次处理 `runtimeResults`、`nestedRuntimeResults`、`collectExecutionJournal` 和 `collectExecutionSuspensions`；不能只遍历顶层结果逐个落库，否则会遗漏递归写入并丢失整次执行的事务边界。当前作者工具的组装见 [`packages/test-runtime/src/execution.ts`](../../packages/test-runtime/src/execution.ts)。下面的低层测试范例用于理解 event 链和 proposal：
 
 - [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) — 合成 emitter runtime 发 `scene.set`，同 turn event 链触发真实 scene-stage resolver 并 commit `plugin.data`。
 - [`packages/runtime/tests/emit-event-integration.test.ts`](../../packages/runtime/tests/emit-event-integration.test.ts) — 该模式的最初出处。
@@ -138,7 +138,7 @@ pnpm vitest run plugins/<id>/tests
 
 harness 会执行选定插件的 `entry` 模块并注册它导出的工具和服务，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。hook / RPC / wire 的注册会被接受但不生效——它们属于 server bootstrap 的职责，单 runtime 的 harness 回合走不到。
 
-harness 默认只加载被测插件。使用可重复的 `--with-plugin <id>` 显式加入协作插件；API `runRuntimeDebug` 和 case 均使用 `withPlugins: string[]`，case 的列表覆盖 CLI 列表。它们从同一个 `--plugins-dir` 查找，重复 ID 去重，缺失包在 entry 执行前报错。选定包均加入测试会话，工具按所属插件隔离，服务仅允许选定且当前会话仍活跃的插件调用。角色工具按生产 registry 的 `world-data-provider` capability 规则定位 schema，包含协作插件的包级和 runtime 声明。退出及初始化失败时逆序清理入口资源；正常退出同时启动入口清理和工具停机，等待工具回调结束后才关闭 store，避免超时工具阻塞停止它所等待的入口资源。CLI 会执行这些包的服务端代码，应只选择信任的本地包，生产审批仍需通过 HTTP 测试验证。
+harness 默认只加载被测插件。使用可重复的 `--with-plugin <id>` 显式加入协作插件；API `runRuntimeDebug` 和 case 均使用 `withPlugins: string[]`，case 的列表覆盖 CLI 列表。它们从同一个 `--plugins-dir` 查找，重复 ID 去重，缺失包在 entry 执行前报错。选定包均加入测试会话，工具按所属插件隔离，服务仅允许选定且当前会话仍活跃的插件调用。角色工具读取会话 World Model 的领域 schema；测试通过 character.schema.set 或初始 characterSchema 提供约束，不查询插件私有 namespace。退出及初始化失败时逆序清理入口资源；正常退出同时启动入口清理和工具停机，等待工具回调结束后才关闭 store，避免超时工具阻塞停止它所等待的入口资源。CLI 会执行这些包的服务端代码，应只选择信任的本地包，生产审批仍需通过 HTTP 测试验证。
 
 只有指定目标被改为初始手动触发，加入协作插件不会自动运行其全部 runtime；声明的事件下游仍可执行。跨插件 `needs` 需要实际的上游结果，单纯加载包并不制造结果。仅调试不依赖上游的路径时，可以用 case `"ignoreUpstreams": true` 或 CLI `--ignore-upstreams`。报告的 `pluginData` 仍只包含被测插件。`userSettings` 覆盖值仅应用于被测插件的 runtime，包括协作插件后台任务递归调用回来的 runtime；协作插件使用自身声明的默认值。后台与递归执行保留完整的按插件分桶设置快照。
 

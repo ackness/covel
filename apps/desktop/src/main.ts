@@ -43,6 +43,7 @@ import { registerDesktopIpcHandlers } from "./ipc-handlers.js";
 import {
   buildAppMenu,
   createMainWindow,
+  getMainWindow,
   loadSplashInto,
   navigateToApp,
 } from "./windows.js";
@@ -51,6 +52,7 @@ import { resolveSystemProxyRequest } from "./system-proxy.js";
 import { showAppUpdateNotification } from "./app-update-notification.js";
 import { createQuitHandler, stopServerProcess } from "./server-shutdown.js";
 import { waitForServerProcess } from "./server-readiness.js";
+import { createServerRecovery, findStartablePort } from "./server-recovery.js";
 import {
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
@@ -146,7 +148,9 @@ async function saveSettingsViaSidecar(
   );
 }
 
-async function saveKeysViaSidecar(keys: Record<string, string>): Promise<void> {
+async function saveKeysViaSidecar(
+  keys: Record<string, string | null>,
+): Promise<void> {
   await requestSidecarConfig<{ ok?: boolean }>("/api/config/keys", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -158,11 +162,28 @@ async function saveKeysViaSidecar(keys: Record<string, string>): Promise<void> {
 
 let serverProcess: ChildProcess | null = null;
 let serverPort = 0;
-let serverStartedAt = 0;
 let manualStop = false;
 let quitting = false;
-let restartAttempts = 0;
-const MAX_RESTART_ATTEMPTS = 3;
+let serverPaths: ReturnType<typeof ensureUserPaths> | undefined;
+
+const serverRecovery = createServerRecovery<ChildProcess>({
+  restart: () => {
+    if (!serverPaths) throw new Error("Server paths are unavailable");
+    return startServer(serverPaths);
+  },
+  navigate: (port) => {
+    const win = getMainWindow();
+    if (win && !win.isDestroyed()) navigateToApp(win, port);
+  },
+  status: (state, attempts, delay) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send("covel:server:status", { state, attempts, delay });
+      }
+    }
+  },
+  log: (message, error) => writeLog("error", message, error),
+});
 
 // Per-launch bearer token for privileged /api/config/* writes. Generated
 // once at app startup and reused across sidecar restarts so the renderer's
@@ -199,9 +220,13 @@ function broadcastStartupError(diag: DiagnosedError, logs: string): void {
 async function startServer(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<number> {
-  const port = await findFreePort();
-  if (quitting) throw new Error("Application is shutting down");
-  serverPort = port;
+  if (serverProcess) throw new Error("Server process is already running");
+  manualStop = false;
+  serverPaths = paths;
+  const port = await findStartablePort(
+    findFreePort,
+    () => quitting || manualStop,
+  );
   fs.writeFileSync(userServerPortFile(), String(port), "utf-8");
 
   const serverEntry = resolveServerEntry();
@@ -261,13 +286,13 @@ async function startServer(
   }
   writeLog("info", `node: ${nodeBin}`);
 
-  manualStop = false;
   serverProcess = spawn(nodeBin, [tsxPath, serverEntry], {
     cwd: projectRoot,
     env: spawnEnv,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
-  serverStartedAt = Date.now();
+  serverPort = port;
+  const startedAt = Date.now();
 
   const child = serverProcess;
   child.on("error", (error) => {
@@ -304,20 +329,19 @@ async function startServer(
   });
 
   serverProcess.on("exit", (code, signal) => {
-    const uptime = Date.now() - serverStartedAt;
+    const uptime = Date.now() - startedAt;
     writeLog(
       "warn",
       `Server exited (code=${code}, signal=${signal}, uptime=${uptime}ms)`,
     );
-    if (serverProcess === child) serverProcess = null;
+    if (serverProcess === child) {
+      serverProcess = null;
+      serverPort = 0;
+      stopHealthHeartbeat();
+    }
 
     // Only auto-restart on unexpected exit after a successful boot.
-    if (manualStop || quitting) return;
-    if (uptime < 2000) {
-      // Crashed during boot — let the outer retry loop handle it.
-      return;
-    }
-    scheduleServerRestart(paths);
+    if (!manualStop && !quitting) serverRecovery.exited(child);
   });
 
   // Wait for health check with progress updates
@@ -332,75 +356,40 @@ async function startServer(
     { threshold: 15_000, label: t("startup.status.almostReady") },
   ];
 
-  await waitForServerProcess(child, healthUrl, (elapsed) => {
-    if (quitting) throw new Error("Application is shutting down");
-    let currentLabel = PROGRESS_STEPS[0].label;
-    for (const step of PROGRESS_STEPS) {
-      if (elapsed >= step.threshold) currentLabel = step.label;
+  try {
+    await waitForServerProcess(child, healthUrl, (elapsed) => {
+      if (quitting || manualStop)
+        throw new Error("Application is shutting down");
+      let currentLabel = PROGRESS_STEPS[0].label;
+      for (const step of PROGRESS_STEPS) {
+        if (elapsed >= step.threshold) currentLabel = step.label;
+      }
+      broadcastProgress(currentLabel);
+    });
+    if (
+      quitting ||
+      manualStop ||
+      serverProcess !== child ||
+      child.exitCode !== null ||
+      child.signalCode !== null
+    ) {
+      throw new Error("Server exited before readiness");
     }
-    broadcastProgress(currentLabel);
-  });
-
-  if (quitting) throw new Error("Application is shutting down");
+  } catch (error) {
+    if (serverProcess === child) {
+      await stopServerProcess(child, writeLog);
+      serverProcess = null;
+      serverPort = 0;
+    }
+    throw error;
+  }
 
   broadcastProgress(t("startup.status.ready"));
   writeLog("info", `Server ready on port ${port}`);
-  restartAttempts = 0;
-
+  serverRecovery.ready(child);
   startHealthHeartbeat(healthUrl);
 
   return port;
-}
-
-// ── Server auto-restart ─────────────────────────────────────────
-
-let restartTimer: NodeJS.Timeout | null = null;
-
-function scheduleServerRestart(
-  paths: ReturnType<typeof ensureUserPaths>,
-): void {
-  if (restartTimer || quitting || manualStop) return;
-  if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
-    writeLog(
-      "error",
-      `Server exceeded ${MAX_RESTART_ATTEMPTS} restart attempts — giving up`,
-    );
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send("covel:server:status", {
-        state: "down",
-        attempts: restartAttempts,
-      });
-    }
-    return;
-  }
-  const delay = Math.min(15_000, 1000 * 2 ** restartAttempts);
-  restartAttempts += 1;
-  writeLog(
-    "warn",
-    `Scheduling server restart #${restartAttempts} in ${delay}ms`,
-  );
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send("covel:server:status", {
-      state: "restarting",
-      attempts: restartAttempts,
-      delay,
-    });
-  }
-  restartTimer = setTimeout(async () => {
-    restartTimer = null;
-    try {
-      await startServer(paths);
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("covel:server:status", {
-          state: "up",
-          attempts: restartAttempts,
-        });
-      }
-    } catch (err) {
-      writeLog("error", "Restart failed:", err);
-      scheduleServerRestart(paths);
-    }
-  }, delay);
 }
 
 // ── Health heartbeat ────────────────────────────────────────────
@@ -454,17 +443,16 @@ function stopServer(): Promise<void> {
 
   manualStop = true;
   stopHealthHeartbeat();
-  if (restartTimer) {
-    clearTimeout(restartTimer);
-    restartTimer = null;
-  }
-
-  const child = serverProcess;
-  if (!child) return Promise.resolve();
-
-  pendingStop = stopServerProcess(child, writeLog)
-    .then(() => {
-      if (serverProcess === child) serverProcess = null;
+  pendingStop = serverRecovery
+    .cancel()
+    .then(async () => {
+      const child = serverProcess;
+      if (!child) return;
+      await stopServerProcess(child, writeLog);
+      if (serverProcess === child) {
+        serverProcess = null;
+        serverPort = 0;
+      }
     })
     .finally(() => {
       pendingStop = null;
@@ -508,7 +496,7 @@ async function productionStartup(
       });
 
       await stopServer();
-      restartAttempts = 0;
+      serverRecovery.resetBudget();
       loadSplashInto(win);
       await attemptStart();
     }
@@ -582,7 +570,7 @@ app.whenReady().then(async () => {
       writeLog("info", "User requested server restart via IPC");
       try {
         await stopServer();
-        restartAttempts = 0;
+        serverRecovery.resetBudget();
         await startServer(paths);
         return { ok: true as const, port: serverPort };
       } catch (err) {

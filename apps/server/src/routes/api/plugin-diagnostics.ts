@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
   pluginRuntimeManifests,
+  getPluginTrustInfo,
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import {
@@ -26,6 +27,7 @@ import {
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
 import { mergePluginCommands } from "./session/commands.js";
+import { buildSessionPluginView } from "./session/plugins.js";
 
 const CALL_WINDOW = 100;
 const TOTAL_CALL_LIMIT = 500;
@@ -65,6 +67,17 @@ export class RecentPluginServiceCalls {
         providerPluginId: boundedField(event.providerPluginId),
         name: boundedField(event.name),
         contract: boundedField(event.contract),
+        ...(event.extension
+          ? {
+              extension: {
+                point: boundedField(event.extension.point),
+                id: boundedField(event.extension.id),
+                ...(event.extension.slot
+                  ? { slot: boundedField(event.extension.slot) }
+                  : {}),
+              },
+            }
+          : {}),
         durationMs: event.durationMs,
         completedAt: new Date().toISOString(),
         outcome: event.outcome,
@@ -93,7 +106,7 @@ export class RecentPluginServiceCalls {
       )
       .slice(-CALL_WINDOW)
       .reverse()
-      .map(({ value }) => ({ ...value }));
+      .map(({ value }) => structuredClone(value));
   }
 }
 
@@ -103,8 +116,9 @@ interface PluginDiagnosticsDeps {
   readonly hooks: HookPipeline;
   readonly rpc: PluginRpcRegistry;
   readonly services: PluginServiceRegistry;
+  readonly extensions?: import("@covel/runtime").PluginExtensionHost;
   readonly calls: RecentPluginServiceCalls;
-  readonly hasPendingEntry: (pluginId: string) => boolean;
+  readonly isEntryPublished: (pluginId: string) => boolean;
   readonly isServerCodeApproved: (
     session: SessionRecord,
     pluginId: string,
@@ -128,7 +142,17 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
     session: SessionRecord,
     pluginId?: string,
   ): PluginDiagnosticsSnapshot => {
-    const active = new Set(session.activePlugins);
+    const view = buildSessionPluginView(session, deps.registry, {
+      isEntryPublished: deps.isEntryPublished,
+      authorized: [...deps.registry.getAll().values()]
+        .filter(
+          (entry) =>
+            getPluginTrustInfo(entry.id, entry.source).autoLoad ||
+            deps.isServerCodeApproved(session, entry.id),
+        )
+        .map((entry) => entry.id),
+    });
+    const sessionPlugins = new Map(view.items.map((item) => [item.id, item]));
     const hooks = deps.hooks.list();
     const actions = deps.rpc.list();
     const services = deps.services.list();
@@ -136,14 +160,11 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
       .filter((entry) => !pluginId || entry.id === pluginId)
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((entry): PluginDiagnostic => {
-        const source = entry.source ?? "community";
-        const approved =
-          source === "builtin" || deps.isServerCodeApproved(session, entry.id);
+        const plugin = sessionPlugins.get(entry.id)!;
         const available =
-          active.has(entry.id) &&
-          approved &&
-          entry.status !== "error" &&
-          !entry.error;
+          plugin.active &&
+          plugin.serverCodeApproved &&
+          plugin.hostState !== "error";
         const ownActions = available
           ? actions
               .filter((action) => action.pluginId === entry.id)
@@ -152,20 +173,23 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
           : [];
         return {
           pluginId: entry.id,
-          source,
-          active: active.has(entry.id),
-          state:
-            entry.status === "error"
-              ? "load-error"
-              : !active.has(entry.id)
-                ? "inactive"
-                : !approved
-                  ? "approval-required"
-                  : entry.error
-                    ? "activation-error"
-                    : deps.hasPendingEntry(entry.id)
-                      ? "entry-pending"
-                      : "ready",
+          source: plugin.source,
+          active: plugin.active,
+          hostState: plugin.hostState,
+          sessionState: plugin.sessionState,
+          serverCodeApproved: plugin.serverCodeApproved,
+          ...(plugin.autoAdded ? { autoAdded: true } : {}),
+          ...(plugin.rejection ? { rejection: plugin.rejection } : {}),
+          ...(plugin.approvalRequired ? { approvalRequired: true } : {}),
+          ...(plugin.error
+            ? {
+                error:
+                  "Plugin activation or loading failed; check the server log.",
+              }
+            : {}),
+          ...(plugin.registrationError
+            ? { registrationError: plugin.registrationError }
+            : {}),
           runtimeIds: pluginRuntimeManifests(entry).map(
             ({ manifest }) => manifest.name,
           ),
@@ -179,6 +203,16 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
                   .map(({ id, event }) => ({ id, event }))
               : [],
             actions: ownActions,
+            extensions: available
+              ? (deps.extensions?.list() ?? [])
+                  .filter((extension) => extension.pluginId === entry.id)
+                  .map(({ point, id, order, slot }) => ({
+                    point,
+                    id,
+                    order,
+                    slot,
+                  }))
+              : [],
             services: available
               ? services
                   .filter((service) => service.pluginId === entry.id)
@@ -195,11 +229,45 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
                 })),
         };
       });
+    const calls = deps.calls.list(session, pluginId);
+    const counters = new Map<
+      string,
+      {
+        point: string;
+        providerPluginId: string;
+        total: number;
+        success: number;
+        error: number;
+        timeout: number;
+        cancelled: number;
+      }
+    >();
+    for (const call of calls) {
+      if (!call.extension) continue;
+      const key = JSON.stringify([call.extension.point, call.providerPluginId]);
+      const counter = counters.get(key) ?? {
+        point: call.extension.point,
+        providerPluginId: call.providerPluginId,
+        total: 0,
+        success: 0,
+        error: 0,
+        timeout: 0,
+        cancelled: 0,
+      };
+      counter.total++;
+      counter[call.outcome]++;
+      counters.set(key, counter);
+    }
     return {
       sessionId: session.id,
       capturedAt: new Date().toISOString(),
       plugins,
-      calls: deps.calls.list(session, pluginId),
+      calls,
+      extensionCalls: [...counters.values()].sort((a, b) =>
+        `${a.point}/${a.providerPluginId}`.localeCompare(
+          `${b.point}/${b.providerPluginId}`,
+        ),
+      ),
       history: { scope: "process", limit: CALL_WINDOW },
     };
   };

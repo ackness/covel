@@ -145,7 +145,7 @@ documents sharing the browser origin and vault, not unrelated browsers or origin
 
 `BrowserCheckpoint` includes every domain needed to resume a session: session
 and world records, message/execution journals, events/traces, characters,
-plugin data, memory/lorebook data, interactions, suspensions, snapshots, and
+plugin data, character schemas, owned lorebook entries, interactions, suspensions, snapshots, and
 lifecycle ledgers. The current-only envelope is schema v2; it rejects missing
 session clock fields, non-canonical execution origins/statuses, old snapshot
 payloads, and schema v1 checkpoints at the storage boundary.
@@ -364,10 +364,12 @@ metadata must not supply an override the snapshot did not capture. See [snapshot
 
 ## Record Identity
 
-World dimensions are normalized at the shared record boundary. Character and
-lorebook IDs are session-local, with durable
-identity `(sessionId, id)` in MemoryStore, SQLite, PostgreSQL, and browser
-checkpoints. Browser persistence therefore shares domain shapes without sharing
+World dimensions are normalized at the shared record boundary. Character identity
+is `(sessionId, id)`. Lorebook identity also includes its owner: world, player, or
+a specific plugin. A plugin can modify only its own lore entries, including when
+another owner uses the same entry ID. Each session has an authoritative
+`characterSchema` with open character types and validated attributes. These
+identities are preserved by MemoryStore, SQLite, PostgreSQL, and browser checkpoints. Browser persistence therefore shares domain shapes without sharing
 server table layouts or backend-specific CRUD implementations.
 
 Model routing uses slot settings, request overrides and session
@@ -379,7 +381,7 @@ as well as update across MemoryStore, SQLite and PostgreSQL.
 
 ## Current Snapshot Contract
 
-Snapshot payload schema v3 requires `stateSchemas`, `runtimeExports`,
+Snapshot payload schema v3 requires `characterSchema` (object or null), `stateSchemas`, `runtimeExports`,
 `sessionSummaries`, `compactedMessageSummaryIds` and `displayMessagesBoundary`.
 Empty arrays/maps and a null chat boundary are explicit captured values. Missing
 fields are invalid, including older development payloads carrying the same version.
@@ -392,3 +394,43 @@ export validates stored fork ownership without repairing historical parent-scope
 
 Development caches containing the former flat state-patch shape must be recreated;
 no compatibility reader or cache migration is provided.
+
+The plugin-extension migration removes the working-memory table and character
+plugin mirrors. Memory blocks are ordinary plugin-owned data. Recreate affected
+development sessions, snapshots and browser checkpoints; old data is not migrated.
+An existing SQLite database can also fail during startup: older
+`lorebook_entries` tables use `plugin_id`, while the current table and indexes
+require `owner`. `CREATE TABLE IF NOT EXISTS` does not change that table. Stop
+the server, back up the database together with any `-wal` and `-shm` files,
+then use a new `SQLITE_PATH` or recreate the development database. Creating only
+new sessions in the old database is insufficient. See the
+[development migration steps](../guide/env-registry.md#plugin-extension-development-data).
+
+## Plugin-data ownership and reserved names
+
+Plugin-facing data APIs bind both session ID and plugin owner. A namespace is a
+name inside that owner's partition, not a way to select another owner. Ordinary
+plugin writes are buffered as proposals and committed under the source owner.
+
+| Owner / namespace                                                                        | Authority                               | Plugin access                                                                                                                              |
+| ---------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                  | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                   |
+| Plugin owner, `_jobs`                                                                    | RPC job status and progress             | Read only; job APIs own transitions.                                                                                                       |
+| Plugin owner, `_runtime_jobs`                                                            | Durable runtime scheduling and recovery | Read only; runtime workers own transitions.                                                                                                |
+| Plugin owner, `_logs`                                                                    | Runtime log ring                        | Read only through data APIs; entries are produced through the scoped logger.                                                               |
+| Plugin owner, `message`                                                                  | Plugin                                  | Ordinary proposal-backed data; the UI host prefetches and forwards it for declared message panels without interpreting its business shape. |
+| Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | Plugin                                  | Read own data and write through proposals. The old character mirrors are not recreated.                                                    |
+| `__kernel:<subsystem>` owner, including `__kernel:vector`                                | Kernel                                  | Not visible through plugin-bound store or extension APIs. This is an owner partition, not a plugin namespace.                              |
+
+The full underscore prefix remains reserved. Enumerating today's three names as
+exceptions would allow future kernel bookkeeping to become plugin-writable before
+all callers were updated. `_memory` stays protected even though the old memory
+mirror and queue were removed; no compatibility reads or data restoration are
+implied. Jobs and logs retain their existing snapshot/fork inclusion policies.
+These are API authority boundaries, not encryption or a process sandbox.
+
+**Stability commitment**: The `_` prefix reservation is a permanent design decision.
+New kernel subsystems may introduce
+additional `_<name>` namespaces without breaking changes. Plugin authors must never
+rely on `_` namespaces for their own data or assume they can write to kernel-reserved
+names.

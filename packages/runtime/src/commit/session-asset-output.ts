@@ -5,7 +5,7 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
-import { FrameworkCapability, isAssetGeneratePayload } from "@covel/shared";
+import { isAssetGeneratePayload } from "@covel/shared";
 import type { Proposal } from "@covel/shared";
 import type { KernelStore } from "./session-commit-pipeline.js";
 import { makeProposal } from "../session/session-kernel-helpers.js";
@@ -21,9 +21,9 @@ export async function enforceImageAssetOutput(
   store: KernelStore,
   sessionId: string,
   proposals: readonly Proposal[],
-  capabilities: readonly string[] | undefined,
+  enforce: boolean | undefined,
 ): Promise<{ proposal: Proposal; error: string } | null> {
-  if (!capabilities?.includes(FrameworkCapability.ImageGeneration)) return null;
+  if (!enforce) return null;
   if (isNonEnforceableAssetOutput(result.output)) return null;
 
   const hasAssetGenerate = proposals.some(
@@ -61,9 +61,9 @@ export async function enforceImagePluginDataRefs(
   store: KernelStore,
   sessionId: string,
   proposals: readonly Proposal[],
-  capabilities: readonly string[] | undefined,
+  enforce: boolean | undefined,
 ): Promise<Array<{ proposal: Proposal; error: string }>> {
-  if (!capabilities?.includes(FrameworkCapability.ImageGeneration)) return [];
+  if (!enforce) return [];
 
   const offenders = proposals.filter(hasInlineImagePluginData);
   if (offenders.length === 0) return [];
@@ -167,8 +167,9 @@ function hasInlineImagePluginData(proposal: Proposal): boolean {
 
 function isInlineImagePluginDataItem(item: unknown): boolean {
   if (!item || typeof item !== "object") return false;
-  const payload = item as { namespace?: unknown; value?: unknown };
-  if (payload.namespace !== "images") return false;
+  // Scoped by the image-flow runtime contract, not by a namespace name: an
+  // image asset runtime may write status records under its own namespace.
+  const payload = item as { value?: unknown };
   return containsInlineMediaField(payload.value);
 }
 

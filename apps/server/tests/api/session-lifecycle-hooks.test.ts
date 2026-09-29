@@ -144,17 +144,20 @@ function registerCommunityPlugin(
       pluginType: "plugin",
       runtimeCount: 1,
     },
-    manifest: {
-      manifest: {
-        name: "community-plugin/runtime",
-        pluginId: "community-plugin",
-        description: "test",
-        runtimeType: "function",
-        stage: "narrative",
+    manifests: [
+      {
+        runtime: { type: "function" as const },
+        manifest: {
+          name: "community-plugin/runtime",
+          pluginId: "community-plugin",
+          description: "test",
+          runtimeType: "function",
+          stage: "narrative",
+        },
+        promptTemplate: "",
+        rawFrontmatter: {},
       },
-      promptTemplate: "",
-      rawFrontmatter: {},
-    },
+    ],
     loadedRuntimes: new Map(),
     status: "registered",
   });
@@ -230,12 +233,17 @@ describe("Session lifecycle hooks", () => {
           pluginType: "plugin",
           runtimeCount: 1,
         },
-        manifest: {
+        packageManifest: {
+          plugin: {
+            id: pluginId,
+            kind: "plugin",
+            description: "Settings fixture",
+          },
           manifest: {
             name: pluginId,
             pluginId,
             description: "",
-            runtimeType: "function",
+            pluginType: "plugin",
             userSettings: [
               { key: "tone", type: "text", default: "manifest", label: "Tone" },
               { key: "detail", type: "number", default: 1, label: "Detail" },

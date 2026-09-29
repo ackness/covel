@@ -32,11 +32,13 @@ async function writePlugin(dirName: string, manifestName: string) {
     path.join(dir, "PLUGIN.md"),
     [
       "---",
-      `name: ${manifestName}`,
-      "pluginType: plugin",
+      `id: ${manifestName}`,
+      "kind: plugin",
       "description: identity test fixture",
-      "trigger:",
-      "  type: manual",
+      "runtime:",
+      "  type: agent",
+      "  schedule:",
+      "    trigger: {type: manual}",
       "---",
       "",
       "Body.",
@@ -49,47 +51,20 @@ async function writePlugin(dirName: string, manifestName: string) {
   );
 }
 
-/**
- * A multi-runtime plugin whose two runtimes declare the SAME dataSchemas
- * namespace with different `schemaVersion`. Identity validation passes (both
- * frontmatter roots match the directory), but `registry.register` throws while
- * merging the conflicting schemas — the failure path that must still leave no
- * capability caches behind.
- */
+/** Both definitions parse independently; conflicting contract schemas fail registration. */
 async function writeConflictingSchemaPlugin(dirName: string) {
-  const base = path.join(root, dirName);
-  const runtimes = [
-    { rt: "a", version: 1 },
-    { rt: "b", version: 2 },
-  ];
-  for (const { rt, version } of runtimes) {
-    const dir = path.join(base, "runtimes", rt);
-    await mkdir(dir, { recursive: true });
+  for (const [id, type] of [
+    ["aaa-provider", "string"],
+    [dirName, "number"],
+  ]) {
+    const base = path.join(root, id!);
+    await mkdir(base, { recursive: true });
     await writeFile(
-      path.join(dir, "PLUGIN.md"),
-      [
-        "---",
-        `name: ${dirName}/${rt}`,
-        "pluginType: plugin",
-        "description: conflicting schema fixture",
-        "trigger:",
-        "  type: manual",
-        "dataSchemas:",
-        "  shared:",
-        `    schemaVersion: ${version}`,
-        "    acceptsWorldData: true",
-        "    schema: ./schemas/shared.schema.json",
-        "---",
-        "",
-        "Body.",
-        "",
-      ].join("\n"),
+      path.join(base, "PLUGIN.md"),
+      `---\nid: ${id}\nkind: plugin\ndescription: Contract conflict fixture\ncontracts:\n  shared.value@1:\n    schema: ./value.json\n---\n`,
     );
+    await writeFile(path.join(base, "value.json"), JSON.stringify({ type }));
   }
-  await writeFile(
-    path.join(base, "package.json"),
-    JSON.stringify({ name: dirName, version: "0.0.1", type: "module" }),
-  );
 }
 
 describe("plugin discovery identity gate ", () => {
@@ -114,7 +89,7 @@ describe("plugin discovery identity gate ", () => {
 
     const entry = registry.get("innocent");
     expect(entry?.status).toBe("error");
-    expect(entry?.error).toMatch(/identity mismatch/i);
+    expect(entry?.error).toMatch(/id must match|identity mismatch/i);
     expect(entry?.loadedRuntimes.size).toBe(0);
     expect(entry?.manifests ?? []).toHaveLength(0);
     // Nothing registered under the impersonated id either.
@@ -140,7 +115,7 @@ describe("plugin discovery identity gate ", () => {
 
   it("leaves no discovery capability behind when registry.register throws", async () => {
     // The caches are published just before register(); register() itself can
-    // throw (here: a dataSchemas namespace conflict) after they were set, so
+    // throw (here: a cross-plugin contract schema conflict) after they were set, so
     // the failure path must undo them or the plugin stays visible to wiring.
     await writeConflictingSchemaPlugin("conflicted");
     const { registry, discoveryMap, manifestCache } =
@@ -149,7 +124,9 @@ describe("plugin discovery identity gate ", () => {
         eventBus: createEventBus(createMemoryStore()),
       });
 
+    expect(registry.get("aaa-provider")?.status).toBe("registered");
     expect(registry.get("conflicted")?.status).toBe("error");
+    expect(registry.get("conflicted")?.error).toContain("Conflicting schema");
     expect(discoveryMap.has("conflicted")).toBe(false);
     expect(manifestCache.has("conflicted")).toBe(false);
   });

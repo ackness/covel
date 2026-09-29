@@ -1,29 +1,52 @@
 {
   "name": "@covel/plugin-handlers-utils",
   "version": "0.0.41",
-  "private": true,
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./image-generation": {
-      "types": "./src/image-generation.ts",
-      "import": "./src/image-generation.ts"
+      "types": "./dist/image-generation.d.ts",
+      "import": "./dist/image-generation.js"
+    },
+    "./extension-points": {
+      "types": "./dist/extension-points.d.ts",
+      "import": "./dist/extension-points.js"
+    },
+    "./plugin-api": {
+      "types": "./dist/plugin-api.d.ts",
+      "import": "./dist/plugin-api.js"
     }
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
-    "clean": "node ../../scripts/remove-paths.mjs dist"
-  },
-  "dependencies": {
-    "@covel/shared": "workspace:*"
+    "clean": "node ../../scripts/remove-paths.mjs dist",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
+    "test:package": "node scripts/test-package.mjs",
+    "prepare": "pnpm run build"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "zod": "^4.4.3"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=26"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

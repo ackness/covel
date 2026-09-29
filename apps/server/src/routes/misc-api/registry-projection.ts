@@ -1,14 +1,14 @@
 import path from "node:path";
 import {
   pluginRuntimeManifests,
-  type ParsedPluginMd,
+  type ParsedRuntimeMd,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 
 /** Canonical manifest records published by bootstrap into the registry. */
 export function pluginManifestRecords(
   entry: PluginRegistryEntry,
-): readonly ParsedPluginMd[] {
+): readonly ParsedRuntimeMd[] {
   return pluginRuntimeManifests(entry);
 }
 

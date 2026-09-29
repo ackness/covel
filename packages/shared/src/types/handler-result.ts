@@ -53,8 +53,8 @@ export interface ObservabilityEffects {
 
 /**
  * Effects a `success` outcome may carry: the observation channels plus domain
- * writes. The kernel materializes these keys onto its internal runtime output
- * before proposal normalization.
+ * writes. The kernel carries these separately from the business output through
+ * scheduling and proposal normalization.
  */
 export interface RuntimeEffects extends ObservabilityEffects {
   readonly statePatches?: readonly JsonValue[];

@@ -7,7 +7,10 @@ import {
   resolveMedia,
   sourceLabelFor,
 } from "../../lib/stage-data.js";
-import { abortSignalWithTimeout } from "@covel/plugin-handlers-utils";
+import {
+  abortSignalWithTimeout,
+  optionalString,
+} from "@covel/plugin-handlers-utils";
 
 const SCENE_KIND = "scene-background";
 // Scene backgrounds are landscape by convention (A-spec) — the registry
@@ -37,17 +40,6 @@ export default async function handler(ctx) {
     };
   }
 
-  if (!ctx.images) {
-    await ctx.logger?.error?.("scene-stage.background-gen.no-images-context", {
-      sceneId,
-      variant,
-    });
-    return {
-      outcome: "failed",
-      error: "ctx.images is unavailable",
-    };
-  }
-
   const existing = ctx.pluginData
     ? await ctx.pluginData.get(GENERATED_NS, sceneId)
     : null;
@@ -64,6 +56,12 @@ export default async function handler(ctx) {
       existing.night ?? null,
     );
     return { outcome: "skipped", skipReason: "variant already generated" };
+  }
+
+  const presetId = optionalString(ctx.userSettings?.modelPresetId) ?? "image";
+  if (!ctx.images || !ctx.images.isAvailable(presetId)) {
+    await clearPendingStageIfCurrent(ctx, sceneId, variant);
+    return { outcome: "skipped", skipReason: "image model unavailable" };
   }
 
   const registry = ctx.pluginData
@@ -104,6 +102,7 @@ export default async function handler(ctx) {
   });
   try {
     const { refs } = await ctx.images.generate({
+      presetId,
       prompt,
       size: SCENE_SIZE,
       n: 1,
@@ -159,9 +158,7 @@ export default async function handler(ctx) {
     sequence: (progressSequence += 1),
   });
 
-  // assetGenerations is a domain effect; the kernel projects it back to the
-  // legacy top-level `assetGenerations` key that session-output-normalizer /
-  // collectAssetGenerations read.
+  // assetGenerations is a domain effect, separate from the business value.
   return {
     outcome: "success",
     effects: {
@@ -222,6 +219,28 @@ async function refreshStageIfCurrent(ctx, sceneId, day, night) {
     night,
     resolved: resolveMedia(previousStage.variant, day, night),
     sourceLabel: sourceLabelFor("session"),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/** Clear a stale spinner when a queued request loses its image model. */
+async function clearPendingStageIfCurrent(ctx, sceneId, variant) {
+  const stage = ctx.pluginData
+    ? await ctx.pluginData.get(STAGE_NS, STAGE_KEY)
+    : null;
+  if (
+    !stage ||
+    typeof stage !== "object" ||
+    stage.sceneId !== sceneId ||
+    stage.variant !== variant ||
+    stage.source !== "pending"
+  ) {
+    return;
+  }
+  await ctx.pluginData.set(STAGE_NS, STAGE_KEY, {
+    ...stage,
+    source: "none",
+    sourceLabel: sourceLabelFor("none"),
     updatedAt: new Date().toISOString(),
   });
 }

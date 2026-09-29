@@ -24,7 +24,7 @@ const fixture = {
     type: "module",
   }),
   "PLUGIN.md":
-    "---\nname: example-note\npluginType: plugin\ndescription: Synthetic hook plugin\noutputKind: system\nentry: ./server/index.js\n---\n",
+    "---\nid: example-note\nkind: plugin\ndescription: Synthetic hook plugin\nentry: ./server/index.js\n---\n",
   // Importing the module is forbidden during preview, install and discovery.
   "server/index.js":
     'throw new Error("Unapproved code executed");\nexport default function register() {}\n',
@@ -156,6 +156,10 @@ describe("GitHub plugin installation", () => {
   it("enables a hook-only installed plugin only after a separate session approval", async () => {
     archive = await zip({
       ...fixture,
+      "PLUGIN.md": fixture["PLUGIN.md"].replace(
+        "entry: ./server/index.js",
+        "entry: ./server/index.js\ncontributes:\n  hooks:\n    - event: PostContextAssembly",
+      ),
       "server/index.js": `
       import { writeFileSync } from "node:fs";
       export default function register(covel) {
@@ -285,7 +289,7 @@ describe("GitHub plugin installation", () => {
     expect(await readdir(root)).toEqual([]);
   });
 
-  it.each(["PLUGIN.md", "PLUGIN.en.md", "runtimes/hidden/PLUGIN.fr.md"])(
+  it.each(["PLUGIN.md", "PLUGIN.en.md", "runtimes/hidden/RUNTIME.fr.md"])(
     "rejects executable frontmatter in %s without evaluating it",
     async (filename) => {
       const marker = "__covelInstallEvaluated";
@@ -338,10 +342,11 @@ describe("GitHub plugin installation", () => {
   it("selects a subdirectory at a tag and supports multi-runtime layouts", async () => {
     archive = await zip({
       "plugins/note/package.json": fixture["package.json"],
-      "plugins/note/runtimes/one/PLUGIN.md":
-        "---\nname: example-note/one\npluginType: plugin\ndescription: One\ntrigger: { type: manual }\n---\n",
-      "plugins/note/runtimes/two/PLUGIN.md":
-        "---\nname: example-note/two\npluginType: plugin\ndescription: Two\ntrigger: { type: manual }\n---\n",
+      "plugins/note/PLUGIN.md": fixture["PLUGIN.md"],
+      "plugins/note/runtimes/one/RUNTIME.md":
+        "---\ntype: agent\ndescription: One\nschedule:\n  trigger: { type: manual }\n---\n",
+      "plugins/note/runtimes/two/RUNTIME.md":
+        "---\ntype: agent\ndescription: Two\nschedule:\n  trigger: { type: manual }\n---\n",
       "outside.txt": "must not install",
     });
     const item = await preview(`${repo}/tree/v1/plugins/note`);
@@ -355,10 +360,10 @@ describe("GitHub plugin installation", () => {
     );
     expect(
       await readFile(
-        path.join(root, "example-note/runtimes/two/PLUGIN.md"),
+        path.join(root, "example-note/runtimes/two/RUNTIME.md"),
         "utf8",
       ),
-    ).toContain("example-note/two");
+    ).toContain("description: Two");
   });
 
   it("discovers repository or folder packages and installs them independently", async () => {
@@ -429,7 +434,7 @@ describe("GitHub plugin installation", () => {
       ]);
       expect(
         await readFile(path.join(root, item.id, "PLUGIN.md"), "utf8"),
-      ).toContain(`name: ${item.id}`);
+      ).toContain(`id: ${item.id}`);
       const receipt = JSON.parse(
         await readFile(path.join(root, item.id, ".covel-install.json"), "utf8"),
       );

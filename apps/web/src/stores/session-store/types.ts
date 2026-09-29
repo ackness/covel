@@ -335,6 +335,7 @@ export type SessionAction =
       turnId: string;
       keepRuntimeIds: ReadonlySet<string>;
     }
+  | { type: "SET_CHARACTER_SCHEMA"; schema: unknown }
   | { type: "SET_GAME_STATE"; state: Record<string, unknown> }
   | { type: "UPSERT_GAME_STATE_CHARACTER"; character: SnapshotCharacter }
   | { type: "REMOVE_SESSION"; sessionId: string }

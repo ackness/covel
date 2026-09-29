@@ -1,7 +1,7 @@
 import { closeTestApi } from "../helpers/close-api.js";
 import path from "node:path";
 import type { Hono } from "hono";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type {
   LLMAdapter,
   LLMResponse,
@@ -9,7 +9,7 @@ import type {
 } from "@covel/runtime";
 import type { LLMMessage } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
-import { awaitPendingMemoryBackgroundTasks } from "@covel/memory";
+import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 
@@ -194,6 +194,22 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       pluginsDir,
       worldsDirs: [worldsDir],
       llmAdapter: mockLLM,
+      canRunRuntimeJobWithServerServices: () => true,
+      pluginGateway: {
+        async generateText(input) {
+          const result = await mockLLM.generate({
+            messages: [
+              { role: "system", content: input.system ?? "" },
+              { role: "user", content: input.prompt ?? "" },
+            ],
+          });
+          return {
+            text: result.content ?? "",
+            finishReason: "stop",
+            usage: result.usage,
+          };
+        },
+      } as import("@covel/shared/plugin-runtime").PluginRuntimeGateway,
       store: createMemoryStore(),
       storeBackend: "memory",
     }));
@@ -218,7 +234,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         plugins: ["chat-mode-narrator"],
       }),
     });
-    expect(createRes.status).toBe(201);
+    expect(createRes.status, await createRes.clone().text()).toBe(201);
 
     const created = (await createRes.json()) as {
       id: string;
@@ -250,9 +266,8 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       "kamishiro-mio",
     );
     expect(mioBlueprint?.value).toMatchObject({
-      sourceWorldId: "haruka-academy",
-      sourceId: "cast",
-      instantiatedCharacterId: `${sessionId}-npc-kamishiro-mio`,
+      id: "kamishiro-mio",
+      name: "神代澪",
     });
     const mioBlueprintMirror = await store.getPluginData(
       sessionId,
@@ -260,20 +275,14 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       "characters",
       `${sessionId}-npc-kamishiro-mio`,
     );
-    expect(mioBlueprintMirror?.value).toMatchObject({
-      id: `${sessionId}-npc-kamishiro-mio`,
-      name: "神代澪",
-    });
+    expect(mioBlueprintMirror).toBeNull();
     const mioCharacterPanelMirror = await store.getPluginData(
       sessionId,
       "char-creator",
       "characters",
       `${sessionId}-npc-kamishiro-mio`,
     );
-    expect(mioCharacterPanelMirror?.value).toMatchObject({
-      id: `${sessionId}-npc-kamishiro-mio`,
-      name: "神代澪",
-    });
+    expect(mioCharacterPanelMirror).toBeNull();
 
     const now = new Date().toISOString();
     await store.upsertCharacter({
@@ -374,15 +383,19 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(new Set(observedTurnIds).size).toBe(3);
     expect(mockLLM.narratorCalls).toBe(3);
     expect(mockLLM.scenePromptCalls).toBe(3);
-    // Stream completion commits the turn; memory extraction has its own drain.
-    const memoryDrain = await awaitPendingMemoryBackgroundTasks();
-    expect(memoryDrain.rejected).toBe(0);
+    // The last durable detached job must settle independently of the action stream.
+    await vi.waitFor(async () => {
+      const jobs = await listRuntimeJobs(store, { sessionId });
+      expect(
+        jobs.filter((job) => job.runtimeId === "memory/extract"),
+      ).toHaveLength(3);
+      expect(jobs.every((job) => job.status === "succeeded")).toBe(true);
+    });
     expect(mockLLM.memoryCalls).toBe(3);
     expect(
-      (await store.listWorkingMemory(sessionId)).find(
-        (record) => record.scope === "story" && record.key === "scene",
-      )?.value,
-    ).toEqual({ text: "第3轮课间教室" });
+      (await store.getPluginData(sessionId, "memory", "blocks", "scene"))
+        ?.value,
+    ).toMatchObject({ content: "第3轮课间教室" });
     // Acceptance: character-tracker executes in dialogue mode once the
     // chat engine succeeds (it gates on the narrative-engine capability now).
     expect(mockLLM.trackerCalls).toBe(3);

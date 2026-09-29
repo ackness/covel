@@ -1,3 +1,5 @@
+import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
+import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import type {
   RuntimeManifest,
   RuntimeResult,
@@ -36,6 +38,9 @@ import {
 } from "../function-runtime/runtime-abort-boundaries.js";
 
 export interface ExecuteAgentGuardOptions {
+  readonly lastPlayerInput?:
+    import("@covel/shared").PlayerInputSubmission | null;
+  readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
   readonly loaded: LoadedRuntime;
@@ -65,6 +70,8 @@ export interface ExecuteAgentGuardOptions {
 }
 
 export async function executeAgentGuard({
+  lastPlayerInput = null,
+  upstreamProposals = [],
   manifest,
   input,
   loaded,
@@ -158,10 +165,24 @@ export async function executeAgentGuard({
     // so nothing needs to see the write before commit. Reads overlay the buffer,
     // so a guard still observes its own not-yet-committed writes.
     const writeBuffer = createExecutionWriteBuffer();
+    const world = deps.store
+      ? await createWorldModelView(
+          deps.store,
+          input.sessionId,
+          upstreamProposals,
+          writeBuffer,
+          assertLive,
+        )
+      : undefined;
     const guardStore = deps.store
       ? revocable(
           trustedGuard
-            ? createTrustedHandlerStore(deps.store, guardHelperCtx, writeBuffer)
+            ? createTrustedHandlerStore(
+                deps.store,
+                guardHelperCtx,
+                writeBuffer,
+                world,
+              )
             : createFunctionStoreView(deps.store, guardHelperCtx, writeBuffer),
         )
       : undefined;
@@ -230,8 +251,12 @@ export async function executeAgentGuard({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
+      session: {
+        lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
+      },
       locale: input.locale,
       store: guardStore,
+      world,
       recursiveCall: guardRecursiveCall,
       recursionDepth,
       ...(guardGateway && trustedGuard
@@ -363,6 +388,7 @@ export async function executeAgentGuard({
         manifest,
         input,
         result,
+        { outputContractSchema: loaded.outputContractSchema },
       );
       const postOutput = postResult.output as Record<string, unknown> | null;
       if (

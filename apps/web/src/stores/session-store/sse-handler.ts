@@ -1,3 +1,4 @@
+import { applyUiSlotEvent } from "@/stores/ui-slot-store.js";
 import { reasoningAction } from "./reasoning.js";
 import {
   isAssetGenerateView,
@@ -249,6 +250,11 @@ export function createSseEventHandler(
     ) {
       return;
     }
+    if (
+      currentSessionId &&
+      applyUiSlotEvent(currentSessionId, envelope.type, payload, turnId)
+    )
+      return;
     // `SseEnvelope.type` is the raw, untrusted wire string. Narrow it to the
     // closed `CovelEventType` union so the switch below is exhaustiveness-
     // checked: every union member must be either handled or explicitly
@@ -590,6 +596,10 @@ export function createSseEventHandler(
         }
         break;
       }
+      case "ui.slot.changed":
+      case "ui.slot.preview":
+      case "ui.slot.cleared":
+        break;
       case "domain-event.previewed": {
         const topic = payload.topic;
         const data = payload.data;
@@ -619,6 +629,17 @@ export function createSseEventHandler(
       }
       case "plugin-data.changed": {
         reducePluginDataChanged(deps.dispatch, payload, envelope.sessionId);
+        break;
+      }
+      case "character-schema.changed": {
+        invalidateSessionResource(deps.dispatch, [
+          "game-state",
+          envelope.sessionId,
+        ]);
+        deps.dispatch({
+          type: "SET_CHARACTER_SCHEMA",
+          schema: payload.schema,
+        });
         break;
       }
       case "character.upserted": {
@@ -717,12 +738,6 @@ export function createSseEventHandler(
       case "connection.restored":
       case "state.snapshot.created":
       case "session.forked":
-      // `working_memory.changed` rides the action stream as a commit event but
-      // is intentionally not rendered here — the UI reflects working-memory
-      // mutations via `state.changed`. Explicit so the exhaustiveness guard
-      // stays green (previously this fell through to `assertNeverEvent` and
-      // warned on every commit).
-      case "working_memory.changed":
       case "memory.updated":
       case "tool.calling":
       case "tool.completed":
@@ -733,6 +748,7 @@ export function createSseEventHandler(
       case "hook.fired":
       case "hook.rewrote":
       case "hook.aborted":
+      case "plugin.service.completed":
       // Command lifecycle is trace-only and never forwarded to this action
       // stream; keep the closed event union exhaustive for future changes.
       case "command.invoked":

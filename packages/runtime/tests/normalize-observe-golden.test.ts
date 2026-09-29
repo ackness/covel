@@ -19,6 +19,8 @@ import {
   normalizeRuntimeManifest,
   resolveRuntimeProviders,
 } from "@covel/plugin-loader";
+import { resolveInputBindings } from "../src/schedule/input-bindings.js";
+import type { RuntimeResult } from "@covel/shared";
 import { scheduleByDag } from "../src/schedule/dag-scheduler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
@@ -82,7 +84,7 @@ describe("normalize golden (bundled plugin set)", () => {
     const defaults = manifests.filter((m) => m.pluginId !== "tabletop-rules");
     const setup = resolveRuntimeProviders(defaults).filter(isSetupRuntime);
     // Declared edges carry the whole order now: schema-gen declares
-    // `after: [pregame]` and player-init's turn-scoped `needs` orders it
+    // `after: [{ contract: session.opening@1 }]` and player-init's `after` orders it
     // after both. Same serial order the legacy priority chain produced.
     // `scene-stage/seed` declares no edge — it only reads its own plugin_data,
     // so it joins the first level in parallel (name breaks the tie).
@@ -104,6 +106,75 @@ describe("normalize golden (bundled plugin set)", () => {
     ]);
   });
 
+  it("orders setup with a different opening provider identity", async () => {
+    const manifests = (await loadAllManifests()).map((manifest) =>
+      manifest.name === "pregame"
+        ? {
+            ...manifest,
+            name: "third-party-opening",
+            pluginId: "third-party-opening",
+          }
+        : manifest,
+    );
+    expect(
+      levelsOf(resolveRuntimeProviders(manifests).filter(isSetupRuntime)),
+    ).toEqual([
+      ["scene-stage/seed", "third-party-opening"],
+      ["world-init/schema-gen"],
+      ["char-creator/player-init"],
+      ["tabletop-rules/creation"],
+    ]);
+  });
+  it("binds real narrator inputs to alternative providers and tolerates their absence", async () => {
+    const manifests = await loadAllManifests();
+    const narrator = manifests.find(
+      (manifest) => manifest.name === "narrator",
+    )!;
+    const provider = {
+      ...manifests.find(
+        (manifest) => manifest.name === "npc-graph/rag-retriever",
+      )!,
+      name: "alternative-graph/retrieve",
+      pluginId: "alternative-graph",
+    };
+    const result: RuntimeResult = {
+      pluginId: provider.pluginId!,
+      runtimeId: provider.name,
+      runId: "run-graph",
+      turnId: "turn",
+      status: "success",
+      output: { npcContext: "Public relationship context" },
+      toolCalls: [],
+      durationMs: 1,
+      timestamp: new Date().toISOString(),
+    };
+    const args = {
+      manifest: narrator,
+      activation: { source: "stage" as const, detached: false, payload: null },
+      acceptsSchemas: {},
+      loadProducerSchema: async () => undefined,
+    };
+    const bound = await resolveInputBindings({
+      ...args,
+      activeRuntimes: [narrator, provider],
+      completedResults: new Map([[provider.name, result]]),
+    });
+    expect(bound).toMatchObject({
+      ok: true,
+      slots: {
+        "npc-relationships": {
+          value: "Public relationship context",
+          source: { pluginId: "alternative-graph", runtimeId: provider.name },
+        },
+      },
+    });
+    const absent = await resolveInputBindings({
+      ...args,
+      activeRuntimes: [narrator],
+      completedResults: new Map(),
+    });
+    expect(absent).toMatchObject({ ok: true, slots: {} });
+  });
   it("runs the shared WorldIR extractor before structured post-turn consumers", async () => {
     const manifests = await loadAllManifests();
     const specs = specById(manifests.map(normalizeRuntimeManifest));
@@ -120,6 +191,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "branch-reply",
       "char-creator/character-tracker",
       "guide",
+      "memory/extract",
       "scene-prompts",
       "world-ir",
       "world-time/advance",
@@ -139,7 +211,7 @@ describe("normalize golden (bundled plugin set)", () => {
 
     // pregame / schema-gen are single-declared now: explicit `stage: setup` +
     // `trigger: auto` (maxTriggerCount = retry budget); schema-gen carries the
-    // authored `after: [pregame]` ordering edge. No legacy provenance left in
+    // authored `after: [{ contract: session.opening@1 }]` ordering edge. No legacy provenance left in
     // any bundled manifest.
     const pregame = requireSpec(specs, "pregame");
     expect(pregame.stage).toBe("setup");
@@ -151,14 +223,18 @@ describe("normalize golden (bundled plugin set)", () => {
     const schemaGen = requireSpec(specs, "world-init/schema-gen");
     expect(schemaGen.stage).toBe("setup");
     expect(schemaGen.declaredTrigger.type).toBe("auto");
-    expect(schemaGen.deps.after).toEqual(["pregame"]);
+    expect(schemaGen.deps.after).toEqual([{ capability: "session.opening@1" }]);
     expect(schemaGen.provenance.derivedFrom).toEqual([]);
 
-    // player-init: explicit `stage: setup` plus turn-scoped `needs`, which are
-    // the DAG edge and the same-turn gate.
+    // player-init stays ordered after setup providers, but submitting its form
+    // in a later execution must not require those completed providers again.
     const playerInit = requireSpec(specs, "char-creator/player-init");
     expect(playerInit.stage).toBe("setup");
-    expect(playerInit.deps.needs).toEqual(["pregame", "world-init/schema-gen"]);
+    expect(playerInit.deps.needs).toEqual([]);
+    expect(playerInit.deps.after).toEqual([
+      { capability: "session.opening@1" },
+      { capability: "world-data-provider@1" },
+    ]);
 
     // pre-turn band: rag-retriever + scene-cast, both scheduled.
     const retriever = requireSpec(specs, "npc-graph/rag-retriever");
@@ -178,16 +254,16 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const id of ["guide", "char-creator/character-tracker"]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBe("post-turn");
-      expect(spec.deps.needs).toEqual([{ capability: "narrative-engine" }]);
+      expect(spec.deps.needs).toEqual([{ capability: "narrative-engine@1" }]);
     }
 
     const worldIr = requireSpec(specs, "world-ir");
     expect(worldIr.stage).toBe("post-turn");
-    expect(manifestOf(manifests, "world-ir").capabilities).toContain(
-      "world-ir-provider",
+    expect(manifestOf(manifests, "world-ir").outputContract).toBe(
+      "world-ir-provider@1",
     );
     expect(worldIr.bindings.narrative).toMatchObject({
-      from: { capability: "narrative-engine", cardinality: "one" },
+      from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       required: true,
     });
@@ -205,8 +281,8 @@ describe("normalize golden (bundled plugin set)", () => {
       expect(spec.stage).toBe("post-turn");
       expect(spec.deps.needs).toEqual([]);
       expect(spec.bindings.worldIR).toMatchObject({
-        from: { capability: "world-ir-provider", cardinality: "one" },
-        accepts: "covel://world/ir/v1",
+        from: { capability: "world-ir-provider@1", cardinality: "one" },
+        accepts: "contract:world-ir@1",
         required: true,
       });
     }
@@ -218,7 +294,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(scenePrompts.stage).toBe("post-turn");
     expect(scenePrompts.deps.needs).toEqual([]);
     expect(scenePrompts.bindings.narrative).toMatchObject({
-      from: { capability: "narrative-engine", cardinality: "one" },
+      from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       required: true,
     });
@@ -231,7 +307,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(branchReply.deps.needs).toEqual([]);
     expect(branchReply.bindings).toEqual({
       narrative: {
-        from: { capability: "narrative-engine", cardinality: "one" },
+        from: { capability: "narrative-engine@1", cardinality: "one" },
         select: "/narrativeOutput",
         required: false,
       },
@@ -266,7 +342,12 @@ describe("normalize golden (bundled plugin set)", () => {
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    for (const id of ["director", "story-guard", "cost-gate", "memory"]) {
+    for (const id of [
+      "director",
+      "story-guard",
+      "cost-gate",
+      "history-compaction",
+    ]) {
       expect(specs.has(id), `${id}: no synthetic runtime`).toBe(false);
       const discovery = discoveries.find((entry) => entry.id === id)!;
       const definition = await loadPluginDefinition(discovery);

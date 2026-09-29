@@ -208,6 +208,22 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
       pluginType: "community",
       source: "community",
     },
+    packageManifest: {
+      plugin: {
+        id: "test-plugin",
+        kind: "plugin",
+        description: "Resume fixture",
+      },
+      manifest: {
+        name: "test-plugin",
+        pluginId: "test-plugin",
+        pluginType: "plugin",
+        description: "Resume fixture",
+        userSettings: TEST_MANIFEST.userSettings,
+      },
+      promptTemplate: "",
+      rawFrontmatter: {},
+    },
     manifests: [
       {
         manifest: TEST_MANIFEST,

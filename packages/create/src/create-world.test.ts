@@ -22,8 +22,9 @@ summary: 一个用于生成器测试的世界。
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
 tags: [test]
-requiredPlugins: []
-recommendedPlugins: []
+pluginPolicy:
+  requested: []
+  recommended: []
 dimensions:
   geography:
     overview: 小型测试地区。
@@ -126,6 +127,53 @@ describe("createWorld", () => {
     if (tmp) await rm(tmp, { recursive: true, force: true });
   });
 
+  it("propagates caller cancellation on the final generation attempt", async () => {
+    const controller = new AbortController();
+    const reason = new Error("caller canceled final attempt");
+    let calls = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        calls++;
+        if (calls === 3) controller.abort(reason);
+        throw new Error("provider request failed");
+      },
+    };
+
+    await expect(
+      createWorld({
+        llm,
+        concept: "Synthetic world",
+        outputDir: tmp,
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(calls).toBe(3);
+    expect(await readdir(tmp)).toEqual([]);
+  });
+
+  it("continues retrying attempt timeouts when the caller has not canceled", async () => {
+    let calls = 0;
+    const llm: LLMAdapter = {
+      async generate({ signal }) {
+        calls++;
+        return new Promise<LLMResponse>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      },
+    };
+
+    const result = await createWorld({
+      llm,
+      concept: "Synthetic world",
+      outputDir: tmp,
+      attemptTimeoutMs: 5,
+    });
+    expect(result.success).toBe(false);
+    expect(calls).toBe(3);
+  });
+
   it("preserves an existing package and admits only one concurrent creator", async () => {
     const options = {
       llm: new FixedLlm(
@@ -169,7 +217,7 @@ describe("createWorld", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     const lore = await readFile(
       path.join(tmp, "test-world", "WORLD.md"),
       "utf8",
@@ -206,7 +254,7 @@ describe("createWorld", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     expect(result.files).toContain("test-world/WORLD.zh-Hant-TW.md");
     expect(result.files).toContain("test-world/WORLD.md");
     expect(result.files).not.toContain("test-world/WORLD.zh.md");
@@ -228,7 +276,7 @@ describe("createWorld", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     const lore = await readFile(
       path.join(tmp, "test-world", "WORLD.md"),
       "utf8",
@@ -246,7 +294,7 @@ describe("createWorld", () => {
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     const lore = await readFile(
       path.join(tmp, "test-world", "WORLD.md"),
       "utf8",
@@ -263,8 +311,9 @@ summary: 一个用于生成器测试的世界。
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
 tags: [test]
-requiredPlugins: []
-recommendedPlugins: []
+pluginPolicy:
+  requested: []
+  recommended: []
 extraRoot: ignored
 dimensions:
   factions:
@@ -303,7 +352,7 @@ dimensions:
       attemptTimeoutMs: 5_000,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     const manifest = await readFile(
       path.join(tmp, "test-world", "world.yaml"),
       "utf8",
@@ -330,18 +379,21 @@ dimensions:
     startingResources:
       铜分: 8
       防水火柴: 2`,
-    ).concat(`
-memoryBlocks:
+    );
+    const memoryPackage =
+      WORLD_PACKAGE_YAML +
+      `
+memoryDefinitions:
   - label: time_debt
     displayName: 时间债
     extractionHint: 玩家改写时间付出的记忆与后果。
   - label: erased_clues
     displayName: 被删除的线索
     extractionHint: 只在雨中显现、随后可能再次消失的证据。
-`);
+`;
     const result = await createWorld({
       llm: new FixedLlm(
-        `===WORLD_YAML===\n${enrichedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`,
+        `===WORLD_YAML===\n${enrichedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${memoryPackage}\n===END===`,
       ),
       concept: "雨中的倒转钟城",
       outputDir: tmp,
@@ -353,7 +405,7 @@ memoryBlocks:
       },
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
     expect(result.packageContent).toMatchObject({
       characters: expect.arrayContaining([
         expect.objectContaining({ id: "bell-keeper", name: "守钟人" }),
@@ -383,10 +435,21 @@ memoryBlocks:
       path.join(tmp, "test-world", "data/lorebook.yaml"),
       "utf8",
     );
-    expect(manifest).toContain("preset: dialogue-mode");
+    expect(manifest).toContain("presetId: dialogue-mode");
     expect(manifest).toContain("defaultViewMode: stage");
-    expect(manifest).toContain("characterBlueprintSources:");
-    expect(manifest).toContain("memoryBlocks:");
+    expect(manifest).not.toContain("memoryBlocks:");
+    expect(descriptor).toContain("to: contract:memory.blocks@1");
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(tmp, "test-world", "data/memory-blocks.json"),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({
+      id: "world",
+      blocks: [{ label: "time_debt" }, { label: "erased_clues" }],
+    });
     expect(descriptor).toContain("to: characters");
     expect(descriptor).toContain("to: lorebook");
     expect(characters).toHaveLength(3);

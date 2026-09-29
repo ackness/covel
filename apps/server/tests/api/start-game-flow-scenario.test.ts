@@ -13,7 +13,7 @@ import {
 import {
   createPluginRpcRegistry,
   createRpcExecutor,
-  submitFormHandler,
+  createSubmitFormHandler,
   type LLMAdapter,
   type LLMResponse,
 } from "@covel/runtime";
@@ -81,6 +81,7 @@ function makeSummary(id: string): PluginSummary {
 
 function makeEntry(id: string, loaded: LoadedRuntime): PluginRegistryEntry {
   const parsed = {
+    runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
     manifest: loaded.manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -89,7 +90,7 @@ function makeEntry(id: string, loaded: LoadedRuntime): PluginRegistryEntry {
     id,
     source: "builtin",
     summary: makeSummary(id),
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[loaded.manifest.name, loaded]]),
     status: "registered",
@@ -230,7 +231,10 @@ function makeApp(
   const eventBus = createEventBus(store);
   const sessionLock = createInProcessSessionLock();
   const rpcRegistry = createPluginRpcRegistry();
-  rpcRegistry.registerFrameworkDefault("submit-form", submitFormHandler);
+  rpcRegistry.registerFrameworkDefault(
+    "submit-form",
+    createSubmitFormHandler(undefined, store),
+  );
   const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
   const rpcApprovalGate = createRpcApprovalGate();
 

@@ -1,3 +1,4 @@
+import { buildTurnDigest } from "./turn-digest.js";
 /**
  * TurnExecutor — orchestrates a complete turn execution.
  *
@@ -63,9 +64,7 @@ import {
 import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
 import { planTurnDetachment } from "../schedule/turn-completion.js";
 import {
-  loadCoreMemoryBlocks,
   loadSessionSummaries,
-  loadWorkingMemory,
   refreshSessionContextSnapshot,
 } from "./session-context.js";
 import {
@@ -333,6 +332,37 @@ async function executeTurnImpl(
       }
     }
   }
+  if (deps.extensions) {
+    const extensionSession = await deps.store?.getSession(input.sessionId);
+    deps = {
+      ...deps,
+      extensionExecution: deps.extensions.createExecution({
+        emitter: deps.emitter,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        locale: input.locale ?? "zh-CN",
+        world: {
+          characterSchema:
+            (await deps.store?.getCharacterSchema(input.sessionId)) ?? null,
+          characters: (await deps.store?.listCharacters(input.sessionId)) ?? [],
+          worldRecord: extensionSession?.worldId
+            ? ((await deps.store?.getWorld(extensionSession.worldId)) ?? null)
+            : null,
+        },
+        signal:
+          getTurnExecutionSignal(deps.turnControl) ??
+          new AbortController().signal,
+        gateway: deps.gateway,
+        utils: deps.utils,
+        readPluginData: async (pluginId, namespace) =>
+          (await deps.store?.listPluginData(
+            input.sessionId,
+            pluginId,
+            namespace,
+          )) ?? [],
+      }),
+    };
+  }
   const projectedPromptHistory = await buildProjectedPromptHistory({
     input,
     deps,
@@ -455,22 +485,12 @@ async function executeTurnImpl(
     );
   }
   const sessionSummaries = await loadSessionSummaries({ input, deps });
-  // Single listWorkingMemory read per turn: the raw records are threaded into
-  // the core-memory manager (initializeDefaults + loadBlocks) below (R-13).
-  const { entries: workingMemory, records: workingMemoryRecords } =
-    await loadWorkingMemory({ input, deps });
-  const coreMemoryBlocks = await loadCoreMemoryBlocks({
-    input,
-    deps,
-    ...(workingMemoryRecords ? { workingMemoryRecords } : {}),
-  });
   const loadSessionContext = () =>
     refreshSessionContextSnapshot({
       input,
       deps,
       turnNumber,
       sessionSummaries,
-      coreMemoryBlocks,
     });
   let sessionContext = await loadSessionContext();
   const refreshSessionContext = async () =>
@@ -519,6 +539,8 @@ async function executeTurnImpl(
           projectedPromptHistory,
           input.locale,
           deps.emitter?.traceId,
+          deps.emitter,
+          getTurnExecutionSignal(deps.turnControl),
         );
         await runPostCompactionHook(hookOpts, {
           compacted: result.compacted,
@@ -600,8 +622,6 @@ async function executeTurnImpl(
       ...(deps.compactor && deps.store && shouldAppendPlayerMessage
         ? { prepareCompactedContext }
         : {}),
-      workingMemory,
-      coreMemoryBlocks,
       sessionContext,
       triggerEvent,
       turnOptions: options,
@@ -741,6 +761,12 @@ async function executeTurnImpl(
           : {}),
         ...(manifest.version ? { pluginVersion: manifest.version } : {}),
         upstreamResults: frozenUpstreamResults,
+        turnDigest: buildTurnDigest(
+          input,
+          frozenUpstreamResults,
+          activeRuntimes,
+          sessionMeta.lastPlayerInput,
+        ),
       });
     }
     const results = await executeParallel(
@@ -779,7 +805,7 @@ async function executeTurnImpl(
 
   // Drop retry seeds BEFORE the event fan-out and the finalizer: seeds are
   // inject/needs context for the retried runtime only. runEventChain collects
-  // `output.events` from every completedResults entry — leaving seeds in
+  // `effects.events` from every completedResults entry — leaving seeds in
   // would REPLAY the original turn's events (scene.set, receipts, generation
   // requests) on every retry. Seeds a real execution overwrote stay.
   for (const [name, seed] of retrySeeds) {
@@ -819,14 +845,12 @@ async function executeTurnImpl(
   // character form, etc. A setup runtime is considered
   // "done" when ANY of the following hold:
   //
-  //   1. Its output reports `preGameDone: true`
+  //   1. Its successful result reports `completion: "done"`
   //        - Used by runtimes that complete deterministically in one turn
-  //          (e.g. `pregame` handler returns `{ preGameDone: true }`
+  //          (e.g. `pregame` handler returns `completion: "done"`
   //          after writing the welcome notification).
-  //        - Also used by runtimes whose guard triggers completion after the
-  //          player submits an interactive form (e.g. `char-creator/
-  //          player-init` only returns `preGameDone: true` in the guard
-  //          branch that observes a submitted character form).
+  //        - Agent protocol `preGameDone: true` is converted to this signal
+  //          at the agent output boundary.
   //
   //   2. Its guard returned `{ skip: true }`
   //        - Covers a setup runtime that finds its work already done or
@@ -845,7 +869,7 @@ async function executeTurnImpl(
   // authoritative phase to `playing`.
   //
   // IMPORTANT: plugins with a form-submission completion signal (like
-  // player-init) MUST NOT report `preGameDone: true` in the "form shown"
+  // player-init) MUST NOT report completion in the "form shown"
   // turn — they report it only after the player submits the form. This
   // keeps the user interactable while Pre-Game is still progressing.
   //

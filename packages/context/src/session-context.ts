@@ -1,36 +1,17 @@
-/**
- * Session-level context snapshot loader (Sprint 1-B).
- *
- * Collapses the scattered store reads spread across `turn-executor.ts` into a
- * single deterministic async call. Returns a strictly-readonly snapshot built
- * once per turn.
- *
- * Invariants:
- *  1. All store reads are guarded (method existence probe + try/catch).
- *     Loader failures never throw; missing data degrades to empty shapes.
- *  2. World-data-provider and persona-provider plugin ids are caller-supplied
- *     (discovered by the `world-data-provider` / `persona-provider` capability
- *     tags) — never hardcoded here.
- *  3. `coreMemoryBlocks` / `summaries` are caller-resolved inputs; the
- *     loader does not inspect environment configuration.
- */
+/** Captures committed world state and caller-resolved history summaries once per execution. */
 
 import type {
   LorebookEntryRecord,
   SessionContextReadStore,
   WorldRecord,
-  WorkingMemoryRecord,
 } from "./session-context-store.js";
 import type {
   CharacterSummary,
   ContextContribution,
-  CoreMemoryBlockView,
   LorebookEntryView,
   LorebookPromptPosition,
-  PersonaProfile,
   SessionContextSnapshot,
   SummaryRecord,
-  WorkingMemoryEntry,
 } from "./types.js";
 import { buildWorldContextView } from "./session-context-views.js";
 
@@ -46,25 +27,10 @@ export interface BuildSessionContextSnapshotOpts {
   readonly turnNumber: number;
   /** World this session is bound to. Used to load `WorldContextView`. */
   readonly worldId?: string;
-  /**
-   * Plugin ID of the world-data-provider (discovered by `world-data-provider`
-   * capability tag in bootstrap). Drives `world.entries` / `world.schema`
-   * loading. Framework must NEVER hardcode a plugin id.
-   */
-  readonly worldDataPluginId?: string;
-  /**
-   * Plugin ID of the persona provider (discovered by the `persona-provider`
-   * capability tag in bootstrap). Drives `activePersona` loading from that
-   * plugin's `session-binding` / `profiles` namespaces. When absent, no
-   * persona is loaded. Framework must NEVER hardcode a plugin id.
-   */
-  readonly personaPluginId?: string;
-  /**
-   * Pre-loaded core memory blocks. Caller decides whether to load them
-   * based on memorySystem availability.
-   * Defaults to `[]`.
-   */
-  readonly coreMemoryBlocks?: readonly CoreMemoryBlockView[];
+  readonly worldContext?: {
+    readonly schema?: Record<string, unknown>;
+    readonly entries?: Record<string, unknown>;
+  };
   /**
    * Pre-loaded session summaries. Caller decides whether to load them
    * based on compactor/store availability. Defaults to `[]`.
@@ -80,21 +46,13 @@ export async function buildSessionContextSnapshot(
   opts: BuildSessionContextSnapshotOpts,
 ): Promise<SessionContextSnapshot> {
   // Session read is for completeness — caller already gates on active status.
-  const [
-    sessionRecord,
-    characters,
-    lastFormValues,
-    workingMemory,
-    lorebookRecords,
-    activePersona,
-  ] = await Promise.all([
-    safeGetSession(store, sessionId),
-    loadCharacters(store, sessionId),
-    loadLastFormValues(store, sessionId),
-    loadWorkingMemory(store, sessionId),
-    loadLorebookRecords(store, sessionId),
-    loadActivePersona(store, sessionId, opts.personaPluginId),
-  ]);
+  const [sessionRecord, characters, lastFormValues, lorebookRecords] =
+    await Promise.all([
+      safeGetSession(store, sessionId),
+      loadCharacters(store, sessionId),
+      loadLastFormValues(store, sessionId),
+      loadLorebookRecords(store, sessionId),
+    ]);
 
   const storedWorldRecord = opts.worldId
     ? await safeGetWorld(store, opts.worldId)
@@ -105,15 +63,11 @@ export async function buildSessionContextSnapshot(
       ? { ...storedWorldRecord, lore: loreOverride }
       : storedWorldRecord;
 
-  const worldSchema = await loadWorldSchema(
-    store,
-    sessionId,
-    opts.worldDataPluginId,
-  );
-  const worldEntriesMap = lorebookWorldEntriesMap(
-    lorebookRecords,
-    opts.worldDataPluginId,
-  );
+  const worldSchema = opts.worldContext?.schema;
+  const worldEntriesMap = {
+    ...lorebookWorldEntriesMap(lorebookRecords),
+    ...opts.worldContext?.entries,
+  };
 
   return {
     sessionId,
@@ -128,17 +82,13 @@ export async function buildSessionContextSnapshot(
       locale: opts.locale,
     }),
     characters,
-    workingMemory,
-    coreMemoryBlocks: opts.coreMemoryBlocks ?? [],
     loreEntries: lorebookRecords.map(toLorebookEntryView),
     summaries: opts.summaries ?? [],
-    ...(activePersona ? { activePersona } : {}),
     contributions: [
       ...compileLorebookContributions(
         lorebookRecords,
         opts.playerMessage ?? "",
       ),
-      ...(activePersona ? [compilePersonaContribution(activePersona)] : []),
     ],
   };
 }
@@ -214,21 +164,6 @@ async function loadLastFormValues(
   }
 }
 
-async function loadWorkingMemory(
-  store: SessionContextReadStore,
-  sessionId: string,
-): Promise<readonly WorkingMemoryEntry[]> {
-  if (typeof store.listWorkingMemory !== "function") return [];
-  try {
-    const records: readonly WorkingMemoryRecord[] =
-      await store.listWorkingMemory(sessionId);
-    return records.map((r) => ({ scope: r.scope, key: r.key, value: r.value }));
-  } catch (err) {
-    warnLoadFailure("loadWorkingMemory", sessionId, err);
-    return [];
-  }
-}
-
 async function loadLorebookRecords(
   store: SessionContextReadStore,
   sessionId: string,
@@ -240,126 +175,6 @@ async function loadLorebookRecords(
     warnLoadFailure("loadLorebookRecords", sessionId, err);
     return [];
   }
-}
-
-async function loadActivePersona(
-  store: SessionContextReadStore,
-  sessionId: string,
-  personaPluginId: string | undefined,
-): Promise<PersonaProfile | undefined> {
-  // No persona provider discovered for this session — degrade to no persona.
-  // Framework never assumes a specific plugin id.
-  if (!personaPluginId) return undefined;
-  try {
-    const bindings = await store.listPluginData(
-      sessionId,
-      personaPluginId,
-      "session-binding",
-    );
-    const current = bindings.find((record) => record.key === "current");
-    const bindingValue = current?.value;
-    if (!bindingValue || typeof bindingValue !== "object") return undefined;
-    const profileId = (bindingValue as Record<string, unknown>).profileId;
-    if (typeof profileId !== "string" || profileId.length === 0)
-      return undefined;
-
-    const profiles = await store.listPluginData(
-      sessionId,
-      personaPluginId,
-      "profiles",
-    );
-    const profileRecord = profiles.find((record) => record.key === profileId);
-    return normalizePersonaProfile(profileRecord?.value, profileId);
-  } catch (err) {
-    warnLoadFailure("loadActivePersona", sessionId, err);
-    return undefined;
-  }
-}
-
-function normalizePersonaProfile(
-  value: unknown,
-  profileId: string,
-): PersonaProfile | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
-  const record = value as Record<string, unknown>;
-  const rawProfile = record.profile ?? value;
-  if (
-    !rawProfile ||
-    typeof rawProfile !== "object" ||
-    Array.isArray(rawProfile)
-  )
-    return undefined;
-  const profile = rawProfile as Record<string, unknown>;
-  const id =
-    typeof profile.id === "string" && profile.id.length > 0
-      ? profile.id
-      : profileId;
-  const name =
-    typeof profile.name === "string" && profile.name.length > 0
-      ? profile.name
-      : id;
-  const description =
-    typeof profile.description === "string" ? profile.description : undefined;
-  const coordinate = normalizePersonaCoordinate(profile.promptCoordinate);
-  return {
-    id,
-    name,
-    ...(description ? { description } : {}),
-    ...(coordinate ? { promptCoordinate: coordinate } : {}),
-  };
-}
-
-function normalizePersonaCoordinate(
-  value: unknown,
-): PersonaProfile["promptCoordinate"] | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
-  const coordinate = value as Record<string, unknown>;
-  const position = coordinate.position;
-  if (
-    position !== "seg3_prepend" &&
-    position !== "seg3_append" &&
-    position !== "at_depth"
-  ) {
-    return undefined;
-  }
-  const depth =
-    typeof coordinate.depth === "number" && Number.isFinite(coordinate.depth)
-      ? Math.max(0, Math.round(coordinate.depth))
-      : undefined;
-  const order =
-    typeof coordinate.order === "number" && Number.isFinite(coordinate.order)
-      ? coordinate.order
-      : undefined;
-  return {
-    position,
-    ...(depth !== undefined ? { depth } : {}),
-    ...(order !== undefined ? { order } : {}),
-  };
-}
-
-function compilePersonaContribution(
-  persona: PersonaProfile,
-): ContextContribution {
-  const coordinate = persona.promptCoordinate;
-  const content = [
-    "[Player Persona]",
-    `Name: ${persona.name}`,
-    persona.description ? `Description: ${persona.description}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return {
-    kind: "persona_description",
-    sourceType: "persona",
-    sourceId: persona.id,
-    content,
-    position: coordinate?.position ?? "seg3_prepend",
-    ...(coordinate?.depth !== undefined ? { depth: coordinate.depth } : {}),
-    order: coordinate?.order ?? 0,
-  };
 }
 
 function compileLorebookContributions(
@@ -388,7 +203,7 @@ function compileLorebookContributions(
         ...(coordinate.depth !== undefined ? { depth: coordinate.depth } : {}),
         order: record.insertionOrder,
         debugTrace: {
-          pluginId: record.pluginId,
+          owner: record.owner,
           strategy: record.strategy,
           keys: record.keys,
           ...(extra.sourceRuleId ? { sourceRuleId: extra.sourceRuleId } : {}),
@@ -514,7 +329,7 @@ function toLorebookEntryView(r: LorebookEntryRecord): LorebookEntryView {
       : undefined;
   return {
     id: r.id,
-    pluginId: r.pluginId,
+    owner: r.owner,
     content: r.content,
     keys: r.keys,
     enabled: r.enabled,
@@ -541,39 +356,12 @@ async function safeGetWorld(
   }
 }
 
-async function loadWorldSchema(
-  store: SessionContextReadStore,
-  sessionId: string,
-  worldDataPluginId: string | undefined,
-): Promise<Record<string, unknown> | undefined> {
-  if (!worldDataPluginId) return undefined;
-  try {
-    const records = await store.listPluginData(
-      sessionId,
-      worldDataPluginId,
-      "schema",
-    );
-    if (records.length === 0) return undefined;
-    const map: Record<string, unknown> = {};
-    for (const r of records) map[r.key] = r.value;
-    return map;
-  } catch (err) {
-    warnLoadFailure("loadWorldSchema", sessionId, err);
-    return undefined;
-  }
-}
-
 function lorebookWorldEntriesMap(
   records: readonly LorebookEntryRecord[],
-  worldDataPluginId: string | undefined,
 ): Record<string, unknown> | undefined {
-  if (!worldDataPluginId) return undefined;
   const relevant = records
     .filter(
-      (e) =>
-        e.pluginId === worldDataPluginId &&
-        e.strategy === "constant" &&
-        e.enabled,
+      (e) => e.owner.kind === "world" && e.strategy === "constant" && e.enabled,
     )
     .slice()
     .sort((a, b) => a.insertionOrder - b.insertionOrder);

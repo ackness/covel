@@ -11,7 +11,7 @@ function apiKeyEnvNameToProviderId(input: string): string | null {
   return provider || null;
 }
 
-function providerKeyToId(input: string): string | null {
+export function providerKeyToId(input: string): string | null {
   const fromEnv = apiKeyEnvNameToProviderId(input);
   if (fromEnv) return fromEnv;
   const sanitized = input

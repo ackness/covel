@@ -5,45 +5,18 @@ import { openAiTranscriptionWire } from "./openai-transcription-wire.js";
 export const DEFAULT_SPEECH_WIRE = "openai-speech";
 export const DEFAULT_TRANSCRIPTION_WIRE = "openai-transcription";
 
-// Deliberate runtime Maps (same design as image/wire-registry.ts): plugin
-// registration is a designed extension point, not speculative flexibility.
-const speechWires = new Map<string, SpeechWire>();
-const transcriptionWires = new Map<string, TranscriptionWire>();
-
+import { registerWire, getWire } from "../wire-lifecycle.js";
 export function registerSpeechWire(wire: SpeechWire): () => void {
-  if (speechWires.has(wire.id)) {
-    throw new Error(`speech wire "${wire.id}" already registered`);
-  }
-  const id = wire.id;
-  speechWires.set(id, wire);
-  let disposed = false;
-  return () => {
-    if (disposed) return;
-    disposed = true;
-    if (speechWires.get(id) === wire) speechWires.delete(id);
-  };
+  return registerWire("speech", wire);
 }
-
 export function getSpeechWire(id: string): SpeechWire | null {
-  return speechWires.get(id) ?? null;
+  return getWire("speech", id);
 }
-
 export function registerTranscriptionWire(wire: TranscriptionWire): () => void {
-  if (transcriptionWires.has(wire.id)) {
-    throw new Error(`transcription wire "${wire.id}" already registered`);
-  }
-  const id = wire.id;
-  transcriptionWires.set(id, wire);
-  let disposed = false;
-  return () => {
-    if (disposed) return;
-    disposed = true;
-    if (transcriptionWires.get(id) === wire) transcriptionWires.delete(id);
-  };
+  return registerWire("transcription", wire);
 }
-
 export function getTranscriptionWire(id: string): TranscriptionWire | null {
-  return transcriptionWires.get(id) ?? null;
+  return getWire("transcription", id);
 }
 
 registerSpeechWire(openAiSpeechWire);

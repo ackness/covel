@@ -1,31 +1,5 @@
-/**
- * @covel/memory — Three-tier memory system for long-running game sessions.
- *
- * Inspired by Letta (MemGPT):
- *   - Core Memory Blocks: editable text in the context window
- *   - Recall Memory: searchable conversation history
- *   - Archival Memory: long-term cross-plugin knowledge
- *
- * (Compaction lives in `@covel/context`'s `maybeCompact`, not this package.)
- *
- * Public surface is intentionally narrow: consumers compose the whole system
- * via `createMemorySystem`. `createMemoryManager` also supports a host-owned
- * transaction boundary for final block writes and recovery receipts.
- */
-
-// ── Types ────────────────────────────────────────────────────────
+/** Kernel recall, archival search, and vector ingestion primitives. */
 export type {
-  CoreMemoryLabel,
-  CoreMemoryBlockSchema,
-  CoreMemoryBlock,
-  CoreMemoryConfig,
-  MemoryManager,
-  MemoryLLMAdapter,
-  MemoryUpdaterConfig,
-  MemoryUpdateResult,
-  MemoryUpdateInput,
-  MemoryAuthoritativeFacts,
-  MemoryUpdater,
   RecallSearchResult,
   RecallSearcher,
   ArchivalSearchResult,
@@ -33,11 +7,7 @@ export type {
   MemorySystemDeps,
   MemorySystem,
 } from "./types.js";
-
-export { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
-
 export type { EmbedFn } from "./vector-common.js";
-
 export {
   awaitPendingMemoryBackgroundTasks,
   pendingMemoryBackgroundTaskCount,
@@ -48,15 +18,9 @@ export type {
   MemoryBackgroundTaskInfo,
   MemoryBackgroundTaskKind,
 } from "./background-tasks.js";
-
-// ── Memory system facade ─────────────────────────────────────────
 export { createMemorySystem } from "./memory-system.js";
-export { createMemoryManager } from "./core-memory.js";
-export type { CreateMemorySystemOptions } from "./memory-system.js";
-
 export type {
   MemoryStore,
-  CoreMemoryStore,
   RecallStore,
   ArchivalStore,
   VectorIngestStore,

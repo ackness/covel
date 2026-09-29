@@ -33,16 +33,40 @@ export function parsePluginUiState(
 export function buildPluginPanelInitialState(
   data: Record<string, unknown>,
   invokingMap: Record<string, true>,
+  sources: Record<string, Record<string, unknown>> = {},
 ): Record<string, unknown> {
   const entries = Object.entries(data).map(([key, value]) => ({ key, value }));
-  return { ...expandIndexedState(data), entries, _invoking: invokingMap };
+  return {
+    ...expandIndexedState(data),
+    entries,
+    _invoking: invokingMap,
+    sources,
+  };
+}
+
+/** Resolve only explicitly named namespaces of the panel's owning plugin. */
+export function resolvePluginPanelSources(
+  ownerNamespaces: Readonly<Record<string, Record<string, unknown>>>,
+  bindings: Readonly<Record<string, string>>,
+): Record<string, Record<string, unknown>> {
+  return Object.fromEntries(
+    Object.entries(bindings).map(([name, namespace]) => [
+      name,
+      Object.hasOwn(ownerNamespaces, namespace)
+        ? (ownerNamespaces[namespace] ?? {})
+        : {},
+    ]),
+  );
 }
 
 export function flattenStateForPluginPanel(
   value: Record<string, unknown>,
 ): Record<string, unknown> {
   const updates: Record<string, unknown> = {};
-  flattenStateValue(updates, "", value);
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "sources") updates["/sources"] = child;
+    else flattenStateValue(updates, `/${key}`, child);
+  }
   return updates;
 }
 

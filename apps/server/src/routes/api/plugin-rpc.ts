@@ -1,3 +1,5 @@
+import { resolveMediaImageFlow } from "./media-image-flow.js";
+import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
 /**
  * Plugin RPC route.
  *
@@ -59,7 +61,6 @@ import {
   SessionNotActiveError,
 } from "./plugin-rpc/runtime-turn.js";
 import { commitFailureMessage } from "./plugin-rpc/runtime-response.js";
-import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
   checkHostedOperator,
@@ -196,12 +197,17 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // fresh read is linearised against those writers, keeping this a pure
     // read-repair. A session deleted in the meantime reconciles to the empty
     // set, so the runtime lookup below fails closed with `runtime_not_active`.
-    const activeRuntimes = await sessionLock.withLock(sessionId, async () => {
-      const live = await store.getSession(sessionId);
-      const livePlugins = live?.activePlugins as readonly string[] | undefined;
-      pluginRegistry.syncSessionActivations(sessionId, livePlugins ?? []);
-      return pluginRegistry.getActiveRuntimes(sessionId);
-    });
+    const activeRuntimes = await withSettledSessionLock(
+      c,
+      sessionId,
+      async () => {
+        const live = await store.getSession(sessionId);
+        const livePlugins = live?.activePlugins as
+          readonly string[] | undefined;
+        pluginRegistry.syncSessionActivations(sessionId, livePlugins ?? []);
+        return pluginRegistry.getActiveRuntimes(sessionId);
+      },
+    );
     const target = activeRuntimes.find((rt) => rt.name === body.runtimeId);
     if (!target) {
       return c.json(
@@ -281,11 +287,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         429,
       );
     }
-
-    const capabilityPluginIds = resolveTurnCapabilityPluginIds(
-      pluginRegistry,
-      sessionId,
-    );
     // Player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced
     // from the unified SettingsStore. The body map keys on pluginId so
@@ -340,6 +341,20 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const turnId = crypto.randomUUID();
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
+      memorySystem: c.get("memorySystem"),
+      resolveImageFlowRuntimeIds: async () =>
+        (
+          await resolveMediaImageFlow(
+            store,
+            c.get("pluginExtensions"),
+            sessionId,
+          )
+        )?.assetRuntimeIds,
+      withSettledLock: (fn, waitBudget) =>
+        withSettledSessionLock(c, sessionId, fn, waitBudget),
+      withSnapshot: (fn, beforeCapture) =>
+        c.get("withPluginSnapshot")?.(sessionId, fn, beforeCapture) ??
+        sessionLock.withLock(sessionId, async () => beforeCapture?.()).then(fn),
       pluginRegistry,
       store,
       eventBus,
@@ -353,7 +368,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           sessionApprovalScope(session, runtime.pluginId),
         ]),
       ),
-      deps: buildTurnExecutorDeps(c, capabilityPluginIds),
+      deps: buildTurnExecutorDeps(c),
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 

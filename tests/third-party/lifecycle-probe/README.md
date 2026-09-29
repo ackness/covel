@@ -34,7 +34,7 @@ ZIP 输出到 `test-results/lifecycle-probe.zip`。测试将该 ZIP 通过真实
 
 自动回归覆盖无凭据拒绝、安装、重复导入、重启发现、启用审批、运行审批、设置覆盖、工具执行、后台落库、RPC/hook、失败回滚、禁用与审批撤销、卸载、重启清除发现结果和重新安装。卸载保留会话数据；重新安装后仍需重新审批。
 
-组合测试会把两个 ZIP 经真实安装 API 导入、重启并逐个启用。`/probe` 和面板的状态按钮复用 `probe-status` 只读 RPC；`lifecycle-probe/note` 在手动 payload 带 `providerPluginId` 时，先按 `probe/note-format@1` 发现指定提供者，再调用其 `format-note` 服务，将结果写入自己的 `notes` namespace。普通记录不带该字段，原有行为不变。测试还检查提供者未启用和禁用后的调用失败、不产生记录，且命令和手动 runtime 都不推进玩家回合或调用 LLM。服务调用只发生在 function runtime，命令 RPC 不直接取得跨插件服务。
+组合测试会把两个 ZIP 经真实安装 API 导入、重启并逐个启用。`/probe` 和面板的状态按钮复用 `probe-status` 只读 RPC；`lifecycle-probe/note` 在手动 payload 带 `providerPluginId` 时，先按 `probe.note-format@1` 发现指定提供者，再调用其 `format-note` 服务，将结果写入自己的 `notes` namespace。普通记录不带该字段，原有行为不变。测试还检查提供者未启用和禁用后的调用失败、不产生记录，且命令和手动 runtime 都不推进玩家回合或调用 LLM。服务调用只发生在 function runtime，命令 RPC 不直接取得跨插件服务。
 
 服务调用设置 1500 ms 的局部预算；超时或调用失败时，记录不会提交。entry 还展示资源生命周期：`SessionEnd` 移除该会话的临时计数，`onDispose` 在宿主关闭时清空整个计数缓存。
 

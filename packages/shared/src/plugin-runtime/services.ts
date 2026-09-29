@@ -44,6 +44,7 @@ export interface PluginRuntimeGateway {
       readonly role: "system" | "user" | "assistant";
       readonly content: string;
     }[];
+    readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly signal?: AbortSignal;
   }): Promise<{
@@ -64,6 +65,7 @@ export interface PluginRuntimeGateway {
       readonly role: "system" | "user" | "assistant";
       readonly content: string;
     }[];
+    readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly signal?: AbortSignal;
   }): Promise<{
@@ -109,6 +111,8 @@ export interface PluginRuntimeGateway {
     background?: "transparent" | "opaque";
     signal?: AbortSignal;
   }): Promise<{
+    /** Non-secret identity of the target actually used for this generation. */
+    target: ImageGenerationTarget;
     images: ReadonlyArray<
       | { kind: "bytes"; bytes: Uint8Array; mime: string }
       | { kind: "url"; url: string; mime: string }
@@ -165,6 +169,11 @@ export interface ResolvedSlotForPlugin {
   readonly tag: string;
   readonly metadata: Readonly<Record<string, unknown>>;
 }
+
+export type ImageGenerationTarget = Pick<
+  ResolvedSlotForPlugin,
+  "provider" | "model" | "protocol" | "baseUrl" | "metadata"
+>;
 
 /**
  * Narrow utility surface exposed to plugin function handlers via
@@ -226,7 +235,7 @@ export interface MediaContext {
 }
 
 export interface ImageGenerateInput {
-  /** Slot name; defaults to image-tag resolution. */
+  /** Exact image role or preset name; defaults to the "image" role. */
   readonly presetId?: string;
   readonly prompt: string;
   readonly negativePrompt?: string;
@@ -250,7 +259,7 @@ export interface ImageGenerateInput {
 export interface ImageGenerateOutput {
   readonly refs: readonly MediaRef[];
   readonly warnings: readonly string[];
-  /** True when promptHash matched an existing asset and no provider call was made. */
+  /** True when the resolved model, wire settings and prompt matched an existing asset. */
   readonly cached: boolean;
 }
 
@@ -261,6 +270,8 @@ export interface ImageGenerateOutput {
  * deduplicates identical prompts (promptHash).
  */
 export interface ImagesContext {
+  /** Check the exact image role without generating or making a provider request. */
+  isAvailable(presetId?: string): boolean;
   generate(input: ImageGenerateInput): Promise<ImageGenerateOutput>;
 }
 

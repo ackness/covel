@@ -5,10 +5,7 @@ import {
   resolveSessionParam,
   SESSION_NOT_FOUND_CODE,
 } from "./session-guard.js";
-import {
-  buildSnapshotPluginList,
-  findWorldDataProviderPluginId,
-} from "./plugins.js";
+import { buildSnapshotPluginList } from "./plugins.js";
 import type { SessionRouteEnv } from "./route-env.js";
 import { getSessionExecutionStatus } from "../actions/execution-recovery.js";
 
@@ -52,25 +49,9 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
         new Set(currentSession.activePlugins),
       ),
     };
-    const worldDataPluginId = findWorldDataProviderPluginId(
-      currentSession.activePlugins,
-      pluginRegistry,
-    );
-    if (worldDataPluginId) {
-      try {
-        const schemaRecord = await store.getPluginData(
-          id,
-          worldDataPluginId,
-          "schema",
-          "character-attributes",
-        );
-        if (schemaRecord?.value) {
-          return c.json({ ...view, characterSchema: schemaRecord.value });
-        }
-      } catch {
-        // Optional schema discovery must not prevent session restore.
-      }
-    }
-    return c.json(view);
+    return c.json({
+      ...view,
+      characterSchema: await store.getCharacterSchema(id),
+    });
   });
 }

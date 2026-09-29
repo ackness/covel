@@ -1,8 +1,10 @@
+import { requestJobServices } from "./plugin-rpc/settled-request.js";
 import { Hono } from "hono";
 
 import { errorBody, listBody } from "../../api-error.js";
 import {
   createRuntimeJob,
+  RuntimeJobSupersededError,
   listRuntimeJobs,
   transitionRuntimeJob,
   type RuntimeJobRecord,
@@ -19,6 +21,7 @@ import {
   sessionApprovalScope,
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
+import type { RuntimeJobCredentialKey } from "./plugin-rpc/runtime-job-credentials.js";
 import { publicRuntimeJob } from "./plugin-rpc/runtime-job-public.js";
 
 export const runtimeJobRoutes = new Hono();
@@ -68,6 +71,13 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
       409,
     );
   }
+  const cancelledPayload = parseStagedRuntimeJobPayload(changed.payload);
+  if (cancelledPayload)
+    c.get("runtimeJobCredentials")?.discard({
+      jobId,
+      sessionId,
+      expectedSessionIncarnation: cancelledPayload.expectedSessionIncarnation,
+    });
   await appendRuntimeJobStatus(c.get("store"), eventBus, changed);
   return c.json(publicRuntimeJob(changed));
 });
@@ -86,61 +96,90 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
   const sessionId = guard.session.id;
   const sourceJobId = c.req.param("jobId");
   const eventBus = c.get("eventBus");
-  const created = await c.get("sessionLock").withLock(sessionId, async () => {
-    const live = await c.get("store").getSession(sessionId);
-    if (!live || live.status !== "active") return undefined;
-    const source = await findJob(c.get("store"), sessionId, sourceJobId);
-    if (
-      !source ||
-      !["failed", "timed_out", "cancelled", "stale", "orphaned"].includes(
-        source.status,
-      )
-    ) {
-      return undefined;
-    }
-    const priorPayload = parseStagedRuntimeJobPayload(source.payload);
-    if (!priorPayload) return undefined;
-    const jobId = crypto.randomUUID();
-    const {
-      runtimeModelOverrides: _priorRuntimeModelOverrides,
-      ...stablePayload
-    } = priorPayload;
-    const payload: StagedRuntimeJobPayload = {
-      ...stablePayload,
-      descriptor: { ...priorPayload.descriptor, jobId },
-      expectedSessionIncarnation: sessionIncarnationIdentity(live),
-      expectedApprovalScope: sessionApprovalScope(live, source.pluginId),
-      locale: live.locale,
-      ...(live.runtimeModelOverrides
-        ? { runtimeModelOverrides: live.runtimeModelOverrides }
-        : {}),
-    };
-    let queuedStatus: ReturnType<typeof makeRuntimeJobStatusRecord> | undefined;
-    const job = await c.get("store").withTransaction(async (tx) => {
-      const queued = await createRuntimeJob(tx, {
-        jobId,
-        sessionId,
-        pluginId: source.pluginId,
-        runtimeId: source.runtimeId,
-        origin: source.origin,
-        payload,
-        ...(source.maxQueueMs !== undefined
-          ? { maxQueueMs: source.maxQueueMs }
-          : {}),
-        ...(source.maxExecutionMs !== undefined
-          ? { maxExecutionMs: source.maxExecutionMs }
-          : {}),
-      });
-      queuedStatus = makeRuntimeJobStatusRecord(queued, 0);
-      if (!(await tx.appendJobStatus(queuedStatus))) {
-        throw new Error(
-          `could not append retry status for runtime job ${jobId}`,
-        );
+  let retryCredentialKey: RuntimeJobCredentialKey | undefined;
+  const created = await c
+    .get("sessionLock")
+    .withLock(sessionId, async () => {
+      const live = await c.get("store").getSession(sessionId);
+      if (!live || live.status !== "active") return undefined;
+      const source = await findJob(c.get("store"), sessionId, sourceJobId);
+      if (
+        !source ||
+        !["failed", "timed_out", "cancelled", "stale", "orphaned"].includes(
+          source.status,
+        )
+      ) {
+        return undefined;
       }
-      return queued;
+      const priorPayload = parseStagedRuntimeJobPayload(source.payload);
+      if (!priorPayload) return undefined;
+      const jobId = crypto.randomUUID();
+      const {
+        runtimeModelOverrides: _priorRuntimeModelOverrides,
+        ...stablePayload
+      } = priorPayload;
+      const payload: StagedRuntimeJobPayload = {
+        ...stablePayload,
+        descriptor: { ...priorPayload.descriptor, jobId },
+        expectedSessionIncarnation: sessionIncarnationIdentity(live),
+        expectedApprovalScope: sessionApprovalScope(live, source.pluginId),
+        locale: live.locale,
+        ...(live.runtimeModelOverrides
+          ? { runtimeModelOverrides: live.runtimeModelOverrides }
+          : {}),
+      };
+      let queuedStatus:
+        ReturnType<typeof makeRuntimeJobStatusRecord> | undefined;
+      const job = await c.get("store").withTransaction(async (tx) => {
+        const queued = await createRuntimeJob(tx, {
+          jobId,
+          sessionId,
+          pluginId: source.pluginId,
+          runtimeId: source.runtimeId,
+          origin: source.origin,
+          payload,
+          ...(source.settle
+            ? {
+                settle: source.settle,
+                maxSettleWaitMs: source.maxSettleWaitMs,
+                retryOfJobId: source.jobId,
+              }
+            : {}),
+          ...(source.maxQueueMs !== undefined
+            ? { maxQueueMs: source.maxQueueMs }
+            : {}),
+          ...(source.maxExecutionMs !== undefined
+            ? { maxExecutionMs: source.maxExecutionMs }
+            : {}),
+        });
+        queuedStatus = makeRuntimeJobStatusRecord(queued, 0);
+        if (!(await tx.appendJobStatus(queuedStatus))) {
+          throw new Error(
+            `could not append retry status for runtime job ${jobId}`,
+          );
+        }
+        retryCredentialKey = {
+          jobId,
+          sessionId,
+          expectedSessionIncarnation: payload.expectedSessionIncarnation,
+        };
+        const services = requestJobServices(c);
+        if (services)
+          c.get("runtimeJobCredentials")?.register(
+            retryCredentialKey,
+            services,
+            source.maxQueueMs,
+          );
+        return queued;
+      });
+      return { job, status: queuedStatus! };
+    })
+    .catch((error: unknown) => {
+      if (retryCredentialKey)
+        c.get("runtimeJobCredentials")?.discard(retryCredentialKey);
+      if (error instanceof RuntimeJobSupersededError) return undefined;
+      throw error;
     });
-    return { job, status: queuedStatus! };
-  });
   if (!created) {
     return c.json(
       errorBody("Runtime job was not found or is not retryable", {

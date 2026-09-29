@@ -1,3 +1,4 @@
+import { isDerivedVectorRecord } from "../vector-store.js";
 import {
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
   validateBrowserCheckpoint,
@@ -41,8 +42,8 @@ export async function exportSessionCheckpoint(
     events,
     traceEvents,
     characters,
+    characterSchema,
     pluginData,
-    workingMemory,
     lorebookEntries,
     sessionSummaries,
     playerInputs,
@@ -66,8 +67,8 @@ export async function exportSessionCheckpoint(
     store.listEvents(sessionId),
     store.listTraceEvents(sessionId),
     store.listCharacters(sessionId),
+    store.getCharacterSchema(sessionId),
     store.listPluginDataSessionScope(sessionId),
-    store.listWorkingMemory(sessionId),
     store.listSessionLorebookEntries(sessionId),
     store.listSessionSummaries(sessionId),
     store.listPlayerInputs(sessionId),
@@ -112,8 +113,8 @@ export async function exportSessionCheckpoint(
     events,
     traceEvents,
     characters,
-    pluginData,
-    workingMemory,
+    characterSchema,
+    pluginData: pluginData.filter((row) => !isDerivedVectorRecord(row)),
     lorebookEntries,
     sessionSummaries,
     playerInputs,
@@ -167,10 +168,14 @@ async function writeCheckpoint(
     await store.saveInteractionRecord(record);
   for (const record of checkpoint.events) await store.saveEvent(record);
   for (const record of checkpoint.messages) await store.addMessage(record);
+  if (checkpoint.characterSchema)
+    await store.upsertCharacterSchema(checkpoint.characterSchema);
   for (const record of checkpoint.characters)
     await store.upsertCharacter(record);
   if (checkpoint.pluginData.length > 0) {
-    await store.setPluginDataBatch(checkpoint.pluginData);
+    await store.setPluginDataBatch(
+      checkpoint.pluginData.filter((row) => !isDerivedVectorRecord(row)),
+    );
   }
   for (const record of checkpoint.traceEvents)
     await store.addTraceEvent(record);
@@ -178,8 +183,6 @@ async function writeCheckpoint(
     await store.appendTurnMessage(record);
   for (const record of checkpoint.playerInputs)
     await store.savePlayerInput(record);
-  for (const record of checkpoint.workingMemory)
-    await store.upsertWorkingMemory(record);
   if (checkpoint.worldDataLedger.length > 0) {
     await store.saveWorldDataImportLedgerBatch(checkpoint.worldDataLedger);
   }

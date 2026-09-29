@@ -62,20 +62,11 @@ function makeCtx({
     turnId: "turn-1",
     pluginId: "tabletop-rules",
     locale: "en-US",
-    // Builtin installs get the full DataStore surface: getSession(id) and
-    // listPlayerInputs(id) both REQUIRE the session id. Community installs
-    // get the session-bound view whose methods take no arguments.
-    store:
-      storeShape === "trusted"
-        ? {
-            getSession: async (id) => (id === sessionId ? sessionRecord : null),
-            listPlayerInputs: async (id) =>
-              id === sessionId ? playerInputs : [],
-          }
-        : {
-            getSession: async () => sessionRecord,
-            listPlayerInputs: async () => playerInputs,
-          },
+    world: { characterSchema: worldSchema, characters },
+    store: {
+      getSession: async () => sessionRecord,
+      listPlayerInputs: async () => playerInputs,
+    },
     pluginData: {
       get: async (namespace, key) =>
         pluginData.get(`${namespace}/${key}`) ?? null,
@@ -166,10 +157,7 @@ describe("creation handler", () => {
   it("offers the allocation form on the turn the creator reports its player", async () => {
     const { ctx, calls, pluginData } = makeCtx({
       phase: "setup",
-      characters: [],
-      inputs: {
-        playerId: { cardinality: "one", value: "char-player-1" },
-      },
+      characters: [{ id: "char-player-1", type: "player", fields: {} }],
     });
     const result = await handler(ctx);
     expect(result.completion).toBe("pending");
@@ -237,9 +225,7 @@ describe("creation handler", () => {
     const { ctx, calls } = makeCtx({
       phase: "setup",
       worldSchema: dialogueSchema,
-      inputs: {
-        playerId: { cardinality: "one", value: "char-player-1" },
-      },
+      characters: [{ id: "char-player-1", type: "player", fields: {} }],
     });
     const result = await handler(ctx);
     expect(result).toEqual({

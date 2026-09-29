@@ -158,7 +158,7 @@ describe("Hook data at the commit boundary", () => {
             name: "probe/main",
             pluginId: "probe",
             outputKind: "plugin",
-            capabilities: [],
+            outputContract: undefined,
           },
         ],
         results: [accepted],

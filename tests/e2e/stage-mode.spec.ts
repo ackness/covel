@@ -73,13 +73,11 @@ test.describe("Stage view mode", () => {
       // Capture the restore baseline once. Fetching inside route handlers races
       // with route removal after the mocked action triggers another restore.
       const apiPath = `/api/sessions/${encodeURIComponent(sessionId)}`;
-      const [sessionResponse, viewResponse, pluginsResponse] =
-        await Promise.all([
-          page.request.get(apiPath),
-          page.request.get(`${apiPath}/view`),
-          page.request.get(`${apiPath}/plugins`),
-        ]);
-      for (const response of [sessionResponse, viewResponse, pluginsResponse]) {
+      const [sessionResponse, viewResponse] = await Promise.all([
+        page.request.get(apiPath),
+        page.request.get(`${apiPath}/view`),
+      ]);
+      for (const response of [sessionResponse, viewResponse]) {
         expect(
           response.ok(),
           "stage restore baseline unavailable",
@@ -89,23 +87,8 @@ test.describe("Stage view mode", () => {
       const snapshot = (await viewResponse.json()) as {
         session: Record<string, unknown>;
       };
-      const directory = await pluginsResponse.json();
-      // ZIP installation and execution are exercised by the server integration
-      // test. This browser fixture checks capability discovery and legacy stamps
-      // with that package's ID, without depending on a live provider.
-      await page.route(`${sessionPath}/plugins`, async (route) => {
-        await route.fulfill({
-          json: {
-            ...directory,
-            items: directory.items.map(
-              (item: { id: string; capabilities?: string[] }) =>
-                item.capabilities?.includes("scene-prompts")
-                  ? { ...item, id: "lifecycle-probe" }
-                  : item,
-            ),
-          },
-        });
-      });
+      // The server projects third-party plugin state into typed UI slots.
+      // This fixture preserves a retry's source-turn attribution on restore.
       // Restore a deterministic completed turn without invoking a model.
       await page.route(sessionPath, async (route) => {
         if (route.request().method() !== "GET") return route.fallback();
@@ -167,37 +150,34 @@ test.describe("Stage view mode", () => {
           },
         });
       });
-      await page.route(
-        `${sessionPath}/plugin-data/lifecycle-probe{,/**}`,
-        async (route) => {
-          const prompts = {
-            __turnId: "stage-mobile-retry",
-            scene: "After class",
-            recap:
-              "Mio has offered to help you find an old festival journal. ".repeat(
-                30,
-              ),
-            decision: "Where will you look first?",
-            ...Object.fromEntries(
-              Array.from({ length: 5 }, (_, index) => [
-                `prompt${index + 1}Text`,
-                `Option ${index + 1}: Ask about the archive, then compare the notes with the festival records.`,
-              ]),
-            ),
-            prompt6Text: lastChoice,
-          };
-          await route.fulfill({
-            json: {
-              items: Object.entries(prompts).map(([key, value]) => ({
-                namespace: "message",
-                key,
-                value,
-                updatedAt: "2026-01-01T00:00:00Z",
-              })),
-            },
-          });
-        },
-      );
+      await page.route(`${sessionPath}/ui-slots`, async (route) => {
+        await route.fulfill({
+          json: {
+            items: [
+              {
+                slot: "stage.choices@1",
+                revision: "mobile-retry:1",
+                value: {
+                  turnId: "stage-mobile-retry",
+                  scene: "After class",
+                  recap:
+                    "Mio has offered to help you find an old festival journal. ".repeat(
+                      30,
+                    ),
+                  decision: "Where will you look first?",
+                  choices: [
+                    ...Array.from({ length: 5 }, (_, index) => ({
+                      id: `prompt:${index + 1}`,
+                      text: `Option ${index + 1}: Ask about the archive, then compare the notes with the festival records.`,
+                    })),
+                    { id: "prompt:6", text: lastChoice },
+                  ],
+                },
+              },
+            ],
+          },
+        });
+      });
       await page.route("**/api/actions", async (route) => {
         await route.fulfill({ contentType: "text/event-stream", body: "" });
       });
@@ -290,17 +270,22 @@ test.describe("Stage view mode", () => {
                 id: "stage-evaluation-fixture",
                 displayName: "Evaluation Fixture",
                 description: "Synthetic stage bridge consumer",
-                pluginType: "plugin",
+                kind: "plugin",
                 active: true,
                 locked: false,
                 source: "community",
-                status: "registered",
+                hostState: "loaded",
+                sessionState: "active",
                 runtimeCount: 0,
                 runtimes: [],
                 tools: [],
                 userSettings: [],
-                capabilities: [],
-                tags: ["role:demo"],
+                provides: [],
+                requires: [],
+                optional: [],
+                conflicts: [],
+                extensions: [],
+                tags: ["ui:stage"],
               } satisfies SessionPlugin,
             ],
           },
@@ -349,21 +334,24 @@ test.describe("Stage view mode", () => {
           },
         }),
       );
-      await page.route(`${mask}/plugin-data/scene-prompts{,/**}`, (route) =>
+      await page.route(`${mask}/ui-slots`, (route) =>
         route.fulfill({
           json: {
-            items: Object.entries({
-              __turnId: "demo-turn",
-              scene: "School tour",
-              decision: "Where next?",
-              prompt1Text: "Ask about the library",
-              prompt2Text: "Explore the classroom",
-            }).map(([key, value]) => ({
-              namespace: "message",
-              key,
-              value,
-              updatedAt: "2026-01-01T00:00:00Z",
-            })),
+            items: [
+              {
+                slot: "stage.choices@1",
+                revision: "demo:1",
+                value: {
+                  turnId: "demo-turn",
+                  scene: "School tour",
+                  decision: "Where next?",
+                  choices: [
+                    { id: "prompt:1", text: "Ask about the library" },
+                    { id: "prompt:2", text: "Explore the classroom" },
+                  ],
+                },
+              },
+            ],
           },
         }),
       );
@@ -403,7 +391,7 @@ test.describe("Stage view mode", () => {
       await page.reload();
       const host = page.getByTestId("stage-plugin-panels");
       await expect(host).toBeVisible();
-      const frame = host.frameLocator("iframe");
+      const frame = host.frameLocator("iframe").frameLocator("iframe");
       await expect(frame.getByText("75%", { exact: true })).toBeVisible();
       await expect(frame.getByText("25%", { exact: true })).toBeVisible();
       await expect(host.locator("iframe")).toHaveAttribute(
@@ -411,7 +399,9 @@ test.describe("Stage view mode", () => {
         "allow-scripts",
       );
       const content = await host.locator("iframe").elementHandle();
-      const child = await content!.contentFrame();
+      const wrapper = await content!.contentFrame();
+      const innerContent = await wrapper!.$("iframe");
+      const child = await innerContent!.contentFrame();
       expect(
         await child!.evaluate(() => {
           try {

@@ -12,9 +12,11 @@ import {
   type MediaStore,
 } from "@covel/store";
 import {
+  PluginExtensionHost,
+  PluginServiceRegistry,
   createPluginRpcRegistry,
   createRpcExecutor,
-  submitFormHandler,
+  createSubmitFormHandler,
   type PluginRpcRegistry,
   type RpcExecutor,
   type RpcHandlerContext,
@@ -40,6 +42,7 @@ import {
 } from "../../src/lib/session-lock.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 import branchReplyHandler from "../../../../plugins/branch-reply/handler.js";
+import branchReplyEntry from "../../../../plugins/branch-reply/server/index.js";
 
 type Env = {
   Variables: {
@@ -61,7 +64,10 @@ function setup(): {
 } {
   const store = createMemoryStore();
   const registry = createPluginRpcRegistry();
-  registry.registerFrameworkDefault("submit-form", submitFormHandler);
+  registry.registerFrameworkDefault(
+    "submit-form",
+    createSubmitFormHandler(undefined, store),
+  );
   registry.registerFrameworkDefault("echo", async (payload) => ({
     echoed: payload,
   }));
@@ -276,7 +282,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       runtimeType: "agent",
       outputKind: "story",
       model: "story",
-      capabilities: ["narrative"],
+      outputContract: "narrative@1",
       commands: [
         {
           name: "inspect",
@@ -289,12 +295,22 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       ],
     };
     const parsed = {
+      runtime: { type: runtime.runtimeType ?? ("agent" as const) },
       manifest: runtime,
       promptTemplate: "",
       rawFrontmatter: {},
     };
     pluginRegistry.register({
       id: "inspector",
+      packageManifest: {
+        ...parsed,
+        plugin: {
+          id: "inspector",
+          kind: "plugin",
+          description: "Inspector",
+          contributes: { commands: runtime.commands },
+        },
+      },
       summary: {
         id: "inspector",
         name: "Inspector",
@@ -302,7 +318,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
         pluginType: "plugin",
         runtimeCount: 1,
       },
-      manifest: parsed,
+
       manifests: [parsed],
       loadedRuntimes: new Map([
         [runtime.name, { manifest: runtime, promptTemplate: "" }],
@@ -499,6 +515,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("gives builtin plugin actions scoped immediate writes without host store authority", async () => {
+    await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     let exposed: string[] = [];
     const createdAt = "2026-01-01T00:00:00.000Z";
     await store.setPluginData({
@@ -563,7 +580,71 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     ).toBeNull();
   });
 
+  it.each(["builtin", "community"] as const)(
+    "rejects actions from a disabled %s plugin before approval or handler execution",
+    async (trust) => {
+      const handler = vi.fn(async () => ({ updated: true }));
+      registry.registerPluginHandler("fixture", "update", handler, {}, trust);
+      const response = await app.request(
+        "/api/sessions/sess-rpc-1/plugin-rpc",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "action",
+            pluginId: "fixture",
+            action: "update",
+          }),
+        },
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        code: "plugin_not_active",
+      });
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rechecks action activation after waiting for the session lock", async () => {
+    const { app, store, registry, sessionLock, gate } = setup();
+    await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: ["fixture"] });
+    const handler = vi.fn(async () => ({ updated: true }));
+    registry.registerPluginHandler("fixture", "update", handler, {}, "builtin");
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const admitted = Promise.withResolvers<void>();
+    const evaluate = gate.evaluate.bind(gate);
+    vi.spyOn(gate, "evaluate").mockImplementation((input) => {
+      admitted.resolve();
+      return evaluate(input);
+    });
+    const owner = sessionLock.withLock("sess-rpc-1", async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const pending = app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: "fixture",
+        action: "update",
+      }),
+    });
+    await admitted.promise;
+    await store.updateSession("sess-rpc-1", { activePlugins: [] });
+    release.resolve();
+    await owner;
+    const response = await pending;
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "plugin_not_active" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("dispatches an entry-registered plugin action", async () => {
+    await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     registry.registerPluginHandler(
       "codex",
       "regenerate",
@@ -913,6 +994,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   it("routes an entry-registered action through the approval gate instead of 404", async () => {
     const { app, store, registry, activateCalls } = setupEntry();
     await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: [PLUGIN_ID] });
 
     const res = await call(app, "entry-action");
 
@@ -933,6 +1015,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   it("activates the entry and dispatches after the approval is granted", async () => {
     const { app, store, gate, registry } = setupEntry();
     await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: [PLUGIN_ID] });
 
     const first = await call(app, "entry-action");
     const { approvalId } = (await first.json()) as { approvalId: string };
@@ -974,6 +1057,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   it("404s a genuinely-unknown action once the entry is active", async () => {
     const { app, store, gate } = setupEntry();
     await seedSession(store);
+    await store.updateSession("sess-rpc-1", { activePlugins: [PLUGIN_ID] });
 
     // Approve loading the entry, then verify an undeclared action is rejected
     // before any action-specific approval is created.
@@ -1028,7 +1112,7 @@ function makeFunctionEntry(args: {
   handler: FunctionHandler;
   execution?: "sync" | "background";
   stage?: RuntimeManifest["stage"];
-  /** Semantic capability tags for framework discovery (findPluginByCapability). */
+  /** Semantic capability tags for framework discovery. */
   capabilities?: readonly string[];
   /** Plugin discovery source — drives trust-gate verdict. Defaults to 'builtin'
    * so happy-path tests auto-allow without explicit approvals. Community
@@ -1112,6 +1196,7 @@ function makeFunctionEntry(args: {
   };
 
   const parsed = {
+    runtime: { type: manifest.runtimeType ?? ("agent" as const) },
     manifest,
     promptTemplate: "",
     rawFrontmatter: {},
@@ -1120,7 +1205,7 @@ function makeFunctionEntry(args: {
   const entry: PluginRegistryEntry = {
     id: args.pluginId,
     summary: makeSummary(args.pluginId),
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[args.runtimeId, loaded]]),
     status: "registered",
@@ -1156,6 +1241,7 @@ function makeAgentEntry(args: {
     promptTemplate: "You are a test narrator.",
   };
   const parsed = {
+    runtime: { type: manifest.runtimeType ?? ("agent" as const) },
     manifest,
     promptTemplate: loaded.promptTemplate,
     rawFrontmatter: {},
@@ -1163,7 +1249,7 @@ function makeAgentEntry(args: {
   const entry: PluginRegistryEntry = {
     id: args.pluginId,
     summary: makeSummary(args.pluginId),
-    manifest: parsed,
+
     manifests: [parsed],
     loadedRuntimes: new Map([[args.runtimeId, loaded]]),
     status: "registered",
@@ -1448,9 +1534,6 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       execution: "sync",
       handler: branchReplyHandler as FunctionHandler,
       stage: undefined,
-      // Declares the prompt-history-rewriter capability so the framework
-      // discovers it (instead of hardcoding "branch-reply" in the executor).
-      capabilities: ["branch-reply", "prompt-history-rewriter"],
     });
     const { entry: narratorEntry, loaded: narratorLoaded } = makeAgentEntry({
       pluginId: "chat-mode-narrator",
@@ -1464,6 +1547,16 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register(branchEntry);
     pluginRegistry.register(narratorEntry);
 
+    const extensions = new PluginExtensionHost(
+      new PluginServiceRegistry({
+        list: async (id) => (await store.getSession(id))?.activePlugins ?? [],
+        ensure: async () => {},
+      }),
+    );
+    branchReplyEntry({
+      provideExtension: (point, id, implementation) =>
+        extensions.register("branch-reply", { point, id }, implementation),
+    });
     const rpcRegistry = createPluginRpcRegistry();
     const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
@@ -1483,6 +1576,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
+      c.set("pluginExtensions", extensions);
       c.set("rpcExecutor", rpcExecutor);
       c.set("rpcRegistry", rpcRegistry);
       c.set("rpcApprovalGate", gate);
@@ -1509,7 +1603,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         id: "sess-branch-api",
-        plugins: ["chat-mode-narrator"],
+        plugins: ["chat-mode-narrator", "branch-reply"],
         locale: "zh-CN",
       }),
     });
@@ -2478,11 +2572,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     // pluginRegistry indexes by pluginId, so registering two entries with
     // the same id would overwrite. `getActiveRuntimes` walks `manifests[]`.
     const parsedTarget = {
+      runtime: {
+        type: targetLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: targetLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
     };
     const parsedFollower = {
+      runtime: {
+        type: followerLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: followerLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -2490,7 +2590,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register({
       id: PLUGIN_ID,
       summary: makeSummary(PLUGIN_ID),
-      manifest: parsedTarget,
+
       manifests: [parsedTarget, parsedFollower],
       loadedRuntimes: new Map([
         [TARGET, targetLoaded],
@@ -2729,11 +2829,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     };
 
     const parsedTarget = {
+      runtime: {
+        type: targetLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: targetLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
     };
     const parsedFollower = {
+      runtime: {
+        type: followerLoaded.manifest.runtimeType ?? ("agent" as const),
+      },
       manifest: followerLoaded.manifest,
       promptTemplate: "",
       rawFrontmatter: {},
@@ -2741,7 +2847,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register({
       id: PLUGIN_ID,
       summary: makeSummary(PLUGIN_ID),
-      manifest: parsedTarget,
+
       manifests: [parsedTarget, parsedFollower],
       loadedRuntimes: new Map([
         [TARGET, targetLoaded],

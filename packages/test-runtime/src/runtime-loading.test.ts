@@ -103,25 +103,25 @@ describe("test-runtime runtime loading helpers", () => {
         pluginId: "lifecycle-probe",
         signal: new AbortController().signal,
       });
-      expect(await client.discover("probe/note-format@1")).toEqual([]);
+      expect(await client.discover("probe.note-format@1")).toEqual([]);
       await expect(
         client.call({
           pluginId: "service-provider-probe",
           name: "format-note",
-          contract: "probe/note-format@1",
+          contract: "probe.note-format@1",
           input: { text: "hello" },
         }),
       ).rejects.toThrow('plugin "service-provider-probe" is not active');
       await store.updateSession("selected-session", {
         activePlugins: ["lifecycle-probe", "service-provider-probe"],
       });
-      expect(await client.discover("probe/note-format@1")).toMatchObject([
+      expect(await client.discover("probe.note-format@1")).toMatchObject([
         { pluginId: "service-provider-probe", name: "format-note" },
       ]);
       await store.updateSession("selected-session", {
         activePlugins: ["service-provider-probe"],
       });
-      await expect(client.discover("probe/note-format@1")).rejects.toThrow(
+      await expect(client.discover("probe.note-format@1")).rejects.toThrow(
         'plugin "lifecycle-probe" is not active',
       );
       const otherSession = bundle.services.createClient({
@@ -130,7 +130,7 @@ describe("test-runtime runtime loading helpers", () => {
         signal: new AbortController().signal,
       });
       await expect(
-        otherSession.discover("probe/note-format@1"),
+        otherSession.discover("probe.note-format@1"),
       ).rejects.toThrow('session "missing-session" not found');
     } finally {
       await bundle.close();
@@ -148,9 +148,10 @@ describe("test-runtime runtime loading helpers", () => {
         path.join(rootPath, "PLUGIN.md"),
         [
           "---",
-          "name: plugin",
+          "id: plugin",
+          "kind: plugin",
           "description: Test plugin",
-          "pluginType: plugin",
+          "contributes: {tools: [root-tool], forms: [check]}",
           "entry: ./server/index.js",
           "---",
         ].join("\n"),
@@ -175,12 +176,12 @@ describe("test-runtime runtime loading helpers", () => {
         id: "plugin",
         rootPath,
         isMultiRuntime: true,
-        pluginMdPaths: [path.join(rootPath, "runtimes/main/PLUGIN.md")],
+        pluginMdPaths: [path.join(rootPath, "runtimes/main/RUNTIME.md")],
       };
       await fs.mkdir(path.join(rootPath, "runtimes/main"), { recursive: true });
       await fs.writeFile(
         discovery.pluginMdPaths[0]!,
-        "---\nname: plugin/main\ndescription: Main\ntrigger: {type: manual}\n---\n",
+        "---\ntype: agent\ndescription: Main\nschedule: {trigger: {type: manual}}\n---\n",
         "utf8",
       );
       const entry = await loadEntryTools(
@@ -194,7 +195,7 @@ describe("test-runtime runtime loading helpers", () => {
       await fs.rm(rootPath, { recursive: true, force: true });
     }
   });
-  it("shares package declarations with runtimes whose logical IDs differ from their directories", async () => {
+  it("shares package declarations with each child runtime", async () => {
     const pluginsDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "covel-harness-package-"),
     );
@@ -204,18 +205,19 @@ describe("test-runtime runtime loading helpers", () => {
       await fs.writeFile(
         path.join(root, "PLUGIN.md"),
         `---
-name: probe
+id: probe
+kind: plugin
 description: Package
-userSettings:
-  - key: mode
-    type: text
-    label: Mode
-    default: brief
-dataSchemas:
-  notes:
-    schema: ./schemas/notes.json
-    schemaVersion: 1
-    acceptsWorldData: false
+contributes:
+  settings:
+    - key: mode
+      type: text
+      label: Mode
+      default: brief
+  data:
+    notes:
+      schema: ./schemas/notes.json
+      version: 1
 ---
 `,
         "utf8",
@@ -227,13 +229,12 @@ dataSchemas:
         "utf8",
       );
       await fs.writeFile(
-        path.join(root, "runtimes/main/PLUGIN.md"),
+        path.join(root, "runtimes/main/RUNTIME.md"),
         `---
-name: probe/logical
+type: function
 description: Main
-runtimeType: function
-handler: ./handler.js
-trigger: {type: manual}
+function: {handler: ./handler.js}
+schedule: {trigger: {type: manual}}
 ---
 `,
         "utf8",
@@ -246,7 +247,7 @@ trigger: {type: manual}
       const bundle = await loadRuntimeBundle({
         pluginsDir,
         pluginId: "probe",
-        runtimeId: "probe/logical",
+        runtimeId: "probe/main",
         locale: "zh-CN",
       });
       expect(bundle.target.userSettings?.[0]?.default).toBe("brief");
@@ -254,10 +255,10 @@ trigger: {type: manual}
         "./schemas/notes.json",
       );
       expect(
-        bundle.loadedCache.get("probe/logical")?.manifest.userSettings,
+        bundle.loadedCache.get("probe/main")?.manifest.userSettings,
       ).toEqual(bundle.target.userSettings);
       expect(
-        bundle.loadedCache.get("probe/logical")?.manifest.dataSchemas,
+        bundle.loadedCache.get("probe/main")?.manifest.dataSchemas,
       ).toEqual(bundle.target.dataSchemas);
       await bundle.close();
     } finally {
@@ -274,7 +275,7 @@ trigger: {type: manual}
       try {
         await fs.writeFile(
           path.join(root, "PLUGIN.md"),
-          "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+          `---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\ncontributes: {tools: [${name}]}\n---\n`,
           "utf8",
         );
         const registration = `covel.registerTool(covel.toolkit.tool({ name: "${name}", description: "Fixture", parameters: covel.toolkit.z.object({}), execute: async () => ({}) }));`;
@@ -309,7 +310,7 @@ trigger: {type: manual}
       await fs.mkdir(root);
       await fs.writeFile(
         path.join(root, "PLUGIN.md"),
-        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+        "---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\n---\n",
         "utf8",
       );
       await fs.writeFile(
@@ -347,7 +348,7 @@ trigger: {type: manual}
       });
       services.register("other", {
         name: "existing",
-        contract: "test/v1",
+        contract: "test.service@1",
         input: z.object({}),
         output: z.object({}),
         handler: async () => ({}),
@@ -360,11 +361,11 @@ trigger: {type: manual}
       try {
         await fs.writeFile(
           path.join(root, "PLUGIN.md"),
-          "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+          `---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\ncontributes: {services: [test.service@1]${outcome === "tool" ? ", tools: [memory-search]" : ""}}\n---\n`,
           "utf8",
         );
         const registration =
-          'covel.registerService({ name: "pending", contract: "test/v1", input: covel.toolkit.z.object({}), output: covel.toolkit.z.object({}), handler: async () => ({}) });';
+          'covel.registerService({ name: "pending", contract: "test.service@1", input: covel.toolkit.z.object({}), output: covel.toolkit.z.object({}), handler: async () => ({}) });';
         const ending =
           outcome === "factory"
             ? 'throw new Error("factory failed");'
@@ -393,7 +394,7 @@ trigger: {type: manual}
           const entry = await activation;
           expect(entry.tools).toEqual([]);
           expect(
-            (await client.discover("test/v1")).map(
+            (await client.discover("test.service@1")).map(
               ({ pluginId, name }) => `${pluginId}/${name}`,
             ),
           ).toEqual(["other/existing", "probe/pending"]);
@@ -404,10 +405,10 @@ trigger: {type: manual}
               ? "factory failed"
               : outcome === "tool"
                 ? "reserved"
-                : "Duplicate plugin service",
+                : "duplicate registration",
           );
         expect(
-          (await client.discover("test/v1")).map(
+          (await client.discover("test.service@1")).map(
             ({ pluginId, name }) => `${pluginId}/${name}`,
           ),
         ).toEqual(["other/existing"]);
@@ -425,12 +426,12 @@ trigger: {type: manual}
     try {
       await fs.writeFile(
         path.join(root, "PLUGIN.md"),
-        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+        "---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\ncontributes: {services: [test.service@1]}\n---\n",
       );
       await fs.writeFile(
         path.join(root, "entry.js"),
         `export default covel => {
-          covel.registerService({ name: "active", contract: "test/v1", input: covel.toolkit.z.object({}), output: covel.toolkit.z.object({}), handler: async () => ({}) });
+          covel.registerService({ name: "active", contract: "test.service@1", input: covel.toolkit.z.object({}), output: covel.toolkit.z.object({}), handler: async () => ({}) });
           covel.onDispose(async () => {
             await new Promise(resolve => setTimeout(resolve, 10));
             await (await import("node:fs/promises")).writeFile(${JSON.stringify(marker)}, String(covel.signal.aborted));
@@ -457,9 +458,9 @@ trigger: {type: manual}
         await loadPluginDefinition(discovery),
         services,
       );
-      expect(await client.discover("test/v1")).toHaveLength(1);
+      expect(await client.discover("test.service@1")).toHaveLength(1);
       const closing = entry.close();
-      expect(await client.discover("test/v1")).toEqual([]);
+      expect(await client.discover("test.service@1")).toEqual([]);
       await closing;
       await entry.close();
       expect(await fs.readFile(marker, "utf8")).toBe("true");
@@ -476,7 +477,7 @@ trigger: {type: manual}
     try {
       await fs.writeFile(
         path.join(root, "PLUGIN.md"),
-        "---\nname: probe\ndescription: Probe\nentry: ./entry.js\n---\n",
+        "---\nid: probe\nkind: plugin\ndescription: Probe\nentry: ./entry.js\n---\n",
       );
       await fs.writeFile(
         path.join(root, "entry.js"),

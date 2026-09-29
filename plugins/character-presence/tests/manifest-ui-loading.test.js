@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
+  compileInlineRuntime,
+  loadPluginUi,
   loadPluginManifest,
   loadRuntime,
   parsePluginMd,
@@ -22,12 +24,16 @@ describe("character-presence manifest and UI loading", () => {
     expect(parsed.manifest).toMatchObject({
       name: "character-presence",
       pluginId: "character-presence",
-      runtimeType: "function",
-      handler: "./handler.js",
-      trigger: { type: "manual" },
       ui: {
         right: ["./ui/character-presence-panel.json"],
       },
+    });
+    expect(compileInlineRuntime(parsed).manifest).toMatchObject({
+      name: "character-presence",
+      pluginId: "character-presence",
+      runtimeType: "function",
+      handler: "./handler.js",
+      trigger: { type: "manual" },
     });
   });
 
@@ -42,9 +48,10 @@ describe("character-presence manifest and UI loading", () => {
     expect(manifests).toHaveLength(1);
 
     const loaded = await loadRuntime(discovery, "character-presence");
+    const ui = await loadPluginUi(discovery);
     expect(loaded.handler).toBeTypeOf("function");
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0]).toMatchObject({
+    expect(ui.uiSpecs?.right).toHaveLength(1);
+    expect(ui.uiSpecs?.right?.[0]).toMatchObject({
       id: "character-presence",
       dataSource: { namespace: "presence" },
       alwaysRender: true,

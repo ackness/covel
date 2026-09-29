@@ -1,3 +1,4 @@
+import { readFileSync as readContractFile } from "node:fs";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * inventory plugin tests.
@@ -19,7 +20,8 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import path from "node:path";
 import {
   discoverPlugins,
-  loadPluginManifest,
+  loadPluginDefinition,
+  loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
@@ -543,13 +545,30 @@ describe("update-inventory", () => {
 describe("inventory plugin manifest", () => {
   let manifest;
   let loaded;
+  let declaration;
+  let packageManifest;
+  let loadedUi;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const discovery = discoveries.find((d) => d.id === "inventory");
-    const manifests = await loadPluginManifest(discovery);
+    const definition = await loadPluginDefinition(discovery);
+    const manifests = definition.manifests;
+    packageManifest = definition.packageManifest.manifest;
+    loadedUi = await loadPluginUi(discovery, undefined, definition);
     manifest = manifests[0].manifest;
-    loaded = await loadRuntime(discovery, manifest.name);
+    declaration = definition.packageManifest.plugin;
+    loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
+      "world-ir@1": JSON.parse(
+        readContractFile(
+          new URL(
+            "../../world-ir/schemas/world-ir.schema.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ),
+    });
   });
 
   it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
@@ -559,13 +578,13 @@ describe("inventory plugin manifest", () => {
     expect(manifest.trigger?.type).toBe("auto");
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider", cardinality: "one" },
-      accepts: "covel://world/ir/v1",
+      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      accepts: "contract:world-ir@1",
       required: true,
     });
-    expect(manifest.relations?.requires).toContain("world-ir");
+    expect(declaration.requires).toContain("world-ir-provider@1");
     // Agent runtime — no `runtimeType` field means default 'agent'
-    expect(manifest.runtimeType).toBeUndefined();
+    expect(manifest.runtimeType).toBe("agent");
     expect(manifest.handler).toBeUndefined();
   });
 
@@ -591,7 +610,7 @@ describe("inventory plugin manifest", () => {
   });
 
   it("declares the player-facing bag command", () => {
-    expect(manifest.commands).toEqual([
+    expect(packageManifest.commands).toEqual([
       expect.objectContaining({
         name: "bag",
         aliases: ["inventory"],
@@ -601,7 +620,7 @@ describe("inventory plugin manifest", () => {
   });
 
   it("accepts world data into the items namespace", () => {
-    const schema = manifest.dataSchemas?.items;
+    const schema = packageManifest.dataSchemas?.items;
     expect(schema).toBeDefined();
     expect(schema.schemaVersion).toBe(1);
     expect(schema.acceptsWorldData).toBe(true);
@@ -609,16 +628,18 @@ describe("inventory plugin manifest", () => {
   });
 
   it("declares the right panel and message block UI specs", () => {
-    expect(manifest.ui?.right).toContain("./ui/inventory-panel.json");
-    expect(manifest.ui?.message).toContain("./ui/inventory-message.json");
+    expect(packageManifest.ui?.right).toContain("./ui/inventory-panel.json");
+    expect(packageManifest.ui?.message).toContain(
+      "./ui/inventory-message.json",
+    );
   });
 
   it("loads UI spec JSON with panel metadata", () => {
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0].id).toBe("inventory");
-    expect(loaded.uiSpecs?.right?.[0].icon).toBe("backpack");
-    expect(loaded.uiSpecs?.message).toHaveLength(1);
-    expect(loaded.uiSpecs?.message?.[0].id).toBe("inventory-message");
+    expect(loadedUi.uiSpecs?.right).toHaveLength(1);
+    expect(loadedUi.uiSpecs?.right?.[0].id).toBe("inventory");
+    expect(loadedUi.uiSpecs?.right?.[0].icon).toBe("backpack");
+    expect(loadedUi.uiSpecs?.message).toHaveLength(1);
+    expect(loadedUi.uiSpecs?.message?.[0].id).toBe("inventory-message");
   });
 
   it("loads PLUGIN.md body as the LLM prompt template", () => {

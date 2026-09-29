@@ -1,62 +1,72 @@
 ---
-name: codex
+id: codex
+kind: plugin
 displayName:
   zh: 设定图鉴
   en: Codex
 description:
   zh: 自动整理新发现的地点、人物、物品和传闻，方便随时回看。
-  en: Automatically collects newly discovered places, people, items, and rumors for later review.
-pluginType: plugin
-# Narrator-downstream layer (see guide for the rationale). Every
-# plugin in this layer shares priority 600 so priority-based fallback
-# scheduling still runs them in parallel.
-stage: post-turn
-outputKind: system
-model: plugin
-timeoutMs: 120000
-maxRetries: 0
-callTimeoutMs: 60000
-requireExplicitCompletion: true
-completeAfterTools: [sync-codex-entries]
+  en: >-
+    Automatically collects newly discovered places, people, items, and rumors
+    for later review.
 tags:
-  - role:codex
-  - data:lorebook
-  - cost:llm
-  - ui:right-panel
-trigger:
-  type: auto
-inputs:
-  worldIR:
-    from:
-      capability: world-ir-provider
-      cardinality: one
-    accepts: covel://world/ir/v1
-    required: true
-input:
-  inject:
-    - kind: plugin-data
-      namespace: entries
-      as: "<existing-entries>"
-      format: summary
-      maxEntries: 100
-relations:
-  requires:
-    - world-ir
+  - "data:lorebook"
+  - "cost:llm"
+  - "ui:right-panel"
+requires:
+  - world-ir-provider@1
 entry: ./server/index.js
-tools:
-  plugin:
+contributes:
+  ui:
+    right:
+      - ./ui/codex-panel.json
+  prompt:
+    - id: post-history
+      content: |
+        本 runtime 工作流：
+        - 已有条目见 `<existing-entries>` 块（由框架在 prompt 构建时自动注入）
+        - 把全新发现放进 `unlocks`，把已有条目的补充放进 `updates`，一次调用 `sync-codex-entries`
+        - 如果本轮没有符合标准的新发现，不调用任何业务工具
+        - `sync-codex-entries` 成功后框架自动结束；决定不写入时调用 `runtime-done`
+      position: post-history
+      role: system
+  tools:
+    - unlock-codex-entries
+    - update-codex-entry
     - sync-codex-entries
-ui:
-  right:
-    - ./ui/codex-panel.json
-postHistory:
-  role: system
-  content: |
-    本 runtime 工作流：
-    - 已有条目见 `<existing-entries>` 块（由框架在 prompt 构建时自动注入）
-    - 把全新发现放进 `unlocks`，把已有条目的补充放进 `updates`，一次调用 `sync-codex-entries`
-    - 如果本轮没有符合标准的新发现，不调用任何业务工具
-    - `sync-codex-entries` 成功后框架自动结束；决定不写入时调用 `runtime-done`
+runtime:
+  type: agent
+  schedule:
+    stage: post-turn
+    trigger:
+      type: auto
+  io:
+    inputs:
+      worldIR:
+        from:
+          contract: world-ir-provider@1
+          cardinality: one
+        accepts: "contract:world-ir@1"
+        required: true
+    selfData:
+      - namespace: entries
+        as: <existing-entries>
+        format: summary
+        maxEntries: 100
+    visibility: system
+  agent:
+    model: plugin
+    tools:
+      plugin:
+        - sync-codex-entries
+    loop:
+      timeoutMs: 120000
+      callTimeoutMs: 60000
+      maxRetries: 0
+      completion:
+        require: explicit
+        afterTools:
+          - sync-codex-entries
 ---
 
 你是知识图鉴系统（Codex Tracker）。你的任务是判断本轮叙事里是否出现了**值得登记**的新发现，并维护一个干净、准确的图鉴数据库。**宁可漏记，不可乱记** —— 绝大多数回合都不需要新增条目。
@@ -65,7 +75,7 @@ postHistory:
 
 ### 本轮 WorldIR
 
-本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。优先查看 `entities` 与 `statements`，并用 `summary`、`events` 和 `relations` 补充证据。只根据 IR 中明确存在的信息登记，不能补回原文没有被抽取的细节。
+本轮叙事已由共享抽取 agent 转为 `contract:world-ir@1`，位于 `<runtime-inputs>` 的 `worldIR.value`。优先查看 `entities` 与 `statements`，并用 `summary`、`events` 和 `relations` 补充证据。只根据 IR 中明确存在的信息登记，不能补回原文没有被抽取的细节。
 
 ### 已有图鉴条目
 

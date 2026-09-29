@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   createMemoryStore,
@@ -14,6 +14,8 @@ const WORLD_ID = "browser-world";
 
 let store: DataStore;
 let app: Hono;
+let clearSlots: ReturnType<typeof vi.fn>;
+let invalidateSlots: ReturnType<typeof vi.fn>;
 
 async function seed(target: DataStore, metadata?: Record<string, unknown>) {
   await target.upsertWorld({
@@ -49,8 +51,14 @@ async function upload(checkpoint: unknown): Promise<Response> {
 beforeEach(async () => {
   store = createMemoryStore();
   await seed(store, { ownerTokenHash: "server-private" });
+  clearSlots = vi.fn();
+  invalidateSlots = vi.fn();
   app = new Hono();
   app.use("*", async (c, next) => {
+    c.set("uiSlots", {
+      clearSession: clearSlots,
+      invalidateSession: invalidateSlots,
+    });
     c.set("store", store);
     c.set("storeBackend", "memory");
     c.set("sessionLock", createInProcessSessionLock());
@@ -78,6 +86,8 @@ describe("browser-private workspace exchange", () => {
     });
 
     expect((await upload(checkpoint)).status).toBe(200);
+    expect(clearSlots).toHaveBeenCalledWith(SESSION_ID);
+    expect(invalidateSlots).toHaveBeenCalledWith(SESSION_ID);
     expect((await store.listMessages(SESSION_ID))[0]?.content).toBe("hello");
     expect((await store.getSession(SESSION_ID))?.metadata).toEqual({
       player: "local",

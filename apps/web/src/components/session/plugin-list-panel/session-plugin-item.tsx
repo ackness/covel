@@ -32,7 +32,7 @@ export function SessionPluginItem({
   const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  if (plugin.status === "error") {
+  if (plugin.hostState === "error") {
     return (
       <div className="border border-destructive/40 bg-destructive/5 rounded-md overflow-hidden">
         <button

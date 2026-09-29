@@ -51,17 +51,15 @@ describe("character-blueprint handler", () => {
         namespace: "blueprints",
         key: "mentor-lin",
         value: {
-          blueprint: {
-            schemaVersion: 1,
-            id: "mentor-lin",
-            name: "Lin Yue",
-            role: "npc",
-            persona: { summary: "A precise sword mentor." },
-          },
+          schemaVersion: 1,
+          id: "mentor-lin",
+          name: "Lin Yue",
+          role: "npc",
+          persona: { summary: "A precise sword mentor." },
         },
       },
     });
-    expect(proposals[0].payload.value.importedAt).toEqual(expect.any(String));
+    expect(proposals[0].payload.value).not.toHaveProperty("importedAt");
   });
 
   it("imports and instantiates through character.upsert", async () => {
@@ -84,7 +82,6 @@ describe("character-blueprint handler", () => {
           instantiate: {
             characterId: "char-lin-yue",
             fields: { realm: "Golden Core" },
-            mirrorPluginId: "other-plugin",
           },
         },
       }),
@@ -109,7 +106,7 @@ describe("character-blueprint handler", () => {
         namespace: "blueprints",
         key: "mentor-lin",
         value: {
-          instantiatedCharacterId: "sess-blueprint-char-lin-yue",
+          id: "mentor-lin",
         },
       },
     });
@@ -126,8 +123,6 @@ describe("character-blueprint handler", () => {
         description: "A cautious sword mentor.",
         fields: { realm: "Golden Core" },
         version: 1,
-        mirrorPluginId: "character-blueprint",
-        mirrorPluginIds: ["char-creator"],
       },
     });
     expect(proposals[1].payload.createdAt).toEqual(expect.any(String));
@@ -195,28 +190,26 @@ describe("character-blueprint handler", () => {
         namespace: "blueprints",
         key: "kamishiro-mio",
         value: {
-          blueprint: {
-            id: "kamishiro-mio",
-            name: "神代澪",
-            description: "二年 B 组班长兼文艺部部长。",
-            aliases: ["澪", "班长"],
-            tags: ["classmate", "literature-club"],
-            attributes: {
-              club: "文艺部",
-              class: "二年 B 组",
-              relationshipStage: "初识",
-            },
-            persona: {
-              summary: "温柔克制的优等生。",
-              traits: ["礼貌", "慢热"],
-              goals: ["保住文艺部活动室", "完成学园祭特刊"],
-              voice: "说话轻，句子完整。",
-              style: "用整理纸张掩饰紧张。",
-            },
-            instantiate: {
-              characterId: "npc-kamishiro-mio",
-              type: "npc",
-            },
+          id: "kamishiro-mio",
+          name: "神代澪",
+          description: "二年 B 组班长兼文艺部部长。",
+          aliases: ["澪", "班长"],
+          tags: ["classmate", "literature-club"],
+          attributes: {
+            club: "文艺部",
+            class: "二年 B 组",
+            relationshipStage: "初识",
+          },
+          persona: {
+            summary: "温柔克制的优等生。",
+            traits: ["礼貌", "慢热"],
+            goals: ["保住文艺部活动室", "完成学园祭特刊"],
+            voice: "说话轻，句子完整。",
+            style: "用整理纸张掩饰紧张。",
+          },
+          instantiate: {
+            characterId: "npc-kamishiro-mio",
+            type: "npc",
           },
         },
       },
@@ -251,9 +244,7 @@ describe("character-blueprint handler", () => {
     });
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(1);
-    expect(proposals[0].payload.value.blueprint).not.toHaveProperty(
-      "instantiate",
-    );
+    expect(proposals[0].payload.value).not.toHaveProperty("instantiate");
   });
 
   it("keeps structured form imports as blueprints when instantiate is false", async () => {
@@ -283,17 +274,13 @@ describe("character-blueprint handler", () => {
         namespace: "blueprints",
         key: "kamishiro-mio",
         value: {
-          blueprint: {
-            id: "kamishiro-mio",
-            name: "神代澪",
-            persona: { summary: "温柔克制的优等生。" },
-          },
+          id: "kamishiro-mio",
+          name: "神代澪",
+          persona: { summary: "温柔克制的优等生。" },
         },
       },
     });
-    expect(proposals[0].payload.value.blueprint).not.toHaveProperty(
-      "instantiate",
-    );
+    expect(proposals[0].payload.value).not.toHaveProperty("instantiate");
   });
 
   it("does not double-prefix generated character ids when form ids are generated", async () => {
@@ -314,7 +301,7 @@ describe("character-blueprint handler", () => {
       characterId: `sess-blueprint-${result.value.blueprintId}`,
     });
     const proposals = getPendingProposals(result);
-    expect(proposals[0].payload.value.blueprint.instantiate.characterId).toBe(
+    expect(proposals[0].payload.value.instantiate.characterId).toBe(
       result.value.blueprintId,
     );
   });
