@@ -38,8 +38,9 @@ export async function buildThirdPartyPluginZip(
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const output = fileURLToPath(
-    new URL("../../../../test-results/lifecycle-probe.zip", import.meta.url),
+  const output = path.resolve(
+    import.meta.dirname,
+    "../../../../test-results/lifecycle-probe.zip",
   );
   await mkdir(path.dirname(output), { recursive: true });
   await writeFile(output, await buildThirdPartyPluginZip());
