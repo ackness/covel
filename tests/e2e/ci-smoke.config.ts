@@ -6,7 +6,9 @@ import baseConfig from "../../playwright.config.js";
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const webServer = baseConfig.webServer;
 
-export default defineConfig(baseConfig, {
+// defineConfig(baseConfig, overrides) concatenates webServer arrays.
+export default defineConfig({
+  ...baseConfig,
   testDir: fileURLToPath(new URL(".", import.meta.url)),
   outputDir: path.join(repoRoot, "tests/e2e/artifacts/ci-smoke"),
   testMatch: [
