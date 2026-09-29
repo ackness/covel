@@ -22,6 +22,7 @@ describe("built-in adapter capability projection", () => {
     "openai-chat-v1",
     "openai-responses-v1",
     "anthropic-messages-v1",
+    "google-generative-ai-v1",
   ] as const)("limits %s text requests to implemented shapes", (protocol) => {
     const effective = projectCapabilityForBuiltinAdapter(
       multimodal,

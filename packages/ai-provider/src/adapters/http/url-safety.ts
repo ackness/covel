@@ -11,7 +11,8 @@ const BLOCKED_IP_PATTERNS = [
 ];
 
 const BLOCKED_HOSTNAMES = ["metadata.google.internal", "metadata.internal"];
-const TRAILING_VERSION_RE = /\/(v\d[a-z0-9]*)$/i;
+// Google exposes its OpenAI-compatible wire below /v1beta/openai.
+const TRAILING_VERSION_RE = /\/(v\d[a-z0-9]*)(?:\/openai)?$/i;
 
 /**
  * Canonicalise `URL.hostname` for the IP blocklist: URL wraps IPv6 literals in

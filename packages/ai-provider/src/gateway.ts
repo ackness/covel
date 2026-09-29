@@ -75,6 +75,25 @@ import type {
   ModelRequestContext,
 } from "./types.js";
 
+function assertExplicitGoogleMediaWire(
+  protocol: ProviderProtocol,
+  wire: unknown,
+  mode: "image" | "speech" | "transcription",
+  provider: string,
+): void {
+  if (
+    protocol === "google-generative-ai-v1" &&
+    !(typeof wire === "string" && wire)
+  ) {
+    throw new AiProviderError({
+      code: "CONFIG_ERROR",
+      message: `Google native ${mode} generation requires an explicitly configured ${mode}Wire; the built-in Gemini adapter supports text generation only.`,
+      provider,
+      retriable: false,
+    });
+  }
+}
+
 interface GatewayDependencies {
   providerRegistry: {
     resolve(
@@ -613,6 +632,12 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
+          assertExplicitGoogleMediaWire(
+            resolved.protocol,
+            slotMeta?.speechWire,
+            "speech",
+            targetProvider(target),
+          );
           const wireId =
             typeof slotMeta?.speechWire === "string" && slotMeta.speechWire
               ? slotMeta.speechWire
@@ -674,6 +699,12 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
+          assertExplicitGoogleMediaWire(
+            resolved.protocol,
+            slotMeta?.transcriptionWire,
+            "transcription",
+            targetProvider(target),
+          );
           const wireId =
             typeof slotMeta?.transcriptionWire === "string" &&
             slotMeta.transcriptionWire
@@ -746,6 +777,12 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
+          assertExplicitGoogleMediaWire(
+            resolved.protocol,
+            slotMeta?.imageWire,
+            "image",
+            targetProvider(target),
+          );
           const wireId =
             typeof slotMeta?.imageWire === "string" && slotMeta.imageWire
               ? slotMeta.imageWire

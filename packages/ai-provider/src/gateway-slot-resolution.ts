@@ -8,7 +8,6 @@ import {
 } from "@covel/shared";
 import { AiProviderError, ModelConfigurationError } from "./errors.js";
 import { projectCapabilityForBuiltinAdapter } from "./capability/adapter-support.js";
-import { validateParameterMetadata } from "./provider-options.js";
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
@@ -372,11 +371,6 @@ export function createGatewaySlotResolution(
     const merged =
       presetMeta || metadata ? { ...presetMeta, ...metadata } : undefined;
     const result = withParameterOverrides(merged, presetId, options);
-    validateParameterMetadata(
-      result ?? {},
-      targetProvider(target),
-      target.preset?.protocol ?? "openai-chat-v1",
-    );
     const parameters = result?.parameterOverrides as
       ModelParameterOverrides | undefined;
     const limits = resolveLlmTokenLimits({

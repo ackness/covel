@@ -21,12 +21,16 @@ export function withTextRequestDefaults(
     "reasoningEffort" in overrides;
   const hasReasoning =
     hasOverride ||
+    (metadata?.generationConfig !== null &&
+      typeof metadata?.generationConfig === "object" &&
+      "thinkingConfig" in metadata.generationConfig) ||
     [
       "reasoningEffort",
       "reasoning_effort",
       "enable_thinking",
       "thinking_budget",
       "thinking",
+      "thinkingConfig",
       "reasoning",
       "output_config",
     ].some((key) => metadata?.[key] !== undefined);

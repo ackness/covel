@@ -4,6 +4,27 @@ import { PROVIDER_PROTOCOLS } from "../src/types.js";
 import { getProtocolDefinition } from "../src/protocol-registry.js";
 
 describe("provider-registry", () => {
+  it("resolves native Google defaults and preserves an explicit compatible connection", () => {
+    const registry = createProviderRegistry();
+    expect(registry.resolve({ provider: "google" })).toMatchObject({
+      protocol: "google-generative-ai-v1",
+      usesBuiltinAdapter: true,
+      config: { baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
+    });
+    expect(
+      registry.resolve({
+        provider: "google",
+        protocol: "openai-chat-v1",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      }),
+    ).toMatchObject({
+      protocol: "openai-chat-v1",
+      config: {
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      },
+    });
+  });
+
   it("supplies canonical endpoints for built-in providers without llm.toml", () => {
     const registry = createProviderRegistry();
 

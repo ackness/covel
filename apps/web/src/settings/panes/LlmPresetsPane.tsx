@@ -195,6 +195,7 @@ export function LlmPresetsPane() {
         "openai-chat-v1",
         "openai-responses-v1",
         "anthropic-messages-v1",
+        "google-generative-ai-v1",
       ].includes(protocol)
         ? prepared.firstModelRef
         : undefined,

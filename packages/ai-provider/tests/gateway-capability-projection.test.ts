@@ -34,6 +34,44 @@ const expected = {
 };
 
 describe("effective gateway capabilities", () => {
+  it("validates portable parameters against the resolved native protocol", async () => {
+    const registry = createProviderRegistry();
+    const resolve = registry.resolve;
+    const generateText = vi.fn(async () => ({
+      text: "ok",
+      finishReason: "stop" as const,
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    vi.spyOn(registry, "resolve").mockImplementation((...args) => {
+      const resolution = resolve(...args);
+      return {
+        ...resolution,
+        adapter: { ...resolution.adapter, generateText },
+      };
+    });
+    const gateway = createGateway({
+      providerRegistry: registry,
+      presetRegistry: createPresetRegistry({
+        profiles: [],
+        presets: [{ ...preset, provider: "google", protocol: undefined }],
+      }),
+    });
+    const result = await gateway.generateText({
+      messages: [{ role: "user", content: "hello" }],
+      providerRequestMetadata: { parameterOverrides: { topK: 12 } },
+    });
+    expect(result.diagnostics?.warnings ?? []).not.toContainEqual(
+      expect.objectContaining({ feature: "parameterOverrides.topK" }),
+    );
+    await expect(
+      gateway.generateText({
+        messages: [{ role: "user", content: "hello" }],
+        providerRequestMetadata: { parameterOverrides: { topK: -1 } },
+      }),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
   it("projects built-in support after full request overrides without mutating the preset", () => {
     const registry = createProviderRegistry({
       providerDefaults: {

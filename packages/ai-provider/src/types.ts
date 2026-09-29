@@ -26,13 +26,14 @@ import type { ReasoningEffort } from "./reasoning-effort.js";
  * OpenAI-compatible providers (DeepSeek, Qwen/DashScope, Groq, …) are not
  * separate protocols — they speak `openai-chat-v1` and register with zero
  * code via `llm.toml` `[covel.<slot>]`. Only a genuinely new *wire* shape
- * (e.g. Gemini-native, Bedrock SigV4, Cohere) warrants a new member here,
+ * (e.g. Bedrock SigV4, Cohere) warrants a new member here,
  * and adding one is a single entry in `BUILTIN_PROTOCOLS`.
  */
 export const PROVIDER_PROTOCOLS = [
   "openai-chat-v1",
   "openai-responses-v1",
   "anthropic-messages-v1",
+  "google-generative-ai-v1",
   "typesafe-systemone-v1",
   "openrouter-decisions-v1",
   "vercel-evaluation-v4",

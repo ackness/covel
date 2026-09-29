@@ -19,6 +19,12 @@ export interface ProviderOptionSettings {
   thinking?:
     | { type: "enabled"; budgetTokens: number }
     | { type: "disabled" | "adaptive" };
+  thinkingConfig?: {
+    thinkingBudget?: number;
+    thinkingLevel?: "minimal" | "low" | "medium" | "high";
+    includeThoughts?: boolean;
+  };
+  cachedContent?: string;
   /** Explicit wire extension; reserved framework fields are still protected. */
   extraBody?: Record<string, unknown>;
 }
@@ -44,6 +50,9 @@ const FRAMEWORK_BODY_FIELDS = new Set([
   "embeddingFormat",
   "providerOptions",
   "reasoningEffort",
+  "contents",
+  "systemInstruction",
+  "generationConfig",
 ]);
 
 const settingsSchema = z.object({
@@ -53,6 +62,20 @@ const settingsSchema = z.object({
   store: z.boolean().optional(),
   seed: z.number().int().safe().optional(),
   user: z.string().optional(),
+  thinkingConfig: z
+    .object({
+      thinkingBudget: z.number().int().min(-1).optional(),
+      thinkingLevel: z.enum(["minimal", "low", "medium", "high"]).optional(),
+      includeThoughts: z.boolean().optional(),
+    })
+    .strict()
+    .refine(
+      (value) =>
+        value.thinkingBudget === undefined || value.thinkingLevel === undefined,
+      "Choose either thinkingBudget or thinkingLevel",
+    )
+    .optional(),
+  cachedContent: z.string().min(1).optional(),
   thinking: z
     .discriminatedUnion("type", [
       z.object({
@@ -125,6 +148,11 @@ export function resolveProviderOptions(
             ? { type: "enabled", budget_tokens: settings.thinking.budgetTokens }
             : { type: settings.thinking.type };
       }
+    } else if (protocol === "google-generative-ai-v1") {
+      for (const key of ["thinkingConfig", "cachedContent", "seed"] as const) {
+        supported.add(key);
+        if (settings[key] !== undefined) fields[key] = settings[key];
+      }
     }
     if (settings.reasoningEffort !== undefined)
       fields.reasoning_effort = settings.reasoningEffort;
@@ -169,9 +197,12 @@ export function validateParameterMetadata(
   )) {
     if (
       !Object.hasOwn(parameterSchema.shape, key) ||
-      (key === "topK" && protocol !== "anthropic-messages-v1") ||
+      (key === "topK" &&
+        protocol !== "anthropic-messages-v1" &&
+        protocol !== "google-generative-ai-v1") ||
       (["frequencyPenalty", "presencePenalty"].includes(key) &&
-        protocol !== "openai-chat-v1")
+        protocol !== "openai-chat-v1" &&
+        protocol !== "google-generative-ai-v1")
     ) {
       warnings.push(unsupported(`parameterOverrides.${key}`));
     }

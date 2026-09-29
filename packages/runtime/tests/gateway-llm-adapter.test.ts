@@ -3,6 +3,7 @@ import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
 import {
   createGatewayAdapter,
   type GatewayLike,
+  type SlotOverridesInput,
 } from "../src/llm/gateway-llm-adapter.js";
 
 describe("createGatewayAdapter target resolution", () => {
@@ -74,7 +75,16 @@ describe("createGatewayAdapter target resolution", () => {
     };
     const slotOverrides = {
       slotBindings: { story: { modelRef: "custom-story" } },
-    };
+      customPresets: [
+        {
+          id: "custom-story",
+          name: "Gemini",
+          provider: "google",
+          model: "gemini-fixture",
+          protocol: "google-generative-ai-v1",
+        },
+      ],
+    } satisfies SlotOverridesInput;
     const adapter = createGatewayAdapter(gateway, {
       apiKeys: { "deepseek-proxy": "request-key" },
       envApiKeys: { deepseek: "env-key" },

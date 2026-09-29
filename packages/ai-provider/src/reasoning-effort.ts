@@ -43,6 +43,103 @@ function isQwenThinkingOnlyModel(model: string): boolean {
   );
 }
 
+function isGeminiModel(model: string, ...names: string[]): boolean {
+  const modelName = model.split("/").at(-1) ?? model;
+  return names.some(
+    (name) =>
+      modelName.startsWith(name) &&
+      /^(?:-preview(?:-[\d-]+)?|-latest|-\d{3})?$/.test(
+        modelName.slice(name.length),
+      ),
+  );
+}
+
+function resolveGeminiReasoningProfile(
+  model: string,
+  protocol?: ProviderProtocol | string,
+): ReasoningEffortProfile | null {
+  const openAiCompatible = protocol === "openai-chat-v1";
+  if (isGeminiModel(model, "gemini-2.5-pro")) {
+    return {
+      family: "google",
+      options: gemini25BudgetOptions(false, openAiCompatible),
+    };
+  }
+  if (isGeminiModel(model, "gemini-2.5-flash", "gemini-2.5-flash-lite")) {
+    return {
+      family: "google",
+      options: gemini25BudgetOptions(true, openAiCompatible),
+    };
+  }
+  if (isGeminiModel(model, "gemini-3-pro")) {
+    return {
+      family: "google",
+      defaultValue: "high",
+      options: options("low", "high"),
+    };
+  }
+  if (isGeminiModel(model, "gemini-3.1-pro")) {
+    return {
+      family: "google",
+      defaultValue: "high",
+      options: options(
+        ...(openAiCompatible ? ["minimal" as const] : []),
+        "low",
+        "medium",
+        "high",
+      ),
+    };
+  }
+  if (isGeminiModel(model, "gemini-3-flash")) {
+    return {
+      family: "google",
+      defaultValue: "high",
+      options: options("minimal", "low", "medium", "high"),
+    };
+  }
+  if (isGeminiModel(model, "gemini-3.1-flash-lite", "gemini-3.5-flash-lite")) {
+    return {
+      family: "google",
+      defaultValue: "minimal",
+      options: options("minimal", "low", "medium", "high"),
+    };
+  }
+  if (isGeminiModel(model, "gemini-3.5-flash", "gemini-3.6-flash")) {
+    return {
+      family: "google",
+      defaultValue: "medium",
+      options: options("minimal", "low", "medium", "high"),
+    };
+  }
+  if (isGeminiModel(model, "gemini-3.7-flash", "gemini-3.8-flash")) {
+    return {
+      family: "google",
+      defaultValue: "medium",
+      options: options("low", "medium", "high"),
+    };
+  }
+  return null;
+}
+
+function gemini25BudgetOptions(
+  canDisable: boolean,
+  openAiCompatible: boolean,
+): ReasoningEffortOption[] {
+  // Application presets within each model's published budget range, not
+  // native Gemini 2.5 effort levels.
+  return [
+    ...(canDisable
+      ? [{ value: "none" as const, thinkingBudgetTokens: 0 }]
+      : []),
+    ...(openAiCompatible
+      ? [{ value: "minimal" as const, thinkingBudgetTokens: 1024 }]
+      : []),
+    { value: "low", thinkingBudgetTokens: 1024 },
+    { value: "medium", thinkingBudgetTokens: 8192 },
+    { value: "high", thinkingBudgetTokens: 24576 },
+  ];
+}
+
 /**
  * Resolve the reasoning control from the opaque model ID first, then fall back
  * to the transport provider. This keeps aggregator IDs such as
@@ -93,14 +190,7 @@ export function resolveReasoningEffortProfile(
   }
 
   if (family === "google") {
-    if (!advertisesReasoning && !/gemini-(?:2\.5|3)/.test(model)) return null;
-    const canDisable = /gemini-2\.5-(?:flash|flash-lite)/.test(model);
-    return {
-      family,
-      options: canDisable
-        ? options("none", "minimal", "low", "medium", "high")
-        : options("minimal", "low", "medium", "high"),
-    };
+    return resolveGeminiReasoningProfile(model, protocol);
   }
 
   if (family === "xai") {
@@ -265,6 +355,20 @@ export function extractReasoningRequestFields(
         ...asRecord(metadata?.output_config),
         effort: selection,
       },
+    };
+  }
+
+  if (protocol === "google-generative-ai-v1") {
+    if (family !== "google") return {};
+    const option = resolveGeminiReasoningProfile(model, protocol)?.options.find(
+      (entry) => entry.value === selection,
+    );
+    if (!option) return {};
+    return {
+      thinkingConfig:
+        option.thinkingBudgetTokens !== undefined
+          ? { thinkingBudget: option.thinkingBudgetTokens }
+          : { thinkingLevel: selection },
     };
   }
 

@@ -2,6 +2,7 @@ const BUILTIN_TEXT_PROTOCOLS = new Set([
   "openai-chat-v1",
   "openai-responses-v1",
   "anthropic-messages-v1",
+  "google-generative-ai-v1",
 ]);
 
 /** Limit model facts to request shapes handled by built-in text adapters. */

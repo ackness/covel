@@ -35,6 +35,7 @@ describe("evaluation protocol selection", () => {
         "OpenAI Chat",
         "OpenAI Responses",
         "Anthropic Messages",
+        "Google Gemini",
         "Evaluation",
       ]);
       fireEvent.change(select, { target: { value: "evaluation" } });

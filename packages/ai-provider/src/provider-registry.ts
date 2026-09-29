@@ -21,6 +21,7 @@ import type {
  */
 const PROVIDER_PROTOCOL_DEFAULTS: Record<string, ProviderProtocol> = {
   anthropic: "anthropic-messages-v1",
+  google: "google-generative-ai-v1",
 };
 
 /** Protocol assumed for any provider without a {@link PROVIDER_PROTOCOL_DEFAULTS} entry. */

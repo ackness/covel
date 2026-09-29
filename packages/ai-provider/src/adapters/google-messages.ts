@@ -1,0 +1,235 @@
+import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
+import type {
+  ProviderConfig,
+  TextMessage,
+  TextMessageContent,
+} from "../types.js";
+import {
+  GOOGLE_PROTOCOL,
+  googleError,
+  googlePartSchema,
+  type GooglePart,
+} from "./google-response.js";
+
+type Content = { role: "user" | "model"; parts: Record<string, unknown>[] };
+type Call = { name: string; id?: string; order: number };
+
+function serializeContent(
+  content: TextMessageContent,
+): Record<string, unknown>[] {
+  if (typeof content === "string") return content ? [{ text: content }] : [];
+  return (content ?? []).map((part) => {
+    if (part.type === "text") return { text: part.text };
+    const { url, mime } = part.image;
+    const data = url?.match(
+      /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i,
+    );
+    if (data) return { inlineData: { mimeType: data[1], data: data[2] } };
+    if (url && mime.startsWith("image/")) {
+      let parsed: URL | undefined;
+      try {
+        parsed = new URL(url);
+      } catch {
+        /* Report the supported forms below. */
+      }
+      if (
+        parsed &&
+        parsed.protocol === "https:" &&
+        parsed.hostname === "generativelanguage.googleapis.com" &&
+        /^\/v1(?:beta)?\/files\/[a-zA-Z0-9_-]+$/.test(parsed.pathname) &&
+        !parsed.search &&
+        !parsed.hash &&
+        !parsed.username &&
+        !parsed.password
+      ) {
+        return { fileData: { mimeType: mime, fileUri: url } };
+      }
+    }
+    throw googleError(
+      "Gemini images require an image data URL or a Google Files URI; arbitrary image URLs must be resolved before generation",
+      true,
+    );
+  });
+}
+
+function nativeParts(
+  message: TextMessage,
+  config: ProviderConfig,
+  model: string,
+): GooglePart[] | undefined {
+  const continuation = message.providerContinuation;
+  if (!continuation || continuation.protocol !== GOOGLE_PROTOCOL)
+    return undefined;
+  const parsed = z.array(googlePartSchema).safeParse(continuation.items);
+  if (!parsed.success)
+    throw googleError("Invalid Gemini provider continuation", true);
+  if (
+    continuation.model !== model ||
+    continuation.baseUrl !== (config.baseUrl ?? "")
+  ) {
+    if (parsed.data.some((part) => part.thoughtSignature !== undefined)) {
+      throw googleError(
+        "Gemini signed continuation requires the original protocol, model and base URL",
+        true,
+      );
+    }
+    return undefined;
+  }
+  const nativeCalls = parsed.data
+    .filter((part) => part.functionCall)
+    .map((part) => part.functionCall!);
+  if (
+    nativeCalls.length !== (message.toolCalls?.length ?? 0) ||
+    nativeCalls.some((call, index) => {
+      const generic = message.toolCalls?.[index];
+      if (
+        !generic ||
+        call.name !== generic.name ||
+        (call.id !== undefined && call.id !== generic.id)
+      )
+        return true;
+      try {
+        // Property order is immaterial, but array order and argument values
+        // must match before reusing the provider's ordered, opaque parts.
+        return !isDeepStrictEqual(
+          call.args ?? {},
+          JSON.parse(generic.arguments),
+        );
+      } catch {
+        return true;
+      }
+    })
+  ) {
+    throw googleError(
+      "Gemini continuation does not match the assistant tool calls",
+      true,
+    );
+  }
+  return parsed.data;
+}
+
+function toolResponse(content: TextMessageContent): Record<string, unknown> {
+  const parts = serializeContent(content);
+  if (parts.some((part) => typeof part.text !== "string")) {
+    throw googleError(
+      "Gemini function results currently require text or JSON content",
+      true,
+    );
+  }
+  const text = parts.map((part) => part.text).join("\n");
+  let value: unknown = text;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    /* A plain text tool result is valid. */
+  }
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : { result: value };
+}
+
+/** Preserve model part order and associate parallel responses by call ID. */
+export function googleMessages(
+  messages: TextMessage[],
+  config: ProviderConfig,
+  model: string,
+): Record<string, unknown> {
+  const contents: Content[] = [];
+  const systemParts: Record<string, unknown>[] = [];
+  const calls = new Map<string, Call>();
+  for (let index = 0; index < messages.length; index++) {
+    const message = messages[index]!;
+    if (message.role === "system" || message.role === "developer") {
+      const parts = serializeContent(message.content);
+      if (parts.some((part) => typeof part.text !== "string"))
+        throw googleError("Gemini system instructions require text", true);
+      systemParts.push(...parts);
+      continue;
+    }
+    if (message.role === "tool") {
+      const responses: { call: Call; part: Record<string, unknown> }[] = [];
+      const seen = new Set<string>();
+      while (index < messages.length && messages[index]!.role === "tool") {
+        const result = messages[index]!;
+        const call = result.toolCallId
+          ? calls.get(result.toolCallId)
+          : undefined;
+        if (!call || !result.toolCallId || seen.has(result.toolCallId))
+          throw googleError(
+            "Gemini tool result requires a unique preceding tool call ID",
+            true,
+          );
+        seen.add(result.toolCallId);
+        responses.push({
+          call,
+          part: {
+            functionResponse: {
+              name: call.name,
+              ...(call.id ? { id: call.id } : {}),
+              response: toolResponse(result.content),
+            },
+          },
+        });
+        index++;
+      }
+      index--;
+      responses.sort((left, right) => left.call.order - right.call.order);
+      contents.push({
+        role: "user",
+        parts: responses.map((response) => response.part),
+      });
+      continue;
+    }
+    if (message.role !== "assistant" && message.role !== "user")
+      throw googleError(
+        `Unsupported Gemini message role: ${message.role}`,
+        true,
+      );
+    let parts: Record<string, unknown>[];
+    if (message.role === "assistant") {
+      const native = nativeParts(message, config, model);
+      const nativeCalls = native
+        ?.filter((part) => part.functionCall)
+        .map((part) => part.functionCall!);
+      const generic = (message.toolCalls ?? []).map((call, order) => {
+        let args: unknown;
+        try {
+          args = JSON.parse(call.arguments);
+        } catch {
+          throw googleError(
+            "Gemini tool arguments must be valid JSON objects",
+            true,
+          );
+        }
+        const parsed = z.record(z.string(), z.json()).safeParse(args);
+        if (!parsed.success)
+          throw googleError(
+            "Gemini tool arguments must be valid JSON objects",
+            true,
+          );
+        const nativeId = nativeCalls?.[order]?.id;
+        calls.set(call.id, {
+          name: call.name,
+          ...(nativeId ? { id: nativeId } : {}),
+          order,
+        });
+        return { functionCall: { name: call.name, args: parsed.data } };
+      });
+      parts = native ?? [...serializeContent(message.content), ...generic];
+    } else {
+      parts = serializeContent(message.content);
+    }
+    if (parts.length)
+      contents.push({
+        role: message.role === "assistant" ? "model" : "user",
+        parts,
+      });
+  }
+  return {
+    contents,
+    ...(systemParts.length
+      ? { systemInstruction: { parts: systemParts } }
+      : {}),
+  };
+}

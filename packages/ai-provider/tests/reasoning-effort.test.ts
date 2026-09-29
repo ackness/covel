@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractReasoningRequestFields,
   resolveReasoningEffortProfile,
-} from "../src/index.js";
+} from "../src/reasoning-effort.js";
 
 describe("reasoning effort profiles", () => {
   it("recognizes deepseek-flash without a model-database entry", () => {
@@ -244,5 +244,145 @@ describe("Qwen native effort and budget presets", () => {
         (option) => option.thinkingBudgetTokens !== undefined,
       ),
     ).toBe(false);
+  });
+});
+
+describe("Gemini thinking controls", () => {
+  it.each([
+    ["gemini-3-pro-preview", ["low", "high"], "high"],
+    ["gemini-3.1-pro-preview", ["low", "medium", "high"], "high"],
+    ["gemini-3-flash-preview", ["minimal", "low", "medium", "high"], "high"],
+    ["gemini-3.5-flash", ["minimal", "low", "medium", "high"], "medium"],
+    ["gemini-3.6-flash", ["minimal", "low", "medium", "high"], "medium"],
+    ["gemini-3.7-flash", ["low", "medium", "high"], "medium"],
+    ["gemini-3.8-flash", ["low", "medium", "high"], "medium"],
+    ["gemini-3.1-flash-lite", ["minimal", "low", "medium", "high"], "minimal"],
+    ["gemini-3.5-flash-lite", ["minimal", "low", "medium", "high"], "minimal"],
+  ] as const)(
+    "offers only documented levels for %s",
+    (model, levels, defaultValue) => {
+      expect(
+        resolveReasoningEffortProfile(
+          `google/${model}`,
+          "openai",
+          "google-generative-ai-v1",
+          ["reasoning"],
+        ),
+      ).toMatchObject({
+        family: "google",
+        defaultValue,
+        options: levels.map((value) => ({ value })),
+      });
+    },
+  );
+
+  it("uses explicit application budget presets for Gemini 2.5", () => {
+    expect(
+      resolveReasoningEffortProfile("gemini-2.5-pro", "google")?.options,
+    ).toEqual([
+      { value: "low", thinkingBudgetTokens: 1024 },
+      { value: "medium", thinkingBudgetTokens: 8192 },
+      { value: "high", thinkingBudgetTokens: 24576 },
+    ]);
+    expect(
+      resolveReasoningEffortProfile("gemini-2.5-flash-lite", "google")?.options,
+    ).toEqual([
+      { value: "none", thinkingBudgetTokens: 0 },
+      { value: "low", thinkingBudgetTokens: 1024 },
+      { value: "medium", thinkingBudgetTokens: 8192 },
+      { value: "high", thinkingBudgetTokens: 24576 },
+    ]);
+  });
+
+  it.each([
+    [
+      "gemini-3-pro-preview",
+      "low",
+      { thinkingConfig: { thinkingLevel: "low" } },
+    ],
+    [
+      "gemini-3.1-pro-preview",
+      "medium",
+      { thinkingConfig: { thinkingLevel: "medium" } },
+    ],
+    ["gemini-3.8-flash", "high", { thinkingConfig: { thinkingLevel: "high" } }],
+    ["gemini-2.5-pro", "low", { thinkingConfig: { thinkingBudget: 1024 } }],
+    [
+      "gemini-2.5-flash",
+      "medium",
+      { thinkingConfig: { thinkingBudget: 8192 } },
+    ],
+    [
+      "gemini-2.5-flash-lite",
+      "none",
+      { thinkingConfig: { thinkingBudget: 0 } },
+    ],
+  ] as const)(
+    "maps native %s / %s to generationConfig fields",
+    (model, selection, fields) => {
+      expect(
+        extractReasoningRequestFields(
+          { parameterOverrides: { reasoningEffort: selection } },
+          undefined,
+          "google-generative-ai-v1",
+          model,
+        ),
+      ).toEqual(fields);
+    },
+  );
+
+  it("keeps the OpenAI compatibility wire as reasoning_effort", () => {
+    expect(
+      extractReasoningRequestFields(
+        { parameterOverrides: { reasoningEffort: "minimal" } },
+        undefined,
+        "openai-chat-v1",
+        "gemini-2.5-flash",
+      ),
+    ).toEqual({ reasoning_effort: "minimal" });
+    expect(
+      extractReasoningRequestFields(
+        { parameterOverrides: { reasoningEffort: "minimal" } },
+        undefined,
+        "openai-chat-v1",
+        "gemini-3.1-pro-preview",
+      ),
+    ).toEqual({ reasoning_effort: "minimal" });
+    expect(
+      resolveReasoningEffortProfile(
+        "gemini-3.1-pro-preview",
+        "google",
+        "openai-chat-v1",
+      )?.options.map(({ value }) => value),
+    ).toEqual(["minimal", "low", "medium", "high"]);
+  });
+
+  it("drops unsupported or unknown Gemini selections", () => {
+    for (const [model, selection] of [
+      ["gemini-3-pro-preview", "medium"],
+      ["gemini-3.8-flash", "minimal"],
+      ["gemini-2.5-pro", "none"],
+      ["gemini-2.5-flash", "minimal"],
+      ["gemini-2.5-flash-image", "high"],
+      ["gemini-3.1-flash-lite-image", "minimal"],
+      ["gemini-4-pro", "high"],
+    ]) {
+      expect(
+        extractReasoningRequestFields(
+          { parameterOverrides: { reasoningEffort: selection } },
+          undefined,
+          "google-generative-ai-v1",
+          model,
+        ),
+      ).toEqual({});
+    }
+    expect(
+      resolveReasoningEffortProfile(
+        "gemini-4-pro",
+        "google",
+        "google-generative-ai-v1",
+        ["reasoning"],
+      ),
+    ).toBeNull();
   });
 });

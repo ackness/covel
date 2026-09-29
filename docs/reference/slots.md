@@ -31,22 +31,22 @@ Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途�
 
 Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
-| 字段                                | 必填 | 说明                                                                                                                                              |
-| ----------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                                                                                |
-| `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                      |
-| `baseUrl`                           | ✅   | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）                                                                                  |
-| `protocol`                          | ✅   | `openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1` / `typesafe-systemone-v1` / `openrouter-decisions-v1` / `vercel-evaluation-v4` |
-| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `evaluation`。缺省从 output 模态推断                                      |
-| `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                              |
-| `input` / `output`                  | —    | 模态覆盖（缺省自动检测，见下）。`output` 支持 `text` / `image` / `audio` / `video` / `embedding` / `evaluation`                                   |
-| `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                                                                            |
-| `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                                                                    |
-| `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                                                                  |
-| `thinking` / `reasoning_effort`     | —    | 思考模式与强度；按目标协议转换为对应请求字段                                                                                                      |
-| `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                                                                  |
-| `providerRequestMetadata`           | —    | 生成请求的自由 KV（per-call 优先）；评估请求不使用。媒体 wire 路由键也放这里，见下                                                                |
-| `providerOptions`                   | —    | 文本 / 对象 / 流式调用的供应商或协议命名空间参数，只解析当前目标的设置，见下                                                                      |
+| 字段                                | 必填 | 说明                                                                                                                                                                          |
+| ----------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                                                                                                            |
+| `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                                                                                                  |
+| `baseUrl`                           | ✅   | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）                                                                                                              |
+| `protocol`                          | ✅   | `openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1` / `google-generative-ai-v1` / `typesafe-systemone-v1` / `openrouter-decisions-v1` / `vercel-evaluation-v4` |
+| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `evaluation`。缺省从 output 模态推断                                                                  |
+| `fallback`                          | —    | 失败时回落的 slot 名                                                                                                                                                          |
+| `input` / `output`                  | —    | 模态覆盖（缺省自动检测，见下）。`output` 支持 `text` / `image` / `audio` / `video` / `embedding` / `evaluation`                                                               |
+| `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                                                                                                        |
+| `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                                                                                                |
+| `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                                                                                              |
+| `thinking` / `reasoning_effort`     | —    | 思考模式与强度；按目标协议转换为对应请求字段                                                                                                                                  |
+| `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                                                                                              |
+| `providerRequestMetadata`           | —    | 生成请求的自由 KV（per-call 优先）；评估请求不使用。媒体 wire 路由键也放这里，见下                                                                                            |
+| `providerOptions`                   | —    | 文本 / 对象 / 流式调用的供应商或协议命名空间参数，只解析当前目标的设置，见下                                                                                                  |
 
 ## Slot 解析链
 
@@ -64,7 +64,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 仓库快照由维护者通过 `pnpm --filter @covel/ai-provider update-model-db` 从固定 commit 生成；设置页的手动刷新会把较新数据写入用户配置目录，并在后续启动时优先于内置快照加载。
 
-模型资料与当前适配器可执行的能力分开处理。内置 Chat、Responses、Anthropic 文本适配器的输入只支持 text/image，输出只支持 text，不声明 `web_search` 或 `computer_use`。能力覆盖合并后仍受这层限制，不能通过手动勾选启用尚未实现的协议功能。`GET /api/model-db/lookup` 保留原始 `capability`；传入 `role` 与 `protocol` 后另返回 `effectiveCapability`，并在能解析连接时返回 `usesBuiltinAdapter`。设置页、`resolveSlot` 和实际文本调用上下文使用同一投影。程序化注册的自定义 adapter 与独立图片、语音、转写、embedding wire 保留自身能力。未知模型仍标注协议推断来源，不把协议默认值当作已核实的模型事实。
+模型资料与当前适配器可执行的能力分开处理。内置 Chat、Responses、Anthropic 和 Gemini 原生文本适配器的输入只支持 text/image，输出只支持 text，不声明 `web_search` 或 `computer_use`。能力覆盖合并后仍受这层限制，不能通过手动勾选启用尚未实现的协议功能。`GET /api/model-db/lookup` 保留原始 `capability`；传入 `role` 与 `protocol` 后另返回 `effectiveCapability`，并在能解析连接时返回 `usesBuiltinAdapter`。设置页、`resolveSlot` 和实际文本调用上下文使用同一投影。程序化注册的自定义 adapter 与独立图片、语音、转写、embedding wire 保留自身能力。未知模型仍标注协议推断来源，不把协议默认值当作已核实的模型事实。
 
 调用后的工具完成契约、输出校验和工具循环耗尽等失败也保留最后一次响应的服务商和模型。该身份由 `onTargetAttempt` 跟随实际请求更新，包含备用模型；普通执行和暂停后的恢复执行共用失败身份处理，不能用初始用途绑定冒充最终响应模型。
 
@@ -124,7 +124,7 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 服务商与模型页面支持复制配置、编辑名称、自动保存思考设置；用途分配、插件绑定和会话摘要显示配置名及思考设置。主叙事、代理插件、函数插件和记忆任务通过同一请求配置链路继承所选模型默认值，无需逐用途重复设置。显式用途覆盖仍优先于模型默认。当前 `automatic` 档位用于 Qwen，界面显示“开启思考”，发送 `enable_thinking: true`，并非按任务自动选择开关。
 
-首次手动创建服务商与模型时，若 `story` / `plugin` 尚未显式分配，设置页会把这两个用途同时绑定到该模型，保证叙事与插件任务都能立即运行。DeepSeek、OpenAI、Anthropic、DashScope 即使首次配置未填写 `baseUrl`，也会使用框架内置的官方端点与协议；用户填写的地址始终优先。
+首次手动创建服务商与模型时，若 `story` / `plugin` 尚未显式分配，设置页会把这两个用途同时绑定到该模型，保证叙事与插件任务都能立即运行。DeepSeek、OpenAI、Anthropic、Google、DashScope 即使首次配置未填写 `baseUrl`，也会使用框架内置的官方端点与协议；用户填写的地址始终优先。`google` 缺省使用 `google-generative-ai-v1` 和 `https://generativelanguage.googleapis.com/v1beta`，密钥名为 `GOOGLE_API_KEY`。设置页的协议选择显示为“Google Gemini”。若使用 Google 的 OpenAI 兼容端点，需显式选择 `openai-chat-v1` 并设地址为 `https://generativelanguage.googleapis.com/v1beta/openai`。
 
 模型 ID 是不透明字符串，发送请求时不会被裁剪或改写。例如服务商 `openai` 下的 `openai/gpt-5.6-sol` 和 `deepseek/deepseek-v4-flash` 会保持原样。能力查询按以下候选顺序匹配，匹配结果只用于显示能力和价格：
 
@@ -149,8 +149,9 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 - OpenAI Chat 和兼容接口：`reasoning_effort`；DeepSeek 同时发送 `thinking.type`，Qwen 开关使用 `enable_thinking`；Qwen3.8 Chat 的原生 `low/medium/xhigh` 使用 `reasoning_effort`，已确认的 Qwen3.5–3.7 Max/Plus/Flash 使用 `thinking_budget` 预算预设（2048/8192/16384），界面明确标注 token 数值。预算预设不是服务商原生档位，实际消耗可以少于预算。显式档位会清理继承的预算，避免 Qwen3.8 同时发送两种参数。
 - OpenAI Responses：`reasoning: { effort }`。已识别的 GPT-5/o3/o4 模型同时请求 `summary: "auto"`；保留显式摘要设置。`store: false` 时请求加密 reasoning，用于工具续调。
 - Anthropic Messages：`output_config: { effort }`；已识别的自适应思考模型选择档位时启用 `thinking.type: "adaptive"`，默认请求可见摘要 `display: "summarized"`；不可关闭思考的模型不显示关闭选项。Claude 请求会移除与思考冲突的采样参数，关闭思考时清理继承的 effort，避免组合产生 400 错误。DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
+- Gemini 原生 `generateContent`：Gemini 3 使用 `generationConfig.thinkingConfig.thinkingLevel`；Gemini 2.5 使用 `thinkingBudget`。3 Pro 仅有 low/high，3.1 Pro 为 low/medium/high，3 Flash、3.5/3.6 Flash 及 3.1/3.5 Flash-Lite 为 minimal/low/medium/high，3.7/3.8 Flash 为 low/medium/high。2.5 Pro 不提供关闭；2.5 Flash/Flash-Lite 的 `none` 转为预算 0。2.5 的 low/medium/high 分别是应用预算预设 1024/8192/24576 token，不是 Google 原生档位。未知 Gemini 型号不推测档位。Google OpenAI 兼容接口仍发送 `reasoning_effort`，其中 `minimal` 在 3.1 Pro 映射为 low、在 2.5 映射为 1024 token；这不代表原生协议支持这些型号的 `minimal` 档位。
 
-当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 的 `minimal/low/medium/high`、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/开启、原生档位或预算预设。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。
+当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 按型号与协议限定的子集、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/开启、原生档位或预算预设。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。Gemini 档位依据 [Google thinking 说明](https://ai.google.dev/gemini-api/docs/generate-content/thinking) 和 [OpenAI 兼容映射](https://ai.google.dev/gemini-api/docs/openai)。
 
 ## 媒体 wire 路由键（`providerRequestMetadata`）
 
@@ -198,11 +199,15 @@ reasoningEffort = "high"
 
 [covel.story.providerOptions."openai-responses-v1"]
 reasoningSummary = "auto"
+
+[covel.gemini.providerOptions.google.thinkingConfig]
+thinkingLevel = "medium"
+includeThoughts = true
 ```
 
-当前类型化字段包括 `reasoningEffort`、`reasoningSummary`、`parallelToolCalls`、`store`、`seed`、`user` 和 Anthropic `thinking`。支持范围按协议判断，例如 `seed` 只用于 Chat，`reasoningSummary` 只用于 Responses，`thinking` 只用于 Anthropic。启用 thinking 使用 `{ type: "enabled", budgetTokens: 2048 }`，转换为 wire 的 `budget_tokens`。非法已知字段在请求前抛不可重试 `CONFIG_ERROR`；不支持或未知字段被忽略并记录 `diagnostics.warnings`。生成参数也校验有限数值、采样范围和正整数输出额度。
+当前类型化字段包括 `reasoningEffort`、`reasoningSummary`、`parallelToolCalls`、`store`、`seed`、`user`、Anthropic `thinking`，以及仅供 Gemini 原生协议使用的 `thinkingConfig` 和 `cachedContent`。`seed` 适用于 Chat 和 Gemini 原生协议，`reasoningSummary` 只用于 Responses。Anthropic 启用 thinking 使用 `{ type: "enabled", budgetTokens: 2048 }`，转换为 wire 的 `budget_tokens`。Gemini `thinkingConfig` 可设置 `thinkingBudget` 或 `thinkingLevel`（二选一）及 `includeThoughts`；选具体值时仍须符合目标型号支持范围。非法已知字段在请求前抛不可重试 `CONFIG_ERROR`；不支持或未知字段被忽略并记录 `diagnostics.warnings`。生成参数也校验有限数值、采样范围和正整数输出额度。
 
-合并顺序是 preset 的自由 metadata → preset 的命名空间设置 → 本次调用的自由 metadata → 本次调用的命名空间设置 → 用途和 runtime 的生成参数限制。`extraBody` 可传尚未类型化的原生字段；model、messages、tools、stream、响应格式、输出预算等框架字段受保护，不能借此覆盖，省略时产生 warning。
+合并顺序是 preset 的自由 metadata → preset 的命名空间设置 → 本次调用的自由 metadata → 本次调用的命名空间设置 → 用途和 runtime 的生成参数限制。`extraBody` 可传尚未类型化的原生字段；model、messages、tools、stream、响应格式、输出预算，以及 Gemini 的 `contents`、`systemInstruction`、`generationConfig` 等框架字段受保护，不能借此覆盖，省略时产生 warning。
 
 自由格式的 `providerRequestMetadata` 仍可使用。本次调用中的原生字段只随最初的 provider、协议和端点发送；fallback 改变其中任意一个时会省略这些字段并记录 warning。可移植的 `parameterOverrides` 仍保留，每个备用 preset 自己的配置仍然生效。需要跨供应商设置时应使用各自的 `providerOptions` 命名空间。媒体 wire 路由和插件的 `resolveSlot().metadata` 契约不变。
 
@@ -210,7 +215,7 @@ reasoningSummary = "auto"
 
 ## 结构化输出
 
-`gateway.generateObject({ schema, messages })` 在发送请求前，将 Zod schema 的输入形态转换为 JSON Schema。Responses 将完整的 `name` / `schema` 放入 `text.format`；OpenAI Chat 使用兼容的 `json_object` 模式，并在系统消息中传递 schema；Anthropic 在系统消息中传递 schema 和 JSON 输出指令。Chat / Anthropic 的指令不保证模型一定遵守 schema，所有协议仍在返回后通过原始 Zod schema 的 `safeParse` 校验，应用默认值和转换。自定义 refinement 也在这一步校验。
+`gateway.generateObject({ schema, messages })` 在发送请求前，将 Zod schema 的输入形态转换为 JSON Schema。Responses 将完整的 `name` / `schema` 放入 `text.format`；OpenAI Chat 使用兼容的 `json_object` 模式，并在系统消息中传递 schema；Anthropic 在系统消息中传递 schema 和 JSON 输出指令；Gemini 原生协议发送 `generationConfig.responseMimeType: "application/json"` 和 `responseJsonSchema`。Chat / Anthropic 的指令不保证模型一定遵守 schema，所有协议仍在返回后通过原始 Zod schema 的 `safeParse` 校验，应用默认值和转换。自定义 refinement 也在这一步校验。
 
 无法转换为 JSON Schema 的输入类型会在网络请求前返回不可重试的 `CONFIG_ERROR`。模型返回非 JSON 或不符合 Zod schema 的对象则返回 `SCHEMA_VALIDATION_FAILED`。schema 指令保留已有 Anthropic 缓存分段，并避免重复插入 runtime 已提供的同一 schema。
 
@@ -218,15 +223,15 @@ reasoningSummary = "auto"
 
 ## Provider 流式响应
 
-三个文本协议共用的 SSE 解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
+四种内置文本协议共用的 SSE 帧解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。Gemini 原生协议使用 `streamGenerateContent` 的响应格式，不能用 `[DONE]` 判定其终态。
 
-文本流必须包含协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。
+Chat、Responses、Anthropic 的文本流必须包含各自协议终态：Chat 的非空 `finish_reason`、Responses 的 `response.completed` / `response.incomplete`、Anthropic 的 `message_stop`。仅 EOF 或 `[DONE]` 不代表这些协议的模型成功。流内错误、`response.failed` 与缺失终态抛出 provider error；已收到部分文本、思考或工具调用后，runtime 不会保存为成功，也不会重试后拼接结果。无输出的瞬态错误仍可按既有策略重试或切换备用模型。Gemini 原生流依据 `streamGenerateContent` 的候选结束原因判定完成，不依赖 OpenAI 的 `[DONE]` 标记。
 
-三协议的 text/object 返回值和 stream 的 `done` 可携带 `diagnostics`，包含供应商及请求 warning、URL/文档来源和引用位置；runtime bridge 和 LLM trace 保留这些信息。`citations.location` 区分回答文本位置与来源文本位置，不能把 Anthropic 文档页码或原文字符偏移当作回答偏移。来源只记录已收到的协议数据，不代表已支持主动调用 web search 或文件工具。
+四种内置文本协议的 text/object 返回值和 stream 的 `done` 可携带 `diagnostics`，包含供应商及请求 warning、URL/文档来源和引用位置；runtime bridge 和 LLM trace 保留这些信息。`citations.location` 区分回答文本位置与来源文本位置，不能把 Anthropic 文档页码或原文字符偏移当作回答偏移。来源只记录已收到的协议数据，不代表已支持主动调用 web search 或文件工具。
 
 function 插件的 `PluginRuntimeGateway` 同样透传 `providerOptions` 与完整返回诊断。该路径的 `gateway.responded` / `gateway.failed` trace 保持原有隐私约定，只记录 `diagnosticsSummary` 中的 warning 类型、来源/引用数量及拒绝原因，不记录引用原文、来源 URL、标题或拒绝全文。
 
-显式 refusal 或 content filter 抛出不可重试的 `REFUSAL`，在 `error.details.diagnostics.refusal` 保留拒绝原因；不切换备用模型。即使已有普通文本或工具内容，也不能把混合拒绝记成成功。流式文本可能已经交付，但不会产生成功 `done`；三个适配器的完整工具调用都等最终拒绝检查通过后才交付。协议回归使用 `packages/ai-provider/tests/protocol-fixtures/` 中的合成响应，覆盖字节分片、工具参数、未知扩展、拒绝和引用，避免依赖付费 API 或保存真实对话。
+显式 refusal 或 content filter 抛出不可重试的 `REFUSAL`，在 `error.details.diagnostics.refusal` 保留拒绝原因；不切换备用模型。即使已有普通文本或工具内容，也不能把混合拒绝记成成功。流式文本可能已经交付，但不会产生成功 `done`；内置文本适配器的完整工具调用都等最终拒绝检查通过后才交付。协议回归使用 `packages/ai-provider/tests/protocol-fixtures/` 中的合成响应，覆盖字节分片、工具参数、未知扩展、拒绝和引用，避免依赖付费 API 或保存真实对话。
 
 嵌入调用可传 `expectedModelId`（`provider/model`）；Gateway 在解析目标后、网络请求前校验它。Memory 的 `EmbedFn(texts, { sessionId, modelId })` 必须使用会话锁定的模型身份。修改当前配置不能把同维度的另一个模型写入旧索引；不匹配时查询降级为关键词检索，摄入不推进进度。恢复原模型配置后可继续补录；需要切换模型时重建开发期会话及索引，已混入错误向量的数据也需重建。
 

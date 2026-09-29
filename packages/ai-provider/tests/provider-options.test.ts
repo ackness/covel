@@ -90,6 +90,62 @@ function setup(alternateEndpoint = false) {
 }
 
 describe("target-scoped provider options", () => {
+  it("validates and scopes native Gemini options without forwarding them to Chat", () => {
+    const options: ProviderOptions = {
+      google: {
+        thinkingConfig: { thinkingLevel: "medium", includeThoughts: true },
+        cachedContent: "cachedContents/synthetic-cache",
+        seed: 7,
+      },
+    };
+    expect(
+      resolveProviderOptions(options, "google", "google-generative-ai-v1"),
+    ).toEqual({ metadata: options.google, warnings: [] });
+    const compatible = resolveProviderOptions(
+      options,
+      "google",
+      "openai-chat-v1",
+    );
+    expect(compatible.metadata).toEqual({ seed: 7 });
+    expect(compatible.warnings.map((warning) => warning.feature)).toEqual([
+      "providerOptions.google.thinkingConfig",
+      "providerOptions.google.cachedContent",
+    ]);
+  });
+
+  it.each([
+    { thinkingBudget: -2 },
+    { thinkingBudget: 1.5 },
+    { thinkingBudget: 1024, thinkingLevel: "low" },
+    { thinkingLevel: "max" },
+  ])("rejects invalid native thinking configuration %j", (thinkingConfig) => {
+    expect(() =>
+      resolveProviderOptions(
+        { google: { thinkingConfig } } as ProviderOptions,
+        "google",
+        "google-generative-ai-v1",
+      ),
+    ).toThrow(AiProviderError);
+  });
+
+  it("protects native Gemini messages and generation limits in extraBody", () => {
+    const resolved = resolveProviderOptions(
+      {
+        google: {
+          extraBody: {
+            contents: [],
+            systemInstruction: { parts: [{ text: "replacement" }] },
+            generationConfig: { maxOutputTokens: 999999 },
+          },
+        },
+      },
+      "google",
+      "google-generative-ai-v1",
+    );
+    expect(resolved.metadata).toEqual({});
+    expect(resolved.warnings).toHaveLength(3);
+  });
+
   it("selects protocol defaults then active provider options and ignores inactive invalid options", () => {
     const options = {
       "openai-chat-v1": { store: false, seed: 2 },
