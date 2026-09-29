@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CharacterRecord } from "../types/character-record.js";
 import type { CharacterSchemaRecord } from "../types/world-model.js";
 import type { Proposal } from "../types/proposal.js";
-import { characterSchemaSchema } from "../schemas/world-model.js";
+import { characterSchemaSchema } from "../schemas/world.js";
 import { buildFieldsZodFromSchema } from "../schemas/character-fields.js";
 import { materializeCharacterUpsert } from "./character-upsert.js";
 

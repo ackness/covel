@@ -51,8 +51,8 @@ import {
   resolveSessionParam,
   SESSION_DELETION_PENDING_KEY,
   sessionIncarnationIdentity,
-  withLockedSessionMutation,
 } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
 import {
   decodePluginUserSettingsHeader,

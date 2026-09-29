@@ -25,7 +25,7 @@ function getContext(): CanvasRenderingContext2D | null {
  * Probing twice with different seeds is the validity check: a rejected
  * assignment leaves each seed in place, so the two reads disagree.
  */
-export function normalizeCssColor(input: string): string | null {
+function normalizeCssColor(input: string): string | null {
   const value = input.trim();
   if (!value) return null;
 

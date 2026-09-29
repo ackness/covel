@@ -1,6 +1,6 @@
 import { kernelExtensionPoints, kernelUiSlots } from "./contracts.js";
 import { z } from "zod";
-import { defineExtensionPoint } from "./index.js";
+import { defineExtensionPoint } from "./definition.js";
 import { mediaRefSchema } from "../types/media.js";
 import { i18nTextSchema } from "../schemas/world.js";
 

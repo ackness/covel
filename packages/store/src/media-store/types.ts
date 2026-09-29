@@ -12,20 +12,6 @@ export interface MediaStoreConfig {
   readonly idbDbName?: string;
 }
 
-// Re-export the shared MediaStore wire-shape interfaces so existing
-// `import { MediaStore, ... } from "@covel/store"` call sites keep
-// working without churn. The canonical definitions now live in
-// `@covel/shared/src/types/media.ts` so browser code can reference
-// the contract without dragging Node-only modules into the bundle.
-export type {
-  MediaAssetLookup,
-  MediaAssetRecord,
-  MediaCleanupResult,
-  MediaLifecyclePolicy,
-  MediaRefRecord,
-  MediaStore,
-} from "@covel/shared";
-
 export interface SqliteMediaStoreOptions {
   readonly mediaRoot?: string;
 }

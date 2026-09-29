@@ -84,8 +84,8 @@ function loadKeysEnvIntoProcessEnv(filePath: string): number {
   return count;
 }
 
-/** Exported for tests. Production code triggers it via the side-effect call below. */
-export function bootstrap(): BootstrapSummary {
+/** Production code triggers this via the side-effect call below. */
+function bootstrap(): BootstrapSummary {
   if (process.env.NODE_ENV === "production") {
     return {
       applied: false,

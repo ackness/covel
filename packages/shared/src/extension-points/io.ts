@@ -1,4 +1,4 @@
-import type { ExtensionPoint } from "./index.js";
+import type { ExtensionPoint } from "./definition.js";
 import type { kernelExtensionPoints } from "./contracts.js";
 import type { historyCompactV1 } from "./history-compact.js";
 import type { mediaImageFlowV1 } from "./media-image-flow.js";

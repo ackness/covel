@@ -9,7 +9,6 @@ export type {
   LorebookOwner,
 } from "./types/world-model.js";
 export {
-  characterSchemaSchema,
   characterSchemaRecordSchema,
   lorebookOwnerSchema,
 } from "./schemas/world-model.js";
@@ -194,6 +193,7 @@ export type {
 export {
   i18nTextSchema,
   attributeDefinitionSchema,
+  characterSchemaSchema,
   worldManifestSchema,
   worldDimensionsSchema,
   worldGeographySchema,

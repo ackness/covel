@@ -59,35 +59,6 @@ export function requireOptionalString(
 }
 
 /**
- * Require `value` to be a number when it is provided (non-`undefined`).
- */
-export function requireOptionalNumber(
-  value: unknown,
-  message: string,
-): CommitResult | undefined {
-  if (value !== undefined && typeof value !== "number") {
-    return commitError(message);
-  }
-  return undefined;
-}
-
-/**
- * Require `value` to be a string array when it is provided (non-`undefined`).
- */
-export function requireOptionalStringArray(
-  value: unknown,
-  message: string,
-): CommitResult | undefined {
-  if (
-    value !== undefined &&
-    (!Array.isArray(value) || value.some((item) => typeof item !== "string"))
-  ) {
-    return commitError(message);
-  }
-  return undefined;
-}
-
-/**
  * Run a sequence of validator results in order, returning the first failure
  * (if any). Mirrors the short-circuit semantics of consecutive `if` guards.
  */

@@ -15,7 +15,7 @@
 import type { ProposalSource } from "@covel/shared";
 
 /** Reserved sentinel identifying the framework (not a plugin) as a write origin. */
-export const FRAMEWORK_PLUGIN_ID = "framework";
+const FRAMEWORK_PLUGIN_ID = "framework";
 
 /**
  * Build a framework-origin `ProposalSource`. `route` names the API surface that

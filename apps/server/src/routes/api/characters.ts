@@ -13,10 +13,8 @@ import type { HookPipeline } from "@covel/runtime";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { frameworkProposalSource } from "../../lib/framework-source.js";
 import type { SessionLock } from "../../lib/session-lock.js";
-import {
-  resolveSessionParam,
-  withLockedSessionMutation,
-} from "./session/session-guard.js";
+import { resolveSessionParam } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
   Variables: {

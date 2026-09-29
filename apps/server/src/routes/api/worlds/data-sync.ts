@@ -20,8 +20,8 @@ import {
 import {
   checkSessionOwner,
   sessionApprovalScope,
-  withLockedSessionMutation,
 } from "../session/session-guard.js";
+import { withLockedSessionMutation } from "../session/locked-mutation.js";
 import { type WorldEnv, formatWorldEntryContent } from "./shared.js";
 
 export const worldDataSyncRoutes = new Hono<WorldEnv>();

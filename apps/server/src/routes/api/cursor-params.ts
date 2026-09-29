@@ -13,9 +13,9 @@ import {
 } from "@covel/shared";
 
 /** Fallback page size when `?limit` is absent or invalid. */
-export const DEFAULT_PAGE_LIMIT = 80;
+const DEFAULT_PAGE_LIMIT = 80;
 /** Hard ceiling so a client cannot request an unbounded window. */
-export const MAX_PAGE_LIMIT = 500;
+const MAX_PAGE_LIMIT = 500;
 
 export interface CursorQuery {
   readonly ok: true;

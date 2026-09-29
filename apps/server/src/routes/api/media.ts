@@ -34,8 +34,8 @@ import {
 import {
   checkHostedOperator,
   checkSessionOwner,
-  withLockedSessionMutation,
 } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { errorBody } from "../../api-error.js";
 

@@ -48,7 +48,7 @@ export function covelHome(): string {
   return process.env.COVEL_HOME ?? path.join(os.homedir(), ".covel");
 }
 
-export function configTomlPath(): string {
+function configTomlPath(): string {
   return path.join(covelHome(), "config.toml");
 }
 
@@ -56,11 +56,11 @@ function userLlmTomlPath(): string {
   return path.join(covelHome(), "llm.toml");
 }
 
-export function userKeysEnvPath(): string {
+function userKeysEnvPath(): string {
   return path.join(covelHome(), "keys.env");
 }
 
-export function userSettingsJsonPath(): string {
+function userSettingsJsonPath(): string {
   return path.join(covelHome(), "settings.json");
 }
 
@@ -86,7 +86,7 @@ function readConfig(): DesktopConfig {
  * redirected via `[paths] data_root` in `config.toml` — useful when the
  * SQLite file grows large and the user wants it on an external drive.
  */
-export function dataRoot(): string {
+function dataRoot(): string {
   const cfg = readConfig();
   const custom = cfg.paths?.data_root;
   if (custom && custom.trim()) {

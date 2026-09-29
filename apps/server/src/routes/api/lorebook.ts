@@ -14,10 +14,8 @@ import { scheduleMemoryIngest } from "./commit-execution.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
-import {
-  resolveSessionParam,
-  withLockedSessionMutation,
-} from "./session/session-guard.js";
+import { resolveSessionParam } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { errorBody, listBody, okBody } from "../../api-error.js";
 
 type Env = {

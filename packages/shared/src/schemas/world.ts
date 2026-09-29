@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
-import { characterSchemaSchema } from "./world-model.js";
+import type { AttributeDefinition } from "../types/character-schema.js";
 
 // ── Common ──────────────────────────────────────────────────────
 
@@ -339,6 +339,28 @@ export const attributeDefinitionSchema: z.ZodType = z.lazy(() =>
     })
     .strict(),
 );
+
+export const characterSchemaSchema = z
+  .object({
+    version: z.number().int().positive(),
+    types: z
+      .array(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .refine((value) => value !== "player", "player is a reserved type"),
+      )
+      .refine(
+        (values) => new Set(values).size === values.length,
+        "character types must be unique",
+      )
+      .default(["npc", "companion"]),
+    attributes: z.array(
+      z.lazy(() => attributeDefinitionSchema as z.ZodType<AttributeDefinition>),
+    ),
+  })
+  .strict();
 
 export const worldManifestSchema = z
   .object({

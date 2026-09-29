@@ -65,8 +65,8 @@ import {
   SESSION_APPROVAL_SCOPE_KEY,
   SESSION_INCARNATION_KEY,
   SESSION_OWNER_TOKEN_HASH_KEY,
-  withLockedSessionMutation,
 } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
   Variables: {

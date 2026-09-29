@@ -1,6 +1,6 @@
 import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
-import { defineExtensionPoint } from "./index.js";
+import { defineExtensionPoint } from "./definition.js";
 
 /** Preserve store provenance and metadata that later prompt stages consume. */
 export interface ExtensionHistoryMessage {

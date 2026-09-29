@@ -6,10 +6,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import {
-  resolveSessionParam,
-  withLockedSessionMutation,
-} from "./session/session-guard.js";
+import { resolveSessionParam } from "./session/session-guard.js";
+import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { errorBody, parseJsonBody } from "../../api-error.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 
