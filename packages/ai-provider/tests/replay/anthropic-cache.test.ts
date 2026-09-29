@@ -319,12 +319,11 @@ describe("Anthropic adapter — cache_control injection", () => {
       expect(Array.isArray(blocks)).toBe(true);
 
       const last = blocks[blocks.length - 1]!;
-      expect(last.text as string).toContain("Respond with JSON only.");
+      expect(last.text as string).toContain("<response-format>");
+      expect(last.text as string).toContain('"value":{"type":"number"}');
       // The JSON directive must NOT poison earlier cacheable segments.
       for (let i = 0; i < blocks.length - 1; i++) {
-        expect(blocks[i]!.text as string).not.toContain(
-          "Respond with JSON only.",
-        );
+        expect(blocks[i]!.text as string).not.toContain("<response-format>");
       }
     });
   });

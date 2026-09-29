@@ -34,6 +34,7 @@ import {
 import { applyCapabilityFallback } from "./capability-fallback.js";
 import { extractReasoningRequestFields } from "../reasoning-effort.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
+import { objectResponseFormat } from "./structured-output.js";
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
@@ -327,7 +328,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/responses", {
         model: params.model,
         input: serializeResponsesInput(messages, params.model, config),
-        text: { format: { type: "json_schema" } },
+        text: {
+          format: toResponsesJsonSchema(
+            objectResponseFormat(params.schema, "openai-responses"),
+          ),
+        },
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(
           params.providerRequestMetadata,
@@ -375,6 +380,9 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         model: params.model,
         input: serializeResponsesInput(messages, params.model, config),
         stream: true,
+        ...(params.responseFormat
+          ? { text: { format: toResponsesJsonSchema(params.responseFormat) } }
+          : {}),
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(
           params.providerRequestMetadata,

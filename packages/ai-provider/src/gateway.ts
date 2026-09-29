@@ -308,6 +308,7 @@ export function createGateway(deps: GatewayDependencies) {
       messages: TextMessage[];
       tools?: ToolDefinition[];
       defaults?: LLMRequestDefaults;
+      responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
@@ -326,6 +327,7 @@ export function createGateway(deps: GatewayDependencies) {
       messages: TextMessage[];
       tools?: ToolDefinition[];
       defaults?: LLMRequestDefaults;
+      responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
@@ -378,6 +380,7 @@ export function createGateway(deps: GatewayDependencies) {
             messages: input.messages,
             tools: input.tools,
             defaults: input.defaults,
+            responseFormat: input.responseFormat,
             providerRequestMetadata: withPresetMetadata(
               target,
               input.providerRequestMetadata,

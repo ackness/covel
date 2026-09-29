@@ -241,6 +241,63 @@ describe("provider-registry", () => {
       });
       expect(redirected.config.headers).toBeUndefined();
     });
+
+    it.each(["provider", "protocol"] as const)(
+      "binds programmatic %s credentials to the trusted origin",
+      (source) => {
+        const credentials = {
+          baseUrl: "https://api.custom.example/v1",
+          apiKey: "synthetic-registered-key",
+          headers: { "x-api-key": "synthetic-registered-header" },
+        };
+        const registry = createProviderRegistry({
+          providers: {
+            custom:
+              source === "provider"
+                ? { defaults: credentials }
+                : {
+                    protocols: {
+                      "openai-chat-v1": { defaults: credentials },
+                    },
+                  },
+          },
+        });
+
+        const trusted = registry.resolve({
+          provider: "custom",
+          baseUrl: "https://api.custom.example/another-path",
+          requestScoped: true,
+        });
+        expect(trusted.config.apiKey).toBe(credentials.apiKey);
+        expect(trusted.config.headers).toEqual(credentials.headers);
+
+        const redirected = registry.resolve({
+          provider: "custom",
+          baseUrl: "https://other.example/v1",
+          requestScoped: true,
+        });
+        expect(redirected.envKeyAllowed).toBe(false);
+        expect(redirected.config.apiKey).toBeUndefined();
+        expect(redirected.config.headers).toBeUndefined();
+        expect(
+          registry.withApiKeys(redirected, {}, "custom", {
+            custom: "synthetic-env-key",
+          }).config.apiKey,
+        ).toBeUndefined();
+        expect(
+          registry.withApiKeys(
+            redirected,
+            { custom: "synthetic-request-key" },
+            "custom",
+          ).config.apiKey,
+        ).toBe("synthetic-request-key");
+
+        // Resolving an overlay must not mutate the registered credentials.
+        expect(registry.resolve({ provider: "custom" }).config).toMatchObject(
+          credentials,
+        );
+      },
+    );
   });
 
   // ── cacheStrategy auto-fill ──────────────────────────────

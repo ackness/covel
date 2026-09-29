@@ -27,7 +27,7 @@ describe("openai-speech wire", () => {
     return fn;
   }
 
-  it("POSTs /audio/speech with model/input/voice/format and returns bytes", async () => {
+  it("POSTs /audio/speech with model/input/voice/response_format and returns bytes", async () => {
     const fn = mockSpeechFetch();
 
     const result = await openAiSpeechWire.synthesize(config, {
@@ -48,8 +48,9 @@ describe("openai-speech wire", () => {
       model: "tts-1",
       input: "hello",
       voice: "alloy",
-      format: "mp3",
+      response_format: "mp3",
     });
+    expect(body).not.toHaveProperty("format");
     expect(result.audio.mimeType).toBe("audio/mpeg");
     expect(result.audio.data).toEqual(new Uint8Array([1, 2, 3]));
     expect(result.warnings).toEqual([]);
@@ -125,6 +126,9 @@ describe("openai-transcription wire", () => {
     expect(formData.get("language")).toBe("en");
     expect(formData.get("transcriptionWire")).toBeNull();
     expect(formData.get("file")).toBeInstanceOf(Blob);
+    expect(
+      new Uint8Array(await (formData.get("file") as Blob).arrayBuffer()),
+    ).toEqual(new Uint8Array([9, 9]));
 
     // Production uses the package-pinned npm Undici implementation. Its
     // FormData brand must match or the body degrades to `[object FormData]`.
@@ -143,6 +147,24 @@ describe("openai-transcription wire", () => {
     expect(result.text).toBe("hello world");
     expect(result.usage).toEqual({ inputTokens: 7, outputTokens: 3 });
     expect(result.warnings).toEqual([]);
+  });
+
+  it.each([
+    ["Uint8Array subarray", new Uint8Array([1, 2, 3, 4]).subarray(1, 3)],
+    ["Node Buffer subarray", Buffer.from([1, 2, 3, 4]).subarray(1, 3)],
+  ])("uploads only the %s view bytes", async (_name, data) => {
+    const fn = mockTranscriptionFetch({ text: "ok" });
+
+    await openAiTranscriptionWire.transcribe(config, {
+      model: "whisper-1",
+      audio: { data, mimeType: "audio/wav" },
+    });
+
+    const formData = (fn.mock.calls[0]![1] as RequestInit).body as FormData;
+    const file = formData.get("file") as Blob;
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(
+      new Uint8Array([2, 3]),
+    );
   });
 
   it("returns null usage when the response has none", async () => {

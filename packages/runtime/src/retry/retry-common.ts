@@ -10,6 +10,7 @@
  * sites stay unchanged.
  */
 
+import { AiProviderError } from "@covel/ai-provider";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -127,6 +128,23 @@ export class LLMRetryError extends Error {
  */
 export function isTransientError(err: unknown): boolean {
   if (err instanceof LLMRetryError) return true;
+  if (err instanceof AiProviderError) {
+    if (
+      err.code === "CONFIG_ERROR" ||
+      err.code === "SCHEMA_VALIDATION_FAILED"
+    ) {
+      return false;
+    }
+    if (err.statusCode === 429) return true;
+    if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) {
+      return false;
+    }
+    return err.code === "RATE_LIMITED" || err.retriable;
+  }
+
+  // Unknown third-party adapters may expose only a message. Gateway errors
+  // above retain their structured classification even if their prose contains
+  // words such as "network" or omits recognizable rate-limit wording.
   const msg = extractMessage(err).toLowerCase();
 
   // Abort / timeout variants across Node, undici, browser fetch.
@@ -147,8 +165,7 @@ export function isTransientError(err: unknown): boolean {
   ) {
     return true;
   }
-  // Provider error payloads that bubble through ai-provider's gateway.
-  // gateway.ts:normalizeError() stringifies retriable flag + statusCode.
+  // Unstructured provider errors from third-party adapters.
   if (msg.includes("rate_limited") || msg.includes("rate limit")) return true;
   if (msg.includes("provider_error")) return true;
   // 5xx upstream.

@@ -3,8 +3,10 @@ import {
   AnthropicContinuationAccumulator,
 } from "./provider-continuation.js";
 import { readAnthropicReasoning } from "./http/reasoning-readers.js";
-/** Appended to system prompt for Anthropic generateObject (no native JSON mode). */
-const ANTHROPIC_JSON_DIRECTIVE = "Respond with JSON only.";
+import {
+  objectResponseFormat,
+  responseFormatInstruction,
+} from "./structured-output.js";
 
 import {
   MAX_CACHE_BREAKPOINTS,
@@ -332,7 +334,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         { model: params.model, config },
       );
       const anthropicTools = toAnthropicTools(params.tools);
-      const systemField = buildAnthropicSystemField(system, config);
+      const systemField = buildAnthropicSystemField(
+        system,
+        config,
+        responseFormatInstruction(params.messages, params.responseFormat),
+      );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
       const response = await postJson(
@@ -387,7 +393,10 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       const systemField = buildAnthropicSystemField(
         system,
         config,
-        ANTHROPIC_JSON_DIRECTIVE,
+        responseFormatInstruction(
+          params.messages,
+          objectResponseFormat(params.schema, "anthropic"),
+        ),
       );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
@@ -449,7 +458,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         { model: params.model, config },
       );
       const anthropicTools = toAnthropicTools(params.tools);
-      const systemField = buildAnthropicSystemField(system, config);
+      const systemField = buildAnthropicSystemField(
+        system,
+        config,
+        responseFormatInstruction(params.messages, params.responseFormat),
+      );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
       const response = await postJson(

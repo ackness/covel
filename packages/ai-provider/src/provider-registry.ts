@@ -203,9 +203,10 @@ export function createProviderRegistry(options?: {
       mergedConfig.baseUrl === undefined ||
       hasSameOrigin(mergedConfig.baseUrl, trustedBaseUrl);
 
-    // Trusted default headers (llm.toml can carry auth-bearing headers) must
-    // not follow a request-redirected origin either — same exfil channel.
-    if (!envKeyAllowed && mergedConfig.headers) {
+    // Registered credentials must not follow a request-redirected origin.
+    // Explicit request keys are applied separately by withApiKeys.
+    if (!envKeyAllowed) {
+      delete mergedConfig.apiKey;
       delete mergedConfig.headers;
     }
 

@@ -86,9 +86,43 @@ export function normalizeError(
     code: "PROVIDER_ERROR",
     message: error instanceof Error ? error.message : "Unknown provider error.",
     provider,
-    retriable: false,
+    retriable: isTransientTransportError(error),
     cause: error,
   });
+}
+
+const TRANSIENT_TRANSPORT_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+
+/** Fetch and Undici retain transport failures in their cause chain. */
+function isTransientTransportError(error: unknown): boolean {
+  let cause = error;
+  for (let depth = 0; cause instanceof Error && depth < 8; depth++) {
+    const code = (cause as Error & { code?: unknown }).code;
+    if (typeof code === "string" && TRANSIENT_TRANSPORT_CODES.has(code)) {
+      return true;
+    }
+    // Generic abort/timeout names can represent the caller's whole deadline.
+    // Attempt-level timeout retries belong to the owner of that signal;
+    // transport timeouts are identified by the explicit codes above.
+    if (cause instanceof TypeError && cause.message === "fetch failed") {
+      return true;
+    }
+    cause = cause.cause;
+  }
+  return false;
 }
 
 export async function notifyStart(

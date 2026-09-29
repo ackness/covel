@@ -42,6 +42,7 @@ import {
   emitLlmRespondedError,
   emitLlmRespondedSuccess,
 } from "../llm/llm-telemetry.js";
+import { AiProviderError } from "@covel/ai-provider";
 import { TurnAbortedError } from "../turn-executor/turn-control.js";
 import { acquireLLMSlot } from "./llm-slots.js";
 import {
@@ -315,6 +316,9 @@ function isCallTimeout(err: unknown, signal: AbortSignal): boolean {
     const msg = reason instanceof Error ? reason.message : String(reason ?? "");
     if (msg.toLowerCase().includes("timeout")) return true;
   }
+  // Provider classifications remain authoritative when our own deadline did
+  // not fire; e.g. a 400 mentioning an invalid timeout option is not a timeout.
+  if (err instanceof AiProviderError) return false;
   const text = extractMessage(err).toLowerCase();
   return text.includes("timeout") || text.includes("timed out");
 }

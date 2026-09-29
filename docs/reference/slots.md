@@ -184,6 +184,14 @@ providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 - 未注册的 wire id 在生成时抛 `CONFIG_ERROR`（报错信息含修复指引），不会静默回落。
 - 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription? })` 注册自定义 wire（frontmatter 的 `wires` 字段仍被接受但已弃用）—— 见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wireentry-里的-covelregisterwires)；wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription)。
 
+## 结构化输出
+
+`gateway.generateObject({ schema, messages })` 在发送请求前，将 Zod schema 的输入形态转换为 JSON Schema。Responses 将完整的 `name` / `schema` 放入 `text.format`；OpenAI Chat 使用兼容的 `json_object` 模式，并在系统消息中传递 schema；Anthropic 在系统消息中传递 schema 和 JSON 输出指令。Chat / Anthropic 的指令不保证模型一定遵守 schema，所有协议仍在返回后通过原始 Zod schema 的 `safeParse` 校验，应用默认值和转换。自定义 refinement 也在这一步校验。
+
+无法转换为 JSON Schema 的输入类型会在网络请求前返回不可重试的 `CONFIG_ERROR`。模型返回非 JSON 或不符合 Zod schema 的对象则返回 `SCHEMA_VALIDATION_FAILED`。schema 指令保留已有 Anthropic 缓存分段，并避免重复插入 runtime 已提供的同一 schema。
+
+`gateway.generateText` 与 `gateway.streamText` 均接受 `responseFormat`，并将它传给每次实际调用的适配器，包括备用模型。流式输出仍是文本增量；`responseFormat` 不提供增量对象解析，也不替代调用方对完整结果的校验。
+
 ## Provider 流式响应
 
 三个文本协议共用的 SSE 解析器支持 LF、CRLF、CR 换行（包括跨网络分片的 CRLF）、`data:` 后可选的空格和同一事件内多个 `data` 行；多行内容以换行连接后解析 JSON。事件必须以空行结束，流结束时丢弃未完成事件。收到 `[DONE]` 或调用方提前结束消费时，解析器取消剩余响应体并释放 reader，避免后台连接继续占用资源。格式规则见 [WHATWG SSE 规范](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。
@@ -196,11 +204,19 @@ providerRequestMetadata = { speechWire = "mimo-tts/mimo" }
 
 Key 永远不进 `llm.toml`：dev 放 `.env.llm`，桌面端放 `~/.covel/keys.env`（mode 600），纯 web 放 localStorage（`covel:keys`）。每次 AI 请求经 `X-Provider-Keys` header（base64 JSON `{provider: key}`）到达服务端，按目标 slot 的 `provider` 名分发绑定 —— wire 拿到的 `config.apiKey` 已是该 slot provider 的 key，客户端 key 覆盖 env key。
 
+服务端环境密钥和程序化注册的默认凭据均绑定可信 origin。请求级覆盖将地址改为其它 origin 时，移除默认 `apiKey` 和 headers，并禁止注入环境密钥；调用方明确提供的请求密钥仍可用于该地址。同源路径调整保留默认凭据，请求解析不会修改注册配置。
+
+## 音频请求
+
+内置 `openai-speech` wire 将 `SpeechSynthesisParams.format` 映射为服务商请求的 `response_format`。内置 `openai-transcription` wire 只上传 `audio.data` 视图中的字节，支持 `Uint8Array` 和 Node `Buffer` 切片，不包含底层共享 buffer 的其它内容。
+
 ## HTTP retry cleanup
 
 Provider and plugin HTTP helpers cancel rejected response bodies before retrying instead of buffering the entire error stream. Redirect responses are also cancelled when rejected. `Retry-After` waits remain abortable; long finite delays are split into timer-safe intervals, and non-finite delays fail explicitly instead of overflowing into immediate retries.
 
 ## 失败后的模型与参数调整
+
+Runtime 的同目标重试优先读取结构化 provider 错误的 `code`、`statusCode` 和 `retriable`，配置与 schema 校验失败不重试，错误消息中的关键词不能覆盖明确的不可重试判断。网关在归一化时保留已知临时网络故障的可重试属性；未知第三方异常才使用消息判断。调用方取消和已有部分流式输出仍禁止重试，备用模型切换保留独立的既有规则。
 
 错误详情保留失败请求实际使用的 `provider` 和 `model`，包含备用模型最终失败的情况；后续修改配置不会改变已记录的失败目标。可在失败任务上打开“更换模型 / 调整参数”，进入模型用途选择服务商和模型，并展开“生成参数”调整上下文窗口、模型最大输出能力、单次输出、温度、采样和思考强度；能力字段也可以通过原“编辑能力”入口覆盖，包括仅在前端配置的模型用途。两处复用同一个 token 编辑组件，并沿用 `llm.capabilityOverrides` / `llm.paramOverrides`，无需迁移旧设置。资料库输出上限仅供参考，不阻止输入符合设置范围的手动参数。
 
