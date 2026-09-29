@@ -17,11 +17,18 @@ export function computeBackoffMs(attempt: number): number {
   return Math.min(MAX_BACKOFF_MS, Math.floor(exp * jitter));
 }
 
-export function parseRetryAfterMs(header: string | null): number | null {
+export function parseRetryAfterMs(
+  header: string | null,
+  now = Date.now(),
+): number | null {
   if (!header) return null;
   const trimmed = header.trim();
-  if (!/^\d+$/.test(trimmed)) return null;
-  return Number(trimmed) * 1000;
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  // Reject malformed numeric delays instead of letting Date.parse interpret
+  // values such as "0.5" as calendar dates.
+  if (!/[a-z]/i.test(trimmed)) return null;
+  const date = Date.parse(trimmed);
+  return Number.isFinite(date) ? Math.max(0, date - now) : null;
 }
 
 export function sleepWithAbort(

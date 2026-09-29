@@ -57,6 +57,10 @@ export type {
 } from "./reasoning-effort.js";
 
 // Errors
+export type {
+  ProviderOptions,
+  ProviderOptionSettings,
+} from "./provider-options.js";
 export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
 
 // Bundled resources
@@ -163,6 +167,7 @@ export {
 
 // Capability
 export {
+  projectCapabilityForBuiltinAdapter,
   modelLookupCandidateDetails,
   modelLookupCandidates,
   modelNamespace,

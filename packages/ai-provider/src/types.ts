@@ -1,4 +1,6 @@
 import type {
+  LLMDiagnostics,
+  LLMRequestBudget,
   LLMResponseFormat,
   LLMProviderContinuation,
   LLMProviderRequest,
@@ -24,13 +26,14 @@ import type { ReasoningEffort } from "./reasoning-effort.js";
  * OpenAI-compatible providers (DeepSeek, Qwen/DashScope, Groq, …) are not
  * separate protocols — they speak `openai-chat-v1` and register with zero
  * code via `llm.toml` `[covel.<slot>]`. Only a genuinely new *wire* shape
- * (e.g. Gemini-native, Bedrock SigV4, Cohere) warrants a new member here,
+ * (e.g. Bedrock SigV4, Cohere) warrants a new member here,
  * and adding one is a single entry in `BUILTIN_PROTOCOLS`.
  */
 export const PROVIDER_PROTOCOLS = [
   "openai-chat-v1",
   "openai-responses-v1",
   "anthropic-messages-v1",
+  "google-generative-ai-v1",
   "typesafe-systemone-v1",
   "openrouter-decisions-v1",
   "vercel-evaluation-v4",
@@ -160,6 +163,8 @@ export interface ProviderConfig {
   headers?: Record<string, string>;
   /** Abort signal for request cancellation. */
   signal?: AbortSignal;
+  /** Shared finite budget across transport, gateway fallback, and runtime retries. */
+  requestBudget?: LLMRequestBudget;
   /**
    * Prompt cache strategy for this provider.
    *
@@ -242,6 +247,7 @@ export interface ModelProfile {
 // ── Preset Config (from TOML [[presets]]) ──────────────────────────
 
 export interface PresetConfig {
+  providerOptions?: import("./provider-options.js").ProviderOptions;
   id: string;
   name: string;
   provider: string;
@@ -354,6 +360,7 @@ export interface TextMessage {
 export type UsageSummary = LLMUsageSummary;
 
 export interface TextGenerationResult {
+  diagnostics?: LLMDiagnostics;
   text: string;
   finishReason: string;
   usage: UsageSummary;
@@ -373,6 +380,7 @@ export interface ObjectGenerationParams<
 }
 
 export interface ObjectGenerationResult<TObject = unknown> {
+  diagnostics?: LLMDiagnostics;
   object: TObject;
   reasoningContent?: string;
   providerContinuation?: LLMProviderContinuation;
@@ -388,6 +396,7 @@ export type StreamEvent =
   | { type: "tool-call"; id: string; name: string; arguments: string }
   | {
       type: "done";
+      diagnostics?: LLMDiagnostics;
       finishReason: string;
       usage: UsageSummary;
       /**

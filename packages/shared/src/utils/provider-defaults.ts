@@ -2,6 +2,7 @@ export type BuiltinProviderProtocol =
   | "openai-chat-v1"
   | "openai-responses-v1"
   | "anthropic-messages-v1"
+  | "google-generative-ai-v1"
   | "typesafe-systemone-v1"
   | "openrouter-decisions-v1"
   | "vercel-evaluation-v4";
@@ -41,6 +42,10 @@ export const BUILTIN_PROVIDER_CONNECTIONS = {
   anthropic: {
     baseUrl: "https://api.anthropic.com",
     protocol: "anthropic-messages-v1",
+  },
+  google: {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    protocol: "google-generative-ai-v1",
   },
   dashscope: {
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",

@@ -18,6 +18,7 @@ import type { ModelProviderAdapter } from "./adapters/adapter.js";
 import { createOpenAiChatAdapter } from "./adapters/openai-chat.js";
 import { createOpenAiResponsesAdapter } from "./adapters/openai-responses.js";
 import { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js";
+import { createGoogleGenerativeAiAdapter } from "./adapters/google-generative-ai.js";
 import type {
   CacheStrategy,
   ModelCapability,
@@ -63,6 +64,15 @@ export const BASE_CAPABILITY_DEFAULTS: ModelCapability = {
  * guarantee.
  */
 const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
+  "google-generative-ai-v1": {
+    createAdapter: createGoogleGenerativeAiAdapter,
+    cacheStrategy: "auto-prefix",
+    capabilityDefaults: {
+      input: ["text"],
+      output: ["text"],
+      features: ["function_calling", "structured_output", "streaming"],
+    },
+  },
   "typesafe-systemone-v1": {
     createAdapter: () => createEvaluationAdapter("typesafe-systemone-v1"),
     cacheStrategy: "none",
@@ -104,12 +114,7 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
     cacheStrategy: "auto-prefix",
     capabilityDefaults: {
       ...BASE_CAPABILITY_DEFAULTS,
-      features: [
-        "function_calling",
-        "structured_output",
-        "streaming",
-        "web_search",
-      ],
+      features: ["function_calling", "structured_output", "streaming"],
     },
   },
   "anthropic-messages-v1": {

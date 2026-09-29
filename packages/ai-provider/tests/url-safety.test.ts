@@ -93,6 +93,20 @@ describe("validateBaseUrl", () => {
 });
 
 describe("buildProviderUrl", () => {
+  it("preserves the Gemini OpenAI compatibility prefix", () => {
+    expect(
+      buildProviderUrl(
+        "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "/chat/completions",
+      ),
+    ).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    );
+    expect(
+      buildProviderUrl("https://proxy.example/v1beta/openai", "/embeddings"),
+    ).toBe("https://proxy.example/v1beta/openai/embeddings");
+  });
+
   it("builds URL from base and path", () => {
     expect(
       buildProviderUrl("https://api.openai.com", "/v1/chat/completions"),

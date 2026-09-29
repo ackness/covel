@@ -4,6 +4,27 @@ import { PROVIDER_PROTOCOLS } from "../src/types.js";
 import { getProtocolDefinition } from "../src/protocol-registry.js";
 
 describe("provider-registry", () => {
+  it("resolves native Google defaults and preserves an explicit compatible connection", () => {
+    const registry = createProviderRegistry();
+    expect(registry.resolve({ provider: "google" })).toMatchObject({
+      protocol: "google-generative-ai-v1",
+      usesBuiltinAdapter: true,
+      config: { baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
+    });
+    expect(
+      registry.resolve({
+        provider: "google",
+        protocol: "openai-chat-v1",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      }),
+    ).toMatchObject({
+      protocol: "openai-chat-v1",
+      config: {
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      },
+    });
+  });
+
   it("supplies canonical endpoints for built-in providers without llm.toml", () => {
     const registry = createProviderRegistry();
 
@@ -241,6 +262,63 @@ describe("provider-registry", () => {
       });
       expect(redirected.config.headers).toBeUndefined();
     });
+
+    it.each(["provider", "protocol"] as const)(
+      "binds programmatic %s credentials to the trusted origin",
+      (source) => {
+        const credentials = {
+          baseUrl: "https://api.custom.example/v1",
+          apiKey: "synthetic-registered-key",
+          headers: { "x-api-key": "synthetic-registered-header" },
+        };
+        const registry = createProviderRegistry({
+          providers: {
+            custom:
+              source === "provider"
+                ? { defaults: credentials }
+                : {
+                    protocols: {
+                      "openai-chat-v1": { defaults: credentials },
+                    },
+                  },
+          },
+        });
+
+        const trusted = registry.resolve({
+          provider: "custom",
+          baseUrl: "https://api.custom.example/another-path",
+          requestScoped: true,
+        });
+        expect(trusted.config.apiKey).toBe(credentials.apiKey);
+        expect(trusted.config.headers).toEqual(credentials.headers);
+
+        const redirected = registry.resolve({
+          provider: "custom",
+          baseUrl: "https://other.example/v1",
+          requestScoped: true,
+        });
+        expect(redirected.envKeyAllowed).toBe(false);
+        expect(redirected.config.apiKey).toBeUndefined();
+        expect(redirected.config.headers).toBeUndefined();
+        expect(
+          registry.withApiKeys(redirected, {}, "custom", {
+            custom: "synthetic-env-key",
+          }).config.apiKey,
+        ).toBeUndefined();
+        expect(
+          registry.withApiKeys(
+            redirected,
+            { custom: "synthetic-request-key" },
+            "custom",
+          ).config.apiKey,
+        ).toBe("synthetic-request-key");
+
+        // Resolving an overlay must not mutate the registered credentials.
+        expect(registry.resolve({ provider: "custom" }).config).toMatchObject(
+          credentials,
+        );
+      },
+    );
   });
 
   // ── cacheStrategy auto-fill ──────────────────────────────

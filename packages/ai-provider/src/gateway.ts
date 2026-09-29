@@ -1,4 +1,12 @@
-import type { LLMResponseFormat, LLMRequestDefaults } from "@covel/shared";
+import {
+  assertLlmRequestBudget,
+  createLlmRequestScope,
+  iterateLlmRequest,
+  type LLMResponseFormat,
+  type LLMRequestDefaults,
+  type LLMProviderWarning,
+  type LLMRequestBudget,
+} from "@covel/shared";
 import type { ImageGenerationTarget } from "@covel/shared/plugin-runtime";
 import type { ZodType } from "zod";
 import type {
@@ -8,6 +16,17 @@ import type {
 } from "./evaluation/types.js";
 
 import { AiProviderError } from "./errors.js";
+import {
+  extractReasoningRequestFields,
+  readReasoningEffort,
+} from "./reasoning-effort.js";
+import { projectCapabilityForBuiltinAdapter } from "./capability/adapter-support.js";
+import {
+  resolveProviderOptions,
+  validateParameterMetadata,
+  withProviderWarnings,
+  type ProviderOptions,
+} from "./provider-options.js";
 import { assertSuccessfulFinishReason } from "./adapters/generation-completion.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
@@ -53,8 +72,27 @@ import type {
   TextMessage,
   ToolDefinition,
   TranscriptionResult,
-  UsageSummary,
+  ModelRequestContext,
 } from "./types.js";
+
+function assertExplicitGoogleMediaWire(
+  protocol: ProviderProtocol,
+  wire: unknown,
+  mode: "image" | "speech" | "transcription",
+  provider: string,
+): void {
+  if (
+    protocol === "google-generative-ai-v1" &&
+    !(typeof wire === "string" && wire)
+  ) {
+    throw new AiProviderError({
+      code: "CONFIG_ERROR",
+      message: `Google native ${mode} generation requires an explicitly configured ${mode}Wire; the built-in Gemini adapter supports text generation only.`,
+      provider,
+      retriable: false,
+    });
+  }
+}
 
 interface GatewayDependencies {
   providerRegistry: {
@@ -198,9 +236,11 @@ export function createGateway(deps: GatewayDependencies) {
       defaults?: LLMRequestDefaults;
       responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: ProviderOptions;
     },
     options?: GatewayOptions,
   ) {
+    let metadataTarget: string | undefined;
     return runOperation(
       {
         presetId: input.presetId,
@@ -209,6 +249,14 @@ export function createGateway(deps: GatewayDependencies) {
         resolveTargets: (presetId) =>
           resolveTextTargets(presetId, options, input.presetId),
         execute: async (target, resolved) => {
+          metadataTarget ??= metadataTargetIdentity(target, resolved);
+          const request = prepareTextMetadata(
+            target,
+            resolved,
+            input,
+            options,
+            metadataTarget,
+          );
           const result = await resolved.adapter.generateText(
             configWithSignal(resolved.config, options, {
               provider: targetProvider(target),
@@ -220,21 +268,16 @@ export function createGateway(deps: GatewayDependencies) {
               tools: input.tools,
               defaults: input.defaults,
               responseFormat: input.responseFormat,
-              providerRequestMetadata: withPresetMetadata(
-                target,
-                input.providerRequestMetadata,
-                input.presetId,
-                options,
-              ),
+              providerRequestMetadata: request.metadata,
             },
-            { profile: target.profile, preset: target.preset, mode: "text" },
+            textContext(target, resolved, "text"),
           );
           assertSuccessfulFinishReason(
             result.finishReason,
             targetProvider(target),
           );
           return {
-            ...result,
+            ...withProviderWarnings(result, request.warnings),
             model: targetModel(target),
             provider: targetProvider(target),
           };
@@ -251,9 +294,11 @@ export function createGateway(deps: GatewayDependencies) {
       schema: ZodType<TObject>;
       messages: TextMessage[];
       providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: ProviderOptions;
     },
     options?: GatewayOptions,
   ) {
+    let metadataTarget: string | undefined;
     return runOperation(
       {
         presetId: input.presetId,
@@ -264,6 +309,14 @@ export function createGateway(deps: GatewayDependencies) {
         resolveTargets: (presetId) =>
           resolveTextTargets(presetId, options, input.presetId),
         execute: async (target, resolved) => {
+          metadataTarget ??= metadataTargetIdentity(target, resolved);
+          const request = prepareTextMetadata(
+            target,
+            resolved,
+            input,
+            options,
+            metadataTarget,
+          );
           const result = await resolved.adapter.generateObject(
             configWithSignal(resolved.config, options, {
               provider: targetProvider(target),
@@ -273,25 +326,16 @@ export function createGateway(deps: GatewayDependencies) {
               model: targetModel(target),
               schema: input.schema,
               messages: input.messages,
-              providerRequestMetadata: withPresetMetadata(
-                target,
-                input.providerRequestMetadata,
-                input.presetId,
-                options,
-              ),
+              providerRequestMetadata: request.metadata,
             },
-            { profile: target.profile, preset: target.preset, mode: "object" },
+            textContext(target, resolved, "object"),
           );
           assertSuccessfulFinishReason(
             result.finishReason,
             targetProvider(target),
           );
           return {
-            ...(result as {
-              object: TObject;
-              finishReason: string;
-              usage: UsageSummary;
-            }),
+            ...withProviderWarnings(result, request.warnings),
             model: targetModel(target),
             provider: targetProvider(target),
           };
@@ -308,15 +352,27 @@ export function createGateway(deps: GatewayDependencies) {
       messages: TextMessage[];
       tools?: ToolDefinition[];
       defaults?: LLMRequestDefaults;
+      responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: ProviderOptions;
     },
     options?: GatewayOptions,
   ): AsyncIterable<StreamEvent> {
-    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
+    const scope = createLlmRequestScope({
+      budget: options?.requestBudget,
+      signal: options?.signal,
+    });
+    let cleanup = () => {};
     try {
-      yield* streamTextInner(input, options);
+      cleanup = applySlotOverlay(deps, options?.slotOverrides);
+      yield* streamTextInner(input, {
+        ...options,
+        requestBudget: scope.budget,
+        signal: scope.signal,
+      });
     } finally {
       cleanup();
+      scope.dispose();
     }
   }
 
@@ -326,9 +382,14 @@ export function createGateway(deps: GatewayDependencies) {
       messages: TextMessage[];
       tools?: ToolDefinition[];
       defaults?: LLMRequestDefaults;
+      responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: ProviderOptions;
     },
-    options?: GatewayOptions,
+    options: GatewayOptions & {
+      signal: AbortSignal;
+      requestBudget: LLMRequestBudget;
+    },
   ): AsyncIterable<StreamEvent> {
     const targets = resolveTextTargets(
       resolveSlotOrPassthrough(input.presetId, "text", options),
@@ -344,6 +405,7 @@ export function createGateway(deps: GatewayDependencies) {
       ),
     );
     let lastError: AiProviderError | null = null;
+    let metadataTarget: string | undefined;
 
     for (const [index, target] of targets.entries()) {
       const { provider, resolved } = prepareTarget(
@@ -357,6 +419,19 @@ export function createGateway(deps: GatewayDependencies) {
       const startTime = Date.now();
 
       try {
+        if (options?.requestBudget)
+          assertLlmRequestBudget(options.requestBudget, {
+            signal: options.signal,
+            requireAttempt: true,
+          });
+        metadataTarget ??= metadataTargetIdentity(target, resolved);
+        const request = prepareTextMetadata(
+          target,
+          resolved,
+          input,
+          options,
+          metadataTarget,
+        );
         notifyTargetAttempt(options?.onTargetAttempt, target);
         await notifyStart(
           resolved.hooks,
@@ -365,27 +440,27 @@ export function createGateway(deps: GatewayDependencies) {
           "stream",
           targetModel(target),
           options?.traceId,
+          options,
         );
         let completion: Extract<StreamEvent, { type: "done" }> | undefined;
 
-        for await (const event of resolved.adapter.streamText(
-          configWithSignal(resolved.config, options, {
-            provider: targetProvider(target),
-            protocol: resolved.protocol,
-          }),
-          {
-            model: targetModel(target),
-            messages: input.messages,
-            tools: input.tools,
-            defaults: input.defaults,
-            providerRequestMetadata: withPresetMetadata(
-              target,
-              input.providerRequestMetadata,
-              input.presetId,
-              options,
-            ),
-          },
-          { profile: target.profile, preset: target.preset, mode: "stream" },
+        for await (const event of iterateLlmRequest(
+          resolved.adapter.streamText(
+            configWithSignal(resolved.config, options, {
+              provider: targetProvider(target),
+              protocol: resolved.protocol,
+            }),
+            {
+              model: targetModel(target),
+              messages: input.messages,
+              tools: input.tools,
+              defaults: input.defaults,
+              responseFormat: input.responseFormat,
+              providerRequestMetadata: request.metadata,
+            },
+            textContext(target, resolved, "stream"),
+          ),
+          options?.signal,
         )) {
           if (
             (event.type === "text-delta" && event.textDelta.length > 0) ||
@@ -397,7 +472,7 @@ export function createGateway(deps: GatewayDependencies) {
           }
           if (event.type === "done") {
             assertSuccessfulFinishReason(event.finishReason, provider);
-            completion = event;
+            completion = withProviderWarnings(event, request.warnings);
             continue;
           }
           yield event;
@@ -422,6 +497,7 @@ export function createGateway(deps: GatewayDependencies) {
           completion.usage,
           Date.now() - startTime,
           options?.traceId,
+          options,
         );
         yield completion;
         return;
@@ -556,6 +632,12 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
+          assertExplicitGoogleMediaWire(
+            resolved.protocol,
+            slotMeta?.speechWire,
+            "speech",
+            targetProvider(target),
+          );
           const wireId =
             typeof slotMeta?.speechWire === "string" && slotMeta.speechWire
               ? slotMeta.speechWire
@@ -617,6 +699,12 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
+          assertExplicitGoogleMediaWire(
+            resolved.protocol,
+            slotMeta?.transcriptionWire,
+            "transcription",
+            targetProvider(target),
+          );
           const wireId =
             typeof slotMeta?.transcriptionWire === "string" &&
             slotMeta.transcriptionWire
@@ -689,6 +777,12 @@ export function createGateway(deps: GatewayDependencies) {
         ],
         execute: async (target, resolved) => {
           const slotMeta = target.preset?.providerRequestMetadata;
+          assertExplicitGoogleMediaWire(
+            resolved.protocol,
+            slotMeta?.imageWire,
+            "image",
+            targetProvider(target),
+          );
           const wireId =
             typeof slotMeta?.imageWire === "string" && slotMeta.imageWire
               ? slotMeta.imageWire
@@ -757,6 +851,119 @@ export function createGateway(deps: GatewayDependencies) {
 
   // ── Internal helpers ─────────────────────────────────────────────
 
+  function metadataTargetIdentity(
+    target: ResolvedTarget,
+    resolved: ProviderResolution,
+  ): string {
+    return JSON.stringify([
+      targetProvider(target),
+      resolved.protocol,
+      resolved.config.baseUrl ?? null,
+    ]);
+  }
+
+  function textContext(
+    target: ResolvedTarget,
+    resolved: ProviderResolution,
+    mode: "text" | "object" | "stream",
+  ): ModelRequestContext {
+    const preset = target.preset;
+    return {
+      profile: target.profile,
+      preset:
+        resolved.usesBuiltinAdapter && preset?.capability
+          ? {
+              ...preset,
+              capability: projectCapabilityForBuiltinAdapter(
+                preset.capability,
+                resolved.protocol,
+                "text",
+              ),
+            }
+          : preset,
+      mode,
+    };
+  }
+
+  function prepareTextMetadata(
+    target: ResolvedTarget,
+    resolved: ProviderResolution,
+    input: {
+      presetId?: string;
+      providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: ProviderOptions;
+    },
+    options: GatewayOptions | undefined,
+    metadataTarget: string,
+  ): { metadata: Record<string, unknown>; warnings: LLMProviderWarning[] } {
+    const provider = targetProvider(target);
+    const presetOptions = resolveProviderOptions(
+      target.preset?.providerOptions,
+      provider,
+      resolved.protocol,
+    );
+    const callOptions = resolveProviderOptions(
+      input.providerOptions,
+      provider,
+      resolved.protocol,
+    );
+    const warnings = [...presetOptions.warnings, ...callOptions.warnings];
+    let callMetadata = input.providerRequestMetadata;
+    if (
+      metadataTarget !== metadataTargetIdentity(target, resolved) &&
+      callMetadata
+    ) {
+      // Unscoped wire extensions belong to the original target. Portable
+      // generation settings can cross providers; native fields cannot.
+      const { parameterOverrides, ...native } = callMetadata;
+      callMetadata =
+        parameterOverrides === undefined ? {} : { parameterOverrides };
+      if (Object.keys(native).length)
+        warnings.push({
+          type: "compatibility",
+          feature: "providerRequestMetadata",
+          message:
+            "Unscoped provider metadata was omitted after fallback changed the provider, protocol or endpoint. Use providerOptions to configure each target.",
+        });
+    }
+    const metadata =
+      withPresetMetadata(
+        target,
+        { ...callMetadata, ...callOptions.metadata },
+        input.presetId,
+        options,
+        {
+          ...target.preset?.providerRequestMetadata,
+          ...presetOptions.metadata,
+        },
+      ) ?? {};
+    warnings.push(
+      ...validateParameterMetadata(metadata, provider, resolved.protocol),
+    );
+    const reasoningEffort = readReasoningEffort(metadata);
+    if (
+      resolved.usesBuiltinAdapter &&
+      reasoningEffort &&
+      reasoningEffort !== "provider-default" &&
+      Object.keys(
+        extractReasoningRequestFields(
+          metadata,
+          textContext(target, resolved, "text"),
+          resolved.protocol,
+          targetModel(target),
+        ),
+      ).length === 0
+    ) {
+      warnings.push({
+        type: "unsupported",
+        feature: "reasoningEffort",
+        message:
+          "The selected model does not use this reasoning effort setting; the provider default applies.",
+      });
+    }
+    return { metadata, warnings };
+  }
+
   /** Merge abort signal from gateway options into provider config. */
   function configWithSignal(
     config: ProviderConfig,
@@ -765,7 +972,15 @@ export function createGateway(deps: GatewayDependencies) {
   ): ProviderConfig {
     return {
       ...config,
-      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(options?.signal
+        ? {
+            signal:
+              config.signal && config.signal !== options.signal
+                ? AbortSignal.any([config.signal, options.signal])
+                : options.signal,
+          }
+        : {}),
+      requestBudget: options?.requestBudget ?? config.requestBudget,
       ...(requestTarget && options?.onProviderRequest
         ? {
             requestObservation: {

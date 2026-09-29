@@ -24,7 +24,7 @@ async function transcribe(
   formData.set("model", params.model);
   formData.set(
     "file",
-    new Blob([params.audio.data.buffer as ArrayBuffer], {
+    new Blob([Uint8Array.from(params.audio.data)], {
       type: params.audio.mimeType,
     }),
     params.audio.fileName ?? "audio.bin",

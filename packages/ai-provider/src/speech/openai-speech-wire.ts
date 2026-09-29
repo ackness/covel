@@ -23,7 +23,7 @@ async function synthesize(
     model: params.model,
     input: params.text,
     ...(params.voice ? { voice: params.voice } : {}),
-    ...(params.format ? { format: params.format } : {}),
+    ...(params.format ? { response_format: params.format } : {}),
     ...extra,
   });
 

@@ -9,6 +9,7 @@
  */
 
 import { AiProviderError } from "./errors.js";
+import { assertLlmRequestBudget } from "@covel/shared";
 import type { ProviderResolution } from "./provider-registry.js";
 import {
   normalizeError,
@@ -118,21 +119,38 @@ export async function handleTargetFailure(args: {
     canFallback,
   } = args;
 
-  await notifyError(
-    resolved.hooks,
-    provider,
-    resolved.protocol,
-    mode,
-    targetModel(target),
-    error,
-    Date.now() - startTime,
-    options?.traceId,
-  );
+  let failure = error;
+  try {
+    await notifyError(
+      resolved.hooks,
+      provider,
+      resolved.protocol,
+      mode,
+      targetModel(target),
+      error,
+      Date.now() - startTime,
+      options?.traceId,
+      options,
+    );
+  } catch (hookAbort) {
+    failure = hookAbort;
+  }
 
-  const normalized = targetFailure(error, target);
+  const normalized = targetFailure(failure, target);
 
   if (options?.signal?.aborted || !canFallback || !shouldFallback(normalized)) {
     throw normalized;
+  }
+
+  if (options?.requestBudget) {
+    try {
+      assertLlmRequestBudget(options.requestBudget, {
+        signal: options.signal,
+        requireAttempt: true,
+      });
+    } catch (exhausted) {
+      throw targetFailure(exhausted, target);
+    }
   }
 
   return normalized;

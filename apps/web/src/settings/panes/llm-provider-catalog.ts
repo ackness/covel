@@ -7,6 +7,7 @@ import { z } from "zod";
 import { providerModelProfilesSchema } from "../registry/llm.js";
 import {
   providerKeyToId,
+  getBuiltinProviderConnection,
   isReasoningEffort,
   type ReasoningEffort,
 } from "@covel/shared";
@@ -127,7 +128,10 @@ export function buildProviderCatalog(
       id: providerId,
       provider: providerId,
       baseUrl: preset.baseUrl ?? "",
-      protocol: preset.protocol ?? "openai-chat-v1",
+      protocol:
+        preset.protocol ??
+        getBuiltinProviderConnection(providerId)?.protocol ??
+        "openai-chat-v1",
       serverModels: [],
     };
     entry.serverModels.push(preset);
@@ -139,7 +143,11 @@ export function buildProviderCatalog(
       id: profile.id,
       provider: profile.provider ?? profile.id,
       baseUrl: profile.baseUrl,
-      protocol: profile.protocol ?? "openai-chat-v1",
+      protocol:
+        profile.protocol ??
+        getBuiltinProviderConnection(profile.provider ?? profile.id)
+          ?.protocol ??
+        "openai-chat-v1",
       serverModels: [],
     };
     entry.localProfile = profile;
@@ -171,6 +179,7 @@ const SUPPORTED_PROVIDER_PROTOCOLS = new Set([
   "openai-chat-v1",
   "openai-responses-v1",
   "anthropic-messages-v1",
+  "google-generative-ai-v1",
   "typesafe-systemone-v1",
   "openrouter-decisions-v1",
   "vercel-evaluation-v4",

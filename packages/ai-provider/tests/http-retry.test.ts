@@ -6,7 +6,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { postJson, sleepWithAbort } from "../src/adapters/http.js";
+import {
+  parseRetryAfterMs,
+  postJson,
+  sleepWithAbort,
+} from "../src/adapters/http.js";
+import { createLlmRequestBudget } from "@covel/shared";
 import type { ProviderConfig } from "../src/types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -141,6 +146,49 @@ describe("postJson retry wrapper", () => {
 
     expect(result.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("honors Retry-After HTTP dates and clamps dates in the past", async () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        makeMockResponse({
+          status: 429,
+          retryAfter: "Thu, 01 Jan 2026 00:00:02 GMT",
+        }),
+      )
+      .mockResolvedValueOnce(makeMockResponse({ status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = postJson(CONFIG, "/chat/completions", {});
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await pending).status).toBe(200);
+    expect(parseRetryAfterMs("Thu, 01 Jan 2026 00:00:00 GMT")).toBe(0);
+    expect(parseRetryAfterMs("invalid")).toBeNull();
+    expect(parseRetryAfterMs("0.5")).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops Retry-After waits at the logical deadline", async () => {
+    const fetchMock = vi.fn(async () =>
+      makeMockResponse({ status: 429, retryAfter: "120" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = postJson(
+      { ...CONFIG, requestBudget: createLlmRequestBudget({ timeoutMs: 50 }) },
+      "/chat/completions",
+      {},
+    );
+    const rejected = expect(pending).rejects.toMatchObject({
+      code: "REQUEST_BUDGET_EXCEEDED",
+      retriable: false,
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    await rejected;
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("aborts mid-backoff when signal is aborted", async () => {

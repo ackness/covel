@@ -21,6 +21,53 @@ async function savedEntries(page: Page) {
   );
 }
 
+test("Google Gemini native models retain their protocol and text bindings across reload", async ({
+  page,
+}) => {
+  await page.route("**/api/presets", (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route("**/api/llm-config", (route) =>
+    route.fulfill({ json: { configured: false, providers: [], slots: {} } }),
+  );
+  const settings = await openProviderSettings(page);
+  await settings
+    .getByRole("button", { name: "Add provider", exact: true })
+    .first()
+    .click();
+  const create = page.getByRole("dialog", {
+    name: "Add provider",
+    exact: true,
+  });
+  await create.getByPlaceholder("Provider ID, e.g. openai").fill("google");
+  await create
+    .getByRole("combobox", { name: "API protocol", exact: true })
+    .selectOption("google-generative-ai-v1");
+  await create
+    .getByRole("textbox", { name: /^Model IDs(?:\s|$)/ })
+    .fill("gemini-3.1-pro-preview");
+  await create
+    .getByRole("button", { name: "Add provider", exact: true })
+    .click();
+  await expect(create).toHaveCount(0);
+  const entries = await savedEntries(page);
+  const profile = entries["llm.providers"].find(
+    (item: { id: string }) => item.id === "google",
+  );
+  expect(profile).toMatchObject({
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    protocol: "google-generative-ai-v1",
+    models: [{ modelId: "gemini-3.1-pro-preview" }],
+  });
+  expect(entries["llm.slotConfig"].story.modelRef).toBe(profile.models[0].ref);
+  await page.reload();
+  expect(
+    (await savedEntries(page))["llm.providers"].find(
+      (item: { id: string }) => item.id === "google",
+    ),
+  ).toEqual(profile);
+});
+
 test("TypeSafe models retain their native protocol across save and reload", async ({
   page,
 }) => {

@@ -1,0 +1,181 @@
+{
+  "provenance": {
+    "kind": "synthetic",
+    "reference": "https://github.com/vercel/ai/blob/546a6f8876b0de68452d71a3e49716bcdf7f40c9/packages/openai/src/chat/openai-chat-language-model.ts",
+    "note": "Hand-authored protocol fixtures; no recorded provider traffic or credentials."
+  },
+  "success": {
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\"ok\":true}",
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url_citation": {
+                "url": "https://example.org/source",
+                "title": "Synthetic reference",
+                "start_index": 0,
+                "end_index": 11
+              }
+            }
+          ],
+          "tool_calls": [
+            {
+              "id": "call_fixture",
+              "type": "function",
+              "function": {
+                "name": "lookup",
+                "arguments": "{\"query\":\"fixture\"}"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 12,
+      "completion_tokens": 5
+    },
+    "warnings": [
+      {
+        "type": "compatibility",
+        "feature": "sampling",
+        "message": "Synthetic provider adjusted sampling."
+      }
+    ],
+    "unknown_field": {
+      "ignored": true
+    }
+  },
+  "stream": [
+    {
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "role": "assistant",
+            "content": "{\"ok\":true}",
+            "annotations": [
+              {
+                "type": "url_citation",
+                "url_citation": {
+                  "url": "https://example.org/source",
+                  "title": "Synthetic reference",
+                  "start_index": 0,
+                  "end_index": 11
+                }
+              }
+            ]
+          },
+          "finish_reason": null
+        }
+      ],
+      "warnings": [
+        {
+          "type": "compatibility",
+          "feature": "sampling",
+          "message": "Synthetic provider adjusted sampling."
+        }
+      ]
+    },
+    {
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "id": "call_fixture",
+                "type": "function",
+                "function": {
+                  "name": "lookup",
+                  "arguments": "{\"query\":"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "choices": [
+        {
+          "index": 0,
+          "delta": {
+            "tool_calls": [
+              {
+                "index": 0,
+                "function": {
+                  "arguments": "\"fixture\"}"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "choices": [
+        {
+          "index": 0,
+          "delta": {},
+          "finish_reason": "tool_calls"
+        }
+      ]
+    },
+    {
+      "choices": [],
+      "usage": {
+        "prompt_tokens": 12,
+        "completion_tokens": 5
+      },
+      "unknown_field": true
+    }
+  ],
+  "refusal": {
+    "choices": [
+      {
+        "message": {
+          "content": "Partial answer",
+          "refusal": "I cannot comply."
+        },
+        "finish_reason": "stop"
+      }
+    ]
+  },
+  "refusalStream": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "Partial answer"
+          }
+        }
+      ]
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "refusal": "I cannot "
+          }
+        }
+      ]
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "refusal": "comply."
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  ]
+}

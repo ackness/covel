@@ -11,6 +11,76 @@ async function openModelRoles(page: Page) {
   return page.getByRole("dialog");
 }
 
+test("text protocol support limits survive manual capability overrides", async ({
+  page,
+}) => {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": ONBOARDING_VERSION,
+    "ui.locale": "en-US",
+    "llm.providers": [
+      {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://fixture.invalid",
+        protocol: "openai-responses-v1",
+        models: [{ ref: "fixture-model", modelId: "fixture-model" }],
+      },
+    ],
+    "llm.slotConfig": { plugin: { modelRef: "fixture-model" } },
+    "llm.capabilityOverrides": {
+      plugin: {
+        input: ["text", "audio", "video", "file"],
+        features: ["web_search", "computer_use"],
+      },
+    },
+  });
+  await page.route("**/api/llm-config", (route) =>
+    route.fulfill({ json: { configured: false, providers: [], slots: {} } }),
+  );
+  await page.route("**/api/model-db/lookup**", (route) =>
+    route.fulfill({
+      json: {
+        found: true,
+        source: "model-database",
+        pricingKind: "unknown",
+        candidates: [],
+        reasoning: null,
+        usesBuiltinAdapter: true,
+        capability: {
+          input: ["text", "image", "audio", "video", "file"],
+          output: ["text"],
+          features: ["web_search", "computer_use", "vision"],
+        },
+        effectiveCapability: {
+          input: ["text", "image"],
+          output: ["text"],
+          features: ["vision"],
+        },
+      },
+    }),
+  );
+  await page.goto("/session");
+  const dialog = await openModelRoles(page);
+  const role = dialog.getByRole("group", { name: "plugin", exact: true });
+  await role
+    .getByRole("button", { name: "Edit Capabilities", exact: true })
+    .click();
+  for (const name of [
+    "Audio Input",
+    "Video Input",
+    "File Input",
+    "Web Search",
+    "Computer Use",
+  ]) {
+    await expect(
+      role.getByRole("button", { name, exact: true }),
+    ).toBeDisabled();
+  }
+  await expect(
+    role.getByRole("button", { name: "Image Input", exact: true }),
+  ).toBeEnabled();
+});
+
 test("model reasoning defaults and role overrides persist independently", async ({
   page,
 }) => {

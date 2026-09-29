@@ -9,11 +9,13 @@ export function useModelCapability(
   provider: string,
   protocol: string | undefined,
   catalogRevision?: string,
+  role?: string,
 ) {
   const targetKey = JSON.stringify([
     model,
     provider,
     protocol,
+    role,
     catalogRevision,
   ]);
   const [lookup, setLookup] = useState<{
@@ -23,7 +25,7 @@ export function useModelCapability(
   useEffect(() => {
     let active = true;
     if (model) {
-      void lookupModelCapabilityDetails(model, provider, protocol)
+      void lookupModelCapabilityDetails(model, provider, protocol, role)
         .then((result) => {
           if (active) setLookup({ targetKey, result });
         })
@@ -34,6 +36,6 @@ export function useModelCapability(
     return () => {
       active = false;
     };
-  }, [model, provider, protocol, targetKey]);
+  }, [model, provider, protocol, role, targetKey]);
   return lookup?.targetKey === targetKey ? lookup.result : undefined;
 }

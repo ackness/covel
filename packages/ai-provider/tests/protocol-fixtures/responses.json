@@ -1,0 +1,297 @@
+{
+  "provenance": {
+    "kind": "synthetic",
+    "reference": "https://github.com/vercel/ai/blob/546a6f8876b0de68452d71a3e49716bcdf7f40c9/packages/openai/src/responses/openai-responses-language-model.ts",
+    "note": "Hand-authored protocol fixtures; no recorded provider traffic or credentials."
+  },
+  "success": {
+    "id": "resp_fixture",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_fixture",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "{\"ok\":true}",
+            "annotations": [
+              {
+                "type": "url_citation",
+                "url": "https://example.org/source",
+                "title": "Synthetic reference",
+                "start_index": 0,
+                "end_index": 11
+              },
+              {
+                "type": "file_citation",
+                "file_id": "file_fixture",
+                "filename": "fixture.txt",
+                "index": 0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "function_call",
+        "id": "fc_fixture",
+        "call_id": "call_fixture",
+        "name": "lookup",
+        "arguments": "{\"query\":\"fixture\"}",
+        "status": "completed"
+      }
+    ],
+    "usage": {
+      "input_tokens": 12,
+      "output_tokens": 5
+    },
+    "warnings": [
+      {
+        "type": "compatibility",
+        "feature": "sampling",
+        "message": "Synthetic provider adjusted sampling."
+      }
+    ],
+    "unknown_field": true
+  },
+  "stream": [
+    {
+      "type": "response.created",
+      "response": {
+        "id": "resp_fixture",
+        "status": "in_progress"
+      },
+      "warnings": [
+        {
+          "type": "compatibility",
+          "feature": "sampling",
+          "message": "Synthetic provider adjusted sampling."
+        }
+      ]
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 1,
+      "item": {
+        "type": "function_call",
+        "id": "fc_fixture",
+        "call_id": "call_fixture",
+        "name": "lookup",
+        "arguments": "",
+        "status": "in_progress"
+      }
+    },
+    {
+      "type": "response.output_text.delta",
+      "item_id": "msg_fixture",
+      "output_index": 0,
+      "content_index": 0,
+      "delta": "{\"ok\":true}"
+    },
+    {
+      "type": "response.output_text.annotation.added",
+      "item_id": "msg_fixture",
+      "output_index": 0,
+      "content_index": 0,
+      "annotation_index": 0,
+      "annotation": {
+        "type": "url_citation",
+        "url": "https://example.org/source",
+        "title": "Synthetic reference",
+        "start_index": 0,
+        "end_index": 11
+      }
+    },
+    {
+      "type": "response.function_call_arguments.delta",
+      "item_id": "fc_fixture",
+      "output_index": 1,
+      "delta": "{\"query\":"
+    },
+    {
+      "type": "response.future_event",
+      "irrelevant": true
+    },
+    {
+      "type": "response.function_call_arguments.delta",
+      "item_id": "fc_fixture",
+      "output_index": 1,
+      "delta": "\"fixture\"}"
+    },
+    {
+      "type": "response.function_call_arguments.done",
+      "item_id": "fc_fixture",
+      "output_index": 1,
+      "arguments": "{\"query\":\"fixture\"}"
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 0,
+      "item": {
+        "type": "message",
+        "id": "msg_fixture",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "{\"ok\":true}",
+            "annotations": [
+              {
+                "type": "url_citation",
+                "url": "https://example.org/source",
+                "title": "Synthetic reference",
+                "start_index": 0,
+                "end_index": 11
+              },
+              {
+                "type": "file_citation",
+                "file_id": "file_fixture",
+                "filename": "fixture.txt",
+                "index": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 1,
+      "item": {
+        "type": "function_call",
+        "id": "fc_fixture",
+        "call_id": "call_fixture",
+        "name": "lookup",
+        "arguments": "{\"query\":\"fixture\"}",
+        "status": "completed"
+      }
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "id": "resp_fixture",
+        "status": "completed",
+        "output": [
+          {
+            "type": "message",
+            "id": "msg_fixture",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "{\"ok\":true}",
+                "annotations": [
+                  {
+                    "type": "url_citation",
+                    "url": "https://example.org/source",
+                    "title": "Synthetic reference",
+                    "start_index": 0,
+                    "end_index": 11
+                  },
+                  {
+                    "type": "file_citation",
+                    "file_id": "file_fixture",
+                    "filename": "fixture.txt",
+                    "index": 0
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "function_call",
+            "id": "fc_fixture",
+            "call_id": "call_fixture",
+            "name": "lookup",
+            "arguments": "{\"query\":\"fixture\"}",
+            "status": "completed"
+          }
+        ],
+        "usage": {
+          "input_tokens": 12,
+          "output_tokens": 5
+        },
+        "warnings": [
+          {
+            "type": "compatibility",
+            "feature": "sampling",
+            "message": "Synthetic provider adjusted sampling."
+          }
+        ],
+        "unknown_field": true
+      }
+    }
+  ],
+  "refusal": {
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "Partial answer",
+            "annotations": []
+          },
+          {
+            "type": "refusal",
+            "refusal": "I cannot comply."
+          }
+        ]
+      }
+    ]
+  },
+  "refusalStream": [
+    {
+      "type": "response.output_text.delta",
+      "output_index": 0,
+      "content_index": 0,
+      "delta": "Partial answer"
+    },
+    {
+      "type": "response.refusal.delta",
+      "output_index": 0,
+      "content_index": 1,
+      "delta": "I cannot "
+    },
+    {
+      "type": "response.refusal.delta",
+      "output_index": 0,
+      "content_index": 1,
+      "delta": "comply."
+    },
+    {
+      "type": "response.refusal.done",
+      "output_index": 0,
+      "content_index": 1,
+      "refusal": "I cannot comply."
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "status": "completed",
+        "output": [
+          {
+            "type": "message",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "Partial answer",
+                "annotations": []
+              },
+              {
+                "type": "refusal",
+                "refusal": "I cannot comply."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

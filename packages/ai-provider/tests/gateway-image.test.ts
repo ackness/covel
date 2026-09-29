@@ -98,6 +98,20 @@ const PNG_B64 = Buffer.from(
 ).toString("base64");
 
 describe("gateway.generateImage", () => {
+  it("requires an explicit image wire for native Google endpoints", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const { gateway } = setup({ protocol: "google-generative-ai-v1" });
+    await expect(
+      gateway.generateImage({ presetId: "img-primary", prompt: "test" }),
+    ).rejects.toMatchObject({
+      code: "CONFIG_ERROR",
+      retriable: false,
+      message: expect.stringContaining("imageWire"),
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("classifies a missing provider as an image configuration error before any request", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);

@@ -354,6 +354,22 @@ describe("explicit ping model identity", () => {
 });
 
 describe("LLM settings and connectivity", () => {
+  it("publishes the native Google endpoint and protocol when a preset inherits connection defaults", async () => {
+    const { app, presetRegistry } = setup();
+    presetRegistry.addPreset({
+      ...presetRegistry.resolvePreset("slot-story")!,
+      provider: "google",
+      model: "gemini-3.1-pro-preview",
+    });
+    const response = await app.request("/api/llm-config");
+    expect(response.status).toBe(200);
+    expect((await response.json()).slots.story).toMatchObject({
+      provider: "google",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      protocol: "google-generative-ai-v1",
+    });
+  });
+
   it("publishes explicit limits and recognized parameter defaults without private metadata", async () => {
     const { app } = setup();
     const presets = await (await app.request("/api/presets")).json();

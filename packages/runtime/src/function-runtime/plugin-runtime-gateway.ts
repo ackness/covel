@@ -22,7 +22,7 @@ import type {
   EvaluationQuestions,
   EvaluationResult,
 } from "@covel/shared/plugin-runtime";
-import type { LLMUsageSummary } from "@covel/shared";
+import type { LLMDiagnostics, LLMUsageSummary } from "@covel/shared";
 import type { ZodType } from "zod";
 import type {
   CapabilityOverridePolicy,
@@ -61,10 +61,14 @@ export interface FullGatewayLike {
       messages: Array<{ role: string; content: string | null }>;
       defaults?: import("@covel/shared").LLMRequestDefaults;
       providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: Readonly<
+        Record<string, Readonly<Record<string, unknown>>>
+      >;
     },
     options?: FullGatewayOptions,
   ): Promise<{
     text: string;
+    diagnostics?: LLMDiagnostics;
     reasoningContent?: string;
     finishReason: string;
     usage: LLMUsageSummary;
@@ -79,10 +83,14 @@ export interface FullGatewayLike {
       messages: Array<{ role: string; content: string | null }>;
       defaults?: import("@covel/shared").LLMRequestDefaults;
       providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: Readonly<
+        Record<string, Readonly<Record<string, unknown>>>
+      >;
     },
     options?: FullGatewayOptions,
   ): Promise<{
     object: T;
+    diagnostics?: LLMDiagnostics;
     reasoningContent?: string;
     finishReason: string;
     usage: LLMUsageSummary;
@@ -212,6 +220,9 @@ export function createPluginRuntimeGateway(
           ...(input.presetId ? { presetId: input.presetId } : {}),
           messages,
           ...(input.defaults ? { defaults: input.defaults } : {}),
+          ...(input.providerOptions
+            ? { providerOptions: input.providerOptions }
+            : {}),
           ...(input.providerRequestMetadata
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
             : {}),
@@ -223,6 +234,7 @@ export function createPluginRuntimeGateway(
       );
       return {
         text: result.text,
+        ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
         finishReason: result.finishReason,
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
@@ -244,9 +256,13 @@ export function createPluginRuntimeGateway(
         readonly content: string;
       }[];
       readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
+      readonly providerOptions?: Readonly<
+        Record<string, Readonly<Record<string, unknown>>>
+      >;
       readonly signal?: AbortSignal;
     }): Promise<{
       readonly object: T;
+      readonly diagnostics?: LLMDiagnostics;
       readonly reasoningContent?: string;
       readonly finishReason: string;
       readonly usage: LLMUsageSummary;
@@ -275,6 +291,9 @@ export function createPluginRuntimeGateway(
           schema: zodSchema as ZodType<T>,
           messages,
           ...(input.defaults ? { defaults: input.defaults } : {}),
+          ...(input.providerOptions
+            ? { providerOptions: input.providerOptions }
+            : {}),
           ...(input.providerRequestMetadata
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
             : {}),
@@ -286,6 +305,7 @@ export function createPluginRuntimeGateway(
       );
       return {
         object: result.object,
+        ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
         finishReason: result.finishReason,
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }

@@ -44,7 +44,7 @@ describe("model capability lookup cache", () => {
     expect(second).toBe(first);
   });
 
-  it("keys the cache on provider and protocol", async () => {
+  it("keys the cache on provider, protocol, and role", async () => {
     requestMock.mockImplementation(lookupReply);
 
     await lookupModelCapabilityDetails("deepseek-v4-flash");
@@ -54,8 +54,17 @@ describe("model capability lookup cache", () => {
       "deepseek",
       "openai-chat-v1",
     );
+    await lookupModelCapabilityDetails(
+      "deepseek-v4-flash",
+      "deepseek",
+      "openai-chat-v1",
+      "text",
+    );
 
-    expect(requestMock).toHaveBeenCalledTimes(3);
+    expect(requestMock).toHaveBeenCalledTimes(4);
+    expect(requestMock).toHaveBeenLastCalledWith(
+      "/api/model-db/lookup?model=deepseek-v4-flash&provider=deepseek&protocol=openai-chat-v1&role=text",
+    );
   });
 
   it("keeps tuple keys distinct when a value contains the old delimiter", async () => {

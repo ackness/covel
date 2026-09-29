@@ -40,6 +40,25 @@ export function assertSuccessfulFinishReason(
   finishReason: string,
   provider: string,
 ): void {
+  if (
+    finishReason === "refusal" ||
+    finishReason === "content_filter" ||
+    finishReason === "content-filter"
+  ) {
+    throw new AiProviderError({
+      code: "REFUSAL",
+      message: `${provider} refused the generation`,
+      provider,
+      retriable: false,
+      details: {
+        diagnostics: {
+          refusal: {
+            reason: finishReason === "refusal" ? "refusal" : "content-filter",
+          },
+        },
+      },
+    });
+  }
   if (finishReason === "error") {
     throw new AiProviderError({
       code: "PROVIDER_ERROR",

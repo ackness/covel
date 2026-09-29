@@ -78,6 +78,22 @@ function setup(presetOverrides: Partial<PresetConfig> = {}) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("gateway.synthesizeSpeech", () => {
+  it("rejects unconfigured native Google audio wires before sending OpenAI-shaped requests", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const { gateway } = setup({ protocol: "google-generative-ai-v1" });
+    await expect(
+      gateway.synthesizeSpeech({ presetId: "tts-primary", text: "hello" }),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+    await expect(
+      gateway.transcribeAudio({
+        presetId: "tts-primary",
+        audio: { data: new Uint8Array([1]), mimeType: "audio/wav" },
+      }),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   function mockSpeechFetch() {
     const fn = vi.fn(async () => ({
       ok: true,

@@ -36,6 +36,57 @@ const fallback: ModelCapabilityLookupResult = {
 };
 
 describe("effective model capabilities", () => {
+  it("projects the selected text adapter after user capability overrides", () => {
+    const lookup: ModelCapabilityLookupResult = {
+      ...fallback,
+      found: true,
+      source: "known",
+      capability: {
+        input: ["text", "image", "audio", "file"],
+        output: ["text", "audio"],
+        features: ["vision", "web_search"],
+      },
+    };
+    const displayed = resolveDisplayCapability(
+      lookup,
+      undefined,
+      {
+        input: ["text", "image", "video"],
+        output: ["text", "audio"],
+        features: ["vision", "web_search", "computer_use"],
+      },
+      { protocol: "openai-responses-v1", role: "text" },
+    );
+    expect(displayed).toMatchObject({
+      input: ["text", "image"],
+      output: ["text"],
+      features: ["vision"],
+    });
+    expect(lookup.capability.input).toContain("audio");
+  });
+
+  it("keeps non-text wires and registered custom adapters intact", () => {
+    const raw = {
+      input: ["audio" as const],
+      output: ["text" as const],
+      features: ["web_search" as const],
+    };
+    expect(
+      resolveDisplayCapability(undefined, raw, undefined, {
+        protocol: "openai-chat-v1",
+        role: "transcription",
+      }),
+    ).toEqual(raw);
+    expect(
+      resolveDisplayCapability(
+        { ...fallback, usesBuiltinAdapter: false },
+        raw,
+        undefined,
+        { protocol: "openai-chat-v1", role: "text" },
+      )?.input,
+    ).toEqual(["audio"]);
+  });
+
   it.each([undefined, null])(
     "normalizes partial overrides when the lookup is %s",
     (lookup) => {

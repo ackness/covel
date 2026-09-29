@@ -33,6 +33,14 @@ import {
   mediaRefFallbackText,
 } from "./common.js";
 import { readTokenCount } from "./usage.js";
+import {
+  readResponseDiagnostics,
+  ResponseDiagnostics,
+} from "./response-diagnostics.js";
+import {
+  objectResponseFormat,
+  withResponseFormatInstruction,
+} from "./structured-output.js";
 
 import type {
   ModelRequestContext,
@@ -202,7 +210,10 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params, context) {
       params = withTextRequestDefaults(params);
-      const messages = applyCapabilityFallback(params.messages, context);
+      const messages = applyCapabilityFallback(
+        withResponseFormatInstruction(params.messages, params.responseFormat),
+        context,
+      );
       const body: Record<string, unknown> = {
         model: params.model,
         messages: serializeMessages(messages),
@@ -223,13 +234,18 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       if (params.responseFormat) {
         // json_object is the widest interoperable structured-output mode for
         // OpenAI-compatible endpoints (including Qwen/DeepSeek proxies). The
-        // gateway adapter also places the exact schema in the system prompt;
+        // adapter also places the exact schema in the system prompt;
         // runtime validation remains the final contract gate.
         body.response_format = { type: "json_object" };
       }
 
       const response = await postJson(config, "/chat/completions", body);
       const payload = await parseJson(response);
+      const diagnostics = readResponseDiagnostics(
+        payload,
+        "chat",
+        "openai-chat",
+      );
       assertSuccess(response, payload, "openai-chat");
       assertGenerationPayload(payload, "openai-chat");
       assertSuccessfulFinishReason(
@@ -240,6 +256,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       const toolCalls = readOpenAiChatToolCalls(payload);
       const reasoningContent = readOpenAiChatReasoningContent(payload);
       return {
+        ...(diagnostics ? { diagnostics } : {}),
         text: readOpenAiChatText(payload),
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
@@ -249,7 +266,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     },
 
     async generateObject(config, params, context) {
-      const messages = applyCapabilityFallback(params.messages, context);
+      const messages = applyCapabilityFallback(
+        withResponseFormatInstruction(
+          params.messages,
+          objectResponseFormat(params.schema, "openai-chat"),
+        ),
+        context,
+      );
       const response = await postJson(config, "/chat/completions", {
         model: params.model,
         messages: serializeMessages(messages),
@@ -262,6 +285,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         ),
       });
       const payload = await parseJson(response);
+      const diagnostics = readResponseDiagnostics(
+        payload,
+        "chat",
+        "openai-chat",
+      );
       assertSuccess(response, payload, "openai-chat");
       assertGenerationPayload(payload, "openai-chat");
       assertSuccessfulFinishReason(
@@ -281,6 +309,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       }
 
       return {
+        ...(diagnostics ? { diagnostics } : {}),
         object: validation.data,
         reasoningContent: readOpenAiChatReasoningContent(payload) ?? undefined,
         finishReason: readOpenAiChatFinishReason(payload),
@@ -290,7 +319,10 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
     async *streamText(config, params, context) {
       params = withTextRequestDefaults(params);
-      const messages = applyCapabilityFallback(params.messages, context);
+      const messages = applyCapabilityFallback(
+        withResponseFormatInstruction(params.messages, params.responseFormat),
+        context,
+      );
       const body: Record<string, unknown> = {
         model: params.model,
         messages: serializeMessages(messages),
@@ -299,6 +331,9 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         // explicit. Compatible providers that support usage follow the same
         // shape; malformed/absent counters remain safely normalized to zero.
         stream_options: { include_usage: true },
+        ...(params.responseFormat
+          ? { response_format: { type: "json_object" } }
+          : {}),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
           params.providerRequestMetadata,
@@ -318,6 +353,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       // Check HTTP status before parsing SSE — a non-2xx response won't be SSE
       if (!response.ok) {
         const payload = await parseJson(response);
+        readResponseDiagnostics(payload, "chat", "openai-chat");
         assertSuccess(response, payload, "openai-chat");
       }
 
@@ -325,51 +361,59 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       let finishReason = "stop";
       let completed = false;
       let reasoningAcc = "";
+      const diagnostics = new ResponseDiagnostics("chat");
       // Accumulate tool_call deltas by index across chunks.
       const toolCallAcc = new Map<
         number,
         { id: string | null; name: string | null; arguments: string }
       >();
 
-      for await (const payload of iterateSsePayloads(response)) {
-        assertGenerationPayload(payload, "openai-chat");
-        const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
-        if (reasoningDelta) {
-          reasoningAcc += reasoningDelta;
-          yield { type: "reasoning-delta", reasoningDelta };
-        }
+      try {
+        for await (const payload of iterateSsePayloads(response)) {
+          diagnostics.push(payload);
+          if (payload.error) diagnostics.assertNotRefused("openai-chat");
+          assertGenerationPayload(payload, "openai-chat");
+          const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
+          if (reasoningDelta) {
+            reasoningAcc += reasoningDelta;
+            yield { type: "reasoning-delta", reasoningDelta };
+          }
 
-        const delta = readOpenAiChatStreamDelta(payload);
-        if (delta) {
-          yield { type: "text-delta", textDelta: delta };
-        }
+          const delta = readOpenAiChatStreamDelta(payload);
+          if (delta) {
+            yield { type: "text-delta", textDelta: delta };
+          }
 
-        const toolCallDeltas = readOpenAiChatStreamToolCallDeltas(payload);
-        if (toolCallDeltas) {
-          for (const tcd of toolCallDeltas) {
-            const existing = toolCallAcc.get(tcd.index) ?? {
-              id: null,
-              name: null,
-              arguments: "",
-            };
-            if (tcd.id) existing.id = tcd.id;
-            if (tcd.name) existing.name = tcd.name;
-            if (tcd.argumentsDelta) existing.arguments += tcd.argumentsDelta;
-            toolCallAcc.set(tcd.index, existing);
+          const toolCallDeltas = readOpenAiChatStreamToolCallDeltas(payload);
+          if (toolCallDeltas) {
+            for (const tcd of toolCallDeltas) {
+              const existing = toolCallAcc.get(tcd.index) ?? {
+                id: null,
+                name: null,
+                arguments: "",
+              };
+              if (tcd.id) existing.id = tcd.id;
+              if (tcd.name) existing.name = tcd.name;
+              if (tcd.argumentsDelta) existing.arguments += tcd.argumentsDelta;
+              toolCallAcc.set(tcd.index, existing);
+            }
+          }
+
+          if (payload.usage && typeof payload.usage === "object") {
+            usage = readOpenAiChatUsage(payload);
+          }
+
+          const reason = readOpenAiChatStreamFinishReason(payload);
+          if (reason) {
+            finishReason = reason;
+            completed = true;
           }
         }
-
-        if (payload.usage && typeof payload.usage === "object") {
-          usage = readOpenAiChatUsage(payload);
-        }
-
-        const reason = readOpenAiChatStreamFinishReason(payload);
-        if (reason) {
-          finishReason = reason;
-          completed = true;
-        }
+      } catch (error) {
+        diagnostics.assertNotRefused("openai-chat");
+        throw error;
       }
-
+      diagnostics.assertNotRefused("openai-chat");
       assertStreamCompleted(completed, "openai-chat");
 
       // Emit accumulated tool calls before done.
@@ -388,6 +432,9 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
       yield {
         type: "done",
+        ...(diagnostics.diagnostics()
+          ? { diagnostics: diagnostics.diagnostics() }
+          : {}),
         finishReason,
         usage,
         ...(reasoningAcc ? { reasoningContent: reasoningAcc } : {}),

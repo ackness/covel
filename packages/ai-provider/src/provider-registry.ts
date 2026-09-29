@@ -21,6 +21,7 @@ import type {
  */
 const PROVIDER_PROTOCOL_DEFAULTS: Record<string, ProviderProtocol> = {
   anthropic: "anthropic-messages-v1",
+  google: "google-generative-ai-v1",
 };
 
 /** Protocol assumed for any provider without a {@link PROVIDER_PROTOCOL_DEFAULTS} entry. */
@@ -60,6 +61,8 @@ interface ProviderRegistration {
 
 export interface ProviderResolution {
   adapter: ModelProviderAdapter;
+  /** Only built-in adapters are bounded by the framework's protocol support. */
+  usesBuiltinAdapter?: boolean;
   config: ProviderConfig;
   protocol: ProviderProtocol;
   hooks: ProviderLifecycleHook[];
@@ -203,14 +206,16 @@ export function createProviderRegistry(options?: {
       mergedConfig.baseUrl === undefined ||
       hasSameOrigin(mergedConfig.baseUrl, trustedBaseUrl);
 
-    // Trusted default headers (llm.toml can carry auth-bearing headers) must
-    // not follow a request-redirected origin either — same exfil channel.
-    if (!envKeyAllowed && mergedConfig.headers) {
+    // Registered credentials must not follow a request-redirected origin.
+    // Explicit request keys are applied separately by withApiKeys.
+    if (!envKeyAllowed) {
+      delete mergedConfig.apiKey;
       delete mergedConfig.headers;
     }
 
     return {
       adapter,
+      usesBuiltinAdapter: !protocolRoute?.adapter && !registered.adapter,
       config: mergedConfig,
       protocol,
       hooks: [...(registered.hooks ?? [])],

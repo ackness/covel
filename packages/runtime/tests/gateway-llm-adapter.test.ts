@@ -1,10 +1,64 @@
 import { describe, expect, it } from "vitest";
+import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
 import {
   createGatewayAdapter,
   type GatewayLike,
+  type SlotOverridesInput,
 } from "../src/llm/gateway-llm-adapter.js";
 
 describe("createGatewayAdapter target resolution", () => {
+  it("preserves diagnostics and shares the request budget for generate and stream", async () => {
+    const diagnostics: LLMDiagnostics = {
+      warnings: [{ type: "compatibility", message: "Synthetic warning" }],
+      sources: [
+        { type: "url", id: "source-1", url: "https://example.org/reference" },
+      ],
+      citations: [{ sourceId: "source-1", startIndex: 0, endIndex: 6 }],
+    };
+    const requestBudget: LLMRequestBudget = {
+      maxAttempts: 4,
+      attempts: 0,
+      deadline: Date.now() + 10_000,
+    };
+    const responseFormat = {
+      type: "json_schema" as const,
+      schema: { type: "object" },
+    };
+    const budgets: unknown[] = [];
+    const formats: unknown[] = [];
+    const gateway: GatewayLike = {
+      resolveSlot: () => null,
+      async generateText(input, options) {
+        budgets.push(options?.requestBudget);
+        formats.push(input.responseFormat);
+        return {
+          text: "{}",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: "stop",
+          diagnostics,
+        };
+      },
+      async *streamText(input, options) {
+        budgets.push(options?.requestBudget);
+        formats.push(input.responseFormat);
+        yield { type: "done", finishReason: "stop", diagnostics };
+      },
+    };
+    const adapter = createGatewayAdapter(gateway);
+    const result = await adapter.generate({
+      messages: [],
+      requestBudget,
+      responseFormat,
+    });
+    const events = await Array.fromAsync(
+      adapter.stream!({ messages: [], requestBudget, responseFormat }),
+    );
+    expect(result.diagnostics).toEqual(diagnostics);
+    expect(events[0]).toMatchObject({ type: "done", diagnostics });
+    expect(budgets).toHaveLength(2);
+    for (const budget of budgets) expect(budget).toBe(requestBudget);
+    expect(formats).toEqual([responseFormat, responseFormat]);
+  });
   it("resolves the trace identity with the same request-scoped slot config", () => {
     const calls: Array<{
       slot: string | undefined;
@@ -21,7 +75,16 @@ describe("createGatewayAdapter target resolution", () => {
     };
     const slotOverrides = {
       slotBindings: { story: { modelRef: "custom-story" } },
-    };
+      customPresets: [
+        {
+          id: "custom-story",
+          name: "Gemini",
+          provider: "google",
+          model: "gemini-fixture",
+          protocol: "google-generative-ai-v1",
+        },
+      ],
+    } satisfies SlotOverridesInput;
     const adapter = createGatewayAdapter(gateway, {
       apiKeys: { "deepseek-proxy": "request-key" },
       envApiKeys: { deepseek: "env-key" },

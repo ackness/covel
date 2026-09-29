@@ -1,4 +1,6 @@
 export type AiProviderErrorCode =
+  | "REFUSAL"
+  | "REQUEST_BUDGET_EXCEEDED"
   | "RATE_LIMITED"
   | "SCHEMA_VALIDATION_FAILED"
   | "PROVIDER_ERROR"

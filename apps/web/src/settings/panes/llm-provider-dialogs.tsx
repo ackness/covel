@@ -260,6 +260,7 @@ export function ProtocolSelect({
           <option value="openai-chat-v1">OpenAI Chat</option>
           <option value="openai-responses-v1">OpenAI Responses</option>
           <option value="anthropic-messages-v1">Anthropic Messages</option>
+          <option value="google-generative-ai-v1">Google Gemini</option>
           <option value="evaluation">{t("settings.evaluationProtocol")}</option>
         </select>
       </label>

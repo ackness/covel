@@ -147,6 +147,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       fallbackPresetIds: fallbackIds.length > 0 ? fallbackIds : undefined,
       capability,
       tag,
+      ...(def.providerOptions ? { providerOptions: def.providerOptions } : {}),
       ...(def.embeddingFormat !== undefined
         ? { embeddingFormat: def.embeddingFormat }
         : {}),

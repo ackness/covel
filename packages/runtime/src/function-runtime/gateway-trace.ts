@@ -18,7 +18,7 @@ import type {
   PluginEvaluationInput,
   EvaluationQuestions,
 } from "@covel/shared/plugin-runtime";
-import type { LLMUsageSummary } from "@covel/shared";
+import type { LLMDiagnostics, LLMUsageSummary } from "@covel/shared";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { summarizeTraceError } from "./trace-error.js";
 
@@ -34,6 +34,55 @@ interface GatewayCallInput {
   readonly prompt?: string;
   readonly system?: string;
   readonly messages?: readonly { readonly content: string }[];
+}
+
+/** Keep function-runtime traces free of citation text, URLs and refusal prose. */
+function summarizeDiagnostics(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const diagnostics = value as Record<string, unknown>;
+  const warningTypes = Array.isArray(diagnostics.warnings)
+    ? diagnostics.warnings.flatMap((warning: unknown) => {
+        const type =
+          warning && typeof warning === "object" && "type" in warning
+            ? warning.type
+            : undefined;
+        return type === "unsupported" ||
+          type === "compatibility" ||
+          type === "other"
+          ? [type]
+          : [];
+      })
+    : [];
+  const refusal = diagnostics.refusal;
+  const reason =
+    refusal && typeof refusal === "object" && "reason" in refusal
+      ? refusal.reason
+      : undefined;
+  return {
+    warningTypes,
+    sourceCount: Array.isArray(diagnostics.sources)
+      ? diagnostics.sources.length
+      : 0,
+    citationCount: Array.isArray(diagnostics.citations)
+      ? diagnostics.citations.length
+      : 0,
+    ...(reason === "refusal" || reason === "content-filter"
+      ? { refusalReason: reason }
+      : {}),
+  };
+}
+
+function errorDiagnostics(error: unknown): unknown {
+  const details =
+    error && typeof error === "object" && "details" in error
+      ? error.details
+      : undefined;
+  return details && typeof details === "object" && "diagnostics" in details
+    ? details.diagnostics
+    : undefined;
 }
 
 /** Summarize a call's prompt shape without leaking the text (PII guard). */
@@ -71,6 +120,7 @@ export function withGatewayTrace(
     R extends {
       finishReason?: string;
       reasoningContent?: string;
+      diagnostics?: LLMDiagnostics;
       usage: LLMUsageSummary;
       model?: string;
       provider?: string;
@@ -84,7 +134,9 @@ export function withGatewayTrace(
     await emitter.emit("gateway.calling", { ...ctx, method, ...summary });
     try {
       const result = await call();
+      const diagnosticsSummary = summarizeDiagnostics(result.diagnostics);
       await emitter.emit("gateway.responded", {
+        ...(diagnosticsSummary ? { diagnosticsSummary } : {}),
         ...ctx,
         method,
         ...(result.finishReason ? { finishReason: result.finishReason } : {}),
@@ -98,7 +150,9 @@ export function withGatewayTrace(
       });
       return result;
     } catch (err) {
+      const diagnosticsSummary = summarizeDiagnostics(errorDiagnostics(err));
       await emitter.emit("gateway.failed", {
+        ...(diagnosticsSummary ? { diagnosticsSummary } : {}),
         ...ctx,
         method,
         error: summarizeTraceError(err),

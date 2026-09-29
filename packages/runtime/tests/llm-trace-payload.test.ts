@@ -108,6 +108,25 @@ describe("buildLlmRespondedSuccessPayload", () => {
     usage: { inputTokens: 10, outputTokens: 5 },
   };
 
+  it("preserves normalized provider diagnostics in success traces", () => {
+    const diagnostics = {
+      sources: [
+        {
+          type: "url" as const,
+          id: "source-1",
+          url: "https://example.org/reference",
+        },
+      ],
+    };
+    const payload = buildLlmRespondedSuccessPayload({
+      ...baseIdentity,
+      response: { ...response, diagnostics },
+      durationMs: 1,
+      attempt: 0,
+    });
+    expect(payload.diagnostics).toEqual(diagnostics);
+  });
+
   it("projects the spec schema from an LLMResponse", () => {
     const payload = buildLlmRespondedSuccessPayload({
       ...baseIdentity,
@@ -174,6 +193,23 @@ describe("buildLlmRespondedSuccessPayload", () => {
 });
 
 describe("buildLlmRespondedErrorPayload", () => {
+  it("preserves refusal details in error traces", () => {
+    const diagnostics = {
+      refusal: { reason: "refusal", message: "Synthetic refusal" },
+    };
+    const error = Object.assign(new Error("Provider refused generation"), {
+      code: "REFUSAL",
+      retriable: false,
+      details: { diagnostics },
+    });
+    const payload = buildLlmRespondedErrorPayload({
+      ...baseIdentity,
+      error,
+      durationMs: 1,
+      attempt: 0,
+    });
+    expect(payload).toMatchObject({ finishReason: "error", diagnostics });
+  });
   it("produces the error shape required by the spec (finishReason=error, usage present)", () => {
     const payload = buildLlmRespondedErrorPayload({
       ...baseIdentity,

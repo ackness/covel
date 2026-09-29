@@ -1,4 +1,6 @@
 import type { LLMProviderRequest } from "./llm-provider-request.js";
+import type { LLMDiagnostics } from "./llm-diagnostics.js";
+import type { LLMRequestBudget } from "../llm-request-budget.js";
 /**
  * LLM adapter — thin abstraction for calling language models.
  *
@@ -68,6 +70,7 @@ export interface LLMUsageSummary {
 }
 
 export interface LLMResponse {
+  readonly diagnostics?: LLMDiagnostics;
   readonly content: string | null;
   readonly toolCalls: readonly LLMToolCall[];
   readonly finishReason: "stop" | "tool_calls" | "length" | "error";
@@ -111,6 +114,7 @@ export type LLMStreamEvent =
     }
   | {
       readonly type: "done";
+      readonly diagnostics?: LLMDiagnostics;
       readonly finishReason: string;
       /** Accumulated provider-exposed reasoning text or summary. */
       readonly reasoningContent?: string;
@@ -180,6 +184,7 @@ export interface LLMAdapter {
    * The `model` parameter maps to a slot name (e.g., 'default', 'fast', 'balance').
    */
   generate(params: {
+    readonly requestBudget?: LLMRequestBudget;
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
@@ -204,6 +209,8 @@ export interface LLMAdapter {
    * Optional — when not provided, callers should fall back to `generate()`.
    */
   stream?(params: {
+    readonly requestBudget?: LLMRequestBudget;
+    readonly responseFormat?: LLMResponseFormat;
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];

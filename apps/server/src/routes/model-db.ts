@@ -8,8 +8,10 @@ import { resolve, dirname } from "node:path";
 import { readRuntimeEnv } from "@covel/shared";
 import {
   type ProviderProtocol,
+  PROVIDER_PROTOCOLS,
   createModelDatabase,
   fetchLiteLlmModels,
+  projectCapabilityForBuiltinAdapter,
   resolveCapabilityDetails,
   resolveReasoningEffortProfile,
   setModelDatabase,
@@ -59,11 +61,24 @@ export function createModelDbRoutes(ai: AiStack): Hono {
     const model = c.req.query("model") ?? "";
     const provider = c.req.query("provider");
     const protocol = c.req.query("protocol") as ProviderProtocol | undefined;
+    const role = c.req.query("role");
     const result = resolveCapabilityDetails(
       model,
       provider ?? undefined,
       protocol,
     );
+    const usesBuiltinAdapter =
+      role &&
+      protocol &&
+      PROVIDER_PROTOCOLS.includes(protocol) &&
+      provider &&
+      ai.providerRegistry
+        ? ai.providerRegistry.resolve({
+            provider,
+            protocol,
+            requestScoped: true,
+          }).usesBuiltinAdapter
+        : undefined;
     const found = result.source !== "protocol-default";
     return c.json({
       found,
@@ -83,6 +98,16 @@ export function createModelDbRoutes(ai: AiStack): Hono {
         inputPerMToken: result.capability.pricing?.inputPerMToken,
         outputPerMToken: result.capability.pricing?.outputPerMToken,
       },
+      ...(usesBuiltinAdapter !== undefined ? { usesBuiltinAdapter } : {}),
+      ...(role && protocol && usesBuiltinAdapter !== false
+        ? {
+            effectiveCapability: projectCapabilityForBuiltinAdapter(
+              result.capability,
+              protocol,
+              role,
+            ),
+          }
+        : {}),
     });
   });
 

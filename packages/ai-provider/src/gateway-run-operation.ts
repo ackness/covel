@@ -32,6 +32,11 @@
  */
 
 import { AiProviderError } from "./errors.js";
+import {
+  assertLlmRequestBudget,
+  awaitLlmRequest,
+  createLlmRequestScope,
+} from "@covel/shared";
 import type { ProviderResolution } from "./provider-registry.js";
 import {
   notifyStart,
@@ -122,8 +127,25 @@ export function createRunOperation(
     spec: OperationSpec<TResult>,
     options: GatewayOptions | undefined,
   ): Promise<TResult> {
-    const cleanup = applySlotOverlay(deps, options?.slotOverrides);
+    // Media backends own longer task/polling deadlines; only an explicit
+    // budget opts them into this transport ceiling.
+    const scope =
+      options?.requestBudget ||
+      ["text", "object", "evaluate"].includes(spec.mode)
+        ? createLlmRequestScope({
+            budget: options?.requestBudget,
+            signal: options?.signal,
+          })
+        : undefined;
+    if (scope)
+      options = {
+        ...options,
+        requestBudget: scope.budget,
+        signal: scope.signal,
+      };
+    let cleanup = () => {};
     try {
+      cleanup = applySlotOverlay(deps, options?.slotOverrides);
       const effectivePresetId = resolveSlotOrPassthrough(
         spec.presetId,
         spec.fallbackTag,
@@ -144,13 +166,32 @@ export function createRunOperation(
       let lastError: AiProviderError | null = null;
 
       for (const [index, target] of targets.entries()) {
-        const { provider, resolved } = spec.prepare
+        const { provider, resolved: prepared } = spec.prepare
           ? spec.prepare(target, options)
           : prepareTarget(deps.providerRegistry, target, spec.mode, options);
+        const resolved = {
+          ...prepared,
+          config: {
+            ...prepared.config,
+            ...(scope
+              ? {
+                  requestBudget: scope.budget,
+                  signal: prepared.config.signal
+                    ? AbortSignal.any([prepared.config.signal, scope.signal])
+                    : scope.signal,
+                }
+              : {}),
+          },
+        };
 
         const startTime = Date.now();
 
         try {
+          if (scope)
+            assertLlmRequestBudget(scope.budget, {
+              signal: scope.signal,
+              requireAttempt: true,
+            });
           notifyTargetAttempt(options?.onTargetAttempt, target);
           await notifyStart(
             resolved.hooks,
@@ -159,8 +200,12 @@ export function createRunOperation(
             spec.mode,
             targetModel(target),
             options?.traceId,
+            options,
           );
-          const result = await spec.execute(target, resolved);
+          const result = await awaitLlmRequest(
+            spec.execute(target, resolved),
+            scope?.signal ?? options?.signal,
+          );
           await notifySuccess(
             resolved.hooks,
             provider,
@@ -170,6 +215,7 @@ export function createRunOperation(
             resolveUsage(result),
             Date.now() - startTime,
             options?.traceId,
+            options,
           );
           return result;
         } catch (error) {
@@ -197,6 +243,7 @@ export function createRunOperation(
       );
     } finally {
       cleanup();
+      scope?.dispose();
     }
   }
 

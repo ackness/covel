@@ -386,14 +386,17 @@ protocol = "typesafe-systemone-v1"`);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockClear();
     const controller = new AbortController();
+    let receivedSignal: AbortSignal | null | undefined;
     fetchMock.mockImplementationOnce(async (_url, init) => {
-      expect(init?.signal).toBe(controller.signal);
+      receivedSignal = init?.signal;
       controller.abort();
       throw controller.signal.reason;
     });
     await expect(
       gateway.evaluate(params, { signal: controller.signal }),
     ).rejects.toThrow();
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(receivedSignal?.reason).toBe(controller.signal.reason);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

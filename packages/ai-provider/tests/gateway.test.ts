@@ -350,6 +350,52 @@ describe("gateway", () => {
     expect(events[2]).toMatchObject({ type: "done", finishReason: "stop" });
   });
 
+  it("preserves the structured response format across streaming fallback", async () => {
+    const streamText = vi.fn<ModelProviderAdapter["streamText"]>(
+      async function* (_config, params) {
+        if (params.model === "test-model") {
+          throw new Error("Upstream unavailable");
+        }
+        yield { type: "text-delta", textDelta: '{"ok":true}' };
+        yield {
+          type: "done",
+          finishReason: "stop",
+          usage: { inputTokens: 10, outputTokens: 5 },
+        };
+      },
+    );
+    const { gateway } = setup({ streamText });
+    const responseFormat = {
+      type: "json_schema" as const,
+      schema: {
+        type: "object",
+        properties: { ok: { type: "boolean" } },
+        required: ["ok"],
+      },
+    };
+
+    const events = await Array.fromAsync(
+      gateway.streamText({
+        messages: [{ role: "user", content: "Return the result." }],
+        responseFormat,
+      }),
+    );
+
+    expect(streamText).toHaveBeenCalledTimes(2);
+    for (const call of [1, 2]) {
+      expect(streamText).toHaveBeenNthCalledWith(
+        call,
+        expect.anything(),
+        expect.objectContaining({ responseFormat }),
+        expect.objectContaining({ mode: "stream" }),
+      );
+    }
+    expect(events).toEqual([
+      { type: "text-delta", textDelta: '{"ok":true}' },
+      expect.objectContaining({ type: "done", finishReason: "stop" }),
+    ]);
+  });
+
   it("does not fallback after a streamed tool call is observable", async () => {
     let callCount = 0;
     const { gateway } = setup({

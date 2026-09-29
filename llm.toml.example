@@ -14,6 +14,7 @@
 #   baseUrl  - provider or compatible proxy URL; configurable per slot
 #   protocol - wire format, independent of provider name and model ID:
 #              openai-chat-v1, openai-responses-v1, anthropic-messages-v1,
+#              google-generative-ai-v1,
 #              typesafe-systemone-v1, openrouter-decisions-v1,
 #              vercel-evaluation-v4
 #   fallback - optional target slot name; enable the target and its key
@@ -75,6 +76,26 @@ fallback = "story"
 # protocol = "openai-chat-v1"
 # reasoning_effort = "disabled"
 # fallback = "utility"
+
+# -- Optional: Google Gemini native text -------------------------
+# Key: GOOGLE_API_KEY. Native text, images, tools, and JSON schema output.
+# https://ai.google.dev/api/generate-content
+#
+# [covel.gemini]
+# provider = "google"
+# model    = "gemini-3.1-pro-preview"
+# baseUrl  = "https://generativelanguage.googleapis.com/v1beta"
+# protocol = "google-generative-ai-v1"
+# fallback = "utility"
+#
+# [covel.gemini.providerOptions.google.thinkingConfig]
+# thinkingLevel = "medium"
+# includeThoughts = true
+#
+# To use the OpenAI-compatible endpoint instead, explicitly set
+# protocol = "openai-chat-v1" and
+# baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai".
+# Native thinkingConfig options belong only to the native protocol.
 
 # -- Optional: Jev via the official TypeSafe provider --------------
 # Key: TYPESAFE_API_KEY. Direct TypeSafe System One API, no gateway needed.

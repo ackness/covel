@@ -11,6 +11,26 @@ import {
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
+  it("preserves native Gemini protocols during import and infers Google connection defaults", () => {
+    const profile = {
+      id: "google",
+      name: "Gemini",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      protocol: "google-generative-ai-v1",
+      models: [
+        {
+          ref: "gemini",
+          modelId: "gemini-3.1-pro-preview",
+          protocol: "google-generative-ai-v1",
+        },
+      ],
+    };
+    expect(sanitizeImportedProfile(profile)).toEqual(profile);
+    expect(
+      buildProviderCatalog([], [{ ...profile, protocol: undefined }])[0],
+    ).toMatchObject({ protocol: "google-generative-ai-v1" });
+  });
+
   it("preserves same-model configurations with distinct references across export/import", () => {
     const profile = {
       id: "fixture",

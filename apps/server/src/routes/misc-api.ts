@@ -147,6 +147,7 @@ export function createMiscApiRoutes(
         .listPresets()
         .find((p) => p.id === slot.presetId);
       if (!preset) continue;
+      const resolved = ai.providerRegistry.resolve(preset);
       const fallbackPresetId = preset.fallbackPresetIds?.[0];
       const fallbackSlotId =
         typeof fallbackPresetId === "string"
@@ -155,11 +156,10 @@ export function createMiscApiRoutes(
             : fallbackPresetId
           : undefined;
       slotsInfo[slotId] = {
-        baseUrl:
-          preset.baseUrl ?? ai.config.providers[preset.provider]?.baseUrl,
+        baseUrl: resolved.config.baseUrl,
         provider: preset.provider,
         model: preset.model,
-        protocol: preset.protocol ?? "openai-chat-v1",
+        protocol: resolved.protocol,
         tag: slot.tag,
         ...(fallbackSlotId ? { fallback: fallbackSlotId } : {}),
         ...(preset.capability ? { capability: preset.capability } : {}),

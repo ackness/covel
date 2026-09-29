@@ -106,6 +106,36 @@ describe("llm capability controls", () => {
     });
   });
 
+  it("disables capabilities the selected built-in text adapter cannot send", () => {
+    const onUpdate = vi.fn();
+    render(
+      <CapabilityEditor
+        serverCap={{
+          input: ["text", "audio"],
+          output: ["text", "audio"],
+          features: ["web_search"],
+        }}
+        override={undefined}
+        onUpdate={onUpdate}
+        context={{ protocol: "openai-responses-v1", role: "text" }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Audio Input" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(
+      screen.getByRole("button", { name: "Speech Synthesis" }),
+    ).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Web Search" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Web Search" }));
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
   it("emits numeric and pricing patches from editor inputs", () => {
     const onUpdate = vi.fn();
 
