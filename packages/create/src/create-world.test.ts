@@ -148,6 +148,42 @@ describe("createWorld", () => {
     ).rejects.toThrow("invalid generated world");
   });
 
+  it("returns the validated manifest with canonical locales and schema defaults", async () => {
+    const yaml = WORLD_YAML.replace(
+      "defaultLocale: zh-CN",
+      "defaultLocale: zh_hant_tw",
+    )
+      .replace(
+        "supportedLocales: [zh-CN]",
+        "supportedLocales: [zh_hant_tw, en_us]",
+      )
+      .replace(
+        "tags: [test]",
+        "tags: [test]\ncharacterSchema:\n  attributes:\n    - id: affinity\n      name: 关系\n      type: number\n      category: social\npluginSettings:\n  memory:\n    cadence: 2",
+      );
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "Clockwork city",
+    });
+
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.manifest).toMatchObject({
+      defaultLocale: "zh-Hant-TW",
+      supportedLocales: ["zh-Hant-TW", "en-US"],
+      characterSchema: {
+        types: ["npc", "companion"],
+        attributes: [
+          { id: "affinity", name: "关系", type: "number", category: "social" },
+        ],
+      },
+      pluginSettings: { memory: { cadence: 2 } },
+      dimensions: { geography: { regions: [{ name: "中央街区" }] } },
+    });
+  });
+
   it("rejects unresolved file references before returning generated content", async () => {
     const result = await createWorld({
       llm: new FixedLlm(

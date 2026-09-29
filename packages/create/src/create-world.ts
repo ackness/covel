@@ -336,15 +336,17 @@ export async function createWorld(
       }
     }
 
-    // Extract id from validated data
-    const id = yamlData.id as string;
+    // Use the parsed output: schema transforms and defaults are part of the
+    // manifest contract shared by file and in-memory save targets.
+    const manifest = validation.data as Record<string, unknown>;
+    const id = manifest.id as string;
     log(options, "info", `validation passed id=${id}`);
 
     attemptSignal.throwIfAborted();
     return {
       success: true,
       id,
-      manifest: yamlData,
+      manifest,
       lore: normalizedLore,
       locale,
       packageContent: generatedPackage.content,

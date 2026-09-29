@@ -195,6 +195,67 @@ describe("ai world generation route", () => {
   );
 
   it.each(["server-file", "server-store", "return-only"] as const)(
+    "%s returns the same normalized manifest fields",
+    async (saveTarget) => {
+      const yaml = WORLD_YAML.replace(
+        "defaultLocale: zh-CN",
+        "defaultLocale: zh_hant_tw",
+      )
+        .replace(
+          "supportedLocales: [zh-CN]",
+          "supportedLocales: [zh_hant_tw, en_us]",
+        )
+        .replace(
+          "tags: [test]",
+          "tags: [test]\ncharacterSchema:\n  attributes:\n    - id: affinity\n      name: 关系\n      type: number\n      category: social\npluginSettings:\n  memory:\n    cadence: 2",
+        );
+      app = createTestApp(
+        store,
+        new FixedLlm(
+          `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+        ),
+      );
+
+      const response = await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concept: "Clockwork city", saveTarget }),
+      });
+      const events = await readSseJson(response);
+      expect(events.filter((event) => event.type === "error")).toEqual([]);
+      const done = events.find((event) => event.type === "done") as {
+        world: import("@covel/store").WorldRecord;
+      };
+      expect(done.world).toMatchObject({
+        locale: "zh-Hant-TW",
+        metadata: {
+          characterSchema: {
+            types: ["npc", "companion"],
+            attributes: [
+              {
+                id: "affinity",
+                name: "关系",
+                type: "number",
+                category: "social",
+              },
+            ],
+          },
+          pluginSettings: { memory: { cadence: 2 } },
+          dimensions: { geography: { regions: [{ name: "中央区" }] } },
+        },
+      });
+      if (saveTarget === "return-only") {
+        expect(await store.getWorld(done.world.id)).toBeNull();
+      } else {
+        expect(await store.getWorld(done.world.id)).toMatchObject({
+          locale: "zh-Hant-TW",
+          metadata: { characterSchema: { types: ["npc", "companion"] } },
+        });
+      }
+    },
+  );
+
+  it.each(["server-file", "server-store", "return-only"] as const)(
     "%s preserves generated memory definitions through session import",
     async (saveTarget) => {
       const discovery = (
