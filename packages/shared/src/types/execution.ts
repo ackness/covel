@@ -316,7 +316,7 @@ export interface TurnResult {
 
 export type InteractionType = "form" | "choice" | "confirmation";
 
-export interface InteractionSubmitBehavior {
+interface InteractionSubmitBehavior {
   /** Whether the filled narrative should appear as a visible player bubble. */
   readonly echoFilledNarrative?: boolean;
 }

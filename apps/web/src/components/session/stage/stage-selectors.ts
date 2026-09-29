@@ -23,7 +23,6 @@ import {
 } from "./stage-direction-selectors.js";
 
 export {
-  MAX_SPRITE_SLOTS,
   type SpritePosition,
   type StageCurrentRecord,
   type StageSpeaker,

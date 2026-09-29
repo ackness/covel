@@ -131,7 +131,7 @@ const TRANSFORM_OPTIONS: readonly TokenOption[] = [
  * ponytail: URL + gradients only; add local-image upload when players ask —
  * data-URLs would blow the settings blob past localStorage limits.
  */
-export const AMBIENCE_PRESETS: readonly TokenOption[] = [
+const AMBIENCE_PRESETS: readonly TokenOption[] = [
   {
     id: "none",
     value: "none",

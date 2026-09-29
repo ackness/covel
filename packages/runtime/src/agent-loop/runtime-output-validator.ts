@@ -36,7 +36,7 @@ interface ValidatorContext {
  * envelope. Returns a failed RuntimeResult that preserves the full LLM output
  * plus a structured diagnostic, or `undefined` when `parsedAsJson` is true.
  */
-export function checkSchemaProseFailure(
+function checkSchemaProseFailure(
   ctx: ValidatorContext,
   finalContent: string,
   parsedAsJson: boolean,
@@ -98,7 +98,7 @@ export function checkSchemaProseFailure(
  * Check #2 — validate the parsed output against the declared schema. Returns a
  * failed RuntimeResult on mismatch, or `undefined` when valid.
  */
-export function checkSchemaValidation(
+function checkSchemaValidation(
   ctx: ValidatorContext,
   output: Record<string, unknown>,
 ): RuntimeResult | undefined {

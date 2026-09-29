@@ -422,9 +422,9 @@ export async function getDesktopInfo(): Promise<{
 
 // ── Asset import ──────────────────────────────────────────────────
 
-export type ImportKind = "plugin" | "world";
+type ImportKind = "plugin" | "world";
 
-export interface ImportResult {
+interface ImportResult {
   readonly ok: boolean;
   readonly kind: ImportKind;
   readonly targetPath?: string;
@@ -433,9 +433,7 @@ export interface ImportResult {
 }
 
 /** Open the native file chooser and import the selected file / folder. */
-export async function pickAndImport(
-  kind: ImportKind,
-): Promise<ImportResult | null> {
+async function pickAndImport(kind: ImportKind): Promise<ImportResult | null> {
   const ipc = getCovelIpc();
   if (!ipc) return null;
   return ipc.invoke<ImportResult>(`covel:import:pick-${kind}`);

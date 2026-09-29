@@ -43,16 +43,16 @@ import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
 
 export const SESSION_NOT_FOUND_CODE = "session_not_found";
-export const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
+const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
 export const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
-export const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
+const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
 
 /** Metadata key holding the SHA-256 hex hash of the session owner token. */
 export const SESSION_OWNER_TOKEN_HASH_KEY = "ownerTokenHash";
 /** Private metadata key that identifies one persisted session incarnation. */
 export const SESSION_APPROVAL_SCOPE_KEY = "approvalScopeNonce";
 /** Private per-plugin revocation generations within the session scope. */
-export const SESSION_APPROVAL_REVISIONS_KEY = "approvalScopeRevisions";
+const SESSION_APPROVAL_REVISIONS_KEY = "approvalScopeRevisions";
 /** Private immutable identity for sessions that do not carry an owner hash. */
 export const SESSION_INCARNATION_KEY = "sessionIncarnationNonce";
 /** Private marker that keeps a failed/in-progress delete fail-closed. */
@@ -199,7 +199,7 @@ export function safeEqual(a: string, b: string): boolean {
  * Extract the caller-presented session token. Query-param fallback exists for
  * EventSource (SSE) clients, which cannot set request headers.
  */
-export function extractSessionOwnerToken(c: Context): string | undefined {
+function extractSessionOwnerToken(c: Context): string | undefined {
   const auth = (c.req.header("authorization") ?? "").trim();
   const bearer = /^Bearer\s+(.+)$/i.exec(auth)?.[1]?.trim();
   if (bearer) return bearer;

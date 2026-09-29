@@ -1,7 +1,6 @@
 import { normalizeProviderKeyMap, providerKeyToId } from "@covel/shared";
 import {
   PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES,
-  PLUGIN_USER_SETTINGS_HEADER_TOO_LARGE_CODE,
   utf8ByteLength,
 } from "@covel/shared/plugin-user-settings-header";
 import { isServerManagedSecret } from "@covel/settings";
@@ -48,8 +47,6 @@ export function encodeBase64Json(value: unknown): string {
 }
 
 export class PluginUserSettingsHeaderTooLargeError extends Error {
-  readonly code = PLUGIN_USER_SETTINGS_HEADER_TOO_LARGE_CODE;
-
   constructor() {
     super("X-Plugin-User-Settings exceeds 8 KiB");
     this.name = "PluginUserSettingsHeaderTooLargeError";
@@ -94,7 +91,7 @@ export function buildProviderKeysHeader(): Record<string, string> {
  * world default survives for keys the player never touched. Returns an empty
  * object when the player hasn't explicitly saved any plugin-scoped setting.
  */
-export function buildPluginUserSettingsHeader(): Record<string, string> {
+function buildPluginUserSettingsHeader(): Record<string, string> {
   const store = getSettings() as unknown as {
     listEntries(): readonly { key: string }[];
     get<T>(key: string): T;

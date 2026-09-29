@@ -23,7 +23,6 @@ import { createUiCommitHandlers } from "./commit-ui.js";
 
 export type {
   CommitHandler,
-  CommitHandlerFor,
   CommitHandlerMap,
 } from "./commit-handler-types.js";
 

@@ -243,7 +243,7 @@ interface BuildProtectedResult {
   readonly limitExceededRowCount?: number;
 }
 
-export async function buildProtectedMediaIds(
+async function buildProtectedMediaIds(
   store: DataStore,
   mediaStore: MediaStore,
   options: BuildProtectedOptions = {},

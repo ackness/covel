@@ -74,7 +74,7 @@ export interface SessionContextValue extends SessionActions {
 export const SessionStateContext = createContext<SessionState | null>(null);
 export const SessionActionsContext = createContext<SessionActions | null>(null);
 
-export function useSessionState(): SessionState {
+function useSessionState(): SessionState {
   const ctx = useContext(SessionStateContext);
   if (!ctx)
     throw new Error("useSessionState must be used within SessionProvider");

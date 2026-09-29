@@ -14,7 +14,7 @@ import type {
   SummaryRecord,
 } from "./types.js";
 
-export interface RenderedAuthorsNote {
+interface RenderedAuthorsNote {
   readonly role: "system" | "user" | "assistant";
   readonly depth: number;
   readonly content: string;
@@ -28,7 +28,7 @@ export interface RenderedDepthContribution {
 }
 
 /** Map a persisted history record into the LLM message shape. */
-export function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
+function toLLMMessage(msg: MessageHistoryRecord): LLMMessage {
   return {
     role: msg.role as "system" | "user" | "assistant",
     content: messageContentFromHistoryRecord(msg),
@@ -119,7 +119,7 @@ export function buildMessageHistoryWithSummaries(
  * message count prepends it before the history. The returned array
  * is a new copy — the input is never mutated.
  */
-export function insertAuthorsNotes(
+function insertAuthorsNotes(
   messages: readonly LLMMessage[],
   notes: readonly RenderedAuthorsNote[],
 ): LLMMessage[] {

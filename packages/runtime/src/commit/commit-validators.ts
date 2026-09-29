@@ -45,20 +45,6 @@ export function requireNonEmptyArray(
 }
 
 /**
- * Require `value` to be a string when it is provided (non-`undefined`).
- * Optional fields use this so an absent value passes.
- */
-export function requireOptionalString(
-  value: unknown,
-  message: string,
-): CommitResult | undefined {
-  if (value !== undefined && typeof value !== "string") {
-    return commitError(message);
-  }
-  return undefined;
-}
-
-/**
  * Run a sequence of validator results in order, returning the first failure
  * (if any). Mirrors the short-circuit semantics of consecutive `if` guards.
  */

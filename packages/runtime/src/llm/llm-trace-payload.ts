@@ -146,4 +146,4 @@ export function buildLlmRespondedErrorPayload(
 
 // Re-export types the builders reference so call sites can import from a
 // single module.
-export type { LLMMessage, LLMResponse, LLMToolCall, LLMToolDefinition };
+export type { LLMMessage, LLMResponse, LLMToolDefinition };

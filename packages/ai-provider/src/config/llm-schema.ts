@@ -59,7 +59,7 @@ const pricingSchema = z
  * outputPerMToken = 1.1
  * ```
  */
-export const slotDefinitionSchema = z.object({
+const slotDefinitionSchema = z.object({
   /** Provider identifier — maps to {PROVIDER}_API_KEY in .env.llm */
   provider: z.string().min(1),
   /** Model ID passed to the provider API */

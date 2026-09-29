@@ -92,8 +92,7 @@ export interface ExecutionStep {
  *
  * The backend persists a fuller record in the store (pendingContinuation etc.);
  * only the UI-visible fields travel through api.ts via `listSuspensions` and
- * the SSE payloads; we re-export that shape from session-store.tsx so callers
- * can keep using `import type { SuspensionSummary } from "@/stores/session-store"`.
+ * the SSE payloads. The store uses the API shape directly.
  */
 export type SuspensionSummary = api.SuspensionSummary;
 

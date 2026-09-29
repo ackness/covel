@@ -25,7 +25,7 @@ export interface AppearanceOverrides {
   readonly dark: Readonly<Record<string, string>>;
 }
 
-export const EMPTY_OVERRIDES: AppearanceOverrides = {
+const EMPTY_OVERRIDES: AppearanceOverrides = {
   shared: {},
   light: {},
   dark: {},

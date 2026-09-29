@@ -4,11 +4,6 @@ import type { MediaRef } from "@covel/shared";
 export type CharacterBlueprintRole =
   "player" | "npc" | "companion" | (string & {});
 
-export interface CharacterBlueprintI18nText {
-  readonly default: string;
-  readonly translations?: Readonly<Record<string, string>>;
-}
-
 export interface CharacterBlueprintPersona {
   readonly summary?: string;
   readonly traits?: readonly string[];
@@ -77,24 +72,6 @@ export interface CharacterBlueprint {
   readonly media?: CharacterBlueprintMediaRefs;
   readonly instantiate?: CharacterBlueprintInstantiation;
   readonly metadata?: Readonly<Record<string, unknown>>;
-}
-
-export interface CharacterBlueprintRecord {
-  readonly blueprint: CharacterBlueprint;
-  readonly importedAt: string;
-  readonly instantiatedCharacterId?: string;
-}
-
-export interface CharacterBlueprintImportPayload {
-  readonly blueprint: CharacterBlueprint;
-  readonly instantiate?: boolean;
-}
-
-export interface CharacterBlueprintImportResult {
-  readonly imported: boolean;
-  readonly blueprintId: string;
-  readonly instantiated: boolean;
-  readonly characterId?: string;
 }
 
 export function characterBlueprintToCharacterUpsert(

@@ -156,7 +156,7 @@ function buildCompactorUserPrompt(
   );
 }
 
-export function resolveSummaryTokenBudget(contextWindow: number): number {
+function resolveSummaryTokenBudget(contextWindow: number): number {
   return Math.min(
     MAX_SUMMARY_TOKENS,
     Math.max(

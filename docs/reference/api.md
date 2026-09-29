@@ -333,6 +333,8 @@ checkpoint 的 sessionId，world.id 必须匹配 session.worldId，违规返回 
 `400 session_record_scope_conflict`，整个 checkpoint 写入回滚。
 checkpoint 不允许携带 provider key、owner token 或其他凭据。
 
+客户端 `applySessionCommit` 拒绝同一 `actionId` 携带不同内容的提交，抛出 `ActionIdConflictError`。调用方通过错误类及其 `sessionId`、`actionId` 判断冲突；该本地错误不携带 `code` 字段。HTTP 响应中的错误码由端点定义。
+
 Web 私有模式按 vault 数据库和 session ID 取得跨标签页 Web Lock，在同一次持有期间完成：恢复前次 pending、持久化本次输入、上传 checkpoint、记录本次 pending、执行、下载 commit 并清理 pending。普通本地 checkpoint 修改和会话删除也使用同一锁；排队期间已失效的动作不会持久化新输入。其它会话仍可独立执行。页面关闭会释放锁，另一个页面可继续恢复，而不会把仍由活跃页面持有的操作提前导出为旧结果。服务端单次请求的会话锁和 revision 检查不能替代这项客户端完整操作协调。
 
 世界与会话共用固定的锁顺序：先世界、后会话。会话创建、修改、删除及完整工作区操作持有世界共享锁；世界字段修改、生成结果整条保存和删除持有世界独占锁。不同会话仍可并行，但世界修改会等待正在执行的会话完成，避免 checkpoint 的旧世界副本覆盖新数据。删除世界先排空已获准的会话操作，再枚举和清理会话；删除后排到的新建会话重新检查世界是否存在，缺失时失败。世界字段 patch 在锁内合并最新记录；`saveGeneratedWorld` 则保持显式整条替换语义。

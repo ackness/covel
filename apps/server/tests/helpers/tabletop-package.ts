@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildThirdPartyPluginZip } from "./third-party-package.js";
 
-export const tabletopSource = fileURLToPath(
+const tabletopSource = fileURLToPath(
   new URL("../../../../plugins/tabletop-rules/", import.meta.url),
 );
 export const tabletopProbeId = "tabletop-probe";

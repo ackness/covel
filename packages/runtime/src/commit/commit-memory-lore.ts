@@ -9,7 +9,6 @@ import {
   firstFailure,
   requireNonEmptyArray,
   requireNonEmptyString,
-  requireOptionalString,
 } from "./commit-validators.js";
 
 export function createMemoryLoreCommitHandlers(

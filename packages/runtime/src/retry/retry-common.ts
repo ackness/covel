@@ -31,8 +31,8 @@ export interface RetryPolicy {
 export const DEFAULT_MAX_RETRIES = 1;
 export const DEFAULT_FIRST_TOKEN_TIMEOUT_MS = 30_000;
 export const DEFAULT_LOOP_THRESHOLD = 3;
-export const DEFAULT_CALL_TIMEOUT_CAP_MS = 60_000;
-export const MIN_CALL_TIMEOUT_MS = 5_000;
+const DEFAULT_CALL_TIMEOUT_CAP_MS = 60_000;
+const MIN_CALL_TIMEOUT_MS = 5_000;
 
 /** Minimum per-attempt budget floor (ms). */
 const MIN_ATTEMPT_BUDGET_MS = 1_000;

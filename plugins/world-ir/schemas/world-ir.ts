@@ -115,7 +115,7 @@ export const WORLD_IR_V1_JSON_SCHEMA = deepFreezeSchema({
 const WORLD_IR_MAX_DEPTH = 32;
 const WORLD_IR_MAX_NODES = 100_000;
 
-export const worldIRJsonValueSchema: z.ZodType<WorldIRJsonValue> = z.lazy(() =>
+const worldIRJsonValueSchema: z.ZodType<WorldIRJsonValue> = z.lazy(() =>
   z.union([
     z.null(),
     z.boolean(),
@@ -130,7 +130,7 @@ const worldIRAttributesSchema = z.record(z.string(), worldIRJsonValueSchema);
 const worldIRIdSchema = z.string().min(1);
 const worldIRTypeSchema = z.string().min(1);
 
-export const worldIRV1EntitySchema = z
+const worldIRV1EntitySchema = z
   .object({
     id: worldIRIdSchema,
     type: worldIRTypeSchema,
@@ -140,7 +140,7 @@ export const worldIRV1EntitySchema = z
   })
   .strict();
 
-export const worldIRV1RelationSchema = z
+const worldIRV1RelationSchema = z
   .object({
     id: worldIRIdSchema,
     type: worldIRTypeSchema,
@@ -151,7 +151,7 @@ export const worldIRV1RelationSchema = z
   })
   .strict();
 
-export const worldIRV1EventSchema = z
+const worldIRV1EventSchema = z
   .object({
     id: worldIRIdSchema,
     type: worldIRTypeSchema,
@@ -162,7 +162,7 @@ export const worldIRV1EventSchema = z
   })
   .strict();
 
-export const worldIRV1StatementSchema = z
+const worldIRV1StatementSchema = z
   .object({
     id: worldIRIdSchema,
     type: worldIRTypeSchema,

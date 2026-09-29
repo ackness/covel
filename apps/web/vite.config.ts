@@ -56,7 +56,7 @@ function readEnvInt(
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function resolveRuntimeProxyTarget(
+function resolveRuntimeProxyTarget(
   env: Record<string, string | undefined> = process.env,
 ): string {
   const host = readEnvString("RUNTIME_HOST", "127.0.0.1", env);
@@ -77,7 +77,7 @@ export function createRuntimeProxyConfig(
   return Object.fromEntries(RUNTIME_PROXY_PATHS.map((path) => [path, entry]));
 }
 
-export function resolveWorkspaceRoot(): string {
+function resolveWorkspaceRoot(): string {
   return fileURLToPath(new URL("../../", import.meta.url));
 }
 

@@ -26,14 +26,14 @@ const localeCodeSchema = z
 
 // ── Geography ───────────────────────────────────────────────────
 
-export const worldLandmarkSchema = z
+const worldLandmarkSchema = z
   .object({
     name: i18nTextSchema,
     description: i18nTextSchema.optional(),
   })
   .strict();
 
-export const worldRegionSchema = z
+const worldRegionSchema = z
   .object({
     name: i18nTextSchema,
     description: i18nTextSchema,
@@ -51,7 +51,7 @@ export const worldGeographySchema = z
 
 // ── Factions ────────────────────────────────────────────────────
 
-export const factionTypeSchema = z.enum([
+const factionTypeSchema = z.enum([
   "political",
   "guild",
   "corporate",
@@ -61,9 +61,9 @@ export const factionTypeSchema = z.enum([
   "other",
 ]);
 
-export const influenceLevelSchema = z.enum(["major", "minor"]);
+const influenceLevelSchema = z.enum(["major", "minor"]);
 
-export const factionRelationSchema = z
+const factionRelationSchema = z
   .object({
     type: z.string().min(1),
     targetId: z.string().min(1),
@@ -92,7 +92,7 @@ export const worldFactionSchema = z
 
 // ── Power System ────────────────────────────────────────────────
 
-export const powerSystemTypeSchema = z.enum([
+const powerSystemTypeSchema = z.enum([
   "magic",
   "technology",
   "cultivation",
@@ -101,7 +101,7 @@ export const powerSystemTypeSchema = z.enum([
   "other",
 ]);
 
-export const powerTierSchema = z
+const powerTierSchema = z
   .object({
     name: i18nTextSchema,
     rank: z.number().int().min(1),
@@ -121,7 +121,7 @@ export const worldPowerSystemSchema = z
 
 // ── History ─────────────────────────────────────────────────────
 
-export const historySignificanceSchema = z.enum(["major", "minor"]);
+const historySignificanceSchema = z.enum(["major", "minor"]);
 
 export const worldHistoryEventSchema = z
   .object({
@@ -135,7 +135,7 @@ export const worldHistoryEventSchema = z
 
 // ── Economy ─────────────────────────────────────────────────────
 
-export const worldCurrencySchema = z
+const worldCurrencySchema = z
   .object({
     name: i18nTextSchema,
     symbol: z.string().optional(),
@@ -153,7 +153,7 @@ export const worldEconomySchema = z
 
 // ── Social Structure ────────────────────────────────────────────
 
-export const socialClassSchema = z
+const socialClassSchema = z
   .object({
     name: i18nTextSchema,
     description: i18nTextSchema,
@@ -161,7 +161,7 @@ export const socialClassSchema = z
   })
   .strict();
 
-export const worldRaceSchema = z
+const worldRaceSchema = z
   .object({
     name: i18nTextSchema,
     description: i18nTextSchema,
@@ -179,7 +179,7 @@ export const worldSocialStructureSchema = z
 
 // ── Tone ────────────────────────────────────────────────────────
 
-export const contentRatingSchema = z.enum(["all-ages", "teen", "mature"]);
+const contentRatingSchema = z.enum(["all-ages", "teen", "mature"]);
 
 export const worldToneSchema = z
   .object({
@@ -192,18 +192,13 @@ export const worldToneSchema = z
 
 // ── Mechanics ───────────────────────────────────────────────────
 
-export const combatStyleSchema = z.enum([
+const combatStyleSchema = z.enum([
   "turn-based",
   "real-time",
   "narrative",
   "none",
 ]);
-export const difficultyLevelSchema = z.enum([
-  "easy",
-  "normal",
-  "hard",
-  "adaptive",
-]);
+const difficultyLevelSchema = z.enum(["easy", "normal", "hard", "adaptive"]);
 
 export const worldMechanicsSchema = z
   .object({

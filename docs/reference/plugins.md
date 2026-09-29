@@ -29,6 +29,8 @@ example/
 - [plugin-manifest.schema.json](../../packages/shared/schemas/plugin-manifest.schema.json)
 - [runtime-manifest.schema.json](../../packages/shared/schemas/runtime-manifest.schema.json)
 
+TypeScript 校验入口从 `@covel/shared` 导入：`pluginManifestSchema` 校验包清单，`runtimeAuthoringManifestSchema` 校验作者 runtime。用于组合完整校验器的输入/输出配置、命令参数、投影项和绑定引用等细粒度 schema 属于内部实现，不再单独从包入口导出。
+
 加载器会编译成内部执行结构。内部 `RuntimeManifest` 字段不是作者格式，不能复制到 `PLUGIN.md` 根层。
 
 加载结果分为包定义 `ParsedPluginMd` 和执行定义 `ParsedRuntimeMd`。`loadPluginDefinition()` 返回必需的 `packageManifest` 与显式的 `manifests` 数组；数组为空就没有可调度的 runtime。`parsePluginMd()` 只解析包，根内联 runtime 由 `compileInlineRuntime()` 显式编译。包的 entry、UI、事件、命令和扩展只从根定义注册一次，不复制到每个 runtime；runtime 保留执行身份与版本，并继承执行所需的用户设置和数据 schema。

@@ -308,7 +308,7 @@ function runDag(runtimes: readonly RuntimeManifest[]): ScheduleResult {
  * runtime has no trigger record in the (uncompacted) message history. Large
  * enough to satisfy any `turnInterval` gate — erring toward triggering.
  */
-export const NEVER_TRIGGERED_SENTINEL = 999;
+const NEVER_TRIGGERED_SENTINEL = 999;
 
 /**
  * `messageHistory` is the uncompacted suffix of the session timeline. If a

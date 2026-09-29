@@ -8,9 +8,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-export function recoverySource(
-  payload: Record<string, unknown>,
-): string | undefined {
+function recoverySource(payload: Record<string, unknown>): string | undefined {
   if (
     typeof payload.sourceTurnId === "string" &&
     Array.isArray(payload.runtimeIds) &&

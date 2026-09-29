@@ -7,8 +7,6 @@ export type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
   PluginRuntimeUtils,
-  IngestUrlOptions,
-  MediaContext,
   ImageGenerateInput,
   ImageGenerateOutput,
   ImagesContext,

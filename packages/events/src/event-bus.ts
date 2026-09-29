@@ -133,7 +133,7 @@ export const SESSION_IDLE_TTL_MS = 30 * 60_000;
 export const PERSIST_MAX_IN_FLIGHT = 8;
 export const PERSIST_QUEUE_MAX = 1000;
 /** Receive-side reorder buffer cap per (origin, session). */
-export const RECEIVE_PENDING_MAX = 64;
+const RECEIVE_PENDING_MAX = 64;
 /** How long a receiver waits on a transport seq hole before skipping it. */
 export const RECEIVE_GAP_FLUSH_MS = 2000;
 /** FIFO cap on receive-ordering states across transport streams. */

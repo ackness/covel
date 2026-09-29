@@ -14,7 +14,7 @@ export interface Frame {
   data?: string;
 }
 
-export function parseBlock(block: string): Frame {
+function parseBlock(block: string): Frame {
   const frame: Frame = {};
   for (const line of block.split("\n")) {
     if (line.startsWith("id:")) frame.id = line.slice(3).replace(/^ /, "");

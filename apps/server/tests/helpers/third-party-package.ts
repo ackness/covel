@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import yazl from "yazl";
 
-export const fixtureRoot = fileURLToPath(
+const fixtureRoot = fileURLToPath(
   new URL("../../../../tests/third-party/lifecycle-probe/", import.meta.url),
 );
 

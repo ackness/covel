@@ -127,8 +127,6 @@ export class RevisionConflictError extends Error {
 }
 
 export class ActionIdConflictError extends Error {
-  readonly code = "action_id_conflict";
-
   constructor(
     readonly sessionId: string,
     readonly actionId: string,

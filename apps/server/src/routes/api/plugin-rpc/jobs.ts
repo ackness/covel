@@ -126,9 +126,9 @@ export async function writePluginJob(
 }
 
 /** Durable scheduler source of truth; distinct from legacy plugin RPC `_jobs`. */
-export const RUNTIME_JOB_NAMESPACE = "_runtime_jobs";
-export const RUNTIME_JOB_SCHEMA_VERSION = 1 as const;
-export const DEFAULT_RUNTIME_JOB_QUEUE_LIMIT = 256;
+const RUNTIME_JOB_NAMESPACE = "_runtime_jobs";
+const RUNTIME_JOB_SCHEMA_VERSION = 1 as const;
+const DEFAULT_RUNTIME_JOB_QUEUE_LIMIT = 256;
 
 export type RuntimeJobStatus =
   | "queued"
@@ -235,7 +235,7 @@ export class RuntimeJobSupersededError extends Error {
   }
 }
 
-export class RuntimeJobQueueChangedError extends Error {
+class RuntimeJobQueueChangedError extends Error {
   constructor() {
     super("runtime job queue changed during enqueue; retry the transaction");
     this.name = "RuntimeJobQueueChangedError";
@@ -243,8 +243,6 @@ export class RuntimeJobQueueChangedError extends Error {
 }
 
 export class RuntimeJobQueueFullError extends Error {
-  readonly code = "RUNTIME_JOB_QUEUE_FULL";
-
   constructor(
     readonly sessionId: string,
     readonly limit: number,
