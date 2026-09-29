@@ -11,7 +11,8 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { stateRoutes } from "../../src/routes/api/state.js";
 import { createHealthRoutes } from "../../src/routes/api/health.js";

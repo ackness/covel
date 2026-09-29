@@ -44,6 +44,8 @@ import type {
   SearchVectorsInput,
   VectorSearchResult,
   DeleteVectorsInput,
+  VectorIndexProgressScope,
+  UpdateVectorIndexProgressInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
 
@@ -469,6 +471,48 @@ export function createPgVectorCapability(
     }));
   }
 
+  async function getVectorIndexProgress(
+    scope: VectorIndexProgressScope,
+  ): Promise<string | null> {
+    const rows = await client<Array<{ value: string }>>`
+      SELECT value FROM vector_index_progress
+      WHERE session_id = ${scope.sessionId} AND plugin_id = ${scope.pluginId} AND namespace = ${scope.namespace}
+    `;
+    return rows[0]?.value ?? null;
+  }
+
+  async function compareAndSetVectorIndexProgress(
+    input: UpdateVectorIndexProgressInput,
+  ): Promise<boolean> {
+    return client.begin(async (tx) => {
+      // The parent lock pairs with session cascade deletion, including same-id replacement.
+      const sessions = await tx<Array<{ created_at: string }>>`
+        SELECT created_at FROM sessions WHERE id = ${input.sessionId} FOR KEY SHARE
+      `;
+      if (
+        !sessions[0] ||
+        sessions[0].created_at !== input.expectedSessionCreatedAt
+      ) {
+        throw new Error("Vector index progress: session incarnation changed");
+      }
+      if (input.expectedValue === null) {
+        const rows = await tx`
+          INSERT INTO vector_index_progress (session_id, plugin_id, namespace, value)
+          VALUES (${input.sessionId}, ${input.pluginId}, ${input.namespace}, ${input.value})
+          ON CONFLICT DO NOTHING RETURNING session_id
+        `;
+        return rows.length > 0;
+      }
+      const rows = await tx`
+        UPDATE vector_index_progress SET value = ${input.value}
+        WHERE session_id = ${input.sessionId} AND plugin_id = ${input.pluginId}
+          AND namespace = ${input.namespace} AND value = ${input.expectedValue}
+        RETURNING session_id
+      `;
+      return rows.length > 0;
+    });
+  }
+
   async function deleteVectors(input: DeleteVectorsInput): Promise<void> {
     const target = await resolveSessionVectorTarget(input.sessionId);
     if (!target) {
@@ -478,22 +522,41 @@ export function createPgVectorCapability(
 
     const tname = physicalTableName(target.modelRegistryId);
 
+    const conditions = ["session_id = $1", "plugin_id = $2"];
+    const values = [input.sessionId, input.pluginId];
     if (input.namespace !== undefined) {
-      await client.unsafe(
-        `DELETE FROM ${tname}
-          WHERE session_id = $1 AND plugin_id = $2 AND namespace = $3`,
-        [input.sessionId, input.pluginId, input.namespace],
-      );
-    } else {
-      await client.unsafe(
-        `DELETE FROM ${tname}
-          WHERE session_id = $1 AND plugin_id = $2`,
-        [input.sessionId, input.pluginId],
-      );
+      values.push(input.namespace);
+      conditions.push(`namespace = $${values.length}`);
     }
+    if (input.key !== undefined) {
+      values.push(input.key);
+      conditions.push(`key = $${values.length}`);
+    }
+    await client.begin(async (tx) => {
+      const sessions = await tx<
+        Array<{ created_at: string; embedding_model_id: number | null }>
+      >`
+        SELECT created_at, embedding_model_id FROM sessions WHERE id = ${input.sessionId} FOR KEY SHARE
+      `;
+      const session = sessions[0];
+      if (
+        !session ||
+        session.embedding_model_id !== target.modelRegistryId ||
+        (input.expectedSessionCreatedAt !== undefined &&
+          session.created_at !== input.expectedSessionCreatedAt)
+      ) {
+        throw new Error("Vector delete: session incarnation changed");
+      }
+      await tx.unsafe(
+        `DELETE FROM ${tname} WHERE ${conditions.join(" AND ")}`,
+        values,
+      );
+    });
   }
 
   return {
+    getVectorIndexProgress,
+    compareAndSetVectorIndexProgress,
     upsertVector,
     searchVectors,
     deleteVectors,

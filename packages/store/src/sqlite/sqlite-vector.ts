@@ -52,6 +52,8 @@ import type {
   SearchVectorsInput,
   VectorSearchResult,
   DeleteVectorsInput,
+  VectorIndexProgressScope,
+  UpdateVectorIndexProgressInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
 
@@ -437,6 +439,60 @@ export function createSqliteVectorCapability(
     }));
   }
 
+  async function getVectorIndexProgress(
+    scope: VectorIndexProgressScope,
+  ): Promise<string | null> {
+    const row = sqlite
+      .prepare(
+        "SELECT value FROM vector_index_progress WHERE session_id = ? AND plugin_id = ? AND namespace = ?",
+      )
+      .get(scope.sessionId, scope.pluginId, scope.namespace) as
+      { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  async function compareAndSetVectorIndexProgress(
+    input: UpdateVectorIndexProgressInput,
+  ): Promise<boolean> {
+    return sqlite
+      .transaction(() => {
+        const session = sqlite
+          .prepare("SELECT created_at FROM sessions WHERE id = ?")
+          .get(input.sessionId) as { created_at: string } | undefined;
+        if (!session || session.created_at !== input.expectedSessionCreatedAt) {
+          throw new Error("Vector index progress: session incarnation changed");
+        }
+        if (input.expectedValue === null) {
+          return (
+            sqlite
+              .prepare(
+                "INSERT INTO vector_index_progress (session_id, plugin_id, namespace, value) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING",
+              )
+              .run(
+                input.sessionId,
+                input.pluginId,
+                input.namespace,
+                input.value,
+              ).changes > 0
+          );
+        }
+        return (
+          sqlite
+            .prepare(
+              "UPDATE vector_index_progress SET value = ? WHERE session_id = ? AND plugin_id = ? AND namespace = ? AND value = ?",
+            )
+            .run(
+              input.value,
+              input.sessionId,
+              input.pluginId,
+              input.namespace,
+              input.expectedValue,
+            ).changes > 0
+        );
+      })
+      .immediate();
+  }
+
   async function deleteVectors(input: DeleteVectorsInput): Promise<void> {
     const target = await resolveSessionVectorTarget(input.sessionId);
     if (!target) {
@@ -446,24 +502,42 @@ export function createSqliteVectorCapability(
 
     const tname = physicalTableName(target.modelRegistryId);
 
+    const conditions = ["session_id = ?", "plugin_id = ?"];
+    const values = [input.sessionId, input.pluginId];
     if (input.namespace !== undefined) {
-      sqlite
-        .prepare(
-          `DELETE FROM ${tname}
-            WHERE session_id = ? AND plugin_id = ? AND namespace = ?`,
-        )
-        .run(input.sessionId, input.pluginId, input.namespace);
-    } else {
-      sqlite
-        .prepare(
-          `DELETE FROM ${tname}
-            WHERE session_id = ? AND plugin_id = ?`,
-        )
-        .run(input.sessionId, input.pluginId);
+      conditions.push("namespace = ?");
+      values.push(input.namespace);
     }
+    if (input.key !== undefined) {
+      conditions.push("data_key = ?");
+      values.push(input.key);
+    }
+    sqlite
+      .transaction(() => {
+        const session = sqlite
+          .prepare(
+            "SELECT created_at, embedding_model_id FROM sessions WHERE id = ?",
+          )
+          .get(input.sessionId) as
+          { created_at: string; embedding_model_id: number | null } | undefined;
+        if (
+          !session ||
+          session.embedding_model_id !== target.modelRegistryId ||
+          (input.expectedSessionCreatedAt !== undefined &&
+            session.created_at !== input.expectedSessionCreatedAt)
+        ) {
+          throw new Error("Vector delete: session incarnation changed");
+        }
+        sqlite
+          .prepare(`DELETE FROM ${tname} WHERE ${conditions.join(" AND ")}`)
+          .run(...values);
+      })
+      .immediate();
   }
 
   return {
+    getVectorIndexProgress,
+    compareAndSetVectorIndexProgress,
     upsertVector,
     searchVectors,
     deleteVectors,

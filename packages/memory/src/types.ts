@@ -93,6 +93,9 @@ export interface MemorySystemDeps {
 export interface MemorySystem {
   readonly recall: RecallSearcher;
   readonly archival: ArchivalSearcher;
+  /** Drain only this instance after the host has stopped producers. */
+  drain(): Promise<import("./background-tasks.js").MemoryBackgroundDrainResult>;
+  pendingTaskCount(): number;
 
   /**
    * Embed-on-write ingestion sweep for the semantic memory tier. Embeds turn

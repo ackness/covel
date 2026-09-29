@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { shortIdBatch, tool, z } from "@covel/tools";
+import { shortIdBatch } from "@covel/plugin-handlers-utils";
+import { tool, z } from "@covel/tools";
 import openBag from "../rpc/open-bag.js";
 import registerInventory from "../server/index.js";
 

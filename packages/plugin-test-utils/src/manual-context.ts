@@ -2,10 +2,11 @@
  * Function handler context factory for direct handler unit tests.
  */
 
+import type { FunctionHandlerContext } from "@covel/shared/plugin-runtime";
 import type {
-  FunctionHandlerContext,
+  FunctionStoreView,
   ProgressReporter,
-} from "@covel/plugin-loader";
+} from "@covel/plugin-handlers-utils";
 import type {
   InputSlot,
   RuntimeActivation,
@@ -19,7 +20,8 @@ export interface ManualFunctionContextOptions {
   readonly turnId?: string;
   readonly playerMessage?: string;
   readonly locale?: string;
-  readonly store?: unknown;
+  /** Stub only the reads exercised by this test; omitted methods reject. */
+  readonly store?: Partial<FunctionStoreView>;
   readonly manualPayload?: Readonly<Record<string, unknown>>;
   /** Provenance-wrapped input bindings exposed as `ctx.inputs`. */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
@@ -52,7 +54,14 @@ export function makeManualFunctionContext({
     runtimeId,
     playerMessage,
     ...(locale ? { locale } : {}),
-    store,
+    store: {
+      getPluginData: missingRead("getPluginData"),
+      listPluginData: missingRead("listPluginData"),
+      listPlayerInputs: missingRead("listPlayerInputs"),
+      getSession: missingRead("getSession"),
+      listTurnMessages: missingRead("listTurnMessages"),
+      ...store,
+    },
     recursiveCall: async () => {
       throw new Error("recursiveCall is not configured for this test context");
     },
@@ -62,5 +71,11 @@ export function makeManualFunctionContext({
     ...(activation ? { activation } : {}),
     ...(execution ? { execution } : {}),
     ...(progress ? { progress } : {}),
+  };
+}
+
+function missingRead(method: keyof FunctionStoreView) {
+  return async (): Promise<never> => {
+    throw new Error(`store.${method} is not configured for this test context`);
   };
 }

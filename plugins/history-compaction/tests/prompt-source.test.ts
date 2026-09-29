@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { createMemoryStore, type TurnMessageRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+import type { TurnMessageRecord } from "@covel/store";
 import {
   maybeCompact as applyCompaction,
   type PromptLoader,

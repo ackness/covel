@@ -14,10 +14,11 @@ import {
   createVectorIngestor,
   type VectorIngestor,
 } from "./vector-ingest.js";
-import { trackMemoryBackgroundTask } from "./background-tasks.js";
+import { createMemoryBackgroundTasks } from "./background-tasks.js";
 
 export function createMemorySystem(deps: MemorySystemDeps): MemorySystem {
   const { store } = deps;
+  const background = createMemoryBackgroundTasks();
   // Searcher selection. Keyword search is always built — it is the dependency-
   // free default and the per-session fallback. When an `embed` function is
   // injected AND the store has a vector capability, recall/archival upgrade to
@@ -62,12 +63,11 @@ export function createMemorySystem(deps: MemorySystemDeps): MemorySystem {
   return {
     recall,
     archival,
+    drain: background.drain,
+    pendingTaskCount: background.pendingTaskCount,
 
-    async ingest(sessionId) {
-      return trackMemoryBackgroundTask(ingestor.ingest(sessionId), {
-        kind: "vector-ingest",
-        sessionId,
-      });
+    ingest(sessionId) {
+      return background.track(ingestor.ingest(sessionId), sessionId);
     },
   };
 }

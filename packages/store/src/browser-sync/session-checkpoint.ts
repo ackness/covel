@@ -1,4 +1,3 @@
-import { isDerivedVectorRecord } from "../vector-store.js";
 import {
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
   validateBrowserCheckpoint,
@@ -114,7 +113,7 @@ export async function exportSessionCheckpoint(
     traceEvents,
     characters,
     characterSchema,
-    pluginData: pluginData.filter((row) => !isDerivedVectorRecord(row)),
+    pluginData,
     lorebookEntries,
     sessionSummaries,
     playerInputs,
@@ -173,9 +172,7 @@ async function writeCheckpoint(
   for (const record of checkpoint.characters)
     await store.upsertCharacter(record);
   if (checkpoint.pluginData.length > 0) {
-    await store.setPluginDataBatch(
-      checkpoint.pluginData.filter((row) => !isDerivedVectorRecord(row)),
-    );
+    await store.setPluginDataBatch(checkpoint.pluginData);
   }
   for (const record of checkpoint.traceEvents)
     await store.addTraceEvent(record);

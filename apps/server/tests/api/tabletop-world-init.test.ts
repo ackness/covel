@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parse } from "yaml";
 import { expect, it, vi } from "vitest";
-import { createSqliteStore } from "@covel/store";
+import { createSqliteStore } from "@covel/store/sqlite";
 import type { LLMAdapter } from "@covel/runtime";
 import {
   bootstrapApi,

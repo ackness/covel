@@ -3,6 +3,7 @@ import type { ApprovalRequest } from "@covel/shared";
 import {
   matchPermissionRule,
   createApprovalPipeline,
+  createDefaultToolApprovalPipeline,
 } from "../src/approval-pipeline.js";
 import type {
   PermissionRule,
@@ -75,6 +76,13 @@ describe("matchPermissionRule", () => {
     const result = matchPermissionRule("covel_my_tool", "local", rules);
     expect(result).toEqual({ pattern: "local:*", action: "deny" });
   });
+});
+
+it("uses the same source policy for host and isolated tool execution", () => {
+  const pipeline = createDefaultToolApprovalPipeline();
+  expect(pipeline.check(makeRequest(), "builtin").decision).toBe("allow");
+  expect(pipeline.check(makeRequest(), "local").decision).toBe("allow");
+  expect(pipeline.check(makeRequest(), "third-party").decision).toBe("deny");
 });
 
 // ── createApprovalPipeline ───────────────────────────────────────────────────

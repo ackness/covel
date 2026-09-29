@@ -1,11 +1,12 @@
-import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
+import {
+  pickLocaleText as pick,
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import {
   CharacterFieldValidationError,
   mergeSchemaDefaults,
 } from "@covel/tools";
-
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
 
 /**
  * guard.js — Pre-execution gate for player-init runtime.
@@ -23,8 +24,7 @@ import { withPendingProposals } from "@covel/tools";
  *   3. No player AND no submission yet → proceed to LLM so it generates
  *      the opening form (Step 1 in PLUGIN.md).
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginAgentGuard}
  */
 export default async function guard(ctx) {
   const { logger, sessionId, store, locale } = ctx;

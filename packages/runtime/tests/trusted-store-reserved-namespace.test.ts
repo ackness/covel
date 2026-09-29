@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import type { FunctionHandler } from "@covel/plugin-loader";
 import { executeFunctionRuntime } from "../src/function-runtime/turn-function-runtime.js";
@@ -154,6 +154,7 @@ describe("trusted function-runtime store handle", () => {
         turnId: "turn-1",
         status: result.status,
         output: result.output,
+        pendingProposals: result.pendingProposals,
       },
       store,
       SESSION_ID,

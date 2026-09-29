@@ -10,9 +10,6 @@ export type ArchivalStore = Pick<
 export interface VectorIngestStore
   extends
     ArchivalStore,
-    Pick<
-      DataStore,
-      "getSession" | "listTurnMessagesAfter" | "getPluginData" | "setPluginData"
-    > {}
+    Pick<DataStore, "getSession" | "listTurnMessagesAfter"> {}
 
 export interface MemoryStore extends RecallStore, VectorIngestStore {}

@@ -77,7 +77,7 @@ describe("makeManualFunctionContext", () => {
     expect(ctx.manualPayload).toEqual({ blueprint: { id: "mentor-lin" } });
   });
 
-  it("keeps explicit store and ids", () => {
+  it("keeps explicit reads and ids while rejecting missing read capabilities", async () => {
     const store = { listPluginData: async () => [] };
     const ctx = makeManualFunctionContext({
       pluginId: "player-identity",
@@ -88,7 +88,10 @@ describe("makeManualFunctionContext", () => {
 
     expect(ctx.sessionId).toBe("sess-custom");
     expect(ctx.turnId).toBe("turn-custom");
-    expect(ctx.store).toBe(store);
+    expect(await ctx.store.listPluginData("notes")).toEqual([]);
+    await expect(ctx.store.getSession()).rejects.toThrow(
+      "store.getSession is not configured for this test context",
+    );
   });
 });
 

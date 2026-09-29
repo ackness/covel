@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../runtimes/seed/handler.js";
 
 function ref(id) {
@@ -45,7 +49,7 @@ describe("scene-stage seed handler", () => {
   it("seeds the registry's first scene as the day variant", async () => {
     const result = await handler(makeCtx());
 
-    expect(result.completion).toBe("done");
+    expect(getToolContent(result).completion).toBe("done");
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(1);
     expect(proposals[0]).toMatchObject({
@@ -74,15 +78,15 @@ describe("scene-stage seed handler", () => {
     const previous = { sceneId: "library", name: "图书馆", variant: "night" };
     const result = await handler(makeCtx({ previous }));
 
-    expect(result.value).toMatchObject({ skipped: true });
+    expect(getToolContent(result).value).toMatchObject({ skipped: true });
     expect(getPendingProposals(result)).toHaveLength(0);
-    expect(result.completion).toBe("done");
+    expect(getToolContent(result).completion).toBe("done");
   });
 
   it("stays a no-op for worlds that ship no scene registry", async () => {
     const result = await handler(makeCtx({ registry: null }));
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       skipped: true,
       reason: "no scene registry",
     });
@@ -93,14 +97,14 @@ describe("scene-stage seed handler", () => {
     const registry = { schemaVersion: 1, scenes: [] };
     const result = await handler(makeCtx({ registry }));
 
-    expect(result.value).toMatchObject({ skipped: true });
+    expect(getToolContent(result).value).toMatchObject({ skipped: true });
     expect(getPendingProposals(result)).toHaveLength(0);
   });
 
   it("reports done even without plugin-data access so setup can never wedge", async () => {
     const result = await handler(makeCtx({ noPluginData: true }));
 
-    expect(result.completion).toBe("done");
-    expect(result.outcome).toBe("success");
+    expect(getToolContent(result).completion).toBe("done");
+    expect(getToolContent(result).outcome).toBe("success");
   });
 });

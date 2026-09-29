@@ -5,7 +5,6 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
-import { getPendingProposals } from "@covel/tools";
 import type { EventBus } from "@covel/events";
 import type { Proposal, RuntimeEffects, SessionEvent } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -50,6 +49,7 @@ export async function processRuntimeResult(
     status: string;
     output: Record<string, unknown> | null;
     effects?: RuntimeEffects;
+    pendingProposals?: readonly Proposal[];
     toolCalls?: ReadonlyArray<{ output?: unknown }>;
   },
   store: KernelStore,
@@ -83,22 +83,20 @@ export async function processRuntimeResult(
 
   const source = { pluginId: result.pluginId, runtimeId: result.runtimeId };
 
-  // Buffered domain writes attached to the output — by the agent tool loop
+  // Buffered domain writes attached to the result — by the agent tool loop
   // (success results) or a function-runtime / agent-guard write buffer. A
   // pre-game guard that wrote then returned `{ skip: true }` carries them on a
   // SKIPPED result. Tool/handler code could forge session/turn/source, so
   // rebind identity to the executing runtime before commit.
-  const pendingProposals = result.output
-    ? getPendingProposals(result.output).map(
-        (p) =>
-          ({
-            ...p,
-            sessionId,
-            turnId: result.turnId,
-            source,
-          }) as Proposal,
-      )
-    : [];
+  const pendingProposals = (result.pendingProposals ?? []).map(
+    (proposal) =>
+      ({
+        ...proposal,
+        sessionId,
+        turnId: result.turnId,
+        source,
+      }) as Proposal,
+  );
 
   // Non-success results are not normalized — their output is not a committable
   // story/state output. Only a SKIPPED runtime (a pre-game guard that wrote

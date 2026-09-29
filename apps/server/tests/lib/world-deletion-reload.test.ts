@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { worldOperationLockId } from "../../src/world-lifecycle.js";
 import { seedWorlds } from "../../src/world-seed-loader.js";

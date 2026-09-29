@@ -10,7 +10,7 @@
  *
  * The buffer collects those writes as proposals instead. At execution end the
  * caller flushes them onto the runtime result's output via
- * `withPendingProposals`, so they commit through the same
+ * `RuntimeResult.pendingProposals`, so they commit through the same
  * `finalizeExecution` transaction as everything else — and a rollback discards
  * them.
  *

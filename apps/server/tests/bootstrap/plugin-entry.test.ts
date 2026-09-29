@@ -19,7 +19,7 @@ import {
   type HookContext,
 } from "@covel/runtime";
 import type { PluginManifest, RuntimeManifest } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
 

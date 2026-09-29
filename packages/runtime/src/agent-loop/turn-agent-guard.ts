@@ -10,7 +10,7 @@ import type {
 import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import { withPendingProposals } from "@covel/tools";
+import { getToolContent, getPendingProposals } from "@covel/tools";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
   createFunctionStoreView,
@@ -185,7 +185,7 @@ export async function executeAgentGuard({
               )
             : createFunctionStoreView(deps.store, guardHelperCtx, writeBuffer),
         )
-      : undefined;
+      : revocable(createFunctionStoreView(undefined, guardHelperCtx));
     const guardLoggerHandle =
       deps.store && trustedGuard
         ? revocable(createPluginLogger(deps.store, guardHelperCtx))
@@ -295,7 +295,7 @@ export async function executeAgentGuard({
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     let removeAbortListener: (() => void) | undefined;
     let completedNormally = false;
-    let guardOutput: Awaited<typeof guardPromise>;
+    let rawGuardOutput: Awaited<typeof guardPromise>;
     try {
       const aborted = new Promise<never>((_, reject) => {
         const onAbort = () => {
@@ -315,7 +315,7 @@ export async function executeAgentGuard({
         removeAbortListener = () =>
           guardSignal.removeEventListener("abort", onAbort);
       });
-      guardOutput = await Promise.race([
+      rawGuardOutput = await Promise.race([
         guardWork,
         aborted,
         new Promise<never>(() => {
@@ -346,24 +346,12 @@ export async function executeAgentGuard({
       }
     }
 
+    const guardOutput = getToolContent(rawGuardOutput);
     if (guardOutput.skip === true) {
-      // Flush execution-buffered domain writes onto the skipped output so the
-      // commit path (processRuntimeResult) commits them for a `skipped` result
-      // through the same finalize transaction as everything else — a rolled-back
-      // execution discards them. Non-enumerable symbol attachment; JSON.stringify
-      // (turn message, tracing) ignores it. Only the skip:true path flushes:
-      // production guards write-then-skip, so a guard that instead proceeds
-      // (skip:false → the agent runtime runs) has an empty buffer here anyway.
-      if (
-        writeBuffer.length > 0 &&
-        guardOutput &&
-        typeof guardOutput === "object"
-      ) {
-        withPendingProposals(
-          guardOutput as unknown as Record<string, unknown>,
-          writeBuffer,
-        );
-      }
+      const pendingProposals = [
+        ...getPendingProposals(rawGuardOutput),
+        ...writeBuffer,
+      ];
 
       // Record `skipped` in the internal RuntimeResult so downstream
       // consumers (Pre-Game completion tracker, session-kernel's
@@ -378,6 +366,7 @@ export async function executeAgentGuard({
         turnId: input.turnId,
         status: "skipped",
         output: guardOutput,
+        ...(pendingProposals.length > 0 ? { pendingProposals } : {}),
         toolCalls: [],
         durationMs: Date.now() - startTime,
         timestamp: new Date().toISOString(),

@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../handler.js";
 
 function ctx(manualPayload) {
@@ -16,7 +20,7 @@ function ctx(manualPayload) {
 }
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business return
-// is under `result.value`; pending proposals stay on the envelope (result).
+// is under `getToolContent(result).value`; pending proposals stay on the envelope (result).
 describe("character-blueprint handler", () => {
   it("imports a blueprint into plugin data", async () => {
     const result = await handler(
@@ -31,7 +35,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       imported: true,
       blueprintId: "mentor-lin",
       instantiated: false,
@@ -87,7 +91,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       imported: true,
       blueprintId: "mentor-lin",
       instantiated: true,
@@ -141,7 +145,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       imported: true,
       blueprintId: "json-mentor",
       instantiated: true,
@@ -177,7 +181,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       imported: true,
       blueprintId: "kamishiro-mio",
       instantiated: true,
@@ -237,7 +241,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       imported: true,
       blueprintId: "kamishiro-mio",
       instantiated: false,
@@ -261,7 +265,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       imported: true,
       blueprintId: "kamishiro-mio",
       instantiated: false,
@@ -294,15 +298,15 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       imported: true,
       blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
       instantiated: true,
-      characterId: `sess-blueprint-${result.value.blueprintId}`,
+      characterId: `sess-blueprint-${getToolContent(result).value.blueprintId}`,
     });
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.value.instantiate.characterId).toBe(
-      result.value.blueprintId,
+      getToolContent(result).value.blueprintId,
     );
   });
 
@@ -317,7 +321,7 @@ describe("character-blueprint handler", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       imported: true,
       blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
       instantiated: false,

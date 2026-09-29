@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { tool, withPendingProposals, withEmittedEvents } from "@covel/tools";
 import type { Proposal } from "@covel/shared";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";

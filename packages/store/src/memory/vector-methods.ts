@@ -25,6 +25,34 @@ function squaredL2(a: Float32Array, b: Float32Array): number {
 
 export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
   return {
+    async getVectorIndexProgress(scope) {
+      return (
+        state.vectorIndexProgress.get(
+          JSON.stringify([scope.sessionId, scope.pluginId, scope.namespace]),
+        )?.value ?? null
+      );
+    },
+    async compareAndSetVectorIndexProgress(input) {
+      const session = state.sessions.get(input.sessionId);
+      if (!session || session.createdAt !== input.expectedSessionCreatedAt) {
+        throw new Error("Vector index progress: session incarnation changed");
+      }
+      const key = JSON.stringify([
+        input.sessionId,
+        input.pluginId,
+        input.namespace,
+      ]);
+      if (
+        (state.vectorIndexProgress.get(key)?.value ?? null) !==
+        input.expectedValue
+      )
+        return false;
+      state.vectorIndexProgress.set(key, {
+        sessionId: input.sessionId,
+        value: input.value,
+      });
+      return true;
+    },
     async upsertVector(input: UpsertVectorInput) {
       const session = state.sessions.get(input.sessionId);
       if (!session) {
@@ -108,6 +136,13 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async deleteVectors(input: DeleteVectorsInput) {
+      if (
+        input.expectedSessionCreatedAt !== undefined &&
+        state.sessions.get(input.sessionId)?.createdAt !==
+          input.expectedSessionCreatedAt
+      ) {
+        throw new Error("Vector delete: session incarnation changed");
+      }
       for (const [rowKey, row] of Array.from(state.vectorRows.entries())) {
         if (row.sessionId !== input.sessionId) continue;
         if (row.pluginId !== input.pluginId) continue;
@@ -117,6 +152,7 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         ) {
           continue;
         }
+        if (input.key !== undefined && row.key !== input.key) continue;
         state.vectorRows.delete(rowKey);
       }
     },

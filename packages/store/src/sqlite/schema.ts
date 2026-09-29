@@ -692,3 +692,17 @@ export const vectorModels = sqliteTable(
     uniqueIndex("vector_models_model_id_dim_idx").on(table.modelId, table.dim),
   ],
 );
+
+/** Derived vector-index cursors/hashes; cascaded with the physical session index. */
+export const vectorIndexProgress = sqliteTable(
+  "vector_index_progress",
+  {
+    sessionId: text("session_id").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    namespace: text("namespace").notNull(),
+    value: text("value").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.pluginId, table.namespace] }),
+  ],
+);

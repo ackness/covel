@@ -5,12 +5,8 @@
 import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  type DataStore,
-  type MediaStore,
-} from "@covel/store";
+import { type DataStore, type MediaStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {
   PluginExtensionHost,
   PluginServiceRegistry,
@@ -1157,6 +1153,7 @@ function makeFunctionEntry(args: {
         unknown
       >;
       if (
+        raw.kind === "covel.tool-result" ||
         raw.outcome === "success" ||
         raw.outcome === "failed" ||
         raw.outcome === "skipped" ||

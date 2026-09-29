@@ -104,7 +104,10 @@ async function persistTurnResult(
     id: crypto.randomUUID(),
     sessionId: input.sessionId,
     turnId: input.turnId,
-    runtimeResults: turnResult.runtimeResults,
+    // Pending commands belong to the host commit plan, not queryable history.
+    runtimeResults: turnResult.runtimeResults.map(
+      ({ pendingProposals: _pendingProposals, ...result }) => result,
+    ),
     // Persist the canonical execution origin. Turn accounting excludes every
     // non-player execution through `ExecutionContext.countPolicy`.
     origin: executionContext.origin,

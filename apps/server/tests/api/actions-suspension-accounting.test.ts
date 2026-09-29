@@ -8,7 +8,7 @@ import {
 } from "@covel/plugin-loader";
 import { createHookPipeline } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { parseJsonFrames } from "./sse-test-utils.js";

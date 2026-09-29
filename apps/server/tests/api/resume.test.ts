@@ -9,7 +9,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import type { BudgetOptions } from "@covel/context";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { __resetSweepClockForTests } from "../../src/routes/api/suspension-sweep.js";
 import {
   createPluginRegistry,

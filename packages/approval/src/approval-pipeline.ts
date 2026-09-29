@@ -140,3 +140,12 @@ export function createApprovalPipeline(
 
   return { check };
 }
+
+/** The host's tool-source policy, shared by production and isolated runtime tests. */
+export function createDefaultToolApprovalPipeline(): ApprovalPipeline {
+  return createApprovalPipeline([
+    { pattern: "builtin:*", action: "allow" },
+    { pattern: "local:*", action: "allow" },
+    { pattern: "third-party:*", action: "deny" },
+  ]);
+}

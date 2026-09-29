@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import {
   isSetupDoneForVersion,

@@ -1,6 +1,6 @@
 export {
   createApprovalPipeline,
-  matchPermissionRule,
+  createDefaultToolApprovalPipeline,
 } from "./approval-pipeline.js";
 export type {
   ApprovalPipeline,

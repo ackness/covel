@@ -1,4 +1,4 @@
-import { withPendingProposals } from "@covel/tools";
+import { withPendingProposals } from "@covel/plugin-handlers-utils";
 import {
   REGISTRY_KEY,
   SCENES_NS,
@@ -21,7 +21,7 @@ import {
  * LLM's own `scene.set` (same-turn event fan-out has no defined order between
  * the two, and the loser would overwrite the correct scene).
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   const done = (reason) => ({

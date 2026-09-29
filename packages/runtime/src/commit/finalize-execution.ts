@@ -148,8 +148,8 @@ export interface FinalizeExecutionArgs {
    * Loads a producer's declared `output.schema` (containment-checked by the
    * loader) — called only for a `status: success` result whose runtime declares
    * `output.recordAs`, to validate and digest the published export value inside
-   * the commit transaction (docs 02 §3.4). Absent ⇒ no export publication: thin
-   * callers (resume, tests) that do not thread a loader publish nothing.
+   * the commit transaction. Required when a successful result declares recordAs;
+   * a missing loader or schema fails the commit instead of dropping the export.
    */
   readonly loadOutputSchema?: (
     runtimeId: string,
@@ -318,31 +318,48 @@ export async function finalizeExecution(
   const activePluginIds =
     args.activePluginIds ?? new Set(runtimes.map((rt) => rt.pluginId));
 
-  // Per-runtime `recordAs` export declaration (docs 02 §3.4). Only present when
-  // a loader was threaded — resume / thin callers publish no exports this wave.
+  // Resolve declarations independently of optional host services. Missing
+  // schema dependencies must never silently disable a declared export.
   const exportDeclByRuntime = new Map<string, ExportDecl>();
-  if (args.loadOutputSchema) {
-    for (const rt of runtimes) {
-      const recordAs = rt.output?.recordAs;
-      if (!recordAs) continue;
-      exportDeclByRuntime.set(rt.name, {
-        recordAs,
-        pluginId: rt.pluginId,
-        pluginVersion: rt.version ?? "0.0.0",
-      });
-    }
+  for (const rt of runtimes) {
+    const recordAs = rt.output?.recordAs;
+    if (!recordAs) continue;
+    exportDeclByRuntime.set(rt.name, {
+      recordAs,
+      pluginId: rt.pluginId,
+      pluginVersion: rt.version ?? "0.0.0",
+    });
   }
   const publishExports = async (
     sink: Parameters<typeof publishExecutionExports>[0]["sink"],
   ): Promise<void> => {
-    if (!args.loadOutputSchema || exportDeclByRuntime.size === 0) return;
+    const exportedResults = results.filter(
+      (result) =>
+        result.status === "success" &&
+        exportDeclByRuntime.has(result.runtimeId),
+    );
+    if (exportedResults.length === 0) return;
+    if (!args.loadOutputSchema) {
+      throw new Error(
+        "Cannot commit declared runtime exports without an output schema loader",
+      );
+    }
+    const schemas = new Map<string, Readonly<Record<string, unknown>>>();
+    for (const result of exportedResults) {
+      const schema = await args.loadOutputSchema(result.runtimeId);
+      if (!schema)
+        throw new Error(
+          `Missing output schema for runtime export ${result.runtimeId}`,
+        );
+      schemas.set(result.runtimeId, schema);
+    }
     const mediaStore = args.mediaStore;
     await publishExecutionExports({
       sink,
       sessionId,
       results,
       declFor: (runtimeId) => exportDeclByRuntime.get(runtimeId),
-      loadOutputSchema: args.loadOutputSchema,
+      loadOutputSchema: async (runtimeId) => schemas.get(runtimeId),
       committedAt: sessionClock?.now ?? new Date().toISOString(),
       ...(mediaStore
         ? {

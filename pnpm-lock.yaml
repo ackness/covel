@@ -509,6 +509,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../plugin-handlers-utils
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../plugin-loader
@@ -537,6 +540,9 @@ importers:
 
   packages/shared:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../plugin-handlers-utils
       smol-toml:
         specifier: ^1.8.0
         version: 1.8.0
@@ -596,6 +602,9 @@ importers:
       '@covel/ai-provider':
         specifier: workspace:*
         version: link:../ai-provider
+      '@covel/approval':
+        specifier: workspace:*
+        version: link:../approval
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../plugin-loader
@@ -624,6 +633,9 @@ importers:
 
   packages/tools:
     dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../plugin-handlers-utils
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
@@ -646,9 +658,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -659,6 +668,9 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -668,13 +680,13 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -691,6 +703,9 @@ importers:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -703,13 +718,13 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -719,9 +734,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -729,6 +741,9 @@ importers:
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -748,9 +763,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -761,6 +773,9 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -770,9 +785,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -780,6 +792,9 @@ importers:
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -815,10 +830,10 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
+    devDependencies:
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools
-    devDependencies:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -844,9 +859,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -854,6 +866,9 @@ importers:
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -863,13 +878,13 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -902,9 +917,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -915,6 +927,9 @@ importers:
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -934,9 +949,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -944,6 +956,9 @@ importers:
       '@covel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -953,13 +968,13 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
         version: link:../../packages/plugin-loader
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -969,9 +984,6 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -979,6 +991,9 @@ importers:
       '@covel/plugin-test-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-test-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -1003,13 +1018,16 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
       zod:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@covel/store':
+        specifier: workspace:*
+        version: link:../../packages/store
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -1035,9 +1053,6 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@covel/tools':
-        specifier: workspace:*
-        version: link:../../packages/tools
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1051,6 +1066,9 @@ importers:
       '@covel/store':
         specifier: workspace:*
         version: link:../../packages/store
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))

@@ -9,7 +9,8 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import type { RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";

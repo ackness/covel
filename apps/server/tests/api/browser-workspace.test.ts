@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
-  createMemoryStore,
   exportSessionCheckpoint,
   type DataStore,
   type SessionCommit,
 } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createBrowserWorkspaceRoutes } from "../../src/routes/api/browser-workspace.js";
 

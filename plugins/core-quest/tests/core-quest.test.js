@@ -1,3 +1,8 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
@@ -25,7 +30,8 @@ import {
   loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpsertQuests from "../tools/upsert-quests.js";
 
 // In-memory mock store for plugin-data operations
@@ -157,9 +163,9 @@ describe("upsert-quests", () => {
     );
 
     // Assert
-    expect(result.upserted).toBe(1);
-    expect(result.created).toBe(1);
-    expect(result.quests[0].change).toBe("new");
+    expect(getToolContent(result).upserted).toBe(1);
+    expect(getToolContent(result).created).toBe(1);
+    expect(getToolContent(result).quests[0].change).toBe("new");
 
     const stored = await findQuestByName("寻回断魂钩");
     expect(stored).not.toBeNull();
@@ -219,8 +225,8 @@ describe("upsert-quests", () => {
     );
 
     // Assert — merged, not duplicated
-    expect(result.advanced).toBe(1);
-    expect(result.quests[0].change).toBe("progress");
+    expect(getToolContent(result).advanced).toBe(1);
+    expect(getToolContent(result).quests[0].change).toBe("progress");
     const rows = await mockStore.listPluginData(
       "sess-1",
       "core-quest",
@@ -538,7 +544,10 @@ describe("upsert-quests", () => {
     );
 
     // Assert
-    expect(result.quests.map((q) => q.change)).toEqual(["completed", "failed"]);
+    expect(getToolContent(result).quests.map((q) => q.change)).toEqual([
+      "completed",
+      "failed",
+    ]);
     const completed = await findQuestByName("寻回断魂钩");
     expect(completed.value.status).toBe("completed");
     const failed = await findQuestByName("护送商队");
@@ -621,7 +630,7 @@ describe("upsert-quests", () => {
     );
 
     // Assert — merged onto the imported row key, no duplicate
-    expect(result.advanced).toBe(1);
+    expect(getToolContent(result).advanced).toBe(1);
     const rows = await mockStore.listPluginData(
       "sess-1",
       "core-quest",

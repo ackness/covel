@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import type { SetupRuntimeState } from "@covel/shared";
 import { setupRuntimeControlRoutes } from "../../src/routes/api/setup-runtime-control.js";

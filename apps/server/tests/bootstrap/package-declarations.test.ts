@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline, createPluginRpcRegistry } from "@covel/runtime";
 import { ToolRegistry } from "@covel/tools";
 import { createRpcApprovalGate } from "@covel/approval";

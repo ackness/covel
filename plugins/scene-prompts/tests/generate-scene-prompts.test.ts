@@ -1,4 +1,9 @@
-import { getPendingProposals, tool, z } from "@covel/tools";
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
+
+import { tool, z } from "@covel/tools";
 import { describe, expect, it } from "vitest";
 import createGenerateScenePrompts from "../tools/generate-scene-prompts.js";
 
@@ -28,14 +33,14 @@ describe("generate-scene-prompts", () => {
       context,
     );
 
-    expect(result.scene).toBe("破庙暗影");
-    expect(result.recap).toBe(
+    expect(getToolContent(result).scene).toBe("破庙暗影");
+    expect(getToolContent(result).recap).toBe(
       "你和苏婉已经追踪符纹来到破庙，并约定先确认暗影身份再继续深入。梁上传来的动静让原定调查出现了新的风险。",
     );
-    expect(result.decision).toBe(
+    expect(getToolContent(result).decision).toBe(
       "你现在要先确认梁上暗影，还是继续检查供桌旁的符纹？",
     );
-    expect(result.prompts).toHaveLength(3);
+    expect(getToolContent(result).prompts).toHaveLength(3);
 
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(1);
@@ -111,10 +116,10 @@ describe("generate-scene-prompts", () => {
       context,
     );
 
-    expect(minimumResult.recap).toHaveLength(20);
-    expect(minimumResult.decision).toHaveLength(8);
-    expect(maximumResult.recap).toHaveLength(240);
-    expect(maximumResult.decision).toHaveLength(120);
+    expect(getToolContent(minimumResult).recap).toHaveLength(20);
+    expect(getToolContent(minimumResult).decision).toHaveLength(8);
+    expect(getToolContent(maximumResult).recap).toHaveLength(240);
+    expect(getToolContent(maximumResult).decision).toHaveLength(120);
   });
 
   it("rejects recap and decision outside their documented boundaries", async () => {

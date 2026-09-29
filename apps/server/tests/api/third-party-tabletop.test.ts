@@ -12,7 +12,8 @@ import { parse as parseYaml } from "yaml";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createSqliteStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createSqliteStore } from "@covel/store/sqlite";
 import { importWorldDataForSession } from "../../src/world-data/session-import.js";
 import type { LLMAdapter } from "@covel/runtime";
 import {

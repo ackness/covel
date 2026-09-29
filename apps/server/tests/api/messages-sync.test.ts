@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryStore,
-  type DataStore,
-  type StoreTransaction,
-} from "@covel/store";
+import { type DataStore, type StoreTransaction } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { messageRoutes } from "../../src/routes/api/messages.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 

@@ -1,8 +1,6 @@
 import { commitExecution } from "../commit-execution.js";
 import {
   createTurnEmitter,
-  collectExecutionJournal,
-  collectExecutionSuspensions,
   createDetachedProposalGuard,
   executeTurn,
   buildHookSettings,
@@ -125,7 +123,7 @@ export interface RunDetachedStageArgs {
   }) => Promise<void>;
   readonly completeInTx: (
     tx: StoreTransaction,
-    result: Awaited<ReturnType<typeof executeTurn>>,
+    result: import("@covel/shared").TurnResult,
   ) => Promise<void>;
   readonly beforeExecute?: () => Promise<void>;
   readonly executionSignal?: AbortSignal;
@@ -152,11 +150,11 @@ export function createPluginRpcRuntimeTurnRunner(
 ): {
   runManualTurn(args: RunManualTurnArgs): Promise<ManualTurnSummary>;
   runDeferredFollowerTurn(args: RunDeferredFollowerArgs): Promise<{
-    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly turnResult: import("@covel/shared").TurnResult;
     readonly commit: TurnCommitOutcome;
   }>;
   runDetachedStage(args: RunDetachedStageArgs): Promise<{
-    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly turnResult: import("@covel/shared").TurnResult;
     readonly commit: TurnCommitOutcome;
   }>;
 } {
@@ -241,7 +239,7 @@ export function createPluginRpcRuntimeTurnRunner(
   }
 
   async function processTurnResults(
-    turnResult: Awaited<ReturnType<typeof executeTurn>>,
+    execution: import("@covel/runtime").ExecutedTurn,
     emitter: ReturnType<typeof createTurnEmitter>,
     hookScope: HookScope,
     opts: {
@@ -253,11 +251,7 @@ export function createPluginRpcRuntimeTurnRunner(
       readonly extraInTx?: (tx: StoreTransaction) => Promise<void>;
     } = {},
   ): Promise<TurnCommitOutcome> {
-    // Commit the whole execution (top-level + nested recursiveCall results) in
-    // ONE transaction via the shared finalize primitive. Any proposal failure
-    // rolls the turn back (committed siblings included) and settles the
-    // turn_results row to `failed`; a clean run settles it `committed`, both
-    // inside that transaction.
+    const turnResult = execution.result;
     const outcome = await commitExecution({
       memorySystem: ctx.memorySystem,
       imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(),
@@ -285,35 +279,13 @@ export function createPluginRpcRuntimeTurnRunner(
         }
       },
       store: ctx.store,
-      sessionId: ctx.sessionId,
-      executionContext: turnResult.executionContext,
-      runtimes: activeRuntimes(),
+      execution,
       activePluginIds: hookScope.activePluginIds,
-      hookSettings: hookScope.settings,
-      results: [
-        ...turnResult.runtimeResults,
-        ...(turnResult.nestedRuntimeResults ?? []),
-      ],
-      journalMessages: collectExecutionJournal(turnResult),
-      suspensions: collectExecutionSuspensions(turnResult),
-      turnIds: [turnResult.turnId],
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
       emitter,
       ...(opts.extraInTx ? { extraInTx: opts.extraInTx } : {}),
       ...(opts.proposalGuard ? { proposalGuard: opts.proposalGuard } : {}),
-      // Manual / late-setup runs settle their setup attempts too (a manual
-      // retrigger of a pending setup runtime burns an attempt).
-      ...(turnResult.setupRan ? { setupRan: turnResult.setupRan } : {}),
-      // Publishes recordAs exports inside the commit transaction — a manual /
-      // background execution can publish just like a player turn.
-      loadOutputSchema: async (runtimeId) => {
-        const rt = activeRuntimes().find((r) => r.name === runtimeId);
-        return rt
-          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale, ctx.sessionId))
-              ?.outputSchema
-          : undefined;
-      },
       // MediaRef canonicalization / ownership for published export values.
       ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
     });
@@ -368,7 +340,7 @@ export function createPluginRpcRuntimeTurnRunner(
       readonly completeInTx?: RunDetachedStageArgs["completeInTx"];
     } = {},
   ): Promise<{
-    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly turnResult: import("@covel/shared").TurnResult;
     readonly commit: TurnCommitOutcome;
   }> {
     const userSettings = snapshotUserSettings(turnInput.userSettings);
@@ -442,7 +414,7 @@ export function createPluginRpcRuntimeTurnRunner(
                   return hookScopeFor(live.activePlugins, userSettings);
                 },
               );
-              const result = await executeTurn(
+              const execution = await executeTurn(
                 executionInput,
                 activeRuntimes(),
                 {
@@ -457,6 +429,7 @@ export function createPluginRpcRuntimeTurnRunner(
                   turnControl,
                 },
               );
+              const { result } = execution;
               if (
                 opts.rejectSuspension === true &&
                 [
@@ -500,7 +473,7 @@ export function createPluginRpcRuntimeTurnRunner(
                   }
                   const completeInTx = opts.completeInTx;
                   return processTurnResults(
-                    result,
+                    execution,
                     emitter,
                     hookScopeFor(live.activePlugins, userSettings),
                     {
@@ -596,7 +569,7 @@ export function createPluginRpcRuntimeTurnRunner(
             const live = await requireLiveApprovedSession(args.runtimeId);
             const hookScope = hookScopeFor(live.activePlugins, userSettings);
             executionSignal?.throwIfAborted();
-            const turnResult = await executeTurn(
+            const execution = await executeTurn(
               executionInput,
               activeRuntimes(),
               {
@@ -610,12 +583,12 @@ export function createPluginRpcRuntimeTurnRunner(
               },
             );
             const outcome = await processTurnResults(
-              turnResult,
+              execution,
               emitter,
               hookScope,
               { executionSignal },
             );
-            return { result: turnResult, commit: outcome };
+            return { result: execution.result, commit: outcome };
           }),
         );
 
@@ -639,7 +612,7 @@ export function createPluginRpcRuntimeTurnRunner(
   async function runDeferredFollowerTurn(
     args: RunDeferredFollowerArgs,
   ): Promise<{
-    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly turnResult: import("@covel/shared").TurnResult;
     readonly commit: TurnCommitOutcome;
   }> {
     const emitter = createTurnEmitter({
@@ -673,7 +646,7 @@ export function createPluginRpcRuntimeTurnRunner(
   }
 
   async function runDetachedStage(args: RunDetachedStageArgs): Promise<{
-    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly turnResult: import("@covel/shared").TurnResult;
     readonly commit: TurnCommitOutcome;
   }> {
     const emitter = createTurnEmitter({

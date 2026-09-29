@@ -10,7 +10,7 @@ import type {
   RuntimeManifest,
   RuntimeResult,
 } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";

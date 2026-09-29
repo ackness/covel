@@ -13,13 +13,10 @@ import {
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import {
-  builtinUITools,
-  ToolRegistry,
-  createCharacterTools,
-  createPluginDataTools,
-  runtimeDoneTool,
-  suspendTool,
+  createDefaultToolRegistry,
+  type EventDirectoryLike,
 } from "@covel/tools";
+import { createDefaultToolApprovalPipeline } from "@covel/approval";
 import {
   evaluateExpectations,
   hasUnexpectedRunFailure,
@@ -116,6 +113,16 @@ export interface RunRuntimeCasesResult {
   }[];
 }
 
+/** The isolated runner cannot validate session event contracts without the host. */
+const isolatedEventDirectory: EventDirectoryLike = {
+  async listTopics() {
+    return [];
+  },
+  async validate() {
+    return { ok: false, reason: "session event directory is unavailable" };
+  },
+};
+
 export async function runRuntimeDebug(
   options: RunRuntimeDebugOptions,
 ): Promise<RunRuntimeDebugResult> {
@@ -167,14 +174,10 @@ export async function runRuntimeDebug(
     });
     registry.syncSessionActivations(sessionId, pluginIds);
 
-    const tools = new ToolRegistry();
-    for (const t of builtinUITools) tools.registerBuiltin(t);
-    tools.registerBuiltin(suspendTool);
-    tools.registerBuiltin(runtimeDoneTool);
-    for (const t of createPluginDataTools(store)) tools.registerBuiltin(t);
-    for (const t of createCharacterTools(store)) {
-      tools.registerBuiltin(t);
-    }
+    const tools = createDefaultToolRegistry({
+      store,
+      eventDirectory: isolatedEventDirectory,
+    });
     for (const { pluginId: ownerId, tool } of entryTools) {
       tools.registerPlugin(ownerId, tool);
     }
@@ -195,12 +198,13 @@ export async function runRuntimeDebug(
         findTool: (name, context) => tools.find(name, context.pluginId),
         getToolSource: (name) => tools.source(name),
         store,
+        approval: createDefaultToolApprovalPipeline(),
       })),
     } satisfies TurnExecutorDeps;
     const userSettings = snapshotUserSettings(
       options.userSettings ? { [pluginId]: options.userSettings } : undefined,
     );
-    const result = await executeTurn(
+    const execution = await executeTurn(
       {
         sessionId,
         turnId,
@@ -217,12 +221,10 @@ export async function runRuntimeDebug(
       deps,
     );
 
+    const { result } = execution;
     const commit = await commitDebugExecution({
-      turn: result,
-      manifests,
+      execution,
       deps,
-      locale,
-      userSettings,
       detached: false,
     });
     const committedFollowers =

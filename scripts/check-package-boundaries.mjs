@@ -6,14 +6,14 @@ import { packageImports } from "./lib/package-imports.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = {
-  shared: [],
+  shared: ["plugin-handlers-utils"],
   "ai-provider": ["shared"],
   approval: ["shared"],
   context: ["shared"],
   create: ["context", "shared"],
   events: ["shared"],
   memory: ["shared", "store"],
-  "plugin-handlers-utils": ["shared"],
+  "plugin-handlers-utils": [],
   "plugin-loader": ["events", "shared"],
   // Tool fixtures use runtime's scoped-read implementation and store/tool types.
   // sdk-alignment asserts the public SDK stays structurally equal to shared.
@@ -37,6 +37,7 @@ const layers = {
   settings: ["shared"],
   store: ["shared"],
   "test-runtime": [
+    "approval",
     "ai-provider",
     "context",
     "events",
@@ -47,7 +48,7 @@ const layers = {
     "store",
     "tools",
   ],
-  tools: ["shared"],
+  tools: ["shared", "plugin-handlers-utils"],
 };
 const workspaces = ["apps", "packages", "plugins"].flatMap((group) =>
   readdirSync(path.join(root, group)).flatMap((name) => {

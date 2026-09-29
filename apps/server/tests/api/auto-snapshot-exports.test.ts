@@ -3,12 +3,12 @@ import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { finalizeExecution, saveAutoSnapshot } from "@covel/runtime";
 import {
-  createMemoryStore,
-  createSqliteStore,
   type DataStore,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
 } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+import { createSqliteStore } from "@covel/store/sqlite";
 import {
   makeSession,
   makeWorld,

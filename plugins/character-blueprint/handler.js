@@ -6,17 +6,17 @@ import {
   optionalString,
   readManualEntity,
   splitList,
+  shortId,
+  withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 import { characterBlueprintToCharacterUpsert } from "./types/blueprint.ts";
-import { shortId, withPendingProposals } from "@covel/tools";
 
 const BLUEPRINT_NAMESPACE = "blueprints";
 const BLUEPRINT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
 
 /**
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   const payload = ctx.manualPayload ?? {};

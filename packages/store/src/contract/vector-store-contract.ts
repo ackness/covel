@@ -92,6 +92,103 @@ export function runVectorStoreContractTests(
       store = await createStore();
     });
 
+    it("deletes one key without removing surviving vectors or other namespaces", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      const embedding = new Float32Array([1, 0]);
+      for (const [namespace, key] of [
+        ["archive", "removed"],
+        ["archive", "kept"],
+        ["other", "removed"],
+      ]) {
+        await store.upsertVector({
+          sessionId: "s1",
+          pluginId: "owner",
+          namespace,
+          key,
+          embedding,
+        });
+      }
+      await expect(
+        store.deleteVectors({
+          sessionId: "s1",
+          pluginId: "owner",
+          namespace: "archive",
+          key: "removed",
+          expectedSessionCreatedAt: "stale-incarnation",
+        }),
+      ).rejects.toThrow("incarnation changed");
+      await store.deleteVectors({
+        sessionId: "s1",
+        pluginId: "owner",
+        namespace: "archive",
+        key: "removed",
+      });
+      const results = await store.searchVectors({
+        sessionId: "s1",
+        query: embedding,
+        topK: 10,
+      });
+      expect(
+        results.map((row) => `${row.namespace}/${row.key}`).sort(),
+      ).toEqual(["archive/kept", "other/removed"]);
+    });
+
+    it("isolates index progress, compares revisions atomically and rejects stale incarnations", async () => {
+      await setupSessionWithModel(store, "s1", 2);
+      const session = (await store.getSession("s1"))!;
+      const scope = { sessionId: "s1", pluginId: "owner", namespace: "recall" };
+      const input = {
+        ...scope,
+        value: "first",
+        expectedValue: null,
+        expectedSessionCreatedAt: session.createdAt,
+      };
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+      const attempts = await Promise.all([
+        store.compareAndSetVectorIndexProgress(input),
+        store.compareAndSetVectorIndexProgress({ ...input, value: "second" }),
+      ]);
+      expect(attempts.filter(Boolean)).toHaveLength(1);
+      const current = await store.getVectorIndexProgress(scope);
+      expect(
+        await store.getVectorIndexProgress({ ...scope, pluginId: "other" }),
+      ).toBeNull();
+      expect(
+        await store.getVectorIndexProgress({ ...scope, namespace: "other" }),
+      ).toBeNull();
+      expect(await store.listPluginDataSessionScope("s1")).toEqual([]);
+      expect(
+        await store.compareAndSetVectorIndexProgress({
+          ...input,
+          expectedValue: "wrong",
+        }),
+      ).toBe(false);
+      expect(
+        await store.compareAndSetVectorIndexProgress({
+          ...input,
+          expectedValue: current,
+          value: "advanced",
+        }),
+      ).toBe(true);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.deleteSession("s1");
+          throw new Error("rollback deletion");
+        }),
+      ).rejects.toThrow("rollback deletion");
+      expect(await store.getVectorIndexProgress(scope)).toBe("advanced");
+      await store.deleteSession("s1");
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+      await store.createSession({
+        ...session,
+        createdAt: "2030-01-01T00:00:00.000Z",
+      });
+      await expect(
+        store.compareAndSetVectorIndexProgress(input),
+      ).rejects.toThrow("incarnation changed");
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+    });
+
     it("round-trips a single vector through search", async () => {
       const dim = 64;
       await setupSessionWithModel(store, "s1", dim);

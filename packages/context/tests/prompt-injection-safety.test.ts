@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildSegmentedContext, type ContextBuildParams } from "@covel/context";
+import type { ContextBuildParams } from "@covel/context";
+import { buildSegmentedContext } from "../src/prompt-assembler.js";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 
 /**

@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  interpolateTemplate,
-  buildInjectBlocks,
-  buildContext,
-} from "@covel/context";
+import { interpolateTemplate, buildInjectBlocks } from "@covel/context";
+import { buildContextSync as buildContext } from "../src/context-builder.js";
 import type { ContextBuildParams, MessageHistoryRecord } from "@covel/context";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,

@@ -7,8 +7,7 @@ import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
  * so the kernel records this runtime as done in session.setupRuntimes. Session
  * status is not touched — lifecycle advancement is the kernel's job.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function pregameHandler(ctx) {
   const { sessionId, store, locale } = ctx;

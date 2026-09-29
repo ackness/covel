@@ -14,7 +14,7 @@ import {
   type PluginServiceCallEvent,
 } from "../src/plugin-services.js";
 import { createTurnEmitter } from "../src/trace/turn-emitter.js";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 
 function fixture<M extends ExtensionMode>(
   mode: M,

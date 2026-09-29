@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import {
   createPluginRegistry,

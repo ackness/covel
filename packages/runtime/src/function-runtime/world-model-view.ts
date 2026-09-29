@@ -5,7 +5,6 @@ import {
   type WorldModelView,
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
-import { getPendingProposals } from "@covel/tools";
 
 /** Match commit eligibility, including completed guards that skipped model work. */
 export function collectUpstreamWorldProposals(
@@ -15,7 +14,7 @@ export function collectUpstreamWorldProposals(
   return structuredClone(
     [...results.values()].flatMap((result) =>
       result.status === "success" || result.status === "skipped"
-        ? getPendingProposals(result.output)
+        ? (result.pendingProposals ?? [])
             .filter(
               (proposal) =>
                 proposal.type === "character.upsert" ||

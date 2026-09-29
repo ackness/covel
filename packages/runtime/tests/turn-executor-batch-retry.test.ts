@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { FunctionHandlerContext } from "@covel/plugin-loader";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";

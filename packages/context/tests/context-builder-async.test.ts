@@ -1,8 +1,7 @@
 /**
- * Async build path tests — covers `buildContextAsync`, `needsAsyncBuild`,
- * and the new `kind: 'plugin-data'` inject resolution.
+ * Public context assembly tests for `kind: 'plugin-data'` inject resolution.
  *
- * The sync `buildContext` path is tested separately in `context-builder.test.ts`;
+ * The internal sync path is tested separately in `context-builder.test.ts`;
  * these cases assert that:
  *   - sync path ignores plugin-data injects but still returns valid output
  *   - async path resolves runtime injects the same way the sync path does
@@ -10,16 +9,12 @@
  *   - empty namespaces render as `<tag>暂无</tag>`
  *   - two-pass truncation is stable and deterministic (anchors + recent)
  *   - summary / full / ids-only formats each serialise as specified
- *   - store errors propagate out of `buildContextAsync`
+ *   - store errors propagate out of `buildContext`
  *   - `needsAsyncBuild` correctly detects plugin-data declarations
  */
 import { describe, it, expect, vi } from "vitest";
-import {
-  buildContext,
-  buildContextAsync,
-  needsAsyncBuild,
-  type ContextBuildParams,
-} from "@covel/context";
+import { buildContext, type ContextBuildParams } from "@covel/context";
+import { buildContextSync, needsAsyncBuild } from "../src/context-builder.js";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   type RuntimeManifest,
@@ -149,9 +144,9 @@ describe("needsAsyncBuild", () => {
   });
 });
 
-// ── buildContextAsync — runtime inject regression ────────────────
+// ── buildContext — runtime inject regression ─────────────────────
 
-describe("buildContextAsync — runtime inject regression", () => {
+describe("buildContext — runtime inject regression", () => {
   it("resolves runtime injects identically to the sync path", async () => {
     const manifest = makeManifest({
       input: {
@@ -176,8 +171,8 @@ describe("buildContextAsync — runtime inject regression", () => {
       completedResults: results,
     };
 
-    const sync = buildContext(params);
-    const asyncResult = await buildContextAsync(params);
+    const sync = buildContextSync(params);
+    const asyncResult = await buildContext(params);
 
     expect(asyncResult.systemPrompt).toBe(sync.systemPrompt);
     expect(asyncResult.messages).toEqual(sync.messages);
@@ -206,15 +201,15 @@ describe("buildContextAsync — runtime inject regression", () => {
       turnInput: makeTurnInput(),
       completedResults: new Map(),
     };
-    const result = buildContext(params);
+    const result = buildContextSync(params);
     expect(result.systemPrompt).toBe(`body${PROMPT_CACHE_BREAKPOINT_MARKER}`);
     expect(result.systemPrompt).not.toContain("<existing-entries>");
   });
 });
 
-// ── buildContextAsync — plugin-data inject ───────────────────────
+// ── buildContext — plugin-data inject ────────────────────────────
 
-describe("buildContextAsync — plugin-data inject", () => {
+describe("buildContext — plugin-data inject", () => {
   function makeParams(
     store: DataStore,
     extraInjects: RuntimeManifest["input"] extends { inject?: infer U }
@@ -246,7 +241,7 @@ describe("buildContextAsync — plugin-data inject", () => {
 
   it("injects <existing-entries>暂无</existing-entries> when namespace is empty", async () => {
     const store = makeStoreStub([]);
-    const result = await buildContextAsync(makeParams(store));
+    const result = await buildContext(makeParams(store));
     expect(result.systemPrompt).toContain(
       "<existing-entries>暂无</existing-entries>",
     );
@@ -268,7 +263,7 @@ describe("buildContextAsync — plugin-data inject", () => {
       ),
     ];
     const store = makeStoreStub(entries);
-    const result = await buildContextAsync(makeParams(store));
+    const result = await buildContext(makeParams(store));
     expect(result.systemPrompt).toContain(
       "- codex-fire-mountain | 2025-01-02T00:00:00.000Z",
     );
@@ -290,7 +285,7 @@ describe("buildContextAsync — plugin-data inject", () => {
         return () => undefined;
       },
     });
-    await expect(buildContextAsync(makeParams(store))).rejects.toThrow(
+    await expect(buildContext(makeParams(store))).rejects.toThrow(
       "store offline",
     );
   });
@@ -300,14 +295,14 @@ describe("buildContextAsync — plugin-data inject", () => {
     const { store: _store, ...withoutStore } = params;
     void _store;
     await expect(
-      buildContextAsync(withoutStore as ContextBuildParams),
+      buildContext(withoutStore as ContextBuildParams),
     ).rejects.toThrow(/store is required/i);
   });
 });
 
-// ── buildContextAsync — truncation semantics ─────────────────────
+// ── buildContext — truncation semantics ──────────────────────────
 
-describe("buildContextAsync — two-pass truncation", () => {
+describe("buildContext — two-pass truncation", () => {
   it("picks oldest anchors + most-recently-updated when capped", async () => {
     // 10 entries, maxEntries=4 → anchorQuota=2 (oldest by createdAt),
     // recentQuota=2 (newest by updatedAt, excluding anchors).
@@ -336,7 +331,7 @@ describe("buildContextAsync — two-pass truncation", () => {
         ],
       },
     });
-    const result = await buildContextAsync({
+    const result = await buildContext({
       promptTemplate: "body",
       manifest,
       turnInput: makeTurnInput(),
@@ -385,7 +380,7 @@ describe("buildContextAsync — two-pass truncation", () => {
         ],
       },
     });
-    const result = await buildContextAsync({
+    const result = await buildContext({
       promptTemplate: "body",
       manifest,
       turnInput: makeTurnInput(),
@@ -398,9 +393,9 @@ describe("buildContextAsync — two-pass truncation", () => {
   });
 });
 
-// ── buildContextAsync — format variants ──────────────────────────
+// ── buildContext — format variants ───────────────────────────────
 
-describe("buildContextAsync — format variants", () => {
+describe("buildContext — format variants", () => {
   const entry = makeEntry(
     "codex-test",
     { title: "测试", content: "short" },
@@ -423,7 +418,7 @@ describe("buildContextAsync — format variants", () => {
         ],
       },
     });
-    return buildContextAsync({
+    return buildContext({
       promptTemplate: "body",
       manifest,
       turnInput: makeTurnInput(),

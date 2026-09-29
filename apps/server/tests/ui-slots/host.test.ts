@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { PluginExtensionHost, PluginServiceRegistry } from "@covel/runtime";
 import {
   uiSlotV1,

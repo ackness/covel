@@ -13,7 +13,8 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { stateRoutes } from "../../src/routes/api/state.js";
 
 function buildApp(store: DataStore): Hono {

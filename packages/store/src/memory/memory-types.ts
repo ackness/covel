@@ -60,6 +60,10 @@ export interface MemoryState {
   readonly pluginData: Map<string, PluginDataRecord>;
   readonly suspensions: Map<string, SuspensionRecord>;
   readonly snapshots: Map<string, SnapshotRecord>;
+  readonly vectorIndexProgress: Map<
+    string,
+    { sessionId: string; value: string }
+  >;
   readonly vectorRows: Map<string, MemoryVectorRow>;
   readonly vectorModelRegistry: Map<string, VectorTarget>;
   nextModelId: number;

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { createRpcApprovalGate } from "@covel/approval";
 import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 

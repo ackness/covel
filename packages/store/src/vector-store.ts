@@ -24,16 +24,6 @@
  * `number[]` once, not per call.
  */
 
-/** Reserved storage owner for memory's physical index and its derived progress. */
-export const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
-
-/** These records are meaningful only alongside the physical vector index. */
-export function isDerivedVectorRecord(record: {
-  readonly pluginId: string;
-}): boolean {
-  return record.pluginId === MEMORY_VECTOR_PLUGIN_ID;
-}
-
 // ── Model identity & routing ─────────────────────────────────────
 
 /** Identity of an embedding model. Used as routing key. */
@@ -125,10 +115,27 @@ export interface VectorSearchResult {
 /** Scope for bulk deletion. Omit fields to widen the scope. */
 export interface DeleteVectorsInput {
   readonly sessionId: string;
+  /** Reject deletion produced from a stale session incarnation. */
+  readonly expectedSessionCreatedAt?: string;
   /** Required — prevents cross-plugin accidental deletion. */
   readonly pluginId: string;
   /** Optional — when omitted, wipes every namespace for the plugin. */
   readonly namespace?: string;
+  /** Delete just this key within the selected scope. */
+  readonly key?: string;
+}
+
+/** Derived index progress belongs to the index, never to exported plugin data. */
+export interface VectorIndexProgressScope {
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly namespace: string;
+}
+
+export interface UpdateVectorIndexProgressInput extends VectorIndexProgressScope {
+  readonly value: string;
+  readonly expectedValue: string | null;
+  readonly expectedSessionCreatedAt: string;
 }
 
 // ── Capability interfaces ────────────────────────────────────────
@@ -138,6 +145,13 @@ export interface DeleteVectorsInput {
  * before calling any of these methods.
  */
 export interface VectorStoreCapability {
+  getVectorIndexProgress(
+    scope: VectorIndexProgressScope,
+  ): Promise<string | null>;
+  /** Atomic progress update; stale session incarnations reject and CAS conflicts return false. */
+  compareAndSetVectorIndexProgress(
+    input: UpdateVectorIndexProgressInput,
+  ): Promise<boolean>;
   /** Insert or replace a vector keyed by (sessionId, pluginId, namespace, key). */
   upsertVector(input: UpsertVectorInput): Promise<void>;
   /** Top-k nearest neighbours for a query within the session's vector space. */
@@ -198,6 +212,9 @@ export function supportsVector<T extends object>(
     typeof candidate.upsertVector === "function" &&
     typeof candidate.searchVectors === "function" &&
     typeof candidate.deleteVectors === "function" &&
+    typeof candidate.getVectorIndexProgress === "function" &&
+    typeof candidate.compareAndSetVectorIndexProgress === "function" &&
+    typeof candidate.lockSessionEmbeddingModel === "function" &&
     typeof candidate.ensureVectorModel === "function" &&
     typeof candidate.resolveSessionVectorTarget === "function" &&
     typeof candidate.listVectorModels === "function"

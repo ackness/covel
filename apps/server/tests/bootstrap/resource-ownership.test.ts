@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";

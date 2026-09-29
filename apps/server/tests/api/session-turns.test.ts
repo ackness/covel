@@ -7,7 +7,8 @@
 
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { sessionTurnRoutes } from "../../src/routes/api/session-turns.js";
 
 async function makeApp(): Promise<{ app: Hono; store: DataStore }> {

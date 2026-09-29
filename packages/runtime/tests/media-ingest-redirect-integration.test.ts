@@ -14,7 +14,7 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
-import { createMemoryMediaStore } from "@covel/store";
+import { createMemoryMediaStore } from "@covel/store/memory";
 import { createRuntimeMediaContext } from "../src/function-runtime/runtime-media-context.js";
 import { enforceHttpPermissions } from "../src/function-runtime/http-permissions.js";
 

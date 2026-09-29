@@ -9,7 +9,6 @@ import {
   processRuntimeResult,
   createTraceRecorder,
 } from "../src/session/session-kernel.js";
-import { withPendingProposals } from "@covel/tools";
 import type { Proposal, RuntimeResult } from "@covel/shared";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
@@ -1428,21 +1427,24 @@ describe("processRuntimeResult", () => {
   it("should append pending proposals from runtime output and commit them", async () => {
     const store = createMockStore();
     const result = makeRuntimeResult(
-      withPendingProposals({ narrativeOutput: "写入图鉴。" }, [
-        {
-          id: "proposal-plugin-data-1",
-          type: "plugin.data",
-          source: { pluginId: "test-plugin", runtimeId: "test-runtime" },
-          turnId: TURN_ID,
-          sessionId: SESSION_ID,
-          payload: {
-            namespace: "entries",
-            key: "codex-qingping",
-            value: { title: "青萍山" },
+      { narrativeOutput: "写入图鉴。" },
+      {
+        pendingProposals: [
+          {
+            id: "proposal-plugin-data-1",
+            type: "plugin.data",
+            source: { pluginId: "test-plugin", runtimeId: "test-runtime" },
+            turnId: TURN_ID,
+            sessionId: SESSION_ID,
+            payload: {
+              namespace: "entries",
+              key: "codex-qingping",
+              value: { title: "青萍山" },
+            },
+            timestamp: new Date().toISOString(),
           },
-          timestamp: new Date().toISOString(),
-        },
-      ]) as Record<string, unknown>,
+        ],
+      },
     );
 
     const { events, failedProposals } = await processRuntimeResult(

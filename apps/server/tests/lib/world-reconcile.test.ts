@@ -3,11 +3,8 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  createMemoryStore,
-  type DataStore,
-  type WorldRecord,
-} from "@covel/store";
+import { type DataStore, type WorldRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   seedWorlds,
   reconcileSeededWorlds,

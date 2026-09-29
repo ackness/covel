@@ -7,12 +7,9 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import type { LLMAdapter } from "@covel/runtime";
-import {
-  createMemoryStore,
-  createSqliteStore,
-  type DataStore,
-  type WorldRecord,
-} from "@covel/store";
+import { type DataStore, type WorldRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+import { createSqliteStore } from "@covel/store/sqlite";
 import { aiRoutes } from "../../src/routes/api/ai.js";
 import { installRoutes } from "../../src/routes/api/install.js";
 import { worldRoutes } from "../../src/routes/api/worlds.js";

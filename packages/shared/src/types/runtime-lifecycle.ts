@@ -131,14 +131,8 @@ export interface LogicalTurnLedgerRecord {
 // ── Background job progress ──────────────────────────────────────
 
 /** Lifecycle state of a background job progress event. */
-export type JobStatusState =
-  | "queued"
-  | "running"
-  | "progress"
-  | "waiting-input"
-  | "succeeded"
-  | "failed"
-  | "cancelled";
+import type { JobStatusState } from "@covel/plugin-handlers-utils";
+export type { JobStatusState } from "@covel/plugin-handlers-utils";
 
 /**
  * One append-only progress event for a background job.

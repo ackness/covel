@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { expect, it, vi } from "vitest";
 
 // This suite checks invalid-package recovery, not native event delivery.

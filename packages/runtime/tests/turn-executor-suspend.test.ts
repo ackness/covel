@@ -16,15 +16,12 @@ import type {
   SubscriptionEvent,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
 import type { EventBus } from "@covel/events";
-import { getPendingProposals } from "@covel/tools";
-import {
-  collectExecutionSuspensions,
-  createHookPipeline,
-} from "../src/index.js";
+import { createHookPipeline } from "../src/index.js";
+import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
 import {
   executeTurn,
   resumeSuspendedRuntime,
@@ -1231,7 +1228,7 @@ describe("resumeSuspendedRuntime", () => {
       deps,
     );
 
-    expect(getPendingProposals(result.output)).toEqual([
+    expect(result.pendingProposals).toEqual([
       expect.objectContaining({
         type: "plugin.data",
         payload: {

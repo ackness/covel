@@ -4,12 +4,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  type DataStore,
-  type MediaStore,
-} from "@covel/store";
+import { type DataStore, type MediaStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { mediaRoutes } from "../../src/routes/api/media.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import type { SessionLock } from "../../src/lib/session-lock.js";

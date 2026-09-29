@@ -56,6 +56,9 @@ Options:
   --pretty                   Pretty-print JSON output.
   --help                     Show this help.
 
+The debug runner uses an isolated store, mock gateway in mock mode, and no
+server event schema directory. It exercises runtime logic, not HTTP flows.
+
 Example:
   covel-test-runtime dashscope-image-gen --mode live --case generate-image-json --pretty
 

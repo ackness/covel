@@ -1,3 +1,8 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
@@ -24,7 +29,8 @@ import {
   loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpdateInventory from "../tools/update-inventory.js";
 
 // In-memory mock store for plugin-data operations
@@ -156,12 +162,12 @@ describe("update-inventory", () => {
       mockStore,
     );
 
-    const itemId = result.results[0].itemId;
+    const itemId = getToolContent(result).results[0].itemId;
     expect(itemId).toMatch(/^item-iron-sword-[a-f0-9]{32}$/);
 
     // Assert — result + persisted item
-    expect(result.applied).toBe(1);
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).applied).toBe(1);
+    expect(getToolContent(result).results[0]).toMatchObject({
       op: "add",
       status: "created",
       itemId,
@@ -205,7 +211,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -216,7 +222,7 @@ describe("update-inventory", () => {
     );
 
     // Assert — same id, stacked quantity, no duplicate row
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       status: "updated",
       itemId,
       quantity: 5,
@@ -234,7 +240,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -245,7 +251,10 @@ describe("update-inventory", () => {
     );
 
     // Assert
-    expect(result.results[0]).toMatchObject({ status: "updated", quantity: 4 });
+    expect(getToolContent(result).results[0]).toMatchObject({
+      status: "updated",
+      quantity: 4,
+    });
     const stored = await mockStore.getPluginData(
       "sess-1",
       "inventory",
@@ -264,7 +273,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -275,7 +284,7 @@ describe("update-inventory", () => {
     );
 
     // Assert — tombstone, hidden from the bag but keeping the stable id
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       status: "removed",
       itemId,
     });
@@ -307,7 +316,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
     await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "remove", name: "Torch" }] },
@@ -324,7 +333,7 @@ describe("update-inventory", () => {
     );
 
     // Assert — same row, fresh quantity, tombstone cleared
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       status: "created",
       itemId,
       quantity: 3,
@@ -358,14 +367,16 @@ describe("update-inventory", () => {
     );
 
     // Assert — missing item is a noted skip, the valid change still applies
-    expect(result.skipped).toBe(1);
-    expect(result.applied).toBe(1);
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).skipped).toBe(1);
+    expect(getToolContent(result).applied).toBe(1);
+    expect(getToolContent(result).results[0]).toMatchObject({
       op: "remove",
       name: "Ghost Dagger",
       status: "skipped",
     });
-    expect(result.results[0].note).toContain("not in inventory");
+    expect(getToolContent(result).results[0].note).toContain(
+      "not in inventory",
+    );
     // The skipped remove contributes no message entry
     const message = await mockStore.getPluginData(
       "sess-1",
@@ -385,7 +396,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act — equip
     await executeAndCommit(
@@ -409,7 +420,7 @@ describe("update-inventory", () => {
       { ...ctx, turnId: "turn-3" },
       mockStore,
     );
-    expect(noop.results[0]).toMatchObject({
+    expect(getToolContent(noop).results[0]).toMatchObject({
       status: "skipped",
       note: "already equipped",
     });
@@ -440,8 +451,10 @@ describe("update-inventory", () => {
     );
 
     // Assert — nothing persisted, no message
-    expect(result.applied).toBe(0);
-    expect(result.results[0]).toMatchObject({ status: "skipped" });
+    expect(getToolContent(result).applied).toBe(0);
+    expect(getToolContent(result).results[0]).toMatchObject({
+      status: "skipped",
+    });
     const rows = await mockStore.listPluginData("sess-1", "inventory");
     expect(rows).toHaveLength(0);
   });
@@ -464,7 +477,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act — correct the quantity estimate, leave description/tags alone
     await executeAndCommit(
@@ -508,7 +521,7 @@ describe("update-inventory", () => {
       ctx,
     );
 
-    const itemId = first.results[0].itemId;
+    const itemId = getToolContent(first).results[0].itemId;
 
     // Act — second call in the same turn equips it via pending overlay
     const second = await updateInventoryTool.execute(
@@ -517,7 +530,7 @@ describe("update-inventory", () => {
     );
 
     // Assert — equip applied, and the merged message keeps both entries
-    expect(second.results[0]).toMatchObject({
+    expect(getToolContent(second).results[0]).toMatchObject({
       status: "updated",
       itemId,
     });

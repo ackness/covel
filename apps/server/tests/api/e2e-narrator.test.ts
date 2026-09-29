@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import path from "node:path";
 import type { Hono } from "hono";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";

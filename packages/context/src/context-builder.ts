@@ -6,9 +6,8 @@
  * - Inject block assembly (XML-wrapped data from other runtime outputs)
  * - Full context assembly (system prompt + message history)
  *
- * The early-development codebase now uses one segment-based assembler for all
- * agent runtimes. `buildContext` remains the stable public API while the
- * implementation lives in `prompt-assembler.ts`.
+ * Agent runtimes use one asynchronous entrypoint. The segment assembler lives
+ * in `prompt-assembler.ts`.
  */
 
 import {
@@ -56,35 +55,8 @@ export const interpolateTemplate = _interpolateTemplate;
  */
 export const buildInjectBlocks = _buildInjectBlocks;
 
-/**
- * Assemble the full execution context for a runtime.
- *
- * Combines the prompt template, inject blocks from upstream runtime outputs,
- * template variable interpolation, and message history into an
- * `AssembledContext` ready for LLM consumption.
- *
- * This delegates to the segment-based assembler. Budget pruning runs whenever
- * the caller supplies both an estimator and context budget.
- *
- * @param params - Context build parameters: prompt template, manifest, turn input, completed results, and message history.
- * @returns An `AssembledContext` containing the interpolated system prompt and ordered messages.
- *
- * @example
- * ```typescript
- * import { buildContext } from '@covel/context';
- *
- * const ctx = buildContext({
- *   promptTemplate: 'You are a narrator for {{ player.message }}',
- *   manifest,
- *   turnInput: { sessionId: 'sess-1', turnId: 'turn-1', playerMessage: 'Enter the dungeon' },
- *   completedResults: new Map(),
- * });
- *
- * console.log(ctx.systemPrompt); // Interpolated system prompt
- * console.log(ctx.messages);     // [{ role: 'user', content: 'Enter the dungeon' }]
- * ```
- */
-export function buildContext(params: ContextBuildParams): AssembledContext {
+/** Synchronous assembler used internally when no store read is needed. */
+export function buildContextSync(params: ContextBuildParams): AssembledContext {
   return buildSegmentedContext(params);
 }
 
@@ -92,9 +64,7 @@ export function buildContext(params: ContextBuildParams): AssembledContext {
  * Determine whether a manifest requires the async build path.
  *
  * Returns `true` when the manifest declares at least one `input.inject`
- * entry with `kind: 'plugin-data'`. Callers use this to decide between
- * {@link buildContext} (sync) and {@link buildContextAsync} (async, supports
- * plugin-data inject).
+ * entry with `kind: 'plugin-data'`.
  */
 export function needsAsyncBuild(
   params: Pick<ContextBuildParams, "manifest">,
@@ -105,12 +75,39 @@ export function needsAsyncBuild(
 }
 
 /**
- * Async assembly path — semantically identical to {@link buildContext} but
- * supports `input.inject` entries of kind `plugin-data`, which require a
- * store round-trip to materialise.
+ * Internal path for `input.inject` entries of kind `plugin-data`, which
+ * require a store round-trip to materialise.
  */
-export async function buildContextAsync(
+async function buildContextAsync(
   params: ContextBuildParams,
 ): Promise<AssembledContext> {
   return buildSegmentedContextAsync(params);
+}
+
+/**
+ * Assemble the full execution context for a runtime.
+ *
+ * Combines the prompt template, upstream injects, template interpolation,
+ * and message history. Plugin-data injects read from `params.store`; other
+ * inputs use the synchronous assembler. Budget pruning runs when both an
+ * estimator and context budget are supplied.
+ *
+ * @example
+ * ```typescript
+ * import { buildContext } from '@covel/context';
+ *
+ * const ctx = await buildContext({
+ *   promptTemplate: 'You are a narrator for {{ player.message }}',
+ *   manifest,
+ *   turnInput,
+ *   completedResults: new Map(),
+ * });
+ * ```
+ */
+export async function buildContext(
+  params: ContextBuildParams,
+): Promise<AssembledContext> {
+  return needsAsyncBuild(params)
+    ? buildContextAsync(params)
+    : buildContextSync(params);
 }

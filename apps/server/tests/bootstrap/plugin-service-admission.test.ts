@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
 import { PluginServiceRegistry } from "@covel/runtime";
 import { createPluginServiceAdmission } from "../../src/routes/api/bootstrap/plugin-service-admission.js";

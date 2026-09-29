@@ -1,4 +1,5 @@
-import type { RuntimeResult } from "@covel/shared";
+import type { ExecutionCommitPlan, PreparedExecution } from "../execution.js";
+import { deepFreeze } from "../hooks/hook-settings.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
 import {
@@ -25,9 +26,11 @@ export type ExecutionCompletion =
 
 export interface CommitExecutionArgs extends Omit<
   FinalizeExecutionArgs,
-  "results"
+  keyof ExecutionCommitPlan | "loadOutputSchema"
 > {
-  readonly results: readonly RuntimeResult[];
+  readonly execution: PreparedExecution;
+  /** Restrict a detached commit to plugins still active under the session lock. */
+  readonly activePluginIds?: ReadonlySet<string>;
   readonly completion: ExecutionCompletion;
   /** Transport delivery precedes the checkpoint and completion notification. */
   readonly onFinalized?: (
@@ -49,7 +52,33 @@ export interface CommitExecutionOutcome extends FinalizeExecutionOutcome {
 export async function commitExecution(
   args: CommitExecutionArgs,
 ): Promise<CommitExecutionOutcome> {
-  const outcome = await finalizeExecution(args);
+  const plan = args.execution.commit;
+  const outcome = await finalizeExecution({
+    ...args,
+    ...plan,
+    // Activation can shrink during detached work, but a later activation must
+    // never introduce hooks into an execution that did not capture them.
+    activePluginIds: new Set(
+      [
+        ...(plan.activePluginIds ??
+          plan.runtimes.map((runtime) => runtime.pluginId)),
+      ].filter((pluginId) => args.activePluginIds?.has(pluginId) ?? true),
+    ),
+    hookSettings: deepFreeze(plan.hookSettings),
+    loadOutputSchema: async (runtimeId) => plan.outputSchemas[runtimeId],
+    extraInTx: async (tx) => {
+      if (
+        plan.resolvedSuspensionId &&
+        plan.results.some((result) => result.status !== "success")
+      ) {
+        throw new Error("Cannot commit an unsuccessful resumed execution");
+      }
+      await args.extraInTx?.(tx);
+      if (plan.resolvedSuspensionId) {
+        await tx.markSuspensionResolved(plan.resolvedSuspensionId);
+      }
+    },
+  });
   try {
     await args.onFinalized?.(outcome);
   } catch (error) {
@@ -59,8 +88,9 @@ export async function commitExecution(
     return { ...outcome, snapshotFailed: false };
   }
 
-  const { completion, store, sessionId, eventBus } = args;
-  const suspended = args.results.some(
+  const { completion, store, eventBus } = args;
+  const { sessionId } = plan;
+  const suspended = plan.results.some(
     (result) => result.status === "suspended",
   );
   if (completion.kind === "resume" && !suspended) {

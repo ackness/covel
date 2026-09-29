@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../handler.js";
 
 function ctx(manualPayload) {
@@ -17,7 +21,7 @@ function ctx(manualPayload) {
 }
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business return
-// is under `result.value`; pending proposals stay on the envelope (result).
+// is under `getToolContent(result).value`; pending proposals stay on the envelope (result).
 describe("living-world-rules handler", () => {
   it("saves a constant rule and emits lorebook.upsert", async () => {
     const result = await handler(
@@ -35,7 +39,7 @@ describe("living-world-rules handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       ruleId: "rain-market",
       lorebookEntryId: "lwr-rain-market",
@@ -176,7 +180,7 @@ describe("living-world-rules handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       ruleId: "club-room",
       lorebookEntryId: "lwr-club-room",
@@ -244,10 +248,10 @@ describe("living-world-rules handler", () => {
       }),
     );
 
-    expect(result.value).toEqual({
+    expect(getToolContent(result).value).toEqual({
       saved: true,
       ruleId: expect.stringMatching(/^rule-club-room-rule-[a-f0-9]{32}$/),
-      lorebookEntryId: `lwr-${result.value.ruleId}`,
+      lorebookEntryId: `lwr-${getToolContent(result).value.ruleId}`,
     });
   });
 

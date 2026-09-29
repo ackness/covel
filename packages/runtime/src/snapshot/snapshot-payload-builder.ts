@@ -18,8 +18,6 @@
  * to travel with the snapshot.
  */
 
-import { isDerivedVectorRecord } from "@covel/store/vector";
-
 import type {
   DataStore,
   SnapshotPayload,
@@ -74,15 +72,12 @@ export async function buildSnapshotPayload(
   // and a plugin that never produced a runtime result still travels.
   // Framework job-control rows are incarnation-bound execution state, not
   // plugin business data. Copying them into a fork would make a second worker
-  // replay already-paid provider work under a new session. Derived vector
-  // progress is also excluded because snapshots do not carry physical indexes.
+  // replay already-paid provider work under a new session. Vector progress
+  // lives in its own table and does not enter plugin snapshots.
   const pluginData: readonly PluginDataRecord[] = (
     await store.listPluginDataSessionScope(sessionId)
   ).filter(
-    (row) =>
-      row.namespace !== "_jobs" &&
-      row.namespace !== "_runtime_jobs" &&
-      !isDerivedVectorRecord(row),
+    (row) => row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs",
   );
 
   const runtimeExports = await store.listRuntimeExports(sessionId, {

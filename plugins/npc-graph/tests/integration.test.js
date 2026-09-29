@@ -1,3 +1,8 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
  * npc-graph end-to-end integration test (no real LLM).
@@ -17,7 +22,8 @@ import { bindToolStore } from "@covel/plugin-test-utils";
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpsertNpcGraph from "../tools/upsert-npc-graph.js";
 import retrieverHandler from "../runtimes/rag-retriever/handler.js";
 
@@ -176,8 +182,8 @@ describe("npc-graph end-to-end (extractor → retriever)", () => {
       store,
     );
 
-    expect(extractResult.nodes.created).toBe(3);
-    expect(extractResult.edges.created).toBe(2);
+    expect(getToolContent(extractResult).nodes.created).toBe(3);
+    expect(getToolContent(extractResult).edges.created).toBe(2);
 
     // ── Simulate Phase 3: retriever runs at the start of turn 4 ─
     // The player mentions Xiao Yansheng — retriever should surface

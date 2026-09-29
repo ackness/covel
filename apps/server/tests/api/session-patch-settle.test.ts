@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createEventBus } from "@covel/events";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";

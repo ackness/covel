@@ -14,10 +14,11 @@
  *
  * It must never block or fail a turn: callers fire-and-forget it after commit,
  * and every store/embed error is swallowed with a warning. Incremental progress
- * is persisted in `plugin_data` (a recall cursor + an archival content-hash map)
+ * is persisted alongside the vector index (a recall cursor + an archival content-hash map)
  * so a process restart does not re-embed everything.
  */
 
+import { collectArchivalItems } from "./archival-items.js";
 import type { VectorIngestStore } from "./store-contracts.js";
 
 import type { VectorStoreCapability } from "@covel/store/vector";
@@ -57,9 +58,7 @@ interface RecallCursor {
 type ArchivalHashes = Record<string, string>;
 
 const CURSOR_NS = "recall-ingest";
-const CURSOR_KEY = "cursor";
 const HASHES_NS = "archival-ingest";
-const HASHES_KEY = "hashes";
 
 export interface VectorIngestor {
   /**
@@ -202,12 +201,12 @@ async function ingestRecall(
   sessionId: string,
   expectedSessionCreatedAt: string,
 ): Promise<{ written: number; more: boolean }> {
-  const cursor = await readPluginJson<RecallCursor>(
+  const progress = await readProgress<RecallCursor>(
     store,
     sessionId,
     CURSOR_NS,
-    CURSOR_KEY,
   );
+  const cursor = progress.value;
 
   // Keyset read of just the batch window past the cursor — the store orders by
   // the same `(createdAt, id)` total order the cursor is written in, so a long
@@ -267,12 +266,13 @@ async function ingestRecall(
   }
 
   if (lastHandled) {
-    await writePluginJson<RecallCursor>(
+    await writeProgress(
       store,
       sessionId,
       CURSOR_NS,
-      CURSOR_KEY,
       lastHandled,
+      progress.raw,
+      expectedSessionCreatedAt,
     );
   }
   return {
@@ -284,14 +284,6 @@ async function ingestRecall(
 
 // ── Archival (lorebook + characters, hash-incremental) ───────────
 
-interface ArchivalItem {
-  readonly vecKey: string;
-  readonly displayKey: string;
-  readonly text: string;
-  readonly source: "lorebook" | "character";
-  readonly pluginId?: string;
-}
-
 async function ingestArchival(
   store: VectorStore,
   embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
@@ -300,40 +292,38 @@ async function ingestArchival(
 ): Promise<{ written: number; more: boolean }> {
   const items = await collectArchivalItems(store, sessionId);
 
-  let hashes =
-    (await readPluginJson<ArchivalHashes>(
-      store,
-      sessionId,
-      HASHES_NS,
-      HASHES_KEY,
-    )) ?? {};
+  const progress = await readProgress<ArchivalHashes>(
+    store,
+    sessionId,
+    HASHES_NS,
+  );
+  const hashes = progress.value ?? {};
 
-  // Purge vectors for archival records that no longer exist (deleted lorebook
-  // entries / characters). `deleteVectors` is scope-only (no per-key delete), so
-  // on any detected deletion we wipe the whole archival namespace and reset the
-  // hash map — the surviving items are then re-embedded below. This keeps stale
-  // vectors from being returned by search and bounds the hash map (it would
-  // otherwise grow forever). Deletions are rare and the archival set is small
-  // (lorebook + characters, not turn messages), so the re-embed cost is fine.
+  // Read the complete corpus before removing anything. A source read failure
+  // must preserve both existing vectors and progress.
   const liveKeys = new Set(items.map((it) => it.vecKey));
-  const hasDeletion = Object.keys(hashes).some((k) => !liveKeys.has(k));
-  if (hasDeletion) {
+  const removedKeys = Object.keys(hashes).filter((key) => !liveKeys.has(key));
+  const hasDeletion = removedKeys.length > 0;
+  for (const key of removedKeys) {
     await store.deleteVectors({
       sessionId,
       pluginId: MEMORY_VECTOR_PLUGIN_ID,
       namespace: ARCHIVAL_NAMESPACE,
+      key,
+      expectedSessionCreatedAt,
     });
-    hashes = {};
+    delete hashes[key];
   }
 
   if (items.length === 0) {
     if (hasDeletion) {
-      await writePluginJson<ArchivalHashes>(
+      await writeProgress(
         store,
         sessionId,
         HASHES_NS,
-        HASHES_KEY,
         {},
+        progress.raw,
+        expectedSessionCreatedAt,
       );
     }
     return { written: 0, more: false };
@@ -343,7 +333,18 @@ async function ingestArchival(
   const changed = items.filter(
     (it) => hashes[it.vecKey] !== contentHash(it.text),
   );
-  if (changed.length === 0) return { written: 0, more: false };
+  if (changed.length === 0) {
+    if (hasDeletion)
+      await writeProgress(
+        store,
+        sessionId,
+        HASHES_NS,
+        hashes,
+        progress.raw,
+        expectedSessionCreatedAt,
+      );
+    return { written: 0, more: false };
+  }
 
   const batch = changed.slice(0, MAX_INGEST_BATCH);
   const vectors = await embedWithRetry(
@@ -377,12 +378,13 @@ async function ingestArchival(
     written += 1;
   }
 
-  await writePluginJson<ArchivalHashes>(
+  await writeProgress(
     store,
     sessionId,
     HASHES_NS,
-    HASHES_KEY,
     nextHashes,
+    progress.raw,
+    expectedSessionCreatedAt,
   );
   return {
     written,
@@ -390,84 +392,38 @@ async function ingestArchival(
   };
 }
 
-async function collectArchivalItems(
-  store: VectorIngestStore,
-  sessionId: string,
-): Promise<ArchivalItem[]> {
-  const items: ArchivalItem[] = [];
-
-  // Deletion detection needs both complete source reads. Let failures reach
-  // the sweep's archival catch before any vectors or hashes can be changed.
-  // Lorebook entries. plugin_data is intentionally excluded (same isolation
-  // reasoning as the keyword archival searcher — no plugin-agnostic way to scan
-  // every plugin's namespaced data).
-  const entries = await store.listSessionLorebookEntries(sessionId);
-  for (const entry of entries) {
-    const content = String(entry.content ?? "").trim();
-    if (!content) continue;
-    items.push({
-      vecKey: `lorebook:${JSON.stringify(entry.owner)}:${entry.id}`,
-      displayKey: entry.keys?.[0] ?? entry.id,
-      text: content,
-      source: "lorebook",
-      ...(entry.owner.kind === "plugin"
-        ? { pluginId: entry.owner.pluginId }
-        : {}),
-    });
-  }
-
-  // Character records.
-  const characters = await store.listCharacters(sessionId);
-  for (const char of characters) {
-    const text =
-      `[${char.type}] ${char.name}: ${char.description ?? ""} ${JSON.stringify(char.fields ?? {})}`.trim();
-    if (!text) continue;
-    items.push({
-      vecKey: `character:${char.id}`,
-      displayKey: char.name,
-      text,
-      source: "character",
-    });
-  }
-
-  return items;
-}
-
-// ── plugin_data cursor helpers ───────────────────────────────────
-
-async function readPluginJson<T>(
-  store: VectorIngestStore,
+// Index progress is deliberately absent from business-data snapshots/checkpoints.
+async function readProgress<T>(
+  store: VectorStore,
   sessionId: string,
   namespace: string,
-  key: string,
-): Promise<T | null> {
-  const rec = await store.getPluginData(
-    sessionId,
-    MEMORY_VECTOR_PLUGIN_ID,
-    namespace,
-    key,
-  );
-  return (rec?.value as T | undefined) ?? null;
-}
-
-async function writePluginJson<T>(
-  store: VectorIngestStore,
-  sessionId: string,
-  namespace: string,
-  key: string,
-  value: T,
-): Promise<void> {
-  const now = new Date().toISOString();
-  await store.setPluginData({
-    id: `${MEMORY_VECTOR_PLUGIN_ID}:${namespace}:${key}:${sessionId}`,
+): Promise<{ value: T | null; raw: string | null }> {
+  const raw = await store.getVectorIndexProgress({
     sessionId,
     pluginId: MEMORY_VECTOR_PLUGIN_ID,
     namespace,
-    key,
-    value,
-    createdAt: now,
-    updatedAt: now,
   });
+  return { raw, value: raw === null ? null : (JSON.parse(raw) as T) };
+}
+
+async function writeProgress(
+  store: VectorStore,
+  sessionId: string,
+  namespace: string,
+  value: unknown,
+  expectedValue: string | null,
+  expectedSessionCreatedAt: string,
+): Promise<void> {
+  const updated = await store.compareAndSetVectorIndexProgress({
+    sessionId,
+    pluginId: MEMORY_VECTOR_PLUGIN_ID,
+    namespace,
+    value: JSON.stringify(value),
+    expectedValue,
+    expectedSessionCreatedAt,
+  });
+  if (!updated)
+    throw new Error("Vector index progress changed during ingestion");
 }
 
 function warn(kind: string, sessionId: string, err: unknown): void {

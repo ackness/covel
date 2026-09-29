@@ -1,3 +1,8 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
 import { bindToolStore } from "@covel/plugin-test-utils";
 /**
@@ -27,7 +32,8 @@ import {
   loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpdateAffinity from "../tools/update-affinity.js";
 import { AFFINITY_TIERS, clampScore, getTier } from "../tier-metadata.js";
 
@@ -200,9 +206,9 @@ describe("update-affinity", () => {
       mockStore,
     );
 
-    expect(result.applied).toBe(1);
-    expect(result.results[0].status).toBe("created");
-    const id = result.results[0].id;
+    expect(getToolContent(result).applied).toBe(1);
+    expect(getToolContent(result).results[0].status).toBe("created");
+    const id = getToolContent(result).results[0].id;
     expect(id).toBeDefined();
 
     const stored = await mockStore.getPluginData(
@@ -236,7 +242,7 @@ describe("update-affinity", () => {
       mockStore,
     );
 
-    expect(result.results[0].status).toBe("updated");
+    expect(getToolContent(result).results[0].status).toBe("updated");
     const stored = await mockStore.getPluginData(
       "sess-1",
       "affinity",
@@ -354,7 +360,7 @@ describe("update-affinity", () => {
     );
 
     // Matched by name — reuses the preseeded key instead of forking a record.
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       id: "aff-suwan",
       status: "updated",
     });
@@ -391,7 +397,7 @@ describe("update-affinity", () => {
       mockStore,
     );
 
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       id: "aff-lian",
       status: "updated",
     });
@@ -461,7 +467,7 @@ describe("update-affinity", () => {
       { changes: [{ name: "莉安", delta: 5, reason: "你替她挡了债主" }] },
       ctx,
     );
-    const id = first.results[0].id;
+    const id = getToolContent(first).results[0].id;
 
     const second = await updateAffinityTool.execute(
       { changes: [{ name: "莉安", delta: 3, reason: "你送她回家" }] },
@@ -469,7 +475,7 @@ describe("update-affinity", () => {
     );
 
     // The second call saw the uncommitted score of 5, not a fresh record.
-    expect(second.results[0]).toMatchObject({
+    expect(getToolContent(second).results[0]).toMatchObject({
       id,
       score: 8,
       status: "updated",

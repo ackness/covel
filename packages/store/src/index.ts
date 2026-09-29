@@ -5,18 +5,10 @@ export {
 } from "./factory.js";
 export { BROWSER_IDB_DATABASE_NAME, STORAGE_MIGRATIONS } from "./migrations.js";
 export { describeStorageCapabilities } from "./storage-capabilities.js";
-export { createMemoryStore } from "./memory/memory-store.js";
-export { createSqliteStore } from "./sqlite/sqlite-store.js";
-export { createPgStore } from "./postgres/pg-store.js";
-export { createIndexedDbMediaStore } from "./indexeddb/idb-media-store.js";
 export {
   createMediaStore,
   createMediaStoreFromEnv,
-  createMemoryMediaStore,
-  createPgMediaStore,
-  createPgMediaStoreFromClient,
-  createSqliteMediaStore,
-} from "./media-store.js";
+} from "./media-store/factory.js";
 export { supportsVector } from "./vector-store.js";
 export { rebindSnapshotPayloadSession } from "./records/snapshot-session-scope.js";
 export {
@@ -87,6 +79,8 @@ export type {
   SearchVectorsInput,
   VectorSearchResult,
   DeleteVectorsInput,
+  VectorIndexProgressScope,
+  UpdateVectorIndexProgressInput,
 } from "./vector-store.js";
 export type {
   DataStore,

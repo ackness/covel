@@ -18,9 +18,15 @@ it("rejects a partial vector adapter before callers access model metadata", () =
     resolveSessionVectorTarget: async () => null,
   };
   expect(supportsVector(partial)).toBe(false);
-  expect(supportsVector({ ...partial, listVectorModels: async () => [] })).toBe(
-    true,
-  );
+  expect(
+    supportsVector({
+      ...partial,
+      listVectorModels: async () => [],
+      lockSessionEmbeddingModel: async () => {},
+      getVectorIndexProgress: async () => null,
+      compareAndSetVectorIndexProgress: async () => true,
+    }),
+  ).toBe(true);
 });
 
 // ── MemoryStore: always supports VectorStoreCapability ────────

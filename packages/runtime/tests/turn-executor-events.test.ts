@@ -12,7 +12,7 @@ import type {
 } from "@covel/shared";
 import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { commitExecution } from "../src/commit/commit-execution.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -115,11 +115,17 @@ describe("TurnExecutor EventBus Bridge", () => {
 
     await commitExecution({
       store: deps.store!,
-      sessionId: result.sessionId,
-      executionContext: result.executionContext,
-      runtimes: [narratorManifest],
-      results: result.runtimeResults,
-      turnIds: [result.turnId],
+      execution: {
+        result,
+        commit: {
+          sessionId: result.sessionId,
+          executionContext: result.executionContext,
+          runtimes: [narratorManifest],
+          results: result.runtimeResults,
+          turnIds: [result.turnId],
+          outputSchemas: {},
+        },
+      },
       eventBus,
       completion: {
         kind: "turn",
