@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.43] - 2026-09-30
+
+This release adds native Gemini support, tightens provider request contracts, and makes execution commits and memory indexing more explicit and atomic. It also fixes plugin panel state and aligns local verification with CI (#91, #92, #93).
+
+### Added
+
+- **Native Gemini text generation.** The `google-generative-ai-v1` adapter supports streaming, tool calls, structured output, supported image inputs, and model-specific thinking settings. Google defaults to the native endpoint; OpenAI-compatible Google configurations must explicitly select `openai-chat-v1` and the compatible endpoint. Native Google embeddings, media generation, file uploads, and grounding are not included.
+- **Automatic checks before pushing.** `pnpm hooks:install` installs a pre-push hook that verifies each distinct pushed ref tip in a clean temporary checkout: frozen dependency installation, `pnpm check`, unit tests, and browser test collection. PostgreSQL integration, browser execution, and packaging remain separate release checks.
+
+### Changed
+
+- **Provider requests have explicit contracts and shared budgets.** Effective capabilities drive model controls; typed provider options, request limits, and deadlines apply across retries and fallbacks. Unsupported configuration fails before sending requests, structured output is validated and normalized, and response diagnostics remain available in traces.
+- **Execution prepares its own commit.** Turn and resume APIs return the public result together with an internal commit carrying the admitted schemas, effects, suspension state, and accounting. Consumers commit the complete prepared execution; public results do not expose pending proposals. Hook settings and runtime generations are captured for detached work.
+- **Library and plugin interfaces are consolidated.** Handlers use shared SDK contracts, Store backends use explicit subpath imports, context construction is asynchronous, and world creation returns a normalized manifest separately from package writing. Unused exports and module cycles have been removed.
+- **Verification uses the same gates locally and in CI.** Fallow checks dependency and import hygiene; release builds reuse CI gates, PostgreSQL checks run without task caching, and browser smoke starts one isolated server stack. The framework uses Node.js 26 and pnpm 11.22.
+
+### Fixed
+
+- **Memory vectors and indexing progress commit atomically.** Memory, SQLite, and PostgreSQL stores compare the expected revision and session incarnation before applying vector changes and progress together. Derived index progress is separate from portable plugin data.
+- **Plugin panels preserve active edits and interaction state.** Equivalent array updates no longer replace drafts, numeric object keys remain object keys, action parameters read current state, and stale callbacks respect the current interaction lock.
+- **Clean-checkout verification resolves generated plugin artifacts correctly.** Generated ZIP paths no longer appear as missing source imports when local test output is absent.
+- **Live player-flow verification starts every claimed round.** The three-round acceptance test sends the third action explicitly instead of treating a selected guide draft as an executed turn.
+
+### Breaking contracts and upgrade notes
+
+- Update custom hosts and plugins for prepared execution commits, the shared handler SDK, asynchronous context construction, explicit Store backend imports, and the normalized `createWorld` / `writeWorldPackage` split. Update the server, Web client, desktop shell, and framework packages together; plugin and world packages remain independently versioned.
+- Recreate affected development sessions and vector indexes that use the previous vector-progress representation. Checkpoints omit derived index progress and do not migrate it; restored sessions rebuild their own indexes. There is no automatic migration for old development data. Back up affected storage before recreating it; upgrades from versions before v0.0.42 also require the [v0.0.42 upgrade procedure](./guide/upgrade-0.0.42.en.md).
+- macOS Apple Silicon and Windows x64 artifacts remain unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
+
 ## [0.0.42] - 2026-09-29
 
 This release introduces versioned plugin extension contracts and the kernel-owned World Model, and hardens execution, persistence, and recovery across the server, browser, and desktop shell (#89). It replaces several development-era contracts; follow the [v0.0.42 upgrade guide](./guide/upgrade-0.0.42.en.md) before opening existing development data.
@@ -1417,7 +1446,9 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.41...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.43...HEAD
+[0.0.43]: https://github.com/AcKnEsS/covel/compare/v0.0.42...v0.0.43
+[0.0.42]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.42
 [0.0.41]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.41
 [0.0.40]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.40
 [0.0.39]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.39
