@@ -1,9 +1,6 @@
 name: CI
 
-# Verify lint and tests on PRs and main; main also runs the full build.
-# release.yml repeats the test gates and release preflight before packaging.
-# Setup steps mirror release.yml (pnpm/action-setup + actions/setup-node with
-# pnpm cache) so both workflows install identically.
+# Verify PRs and main, and reuse the same gates for release packaging.
 #
 # Push is scoped to main deliberately. A `*-dev` branch with an open PR gets
 # two runs of the same commit otherwise — the PR ref and the branch ref hash
@@ -14,6 +11,17 @@ on:
   push:
     branches:
       - main
+  workflow_call:
+    inputs:
+      commit:
+        description: Immutable commit to verify for a release.
+        required: false
+        type: string
+      release:
+        description: Run release preflight before packaging.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,14 +32,26 @@ concurrency:
 
 jobs:
   verify:
-    name: Lint, test, build
+    name: Check, test, build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.commit || github.sha }}
           persist-credentials: false
+
+      - name: Install actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint_1.7.12_linux_amd64.tar.gz"
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$archive"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -39,7 +59,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 26.7.0
+          node-version: "26.7.0"
           cache: pnpm
 
       - name: Install dependencies
@@ -50,6 +70,7 @@ jobs:
       # here instead of re-running them. restore-keys falls back to the most
       # recent cache on this OS when the exact SHA has no entry.
       - name: Cache turbo
+        if: ${{ !inputs.release }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -58,17 +79,18 @@ jobs:
             turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             turbo-${{ runner.os }}-
 
-      - name: Check peer dependency compatibility
-        run: pnpm peers check
+      - name: Restore CI task cache
+        if: ${{ inputs.release }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Package boundaries
-        run: pnpm check:boundaries
-
-      - name: Dependency hygiene (knip)
-        run: pnpm deps:check
+      - name: Check
+        run: pnpm check
 
       - name: Test
         # Bound both workspace tasks and their worker pools on shared runners.
@@ -76,25 +98,19 @@ jobs:
           VITEST_MAX_WORKERS: "2"
         run: pnpm test --concurrency=2
 
-      # Exclude convention-only `_archive`; every active plugin directory is
-      # validated together so cross-runtime collisions are also detected.
-      - name: Strict plugin manifest validation
-        run: pnpm validate:plugin plugins/[!_]*
-
-      # Only the three apps have a build script, so this covers the bundling
-      # layer (vite/rolldown config, manualChunks, circular imports) that
-      # `tsc --noEmit` in Lint cannot see. Kept off PRs for faster feedback —
-      # push to main still gates it, well before a release tag would.
+      # The release matrix builds desktop and its web/server dependencies.
       - name: Build
-        if: github.event_name == 'push'
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !inputs.release }}
         run: pnpm build
 
-      - name: Check plugin/world i18n coverage + READMEs
-        run: pnpm check:i18n
+      - name: Release preflight
+        if: ${{ inputs.release }}
+        run: pnpm release:preflight
 
   postgres:
     name: PostgreSQL integration
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
         # PostgreSQL 18 + pgvector 0.8.6, pinned by multi-platform digest.
@@ -118,6 +134,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.commit || github.sha }}
           persist-credentials: false
 
       - name: Setup pnpm
@@ -126,14 +143,55 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 26.7.0
+          node-version: "26.7.0"
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test PostgreSQL stores
-        run: pnpm --filter @covel/store test
+      - name: Test PostgreSQL integration
+        run: pnpm test:pg
 
-      - name: Test PostgreSQL server integration
-        run: pnpm --filter @covel/server exec vitest run tests/integration
+  browser:
+    name: Browser smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26.7.0"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Collect browser tests
+        run: pnpm e2e --list
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test browser smoke
+        run: pnpm e2e:smoke
+
+      - name: Upload browser failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: covel-browser-smoke-failure
+          path: |
+            tests/e2e/artifacts/ci-smoke
+            tests/e2e/report/ci-smoke
+          if-no-files-found: ignore
+          retention-days: 7

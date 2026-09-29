@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-9-4.turborepo.dev/schema.json",
+  "globalDependencies": ["tsconfig.json", "mise.toml"],
   "globalPassThroughEnv": ["VITEST_MAX_WORKERS"],
   "tasks": {
     "build": {
@@ -58,6 +59,30 @@
         "$TURBO_ROOT$/vitest.base.ts"
       ]
     },
+    "@covel/desktop#lint": {
+      "dependsOn": ["@covel/shared#build"]
+    },
+    "@covel/desktop#test": {
+      "dependsOn": ["@covel/shared#build"]
+    },
+    "@covel/context#test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/prompts/**"
+      ]
+    },
+    "@covel/create#test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/prompts/**"
+      ]
+    },
+    "@covel/store#test": {
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL", "COVEL_REQUIRE_PG_TESTS"]
+    },
     "@covel/plugin-loader#test": {
       "dependsOn": ["^build"],
       "cache": true,
@@ -90,7 +115,8 @@
     },
     "@covel/server#test": {
       "dependsOn": ["^build"],
-      "cache": true,
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL", "COVEL_REQUIRE_PG_TESTS"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "src/**",
@@ -100,6 +126,7 @@
         "$TURBO_ROOT$/scripts/e2e-plugin-verify.ts",
         "$TURBO_ROOT$/tests/third-party/**",
         "$TURBO_ROOT$/worlds/**",
+        "$TURBO_ROOT$/prompts/**",
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",

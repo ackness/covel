@@ -7,8 +7,8 @@
  * <10 seconds on a warm cache.
  *
  * Checks:
- *   1. Lockfile is in sync (`pnpm install --frozen-lockfile` would not
- *      change anything).
+ *   1. Lockfile is in sync with all workspace manifests, checked in an
+ *      isolated metadata-only workspace without installing dependencies.
  *   2. Every `import` in `packages/<pkg>/src/**` and
  *      `apps/<app>/src/**` resolves to either a Node builtin, a
  *      workspace package, or a declared dep/devDep — catches the
@@ -26,23 +26,26 @@
  *   6. The bundled LiteLLM model database is a valid snapshot pinned to an
  *      immutable upstream commit.
  *   7. Production source env reads are covered by the shared registry.
- *   8. `actionlint` passes (when installed).
+ *   8. `actionlint` passes for all workflow YAML files.
  *
  * Exit code 0 = safe to push. Non-zero = fix before tagging.
  *
  * Usage:
  *   node scripts/release-preflight.mjs        # full
- *   node scripts/release-preflight.mjs --skip-lockfile  # skip the install
+ *   node scripts/release-preflight.mjs --skip-lockfile  # skip lockfile validation
  *
  * Wired into the root package.json as `pnpm release:preflight`.
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import module from "node:module";
 import { checkPluginEventSchemas } from "./lib/plugin-event-schemas.mjs";
+import { checkLockfile } from "./check-lockfile.mjs";
+import { checkPluginManifests } from "./check-plugin-manifests.mjs";
+import { checkWorkflows } from "./check-workflows.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
@@ -144,20 +147,15 @@ function pkgRoot(spec) {
 }
 
 // ── 1. Lockfile sync ─────────────────────────────────────────────
-console.log("\n[1/8] Lockfile sync (pnpm --frozen-lockfile dry-run)");
+console.log("\n[1/8] Lockfile sync (isolated metadata-only pnpm validation)");
 if (args.has("--skip-lockfile")) {
   warn("skipped (--skip-lockfile)");
 } else {
   try {
-    execSync("pnpm install --frozen-lockfile --prefer-offline", {
-      cwd: repoRoot,
-      stdio: "pipe",
-    });
+    checkLockfile(repoRoot);
     ok("pnpm-lock.yaml in sync with package.jsons");
   } catch (e) {
-    fail(
-      `pnpm install --frozen-lockfile failed:\n${e.stderr?.toString() ?? e.message}`,
-    );
+    fail(e.message);
   }
 }
 
@@ -253,27 +251,9 @@ for (const entry of pluginDirs) {
   pluginIssues += events.errors.length;
 }
 try {
-  execFileSync(
-    process.execPath,
-    [
-      "--import",
-      "tsx",
-      path.join(
-        repoRoot,
-        "packages/plugin-loader/scripts/validate-manifest.ts",
-      ),
-      ...pluginDirs.map((entry) => path.join(repoRoot, "plugins", entry.name)),
-    ],
-    { cwd: repoRoot, encoding: "utf-8", stdio: "pipe" },
-  );
+  checkPluginManifests(repoRoot);
 } catch (e) {
-  const output = [e.stdout?.toString(), e.stderr?.toString()]
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-  fail(
-    `strict plugin manifest validation failed${output ? `:\n${output}` : ""}`,
-  );
+  fail(`strict plugin manifest validation failed: ${e.message}`);
   pluginIssues++;
 }
 if (pluginIssues === 0)
@@ -431,20 +411,10 @@ try {
 // ── 8. actionlint ────────────────────────────────────────────────
 console.log("\n[8/8] GitHub Actions workflow lint");
 try {
-  execSync("which actionlint", { stdio: "pipe" });
-  try {
-    execSync("actionlint .github/workflows/*.yml", {
-      cwd: repoRoot,
-      stdio: "pipe",
-    });
-    ok("actionlint passed");
-  } catch (e) {
-    fail(
-      `actionlint:\n${e.stdout?.toString() ?? e.stderr?.toString() ?? e.message}`,
-    );
-  }
-} catch {
-  warn("actionlint not installed — `brew install actionlint` to enable");
+  checkWorkflows(repoRoot);
+  ok("actionlint passed");
+} catch (e) {
+  fail(e.message);
 }
 
 // ── Summary ──────────────────────────────────────────────────────
