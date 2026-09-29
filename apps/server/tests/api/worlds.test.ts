@@ -4,12 +4,8 @@ import { access, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  type DataStore,
-  type MediaStore,
-} from "@covel/store";
+import { type DataStore, type MediaStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
 import {

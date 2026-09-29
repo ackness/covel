@@ -16,7 +16,7 @@ import type {
   ToolCall,
   ToolCallContext,
 } from "../src/agent-loop/tool-executor.js";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { tool, withPendingProposals } from "@covel/tools";
 import { z } from "zod";

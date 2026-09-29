@@ -13,8 +13,6 @@ import { Hono } from "hono";
 import { createHash } from "node:crypto";
 import type { MediaRef } from "@covel/shared";
 import {
-  createMemoryMediaStore,
-  createMemoryStore,
   type DataStore,
   type MediaAssetLookup,
   type MediaAssetRecord,
@@ -22,6 +20,7 @@ import {
   type MediaStore,
   type SessionRecord,
 } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { mediaRoutes } from "../../src/routes/api/media.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import {

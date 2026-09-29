@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
 import { parseSubscriptionEventId } from "@covel/shared";
 import { createEventBus, type EventBus } from "../src/event-bus.js";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 
 /** Seq part of a `${epoch}:${seq}` wire id. */
 const seqOf = (event: SubscriptionEvent): number =>

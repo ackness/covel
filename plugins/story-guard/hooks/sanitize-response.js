@@ -13,7 +13,7 @@ import { sanitize } from "./_rules.js";
  *   - sanitisation would blank the narrative (conservative: never replace real
  *     content with whitespace-only output).
  *
- * @param {import("@covel/runtime").HookContext} _ctx
+ * @param {import("@covel/plugin-handlers-utils").PluginHookContext} _ctx
  * @param {{ response?: { content?: string | null } & Record<string, unknown> }} payload
  * @returns {Promise<{ action: "continue" } | { action: "continue", replace: { response: Record<string, unknown> } }>}
  */

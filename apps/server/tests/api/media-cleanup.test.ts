@@ -18,12 +18,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import {
-  createMemoryMediaStore,
-  createMemoryStore,
   type DataStore,
   type MediaStore,
   type SessionRecord,
 } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { mediaRoutes } from "../../src/routes/api/media.js";
 
 function makeSession(id: string, worldId = "world-1"): SessionRecord {

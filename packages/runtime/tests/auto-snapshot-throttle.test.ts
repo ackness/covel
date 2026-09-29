@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { EventBus } from "@covel/events";
 import {
   DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS,

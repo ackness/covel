@@ -6,9 +6,10 @@ Covel is a pnpm/Turborepo TypeScript modular monolith: plugins carry gameplay lo
 
 ## Build, Test, and Development Commands
 
-- `pnpm install --frozen-lockfile` installs the Node 26+/pnpm 11.22 workspace.
+- `pnpm install --frozen-lockfile` installs the Node 26.x/pnpm 11.22 workspace.
 - `pnpm dev` starts the Vite client and API server; `pnpm build` builds all Turbo targets.
 - `pnpm lint` runs workspace TypeScript checks; `pnpm format` applies Prettier.
+- `pnpm deps:check` gates dependency/import findings with Fallow; `pnpm analyze` reports dead code, duplication, and complexity. Maintain dynamic entry points in `.fallowrc.jsonc`.
 - `pnpm test` runs all Vitest suites; target one package with `pnpm --filter @covel/runtime test`.
 - `pnpm e2e` runs Playwright; use `pnpm db:up` before PostgreSQL-backed tests.
 

@@ -15,6 +15,7 @@ export {
   loadPluginDefinition,
   loadPluginEntryDefinition,
   loadRuntime,
+  resolveRuntimePrompt,
   loadPluginUi,
 } from "./load.js";
 export type { PluginDefinition } from "./load.js";

@@ -1,6 +1,6 @@
 /**
  * World package generator — uses an LLM to create the manifest, lore, and
- * requested portable supplements, then validates and writes a worldData package.
+ * requested portable supplements, then returns validated portable content.
  *
  * Only requires a concept string. The LLM autonomously decides
  * all unspecified details while an optional brief constrains the experience
@@ -28,7 +28,6 @@ import {
 } from "./validation-helpers.js";
 import { requestLlmResponse } from "./llm-request.js";
 import { repairWorldLore } from "./lore-repair.js";
-import { writeWorldPackage } from "./world-writer.js";
 import {
   applyCreationBriefToManifest,
   normalizeGeneratedPackage,
@@ -193,6 +192,14 @@ export async function createWorld(
     }
 
     const briefErrors = applyCreationBriefToManifest(yamlData, options.brief);
+    if (
+      yamlData.worldData !== undefined ||
+      yamlData.dimensionSources !== undefined
+    ) {
+      briefErrors.push(
+        "Generated worlds must contain inline data, not worldData or dimensionSources file references",
+      );
+    }
     if (briefErrors.length > 0) {
       lastErrors = briefErrors;
       log(
@@ -329,26 +336,19 @@ export async function createWorld(
       }
     }
 
-    // Extract id from validated data
-    const id = yamlData.id as string;
+    // Use the parsed output: schema transforms and defaults are part of the
+    // manifest contract shared by file and in-memory save targets.
+    const manifest = validation.data as Record<string, unknown>;
+    const id = manifest.id as string;
     log(options, "info", `validation passed id=${id}`);
 
     attemptSignal.throwIfAborted();
-    const writtenFiles = await writeWorldPackage(
-      options.outputDir,
-      id,
-      yamlData,
-      normalizedLore,
-      locale,
-      generatedPackage.content,
-    );
-
-    log(options, "info", `done wrote ${writtenFiles.length} files`);
-
     return {
       success: true,
-      files: writtenFiles,
       id,
+      manifest,
+      lore: normalizedLore,
+      locale,
       packageContent: generatedPackage.content,
     };
   }
@@ -356,7 +356,6 @@ export async function createWorld(
   log(options, "error", `all ${MAX_RETRIES + 1} attempts exhausted`);
   return {
     success: false,
-    files: [],
     errors: lastErrors,
     id: "unknown",
   };

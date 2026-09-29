@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../handler.js";
 
 /**
@@ -39,7 +43,7 @@ function narrativeSlot(value, runtimeId = "narrator") {
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business return
 // (action / turnId / seeded / candidateCount / accepted*) is under
-// `result.value`; pending proposals stay on the envelope (result).
+// `getToolContent(result).value`; pending proposals stay on the envelope (result).
 describe("branch-reply seed path (auto, no manualPayload)", () => {
   it("seeds candidate[0] from the bound narrative slot with its provenance runtimeId", async () => {
     const result = await handler(
@@ -51,7 +55,7 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       action: "seed",
       turnId: "turn-branch",
       seeded: true,
@@ -94,7 +98,7 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
 
   it("skips when no narrative input is bound", async () => {
     const result = await handler(ctx());
-    expect(result).toEqual({
+    expect(getToolContent(result)).toEqual({
       outcome: "skipped",
       skipReason: "no narrative input bound",
     });
@@ -127,7 +131,10 @@ describe("branch-reply seed path (auto, no manualPayload)", () => {
         pluginData,
       }),
     );
-    expect(result.value).toMatchObject({ action: "seed", seeded: false });
+    expect(getToolContent(result).value).toMatchObject({
+      action: "seed",
+      seeded: false,
+    });
     expect(getPendingProposals(result)).toHaveLength(0);
   });
 });
@@ -160,7 +167,7 @@ describe("branch-reply createCandidates (regenerate)", () => {
       presetId: "fast",
     });
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       action: "createCandidates",
       turnId: "turn-42",
       candidateCount: 3,
@@ -235,7 +242,7 @@ describe("branch-reply createCandidates (regenerate)", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       action: "createCandidates",
       turnId: "turn-42",
       candidateCount: 1,
@@ -361,7 +368,7 @@ describe("branch-reply acceptCandidate", () => {
       }),
     );
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       action: "acceptCandidate",
       turnId: "turn-42",
       acceptedCandidateId: "turn-42-candidate-2",
@@ -514,7 +521,7 @@ describe("branch-reply seed path — inputs.narrative binding", () => {
         inputs: { narrative: { cardinality: "one", value: "", source: {} } },
       }),
     );
-    expect(result).toEqual({
+    expect(getToolContent(result)).toEqual({
       outcome: "skipped",
       skipReason: "no narrative input bound",
     });

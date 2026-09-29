@@ -6,13 +6,11 @@ import type {
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
-  buildHookSettings,
-  collectExecutionJournal,
-  collectExecutionSuspensions,
   commitExecution,
   executeTurn,
   snapshotUserSettings,
   type TurnExecutorDeps,
+  type ExecutedTurn,
 } from "@covel/runtime";
 
 export interface DeferredFollowerInput {
@@ -87,14 +85,12 @@ export async function writeExpectedFollowerFailureJob(args: {
 
 /** Commit one isolated author-tool execution through the host's finalizer. */
 export async function commitDebugExecution(args: {
-  readonly turn: TurnResult;
-  readonly manifests: readonly RuntimeManifest[];
+  readonly execution: ExecutedTurn;
   readonly deps: TurnExecutorDeps & { readonly store: DataStore };
-  readonly locale: string;
-  readonly userSettings: TurnInput["userSettings"];
   readonly detached: boolean;
 }) {
-  const { turn, deps } = args;
+  const { execution, deps } = args;
+  const turn = execution.result;
   const signals = [
     deps.turnControl?.signal,
     deps.turnControl?.executionSignal,
@@ -102,29 +98,14 @@ export async function commitDebugExecution(args: {
   return commitExecution({
     store: deps.store,
     signal: signals.length > 0 ? AbortSignal.any(signals) : undefined,
-    sessionId: turn.sessionId,
-    executionContext: turn.executionContext,
-    runtimes: args.manifests,
-    results: [...turn.runtimeResults, ...(turn.nestedRuntimeResults ?? [])],
-    journalMessages: collectExecutionJournal(turn),
-    suspensions: collectExecutionSuspensions(turn),
-    turnIds: [turn.turnId],
+    execution,
     completion: args.detached
       ? { kind: "detached", turnId: turn.turnId }
       : { kind: "turn", turnId: turn.turnId, durationMs: turn.durationMs },
     hookPipeline: deps.hookPipeline,
-    hookSettings: buildHookSettings(args.manifests, args.userSettings),
     eventBus: deps.eventBus,
     emitter: deps.emitter,
-    ...(turn.setupRan ? { setupRan: turn.setupRan } : {}),
     ...(deps.mediaStore ? { mediaStore: deps.mediaStore } : {}),
-    loadOutputSchema: async (runtimeId) => {
-      const runtime = args.manifests.find((item) => item.name === runtimeId);
-      return runtime
-        ? (await deps.loadRuntime(runtime, args.locale, turn.sessionId))
-            ?.outputSchema
-        : undefined;
-    },
   });
 }
 
@@ -179,7 +160,7 @@ export async function runDeferredFollower(args: {
   try {
     // Match the host's detached event invocation. The shared executor owns
     // setting defaults, buffered writes, timeouts and capability revocation.
-    const turn = await executeTurn(
+    const execution = await executeTurn(
       {
         sessionId: args.sessionId,
         turnId,
@@ -195,6 +176,7 @@ export async function runDeferredFollower(args: {
       args.manifests,
       args.deps,
     );
+    const turn = execution.result;
     const target = turn.runtimeResults.find(
       (result) => result.runtimeId === manifest.name,
     );
@@ -207,11 +189,8 @@ export async function runDeferredFollower(args: {
     // One isolated in-memory run owns this store. As in the host, all sibling
     // and nested proposals share a single commit; no per-result commit loop.
     const commit = await commitDebugExecution({
-      turn,
-      manifests: args.manifests,
+      execution,
       deps: args.deps,
-      locale: args.locale,
-      userSettings,
       detached: true,
     });
     // The host only chains events after their producing execution commits.

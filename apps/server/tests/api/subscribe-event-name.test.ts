@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from "vitest";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { deriveSseEventName } from "../../src/routes/api/subscribe.js";
 
 describe("deriveSseEventName", () => {

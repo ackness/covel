@@ -11,8 +11,7 @@
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
 
 /**
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   const { playerMessage, locale } = ctx;
@@ -212,7 +211,7 @@ export default async function handler(ctx) {
  * Load adjacent edge IDs for a node by merging `by-source:{id}` and
  * `by-target:{id}` entries from the index namespace.
  *
- * @param {import('@covel/plugin-loader').PluginDataWriter | undefined} pluginData
+ * @param {import('@covel/plugin-handlers-utils').PluginDataWriter | undefined} pluginData
  * @param {string} nodeId
  * @returns {Promise<string[]>}
  */

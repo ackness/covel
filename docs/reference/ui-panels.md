@@ -258,7 +258,7 @@ type I18nText = string | Record<LocaleTag, string>;
 { "label": { "zh": "世界" } }            // 缺少英文 locale
 ```
 
-**框架端解析器**：`apps/web/src/lib/catalog.tsx` 重新导出 `resolveI18n(value, locale?)` 与 `useI18nResolver()`；实现位于 `apps/web/src/lib/catalog/helpers.tsx`。所有内置 ComponentRenderer 已调用 hook 订阅 locale 变更；切语言时 json-render 子树会自动重渲染。
+**框架端解析器**：`resolveI18n(value, locale?)` 与 `useI18nResolver()` 由 `apps/web/src/lib/catalog/helpers.tsx` 导出，渲染器直接从该模块导入。所有内置 ComponentRenderer 已调用 hook 订阅 locale 变更；切语言时 json-render 子树会自动重渲染。
 
 **验证**：`pnpm check:i18n` 会同时跑 `check-no-chinese-literal`（应用代码）与 `check-plugin-i18n`（插件 JSON）两套扫描。
 
@@ -277,6 +277,8 @@ type I18nText = string | Record<LocaleTag, string>;
 | 数值/文本动态处理      | `{ "$math": "add", "a": 1, "b": 2 }`、`{ "$concat": ["HP ", { "$state": "/hp" }] }`       |
 
 > ⚠️ `repeat.statePath` 接受绝对状态路径字符串，或嵌套 repeat 中的 `{ "$item": "field" }`；它不是 `{ "$state": ... }`。item 字段名不能带前导斜杠（`$item: "key"` ✓，`$item: "/key"` ✗）。
+
+面板按前后两次外部数据快照的差异同步状态。删除的字段与数组缩短后失效的派生索引会清空，空对象会保留；`/_invoking` 和 `/sources` 整体替换，因此调用结束后按钮恢复可用。外部值未变化的字段保留 `$bindState` 本地编辑，未被外部数据占用的草稿字段也会保留；切换面板后复用缓存仍遵循这一规则。状态路径使用 JSON Pointer 转义，字段名中的 `~` 写为 `~0`，`/` 写为 `~1`。
 
 ### 标准 directives
 

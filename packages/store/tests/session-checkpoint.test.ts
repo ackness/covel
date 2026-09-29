@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createMemoryStore,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
 } from "../src/index.js";
+import { createMemoryStore } from "../src/memory-entry.js";
+
 import {
   makeCharacter,
   makeEvent,

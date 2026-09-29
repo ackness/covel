@@ -1,6 +1,5 @@
 import type { SettingsStoreApi } from "@covel/settings";
-import { DEFAULT_COLOR_SCHEME } from "@/lib/appearance.js";
-import { THEME_SCHEME_KEY } from "./registry.js";
+import { DEFAULT_COLOR_SCHEME, THEME_SCHEME_KEY } from "@/lib/appearance.js";
 import {
   getTokenSpec,
   isAdjustableToken,

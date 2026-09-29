@@ -20,7 +20,7 @@ export async function commitExecution(
 ): ReturnType<typeof commitRuntimeExecution> {
   const outcome = await commitRuntimeExecution(args);
   if (outcome.status === "committed") {
-    scheduleMemoryIngest(args.memorySystem, args.sessionId);
+    scheduleMemoryIngest(args.memorySystem, args.execution.commit.sessionId);
   }
   return outcome;
 }

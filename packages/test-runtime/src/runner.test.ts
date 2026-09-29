@@ -530,7 +530,7 @@ describe("runtime debug host integration", () => {
   });
 
   it.each([false, true])(
-    "stops entry-owned workers before draining timed-out tools (cleanup error: %s)",
+    "aborts entry workers and drains tool callbacks before disposing resources (cleanup error: %s)",
     async (cleanupFails) => {
       const { root, pluginRoot } = await pluginFixture();
       await writeFile(
@@ -546,10 +546,11 @@ describe("runtime debug host integration", () => {
         export function release() { finish?.({stopped: true}); }
         export default covel => {
           const work = new Promise(resolve => { finish = resolve; });
+          covel.signal.addEventListener("abort", release, {once:true});
           covel.onDispose(() => {
+            if (!state.drained) throw new Error("resource disposed before tool callback drained");
             state.disposed = true;
             state.aborted = covel.signal.aborted;
-            release();
             if (${cleanupFails}) throw new Error("worker cleanup failed");
           });
           covel.registerTool(covel.toolkit.tool({
@@ -558,6 +559,7 @@ describe("runtime debug host integration", () => {
             execute: async () => {
               const result = await work;
               await new Promise(resolve => setTimeout(resolve, 10));
+              if (state.disposed) throw new Error("resource released while tool still running");
               state.drained = true;
               return result;
             },

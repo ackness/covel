@@ -11,14 +11,12 @@ export interface CreateWorldLogger {
   error(...args: unknown[]): void;
 }
 
-/** Options for creating a world package. Only `concept` is required. */
+/** Generate and validate a world without choosing a persistence backend. */
 export interface CreateWorldOptions {
   /** LLM adapter for generation. */
   readonly llm: LLMAdapter;
   /** Core concept or longer creative direction. */
   readonly concept: string;
-  /** Output directory to write files. */
-  readonly outputDir: string;
   /** Model slot to use (default: 'default'). */
   readonly model?: string;
   /** Locale for generated content (default: 'zh-CN'). */
@@ -37,18 +35,22 @@ export interface CreateWorldOptions {
   readonly loadPrompt?: PromptLoader;
 }
 
-/** Result of a creation operation. */
-export interface CreateResult {
-  readonly success: boolean;
-  /** Files written (relative to outputDir). */
-  readonly files: readonly string[];
-  /** Validation errors (if any). */
-  readonly errors?: readonly string[];
-  /** The generated ID. */
+/** Validated, portable generation result. File export never mutates it. */
+export interface GeneratedWorld {
   readonly id: string;
-  /** Portable text content used when the generated file package is transient. */
-  readonly packageContent?: GeneratedWorldPackageContent;
+  readonly manifest: Readonly<Record<string, unknown>>;
+  readonly lore: string;
+  readonly locale: string;
+  readonly packageContent: GeneratedWorldPackageContent;
 }
+
+export type CreateResult =
+  | (GeneratedWorld & { readonly success: true; readonly errors?: never })
+  | {
+      readonly success: false;
+      readonly id: "unknown";
+      readonly errors: readonly string[];
+    };
 
 export interface GeneratedWorldCharacter {
   readonly schemaVersion: 1;
@@ -89,7 +91,6 @@ export interface GeneratedMemoryDefinition {
 
 export interface GeneratedWorldPackageContent {
   readonly contractData?: readonly GeneratedContractData[];
-  readonly memoryDefinitions?: readonly GeneratedMemoryDefinition[];
   readonly characters: readonly GeneratedWorldCharacter[];
   readonly lorebook: readonly GeneratedWorldLorebookEntry[];
   readonly rules: readonly GeneratedWorldLorebookEntry[];

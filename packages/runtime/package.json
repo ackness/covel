@@ -23,11 +23,12 @@
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1",
+    "@covel/plugin-handlers-utils": "workspace:*"
   }
 }

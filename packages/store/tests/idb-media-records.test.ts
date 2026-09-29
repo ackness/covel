@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { cleanupCandidates } from "../src/media-store/cleanup-policy.js";
 import {
   cloneMeta,
   type IdbMediaAssetRecord,
   type IdbMediaRefRecord,
-  planMediaCleanup,
   refKey,
   sha256,
   sortAssetRecords,
@@ -194,7 +194,7 @@ describe("idb-media-records", () => {
       ),
     ];
 
-    const plan = planMediaCleanup(assets, new Set(["protected"]), {
+    const plan = cleanupCandidates(assets, new Set(["protected"]), {
       maxBytes: 80,
       now: new Date("2024-01-04T00:00:00.000Z"),
     });

@@ -1,5 +1,7 @@
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 // Labels are stored as I18nText into plugin_data so the Badge renderer resolves
 // them to the session locale (a bare zh string would render Chinese for en

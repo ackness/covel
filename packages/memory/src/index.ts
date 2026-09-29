@@ -6,18 +6,11 @@ export type {
   ArchivalSearcher,
   MemorySystemDeps,
   MemorySystem,
+  MemorySearchOptions,
+  MemorySearchResult,
 } from "./types.js";
 export type { EmbedFn } from "./vector-common.js";
-export {
-  awaitPendingMemoryBackgroundTasks,
-  pendingMemoryBackgroundTaskCount,
-  trackMemoryBackgroundTask,
-} from "./background-tasks.js";
-export type {
-  MemoryBackgroundDrainResult,
-  MemoryBackgroundTaskInfo,
-  MemoryBackgroundTaskKind,
-} from "./background-tasks.js";
+export type { MemoryBackgroundDrainResult } from "./background-tasks.js";
 export { createMemorySystem } from "./memory-system.js";
 export type {
   MemoryStore,

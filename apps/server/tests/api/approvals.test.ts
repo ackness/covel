@@ -11,7 +11,8 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   createPluginRpcRegistry,
   createRpcExecutor,

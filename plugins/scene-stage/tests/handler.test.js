@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../runtimes/resolver/handler.js";
 
 const TOPIC = "scene.set";
@@ -80,8 +84,8 @@ function makeCtx({
 }
 
 // Deliberate change: handler returns the canonical HandlerResult. The business value
-// (stage / skipped marker) is under `result.value`; the generate-requested
-// event is under `result.effects.events`.
+// (stage / skipped marker) is under `getToolContent(result).value`; the generate-requested
+// event is under `getToolContent(result).effects.events`.
 describe("scene-stage resolver handler", () => {
   it("1. exact name match writes stage/current with source=world", async () => {
     const ctx = makeCtx({ location: "二年 B 组教室", timeOfDay: "day" });
@@ -155,9 +159,9 @@ describe("scene-stage resolver handler", () => {
     });
     const result = await handler(ctx);
 
-    expect(result.value.skipped).toBe(true);
+    expect(getToolContent(result).value.skipped).toBe(true);
     expect(getPendingProposals(result)).toHaveLength(0);
-    expect(result.effects?.events).toBeUndefined();
+    expect(getToolContent(result).effects?.events).toBeUndefined();
   });
 
   it("5. unmatched location with the gate open queues a generate-requested event", async () => {
@@ -180,7 +184,7 @@ describe("scene-stage resolver handler", () => {
     });
     const sceneId = proposals[0].payload.value.sceneId;
     expect(sceneId).toMatch(/^gen-[0-9a-f]{8}$/);
-    expect(result.effects?.events).toEqual([
+    expect(getToolContent(result).effects?.events).toEqual([
       {
         topic: "scene-stage.generate.requested",
         data: {
@@ -206,7 +210,7 @@ describe("scene-stage resolver handler", () => {
       resolved: null,
       sourceLabel: { zh: "无背景", en: "No backdrop" },
     });
-    expect(result.effects?.events).toBeUndefined();
+    expect(getToolContent(result).effects?.events).toBeUndefined();
   });
 
   it("6b. unmatched location at the per-session generation cap resolves source=none", async () => {
@@ -228,7 +232,7 @@ describe("scene-stage resolver handler", () => {
 
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.value.source).toBe("none");
-    expect(result.effects?.events).toBeUndefined();
+    expect(getToolContent(result).effects?.events).toBeUndefined();
   });
 
   it("skips missing image models without enqueueing, then generates after the slot is configured", async () => {
@@ -237,12 +241,12 @@ describe("scene-stage resolver handler", () => {
     const first = await handler(makeCtx({ location, images }));
     const unavailableStage = getPendingProposals(first)[0].payload.value;
     expect(unavailableStage.source).toBe("none");
-    expect(first.effects?.events).toBeUndefined();
+    expect(getToolContent(first).effects?.events).toBeUndefined();
 
     const repeated = await handler(
       makeCtx({ location, previous: unavailableStage, images }),
     );
-    expect(repeated.effects?.events).toBeUndefined();
+    expect(getToolContent(repeated).effects?.events).toBeUndefined();
     expect(getPendingProposals(repeated)).toHaveLength(0);
 
     images.isAvailable.mockReturnValue(true);
@@ -252,7 +256,7 @@ describe("scene-stage resolver handler", () => {
     expect(getPendingProposals(configured)[0].payload.value.source).toBe(
       "pending",
     );
-    expect(configured.effects?.events).toHaveLength(1);
+    expect(getToolContent(configured).effects?.events).toHaveLength(1);
     expect(images.isAvailable).toHaveBeenCalledWith("image");
   });
 
@@ -270,7 +274,7 @@ describe("scene-stage resolver handler", () => {
       }),
     );
     expect(getPendingProposals(result)[0].payload.value.source).toBe("none");
-    expect(result.effects?.events).toBeUndefined();
+    expect(getToolContent(result).effects?.events).toBeUndefined();
     expect(images.isAvailable).toHaveBeenCalledWith("illustration");
   });
 
@@ -282,7 +286,7 @@ describe("scene-stage resolver handler", () => {
       source: "world",
       resolved: CLASSROOM_DAY,
     });
-    expect(world.effects?.events).toBeUndefined();
+    expect(getToolContent(world).effects?.events).toBeUndefined();
 
     const cached = await handler(
       makeCtx({
@@ -306,7 +310,7 @@ describe("scene-stage resolver handler", () => {
       source: "session",
       resolved: SESSION_DAY,
     });
-    expect(cached.effects?.events).toBeUndefined();
+    expect(getToolContent(cached).effects?.events).toBeUndefined();
   });
 
   it("7. session-generated scene match resolves source=session", async () => {
@@ -362,7 +366,7 @@ describe("scene-stage resolver handler", () => {
       night: null,
       resolved: SESSION_DAY,
     });
-    expect(result.effects?.events).toEqual([
+    expect(getToolContent(result).effects?.events).toEqual([
       {
         topic: "scene-stage.generate.requested",
         data: { sceneId: "gen-abcd1234", location: "地下室", variant: "night" },
@@ -392,7 +396,7 @@ describe("scene-stage resolver handler", () => {
     });
     const result = await handler(ctx);
 
-    expect(result.effects?.events).toEqual([
+    expect(getToolContent(result).effects?.events).toEqual([
       {
         topic: "scene-stage.generate.requested",
         data: {
@@ -431,14 +435,14 @@ describe("scene-stage resolver handler", () => {
       variant: "night",
       resolved: SESSION_DAY,
     });
-    expect(result.effects?.events).toBeUndefined();
+    expect(getToolContent(result).effects?.events).toBeUndefined();
   });
 
   it("8a. skips without writing when there is no trigger event", async () => {
     const ctx = makeCtx({ location: "二年 B 组教室", noTriggerEvent: true });
     const result = await handler(ctx);
 
-    expect(result.value.skipped).toBe(true);
+    expect(getToolContent(result).value.skipped).toBe(true);
     expect(getPendingProposals(result)).toHaveLength(0);
     expect(ctx.pluginData.get).not.toHaveBeenCalled();
   });
@@ -447,7 +451,7 @@ describe("scene-stage resolver handler", () => {
     const ctx = makeCtx({ location: "   " });
     const result = await handler(ctx);
 
-    expect(result.value.skipped).toBe(true);
+    expect(getToolContent(result).value.skipped).toBe(true);
     expect(getPendingProposals(result)).toHaveLength(0);
     expect(ctx.pluginData.get).not.toHaveBeenCalled();
   });
@@ -462,11 +466,11 @@ describe("scene-stage resolver handler", () => {
 
     const result = await handler(makeCtx({ location, previous: pendingStage }));
 
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       skipped: true,
       reason: "no-op: scene/variant unchanged",
     });
-    expect(result.effects?.events).toBeUndefined();
+    expect(getToolContent(result).effects?.events).toBeUndefined();
     expect(getPendingProposals(result)).toHaveLength(0);
   });
 
@@ -487,7 +491,7 @@ describe("scene-stage resolver handler", () => {
     });
     const result = await handler(ctx);
 
-    expect(result.value.skipped).toBeUndefined();
+    expect(getToolContent(result).value.skipped).toBeUndefined();
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(1);
     expect(proposals[0].payload.value).toMatchObject({

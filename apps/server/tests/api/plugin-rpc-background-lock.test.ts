@@ -5,7 +5,7 @@ import type {
   LoadedRuntime,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createInProcessSessionLock,

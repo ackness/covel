@@ -61,6 +61,41 @@ describe("tool()", () => {
     });
   });
 
+  it("publishes the input schema and executes the parsed transform output", async () => {
+    const mod = tool({
+      name: "text-length",
+      description: "Measure text",
+      parameters: z.object({
+        text: z.string().transform((text) => text.length),
+      }),
+      execute: async ({ text }) => ({ length: text }),
+    });
+    expect(mod.jsonSchema).toMatchObject({
+      type: "object",
+      required: ["text"],
+      properties: { text: { type: "string" } },
+    });
+    expect(
+      await mod.execute(
+        { text: "abc" },
+        { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" },
+      ),
+    ).toEqual({ length: 3 });
+  });
+
+  it("rejects unsupported parameters during registration with a tool-specific error", () => {
+    expect(() =>
+      tool({
+        name: "bad-date",
+        description: "Unsupported input",
+        parameters: z.object({ at: z.date() }),
+        execute: async (params) => params,
+      }),
+    ).toThrow(
+      /Tool "bad-date" parameters cannot be represented as JSON Schema/,
+    );
+  });
+
   it("handles complex schema with optional, enum, and nested fields", () => {
     const complexTool = tool({
       name: "complex",

@@ -2,6 +2,7 @@ name: Build Desktop
 
 # Tag pushes build and publish an unsigned release. Manual runs may build any
 # existing ref; enabling publish_release requires an existing v* tag.
+# Packaging depends on the same check, PostgreSQL, and browser gates as CI.
 on:
   push:
     tags:
@@ -132,59 +133,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   verify-release:
-    name: Test and release preflight
     needs: prepare
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout resolved commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.prepare.outputs.commit }}
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 26.7.0
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Reuse successful CI tasks for the resolved source, including manual
-      # releases whose source differs from github.sha. Turbo still validates
-      # every task's inputs; a missing or stale cache runs the checks normally.
-      # Restore only: main CI owns the shared cache, so tags need no duplicate.
-      - name: Restore CI task cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ needs.prepare.outputs.commit }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-${{ runner.os }}-
-
-      - name: Type check
-        run: pnpm lint
-
-      - name: Dependency hygiene
-        run: pnpm deps:check
-
-      - name: Test
-        # Match CI's two-level concurrency budget during release verification.
-        env:
-          VITEST_MAX_WORKERS: "2"
-        run: pnpm test --concurrency=2
-
-      - name: Check plugin/world i18n coverage and READMEs
-        run: pnpm check:i18n
-
-      - name: Release preflight
-        run: pnpm release:preflight -- --skip-lockfile
+    uses: ./.github/workflows/ci.yml
+    with:
+      commit: ${{ needs.prepare.outputs.commit }}
+      release: true
 
   build-electron:
     name: Electron mac-arm64
@@ -204,7 +157,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 26.7.0
+          node-version: "26"
           cache: pnpm
 
       - name: Cache Electron binaries
@@ -218,8 +171,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # verify-release has already type-checked this exact commit. Keep the
-      # platform build and packaged-resource checks on each target OS.
+      # verify-release has checked this exact commit. Keep the platform build
+      # and packaged-resource checks on each target OS.
       - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
@@ -263,7 +216,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 26.7.0
+          node-version: "26"
           cache: pnpm
 
       - name: Cache Electron binaries

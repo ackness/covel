@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+  // File-based routes, Electron entry points, type assertions, and authoring CLIs.
+  "entry": [
+    "apps/web/src/routes/**/*.{ts,tsx}",
+    "apps/desktop/src/{main,preload}.ts",
+    "apps/desktop/scripts/verify-staging.mjs",
+    "packages/plugin-test-utils/src/sdk-alignment.ts",
+    "scripts/{emit-presence,emit-scenes,generate-portraits,generate-scenes}.mjs",
+    "scripts/validate-release-worlds.ts",
+  ],
+  // Plugin manifests and Markdown frontmatter name these modules at runtime.
+  "dynamicallyLoaded": [
+    "plugins/*/{handler,guard}.js",
+    "plugins/*/server/index.js",
+    "plugins/*/hooks/*.js",
+    "plugins/*/tools/*.js",
+    "plugins/*/runtimes/*/{handler,guard}.js",
+    "plugins/memory/server/extract.js",
+    "plugins/living-world-rules/server/project-world-ir.js",
+    "packages/runtime/tests/test-plugins/evaluation-consumer/{handler,server}.js",
+  ],
+  "ignorePatterns": [
+    "plugins/_archive/**",
+    "templates/**",
+    "apps/desktop/staging/**",
+    "apps/web/src/routeTree.gen.ts",
+  ],
+  // Desktop depends on Web to order and stage its build, without a source import.
+  "ignoreDependencies": ["@covel/web"],
+  "rules": {
+    "unused-dev-dependencies": "error",
+    "unused-optional-dependencies": "error",
+  },
+}

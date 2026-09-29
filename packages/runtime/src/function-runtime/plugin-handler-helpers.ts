@@ -391,10 +391,24 @@ export function createPluginLogger(
  * proposal-backed writes through createTrustedHandlerStore.
  */
 export function createFunctionStoreView(
-  store: DataStore,
+  store: DataStore | undefined,
   ctx: HandlerHelperContext,
   buffer?: ExecutionWriteBuffer,
 ): FunctionStoreView {
+  if (!store) {
+    const unavailable = async (): Promise<never> => {
+      throw new Error(
+        "Function store is unavailable: configure execution deps.store",
+      );
+    };
+    return {
+      getPluginData: unavailable,
+      listPluginData: unavailable,
+      getSession: unavailable,
+      listPlayerInputs: unavailable,
+      listTurnMessages: unavailable,
+    };
+  }
   const reads = createTrustedHandlerStore(store, ctx, buffer ?? []);
   return {
     getPluginData(namespace, key) {

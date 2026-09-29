@@ -9,7 +9,8 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { characterRoutes } from "../../src/routes/api/characters.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 

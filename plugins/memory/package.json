@@ -10,7 +10,7 @@
     "@covel/shared": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^4.1.11",
-    "zod": "^4.4.3"
+    "vitest": "^5.0.1",
+    "zod": "^4.6.5"
   }
 }

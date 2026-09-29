@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPluginRegistry } from "@covel/plugin-loader";
-import {
-  createMemoryStore,
-  createSqliteStore,
-  type DataStore,
-} from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+import { createSqliteStore } from "@covel/store/sqlite";
 import {
   makeSession,
   makeWorld,

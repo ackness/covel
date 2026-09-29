@@ -5,15 +5,15 @@ import {
   optionalInteger,
   optionalString,
   readManualEntity,
+  shortId,
+  withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { shortId, withPendingProposals } from "@covel/tools";
 
 const PRESENCE_NAMESPACE = "presence";
 const CHARACTER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 
 /**
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   let payload = ctx.manualPayload ?? {};

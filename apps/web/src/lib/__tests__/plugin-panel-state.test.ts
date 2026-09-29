@@ -6,6 +6,7 @@ import {
   flattenStateForPluginPanel,
   parsePluginUiState,
   resolvePluginPanelSources,
+  syncPluginPanelState,
 } from "../plugin-panel-state.js";
 
 describe("plugin-panel state helpers", () => {
@@ -99,6 +100,98 @@ describe("plugin-panel state helpers", () => {
       "/nested/value": 2,
       "/empty": null,
     });
+  });
+
+  it("clears finished invocations and removed external fields", () => {
+    const store = createStateStore({});
+    syncPluginPanelState(
+      store,
+      buildPluginPanelInitialState(
+        { removed: { name: "old" }, retained: { removed: true, count: 1 } },
+        { "runtime:image": true },
+      ),
+    );
+    expect(store.get("/_invoking/runtime:image")).toBe(true);
+
+    syncPluginPanelState(
+      store,
+      buildPluginPanelInitialState({ retained: { count: 2 } }, {}),
+    );
+    expect(store.get("/_invoking")).toEqual({});
+    expect(store.get("/removed")).toBeUndefined();
+    expect(store.get("/retained/removed")).toBeUndefined();
+    expect(store.get("/retained/count")).toBe(2);
+  });
+
+  it("replaces shorter arrays and clears their obsolete derived indexes", () => {
+    const store = createStateStore({});
+    syncPluginPanelState(
+      store,
+      buildPluginPanelInitialState(
+        { characters: [{ name: "First" }, { name: "Second" }] },
+        {},
+      ),
+    );
+    syncPluginPanelState(
+      store,
+      buildPluginPanelInitialState({ characters: [{ name: "Updated" }] }, {}),
+    );
+    expect(store.get("/characters")).toEqual([{ name: "Updated" }]);
+    expect(store.get("/character1Name")).toBe("Updated");
+    expect(store.get("/character2Name")).toBeUndefined();
+  });
+
+  it("preserves empty objects and JSON Pointer characters in field names", () => {
+    const store = createStateStore({});
+    syncPluginPanelState(store, { "a/b": { "~name": 1 }, empty: {} });
+    expect(store.get("/a~1b/~0name")).toBe(1);
+    expect(store.get("/a")).toBeUndefined();
+    expect(store.get("/empty")).toEqual({});
+
+    syncPluginPanelState(store, { "a/b": {}, empty: { value: 2 } });
+    expect(store.get("/a~1b")).toEqual({});
+    expect(store.get("/empty/value")).toBe(2);
+    syncPluginPanelState(store, { empty: {} });
+    expect(store.get("/a~1b")).toBeUndefined();
+    expect(store.get("/empty")).toEqual({});
+  });
+
+  it("preserves local drafts when reusing a cached store until the external value changes", () => {
+    const store = createStateStore({});
+    syncPluginPanelState(store, {
+      form: { name: "initial", count: 1 },
+      removed: true,
+    });
+    store.set("/form/name", "edited");
+    store.set("/form/localOnly", "nested draft");
+    store.set("/draft", "local draft");
+
+    // A remounted panel supplies a fresh snapshot with the same cached store.
+    const cachedStore = new Map([["panel", store]]).get("panel")!;
+    syncPluginPanelState(cachedStore, { form: { name: "initial", count: 2 } });
+    expect(store.get("/form/name")).toBe("edited");
+    expect(store.get("/form/count")).toBe(2);
+    expect(store.get("/form/localOnly")).toBe("nested draft");
+    expect(store.get("/draft")).toBe("local draft");
+    expect(store.get("/removed")).toBeUndefined();
+
+    syncPluginPanelState(store, { form: { name: "server update", count: 2 } });
+    expect(store.get("/form/name")).toBe("server update");
+  });
+
+  it("handles object, array, and scalar replacements without stale descendants", () => {
+    const store = createStateStore({});
+    for (const value of [
+      { nested: { old: true } },
+      [1, 2],
+      { next: true },
+      3,
+      { final: true },
+      {},
+    ]) {
+      syncPluginPanelState(store, { value });
+      expect(store.get("/value")).toEqual(value);
+    }
   });
 
   it("binds only owner namespaces and replaces stale sources on session changes", () => {

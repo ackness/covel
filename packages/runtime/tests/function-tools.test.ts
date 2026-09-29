@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import type { FunctionHandler } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createCharacterTools, getPendingProposals, tool } from "@covel/tools";
 import { z } from "zod";
 import type { RuntimeManifest } from "@covel/shared";

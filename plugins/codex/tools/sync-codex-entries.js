@@ -2,7 +2,7 @@ import {
   getPendingProposals,
   getToolContent,
   withPendingProposals,
-} from "@covel/tools";
+} from "@covel/plugin-handlers-utils";
 import makeUnlockCodexEntries, {
   createCodexEntrySchema,
 } from "./unlock-codex-entries.js";

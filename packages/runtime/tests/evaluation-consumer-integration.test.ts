@@ -7,7 +7,7 @@ import {
   loadPluginDefinition,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   tool,
   shortId,

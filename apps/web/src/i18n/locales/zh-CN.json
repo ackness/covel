@@ -1670,6 +1670,7 @@
     },
     "boot": {
       "title": "启动失败",
+      "desktopModeUnavailable": "无法连接服务器以确定设置的保存位置。请检查连接后重试。",
       "retry": "重试",
       "reload": "重新加载"
     }

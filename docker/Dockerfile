@@ -1,8 +1,6 @@
 # syntax=docker/dockerfile:1.20.0@sha256:26147acbda4f14c5add9946e2fd2ed543fc402884fd75146bd342a7f6271dc1d
-# node:26.7.0-alpine3.24 (2026-08-05) — pinned by multi-platform digest so
-# the base image can't silently drift; bump the digest (and this comment)
-# when intentionally upgrading Node.
-FROM node:26.7.0-alpine3.24@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS base
+# Follow the latest Node 26 release on Alpine 3.24.
+FROM node:26-alpine3.24 AS base
 RUN apk add --no-cache libc6-compat libstdc++
 # Node 25+ no longer bundles Corepack. Pin both the shim and pnpm payload so
 # builds cannot drift and the non-root runtime never downloads a package

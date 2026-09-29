@@ -1,7 +1,7 @@
 import { createFunctionStoreView } from "../src/function-runtime/plugin-handler-helpers.js";
 import { describe, expect, it } from "vitest";
 import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { getPendingProposals, shortIdBatch, tool, z } from "@covel/tools";
 import { createCommitPipeline } from "../src/session/session-kernel.js";

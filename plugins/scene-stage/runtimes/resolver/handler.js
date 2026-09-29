@@ -1,5 +1,8 @@
-import { withPendingProposals } from "@covel/tools";
-import { optionalString } from "@covel/plugin-handlers-utils";
+import {
+  withPendingProposals,
+  optionalString,
+} from "@covel/plugin-handlers-utils";
+
 import { createHash } from "node:crypto";
 import {
   GENERATED_NS,

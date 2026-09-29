@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, SubscriptionEvent } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";

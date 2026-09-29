@@ -20,6 +20,10 @@ function fixture() {
   const resources: ServerResources = {
     worldWatchers: [{ start() {}, stop: close("watchers") }],
     api: {
+      memorySystem: {
+        drain: async () => ({ awaited: 0, rejected: 0, failures: [] }),
+        pendingTaskCount: () => 0,
+      },
       applicationWork: { close: close("requests") },
       runtimeJobWorker: { close: close("worker") },
       pluginBackgroundQueue: { close: close("queue") },
@@ -128,6 +132,14 @@ describe("server resource ownership", () => {
       "locks",
       "ingest-locks",
     ]);
+  });
+
+  it("closes dependencies when bootstrap has no memory instance", async () => {
+    const { resources, calls } = fixture();
+    delete resources.api!.memorySystem;
+    await createServerResourceDrain(resources)();
+    expect(calls).toContain("store");
+    expect(calls).toContain("ingest-locks");
   });
 
   it("closes only resources acquired before a partial startup failure", async () => {

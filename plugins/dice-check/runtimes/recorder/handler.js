@@ -1,3 +1,7 @@
+/**
+ * @typedef {import("@covel/plugin-handlers-utils").PluginFunctionContext & { execution?: { sourceTurnId?: string } }} RecorderContext
+ */
+
 const CHECKS_NAMESPACE = "checks";
 const MESSAGE_NAMESPACE = "message";
 
@@ -47,7 +51,7 @@ const OUTCOME_PRESENTATION = {
  * event schema, and this handler additionally proves each receipt against the
  * immutable pre-rolled pool and the deterministic check rules.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {RecorderContext} ctx
  */
 export default async function handler(ctx) {
   if (!ctx.triggerEvent) {
@@ -201,7 +205,7 @@ function buildRollText(record) {
  * Next per-turn sequence number: count of existing `checks` keys with this
  * turn's prefix, plus one.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {RecorderContext} ctx
  */
 async function nextSequence(ctx) {
   if (!ctx.pluginData?.list) return 1;
@@ -217,7 +221,7 @@ async function nextSequence(ctx) {
  * Previously recorded checks for this turn's message block, so a second
  * receipt in the same turn appends instead of overwriting.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {RecorderContext} ctx
  * @returns {Promise<ReadonlyArray<unknown>>}
  */
 async function readTurnChecks(ctx) {
@@ -234,7 +238,7 @@ async function readTurnChecks(ctx) {
  * Missing or malformed audit data fails closed: a receipt cannot prove which
  * die it consumed without the original pool.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {RecorderContext} ctx
  * @returns {Promise<ReadonlyArray<number>>}
  */
 async function readDicePool(ctx) {

@@ -16,7 +16,8 @@ import type {
   SubscriptionEvent,
 } from "@covel/shared";
 import type { LoadedRuntime, PluginRuntimeGateway } from "@covel/plugin-loader";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";

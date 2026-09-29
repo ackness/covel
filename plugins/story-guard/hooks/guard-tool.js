@@ -11,7 +11,7 @@ import { isBlockedTool } from "./_rules.js";
  * name is nested at `toolCall.name`, so a `match: { name: ... }` would never
  * fire. Keeping the deny-list in the handler is the working, testable gate.
  *
- * @param {import("@covel/runtime").HookContext} _ctx
+ * @param {import("@covel/plugin-handlers-utils").PluginHookContext} _ctx
  * @param {{ toolCall?: { name?: string } }} payload
  * @returns {Promise<{ action: "continue" } | { action: "abort", reason: string }>}
  */

@@ -1,3 +1,8 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 /**
  * {{pluginName}} plugin tests
  */
@@ -6,12 +11,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  getPendingProposals,
-  tool,
-  withPendingProposals,
-  z,
-} from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createRecordNote from "../tools/record-note.js";
 
 const toolInstance = createRecordNote({
@@ -51,8 +52,8 @@ describe("record-note tool", () => {
       ctx,
     );
 
-    expect(result.recorded).toBe(true);
-    expect(result.key).toBe("note-opened-vault");
+    expect(getToolContent(result).recorded).toBe(true);
+    expect(getToolContent(result).key).toBe("note-opened-vault");
 
     const proposals = getPendingProposals(result);
     expect(proposals).toHaveLength(1);

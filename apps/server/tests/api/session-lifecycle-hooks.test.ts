@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createRpcApprovalGate } from "@covel/approval";
-import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline } from "@covel/runtime";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { characterRoutes } from "../../src/routes/api/characters.js";

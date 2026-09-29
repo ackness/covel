@@ -8,7 +8,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createMemoryStore, type SessionRecord } from "@covel/store";
+import { type SessionRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   makePendingPluginJobValue,
   makeTerminalPluginJobValue,

@@ -8,12 +8,8 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  type DataStore,
-  type MediaStore,
-} from "@covel/store";
+import { type DataStore, type MediaStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import { decodePageCursor, type SubscriptionEvent } from "@covel/shared";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";

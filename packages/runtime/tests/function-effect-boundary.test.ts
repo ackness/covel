@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { HandlerResult, RuntimeManifest } from "@covel/shared";
 import { createEmitEventTool } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";

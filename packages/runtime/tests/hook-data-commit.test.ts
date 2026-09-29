@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProposalFor, RuntimeResult } from "@covel/shared";
-import { createMemoryStore, type SuspensionRecord } from "@covel/store";
-import {
-  getEmittedEvents,
-  getPendingProposals,
-  withEmittedEvents,
-  withPendingProposals,
-} from "@covel/tools";
+import { type SuspensionRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { runPostRuntimeHook } from "../src/hooks/wire-helpers.js";
 import { createCommitPipeline } from "../src/commit/session-commit-pipeline.js";
@@ -111,16 +106,16 @@ describe("Hook data at the commit boundary", () => {
     },
   );
 
-  it("retains tool proposals and events across a returned runtime rewrite and commits the owned proposal", async () => {
+  it("retains explicit proposals and effects across a returned runtime rewrite and commits the owned proposal", async () => {
     const store = createMemoryStore();
     const pipeline = createHookPipeline();
     const pending = proposal();
     const event = { topic: "probe.updated", data: { value: "original" } };
-    const original = result(
-      withPendingProposals(withEmittedEvents({ value: "original" }, [event]), [
-        pending,
-      ]),
-    );
+    const original: RuntimeResult = {
+      ...result({ value: "original" }),
+      pendingProposals: [pending],
+      effects: { events: [event] },
+    };
     pipeline.register<{ result: RuntimeResult }>({
       id: "rewrite",
       event: "PostRuntime",
@@ -140,8 +135,8 @@ describe("Hook data at the commit boundary", () => {
       );
       Object.assign(pending.payload, { value: "late producer write" });
       event.data.value = "late producer write";
-      expect(getPendingProposals(accepted.output)).toHaveLength(1);
-      expect(getEmittedEvents(accepted.output)).toEqual([
+      expect(accepted.pendingProposals).toHaveLength(1);
+      expect(accepted.effects?.events).toEqual([
         { topic: "probe.updated", data: { value: "original" } },
       ]);
       expect(JSON.stringify(accepted.output)).toBe('{"value":"original"}');

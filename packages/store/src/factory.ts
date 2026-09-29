@@ -17,8 +17,8 @@ import { readRuntimeEnv } from "@covel/shared";
 /**
  * Create a `DataStore` instance for the specified backend.
  *
- * Loads only the selected backend. Import this factory subpath to avoid the
- * legacy root entry's eager backend exports.
+ * Loads only the selected backend. Both the root and factory entry points
+ * keep backend implementations lazy.
  *
  * @param config - Store configuration specifying the backend (`memory`, `sqlite`, or `pg`) and connection details.
  * @returns A `DataStore` instance ready for use.

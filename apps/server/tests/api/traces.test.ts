@@ -6,11 +6,8 @@ import {
   type PluginRegistryEntry,
   type PluginSummary,
 } from "@covel/plugin-loader";
-import {
-  createMemoryStore,
-  type DataStore,
-  type SessionRecord,
-} from "@covel/store";
+import { type DataStore, type SessionRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { traceRoutes } from "../../src/routes/api/traces.js";
 
 function makeApp(

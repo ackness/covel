@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "../src/event-bus.js";
 
 describe("EventBus transport ref failures", () => {

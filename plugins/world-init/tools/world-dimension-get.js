@@ -13,7 +13,7 @@
  */
 import { DIMENSION_KEYS, resolveI18nDeep } from "@covel/shared";
 import { z } from "zod";
-import { overlayPluginDataValue } from "@covel/tools";
+import { overlayPluginDataValue } from "@covel/plugin-handlers-utils";
 const dimensionKeys = [...DIMENSION_KEYS];
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);

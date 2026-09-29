@@ -1,5 +1,7 @@
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 const TURNS_NAMESPACE = "turns";
 const MESSAGE_NAMESPACE = "message";

@@ -4,8 +4,10 @@
  *
  * @param {{ tool: Function, z: import('zod') }} injection
  */
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 export function createWorldAttributeSchema(z) {
   // A display label is either a plain string or an i18n record

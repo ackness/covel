@@ -44,6 +44,8 @@ import type {
   SearchVectorsInput,
   VectorSearchResult,
   DeleteVectorsInput,
+  VectorIndexProgressScope,
+  CommitVectorIndexBatchInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
 
@@ -315,96 +317,101 @@ export function createPgVectorCapability(
   // ── VectorStoreCapability ────────────────────────────────────────
 
   async function upsertVector(input: UpsertVectorInput): Promise<void> {
+    await client.begin((tx) => upsertVectorInTransaction(tx, input));
+  }
+
+  async function upsertVectorInTransaction(
+    tx: TransactionSql,
+    input: UpsertVectorInput,
+  ): Promise<void> {
     // The extension and physical tables are created by ensureVectorModel. Do
     // not resolve a session binding here: the binding, model row, incarnation
     // guard, and INSERT must all be observed under one parent-row lock.
     const vecStr = toVectorString(input.embedding);
 
-    await client.begin(async (tx) => {
-      // Pair with deletePgSessionCascade's parent FOR UPDATE lock. Resolving
-      // the target only after this lock removes the resolve/delete/recreate
-      // ABA window, while expectedSessionCreatedAt rejects results produced
-      // for an older incarnation of the same id.
-      const sessionRows = await tx<
-        Array<{ embedding_model_id: number | null; created_at: string }>
-      >`
+    // Pair with deletePgSessionCascade's parent FOR UPDATE lock. Resolving
+    // the target only after this lock removes the resolve/delete/recreate
+    // ABA window, while expectedSessionCreatedAt rejects results produced
+    // for an older incarnation of the same id.
+    const sessionRows = await tx<
+      Array<{ embedding_model_id: number | null; created_at: string }>
+    >`
         SELECT embedding_model_id, created_at
           FROM sessions
          WHERE id = ${input.sessionId}
          FOR KEY SHARE
       `;
-      if (sessionRows.length === 0) {
-        throw new Error(
-          `pg-vector upsertVector: session ${input.sessionId} not found`,
-        );
-      }
-      const session = sessionRows[0];
-      if (
-        input.expectedSessionCreatedAt !== undefined &&
-        session.created_at !== input.expectedSessionCreatedAt
-      ) {
-        throw new Error(
-          `pg-vector upsertVector: session ${input.sessionId} incarnation changed`,
-        );
-      }
-      if (session.embedding_model_id == null) {
-        throw new Error(
-          `pg-vector upsertVector: session ${input.sessionId} has no embedding model locked`,
-        );
-      }
+    if (sessionRows.length === 0) {
+      throw new Error(
+        `pg-vector upsertVector: session ${input.sessionId} not found`,
+      );
+    }
+    const session = sessionRows[0];
+    if (
+      input.expectedSessionCreatedAt !== undefined &&
+      session.created_at !== input.expectedSessionCreatedAt
+    ) {
+      throw new Error(
+        `pg-vector upsertVector: session ${input.sessionId} incarnation changed`,
+      );
+    }
+    if (session.embedding_model_id == null) {
+      throw new Error(
+        `pg-vector upsertVector: session ${input.sessionId} has no embedding model locked`,
+      );
+    }
 
-      const modelRows = await tx<
-        Array<{
-          id: number;
-          model_id: string;
-          dim: number;
-          table_name: string;
-        }>
-      >`
+    const modelRows = await tx<
+      Array<{
+        id: number;
+        model_id: string;
+        dim: number;
+        table_name: string;
+      }>
+    >`
         SELECT id, model_id, dim, table_name
           FROM vector_models
          WHERE id = ${session.embedding_model_id}
       `;
-      if (modelRows.length === 0) {
-        throw new Error(
-          `pg-vector: session ${input.sessionId} references unknown vector_models.id ${session.embedding_model_id}`,
-        );
-      }
-      const model = modelRows[0];
-      const tname = physicalTableName(model.id);
-      if (model.table_name !== tname) {
-        throw new Error(
-          `pg-vector: unsafe vector table name ${JSON.stringify(model.table_name)} for model ${model.id}`,
-        );
-      }
-      if (input.embedding.length !== model.dim) {
-        throw new Error(
-          `pg-vector upsertVector: embedding length ${input.embedding.length} does not match model dim ${model.dim}`,
-        );
-      }
+    if (modelRows.length === 0) {
+      throw new Error(
+        `pg-vector: session ${input.sessionId} references unknown vector_models.id ${session.embedding_model_id}`,
+      );
+    }
+    const model = modelRows[0];
+    const tname = physicalTableName(model.id);
+    if (model.table_name !== tname) {
+      throw new Error(
+        `pg-vector: unsafe vector table name ${JSON.stringify(model.table_name)} for model ${model.id}`,
+      );
+    }
+    if (input.embedding.length !== model.dim) {
+      throw new Error(
+        `pg-vector upsertVector: embedding length ${input.embedding.length} does not match model dim ${model.dim}`,
+      );
+    }
 
-      modelCache.set(model.id, {
-        modelRegistryId: model.id,
-        modelId: model.model_id,
-        dim: model.dim,
-        tableName: model.table_name,
-      });
+    modelCache.set(model.id, {
+      modelRegistryId: model.id,
+      modelId: model.model_id,
+      dim: model.dim,
+      tableName: model.table_name,
+    });
 
-      await tx.unsafe(
-        `INSERT INTO ${tname} (session_id, plugin_id, namespace, key, embedding, payload)
+    await tx.unsafe(
+      `INSERT INTO ${tname} (session_id, plugin_id, namespace, key, embedding, payload)
          VALUES ($1, $2, $3, $4, $5::vector, $6)
          ON CONFLICT (session_id, plugin_id, namespace, key)
          DO UPDATE SET embedding = EXCLUDED.embedding, payload = EXCLUDED.payload`,
-        [
-          input.sessionId,
-          input.pluginId,
-          input.namespace,
-          input.key,
-          vecStr,
-          input.payload ?? null,
-        ],
-      );
-    });
+      [
+        input.sessionId,
+        input.pluginId,
+        input.namespace,
+        input.key,
+        vecStr,
+        input.payload ?? null,
+      ],
+    );
   }
 
   async function searchVectors(
@@ -469,6 +476,81 @@ export function createPgVectorCapability(
     }));
   }
 
+  async function getVectorIndexProgress(
+    scope: VectorIndexProgressScope,
+  ): Promise<string | null> {
+    const rows = await client<Array<{ value: string }>>`
+      SELECT value FROM vector_index_progress
+      WHERE session_id = ${scope.sessionId} AND plugin_id = ${scope.pluginId} AND namespace = ${scope.namespace}
+    `;
+    return rows[0]?.value ?? null;
+  }
+
+  async function commitVectorIndexBatch(
+    input: CommitVectorIndexBatchInput,
+  ): Promise<boolean> {
+    return client.begin(async (tx) => {
+      // The parent lock pairs with session cascade deletion, including same-id replacement.
+      const sessions = await tx<
+        Array<{ created_at: string; embedding_model_id: number | null }>
+      >`
+        SELECT created_at, embedding_model_id FROM sessions WHERE id = ${input.sessionId} FOR KEY SHARE
+      `;
+      if (
+        !sessions[0] ||
+        sessions[0].created_at !== input.expectedSessionCreatedAt
+      ) {
+        throw new Error("Vector index progress: session incarnation changed");
+      }
+      // Claim progress first. PostgreSQL rechecks the predicate after waiting
+      // for a competing writer; the loser never reaches vector mutations.
+      const rows =
+        input.expectedValue === null
+          ? await tx`
+            INSERT INTO vector_index_progress (session_id, plugin_id, namespace, value)
+            VALUES (${input.sessionId}, ${input.pluginId}, ${input.namespace}, ${input.value})
+            ON CONFLICT DO NOTHING RETURNING session_id
+          `
+          : await tx`
+            UPDATE vector_index_progress SET value = ${input.value}
+            WHERE session_id = ${input.sessionId} AND plugin_id = ${input.pluginId}
+              AND namespace = ${input.namespace} AND value = ${input.expectedValue}
+            RETURNING session_id
+          `;
+      if (rows.length === 0) return false;
+      const modelId = sessions[0].embedding_model_id;
+      if (input.deletes?.length && modelId !== null) {
+        const models = await tx<Array<{ id: number; table_name: string }>>`
+          SELECT id, table_name FROM vector_models WHERE id = ${modelId}
+        `;
+        if (!models[0]) {
+          throw new Error(
+            `pg-vector: session ${input.sessionId} references unknown vector_models.id ${modelId}`,
+          );
+        }
+        const tname = requireCurrentTableName(
+          models[0].id,
+          models[0].table_name,
+        );
+        for (const mutation of input.deletes) {
+          await tx.unsafe(
+            `DELETE FROM ${tname} WHERE session_id = $1 AND plugin_id = $2 AND namespace = $3 AND key = $4`,
+            [input.sessionId, input.pluginId, mutation.namespace, mutation.key],
+          );
+        }
+      }
+      for (const mutation of input.upserts ?? []) {
+        await upsertVectorInTransaction(tx, {
+          ...mutation,
+          sessionId: input.sessionId,
+          pluginId: input.pluginId,
+          expectedSessionCreatedAt: input.expectedSessionCreatedAt,
+        });
+      }
+      return true;
+    });
+  }
+
   async function deleteVectors(input: DeleteVectorsInput): Promise<void> {
     const target = await resolveSessionVectorTarget(input.sessionId);
     if (!target) {
@@ -478,22 +560,41 @@ export function createPgVectorCapability(
 
     const tname = physicalTableName(target.modelRegistryId);
 
+    const conditions = ["session_id = $1", "plugin_id = $2"];
+    const values = [input.sessionId, input.pluginId];
     if (input.namespace !== undefined) {
-      await client.unsafe(
-        `DELETE FROM ${tname}
-          WHERE session_id = $1 AND plugin_id = $2 AND namespace = $3`,
-        [input.sessionId, input.pluginId, input.namespace],
-      );
-    } else {
-      await client.unsafe(
-        `DELETE FROM ${tname}
-          WHERE session_id = $1 AND plugin_id = $2`,
-        [input.sessionId, input.pluginId],
-      );
+      values.push(input.namespace);
+      conditions.push(`namespace = $${values.length}`);
     }
+    if (input.key !== undefined) {
+      values.push(input.key);
+      conditions.push(`key = $${values.length}`);
+    }
+    await client.begin(async (tx) => {
+      const sessions = await tx<
+        Array<{ created_at: string; embedding_model_id: number | null }>
+      >`
+        SELECT created_at, embedding_model_id FROM sessions WHERE id = ${input.sessionId} FOR KEY SHARE
+      `;
+      const session = sessions[0];
+      if (
+        !session ||
+        session.embedding_model_id !== target.modelRegistryId ||
+        (input.expectedSessionCreatedAt !== undefined &&
+          session.created_at !== input.expectedSessionCreatedAt)
+      ) {
+        throw new Error("Vector delete: session incarnation changed");
+      }
+      await tx.unsafe(
+        `DELETE FROM ${tname} WHERE ${conditions.join(" AND ")}`,
+        values,
+      );
+    });
   }
 
   return {
+    getVectorIndexProgress,
+    commitVectorIndexBatch,
     upsertVector,
     searchVectors,
     deleteVectors,

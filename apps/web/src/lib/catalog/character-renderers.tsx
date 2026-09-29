@@ -6,7 +6,6 @@ import { formatDateTime, resolvePath, useI18nResolver } from "./helpers.js";
 import { catalogItems } from "./catalog-actions.js";
 import { useActiveSessionId } from "./session-context.js";
 import { useUiSlot } from "@/stores/ui-slot-store.js";
-export { CharacterFieldsView } from "./character-fields-renderer.js";
 const text = (value: unknown) =>
   value == null
     ? ""

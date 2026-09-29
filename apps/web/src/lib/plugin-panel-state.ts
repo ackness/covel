@@ -1,3 +1,5 @@
+import type { StateStore } from "@json-render/react";
+
 /** Copy a bounded JSON draft so callers cannot mutate the cached snapshot. */
 export function parsePluginUiState(
   value: unknown,
@@ -61,13 +63,41 @@ export function resolvePluginPanelSources(
 
 export function flattenStateForPluginPanel(
   value: Record<string, unknown>,
+  previous: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const updates: Record<string, unknown> = {};
+  for (const key of Object.keys(previous)) {
+    if (!Object.hasOwn(value, key))
+      updates[`/${escapePointer(key)}`] = undefined;
+  }
   for (const [key, child] of Object.entries(value)) {
-    if (key === "sources") updates["/sources"] = child;
-    else flattenStateValue(updates, `/${key}`, child);
+    const oldValue = Object.hasOwn(previous, key) ? previous[key] : undefined;
+    if (Object.hasOwn(previous, key) && Object.is(child, oldValue)) continue;
+    const path = `/${escapePointer(key)}`;
+    if (key === "sources" || key === "_invoking") updates[path] = child;
+    else flattenStateValue(updates, path, child, oldValue);
   }
   return updates;
+}
+
+// Keep the external snapshot with its cached store across panel unmounts.
+// Diff against this snapshot, not the live store, to preserve local edits.
+const externalSnapshots = new WeakMap<StateStore, Record<string, unknown>>();
+
+export function syncPluginPanelState(
+  store: StateStore,
+  value: Record<string, unknown>,
+): void {
+  const updates = flattenStateForPluginPanel(
+    value,
+    externalSnapshots.get(store),
+  );
+  externalSnapshots.set(store, value);
+  store.update(updates);
+}
+
+function escapePointer(value: string): string {
+  return value.replace(/~/g, "~0").replace(/\//g, "~1");
 }
 
 /** Mirrors the render-side cap in `catalog/core-renderers.tsx`. */
@@ -77,6 +107,7 @@ function flattenStateValue(
   updates: Record<string, unknown>,
   basePath: string,
   value: unknown,
+  previous: unknown,
   depth = 0,
 ): void {
   if (Array.isArray(value)) {
@@ -86,10 +117,38 @@ function flattenStateValue(
   // Plugin data is unvalidated and arbitrarily deep. Past the cap, assign the
   // subtree wholesale rather than recursing into a stack overflow.
   if (value && typeof value === "object" && depth < MAX_FLATTEN_DEPTH) {
-    for (const [key, child] of Object.entries(
-      value as Record<string, unknown>,
-    )) {
-      flattenStateValue(updates, `${basePath}/${key}`, child, depth + 1);
+    const entries = Object.entries(value as Record<string, unknown>);
+    const oldRecord =
+      previous && typeof previous === "object" && !Array.isArray(previous)
+        ? (previous as Record<string, unknown>)
+        : undefined;
+    if (entries.length === 0) {
+      if (!oldRecord || Object.keys(oldRecord).length > 0)
+        updates[basePath] = value;
+      return;
+    }
+    if (Array.isArray(previous)) updates[basePath] = {};
+    for (const key of Object.keys(oldRecord ?? {})) {
+      if (!Object.hasOwn(value, key)) {
+        updates[`${basePath}/${escapePointer(key)}`] = undefined;
+      }
+    }
+    for (const [key, child] of entries) {
+      const oldValue =
+        oldRecord && Object.hasOwn(oldRecord, key) ? oldRecord[key] : undefined;
+      if (
+        oldRecord &&
+        Object.hasOwn(oldRecord, key) &&
+        Object.is(child, oldValue)
+      )
+        continue;
+      flattenStateValue(
+        updates,
+        `${basePath}/${escapePointer(key)}`,
+        child,
+        oldValue,
+        depth + 1,
+      );
     }
     return;
   }

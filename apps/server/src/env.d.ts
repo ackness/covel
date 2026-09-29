@@ -179,6 +179,7 @@ declare module "hono" {
       sessionId: string,
       fn: () => Promise<T>,
       beforeCapture?: () => Promise<void>,
+      locale?: string,
     ) => Promise<T>;
     hasPendingPluginEntry?: (pluginId: string) => boolean;
     isPluginEntryPublished?: (pluginId: string) => boolean;

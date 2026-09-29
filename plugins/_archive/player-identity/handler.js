@@ -6,9 +6,10 @@ import {
   optionalString,
   readManualEntity,
   splitList,
+  shortId,
+  withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 import { playerIdentityToCharacterUpsert } from "./types/identity.ts";
-import { shortId, withPendingProposals } from "@covel/tools";
 
 const PROFILE_NAMESPACE = "profiles";
 const BINDING_NAMESPACE = "session-binding";
@@ -17,8 +18,7 @@ const DEFAULT_MIRROR_PLUGIN_ID = "player-identity";
 const PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 /**
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   const payload = ctx.manualPayload ?? {};
@@ -117,7 +117,7 @@ function playerCharacterIdForProfile(profileId) {
 /**
  * List saved profile rows other than `activeId`, so activation can clear their
  * `active` flag. Best-effort — returns [] when the store can't list.
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {import('@covel/plugin-handlers-utils').PluginFunctionContext} ctx
  * @param {string} activeId
  * @returns {Promise<Array<{ key: string; value: Record<string, unknown> }>>}
  */

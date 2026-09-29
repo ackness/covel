@@ -59,6 +59,17 @@ export interface ArchivalSearcher {
 
 // ── Unified Memory System ───────────────────────────────────────
 
+export interface MemorySearchOptions {
+  readonly scope?: "recall" | "archival" | "all";
+  readonly limit?: number;
+}
+
+export type MemorySearchResult =
+  | (RecallSearchResult & { readonly source: "recall" })
+  | (Omit<ArchivalSearchResult, "source"> & {
+      readonly source: `archival:${ArchivalSearchResult["source"]}`;
+    });
+
 /**
  * Inject-only embedding function for the semantic (vector) memory tier. The
  * memory package never imports a concrete provider; the server bootstrap layer
@@ -80,8 +91,9 @@ export interface MemorySystemDeps {
   readonly embed?: import("./vector-common.js").EmbedFn;
   /**
    * Optional cross-process serialization for a complete vector-ingestion
-   * sweep. Production PostgreSQL deployments inject an advisory-lock runner;
-   * local deployments rely on the ingestor's in-process single-flight map.
+   * sweep. Avoids redundant embedding work across instances; atomic index
+   * batches preserve consistency even without this coordinator. Each instance
+   * also coalesces concurrent requests for the same session.
    */
   readonly runIngestExclusive?: import("./vector-ingest.js").RunIngestExclusive;
 }
@@ -93,6 +105,19 @@ export interface MemorySystemDeps {
 export interface MemorySystem {
   readonly recall: RecallSearcher;
   readonly archival: ArchivalSearcher;
+  /**
+   * Search both tiers with one request-scoped query embedding per model.
+   * Results interleave each tier's ranking (recall first on ties); source
+   * scores remain local to their tier and must not be compared across tiers.
+   */
+  search(
+    sessionId: string,
+    query: string,
+    options?: MemorySearchOptions,
+  ): Promise<readonly MemorySearchResult[]>;
+  /** Drain only this instance after the host has stopped producers. */
+  drain(): Promise<import("./background-tasks.js").MemoryBackgroundDrainResult>;
+  pendingTaskCount(): number;
 
   /**
    * Embed-on-write ingestion sweep for the semantic memory tier. Embeds turn

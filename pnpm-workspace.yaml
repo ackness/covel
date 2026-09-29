@@ -30,12 +30,11 @@ allowBuilds:
 # so scope their overrides to the affected parent and use the tested safe
 # PostCSS patch / current esbuild release until upstream updates its pins.
 overrides:
-  rolldown: 1.1.4
-  tsx: 4.23.12
-  "@tailwindcss/language-service>postcss": 8.5.26
+  tsx: 4.23.15
+  "@tailwindcss/language-service>postcss": 8.5.28
   "@esbuild-kit/core-utils>esbuild": 0.28.2
   # Security patches for Ajv URI parsing and desktop plist serialization.
-  "ajv>fast-uri": 3.1.6
+  "ajv>fast-uri": 3.1.8
   "plist>@xmldom/xmldom": 0.8.15
 
 # @tailwindcss/language-service currently combines media-query-list-parser

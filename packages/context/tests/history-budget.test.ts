@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { createMemoryStore, type TurnMessageRecord } from "@covel/store";
+import { type TurnMessageRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { maybeCompact } from "../src/history-budget.js";
 
 const message = (id: string): TurnMessageRecord => ({

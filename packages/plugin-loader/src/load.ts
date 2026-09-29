@@ -73,26 +73,78 @@ async function resolveLocalizedPluginMd(
   locale?: string,
   stem = "PLUGIN",
 ): Promise<string> {
-  const base = path.join(dir, `${stem}.md`);
+  for (const name of localizedMarkdownNames(locale, stem)) {
+    const candidate = path.join(dir, name);
+    if (await fileExists(candidate)) return candidate;
+  }
+  return path.join(dir, `${stem}.md`);
+}
+
+function localizedMarkdownNames(locale?: string, stem = "PLUGIN"): string[] {
+  const base = `${stem}.md`;
   const canonicalLocale = canonicalizeLocale(locale);
-  if (!canonicalLocale) return base;
-
+  if (!canonicalLocale) return [base];
   const requestedNames = localeVariantNames(canonicalLocale, stem);
-  for (const name of requestedNames) {
-    const candidate = path.join(dir, name);
-    if (await fileExists(candidate)) return candidate;
-  }
-
-  if (isDefaultLocaleOrAlias(canonicalLocale)) return base;
-
+  if (isDefaultLocaleOrAlias(canonicalLocale)) return [...requestedNames, base];
   const fallbackLocale = canonicalizeLocale(DEFAULT_FALLBACK_LOCALE)!;
-  for (const name of localeVariantNames(fallbackLocale, stem)) {
-    if (requestedNames.includes(name)) continue;
-    const candidate = path.join(dir, name);
-    if (await fileExists(candidate)) return candidate;
-  }
+  return [
+    ...new Set([
+      ...requestedNames,
+      ...localeVariantNames(fallbackLocale, stem),
+      base,
+    ]),
+  ];
+}
 
-  return base;
+/** Capture prose before publication; later locale selection never reads live files. */
+async function captureRuntimePrompts(
+  discovery: PluginDiscoveryResult,
+  parsed: ParsedRuntimeMd,
+  plugin: PluginManifest,
+): Promise<ParsedRuntimeMd> {
+  const dir = discovery.isMultiRuntime
+    ? path.dirname(parsed.sourcePath!)
+    : discovery.rootPath;
+  const stem = discovery.isMultiRuntime ? "RUNTIME" : "PLUGIN";
+  const basePath = path.join(dir, `${stem}.md`);
+  const baseContent = await fs.readFile(basePath, "utf-8");
+  const canonical = discovery.isMultiRuntime
+    ? parseRuntimeMd(baseContent, basePath, plugin)
+    : parsePluginMd(baseContent, basePath);
+  const promptTemplates: Record<string, string> = {
+    [`${stem}.md`]: canonical.promptTemplate,
+  };
+  for (const name of await fs.readdir(dir)) {
+    if (
+      !name.startsWith(`${stem}.`) ||
+      !name.endsWith(".md") ||
+      name === `${stem}.md`
+    )
+      continue;
+    if (!canonicalizeLocale(name.slice(stem.length + 1, -3))) continue;
+    const sourcePath = path.join(dir, name);
+    await assertInsideRoot(discovery.rootPath, sourcePath, "Localized prompt");
+    const content = await fs.readFile(sourcePath, "utf-8");
+    const localized = discovery.isMultiRuntime
+      ? parseRuntimeMd(content, sourcePath, plugin, canonical.rawFrontmatter)
+      : parsePluginMd(content, sourcePath, canonical.rawFrontmatter);
+    promptTemplates[name] = localized.promptTemplate;
+  }
+  return { ...parsed, promptTemplates };
+}
+
+/** Select prose from an already captured definition without changing its contract. */
+export function resolveRuntimePrompt(
+  parsed: ParsedRuntimeMd,
+  locale?: string,
+): string {
+  if (!parsed.promptTemplates) return parsed.promptTemplate;
+  const stem = "RUNTIME.md" in parsed.promptTemplates ? "RUNTIME" : "PLUGIN";
+  return (
+    localizedMarkdownNames(locale, stem)
+      .map((name) => parsed.promptTemplates![name])
+      .find((body) => body !== undefined) ?? parsed.promptTemplate
+  );
 }
 
 /**
@@ -362,7 +414,14 @@ export async function loadPluginDefinition(
         );
     }
   }
-  const definition = { packageManifest, manifests };
+  const definition = {
+    packageManifest,
+    manifests: await Promise.all(
+      manifests.map((parsed) =>
+        captureRuntimePrompts(discovery, parsed, plugin),
+      ),
+    ),
+  };
   validatePluginDeclarations([packageManifest]);
   return definition;
 }
@@ -750,7 +809,7 @@ export async function loadRuntime(
 
   return {
     manifest: resolvePluginRuntimeManifest(snapshot, parsed.manifest),
-    promptTemplate: parsed.promptTemplate,
+    promptTemplate: resolveRuntimePrompt(parsed, locale),
     outputSchema,
     ...(outputContractSchema ? { outputContractSchema } : {}),
     ...(inputSchema ? { inputSchema } : {}),

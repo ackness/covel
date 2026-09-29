@@ -28,8 +28,6 @@ import {
   executeTurn,
   createTraceRecorder,
   createTurnEmitter,
-  collectExecutionJournal,
-  collectExecutionSuspensions,
   snapshotUserSettings,
 } from "@covel/runtime";
 import type {
@@ -118,7 +116,6 @@ export const actionRoutes = new Hono<Env>();
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
-  const loadRuntimeFn = c.get("loadRuntimeFn");
   const eventBus = c.get("eventBus");
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
@@ -356,17 +353,22 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       commitStatusSettled = false;
       hasStartedTurn = false;
       currentRetryScope = undefined;
-      const {
-        result,
-        trace,
-        userSettings,
-        committed,
-        commitError,
-        wasPreGamePending,
-        followerSession,
-        approvalScopes,
-        queuedRuntimeJobs,
-      } = await withSettledExecutionLock(c, sessionId, async () => {
+      const readLiveActionSession = async () => {
+        c.get("requestWork")?.signal.throwIfAborted();
+        const live = await store.getSession(sessionId);
+        if (!live)
+          throw new Error("session was deleted while the action was queued");
+        if (sessionIncarnationIdentity(live) !== expectedIncarnation) {
+          throw new Error("session was replaced while the action was queued");
+        }
+        if (live.status !== "active") {
+          throw new Error(
+            `session is ${live.status}; it must be active to accept actions`,
+          );
+        }
+        return live;
+      };
+      const executeCapturedTurn = async () => {
         c.get("requestWork")?.signal.throwIfAborted();
         // This execution now owns the session — events on the bus
         // from here on belong to this turn.
@@ -377,18 +379,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // check must not get player messages, interaction records, or
           // compaction appended to a non-active session. The throw surfaces
           // as an `error.occurred` SSE event via the outer catch.
-          const liveSession = await store.getSession(sessionId);
-          if (!liveSession) {
-            throw new Error("session was deleted while the action was queued");
-          }
-          if (sessionIncarnationIdentity(liveSession) !== expectedIncarnation) {
-            throw new Error("session was replaced while the action was queued");
-          }
-          if (liveSession.status !== "active") {
-            throw new Error(
-              `session is ${liveSession.status}; it must be active to accept actions`,
-            );
-          }
+          const liveSession = await readLiveActionSession();
 
           if (turnArgs.origin !== "continuation") {
             const recovery = await assertRecoverableTurn(
@@ -446,7 +437,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           );
 
           let effectiveSession = liveSession;
-          if (effectiveLocale !== liveSession.locale) {
+          if (effectiveSession.locale !== effectiveLocale) {
             const updatedAt = new Date().toISOString();
             await store.updateSession(sessionId, {
               locale: effectiveLocale,
@@ -636,7 +627,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // Control covers preparation, execution and commit. Closing the SSE
           // transport does not cancel this turn; a refreshed client observes
           // it through the read-only execution endpoint until finalization.
-          const result = await executeTurn(turnInput, activeRuntimes, {
+          const execution = await executeTurn(turnInput, activeRuntimes, {
             ...buildTurnExecutorDeps(c),
             hookScope,
             // The main turn path never passed the eventBus, so every
@@ -693,24 +684,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             turnControl,
           });
 
-          // Commit the whole execution — top-level plus nested recursiveCall
-          // results — in ONE transaction via the shared finalize primitive.
-          // Any proposal failure rolls the whole turn back (committed siblings
-          // included) and settles the turn_results row to `failed`; a clean
-          // run settles it `committed`, both inside that transaction. Nested
-          // rows reuse the top-level turnId, so `[turnId]` settles them all.
-          //
-          // hookPipeline / eventBus are forwarded so `PreStateCommit` and
-          // `PostStateCommit` hooks declared by plugins fire on the production
-          // write path (previously they only ran in tests).
+          const { result } = execution;
           const hookPipeline = c.get("hookPipeline");
-          const finalizableResults = [
-            ...result.runtimeResults,
-            ...(result.nestedRuntimeResults ?? []),
-          ];
-          const hasSuspendedRuntime = finalizableResults.some(
-            (runtimeResult) => runtimeResult.status === "suspended",
-          );
           const queuedRuntimeJobs: Array<{
             readonly job: RuntimeJobRecord;
             readonly status: JobStatusRecord;
@@ -754,18 +729,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             },
             signal: commitSignal,
             store,
-            sessionId,
-            // A suspension persists the original counting responsibility for
-            // resume; this partial execution must not complete it yet.
-            executionContext: hasSuspendedRuntime
-              ? { ...result.executionContext, countPolicy: "none" }
-              : result.executionContext,
-            runtimes: activeRuntimes,
-            activePluginIds: hookScope.activePluginIds,
-            hookSettings: hookScope.settings,
-            results: finalizableResults,
-            journalMessages: collectExecutionJournal(result),
-            suspensions: collectExecutionSuspensions(result),
+            execution,
             ...(playerInputWrites || result.deferredRuntimeJobs?.length
               ? {
                   extraInTx: async (tx) => {
@@ -860,34 +824,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   },
                 }
               : {}),
-            turnIds: [turnArgs.turnId],
             ...(hookPipeline ? { hookPipeline } : {}),
             eventBus,
             emitter,
-            // Session-clock write folded into the commit transaction:
-            // logical-turn counting (from executionContext.countPolicy) plus
-            // the setup mirror / phase flip (from setupCompletion). Replaces
-            // the old out-of-band advanceSessionTurnCount + the pre-game
-            // completion write, and rolls back atomically with the proposals.
-            sessionClock: {
-              now: new Date().toISOString(),
-              ...(result.setupCompletion
-                ? { setupCompletion: result.setupCompletion }
-                : {}),
-            },
-            // Setup attempt ledger + pending/blocked mirror, settled outside
-            // the commit transaction (a rolled-back commit still burns an
-            // attempt, so deterministic failures reach `blocked`).
-            ...(result.setupRan ? { setupRan: result.setupRan } : {}),
-            // Publishes recordAs exports inside the commit transaction —
-            // loaded lazily, only for a success result that declares one.
-            loadOutputSchema: async (runtimeId) => {
-              const rt = activeRuntimes.find((r) => r.name === runtimeId);
-              return rt
-                ? (await loadRuntimeFn(rt, effectiveLocale, sessionId))
-                    ?.outputSchema
-                : undefined;
-            },
             // MediaRef canonicalization / ownership for published export values.
             ...(mediaStore ? { mediaStore } : {}),
           });
@@ -931,7 +870,24 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           eventBusUnsubscribe?.();
           eventBusUnsubscribe = undefined;
         }
-      });
+      };
+      const {
+        result,
+        trace,
+        userSettings,
+        committed,
+        commitError,
+        wasPreGamePending,
+        followerSession,
+        approvalScopes,
+        queuedRuntimeJobs,
+      } = await withSettledExecutionLock(
+        c,
+        sessionId,
+        executeCapturedTurn,
+        undefined,
+        effectiveLocale,
+      );
 
       // ——— Post-lock tail (per turn) ———
       // Deferred-follower scheduling and the final SSE writes deliberately run

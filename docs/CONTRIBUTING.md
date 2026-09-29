@@ -8,7 +8,7 @@
 
 ## 开发环境
 
-- Node.js ≥ 26
+- Node.js 26.x
 - pnpm 11.22.0（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
@@ -65,12 +65,25 @@ node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
 新功能与 bug 修复都应带测试。每个 package 自带 vitest：
 
 ```bash
+pnpm check                                 # CI 静态检查与脚本回归
+pnpm deps:check                            # Fallow 依赖与导入检查
+pnpm analyze                               # Fallow 死代码、重复代码与复杂度报告
 pnpm test                                  # 全量
 pnpm --filter @covel/runtime test          # 单包
+pnpm test:pg                               # 必须连接 PostgreSQL 的集成检查
+pnpm e2e:smoke                             # CI 的确定性 Chromium 核心流程
 pnpm e2e                                   # Playwright 端到端
 ```
 
-覆盖率目标 ≥ 80%（`pnpm test:coverage`）——当前为参考目标，CI（[`ci.yml`](../.github/workflows/ci.yml)）尚未设阈值强制拦截。
+`pnpm check` 包含 peer 依赖、类型、包边界、依赖声明、插件 manifest、i18n、脚本回归和工作流检查。工作流检查要求安装 `actionlint`（CI 固定使用 1.7.12；本地可用 `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`）。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
+
+[Fallow](https://github.com/fallow-rs/fallow) 作为根开发依赖安装，替代 Knip。`deps:check` 会阻断未使用依赖、未声明依赖与无法解析的导入；`analyze` 提供完整报告，供人工核实后清理，不作为全量阻断项。`.fallowrc.jsonc` 声明文件路由、插件动态入口和手动运行的脚本；增加这类入口时同步维护配置，避免误报。工具版本遵循工作区的 7 天发布等待期。
+
+`pnpm test:pg` 从环境或根 `.env` 读取 `DATABASE_URL`，强制执行 Store 与 Server 的 PostgreSQL 测试；数据库缺失、不可达或缺少 pgvector 都会失败。Store 和 Server 的普通测试也接收显式传入的数据库环境变量，但由于数据库状态不属于源码输入，这两组测试不复用 Turbo 缓存。其余缓存会跟随公共 TypeScript 配置失效，读取框架 prompt 的测试也跟随 `prompts/**` 失效。
+
+`pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，在各包 `coverage/` 生成文本/lcov 报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。覆盖率目标 ≥ 80% 当前为参考目标，CI（[`ci.yml`](../.github/workflows/ci.yml)）尚未设阈值强制拦截。
+
+PR、main 和发布复用同一份 CI 检查，包含独立 PostgreSQL 与 Chromium smoke job。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
 
 ### 框架/插件隔离（重要）
 
@@ -98,7 +111,7 @@ pnpm e2e                                   # Playwright 端到端
 
 1. 从 `main` 分出一个 feature branch
 2. 推送后通过 GitHub UI 开 PR，指向 `main`
-3. 确保 CI 全部绿；`pnpm lint` 与 `pnpm test` 本地先跑过
+3. 确保 CI 全部绿；`pnpm check` 与 `pnpm test` 本地先跑过
 4. PR 描述说明「为什么」与「如何验证」
 5. 有破坏性变更时，在正文中标注 `BREAKING CHANGE:`
 
@@ -107,7 +120,7 @@ pnpm e2e                                   # Playwright 端到端
 发布检查的唯一操作清单是[桌面打包指南](./guide/desktop-packaging.md#release-checklist)。按以下顺序执行：
 
 1. 在开发分支准备版本、CHANGELOG 和文档。根目录、`apps/*` 与 `packages/*` 的版本匹配目标 tag；插件和世界包可以独立版本化。
-2. 先顺序完成本地 `pnpm lint`、`pnpm test`、UI/E2E 检查和 `pnpm release:preflight`，再用隔离数据完成[真实模型玩家流程](./guide/e2e-testing.md#发版前的玩家流程验收)。
+2. 先顺序完成本地 `pnpm check`、`pnpm test`、`pnpm test:pg`、UI/E2E 检查和 `pnpm release:preflight`，再用隔离数据完成[真实模型玩家流程](./guide/e2e-testing.md#发版前的玩家流程验收)。
 3. 本地通过后推送 PR，等待 CI / PostgreSQL 集成，以及候选分支的 `Build Desktop` dry run（`publish_release=false`）通过。
 4. 合并 PR，确认 `main` 的检查和准确提交，再在该提交创建并推送 annotated `v*` tag。
 5. [发布工作流](../.github/workflows/release.yml) 校验不可变提交、框架版本和发布说明，构建并验证 macOS arm64 / Windows x64 产物后发布 GitHub Release。下载产物复核版本、摘要、启动和插件生命周期。

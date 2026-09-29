@@ -8,7 +8,7 @@ Thanks for considering contributing! This document outlines the process for cont
 
 ## Development environment
 
-- Node.js ≥ 26
+- Node.js 26.x
 - pnpm 11.22.0 (see the root `package.json` `packageManager`)
 - Optional: Docker (for PostgreSQL mode)
 
@@ -65,12 +65,25 @@ The default source search is `.assets/demo.dev1.mp4`, `.assets/demo.dev0.mp4`, t
 New features and bug fixes should ship with tests. Each package uses vitest:
 
 ```bash
+pnpm check                                 # CI static checks and script regressions
+pnpm deps:check                            # Fallow dependency and import checks
+pnpm analyze                               # Fallow dead code, duplication, and complexity report
 pnpm test                                  # everything
 pnpm --filter @covel/runtime test          # single package
+pnpm test:pg                               # required PostgreSQL integration checks
+pnpm e2e:smoke                             # deterministic CI Chromium flows
 pnpm e2e                                   # Playwright end-to-end
 ```
 
-Coverage target: ≥ 80% (`pnpm test:coverage`) — aspirational for now; [`ci.yml`](../.github/workflows/ci.yml) does not yet enforce a coverage threshold.
+`pnpm check` runs peer dependency, type, package boundary, dependency declaration, plugin manifest, i18n, script regression, and workflow checks. Workflow validation requires `actionlint` (CI pins 1.7.12; install locally with `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`). `pnpm lint` and `pnpm test` no longer build Web assets implicitly; run `pnpm build` separately to validate packaging.
+
+[Fallow](https://github.com/fallow-rs/fallow) is installed as a root dev dependency, replacing Knip. `deps:check` fails on unused dependencies, unlisted dependencies, and unresolved imports. `analyze` provides the full report for reviewed cleanup without gating on every finding. `.fallowrc.jsonc` declares file-based routes, dynamically loaded plugins, and manual scripts; update it when adding such entry points to avoid false positives. The tool version follows the workspace's seven-day minimum release age.
+
+`pnpm test:pg` reads `DATABASE_URL` from the environment or root `.env` and requires the Store and Server PostgreSQL tests to run. A missing or unreachable database, or missing pgvector extension, fails the command. Ordinary Store and Server tests also receive explicitly supplied database environment variables. These two suites bypass Turbo caching because database state is external to source inputs. Other cached tasks invalidate when shared TypeScript configuration changes, and tests that read framework prompts also track `prompts/**`.
+
+`pnpm test:coverage` runs two coverage commands sequentially: `test:coverage:vitest` always reruns the Vitest workspaces and generates text/lcov reports in each package's `coverage/`; `test:coverage:desktop` runs all desktop Node tests and self-checks and writes per-process raw V8 coverage to `apps/desktop/coverage/` for separate analysis, outside the Vitest percentage. The ≥ 80% coverage target remains aspirational; [`ci.yml`](../.github/workflows/ci.yml) does not yet enforce a threshold.
+
+PRs, main, and releases reuse the same CI gates, including independent PostgreSQL and Chromium smoke jobs. Releases also run `pnpm release:preflight`; lockfile validation uses a temporary metadata directory without modifying workspace dependencies or running install scripts.
 
 ### Framework / plugin isolation (important)
 
@@ -98,7 +111,7 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 
 1. Branch off `main` into a feature branch
 2. Open a PR targeting `main` after pushing
-3. Make sure CI is green; run `pnpm lint` and `pnpm test` locally first
+3. Make sure CI is green; run `pnpm check` and `pnpm test` locally first
 4. Describe **why** the change exists and **how to verify** it
 5. For breaking changes, add a `BREAKING CHANGE:` footer
 
@@ -107,7 +120,7 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 Use the [desktop release checklist](./guide/desktop-packaging.md#release-checklist) as the single operational checklist:
 
 1. Prepare versions, CHANGELOG and docs on a development branch. Root, `apps/*` and `packages/*` versions must match the target tag; plugin and world packages may version independently.
-2. Complete local `pnpm lint`, `pnpm test`, UI/E2E checks and `pnpm release:preflight` sequentially, then exercise the [real-model player flow](./guide/e2e-testing.md#发版前的玩家流程验收) with isolated data.
+2. Complete local `pnpm check`, `pnpm test`, `pnpm test:pg`, UI/E2E checks and `pnpm release:preflight` sequentially, then exercise the [real-model player flow](./guide/e2e-testing.md#发版前的玩家流程验收) with isolated data.
 3. Push the PR after local checks pass. Wait for CI / PostgreSQL integration and a `Build Desktop` dry run on the candidate branch (`publish_release=false`).
 4. Merge the PR, verify checks and the exact commit on `main`, then create and push an annotated `v*` tag on that commit.
 5. The [release workflow](../.github/workflows/release.yml) validates the immutable commit, framework versions and release notes, then builds and verifies macOS arm64 / Windows x64 artifacts before publishing. Download the assets to check versions, digests, startup and plugin lifecycle.

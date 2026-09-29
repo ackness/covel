@@ -6,7 +6,7 @@ import {
 } from "./execution-recovery-fixtures.js";
 import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
 import { createFormTool } from "../../packages/tools/src/builtin/ui-tools.js";
-import { createMemoryStore } from "../../packages/store/src/index.js";
+import { createStore } from "../../packages/store/src/index.js";
 import { createSubmitFormHandler } from "../../packages/runtime/src/rpc-defaults/submit-form.js";
 
 // API tests exercise ZIP installation, authorization and durable commits. Here the
@@ -21,7 +21,7 @@ for (const width of [1512, 390]) {
       await page.request.get(`/api/sessions/${fixture.id}/view`)
     ).json();
     const pluginId = "tabletop-probe";
-    const store = createMemoryStore();
+    const store = await createStore({ backend: "memory" });
     const submitFormHandler = createSubmitFormHandler(undefined, store);
     const data = new Map<string, unknown>([
       [

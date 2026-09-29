@@ -8,12 +8,16 @@ import { worldGenerationDataContracts } from "../../world-data/portable-contract
  */
 
 import { worldOperationLockId } from "../../world-lifecycle.js";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
-import { createWorld, type GeneratedWorldPackageContent } from "@covel/create";
+import {
+  createWorld,
+  writeWorldPackage,
+  type GeneratedWorldPackageContent,
+} from "@covel/create";
+import { worldRecordFromManifest } from "../../world-data/world-record.js";
 import {
   DEFAULT_LOCALE,
   readRuntimeEnv,
@@ -247,15 +251,6 @@ aiRoutes.post(
     const env = readRuntimeEnv();
     const worldsDir = resolveUserResourceDirs(env).worlds;
 
-    const outputDir =
-      saveTarget === "server-file"
-        ? worldsDir
-        : await mkdtemp(path.join(tmpdir(), "covel-ai-world-"));
-
-    console.log(
-      `[ai/generate-world] outputDir=${outputDir}, saveTarget=${saveTarget}, concept="${(concept as string).trim().slice(0, 40)}..."`,
-    );
-
     const shutdownSignal = c.get("requestWork")?.signal;
     return streamOwnedSSE(c, async (stream) => {
       const send = async (event: GenerateEvent) => {
@@ -271,7 +266,6 @@ aiRoutes.post(
         const createOpts = {
           llm,
           concept: (concept as string).trim(),
-          outputDir,
           model: typeof body.model === "string" ? body.model : undefined,
           locale: normalizeLocale(body.locale, DEFAULT_LOCALE),
           brief: brief.value,
@@ -310,26 +304,32 @@ aiRoutes.post(
           });
           return;
         }
-        generatedWorldDir = path.join(outputDir, result.id);
 
         await send({ type: "progress", phase: "validating" });
 
-        // Reload the freshly written world.yaml into a WorldRecord and upsert
-        // into the store so the listing endpoint immediately reflects it.
-        const worldDir = path.join(outputDir, result.id);
-        const loadedRecord = await loadSingleWorld(worldDir, {
+        let loadedRecord: WorldRecord | null;
+        const metadata = {
           source: saveTarget === "server-file" ? "generated-file" : "generated",
           storage: storageMetadata(saveTarget, env.storeBackend, worldsDir),
-        });
-
-        if (!loadedRecord) {
-          await send({
-            type: "error",
-            message: `Generated world "${result.id}" failed post-write validation`,
+        };
+        if (saveTarget === "server-file") {
+          createOpts.signal.throwIfAborted();
+          await writeWorldPackage(worldsDir, result);
+          generatedWorldDir = path.join(worldsDir, result.id);
+          loadedRecord = await loadSingleWorld(generatedWorldDir, metadata);
+          if (!loadedRecord)
+            throw new Error(
+              `Generated world "${result.id}" failed post-write validation`,
+            );
+        } else {
+          loadedRecord = worldRecordFromManifest(result.manifest, result.lore, {
+            ...metadata,
+            ...(result.packageContent.characters.length
+              ? { embeddedCharacters: result.packageContent.characters }
+              : {}),
           });
-          return;
         }
-        const fileRecord = withGeneratedPackageMetadata(
+        const generatedRecord = withGeneratedPackageMetadata(
           loadedRecord,
           result.packageContent,
         );
@@ -337,8 +337,8 @@ aiRoutes.post(
         await send({ type: "progress", phase: "saving" });
         const record =
           saveTarget === "server-file"
-            ? fileRecord
-            : recordForStoreOnly(fileRecord, saveTarget);
+            ? generatedRecord
+            : recordForStoreOnly(generatedRecord, saveTarget);
         if (saveTarget !== "return-only") {
           shutdownSignal?.throwIfAborted();
           if (
@@ -367,9 +367,6 @@ aiRoutes.post(
       } finally {
         if (saveTarget === "server-file" && generatedWorldDir && !activated) {
           await rm(generatedWorldDir, { recursive: true, force: true });
-        }
-        if (saveTarget !== "server-file") {
-          await rm(outputDir, { recursive: true, force: true });
         }
       }
     });

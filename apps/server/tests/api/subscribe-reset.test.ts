@@ -13,7 +13,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Hono } from "hono";
 import { createEventBus, RING_BUFFER_MAX, type EventBus } from "@covel/events";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   drain,
   emitSeq,

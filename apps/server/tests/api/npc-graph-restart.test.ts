@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { createSqliteStore } from "@covel/store";
+import { createSqliteStore } from "@covel/store/sqlite";
 import { createCommitPipeline, createFunctionStoreView } from "@covel/runtime";
 import createGraphTool from "../../../../plugins/npc-graph/tools/upsert-npc-graph.js";
 

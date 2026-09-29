@@ -1,5 +1,5 @@
 import { estimateTokens } from "@covel/context";
-import type { TurnExecutorDeps } from "@covel/runtime";
+import type { ExecutionDeps, TurnExecutorDeps } from "@covel/runtime";
 import type { Context } from "hono";
 
 /**
@@ -46,7 +46,7 @@ export function buildTurnExecutorDeps(
 export function buildResumeTurnExecutorDeps(
   c: Context,
   emitter: NonNullable<TurnExecutorDeps["emitter"]>,
-): TurnExecutorDeps {
+): ExecutionDeps {
   return {
     ...buildTurnExecutorDeps(c),
     store: c.get("store"),

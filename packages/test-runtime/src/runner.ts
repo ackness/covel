@@ -8,18 +8,16 @@ import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import type { RunRuntimeDebugOptions } from "./types.js";
 import {
   createToolExecutor,
+  buildHookSettings,
   executeTurn,
   snapshotUserSettings,
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import {
-  builtinUITools,
-  ToolRegistry,
-  createCharacterTools,
-  createPluginDataTools,
-  runtimeDoneTool,
-  suspendTool,
+  createDefaultToolRegistry,
+  type EventDirectoryLike,
 } from "@covel/tools";
+import { createDefaultToolApprovalPipeline } from "@covel/approval";
 import {
   evaluateExpectations,
   hasUnexpectedRunFailure,
@@ -46,6 +44,7 @@ import {
   loadRuntimeBundle,
   loadRuntimeManifests,
   pluginIdFromRuntime,
+  type UnsupportedDebugCapability,
 } from "./runtime-loading.js";
 import { buildMockLlm, serializeLlmCalls } from "./llm-setup.js";
 import {
@@ -57,6 +56,7 @@ import {
 export type { RunRuntimeDebugOptions };
 
 export interface RunRuntimeDebugResult {
+  readonly unsupportedCapabilities: readonly UnsupportedDebugCapability[];
   readonly status: "ok";
   readonly mode: "mock" | "live";
   readonly caseName?: string;
@@ -116,6 +116,16 @@ export interface RunRuntimeCasesResult {
   }[];
 }
 
+/** The isolated runner cannot validate session event contracts without the host. */
+const isolatedEventDirectory: EventDirectoryLike = {
+  async listTopics() {
+    return [];
+  },
+  async validate() {
+    return { ok: false, reason: "session event directory is unavailable" };
+  },
+};
+
 export async function runRuntimeDebug(
   options: RunRuntimeDebugOptions,
 ): Promise<RunRuntimeDebugResult> {
@@ -143,6 +153,9 @@ export async function runRuntimeDebug(
       pluginIds,
       discoveries,
       registry,
+      hookPipeline,
+      hookSettings,
+      unsupportedCapabilities,
     } = (bundle = await loadRuntimeBundle({
       pluginsDir,
       pluginId,
@@ -167,21 +180,25 @@ export async function runRuntimeDebug(
     });
     registry.syncSessionActivations(sessionId, pluginIds);
 
-    const tools = new ToolRegistry();
-    for (const t of builtinUITools) tools.registerBuiltin(t);
-    tools.registerBuiltin(suspendTool);
-    tools.registerBuiltin(runtimeDoneTool);
-    for (const t of createPluginDataTools(store)) tools.registerBuiltin(t);
-    for (const t of createCharacterTools(store)) {
-      tools.registerBuiltin(t);
-    }
+    const tools = createDefaultToolRegistry({
+      store,
+      eventDirectory: isolatedEventDirectory,
+    });
     for (const { pluginId: ownerId, tool } of entryTools) {
       tools.registerPlugin(ownerId, tool);
     }
     const llm = buildMockLlm(options);
     const liveAdapters =
       options.mode === "live" ? makeLiveAdapters() : undefined;
+    const userSettings = snapshotUserSettings(
+      options.userSettings ? { [pluginId]: options.userSettings } : undefined,
+    );
     const deps = {
+      hookPipeline,
+      hookScope: {
+        activePluginIds: new Set(pluginIds),
+        settings: buildHookSettings(hookSettings, userSettings),
+      },
       loadRuntime: async (manifest) => loadedCache.get(manifest.name),
       llm: liveAdapters?.llm ?? llm,
       services,
@@ -195,12 +212,10 @@ export async function runRuntimeDebug(
         findTool: (name, context) => tools.find(name, context.pluginId),
         getToolSource: (name) => tools.source(name),
         store,
+        approval: createDefaultToolApprovalPipeline(),
       })),
     } satisfies TurnExecutorDeps;
-    const userSettings = snapshotUserSettings(
-      options.userSettings ? { [pluginId]: options.userSettings } : undefined,
-    );
-    const result = await executeTurn(
+    const execution = await executeTurn(
       {
         sessionId,
         turnId,
@@ -217,12 +232,10 @@ export async function runRuntimeDebug(
       deps,
     );
 
+    const { result } = execution;
     const commit = await commitDebugExecution({
-      turn: result,
-      manifests,
+      execution,
       deps,
-      locale,
-      userSettings,
       detached: false,
     });
     const committedFollowers =
@@ -285,6 +298,7 @@ export async function runRuntimeDebug(
       ...followerResults,
     ];
     const baseResult = {
+      unsupportedCapabilities,
       status: "ok" as const,
       mode: options.mode ?? ("mock" as const),
       ...(options.caseName ? { caseName: options.caseName } : {}),
@@ -322,8 +336,8 @@ export async function runRuntimeDebug(
         ...(error instanceof AggregateError ? error.errors : [error]),
       );
     };
-    // Stop tool admission and entry-owned workers together: a timed-out tool
-    // may only settle once its entry's disposal stops the worker it awaits.
+    // Abort tool admission and entry-owned workers together. Entry disposal
+    // waits for retained callbacks before releasing resources.
     const stopped = await Promise.allSettled([
       Promise.resolve().then(() => toolExecutor?.close()),
       Promise.resolve().then(() => bundle?.close()),

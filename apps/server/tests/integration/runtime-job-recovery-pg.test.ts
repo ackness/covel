@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
-import { createPgStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createPgStore } from "@covel/store/postgres";
 import { createPgAdvisorySessionLock } from "../../src/lib/pg-session-lock.js";
 import {
   claimRuntimeJob,

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createPluginRegistry } from "@covel/plugin-loader";
-import { createMemoryStore, exportSessionCheckpoint } from "@covel/store";
+import { exportSessionCheckpoint } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
   createBrowserWorkspaceCache,

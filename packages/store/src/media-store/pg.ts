@@ -5,9 +5,9 @@ import {
   claimedMediaIds,
   finalizeMediaCleanupResult,
 } from "./cleanup-result.js";
+import { cleanupCandidates } from "./cleanup-policy.js";
 import type { PgMediaStoreOptions } from "./types.js";
 import {
-  cleanupCandidates,
   filterAssetsByMetadata,
   normalizeBytes,
   sha256,

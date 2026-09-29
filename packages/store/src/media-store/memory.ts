@@ -3,9 +3,9 @@ import {
   claimedMediaIds,
   finalizeMediaCleanupResult,
 } from "./cleanup-result.js";
+import { cleanupCandidates } from "./cleanup-policy.js";
 import {
   bytesToReadableStream,
-  cleanupCandidates,
   filterAssetsByMetadata,
   sha256,
   toBytes,

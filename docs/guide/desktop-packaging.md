@@ -26,6 +26,11 @@ alone does not pass this check: a plugin can fail while the server keeps running
 
 ## macOS
 
+Electron 44 requires macOS 13 (Ventura) or later. The packaging config declares
+`mac.minimumSystemVersion: "13.0.0"` to match that runtime requirement; macOS 12
+is no longer supported by current builds. See the
+[Electron 44 release notes](https://github.com/electron/electron/releases/tag/v44.0.0).
+
 ### Official unsigned build
 
 The committed config sets `mac.identity: null` and `mac.notarize: false`; release CI also sets `CSC_IDENTITY_AUTO_DISCOVERY=false`. No signing or Apple account secrets are required.
@@ -202,7 +207,7 @@ integration in `apps/desktop/src/main.ts`, and the publishing configuration abov
 - [ ] Update `docs/CHANGELOG.md` with the target version
 - [ ] Sync version badges, Release links, and current-version notices in `README.md` and `README.zh-CN.md`
 - [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard/constants.ts` if the tutorial changed
-- [ ] Run local `pnpm lint`, `pnpm test`, `pnpm e2e` and `pnpm release:preflight` sequentially; fix known failures before pushing
+- [ ] Run local `pnpm check`, `pnpm test`, `pnpm test:pg`, `pnpm e2e` and `pnpm release:preflight` sequentially; fix known failures before pushing
 - [ ] Run `pnpm --filter @covel/desktop build`
 - [ ] Complete the [player-flow acceptance checks](./e2e-testing.md#发版前的玩家流程验收) with isolated data and a real model; deterministic tests and startup health alone do not cover playability
 - [ ] Run `pnpm --filter @covel/desktop smoke:restart` in a desktop session to verify the preload version and navigation to the new backend port

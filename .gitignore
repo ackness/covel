@@ -32,6 +32,7 @@ output/
 node_modules/
 .pnpm-store/
 .turbo/
+.fallow/
 node-compile-cache/
 
 # ── Build output ────────────────────────────────────────────────

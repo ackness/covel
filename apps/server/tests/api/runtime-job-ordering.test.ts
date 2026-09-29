@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createMemoryStore,
-  createSqliteStore,
-  type DataStore,
-} from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+import { createSqliteStore } from "@covel/store/sqlite";
 import { createEventBus } from "@covel/events";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {

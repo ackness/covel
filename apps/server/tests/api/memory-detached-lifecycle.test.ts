@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   executeTurn,
   commitExecution,
@@ -140,7 +140,7 @@ describe("memory detached lifecycle", () => {
       [story, memory],
       { store, llm, loadRuntime, gateway: original.gateway },
     );
-    const descriptor = source.deferredRuntimeJobs?.[0];
+    const descriptor = source.result.deferredRuntimeJobs?.[0];
     expect(descriptor?.turnDigest).toMatchObject({
       turnId: "source",
       playerMessage: "Go to the harbour",
@@ -215,7 +215,7 @@ describe("memory detached lifecycle", () => {
       [story, memory],
       { store, llm: service.llm, gateway: service.gateway, loadRuntime },
     );
-    expect(worker.runtimeResults[0]?.status).toBe("success");
+    expect(worker.result.runtimeResults[0]?.status).toBe("success");
     expect(generateText.mock.calls[0]?.[0]?.prompt).toContain("snapshot-A");
     expect(generateText.mock.calls[0]?.[0]?.prompt).not.toContain("snapshot-B");
     expect(
@@ -224,11 +224,7 @@ describe("memory detached lifecycle", () => {
     await raw.withLock("session", async () => {
       const result = await commitExecution({
         store,
-        sessionId: "session",
-        results: worker.runtimeResults,
-        runtimes: [memory],
-        turnIds: [],
-        executionContext: worker.executionContext!,
+        execution: worker,
         completion: { kind: "detached", turnId: "worker" },
         extraInTx: async (tx) => {
           await transitionRuntimeJob(tx, {
@@ -295,7 +291,7 @@ it("settles ten source turns in order and never publishes a timed-out late memor
       [story, memory],
       { store, llm, loadRuntime },
     );
-    const descriptor = source.deferredRuntimeJobs![0]!;
+    const descriptor = source.result.deferredRuntimeJobs![0]!;
     const key = {
       sessionId: "session",
       pluginId: "memory",
@@ -365,7 +361,7 @@ it("settles ten source turns in order and never publishes a timed-out late memor
     if (index !== 5) release();
     const execution = await worker;
     if (index === 5) {
-      expect(execution.runtimeResults[0]?.status).toBe("failed");
+      expect(execution.result.runtimeResults[0]?.status).toBe("failed");
       await transitionRuntimeJob(store, {
         ...key,
         from: ["running"],
@@ -373,15 +369,11 @@ it("settles ten source turns in order and never publishes a timed-out late memor
       });
       release();
     } else {
-      expect(execution.runtimeResults[0]?.status).toBe("success");
+      expect(execution.result.runtimeResults[0]?.status).toBe("success");
       await raw.withLock("session", async () => {
         const committed = await commitExecution({
           store,
-          sessionId: "session",
-          results: execution.runtimeResults,
-          runtimes: [memory],
-          turnIds: [],
-          executionContext: execution.executionContext!,
+          execution,
           completion: { kind: "detached", turnId: `worker-${index}` },
           extraInTx: async (tx) => {
             await transitionRuntimeJob(tx, {

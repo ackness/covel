@@ -51,9 +51,8 @@ export default function register(covel) {
 
 ```js
 import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
 
-export default function makeSaveNote({ tool, z }) {
+export default function makeSaveNote({ tool, z, withPendingProposals }) {
   return tool({
     name: "save-note",
     description: "Save a concise fact supported by the current narrative.",
@@ -76,6 +75,8 @@ export default function makeSaveNote({ tool, z }) {
 ```
 
 `schemas/note.schema.json` 应验证 `{id,text}`。工具返回的 proposals 进入当前执行缓冲，提交时统一校验和持久化。不要绕过 proposal 管线直接操作宿主事务，也不要把 sessionId/pluginId 作为用户输入交给存储。
+
+`withPendingProposals(content, proposals)` 始终返回显式对象 `{kind: "covel.tool-result", content, pendingProposals}`，也适用于字符串或冻结的正文。组合工具和测试通过公开 SDK 的 `getToolContent(result)` 读取正文、`getPendingProposals(result)` 读取写入；普通对象展开和 `structuredClone` 会保留两个通道。不要把完整 envelope 当成业务正文。纯读取工具可直接返回正文。
 
 ## 读取角色和自有数据
 
@@ -136,6 +137,16 @@ runtime:
 ```
 
 `handler.js` 默认导出函数。需要调用框架工具时声明 `function.tools`，并经 `ctx.tools.call(name, args)` 调用；工具仍经过 schema、审批和事务管线。使用绑定输入和 `ctx.world` 构建结果，通过 SDK 返回输出与 proposals。想跨 execution 消费结果时，生产者声明 `io.output.recordAs`，消费者声明 `scope: committed` 和相同 `recordAs`。
+
+公开 SDK 同时提供 `PluginFunctionHandler`、`PluginFunctionContext` 和 `PluginAgentGuard`，不需要从私有 loader 导入作者类型。核心上下文包含当前插件的只读 store、缓冲写入、World Model、输入、设置、日志、取消和进度。需要额外宿主能力时，用 handler/guard 的能力参数声明实际依赖；核心接口不承诺每个宿主都提供 provider 或媒体服务。
+
+```js
+/** @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler} */
+export default async function handler(ctx) {
+  const row = await ctx.store.getPluginData("notes", "current");
+  return { outcome: "success", value: { found: row !== null } };
+}
+```
 
 工具先写后读必须读取执行视图，不能重新从 committed store 读取并忽略 pending proposals。上游 proposals 仅参与视图，不能再次加入本 runtime 的提交缓冲。
 

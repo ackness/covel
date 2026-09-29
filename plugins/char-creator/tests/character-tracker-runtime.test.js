@@ -1,16 +1,13 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  createCharacterTools,
-  getPendingProposals,
-  runtimeDoneTool,
-} from "@covel/tools";
-import { createMemoryStore } from "../../../packages/store/src/index.ts";
+import { getPendingProposals } from "@covel/plugin-handlers-utils";
+import { createCharacterTools, runtimeDoneTool } from "@covel/tools";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   createToolExecutor,
   createHookPipeline,
   executeTurn,
-  finalizeExecution,
+  commitExecution,
 } from "../../../packages/runtime/src/index.ts";
 import { MockLLM } from "../../../packages/plugin-test-utils/src/mock-llm.ts";
 import { loadRuntimeBundle } from "../../../packages/test-runtime/src/runtime-loading.ts";
@@ -113,7 +110,7 @@ async function run(secondResponse, ...corrections) {
     event: "PreToolUse",
     handler: protectCharacterProfiles,
   });
-  const result = await executeTurn(
+  const execution = await executeTurn(
     {
       sessionId,
       turnId: "tracker-test-turn",
@@ -152,19 +149,12 @@ async function run(secondResponse, ...corrections) {
       },
     },
   );
-  await finalizeExecution({
+  await commitExecution({
     store,
-    sessionId,
-    runtimes: [target],
-    results: result.runtimeResults,
-    turnIds: ["tracker-test-turn"],
-    executionContext: {
-      executionId: "tracker-test-turn",
-      origin: "manual",
-      countPolicy: "none",
-    },
+    execution,
+    completion: { kind: "turn", turnId: "tracker-test-turn", durationMs: 1 },
   });
-  const tracker = result.runtimeResults.find(
+  const tracker = execution.result.runtimeResults.find(
     (item) => item.runtimeId === runtimeId,
   );
   expect(llm.calls.length).toBeGreaterThanOrEqual(2);

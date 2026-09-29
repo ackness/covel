@@ -269,7 +269,11 @@ server transaction API in the browser.
 - `finalizeExecution`（`packages/runtime/src/commit/finalize-execution.ts`）把
   **整个 execution**——顶层结果加上拍平后的嵌套 `recursiveCall` 结果——的所有
   runtime 一起包进 **一个** `withTransaction`。三个提交拥有方
-  （`actions.ts` / `plugin-rpc/runtime-turn.ts` / `resume.ts`）通过 `commitExecution`
+  （`actions.ts` / `plugin-rpc/runtime-turn.ts` / `resume.ts`）将公开执行入口返回的
+  `{ result, commit }` 整体交给 `commitExecution({ execution, ... })`。提交计划捕获执行时
+  的 schema、Hook 设置、journal、suspension 和嵌套结果；宿主不再重新加载 schema 或
+  手工组装这些字段。缺失已声明导出的 schema 使整次事务失败。
+  `commitExecution`
   进入这个边界，再由同一宿主入口协调通知、快照和记忆调度。
 
 > **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
@@ -425,3 +429,34 @@ the affected table in the relevant reference doc.
 `completion.settle: before-next-execution` 在下一次执行入口等待这些作业。等待时不持 SessionLock，取得锁后再次检查；超过声明的等待预算会记录 trace 并继续。取消请求只中止等待。相同 session/runtime 的作业按源回合顺序处理，失败和超时作为终态放行，显式重试不会覆盖更新的源回合作业。进程崩溃后已 claim 的抽取不自动重放，避免重复调用和旧内容覆盖。
 
 原请求服务优先，其次使用可用的服务端配置；只有请求头凭据的部署由后续授权请求补交服务。队列与快照不保存 API key。凭据表是进程内状态，不提供跨实例原请求优先保证。服务关闭停止 claim、取消尚未进入提交的任务，并等待 worker 持有的存储操作释放；已进入提交的事务允许完成。这不保证所有记忆提取成功排空。向量摄取仍是独立路径。
+
+## Derived vector-index progress
+
+`VectorStoreCapability` exposes `getVectorIndexProgress(scope)` and
+`commitVectorIndexBatch(input)` for atomic vector and index-progress writes.
+Scope is `(sessionId, pluginId, namespace)`. Updates require both the previously
+read serialized value (`null` means absent) and `expectedSessionCreatedAt`.
+A batch may include `deletes` (namespace/key pairs) and `upserts`
+(namespace/key/embedding/payload), scoped to the same session and plugin. The
+progress namespace identifies the cursor or hash map; each vector mutation names
+its own data namespace. Deletes run before upserts, and all mutations commit with
+the new progress value. A CAS conflict returns `false` without changing vectors
+or progress; a stale or missing session incarnation or any invalid mutation
+throws and rolls back the entire batch.
+PostgreSQL holds the parent session row with `FOR KEY SHARE`, while SQLite uses
+an immediate transaction and Memory uses its serialized store boundary. These
+operations do not run on the `StoreTransaction` business-data view.
+
+Progress belongs to `vector_index_progress`, not `plugin_data`. Session cascade
+deletion clears it in the same transaction as the session; rolling back that
+cascade restores it. Snapshot/checkpoint export omits it by construction, so
+restored or forked sessions rebuild indexes from their own source rows.
+
+`deleteVectors` optionally accepts `key` to remove one entry within the selected
+scope and `expectedSessionCreatedAt` to reject stale asynchronous deletions.
+Ingestion reads all archival sources and completes embedding before submitting
+the corresponding deletes, upserts, and progress as one batch. An older sweep
+cannot overwrite the vectors owned by a newer progress value. Optional
+cross-process ingestion locks reduce duplicate embedding work; correctness does
+not depend on them. Embedding provider calls never run inside the index commit
+transaction or a business-data transaction.

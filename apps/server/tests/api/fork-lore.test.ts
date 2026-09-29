@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildSessionContextSnapshot } from "@covel/context";
 import {
-  createMemoryStore,
-  createSqliteStore,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
   type DataStore,
   type SnapshotRecord,
 } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+import { createSqliteStore } from "@covel/store/sqlite";
 import {
   makeSession,
   makeSnapshot,

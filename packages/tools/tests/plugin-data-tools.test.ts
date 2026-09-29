@@ -1,3 +1,4 @@
+import { getToolContent } from "@covel/plugin-handlers-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPluginDataTools, getPendingProposals } from "../src/index.js";
 import type { ToolExecutionContext, ToolModule } from "../src/types.js";
@@ -68,7 +69,7 @@ describe("builtin plugin-data tools", () => {
       ctx(),
     )) as { success: boolean; namespace: string; key: string };
 
-    expect(result).toEqual({
+    expect(getToolContent(result)).toEqual({
       success: true,
       namespace: "entries",
       key: "codex-qingping-mountain",
@@ -106,8 +107,8 @@ describe("builtin plugin-data tools", () => {
       ctx(),
     )) as { success: boolean; count: number };
 
-    expect(result.success).toBe(true);
-    expect(result.count).toBe(2);
+    expect(getToolContent(result).success).toBe(true);
+    expect(getToolContent(result).count).toBe(2);
     expect(store.setPluginDataBatch).not.toHaveBeenCalled();
 
     const proposals = getPendingProposals(result);
@@ -137,10 +138,10 @@ describe("builtin plugin-data tools", () => {
       ctx(),
     )) as { found: boolean; namespace: string; key: string; value: unknown };
 
-    expect(result.found).toBe(true);
-    expect(result.namespace).toBe("entries");
-    expect(result.key).toBe("alpha");
-    expect(result.value).toEqual({ saved: true });
+    expect(getToolContent(result).found).toBe(true);
+    expect(getToolContent(result).namespace).toBe("entries");
+    expect(getToolContent(result).key).toBe("alpha");
+    expect(getToolContent(result).value).toEqual({ saved: true });
     expect(store.getPluginData).toHaveBeenCalledOnce();
   });
 
@@ -153,8 +154,8 @@ describe("builtin plugin-data tools", () => {
       ctx(),
     )) as { count: number; items: Array<{ key: string }> };
 
-    expect(result.count).toBe(1);
-    expect(result.items[0]?.key).toBe("alpha");
+    expect(getToolContent(result).count).toBe(1);
+    expect(getToolContent(result).items[0]?.key).toBe("alpha");
     expect(store.listPluginData).toHaveBeenCalledOnce();
   });
 });
@@ -309,8 +310,8 @@ describe("plugin-data reads see this loop's own pending writes", () => {
       found: boolean;
       value: unknown;
     };
-    expect(result.found).toBe(true);
-    expect(result.value).toEqual({ saved: false, n: 42 });
+    expect(getToolContent(result).found).toBe(true);
+    expect(getToolContent(result).value).toEqual({ saved: false, n: 42 });
   });
 
   it("plugin-data-list overlays the pending value onto the stored row", async () => {
@@ -319,9 +320,12 @@ describe("plugin-data reads see this loop's own pending writes", () => {
       items: ReadonlyArray<{ key: string; value: unknown }>;
     };
     // The stored row and the pending write are the same key — one entry.
-    expect(result.count).toBe(1);
-    expect(result.items[0]?.key).toBe("alpha");
-    expect(result.items[0]?.value).toEqual({ saved: false, n: 42 });
+    expect(getToolContent(result).count).toBe(1);
+    expect(getToolContent(result).items[0]?.key).toBe("alpha");
+    expect(getToolContent(result).items[0]?.value).toEqual({
+      saved: false,
+      n: 42,
+    });
   });
 
   it("ignores another plugin's pending writes", async () => {
@@ -339,7 +343,7 @@ describe("plugin-data reads see this loop's own pending writes", () => {
     )) as { value: unknown };
 
     // Falls through to the store — the overlay must not widen plugin scope.
-    expect(result.value).toEqual({ saved: true });
+    expect(getToolContent(result).value).toEqual({ saved: true });
   });
 
   it("keeps NUL-containing namespace/key tuples distinct in pending reads", async () => {

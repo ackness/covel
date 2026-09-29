@@ -3,13 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createHookPipeline } from "@covel/runtime";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  createSqliteStore,
-  exportSessionCheckpoint,
-  type DataStore,
-} from "@covel/store";
+import { exportSessionCheckpoint, type DataStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
+import { createSqliteStore } from "@covel/store/sqlite";
 import {
   makeMessage,
   makeSession,

@@ -8,7 +8,8 @@
 import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
-import type { GeneratedWorldPackageContent } from "./types.js";
+import { canonicalizeLocale, validateWorldManifest } from "@covel/shared";
+import type { GeneratedWorld, GeneratedWorldPackageContent } from "./types.js";
 
 const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
 const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
@@ -16,12 +17,19 @@ const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
 /** Publish one complete package without overwriting an existing world. */
 export async function writeWorldPackage(
   outputDir: string,
-  id: string,
-  manifest: Record<string, unknown>,
-  lore: string,
-  locale: string,
-  packageContent?: GeneratedWorldPackageContent,
+  world: GeneratedWorld,
 ): Promise<string[]> {
+  const { id, lore, packageContent } = world;
+  const locale = canonicalizeLocale(world.locale);
+  if (
+    !locale ||
+    world.manifest.id !== id ||
+    !validateWorldManifest(world.manifest).valid
+  ) {
+    throw new Error("Cannot export an invalid generated world");
+  }
+  // Export replaces inline content with file references in its own copy only.
+  const manifest = structuredClone(world.manifest);
   const finalDir = path.join(outputDir, id);
   try {
     await lstat(finalDir);
@@ -65,7 +73,6 @@ export async function writeWorldDataFiles(
   );
   const characters = packageContent?.characters ?? [];
   const contractData = packageContent?.contractData ?? [];
-  const memoryDefinitions = packageContent?.memoryDefinitions ?? [];
   const lorebook = [
     ...(packageContent?.lorebook ?? []),
     ...(packageContent?.rules ?? []),
@@ -74,7 +81,6 @@ export async function writeWorldDataFiles(
     !hasDimensions &&
     characters.length === 0 &&
     lorebook.length === 0 &&
-    memoryDefinitions.length === 0 &&
     contractData.length === 0
   ) {
     return [];
@@ -135,23 +141,6 @@ export async function writeWorldDataFiles(
       to: "lorebook",
       key: "id",
       ...(hasDimensions ? { after: "dimensions" } : {}),
-    };
-  }
-
-  if (memoryDefinitions.length > 0) {
-    const memoryPath = "data/memory-blocks.json";
-    await writeFile(
-      path.join(worldDir, memoryPath),
-      `${JSON.stringify({ id: "world", blocks: memoryDefinitions }, null, 2)}\n`,
-      "utf8",
-    );
-    written.push(memoryPath);
-    sources.memoryDefinitions = {
-      kind: "json",
-      path: memoryPath,
-      schema: "contract:memory.blocks@1",
-      to: "contract:memory.blocks@1",
-      key: "id",
     };
   }
 

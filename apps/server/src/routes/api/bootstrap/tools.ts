@@ -11,14 +11,9 @@
  */
 
 import {
-  builtinUITools,
   ToolRegistry,
-  createPluginDataTools,
-  createCharacterTools,
+  createDefaultToolRegistry,
   buildSessionCharacterWriteTools,
-  createEmitEventTool,
-  suspendTool,
-  runtimeDoneTool,
   type ToolModule,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
@@ -27,8 +22,7 @@ import {
   type ManagedToolExecutor,
   type LLMAdapter,
 } from "@covel/runtime";
-import { createApprovalPipeline } from "@covel/approval";
-import type { PermissionRule } from "@covel/approval";
+import { createDefaultToolApprovalPipeline } from "@covel/approval";
 import type {
   PluginRegistry,
   PluginDiscoveryResult,
@@ -58,37 +52,7 @@ export async function setupPluginTools(
   params: SetupPluginToolsParams,
 ): Promise<PluginToolsResult> {
   const { store, registry, eventDirectory } = params;
-  const tools = new ToolRegistry();
-
-  for (const t of builtinUITools) {
-    tools.registerBuiltin(t);
-  }
-
-  // Register suspend tool. The sentinel becomes a normal tool result returned
-  // to the LLM when no suspension handler consumes it.
-  tools.registerBuiltin(suspendTool);
-
-  // Register runtime-done tool. Framework contract: agent runtimes call this
-  // immediately after completing their business tool calls to exit without
-  // burning an extra LLM round-trip on a terminator message. The completion
-  // preamble in buildFrameworkPreamble instructs every runtime how to use it.
-  tools.registerBuiltin(runtimeDoneTool);
-
-  // Register plugin-data tools. Reads overlay pending proposals; the Session
-  // Kernel owns committed writes and their events.
-  for (const t of createPluginDataTools(store)) {
-    tools.registerBuiltin(t);
-  }
-
-  // Register emit-event tool — validates against the session event directory
-  // (aggregated `events` contracts of active plugins) and routes through the
-  // emitted-events result channel, never an `event.emit` pendingProposal.
-  const emitEventTool = createEmitEventTool({ directory: eventDirectory });
-  tools.registerBuiltin(emitEventTool);
-
-  for (const t of createCharacterTools(store)) {
-    tools.registerBuiltin(t);
-  }
+  const tools = createDefaultToolRegistry({ store, eventDirectory });
 
   // ── Per-session tool overrides (Phase 2) ──────────────────────
   //
@@ -124,13 +88,7 @@ export async function setupPluginTools(
     sessionToolOverrides.delete(sessionId);
   }
 
-  // Approval: whitelist builtin + known local tools, deny unknown third-party
-  const approvalRules: PermissionRule[] = [
-    { pattern: "builtin:*", action: "allow" },
-    { pattern: "local:*", action: "allow" },
-    { pattern: "third-party:*", action: "deny" },
-  ];
-  const approval = createApprovalPipeline(approvalRules);
+  const approval = createDefaultToolApprovalPipeline();
 
   const toolExecutor = createToolExecutor({
     findTool: (name, context) => {

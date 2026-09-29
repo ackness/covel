@@ -1,5 +1,15 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+  commitToolResults,
+} from "@covel/plugin-test-utils";
 /**
  * inventory plugin tests.
  *
@@ -24,92 +34,9 @@ import {
   loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpdateInventory from "../tools/update-inventory.js";
-
-// In-memory mock store for plugin-data operations
-function createMockPluginDataStore() {
-  /** @type {Map<string, unknown>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const results = [];
-      for (const [k, v] of data) {
-        if (
-          k.startsWith(`${sessionId}:${pluginId}:`) &&
-          (!namespace || k.startsWith(`${sessionId}:${pluginId}:${namespace}:`))
-        ) {
-          results.push(v);
-        }
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type === "plugin.data") {
-      await store.setPluginData({
-        id: proposal.id,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: proposal.payload.namespace,
-        key: proposal.payload.key,
-        value: proposal.payload.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      });
-      continue;
-    }
-
-    if (proposal.type === "plugin.data.batch") {
-      await store.setPluginDataBatch(
-        proposal.payload.items.map((item, index) => ({
-          id: `${proposal.id}:${index}`,
-          sessionId: proposal.sessionId,
-          pluginId: proposal.source.pluginId,
-          namespace: item.namespace,
-          key: item.key,
-          value: item.value,
-          createdAt: proposal.timestamp,
-          updatedAt: proposal.timestamp,
-        })),
-      );
-    }
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
@@ -125,8 +52,8 @@ describe("update-inventory", () => {
   let mockStore;
   let updateInventoryTool;
 
-  beforeEach(() => {
-    mockStore = createMockPluginDataStore();
+  beforeEach(async () => {
+    mockStore = await createPluginTestStore(ctx);
     updateInventoryTool = bindToolStore(
       createUpdateInventory({
         tool,
@@ -156,12 +83,12 @@ describe("update-inventory", () => {
       mockStore,
     );
 
-    const itemId = result.results[0].itemId;
+    const itemId = getToolContent(result).results[0].itemId;
     expect(itemId).toMatch(/^item-iron-sword-[a-f0-9]{32}$/);
 
     // Assert — result + persisted item
-    expect(result.applied).toBe(1);
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).applied).toBe(1);
+    expect(getToolContent(result).results[0]).toMatchObject({
       op: "add",
       status: "created",
       itemId,
@@ -205,7 +132,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -216,7 +143,7 @@ describe("update-inventory", () => {
     );
 
     // Assert — same id, stacked quantity, no duplicate row
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       status: "updated",
       itemId,
       quantity: 5,
@@ -234,7 +161,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -245,7 +172,10 @@ describe("update-inventory", () => {
     );
 
     // Assert
-    expect(result.results[0]).toMatchObject({ status: "updated", quantity: 4 });
+    expect(getToolContent(result).results[0]).toMatchObject({
+      status: "updated",
+      quantity: 4,
+    });
     const stored = await mockStore.getPluginData(
       "sess-1",
       "inventory",
@@ -264,7 +194,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -275,7 +205,7 @@ describe("update-inventory", () => {
     );
 
     // Assert — tombstone, hidden from the bag but keeping the stable id
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       status: "removed",
       itemId,
     });
@@ -307,7 +237,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
     await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "remove", name: "Torch" }] },
@@ -324,7 +254,7 @@ describe("update-inventory", () => {
     );
 
     // Assert — same row, fresh quantity, tombstone cleared
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).results[0]).toMatchObject({
       status: "created",
       itemId,
       quantity: 3,
@@ -358,14 +288,16 @@ describe("update-inventory", () => {
     );
 
     // Assert — missing item is a noted skip, the valid change still applies
-    expect(result.skipped).toBe(1);
-    expect(result.applied).toBe(1);
-    expect(result.results[0]).toMatchObject({
+    expect(getToolContent(result).skipped).toBe(1);
+    expect(getToolContent(result).applied).toBe(1);
+    expect(getToolContent(result).results[0]).toMatchObject({
       op: "remove",
       name: "Ghost Dagger",
       status: "skipped",
     });
-    expect(result.results[0].note).toContain("not in inventory");
+    expect(getToolContent(result).results[0].note).toContain(
+      "not in inventory",
+    );
     // The skipped remove contributes no message entry
     const message = await mockStore.getPluginData(
       "sess-1",
@@ -385,7 +317,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act — equip
     await executeAndCommit(
@@ -409,7 +341,7 @@ describe("update-inventory", () => {
       { ...ctx, turnId: "turn-3" },
       mockStore,
     );
-    expect(noop.results[0]).toMatchObject({
+    expect(getToolContent(noop).results[0]).toMatchObject({
       status: "skipped",
       note: "already equipped",
     });
@@ -440,8 +372,10 @@ describe("update-inventory", () => {
     );
 
     // Assert — nothing persisted, no message
-    expect(result.applied).toBe(0);
-    expect(result.results[0]).toMatchObject({ status: "skipped" });
+    expect(getToolContent(result).applied).toBe(0);
+    expect(getToolContent(result).results[0]).toMatchObject({
+      status: "skipped",
+    });
     const rows = await mockStore.listPluginData("sess-1", "inventory");
     expect(rows).toHaveLength(0);
   });
@@ -464,7 +398,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
-    const itemId = created.results[0].itemId;
+    const itemId = getToolContent(created).results[0].itemId;
 
     // Act — correct the quantity estimate, leave description/tags alone
     await executeAndCommit(
@@ -508,7 +442,7 @@ describe("update-inventory", () => {
       ctx,
     );
 
-    const itemId = first.results[0].itemId;
+    const itemId = getToolContent(first).results[0].itemId;
 
     // Act — second call in the same turn equips it via pending overlay
     const second = await updateInventoryTool.execute(
@@ -517,12 +451,11 @@ describe("update-inventory", () => {
     );
 
     // Assert — equip applied, and the merged message keeps both entries
-    expect(second.results[0]).toMatchObject({
+    expect(getToolContent(second).results[0]).toMatchObject({
       status: "updated",
       itemId,
     });
-    await applyPendingPluginData(first, mockStore);
-    await applyPendingPluginData(second, mockStore);
+    await commitToolResults([first, second], ctx, mockStore);
     const stored = await mockStore.getPluginData(
       "sess-1",
       "inventory",

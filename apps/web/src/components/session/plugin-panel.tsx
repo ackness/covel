@@ -31,7 +31,7 @@ import { compactJobId } from "@/lib/job-ui.js";
 import { pluginPanelViewToSpec } from "@/lib/plugin-panel-spec.js";
 import {
   buildPluginPanelInitialState,
-  flattenStateForPluginPanel,
+  syncPluginPanelState,
   parsePluginUiState,
   resolvePluginPanelSources,
 } from "@/lib/plugin-panel-state.js";
@@ -120,9 +120,8 @@ export function PluginPanel({
   // `/_invoking/<key>` so the catalog Button can show a loading spinner while
   // a plugin-rpc call is pending. Without this affordance the player clicks
   // "generate image" and stares at a static button for ~30 s while the LLM
-  // chain runs, with no signal that anything is happening. StateProvider does
-  // a flat-pointer diff each time `initialState` changes (see @json-render/
-  // react StateProvider) so flipping a key here propagates through.
+  // chain runs, with no signal that anything is happening. External state
+  // synchronization replaces the invoking map when calls start or finish.
   const [invokingMap, setInvokingMap] = useState<Record<string, true>>({});
   const [dismissedErrorJobs, setDismissedErrorJobs] = useState<
     Record<string, true>
@@ -170,8 +169,7 @@ export function PluginPanel({
   );
   useEffect(() => {
     if (spec.webview) return;
-    const updates = flattenStateForPluginPanel(initialState);
-    stateStore.update(updates);
+    syncPluginPanelState(stateStore, initialState);
   }, [initialState, stateStore, spec.webview]);
 
   const failedJobs = useMemo(

@@ -68,83 +68,122 @@ function syncNextThemesStorage(scheme: ColorScheme): void {
   window.localStorage.setItem("covel:scheme", scheme);
 }
 
-// Boot order: load the detected locale catalog, then probe desktop mode — the
-// settings backend choice
-// (localStorage vs ~/.covel via IPC/REST) depends on its result — then
-// hydrate the settings store so appearance / locale apply without a flash,
-// then run the rest of the bootstrap in parallel. The probe is one same-origin
-// fetch (skipped entirely under Electron IPC) and non-fatal on failure.
-i18nReady
-  .then(() => probeDesktopMode())
-  .then(() => initSettings())
-  .then(async () => {
-    const store = getSettings();
-    syncThemeRegistry(store);
-    // Apply initial appearance / locale ASAP so the first paint matches.
-    applyAppearance(store.get<Appearance>("ui.appearance"));
-    const initialScheme = store.get<ColorScheme>(THEME_SCHEME_KEY);
-    applyColorScheme(initialScheme);
-    syncNextThemesStorage(initialScheme);
-    const initialLocale = store.get<SupportedLocale>("ui.locale");
-    if (i18n.language !== initialLocale) {
-      await i18n.changeLanguage(initialLocale);
-    }
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = initialLocale;
-    }
-    // Global subscribers so changes from the Settings UI propagate even when
-    // no component is currently mounted that reads the underlying setting.
-    store.subscribe<Appearance>("ui.appearance", (next) => {
-      applyAppearance(next);
-      syncThemeRegistry(store);
-    });
-    store.subscribe<ColorScheme>(THEME_SCHEME_KEY, (next) => {
-      applyColorScheme(next);
-      syncNextThemesStorage(next);
-      syncThemeRegistry(store);
-    });
-    store.subscribe(CUSTOM_THEMES_KEY, () => {
-      syncThemeRegistry(store);
-    });
-    store.subscribe(APPEARANCE_TOKENS_KEY, () => {
-      applyTokenOverrides(store);
-    });
-    store.subscribe<SupportedLocale>("ui.locale", (next) => {
-      if (i18n.language !== next) void i18n.changeLanguage(next);
-      if (typeof document !== "undefined") {
-        document.documentElement.lang = next;
-      }
-    });
-    configureMessagesWindowCap(store.get<number>("ui.chatMessageWindow"));
-    store.subscribe<number>("ui.chatMessageWindow", (next) => {
-      configureMessagesWindowCap(next);
-    });
-    return syncStorageMode();
-  })
-  // Nothing in the bootstrap is allowed to stop the app from mounting. Every
-  // step above is a preference/hydration concern; a rejection here used to
-  // leave `createRoot` unreached and the page permanently blank, which is
-  // strictly worse than booting on defaults.
-  .catch((err: unknown) => {
-    console.error(
-      "[boot] bootstrap step failed — continuing on defaults:",
-      err,
-    );
-  })
-  .then(() => {
-    createRoot(document.getElementById("root")!).render(
-      <StrictMode>
-        <ThemeProvider
-          defaultTheme={getSettings().get<ColorScheme>(THEME_SCHEME_KEY)}
-          enableSystem={false}
-          storageKey="covel:scheme"
-          attribute="class"
+const root = createRoot(document.getElementById("root")!);
+let booting = false;
+
+function renderApp(): void {
+  root.render(
+    <StrictMode>
+      <ThemeProvider
+        defaultTheme={getSettings().get<ColorScheme>(THEME_SCHEME_KEY)}
+        enableSystem={false}
+        storageKey="covel:scheme"
+        attribute="class"
+      >
+        <SessionProvider>
+          <RouterProvider router={router} />
+        </SessionProvider>
+        <ReloadOverlay />
+      </ThemeProvider>
+    </StrictMode>,
+  );
+}
+
+function renderBootError(message: string): void {
+  root.render(
+    <div className="flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-md space-y-4 border border-border p-6">
+        <h1 className="text-sm font-medium text-destructive">
+          {i18n.t("error.boot.title")}
+        </h1>
+        <p className="text-xs text-muted-foreground">{message}</p>
+        <button
+          type="button"
+          onClick={() => void boot()}
+          className="border border-primary bg-primary px-3 py-2 text-xs uppercase tracking-widest text-primary-foreground hover:bg-primary/90"
         >
-          <SessionProvider>
-            <RouterProvider router={router} />
-          </SessionProvider>
-          <ReloadOverlay />
-        </ThemeProvider>
-      </StrictMode>,
-    );
-  });
+          {i18n.t("error.boot.retry")}
+        </button>
+      </div>
+    </div>,
+  );
+}
+
+// The settings adapter is fixed when its store is created. An inconclusive
+// mode probe must leave that store untouched so a later retry can still pick
+// the correct backend instead of silently writing desktop settings locally.
+async function boot(): Promise<void> {
+  if (booting) return;
+  booting = true;
+  try {
+    try {
+      await i18nReady;
+    } catch (err) {
+      console.error("[boot] locale catalog failed:", err);
+    }
+    if ((await probeDesktopMode()) === "unknown") {
+      renderBootError(i18n.t("error.boot.desktopModeUnavailable"));
+      return;
+    }
+    try {
+      await initSettings();
+      const store = getSettings();
+      syncThemeRegistry(store);
+      // Apply initial appearance / locale ASAP so the first paint matches.
+      applyAppearance(store.get<Appearance>("ui.appearance"));
+      const initialScheme = store.get<ColorScheme>(THEME_SCHEME_KEY);
+      applyColorScheme(initialScheme);
+      syncNextThemesStorage(initialScheme);
+      const initialLocale = store.get<SupportedLocale>("ui.locale");
+      if (i18n.language !== initialLocale) {
+        await i18n.changeLanguage(initialLocale);
+      }
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = initialLocale;
+      }
+      // Global subscribers so changes from the Settings UI propagate even when
+      // no component is currently mounted that reads the underlying setting.
+      store.subscribe<Appearance>("ui.appearance", (next) => {
+        applyAppearance(next);
+        syncThemeRegistry(store);
+      });
+      store.subscribe<ColorScheme>(THEME_SCHEME_KEY, (next) => {
+        applyColorScheme(next);
+        syncNextThemesStorage(next);
+        syncThemeRegistry(store);
+      });
+      store.subscribe(CUSTOM_THEMES_KEY, () => {
+        syncThemeRegistry(store);
+      });
+      store.subscribe(APPEARANCE_TOKENS_KEY, () => {
+        applyTokenOverrides(store);
+      });
+      store.subscribe<SupportedLocale>("ui.locale", (next) => {
+        if (i18n.language !== next) void i18n.changeLanguage(next);
+        if (typeof document !== "undefined") {
+          document.documentElement.lang = next;
+        }
+      });
+      configureMessagesWindowCap(store.get<number>("ui.chatMessageWindow"));
+      store.subscribe<number>("ui.chatMessageWindow", (next) => {
+        configureMessagesWindowCap(next);
+      });
+      await syncStorageMode();
+    } catch (err) {
+      // Hydration concerns must not leave the page blank after the backend is
+      // known. SettingsStore rejects writes if hydration itself failed.
+      console.error(
+        "[boot] bootstrap step failed — continuing on defaults:",
+        err,
+      );
+    }
+    renderApp();
+  } catch (err) {
+    console.error("[boot] startup failed:", err);
+    renderBootError(i18n.t("error.boundary.appDescription"));
+  } finally {
+    booting = false;
+  }
+}
+
+void boot();

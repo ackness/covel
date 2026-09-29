@@ -24,8 +24,8 @@ import {
   claimedMediaIds,
   finalizeMediaCleanupResult,
 } from "./cleanup-result.js";
+import { cleanupCandidates } from "./cleanup-policy.js";
 import {
-  cleanupCandidates,
   filterAssetsByMetadata,
   mediaPath,
   sha256,

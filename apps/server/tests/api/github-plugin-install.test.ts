@@ -9,7 +9,7 @@ import { installRoutes } from "../../src/routes/api/install.js";
 import { parseGithubUrl } from "../../src/routes/api/install/github-source.js";
 import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { configureOutboundProxy } from "@covel/ai-provider";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";

@@ -18,10 +18,10 @@
   "dependencies": {
     "@covel/context": "workspace:*",
     "@covel/shared": "workspace:*",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

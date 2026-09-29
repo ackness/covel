@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Proposal } from "@covel/shared";
-import { getPendingProposals } from "../src/result.js";
+import { getPendingProposals, getToolContent } from "../src/result.js";
 import { createCharacterTools } from "../src/builtin/character-tools.js";
 import type { ToolModule, ToolExecutionContext } from "../src/types.js";
 
@@ -150,7 +150,7 @@ class Loop {
     if (!t) throw new Error(`Tool not found: ${name}`);
     const result = await t.execute(params, this.ctx(pluginId));
     this.pending.push(...getPendingProposals(result));
-    return result as Record<string, unknown>;
+    return getToolContent(result) as Record<string, unknown>;
   }
 
   /** Simulate finalizeExecution committing the buffered proposals. */
@@ -363,7 +363,7 @@ describe("builtin character tools", () => {
         fields: { hp: 100, level: 1, lingGen: "水灵根" },
       });
 
-      expect(result).toMatchObject({
+      expect(getToolContent(result)).toMatchObject({
         success: true,
         characterId: expect.any(String),
         name: "柳无痕",
@@ -480,10 +480,12 @@ describe("builtin character tools", () => {
         type: "player",
         description: "外门弟子",
       })) as { _text: string; characterId: string };
-      expect(typeof result._text).toBe("string");
-      expect(result._text).toContain("柳无痕");
-      expect(result._text).toContain("player");
-      expect(result._text).toContain(result.characterId);
+      expect(typeof getToolContent(result)._text).toBe("string");
+      expect(getToolContent(result)._text).toContain("柳无痕");
+      expect(getToolContent(result)._text).toContain("player");
+      expect(getToolContent(result)._text).toContain(
+        getToolContent(result).characterId,
+      );
     });
 
     it("_text reflects existed=true path when duplicate", async () => {
@@ -511,7 +513,7 @@ describe("builtin character tools", () => {
         fields: { hp: 50, status: "wounded", injuries: ["arm"] },
       });
 
-      expect(result).toMatchObject({
+      expect(getToolContent(result)).toMatchObject({
         success: true,
         characterId: charId,
         version: 2,
@@ -550,7 +552,10 @@ describe("builtin character tools", () => {
         id: "nonexistent",
         fields: { hp: 1 },
       });
-      expect(result).toMatchObject({ success: false, notFound: true });
+      expect(getToolContent(result)).toMatchObject({
+        success: false,
+        notFound: true,
+      });
       expect(loop.pending).toHaveLength(0);
     });
   });
@@ -589,7 +594,7 @@ describe("builtin character tools", () => {
         updates: [{ id: existingId, fields: { hp: 75, status: "wounded" } }],
       });
 
-      expect(result).toMatchObject({
+      expect(getToolContent(result)).toMatchObject({
         success: true,
         created: [expect.objectContaining({ name: "林昭", type: "npc" })],
         updated: [expect.objectContaining({ characterId: existingId })],
@@ -652,14 +657,14 @@ describe("builtin character tools", () => {
         _text: string;
         count: number;
       };
-      expect(typeof result._text).toBe("string");
-      expect(result.count).toBe(3);
-      expect(result._text).toContain("柳无痕");
-      expect(result._text).toContain("苏婉");
-      expect(result._text).toContain("柳娘");
-      expect(result._text).toContain("外门弟子");
-      expect(result._text).toContain("player");
-      expect(result._text).toContain("npc");
+      expect(typeof getToolContent(result)._text).toBe("string");
+      expect(getToolContent(result).count).toBe(3);
+      expect(getToolContent(result)._text).toContain("柳无痕");
+      expect(getToolContent(result)._text).toContain("苏婉");
+      expect(getToolContent(result)._text).toContain("柳娘");
+      expect(getToolContent(result)._text).toContain("外门弟子");
+      expect(getToolContent(result)._text).toContain("player");
+      expect(getToolContent(result)._text).toContain("npc");
     });
 
     it("filters by type when provided", async () => {
@@ -667,10 +672,10 @@ describe("builtin character tools", () => {
         _text: string;
         count: number;
       };
-      expect(result.count).toBe(2);
-      expect(result._text).toContain("苏婉");
-      expect(result._text).toContain("柳娘");
-      expect(result._text).not.toContain("柳无痕");
+      expect(getToolContent(result).count).toBe(2);
+      expect(getToolContent(result)._text).toContain("苏婉");
+      expect(getToolContent(result)._text).toContain("柳娘");
+      expect(getToolContent(result)._text).not.toContain("柳无痕");
     });
 
     it("handles empty session with a clear empty message", async () => {
@@ -680,8 +685,8 @@ describe("builtin character tools", () => {
         _text: string;
         count: number;
       };
-      expect(result.count).toBe(0);
-      expect(result._text.toLowerCase()).toMatch(
+      expect(getToolContent(result).count).toBe(0);
+      expect(getToolContent(result)._text.toLowerCase()).toMatch(
         /no character|empty|没有|暂无/,
       );
     });
@@ -690,10 +695,10 @@ describe("builtin character tools", () => {
       const result = (await loop.call("list-characters", {
         type: "None",
       })) as { _text: string; count: number };
-      expect(result.count).toBe(3);
-      expect(result._text).toContain("柳无痕");
-      expect(result._text).toContain("苏婉");
-      expect(result._text).toContain("柳娘");
+      expect(getToolContent(result).count).toBe(3);
+      expect(getToolContent(result)._text).toContain("柳无痕");
+      expect(getToolContent(result)._text).toContain("苏婉");
+      expect(getToolContent(result)._text).toContain("柳娘");
     });
 
     it("sorts by frequency (version) desc, then updatedAt desc", async () => {
@@ -768,8 +773,8 @@ describe("builtin character tools", () => {
         _text: string;
         count: number;
       };
-      expect(result.count).toBe(4);
-      expect(result._text).toContain("NarratorGhost");
+      expect(getToolContent(result).count).toBe(4);
+      expect(getToolContent(result)._text).toContain("NarratorGhost");
     });
   });
 
@@ -791,13 +796,13 @@ describe("builtin character tools", () => {
         _text: string;
         found: boolean;
       };
-      expect(result.found).toBe(true);
-      expect(typeof result._text).toBe("string");
-      expect(result._text).toContain("柳无痕");
-      expect(result._text).toContain("player");
-      expect(result._text).toContain(charId);
-      expect(result._text).toContain("hp");
-      expect(result._text).toContain("100");
+      expect(getToolContent(result).found).toBe(true);
+      expect(typeof getToolContent(result)._text).toBe("string");
+      expect(getToolContent(result)._text).toContain("柳无痕");
+      expect(getToolContent(result)._text).toContain("player");
+      expect(getToolContent(result)._text).toContain(charId);
+      expect(getToolContent(result)._text).toContain("hp");
+      expect(getToolContent(result)._text).toContain("100");
     });
 
     it("looks up by name and returns full detail", async () => {
@@ -805,9 +810,9 @@ describe("builtin character tools", () => {
         _text: string;
         found: boolean;
       };
-      expect(result.found).toBe(true);
-      expect(result._text).toContain("柳无痕");
-      expect(result._text).toContain("player");
+      expect(getToolContent(result).found).toBe(true);
+      expect(getToolContent(result)._text).toContain("柳无痕");
+      expect(getToolContent(result)._text).toContain("player");
     });
 
     it("returns text saying not found when id is missing", async () => {
@@ -815,8 +820,10 @@ describe("builtin character tools", () => {
         _text: string;
         found: boolean;
       };
-      expect(result.found).toBe(false);
-      expect(result._text.toLowerCase()).toMatch(/not found|未找到|不存在/);
+      expect(getToolContent(result).found).toBe(false);
+      expect(getToolContent(result)._text.toLowerCase()).toMatch(
+        /not found|未找到|不存在/,
+      );
     });
 
     it("requires either id or name", async () => {
@@ -844,8 +851,8 @@ describe("builtin character tools", () => {
       const result = (await loop.call("get-character", {
         id: bufferedId,
       })) as { _text: string; found: boolean };
-      expect(result.found).toBe(true);
-      expect(result._text).toContain("未落库者");
+      expect(getToolContent(result).found).toBe(true);
+      expect(getToolContent(result)._text).toContain("未落库者");
     });
   });
 
@@ -864,11 +871,11 @@ describe("builtin character tools", () => {
         description: "updated desc",
       })) as { _text: string; version: number };
 
-      expect(result.version).toBe(2);
-      expect(typeof result._text).toBe("string");
-      expect(result._text).toContain("赵铁山");
-      expect(result._text).toMatch(/hp/);
-      expect(result._text).toMatch(/status/);
+      expect(getToolContent(result).version).toBe(2);
+      expect(typeof getToolContent(result)._text).toBe("string");
+      expect(getToolContent(result)._text).toContain("赵铁山");
+      expect(getToolContent(result)._text).toMatch(/hp/);
+      expect(getToolContent(result)._text).toMatch(/status/);
     });
 
     it("returns a not-found text when id does not exist", async () => {
@@ -876,9 +883,11 @@ describe("builtin character tools", () => {
         id: "missing",
         fields: { hp: 1 },
       })) as { _text: string; success: boolean; notFound?: boolean };
-      expect(result.success).toBe(false);
-      expect(result.notFound).toBe(true);
-      expect(result._text.toLowerCase()).toMatch(/not found|未找到|不存在/);
+      expect(getToolContent(result).success).toBe(false);
+      expect(getToolContent(result).notFound).toBe(true);
+      expect(getToolContent(result)._text.toLowerCase()).toMatch(
+        /not found|未找到|不存在/,
+      );
     });
   });
 

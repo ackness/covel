@@ -8,8 +8,10 @@
  * Returns UI blocks that json-render renders as styled choice cards.
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 const STYLE_CONFIG = {
   safe: { zh: "稳妥", en: "Safe", icon: "shield", color: "blue" },

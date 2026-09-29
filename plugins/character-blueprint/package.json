@@ -9,11 +9,10 @@
   },
   "dependencies": {
     "@covel/plugin-handlers-utils": "workspace:*",
-    "@covel/shared": "workspace:*",
-    "@covel/tools": "workspace:*"
+    "@covel/shared": "workspace:*"
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

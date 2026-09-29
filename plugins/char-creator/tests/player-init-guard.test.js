@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, it, expect } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import guard from "../runtimes/player-init/guard.js";
 
 const schema = {
@@ -43,7 +47,10 @@ describe("player initialization World Model", () => {
     await expect(guard(ctx)).rejects.toThrow("Character schema is not ready");
     ctx.world.characterSchema = schema;
     const result = await guard(ctx);
-    expect(result).toMatchObject({ preGameDone: true, playerExists: true });
+    expect(getToolContent(result)).toMatchObject({
+      preGameDone: true,
+      playerExists: true,
+    });
     expect(getPendingProposals(result)).toEqual([
       expect.objectContaining({
         type: "character.upsert",
@@ -63,7 +70,7 @@ describe("player initialization World Model", () => {
     const result = await guard(
       context({ characterName: "Alex", background: "Explorer" }),
     );
-    expect(result).toMatchObject({
+    expect(getToolContent(result)).toMatchObject({
       skip: true,
       playerExists: true,
       preGameDone: true,
@@ -83,7 +90,10 @@ describe("player initialization World Model", () => {
     const ctx = context(null, [{ id: "player", type: "player" }]);
     ctx.world.characterSchema = null;
     const result = await guard(ctx);
-    expect(result).toMatchObject({ skip: true, playerId: "player" });
+    expect(getToolContent(result)).toMatchObject({
+      skip: true,
+      playerId: "player",
+    });
     expect(getPendingProposals(result)).toEqual([]);
   });
   it("continues to the opening form when no player input exists", async () => {

@@ -16,8 +16,7 @@ import {
 } from "vitest";
 import {
   maybeCompact as applyCompaction,
-  loadPrompt,
-  setPromptsRoot,
+  createPromptLoader,
   type CompactorDeps as BudgetDeps,
   type CompactorOptions,
 } from "@covel/context";
@@ -30,7 +29,7 @@ interface CompactorDeps extends Omit<BudgetDeps, "compact"> {
   fastSlotLlm: CompactorLLMAdapter;
 }
 const defaultPromptsRoot = new URL("../prompts", import.meta.url).pathname;
-setPromptsRoot(defaultPromptsRoot);
+let loadPrompt = createPromptLoader(defaultPromptsRoot);
 async function maybeCompact(
   sessionId: string,
   system: string,
@@ -683,11 +682,11 @@ describe("maybeCompact", () => {
         path.join(serverDir, "compactor.en.md"),
         "<<EN-FIXTURE>> summarizer\n\nsections:\n- {{ sections }}\n",
       );
-      setPromptsRoot(tmpRoot);
+      loadPrompt = createPromptLoader(tmpRoot);
     });
 
     afterAll(async () => {
-      setPromptsRoot(defaultPromptsRoot);
+      loadPrompt = createPromptLoader(defaultPromptsRoot);
       await rm(tmpRoot, { recursive: true, force: true });
     });
 
@@ -801,7 +800,7 @@ describe("maybeCompact", () => {
       const emptyRoot = await mkdtemp(
         path.join(tmpdir(), "covel-compactor-empty-"),
       );
-      setPromptsRoot(emptyRoot);
+      loadPrompt = createPromptLoader(emptyRoot);
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
       try {
@@ -824,7 +823,7 @@ describe("maybeCompact", () => {
         );
       } finally {
         warnSpy.mockRestore();
-        setPromptsRoot(tmpRoot);
+        loadPrompt = createPromptLoader(tmpRoot);
         await rm(emptyRoot, { recursive: true, force: true });
       }
     });

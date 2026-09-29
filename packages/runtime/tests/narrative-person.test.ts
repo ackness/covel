@@ -45,7 +45,7 @@ describe.each(["narrator", "chat-mode-narrator"])(
               ? undefined
               : { [id]: { narrativePerson: supplied } },
           );
-          const context = buildContext({
+          const context = await buildContext({
             manifest,
             promptTemplate: loaded!.promptTemplate,
             turnInput: {

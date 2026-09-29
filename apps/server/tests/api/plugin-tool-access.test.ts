@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createPluginRegistry } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { tool, z } from "@covel/tools";
 import { setupPluginTools } from "../../src/routes/api/bootstrap/tools.js";
 

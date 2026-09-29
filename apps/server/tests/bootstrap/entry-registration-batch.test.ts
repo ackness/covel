@@ -5,7 +5,7 @@ import {
   getTranscriptionWire,
 } from "@covel/ai-provider";
 import { createHookPipeline, createPluginRpcRegistry } from "@covel/runtime";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry, type ToolModule } from "@covel/tools";
 import { PluginEntryScope } from "@covel/runtime";
 import { buildEntryApi } from "../../src/routes/api/bootstrap/plugin-entry-api.js";

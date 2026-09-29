@@ -16,7 +16,8 @@
 
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore, type StoreTransaction } from "@covel/store";
+import { type StoreTransaction } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import {
   createPluginRegistry,

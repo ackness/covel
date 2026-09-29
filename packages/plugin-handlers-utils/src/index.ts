@@ -1,14 +1,23 @@
 /**
- * @covel/plugin-handlers-utils — pure helper utilities shared by function-runtime
- * plugin handlers (`handler.js`).
- *
- * These were previously duplicated verbatim across several plugins. They are
- * side-effect-free pure functions plus a single proposal factory, and depend
- * only on the Public Plugin API types (structural SDK types). No DB, ORM, kernel
- * internals, or framework components are referenced.
+ * Public plugin author contracts and helpers. Host packages reuse these
+ * contracts without exposing database, discovery or provider internals.
  */
 
+import type {
+  PluginProposalFor,
+  PluginProposalPayloads,
+  PluginProposalType,
+} from "./plugin-api.js";
+
 export type { JsonValue, ImageGenerationResult } from "./types.js";
+export {
+  getToolContent,
+  getPendingProposals,
+  getEmittedEvents,
+  withPendingProposals,
+  withEmittedEvents,
+} from "./tool-result.js";
+export type { EmittedEvent } from "./tool-result.js";
 export type {
   PluginAPI,
   PluginEntryFactory,
@@ -354,10 +363,15 @@ export interface ProposalContext {
  * @param payload - Proposal payload.
  */
 export function makeProposal<
-  const T extends string,
-  P extends Record<string, unknown>,
->(ctx: ProposalContext, now: string, type: T, payload: P) {
-  // Preserve the caller's type and payload; the kernel validates the domain write.
+  const T extends PluginProposalType,
+  P extends PluginProposalPayloads[T],
+>(
+  ctx: ProposalContext,
+  now: string,
+  type: T,
+  payload: P,
+): PluginProposalFor<T> & { readonly payload: P } {
+  // Type-check the payload; the host still validates the domain write at runtime.
   return {
     id: crypto.randomUUID(),
     type,
@@ -371,3 +385,31 @@ export function makeProposal<
     timestamp: now,
   };
 }
+
+export type {
+  FunctionStoreView,
+  PluginDataWriter,
+  PluginLogger,
+  JobStatusState,
+  ProgressEffect,
+  ProgressReporter,
+  PluginFunctionContext,
+  PluginFunctionHandler,
+  PluginAgentGuardResult,
+  PluginAgentGuard,
+} from "./function-runtime.js";
+export type {
+  HandlerResult,
+  JsonSchema,
+  JobStatusEffect,
+  RuntimeDiagnostic,
+  ObservabilityEffects,
+  RuntimeEffects,
+} from "./handler-result.js";
+
+export { shortId, shortIdBatch } from "./short-id.js";
+
+export {
+  overlayPluginDataValue,
+  overlayPluginDataRows,
+} from "./proposal-overlay.js";
