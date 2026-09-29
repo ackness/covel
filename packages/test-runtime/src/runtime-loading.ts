@@ -7,6 +7,9 @@ import type { DataStore } from "@covel/store";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import {
   PluginEntryScope,
+  createHookPipeline,
+  validatePluginHookRegistration,
+  type HookPipeline,
   PluginExtensionHost,
   createExtensionRegistration,
   enforcePluginRegistrationContract,
@@ -37,7 +40,19 @@ import {
   type ToolModule,
 } from "@covel/tools";
 
+export interface UnsupportedDebugCapability {
+  readonly pluginId: string;
+  readonly kind: "hook" | "rpc" | "form-validator" | "media-wire" | "extension";
+  readonly name: string;
+}
+
 export interface RuntimeLoadResult {
+  readonly hookPipeline: HookPipeline;
+  readonly hookSettings: readonly {
+    pluginId: string;
+    userSettings?: RuntimeManifest["userSettings"];
+  }[];
+  readonly unsupportedCapabilities: readonly UnsupportedDebugCapability[];
   readonly discovery: PluginDiscoveryResult;
   readonly rawManifests: readonly RuntimeManifest[];
   readonly manifests: readonly RuntimeManifest[];
@@ -245,6 +260,7 @@ export async function loadRuntimeBundle(args: {
     },
   });
   const extensions = new PluginExtensionHost(services);
+  const hookPipeline = createHookPipeline();
   const entries: Awaited<ReturnType<typeof loadEntryTools>>[] = [];
   const entryTools: { pluginId: string; tool: ToolModule }[] = [];
   const close = async () => {
@@ -268,6 +284,7 @@ export async function loadRuntimeBundle(args: {
         definitions.get(id)!,
         services,
         extensions,
+        hookPipeline,
       );
       entries.push(entry);
       entryTools.push(...entry.tools.map((tool) => ({ pluginId: id, tool })));
@@ -292,6 +309,14 @@ export async function loadRuntimeBundle(args: {
     throw error;
   }
   return {
+    hookPipeline,
+    hookSettings: [...definitions].map(([pluginId, definition]) => ({
+      pluginId,
+      userSettings: definition.packageManifest?.manifest.userSettings,
+    })),
+    unsupportedCapabilities: entries.flatMap(
+      (entry) => entry.unsupportedCapabilities,
+    ),
     discovery,
     rawManifests,
     manifests,
@@ -311,17 +336,20 @@ export async function loadRuntimeBundle(args: {
  * Run the plugin's `entry` module and collect the tools it registers.
  *
  * The harness publishes tools and services after all entry factories succeed.
- * Hooks, RPC actions and media wires are server-bootstrap concerns that a
- * single-runtime harness turn never
- * reaches. An entry that registers one of those still runs to completion — it
- * just has no observable effect here.
+ * Turn hooks use the runtime pipeline. Registrations requiring a session
+ * lifecycle or HTTP/UI host are reported explicitly as unsupported.
  */
 export async function loadEntryTools(
   discovery: PluginDiscoveryResult,
   definition: PluginDefinition,
   services?: PluginServiceRegistry,
   extensions?: PluginExtensionHost,
-): Promise<{ tools: readonly ToolModule[]; close(): Promise<void> }> {
+  hookPipeline?: HookPipeline,
+): Promise<{
+  tools: readonly ToolModule[];
+  unsupportedCapabilities: readonly UnsupportedDebugCapability[];
+  close(): Promise<void>;
+}> {
   const {
     entryPaths,
     extensions: declarations,
@@ -337,9 +365,24 @@ export async function loadEntryTools(
     declarations.length === 0 &&
     staticPromptSegments.length === 0
   )
-    return { tools: [], close: async () => {} };
+    return { tools: [], unsupportedCapabilities: [], close: async () => {} };
 
   const tools = new ToolRegistry();
+  // Prompt/world/history-transform providers run in executeTurn. These three
+  // built-in points are driven only by the server's UI, HTTP or compaction host.
+  const hostOnlyPoints = new Set([
+    "history.compact@1",
+    "ui.slot@1",
+    "media.image-flow@1",
+  ]);
+  const unsupportedCapabilities: UnsupportedDebugCapability[] = declarations
+    .filter((declaration) => hostOnlyPoints.has(declaration.point))
+    .map((declaration) => ({
+      pluginId: discovery.id,
+      kind: "extension",
+      name: `${declaration.point}/${declaration.id}`,
+    }));
+  let hookSeq = 0;
   const scope = new PluginEntryScope();
   const registration = createExtensionRegistration(
     extensions,
@@ -367,19 +410,91 @@ export async function loadEntryTools(
     http: { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
     registerTool(toolModule: ToolModule) {
       scope.stage(() => {
-        scope.track(tools.registerPlugin(discovery.id, toolModule));
+        scope.track(
+          tools.registerPlugin(discovery.id, {
+            ...toolModule,
+            execute: (input, context) =>
+              scope.invoke(() => toolModule.execute(input, context)),
+          }),
+        );
       });
     },
     registerService(definition) {
       if (!services) throw new Error("Plugin service registry is unavailable");
       scope.stage(() => {
-        scope.track(services.register(discovery.id, definition));
+        scope.track(
+          services.register(discovery.id, {
+            ...definition,
+            handler: (input, context) =>
+              scope.invoke(() => definition.handler(input, context)),
+          }),
+        );
       });
     },
-    on() {},
-    registerRpc() {},
-    registerFormValidator() {},
-    registerWires() {},
+    on(event, handler, options) {
+      scope.stage(() => {
+        validatePluginHookRegistration(event, handler, options);
+        // No session lifecycle or history-compactor service runs in this harness.
+        if (
+          !hookPipeline ||
+          [
+            "SessionStart",
+            "SessionEnd",
+            "PreCompaction",
+            "PostCompaction",
+          ].includes(event)
+        ) {
+          unsupportedCapabilities.push({
+            pluginId: discovery.id,
+            kind: "hook",
+            name: event,
+          });
+          return;
+        }
+        const id = `${discovery.id}:${event}:${++hookSeq}`;
+        scope.track(
+          hookPipeline.register({
+            id,
+            event,
+            pluginId: discovery.id,
+            handler: (context, payload) =>
+              scope.invoke(() => handler(context, payload)),
+            ...(options?.match ? { match: options.match } : {}),
+            ...(options?.timeoutMs !== undefined
+              ? { timeoutMs: options.timeoutMs }
+              : {}),
+            ...(options?.enforce ? { enforce: options.enforce } : {}),
+          }),
+        );
+      });
+    },
+    registerRpc(name) {
+      scope.stage(() => {
+        unsupportedCapabilities.push({
+          pluginId: discovery.id,
+          kind: "rpc",
+          name,
+        });
+      });
+    },
+    registerFormValidator(name) {
+      scope.stage(() => {
+        unsupportedCapabilities.push({
+          pluginId: discovery.id,
+          kind: "form-validator",
+          name,
+        });
+      });
+    },
+    registerWires() {
+      scope.stage(() => {
+        unsupportedCapabilities.push({
+          pluginId: discovery.id,
+          kind: "media-wire",
+          name: "media wires",
+        });
+      });
+    },
   };
 
   const checked = enforcePluginRegistrationContract(covel, contributions);
@@ -435,6 +550,7 @@ export async function loadEntryTools(
     throw error;
   }
   return {
+    unsupportedCapabilities,
     tools: [...(tools.pluginTools.get(discovery.id)?.values() ?? [])],
     close: () => scope.dispose(),
   };

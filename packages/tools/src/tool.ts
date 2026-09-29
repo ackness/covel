@@ -4,7 +4,6 @@
 
 import type { ZodType } from "zod";
 import { ZodError } from "zod";
-import type { ToolExecutionEnvelope } from "./result.js";
 import type {
   ToolDefinitionInput,
   ToolExecutionContext,
@@ -62,16 +61,16 @@ export function tool<TParams extends ZodType, TOutput>(
 ): ToolModule<TParams, TOutput> {
   let jsonSchema: Readonly<Record<string, unknown>>;
   try {
-    // Zod v4 ships toJSONSchema() natively. Cast through unknown to avoid the type
-    // mismatch between the v4 ZodType shape used at compile time and the runtime type.
-    type ZodV4WithSchema = { toJSONSchema(): Record<string, unknown> };
-    const params = definition.parameters as unknown as ZodV4WithSchema;
-    const raw = params.toJSONSchema();
+    // Models supply the input shape; execute receives Zod's parsed output.
+    const raw = definition.parameters.toJSONSchema({ io: "input" });
     // Strip $schema — LLM APIs don't need it and some reject it
     const { $schema: _drop, ...rest } = raw;
     jsonSchema = rest;
-  } catch {
-    jsonSchema = { type: "object" };
+  } catch (cause) {
+    throw new Error(
+      `Tool "${definition.name}" parameters cannot be represented as JSON Schema: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
   }
 
   return {
@@ -83,7 +82,7 @@ export function tool<TParams extends ZodType, TOutput>(
     async execute(
       params: unknown,
       context: ToolExecutionContext,
-    ): Promise<TOutput | ToolExecutionEnvelope<TOutput>> {
+    ): Promise<TOutput> {
       let validated: unknown;
       try {
         validated = definition.parameters.parse(params);

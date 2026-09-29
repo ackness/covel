@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+
 import type { DataStore } from "@covel/store";
 
 import { createMemorySystem } from "../src/memory-system.js";
@@ -579,12 +580,11 @@ describe("vector archival (semantic over lorebook + characters)", () => {
           namespace: ARCHIVAL_NAMESPACE,
         });
       const readHashes = () =>
-        store.getPluginData(
+        store.getVectorIndexProgress({
           sessionId,
-          MEMORY_VECTOR_PLUGIN_ID,
-          "archival-ingest",
-          "hashes",
-        );
+          pluginId: MEMORY_VECTOR_PLUGIN_ID,
+          namespace: "archival-ingest",
+        });
       const vectorsBefore = await readVectors();
       const hashesBefore = structuredClone(await readHashes());
       expect(vectorsBefore).toHaveLength(3);
@@ -645,15 +645,12 @@ describe("vector archival (semantic over lorebook + characters)", () => {
       }),
     ).toEqual([]);
     expect(
-      (
-        await store.getPluginData(
-          sessionId,
-          MEMORY_VECTOR_PLUGIN_ID,
-          "archival-ingest",
-          "hashes",
-        )
-      )?.value,
-    ).toEqual({});
+      await store.getVectorIndexProgress({
+        sessionId,
+        pluginId: MEMORY_VECTOR_PLUGIN_ID,
+        namespace: "archival-ingest",
+      }),
+    ).toEqual("{}");
     expect(calls).toHaveLength(1);
   });
 });

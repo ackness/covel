@@ -1,3 +1,7 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, it, expect, beforeAll } from "vitest";
 import path from "node:path";
 import {
@@ -7,7 +11,7 @@ import {
   loadRuntime,
 } from "@covel/plugin-loader";
 import { scheduleByDag } from "@covel/runtime";
-import { getPendingProposals } from "@covel/tools";
+
 import handler from "../handler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
@@ -110,7 +114,7 @@ describe("chat foundation manifests", () => {
 });
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business value
-// (speakers / activeCastContext) is under `result.value`; pending proposals
+// (speakers / activeCastContext) is under `getToolContent(result).value`; pending proposals
 // stay on the envelope (result).
 describe("scene-cast handler", () => {
   it("selects mentioned NPCs and writes active cast plugin data", async () => {
@@ -170,10 +174,14 @@ describe("scene-cast handler", () => {
       userSettings: { activeSpeakerCount: 1 },
     });
 
-    expect(result.value.speakers).toHaveLength(1);
-    expect(result.value.speakers[0].name).toBe("Mira");
-    expect(result.value.activeCastContext).toContain("Mira (id: npc-1)");
-    expect(result.value.activeCastContext).toContain('"mood":"guarded"');
+    expect(getToolContent(result).value.speakers).toHaveLength(1);
+    expect(getToolContent(result).value.speakers[0].name).toBe("Mira");
+    expect(getToolContent(result).value.activeCastContext).toContain(
+      "Mira (id: npc-1)",
+    );
+    expect(getToolContent(result).value.activeCastContext).toContain(
+      '"mood":"guarded"',
+    );
 
     const [proposal] = getPendingProposals(result);
     expect(proposal).toMatchObject({
@@ -241,7 +249,9 @@ describe("scene-cast handler", () => {
       recursionDepth: 0,
     });
 
-    expect(result.value.speakers).toEqual([]);
-    expect(result.value.activeCastContext).toContain("No active NPC selected");
+    expect(getToolContent(result).value.speakers).toEqual([]);
+    expect(getToolContent(result).value.activeCastContext).toContain(
+      "No active NPC selected",
+    );
   });
 });

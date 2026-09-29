@@ -9,7 +9,7 @@ import {
   type PresetConfig,
 } from "@covel/ai-provider";
 import { createPluginRegistry } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 
 function setup(options: { failModel?: string } = {}) {

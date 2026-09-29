@@ -18,8 +18,11 @@
  * generic `ui-spec` convention, not anything about codex semantics.
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
+
 import { getCategoryMetadata } from "../category-metadata.js";
 
 export function createCodexEntrySchema(z) {

@@ -52,10 +52,14 @@ export {
 } from "./hooks/hook-settings.js";
 
 // ── Turn Executor ────────────────────────────────────────────────
-export {
-  executeTurn,
-  resumeSuspendedRuntime,
-} from "./turn-executor/turn-executor.js";
+export { executeTurn, resumeSuspendedRuntime } from "./execution.js";
+export type {
+  PreparedExecution,
+  ExecutedTurn,
+  ExecutedRuntime,
+  ExecutionDeps,
+  ExecutionCommitPlan,
+} from "./execution.js";
 export type {
   AgentLoopDeps,
   TurnExecutorDeps,
@@ -68,9 +72,6 @@ export {
   isTurnAbortedError,
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
-export { collectExecutionJournal } from "./execution-journal.js";
-export { collectExecutionSuspensions } from "./suspension-artifact.js";
-export type { SuspensionArtifact } from "./suspension-artifact.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 
@@ -269,3 +270,5 @@ export type {
 } from "./rpc/form-validator.js";
 export { PluginEntryScope } from "./plugin-entry-scope.js";
 export type { PluginServiceCallEvent } from "./plugin-services.js";
+
+export { validatePluginHookRegistration } from "./plugin-hook-registration.js";

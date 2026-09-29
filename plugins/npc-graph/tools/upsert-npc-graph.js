@@ -24,8 +24,10 @@
  *
  * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function }} injection
  */
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 export default function ({ tool, z, shortIdBatch }) {
   const nodeInputSchema = z.object({

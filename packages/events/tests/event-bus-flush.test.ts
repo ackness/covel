@@ -1,7 +1,8 @@
 import { setImmediate } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CovelMessage } from "@covel/shared";
-import { createMemoryStore, type EventRecord } from "@covel/store";
+import { type EventRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, PERSIST_MAX_IN_FLIGHT } from "../src/event-bus.js";
 
 function message(id: string, sessionId = "sess-flush"): CovelMessage {

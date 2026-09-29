@@ -117,6 +117,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   createWorld: ["worlds"],
   upsertWorld: ["worlds"],
   deleteWorld: ["worlds"],
+  commitVectorIndexBatch: ["vectorRows", "vectorIndexProgress"],
   upsertVector: ["vectorRows"],
   deleteVectors: ["vectorRows"],
   lockSessionEmbeddingModel: ["sessionVectorTargets"],

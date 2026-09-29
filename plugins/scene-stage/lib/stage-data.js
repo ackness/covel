@@ -95,7 +95,7 @@ export function buildStageRecord(params) {
 /**
  * Wrap a stage record in the `plugin.data` proposal that publishes it.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {import('@covel/plugin-handlers-utils').PluginFunctionContext} ctx
  * @param {ReturnType<typeof buildStageRecord>} stage
  */
 export function makeStageProposal(ctx, stage) {

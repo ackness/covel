@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getPendingProposals, withPendingProposals } from "@covel/tools";
+import { withPendingProposals } from "@covel/tools";
 import type { Proposal } from "@covel/shared";
 import { materializeHandlerSuccess } from "../src/commit/materialize-handler-output.js";
 
@@ -61,7 +61,7 @@ describe("materializeHandlerSuccess", () => {
       { outcome: "success", value: { saved: true } },
       raw,
     );
-    expect(getPendingProposals(result.output)).toEqual([proposal]);
+    expect(result.pendingProposals).toEqual([proposal]);
     expect(JSON.stringify(result.output)).toBe('{"saved":true}');
   });
 

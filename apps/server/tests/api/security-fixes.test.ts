@@ -14,12 +14,8 @@ import {
   parsePluginMd,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  type DataStore,
-  type MediaStore,
-} from "@covel/store";
+import { type DataStore, type MediaStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { stateRoutes } from "../../src/routes/api/state.js";
 import { rateLimiter } from "../../src/middleware/rate-limit.js";

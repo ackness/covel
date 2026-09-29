@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { MemorySystem } from "@covel/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 

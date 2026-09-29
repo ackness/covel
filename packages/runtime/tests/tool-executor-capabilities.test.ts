@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { Proposal, ProposalFor } from "@covel/shared";
 import {
   tool,

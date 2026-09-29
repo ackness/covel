@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { runtimeDoneTool, suspendTool, tool } from "@covel/tools";
 import { z } from "zod";
 import type { LLMAdapter, RuntimeManifest } from "@covel/shared";

@@ -95,7 +95,6 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      outputDir,
       attemptTimeoutMs: 5_000,
     });
 
@@ -107,12 +106,9 @@ describe("createWorld WORLD.md repair", () => {
     expect(messageText(llm.requests[1]!, 1)).toContain(META_LORE);
     expect(messageText(llm.requests[1]!, 1)).not.toContain("WORLD_YAML");
     expect(llm.requests[1]!.signal).toBe(llm.requests[0]!.signal);
-    await expect(
-      readFile(path.join(outputDir, "repair-world", "WORLD.md"), "utf8"),
-    ).resolves.toBe(CLEAN_LORE);
-    await expect(
-      readFile(path.join(outputDir, "repair-world", "world.yaml"), "utf8"),
-    ).resolves.toContain("id: repair-world");
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.lore).toBe(CLEAN_LORE);
+    expect(result.manifest.id).toBe("repair-world");
   });
 
   it("propagates caller cancellation during targeted lore repair", async () => {
@@ -139,7 +135,6 @@ describe("createWorld WORLD.md repair", () => {
       createWorld({
         llm,
         concept: "修复世界",
-        outputDir,
         signal: controller.signal,
         attemptTimeoutMs: 5_000,
       }),
@@ -174,7 +169,6 @@ describe("createWorld WORLD.md repair", () => {
         const result = await createWorld({
           llm,
           concept: owner,
-          outputDir: path.join(outputDir, owner, "worlds"),
           loadPrompt: createPromptLoader(root),
           attemptTimeoutMs: 5_000,
         });
@@ -186,12 +180,8 @@ describe("createWorld WORLD.md repair", () => {
           `${owner} generation: ${owner}`,
           `${owner} repair: zh-CN`,
         ]);
-        await expect(
-          readFile(
-            path.join(outputDir, owner, "worlds", "repair-world", "WORLD.md"),
-            "utf8",
-          ),
-        ).resolves.toBe(CLEAN_LORE);
+        if (!result.success) throw new Error(result.errors.join("; "));
+        expect(result.lore).toBe(CLEAN_LORE);
       }),
     );
   });
@@ -206,7 +196,6 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      outputDir,
       attemptTimeoutMs: 5_000,
     });
 
@@ -227,7 +216,6 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      outputDir,
       attemptTimeoutMs: 5_000,
     });
 
@@ -244,7 +232,6 @@ describe("createWorld WORLD.md repair", () => {
     const result = await createWorld({
       llm,
       concept: "修复世界",
-      outputDir,
       attemptTimeoutMs: 5_000,
     });
 

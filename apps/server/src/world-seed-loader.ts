@@ -15,6 +15,7 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
+import { worldRecordFromManifest } from "./world-data/world-record.js";
 import { readReceipt } from "./routes/api/install/package-files.js";
 import type { SessionLock } from "./lib/session-lock.js";
 import { isWorldDeleting, worldOperationLockId } from "./world-lifecycle.js";
@@ -27,7 +28,6 @@ import {
   formatValidationErrors,
   DIMENSION_KEYS,
   localeLookupCandidates,
-  resolveI18nText,
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
@@ -36,17 +36,6 @@ import {
   fileExists,
   readWorldManifest,
 } from "./world-data/session-import/utils.js";
-
-/**
- * Resolve a single I18nText field to a plain display string.
- * Uses the shared exact → language → English → first-value fallback order.
- */
-function resolveText(
-  value: string | Record<string, string> | undefined,
-  defaultLocale?: string,
-): string {
-  return resolveI18nText(value, defaultLocale) ?? "";
-}
 
 /**
  * Resolve a locale-aware file inside the world directory.
@@ -217,10 +206,6 @@ export async function loadSingleWorld(
   const dimensionSources = manifest.dimensionSources as
     Record<string, string> | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
-  const pluginPolicy = manifest.pluginPolicy;
-  const pluginSettings = manifest.pluginSettings as
-    Record<string, Record<string, unknown>> | undefined;
-  const defaultViewMode = manifest.defaultViewMode as string | undefined;
 
   // Merge inline + external dimensions (external wins for same key)
   const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
@@ -240,38 +225,35 @@ export async function loadSingleWorld(
   const lore = await readLore(worldDir, defaultLocale);
   const now = new Date().toISOString();
 
-  const characterSchema = manifest.characterSchema;
-
   const packageReceipt = await readReceipt(worldDir).catch(() => null);
-  const baseMetadata: Record<string, unknown> = {
-    ...(packageReceipt
-      ? {
-          packageManaged: true,
-          storage: {
-            scope: "server",
-            backend: "file",
-            path: path.dirname(worldDir),
-            durable: true,
-          },
-        }
-      : {}),
-    source: options?.source ?? (packageReceipt ? "generated-file" : "file"),
-    ...(options?.storage ? { storage: options.storage } : {}),
-    dimensions:
-      Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
-    dimensionSources: dimensionSources,
-    pluginPolicy,
-    pluginSettings,
-    worldDataPath,
-    characterSchema,
-    ...(defaultViewMode ? { defaultViewMode } : {}),
-  };
+  const baseRecord = worldRecordFromManifest(
+    manifest,
+    lore,
+    {
+      ...(packageReceipt
+        ? {
+            packageManaged: true,
+            storage: {
+              scope: "server",
+              backend: "file",
+              path: path.dirname(worldDir),
+              durable: true,
+            },
+          }
+        : {}),
+      source: options?.source ?? (packageReceipt ? "generated-file" : "file"),
+      ...(options?.storage ? { storage: options.storage } : {}),
+      dimensions:
+        Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
+    },
+    now,
+  );
   const worldData = await loadWorldDataSummary({
     worldRoot: worldDir,
     covelHome: options?.covelHome,
     worldId,
     worldDataPath,
-    metadata: baseMetadata,
+    metadata: baseRecord.metadata,
     now,
   });
   for (const diagnostic of worldData.diagnostics) {
@@ -282,23 +264,7 @@ export async function loadSingleWorld(
     }
   }
 
-  return {
-    id: worldId,
-    name: resolveText(
-      manifest.name as string | Record<string, string>,
-      defaultLocale,
-    ),
-    description: resolveText(
-      manifest.summary as string | Record<string, string> | undefined,
-      defaultLocale,
-    ),
-    lore: lore || undefined,
-    tags: manifest.tags as string[] | undefined,
-    locale: defaultLocale,
-    metadata: worldData.metadata,
-    createdAt: now,
-    updatedAt: now,
-  };
+  return { ...baseRecord, metadata: worldData.metadata };
 }
 
 /**

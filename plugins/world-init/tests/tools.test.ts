@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "../../../packages/store/src/index.ts";
-import { getPendingProposals, getToolContent, tool, z } from "@covel/tools";
+import { createMemoryStore } from "@covel/store/memory";
+import {
+  getPendingProposals,
+  getToolContent,
+} from "@covel/plugin-handlers-utils";
+import { tool, z } from "@covel/tools";
 import { createCommitPipeline } from "../../../packages/runtime/src/session/session-kernel.ts";
 import initializeWorld from "../tools/initialize-world.js";
 import setWorldSchema from "../tools/set-world-schema.js";
@@ -74,7 +78,7 @@ describe("world-init local tools", () => {
     );
     const result = getToolContent(rawResult);
 
-    expect(result).toMatchObject({
+    expect(getToolContent(result)).toMatchObject({
       success: true,
       attributeCount: 15,
       categories,
@@ -164,7 +168,7 @@ describe("world-init local tools", () => {
       context,
     );
 
-    expect(result).toMatchObject({
+    expect(getToolContent(result)).toMatchObject({
       success: true,
       attributeCount: 2,
       categories: ["stats", "social"],
@@ -226,7 +230,7 @@ describe("world-init local tools", () => {
       { ...context, pendingProposals: getPendingProposals(schemaResult) },
     );
 
-    expect(result).toMatchObject({
+    expect(getToolContent(result)).toMatchObject({
       success: true,
       count: 2,
       keys: ["geography", "factions"],

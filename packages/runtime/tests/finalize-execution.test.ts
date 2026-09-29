@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { SuspensionRecord } from "@covel/store";
 import type { Proposal, RuntimeEffects } from "@covel/shared";
 import { withPendingProposals } from "@covel/tools";

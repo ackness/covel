@@ -10,6 +10,7 @@
  * tab in apps/web consumes this endpoint.
  */
 
+import { scheduleMemoryIngest } from "./commit-execution.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
@@ -86,6 +87,7 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
       if (existing)
         return c.json(errorBody("Lorebook entry already exists"), 409);
       await store.upsertLorebookEntries([entry]);
+      scheduleMemoryIngest(c.get("memorySystem"), sessionId);
       return c.json(entry, 201);
     },
   });
@@ -130,6 +132,7 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
         existing ?? undefined,
       );
       await store.upsertLorebookEntries([entry]);
+      scheduleMemoryIngest(c.get("memorySystem"), sessionId);
       return c.json(entry);
     },
   });
@@ -176,6 +179,7 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
           updatedAt: new Date().toISOString(),
         },
       ]);
+      scheduleMemoryIngest(c.get("memorySystem"), sessionId);
       return c.json(okBody({ entryId, enabled: parsed.data.enabled }));
     },
   });
@@ -204,6 +208,7 @@ lorebookRoutes.delete("/:id/lorebook/:entryId", async (c) => {
       );
       if (!existing) return c.json(errorBody("Lorebook entry not found"), 404);
       await store.deleteLorebookEntry(sessionId, { kind: "player" }, entryId);
+      scheduleMemoryIngest(c.get("memorySystem"), sessionId);
       return c.json(okBody());
     },
   });

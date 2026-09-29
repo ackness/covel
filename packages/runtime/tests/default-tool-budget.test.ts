@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEmitEventTool, runtimeDoneTool } from "@covel/tools";
 import {
   executeTurn,

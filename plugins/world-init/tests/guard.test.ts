@@ -1,5 +1,9 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-import { getPendingProposals } from "@covel/tools";
+
 import guard from "../guard.js";
 
 function context(
@@ -25,7 +29,7 @@ describe("world-init schema guard", () => {
     const result = await guard(
       context(null, schema, [{ key: "geography", value: {} }]),
     );
-    expect(result).toMatchObject({
+    expect(getToolContent(result)).toMatchObject({
       skip: true,
       preGameDone: true,
       worldSchema: schema,
@@ -49,7 +53,10 @@ describe("world-init schema guard", () => {
       ["zh-Hant-TW", "Yen", "Apprentice"],
     ]) {
       const result = await guard(context(world, null, [], locale));
-      expect(result).toMatchObject({ skip: true, importedDimensions: true });
+      expect(getToolContent(result)).toMatchObject({
+        skip: true,
+        importedDimensions: true,
+      });
       const proposals = getPendingProposals(result);
       expect(proposals.map((proposal) => proposal.type)).toEqual([
         "character.schema.set",

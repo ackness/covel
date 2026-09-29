@@ -29,6 +29,22 @@ import type {
   PluginProposal,
 } from "@covel/plugin-handlers-utils/plugin-api";
 import type { HookEventName } from "@covel/shared";
+import type {
+  PluginFunctionContext,
+  PluginFunctionHandler,
+  PluginAgentGuard,
+  FunctionStoreView as PublicFunctionStoreView,
+  PluginDataWriter as PublicPluginDataWriter,
+  HandlerResult as PublicHandlerResult,
+} from "@covel/plugin-handlers-utils";
+import type {
+  FunctionHandlerContext,
+  FunctionHandler,
+  AgentGuard,
+  FunctionStoreView,
+  PluginDataWriter,
+} from "@covel/shared/plugin-runtime";
+import type { HandlerResult } from "@covel/shared";
 
 type Assert<T extends true> = T;
 // Tuple-wrapped operands keep unions intact instead of distributing.
@@ -178,6 +194,24 @@ type _SameHookEvents = Assert<
   MutuallyAssignable<HookEventName, PublicHookEventName>
 >;
 type _SameProposals = Assert<MutuallyAssignable<Proposal, PluginProposal>>;
+type _SameStore = Assert<
+  MutuallyAssignable<FunctionStoreView, PublicFunctionStoreView>
+>;
+type _SameWriter = Assert<
+  MutuallyAssignable<PluginDataWriter, PublicPluginDataWriter>
+>;
+type _SameHandlerResult = Assert<
+  MutuallyAssignable<HandlerResult, PublicHandlerResult>
+>;
+type _HostProvidesFunctionCore = Assert<
+  FunctionHandlerContext extends PluginFunctionContext ? true : false
+>;
+type _PublicHandlerRunsOnHost = Assert<
+  PluginFunctionHandler extends FunctionHandler ? true : false
+>;
+type _PublicGuardRunsOnHost = Assert<
+  PluginAgentGuard extends AgentGuard ? true : false
+>;
 // Known-point registration is closed at compile time on both entry surfaces.
 // @ts-expect-error Unknown point ids are not part of the current contract.
 publicApi.provideExtension("unknown.point@1", "bad", { handler: () => null });

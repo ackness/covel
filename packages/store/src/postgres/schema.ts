@@ -713,3 +713,17 @@ export const vectorModels = pgTable(
     ),
   ],
 );
+
+/** Derived vector-index cursors/hashes; cascaded with the physical session index. */
+export const vectorIndexProgress = pgTable(
+  "vector_index_progress",
+  {
+    sessionId: text("session_id").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    namespace: text("namespace").notNull(),
+    value: text("value").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.pluginId, table.namespace] }),
+  ],
+);

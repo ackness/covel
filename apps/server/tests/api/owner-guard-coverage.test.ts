@@ -19,12 +19,8 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import {
-  createMemoryStore,
-  createMemoryMediaStore,
-  type DataStore,
-  type MediaStore,
-} from "@covel/store";
+import { type DataStore, type MediaStore } from "@covel/store";
+import { createMemoryStore, createMemoryMediaStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import { sessionRoutes } from "../../src/routes/api/session.js";

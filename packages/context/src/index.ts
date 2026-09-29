@@ -14,16 +14,7 @@ export {
   interpolateTemplate,
   buildInjectBlocks,
   buildContext,
-  buildContextAsync,
-  needsAsyncBuild,
 } from "./context-builder.js";
-
-// ── Segment-Based Prompt Assembler ───────────────────────────────
-export {
-  buildSegmentedContext,
-  buildSegmentedContextAsync,
-} from "./prompt-assembler.js";
-export type { PromptSegments } from "./prompt-assembler.js";
 
 // ── Token Budget ────────────────────────────────────────────────
 export { applyBudget, estimateTokens, resolveBudgetOptions } from "./budget.js";
@@ -39,7 +30,6 @@ export {
   loadPrompt,
   createPromptLoader,
   interpolate,
-  setPromptsRoot,
 } from "./prompts-loader.js";
 export type { PromptLoader } from "./prompts-loader.js";
 

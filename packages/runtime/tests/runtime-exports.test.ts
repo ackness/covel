@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { buildContext } from "@covel/context";
 import type {
   RuntimeExportBinding,
@@ -317,7 +317,7 @@ describe("resolveExportBindings", () => {
 });
 
 describe("agent export segment", () => {
-  it("renders resolved export slots into the reserved <runtime-exports> block", () => {
+  it("renders resolved export slots into the reserved <runtime-exports> block", async () => {
     const manifest = {
       name: "c/main",
       pluginId: "c",
@@ -330,7 +330,7 @@ describe("agent export segment", () => {
         source: { pluginId: "p", runtimeId: "p/gen", resultId: "r-1" },
       },
     };
-    const assembled = buildContext({
+    const assembled = await buildContext({
       promptTemplate: "You consume config.",
       manifest,
       turnInput: { sessionId: "s", turnId: "t", playerMessage: "go" },

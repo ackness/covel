@@ -30,7 +30,7 @@ export type EmbedFn = (
  * make it impossible to collide with a real plugin id (npm package names, from
  * which plugin ids derive, cannot begin with `_`).
  */
-export { MEMORY_VECTOR_PLUGIN_ID } from "@covel/store/vector";
+export const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
 
 /** Namespace for embedded conversation-history (recall) vectors. */
 export const RECALL_NAMESPACE = "recall";
@@ -44,7 +44,7 @@ export const ARCHIVAL_NAMESPACE = "archival";
  * higher = more relevant — matching the field contract of the keyword
  * searchers. Strictly monotonic decreasing in `distance`, so it preserves the
  * KNN ordering. NOT a calibrated cosine similarity; it is a presentation score
- * so vector and keyword results can be merged/sorted uniformly.
+ * within one tier; cross-tier search combines rank order instead of scores.
  */
 export function distanceToScore(distance: number): number {
   const d = Number.isFinite(distance) && distance > 0 ? distance : 0;

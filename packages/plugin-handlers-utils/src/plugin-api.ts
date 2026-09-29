@@ -6,7 +6,10 @@ import type {
   ExtensionWorldModel,
   PluginExtensionApi,
 } from "./extension-points.js";
+import type { FunctionStoreView } from "./function-runtime.js";
 import type { MediaReference } from "./types.js";
+import type { withPendingProposals } from "./tool-result.js";
+export type { PluginToolResult } from "./tool-result.js";
 
 export type HookEventName =
   | "SessionStart"
@@ -135,37 +138,25 @@ export type PluginProposalFor<K extends PluginProposalType> = {
 export type PluginProposal = {
   [K in PluginProposalType]: PluginProposalFor<K>;
 }[PluginProposalType];
-export interface PluginToolStore {
-  getPluginData(
-    namespace: string,
-    key: string,
-  ): Promise<{ readonly key: string; readonly value: unknown } | null>;
-  listPluginData(
-    namespace: string,
-  ): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;
-  listPlayerInputs(): Promise<
-    readonly {
-      readonly id: string;
-      readonly formId: string;
-      readonly turnId: string;
-      readonly values: unknown;
-    }[]
-  >;
-  getSession(): Promise<unknown>;
-  listTurnMessages(limit?: number): Promise<unknown[]>;
-}
+export type PluginToolStore = FunctionStoreView;
 export interface PluginToolContext {
   readonly sessionId: string;
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /** Scoped, owned reads including earlier writes; absent in stateless hosts. */
   readonly store?: PluginToolStore;
   readonly world?: ExtensionWorldModel;
   readonly upstreamProposals?: readonly PluginProposal[];
+  /** Pass cancellation to external requests and check it before side effects. */
   readonly signal?: AbortSignal;
+  /** Authoritative inputs explicitly declared by this runtime. */
   readonly inputSlots?: Readonly<Record<string, PluginInputSlot>>;
+  /** Earlier writes in this execution; ordinary scoped reads already include them. */
   readonly pendingProposals?: readonly PluginProposal[];
+  /** Logical player-message count, absent outside a turn. */
   readonly turnNumber?: number;
+  /** Topics emitted earlier in this tool loop, used for event deduplication. */
   readonly emittedEventTopics?: readonly string[];
 }
 export type PluginInputSlot =
@@ -186,14 +177,6 @@ export interface PluginInputSource {
   readonly runtimeId: string;
   readonly resultId: string;
 }
-export interface PluginToolResult<T = unknown> {
-  readonly content: T;
-  readonly pendingProposals?: readonly PluginProposal[];
-  readonly emittedEvents?: readonly {
-    readonly topic: string;
-    readonly data: Record<string, unknown>;
-  }[];
-}
 export interface PluginToolModule<
   TParams extends ZodType = ZodType,
   TOutput = unknown,
@@ -204,9 +187,9 @@ export interface PluginToolModule<
   readonly parametersSchema: TParams;
   readonly jsonSchema: Readonly<Record<string, unknown>>;
   execute(
-    params: z.infer<TParams>,
+    params: z.input<TParams>,
     context: PluginToolContext,
-  ): Promise<TOutput | PluginToolResult<TOutput>>;
+  ): Promise<TOutput>;
 }
 export interface PluginToolDefinition<TParams extends ZodType, TOutput> {
   readonly name: string;
@@ -215,7 +198,7 @@ export interface PluginToolDefinition<TParams extends ZodType, TOutput> {
   execute(
     params: z.infer<TParams>,
     context: PluginToolContext,
-  ): Promise<TOutput | PluginToolResult<TOutput>>;
+  ): Promise<TOutput>;
 }
 export interface PluginToolkit {
   readonly tool: <TParams extends ZodType, TOutput>(
@@ -232,10 +215,7 @@ export interface PluginToolkit {
     labels: readonly string[],
     sessionId: string,
   ) => string[];
-  readonly withPendingProposals: <T extends object>(
-    content: T,
-    proposals: readonly PluginProposal[],
-  ) => T;
+  readonly withPendingProposals: typeof withPendingProposals;
 }
 
 export interface PluginServiceClient {

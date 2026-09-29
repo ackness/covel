@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildContext,
-  buildSegmentedContext,
   type ContextBuildParams,
   type MessageHistoryRecord,
   type SessionContextSnapshot,
   type TokenEstimator,
 } from "@covel/context";
+import { buildSegmentedContext } from "../src/prompt-assembler.js";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   splitPromptCacheSegments,
@@ -84,20 +84,20 @@ const mockEstimator: TokenEstimator = (text) => Math.ceil(text.length / 4);
 // ── Tests ───────────────────────────────────────────────────────
 
 describe("prompt-assembler", () => {
-  it("matches the public buildContext entrypoint for a locale-less, inject-less baseline", () => {
+  it("matches the public buildContext entrypoint for a locale-less, inject-less baseline", async () => {
     const params = baselineParams({
       promptTemplate: "You are a narrator. Respond to {{ player.message }}.",
       turnInput: makeTurnInput({ playerMessage: "hello world" }),
     });
 
-    const publicContext = buildContext(params);
+    const publicContext = await buildContext(params);
     const result = buildSegmentedContext(params);
 
     expect(result.systemPrompt).toBe(publicContext.systemPrompt);
     expect(result.messages).toEqual(publicContext.messages);
   });
 
-  it("places the language constraint in segment 1 (framework preamble), not at the tail of segment 3", () => {
+  it("places the language constraint in segment 1 (framework preamble), not at the tail of segment 3", async () => {
     const params = baselineParams({
       promptTemplate: "Tell a story.",
       turnInput: makeTurnInput({ locale: "en-US", playerMessage: "go" }),
@@ -114,7 +114,7 @@ describe("prompt-assembler", () => {
     // Language name is resolved from the locale map.
     expect(result.systemPrompt).toContain("English");
 
-    const publicContext = buildContext(params);
+    const publicContext = await buildContext(params);
     expect(publicContext.systemPrompt).toBe(result.systemPrompt);
   });
 
@@ -326,8 +326,8 @@ describe("prompt-assembler", () => {
 
   // ── Segment 9: Author's Note ──────────────────────────
 
-  it("uses the segment assembler through the public buildContext entrypoint", () => {
-    const result = buildContext(
+  it("uses the segment assembler through the public buildContext entrypoint", async () => {
+    const result = await buildContext(
       baselineParams({
         promptTemplate: "Plugin body.",
         turnInput: makeTurnInput({ locale: "zh-CN", playerMessage: "go" }),

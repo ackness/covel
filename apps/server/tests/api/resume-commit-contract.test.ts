@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";

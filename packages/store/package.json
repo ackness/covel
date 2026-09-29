@@ -51,6 +51,10 @@
     "./capabilities": {
       "types": "./src/storage-capabilities.ts",
       "import": "./src/storage-capabilities.ts"
+    },
+    "./indexeddb": {
+      "types": "./src/indexeddb-entry.ts",
+      "import": "./src/indexeddb-entry.ts"
     }
   },
   "scripts": {

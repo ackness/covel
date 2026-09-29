@@ -14,7 +14,7 @@ import {
   type LoadedRuntime,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { tool } from "@covel/tools";
 import makeSubmitWorldFacts from "../../../plugins/world-ir/tools/submit-world-facts.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -217,15 +217,9 @@ describe("shared WorldIR turn pipeline", () => {
     expect(extractorCall?.tools?.[0]?.parameters).toMatchObject({
       type: "object",
       additionalProperties: false,
-      required: [
-        "schemaVersion",
-        "entities",
-        "relations",
-        "events",
-        "statements",
-      ],
+      required: ["entities", "relations", "events", "statements"],
       properties: {
-        schemaVersion: { const: 1 },
+        schemaVersion: { const: 1, default: 1 },
         entities: { type: "array" },
         relations: { type: "array" },
         events: { type: "array" },

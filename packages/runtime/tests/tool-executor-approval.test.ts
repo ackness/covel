@@ -17,7 +17,7 @@ import type {
 } from "../src/agent-loop/tool-executor.js";
 import { createApprovalPipeline } from "@covel/approval";
 import type { PermissionRule } from "@covel/approval";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { tool } from "@covel/tools";
 import { z } from "zod";

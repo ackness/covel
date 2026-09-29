@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import {
   createPluginRegistry,
@@ -157,6 +158,7 @@ export async function batchRetryFixture() {
       retryFromTurnId: "source",
     },
     type = "retry_failed_runtimes",
+    locale?: string,
   ) =>
     app.request("/api/actions", {
       method: "POST",
@@ -166,6 +168,7 @@ export async function batchRetryFixture() {
         sessionId,
         type,
         payload,
+        ...(locale ? { locale } : {}),
       }),
     });
   const post = async (...args: Parameters<typeof open>) => {

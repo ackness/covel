@@ -11,11 +11,8 @@ import { expect, it, vi } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  createSqliteMediaStore,
-} from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
+import { createSqliteMediaStore } from "@covel/store/sqlite";
 import { writeImportPlan } from "../../src/world-data/session-import/writes.js";
 import {
   materializeMediaIndexWrites,

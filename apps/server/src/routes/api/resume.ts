@@ -43,12 +43,7 @@ import {
   createTurnEmitter,
   runWithHookScope,
 } from "@covel/runtime";
-import type {
-  ExecutionContext,
-  RuntimeManifest,
-  SuspensionSummary,
-} from "@covel/shared";
-import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
+import type { RuntimeManifest, SuspensionSummary } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
@@ -360,13 +355,15 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           ...buildResumeTurnExecutorDeps(c, emitter),
           hookScope,
         };
-        const result = await resumeSuspendedRuntime(
+        const execution = await resumeSuspendedRuntime(
           liveSuspension,
           data,
           effectiveManifest!,
           resumeDeps,
           { userSettings },
         );
+
+        const { result } = execution;
 
         if (result.status !== "success" || !result.output) {
           await releaseClaim();
@@ -381,68 +378,6 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           );
         }
 
-        const inheritedExecution =
-          liveSuspension.pendingContinuation.executionContext;
-        const hasUnresolvedSibling = inheritedExecution.logicalTurnId
-          ? (await store.listSuspensions(sessionId)).some(
-              (candidate) =>
-                candidate.id !== liveSuspension.id &&
-                candidate.resolvedAt === undefined &&
-                candidate.pendingContinuation.executionContext.logicalTurnId ===
-                  inheritedExecution.logicalTurnId,
-            )
-          : false;
-        const resumeExecutionContext: ExecutionContext = {
-          ...inheritedExecution,
-          executionId: result.runId,
-          origin: "resume",
-          // Parallel runtimes may suspend under the same logical turn. Only
-          // the final unresolved continuation owns completion.
-          ...(hasUnresolvedSibling ? { countPolicy: "none" } : {}),
-        };
-
-        // Atomic finalize: proposal commit + assistant turn message + resolved
-        // marker land in ONE transaction via the shared finalize primitive (the
-        // runtime no longer writes them — see turn-resume.ts). Any proposal
-        // failure or store error rolls back ALL of it; the claim is released so
-        // the suspension stays retryable. Resume persists no
-        // turn_results row of its own, so `turnIds` is empty (nothing to settle).
-        const finalizeResume = async (
-          s: import("@covel/store").StoreTransaction,
-        ): Promise<void> => {
-          const out = result.output as Record<string, unknown>;
-          const narrativeContent =
-            typeof out.narrativeOutput === "string"
-              ? out.narrativeOutput
-              : typeof out.content === "string"
-                ? out.content
-                : JSON.stringify(result.output);
-          const interactionsArr = result.effects?.interactions;
-          const pendingInput =
-            interactionsArr && interactionsArr.length > 0
-              ? interactionsArr
-              : undefined;
-          const ui = result.effects?.ui;
-          await s.appendTurnMessage({
-            id: crypto.randomUUID(),
-            sessionId,
-            turnId: suspension.turnId,
-            sourceType: "runtime",
-            sourcePluginId: effectiveManifest!.pluginId,
-            sourceRuntimeId: effectiveManifest!.name,
-            role: "assistant",
-            name: effectiveManifest!.name,
-            content: narrativeContent,
-            order: stageMessageOrder(getRuntimeSpec(effectiveManifest!).stage),
-            pendingInput,
-            ui,
-            createdAt: new Date().toISOString(),
-          });
-          await s.markSuspensionResolved(suspension.id);
-        };
-
-        // finalize owns the transaction, the commit barrier (buffered fan-out
-        // flushed only after commit, dropped on rollback), and the hook scope.
         const outcome = await commitExecution({
           memorySystem: c.get("memorySystem"),
           imageFlowRuntimeIds: (
@@ -460,34 +395,15 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             pluginId: effectiveManifest.pluginId,
             runtimeId: effectiveManifest.name,
           },
-          loadOutputSchema: async () =>
-            (
-              await resumeDeps.loadRuntime(
-                effectiveManifest,
-                liveSession.locale,
-                sessionId,
-              )
-            )?.outputSchema,
           mediaStore: resumeDeps.mediaStore,
           onFinalized: (outcome) => {
             if (outcome.status === "committed") claimAcquired = false;
           },
           store,
-          sessionId,
-          executionContext: resumeExecutionContext,
-          // The original suspended execution deliberately did not complete
-          // its logical player turn. The final sibling resume counts it in the
-          // same transaction as its proposals.
-          sessionClock: { now: new Date().toISOString() },
-          runtimes: [effectiveManifest!],
-          results: [result],
-          turnIds: [],
-          activePluginIds: hookScope.activePluginIds,
-          hookSettings: hookScope.settings,
+          execution,
           ...(hookPipeline ? { hookPipeline } : {}),
           ...(eventBus ? { eventBus } : {}),
           emitter,
-          extraInTx: finalizeResume,
         });
 
         if (outcome.status !== "committed") {

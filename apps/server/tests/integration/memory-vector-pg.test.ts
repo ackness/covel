@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import postgres from "postgres";
 import type { DataStore } from "@covel/store";
-import { createPgStore } from "@covel/store";
+import { createPgStore } from "@covel/store/postgres";
 import { createMemorySystem } from "@covel/memory";
 import type { MemoryLLMAdapter } from "@covel/memory";
 import { createPgAdvisorySessionLock } from "../../src/lib/pg-session-lock.js";

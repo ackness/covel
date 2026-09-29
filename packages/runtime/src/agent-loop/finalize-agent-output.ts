@@ -25,7 +25,7 @@ import type {
   ToolCallRecord,
 } from "@covel/shared";
 import { storyOutputError } from "./story-output.js";
-import { withPendingProposals, type EmittedEvent } from "@covel/tools";
+import type { EmittedEvent } from "@covel/tools";
 import { collectUiBlocks } from "../session/session-kernel-helpers.js";
 import {
   findLastStructuredToolOutput,
@@ -75,6 +75,7 @@ export type FinalizeAgentOutput =
   | {
       readonly kind: "ok";
       readonly output: Record<string, unknown>;
+      readonly pendingProposals?: readonly Proposal[];
       readonly effects?: RuntimeEffects;
       readonly completion?: "done" | "pending";
     }
@@ -228,19 +229,15 @@ export function finalizeAgentOutput(
     output.narrativeOutput = sanitizeStoryNarrativeText(output.narrativeOutput);
   }
 
-  if (pendingProposals.length > 0) {
-    output = withPendingProposals(output, pendingProposals) as Record<
-      string,
-      unknown
-    >;
-  }
-
   const storyError =
     manifest.outputKind === "story" ? storyOutputError(output) : undefined;
   if (storyError) return { kind: "invalid-output", error: storyError };
   return {
     kind: "ok",
     output,
+    ...(pendingProposals.length > 0
+      ? { pendingProposals: [...pendingProposals] }
+      : {}),
     ...(Object.keys(effects).length > 0
       ? { effects: effects as RuntimeEffects }
       : {}),

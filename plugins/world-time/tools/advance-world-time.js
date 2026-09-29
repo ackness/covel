@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { worldTimeSchema } from "../schema.js";
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
+
 import { advanceTime, describeTime } from "../clock.js";
 
 export default function ({ tool }) {

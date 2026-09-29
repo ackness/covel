@@ -1,7 +1,7 @@
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 
-function deepFreeze<T>(value: T): T {
+export function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object") {
     for (const inner of Object.values(value as Record<string, unknown>)) {
       deepFreeze(inner);

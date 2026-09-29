@@ -6,7 +6,7 @@ import {
 } from "./execution-recovery-fixtures.js";
 import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
 import { createFormTool } from "../../packages/tools/src/builtin/ui-tools.js";
-import { createMemoryStore } from "../../packages/store/src/index.js";
+import { createMemoryStore } from "../../packages/store/src/memory-entry.js";
 import { createSubmitFormHandler } from "../../packages/runtime/src/rpc-defaults/submit-form.js";
 
 // API tests exercise ZIP installation, authorization and durable commits. Here the

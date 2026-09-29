@@ -11,7 +11,8 @@ import {
   PluginServiceRegistry,
   type PluginServiceCallEvent,
 } from "@covel/runtime";
-import { createMemoryStore, type SessionRecord } from "@covel/store";
+import { type SessionRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { tool, ToolRegistry } from "@covel/tools";
 import {
   createPluginDiagnostics,

@@ -1,13 +1,15 @@
 import { expect, it } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
+import type { DataStore } from "@covel/store";
 import { createMemorySystem } from "@covel/memory";
-import { MEMORY_VECTOR_PLUGIN_ID } from "@covel/store/vector";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
   createInProcessSessionLock,
   type SessionLock,
 } from "../../src/lib/session-lock.js";
+
+const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
 
 for (const withCharacter of [false, true]) {
   it(`rebuilds forked indexes over multiple sweeps (character=${withCharacter})`, async () => {
@@ -83,10 +85,21 @@ for (const withCharacter of [false, true]) {
     });
     await memory.ingest("parent");
     await memory.ingest("parent");
-    const progress = (await store.listPluginDataSessionScope("parent")).filter(
-      (row) => row.pluginId === MEMORY_VECTOR_PLUGIN_ID,
-    );
-    expect(progress).toHaveLength(2);
+    expect(
+      await store.getVectorIndexProgress({
+        sessionId: "parent",
+        pluginId: MEMORY_VECTOR_PLUGIN_ID,
+        namespace: "recall-ingest",
+      }),
+    ).not.toBeNull();
+    expect(
+      await store.getVectorIndexProgress({
+        sessionId: "parent",
+        pluginId: MEMORY_VECTOR_PLUGIN_ID,
+        namespace: "archival-ingest",
+      }),
+    ).not.toBeNull();
+    expect(await store.listPluginDataSessionScope("parent")).toEqual([]);
     const app = new Hono<{
       Variables: { store: DataStore; sessionLock: SessionLock };
     }>();
@@ -108,14 +121,6 @@ for (const withCharacter of [false, true]) {
         (row) => row.pluginId === MEMORY_VECTOR_PLUGIN_ID,
       ),
     ).toBe(false);
-    // The receiving boundary must also reject progress supplied in a payload.
-    await store.saveSnapshot({
-      ...snapshot,
-      payload: {
-        ...snapshot.payload,
-        pluginData: [...snapshot.payload.pluginData, ...progress],
-      },
-    });
     const fork = await app.request("/api/sessions/parent/fork", {
       method: "POST",
       headers: { "content-type": "application/json" },

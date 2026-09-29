@@ -78,6 +78,8 @@ export { createMemoryTools } from "./builtin/memory-tools.js";
 export type { MemoryToolDeps } from "./builtin/memory-tools.js";
 export { createEmitEventTool } from "./builtin/emit-event.js";
 export type { EventDirectoryLike } from "./builtin/emit-event.js";
+export { createDefaultToolRegistry } from "./builtin/default-tools.js";
+export type { DefaultToolRegistryDeps } from "./builtin/default-tools.js";
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
 export { shortId, shortIdBatch } from "./short-id.js";

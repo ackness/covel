@@ -1,5 +1,10 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, it, expect } from "vitest";
-import { getPendingProposals, tool, z } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createGenerateGuide from "../tools/generate-guide.js";
 
 const CONTEXT = {
@@ -24,14 +29,17 @@ describe("generate-guide tool", () => {
       CONTEXT,
     );
 
-    expect(result.topic).toBe("How to enter the harbor");
-    expect(result.categories).toHaveLength(2);
+    expect(getToolContent(result).topic).toBe("How to enter the harbor");
+    expect(getToolContent(result).categories).toHaveLength(2);
     // No LLM label → bilingual I18nText from STYLE_CONFIG.
-    expect(result.categories[0].label).toEqual({ zh: "稳妥", en: "Safe" });
+    expect(getToolContent(result).categories[0].label).toEqual({
+      zh: "稳妥",
+      en: "Safe",
+    });
     // LLM-supplied label passes through untouched.
-    expect(result.categories[1].label).toBe("全力一搏");
-    expect(result.categories[0].slot).toBe(1);
-    expect(result.categories[1].slot).toBe(2);
+    expect(getToolContent(result).categories[1].label).toBe("全力一搏");
+    expect(getToolContent(result).categories[0].slot).toBe(1);
+    expect(getToolContent(result).categories[1].slot).toBe(2);
   });
 
   it("emits one plugin.data.batch proposal covering the full message block", async () => {

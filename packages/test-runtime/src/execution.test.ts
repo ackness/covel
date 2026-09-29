@@ -8,11 +8,8 @@ import type {
   PluginRuntimeUtils,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
-import {
-  createMemoryMediaStore,
-  createMemoryStore,
-  type PluginDataRecord,
-} from "@covel/store";
+import { type PluginDataRecord } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 
 import {
   runDeferredFollower,

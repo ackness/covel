@@ -1,5 +1,7 @@
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 const ACTIVE_CAST_NAMESPACE = "active-cast";
 const ACTIVE_CAST_KEY = "current";
@@ -8,8 +10,7 @@ const DEFAULT_MAX_SPEAKERS = 2;
 /**
  * Choose active speakers for Chat Mode before narration.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @returns {Promise<Record<string, unknown>>}
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   const turnId = ctx.turnId;

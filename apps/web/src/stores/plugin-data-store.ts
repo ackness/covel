@@ -74,6 +74,15 @@ export function setActiveSession(sessionId: string | null): void {
   notify();
 }
 
+/** Forget one deleted session without disturbing another active session. */
+export function dropPluginDataSession(sessionId: string): void {
+  sessionStores.delete(sessionId);
+  if (activeSessionId === sessionId) {
+    activeSessionId = null;
+    notify();
+  }
+}
+
 /** Test helper — wipes every slot. Not used in production paths. */
 export function __clearAllPluginDataForTest(): void {
   activeSessionId = null;

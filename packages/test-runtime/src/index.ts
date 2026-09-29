@@ -4,3 +4,4 @@ export type {
   RunRuntimeDebugOptions,
   RunRuntimeDebugResult,
 } from "./runner.js";
+export type { UnsupportedDebugCapability } from "./runtime-loading.js";

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type {
   DataStore,
   CharacterRecord,

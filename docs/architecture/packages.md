@@ -1,64 +1,69 @@
-# Workspace package boundaries
+# 包边界：谁需要知道哪个库
 
-`packages/` 当前是工作区内复用边界。各包使用 `workspace:*` 依赖、`private: true` 和 TypeScript 源码入口；它们没有独立 npm 发布、产物资源封装或跨仓库兼容性承诺。评估是否仍在使用时，需要同时检查应用入口、依赖注入和开发命令，不能只统计应用中的 import。
+Covel 是模块化单体，`packages/` 大多是工作区内部边界，并非每个包都要独立发布。判断一个库为何存在，要看它拥有的责任和实际调用者。唯一面向独立插件作者打包的库是 `@covel/plugin-handlers-utils`；它产出 `dist` 和声明文件，其余库主要由应用与框架在工作区内组合。
 
-## Consumers and responsibilities
+## 三条使用路径
 
-| Package                 | 实际入口 / 消费方                                                  | 复用边界                                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `ai-provider`           | `apps/server/src/ai-setup.ts`；runtime gateway；test-runtime       | provider、slot、协议与媒体 wire；依赖 shared 契约及模型资源，Node 服务端使用                                               |
-| `approval`              | server bootstrap 工具/RPC 审批；runtime tool-executor              | 权限规则与审批门，状态由宿主提供                                                                                           |
-| `context`               | runtime 会话上下文与 prompt 组装；server compactor；create prompts | 使用窄 store/LLM 接口；磁盘 prompt loader 仍要求 Node 与 prompts 目录                                                      |
-| `create`                | `apps/server/src/routes/api/ai.ts` 的世界生成                      | 可注入 LLM，产出 Covel WorldIR 与插件内容；是领域库而非通用生成器                                                          |
-| `events`                | server 订阅与传输；runtime 生命周期；plugin registry               | 事件总线、重放与可选持久化/跨进程 transport；事件契约来自 shared                                                           |
-| `memory`                | server bootstrap 注入 runtime，搜索器注入 tools                    | 核心块、提取、recall/archival、向量索引；LLM 和各层 store 均用窄接口                                                       |
-| `plugin-handlers-utils` | narrator、scene-cast、world-init、媒体等插件                       | locale、proposal、文本与取消辅助函数；不依赖 runtime/store                                                                 |
-| `plugin-loader`         | server 注册/发现；测试工具                                         | Node 文件系统上的插件协议、加载和注册；保留目录与 manifest 约束                                                            |
-| `plugin-test-utils`     | 插件测试；test-runtime 的 MockLLM                                  | 开发依赖，提供运行时测试 fixture；不是服务端运行必需组件                                                                   |
-| `runtime`               | actions、manual/RPC、resume、detached jobs；test-runtime           | Covel 的调度、执行、proposal 提交和恢复；是集成内核，不是独立的通用 agent-loop 包                                          |
-| `settings`              | `apps/web/src/settings/store.ts` 及设置面板                        | 注册、校验、订阅和持久化 adapter；JSON-file backend 接受宿主注入的 IPC/HTTP transport，server 不需再运行一份 SettingsStore |
-| `shared`                | 应用、其余库及插件                                                 | 跨层 DTO、schema、领域约束；根入口较宽，特定平台能力应使用已声明 subpath                                                   |
-| `store`                 | server 持久化；runtime/memory；web browser-sync                    | Covel 领域记录与多后端实现；浏览器使用专用 subpath，不能把 Node 根入口当作浏览器数据库库                                   |
-| `test-runtime`          | 根命令 `pnpm test:runtime`；插件 runtime cases                     | 独立启动真实 runtime 的开发 CLI，支持 mock/live；没有应用 import 也不代表闲置                                              |
-| `tools`                 | server 注册；runtime 调用；插件定义工具                            | 工具定义、校验、overlay 和 proposal envelope；注入窄 store 接口，事务提交仍由宿主负责                                      |
+| 使用者                           | 应接触的入口                                                                                                                           | 不需要接触的实现                                                                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 插件作者                         | `@covel/plugin-handlers-utils` 的公开 SDK 类型与辅助函数；运行时注入的 `PluginAPI`、`toolkit` 和受限的 `FunctionStoreView`             | `runtime`、`store`、`tools`、`shared` 的内部入口。`tools` 依赖 SDK 并实现宿主侧工具注册与执行，作者经注入的 `toolkit.tool` 定义工具。 |
+| 应用宿主（server、desktop、web） | 按职责组合 `plugin-loader`、`runtime`、`store`、`memory`、`approval`、`events`、`context` 等；选择实际后端并提供资源、会话锁及提交策略 | 插件作者的业务逻辑。执行返回值本身不负责持久化，宿主必须提交执行计划。                                                                |
+| 框架内部与开发工具               | `shared` 领域契约及各包的内部模块；`plugin-test-utils` 用于插件单元测试，`test-runtime` 用于隔离运行 runtime cases                     | 不应把测试运行器视作完整 HTTP 服务。它与 server 共用默认工具及静态工具审批策略，但 store、LLM、事件目录等资源由测试环境提供。         |
 
-## Composition that must stay connected
+插件作者的 SDK 与宿主实现分开：`plugin-handlers-utils` 不依赖私有工作区包，`shared` 保留框架跨层 DTO/schema，`tools` 实现 SDK 所描述的工具协议。详见[插件契约](../reference/plugins.md)和[工具](../reference/tools.md)。
 
-角色写入经过 `tools` 的会话约束提示与执行校验，生成 proposal，随后由 `runtime` 的提交链写入 `store` 并发布数据更新。工具执行成功不等于已持久化；重复 create 返回已有身份，更新须显式声明。详见 [tools](../reference/tools.md#sync-characters)。
+## 每个包的实际责任
 
-记忆由 server 组装：当前请求 adapter / slot → `memory` updater → DataStore 核心块与面板镜像 → 下一回合 `runtime` → `context` prompt。runtime 的 `memorySystem` 使用结构接口，不直接依赖 memory 包，这是有意保留的可替换边界。普通、manual 和 resume 的已提交叙事均接入提取；未提交结果不触发写入。提取只接收 manifest 声明 `outputKind: story` 的当前回合成功结果，插件内部 text 不是故事事实。宿主统一调用 runtime 的 `commitExecution`；事务、通知、快照、已提交上下文刷新和记忆调度由同一入口衔接，执行结果不携带可调用的收尾回调。恢复执行也使用同一输出导出与媒体校验路径。
+| 包                      | 谁需要知道它                                                 | 保留这个边界的理由                                                                                                                                                                                                       |
+| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `plugin-handlers-utils` | 插件作者、实现作者协议的宿主代码                             | 唯一可独立打包的作者 SDK；拥有 `PluginAPI`、handler/context、proposal、显式工具结果和辅助函数契约。                                                                                                                      |
+| `shared`                | 框架包与应用                                                 | Covel 领域记录、事件、schema 和跨层协议的共同类型所有者；不是插件作者的第二套 SDK。                                                                                                                                      |
+| `plugin-loader`         | server 与开发测试工具                                        | 从 Node 文件系统发现、校验和加载插件包，保持插件目录及 manifest 协议的单一实现。                                                                                                                                         |
+| `runtime`               | server 与 `test-runtime`                                     | 调度、执行、挂起/恢复、效果提交及生命周期组成一个 Covel 内核；宿主通过其执行和提交 API 连接持久化。                                                                                                                      |
+| `tools`                 | server、runtime、`test-runtime`                              | 宿主侧工具定义校验、注册、执行和内置工具装配；依赖作者 SDK 的工具结果契约。默认内置集由 `createDefaultToolRegistry` 构造。                                                                                               |
+| `approval`              | server、runtime、`test-runtime`                              | 两种不同授权机制共享一个小包：`createDefaultToolApprovalPipeline` 是工具来源的静态 allow/deny 策略；`createRpcApprovalGate` 是会话范围内交互式 Plugin RPC 授权状态。前者不持久化玩家批准，后者由宿主负责 HTTP 决策流程。 |
+| `context`               | runtime、server 压缩/生成流程                                | prompt、历史、插件注入数据和 token budget 的组装。常用入口只有异步 `await buildContext(params)`，按输入自行决定是否读取 store；独立 prompt 目录用 `createPromptLoader(root)` 注入。                                      |
+| `events`                | server 订阅层、runtime、插件注册流程                         | Covel 事件总线、重放、可选持久化和 transport 接口；内部 RingBuffer 不属于消费方 API。                                                                                                                                    |
+| `store`                 | server、runtime、memory、浏览器同步                          | 领域持久化契约与 Memory/SQLite/PostgreSQL/IndexedDB 后端。根入口承载契约、工厂和跨后端操作；具体后端工厂从 `/memory`、`/sqlite`、`/postgres`、`/indexeddb` 导入，浏览器同步和向量能力也有专用子入口。                    |
+| `memory`                | server 装配，runtime 通过注入接口使用                        | recall、archival、关键词/向量检索及增量索引。每个 `createMemorySystem` 实例拥有自己的后台任务集合、`pendingTaskCount()` 与 `drain()`；宿主停止生产者后排空该实例。                                                       |
+| `ai-provider`           | server 的模型配置、runtime gateway、`test-runtime` live 模式 | 模型选择、provider 协议及媒体 wire 的集中适配；具体 provider 不进入插件作者 API。                                                                                                                                        |
+| `create`                | server 世界生成路由                                          | 可注入 LLM 的世界内容生成与验证，显式 `writeWorldPackage` 导出文件；数据库消费者直接使用生成结果。                                                                                                                       |
+| `settings`              | web 设置面板与持久化 adapter                                 | 设置项注册、校验、订阅和持久化抽象；宿主提供实际 IPC/HTTP transport。                                                                                                                                                    |
+| `plugin-test-utils`     | 插件单元与集成测试                                           | 受限上下文、mock，以及复用真实执行和事务提交的工具集成测试入口；不启动完整 HTTP server。                                                                                                                                 |
+| `test-runtime`          | 插件开发者运行 runtime cases                                 | 使用隔离 store 与 mock/live gateway 调用真实 runtime 的开发 CLI；复用默认工具集和静态审批策略，但不覆盖 HTTP 路由、生产事件目录或部署锁。                                                                                |
 
-`MemoryUpdater.updateAfterTurn` 可携带来源 `turnId` / `traceId` / `modelSlot`；可选 `onUpdate(input, result)` observer 属于同一个 pending 队列，observer 失败不回滚已写入块。队列中的后续任务在前一任务完成后重新加载核心块。应用层负责捕获请求配置、持久化失败状态和显示提示，memory 包不依赖 Hono 或 React。详见 [slots](../reference/slots.md)、[protocol](../reference/protocol.md) 与 [UI panels](../reference/ui-panels.md)。
+这些边界中，`approval`、`context`、`events`、`create`、`settings` 等小包都有明确消费者与独立责任。它们无须仅因体量小或开发用途被并入 `runtime`；也不应为了看起来通用而增加转发包。
 
-memory 包保留进程内提取队列；server 为生产链路增加与故事同事务的恢复任务，以及独立的核心记忆锁。PostgreSQL 宿主注入跨进程 advisory lock。最终块、镜像和任务确认一起提交；下一次会话访问补做中断任务。向量索引继续使用独立 ingestion lock；这两种机制不等于所有后台任务都拥有统一事务屏障。详见 [transactions](../reference/transactions.md)。
+## 宿主组合的关键边界
 
-## Reuse constraints
+一次执行先通过 `executeTurn(...)` 或 `resumeSuspendedRuntime(...)` 得到 `{ result, commit }`。`result` 是可用于传输的业务结果，已剥离各层 runtime result 的 `pendingProposals`；`RuntimeResult.output` 也只有业务数据。缓冲命令保留在 `commit.results[].pendingProposals` 中，不再藏在 output 上。`commit` 是只交给宿主的计划，包含顶层和递归结果、journal、suspensions、hook scope、schema、setup 与时钟信息。宿主在会话锁内提交它，不再自己拼装这些内部数据：
 
-- `context` 的 `createPromptLoader(root)` 提供独立目录的加载器，可通过 `CompactorDeps.loadPrompt` / `CreateWorldOptions.loadPrompt` 注入；世界生成、重试和 lore 修复使用同一来源。默认 `loadPrompt` / `setPromptsRoot` 仍是进程级兼容入口；并发多目录消费方应使用实例加载器。磁盘加载仍要求 Node，也可注入自定义 `PromptLoader` 函数。
-- `events` 只要求 `EventStore.saveEvent` / `getEventById`，不再以 `store` 为生产依赖；现有 DataStore 通过结构类型直接兼容。事件与订阅格式仍是 shared 中的 Covel 协议。
-- `shared/plugin-runtime` 是执行契约入口，只导出类型，按服务能力、handler 和已加载 runtime 拆分。runtime 消费契约，loader 生产符合契约的对象；runtime 仅在测试中依赖 loader，旧 loader 类型导出保留兼容。
-- `memory` 的 `RecallStore`、`ArchivalStore`、`CoreMemoryStore`、`VectorIngestStore` 只声明实际方法，现有 DataStore 结构兼容。批量核心块更新仍要求同一个事务，不拆散原子性。领域记录类型来自 `store/contracts`；向量能力来自不加载数据库驱动的 `store/vector`，纯能力适配器也可接受检测。
-- runtime 的状态、schema、proposal 和调度语义仍属于 Covel；窄接口不等于这些库已与领域协议解耦。
-- 作者脚本通过 `ai-provider/config`、`ai-provider/image-wires`、`ai-provider/url-safety` 使用公开入口，根工作区显式声明这些脚本的依赖。`scripts/validate-release-worlds.ts` 仍调用 server 的世界载入入口，属于部署验证工具；未把这个工具专用入口扩大为公共库 API。
-- 面向外部发布需要单独定义 API、构建产物、资源与平台入口；在出现该交付需求前，不新增一层只转发现有接口的包装库。
+```ts
+const execution = await executeTurn(input, manifests, deps);
+const { result } = execution;
+await commitExecution({
+  execution,
+  store: deps.store,
+  completion: {
+    kind: "turn",
+    turnId: result.turnId,
+    durationMs: result.durationMs,
+  },
+});
+```
 
-## Boundary checks and remaining tradeoffs
+恢复执行同样把整个 `execution` 交给 `commitExecution`，并选用 `kind: "resume"` 的完成策略。提交事务和提交后的通知、快照、记忆调度分别遵守[事务契约](../reference/transactions.md)。工具调用成功也不意味着 proposal 已持久化。
 
-`pnpm check:boundaries` 检查 apps/packages/plugins 生产源码：跨工作区引用必须走公开 exports，生产导入必须声明依赖，packages 的依赖方向必须符合脚本中的显式允许图。语法解析区分 type-only 与运行时导入、注释和动态 import；不把 JSDoc 当作运行依赖。测试 fixture 不受生产依赖方向约束。新增包关系应连同此文档评审后更新允许图。它与 Knip 的未使用依赖检查互补。
+server 与 `test-runtime` 都使用 `createDefaultToolRegistry({ store, eventDirectory })` 和 `createDefaultToolApprovalPipeline()`，因此默认工具名称及来源策略一致。server 仍为会话注入实际事件 schema、角色能力、持久化资源和交互式 RPC 审批；测试运行器使用隔离资源和 mock gateway。工具返回 `{ kind: "covel.tool-result", content, pendingProposals, emittedEvents? }` 时，宿主先分离并验证效果，再把正文交给模型；纯工具可直接返回正文。详见[工具契约](../reference/tools.md)。
 
-- `store/factory` 为数据和媒体选择后端，按需加载；`store/memory`、`store/sqlite`、`store/postgres` 是明确的后端入口。服务端值导入使用 factory/session/errors/capabilities/vector 子入口，测试 CLI 使用 memory。兼容根入口仍导出全部后端，禁止新增生产值导入；本次没有声称或测量启动速度提升。
-- `context` 快照只要求 `SessionContextReadStore`，压缩器使用带写入和事务的 `SessionContextStore`；事务视图可以直接构建只读快照。
-- `KernelStore` 的领域能力可缺省，角色和 schema 写入必须提供 World Model 查询与对应写入能力，不能跳过全体角色校验。角色版本写入、plugin-data 与 lore 写入已有缺失能力拒绝路径。
-- `plugin-handlers-utils` 根入口保留基础辅助函数；有副作用的完整图片流程经 `/image-generation` 导出。二者保留在同一个包内，避免增加无独立消费需求的包。
-- `settings` 的 IPC 环境探测由应用承担。REST 路径默认值仍服务于 Covel 协议，可通过 options 覆盖；没有为跨项目发布增加一层通用传输框架。
-- `runtime` 仍是 Covel 的集成内核，调度、递归与提交语义高度关联。本次不按行数机械拆分执行器；是否继续提取阶段模块由实际职责和测试成本决定。
-- `shared` 仍承担领域 DTO/schema；世界时间只把声明校验放在 shared，计算、prompt、工具与 UI 放在 core-plugin。没有把时间历法加入内核的逻辑回合计数器。
-- `create`、`approval`、`events`、`tools`、`plugin-loader`、`plugin-test-utils` 和 `test-runtime` 都有明确调用方，没有发现应仅因单一消费者或开发用途而删除的依据。
+memory 的统一 `search` 入口负责 query embedding 复用与跨来源排名，tools 只转换展示结果。`createWorld` 返回经过验证的可移植内容，`writeWorldPackage` 负责可选文件导出；数据库与仅返回模式直接消费生成结果。
 
-### 插件工具单元测试的状态注入
+memory 的后台队列属于 `MemorySystem` 实例，不是进程全局队列。向量增量索引的游标与内容哈希保存在专门的 `vector_index_progress` 表，属于可重建的派生索引状态，不占插件数据命名空间。memory 使用 store 的窄能力接口；server 选择 embedding、跨进程锁、恢复任务及关闭时的 drain 策略。详见[事务](../reference/transactions.md)和[世界数据](../reference/world-data.md)。
 
-`plugin-test-utils.bindToolStore` 在每次直接工具调用时复用 runtime 的
-`createFunctionStoreView`，绑定当前 session/plugin 并合并已有提案；工具工厂只接收
-纯 toolkit。该测试适配器依赖 runtime 实现以及 store/tools 的公开类型，不创建
-数据库、不执行提交、不模拟生产审批或取消。包依赖检查明确允许这些开发辅助依赖；
-生产 tools/store 仍不反向依赖测试包。
+`context` 的 prompt loader 也是实例边界：共享模板可用默认 `loadPrompt`，插件自有目录通过 `createPromptLoader(root)` 注入。包的公开入口不再导出进程级 `setPromptsRoot`。`buildContext` 统一返回 Promise；调用方无需事先判断同步或异步路径。详见[prompt 结构](../reference/prompt-structure.md)。
+
+## 开发阶段的兼容范围
+
+本次调整按当前契约同步更新生产者与消费方，不保留旧版入口的别名或双写：作者应使用可打包 SDK；具体 store 后端应使用其子入口；context 调用须 `await buildContext`；宿主须保留并提交执行计划；工具效果须通过显式结果和 `pendingProposals` 传递。旧测试 fixture 与插件代码也须按同一规则更新。
+
+这些库仍处早期开发，当前没有跨版本持久化迁移承诺。受 store schema 或向量进度表变化影响的既有开发数据需要重新创建；不要把旧数据可读或旧入口可用当作本次改动的保证。`pnpm check:boundaries` 检查生产源码的工作区公开入口、依赖声明与包方向；需要新跨包依赖时，应连同此责任划分一起评审。

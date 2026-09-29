@@ -12,7 +12,8 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import { createHookPipeline } from "@covel/runtime";
 import {

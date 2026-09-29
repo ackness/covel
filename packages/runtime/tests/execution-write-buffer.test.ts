@@ -7,8 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createMemoryStore } from "@covel/store";
-import { withPendingProposals } from "@covel/tools";
+import { createMemoryStore } from "@covel/store/memory";
 import type { Proposal, CharacterUpsertPayload } from "@covel/shared";
 import {
   createPluginDataWriter,
@@ -126,7 +125,8 @@ describe("createTrustedHandlerStore with a write buffer", () => {
           runtimeId: CTX.runtimeId,
           turnId: CTX.turnId,
           status: "success",
-          output: withPendingProposals({}, buffer),
+          output: {},
+          pendingProposals: buffer,
         },
         store,
         CTX.sessionId,
@@ -377,7 +377,6 @@ describe("processRuntimeResult and non-success results", () => {
   it("commits a skipped pre-game guard's buffered writes", async () => {
     const store = createMemoryStore();
     const output: Record<string, unknown> = { skip: true, preGameDone: true };
-    withPendingProposals(output, [pluginDataProposal()]);
 
     const out = await processRuntimeResult(
       {
@@ -386,6 +385,7 @@ describe("processRuntimeResult and non-success results", () => {
         turnId: CTX.turnId,
         status: "skipped",
         output,
+        pendingProposals: [pluginDataProposal()],
       },
       store,
       CTX.sessionId,
@@ -423,7 +423,6 @@ describe("processRuntimeResult and non-success results", () => {
   it("a FAILED result never commits its pending proposals", async () => {
     const store = createMemoryStore();
     const output: Record<string, unknown> = { error: "boom" };
-    withPendingProposals(output, [pluginDataProposal()]);
 
     await processRuntimeResult(
       {
@@ -432,6 +431,7 @@ describe("processRuntimeResult and non-success results", () => {
         turnId: CTX.turnId,
         status: "failed",
         output,
+        pendingProposals: [pluginDataProposal()],
       },
       store,
       CTX.sessionId,

@@ -243,7 +243,7 @@ World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:
 
 ## 本地化与验证
 
-根翻译使用 `PLUGIN.<locale>.md`，子 runtime 使用 `RUNTIME.<locale>.md`。只提供需要翻译的正文和自然语言字段即可。结构字段由 canonical 文件决定，翻译不能改变契约、工具、stage、超时、提示词段 ID 或位置。缺少目标语言时使用兼容语言候选、English、canonical；默认中文及其别名保留 canonical。静态提示词的语言版本在加载时捕获。
+根翻译使用 `PLUGIN.<locale>.md`，子 runtime 使用 `RUNTIME.<locale>.md`。只提供需要翻译的正文和自然语言字段即可。结构字段由 canonical 文件决定，翻译不能改变契约、工具、stage、超时、提示词段 ID 或位置。缺少目标语言时使用兼容语言候选、English、canonical；默认中文及其别名保留 canonical。静态提示词与 runtime 正文的语言版本都在 definition/generation 加载时捕获。执行按有效 locale 从该快照选择正文，不重新读取正在热更新的文件；语言选择不能改变 canonical manifest 的权限或执行合同。
 
 ```sh
 pnpm validate:plugin plugins/example

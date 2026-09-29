@@ -14,7 +14,8 @@ import {
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { pluginDataRoutes } from "../../src/routes/api/plugin-data.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 

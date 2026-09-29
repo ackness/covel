@@ -126,6 +126,7 @@ export interface BootstrapPluginEntries {
     sessionId: string,
     fn: () => Promise<T>,
     beforeCapture?: () => Promise<void>,
+    locale?: string,
   ): Promise<T>;
   reload(
     pluginId: string,
@@ -628,7 +629,7 @@ export async function createBootstrapPluginEntries(
 
   return {
     reload,
-    async withSnapshot(sessionId, fn, beforeCapture) {
+    async withSnapshot(sessionId, fn, beforeCapture, locale) {
       if (snapshotSessions.getStore() === sessionId) {
         if (beforeCapture) {
           if (params.sessionLock)
@@ -689,7 +690,7 @@ export async function createBootstrapPluginEntries(
           let runtime:
             Awaited<ReturnType<RuntimeLoader["capture"]>> | undefined;
           try {
-            runtime = await params.runtimeLoader?.capture(sessionId);
+            runtime = await params.runtimeLoader?.capture(sessionId, locale);
           } catch (error) {
             // A concurrent publication can invalidate a manifest mid-load.
             if (!closed && revision !== artifactRevision) continue;

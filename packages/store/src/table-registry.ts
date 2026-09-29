@@ -55,6 +55,7 @@ export type SessionScopedMemoryKey = Extract<
   | "characters"
   | "characterSchemas"
   | "pluginData"
+  | "vectorIndexProgress"
   | "worldDataImportLedger"
   | "traceEvents"
   | "runtimeOutputs"
@@ -89,6 +90,11 @@ export interface SessionScopedTable {
  * and delete ordering.
  */
 export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
+  {
+    table: "vector_index_progress",
+    memoryKey: "vectorIndexProgress",
+    memoryKind: "map",
+  },
   {
     table: "turn_results",
     memoryKey: "turnResults",

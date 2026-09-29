@@ -9,6 +9,8 @@
  * embedding model, embed failure, or empty index).
  */
 
+import { collectArchivalItems } from "./archival-items.js";
+import type { ArchivalStore } from "./store-contracts.js";
 import { supportsVector } from "@covel/store/vector";
 import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
 import {
@@ -18,15 +20,8 @@ import {
   MEMORY_VECTOR_PLUGIN_ID,
 } from "./vector-common.js";
 
-interface ArchivalPayload {
-  source?: ArchivalSearchResult["source"];
-  key?: string;
-  content?: string;
-  pluginId?: string;
-}
-
 export function createVectorArchivalSearcher(deps: {
-  readonly store: object;
+  readonly store: ArchivalStore;
   readonly embed: EmbedFn;
   readonly fallback: ArchivalSearcher;
 }): ArchivalSearcher {
@@ -42,6 +37,7 @@ export function createVectorArchivalSearcher(deps: {
         return fallback.search(sessionId, query, limit);
       }
       let results;
+      let items;
       try {
         const target = await store.resolveSessionVectorTarget(sessionId);
         if (!target) {
@@ -61,6 +57,12 @@ export function createVectorArchivalSearcher(deps: {
           pluginId: MEMORY_VECTOR_PLUGIN_ID,
           namespace: ARCHIVAL_NAMESPACE,
         });
+        items = new Map(
+          (await collectArchivalItems(store, sessionId)).map((item) => [
+            item.vecKey,
+            item,
+          ]),
+        );
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(
@@ -75,26 +77,40 @@ export function createVectorArchivalSearcher(deps: {
         return fallback.search(sessionId, query, limit);
       }
 
-      return results.map((r) => {
-        const payload = parsePayload(r.payload);
-        const result: ArchivalSearchResult = {
-          key: payload.key ?? r.key,
-          content: payload.content ?? "",
-          score: distanceToScore(r.distance),
-          source: payload.source ?? "lorebook",
-          ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
+      // The index is asynchronous. Never publish a deleted or changed source
+      // just because its old embedding still ranks highly.
+      if (
+        results.some(
+          (row) => items.get(row.key)?.text !== payloadContent(row.payload),
+        )
+      ) {
+        return fallback.search(sessionId, query, limit);
+      }
+      return results.map((row) => {
+        const item = items.get(row.key)!;
+        return {
+          key: item.displayKey,
+          content: item.text,
+          score: distanceToScore(row.distance),
+          source: item.source,
+          ...(item.pluginId ? { pluginId: item.pluginId } : {}),
         };
-        return result;
       });
     },
   };
 }
 
-function parsePayload(raw: string | null): ArchivalPayload {
-  if (!raw) return {};
+function payloadContent(raw: string | null): string | null {
+  if (!raw) return null;
   try {
-    return JSON.parse(raw) as ArchivalPayload;
+    const value: unknown = JSON.parse(raw);
+    return value !== null &&
+      typeof value === "object" &&
+      "content" in value &&
+      typeof value.content === "string"
+      ? value.content
+      : null;
   } catch {
-    return {};
+    return null;
   }
 }

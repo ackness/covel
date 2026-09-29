@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   makeSession,
   makeSnapshot,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EventBus } from "@covel/events";
 import type { DataStore, PluginDataRecord, SessionRecord } from "@covel/store";
-import { createSqliteStore } from "@covel/store";
+import { createSqliteStore } from "@covel/store/sqlite";
 import { createCommitPipeline } from "@covel/runtime";
 import type { Proposal } from "@covel/shared";
 import { wrapStoreWithPluginDataEvents } from "../../src/routes/api/bootstrap/plugin-data-store-events.js";

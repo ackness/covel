@@ -91,6 +91,7 @@ export async function withSettledExecutionLock<T>(
   sessionId: string,
   fn: () => Promise<T>,
   waitBudget?: SettleWaitBudget,
+  locale?: string,
 ): Promise<T> {
   return withSettledSessionLock(
     c,
@@ -103,7 +104,7 @@ export async function withSettledExecutionLock<T>(
           session.activePlugins,
         );
       const snapshot = c.get("withPluginSnapshot");
-      return snapshot ? snapshot(sessionId, fn) : fn();
+      return snapshot ? snapshot(sessionId, fn, undefined, locale) : fn();
     },
     waitBudget,
   );

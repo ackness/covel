@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 

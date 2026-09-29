@@ -2,6 +2,8 @@
 
 先选择扩展入口，再写插件包。需要生成文字时使用 agent runtime；确定性的计算、导入或外部 API 调用使用 function runtime；提示词片段、历史变换、压缩和世界上下文使用公开扩展点。
 
+代码作者使用公开 `@covel/plugin-handlers-utils` 的入口、function/guard 类型和结果 helper。工具通过 entry 注入的 `covel.toolkit` 构造；`@covel/tools` 的 registry、内置工具装配以及 `@covel/plugin-loader` 的加载阶段属于宿主实现。发布独立插件时应将使用到的 SDK 运行代码打包进插件，安装器不会执行 npm 安装。
+
 本指南对应当前作者格式。根文件为 `PLUGIN.md`，多 runtime 子文件为 `RUNTIME.md`。旧平铺字段、子目录 `PLUGIN.md`、`relations` 和框架记忆专用字段均不再接受；旧开发会话和 checkpoint 应重建。
 
 ## 三条路径

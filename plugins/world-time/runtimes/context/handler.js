@@ -1,5 +1,8 @@
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
+
 import { loadTime } from "../../clock.js";
 
 export default async function handler(ctx) {

@@ -1,6 +1,11 @@
+import {
+  getToolContent,
+  getPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { getPendingProposals, validateOutput } from "@covel/tools";
+
+import { validateOutput } from "@covel/tools";
 import handler from "../runtimes/direction/handler.js";
 
 const CHARACTERS = [
@@ -146,7 +151,7 @@ describe("scene-stage direction handler", () => {
     const result = await handler(
       makeCtx([{ type: "actor.enter", character: "不存在的人" }]),
     );
-    expect(result.value).toMatchObject({
+    expect(getToolContent(result).value).toMatchObject({
       skipped: true,
       diagnostics: ["unresolved character: 不存在的人"],
     });
@@ -194,7 +199,7 @@ describe("scene-stage direction handler", () => {
       namespace: "dialogue",
       value: { paragraphSpeakers: [null, null, null] },
     });
-    expect(result.value.diagnostics).toHaveLength(2);
+    expect(getToolContent(result).value.diagnostics).toHaveLength(2);
   });
 
   it("keeps attribution keyed by turn and supports the player as a speaker", async () => {

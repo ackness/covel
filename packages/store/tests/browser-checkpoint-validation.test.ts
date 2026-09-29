@@ -6,10 +6,11 @@ import {
   type BrowserCheckpoint,
 } from "../src/browser-sync/browser-sync.js";
 import {
-  createMemoryStore,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
 } from "../src/index.js";
+import { createMemoryStore } from "../src/memory-entry.js";
+
 import {
   makeCharacter,
   makeEvent,

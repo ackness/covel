@@ -3,7 +3,7 @@ import {
   loadTurnSessionState,
 } from "../src/turn-executor/session-state.js";
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { turnDigestSchema, type RuntimeManifest } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import {

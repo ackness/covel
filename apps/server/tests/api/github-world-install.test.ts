@@ -4,7 +4,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import yazl from "yazl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { installRoutes } from "../../src/routes/api/install.js";
 import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";

@@ -1,5 +1,5 @@
 import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
-import type { EmbedFn } from "@covel/memory";
+import type { EmbedFn, MemorySystem } from "@covel/memory";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
 import { createPluginServiceAdmission } from "./bootstrap/plugin-service-admission.js";
 import {
@@ -237,6 +237,7 @@ export interface ApiBootstrapConfig {
 }
 
 export interface ApiBootstrapResult {
+  readonly memorySystem?: MemorySystem;
   readonly applicationWork: ApplicationWork;
   readonly app: Hono;
   readonly registry: PluginRegistry;
@@ -512,6 +513,7 @@ async function assembleApi(
     sessionId: string,
     fn: () => Promise<T>,
     beforeCapture?: () => Promise<void>,
+    locale?: string,
   ): Promise<T> => {
     let authority: Awaited<ReturnType<typeof serviceAdmission.capture>>;
     return pluginEntries.withSnapshot(
@@ -521,6 +523,7 @@ async function assembleApi(
         await beforeCapture?.();
         authority = await serviceAdmission.capture(sessionId);
       },
+      locale,
     );
   };
   pluginEntries.watch();
@@ -932,6 +935,7 @@ async function assembleApi(
   runtimeJobWorker.wake();
 
   return {
+    memorySystem: bootstrapMemory?.memorySystem,
     app,
     applicationWork,
     registry,

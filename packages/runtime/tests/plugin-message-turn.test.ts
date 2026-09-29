@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
-import { getPendingProposals, withPendingProposals } from "@covel/tools";
+import { createMemoryStore } from "@covel/store/memory";
 import type { ExecutionContext, Proposal } from "@covel/shared";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createExecutionContext } from "../src/turn-executor/execution-context.js";
@@ -58,9 +57,8 @@ async function commit(
     turnId,
     status: "success",
     toolCalls: [],
-    output: options.functionOutput
-      ? {}
-      : withPendingProposals({}, [proposal(items)]),
+    output: {},
+    ...(!options.functionOutput ? { pendingProposals: [proposal(items)] } : {}),
     ...(options.functionOutput ? { effects: { pluginData: items } } : {}),
   };
   const outcome = await finalizeExecution({
@@ -150,9 +148,7 @@ describe("third-party message anchors at the commit boundary", () => {
           ?.value,
       ).toBe(turnId);
       expect(card.turnId).toBe(turnId);
-      const original = functionOutput
-        ? card.effects
-        : getPendingProposals(card.output);
+      const original = functionOutput ? card.effects : card.pendingProposals;
       expect(JSON.stringify(original)).toContain(turnId);
     },
   );

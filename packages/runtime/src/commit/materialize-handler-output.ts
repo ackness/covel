@@ -1,7 +1,7 @@
 /** Materialize a successful plugin HandlerResult into the kernel output. */
 
 import type { HandlerResult, RuntimeResult } from "@covel/shared";
-import { getPendingProposals, withPendingProposals } from "@covel/tools";
+import { getPendingProposals } from "@covel/tools";
 import { isPlainObject } from "./normalize-handler-result.js";
 
 type SuccessOutcome = Extract<HandlerResult, { outcome: "success" }>;
@@ -13,7 +13,10 @@ type SuccessOutcome = Extract<HandlerResult, { outcome: "success" }>;
 export function materializeHandlerSuccess(
   outcome: SuccessOutcome,
   rawOutput: unknown,
-): Pick<RuntimeResult, "output" | "effects" | "completion"> {
+): Pick<
+  RuntimeResult,
+  "output" | "effects" | "completion" | "pendingProposals"
+> {
   const value = structuredClone(outcome.value);
   const projected: Record<string, unknown> = isPlainObject(value)
     ? { ...value }
@@ -22,8 +25,8 @@ export function materializeHandlerSuccess(
       : { value };
   const pending = getPendingProposals(rawOutput);
   return {
-    output:
-      pending.length > 0 ? withPendingProposals(projected, pending) : projected,
+    output: projected,
+    ...(pending.length > 0 ? { pendingProposals: pending } : {}),
     ...(outcome.effects ? { effects: structuredClone(outcome.effects) } : {}),
     ...(outcome.completion ? { completion: outcome.completion } : {}),
   };

@@ -33,6 +33,42 @@ afterEach(() => {
 });
 
 describe("desktop bridge REST helpers", () => {
+  it("retries an inconclusive probe before accepting a desktop response", async () => {
+    vi.resetModules();
+    const bridge = await import("../desktop-bridge.js");
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporarily offline"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ isDesktop: true }), { status: 200 }),
+      );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await expect(bridge.probeDesktopMode()).resolves.toBe("unknown");
+    expect(bridge.isDesktopApp()).toBe(false);
+    await expect(bridge.probeDesktopMode()).resolves.toBe("desktop");
+    expect(bridge.isDesktopApp()).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts an explicit pure web response but not an incomplete one", async () => {
+    vi.resetModules();
+    const bridge = await import("../desktop-bridge.js");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ isDesktop: false }), { status: 200 }),
+      );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await expect(bridge.probeDesktopMode()).resolves.toBe("unknown");
+    await expect(bridge.probeDesktopMode()).resolves.toBe("web");
+    await expect(bridge.probeDesktopMode()).resolves.toBe("web");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(bridge.isDesktopApp()).toBe(false);
+  });
+
   it("posts open file requests through the desktop config REST endpoint", async () => {
     const fetchMock = mockFetch(new Response("{}", { status: 200 }));
 
@@ -90,7 +126,7 @@ describe("desktop bridge REST helpers", () => {
     };
     const fetchMock = mockFetch(new Response("{}", { status: 200 }));
 
-    await probeDesktopMode();
+    await expect(probeDesktopMode()).resolves.toBe("desktop");
     await openLlmToml();
 
     expect(invoke).toHaveBeenCalledWith("covel:get-info");

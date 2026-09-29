@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   materializeWorldModel,
   type Proposal,
@@ -176,7 +176,8 @@ describe("execution World Model", () => {
       runtimeId: "actual/run",
       turnId: "actual-turn",
       status,
-      output: withPendingProposals({}, [{ ...schema(), sessionId: "forged" }]),
+      output: {},
+      pendingProposals: [{ ...schema(), sessionId: "forged" }],
     });
     const collected = collectUpstreamWorldProposals(
       new Map([

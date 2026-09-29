@@ -6,6 +6,8 @@
 
 普通设置的持久化合同只接受 `schemaVersion: 2`，必须包含 `revision`、`savedAt` 和 `entries`。localStorage、REST 和桌面 IPC 共用该校验；无版本或 v1 开发数据不迁移，读取和覆盖写入均会拒绝，原内容保留。受影响的开发设置需要重新建立。设置导入/导出的 `SettingsExportBundle.schemaVersion: 1` 是独立的当前合同，不受此限制影响。
 
+应用启动先确定设置后端：Electron 使用 IPC；无 IPC 时探测 `/api/config/info`，仅明确的 `isDesktop: false` 才选择 localStorage。超时、网络错误和无效响应表示模式未知，页面提供重试入口，此时不创建设置实例或写入浏览器存储。确认模式后才初始化对应后端，重试不会自动迁移设置。
+
 ## Schema 归一化
 
 已注册的非密钥设置使用 schema 的解析结果作为可见值，包括加载、动态注册、`set()`、`setMany()`、导入、刷新和写入失败后的回滚。嵌套 `.default()` 和字符串修整会体现在 `get()`、导出及订阅通知中；显式写入会保存解析结果。未注册的键保留原始值。

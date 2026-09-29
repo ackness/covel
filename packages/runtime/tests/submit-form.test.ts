@@ -8,7 +8,8 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import type { InteractionPayload, InteractionType } from "@covel/shared";
 import {
   createSubmitFormHandler,

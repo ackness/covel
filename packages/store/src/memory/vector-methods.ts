@@ -24,40 +24,41 @@ function squaredL2(a: Float32Array, b: Float32Array): number {
 }
 
 export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
-  return {
-    async upsertVector(input: UpsertVectorInput) {
-      const session = state.sessions.get(input.sessionId);
-      if (!session) {
-        throw new Error(
-          `Memory vector upsert: session ${input.sessionId} not found`,
-        );
-      }
-      if (
-        input.expectedSessionCreatedAt !== undefined &&
-        session.createdAt !== input.expectedSessionCreatedAt
-      ) {
-        throw new Error(
-          `Memory vector upsert: session ${input.sessionId} incarnation changed`,
-        );
-      }
-      const target = state.sessionVectorTargets.get(input.sessionId) ?? null;
-      if (!target) {
-        throw new Error(
-          `Memory vector upsert: session ${input.sessionId} has no embedding model locked`,
-        );
-      }
-      if (input.embedding.length !== target.dim) {
-        throw new Error(
-          `Memory vector upsert: embedding length ${input.embedding.length} does not match model dim ${target.dim}`,
-        );
-      }
-      const rowKey = vectorRowKey(
-        input.sessionId,
-        input.pluginId,
-        input.namespace,
-        input.key,
+  function prepareVector(input: UpsertVectorInput) {
+    const session = state.sessions.get(input.sessionId);
+    if (!session) {
+      throw new Error(
+        `Memory vector upsert: session ${input.sessionId} not found`,
       );
-      state.vectorRows.set(rowKey, {
+    }
+    if (
+      input.expectedSessionCreatedAt !== undefined &&
+      session.createdAt !== input.expectedSessionCreatedAt
+    ) {
+      throw new Error(
+        `Memory vector upsert: session ${input.sessionId} incarnation changed`,
+      );
+    }
+    const target = state.sessionVectorTargets.get(input.sessionId) ?? null;
+    if (!target) {
+      throw new Error(
+        `Memory vector upsert: session ${input.sessionId} has no embedding model locked`,
+      );
+    }
+    if (input.embedding.length !== target.dim) {
+      throw new Error(
+        `Memory vector upsert: embedding length ${input.embedding.length} does not match model dim ${target.dim}`,
+      );
+    }
+    const rowKey = vectorRowKey(
+      input.sessionId,
+      input.pluginId,
+      input.namespace,
+      input.key,
+    );
+    return [
+      rowKey,
+      {
         sessionId: input.sessionId,
         pluginId: input.pluginId,
         namespace: input.namespace,
@@ -65,7 +66,61 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         dim: target.dim,
         embedding: new Float32Array(input.embedding),
         payload: input.payload ?? null,
+      },
+    ] as const;
+  }
+
+  return {
+    async getVectorIndexProgress(scope) {
+      return (
+        state.vectorIndexProgress.get(
+          JSON.stringify([scope.sessionId, scope.pluginId, scope.namespace]),
+        )?.value ?? null
+      );
+    },
+    async commitVectorIndexBatch(input) {
+      const session = state.sessions.get(input.sessionId);
+      if (!session || session.createdAt !== input.expectedSessionCreatedAt) {
+        throw new Error("Vector index progress: session incarnation changed");
+      }
+      const key = JSON.stringify([
+        input.sessionId,
+        input.pluginId,
+        input.namespace,
+      ]);
+      if (
+        (state.vectorIndexProgress.get(key)?.value ?? null) !==
+        input.expectedValue
+      )
+        return false;
+      // Build every row before touching state: validation or cloning may throw.
+      const upserts = (input.upserts ?? []).map((mutation) =>
+        prepareVector({
+          ...mutation,
+          sessionId: input.sessionId,
+          pluginId: input.pluginId,
+          expectedSessionCreatedAt: input.expectedSessionCreatedAt,
+        }),
+      );
+      const deletes = (input.deletes ?? []).map((mutation) =>
+        vectorRowKey(
+          input.sessionId,
+          input.pluginId,
+          mutation.namespace,
+          mutation.key,
+        ),
+      );
+      for (const rowKey of deletes) state.vectorRows.delete(rowKey);
+      for (const [rowKey, row] of upserts) state.vectorRows.set(rowKey, row);
+      state.vectorIndexProgress.set(key, {
+        sessionId: input.sessionId,
+        value: input.value,
       });
+      return true;
+    },
+    async upsertVector(input: UpsertVectorInput) {
+      const [key, row] = prepareVector(input);
+      state.vectorRows.set(key, row);
     },
 
     async searchVectors(
@@ -108,6 +163,13 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async deleteVectors(input: DeleteVectorsInput) {
+      if (
+        input.expectedSessionCreatedAt !== undefined &&
+        state.sessions.get(input.sessionId)?.createdAt !==
+          input.expectedSessionCreatedAt
+      ) {
+        throw new Error("Vector delete: session incarnation changed");
+      }
       for (const [rowKey, row] of Array.from(state.vectorRows.entries())) {
         if (row.sessionId !== input.sessionId) continue;
         if (row.pluginId !== input.pluginId) continue;
@@ -117,6 +179,7 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         ) {
           continue;
         }
+        if (input.key !== undefined && row.key !== input.key) continue;
         state.vectorRows.delete(rowKey);
       }
     },

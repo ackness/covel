@@ -60,6 +60,33 @@ vectors and content hashes, and emits the existing session-correlated warning.
 A successful empty source is authoritative and still removes obsolete entries;
 the next healthy sweep can reuse unchanged hashes without another embedding call.
 
+## Memory index ownership
+
+`MemorySystem` owns its background tasks. Hosts stop producers, call that
+instance's `drain()`, and inspect `pendingTaskCount()` before closing its store.
+Independent instances never share a process-global drain barrier.
+
+Archival vector queries validate their candidates against current character and
+lorebook records before returning content. Deleted or changed candidates cause a
+keyword fallback until asynchronous ingestion refreshes the index. Lorebook API
+writes also schedule ingestion. Deleting one archival source deletes only that
+vector key and retains unchanged vectors without another embedding call.
+
+Recall cursors and archival hashes live in `vector_index_progress`, alongside
+physical indexes, rather than `plugin_data`. Progress writes compare the previous
+serialized value and validate the session incarnation under the backend's write
+boundary. Session deletion/replacement clears both progress and vectors; a
+transaction rollback restores the progress. Business snapshots, forks and browser
+checkpoints never copy it and therefore rebuild their own indexes.
+
+This changes the development storage contract. Recreate existing development
+databases and browser checkpoints containing the former index-owned `plugin_data`
+records; there is no legacy read, migration or sentinel-filter compatibility path.
+
+The `@covel/store` root exports contracts and lazy factories. Explicit backend
+constructors use `/memory`, `/sqlite`, `/postgres` and `/indexeddb`; importing a
+lightweight contract or factory does not load all native backend drivers.
+
 ## Server World and Session Deletion
 
 The world DELETE API owns cascade orchestration. It claims a persisted deletion

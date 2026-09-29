@@ -11,8 +11,12 @@
  * pre-existing entries written before B2 also gain the metadata.
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { overlayPluginDataValue, withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+  overlayPluginDataValue,
+} from "@covel/plugin-handlers-utils";
+
 import { getCategoryMetadata } from "../category-metadata.js";
 
 export function createCodexUpdateSchema(z) {

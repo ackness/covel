@@ -27,7 +27,7 @@ import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import yazl from "yazl";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
 import { installRoutes } from "../../src/routes/api/install.js";
 import { createRequestBodyLimitMiddleware } from "../../src/middleware/request-body-limit.js";

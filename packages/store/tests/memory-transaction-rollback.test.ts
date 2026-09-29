@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createMemoryStore } from "../src/memory/memory-store.js";
 import { makeSession, makeTurnMessage } from "../src/contract/test-fixtures.js";
 import type { MemoryStore } from "../src/memory/memory-types.js";
+import { supportsVector } from "../src/vector-store.js";
 import type { PluginDataRecord } from "../src/types.js";
 
 /**
@@ -192,6 +193,54 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
         embedding: new Float32Array([2, 3]),
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("restores both vectors and progress when an enclosing transaction rolls back a batch", async () => {
+    const session = (await store.getSession("sess-1"))!;
+    const target = await store.ensureVectorModel({
+      modelId: "test/embed",
+      provider: "test",
+      modelName: "embed",
+      dim: 2,
+    });
+    await store.lockSessionEmbeddingModel(session.id, target);
+    const scope = {
+      sessionId: session.id,
+      pluginId: "owner",
+      namespace: "progress",
+    };
+    const embedding = new Float32Array([1, 0]);
+    const guard = { ...scope, expectedSessionCreatedAt: session.createdAt };
+    await store.commitVectorIndexBatch({
+      ...guard,
+      expectedValue: null,
+      value: "before",
+      upserts: [
+        { namespace: "chunks", key: "kept", embedding, payload: "before" },
+      ],
+    });
+    await expect(
+      store.withTransaction(async (tx) => {
+        if (!supportsVector(tx)) throw new Error("Missing vector capability");
+        expect(
+          await tx.commitVectorIndexBatch({
+            ...guard,
+            expectedValue: "before",
+            value: "after",
+            deletes: [{ namespace: "chunks", key: "kept" }],
+            upserts: [{ namespace: "chunks", key: "inserted", embedding }],
+          }),
+        ).toBe(true);
+        throw new Error("rollback batch");
+      }),
+    ).rejects.toThrow("rollback batch");
+    expect(await store.getVectorIndexProgress(scope)).toBe("before");
+    const rows = await store.searchVectors({
+      sessionId: session.id,
+      query: embedding,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ key: "kept", payload: "before" });
   });
 
   it("every WRITE_METHOD_TOUCHES key names a real store method", async () => {

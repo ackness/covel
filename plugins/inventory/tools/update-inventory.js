@@ -26,8 +26,10 @@
  * the item keeps one stable ID across its whole history.
  */
 
-import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 
 /**
  * Badge metadata per op — persisted into the `message` namespace value so

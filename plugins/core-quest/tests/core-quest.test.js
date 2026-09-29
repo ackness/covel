@@ -1,5 +1,14 @@
+import {
+  getToolContent,
+  getPendingProposals,
+  shortIdBatch,
+} from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+} from "@covel/plugin-test-utils";
 /**
  * core-quest plugin tests.
  *
@@ -8,7 +17,7 @@ import { bindToolStore } from "@covel/plugin-test-utils";
  * 1. Local tool `upsert-quests` (L2): create with defaults, merge-by-name
  *    semantics, stable/semantic objective checklist matching, status transitions, the
  *    5-quest cap, world-pack preseeded records, and the message-namespace
- *    change summary — verified against an in-memory store stub.
+ *    change summary — verified against the real in-memory store and commit boundary.
  * 2. Plugin manifest: post-turn agent runtime shape, narrative-engine gate,
  *    dual-engine `input.inject` plus the plugin-data inject, `dataSchemas`
  *    world-data acceptance, and UI declarations.
@@ -25,78 +34,9 @@ import {
   loadPluginUi,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+
+import { tool, z } from "@covel/tools";
 import createUpsertQuests from "../tools/upsert-quests.js";
-
-// In-memory mock store for plugin-data operations
-function createMockPluginDataStore() {
-  /** @type {Map<string, unknown>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const results = [];
-      for (const [k, v] of data) {
-        if (
-          k.startsWith(`${sessionId}:${pluginId}:`) &&
-          (!namespace || k.startsWith(`${sessionId}:${pluginId}:${namespace}:`))
-        ) {
-          results.push(v);
-        }
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type === "plugin.data.batch") {
-      await store.setPluginDataBatch(
-        proposal.payload.items.map((item, index) => ({
-          id: `${proposal.id}:${index}`,
-          sessionId: proposal.sessionId,
-          pluginId: proposal.source.pluginId,
-          namespace: item.namespace,
-          key: item.key,
-          value: item.value,
-          createdAt: proposal.timestamp,
-          updatedAt: proposal.timestamp,
-        })),
-      );
-    }
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
@@ -113,8 +53,8 @@ describe("upsert-quests", () => {
   let mockStore;
   let upsertQuestsTool;
 
-  beforeEach(() => {
-    mockStore = createMockPluginDataStore();
+  beforeEach(async () => {
+    mockStore = await createPluginTestStore(ctx);
     upsertQuestsTool = bindToolStore(
       createUpsertQuests({
         tool,
@@ -157,9 +97,9 @@ describe("upsert-quests", () => {
     );
 
     // Assert
-    expect(result.upserted).toBe(1);
-    expect(result.created).toBe(1);
-    expect(result.quests[0].change).toBe("new");
+    expect(getToolContent(result).upserted).toBe(1);
+    expect(getToolContent(result).created).toBe(1);
+    expect(getToolContent(result).quests[0].change).toBe("new");
 
     const stored = await findQuestByName("寻回断魂钩");
     expect(stored).not.toBeNull();
@@ -219,8 +159,8 @@ describe("upsert-quests", () => {
     );
 
     // Assert — merged, not duplicated
-    expect(result.advanced).toBe(1);
-    expect(result.quests[0].change).toBe("progress");
+    expect(getToolContent(result).advanced).toBe(1);
+    expect(getToolContent(result).quests[0].change).toBe("progress");
     const rows = await mockStore.listPluginData(
       "sess-1",
       "core-quest",
@@ -538,7 +478,10 @@ describe("upsert-quests", () => {
     );
 
     // Assert
-    expect(result.quests.map((q) => q.change)).toEqual(["completed", "failed"]);
+    expect(getToolContent(result).quests.map((q) => q.change)).toEqual([
+      "completed",
+      "failed",
+    ]);
     const completed = await findQuestByName("寻回断魂钩");
     expect(completed.value.status).toBe("completed");
     const failed = await findQuestByName("护送商队");
@@ -621,7 +564,7 @@ describe("upsert-quests", () => {
     );
 
     // Assert — merged onto the imported row key, no duplicate
-    expect(result.advanced).toBe(1);
+    expect(getToolContent(result).advanced).toBe(1);
     const rows = await mockStore.listPluginData(
       "sess-1",
       "core-quest",

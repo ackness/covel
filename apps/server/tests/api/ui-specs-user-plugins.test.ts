@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import { type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   createPluginRegistry,
   type PluginRegistry,

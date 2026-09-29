@@ -19,7 +19,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Proposal, RuntimeManifest } from "@covel/shared";
 import { withPendingProposals } from "@covel/tools";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { processRuntimeResult } from "../src/session/session-runtime-result.js";
 import { createCommitPipeline } from "../src/commit/session-commit-pipeline.js";

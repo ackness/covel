@@ -8,7 +8,7 @@ import type {
   LLMToolDefinition,
 } from "@covel/runtime";
 import type { LLMMessage } from "@covel/shared";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";

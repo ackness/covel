@@ -47,13 +47,20 @@ try {
     path.join(temp, "consumer.mjs"),
     `
 import assert from "node:assert/strict";
-import { makeProposal, optionalNumber, pickLocaleText, createNarrativeReview } from "@covel/plugin-handlers-utils";
+import { makeProposal, optionalNumber, pickLocaleText, createNarrativeReview, withPendingProposals, withEmittedEvents, getToolContent, getPendingProposals, getEmittedEvents } from "@covel/plugin-handlers-utils";
 import { runImageGeneration } from "@covel/plugin-handlers-utils/image-generation";
 assert.equal(optionalNumber("42"), 42);
 assert.equal(pickLocaleText("ZH_cn", "zh", "en"), "zh");
 assert.equal(makeProposal({ pluginId: "sample", turnId: "t", sessionId: "s" }, "now", "plugin.data", { namespace: "notes", key: "current", value: 1 }).type, "plugin.data");
 assert.equal(typeof createNarrativeReview("sample").review, "function");
 assert.equal(typeof runImageGeneration, "function");
+const proposal = makeProposal({ pluginId: "sample", runtimeId: "sample/write", turnId: "t", sessionId: "s" }, "now", "plugin.data", { namespace: "notes", key: "current", value: "saved" });
+const result = withPendingProposals(withEmittedEvents(Object.freeze({ saved: true }), [{ topic: "sample.saved", data: {} }]), [proposal]);
+for (const copy of [{ ...result }, structuredClone(result), JSON.parse(JSON.stringify(result))]) {
+  assert.deepEqual(getToolContent(copy), { saved: true });
+  assert.deepEqual(getPendingProposals(copy), [proposal]);
+  assert.equal(getEmittedEvents(copy)[0].topic, "sample.saved");
+}
 `,
   );
   execFileSync(process.execPath, ["consumer.mjs"], {
@@ -63,12 +70,22 @@ assert.equal(typeof runImageGeneration, "function");
   await writeFile(
     path.join(temp, "consumer.mts"),
     `
-import { makeProposal, optionalNumber } from "@covel/plugin-handlers-utils";
+import { makeProposal, optionalNumber, withPendingProposals } from "@covel/plugin-handlers-utils";
 import type { ImageGenerationHandlerContext } from "@covel/plugin-handlers-utils/image-generation";
-import type { PluginAPI, PluginEntryFactory } from "@covel/plugin-handlers-utils";
+import type { PluginAPI, PluginEntryFactory, PluginFunctionHandler, PluginAgentGuard } from "@covel/plugin-handlers-utils";
 const p = makeProposal({pluginId:"sample",turnId:"t",sessionId:"s"},"now","plugin.data",{namespace:"notes",key:"current",value:1});
 const kind: "plugin.data" = p.type;
 const value: number = p.payload.value;
+// @ts-expect-error The proposal type determines its required payload fields.
+makeProposal({pluginId:"sample",turnId:"t",sessionId:"s"},"now","plugin.data",{topic:"wrong"});
+// @ts-expect-error Unknown proposal kinds are not domain writes.
+makeProposal({pluginId:"sample",turnId:"t",sessionId:"s"},"now","plugin.typo",{});
+const handler: PluginFunctionHandler = async (context) => {
+  const previous = await context.store.getPluginData("notes", "current");
+  await context.pluginData?.set("notes", "current", previous?.value ?? "saved");
+  return { outcome: "success", value: { saved: true } };
+};
+const guard: PluginAgentGuard = async (context) => ({ skip: !(await context.store.getSession()) });
 const ctx: ImageGenerationHandlerContext = {turnId:"t"};
 declare const api: PluginAPI;
 api.provideExtension("prompt.segment@1", "note", {handler: (input) => {
@@ -92,7 +109,9 @@ const entry: PluginEntryFactory = (covel) => {
     parameters: covel.toolkit.z.object({ text: covel.toolkit.z.string() }),
     execute: async ({ text }, context) => {
       const sessionId: string = context.sessionId;
-      return { text, sessionId };
+      return covel.toolkit.withPendingProposals({ text, sessionId }, [
+        makeProposal(context, "now", "plugin.data", { namespace: "notes", key: "current", value: text }),
+      ]);
     },
   }));
   covel.on("TurnStart", async (context) => {
@@ -122,7 +141,7 @@ const entry: PluginEntryFactory = (covel) => {
 api.provideExtension("unknown.point@1", "bad", { handler: () => null });
 // @ts-expect-error Wrong handler output for a known point is rejected.
 api.provideExtension("prompt.segment@1", "bad", { handler: () => 1 });
-void [kind,value,ctx,entry,optionalNumber("1")];
+void [kind,value,ctx,entry,handler,guard,withPendingProposals("saved", [p]),optionalNumber("1")];
 `,
   );
   await writeFile(

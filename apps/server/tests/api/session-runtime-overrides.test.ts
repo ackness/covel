@@ -6,11 +6,8 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryStore,
-  type DataStore,
-  type SessionRecord,
-} from "@covel/store";
+import { type DataStore, type SessionRecord } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import {
   createPluginRegistry,
   type PluginRegistry,

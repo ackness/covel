@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import {
-  createMemoryStore,
-  exportSessionCheckpoint,
-  type DataStore,
-} from "@covel/store";
+import { exportSessionCheckpoint, type DataStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import {
   BROWSER_CHECKPOINT_BODY_LIMIT_BYTES,

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore } from "@covel/store/memory";
 import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
 import { buildPluginFlowResponse } from "../../src/routes/misc-api/plugin-flow.js";
 import {

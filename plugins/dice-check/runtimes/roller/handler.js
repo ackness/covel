@@ -11,7 +11,7 @@ const ROLLS_NAMESPACE = "rolls";
  * `checkContext`) before it writes any outcome — success/failure becomes an
  * auditable roll + attribute modifier vs DC instead of LLM freestyle.
  *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
  */
 export default async function handler(ctx) {
   // randomInt's upper bound is exclusive → 1..20 inclusive.
