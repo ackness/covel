@@ -12,6 +12,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createWorld } from "./create-world.js";
+import { writeWorldPackage } from "./world-writer.js";
 import { buildWorldPrompt } from "./prompts.js";
 
 const WORLD_YAML = `schemaVersion: "1.0"
@@ -127,6 +128,38 @@ describe("createWorld", () => {
     if (tmp) await rm(tmp, { recursive: true, force: true });
   });
 
+  it("returns portable content without writes and exports without mutating it", async () => {
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "Clockwork city",
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(await readdir(tmp)).toEqual([]);
+    expect(result.manifest.dimensions).toHaveProperty("geography");
+    expect(result.lore).toBe(WORLD_LORE);
+    const original = structuredClone(result);
+    Object.freeze(result.manifest);
+    await writeWorldPackage(tmp, result);
+    expect(result).toEqual(original);
+    await expect(
+      writeWorldPackage(tmp, { ...result, id: "../escaped" }),
+    ).rejects.toThrow("invalid generated world");
+  });
+
+  it("rejects unresolved file references before returning generated content", async () => {
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\nworldData: missing.yaml\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "Clockwork city",
+    });
+    expect(result.success).toBe(false);
+    expect(result.errors?.join(" ")).toContain("inline data");
+    expect(await readdir(tmp)).toEqual([]);
+  });
+
   it("propagates caller cancellation on the final generation attempt", async () => {
     const controller = new AbortController();
     const reason = new Error("caller canceled final attempt");
@@ -143,7 +176,6 @@ describe("createWorld", () => {
       createWorld({
         llm,
         concept: "Synthetic world",
-        outputDir: tmp,
         signal: controller.signal,
       }),
     ).rejects.toBe(reason);
@@ -167,7 +199,6 @@ describe("createWorld", () => {
     const result = await createWorld({
       llm,
       concept: "Synthetic world",
-      outputDir: tmp,
       attemptTimeoutMs: 5,
     });
     expect(result.success).toBe(false);
@@ -180,7 +211,6 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
       ),
       concept: "Synthetic world",
-      outputDir: tmp,
       attemptTimeoutMs: 5_000,
     };
     await mkdir(path.join(tmp, "test-world"));
@@ -189,14 +219,18 @@ describe("createWorld", () => {
       "id: preserved\n",
       "utf8",
     );
-    await expect(createWorld(options)).rejects.toThrow("already exists");
+    const generated = await createWorld(options);
+    if (!generated.success) throw new Error(generated.errors.join("; "));
+    await expect(writeWorldPackage(tmp, generated)).rejects.toThrow(
+      "already exists",
+    );
     expect(
       await readFile(path.join(tmp, "test-world/world.yaml"), "utf8"),
     ).toBe("id: preserved\n");
     await rm(path.join(tmp, "test-world"), { recursive: true });
     const results = await Promise.allSettled([
-      createWorld(options),
-      createWorld(options),
+      writeWorldPackage(tmp, generated),
+      writeWorldPackage(tmp, generated),
     ]);
     expect(
       results.filter((result) => result.status === "fulfilled"),
@@ -213,11 +247,12 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
       ),
       concept: "测试世界",
-      outputDir: tmp,
       attemptTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    await writeWorldPackage(tmp, result);
     const lore = await readFile(
       path.join(tmp, "test-world", "WORLD.md"),
       "utf8",
@@ -250,14 +285,15 @@ describe("createWorld", () => {
       ),
       concept: "繁體世界",
       locale: "zh_hant_tw",
-      outputDir: tmp,
       attemptTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
-    expect(result.files).toContain("test-world/WORLD.zh-Hant-TW.md");
-    expect(result.files).toContain("test-world/WORLD.md");
-    expect(result.files).not.toContain("test-world/WORLD.zh.md");
+    if (!result.success) throw new Error(result.errors.join("; "));
+    const files = await writeWorldPackage(tmp, result);
+    expect(files).toContain("test-world/WORLD.zh-Hant-TW.md");
+    expect(files).toContain("test-world/WORLD.md");
+    expect(files).not.toContain("test-world/WORLD.zh.md");
     await expect(
       access(path.join(tmp, "test-world", "WORLD.zh-Hant-TW.md")),
     ).resolves.toBeUndefined();
@@ -272,11 +308,12 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}`,
       ),
       concept: "测试世界",
-      outputDir: tmp,
       attemptTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    await writeWorldPackage(tmp, result);
     const lore = await readFile(
       path.join(tmp, "test-world", "WORLD.md"),
       "utf8",
@@ -290,11 +327,12 @@ describe("createWorld", () => {
         `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n## 测试世界\n\n正文。\n\n1. 钩子一。\n2. 钩子二。\n3. 钩子三。`,
       ),
       concept: "测试世界",
-      outputDir: tmp,
       attemptTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    await writeWorldPackage(tmp, result);
     const lore = await readFile(
       path.join(tmp, "test-world", "WORLD.md"),
       "utf8",
@@ -348,11 +386,12 @@ dimensions:
         `===WORLD_YAML===\n\`\`\`yaml\n${malformed}\n\`\`\`\n===WORLD_MD===\n${WORLD_LORE}`,
       ),
       concept: "测试世界",
-      outputDir: tmp,
       attemptTimeoutMs: 5_000,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    await writeWorldPackage(tmp, result);
     const manifest = await readFile(
       path.join(tmp, "test-world", "world.yaml"),
       "utf8",
@@ -396,7 +435,6 @@ memoryDefinitions:
         `===WORLD_YAML===\n${enrichedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${memoryPackage}\n===END===`,
       ),
       concept: "雨中的倒转钟城",
-      outputDir: tmp,
       attemptTimeoutMs: 5_000,
       brief: {
         experienceMode: "dialogue-mode",
@@ -406,6 +444,8 @@ memoryDefinitions:
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    await writeWorldPackage(tmp, result);
     expect(result.packageContent).toMatchObject({
       characters: expect.arrayContaining([
         expect.objectContaining({ id: "bell-keeper", name: "守钟人" }),
@@ -442,7 +482,7 @@ memoryDefinitions:
     expect(
       JSON.parse(
         await readFile(
-          path.join(tmp, "test-world", "data/memory-blocks.json"),
+          path.join(tmp, "test-world", "data/contract-0.json"),
           "utf8",
         ),
       ),

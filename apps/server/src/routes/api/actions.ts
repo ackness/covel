@@ -353,17 +353,22 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       commitStatusSettled = false;
       hasStartedTurn = false;
       currentRetryScope = undefined;
-      const {
-        result,
-        trace,
-        userSettings,
-        committed,
-        commitError,
-        wasPreGamePending,
-        followerSession,
-        approvalScopes,
-        queuedRuntimeJobs,
-      } = await withSettledExecutionLock(c, sessionId, async () => {
+      const readLiveActionSession = async () => {
+        c.get("requestWork")?.signal.throwIfAborted();
+        const live = await store.getSession(sessionId);
+        if (!live)
+          throw new Error("session was deleted while the action was queued");
+        if (sessionIncarnationIdentity(live) !== expectedIncarnation) {
+          throw new Error("session was replaced while the action was queued");
+        }
+        if (live.status !== "active") {
+          throw new Error(
+            `session is ${live.status}; it must be active to accept actions`,
+          );
+        }
+        return live;
+      };
+      const executeCapturedTurn = async () => {
         c.get("requestWork")?.signal.throwIfAborted();
         // This execution now owns the session — events on the bus
         // from here on belong to this turn.
@@ -374,18 +379,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // check must not get player messages, interaction records, or
           // compaction appended to a non-active session. The throw surfaces
           // as an `error.occurred` SSE event via the outer catch.
-          const liveSession = await store.getSession(sessionId);
-          if (!liveSession) {
-            throw new Error("session was deleted while the action was queued");
-          }
-          if (sessionIncarnationIdentity(liveSession) !== expectedIncarnation) {
-            throw new Error("session was replaced while the action was queued");
-          }
-          if (liveSession.status !== "active") {
-            throw new Error(
-              `session is ${liveSession.status}; it must be active to accept actions`,
-            );
-          }
+          const liveSession = await readLiveActionSession();
 
           if (turnArgs.origin !== "continuation") {
             const recovery = await assertRecoverableTurn(
@@ -443,7 +437,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           );
 
           let effectiveSession = liveSession;
-          if (effectiveLocale !== liveSession.locale) {
+          if (effectiveSession.locale !== effectiveLocale) {
             const updatedAt = new Date().toISOString();
             await store.updateSession(sessionId, {
               locale: effectiveLocale,
@@ -876,7 +870,24 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           eventBusUnsubscribe?.();
           eventBusUnsubscribe = undefined;
         }
-      });
+      };
+      const {
+        result,
+        trace,
+        userSettings,
+        committed,
+        commitError,
+        wasPreGamePending,
+        followerSession,
+        approvalScopes,
+        queuedRuntimeJobs,
+      } = await withSettledExecutionLock(
+        c,
+        sessionId,
+        executeCapturedTurn,
+        undefined,
+        effectiveLocale,
+      );
 
       // ——— Post-lock tail (per turn) ———
       // Deferred-follower scheduling and the final SSE writes deliberately run

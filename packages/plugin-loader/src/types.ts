@@ -78,6 +78,8 @@ export interface ParsedPluginMd extends ParsedMarkdown {
 }
 
 export interface ParsedRuntimeMd extends ParsedMarkdown {
+  /** Markdown bodies captured with this definition, keyed by source filename. */
+  readonly promptTemplates?: Readonly<Record<string, string>>;
   readonly runtime: import("@covel/shared").RuntimeAuthoringManifest;
   readonly manifest: RuntimeManifest;
 }

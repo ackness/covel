@@ -279,6 +279,16 @@ export function normalizeGeneratedPackage(
       memoryDefinitions.length
     )
       errors.push("memoryDefinitions labels must be unique");
+    const identity = "memory.blocks@1/world";
+    if (identities.has(identity)) {
+      errors.push(`duplicate contractData record: ${identity}`);
+    } else if (memoryDefinitions.length > 0) {
+      contractData.push({
+        contract: "memory.blocks@1",
+        key: "world",
+        value: { id: "world", blocks: memoryDefinitions },
+      });
+    }
   }
 
   const duplicateCharacterIds = duplicateIds(characters);
@@ -291,7 +301,7 @@ export function normalizeGeneratedPackage(
   }
 
   return {
-    content: { characters, lorebook, rules, memoryDefinitions, contractData },
+    content: { characters, lorebook, rules, contractData },
     errors,
   };
 }

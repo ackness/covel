@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@covel/plugin-handlers-utils": "workspace:*",
@@ -14,6 +15,7 @@
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
     "vitest": "^4.1.11",
-    "@covel/store": "workspace:*"
+    "@covel/store": "workspace:*",
+    "typescript": "^7.0.2"
   }
 }

@@ -6,6 +6,12 @@ import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { useBuildSessionActions } from "../actions.js";
 import { initialState, reducer } from "../reducer.js";
 import { useSessionRuntimeRefs } from "../runtime-refs.js";
+import {
+  __clearAllPluginDataForTest,
+  getPluginNamespaceSnapshot,
+  loadPluginDataForSession,
+  setActiveSession,
+} from "@/stores/plugin-data-store.js";
 
 const api = vi.hoisted(() => ({
   getSessionView: vi.fn(),
@@ -85,6 +91,7 @@ function setup() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __clearAllPluginDataForTest();
   api.getSessionView.mockResolvedValue({
     session,
     messages: [],
@@ -101,6 +108,54 @@ beforeEach(() => {
 });
 
 describe("session navigation lifecycle", () => {
+  it("drops plugin data only after a successful delete, even if the active session changes", async () => {
+    const { result, ds } = setup();
+    loadPluginDataForSession("sess-1", "codex", "message", [
+      { key: "old", value: "A" },
+    ]);
+    setActiveSession("sess-1");
+    const deletion = deferred<undefined>();
+    ds.deleteSession.mockReturnValueOnce(deletion.promise);
+
+    let deleting!: Promise<void>;
+    await act(async () => {
+      deleting = result.current.actions.deleteSession("sess-1");
+    });
+    setActiveSession("sess-2");
+    loadPluginDataForSession("sess-2", "codex", "message", [
+      { key: "current", value: "B" },
+    ]);
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({
+      current: "B",
+    });
+
+    await act(async () => {
+      deletion.resolve(undefined);
+      await deleting;
+    });
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({
+      current: "B",
+    });
+    setActiveSession("sess-1");
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({});
+  });
+
+  it("keeps plugin data when deleting a session fails", async () => {
+    const { result, ds } = setup();
+    loadPluginDataForSession("sess-1", "codex", "message", [
+      { key: "saved", value: "A" },
+    ]);
+    setActiveSession("sess-1");
+    ds.deleteSession.mockRejectedValueOnce(new Error("delete failed"));
+
+    await expect(
+      result.current.actions.deleteSession("sess-1"),
+    ).rejects.toThrow("delete failed");
+    expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({
+      saved: "A",
+    });
+  });
+
   it("applies steering and resumed runtime results while the same visit remains active", async () => {
     const { result, workspace } = setup();
     await act(async () => {

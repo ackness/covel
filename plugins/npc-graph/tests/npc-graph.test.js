@@ -3,7 +3,12 @@ import {
   getPendingProposals,
   shortIdBatch,
 } from "@covel/plugin-handlers-utils";
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+  commitToolResults,
+} from "@covel/plugin-test-utils";
 /**
  * npc-graph plugin tests.
  *
@@ -25,74 +30,6 @@ import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import { tool, z } from "@covel/tools";
 import createUpsertNpcGraph from "../tools/upsert-npc-graph.js";
 import createListNpcGraph from "../tools/list-npc-graph.js";
-
-// ── Minimal plugin_data mock store ────────────────────────────────
-
-function createMockStore() {
-  /** @type {Map<string, any>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const prefix = namespace
-        ? `${sessionId}:${pluginId}:${namespace}:`
-        : `${sessionId}:${pluginId}:`;
-      const results = [];
-      for (const [k, v] of data) {
-        if (k.startsWith(prefix)) results.push(v);
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type !== "plugin.data.batch") continue;
-    await store.setPluginDataBatch(
-      proposal.payload.items.map((item, index) => ({
-        id: `${proposal.id}:${index}`,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: item.namespace,
-        key: item.key,
-        value: item.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      })),
-    );
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
 
 const ctx = {
   sessionId: "sess-npc",
@@ -187,8 +124,8 @@ describe("upsert-npc-graph", () => {
   let upsertTool;
   let listTool;
 
-  beforeEach(() => {
-    store = createMockStore();
+  beforeEach(async () => {
+    store = await createPluginTestStore(ctx);
     upsertTool = bindToolStore(
       createUpsertNpcGraph({ tool, z, shortIdBatch }),
       store,
@@ -528,8 +465,7 @@ describe("upsert-npc-graph", () => {
     const r1 = await revise(0.5, "Initial trust.");
     const r2 = await revise(0.1, "Growing doubt.");
     const r3 = await revise(-0.6, "Open betrayal.");
-    for (const result of [r1, r2, r3])
-      await applyPendingPluginData(result, store);
+    await commitToolResults([r1, r2, r3], turn, store);
 
     const ids = [
       getToolContent(r1).edges.results[0].id,

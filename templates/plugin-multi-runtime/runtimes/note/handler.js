@@ -8,13 +8,14 @@
 
 const NOTES_NAMESPACE = "notes";
 
+/** @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler} */
 export default async function noteHandler(ctx) {
   const { pluginData, logger, manualPayload, turnId } = ctx;
 
   if (!pluginData || typeof pluginData.set !== "function") {
     return {
       outcome: "failed",
-      error: "ctx.pluginData.set is unavailable. Upgrade @covel/runtime.",
+      error: "This handler requires plugin data writes.",
     };
   }
 
@@ -43,16 +44,21 @@ export default async function noteHandler(ctx) {
   return { outcome: "success", value: { note: record } };
 }
 
+/** @param {unknown} value
+ * @returns {value is Record<string, unknown>} */
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/** @param {unknown} value */
 function stringValue(value) {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : undefined;
 }
 
+/** @param {unknown} value
+ * @returns {string[]} */
 function stringArray(value) {
   return Array.isArray(value)
     ? value.filter((item) => typeof item === "string" && item.trim().length > 0)

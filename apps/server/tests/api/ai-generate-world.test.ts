@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
+import * as worldCreation from "@covel/create";
 import { aiRoutes } from "../../src/routes/api/ai.js";
 import { createApplicationWork } from "../../src/application-work.js";
 
@@ -164,6 +165,136 @@ describe("ai world generation route", () => {
     }
     await rm(worldsDir, { recursive: true, force: true });
   });
+
+  it.each(["server-store", "return-only"] as const)(
+    "%s uses validated generation content without exporting a temporary package",
+    async (saveTarget) => {
+      const exporter = vi
+        .spyOn(worldCreation, "writeWorldPackage")
+        .mockRejectedValue(new Error("File export is unavailable"));
+      const response = await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concept: "Clockwork city", saveTarget }),
+      });
+      const events = await readSseJson(response);
+      expect(events.filter((event) => event.type === "error")).toEqual([]);
+      expect(
+        events.find((event) => event.type === "done")?.world,
+      ).toMatchObject({
+        id: "generated-world",
+        name: "生成世界",
+        lore: WORLD_MD,
+        metadata: {
+          dimensions: { geography: { regions: [{ name: "中央区" }] } },
+        },
+      });
+      expect(exporter).not.toHaveBeenCalled();
+      expect(await readdir(worldsDir)).toEqual([]);
+    },
+  );
+
+  it.each(["server-file", "server-store", "return-only"] as const)(
+    "%s preserves generated memory definitions through session import",
+    async (saveTarget) => {
+      const discovery = (
+        await discoverPlugins(
+          path.resolve(import.meta.dirname, "../../../../plugins"),
+        )
+      ).find((item) => item.id === "memory")!;
+      const definition = await loadPluginDefinition(discovery);
+      const registry = createPluginRegistry();
+      registry.register({
+        id: discovery.id,
+        rootPath: discovery.rootPath,
+        summary: {
+          id: discovery.id,
+          name: "Memory",
+          description: "",
+          pluginType: "core-plugin",
+          runtimeCount: 0,
+        },
+        manifests: [],
+        packageManifest: definition.packageManifest,
+        loadedRuntimes: new Map(),
+        status: "registered",
+      });
+      const blocks = [
+        {
+          label: "tides",
+          displayName: "Tides",
+          extractionHint: "Track changing tides",
+        },
+        {
+          label: "debts",
+          displayName: "Debts",
+          extractionHint: "Track favors owed",
+        },
+      ];
+      app = createTestApp(
+        store,
+        new FixedLlm(
+          `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${JSON.stringify({ memoryDefinitions: blocks })}\n===END===`,
+        ),
+        registry,
+      );
+      const response = await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept: "Tidal city",
+          saveTarget,
+          brief: { content: ["memory"] },
+        }),
+      });
+      const events = await readSseJson(response);
+      expect(events.filter((event) => event.type === "error")).toEqual([]);
+      const done = events.find((event) => event.type === "done") as {
+        world: import("@covel/store").WorldRecord;
+      };
+      expect(done.world.metadata?.contractData).toEqual([
+        {
+          contract: "memory.blocks@1",
+          key: "world",
+          value: { id: "world", blocks },
+        },
+      ]);
+      if (saveTarget === "return-only") await store.createWorld(done.world);
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: "memory-session",
+        worldId: done.world.id,
+        status: "active",
+        phase: "playing",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        activePlugins: ["memory"],
+        createdAt: now,
+        updatedAt: now,
+      });
+      const imported = await importWorldDataForSession({
+        store,
+        sessionId: "memory-session",
+        worldId: done.world.id,
+        worldsDirs: [worldsDir],
+        now,
+        preflight: { registry, activePlugins: ["memory"] },
+      });
+      expect(
+        imported.diagnostics.filter((item) => item.level === "error"),
+      ).toEqual([]);
+      expect(
+        (
+          await store.getPluginData(
+            "memory-session",
+            "memory",
+            "definitions",
+            "world",
+          )
+        )?.value,
+      ).toEqual({ id: "world", blocks });
+    },
+  );
 
   it.each(["server-file", "server-store", "return-only"] as const)(
     "%s preserves generated time contracts through session import",

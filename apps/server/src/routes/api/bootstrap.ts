@@ -513,6 +513,7 @@ async function assembleApi(
     sessionId: string,
     fn: () => Promise<T>,
     beforeCapture?: () => Promise<void>,
+    locale?: string,
   ): Promise<T> => {
     let authority: Awaited<ReturnType<typeof serviceAdmission.capture>>;
     return pluginEntries.withSnapshot(
@@ -522,6 +523,7 @@ async function assembleApi(
         await beforeCapture?.();
         authority = await serviceAdmission.capture(sessionId);
       },
+      locale,
     );
   };
   pluginEntries.watch();

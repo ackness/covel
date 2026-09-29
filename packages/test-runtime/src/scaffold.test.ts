@@ -1,5 +1,13 @@
-import { execFileSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -16,6 +24,11 @@ describe("plugin scaffolding", () => {
       directory: "user-plugins",
     },
     { mode: "with-tools", args: ["--with-tools"], directory: "plugins" },
+    {
+      mode: "agent-only",
+      args: ["-r", "analyst:agent"],
+      directory: "home/plugins",
+    },
   ])(
     "runs the generated $mode plugin cases",
     async ({ mode, args, directory }) => {
@@ -47,6 +60,59 @@ describe("plugin scaffolding", () => {
             stdio: "pipe",
           },
         );
+        const pluginRoot = path.join(root, directory, pluginId);
+        if (mode === "agent-only") {
+          const manifest = JSON.parse(
+            await readFile(path.join(pluginRoot, "package.json"), "utf8"),
+          );
+          expect(manifest.scripts.lint).toBeUndefined();
+          expect(manifest.devDependencies).toBeUndefined();
+        } else {
+          await mkdir(path.join(pluginRoot, "node_modules/@covel"), {
+            recursive: true,
+          });
+          await symlink(
+            path.join(repoRoot, "packages/plugin-handlers-utils"),
+            path.join(pluginRoot, "node_modules/@covel/plugin-handlers-utils"),
+            "dir",
+          );
+          const compiler = path.join(
+            repoRoot,
+            "packages/test-runtime/node_modules/typescript/bin/tsc",
+          );
+          const check = () =>
+            spawnSync(
+              process.execPath,
+              [compiler, "--noEmit", "-p", pluginRoot],
+              { encoding: "utf8", timeout: 10000 },
+            );
+          const checked = check();
+          expect(checked.status, checked.stdout + checked.stderr).toBe(0);
+          const handlerPath = path.join(
+            pluginRoot,
+            mode === "with-tools"
+              ? "tools/record-note.js"
+              : mode === "custom"
+                ? "runtimes/recorder/handler.js"
+                : "runtimes/note/handler.js",
+          );
+          const handlerSource = await readFile(handlerPath, "utf8");
+          const invalidSource =
+            mode === "with-tools"
+              ? handlerSource.replace("params.title", "params.missingTitle")
+              : handlerSource.replace(
+                  "pluginData.set(",
+                  "pluginData.missingSet(",
+                );
+          expect(invalidSource).not.toBe(handlerSource);
+          await writeFile(handlerPath, invalidSource, "utf8");
+          const rejected = check();
+          expect(rejected.status).not.toBe(0);
+          expect(rejected.stdout).toContain(
+            mode === "with-tools" ? "missingTitle" : "missingSet",
+          );
+          await writeFile(handlerPath, handlerSource, "utf8");
+        }
         const report = await runRuntimeCases({
           pluginId,
           pluginsDir: path.join(root, directory),

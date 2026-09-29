@@ -6,6 +6,8 @@ export type {
   ArchivalSearcher,
   MemorySystemDeps,
   MemorySystem,
+  MemorySearchOptions,
+  MemorySearchResult,
 } from "./types.js";
 export type { EmbedFn } from "./vector-common.js";
 export type { MemoryBackgroundDrainResult } from "./background-tasks.js";

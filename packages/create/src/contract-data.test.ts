@@ -70,3 +70,45 @@ it("writes portable contract records as validated contract-targeted world source
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("normalizes memory definitions into portable contract data and rejects duplicate targets", () => {
+  const blocks = [
+    {
+      label: "tides",
+      displayName: "Tides",
+      extractionHint: "Track changing tides",
+    },
+    {
+      label: "debts",
+      displayName: "Debts",
+      extractionHint: "Track favors owed",
+    },
+  ];
+  const normalized = normalizeGeneratedPackage(
+    { memoryDefinitions: blocks },
+    { content: ["memory"] },
+  );
+  expect(normalized).toMatchObject({
+    errors: [],
+    content: {
+      contractData: [
+        {
+          contract: "memory.blocks@1",
+          key: "world",
+          value: { id: "world", blocks },
+        },
+      ],
+    },
+  });
+  const duplicate = normalizeGeneratedPackage(
+    {
+      memoryDefinitions: blocks,
+      contractData: normalized.content.contractData,
+    },
+    { content: ["memory"] },
+    [{ contract: "memory.blocks@1", schema: {}, validate: () => true }],
+  );
+  expect(duplicate.errors).toContain(
+    "duplicate contractData record: memory.blocks@1/world",
+  );
+});

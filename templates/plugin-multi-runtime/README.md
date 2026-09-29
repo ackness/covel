@@ -26,6 +26,8 @@ cp -r {{pluginName}}/ ~/.covel/plugins/
 
 ## 测试
 
+先在插件目录运行 `pnpm install && pnpm lint`。`checkJs` 使用公开 SDK 检查 handler 的上下文、返回值及写入 API；保留 `PluginFunctionHandler` 标注以让新增代码继续接受检查。
+
 模板自带 `tests/runtime-cases.json`，可用仓库测试包验证 manifest 加载、runtime 调用和 plugin-data 写入：
 
 ```bash

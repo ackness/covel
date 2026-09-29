@@ -26,10 +26,9 @@ let readyPromise: Promise<void> | null = null;
 function createStore(): SettingsStore {
   // isDesktopApp() covers BOTH desktop signals: the Electron IPC bridge and
   // the REST-desktop probe (`/api/config/info` → isDesktop, self-host setups
-  // where the sidecar owns ~/.covel). The boot sequence in main.tsx runs
-  // probeDesktopMode() BEFORE initSettings() so this decision sees the probe
-  // result; without that ordering REST-desktop silently fell back to
-  // localStorage and settings never reached ~/.covel/settings.json.
+  // where the sidecar owns ~/.covel). The boot sequence in main.tsx waits for
+  // an explicit desktop/web result before calling initSettings(); a failed
+  // probe must not create this singleton with the localStorage adapter.
   const adapter = isDesktopApp()
     ? createJsonFileBackend({
         ipc: getCovelIpc(),

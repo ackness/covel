@@ -18,5 +18,5 @@
 2. 修改 `PLUGIN.md`，维护 runtime 元信息和模型指令。
 3. 用真实插件逻辑替换 `tools/record-note.js`。
 4. 在 Covel 仓库根目录运行 `pnpm install`，让模板的 `workspace:*` 依赖从根 workspace 解析。
-5. 在 Covel 仓库根目录运行 `pnpm --filter covel-plugin-{{pluginName}} test`。
+5. 在 Covel 仓库根目录运行 `pnpm --filter covel-plugin-{{pluginName}} lint` 和 `pnpm --filter covel-plugin-{{pluginName}} test`。`checkJs` 通过公开 SDK 的 `PluginAPI` / `PluginToolkit` 检查入口和工具实现。
 6. 用 `pnpm test:runtime -- {{pluginName}} --plugins-dir <plugins-dir> --pretty` 跑 `tests/runtime-cases.json`，验证 manifest、工具调用和 plugin-data 写入。

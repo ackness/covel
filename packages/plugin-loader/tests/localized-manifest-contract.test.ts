@@ -55,6 +55,72 @@ English prompt body.
     await fs.rm(dir, { recursive: true, force: true });
   });
 
+  it("selects localized prose from the captured definition without reopening edited files", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const discovery: PluginDiscoveryResult = {
+      id: "demo",
+      rootPath: dir,
+      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
+      isMultiRuntime: false,
+    };
+    const captured = await loadPluginDefinition(discovery);
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.en.md"),
+      LOCALIZED.replace("English prompt body.", "New English generation."),
+    );
+    const oldEnglish = await loadRuntime(discovery, "demo", "en-US", captured);
+    expect(oldEnglish.promptTemplate).toContain("English prompt body.");
+    expect(oldEnglish.manifest.stage).toBe("narrative");
+    expect(oldEnglish.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    expect(
+      (await loadRuntime(discovery, "demo", "ru-RU", captured)).promptTemplate,
+    ).toBe(oldEnglish.promptTemplate);
+    expect(
+      (await loadRuntime(discovery, "demo", "zh-CN", captured)).promptTemplate,
+    ).toContain("中文提示词");
+    const next = await loadPluginDefinition(discovery);
+    expect(
+      (await loadRuntime(discovery, "demo", "en-US", next)).promptTemplate,
+    ).toContain("New English generation.");
+    vi.restoreAllMocks();
+  });
+
+  it("captures multi-runtime translations without changing the canonical tool contract", async () => {
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.md"),
+      "---\nid: demo\nkind: plugin\ndescription: Demo\n---\n",
+    );
+    await fs.rm(path.join(dir, "PLUGIN.en.md"));
+    const runtimeDir = path.join(dir, "runtimes", "story");
+    await fs.mkdir(runtimeDir, { recursive: true });
+    const runtime =
+      "---\ntype: agent\nschedule: {stage: narrative}\nagent: {tools: {builtin: [plugin-data-set]}}\n---\nCanonical body.\n";
+    await fs.writeFile(path.join(runtimeDir, "RUNTIME.md"), runtime);
+    await fs.writeFile(
+      path.join(runtimeDir, "RUNTIME.en.md"),
+      runtime.replace("Canonical body.", "English runtime body."),
+    );
+    const discovery: PluginDiscoveryResult = {
+      id: "demo",
+      rootPath: dir,
+      isMultiRuntime: true,
+      pluginMdPaths: [path.join(runtimeDir, "RUNTIME.md")],
+    };
+    const captured = await loadPluginDefinition(discovery);
+    await fs.writeFile(
+      path.join(runtimeDir, "RUNTIME.en.md"),
+      runtime.replace("Canonical body.", "Changed on disk."),
+    );
+    const loaded = await loadRuntime(
+      discovery,
+      "demo/story",
+      "en-US",
+      captured,
+    );
+    expect(loaded.promptTemplate).toContain("English runtime body.");
+    expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+  });
+
   it("takes contract fields from PLUGIN.md and prose from the locale variant", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const discovery: PluginDiscoveryResult = {

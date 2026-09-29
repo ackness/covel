@@ -1670,6 +1670,7 @@
     },
     "boot": {
       "title": "Failed to start",
+      "desktopModeUnavailable": "Could not reach the server to determine where settings are stored. Check the connection and retry.",
       "retry": "Retry",
       "reload": "Reload app"
     }

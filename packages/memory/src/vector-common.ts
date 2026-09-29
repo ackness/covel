@@ -44,7 +44,7 @@ export const ARCHIVAL_NAMESPACE = "archival";
  * higher = more relevant — matching the field contract of the keyword
  * searchers. Strictly monotonic decreasing in `distance`, so it preserves the
  * KNN ordering. NOT a calibrated cosine similarity; it is a presentation score
- * so vector and keyword results can be merged/sorted uniformly.
+ * within one tier; cross-tier search combines rank order instead of scores.
  */
 export function distanceToScore(distance: number): number {
   const d = Number.isFinite(distance) && distance > 0 ? distance : 0;

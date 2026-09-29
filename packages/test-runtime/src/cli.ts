@@ -57,7 +57,9 @@ Options:
   --help                     Show this help.
 
 The debug runner uses an isolated store, mock gateway in mock mode, and no
-server event schema directory. It exercises runtime logic, not HTTP flows.
+server event schema directory. Turn hooks run through the runtime pipeline.
+HTTP/UI registrations and session/compaction hooks appear in unsupportedCapabilities
+and emit a warning; use the server to verify those capabilities.
 
 Example:
   covel-test-runtime dashscope-image-gen --mode live --case generate-image-json --pretty
@@ -192,6 +194,15 @@ try {
   const result = options.runtimeId
     ? await runRuntimeDebug(options)
     : await runRuntimeCases(options);
+  const reports =
+    "cases" in result ? result.cases.map((item) => item.result) : [result];
+  for (const capability of reports.flatMap(
+    (report) => report.unsupportedCapabilities,
+  )) {
+    process.stderr.write(
+      `[test-runtime] Unsupported ${capability.kind}: ${capability.pluginId}/${capability.name}. Verify with the server.\n`,
+    );
+  }
   process.stdout.write(JSON.stringify(result, null, options.pretty ? 2 : 0));
   process.stdout.write("\n");
   const failed =

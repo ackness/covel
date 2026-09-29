@@ -29,7 +29,7 @@
 | **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
 | **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
 | **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
-| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)           |
+| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 lorebook/角色)                 |
 | initialize-world                      | local   | world-init          | auto-allow | 原子提交角色属性 Schema 与世界词条                                                  |
 | set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部 schema 写入原语                                      |
 | set-world-entries-batch               | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部词条写入原语                                          |
@@ -381,6 +381,10 @@ interface UIRenderPart {
 ---
 
 ### 插件记忆与向量搜索
+
+`memory-search` 通过 `MemorySystem.search(sessionId, query, { scope, limit })` 查询，工具层仅处理参数和展示格式。同次 `scope: "all"` 查询并发搜索两个来源，共享一次同模型的 query embedding；缓存只活到该次查询结束。embedding 失败仍分别回退到关键词搜索。
+
+混合结果按两个来源各自的名次交替排列，同名次先 recall，某一来源不足时由另一来源补满。返回的 `score` 只表示来源内部的分数，不能跨来源比较或重新排序；这也适用于一侧向量检索、另一侧关键词回退的情况。指定单一 scope 时保留该来源原有顺序。
 
 `memory-search` 是框架的 recall/archival 搜索工具。核心记忆块由 `memory` 插件的 `blocks` namespace 持久化，后台提取通过普通 `plugin.data` proposals 提交，并由 `prompt.segment@1` 提供提示词段。框架工具不直接读写其他插件的块数据。
 

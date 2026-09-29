@@ -1,5 +1,10 @@
 import { readFileSync as readContractFile } from "node:fs";
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+  commitToolResults,
+} from "@covel/plugin-test-utils";
 /**
  * codex plugin tests.
  *
@@ -8,7 +13,7 @@ import { bindToolStore } from "@covel/plugin-test-utils";
  * with local tools. These tests cover:
  *
  * 1. Local tools: `unlock-codex-entries` + `update-codex-entry` (pure,
- *    independent of runtime type — verified against an in-memory store stub)
+ *    independent of runtime type — verified against the real in-memory store and commit boundary)
  * 2. Plugin manifest: agent runtime shape, declares local tools,
  *    `input.inject` contains both `narrator` runtime inject and the
  *    plugin-data inject that feeds existing entries into the prompt.
@@ -40,90 +45,6 @@ import {
   getCategoryMetadata,
 } from "../category-metadata.js";
 
-// In-memory mock store for plugin-data operations
-function createMockPluginDataStore() {
-  /** @type {Map<string, unknown>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const results = [];
-      for (const [k, v] of data) {
-        if (
-          k.startsWith(`${sessionId}:${pluginId}:`) &&
-          (!namespace || k.startsWith(`${sessionId}:${pluginId}:${namespace}:`))
-        ) {
-          results.push(v);
-        }
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type === "plugin.data") {
-      await store.setPluginData({
-        id: proposal.id,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: proposal.payload.namespace,
-        key: proposal.payload.key,
-        value: proposal.payload.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      });
-      continue;
-    }
-
-    if (proposal.type === "plugin.data.batch") {
-      await store.setPluginDataBatch(
-        proposal.payload.items.map((item, index) => ({
-          id: `${proposal.id}:${index}`,
-          sessionId: proposal.sessionId,
-          pluginId: proposal.source.pluginId,
-          namespace: item.namespace,
-          key: item.key,
-          value: item.value,
-          createdAt: proposal.timestamp,
-          updatedAt: proposal.timestamp,
-        })),
-      );
-    }
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
-
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
 // ── Tool unit tests ──────────────────────────────────────────────
@@ -140,8 +61,8 @@ describe("codex tools", () => {
   let updateCodexEntryTool;
   let syncCodexEntriesTool;
 
-  beforeEach(() => {
-    mockStore = createMockPluginDataStore();
+  beforeEach(async () => {
+    mockStore = await createPluginTestStore(ctx);
     unlockCodexEntriesTool = bindToolStore(
       createUnlockCodexEntries({
         tool,
@@ -461,8 +382,7 @@ describe("codex tools", () => {
       expect(getToolContent(result).updated).toBe(true);
       expect(getToolContent(result).entryId).toBe(entryId);
 
-      await applyPendingPluginData(unlockResult, mockStore);
-      await applyPendingPluginData(result, mockStore);
+      await commitToolResults([unlockResult, result], ctx, mockStore);
 
       const stored = await mockStore.getPluginData(
         "sess-1",

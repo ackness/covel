@@ -5,6 +5,7 @@ import type {
   RuntimeRetryScope,
 } from "@covel/shared";
 import type { DataStore, TraceEventRecord } from "@covel/store";
+import { topLevelTurnResults } from "./turn-history.js";
 
 type RuntimeRetryAction = Extract<
   ActionRequest,
@@ -54,7 +55,7 @@ export async function prepareRuntimeRetry(
     action.type === "retry_runtime"
       ? [action.payload.runtimeId]
       : action.payload.runtimeIds;
-  const rows = await store.listTurnResults(sessionId);
+  const rows = topLevelTurnResults(await store.listTurnResults(sessionId));
   const requestedSource = action.payload.retryFromTurnId;
   const source = requestedSource
     ? rows.find((row) => row.turnId === requestedSource)
@@ -88,6 +89,7 @@ export async function prepareRuntimeRetry(
       .some(
         (row) =>
           row.commitStatus === "committed" &&
+          row.turnId !== source.turnId &&
           (row.origin === "player" || row.origin === "continuation"),
       )
   ) {

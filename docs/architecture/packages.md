@@ -27,9 +27,9 @@ Covel 是模块化单体，`packages/` 大多是工作区内部边界，并非�
 | `store`                 | server、runtime、memory、浏览器同步                          | 领域持久化契约与 Memory/SQLite/PostgreSQL/IndexedDB 后端。根入口承载契约、工厂和跨后端操作；具体后端工厂从 `/memory`、`/sqlite`、`/postgres`、`/indexeddb` 导入，浏览器同步和向量能力也有专用子入口。                    |
 | `memory`                | server 装配，runtime 通过注入接口使用                        | recall、archival、关键词/向量检索及增量索引。每个 `createMemorySystem` 实例拥有自己的后台任务集合、`pendingTaskCount()` 与 `drain()`；宿主停止生产者后排空该实例。                                                       |
 | `ai-provider`           | server 的模型配置、runtime gateway、`test-runtime` live 模式 | 模型选择、provider 协议及媒体 wire 的集中适配；具体 provider 不进入插件作者 API。                                                                                                                                        |
-| `create`                | server 世界生成路由                                          | 可注入 LLM 的 Covel 世界内容/WorldIR 生成流程；属于产品领域库，不是通用文本生成器。                                                                                                                                      |
+| `create`                | server 世界生成路由                                          | 可注入 LLM 的世界内容生成与验证，显式 `writeWorldPackage` 导出文件；数据库消费者直接使用生成结果。                                                                                                                       |
 | `settings`              | web 设置面板与持久化 adapter                                 | 设置项注册、校验、订阅和持久化抽象；宿主提供实际 IPC/HTTP transport。                                                                                                                                                    |
-| `plugin-test-utils`     | 插件单元测试                                                 | 受限上下文、mock 与工具绑定 fixture，便于直接测试插件；不启动完整 server，也不替代真实提交。                                                                                                                             |
+| `plugin-test-utils`     | 插件单元与集成测试                                           | 受限上下文、mock，以及复用真实执行和事务提交的工具集成测试入口；不启动完整 HTTP server。                                                                                                                                 |
 | `test-runtime`          | 插件开发者运行 runtime cases                                 | 使用隔离 store 与 mock/live gateway 调用真实 runtime 的开发 CLI；复用默认工具集和静态审批策略，但不覆盖 HTTP 路由、生产事件目录或部署锁。                                                                                |
 
 这些边界中，`approval`、`context`、`events`、`create`、`settings` 等小包都有明确消费者与独立责任。它们无须仅因体量小或开发用途被并入 `runtime`；也不应为了看起来通用而增加转发包。
@@ -55,6 +55,8 @@ await commitExecution({
 恢复执行同样把整个 `execution` 交给 `commitExecution`，并选用 `kind: "resume"` 的完成策略。提交事务和提交后的通知、快照、记忆调度分别遵守[事务契约](../reference/transactions.md)。工具调用成功也不意味着 proposal 已持久化。
 
 server 与 `test-runtime` 都使用 `createDefaultToolRegistry({ store, eventDirectory })` 和 `createDefaultToolApprovalPipeline()`，因此默认工具名称及来源策略一致。server 仍为会话注入实际事件 schema、角色能力、持久化资源和交互式 RPC 审批；测试运行器使用隔离资源和 mock gateway。工具返回 `{ kind: "covel.tool-result", content, pendingProposals, emittedEvents? }` 时，宿主先分离并验证效果，再把正文交给模型；纯工具可直接返回正文。详见[工具契约](../reference/tools.md)。
+
+memory 的统一 `search` 入口负责 query embedding 复用与跨来源排名，tools 只转换展示结果。`createWorld` 返回经过验证的可移植内容，`writeWorldPackage` 负责可选文件导出；数据库与仅返回模式直接消费生成结果。
 
 memory 的后台队列属于 `MemorySystem` 实例，不是进程全局队列。向量增量索引的游标与内容哈希保存在专门的 `vector_index_progress` 表，属于可重建的派生索引状态，不占插件数据命名空间。memory 使用 store 的窄能力接口；server 选择 embedding、跨进程锁、恢复任务及关闭时的 drain 策略。详见[事务](../reference/transactions.md)和[世界数据](../reference/world-data.md)。
 

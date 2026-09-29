@@ -28,16 +28,15 @@ import {
  */
 export default async function guard(ctx) {
   const { logger, sessionId, store, locale } = ctx;
-  const s = /** @type {any} */ (store);
 
-  const characters = ctx.world.characters;
+  const characters = ctx.world?.characters;
   const player = Array.isArray(characters)
     ? characters.find((c) => c.type === "player")
     : null;
   // Ordering alone does not guarantee the schema provider succeeded. Use the
   // execution-local World Model, which includes same-turn schema proposals,
   // and fail outside the recoverable-error fallback below.
-  if (!player && !ctx.world.characterSchema) {
+  if (!player && !ctx.world?.characterSchema) {
     throw new Error(
       "Character schema is not ready. Complete world initialization before creating a player.",
     );
@@ -64,11 +63,14 @@ export default async function guard(ctx) {
     }
 
     // ── Branch 2: player submitted form → create deterministically
-    const submission = await latestSubmission(s, sessionId);
+    const submission = await latestSubmission(store);
     if (submission) {
-      const values = /** @type {Record<string, unknown>} */ (
-        submission.values ?? {}
-      );
+      const values =
+        submission.values !== null &&
+        typeof submission.values === "object" &&
+        !Array.isArray(submission.values)
+          ? /** @type {Record<string, unknown>} */ (submission.values)
+          : {};
       const name = pickName(values);
       if (name) {
         const now = new Date().toISOString();
@@ -79,7 +81,7 @@ export default async function guard(ctx) {
           // what the character panel shows (the panel overlays defaults at
           // render time). Schema is discovered by its well-known namespace/key,
           // not by a hardcoded world-data plugin id.
-          const schema = ctx.world.characterSchema;
+          const schema = ctx.world?.characterSchema ?? null;
           const fields = mergeSchemaDefaults(stripNameKeys(values), schema);
           const character = {
             id,
@@ -152,11 +154,9 @@ export default async function guard(ctx) {
 
 /**
  * Fetch the most recent player_inputs row for this session, or null.
- * @param {any} store
- * @param {string} sessionId
+ * @param {import("@covel/plugin-handlers-utils").FunctionStoreView} store
  */
-async function latestSubmission(store, sessionId) {
-  if (typeof store.listPlayerInputs !== "function") return null;
+async function latestSubmission(store) {
   try {
     const inputs = await store.listPlayerInputs();
     if (!Array.isArray(inputs) || inputs.length === 0) return null;
@@ -206,7 +206,6 @@ function pickDescription(values) {
  * @param {Record<string, unknown>} values
  */
 function stripNameKeys(values) {
-  const { characterName, name, 姓名, playerName, ...rest } =
-    /** @type {any} */ (values);
+  const { characterName, name, 姓名, playerName, ...rest } = values;
   return rest;
 }

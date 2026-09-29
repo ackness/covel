@@ -105,6 +105,29 @@ it("saves data via a plugin.data proposal", async () => {
 
 ### In-process turn（手搓 turn-executor）
 
+工具的集成测试可以直接使用真实执行与提交入口，无需在每个插件里复制 proposal 提交器：
+
+```ts
+import {
+  createPluginTestStore,
+  executeToolAndCommit,
+  commitToolResults,
+} from "@covel/plugin-test-utils";
+
+const ctx = {
+  sessionId: "session",
+  turnId: "turn",
+  pluginId: "sample",
+  runtimeId: "sample/main",
+};
+const store = await createPluginTestStore(ctx);
+const result = await executeToolAndCommit(tool, params, ctx, store);
+```
+
+该入口使用 memory store、真实 tool executor、`executeTurn` 和 `commitExecution`；保留 namespace 校验与事务回滚，返回原始工具结果便于断言。需要测试同一执行的多次待提交写入时，先执行工具，再 `await commitToolResults([first, second], ctx, store)` 一次提交。它不提供完整 HTTP、审批或事件目录宿主；这些边界仍由 server 测试覆盖。纯转换单测可以直接调用工具，不必启动执行宿主。
+
+生成的插件模板提供 `pnpm lint`（`checkJs` / `noEmit`），使用公开 SDK 的 JSDoc 类型检查 handler 和工具；无需改写成 TypeScript。修改 SDK 调用时同时运行类型检查与行为测试。
+
 需要跑完整 turn（agent tool loop、event 链、proposal commit）时，直接用 `@covel/runtime` 的公开导出手工组装：`discoverPlugins` / `loadPluginDefinition` / `loadRuntime`（`@covel/plugin-loader`）发现并加载真实 runtime，从定义的 `manifests` 选择执行项，从 `packageManifest` 读取包级 entry 与贡献。`@covel/store/memory` 的 `createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，LLM 用 `MockLLM` 或按步骤出 tool-call 的自定义 `LLMAdapter`。`executeTurn` 返回 `{ result, commit }`，将整个对象作为 `execution` 传给 `commitExecution`；内核负责完整收集嵌套结果、journal、suspension 和输出 schema。不要自己拼提交计划或逐个落库。调用方式见[宿主执行与提交边界](../reference/protocol.md#宿主执行与提交边界)。当前作者工具的组装见 [`packages/test-runtime/src/execution.ts`](../../packages/test-runtime/src/execution.ts)。下面的低层测试范例用于理解 event 链和 proposal：
 
 - [`packages/runtime/tests/scene-stage-integration.test.ts`](../../packages/runtime/tests/scene-stage-integration.test.ts) — 合成 emitter runtime 发 `scene.set`，同 turn event 链触发真实 scene-stage resolver 并 commit `plugin.data`。
@@ -122,7 +145,7 @@ pnpm vitest run plugins/<id>/tests
 
 初始执行和首层 deferred follower 均使用生产 `executeTurn` 和 `commitExecution`，复用声明设置的默认值、工具权限、写缓冲、超时与能力撤销。每次执行的顶层和递归结果、对话 journal、suspensions 在一次事务内提交；失败写入不会留在 plugin-data，提交失败也不会启动该次执行产生的 followers。报告的 `commitStatus` / `commitError` 表示初始执行的提交结果。提交失败、runtime 失败或 job 失败都会使单次 CLI 退出非零，包括 `skipped` follower 和 `--expects-background-follower` 检测到任务缺失。case 可以明确期待某个 runtime 的失败；只有对应 runtime 的失败 job 随该预期被接受，提交失败和其它意外失败仍使 case 失败。
 
-工具仍是隔离调试环境：entry 实际注册 tools 和 services，Hook、RPC、form validator 和 media wire 的注册不在此处运行。CLI 执行初始 turn 及它产生的首层后台 followers，不运行长期队列；首层 follower 再产生的任务列在 `pendingDeferredFollowers`，需用真实 server 验证其后续调度。`runtimeResults` 包含已经执行的递归与同步 event 结果。follower 的 `failed` / `skipped` 对应失败 job；成功提交的 `suspended` 保留暂停结果和 suspension，但 job 为 `done`，表示本次后台调用已结束，不表示暂停交互已恢复。真实 provider、审批、恢复和多跳调度仍由 HTTP/浏览器测试覆盖。
+工具仍是隔离调试环境：entry 实际注册 tools、services 和回合 Hook，并通过真实 HookPipeline 执行。SessionStart/End、Pre/PostCompaction、RPC、form validator、media wire，以及 `history.compact@1`、`ui.slot@1`、`media.image-flow@1` 扩展需要完整宿主，会列入报告的 `unsupportedCapabilities`（pluginId、kind、name），CLI 同时输出警告。CLI 执行初始 turn 及它产生的首层后台 followers，不运行长期队列；首层 follower 再产生的任务列在 `pendingDeferredFollowers`，需用真实 server 验证其后续调度。`runtimeResults` 包含已经执行的递归与同步 event 结果。follower 的 `failed` / `skipped` 对应失败 job；成功提交的 `suspended` 保留暂停结果和 suspension，但 job 为 `done`，表示本次后台调用已结束，不表示暂停交互已恢复。真实 provider、审批、恢复和多跳调度仍由 HTTP/浏览器测试覆盖。
 
 源码入口：
 
@@ -136,7 +159,7 @@ pnpm vitest run plugins/<id>/tests
 - `<pluginId>`：读取插件根目录下的 `tests/runtime-cases.json` 或 `covel.test.json`，执行声明的 cases。
 - `<pluginId>/<runtimeId>`：直接手动触发某个 runtime，适合临时调试。
 
-harness 会执行选定插件的 `entry` 模块并注册它导出的工具和服务，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。hook / RPC / wire 的注册会被接受但不生效——它们属于 server bootstrap 的职责，单 runtime 的 harness 回合走不到。
+harness 会执行选定插件的 `entry` 模块并注册它导出的工具和服务，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。回合 Hook（包括提交前后 Hook）使用选定插件的完整作用域和冻结设置执行，注册时与生产共用 `validatePluginHookRegistration`。工具和服务回调由 `PluginEntryScope` 保活，关闭先通知取消、等待回调退出，再清理资源；需要 HTTP、UI 或会话生命周期的能力则明确报告为不支持。
 
 harness 默认只加载被测插件。使用可重复的 `--with-plugin <id>` 显式加入协作插件；API `runRuntimeDebug` 和 case 均使用 `withPlugins: string[]`，case 的列表覆盖 CLI 列表。它们从同一个 `--plugins-dir` 查找，重复 ID 去重，缺失包在 entry 执行前报错。选定包均加入测试会话，工具按所属插件隔离，服务仅允许选定且当前会话仍活跃的插件调用。角色工具读取会话 World Model 的领域 schema；测试通过 character.schema.set 或初始 characterSchema 提供约束，不查询插件私有 namespace。退出及初始化失败时逆序清理入口资源；正常退出同时启动入口清理和工具停机，等待工具回调结束后才关闭 store，避免超时工具阻塞停止它所等待的入口资源。CLI 会执行这些包的服务端代码，应只选择信任的本地包，生产审批仍需通过 HTTP 测试验证。
 

@@ -108,3 +108,74 @@ describe("memory ownership boundaries", () => {
     }
   });
 });
+
+describe("unified memory search", () => {
+  it("shares one embedding across tiers but not across queries", async () => {
+    const embed = vi.fn(async (texts: readonly string[]) =>
+      texts.map(() => new Float32Array([1, 0])),
+    );
+    const { store, memory } = await fixture(embed);
+    await memory.ingest("session");
+    embed.mockClear();
+    const searchVectors = vi.spyOn(store, "searchVectors");
+    const hits = await memory.search("session", "Alice");
+    expect(hits[0]?.source).toBe("archival:character");
+    expect(embed).toHaveBeenCalledExactlyOnceWith(["Alice"], {
+      sessionId: "session",
+      modelId: "test/test",
+    });
+    expect(
+      searchVectors.mock.calls.map(([request]) => request.namespace).sort(),
+    ).toEqual(["archival", "recall"]);
+    await memory.search("session", "Bob");
+    expect(embed).toHaveBeenCalledTimes(2);
+    expect(embed.mock.calls[1]?.[0]).toEqual(["Bob"]);
+  });
+
+  it("interleaves local rankings even when one tier falls back to keywords", async () => {
+    const { store, memory, character } = await fixture();
+    for (let n = 1; n <= 2; n++) {
+      await store.appendTurnMessage({
+        id: `m${n}`,
+        sessionId: "session",
+        turnId: `t${n}`,
+        sourceType: "player",
+        role: "user",
+        content: `Alice visited ${n}`,
+        order: n,
+        createdAt: `2026-01-01T00:00:0${n}.000Z`,
+      });
+    }
+    await memory.ingest("session");
+    await store.upsertCharacter({
+      ...character,
+      description: "Alice has moved to the harbor",
+    });
+    const hits = await memory.search("session", "Alice", { limit: 3 });
+    expect(hits.map((hit) => hit.source)).toEqual([
+      "recall",
+      "archival:character",
+      "recall",
+    ]);
+    expect(hits[1]?.content).toContain("harbor");
+    expect(
+      await memory.search("session", "Alice", { scope: "recall", limit: 1 }),
+    ).toHaveLength(1);
+  });
+
+  it("falls back in both tiers after a single failed embedding request", async () => {
+    const failure = vi.fn(async () => {
+      throw new Error("synthetic embedding outage");
+    });
+    const { memory } = await fixture(failure);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect((await memory.search("session", "Alice"))[0]?.source).toBe(
+        "archival:character",
+      );
+      expect(failure).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

@@ -73,6 +73,7 @@ import {
   resolveSessionCommand,
 } from "./session/commands.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
+import { topLevelTurnResults } from "./actions/turn-history.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
 
@@ -322,7 +323,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       // ponytail: full artifact scan (listTurnResults sorts ascending, so a
       // head-limit would miss recent turns) — add a keyed getter to the store
       // contract if long sessions make this show up in traces.
-      const rows = await store.listTurnResults(sessionId);
+      const rows = topLevelTurnResults(await store.listTurnResults(sessionId));
       const row = rows.find((r) => r.turnId === body.retryFromTurnId);
       if (!row) {
         return c.json(

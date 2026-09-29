@@ -4,7 +4,12 @@ import {
   shortIdBatch,
 } from "@covel/plugin-handlers-utils";
 import { readFileSync as readContractFile } from "node:fs";
-import { bindToolStore } from "@covel/plugin-test-utils";
+import {
+  bindToolStore,
+  createPluginTestStore,
+  executeToolAndCommit as executeAndCommit,
+  commitToolResults,
+} from "@covel/plugin-test-utils";
 /**
  * inventory plugin tests.
  *
@@ -33,90 +38,6 @@ import {
 import { tool, z } from "@covel/tools";
 import createUpdateInventory from "../tools/update-inventory.js";
 
-// In-memory mock store for plugin-data operations
-function createMockPluginDataStore() {
-  /** @type {Map<string, unknown>} */
-  const data = new Map();
-  const makeKey = (sid, pid, ns, k) => `${sid}:${pid}:${ns}:${k}`;
-
-  return {
-    data,
-    async setPluginData(record) {
-      data.set(
-        makeKey(
-          record.sessionId,
-          record.pluginId,
-          record.namespace,
-          record.key,
-        ),
-        {
-          namespace: record.namespace,
-          key: record.key,
-          value: record.value,
-          updatedAt: record.updatedAt,
-        },
-      );
-    },
-    async setPluginDataBatch(records) {
-      for (const r of records) await this.setPluginData(r);
-    },
-    async getPluginData(sessionId, pluginId, namespace, key) {
-      return data.get(makeKey(sessionId, pluginId, namespace, key)) ?? null;
-    },
-    async listPluginData(sessionId, pluginId, namespace) {
-      const results = [];
-      for (const [k, v] of data) {
-        if (
-          k.startsWith(`${sessionId}:${pluginId}:`) &&
-          (!namespace || k.startsWith(`${sessionId}:${pluginId}:${namespace}:`))
-        ) {
-          results.push(v);
-        }
-      }
-      return results;
-    },
-  };
-}
-
-async function applyPendingPluginData(result, store) {
-  for (const proposal of getPendingProposals(result)) {
-    if (proposal.type === "plugin.data") {
-      await store.setPluginData({
-        id: proposal.id,
-        sessionId: proposal.sessionId,
-        pluginId: proposal.source.pluginId,
-        namespace: proposal.payload.namespace,
-        key: proposal.payload.key,
-        value: proposal.payload.value,
-        createdAt: proposal.timestamp,
-        updatedAt: proposal.timestamp,
-      });
-      continue;
-    }
-
-    if (proposal.type === "plugin.data.batch") {
-      await store.setPluginDataBatch(
-        proposal.payload.items.map((item, index) => ({
-          id: `${proposal.id}:${index}`,
-          sessionId: proposal.sessionId,
-          pluginId: proposal.source.pluginId,
-          namespace: item.namespace,
-          key: item.key,
-          value: item.value,
-          createdAt: proposal.timestamp,
-          updatedAt: proposal.timestamp,
-        })),
-      );
-    }
-  }
-}
-
-async function executeAndCommit(toolModule, params, context, store) {
-  const result = await toolModule.execute(params, context);
-  await applyPendingPluginData(result, store);
-  return result;
-}
-
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
 // ── Tool unit tests ──────────────────────────────────────────────
@@ -131,8 +52,8 @@ describe("update-inventory", () => {
   let mockStore;
   let updateInventoryTool;
 
-  beforeEach(() => {
-    mockStore = createMockPluginDataStore();
+  beforeEach(async () => {
+    mockStore = await createPluginTestStore(ctx);
     updateInventoryTool = bindToolStore(
       createUpdateInventory({
         tool,
@@ -534,8 +455,7 @@ describe("update-inventory", () => {
       status: "updated",
       itemId,
     });
-    await applyPendingPluginData(first, mockStore);
-    await applyPendingPluginData(second, mockStore);
+    await commitToolResults([first, second], ctx, mockStore);
     const stored = await mockStore.getPluginData(
       "sess-1",
       "inventory",

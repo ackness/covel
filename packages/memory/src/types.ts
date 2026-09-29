@@ -59,6 +59,17 @@ export interface ArchivalSearcher {
 
 // ── Unified Memory System ───────────────────────────────────────
 
+export interface MemorySearchOptions {
+  readonly scope?: "recall" | "archival" | "all";
+  readonly limit?: number;
+}
+
+export type MemorySearchResult =
+  | (RecallSearchResult & { readonly source: "recall" })
+  | (Omit<ArchivalSearchResult, "source"> & {
+      readonly source: `archival:${ArchivalSearchResult["source"]}`;
+    });
+
 /**
  * Inject-only embedding function for the semantic (vector) memory tier. The
  * memory package never imports a concrete provider; the server bootstrap layer
@@ -93,6 +104,16 @@ export interface MemorySystemDeps {
 export interface MemorySystem {
   readonly recall: RecallSearcher;
   readonly archival: ArchivalSearcher;
+  /**
+   * Search both tiers with one request-scoped query embedding per model.
+   * Results interleave each tier's ranking (recall first on ties); source
+   * scores remain local to their tier and must not be compared across tiers.
+   */
+  search(
+    sessionId: string,
+    query: string,
+    options?: MemorySearchOptions,
+  ): Promise<readonly MemorySearchResult[]>;
   /** Drain only this instance after the host has stopped producers. */
   drain(): Promise<import("./background-tasks.js").MemoryBackgroundDrainResult>;
   pendingTaskCount(): number;

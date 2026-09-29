@@ -72,6 +72,9 @@ export function getCovelIpc(): CovelIpcApi | null {
 // Distinguishes self-host setups with ~/.covel present from pure web-tier
 // deployments where file-manager / config.toml mutation are meaningless.
 let restDesktopCapable = false;
+let restDesktopModeKnown = false;
+
+export type DesktopMode = "desktop" | "web" | "unknown";
 
 // Per-launch bearer token for privileged REST writes. Sourced from the
 // Electron IPC `covel:get-info` response. On pure web / dev, no token is set
@@ -102,22 +105,31 @@ async function ensureDesktopRestToken(): Promise<void> {
 /**
  * Detect whether the server thinks we're running as a desktop deployment
  * (i.e. it has access to `~/.covel/`). Call once at boot; cheap to re-call
- * (it skips the network probe after the first success).
+ * (it skips the network probe after the first valid response). Unknown means
+ * settings storage must not be selected yet; callers can retry later.
  */
-export async function probeDesktopMode(): Promise<void> {
+export async function probeDesktopMode(): Promise<DesktopMode> {
   // Always try to seed the desktop REST token first — the IPC bridge has it
   // even when restDesktopCapable was already true.
   await ensureDesktopRestToken();
-  if (getCovelIpc() || restDesktopCapable) return;
+  if (getCovelIpc()) return "desktop";
+  if (restDesktopModeKnown) return restDesktopCapable ? "desktop" : "web";
   try {
-    const res = await fetch("/api/config/info");
+    const res = await fetch("/api/config/info", {
+      signal: AbortSignal.timeout(5000),
+    });
     if (res.ok) {
-      const info = (await res.json()) as { isDesktop?: boolean };
-      restDesktopCapable = !!info.isDesktop;
+      const info = (await res.json()) as { isDesktop?: unknown };
+      if (typeof info?.isDesktop === "boolean") {
+        restDesktopCapable = info.isDesktop;
+        restDesktopModeKnown = true;
+        return info.isDesktop ? "desktop" : "web";
+      }
     }
   } catch {
-    // Non-fatal. Leave restDesktopCapable at false.
+    // A failed probe cannot establish where settings belong.
   }
+  return "unknown";
 }
 
 /**
