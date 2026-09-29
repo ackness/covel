@@ -81,9 +81,9 @@ pnpm e2e                                   # Playwright end-to-end
 
 `pnpm test:pg` reads `DATABASE_URL` from the environment or root `.env` and requires the Store and Server PostgreSQL tests to run. A missing or unreachable database, or missing pgvector extension, fails the command. Ordinary Store and Server tests also receive explicitly supplied database environment variables. These two suites bypass Turbo caching because database state is external to source inputs. Other cached tasks invalidate when shared TypeScript configuration changes, and tests that read framework prompts also track `prompts/**`.
 
-`pnpm test:coverage` runs two coverage commands sequentially: `test:coverage:vitest` always reruns the Vitest workspaces and generates text/lcov reports in each package's `coverage/`; `test:coverage:desktop` runs all desktop Node tests and self-checks and writes per-process raw V8 coverage to `apps/desktop/coverage/` for separate analysis, outside the Vitest percentage. The ≥ 80% coverage target remains aspirational; [`ci.yml`](../.github/workflows/ci.yml) does not yet enforce a threshold.
+`pnpm test:coverage` runs two coverage commands sequentially: `test:coverage:vitest` always reruns the Vitest workspaces and generates reports in each package's `coverage/` using its configured reporters; `test:coverage:desktop` runs all desktop Node tests and self-checks and writes per-process raw V8 coverage to `apps/desktop/coverage/` for separate analysis, outside the Vitest percentage. The ≥ 80% coverage target remains aspirational; [`ci.yml`](../.github/workflows/ci.yml) does not yet enforce a threshold.
 
-PRs, main, and releases reuse the same CI gates, including independent PostgreSQL and Chromium smoke jobs. Releases also run `pnpm release:preflight`; lockfile validation uses a temporary metadata directory without modifying workspace dependencies or running install scripts.
+PRs, main, and releases reuse the same CI gates, including independent PostgreSQL and Chromium smoke jobs. The browser job collects the full E2E suite to detect broken imports before running the core flows. Releases also run `pnpm release:preflight`; lockfile validation uses a temporary metadata directory without modifying workspace dependencies or running install scripts.
 
 ### Framework / plugin isolation (important)
 

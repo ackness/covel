@@ -6,6 +6,7 @@ import baseConfig from "../../playwright.config.js";
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const webServer = baseConfig.webServer;
 
+// defineConfig(baseConfig, overrides) concatenates webServer arrays.
 export default defineConfig({
   ...baseConfig,
   testDir: fileURLToPath(new URL(".", import.meta.url)),

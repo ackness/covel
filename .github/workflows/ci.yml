@@ -176,6 +176,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Collect browser tests
+        run: pnpm e2e --list
+
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
