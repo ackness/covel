@@ -80,6 +80,8 @@ export function PluginPanel({
   surfaceContext,
   enableDevtools = false,
 }: PluginPanelProps) {
+  const interactionLockedRef = useRef(interactionLocked);
+  interactionLockedRef.current = interactionLocked;
   const { t, i18n } = useTranslation();
   const activeLocale = i18n.resolvedLanguage ?? i18n.language;
   const dataSource = spec.dataSource as
@@ -494,6 +496,7 @@ export function PluginPanel({
           : undefined
       }
       aria-disabled={interactionLocked}
+      inert={interactionLocked}
     >
       {namespace !== "_jobs" && failedJobs.length > 0 && (
         <div className="mb-3 rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -551,6 +554,7 @@ export function PluginPanel({
             Object.entries(handlers).map(([name, handler]) => [
               name,
               async (params: Record<string, unknown>) => {
+                if (interactionLockedRef.current) return;
                 await handler(params);
               },
             ]),

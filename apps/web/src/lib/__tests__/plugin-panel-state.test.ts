@@ -97,6 +97,7 @@ describe("plugin-panel state helpers", () => {
       }),
     ).toEqual({
       "/entries": [{ key: "a", value: 1 }],
+      "/nested": {},
       "/nested/value": 2,
       "/empty": null,
     });
@@ -192,6 +193,65 @@ describe("plugin-panel state helpers", () => {
       syncPluginPanelState(store, { value });
       expect(store.get("/value")).toEqual(value);
     }
+  });
+
+  it("keeps numeric-keyed objects as objects on creation and type changes", () => {
+    const store = createStateStore({});
+    const record = { "3": "three", name: "record", nested: { "0": "zero" } };
+    syncPluginPanelState(store, { record });
+    expect(store.get("/record")).toEqual(record);
+    expect(Array.isArray(store.get("/record"))).toBe(false);
+    expect(Array.isArray(store.get("/record/nested"))).toBe(false);
+    for (const previous of [null, 3, ["old"]]) {
+      syncPluginPanelState(store, { record: previous });
+      syncPluginPanelState(store, { record });
+      expect(store.get("/record")).toEqual(record);
+      expect(Array.isArray(store.get("/record"))).toBe(false);
+    }
+  });
+
+  it("keeps array and derived-entry drafts until external contents change", () => {
+    const store = createStateStore({});
+    const data = {
+      person: { name: "initial" },
+      choices: [{ label: "first" }, { label: "second" }],
+    };
+    syncPluginPanelState(store, buildPluginPanelInitialState(data, {}));
+    store.set("/entries/0/value/name", "entry draft");
+    store.set("/choices/0/label", "array draft");
+
+    // Invocation start/end and cached-panel remounts rebuild entries. A fresh
+    // server response can reconstruct the original data without changing it.
+    const invocations: Record<string, true>[] = [{ "runtime:test": true }, {}];
+    for (const invoking of invocations) {
+      syncPluginPanelState(
+        store,
+        buildPluginPanelInitialState(structuredClone(data), invoking),
+      );
+      expect(store.get("/entries/0/value/name")).toBe("entry draft");
+      expect(store.get("/choices/0/label")).toBe("array draft");
+      expect(store.get("/_invoking")).toEqual(invoking);
+    }
+
+    const changed = { person: { name: "server" }, choices: [{ label: "new" }] };
+    syncPluginPanelState(store, buildPluginPanelInitialState(changed, {}));
+    expect(store.get("/entries/0/value/name")).toBe("server");
+    expect(store.get("/choices")).toEqual(changed.choices);
+    expect(store.get("/choice2Label")).toBeUndefined();
+  });
+
+  it("bounds comparisons of deeply nested external arrays", () => {
+    const store = createStateStore({});
+    let first: unknown = "leaf";
+    let second: unknown = "leaf";
+    for (let depth = 0; depth < 5000; depth++) {
+      first = { nested: first };
+      second = { nested: second };
+    }
+    syncPluginPanelState(store, { values: [first] });
+    const replacement = [second];
+    syncPluginPanelState(store, { values: replacement });
+    expect(store.get("/values")).toBe(replacement);
   });
 
   it("binds only owner namespaces and replaces stale sources on session changes", () => {

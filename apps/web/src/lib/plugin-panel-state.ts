@@ -103,6 +103,40 @@ function escapePointer(value: string): string {
 /** Mirrors the render-side cap in `catalog/core-renderers.tsx`. */
 const MAX_FLATTEN_DEPTH = 32;
 
+/** Compare external JSON snapshots without reading or overwriting local drafts. */
+function sameExternalValue(
+  value: unknown,
+  previous: unknown,
+  depth: number,
+): boolean {
+  if (Object.is(value, previous)) return true;
+  if (
+    depth >= MAX_FLATTEN_DEPTH ||
+    !value ||
+    !previous ||
+    typeof value !== "object" ||
+    typeof previous !== "object" ||
+    Array.isArray(value) !== Array.isArray(previous)
+  )
+    return false;
+  const keys = Object.keys(value);
+  const oldRecord = previous as Record<string, unknown>;
+  return (
+    keys.length === Object.keys(previous).length &&
+    (!Array.isArray(value) ||
+      value.length === (previous as unknown[]).length) &&
+    keys.every(
+      (key) =>
+        Object.hasOwn(oldRecord, key) &&
+        sameExternalValue(
+          (value as Record<string, unknown>)[key],
+          oldRecord[key],
+          depth + 1,
+        ),
+    )
+  );
+}
+
 function flattenStateValue(
   updates: Record<string, unknown>,
   basePath: string,
@@ -111,7 +145,10 @@ function flattenStateValue(
   depth = 0,
 ): void {
   if (Array.isArray(value)) {
-    updates[basePath || "/"] = value;
+    // Derived entries and refreshed server arrays may be reconstructed with
+    // identical contents. Only an external content change replaces the draft.
+    if (!sameExternalValue(value, previous, depth))
+      updates[basePath || "/"] = value;
     return;
   }
   // Plugin data is unvalidated and arbitrarily deep. Past the cap, assign the
@@ -127,7 +164,9 @@ function flattenStateValue(
         updates[basePath] = value;
       return;
     }
-    if (Array.isArray(previous)) updates[basePath] = {};
+    // json-render infers an array when the next pointer segment is numeric.
+    // Establish object containers explicitly before writing their children.
+    if (!oldRecord) updates[basePath] = {};
     for (const key of Object.keys(oldRecord ?? {})) {
       if (!Object.hasOwn(value, key)) {
         updates[`${basePath}/${escapePointer(key)}`] = undefined;
