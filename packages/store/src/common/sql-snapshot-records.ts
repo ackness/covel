@@ -25,6 +25,7 @@ import { toSnapshotRecord, toSuspensionRecord } from "./mappers.js";
 import type { SnapshotRow, SuspensionRow } from "./mappers/snapshot-mappers.js";
 import { requireSnapshotPayload } from "./mappers/snapshot-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
+import { SessionRecordScopeConflictError } from "../errors.js";
 import type {
   CursorPageOpts,
   DataStore,
@@ -107,6 +108,13 @@ export function createSqlSnapshotRecords(
       await runner.insert(stateSnapshots, values.snapshotInsert(record), {
         target: stateSnapshots.id,
         set: values.snapshotUpdate(record),
+        // The unique-id conflict and session check are one statement, so a
+        // concurrent first insert cannot bind this id to another session.
+        setWhere: eq(stateSnapshots.sessionId, record.sessionId),
+        errorOnSkipped: new SessionRecordScopeConflictError(
+          "snapshot",
+          record.id,
+        ),
       });
     },
 
@@ -165,6 +173,11 @@ export function createSqlSnapshotRecords(
       await runner.insert(suspensions, values.suspensionInsert(record), {
         target: suspensions.id,
         set: values.suspensionUpdate(record),
+        setWhere: eq(suspensions.sessionId, record.sessionId),
+        errorOnSkipped: new SessionRecordScopeConflictError(
+          "suspension",
+          record.id,
+        ),
       });
     },
 

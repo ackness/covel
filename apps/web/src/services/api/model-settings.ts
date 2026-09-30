@@ -400,14 +400,14 @@ export function getProviderPriceMultiplier(provider?: string): number {
 
 export function setProviderPriceMultipliers(
   multipliers: Record<string, number>,
-): void {
+): Promise<void> {
   const normalized = Object.fromEntries(
     Object.entries(multipliers).flatMap(([provider, value]) => {
       const id = providerKeyToId(provider);
       return id && Number.isFinite(value) && value > 0 ? [[id, value]] : [];
     }),
   );
-  void getSettings().set("llm.providerPriceMultipliers", normalized);
+  return getSettings().set("llm.providerPriceMultipliers", normalized);
 }
 
 /** Compile the current provider profiles for model pickers and request overlays. */
@@ -425,8 +425,8 @@ export function getParamOverrides(): Record<string, ModelParameterOverrides> {
 
 export function setParamOverrides(
   overrides: Record<string, ModelParameterOverrides>,
-): void {
-  void getSettings().set("llm.paramOverrides", overrides);
+): Promise<void> {
+  return getSettings().set("llm.paramOverrides", overrides);
 }
 
 /**

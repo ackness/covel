@@ -18,6 +18,8 @@ import {
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
+import { SettingsRevisionConflictError } from "@covel/settings";
+import { useSettingsSave } from "../use-settings-save.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
 import { LlmSlotCard } from "./llm-slot-card.js";
@@ -87,8 +89,14 @@ export function LlmSlotsPane() {
 
   const { slots, configuredSlots, discoveredSlotIds } = useLlmSlotIds();
 
+  const {
+    save: saveCapabilities,
+    saving: savingCapabilities,
+    writable,
+  } = useSettingsSave(() => setCapOverridesLocal(getCapabilityOverrides()));
+
   const commitSlot = async (next: Record<string, SlotConfigEntry>) => {
-    if (pendingSlotSave.current || !mounted.current) return;
+    if (!writable || pendingSlotSave.current || !mounted.current) return;
     pendingSlotSave.current = true;
     setSavingSlot(true);
     setSlotSaveError(null);
@@ -106,13 +114,14 @@ export function LlmSlotsPane() {
           : {}),
       });
       if (mounted.current) setSlotConfigLocal(getSlotConfig());
-    } catch {
+    } catch (error) {
       const message = t("settings.saveFailed");
       if (mounted.current) {
         setSlotConfigLocal(getSlotConfig());
         setSlotSaveError(message);
       }
-      emitToast("error", message);
+      if (!(error instanceof SettingsRevisionConflictError))
+        emitToast("error", message);
     } finally {
       pendingSlotSave.current = false;
       if (mounted.current) setSavingSlot(false);
@@ -140,15 +149,13 @@ export function LlmSlotsPane() {
       ...capOverrides,
       [slotId]: { ...capOverrides[slotId], ...patch },
     };
-    setCapOverridesLocal(next);
-    setCapabilityOverrides(next);
+    return saveCapabilities(() => setCapabilityOverrides(next));
   };
 
   const resetCapOverride = (slotId: string) => {
     const next = { ...capOverrides };
     delete next[slotId];
-    setCapOverridesLocal(next);
-    setCapabilityOverrides(next);
+    void saveCapabilities(() => setCapabilityOverrides(next));
   };
 
   const handleReloadConfig = async () => {
@@ -264,12 +271,19 @@ export function LlmSlotsPane() {
           </span>
         </Button>
       </div>
+      {llm?.source && (
+        <p className="break-all text-[11px] text-muted-foreground">
+          {llm.source.kind === "file"
+            ? t("settings.llm.activeFile", { path: llm.source.path })
+            : t("settings.llm.activeBuiltin")}
+        </p>
+      )}
       {llm?.error && (
         <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive leading-relaxed">
           {t("settings.llm.parseError", {
             error: llm.error,
             defaultValue:
-              "llm.toml could not be parsed — using the built-in default. Fix it and reload: {{error}}",
+              "llm.toml could not be loaded. The currently active configuration has been kept. Fix it and reload: {{error}}",
           })}
         </div>
       )}
@@ -304,7 +318,7 @@ export function LlmSlotsPane() {
               variant="outline"
               size="sm"
               className="text-[11px] shrink-0"
-              disabled={savingSlot}
+              disabled={savingSlot || savingCapabilities || !writable}
               onClick={autoBindDiscoveredSlots}
             >
               {t("settings.autoBindSlots", "Auto-bind")}
@@ -332,7 +346,7 @@ export function LlmSlotsPane() {
         </p>
       )}
       <fieldset
-        disabled={savingSlot}
+        disabled={savingSlot || savingCapabilities || !writable}
         aria-busy={savingSlot}
         className="min-w-0 space-y-3"
       >

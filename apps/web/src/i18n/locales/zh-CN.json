@@ -587,6 +587,8 @@
     "deleteConfirmAction": "删除"
   },
   "settings": {
+    "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",
+    "serverKeyAvailable": "服务器默认模型已有实例 API Key。此处填写的个人 Key 保存在当前设备。",
     "modelBindingMissing": "所选模型不可用，请重新选择模型或重置此用途。",
     "resetModelBinding": "重置模型绑定",
     "storageMode": "数据存储",
@@ -859,7 +861,9 @@
       "reloadOk": "配置已重载",
       "reloadOkDetail": "已启用 {{count}} 个模型用途：{{slots}}",
       "reloadFailed": "llm.toml 解析失败",
-      "parseError": "llm.toml 解析失败 —— 已回退到内置默认。修好后重载：{{error}}"
+      "activeFile": "当前配置文件：{{path}}",
+      "activeBuiltin": "当前配置：内置默认",
+      "parseError": "llm.toml 读取失败，当前生效的配置已保留。请修复后重新加载：{{error}}"
     },
     "runtimeSlotsDiscovered": "插件声明的模型用途",
     "temperature": "温度",

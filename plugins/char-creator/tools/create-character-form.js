@@ -4,7 +4,9 @@ export default function ({ tool }, createFormTool) {
     name: "create-character-form",
     description:
       "Create the opening character form. Collect characterName and optional declared string/enum attributes only; retain numeric and compound attribute defaults.",
-    parameters: createFormTool.parametersSchema,
+    // This plugin has no registered form validators; keep their names out of
+    // the LLM contract and strip unsolicited validation metadata before output.
+    parameters: createFormTool.parametersSchema.omit({ validation: true }),
     execute: async (params, context) => {
       const schema = context.world.characterSchema;
       const attributes = new Map(

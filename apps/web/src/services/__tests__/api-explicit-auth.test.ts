@@ -301,14 +301,6 @@ describe("operator auth on hosted administration routes", () => {
           restartRequired: true,
         }),
       )
-      .mockResolvedValueOnce(
-        okJson({
-          keys: { openai: "secret" },
-          providers: {
-            openai: { configured: true, masked: "****" },
-          },
-        }),
-      )
       .mockResolvedValueOnce(okJson({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -320,10 +312,9 @@ describe("operator auth on hosted administration routes", () => {
       "plugin",
       new File(["zip"], "fixture.zip", { type: "application/zip" }),
     );
-    await api.fetchServerProviderKeys();
     await api.uninstallPlugin("fixture-plugin");
 
-    for (const index of [0, 1, 3, 4, 5, 6, 7]) {
+    for (const index of [0, 1, 3, 4, 5, 6]) {
       expect(headersAt(fetchMock, index).get("Authorization")).toBe(
         "Bearer operator-secret",
       );

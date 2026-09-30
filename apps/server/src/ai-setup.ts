@@ -56,6 +56,7 @@ protocol = "openai-chat-v1"
 interface LoadedAiConfig {
   config: AiConfig;
   llmConfig: LlmConfig;
+  source: { kind: "file" | "builtin"; path: string };
   /**
    * Set only when an llm.toml file is present but failed to parse/validate
    * (and we fell back to the built-in default). A missing file is normal
@@ -76,7 +77,9 @@ interface LoadedAiConfig {
  * silently showing the fallback. Shared by `createAiStack` (boot) and
  * `reloadAiStack` (manual Settings reload).
  */
-function loadAiConfig(): LoadedAiConfig {
+function loadAiConfig(
+  context: "startup" | "reload" = "startup",
+): LoadedAiConfig {
   const env = readRuntimeEnv();
   // COVEL_LLM_TOML wins (desktop app passes a userData path); otherwise we
   // try ./llm.toml relative to the server's cwd.
@@ -96,7 +99,9 @@ function loadAiConfig(): LoadedAiConfig {
     error = err instanceof Error ? err.message : String(err);
     console.warn(
       `[ai-setup] llm.toml at ${llmTomlPath} could not be parsed: ${error}. ` +
-        `Falling back to built-in default.`,
+        (context === "startup"
+          ? `Using built-in default.`
+          : `Keeping the active configuration.`),
     );
   }
 
@@ -105,17 +110,23 @@ function loadAiConfig(): LoadedAiConfig {
       `[ai-setup] Loaded llm.toml (${llmTomlPath}) with slots:`,
       Object.keys(llmResult.llmConfig.covel).join(", "),
     );
-    return { config: llmResult.aiConfig, llmConfig: llmResult.llmConfig };
+    return {
+      config: llmResult.aiConfig,
+      llmConfig: llmResult.llmConfig,
+      source: { kind: "file", path: llmTomlPath },
+    };
   }
 
-  console.log(
-    `[ai-setup] Using built-in default LLM config (deepseek/story). ` +
-      `Override by editing ${llmTomlPath}.`,
-  );
+  if (!error || context === "startup")
+    console.log(
+      `[ai-setup] Using built-in default LLM config (deepseek/story). ` +
+        `Override by editing ${llmTomlPath}.`,
+    );
   const fallback = parseLlmConfig(DEFAULT_LLM_TOML);
   return {
     config: fallback.aiConfig,
     llmConfig: fallback.llmConfig,
+    source: { kind: "builtin", path: llmTomlPath },
     error,
   };
 }
@@ -167,6 +178,7 @@ export function createAiStack(): AiStack {
     config: loaded.config,
     llmConfig: loaded.llmConfig,
     lastLoadError: loaded.error,
+    configSource: loaded.source,
     modelDb,
     providerRegistry,
     presetRegistry,
@@ -197,7 +209,15 @@ export interface AiReloadResult {
  * the previous config; the next turn sees the new one.
  */
 export function reloadAiStack(ai: AiStack): AiReloadResult {
-  const loaded = loadAiConfig();
+  const loaded = loadAiConfig("reload");
+  if (loaded.error) {
+    ai.lastLoadError = loaded.error;
+    return {
+      ok: false,
+      slots: Object.keys(ai.slotRegistry.listSlots()),
+      error: loaded.error,
+    };
+  }
 
   ai.providerRegistry.reconfigure({
     providerDefaults: loaded.config.providers,
@@ -211,6 +231,7 @@ export function reloadAiStack(ai: AiStack): AiReloadResult {
   ai.config = loaded.config;
   ai.llmConfig = loaded.llmConfig;
   ai.lastLoadError = loaded.error;
+  ai.configSource = loaded.source;
 
   return {
     ok: loaded.error === undefined,
@@ -273,11 +294,11 @@ export interface AiStack {
   /** Parsed llm.toml config. Always populated — falls back to built-in defaults. */
   llmConfig: LlmConfig | null;
   /**
-   * Set when the most recent llm.toml load failed to parse and fell back to
-   * the built-in default. Surfaced via GET /api/llm-config so the UI can show
-   * the user why their configured slots are absent. Undefined on success.
+   * Set when the most recent llm.toml load failed. Startup uses built-in
+   * defaults; reload keeps the last valid configuration. Undefined on success.
    */
   lastLoadError?: string;
+  configSource?: { kind: "file" | "builtin"; path: string };
   /** Model capability database (LiteLLM-derived). */
   modelDb: ModelDatabase | null;
   providerRegistry: ReturnType<typeof createProviderRegistry>;

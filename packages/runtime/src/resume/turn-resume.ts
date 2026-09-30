@@ -176,6 +176,10 @@ async function executeResumedRuntime(
       deps,
       hookPipeline,
       triggerEvent: undefined,
+      inputs: pendingContinuation.inputSlots,
+      exports: pendingContinuation.exportSlots,
+      activation: pendingContinuation.activation,
+      pendingProposals: pendingContinuation.pendingProposals as Proposal[],
       executionContext: resumeExecutionContext,
       createRecursiveCall: () => async () => {
         throw new Error(

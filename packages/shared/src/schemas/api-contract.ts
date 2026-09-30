@@ -90,6 +90,11 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
       payload: z
         .object({
           content: requiredActionString("send_message.content", 100_000),
+          inputMessageId: requiredActionString(
+            "inputMessageId",
+            128,
+            ACTION_ID_PATTERN,
+          ).optional(),
           ...actionRecoveryPayload,
         })
         .strict(),
@@ -102,6 +107,11 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
       payload: z
         .object({
           command: requiredActionString("execute_command.command", 10_000),
+          inputMessageId: requiredActionString(
+            "inputMessageId",
+            128,
+            ACTION_ID_PATTERN,
+          ).optional(),
           ...actionRecoveryPayload,
         })
         .strict(),

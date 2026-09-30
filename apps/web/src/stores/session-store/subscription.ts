@@ -72,12 +72,44 @@ function containsTerminalBackgroundJob(
   return changes.some((change) => {
     if (!change || typeof change !== "object") return false;
     const row = change as Record<string, unknown>;
-    if (row.namespace !== "_jobs") return false;
+    if (row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs")
+      return false;
     const value = row.value;
     if (!value || typeof value !== "object") return false;
     const status = (value as Record<string, unknown>).status;
-    return status === "done" || status === "failed";
+    return [
+      "done",
+      "succeeded",
+      "failed",
+      "timed_out",
+      "cancelled",
+      "stale",
+      "orphaned",
+    ].includes(String(status));
   });
+}
+
+function isTerminalBackgroundEvent(event: SubscriptionEvent): boolean {
+  if (event.type === "plugin-data.changed")
+    return containsTerminalBackgroundJob(event.payload ?? {});
+  if (event.type !== "job-status.updated") return false;
+  const payload = event.payload ?? {};
+  // Plugin progress may finish before its durable parent's domain commit.
+  // Only the worker's parent control event proves the result is committed.
+  const data = payload.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  const control = data as Record<string, unknown>;
+  return (
+    [
+      "succeeded",
+      "failed",
+      "timed_out",
+      "cancelled",
+      "stale",
+      "orphaned",
+    ].includes(String(control.durableStatus)) &&
+    ["succeeded", "failed", "cancelled"].includes(String(payload.state))
+  );
 }
 
 export function isCurrentSubscriptionEvent(
@@ -480,10 +512,7 @@ export function useSessionSubscription({
       ) {
         return;
       }
-      if (
-        event.type === "plugin-data.changed" &&
-        containsTerminalBackgroundJob(event.payload ?? {})
-      ) {
+      if (isTerminalBackgroundEvent(event)) {
         // Recovery can replace buffered projections. Checkpoint the committed
         // background result on receipt, independently of projection replay.
         const actionId = event.id

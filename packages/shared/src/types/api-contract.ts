@@ -31,11 +31,17 @@ export type ActionRequest = {
 } & (
   | (ActionRequestBase & {
       readonly type: "send_message";
-      readonly payload: { readonly content: string };
+      readonly payload: {
+        readonly content: string;
+        readonly inputMessageId?: string;
+      };
     })
   | (ActionRequestBase & {
       readonly type: "execute_command";
-      readonly payload: { readonly command: string };
+      readonly payload: {
+        readonly command: string;
+        readonly inputMessageId?: string;
+      };
     })
   | (ActionRequestBase & {
       readonly type: "start_session";

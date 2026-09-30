@@ -125,7 +125,11 @@ the IndexedDB transaction itself is never held open over network I/O.
 1. Recover any previous pending result, then persist this action's browser-authored
    input to `BrowserVault`. Superseded queued actions do not persist new input.
 2. `PUT /api/sessions/:id/browser-checkpoint` hydrates an ephemeral `MemoryStore`
-   workspace with the latest full checkpoint.
+   workspace with the latest full checkpoint. When an existing verified workspace
+   contains durable detached jobs, it retains worker-owned state and admits only
+   new user messages, session status/model settings, and authorized world edits.
+   The `reconcileRequired` response requires a staged `hydrate:<revision>` commit
+   download before continuing. Unsupported checkpoint edits return `409`.
 3. Record the pending `actionId`, then execute the normal action or plugin-RPC
    endpoint against that workspace.
 4. `POST /api/sessions/:id/browser-commit` exports the resulting workspace as a
@@ -137,7 +141,9 @@ the IndexedDB transaction itself is never held open over network I/O.
 The client serializes checkpoint uploads and commit downloads. SSE messages are
 rendered immediately but are not persisted one by one; the post-action
 checkpoint is the single durable write. Terminal background-job events request
-an additional checkpoint so detached work is not lost. If a commit download
+an additional checkpoint only after the durable worker settles, so detached work
+is not lost. The upload admission boundary also preserves worker results when
+events are missed or a worker finishes between download and upload. If a commit download
 fails, the pending action survives a page reload and must be recovered before
 the browser is allowed to upload an older checkpoint.
 
@@ -146,6 +152,9 @@ new local input cannot advance a revision ahead of an unrecovered result. A clos
 document releases its Web Lock, allowing another document to recover its pending
 result. Independent sessions do not share this lock. Remote/server-authoritative
 mode continues to use server coordination directly.
+
+Setup Retry and Skip use this same workspace exchange and commit their updated
+session state before publishing it to the UI, including recovery after reload.
 
 World ownership precedes session ownership. Each `LocalDataService` session
 operation, including creation and deletion, holds a shared world Web Lock and

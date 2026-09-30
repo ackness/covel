@@ -14,6 +14,7 @@ const original = "DEEPSEEK_API_KEY=synthetic-old\n";
 beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "covel-keys-atomic-"));
   vi.stubEnv("COVEL_HOME", home);
+  vi.stubEnv("COVEL_DESKTOP_REST", "1");
   vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
   fs.writeFileSync(path.join(home, "keys.env"), original, "utf8");
 });

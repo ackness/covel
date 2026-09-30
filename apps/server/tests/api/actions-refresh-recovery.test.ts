@@ -194,6 +194,14 @@ describe("refreshing a foreground action", () => {
 
   it("executes only one of two recovery requests for the same interrupted turn", async () => {
     const f = await fixture();
+    const input = {
+      id: "durable-input",
+      sessionId: f.sessionId,
+      role: "user" as const,
+      content: "Open the door",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    await f.store.addMessage(input);
     await f.store.addTraceEvent({
       id: "interrupted",
       sessionId: f.sessionId,
@@ -204,18 +212,20 @@ describe("refreshing a foreground action", () => {
       payload: {
         recoveryAction: {
           type: "send_message",
-          payload: { content: "Open the door" },
+          payload: { content: "Open the door", inputMessageId: input.id },
         },
       },
     });
     const first = await f.post({
       content: "Open the door",
+      inputMessageId: input.id,
       recoverFromTurnId: "old-turn",
     });
     const firstBody = first.text();
     await f.started.promise;
     const second = await f.post({
       content: "Open the door",
+      inputMessageId: input.id,
       recoverFromTurnId: "old-turn",
     });
     const secondBody = second.text();
@@ -223,6 +233,11 @@ describe("refreshing a foreground action", () => {
     expect(await firstBody).toContain("execution.completed");
     expect(await secondBody).toContain("no longer available for recovery");
     expect(f.fake.calls).toHaveLength(1);
+    expect(
+      (await f.store.listMessages(f.sessionId)).filter(
+        (message) => message.role === "user",
+      ),
+    ).toEqual([{ ...input, metadata: { turnId: expect.any(String) } }]);
     expect((await f.store.getSession(f.sessionId))?.completedPlayerTurns).toBe(
       1,
     );

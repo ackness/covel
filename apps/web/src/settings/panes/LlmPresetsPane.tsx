@@ -12,6 +12,8 @@ import {
 } from "@/services/api.js";
 import { getBuiltinProviderConnection } from "@covel/shared";
 import { sameSettingValue } from "@covel/settings";
+import { SettingsRevisionConflictError } from "@covel/settings";
+import { useSettingsWritable } from "../use-settings-save.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { Button } from "@/components/ui/button.js";
 import { useSession } from "@/stores/session-store.js";
@@ -101,11 +103,13 @@ export function LlmPresetsPane() {
     }
   }, [catalog, selectedProviderId]);
 
+  const writable = useSettingsWritable();
+
   const commit = async (
     next: ProviderModelProfile[],
     slots = getSlotConfig(),
   ): Promise<boolean> => {
-    if (pendingSave.current || !mounted.current) return false;
+    if (!writable || pendingSave.current || !mounted.current) return false;
     pendingSave.current = true;
     setSaving(true);
     setSaveError(null);
@@ -121,13 +125,14 @@ export function LlmPresetsPane() {
         emitToast("error", message, result.unclearedProviderIds.join(", "));
       }
       return mounted.current;
-    } catch {
+    } catch (error) {
       const message = t("settings.saveFailed");
       if (mounted.current) {
         setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
         setSaveError(message);
       }
-      emitToast("error", message);
+      if (!(error instanceof SettingsRevisionConflictError))
+        emitToast("error", message);
       return false;
     } finally {
       pendingSave.current = false;
@@ -319,7 +324,7 @@ export function LlmPresetsPane() {
   };
 
   return (
-    <fieldset disabled={saving} className="min-w-0 space-y-3">
+    <fieldset disabled={saving || !writable} className="min-w-0 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">

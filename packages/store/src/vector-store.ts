@@ -31,7 +31,7 @@ export interface EmbeddingModelIdentity {
   readonly provider: string; // "openai", "ollama", etc.
   readonly modelName: string; // "text-embedding-3-small"
   readonly dim: number; // 1536, 768, 3072, etc.
-  /** Normalized: "${provider}/${modelName}" */
+  /** Opaque routing identity; server locks include an endpoint/protocol/format hash. */
   readonly modelId: string;
 }
 

@@ -40,6 +40,10 @@ export interface ConflictClause {
    * `Record<string, unknown>` payload.
    */
   readonly set: Record<string, unknown>;
+  /** Atomically restrict updates of an existing conflicting row. */
+  readonly setWhere?: SQL;
+  /** Reject a skipped conditional update, including inside atomic batches. */
+  readonly errorOnSkipped?: Error;
 }
 
 /** Optional refinements for a SELECT. */

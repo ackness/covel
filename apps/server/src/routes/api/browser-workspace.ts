@@ -7,6 +7,7 @@ import {
 } from "../../world-lifecycle.js";
 import { preserveWorldProvenance } from "../../world-seed-loader.js";
 import { Hono } from "hono";
+import { isDeepStrictEqual } from "node:util";
 import { canonicalizeLocale } from "@covel/shared";
 import {
   BrowserSyncValidationError,
@@ -40,6 +41,53 @@ interface WorkspaceHead {
   revision: number;
   actionId: string;
   readonly commits: Map<string, SessionCommit>;
+  checkpoint: BrowserCheckpoint;
+}
+
+function hasDurableJobs(checkpoint: BrowserCheckpoint): boolean {
+  return checkpoint.pluginData.some((row) => row.namespace === "_runtime_jobs");
+}
+
+/** Local authors may append inputs, edit their world, and change session settings. */
+function supportsBrowserDelta(
+  previous: BrowserCheckpoint,
+  incoming: BrowserCheckpoint,
+): boolean {
+  const executionContent = (checkpoint: BrowserCheckpoint) => {
+    const {
+      world: _world,
+      messages: _messages,
+      revision: _revision,
+      actionId: _actionId,
+      committedAt: _committedAt,
+      session,
+      ...domains
+    } = checkpoint;
+    const {
+      status: _status,
+      runtimeModelOverrides: _overrides,
+      updatedAt: _updatedAt,
+      ...sessionIdentity
+    } = session;
+    return { ...domains, session: sessionIdentity };
+  };
+  if (
+    !isDeepStrictEqual(executionContent(previous), executionContent(incoming))
+  )
+    return false;
+  const incomingMessages = new Map(
+    incoming.messages.map((row) => [row.id, row]),
+  );
+  if (
+    previous.messages.some(
+      (row) => !isDeepStrictEqual(row, incomingMessages.get(row.id)),
+    )
+  )
+    return false;
+  const existingIds = new Set(previous.messages.map((row) => row.id));
+  return incoming.messages.every(
+    (row) => existingIds.has(row.id) || row.role === "user",
+  );
 }
 
 /** One API instance's replay state, released with the session lifecycle. */
@@ -229,11 +277,6 @@ export function createBrowserWorkspaceRoutes(
                   409,
                 );
               }
-              return c.json({
-                ok: true,
-                revision: head.revision,
-                unchanged: true,
-              });
             }
 
             const writeWorld =
@@ -273,6 +316,94 @@ export function createBrowserWorkspaceRoutes(
                   )
                 : null,
             };
+            if (
+              head &&
+              (hasDurableJobs(checkpoint) ||
+                (
+                  await c.get("store").listPluginDataSessionScope(sessionId)
+                ).some((row) => row.namespace === "_runtime_jobs"))
+            ) {
+              if (!supportsBrowserDelta(head.checkpoint, checkpoint)) {
+                return c.json(
+                  errorBody(
+                    "Unsupported browser mutation while detached jobs exist",
+                    {
+                      code: "unsupported_browser_mutation",
+                    },
+                  ),
+                  409,
+                );
+              }
+              // Keep job leases, progress and domain results in place. Replacing
+              // a snapshot would rewind a worker that completed after download.
+              const admitted = await c
+                .get("store")
+                .withTransaction(async (tx) => {
+                  const existingMessages = new Map(
+                    (await tx.listMessages(sessionId)).map((row) => [
+                      row.id,
+                      row,
+                    ]),
+                  );
+                  const baselineIds = new Set(
+                    head.checkpoint.messages.map((row) => row.id),
+                  );
+                  if (
+                    checkpoint.messages.some((row) => {
+                      const existing = existingMessages.get(row.id);
+                      return (
+                        !baselineIds.has(row.id) &&
+                        existing &&
+                        (existing.role !== row.role ||
+                          existing.content !== row.content)
+                      );
+                    })
+                  )
+                    return false;
+                  for (const row of checkpoint.messages) {
+                    if (!existingMessages.has(row.id)) await tx.addMessage(row);
+                  }
+                  await tx.updateSession(sessionId, {
+                    status: checkpoint.session.status,
+                    runtimeModelOverrides:
+                      checkpoint.session.runtimeModelOverrides,
+                    updatedAt: checkpoint.session.updatedAt,
+                  });
+                  if (writeWorld && admittedCheckpoint.world)
+                    await tx.upsertWorld(admittedCheckpoint.world);
+                  return true;
+                });
+              if (!admitted)
+                return c.json(
+                  errorBody(
+                    "Browser input conflicts with a committed message",
+                    {
+                      code: "unsupported_browser_mutation",
+                    },
+                  ),
+                  409,
+                );
+              const unchanged = head.revision === checkpoint.revision;
+              head.revision = checkpoint.revision;
+              head.actionId = checkpoint.actionId;
+              head.checkpoint = checkpoint;
+              scheduleMemoryIngest(c.get("memorySystem"), sessionId);
+              // A lost response can retry this same head, then download the
+              // same staged commit without reapplying the input delta.
+              return c.json({
+                ok: true,
+                revision: head.revision,
+                unchanged,
+                reconcileRequired: true,
+              });
+            }
+            if (head?.revision === checkpoint.revision) {
+              return c.json({
+                ok: true,
+                revision: head.revision,
+                unchanged: true,
+              });
+            }
             try {
               await withMemoryIngestLock(c, sessionId, () =>
                 replaceSessionFromCheckpoint(
@@ -315,6 +446,7 @@ export function createBrowserWorkspaceRoutes(
               revision: checkpoint.revision,
               actionId: checkpoint.actionId,
               commits: new Map(),
+              checkpoint,
             });
             scheduleMemoryIngest(c.get("memorySystem"), sessionId);
             return c.json({ ok: true, revision: checkpoint.revision });
@@ -409,6 +541,7 @@ export function createBrowserWorkspaceRoutes(
           };
           head.revision = revision;
           head.actionId = actionId;
+          head.checkpoint = checkpoint;
           cacheCommit(head, commit);
           return c.json(commit);
         } catch (error) {

@@ -232,6 +232,7 @@ describe("GitHub plugin installation", () => {
 
   it("uses hot-applied HTTP and SOCKS settings for metadata and both archive downloads", async () => {
     vi.stubEnv("COVEL_HOME", root);
+    vi.stubEnv("COVEL_DESKTOP_REST", "1");
     const config = createConfigApiRoutes({ apiKeys: {} });
     const update = (mode: string, url: string) =>
       config.request("/api/config/proxy", {

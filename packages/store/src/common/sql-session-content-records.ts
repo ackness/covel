@@ -11,10 +11,14 @@
  * the single source of truth for the session-content surface.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
 import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
+import {
+  adoptPlayerInputMessage,
+  assertCommittedPlayerInput,
+} from "./player-input-message.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import {
@@ -47,6 +51,9 @@ type EventsTable = Table & {
 type MessagesTable = Table & {
   id: Column;
   sessionId: Column;
+  role: Column;
+  content: Column;
+  metadata: Column;
   createdAt: Column;
 };
 type CharactersTable = Table & { id: Column; sessionId: Column };
@@ -78,6 +85,7 @@ export type SqlSessionContentRecords = Pick<
   | "listEvents"
   | "getEventById"
   | "addMessage"
+  | "commitPlayerInputMessage"
   | "listMessages"
   | "listMessagesPage"
   | "getCharacterSchema"
@@ -128,6 +136,52 @@ export function createSqlSessionContentRecords(
 
     async addMessage(record: MessageRecord): Promise<void> {
       await runner.insert(messages, values.messageInsert(record));
+    },
+
+    async commitPlayerInputMessage(record: MessageRecord): Promise<void> {
+      assertCommittedPlayerInput(record);
+      if (
+        await runner.insertIgnoreReturningCount(
+          messages,
+          values.messageInsert(record),
+          messages.id,
+        )
+      )
+        return;
+      const row = await runner.selectFirst<MessageRow>(messages, {
+        where: eq(messages.id, record.id),
+      });
+      if (!row) throw new Error("Player input disappeared before commit");
+      const adopted = adoptPlayerInputMessage(
+        toMessageRecord(row, json),
+        record,
+      );
+      const count = await runner.updateReturningCount(
+        messages,
+        { metadata: values.messageInsert(adopted).metadata },
+        and(
+          eq(messages.id, record.id),
+          eq(messages.sessionId, row.sessionId),
+          eq(messages.role, row.role),
+          eq(messages.content, row.content),
+          eq(messages.createdAt, row.createdAt),
+          row.metadata == null
+            ? isNull(messages.metadata)
+            : eq(messages.metadata, row.metadata),
+        ),
+      );
+      // Compare-and-swap protects callers even outside a session lock.
+      if (count !== 1) {
+        const current = await runner.selectFirst<MessageRow>(messages, {
+          where: eq(messages.id, record.id),
+        });
+        if (current) {
+          const existing = toMessageRecord(current, json);
+          // Another identical same-turn commit may have won the CAS.
+          if (adoptPlayerInputMessage(existing, record) === existing) return;
+        }
+        throw new Error("Player input changed before commit");
+      }
     },
 
     async listMessages(

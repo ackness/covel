@@ -109,9 +109,8 @@ function renderBootError(message: string): void {
   );
 }
 
-// The settings adapter is fixed when its store is created. An inconclusive
-// mode probe must leave that store untouched so a later retry can still pick
-// the correct backend instead of silently writing desktop settings locally.
+// IPC identifies the personal desktop settings backend. Server management
+// discovery must not prevent a browser from loading its own local settings.
 async function boot(): Promise<void> {
   if (booting) return;
   booting = true;
@@ -121,10 +120,7 @@ async function boot(): Promise<void> {
     } catch (err) {
       console.error("[boot] locale catalog failed:", err);
     }
-    if ((await probeDesktopMode()) === "unknown") {
-      renderBootError(i18n.t("error.boot.desktopModeUnavailable"));
-      return;
-    }
+    await probeDesktopMode();
     try {
       await initSettings();
       const store = getSettings();

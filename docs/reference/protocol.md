@@ -63,6 +63,14 @@ return { result: execution.result, committed: outcome.status === "committed" };
 Hook 范围；该参数只能过滤执行时已捕获的插件，不能加入后来启用的插件，设置仍沿用执行快照。
 只应向客户端发送 `result`，不能发送或接受客户端提交的 `commit`。两者都不携带收尾函数。
 
+执行提交计划保留 TurnStart Hook 的否决原因以及执行期间观察到的取消状态。
+这类执行的 `commitExecution` 返回失败，在域事务前停止，禁止宿主 `extraInTx` 写入，
+也不生成成功完成事件或快照；此前已持久化的客户端输入仍保留。
+
+function runtime 挂起时，continuation 保存尚未提交的命令、输入与导出绑定和 activation。
+恢复使用这些冻结快照，未提交命令仍可被本次运行读取，并在恢复成功时一起原子提交。
+恢复失败会丢弃这些域写入。该 continuation 契约更新后，已有开发暂停记录需要重建。
+
 工具作者返回的显式 `PluginToolResult` 见 [工具结果协议](tools.md)。内核解包后将命令放在
 `RuntimeResult.pendingProposals`，业务内容保留在 `output`；命令不会出现在公开执行结果或
 持久化的 turn history 中。原 `collectExecutionJournal` / `collectExecutionSuspensions`
@@ -402,6 +410,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `runtimes.retry` | POST | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent 流 |
 
 `retry_turn` 的普通请求 payload 为空，以空玩家输入和当前已提交上下文启动新的主循环回合，成功提交后增加玩家回合数；它不恢复或重新生成历史回合。恢复未完成回合时，六种动作都可附加 `payload.recoverFromTurnId`，并且必须匹配服务端返回的原 action 描述。客户端从 `GET /api/sessions/:id/execution` 获取只读状态，刷新不重新提交动作；明确点击恢复重试后才发送新的 requestId。服务端在会话锁内校验源回合，开场恢复保留 continuation 来源，不增加玩家回合数。`retry_runtime` 必须提供 `payload.runtimeId`，显式 `retryFromTurnId` 必须指向已提交且仍是当前故事的原回合，目标须仍失败；不带来源时保留旧 manual 调用语义。
+
+`send_message` 和 `execute_command` 可提供 `payload.inputMessageId`。浏览器先持久化玩家输入，再将其 ID 随动作发送；服务端在最终提交事务内接管同一 ID 的同会话、同内容、未提交 user 记录，保留原时间戳并写入 `metadata.turnId`。同一回合的相同输入重复提交保留原记录；已关联其他回合、内容不符或其他会话占用的 ID 会使提交失败。没有本地记录时按该 ID 插入，没有提供 ID 时由服务端生成。不同 ID 的相同文本仍是两条独立输入。失败恢复保留原 `inputMessageId`，不会重新生成输入副本。此字段不适用于 steering 请求。已有开发数据中的重复记录不自动合并，需重新创建受影响会话。
 
 `retry_failed_runtimes` 必须提供原回合 `retryFromTurnId` 和 1–20 个不重复的 `runtimeIds`。锁内合并该来源已提交的恢复 attempt 后，仅仍失败且 active 的目标可重跑；同一 action 按 stage/DAG 执行，统一提交，不重新计数。批量恢复和带来源的单任务恢复都只执行所选目标，禁止事件订阅者、递归或后台分发扩围；普通无来源的 manual / plugin-RPC 行为不变。原故事及已提交成功的非目标结果仅作上下文，不重复提交。一个目标失败而另一个被依赖跳过时，两者仍待恢复。无已提交来源的整回合中断应先恢复原 action，不能把 trace 中的成功当作已提交数据。
 

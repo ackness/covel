@@ -14,6 +14,8 @@ import { SettingsDialog } from "../SettingsDialog.js";
 
 const settingsMocks = vi.hoisted(() => ({
   store: {
+    isHydrated: () => true,
+    subscribePersistenceErrors: () => () => undefined,
     listEntries: () => [],
     subscribeAll: () => () => undefined,
   } as unknown as SettingsStoreApi,
@@ -52,10 +54,21 @@ vi.mock("../panes/PackagesPane.js", () => ({
 
 describe("SettingsDialog navigation", () => {
   beforeEach(async () => {
+    settingsMocks.store.isHydrated = () => true;
     await i18n.changeLanguage("en-US");
   });
 
   afterEach(() => cleanup());
+
+  it("shows a read-only load failure and disables settings controls", () => {
+    settingsMocks.store.isHydrated = () => false;
+    render(<SettingsDialog open onOpenChange={vi.fn()} />);
+    expect(screen.getByRole("alert").textContent).toBe(
+      i18n.t("settings.loadFailedReadOnly"),
+    );
+    const pane = screen.getByText("Appearance pane");
+    expect(pane.closest("fieldset")?.disabled).toBe(true);
+  });
 
   it("uses a compact mobile section picker and full-width content", async () => {
     render(<SettingsDialog open onOpenChange={vi.fn()} />);

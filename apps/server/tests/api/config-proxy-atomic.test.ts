@@ -25,6 +25,7 @@ afterEach(async () => {
 it("keeps the live proxy dispatcher and disk setting when persistence fails", async () => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), "covel-proxy-atomic-"));
   vi.stubEnv("COVEL_HOME", home);
+  vi.stubEnv("COVEL_DESKTOP_REST", "1");
   vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-token");
   const configPath = path.join(home, "config.toml");
   fs.writeFileSync(configPath, '[network]\nproxy_mode = "direct"\n', "utf8");

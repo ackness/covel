@@ -2,11 +2,51 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadKeysEnv, patchKeysEnv, saveKeysEnv } from "./env-files.js";
+import {
+  loadChildEnvironment,
+  loadKeysEnv,
+  patchKeysEnv,
+  saveKeysEnv,
+} from "./env-files.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-keys-check-"));
 const file = path.join(root, "keys.env");
 try {
+  fs.writeFileSync(
+    path.join(root, ".env"),
+    "OPENAI_API_KEY=synthetic-env\n",
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(root, ".env.llm"),
+    "OPENAI_API_KEY=synthetic-llm\n",
+    "utf8",
+  );
+  saveKeysEnv(file, { openai: "synthetic-home" });
+  assert.equal(
+    loadChildEnvironment(root, file, {}).OPENAI_API_KEY,
+    "synthetic-llm",
+  );
+  assert.equal(
+    loadChildEnvironment(root, file, { OPENAI_API_KEY: "synthetic-shell" })
+      .OPENAI_API_KEY,
+    "synthetic-shell",
+  );
+  assert.equal(
+    loadChildEnvironment(root, file, { OPENAI_API_KEY: undefined })
+      .OPENAI_API_KEY,
+    "synthetic-llm",
+  );
+  fs.unlinkSync(path.join(root, ".env.llm"));
+  assert.equal(
+    loadChildEnvironment(root, file, {}).OPENAI_API_KEY,
+    "synthetic-env",
+  );
+  fs.unlinkSync(path.join(root, ".env"));
+  assert.equal(
+    loadChildEnvironment(root, file, {}).OPENAI_API_KEY,
+    "synthetic-home",
+  );
   saveKeysEnv(file, { deepseek: "synthetic-original" });
   const original = fs.readFileSync(file, "utf8");
   for (const value of ["bad\nvalue", "bad\rvalue"]) {

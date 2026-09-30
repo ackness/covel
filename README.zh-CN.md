@@ -162,7 +162,7 @@ cp .env.llm.example .env.llm        # provider API 密钥
 pnpm dev                            # web :5173 + server :3001（SQLite）
 ```
 
-打开 <http://localhost:5173>，调试工具在 `/debug`。PostgreSQL、内存模式等其它选项：[环境变量注册表](./docs/guide/env-registry.md)。
+打开 <http://localhost:5173>，调试工具在 `/debug`。个人使用可直接在设置里填写连接地址、模型和密钥，`.env.llm` 可不创建；网页选择覆盖项目 `llm.toml`，不回写文件。浏览器设置和密钥属于当前浏览器，Electron 使用 `~/.covel` 下的个人文件。SQLite / PostgreSQL 保存的是实例存档。Docker 默认也是仅绑定回环地址的个人实例，不作为公开多人服务。Docker 启动、浏览器存档和配置优先级见[环境变量注册表](./docs/guide/env-registry.md)。
 
 ## 内置世界
 

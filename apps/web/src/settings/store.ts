@@ -11,11 +11,7 @@ import {
   registerProviderKeys,
 } from "./registry/index.js";
 import i18n from "i18next";
-import {
-  getCovelIpc,
-  getDesktopRestAuthHeaders,
-  isDesktopApp,
-} from "@/lib/desktop-bridge";
+import { getCovelIpc } from "@/lib/desktop-bridge";
 import { emitToast } from "@/lib/toast-channel";
 import { synchronizeSettings } from "./synchronize-settings.js";
 import { resolveSettingEntryText } from "./framework-i18n.js";
@@ -24,16 +20,11 @@ let singleton: SettingsStore | null = null;
 let readyPromise: Promise<void> | null = null;
 
 function createStore(): SettingsStore {
-  // isDesktopApp() covers BOTH desktop signals: the Electron IPC bridge and
-  // the REST-desktop probe (`/api/config/info` → isDesktop, self-host setups
-  // where the sidecar owns ~/.covel). The boot sequence in main.tsx waits for
-  // an explicit desktop/web result before calling initSettings(); a failed
-  // probe must not create this singleton with the localStorage adapter.
-  const adapter = isDesktopApp()
-    ? createJsonFileBackend({
-        ipc: getCovelIpc(),
-        getAuthHeaders: getDesktopRestAuthHeaders,
-      })
+  // Personal preferences and BYOK belong to this browser/device. A server's
+  // home directory does not grant it ownership of browser settings.
+  const ipc = getCovelIpc();
+  const adapter = ipc
+    ? createJsonFileBackend({ ipc })
     : createLocalStorageBackend();
   const store = new SettingsStore(adapter);
   registerCoreSettings(store);

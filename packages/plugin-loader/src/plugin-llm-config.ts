@@ -9,7 +9,8 @@
  *   protocol = "openai-chat-v1"
  *
  * The `plugin.default` section defines the plugin's preferred default model.
- * This has medium priority: API override > plugin llm.toml > PLUGIN.md model field.
+ * Explicit API/runtime selections and browser role bindings take priority over
+ * these plugin preferences; PLUGIN.md selects the preferred named role.
  */
 
 import fs from "node:fs/promises";

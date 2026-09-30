@@ -30,7 +30,6 @@ import {
   toFrontendSession,
   toFrontendWorld,
 } from "./mappers.js";
-import { LOCAL_SEED_WORLDS } from "./seed-worlds.js";
 import {
   serverCheckpointWorld,
   syncWorldToServer,
@@ -237,23 +236,33 @@ export class LocalDataService implements DataService {
 
   private async ready(): Promise<BrowserVault> {
     if (!this.initPromise) {
-      this.initPromise = this.vault
-        .initializeWorlds(
-          LOCAL_SEED_WORLDS.map((seed) => ({
-            id: uid("world"),
-            name: seed.name as StoreWorldRecord["name"],
-            description: seed.description as StoreWorldRecord["description"],
-            tags: seed.tags,
-            createdAt: new Date().toISOString(),
-          })),
-        )
-        .catch((error: unknown) => {
-          this.initPromise = null;
-          throw error;
-        });
+      this.initPromise = this.initializeWorlds().catch((error: unknown) => {
+        this.initPromise = null;
+        throw error;
+      });
     }
     await this.initPromise;
     return this.vault;
+  }
+
+  private async initializeWorlds(): Promise<void> {
+    if (await this.vault.hasInitializedWorlds()) return;
+    // Pre-existing local documents remain authoritative, even before their
+    // first service initialization. Never add catalog copies beside them.
+    if ((await this.vault.listWorlds()).length > 0) {
+      await this.vault.initializeWorlds([]);
+      return;
+    }
+    const catalog = await api.listWorlds();
+    await this.vault.initializeWorlds(
+      catalog.map((world) => ({
+        ...world,
+        metadata: {
+          ...world.metadata,
+          storage: { scope: "browser", backend: "indexeddb", durable: true },
+        },
+      })) as StoreWorldRecord[],
+    );
   }
 
   private async mutateCheckpointNow(
@@ -826,10 +835,17 @@ export class LocalDataService implements DataService {
       }
     }
 
-    await api.uploadBrowserCheckpoint(serverSessionId, {
+    const uploaded = await api.uploadBrowserCheckpoint(serverSessionId, {
       ...checkpoint,
       world: serverCheckpointWorld(world),
     });
+    if (uploaded.reconcileRequired) {
+      // The verified mirror retained detached writes while admitting only our
+      // local inputs/settings. Download that combined state before any action.
+      const actionId = `hydrate:${checkpoint.revision}`;
+      await vault.stagePendingCommit(sessionId, actionId);
+      await this.commitFromServerNow(sessionId, actionId);
+    }
   }
 
   async commitFromServer(sessionId: string, actionId: string): Promise<void> {

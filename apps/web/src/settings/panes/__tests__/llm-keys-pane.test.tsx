@@ -1,6 +1,14 @@
-import { act, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
+import { setProviderPriceMultipliers } from "@/services/api.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { LlmKeysPane } from "../LlmKeysPane.js";
 
 const storeMocks = vi.hoisted(() => {
@@ -16,6 +24,8 @@ const storeMocks = vi.hoisted(() => {
       for (const listener of listeners) listener(value, "keys.proxy");
     },
     store: {
+      isHydrated: () => true,
+      subscribePersistenceErrors: () => () => undefined,
       listEntries: () => [{ key: "keys.proxy", backend: "keys" }],
       get: () => key,
       snapshotSecrets: () => (key ? { proxy: key } : {}),
@@ -26,6 +36,9 @@ const storeMocks = vi.hoisted(() => {
     },
   };
 });
+
+vi.mock("@/settings/store", () => ({ getSettings: () => storeMocks.store }));
+vi.mock("@/lib/toast-channel.js", () => ({ emitToast: vi.fn() }));
 
 vi.mock("@/settings/use-settings.js", () => ({
   useSettingsStore: () => storeMocks.store,
@@ -61,15 +74,37 @@ vi.mock("@/lib/desktop-bridge.js", () => ({
 describe("LlmKeysPane", () => {
   beforeEach(async () => {
     storeMocks.reset();
+    vi.mocked(setProviderPriceMultipliers).mockReset();
+    vi.mocked(emitToast).mockReset();
     await i18n.changeLanguage("en-US");
   });
 
-  it("refreshes key status and Ping actions after a migrated secret is saved", async () => {
+  it("refreshes key status and Ping actions after a personal secret is saved", async () => {
     render(<LlmKeysPane providerId="proxy" showIntro={false} />);
     expect(screen.queryByTestId("ping")).toBeNull();
 
-    await act(async () => storeMocks.setKey("sk-migrated"));
+    await act(async () => storeMocks.setKey("fixture-personal-secret"));
 
     expect(screen.getByTestId("ping")).toBeDefined();
+  });
+  it("restores the confirmed price and reports a rejected save once", async () => {
+    vi.mocked(setProviderPriceMultipliers).mockRejectedValueOnce(
+      new Error("synthetic quota error"),
+    );
+    render(<LlmKeysPane providerId="proxy" showIntro={false} />);
+    const input = screen.getByRole("spinbutton", {
+      name: "proxy Price multiplier",
+    }) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "2" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(input.value).toBe("1"));
+    expect(setProviderPriceMultipliers).toHaveBeenCalledExactlyOnceWith({
+      proxy: 2,
+    });
+    expect(emitToast).toHaveBeenCalledExactlyOnceWith(
+      "error",
+      i18n.t("settings.saveFailed"),
+      "synthetic quota error",
+    );
   });
 });

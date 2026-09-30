@@ -188,7 +188,7 @@ export function CapabilityEditor({
 }: {
   serverCap: ModelCapabilityInfo | undefined;
   override: Partial<ModelCapabilityInfo> | undefined;
-  onUpdate: (patch: Partial<ModelCapabilityInfo>) => void;
+  onUpdate: (patch: Partial<ModelCapabilityInfo>) => Promise<boolean> | void;
   context?: { protocol: string; role: string };
 }) {
   const { t } = useTranslation();

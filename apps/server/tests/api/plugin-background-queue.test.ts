@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  getRequestLlmOptions,
+  withRequestLlmOptions,
+} from "../../src/request-llm-context.js";
 import { PluginBackgroundQueueClosedError } from "../../src/routes/api/plugin-rpc/background-queue.js";
 import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
 
@@ -9,6 +13,99 @@ function gate() {
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 describe("plugin background queue ownership", () => {
+  it("restores each queued task's keys and clears request scope for server-only work", async () => {
+    const queue = createTestBackgroundQueue();
+    const releases = Array.from({ length: 4 }, gate);
+    const completed = gate();
+    const seen: Array<[string, string | undefined]> = [];
+    const record = (id: string) =>
+      seen.push([id, getRequestLlmOptions()?.apiKeys?.test]);
+    try {
+      for (let i = 0; i < 4; i++)
+        await withRequestLlmOptions({ apiKeys: { test: `busy-${i}` } }, () =>
+          queue.schedule({
+            sessionId: "busy",
+            jobId: `busy-${i}`,
+            prepare: async () => {},
+            run: () => releases[i]!.promise,
+            reject: async () => {},
+          }),
+        );
+      await withRequestLlmOptions({ apiKeys: { test: "queued-key" } }, () =>
+        queue.schedule({
+          sessionId: "queued",
+          jobId: "request",
+          prepare: async () => {
+            record("prepare");
+          },
+          run: async () => {
+            record("request");
+          },
+          reject: async () => {},
+        }),
+      );
+      await queue.schedule({
+        sessionId: "queued",
+        jobId: "server",
+        prepare: async () => {},
+        run: async () => {
+          record("server");
+          completed.resolve();
+        },
+        reject: async () => {},
+      });
+      // Both queued jobs start from this credential-bearing predecessor branch.
+      releases[0]!.resolve();
+      await completed.promise;
+      expect(seen).toEqual([
+        ["prepare", "queued-key"],
+        ["request", "queued-key"],
+        ["server", undefined],
+      ]);
+      expect(getRequestLlmOptions()).toBeUndefined();
+    } finally {
+      releases.forEach((release) => release.resolve());
+      await queue.close();
+    }
+  });
+
+  it("retains request scope for queued terminal writes during shutdown", async () => {
+    const queue = createTestBackgroundQueue();
+    const releases = Array.from({ length: 4 }, gate);
+    const seen: Array<string | undefined> = [];
+    try {
+      for (let i = 0; i < 4; i++)
+        await queue.schedule({
+          sessionId: "busy",
+          jobId: String(i),
+          prepare: async () => {},
+          run: () => releases[i]!.promise,
+          reject: async () => {},
+        });
+      await withRequestLlmOptions({ apiKeys: { test: "terminal-key" } }, () =>
+        queue.schedule({
+          sessionId: "queued",
+          jobId: "queued",
+          prepare: async () => {},
+          run: async () => {},
+          reject: async () => {
+            seen.push(getRequestLlmOptions()?.apiKeys?.test);
+          },
+        }),
+      );
+      const closing = withRequestLlmOptions(
+        { apiKeys: { test: "other-key" } },
+        () => queue.close(),
+      );
+      releases.forEach((release) => release.resolve());
+      await closing;
+      expect(seen).toEqual(["terminal-key"]);
+    } finally {
+      releases.forEach((release) => release.resolve());
+      await queue.close();
+    }
+  });
+
   it("drains admission and terminal writes and rejects new work during close", async () => {
     const queue = createTestBackgroundQueue();
     const prepared = gate();

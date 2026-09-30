@@ -527,6 +527,53 @@ describe("gateway + slotOverrides", () => {
     });
   });
 
+  it.each(["fast", "memory"])(
+    "resolves missing %s through the request story binding",
+    async (role) => {
+      const { gateway, calls } = setup();
+      const options = {
+        apiKeys: { vendorX: "request-key" },
+        slotOverrides: {
+          slotBindings: { story: { modelRef: "ui-story" } },
+          customPresets: [
+            {
+              id: "ui-story",
+              name: "UI story",
+              provider: "vendorX",
+              model: "ui-model",
+              baseUrl: "https://ui.example/v1",
+              protocol: "openai-chat-v1" as const,
+            },
+          ],
+          parameterOverrides: {
+            [role]: { temperature: 0.3 },
+            story: { temperature: 0.9 },
+          },
+          capabilityOverrides: { [role]: { contextWindow: 4321 } },
+        },
+        capabilityOverridePolicy: "full" as const,
+      };
+      expect(gateway.resolveSlot(role, options)).toMatchObject({
+        provider: "vendorX",
+        model: "ui-model",
+        parameterOverrides: { temperature: 0.3 },
+        capability: { contextWindow: 4321 },
+      });
+      await gateway.generateText(
+        { presetId: role, messages: [{ role: "user", content: "hello" }] },
+        options,
+      );
+      expect(calls[0]).toMatchObject({
+        provider: "vendorX",
+        model: "ui-model",
+        apiKey: "request-key",
+        baseUrl: "https://ui.example/v1",
+        providerRequestMetadata: { parameterOverrides: { temperature: 0.3 } },
+        capability: { contextWindow: 4321 },
+      });
+    },
+  );
+
   it("uses original slot id for resolveSlot parameter overrides during fallback", () => {
     const { gateway } = setup();
 

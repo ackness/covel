@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { registerSessionRecordScopeSuites } from "./session-record-scope-suites.js";
 import type {
   CharacterRecord,
   DataStore,
@@ -32,6 +33,7 @@ import {
 } from "../test-fixtures.js";
 
 export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
+  registerSessionRecordScopeSuites(getStore);
   let store: DataStore;
 
   beforeEach(() => {

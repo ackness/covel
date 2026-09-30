@@ -11,22 +11,6 @@ interface BootSessionStoreOptions {
   ds: DataService;
 }
 
-async function loadProviderKeysFromServer(): Promise<void> {
-  const keys = await api.fetchServerProviderKeys();
-
-  const validKeys: Record<string, string> = {};
-  for (const [key, value] of Object.entries(keys)) {
-    if (key.length <= 64 && value.length <= 256) {
-      validKeys[key] = value;
-    }
-  }
-
-  const existing = api.getProviderKeys();
-  if (Object.keys(existing).length === 0 && Object.keys(validKeys).length > 0) {
-    api.setProviderKeys(validKeys);
-  }
-}
-
 export async function bootSessionStore({
   dispatch,
   ds,
@@ -72,12 +56,6 @@ export async function bootSessionStore({
       worlds,
       llmConfig,
     });
-
-    try {
-      await loadProviderKeysFromServer();
-    } catch {
-      // Provider keys endpoint is optional in web/local deployments.
-    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     dispatch({ type: "BOOT_ERROR", error: message });

@@ -43,6 +43,7 @@ const apiMocks = vi.hoisted(() => ({
   getCapabilityOverrides: vi.fn(),
   setCapabilityOverrides: vi.fn(),
   setSlotConfig: vi.fn(),
+  setMany: vi.fn().mockResolvedValue(undefined),
   serverPresets: [] as PresetSummary[],
   serverParameters: undefined as ModelParameterOverrides | undefined,
 }));
@@ -99,6 +100,11 @@ vi.mock("@/settings/use-settings.js", async (importOriginal) => {
     await importOriginal<typeof import("@/settings/use-settings.js")>();
   return {
     ...original,
+    useSettingsStore: () => ({
+      isHydrated: () => true,
+      subscribePersistenceErrors: () => () => undefined,
+      setMany: apiMocks.setMany,
+    }),
     useSetting: (key: string) =>
       key === "llm.slotConfig"
         ? [apiMocks.getSlotConfig(), apiMocks.setSlotConfig]
@@ -491,9 +497,11 @@ describe("LLM settings regressions", () => {
     });
     render(<LlmAdvancedPane />);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
-    expect(apiMocks.setParamOverrides).toHaveBeenCalledWith({});
-    expect(apiMocks.setCapabilityOverrides).toHaveBeenCalledWith({
-      story: { features: ["vision"], pricing: { inputPerMToken: 1 } },
+    expect(apiMocks.setMany).toHaveBeenCalledWith({
+      "llm.paramOverrides": {},
+      "llm.capabilityOverrides": {
+        story: { features: ["vision"], pricing: { inputPerMToken: 1 } },
+      },
     });
   });
 

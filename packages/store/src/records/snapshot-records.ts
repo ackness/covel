@@ -20,6 +20,7 @@ import type {
   ExecutionContext,
   InputSlot,
   RuntimeExportRecord,
+  RuntimeActivation,
 } from "@covel/shared";
 
 /**
@@ -200,6 +201,10 @@ export interface SuspensionRecord {
     readonly pendingProposals: readonly unknown[];
     /** Frozen declared inputs for tools resumed in the same logical turn. */
     readonly inputSlots?: Readonly<Record<string, InputSlot>>;
+    /** Frozen cross-execution exports supplied to a suspended function. */
+    readonly exportSlots?: Readonly<Record<string, InputSlot>>;
+    /** Original activation supplied to a suspended function. */
+    readonly activation?: RuntimeActivation;
     /**
      * Framework-owned execution identity from the suspended scheduling run.
      * Resume inherits its logical turn and count policy while allocating a new

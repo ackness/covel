@@ -14,7 +14,7 @@ export function ModelTokenLimits({
 }: {
   capability?: ModelCapabilityInfo;
   override?: Partial<ModelCapabilityInfo>;
-  onUpdate: (patch: Partial<ModelCapabilityInfo>) => void;
+  onUpdate: (patch: Partial<ModelCapabilityInfo>) => Promise<boolean> | void;
 }) {
   const { t } = useTranslation();
   return (
@@ -61,7 +61,7 @@ function TokenLimit({
   placeholder: string;
   value?: number;
   max: number;
-  onChange: (value: number | undefined) => void;
+  onChange: (value: number | undefined) => Promise<boolean> | void;
 }) {
   const id = useId();
   const { t } = useTranslation();
@@ -91,8 +91,14 @@ function TokenLimit({
         aria-invalid={!valid}
         aria-describedby={valid ? `${id}-hint` : `${id}-hint ${id}-error`}
         onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          if (!conflict && valid && parsed !== value) onChange(parsed);
+        onBlur={async () => {
+          if (
+            !conflict &&
+            valid &&
+            parsed !== value &&
+            (await onChange(parsed)) === false
+          )
+            reset();
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();

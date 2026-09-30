@@ -103,6 +103,14 @@ const suspensions = createdRow.extend({
       .optional(),
     pendingProposals: z.array(jsonValue),
     inputSlots: inputSlots.optional(),
+    exportSlots: inputSlots.optional(),
+    activation: z
+      .object({
+        source: z.enum(["stage", "event", "manual"]),
+        detached: z.boolean(),
+        payload: jsonValue,
+      })
+      .optional(),
     executionContext: z.looseObject({
       executionId: nonEmptyString,
       origin: executionOrigin,

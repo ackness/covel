@@ -43,6 +43,21 @@ const params = {
 };
 
 describe("create-character-form schema boundary", () => {
+  it("does not advertise validators or emit a model-invented characterName validator", async () => {
+    expect(createCharacterForm.jsonSchema.properties).not.toHaveProperty(
+      "validation",
+    );
+    const result = await createCharacterForm.execute(
+      { ...params, validation: { name: "characterName", data: null } },
+      context,
+    );
+    expect(result).toMatchObject({ created: true, fieldCount: 1 });
+    expect(result.interaction.validation).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(result.interaction))).not.toHaveProperty(
+      "validation",
+    );
+  });
+
   it("accepts string-valued select suggestions without weakening numeric or enum validation", async () => {
     await expect(
       createCharacterForm.execute(

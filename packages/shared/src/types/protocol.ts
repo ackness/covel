@@ -596,7 +596,10 @@ export interface SessionExecutionStatus {
   readonly requestId?: string;
   readonly startedAt?: string;
   readonly origin?: "player" | "continuation";
-  /** An explicit retry uses a new requestId and includes recoverFromTurnId. */
+  /**
+   * An explicit retry uses a new requestId and includes recoverFromTurnId.
+   * Player actions retain inputMessageId to commit the original durable input.
+   */
   readonly retry?: {
     readonly type:
       | "start_session"

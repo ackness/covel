@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsStore } from "@covel/settings";
 import i18n from "@/i18n";
 import { registerLlmSettings } from "../../registry/llm.js";
+import { LlmAdvancedPane } from "../LlmAdvancedPane.js";
 import { LlmSlotsPane } from "../LlmSlotsPane.js";
 
 const mocks = vi.hoisted(() => ({
@@ -189,5 +190,80 @@ describe("model role persistence", () => {
       story: { temperature: 0.4 },
       fast: initialParams.fast,
     });
+  });
+  it("blocks UI saves when persisted settings could not be read", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.store = new SettingsStore({
+      load: async () => {
+        throw new Error("synthetic read failure");
+      },
+      save,
+      loadSecrets: async () => ({}),
+      saveSecrets: async () => undefined,
+    });
+    registerLlmSettings(mocks.store);
+    await mocks.store.init();
+    render(<LlmSlotsPane />);
+    const picker = modelPicker();
+    expect(picker.matches(":disabled")).toBe(true);
+    fireEvent.change(picker, { target: { value: "preset:detailed" } });
+    await act(async () => undefined);
+    expect(save).not.toHaveBeenCalled();
+    log.mockRestore();
+  });
+
+  it("restores the confirmed generation parameter and reports a failed save once", async () => {
+    save.mockRejectedValueOnce(new Error("synthetic parameter failure"));
+    render(<LlmAdvancedPane slotId="story" />);
+    const temperature = screen.getByRole("spinbutton", {
+      name: "Temperature",
+    }) as HTMLInputElement;
+    fireEvent.change(temperature, { target: { value: "0.8" } });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("spinbutton", {
+            name: "Temperature",
+          }) as HTMLInputElement
+        ).value,
+      ).toBe("0.4"),
+    );
+    expect(mocks.store.get("llm.paramOverrides")).toEqual(initialParams);
+    expect(mocks.toast).toHaveBeenCalledExactlyOnceWith(
+      "error",
+      i18n.t("settings.saveFailed"),
+      "synthetic parameter failure",
+    );
+  });
+
+  it("restores a token-limit draft after a failed capability save", async () => {
+    save.mockRejectedValueOnce(new Error("synthetic capability failure"));
+    render(<LlmSlotsPane />);
+    const story = within(screen.getByRole("group", { name: "story" }));
+    fireEvent.click(
+      story.getByRole("button", { name: i18n.t("settings.editCapability") }),
+    );
+    const input = story.getByRole("spinbutton", {
+      name: i18n.t("settings.contextWindowTokens"),
+    });
+    fireEvent.change(input, { target: { value: "128000" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        (
+          story.getByRole("spinbutton", {
+            name: i18n.t("settings.contextWindowTokens"),
+          }) as HTMLInputElement
+        ).value,
+      ).toBe(""),
+    );
+    expect(mocks.store.get("llm.capabilityOverrides")).toEqual({});
+    expect(mocks.toast).toHaveBeenCalledExactlyOnceWith(
+      "error",
+      i18n.t("settings.saveFailed"),
+      "synthetic capability failure",
+    );
   });
 });

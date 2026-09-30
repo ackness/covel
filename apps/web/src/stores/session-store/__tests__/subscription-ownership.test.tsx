@@ -455,6 +455,50 @@ it.each([false, true])(
   },
 );
 
+it.each(["succeeded", "failed", "cancelled"])(
+  "admits a durable %s checkpoint while recovery is buffering UI events",
+  async (state) => {
+    const pendingPlugins = deferred<ReturnType<typeof plugins>>();
+    api.listSessionPlugins.mockReturnValueOnce(pendingPlugins.promise);
+    const { streams, options } = setup();
+    await act(async () => streams[0]!.emit(event("system.reset")));
+    streams[0]!.emit({
+      ...event("job-status.updated"),
+      id: "durable-terminal",
+      payload: {
+        jobId: "durable-job",
+        pluginId: "current",
+        runtimeId: "current/render",
+        state,
+        data: { durableStatus: state, originTurnId: "source-turn" },
+      },
+    });
+    expect(options.workspace.checkpoint).toHaveBeenCalledExactlyOnceWith(
+      session.id,
+      "background:durable-terminal",
+    );
+    await act(async () => pendingPlugins.resolve(plugins("current")));
+    expect(options.workspace.checkpoint).toHaveBeenCalledOnce();
+  },
+);
+
+it("does not checkpoint a handler's terminal progress before its parent commit", async () => {
+  const { streams, options } = setup();
+  await act(async () =>
+    streams[0]!.emit({
+      ...event("job-status.updated"),
+      payload: {
+        jobId: "sub-job",
+        pluginId: "current",
+        runtimeId: "current/render",
+        state: "succeeded",
+        data: { runtimeJobId: "parent", originTurnId: "source" },
+      },
+    }),
+  );
+  expect(options.workspace.checkpoint).not.toHaveBeenCalled();
+});
+
 it.each(["session switch", "revisit", "cross-session envelope", "unmount"])(
   "does not checkpoint terminal background events after %s",
   async (leave) => {

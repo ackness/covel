@@ -693,26 +693,6 @@ export async function resolveExportBindings(
           break;
         }
       }
-      // Runtime actual-value check against the consumer's `accepts` (docs 02
-      // §3.1 / §3.4.4): a producer whose export shape the consumer cannot accept
-      // (an incompatible schema digest manifests here) fails this validation.
-      if (acceptsSchema) {
-        const validation = validateAcceptedValue(record.value, acceptsSchema);
-        if (!validation.valid) {
-          diagnostics.push(
-            diag(
-              "export-schema-invalid",
-              required ? "error" : "warn",
-              consumerRuntimeId,
-              `export "${name}" failed accepts: ${(validation.errors ?? [])
-                .slice(0, 3)
-                .join("; ")}`,
-            ),
-          );
-          skipReason = "export-schema-invalid";
-          break;
-        }
-      }
       items.push({
         value: record.value,
         source: {
@@ -736,6 +716,35 @@ export async function resolveExportBindings(
       }
       if (required) return { ok: false, skipReason, diagnostics };
       continue; // optional → omit slot
+    }
+
+    // Consumer schemas validate the injected business value, before provenance.
+    // Public contracts above still validate each producer's complete output.
+    if (acceptsSchema) {
+      const value =
+        cardinality === "all"
+          ? items.map((item) => item.value)
+          : items[0]!.value;
+      const validation = validateAcceptedValue(value, acceptsSchema);
+      if (!validation.valid) {
+        diagnostics.push(
+          diag(
+            "export-schema-invalid",
+            required ? "error" : "warn",
+            consumerRuntimeId,
+            `export "${name}" failed accepts: ${(validation.errors ?? [])
+              .slice(0, 3)
+              .join("; ")}`,
+          ),
+        );
+        if (required)
+          return {
+            ok: false,
+            skipReason: "export-schema-invalid",
+            diagnostics,
+          };
+        continue;
+      }
     }
 
     slots[name] =

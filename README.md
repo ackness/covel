@@ -164,7 +164,7 @@ cp .env.llm.example .env.llm        # provider API keys
 pnpm dev                            # web :5173 + server :3001 (SQLite)
 ```
 
-Open <http://localhost:5173> — debug tooling lives at `/debug`. PostgreSQL, in-memory mode, and other knobs: [env registry](./docs/guide/env-registry.md).
+Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal use, you can configure a connection, endpoint, model, and key entirely in Settings; `.env.llm` is optional. UI selections override the project `llm.toml` without modifying it. Browser settings and keys stay in this browser; Electron uses personal files under `~/.covel`. SQLite and PostgreSQL store instance-owned sessions. The default Docker profile is a personal instance bound to loopback, not a public multi-player service. Docker setup, in-memory browser checkpoints, and precedence: [env registry](./docs/guide/env-registry.md).
 
 ## Worlds in the box
 

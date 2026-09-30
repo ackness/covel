@@ -23,6 +23,16 @@ Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途�
 
 生成参数页按实际模型能力展示参数。评估等非文本输出模型不显示温度、输出 token 和思考参数，仍可重置此前保存的参数覆盖。
 
+### 实际选择优先级
+
+运行时显式选择（包括会话 `runtimeModelOverrides`）先决定要使用的用途或预设。未显式选择时，当前请求的 UI 用途绑定优先于插件 `llm.toml` 的角色偏好，再使用系统 `llm.toml` 默认及可用文本用途回退。插件偏好保留完整 provider、model、baseUrl 和 protocol，不把裸 model ID 当作系统用途。文件重载不丢失插件目标。
+
+未定义的 `fast` / `memory` 等文本角色回退到现有用途时，该用途也读取当前请求的 UI 绑定、参数和能力。准备页的任务映射必须保存成功，并同步到服务端临时镜像后，才发布可运行会话；保存失败保留选择并走启动回滚，不使用默认值继续启动。
+
+价格覆盖和服务商倍率仅用于调试成本估算，不随模型请求发送。手动价格只在 trace 的实际 provider/model 能唯一对应当前配置时应用；冲突目标沿用资料库估算。它们不会改变服务商实际收费。
+
+集成 `createModelResolver` 和 `createGatewayAdapter` 时必须共享同一个 `Map<string, PluginLlmModelTarget>`；服务端 bootstrap 通过 `pluginModelTargets` 接收它，请求 adapter 同样使用该 map。内部引用只用于保留完整插件目标，不作为客户端模型 ID；`isRoleSelected` 用于识别当前请求的显式用途绑定。
+
 ### 备用策略归属用途
 
 `fallback` 属于 TOML 用途。前端为 `utility` 换模型后，原来的 `utility -> story` 备用关系仍然生效，`story` 也使用本次请求选择的模型。不会借用新选模型所属其它用途的备用关系。重复目标去重，基础备用链的循环防护保持有效；`allowFallback: false` 仍只调用主目标。此规则适用于原本支持备用链的文本、结构化输出、流式输出和评估调用，不为图片、语音、embedding 新增重试机制。
@@ -233,7 +243,7 @@ function 插件的 `PluginRuntimeGateway` 同样透传 `providerOptions` 与完�
 
 显式 refusal 或 content filter 抛出不可重试的 `REFUSAL`，在 `error.details.diagnostics.refusal` 保留拒绝原因；不切换备用模型。即使已有普通文本或工具内容，也不能把混合拒绝记成成功。流式文本可能已经交付，但不会产生成功 `done`；内置文本适配器的完整工具调用都等最终拒绝检查通过后才交付。协议回归使用 `packages/ai-provider/tests/protocol-fixtures/` 中的合成响应，覆盖字节分片、工具参数、未知扩展、拒绝和引用，避免依赖付费 API 或保存真实对话。
 
-嵌入调用可传 `expectedModelId`（`provider/model`）；Gateway 在解析目标后、网络请求前校验它。Memory 的 `EmbedFn(texts, { sessionId, modelId })` 必须使用会话锁定的模型身份。修改当前配置不能把同维度的另一个模型写入旧索引；不匹配时查询降级为关键词检索，摄入不推进进度。恢复原模型配置后可继续补录；需要切换模型时重建开发期会话及索引，已混入错误向量的数据也需重建。
+嵌入调用可传 `expectedModelId`（`provider/model`）及 `expectedConfiguration`；Gateway 在网络请求前校验模型、地址、协议和编码格式。服务端会话锁定的身份为 `provider/model#hash`，hash 覆盖有效地址、协议和 embedding 格式，不包含密钥。维度缓存也按此身份隔离。请求级模型与密钥同样作用于 embedding，包括该请求发起的异步摄入；不会写入会话或共享凭证配置。本次身份合同变更后，旧开发期向量会话及索引需要重建，不自动迁移。Memory 的 `EmbedFn(texts, { sessionId, modelId })` 必须使用会话锁定的模型身份。修改当前配置不能把同维度的另一个模型写入旧索引；不匹配时查询降级为关键词检索，摄入不推进进度。恢复原模型配置后可继续补录；需要切换模型时重建开发期会话及索引，已混入错误向量的数据也需重建。
 
 ## API Key 流转
 

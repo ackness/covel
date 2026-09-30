@@ -120,6 +120,7 @@ export type {
 } from "./agent-loop/tool-executor.js";
 
 // ── Model Resolver ──────────────────────────────────────────────
+export type { PluginLlmModelTarget } from "./llm/model-resolver.js";
 export { createModelResolver } from "./llm/model-resolver.js";
 
 // ── Per-Session Runtime Slot Resolver ───────────────────
@@ -155,7 +156,10 @@ export {
 } from "./rpc-defaults/submit-form.js";
 
 // ── Gateway Bridge ──────────────────────────────────────────────
-export { createGatewayAdapter } from "./llm/gateway-llm-adapter.js";
+export {
+  createGatewayAdapter,
+  resolveGatewayModelSelection,
+} from "./llm/gateway-llm-adapter.js";
 export type {
   GatewayLike,
   GatewayAdapterConfig,

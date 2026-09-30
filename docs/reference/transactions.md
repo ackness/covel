@@ -40,6 +40,13 @@ interface DataStore {
    without a surrounding `withTransaction` is immediately durable.
 5. **Nesting is rejected** on every backend (see below).
 
+Snapshot, suspension, and world-data import ledger IDs have one session owner.
+Upserting an existing ID for another session throws
+`SessionRecordScopeConflictError` on every backend without changing the original
+record. SQL backends enforce ownership in the atomic conflict update, including
+concurrent first inserts. A ledger batch with any ownership conflict rolls back
+the entire batch; the error also rolls back a surrounding store transaction.
+
 ### Contract tests
 
 `packages/store/src/contract/store-contract.ts` runs the shared behavioral
@@ -58,6 +65,12 @@ backend must pass:
 Any new store backend MUST pass this suite.
 
 ## Backend implementations
+
+An execution veto or cancellation captured in the prepared commit plan rejects
+finalization before the domain transaction. Caller `extraInTx` writes, buffered
+proposals, journal entries, suspensions, exports, snapshots, and successful
+completion events are suppressed. Previously recorded execution history is
+settled as failed; already durable client input remains outside this boundary.
 
 Story completion is a commit precondition: a failed `outputKind: story` runtime,
 or a successful story result without non-empty sanitized `narrativeOutput`,

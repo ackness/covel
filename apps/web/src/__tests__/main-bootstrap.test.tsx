@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 
@@ -64,11 +64,9 @@ vi.mock("@/i18n", () => ({
   i18nReady: Promise.resolve(),
 }));
 
-it("waits for a known desktop mode before creating settings, then retries", async () => {
+it("initializes browser settings when server management discovery is unavailable", async () => {
   document.body.innerHTML = '<div id="root"></div>';
-  mocks.probeDesktopMode
-    .mockResolvedValueOnce("unknown")
-    .mockResolvedValueOnce("web");
+  mocks.probeDesktopMode.mockResolvedValueOnce("unknown");
   mocks.getSettings.mockReturnValue({
     get: (key: string) =>
       key === "ui.locale"
@@ -80,14 +78,9 @@ it("waits for a known desktop mode before creating settings, then retries", asyn
   });
 
   await import("../main.js");
-  const retry = await screen.findByRole("button", { name: "Retry" });
-  expect(screen.getByText("Check the connection and retry.")).toBeTruthy();
-  expect(mocks.initSettings).not.toHaveBeenCalled();
-  expect(mocks.getSettings).not.toHaveBeenCalled();
-
-  fireEvent.click(retry);
-  await waitFor(() => expect(screen.getByText("App ready")).toBeTruthy());
-  expect(mocks.probeDesktopMode).toHaveBeenCalledTimes(2);
+  expect(await screen.findByText("App ready")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(mocks.probeDesktopMode).toHaveBeenCalledOnce();
   expect(mocks.initSettings).toHaveBeenCalledOnce();
   expect(mocks.getSettings).toHaveBeenCalled();
 });

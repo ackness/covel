@@ -2,11 +2,11 @@
 
 > [中文版](./settings-store.md)
 
-`@covel/settings` provides schema registration, in-memory values, subscriptions, and persistence. Web uses localStorage; desktop uses the configuration API and `settings.json`. API keys use a separate secrets channel.
+`@covel/settings` provides schema registration, in-memory values, subscriptions, and persistence. Browsers use localStorage; Electron uses IPC and personal `settings.json`. API keys use a separate secrets channel.
 
 Ordinary persisted settings accept only `schemaVersion: 2` with `revision`, `savedAt`, and `entries`. LocalStorage, REST, and desktop IPC share this validation. Unversioned and v1 development data are rejected on reads and replacement writes, without migration or deletion; recreate affected development settings. The separate settings import/export `SettingsExportBundle.schemaVersion: 1` remains the current export contract.
 
-At startup, Electron uses IPC. Without IPC, the app probes `/api/config/info` and selects localStorage only after an explicit `isDesktop: false` response. Timeouts, network failures, and invalid responses leave the mode unknown and show a retry screen before creating the settings store. Retrying never migrates settings between backends.
+Settings storage follows the current device: Electron IPC selects personal files; every browser selects localStorage. `/api/config/info` discovers server administration capabilities only. `COVEL_HOME` and `isDesktop` never select shared server settings for a browser, and failed discovery does not block local initialization.
 
 ## Schema normalization
 
@@ -36,7 +36,7 @@ Backends implementing `loadWithRevision` / `saveWithRevision` must check a monot
 
 `SettingsStoreApi.refresh(): Promise<void>` queues a read of non-secret settings and notifies keys whose values actually changed. Pending writes still compare against their original base when a refresh runs before them. Custom adapters without revision capabilities use serialized snapshot writes; `refresh()` does not read these adapters. This backend capability difference does not permit old persistence formats.
 
-Web refreshes on storage events for `covel:settings`, window focus, and restored visibility. Endpoint, price multiplier, and output-limit drafts retain unfinished input when another window changes the saved value, block automatic overwrite, and offer an explicit reload action. API keys do not participate in ordinary settings refresh or broadcasts; writes merge through the separate provider patch channel.
+Web refreshes on storage events for `covel:settings`, window focus, and restored visibility. Endpoint, price multiplier, and output-limit drafts retain unfinished input when another window changes the saved value, block automatic overwrite, and offer an explicit reload action. API keys use independent `refreshSecrets()` reads on `covel:keys` storage events, focus, and restored visibility. Pending provider patches remain intact; secret values never enter ordinary-settings or revision broadcasts.
 
 ## Secret-channel boundaries
 

@@ -24,6 +24,8 @@ example/
 
 根文件必需，`id` 必须匹配包目录。单 runtime 放在根 `runtime`，其提示词就是根文件正文；多 runtime 放在 `runtimes/<id>/RUNTIME.md`，逻辑 ID 为 `<pluginId>/<id>`，提示词为各自文件正文。两种布局不能混用，子 runtime 不能声明包级贡献。只有 entry/UI/扩展的包可以没有 runtime。
 
+所有 `PLUGIN.md`、`RUNTIME.md` 及其语言变体必须使用以独立 `---` 行包围的普通 YAML frontmatter。加载器在解析前拒绝 `---javascript`、`---js` 等 engine 指令；安装、手动放入目录和重载均不能通过元数据执行代码。
+
 作者 JSON Schema：
 
 - [plugin-manifest.schema.json](../../packages/shared/schemas/plugin-manifest.schema.json)
@@ -179,7 +181,7 @@ io:
 
 发布 runtime 输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。同一契约 ID 的所有提供者必须发布一致的 schema；替代插件的 `provides` 与本插件 runtime 的 `io.output.contract` 必须对齐，其他已安装插件的产出不能替它满足声明。缺少被消费契约的 schema 或只有声明而无产出的提供者会产生加载诊断。
 
-内核在 runtime 最终输出边界校验已发布的契约，失败结果不能提交领域 effects 或写入 `recordAs`。同轮输入在应用 `select` 前再次校验完整输出；`scope: committed` 输入读取冻结的完整 export 后同样校验公共契约，即使没有显式 `accepts`。消费者的 `accepts` 可另加限制，不能关闭公共契约校验。契约发生变化时应重建受影响的开发期会话数据和历史 exports。
+内核在 runtime 最终输出边界校验已发布的契约，失败结果不能提交领域 effects 或写入 `recordAs`。同轮输入在应用 `select` 前再次校验完整输出；`scope: committed` 输入读取冻结的完整 export 后同样校验公共契约，即使没有显式 `accepts`。消费者的 `accepts` 可另加限制，不能关闭公共契约校验。`cardinality: one` 的 `accepts` 校验单个业务值；`all` 校验按 runtime ID 排序的业务值数组，包括数组长度和唯一性约束，公共契约仍分别校验每个提供者。契约发生变化时应重建受影响的开发期会话数据和历史 exports。
 
 内部 `RuntimeResult` 分别保存 `output`（业务输出）、`effects`（显式副作用）和 `completion`（`done` / `pending`）。提交、事件后继和待处理交互读取 `effects`，setup 完成判断读取 `completion`。`outputKind: story` 的 `output.narrativeOutput` 仍按声明发布叙事。
 

@@ -193,6 +193,93 @@ describe("POST /api/actions — turn commit barrier", () => {
     return drainActionStream(res);
   }
 
+  it.each([
+    {
+      type: "send_message",
+      payload: { content: "My name is Player. Begin the adventure." },
+    },
+    { type: "execute_command", payload: { command: "/start adventure" } },
+  ])(
+    "commits opening $type input once across the setup continuation",
+    async (action) => {
+      await store.updateSession(SESSION_ID, {
+        phase: "setup",
+        setupRuntimes: {},
+      });
+      const content = action.payload.content ?? action.payload.command!;
+      const input = {
+        id: "browser-opening",
+        sessionId: SESSION_ID,
+        role: "user" as const,
+        content,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      };
+      await store.addMessage(input);
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: "opening-request",
+          sessionId: SESSION_ID,
+          ...action,
+          payload: { ...action.payload, inputMessageId: input.id },
+        }),
+      });
+      expect(response.status).toBe(200);
+      const events = await drainActionStream(response);
+      expect(
+        events.find((event) => event.type === "execution.completed")?.payload
+          ?.committed,
+      ).toBe(true);
+      const messages = (await store.listMessages(SESSION_ID)).filter(
+        (message) => message.role === "user",
+      );
+      expect(messages).toEqual([
+        { ...input, metadata: { turnId: expect.any(String) } },
+      ]);
+      const turns = await store.listTurnResults(SESSION_ID);
+      expect(turns).toHaveLength(2);
+      expect(
+        (await store.listTurnMessages(SESSION_ID)).filter(
+          (message) =>
+            message.sourceType === "player" && message.content === content,
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("rolls back a mismatched input identity without changing the durable input", async () => {
+    const input = {
+      id: "browser-input",
+      sessionId: SESSION_ID,
+      role: "user" as const,
+      content: "original",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    await store.addMessage(input);
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "mismatch-request",
+        sessionId: SESSION_ID,
+        type: "send_message",
+        payload: { content: "changed", inputMessageId: input.id },
+      }),
+    });
+    const events = await drainActionStream(response);
+    expect(
+      events.find((event) => event.type === "execution.completed")?.payload
+        ?.committed,
+    ).toBe(false);
+    expect(await store.listMessages(SESSION_ID)).toEqual([input]);
+    expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(0);
+    expect(await store.listInteractionRecords(SESSION_ID)).toEqual([]);
+    expect(
+      (await store.listTurnMessages(SESSION_ID)).map((message) => message.id),
+    ).toEqual(["prior-player-0"]);
+  });
+
   it("scopes zero-runtime package hooks and defaults through execution and commit", async () => {
     const pluginId = "entry-only";
     const observed: Array<{

@@ -112,7 +112,7 @@ Default summaries and picker options show the slot, provider, and **effective mo
 
 `runtimeModelOverrides` applies only to agent runtimes. Image, speech, and similar function runtimes commonly select a media provider slot through the plugin setting `modelPresetId`. Session Prep exposes that separately as a **provider slot** setting, persisted for this device rather than in the session runtime override map.
 
-The LLM page can reload `llm.toml` without restarting through `POST /api/llm-config/reload`. Parse errors fall back to the built-in `story` slot and are exposed in `GET /api/llm-config` and the Settings UI.
+The LLM page can reload `llm.toml` without restarting through `POST /api/llm-config/reload`. Startup parse failures use the built-in `story` slot. Reload parse failures retain the last valid configuration. Both are exposed in `GET /api/llm-config` and the Settings UI.
 
 Plugins such as image generation may declare a `modelPresetId` provider slot. If its default slot is missing but another compatible slot is configured, Session Prep lets you override the **provider slot** inline; the warning clears as soon as a configured slot is selected.
 

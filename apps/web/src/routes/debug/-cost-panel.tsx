@@ -2,10 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getProviderPriceMultiplier,
+  getCapabilityOverrides,
+  getCustomPresets,
+  getSlotConfig,
   lookupModelCapability,
 } from "@/services/api.js";
 import type * as api from "@/services/api.js";
 import type { VisibleTurn } from "./-debug-page-model.js";
+import { useSession } from "@/stores/session-store.js";
+import { useSettingsRevision } from "@/settings/use-settings-revision.js";
+import { resolveLocalModelPrices, type ModelPrice } from "./-model-prices.js";
 
 /**
  * Token usage + estimated cost panel — aggregates `usage` from the persisted
@@ -21,7 +27,8 @@ import type { VisibleTurn } from "./-debug-page-model.js";
  * lack that identity remain unattributed and are excluded from pricing.
  *
  * Pricing comes from `/api/model-db/lookup` (LiteLLM-derived per-M-token
- * prices) via the existing `lookupModelCapability` service. The model DB does
+ * prices) via the existing `lookupModelCapability` service, with unambiguous
+ * local provider/model pricing overrides applied for display only. The model DB does
  * not yet expose provider-specific cache read/write prices, so those token
  * subsets are shown separately and excluded from the USD estimate. Missing
  * input/output prices are also excluded component-wise, so a partial estimate
@@ -237,11 +244,6 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
 
 // ── Pricing ──────────────────────────────────────────────────────
 
-interface ModelPrice {
-  readonly inputPerMToken?: number;
-  readonly outputPerMToken?: number;
-}
-
 /** Module-level lookup cache — model prices don't change within a page visit. */
 const priceCache = new Map<string, Promise<ModelPrice | null>>();
 
@@ -399,13 +401,47 @@ export function CostPanel({
   onLoadAll?: () => void;
 }) {
   const { t } = useTranslation();
+  const { state } = useSession();
+  const settingsRevision = useSettingsRevision([
+    "llm.capabilityOverrides",
+    "llm.slotConfig",
+    "llm.providers",
+    "llm.providerPriceMultipliers",
+  ]);
+  const localPrices = useMemo(
+    () =>
+      resolveLocalModelPrices({
+        overrides: getCapabilityOverrides(),
+        bindings: getSlotConfig(),
+        customPresets: getCustomPresets(),
+        presets: state.presets,
+        slots: state.llmConfig?.slots ?? {},
+      }),
+    [settingsRevision, state.presets, state.llmConfig],
+  );
   const model = useMemo(() => aggregate(turns), [turns]);
   const totalTokens = model.totalInput + model.totalOutput;
   const maxRuntimeTokens = Math.max(
     1,
     ...model.byRuntime.map((r) => r.inputTokens + r.outputTokens),
   );
-  const prices = useModelPrices(model.byModel);
+  const referencePrices = useModelPrices(model.byModel);
+  const prices = useMemo(
+    () =>
+      Object.fromEntries(
+        model.byModel.map((agg) => {
+          const key = `${agg.provider ?? ""}\u0000${agg.model}`;
+          const manualPrice = localPrices[key];
+          return [
+            key,
+            manualPrice
+              ? { ...referencePrices[key], ...manualPrice }
+              : referencePrices[key],
+          ];
+        }),
+      ),
+    [model.byModel, referencePrices, localPrices],
+  );
   const cost = useMemo(() => {
     let usd = 0;
     let pricedTokens = 0;
@@ -423,7 +459,7 @@ export function CostPanel({
       unpricedTokens += estimate.unpricedTokens;
     }
     return { usd, pricedTokens, unpricedTokens };
-  }, [model.byModel, prices]);
+  }, [model.byModel, prices, settingsRevision]);
 
   if (model.totalCalls === 0) {
     return (

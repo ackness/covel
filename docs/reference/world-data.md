@@ -93,6 +93,8 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 
 服务器启动时按目录顺序 seed 世界：先 bundled（`COVEL_WORLDS_DIR`，源码默认仓库 `worlds/`），再 user（`COVEL_USER_WORLDS_DIR`，否则 `$COVEL_HOME/worlds`，未设置 home 时为 `~/.covel/worlds`；桌面由 shell 注入 `<data_root>/worlds`）。seed 是 **idempotent upsert**——每个世界包的 `WorldRecord` 写入 DB，`metadata.source = "file"`。
 
+浏览器私有存储首次初始化空库时，从 `GET /api/worlds` 导入完整目录，保留清单 ID、世界观、维度、角色与包元数据，并将副本标注为浏览器 IndexedDB。目录请求失败不会写入初始化标记，可以重试；成功的空目录也是有效结果。初始化完成后，浏览器保存的世界始终由本地编辑和删除管理，后续启动不请求或自动覆盖目录，支持离线读取。已有本地世界也不会被初始化覆盖。服务端目录后续变化不自动更新这些副本；旧开发库中的简化样例需按需重新创建浏览器库。
+
 seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后被归档（从包里移除）的世界会**残留在所有老用户的 DB 里**并继续出现在世界列表。为此 seed 完所有目录后会跑一次 **收敛（reconcile）**，删除"已不在任何世界源里"的陈旧 seed 记录。三重安全栏，确保只清死 seed、绝不误删用户数据：
 
 1. **来源闸门**：仅 `metadata.source === "file"`（纯文件 seed）的世界可被清理。AI 生成的世界（`generated` / `generated-file`）及其它任何来源**永不触碰**，即便它不在当前世界源里。

@@ -33,6 +33,24 @@ export function loadKeysEnvForChild(keysFile: string): Record<string, string> {
   return toApiKeyEnvMap(loadKeysEnv(keysFile));
 }
 
+/** Match source-server precedence: shell > .env.llm > .env > keys.env. */
+export function loadChildEnvironment(
+  baseDir: string,
+  keysFile: string,
+  inherited: NodeJS.ProcessEnv,
+): Record<string, string> {
+  const shell = Object.fromEntries(
+    Object.entries(inherited).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
+  return {
+    ...loadKeysEnvForChild(keysFile),
+    ...loadEnvFiles(baseDir),
+    ...shell,
+  };
+}
+
 /** Apply one explicit patch when the sidecar is unavailable. */
 export function patchKeysEnv(
   keysFile: string,

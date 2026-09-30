@@ -20,6 +20,7 @@ import {
 } from "./navigation.js";
 import { SettingWidget } from "./widgets/index.js";
 import { useSettingsStore } from "./use-settings.js";
+import { useSettingsWritable } from "./use-settings-save.js";
 import { DataPane } from "./DataPane.js";
 import { DesktopPane } from "./DesktopPane.js";
 import { LlmSlotsPane } from "./panes/LlmSlotsPane.js";
@@ -46,6 +47,7 @@ export function SettingsDialog({
   plugins = [],
 }: SettingsDialogProps) {
   const store = useSettingsStore();
+  const writable = useSettingsWritable();
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
   const desktop = isDesktopApp();
@@ -235,7 +237,14 @@ export function SettingsDialog({
             ref={contentRef}
             className="ui-scroll min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"
           >
-            {renderPane(selectedNode, t)}
+            {!writable && (
+              <p role="alert" className="mb-4 text-sm text-destructive">
+                {t("settings.loadFailedReadOnly")}
+              </p>
+            )}
+            <fieldset disabled={!writable} className="min-w-0">
+              {renderPane(selectedNode, t)}
+            </fieldset>
           </section>
         </div>
       </DialogContent>

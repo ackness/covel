@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   exportSessionCheckpoint,
+  type BrowserCheckpoint,
   type DataStore,
   type SessionCommit,
 } from "@covel/store";
@@ -68,6 +69,167 @@ beforeEach(async () => {
 });
 
 describe("browser-private workspace exchange", () => {
+  async function queuedCheckpoint(): Promise<BrowserCheckpoint> {
+    const browser = createMemoryStore();
+    await seed(browser);
+    await browser.setPluginData({
+      id: "durable-job",
+      sessionId: SESSION_ID,
+      pluginId: "media",
+      namespace: "_runtime_jobs",
+      key: "job-1",
+      value: { status: "queued", updatedAt: "initial", attempt: 0 },
+      createdAt: "2026-08-25T00:00:01.000Z",
+      updatedAt: "2026-08-25T00:00:01.000Z",
+    });
+    const checkpoint = await exportSessionCheckpoint(browser, SESSION_ID, {
+      revision: 1,
+      actionId: "queued-turn",
+    });
+    expect((await upload(checkpoint)).status).toBe(200);
+    return checkpoint;
+  }
+
+  it.each(["running", "succeeded"])(
+    "preserves a %s job, detached output and browser edits during the next upload",
+    async (status) => {
+      const checkpoint = await queuedCheckpoint();
+      const job = (await store.listPluginDataSessionScope(SESSION_ID))[0]!;
+      await store.setPluginData({
+        ...job,
+        value: { status, updatedAt: "advanced", ownerId: "live-worker" },
+      });
+      await store.setPluginData({
+        ...job,
+        id: "result-row",
+        namespace: "results",
+        key: "output",
+        value: { url: "synthetic-result" },
+      });
+      const next = {
+        ...checkpoint,
+        revision: 2,
+        actionId: "local-input",
+        session: {
+          ...checkpoint.session,
+          status: "paused" as const,
+          runtimeModelOverrides: { "media/render": "synthetic-slot" },
+        },
+        world: { ...checkpoint.world!, name: "Edited World" },
+        messages: [
+          {
+            id: "next-input",
+            sessionId: SESSION_ID,
+            role: "user" as const,
+            content: "Continue",
+            createdAt: "2026-08-25T00:00:02.000Z",
+          },
+        ],
+      };
+      const response = await upload(next);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ reconcileRequired: true });
+      const rows = await store.listPluginDataSessionScope(SESSION_ID);
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.key === "job-1")?.value).toMatchObject({
+        status,
+        ownerId: "live-worker",
+      });
+      expect((await store.getSession(SESSION_ID))?.status).toBe("paused");
+      expect(
+        (await store.getSession(SESSION_ID))?.runtimeModelOverrides,
+      ).toEqual({
+        "media/render": "synthetic-slot",
+      });
+      expect((await store.getWorld(WORLD_ID))?.name).toBe("Edited World");
+      expect(
+        (await store.listMessages(SESSION_ID)).map((row) => row.id),
+      ).toEqual(["next-input"]);
+      // Retrying a lost upload reply still directs the browser to reconciliation.
+      expect(await (await upload(next)).json()).toMatchObject({
+        unchanged: true,
+        reconcileRequired: true,
+      });
+      expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+      const requestCommit = () =>
+        app.request(`/api/sessions/${SESSION_ID}/browser-commit`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ actionId: "hydrate:2", baseRevision: 2 }),
+        });
+      const committed = await (await requestCommit()).json();
+      expect(committed).toMatchObject({
+        revision: 3,
+        checkpoint: {
+          pluginData: expect.arrayContaining([
+            expect.objectContaining({ namespace: "results" }),
+          ]),
+        },
+      });
+      // Retrying a lost commit reply returns exactly the same checkpoint.
+      expect(await (await requestCommit()).json()).toEqual(committed);
+    },
+  );
+
+  it.each(["worldId", "locale", "activePlugins", "pluginData", "messages"])(
+    "rejects unsupported browser %s edits without dropping detached results",
+    async (field) => {
+      const checkpoint = await queuedCheckpoint();
+      const next = { ...checkpoint, revision: 2, actionId: "unsupported" };
+      if (field === "pluginData") next.pluginData = [];
+      else if (field === "messages")
+        next.messages = [
+          {
+            id: "forged-result",
+            sessionId: SESSION_ID,
+            role: "assistant",
+            content: "Changed",
+            createdAt: "2026-08-25T00:00:03.000Z",
+          },
+        ];
+      else
+        next.session = {
+          ...checkpoint.session,
+          ...(field === "worldId" ? { worldId: "other-world" } : {}),
+          ...(field === "locale" ? { locale: "en-US" } : {}),
+          ...(field === "activePlugins"
+            ? { activePlugins: ["other-plugin"] }
+            : {}),
+        };
+      if (field === "worldId")
+        next.world = { ...checkpoint.world!, id: "other-world" };
+      const response = await upload(next);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: "unsupported_browser_mutation",
+      });
+      expect(await store.listPluginDataSessionScope(SESSION_ID)).toHaveLength(
+        1,
+      );
+    },
+  );
+
+  it("rejects a new local input that collides with a newly committed server message", async () => {
+    const checkpoint = await queuedCheckpoint();
+    const message = {
+      id: "same-id",
+      sessionId: SESSION_ID,
+      role: "user" as const,
+      content: "Server content",
+      createdAt: "2026-08-25T00:00:03.000Z",
+    };
+    await store.addMessage(message);
+    const response = await upload({
+      ...checkpoint,
+      revision: 2,
+      actionId: "collision",
+      messages: [{ ...message, content: "Different browser content" }],
+    });
+    expect(response.status).toBe(409);
+    expect((await store.listMessages(SESSION_ID))[0]?.content).toBe(
+      "Server content",
+    );
+  });
   it("hydrates all checkpoint domains and preserves server-private metadata", async () => {
     const nonce = (await store.getSession(SESSION_ID))?.metadata
       ?.sessionIncarnationNonce;

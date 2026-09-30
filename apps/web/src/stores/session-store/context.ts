@@ -52,6 +52,11 @@ export interface SessionActions {
   removeWorldLocal: (worldId: string) => void;
   loadSessionPlugins: () => Promise<void>;
   toggleSessionPlugin: (pluginId: string, enable: boolean) => Promise<void>;
+  resolveSetupRuntime: (
+    sessionId: string,
+    runtimeId: string,
+    resolution: "retry" | "waive",
+  ) => Promise<void>;
   upsertInteractionDraft: (draft: PendingInteractionDraft) => void;
   removeInteractionDraft: (id: string) => void;
   clearInteractionDrafts: () => void;

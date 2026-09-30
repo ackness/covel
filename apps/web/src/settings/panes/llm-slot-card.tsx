@@ -40,7 +40,9 @@ interface LlmSlotCardProps {
   commitSlot: (next: Record<string, SlotConfigEntry>) => void;
   onToggleEditing: () => void;
   onResetCapability: () => void;
-  onUpdateCapability: (patch: Partial<ModelCapabilityInfo>) => void;
+  onUpdateCapability: (
+    patch: Partial<ModelCapabilityInfo>,
+  ) => Promise<boolean> | void;
 }
 
 export function LlmSlotCard({

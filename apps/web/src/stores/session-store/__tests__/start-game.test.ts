@@ -1,6 +1,10 @@
 import type { DataService } from "@/services/data-service.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
+import { ApiError } from "@/services/api/request.js";
+import { LocalDataService } from "@/services/data-service/local.js";
+import { BrowserVault } from "@/services/storage/browser-vault.js";
+import { createSessionWorkspace } from "@/services/data-service/workspace.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -9,6 +13,11 @@ const api = vi.hoisted(() => ({
   clearPrepRuntimeBindings: vi.fn(),
   getSessionView: vi.fn(),
   markServerAck: vi.fn(),
+  getSession: vi.fn(),
+  createSession: vi.fn(),
+  getWorld: vi.fn(),
+  updateWorld: vi.fn(),
+  uploadBrowserCheckpoint: vi.fn(),
 }));
 const hydration = vi.hoisted(() => ({
   hydratePluginDataForUiSpecs: vi.fn(),
@@ -146,29 +155,110 @@ describe("startGameSession bootstrap order", () => {
       "create",
       "sync",
       "bindings",
-      "clear-bindings",
+      "sync",
       "dispatch-session",
+      "clear-bindings",
     ]);
     expect(api.markServerAck).toHaveBeenCalledOnce();
   });
 
-  it("keeps prep bindings when the server patch fails", async () => {
+  it("rolls back without publishing and keeps prep bindings when the patch fails", async () => {
     api.updateSession.mockRejectedValue(new Error("patch failed"));
     const dispatch = vi.fn();
     const ds = makeDataService([]);
 
-    await startGameSession({
-      ds,
-      workspace: makeWorkspace(ds),
-      dispatch,
-      sessionIdRef: { current: null },
-      sessionGenerationRef,
-      world,
-      plugins: ["pregame", "world-init"],
-    });
+    const sessionIdRef = { current: null };
+    await expect(
+      startGameSession({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch,
+        sessionIdRef,
+        sessionGenerationRef,
+        world,
+        plugins: ["pregame", "world-init"],
+      }),
+    ).rejects.toThrow("patch failed");
 
     expect(api.clearPrepRuntimeBindings).not.toHaveBeenCalled();
-    expect(dispatch).toHaveBeenCalledWith({ type: "SET_SESSION", session });
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "SET_SESSION", session });
+    expect(ds.deleteSession).toHaveBeenCalledExactlyOnceWith(session.id);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_ERROR",
+      error: "patch failed",
+    });
+    expect(sessionIdRef.current).toBeNull();
+  });
+
+  it("preserves prep selections and rolls back if uploading the saved bindings fails", async () => {
+    const ds = makeDataService([]);
+    vi.mocked(ds.syncToServer)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("binding sync failed"));
+    const dispatch = vi.fn();
+    await expect(
+      startGameSession({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch,
+        sessionIdRef: { current: null },
+        sessionGenerationRef,
+        world,
+      }),
+    ).rejects.toThrow("binding sync failed");
+    expect(api.clearPrepRuntimeBindings).not.toHaveBeenCalled();
+    expect(api.getSessionView).not.toHaveBeenCalled();
+    expect(ds.deleteSession).toHaveBeenCalledExactlyOnceWith(session.id);
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "SET_SESSION", session });
+  });
+
+  it("uploads local runtime bindings before publishing while retaining server-resolved setup", async () => {
+    const vault = new BrowserVault({
+      dbName: `prep-bootstrap-${crypto.randomUUID()}`,
+    });
+    try {
+      await vault.upsertWorld({
+        id: world.id,
+        name: "World",
+        description: "",
+        createdAt: world.createdAt,
+      });
+      const ds = new LocalDataService(vault);
+      api.getWorld.mockResolvedValue(world);
+      api.updateWorld.mockResolvedValue(world);
+      api.getSession
+        .mockRejectedValueOnce(new ApiError(404, "/api/sessions/local", ""))
+        .mockResolvedValue(session);
+      api.createSession.mockResolvedValue({ ...session, phase: "playing" });
+      api.uploadBrowserCheckpoint.mockResolvedValue({ ok: true });
+      const dispatch = vi.fn((action: { type: string }) => {
+        if (action.type !== "SET_SESSION") return;
+        const uploaded = api.uploadBrowserCheckpoint.mock.calls.at(-1)?.[1];
+        expect(uploaded.session.runtimeModelOverrides).toEqual({
+          narrator: "fast",
+        });
+        expect(uploaded.session.phase).toBe("playing");
+      });
+      await startGameSession({
+        ds,
+        workspace: createSessionWorkspace(ds, "local"),
+        dispatch,
+        sessionIdRef: { current: null },
+        sessionGenerationRef,
+        world,
+      });
+      expect(api.uploadBrowserCheckpoint).toHaveBeenCalledTimes(2);
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "SET_SESSION",
+        session: expect.objectContaining({
+          runtimeModelOverrides: { narrator: "fast" },
+          phase: "playing",
+        }),
+      });
+      expect(api.updateSession).not.toHaveBeenCalled();
+    } finally {
+      await vault.deleteDatabase();
+    }
   });
 
   it("rejects visibly and removes a local session when server sync fails", async () => {
@@ -189,6 +279,7 @@ describe("startGameSession bootstrap order", () => {
     ).rejects.toThrow("offline");
 
     expect(ds.deleteSession).toHaveBeenCalledWith(session.id);
+    expect(api.clearPrepRuntimeBindings).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_EXECUTION_ERROR",
       error: "offline",
@@ -224,6 +315,34 @@ describe("startGameSession bootstrap order", () => {
     });
     expect(sessionIdRef.current).toBeNull();
     expect(ds.deleteSession).toHaveBeenCalledWith(session.id);
+    expect(api.clearPrepRuntimeBindings).not.toHaveBeenCalled();
+  });
+
+  it("keeps newer prep selections when bootstrap finishes", async () => {
+    let resolveSnapshot!: (snapshot: Record<string, unknown>) => void;
+    api.getSessionView.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSnapshot = resolve;
+      }),
+    );
+    const ds = makeDataService([]);
+    const starting = startGameSession({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch: vi.fn(),
+      sessionIdRef: { current: null },
+      sessionGenerationRef,
+      world,
+    });
+    await vi.waitFor(() => expect(api.getSessionView).toHaveBeenCalled());
+    api.getPrepRuntimeBindings.mockReturnValue({ narrator: "balance" });
+    resolveSnapshot({});
+    await starting;
+
+    expect(ds.updateSession).toHaveBeenCalledWith(session.id, {
+      runtimeModelOverrides: { narrator: "fast" },
+    });
+    expect(api.clearPrepRuntimeBindings).not.toHaveBeenCalled();
   });
 
   it("drops an initial snapshot that resolves after a session switch", async () => {

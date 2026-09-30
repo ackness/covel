@@ -376,7 +376,12 @@ export async function syncMessages(
 export async function uploadBrowserCheckpoint(
   sessionId: string,
   checkpoint: BrowserCheckpoint,
-): Promise<{ ok: true; revision: number; unchanged?: boolean }> {
+): Promise<{
+  ok: true;
+  revision: number;
+  unchanged?: boolean;
+  reconcileRequired?: boolean;
+}> {
   return request(
     `/api/sessions/${encodeURIComponent(sessionId)}/browser-checkpoint`,
     {

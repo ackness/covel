@@ -10,7 +10,7 @@
  * `$inferSelect` shape, so the row assertions never lose real information.
  */
 
-import type { SQL, Table } from "drizzle-orm";
+import { sql, type SQL, type Table } from "drizzle-orm";
 import type { IndexColumn, PgTable, SelectedFields } from "drizzle-orm/pg-core";
 
 import type {
@@ -26,10 +26,12 @@ import type { PgDb } from "./pg-db.js";
 function pgConflictConfig(conflict: ConflictClause): {
   target: IndexColumn | IndexColumn[];
   set: Record<string, unknown>;
+  setWhere?: SQL;
 } {
   return {
     target: conflict.target as IndexColumn | IndexColumn[],
     set: conflict.set,
+    setWhere: conflict.setWhere,
   };
 }
 
@@ -74,7 +76,13 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
         .insert(table as PgTable)
         .values(values);
       if (conflict) {
-        await stmt.onConflictDoUpdate(pgConflictConfig(conflict));
+        const upsert = stmt.onConflictDoUpdate(pgConflictConfig(conflict));
+        if (conflict.errorOnSkipped) {
+          const rows = await upsert.returning({ applied: sql<number>`1` });
+          if (rows.length === 0) throw conflict.errorOnSkipped;
+        } else {
+          await upsert;
+        }
       } else {
         await stmt;
       }
@@ -107,7 +115,17 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
         for (const row of rows) {
           const stmt = tx.insert(table as PgTable).values(row.values);
           if (row.conflict) {
-            await stmt.onConflictDoUpdate(pgConflictConfig(row.conflict));
+            const upsert = stmt.onConflictDoUpdate(
+              pgConflictConfig(row.conflict),
+            );
+            if (row.conflict.errorOnSkipped) {
+              const affected = await upsert.returning({
+                applied: sql<number>`1`,
+              });
+              if (affected.length === 0) throw row.conflict.errorOnSkipped;
+            } else {
+              await upsert;
+            }
           } else {
             await stmt;
           }

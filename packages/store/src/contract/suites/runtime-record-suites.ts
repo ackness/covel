@@ -40,6 +40,129 @@ export function registerRuntimeRecordStoreSuites(
     store = getStore();
   });
 
+  describe("Player input message commits", () => {
+    beforeEach(async () => {
+      await store.createSession(makeSession({ id: "sess-1" }));
+      await store.createSession(makeSession({ id: "sess-2" }));
+    });
+
+    it("adopts durable input by id, preserving timestamp and metadata", async () => {
+      const input = makeMessage({ role: "user", metadata: { local: true } });
+      await store.addMessage(input);
+      await store.commitPlayerInputMessage({
+        ...input,
+        createdAt: "2099-01-01T00:00:00.000Z",
+        metadata: { turnId: "committed" },
+      });
+      expect(await store.listMessages("sess-1")).toEqual([
+        { ...input, metadata: { local: true, turnId: "committed" } },
+      ]);
+      expect(input.metadata).toEqual({ local: true });
+    });
+
+    it("treats an identical same-turn commit as a no-op", async () => {
+      const input = makeMessage({
+        role: "user",
+        metadata: { turnId: "same", local: true },
+      });
+      await store.addMessage(input);
+      await store.commitPlayerInputMessage({
+        ...input,
+        metadata: { turnId: "same", local: false },
+        createdAt: "2099-01-01T00:00:00.000Z",
+      });
+      expect(await store.listMessages("sess-1")).toEqual([input]);
+    });
+
+    it("inserts server-only input and preserves identical text with distinct ids", async () => {
+      const input = makeMessage({
+        role: "user",
+        metadata: { turnId: "first" },
+      });
+      await store.commitPlayerInputMessage(input);
+      await store.commitPlayerInputMessage({
+        ...input,
+        id: id(),
+        metadata: { turnId: "second" },
+      });
+      expect(await store.listMessages("sess-1")).toHaveLength(2);
+    });
+
+    it.each(["session", "role", "content", "committed"])(
+      "rejects occupied %s input ids without changing the row",
+      async (mismatch) => {
+        const input = makeMessage({
+          role: mismatch === "role" ? "assistant" : "user",
+          ...(mismatch === "committed" ? { metadata: { turnId: "old" } } : {}),
+        });
+        await store.addMessage(input);
+        await expect(
+          store.commitPlayerInputMessage({
+            ...input,
+            ...(mismatch === "session" ? { sessionId: "sess-2" } : {}),
+            role: "user",
+            ...(mismatch === "content" ? { content: "different" } : {}),
+            metadata: { turnId: "new" },
+          }),
+        ).rejects.toThrow();
+        expect(await store.listMessages("sess-1")).toEqual([input]);
+        expect(await store.listMessages("sess-2")).toEqual([]);
+      },
+    );
+
+    it("rolls back adoption and server-only insertion with the turn transaction", async () => {
+      const input = makeMessage({ role: "user" });
+      await store.addMessage(input);
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.commitPlayerInputMessage({
+            ...input,
+            metadata: { turnId: "rolled-back" },
+          });
+          await tx.commitPlayerInputMessage({
+            ...input,
+            id: id(),
+            metadata: { turnId: "rolled-back" },
+          });
+          throw new Error("rollback input");
+        }),
+      ).rejects.toThrow("rollback input");
+      expect(await store.listMessages("sess-1")).toEqual([input]);
+    });
+
+    it("allows only one concurrent adopter of an uncommitted id", async () => {
+      const input = makeMessage({ role: "user" });
+      await store.addMessage(input);
+      const results = await Promise.allSettled(
+        ["first", "second"].map((turnId) =>
+          store.commitPlayerInputMessage({ ...input, metadata: { turnId } }),
+        ),
+      );
+      expect(
+        results.filter((result) => result.status === "fulfilled"),
+      ).toHaveLength(1);
+      expect(
+        results.filter((result) => result.status === "rejected"),
+      ).toHaveLength(1);
+      const rows = await store.listMessages("sess-1");
+      expect(rows).toHaveLength(1);
+      expect(["first", "second"]).toContain(
+        (rows[0]!.metadata as Record<string, unknown>).turnId,
+      );
+    });
+
+    it("accepts concurrent identical same-turn commits", async () => {
+      const input = makeMessage({ role: "user" });
+      await store.addMessage(input);
+      const committed = { ...input, metadata: { turnId: "same" } };
+      await Promise.all([
+        store.commitPlayerInputMessage(committed),
+        store.commitPlayerInputMessage(committed),
+      ]);
+      expect(await store.listMessages("sess-1")).toEqual([committed]);
+    });
+  });
+
   describe("Worlds", () => {
     it("persists top-level dimensions and keeps projections aligned after replacement and removal", async () => {
       const original = {

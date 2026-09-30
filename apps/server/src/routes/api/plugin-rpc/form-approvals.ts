@@ -25,6 +25,7 @@ export async function preflightFormApprovals(
   // The submit-form handler owns input validation and its error messages.
   if (!parsed.success) return;
   const messages = await c.get("store").listTurnMessages(session.id);
+  const registry = c.get("pluginRegistry");
   const providers = new Set<string>();
   for (const { interactionId } of parsed.data.submissions) {
     const located = findCommittedInteraction(
@@ -42,13 +43,7 @@ export async function preflightFormApprovals(
         }),
         400,
       );
-    providers.add(pluginId);
-  }
-  const registry = c.get("pluginRegistry");
-  const gate = c.get("rpcApprovalGate");
-  for (const pluginId of providers) {
     const entry = registry.get(pluginId);
-    // Uninstalled providers cannot be restored by granting permission.
     if (!entry)
       return c.json(
         errorBody("Form provider is unavailable", {
@@ -56,6 +51,35 @@ export async function preflightFormApprovals(
         }),
         400,
       );
+    const validation = located.interaction.validation;
+    if (
+      validation &&
+      typeof validation === "object" &&
+      !Array.isArray(validation)
+    ) {
+      const name = (validation as Record<string, unknown>).name;
+      // Permission cannot restore a validator the provider never declared.
+      if (
+        typeof name === "string" &&
+        name &&
+        !entry.packageManifest?.plugin.contributes?.forms?.includes(name)
+      )
+        return c.json(
+          errorBody(
+            `Form validator "${name}" is not declared by plugin "${pluginId}"; regenerate the form`,
+            {
+              code: "form_validator_undeclared",
+              details: { pluginId, validator: name },
+            },
+          ),
+          400,
+        );
+    }
+    providers.add(pluginId);
+  }
+  const gate = c.get("rpcApprovalGate");
+  for (const pluginId of providers) {
+    const entry = registry.get(pluginId)!;
     const trust = getPluginTrustInfo(pluginId, entry.source);
     if (trust.autoLoad) continue;
     const denied = checkHostedOperator(c);

@@ -414,6 +414,10 @@ export class BrowserVault {
     );
   }
 
+  async hasInitializedWorlds(): Promise<boolean> {
+    return (await this.db.initialization.get("worlds")) !== undefined;
+  }
+
   async getWorld(id: string): Promise<WorldRecord | null> {
     const world = await this.db.worlds.get(id);
     return world ? structuredClone(world) : null;

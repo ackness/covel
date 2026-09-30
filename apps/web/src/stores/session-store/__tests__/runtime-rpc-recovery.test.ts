@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionRequest, SseEnvelope } from "@covel/shared";
+import type { MessageRecord, SessionRecord } from "@/services/api.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import { ApiError } from "@/services/api/request.js";
 import { claimSessionAction } from "../runtime-refs.js";
 
-const { sendAction } = vi.hoisted(() => ({ sendAction: vi.fn() }));
-vi.mock("@/services/api", () => ({ sendAction }));
+const { sendAction, submitInputs, getSessionView } = vi.hoisted(() => ({
+  sendAction: vi.fn(),
+  submitInputs: vi.fn(),
+  getSessionView: vi.fn(),
+}));
+vi.mock("@/services/api", () => ({ sendAction, submitInputs, getSessionView }));
 vi.mock("@/lib/toast-channel.js", () => ({ emitToast: vi.fn() }));
-const { runActionStream } = await import("../runtime-rpc.js");
+const { runActionStream, runSingleSessionAction } =
+  await import("../runtime-rpc.js");
+const { submitInteractionBlock } = await import("../interaction-submission.js");
 const request: ActionRequest = {
   requestId: "request-1",
   sessionId: "session-1",
@@ -64,6 +72,121 @@ function envelope(
 }
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("durable player input identity", () => {
+  function fixture() {
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: "session-1" as string | null };
+    const activeActionRef = { current: null as symbol | null };
+    const claimAction = (sid: string) =>
+      claimSessionAction(activeActionRef, sessionIdRef, sid, "request-1");
+    const inputs: MessageRecord[] = [];
+    const workspace: SessionWorkspace = {
+      hydrate: async () => {},
+      checkpoint: async () => {},
+      run: async (_sid, _actionId, mutate, options) => {
+        if (options?.input) inputs.push(options.input);
+        return mutate();
+      },
+    };
+    const runSingleAction = (
+      content: string,
+      options: {
+        echoUserMessage: boolean;
+        owner: ReturnType<typeof claimAction>;
+      },
+    ) =>
+      runSingleSessionAction({
+        content,
+        ...options,
+        dispatch,
+        workspace,
+        sessionIdRef,
+        session: { id: "session-1", locale: "en-US" } as SessionRecord,
+        handleSseEvent: vi.fn(),
+      });
+    return {
+      dispatch,
+      sessionIdRef,
+      claimAction,
+      inputs,
+      workspace,
+      runSingleAction,
+    };
+  }
+
+  async function finish() {
+    await vi.waitFor(() => expect(sendAction).toHaveBeenCalledOnce());
+    const [, onEvent, , onDone] = sendAction.mock.calls[0]!;
+    onEvent(envelope("execution.completed", { committed: true }));
+    onDone();
+  }
+
+  it.each(["Look around", "/start adventure"])(
+    "binds the durable echo id for %s",
+    async (content) => {
+      const f = fixture();
+      const pending = f.runSingleAction(content, {
+        echoUserMessage: true,
+        owner: f.claimAction("session-1"),
+      });
+      await finish();
+      await pending;
+      const input = f.inputs[0]!;
+      expect(sendAction.mock.calls[0]![0]).toMatchObject({
+        type: content.startsWith("/") ? "execute_command" : "send_message",
+        payload: {
+          inputMessageId: input.id,
+          ...(content.startsWith("/") ? { command: content } : { content }),
+        },
+      });
+      expect(f.dispatch).toHaveBeenCalledWith({
+        type: "ADD_MESSAGE",
+        message: {
+          id: input.id,
+          role: "user",
+          content,
+          timestamp: input.createdAt,
+        },
+      });
+    },
+  );
+
+  it("retains the opening form continuation's durable input id", async () => {
+    const f = fixture();
+    submitInputs.mockResolvedValue({
+      results: [
+        {
+          interactionId: "opening",
+          accepted: true,
+          filledNarrative: "My name is Player. Begin the adventure.",
+        },
+      ],
+    });
+    getSessionView.mockRejectedValue(
+      new Error("Synthetic refresh unavailable"),
+    );
+    const pending = submitInteractionBlock(
+      {
+        ...f,
+        submitBlock: vi.fn(),
+        resyncSession: vi.fn(),
+        inFlight: new Set(),
+      },
+      ["block", "setup-turn", "opening", "form", { characterName: "Player" }],
+    );
+    await finish();
+    await pending;
+    expect(f.inputs).toHaveLength(1);
+    expect(sendAction.mock.calls[0]![0]).toMatchObject({
+      type: "send_message",
+      payload: {
+        content: "My name is Player. Begin the adventure.",
+        inputMessageId: f.inputs[0]!.id,
+      },
+    });
+  });
+});
 
 describe("action stream recovery", () => {
   it.each(["error", "eof"])(

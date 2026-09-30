@@ -12,6 +12,7 @@ import { createMemorySystem } from "@covel/memory";
 import {
   createMemoryEmbed,
   createEmbeddingLockHelper,
+  embeddingModelIdentity,
 } from "../src/embedding-lock.js";
 import type { AiStack } from "../src/ai-setup.js";
 
@@ -144,7 +145,9 @@ it("rejects same-dimension model drift after restart for ingestion and both quer
     expect(search).not.toHaveBeenCalled();
     expect(calls).toEqual(["old", "old", "old"]);
     expect((await store.resolveSessionVectorTarget!("session"))?.modelId).toBe(
-      "test/old",
+      embeddingModelIdentity(
+        oldAi.gateway.resolveSlot(undefined, { fallbackTag: "embedding" })!,
+      ),
     );
     search.mockRestore();
     const vectors = await store.searchVectors!({

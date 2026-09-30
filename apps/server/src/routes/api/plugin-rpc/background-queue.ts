@@ -1,3 +1,8 @@
+import {
+  getRequestLlmOptions,
+  withRequestLlmOptions,
+} from "../../../request-llm-context.js";
+
 export class PluginBackgroundQueueClosedError extends Error {
   constructor() {
     super("plugin background queue is shutting down");
@@ -85,6 +90,19 @@ export function createPluginBackgroundQueue(): PluginBackgroundQueue {
     signal: controller.signal,
     async schedule(task) {
       controller.signal.throwIfAborted();
+      const requestOptions = getRequestLlmOptions();
+      const source = task;
+      // A queued task may start from the previous task's async branch.
+      // Restore its own request scope, including an absent server-only scope.
+      task = {
+        ...source,
+        prepare: () =>
+          withRequestLlmOptions(requestOptions, () => source.prepare()),
+        run: (signal) =>
+          withRequestLlmOptions(requestOptions, () => source.run(signal)),
+        reject: (reason) =>
+          withRequestLlmOptions(requestOptions, () => source.reject(reason)),
+      };
       let finish!: () => void;
       const finished = new Promise<void>((resolve) => {
         finish = resolve;
