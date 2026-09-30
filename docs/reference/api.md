@@ -362,6 +362,13 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 该 API 实例持有的 revision/head 和所有重放 payload；其他会话的重试缓存保持
 有效。删除失败且会话仍存在时保留缓存，只有数据已经删除时才完成缓存清理。
 
+已有验证 head 且存在 durable detached job 时，checkpoint 上传保留服务端的作业、
+租约及执行结果，只接纳相对上次 head 新增的用户消息、会话 status/model overrides
+和已授权的世界修改；删除、改写执行域或改变会话身份返回 `409 unsupported_browser_mutation`。
+成功响应包含 `reconcileRequired: true`，包括同一上传的幂等重试。客户端必须先持久化
+`hydrate:<revision>` pending marker，再下载并应用对应的 browser commit，之后才能继续执行。
+没有已有 head 的初次同步或服务端重启恢复仍由完整浏览器 checkpoint 重建。
+
 `PUT /api/sessions/:id/browser-checkpoint` 的完整 JSON 请求体上限为 **64 MiB**，
 包含全部消息、轨迹与快照；超过上限返回 `413`。此专用额度仅适用于该路径的
 `PUT` 请求，`browser-commit` 等普通 API 仍使用 **1 MiB** 上限。当前协议不支持

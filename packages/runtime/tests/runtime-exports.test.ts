@@ -314,6 +314,90 @@ describe("resolveExportBindings", () => {
       ]);
     }
   });
+
+  const resolveAll = (
+    accepts: Readonly<Record<string, unknown>>,
+    options?: { optional?: boolean; invalidContract?: boolean },
+  ) =>
+    resolveExportBindings({
+      consumerRuntimeId: "c/main",
+      exportBindings: {
+        cfg: binding({
+          from: { capability: "cfg-provider", cardinality: "all" },
+          required: !options?.optional,
+        }),
+      },
+      activeRuntimes: [provider("p/b"), provider("p/a")],
+      acceptsSchemas: { cfg: accepts },
+      contractSchemas: { cfg: SCHEMA },
+      getFrozenExport: async (producerRuntimeId) => ({
+        ...record({
+          threshold:
+            options?.invalidContract && producerRuntimeId === "p/b"
+              ? "invalid"
+              : producerRuntimeId === "p/a"
+                ? 1
+                : 2,
+        }),
+        producerRuntimeId,
+      }),
+    });
+
+  it("validates all committed values as an array before wrapping provenance", async () => {
+    const res = await resolveAll({
+      type: "array",
+      minItems: 2,
+      maxItems: 2,
+      items: SCHEMA,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok && res.slots.cfg.cardinality === "all") {
+      expect(res.slots.cfg.items.map((item) => item.value)).toEqual([
+        { threshold: 1 },
+        { threshold: 2 },
+      ]);
+    }
+  });
+
+  it.each([
+    { type: "array", minItems: 3, items: SCHEMA },
+    { type: "array", maxItems: 1, items: SCHEMA },
+    {
+      type: "array",
+      items: { ...SCHEMA, properties: { threshold: { minimum: 2 } } },
+    },
+  ])("rejects all committed values violating accepts %j", async (schema) => {
+    const res = await resolveAll(schema);
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "export-schema-invalid",
+    });
+    expect(res.diagnostics[0]?.code).toBe("export-schema-invalid");
+  });
+
+  it("omits an optional all binding that violates the array accepts schema", async () => {
+    const res = await resolveAll(
+      { type: "array", minItems: 3, items: SCHEMA },
+      { optional: true },
+    );
+    expect(res).toMatchObject({ ok: true, slots: {} });
+    expect(res.diagnostics[0]).toMatchObject({
+      code: "export-schema-invalid",
+      severity: "warn",
+    });
+  });
+
+  it("rejects invalid individual public exports before array accepts", async () => {
+    const res = await resolveAll(
+      { type: "array", items: {} },
+      { invalidContract: true },
+    );
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "export-schema-invalid",
+    });
+    expect(res.diagnostics[0]?.code).toBe("contract-output-invalid");
+  });
 });
 
 describe("agent export segment", () => {

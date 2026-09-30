@@ -25,6 +25,7 @@ import type {
   TurnExecutorOptions,
 } from "./turn-executor/turn-executor-types.js";
 import type { FinalizeExecutionArgs } from "./commit/finalize-execution.js";
+import { getTurnExecutionSignal } from "./turn-executor/turn-control.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -42,6 +43,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "hookSettings"
   | "sessionClock"
   | "setupRan"
+  | "abortReason"
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
   readonly resolvedSuspensionId?: string;
@@ -109,6 +111,14 @@ export async function executeTurn(
     ...turn.runtimeResults,
     ...(turn.nestedRuntimeResults ?? []),
   ];
+  const executionSignal = getTurnExecutionSignal(deps.turnControl);
+  const abortReason =
+    turn.abortReason ??
+    (executionSignal?.aborted
+      ? executionSignal.reason instanceof Error
+        ? executionSignal.reason.message
+        : "Execution was cancelled"
+      : undefined);
   const suspended = results.some((result) => result.status === "suspended");
   return {
     result: {
@@ -140,6 +150,7 @@ export async function executeTurn(
           : turn.executionContext,
         runtimes,
         results,
+        ...(abortReason !== undefined ? { abortReason } : {}),
         journalMessages: collectExecutionJournal(turn),
         suspensions: collectExecutionSuspensions(turn).map((record) =>
           turn.executionContext.countPolicy === "complete-player-turn" &&

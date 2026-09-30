@@ -20,7 +20,11 @@ function frontmatter(
   filePath: string,
   canonical?: Readonly<Record<string, unknown>>,
 ) {
-  const parsed = matter(content);
+  // Reject engine directives before gray-matter can select an executable parser.
+  if (!/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.test(content)) {
+    throw new Error("Manifest requires plain YAML frontmatter");
+  }
+  const parsed = matter(content, { language: "yaml" });
   return {
     body: parsed.content,
     data: canonical

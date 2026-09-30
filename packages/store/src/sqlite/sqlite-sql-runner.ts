@@ -34,10 +34,12 @@ import type { SqliteDb } from "./sqlite-types.js";
 function sqliteConflictConfig(conflict: ConflictClause): {
   target: IndexColumn | IndexColumn[];
   set: Record<string, unknown>;
+  setWhere?: SQL;
 } {
   return {
     target: conflict.target as IndexColumn | IndexColumn[],
     set: conflict.set,
+    setWhere: conflict.setWhere,
   };
 }
 
@@ -87,7 +89,11 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
     ): Promise<void> {
       const stmt = db.insert(table as SQLiteTable).values(values);
       if (conflict) {
-        stmt.onConflictDoUpdate(sqliteConflictConfig(conflict)).run();
+        const result = stmt
+          .onConflictDoUpdate(sqliteConflictConfig(conflict))
+          .run();
+        if (result.changes === 0 && conflict.errorOnSkipped)
+          throw conflict.errorOnSkipped;
       } else {
         stmt.run();
       }
@@ -118,7 +124,11 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
         for (const row of rows) {
           const stmt = tx.insert(table as SQLiteTable).values(row.values);
           if (row.conflict) {
-            stmt.onConflictDoUpdate(sqliteConflictConfig(row.conflict)).run();
+            const result = stmt
+              .onConflictDoUpdate(sqliteConflictConfig(row.conflict))
+              .run();
+            if (result.changes === 0 && row.conflict.errorOnSkipped)
+              throw row.conflict.errorOnSkipped;
           } else {
             stmt.run();
           }

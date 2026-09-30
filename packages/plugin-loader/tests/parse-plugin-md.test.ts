@@ -8,6 +8,47 @@ const md = (value: object, body = "Prompt") =>
   `---\n${JSON.stringify(value)}\n---\n${body}`;
 const root = { id: "probe", kind: "plugin", description: "Probe" };
 describe("current authoring manifests", () => {
+  it.each(["javascript", "js", "json", "yaml"])(
+    "rejects the %s engine directive before evaluating frontmatter",
+    (engine) => {
+      const probe = "__covelFrontmatterProbe";
+      const globals = globalThis as typeof globalThis & Record<string, unknown>;
+      delete globals[probe];
+      const executable = `---${engine}\n(() => { globalThis.${probe} = true; return ${JSON.stringify(root)}; })()\n---\nPrompt`;
+      const plugin = parsePluginMd(md(root), "probe/PLUGIN.md").plugin;
+      try {
+        for (const canonical of [undefined, root]) {
+          expect(() =>
+            parsePluginMd(executable, "probe/PLUGIN.en.md", canonical),
+          ).toThrow("plain YAML frontmatter");
+          expect(() =>
+            parseRuntimeMd(
+              executable,
+              "probe/runtimes/worker/RUNTIME.en.md",
+              plugin,
+              canonical,
+            ),
+          ).toThrow("plain YAML frontmatter");
+        }
+        expect(globals[probe]).toBeUndefined();
+      } finally {
+        delete globals[probe];
+      }
+    },
+  );
+  it("accepts plain YAML with a BOM and CRLF without changing the prompt", () => {
+    const parsed = parsePluginMd(
+      "\uFEFF---\r\nid: probe\r\nkind: plugin\r\ndescription: Probe\r\n---\r\nPrompt\r\n",
+      "probe/PLUGIN.md",
+    );
+    expect(parsed.plugin.id).toBe("probe");
+    expect(parsed.promptTemplate).toBe("Prompt\r\n");
+  });
+  it("requires a closed frontmatter envelope", () => {
+    expect(() =>
+      parsePluginMd("---\nid: probe\nkind: plugin\n", "probe/PLUGIN.md"),
+    ).toThrow("plain YAML frontmatter");
+  });
   it("keeps contribution-only packages free of execution", () => {
     const parsed = parsePluginMd(
       md({ ...root, entry: "./server.js", contributes: { tools: ["probe"] } }),

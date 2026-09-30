@@ -80,6 +80,8 @@ interface FailedProposal {
 }
 
 export interface FinalizeExecutionArgs {
+  /** Execution-level veto/cancellation forbids all domain writes and success fan-out. */
+  readonly abortReason?: string;
   /** Roll back when cancelled before the transaction commits; post-commit fan-out still runs. */
   readonly signal?: AbortSignal;
   readonly store: DataStore;
@@ -450,6 +452,9 @@ export async function finalizeExecution(
     const postCommit: Array<() => Promise<void>> = [];
     let committedEvents: readonly SessionEvent[] = [];
     try {
+      if (args.abortReason !== undefined) {
+        throw new Error(`Execution aborted: ${args.abortReason}`);
+      }
       committedEvents = await store.withTransaction(async (tx) => {
         args.signal?.throwIfAborted();
         // A failed story cannot complete a player action. Optional state

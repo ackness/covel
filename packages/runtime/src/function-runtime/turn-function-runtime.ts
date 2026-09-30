@@ -56,6 +56,8 @@ import {
   withDefaultUtilsSignal,
 } from "./runtime-abort-boundaries.js";
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
+import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
+import { deepFreeze } from "../hooks/hook-settings.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly lastPlayerInput?:
@@ -106,6 +108,8 @@ export interface ExecuteFunctionRuntimeOptions {
   readonly resumeData?: unknown;
   /** Identifies a resume invocation even when `resumeData` is undefined. */
   readonly resumedFromSuspensionId?: string;
+  /** Uncommitted writes captured by the suspended invocation. */
+  readonly pendingProposals?: readonly import("@covel/shared").Proposal[];
   /** Resume forbids creating a second nested suspension. Defaults to true. */
   readonly allowSuspend?: boolean;
 }
@@ -119,9 +123,9 @@ export async function executeFunctionRuntime({
   deps,
   hookPipeline,
   triggerEvent,
-  activation,
-  inputs,
-  exports: exportSlots,
+  activation: originalActivation,
+  inputs: originalInputs,
+  exports: originalExports,
   executionContext,
   createRecursiveCall,
   recursionDepth,
@@ -131,8 +135,16 @@ export async function executeFunctionRuntime({
   executionId,
   resumeData,
   resumedFromSuspensionId,
+  pendingProposals = [],
   allowSuspend = true,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
+  const inputs = originalInputs ? freezeInputSlots(originalInputs) : undefined;
+  const exportSlots = originalExports
+    ? freezeInputSlots(originalExports)
+    : undefined;
+  const activation = originalActivation
+    ? deepFreeze(structuredClone(originalActivation))
+    : undefined;
   // Emit start for function runtimes (no guard to check)
   await reportRuntimeStarted(deps, input.sessionId, manifest, {
     turnId: input.turnId,
@@ -151,6 +163,7 @@ export async function executeFunctionRuntime({
   // result pendingProposals at execution end so they commit in finalizeExecution's
   // single transaction (and roll back with it if the handler fails).
   const writeBuffer = createExecutionWriteBuffer();
+  writeBuffer.push(...structuredClone(pendingProposals));
 
   if (!loaded.handler) {
     return finalizeRuntimeResult(
@@ -548,8 +561,8 @@ export async function executeFunctionRuntime({
   // A resume invocation must not create a second suspension record.
   if (handlerOutcome.outcome === "suspended" && allowSuspend) {
     const suspensionId = crypto.randomUUID();
-    // Function runtimes have no tool loop, so suspend records carry an
-    // empty pendingProposals array and no partial content.
+    // Keep domain writes uncommitted until resume succeeds. The continuation
+    // also owns the original binding snapshots rather than resolving them again.
     const suspension: SuspensionRecord = {
       id: suspensionId,
       sessionId: input.sessionId,
@@ -561,7 +574,10 @@ export async function executeFunctionRuntime({
       pendingContinuation: {
         messages: [],
         toolCallsSoFar: [],
-        pendingProposals: [],
+        pendingProposals: structuredClone(writeBuffer),
+        ...(inputs ? { inputSlots: structuredClone(inputs) } : {}),
+        ...(exportSlots ? { exportSlots: structuredClone(exportSlots) } : {}),
+        ...(activation ? { activation: structuredClone(activation) } : {}),
         emittedEvents: [],
         executionContext,
       },

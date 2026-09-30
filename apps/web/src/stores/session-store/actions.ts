@@ -39,6 +39,7 @@ import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
 import { startGameSession } from "./start-game.js";
+import { resolveSetupRuntime as recoverSetupRuntime } from "./setup-recovery-actions.js";
 import type {
   PendingInteractionDraft,
   SessionDispatch,
@@ -507,6 +508,21 @@ export function useBuildSessionActions({
     resetPluginData();
   }, [dispatch, sessionGenerationRef, sessionIdRef]);
 
+  const resolveSetupRuntime = useCallback<
+    SessionActions["resolveSetupRuntime"]
+  >(
+    (sessionId, runtimeId, resolution) =>
+      sessionIdRef.current === sessionId
+        ? recoverSetupRuntime(runtimeId, resolution, {
+            workspace,
+            sessionIdRef,
+            sessionGenerationRef,
+            dispatch,
+          })
+        : Promise.resolve(),
+    [workspace, sessionIdRef, sessionGenerationRef, dispatch],
+  );
+
   const backToWorldSelect = useCallback(() => {
     sessionGenerationRef.current += 1;
     sessionIdRef.current = null;
@@ -778,6 +794,7 @@ export function useBuildSessionActions({
       removeWorldLocal,
       loadSessionPlugins,
       toggleSessionPlugin,
+      resolveSetupRuntime,
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,
@@ -809,6 +826,7 @@ export function useBuildSessionActions({
       removeWorldLocal,
       loadSessionPlugins,
       toggleSessionPlugin,
+      resolveSetupRuntime,
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,

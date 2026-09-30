@@ -63,6 +63,14 @@ return { result: execution.result, committed: outcome.status === "committed" };
 Hook 范围；该参数只能过滤执行时已捕获的插件，不能加入后来启用的插件，设置仍沿用执行快照。
 只应向客户端发送 `result`，不能发送或接受客户端提交的 `commit`。两者都不携带收尾函数。
 
+执行提交计划保留 TurnStart Hook 的否决原因以及执行期间观察到的取消状态。
+这类执行的 `commitExecution` 返回失败，在域事务前停止，禁止宿主 `extraInTx` 写入，
+也不生成成功完成事件或快照；此前已持久化的客户端输入仍保留。
+
+function runtime 挂起时，continuation 保存尚未提交的命令、输入与导出绑定和 activation。
+恢复使用这些冻结快照，未提交命令仍可被本次运行读取，并在恢复成功时一起原子提交。
+恢复失败会丢弃这些域写入。该 continuation 契约更新后，已有开发暂停记录需要重建。
+
 工具作者返回的显式 `PluginToolResult` 见 [工具结果协议](tools.md)。内核解包后将命令放在
 `RuntimeResult.pendingProposals`，业务内容保留在 `output`；命令不会出现在公开执行结果或
 持久化的 turn history 中。原 `collectExecutionJournal` / `collectExecutionSuspensions`

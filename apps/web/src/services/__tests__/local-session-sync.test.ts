@@ -3,6 +3,12 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { ApiError } from "../api/request.js";
+import type {
+  BrowserCheckpoint,
+  SessionCommit,
+} from "@covel/store/browser-sync";
+import { createSessionWorkspace } from "../data-service/workspace.js";
+import { resolveSetupRuntime } from "../../stores/session-store/setup-recovery-actions.js";
 
 const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
@@ -13,6 +19,8 @@ const api = vi.hoisted(() => ({
   deleteSession: vi.fn(),
   uploadBrowserCheckpoint: vi.fn(),
   fetchBrowserCommit: vi.fn(),
+  retrySetupRuntime: vi.fn(),
+  waiveSetupRuntime: vi.fn(),
 }));
 
 const appKv = vi.hoisted(() => ({
@@ -75,6 +83,301 @@ afterEach(async () => {
 });
 
 describe("LocalDataService browser-authoritative sync", () => {
+  function serverMirror() {
+    let checkpoint: BrowserCheckpoint;
+    let revision = 0;
+    const commits = new Map<string, SessionCommit>();
+    api.uploadBrowserCheckpoint.mockImplementation(
+      async (_id, incoming: BrowserCheckpoint) => {
+        if (!checkpoint) checkpoint = structuredClone(incoming);
+        else
+          checkpoint = {
+            ...checkpoint,
+            world: incoming.world,
+            session: {
+              ...checkpoint.session,
+              status: incoming.session.status,
+              runtimeModelOverrides: incoming.session.runtimeModelOverrides,
+            },
+            messages: [
+              ...checkpoint.messages,
+              ...incoming.messages.filter(
+                (row) =>
+                  !checkpoint.messages.some(
+                    (existing) => existing.id === row.id,
+                  ),
+              ),
+            ],
+          };
+        revision = incoming.revision;
+        return {
+          ok: true,
+          revision,
+          reconcileRequired: checkpoint.pluginData.length > 0,
+        };
+      },
+    );
+    api.fetchBrowserCommit.mockImplementation(
+      async (_id, actionId: string, baseRevision: number) => {
+        const cached = commits.get(actionId);
+        if (cached) return cached;
+        expect(baseRevision).toBe(revision);
+        revision += 1;
+        checkpoint = {
+          ...checkpoint,
+          revision,
+          actionId,
+          committedAt: new Date().toISOString(),
+        };
+        const commit = {
+          baseRevision,
+          revision,
+          actionId,
+          checkpoint: JSON.parse(
+            JSON.stringify(checkpoint),
+          ) as BrowserCheckpoint,
+        };
+        commits.set(actionId, commit);
+        return commit;
+      },
+    );
+    api.getSession.mockImplementation(async () =>
+      checkpoint ? structuredClone(checkpoint.session) : { id: "sess-1" },
+    );
+    return {
+      read: () => checkpoint,
+      update: (mutate: (value: BrowserCheckpoint) => BrowserCheckpoint) => {
+        checkpoint = mutate(checkpoint);
+      },
+    };
+  }
+
+  it("preserves missed detached results through local edits, reload and the next input", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", "sess-1", [], "en-US");
+    const mirror = serverMirror();
+    const workspace = createSessionWorkspace(service, "local");
+    await workspace.hydrate("sess-1");
+    await workspace.run("sess-1", "enqueue-job", async () => {
+      mirror.update((checkpoint) => ({
+        ...checkpoint,
+        pluginData: [
+          {
+            id: "durable-job",
+            sessionId: "sess-1",
+            pluginId: "media",
+            namespace: "_runtime_jobs",
+            key: "job",
+            value: { status: "running" },
+            createdAt: "2026-09-01T00:00:00.000Z",
+            updatedAt: "2026-09-01T00:00:00.000Z",
+          },
+        ],
+      }));
+    });
+    // No subscription is mounted while the detached result commits.
+    mirror.update((checkpoint) => ({
+      ...checkpoint,
+      pluginData: [
+        { ...checkpoint.pluginData[0]!, value: { status: "succeeded" } },
+        {
+          ...checkpoint.pluginData[0]!,
+          id: "output",
+          namespace: "results",
+          key: "output",
+          value: { text: "Detached result" },
+        },
+      ],
+    }));
+    await service.updateSession("sess-1", {
+      status: "paused",
+      runtimeModelOverrides: { "media/render": "slot" },
+    });
+    await service.updateWorld("world-1", { name: "Edited World" });
+    const reloaded = new LocalDataService(vault);
+    await createSessionWorkspace(reloaded, "local").run(
+      "sess-1",
+      "next-action",
+      async () => {
+        expect(mirror.read().pluginData).toHaveLength(2);
+        expect(mirror.read().session.status).toBe("paused");
+        expect(mirror.read().session.runtimeModelOverrides).toEqual({
+          "media/render": "slot",
+        });
+      },
+      {
+        input: {
+          id: "next-input",
+          sessionId: "sess-1",
+          role: "user",
+          content: "Continue",
+          createdAt: "2026-09-01T00:00:01.000Z",
+        },
+      },
+    );
+    const durable = await vault.getLatestCheckpoint("sess-1");
+    expect(durable?.pluginData).toHaveLength(2);
+    expect(durable?.messages.map((row) => row.id)).toEqual(["next-input"]);
+    expect(durable?.world?.name).toBe("Edited World");
+  });
+
+  it.each(["retry", "waive"] as const)(
+    "persists setup %s before global publication and through reload/next input",
+    async (resolution) => {
+      const service = await serviceWithWorld();
+      await service.createSession("world-1", "sess-1", [], "en-US");
+      const mirror = serverMirror();
+      const workspace = createSessionWorkspace(service, "local");
+      await workspace.hydrate("sess-1");
+      const runtimeId = "guide/setup";
+      await workspace.run("sess-1", "block-setup", async () =>
+        mirror.update((checkpoint) => ({
+          ...checkpoint,
+          session: {
+            ...checkpoint.session,
+            setupRuntimes: {
+              [runtimeId]: {
+                state: "blocked",
+                reason: "Synthetic failure",
+                blockedAt: "2026-09-01T00:00:00.000Z",
+                generation: 1,
+                attempts: 1,
+                pluginVersion: "1.0.0",
+              },
+            },
+          },
+        })),
+      );
+      const recover =
+        resolution === "retry" ? api.retrySetupRuntime : api.waiveSetupRuntime;
+      recover.mockImplementation(async () =>
+        mirror.update((checkpoint) => ({
+          ...checkpoint,
+          session: {
+            ...checkpoint.session,
+            setupRuntimes: {
+              [runtimeId]:
+                resolution === "retry"
+                  ? {
+                      state: "pending",
+                      generation: 1,
+                      attempts: 1,
+                      pluginVersion: "1.0.0",
+                    }
+                  : {
+                      state: "done",
+                      resolution: "waived",
+                      generation: 1,
+                      attempts: 1,
+                      pluginVersion: "1.0.0",
+                      completedAt: "2026-09-01T00:00:01.000Z",
+                    },
+            },
+          },
+        })),
+      );
+      const dispatch = vi.fn();
+      await resolveSetupRuntime(runtimeId, resolution, {
+        workspace,
+        sessionIdRef: { current: "sess-1" },
+        sessionGenerationRef: { current: 1 },
+        dispatch,
+      });
+      const expected = resolution === "retry" ? "pending" : "done";
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "SET_SESSION",
+        session: expect.objectContaining({
+          setupRuntimes: {
+            [runtimeId]: expect.objectContaining({ state: expected }),
+          },
+        }),
+      });
+      const reloaded = new LocalDataService(vault);
+      expect(
+        (await reloaded.getSession("sess-1"))?.setupRuntimes[runtimeId]?.state,
+      ).toBe(expected);
+      await createSessionWorkspace(reloaded, "local").run(
+        "sess-1",
+        "next-input",
+        async () => {
+          expect(mirror.read().session.setupRuntimes[runtimeId]?.state).toBe(
+            expected,
+          );
+        },
+        {
+          input: {
+            id: "next-input",
+            sessionId: "sess-1",
+            role: "user",
+            content: "Continue",
+            createdAt: "2026-09-01T00:00:02.000Z",
+          },
+        },
+      );
+      expect(
+        (await reloaded.getSession("sess-1"))?.setupRuntimes[runtimeId]?.state,
+      ).toBe(expected);
+    },
+  );
+
+  it.each(["upload reply", "commit reply"])(
+    "recovers detached reconciliation after a lost %s and service reload",
+    async (failure) => {
+      const service = await serviceWithWorld();
+      await service.createSession("world-1", "sess-1", [], "en-US");
+      const mirror = serverMirror();
+      const workspace = createSessionWorkspace(service, "local");
+      await workspace.hydrate("sess-1");
+      await workspace.run("sess-1", "enqueue", async () =>
+        mirror.update((checkpoint) => ({
+          ...checkpoint,
+          pluginData: [
+            {
+              id: "job",
+              sessionId: "sess-1",
+              pluginId: "media",
+              namespace: "_runtime_jobs",
+              key: "job",
+              value: { status: "queued" },
+              createdAt: "2026-09-01T00:00:00.000Z",
+              updatedAt: "2026-09-01T00:00:00.000Z",
+            },
+          ],
+        })),
+      );
+      mirror.update((checkpoint) => ({
+        ...checkpoint,
+        pluginData: [
+          {
+            ...checkpoint.pluginData[0]!,
+            value: { status: "succeeded", result: "Preserved" },
+          },
+        ],
+      }));
+      const download = api.fetchBrowserCommit.getMockImplementation()!;
+      const upload = api.uploadBrowserCheckpoint.getMockImplementation()!;
+      if (failure === "upload reply")
+        api.uploadBrowserCheckpoint.mockImplementationOnce(async (...args) => {
+          await upload(...args);
+          throw new Error("Reply lost");
+        });
+      else
+        api.fetchBrowserCommit.mockImplementationOnce(async (...args) => {
+          await download(...args);
+          throw new Error("Reply lost");
+        });
+      await expect(workspace.hydrate("sess-1")).rejects.toThrow("Reply lost");
+      const reloaded = new LocalDataService(vault);
+      await createSessionWorkspace(reloaded, "local").hydrate("sess-1");
+      expect(
+        (await vault.getLatestCheckpoint("sess-1"))?.pluginData[0]?.value,
+      ).toEqual({
+        status: "succeeded",
+        result: "Preserved",
+      });
+      expect(await vault.getPendingCommit("sess-1")).toBeNull();
+    },
+  );
   it("captures a long world document without the action-override length limit", async () => {
     const service = await serviceWithWorld();
     const lore = "x".repeat(500_001);

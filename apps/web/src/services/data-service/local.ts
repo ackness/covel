@@ -826,10 +826,17 @@ export class LocalDataService implements DataService {
       }
     }
 
-    await api.uploadBrowserCheckpoint(serverSessionId, {
+    const uploaded = await api.uploadBrowserCheckpoint(serverSessionId, {
       ...checkpoint,
       world: serverCheckpointWorld(world),
     });
+    if (uploaded.reconcileRequired) {
+      // The verified mirror retained detached writes while admitting only our
+      // local inputs/settings. Download that combined state before any action.
+      const actionId = `hydrate:${checkpoint.revision}`;
+      await vault.stagePendingCommit(sessionId, actionId);
+      await this.commitFromServerNow(sessionId, actionId);
+    }
   }
 
   async commitFromServer(sessionId: string, actionId: string): Promise<void> {

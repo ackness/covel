@@ -28,6 +28,7 @@ import type {
   WorldDataLedgerRow,
 } from "./mappers/memory-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
+import { SessionRecordScopeConflictError } from "../errors.js";
 import type {
   DataStore,
   LorebookEntryRecord,
@@ -253,6 +254,11 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
           conflict: {
             target: worldDataImportLedger.id,
             set: values.worldDataLedgerUpdate(record),
+            setWhere: eq(worldDataImportLedger.sessionId, record.sessionId),
+            errorOnSkipped: new SessionRecordScopeConflictError(
+              "world-data import ledger",
+              record.id,
+            ),
           },
         })),
       );
