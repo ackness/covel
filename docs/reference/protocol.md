@@ -411,6 +411,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 `retry_turn` 的普通请求 payload 为空，以空玩家输入和当前已提交上下文启动新的主循环回合，成功提交后增加玩家回合数；它不恢复或重新生成历史回合。恢复未完成回合时，六种动作都可附加 `payload.recoverFromTurnId`，并且必须匹配服务端返回的原 action 描述。客户端从 `GET /api/sessions/:id/execution` 获取只读状态，刷新不重新提交动作；明确点击恢复重试后才发送新的 requestId。服务端在会话锁内校验源回合，开场恢复保留 continuation 来源，不增加玩家回合数。`retry_runtime` 必须提供 `payload.runtimeId`，显式 `retryFromTurnId` 必须指向已提交且仍是当前故事的原回合，目标须仍失败；不带来源时保留旧 manual 调用语义。
 
+`send_message` 和 `execute_command` 可提供 `payload.inputMessageId`。浏览器先持久化玩家输入，再将其 ID 随动作发送；服务端在最终提交事务内接管同一 ID 的同会话、同内容、未提交 user 记录，保留原时间戳并写入 `metadata.turnId`。同一回合的相同输入重复提交保留原记录；已关联其他回合、内容不符或其他会话占用的 ID 会使提交失败。没有本地记录时按该 ID 插入，没有提供 ID 时由服务端生成。不同 ID 的相同文本仍是两条独立输入。失败恢复保留原 `inputMessageId`，不会重新生成输入副本。此字段不适用于 steering 请求。已有开发数据中的重复记录不自动合并，需重新创建受影响会话。
+
 `retry_failed_runtimes` 必须提供原回合 `retryFromTurnId` 和 1–20 个不重复的 `runtimeIds`。锁内合并该来源已提交的恢复 attempt 后，仅仍失败且 active 的目标可重跑；同一 action 按 stage/DAG 执行，统一提交，不重新计数。批量恢复和带来源的单任务恢复都只执行所选目标，禁止事件订阅者、递归或后台分发扩围；普通无来源的 manual / plugin-RPC 行为不变。原故事及已提交成功的非目标结果仅作上下文，不重复提交。一个目标失败而另一个被依赖跳过时，两者仍待恢复。无已提交来源的整回合中断应先恢复原 action，不能把 trace 中的成功当作已提交数据。
 
 每次恢复的生命周期 trace/SSE payload 持久关联 `sourceTurnId` 和本次 `runtimeIds`；`turnId` 保留 attempt 身份。客户端在 `committed: true` 的 turn/execution 终态或已提交工件确认后更新任务恢复状态，保留原失败审计。事务回滚和中断不会清除原失败。中断批量操作的 `retry` 描述保留同一组目标，`recoverFromTurnId` 校验不得更改该组。

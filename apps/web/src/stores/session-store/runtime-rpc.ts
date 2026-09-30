@@ -293,8 +293,22 @@ export async function runSingleSessionAction({
           locale: session.locale ?? i18n.language,
         };
         const action: api.ActionRequest = content.startsWith("/")
-          ? { ...base, type: "execute_command", payload: { command: content } }
-          : { ...base, type: "send_message", payload: { content } };
+          ? {
+              ...base,
+              type: "execute_command",
+              payload: {
+                command: content,
+                ...(input ? { inputMessageId: input.id } : {}),
+              },
+            }
+          : {
+              ...base,
+              type: "send_message",
+              payload: {
+                content,
+                ...(input ? { inputMessageId: input.id } : {}),
+              },
+            };
         return runActionStream(action, handleSseEvent, dispatch, {
           toastOnError: true,
           sessionIdRef,

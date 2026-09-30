@@ -6,6 +6,10 @@ import {
 } from "../common/pagination.js";
 import { characterKey, stateEntryKey } from "../common/keys.js";
 import { computeTurnMessageStats } from "../common/turn-message-stats.js";
+import {
+  adoptPlayerInputMessage,
+  assertCommittedPlayerInput,
+} from "../common/player-input-message.js";
 import type { SessionSummaryRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
@@ -192,6 +196,22 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
 
     async addMessage(record) {
       state.messages.push(record);
+    },
+
+    async commitPlayerInputMessage(record) {
+      assertCommittedPlayerInput(record);
+      const index = state.messages.findIndex(
+        (message) => message.id === record.id,
+      );
+      if (index === -1) {
+        state.messages.push(record);
+      } else {
+        // Replace instead of mutating: transaction snapshots share row objects.
+        state.messages[index] = adoptPlayerInputMessage(
+          state.messages[index]!,
+          record,
+        );
+      }
     },
 
     async listMessages(sessionId, pagination?) {

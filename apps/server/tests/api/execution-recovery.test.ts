@@ -37,6 +37,23 @@ async function fixture() {
 }
 
 describe("foreground execution recovery", () => {
+  it.each([
+    {
+      type: "send_message",
+      payload: { content: "hello", inputMessageId: "durable-input" },
+    },
+    {
+      type: "execute_command",
+      payload: { command: "/start", inputMessageId: "durable-input" },
+    },
+  ])("retains the durable input id when recovering $type", (action) => {
+    expect(
+      recoveryAction(action.type, {
+        ...action.payload,
+        recoverFromTurnId: "failed",
+      }),
+    ).toEqual(action);
+  });
   it.each([199, 399])(
     "reads a same-millisecond terminal past %i later events",
     async (laterEvents) => {

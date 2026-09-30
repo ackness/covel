@@ -145,12 +145,12 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
             store.withTransaction!(async (tx) => {
               const observedTx = new Proxy(tx, {
                 get(txTarget, txProp, txReceiver) {
-                  if (txProp === "addMessage") {
+                  if (txProp === "commitPlayerInputMessage") {
                     return async (record: { role: string }) => {
                       if (record.role === "user") {
                         emitForwardedEvent(eventBus, "in-lock");
                       }
-                      return tx.addMessage(record as never);
+                      return tx.commitPlayerInputMessage(record as never);
                     };
                   }
                   return Reflect.get(txTarget, txProp, txReceiver);

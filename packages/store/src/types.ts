@@ -277,6 +277,13 @@ export interface EventStore {
 /** Chat/narrative message log. Part of `sql-session-content-records`. */
 export interface MessageStore {
   addMessage(record: MessageRecord): Promise<void>;
+  /**
+   * Insert a finalized user input, or adopt its same-session, same-content
+   * uncommitted browser row by id. Preserve its timestamp and reject occupied
+   * or ids committed to a different turn; identical same-turn commits are
+   * no-ops. Call within the turn finalization transaction.
+   */
+  commitPlayerInputMessage(record: MessageRecord): Promise<void>;
   listMessages(
     sessionId: string,
     pagination?: PaginationOpts,

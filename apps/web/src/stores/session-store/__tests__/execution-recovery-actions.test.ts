@@ -4,8 +4,14 @@ import { createRecoveryActionRequest } from "../execution-recovery-actions.js";
 
 describe("explicit recovery retries", () => {
   it.each([
-    { type: "send_message", payload: { content: "Answer the captain" } },
-    { type: "execute_command", payload: { command: "/roll 1d6" } },
+    {
+      type: "send_message",
+      payload: { content: "Answer the captain", inputMessageId: "input-1" },
+    },
+    {
+      type: "execute_command",
+      payload: { command: "/roll 1d6", inputMessageId: "input-2" },
+    },
     { type: "retry_turn", payload: {} },
     { type: "start_session", payload: {} },
     { type: "retry_runtime", payload: { runtimeId: "guide" } },

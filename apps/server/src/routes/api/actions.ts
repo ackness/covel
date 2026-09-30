@@ -469,15 +469,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
           const wasPreGamePending = effectiveSession.phase === "setup";
 
-          // Stage the REST message mirror and normalized interaction row.
-          // They land through finalizeExecution.extraInTx with the runtime
-          // proposals and TurnMessage journal, so refresh / observability
-          // cannot retain player input from a rolled-back execution.
+          // Commit the REST message mirror and interaction row with proposals
+          // and the TurnMessage journal. Rollback removes new mirror rows and
+          // turn attachments, preserving any uploaded browser input intent.
           const playerInputCreatedAt = new Date().toISOString();
           const playerInputWrites = turnArgs.playerMessage
             ? {
                 message: {
-                  id: crypto.randomUUID(),
+                  id:
+                    (type === "send_message" || type === "execute_command"
+                      ? payload.inputMessageId
+                      : undefined) ?? crypto.randomUUID(),
                   sessionId,
                   role: "user" as const,
                   content: turnArgs.playerMessage,
@@ -734,7 +736,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ? {
                   extraInTx: async (tx) => {
                     if (playerInputWrites) {
-                      await tx.addMessage(playerInputWrites.message);
+                      await tx.commitPlayerInputMessage(
+                        playerInputWrites.message,
+                      );
                       await tx.saveInteractionRecord(
                         playerInputWrites.interaction,
                       );

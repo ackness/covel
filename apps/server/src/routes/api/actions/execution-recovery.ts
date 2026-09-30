@@ -9,11 +9,17 @@ const recoveryActionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("retry_turn"), payload: z.object({}) }),
   z.object({
     type: z.literal("send_message"),
-    payload: z.object({ content: z.string().min(1) }),
+    payload: z.object({
+      content: z.string().min(1),
+      inputMessageId: z.string().min(1).optional(),
+    }),
   }),
   z.object({
     type: z.literal("execute_command"),
-    payload: z.object({ command: z.string().min(1) }),
+    payload: z.object({
+      command: z.string().min(1),
+      inputMessageId: z.string().min(1).optional(),
+    }),
   }),
   z.object({
     type: z.literal("retry_failed_runtimes"),

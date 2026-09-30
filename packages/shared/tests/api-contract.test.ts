@@ -43,6 +43,24 @@ const plugin = {
 };
 
 describe("shared API contracts", () => {
+  it.each([
+    { type: "send_message", payload: { content: "hello" } },
+    { type: "execute_command", payload: { command: "/start" } },
+  ])("retains and validates durable input ids for $type", (action) => {
+    const request = {
+      requestId: "req-1",
+      sessionId: "session-1",
+      ...action,
+      payload: { ...action.payload, inputMessageId: "input-1" },
+    };
+    expect(actionRequestSchema.parse(request)).toEqual(request);
+    expect(
+      actionRequestSchema.safeParse({
+        ...request,
+        payload: { ...request.payload, inputMessageId: "" },
+      }).success,
+    ).toBe(false);
+  });
   it("parses and narrows an action request", () => {
     const parsed = validateActionRequest({
       requestId: "req-1",
