@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store/memory";
-import { createPluginRegistry } from "@covel/plugin-loader";
+import { createPluginRegistry, parsePluginMd } from "@covel/plugin-loader";
 import { createBootstrapPluginRpc } from "../../src/routes/api/bootstrap/plugin-rpc-wiring.js";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { approvalRoutes } from "../../src/routes/api/approvals.js";
@@ -15,6 +15,7 @@ describe("form provider authorization", () => {
   let store: ReturnType<typeof createMemoryStore>;
   let app: Hono;
   let rpc: ReturnType<typeof createBootstrapPluginRpc>;
+  let plugins: ReturnType<typeof createPluginRegistry>;
   const validate = vi.fn(() => undefined as string | undefined);
   const now = "2026-01-01T00:00:00.000Z";
   const payload = {
@@ -58,7 +59,7 @@ describe("form provider authorization", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const plugins = createPluginRegistry();
+    plugins = createPluginRegistry();
     rpc = createBootstrapPluginRpc(store);
     for (const [order, id] of providers.entries()) {
       const loaded = makeFakeLoadedRuntime({ name: id });
@@ -79,7 +80,10 @@ describe("form provider authorization", () => {
           pluginType: "plugin",
           runtimeCount: 1,
         },
-
+        packageManifest: parsePluginMd(
+          `---\n${JSON.stringify({ id, kind: "plugin", description: id, contributes: { forms: ["check"] } })}\n---\n`,
+          "PLUGIN.md",
+        ),
         manifests: [parsed],
         loadedRuntimes: new Map([[id, loaded]]),
       });
@@ -165,6 +169,49 @@ describe("form provider authorization", () => {
     expect(rpc.rpcApprovalGate.listAllPendingForSession(sessionId)).toEqual([]);
     expect(validate).not.toHaveBeenCalled();
   });
+
+  it.each(["builtin", "community"] as const)(
+    "rejects an undeclared %s validator without asking for approval or saving input",
+    async (source) => {
+      plugins.register({ ...plugins.get("first")!, source });
+      await store.appendTurnMessage({
+        id: "message-undeclared",
+        sessionId,
+        turnId: "forms",
+        sourceType: "runtime",
+        sourcePluginId: "first",
+        role: "assistant",
+        content: "",
+        order: 3,
+        createdAt: now,
+        pendingInput: [
+          {
+            interactionId: "undeclared",
+            type: "form",
+            fields: [{ name: "value", type: "text" }],
+            validation: { name: "characterName" },
+          },
+        ],
+      });
+      const response = await submit({
+        ...payload,
+        submissions: [
+          { ...payload.submissions[0]!, interactionId: "undeclared" },
+        ],
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: "form_validator_undeclared",
+        error: expect.stringContaining("regenerate the form"),
+        details: { pluginId: "first", validator: "characterName" },
+      });
+      expect(rpc.rpcApprovalGate.listAllPendingForSession(sessionId)).toEqual(
+        [],
+      );
+      expect(validate).not.toHaveBeenCalled();
+      expect(await store.listPlayerInputs(sessionId)).toEqual([]);
+    },
+  );
 
   it("rejects a disabled provider before requesting grants for the batch", async () => {
     await store.updateSession(sessionId, {
