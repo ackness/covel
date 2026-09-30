@@ -103,10 +103,9 @@ async function ensureDesktopRestToken(): Promise<void> {
 }
 
 /**
- * Detect whether the server thinks we're running as a desktop deployment
- * (i.e. it has access to `~/.covel/`). Call once at boot; cheap to re-call
- * (it skips the network probe after the first valid response). Unknown means
- * settings storage must not be selected yet; callers can retry later.
+ * Discover desktop administration capabilities. This does not select the
+ * settings backend: only an Electron IPC bridge uses personal files.
+ * Unknown means discovery failed and may be retried later.
  */
 export async function probeDesktopMode(): Promise<DesktopMode> {
   // Always try to seed the desktop REST token first — the IPC bridge has it
@@ -127,7 +126,7 @@ export async function probeDesktopMode(): Promise<DesktopMode> {
       }
     }
   } catch {
-    // A failed probe cannot establish where settings belong.
+    // Management discovery may be retried independently of local settings.
   }
   return "unknown";
 }

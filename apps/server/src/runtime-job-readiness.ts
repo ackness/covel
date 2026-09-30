@@ -1,14 +1,25 @@
 import type { createGateway, ResolvedSlotConfig } from "@covel/ai-provider";
+import {
+  resolveGatewayModelSelection,
+  type PluginLlmModelTarget,
+} from "@covel/runtime";
 
 /** Check the same origin-gated server configuration used by the execution adapter. */
 export function hasServerRuntimeJobCredentials(
   gateway: Pick<ReturnType<typeof createGateway>, "resolveSlot">,
   model: string | undefined,
   envApiKeys: Readonly<Record<string, string>>,
+  modelTargets?: ReadonlyMap<string, PluginLlmModelTarget>,
 ): boolean {
   let slot: ResolvedSlotConfig | null;
   try {
-    slot = gateway.resolveSlot(model, { envApiKeys });
+    const selection = resolveGatewayModelSelection(model, { modelTargets });
+    slot = gateway.resolveSlot(selection.presetId, {
+      envApiKeys,
+      ...(selection.slotOverrides
+        ? { slotOverrides: selection.slotOverrides }
+        : {}),
+    });
   } catch {
     // An incomplete or removed binding is not evidence of usable credentials.
     return false;

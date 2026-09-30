@@ -127,6 +127,14 @@ Web 客户端将 owner token 按 sessionId 保存在独立的 `covel-browser-cre
 
 ---
 
+## Personal configuration API
+
+`GET /api/llm-config` returns active slots with `serverKeyConfigured` (boolean), plus `source: { kind: "file" | "builtin", path }` and an optional load `error`. `POST /api/llm-config/reload` applies valid TOML in place; invalid reloads return `ok: false` and retain the active configuration. UI settings remain request-scoped overlays and are not written into TOML.
+
+`GET /api/provider-keys` returns only `{ providers: { [provider]: { configured: true } } }` from the live runtime credential map. No raw or masked key material crosses this endpoint, including authenticated desktop requests. Browsers never import these server defaults into personal secrets.
+
+`COVEL_HOME` selects a directory only. Desktop filesystem-management APIs require explicit `COVEL_DESKTOP_REST=1`; Electron supplies its sidecar token. Ordinary browsers use their own localStorage settings even when that management capability is present.
+
 ## 快速开始
 
 下面演示一个完整的纯 API 游戏流程：从启动服务器到完成多轮对话。

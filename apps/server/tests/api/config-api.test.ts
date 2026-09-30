@@ -75,8 +75,25 @@ describe("config API env and file contracts", () => {
     });
   });
 
+  it("treats COVEL_HOME as a path without granting desktop administration", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    const app = buildApp(apiKeys);
+    expect(await (await app.request("/api/config/info")).json()).toMatchObject({
+      isDesktop: false,
+    });
+    const response = await app.request("/api/config/keys", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ openai: "synthetic-key" }),
+    });
+    expect(response.status).toBe(400);
+    expect(apiKeys).toEqual({});
+    expect(fs.existsSync(path.join(tmpHome, "keys.env"))).toBe(false);
+  });
+
   it("opens the effective LLM config override instead of the home default", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const override = path.join(tmpHome, "custom-llm.toml");
     process.env.COVEL_LLM_TOML = path.relative(process.cwd(), override);
     fs.writeFileSync(override, "# Test config\n", "utf8");
@@ -101,6 +118,7 @@ describe("config API env and file contracts", () => {
 
   it("reports desktop paths from runtime env", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     process.env.COVEL_DATA_ROOT = path.join(tmpHome, "data-root");
     process.env.SQLITE_PATH = path.join(tmpHome, "data", "covel.db");
     process.env.COVEL_LOGS_DIR = path.join(tmpHome, "logs");
@@ -144,6 +162,7 @@ describe("config API env and file contracts", () => {
 
   it("writes keys.env, normalizes provider ids and updates the live apiKeys map", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const app = buildApp(apiKeys);
 
     const putRes = await app.request("/api/config/keys", {
@@ -175,6 +194,7 @@ describe("config API env and file contracts", () => {
 
   it("removes keys from file and live apiKeys map when value is empty", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     fs.writeFileSync(
       path.join(tmpHome, "keys.env"),
       "DEEPSEEK_API_KEY=old\nOPEN_ROUTER_API_KEY=old-open\n",
@@ -198,6 +218,7 @@ describe("config API env and file contracts", () => {
 
   it("applies explicit desktop key patches, preserving omissions and clearing the last key", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const file = path.join(tmpHome, "keys.env");
     fs.writeFileSync(
       file,
@@ -239,6 +260,7 @@ describe("config API env and file contracts", () => {
 
   it("refuses to replace an unreadable keys.env", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const keysPath = path.join(tmpHome, "keys.env");
     fs.mkdirSync(keysPath);
     const app = buildApp(apiKeys);
@@ -261,6 +283,7 @@ describe("config API env and file contracts", () => {
 
   it("round-trips settings.json and refuses to overwrite malformed settings", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const app = buildApp(apiKeys);
 
     const putRes = await app.request("/api/config/settings", {
@@ -322,6 +345,7 @@ describe("config API env and file contracts", () => {
     "refuses to read or replace settings version %s",
     async (schemaVersion) => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       const settingsFile = path.join(tmpHome, "settings.json");
       const contents = JSON.stringify({
         schemaVersion,
@@ -349,6 +373,7 @@ describe("config API env and file contracts", () => {
 
   it("rewrites data_root only for absolute paths", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const app = buildApp(apiKeys);
 
     const relativeRes = await app.request("/api/config/data-root", {
@@ -381,6 +406,7 @@ describe("config API env and file contracts", () => {
 
   it("preserves config.toml text and refuses data_root patches on corrupt TOML", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const configPath = path.join(tmpHome, "config.toml");
     fs.writeFileSync(
       configPath,
@@ -426,6 +452,7 @@ describe("config API env and file contracts", () => {
 
   it("persists and hot-applies the compact desktop proxy setting", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     process.env.COVEL_SYSTEM_PROXY_URL = "http://127.0.0.1:7890";
     const app = buildApp(apiKeys);
 
@@ -460,6 +487,7 @@ describe("config API env and file contracts", () => {
 
   it("rejects a mismatched proxy type without changing config.toml", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const app = buildApp(apiKeys);
 
     const res = await app.request("/api/config/proxy", {
@@ -477,6 +505,7 @@ describe("config API env and file contracts", () => {
 
   it("refuses to hot-apply or overwrite proxy settings from corrupt TOML", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const configPath = path.join(tmpHome, "config.toml");
     const corrupt = "[network\nproxy_mode = 'direct'\n";
     fs.writeFileSync(configPath, corrupt, "utf-8");
@@ -494,6 +523,7 @@ describe("config API env and file contracts", () => {
 
   it("validates the proxy dispatcher before changing config.toml", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const configPath = path.join(tmpHome, "config.toml");
     const original = '[paths]\ndata_root = "/existing/data"\n';
     fs.writeFileSync(configPath, original, "utf-8");
@@ -514,6 +544,7 @@ describe("config API env and file contracts", () => {
 
   it("falls back to direct when a stored proxy cannot initialize", async () => {
     process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
     const configPath = path.join(tmpHome, "config.toml");
     fs.writeFileSync(
       configPath,
@@ -549,6 +580,7 @@ describe("config API env and file contracts", () => {
 
     it("advertises requiresAuth on /api/config/info when token is set", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       const app = buildApp(apiKeys);
 
@@ -560,6 +592,7 @@ describe("config API env and file contracts", () => {
 
     it("reports requiresAuth: false when token is absent", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       const app = buildApp(apiKeys);
 
       const body = (await (await app.request("/api/config/info")).json()) as {
@@ -570,6 +603,7 @@ describe("config API env and file contracts", () => {
 
     it("rejects PUT /api/config/keys without Authorization header", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       const app = buildApp(apiKeys);
 
@@ -586,6 +620,7 @@ describe("config API env and file contracts", () => {
 
     it("keeps the non-secret provider list readable without Authorization", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       fs.writeFileSync(
         path.join(tmpHome, "keys.env"),
@@ -602,6 +637,7 @@ describe("config API env and file contracts", () => {
 
     it("rejects PUT /api/config/keys with a wrong token", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       const app = buildApp(apiKeys);
 
@@ -620,6 +656,7 @@ describe("config API env and file contracts", () => {
 
     it("accepts PUT /api/config/keys with the correct bearer token", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       const app = buildApp(apiKeys);
 
@@ -638,6 +675,7 @@ describe("config API env and file contracts", () => {
 
     it("gates settings, proxy, data-root, and open-folder writes with the same token", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       const app = buildApp(apiKeys);
 
@@ -675,6 +713,7 @@ describe("config API env and file contracts", () => {
 
     it("gates sensitive config reads with the same token", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       fs.writeFileSync(
         path.join(tmpHome, "settings.json"),
@@ -700,6 +739,7 @@ describe("config API env and file contracts", () => {
 
     it("keeps public config reads available when the token is required", async () => {
       process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
       const app = buildApp(apiKeys);
 

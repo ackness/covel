@@ -587,6 +587,8 @@
     "deleteConfirmAction": "Delete"
   },
   "settings": {
+    "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",
+    "serverKeyAvailable": "An instance API key is available for server defaults. The personal key entered here stays on this device.",
     "modelBindingMissing": "The selected model is unavailable. Choose another model or reset this role.",
     "resetModelBinding": "Reset model binding",
     "storageMode": "Data Storage",
@@ -859,7 +861,9 @@
       "reloadOk": "Configuration reloaded",
       "reloadOkDetail": "{{count}} slot(s) active: {{slots}}",
       "reloadFailed": "llm.toml could not be parsed",
-      "parseError": "llm.toml could not be parsed — using the built-in default. Fix it and reload: {{error}}"
+      "activeFile": "Active configuration: {{path}}",
+      "activeBuiltin": "Active configuration: built-in default",
+      "parseError": "llm.toml could not be loaded. The currently active configuration has been kept. Fix it and reload: {{error}}"
     },
     "runtimeSlotsDiscovered": "Plugin-declared model roles",
     "temperature": "Temperature",

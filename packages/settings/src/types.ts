@@ -102,6 +102,8 @@ export interface SettingsStoreApi {
   ready(): Promise<void>;
   /** Refresh non-secret settings without overwriting pending local mutations. */
   refresh(): Promise<void>;
+  /** Reload the independent secret channel without writing or broadcasting keys. */
+  refreshSecrets(): Promise<void>;
   /**
    * Whether persisted state was read successfully at `init()`. When false the
    * store serves defaults and refuses writes — saving a full snapshot from a

@@ -1,3 +1,5 @@
+import { getRequestLlmOptions } from "../../request-llm-context.js";
+import type { PluginLlmModelTarget } from "@covel/runtime";
 import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
 import type { EmbedFn, MemorySystem } from "@covel/memory";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
@@ -150,6 +152,7 @@ export interface ApiBootstrapConfig {
   readonly covelHome?: string;
   /** LLM adapter (real or mock). */
   readonly llmAdapter: LLMAdapter;
+  readonly pluginModelTargets?: Map<string, PluginLlmModelTarget>;
   /** Explicit server credential readiness; absent means request services are required. */
   readonly canRunRuntimeJobWithServerServices?: (input: {
     readonly job: RuntimeJobRecord;
@@ -388,7 +391,12 @@ async function assembleApi(
     }
   }
 
-  const resolveModel = createModelResolver({ pluginLlmConfigs });
+  const resolveModel = createModelResolver({
+    pluginLlmConfigs,
+    modelTargets: config.pluginModelTargets ?? new Map(),
+    isRoleSelected: (role) =>
+      getRequestLlmOptions()?.slotOverrides?.slotBindings?.[role] !== undefined,
+  });
 
   // Runtime loader + community dual-authorization gate, extracted to
   // bootstrap/runtime-loader.ts. It forward-references two things built

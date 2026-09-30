@@ -225,7 +225,7 @@ describe("[P2] provider keys raw exposure", () => {
     }
   });
 
-  it("returns masked availability without desktop bearer token", async () => {
+  it("returns availability without key material or masked fragments", async () => {
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
     process.env.QWEN_API_KEY = "sk-qwen-secret";
@@ -246,17 +246,15 @@ describe("[P2] provider keys raw exposure", () => {
     };
 
     expect(res.status).toBe(200);
-    expect(body.keys).toEqual({});
+    expect(body).not.toHaveProperty("keys");
     expect(body.providers.openai).toMatchObject({ configured: true });
-    expect(body.providers.openai.masked).toContain("...");
+    expect(body.providers.openai).not.toHaveProperty("masked");
     expect(body.providers.qwen).toMatchObject({ configured: true });
-    expect(body.providers.qwen.masked).toContain("...");
+    expect(body.providers.qwen).not.toHaveProperty("masked");
   });
 
-  it("denies the masked listing to an anonymous caller on a hosted tier", async () => {
-    // Which providers are configured — and 8 chars of each key — is operator
-    // -only recon material on demo/commercial, where the caller is not the
-    // machine owner. Self/desktop keeps the unauthenticated masked listing.
+  it("denies provider availability to anonymous hosted callers", async () => {
+    // Hosted provider availability remains operator-only.
     process.env.DEPLOYMENT_TIER = "commercial";
     process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
@@ -275,7 +273,7 @@ describe("[P2] provider keys raw exposure", () => {
     expect(await res.text()).not.toContain("sk-op");
   });
 
-  it("returns masked keys to a bearer token without desktop mode", async () => {
+  it("does not expose keys to an operator without desktop mode", async () => {
     // A self-host that set the token only for install/admin APIs is not a
     // desktop shell — raw key material must not cross the HTTP boundary.
     // COVEL_HOME is a plain path setting (docker-compose sets it), not proof
@@ -302,12 +300,12 @@ describe("[P2] provider keys raw exposure", () => {
     };
 
     expect(res.status).toBe(200);
-    expect(body.keys).toEqual({});
+    expect(body).not.toHaveProperty("keys");
     expect(body.providers.openai).toMatchObject({ configured: true });
     expect(JSON.stringify(body)).not.toContain("sk-openai-secret");
   });
 
-  it("returns raw keys with the desktop bearer token", async () => {
+  it("does not expose keys even with the desktop bearer token", async () => {
     process.env.COVEL_DESKTOP_REST = "1";
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
@@ -331,9 +329,28 @@ describe("[P2] provider keys raw exposure", () => {
     };
 
     expect(res.status).toBe(200);
-    expect(body.keys.openai).toBe("sk-openai-secret");
-    expect(body.keys.qwen).toBe("sk-qwen-secret");
+    expect(body).not.toHaveProperty("keys");
+    expect(JSON.stringify(body)).not.toContain("sk-openai-secret");
+    expect(JSON.stringify(body)).not.toContain("sk-qwen-secret");
     expect(body.providers.qwen).toMatchObject({ configured: true });
+  });
+  it("reads the live credential map after a key is deleted", async () => {
+    process.env.DEPLOYMENT_TIER = "self";
+    process.env.OPENAI_API_KEY = "synthetic-startup-key";
+    const apiKeys: Record<string, string> = { openai: "synthetic-live-key" };
+    const app = createMiscApiRoutes(
+      makeAiStackStub(),
+      createPluginRegistry(),
+      createMemoryStore(),
+      apiKeys,
+    );
+    expect(await (await app.request("/api/provider-keys")).json()).toEqual({
+      providers: { openai: { configured: true } },
+    });
+    delete apiKeys.openai;
+    expect(await (await app.request("/api/provider-keys")).json()).toEqual({
+      providers: {},
+    });
   });
 });
 

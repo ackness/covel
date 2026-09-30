@@ -116,16 +116,18 @@ describe("dev-home-bootstrap", () => {
     expect(summary.setVars).not.toContain("SQLITE_PATH");
   });
 
-  it("skips user-provided resources that do not exist (plugins/worlds/llm.toml)", async () => {
+  it("skips missing user resource directories while retaining the project model path", async () => {
     const summary = await freshBootstrap();
 
     expect(process.env.COVEL_USER_PLUGINS_DIR).toBeUndefined();
     expect(process.env.COVEL_USER_WORLDS_DIR).toBeUndefined();
-    expect(process.env.COVEL_LLM_TOML).toBeUndefined();
+    expect(process.env.COVEL_LLM_TOML).toBe(
+      path.resolve(import.meta.dirname, "../../../../llm.toml"),
+    );
     expect(summary.setVars).not.toContain("COVEL_USER_PLUGINS_DIR");
   });
 
-  it("picks up user-provided resources when they exist on disk", async () => {
+  it("discovers user resources without switching to another model file", async () => {
     fs.mkdirSync(path.join(tmpHome, "plugins"), { recursive: true });
     fs.mkdirSync(path.join(tmpHome, "worlds"), { recursive: true });
     fs.writeFileSync(path.join(tmpHome, "llm.toml"), "# empty\n");
@@ -138,7 +140,9 @@ describe("dev-home-bootstrap", () => {
     expect(process.env.COVEL_USER_WORLDS_DIR).toBe(
       path.join(tmpHome, "worlds"),
     );
-    expect(process.env.COVEL_LLM_TOML).toBe(path.join(tmpHome, "llm.toml"));
+    expect(process.env.COVEL_LLM_TOML).toBe(
+      path.resolve(import.meta.dirname, "../../../../llm.toml"),
+    );
   });
 
   it("is a no-op when the desktop sidecar marker is set", async () => {
@@ -170,14 +174,17 @@ describe("dev-home-bootstrap", () => {
     expect(process.env.SQLITE_PATH).toBeUndefined();
   });
 
-  it("is a no-op when ~/.covel does not exist", async () => {
+  it("retains the project model path when the user home does not exist", async () => {
     const missingHome = path.join(tmpHome, "does-not-exist");
     process.env.COVEL_HOME = missingHome;
 
     const summary = await freshBootstrap();
 
-    expect(summary.applied).toBe(false);
+    expect(summary.applied).toBe(true);
     expect(summary.skipReason).toBe("no-covel-home");
+    expect(process.env.COVEL_LLM_TOML).toBe(
+      path.resolve(import.meta.dirname, "../../../../llm.toml"),
+    );
     expect(process.env.SQLITE_PATH).toBeUndefined();
   });
 });

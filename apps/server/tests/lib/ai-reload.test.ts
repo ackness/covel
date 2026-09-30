@@ -78,7 +78,7 @@ describe("reloadAiStack", () => {
     expect(ai.presetRegistry).toBe(presetRegistryBefore);
   });
 
-  it("surfaces a parse error and falls back to the built-in default", async () => {
+  it("surfaces a parse error while preserving the last valid gateway configuration", async () => {
     await writeFile(tomlPath, SLOT_ALPHA);
     const ai = createAiStack();
 
@@ -89,10 +89,10 @@ describe("reloadAiStack", () => {
     expect(result.error).toBeTruthy();
     expect(ai.lastLoadError).toBe(result.error);
 
-    // Fell back to the built-in default story slot; the broken slot is gone.
-    expect(result.slots).toEqual(["story"]);
-    expect(ai.slotRegistry.resolveSlot("alpha")).toBeUndefined();
-    expect(ai.slotRegistry.resolveSlot("story")).toBeTruthy();
+    expect(result.slots).toEqual(["alpha"]);
+    expect(ai.gateway.resolveSlot("alpha")?.model).toBe("deepseek-chat");
+    expect(ai.slotRegistry.resolveSlot("story")).toBeUndefined();
+    expect(ai.configSource).toEqual({ kind: "file", path: tomlPath });
   });
 
   it("clears lastLoadError once a subsequent reload parses cleanly", async () => {

@@ -2,11 +2,11 @@
 
 > [English version](./settings-store.en.md)
 
-`@covel/settings` 提供 schema 注册、内存值、订阅与持久化。Web 使用 localStorage；桌面通过配置 API 使用 `settings.json`。API key 使用独立的 secrets 通道。
+`@covel/settings` 提供 schema 注册、内存值、订阅与持久化。浏览器使用 localStorage；Electron 通过 IPC 使用个人 `settings.json`。API key 使用独立的 secrets 通道。
 
 普通设置的持久化合同只接受 `schemaVersion: 2`，必须包含 `revision`、`savedAt` 和 `entries`。localStorage、REST 和桌面 IPC 共用该校验；无版本或 v1 开发数据不迁移，读取和覆盖写入均会拒绝，原内容保留。受影响的开发设置需要重新建立。设置导入/导出的 `SettingsExportBundle.schemaVersion: 1` 是独立的当前合同，不受此限制影响。
 
-应用启动先确定设置后端：Electron 使用 IPC；无 IPC 时探测 `/api/config/info`，仅明确的 `isDesktop: false` 才选择 localStorage。超时、网络错误和无效响应表示模式未知，页面提供重试入口，此时不创建设置实例或写入浏览器存储。确认模式后才初始化对应后端，重试不会自动迁移设置。
+设置后端由当前设备确定：存在 Electron IPC 时使用个人文件，否则始终使用浏览器 localStorage。服务端 `/api/config/info` 只用于发现管理能力，`COVEL_HOME` 和 `isDesktop` 都不会把浏览器设置切换成服务端共享文件。管理探测失败不阻止本地设置初始化。
 
 ## Schema 归一化
 
@@ -36,7 +36,7 @@
 
 `SettingsStoreApi.refresh(): Promise<void>` 按队列顺序读取非密钥设置，并通知实际变化的键。刷新与待保存修改并发时，后续修改仍会按其原始基值检查冲突。未声明 revision 能力的自定义后端使用串行快照写入，`refresh()` 不读取此类后端；这是后端能力差异，不支持旧持久化格式。
 
-Web 在 `covel:settings` 的 storage 事件、窗口 focus 和恢复可见时刷新。配置中的地址、价格倍率、输出额度草稿遇到远端更新时保留输入，阻止自动覆盖，并提供“加载已保存值”操作。API key 不参与上述普通设置刷新或广播；写入通过独立的 provider patch 合并。
+Web 在 `covel:settings` 的 storage 事件、窗口 focus 和恢复可见时刷新。配置中的地址、价格倍率、输出额度草稿遇到远端更新时保留输入，阻止自动覆盖，并提供“加载已保存值”操作。API key 使用独立的 `refreshSecrets()` 通道，在 `covel:keys` storage 事件、focus 和恢复可见时重新读取；待保存的 provider patch 保留，不进入普通 settings/revision 广播。
 
 ## 密钥通道边界
 
@@ -77,7 +77,7 @@ localStorage 后端必须在 Web Lock 内读取最新密钥、应用 patch 并�
 
 调试页首次选择会话、手动刷新和自动刷新都会读取会话数据，并同步侧栏中的 phase、已完成回合数和 setup runtimes。数据页展示最近成功读取时间；失败保留上一次成功结果并标注可能过期。跨会话返回的旧响应不会覆盖当前数据。自动刷新只合并最新 trace 页，保留已加载的较早页和分页游标。
 
-`createJsonFileBackend({ ipc, fetchImpl, getAuthHeaders })` 的 IPC transport 由宿主显式提供，不再探测 `globalThis.covelIpc`。Web 应用在环境探测结束后调用 `getCovelIpc()` 并传入 adapter；未提供 IPC 时使用 REST。版本冲突、密钥隔离和加载失败语义保持不变。
+`createJsonFileBackend({ ipc, fetchImpl, getAuthHeaders })` 的 IPC transport 由宿主显式提供，不再探测 `globalThis.covelIpc`。Web 应用仅在存在 `getCovelIpc()` 时选择该 adapter；浏览器使用 localStorage。显式集成可选择 adapter 的 REST transport。版本冲突、密钥隔离和加载失败语义保持不变。
 
 ## 当前服务商配置
 

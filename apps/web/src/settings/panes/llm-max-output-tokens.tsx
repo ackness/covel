@@ -17,7 +17,7 @@ export function MaxOutputTokensCard({
   defaultValue?: number;
   modelLimit?: number;
   contextWindow?: number;
-  onChange: (value: number | undefined) => void;
+  onChange: (value: number | undefined) => Promise<boolean> | void;
 }) {
   const { t } = useTranslation();
   const errorId = useId();
@@ -28,8 +28,14 @@ export function MaxOutputTokensCard({
   const valid =
     parsed === undefined ||
     (Number.isSafeInteger(parsed) && parsed > 0 && parsed <= 1_000_000);
-  const commit = () => {
-    if (!conflict && valid && parsed !== override) onChange(parsed);
+  const commit = async () => {
+    if (
+      !conflict &&
+      valid &&
+      parsed !== override &&
+      (await onChange(parsed)) === false
+    )
+      reset();
   };
   let effectiveOutput: number | undefined;
   let inputBudget: number | undefined;

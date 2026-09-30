@@ -49,6 +49,10 @@ export class SettingsStore implements SettingsStoreApi {
   };
   /** Monotonic mutation revisions keep an older failure from undoing newer state. */
   private readonly persistRevisions = { values: 0, secrets: 0 };
+  private readonly pendingSecretPatches = new Map<
+    number,
+    { patch: Record<string, string | null>; explicitKeys: ReadonlySet<string> }
+  >();
   private loaded: Promise<void>;
   private loadResolve!: () => void;
   /** One hydration generation per store instance; concurrent callers share it. */
@@ -157,7 +161,11 @@ export class SettingsStore implements SettingsStoreApi {
     keys: readonly SettingKey[] = [],
   ): Promise<void> {
     this.assertHydrated();
-    if (target === "values" && this.versionedPersistence) {
+    if (target === "secrets") {
+      await this.persistSecrets(mutate, keys);
+      return;
+    }
+    if (this.versionedPersistence) {
       mutate();
       await this.versionedPersistence.persist(keys, this.serializeEntries());
       return;
@@ -166,87 +174,37 @@ export class SettingsStore implements SettingsStoreApi {
     // capture this mutation's full snapshot and enqueue only the backend I/O.
     mutate();
     const revision = ++this.persistRevisions[target];
-    const snapshot =
-      target === "values"
-        ? this.serializeEntries()
-        : (Object.fromEntries(this.secrets) as Record<string, string>);
+    const snapshot = this.serializeEntries();
     try {
-      await this.enqueueSnapshot(target, snapshot, keys);
-      this.replacePersistedSnapshot(target, snapshot);
+      await this.enqueueSnapshot(snapshot);
+      this.replacePersistedSnapshot(snapshot);
     } catch (err) {
       if (this.persistRevisions[target] === revision) {
-        const snapshot = this.persistedSnapshots[target] as Map<
-          string,
-          unknown
-        >;
-        this.restore(
-          target === "values" ? this.values : this.secrets,
-          target === "values"
-            ? new Map(
-                Object.entries(
-                  this.normalizeEntries(
-                    Object.fromEntries(snapshot),
-                    "restoration",
-                  ),
-                ),
-              )
-            : snapshot,
+        this.replaceVisibleValues(
+          this.normalizeEntries(
+            Object.fromEntries(this.persistedSnapshots.values),
+            "restoration",
+          ),
         );
+        for (const key of keys) this.notify(key, this.get(key));
       }
       throw err;
     }
   }
 
-  private replacePersistedSnapshot(
-    target: "values" | "secrets",
-    snapshot: Record<string, unknown> | Record<string, string>,
-  ): void {
-    const persisted = this.persistedSnapshots[target] as Map<string, unknown>;
-    persisted.clear();
-    for (const [key, value] of Object.entries(snapshot)) {
-      persisted.set(key, structuredClone(value));
-    }
+  private replacePersistedSnapshot(snapshot: Record<string, unknown>): void {
+    this.restore(
+      this.persistedSnapshots.values,
+      new Map(Object.entries(snapshot)),
+    );
   }
 
-  private enqueueSnapshot(
-    target: "values" | "secrets",
-    snapshot: Record<string, unknown> | Record<string, string>,
-    keys: readonly string[],
-  ): Promise<void> {
-    const operation = this.persistTails[target].then(async () => {
-      if (this.hydrationState === "failed") {
-        throw (
-          this.hydrationError ?? new Error("settings persistence is read-only")
-        );
-      }
-      if (target === "secrets") {
-        const desired = snapshot as Record<string, string>;
-        const confirmed = this.persistedSnapshots.secrets;
-        // Keep explicit intent even for repeated set/clear calls. Include any
-        // unconfirmed earlier local changes carried by this queued snapshot,
-        // but never rewrite unrelated providers from a stale instance cache.
-        const changed = new Set(keys);
-        for (const provider of new Set([
-          ...confirmed.keys(),
-          ...Object.keys(desired),
-        ])) {
-          if (confirmed.get(provider) !== desired[provider])
-            changed.add(provider);
-        }
-        const patch = Object.fromEntries(
-          [...changed].map((provider) => [
-            provider,
-            Object.hasOwn(desired, provider) ? desired[provider] : null,
-          ]),
-        );
-        await this.adapter.saveSecrets(patch);
-        return;
-      }
-      await this.adapter.save(snapshot as Record<SettingKey, unknown>);
+  private enqueueSnapshot(snapshot: Record<string, unknown>): Promise<void> {
+    const operation = this.persistTails.values.then(async () => {
+      this.assertHydrated();
+      await this.adapter.save(snapshot);
     });
-    // Keep the queue usable after a rejected write while returning the
-    // original rejection to the caller that owns that mutation.
-    this.persistTails[target] = operation.catch(() => undefined);
+    this.persistTails.values = operation.catch(() => undefined);
     return operation;
   }
 
@@ -257,6 +215,107 @@ export class SettingsStore implements SettingsStoreApi {
   async refresh(): Promise<void> {
     this.assertHydrated();
     await this.versionedPersistence?.refresh();
+  }
+
+  private async persistSecrets(
+    mutate: () => void,
+    keys: readonly string[],
+  ): Promise<void> {
+    mutate();
+    const revision = ++this.persistRevisions.secrets;
+    const changed = new Set(keys);
+    for (const provider of new Set([
+      ...this.persistedSnapshots.secrets.keys(),
+      ...this.secrets.keys(),
+    ])) {
+      if (
+        this.persistedSnapshots.secrets.get(provider) !==
+        this.secrets.get(provider)
+      )
+        changed.add(provider);
+    }
+    // Capture intent now. A concurrent reload must not turn an unrelated,
+    // newly discovered provider into a deletion from an older snapshot.
+    const patch = Object.fromEntries(
+      [...changed].map((provider) => [
+        provider,
+        this.secrets.get(provider) ?? null,
+      ]),
+    );
+    this.pendingSecretPatches.set(revision, {
+      patch,
+      explicitKeys: new Set(keys),
+    });
+    const operation = this.persistTails.secrets.then(async () => {
+      this.assertHydrated();
+      await this.adapter.saveSecrets(patch);
+      this.applySecretPatch(this.persistedSnapshots.secrets, patch);
+      // Later saves carry earlier unconfirmed edits in case those writes fail.
+      // Once confirmed, stop replaying inherited edits into unrelated saves.
+      for (const [laterRevision, pending] of this.pendingSecretPatches) {
+        if (laterRevision <= revision) continue;
+        for (const [provider, value] of Object.entries(patch)) {
+          if (
+            !pending.explicitKeys.has(provider) &&
+            pending.patch[provider] === value
+          )
+            delete pending.patch[provider];
+        }
+      }
+    });
+    this.persistTails.secrets = operation.catch(() => undefined);
+    try {
+      await operation;
+    } finally {
+      this.pendingSecretPatches.delete(revision);
+      this.replaceVisibleSecrets();
+    }
+  }
+
+  async refreshSecrets(): Promise<void> {
+    this.assertHydrated();
+    const operation = this.persistTails.secrets.then(async () => {
+      this.assertHydrated();
+      const loaded = await this.adapter.loadSecrets();
+      const next = new Map(
+        Object.entries(loaded).filter(
+          ([, value]) => typeof value === "string" && value.length > 0,
+        ),
+      );
+      this.restore(this.persistedSnapshots.secrets, next);
+      this.replaceVisibleSecrets();
+    });
+    this.persistTails.secrets = operation.catch(() => undefined);
+    await operation;
+  }
+
+  private applySecretPatch(
+    target: Map<string, string>,
+    patch: Record<string, string | null>,
+  ): void {
+    for (const [provider, value] of Object.entries(patch)) {
+      if (value === null) target.delete(provider);
+      else target.set(provider, value);
+    }
+  }
+
+  private replaceVisibleSecrets(): void {
+    const previous = new Map(this.secrets);
+    this.restore(this.secrets, this.persistedSnapshots.secrets);
+    for (const { patch } of this.pendingSecretPatches.values())
+      this.applySecretPatch(this.secrets, patch);
+    for (const provider of new Set([
+      ...previous.keys(),
+      ...this.secrets.keys(),
+    ])) {
+      if (previous.get(provider) === this.secrets.get(provider)) continue;
+      const keys = [...this.registry.keys()].filter(
+        (key) =>
+          this.isSecretKey(key) && this.stripKeysPrefix(key) === provider,
+      );
+      for (const key of keys.length ? keys : [`keys.${provider}`])
+        this.notify(key, this.get(key));
+    }
   }
 
   private replaceVisibleValues(next: Record<SettingKey, unknown>): void {

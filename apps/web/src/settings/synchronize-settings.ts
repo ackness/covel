@@ -1,49 +1,57 @@
 import {
   LOCAL_STORAGE_SETTINGS_KEY,
+  LOCAL_STORAGE_KEYS_KEY,
   type SettingsStoreApi,
 } from "@covel/settings";
 
-/** Refresh preferences only; API keys use their independent secret channel. */
+/** Invalidate independent caches without copying secret values into revisions. */
 export function synchronizeSettings(
   store: SettingsStoreApi,
   target = window,
 ): () => void {
-  let refreshing = false;
-  let rerun = false;
+  const refreshing = { values: false, secrets: false };
+  const rerun = { values: false, secrets: false };
   let stopped = false;
-  const refresh = async () => {
+  const refresh = async (channel: "values" | "secrets") => {
     if (stopped || !store.isHydrated()) return;
-    if (refreshing) {
-      rerun = true;
+    if (refreshing[channel]) {
+      rerun[channel] = true;
       return;
     }
-    refreshing = true;
+    refreshing[channel] = true;
     try {
-      await store.refresh();
+      await (channel === "values" ? store.refresh() : store.refreshSecrets());
     } catch {
       // A failed read never replaces the last confirmed snapshot. The next
       // focus/storage event retries; writes still retain their CAS protection.
     } finally {
-      refreshing = false;
-      if (rerun) {
-        rerun = false;
-        void refresh();
+      refreshing[channel] = false;
+      if (rerun[channel]) {
+        rerun[channel] = false;
+        void refresh(channel);
       }
     }
   };
   const onStorage = (event: StorageEvent) => {
-    if (event.key === LOCAL_STORAGE_SETTINGS_KEY) void refresh();
+    if (event.key === LOCAL_STORAGE_SETTINGS_KEY || event.key === null)
+      void refresh("values");
+    if (event.key === LOCAL_STORAGE_KEYS_KEY || event.key === null)
+      void refresh("secrets");
+  };
+  const onFocus = () => {
+    void refresh("values");
+    void refresh("secrets");
   };
   const onVisibility = () => {
-    if (target.document.visibilityState === "visible") void refresh();
+    if (target.document.visibilityState === "visible") onFocus();
   };
   target.addEventListener("storage", onStorage);
-  target.addEventListener("focus", refresh);
+  target.addEventListener("focus", onFocus);
   target.document.addEventListener("visibilitychange", onVisibility);
   return () => {
     stopped = true;
     target.removeEventListener("storage", onStorage);
-    target.removeEventListener("focus", refresh);
+    target.removeEventListener("focus", onFocus);
     target.document.removeEventListener("visibilitychange", onVisibility);
   };
 }

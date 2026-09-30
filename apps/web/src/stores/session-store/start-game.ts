@@ -47,10 +47,9 @@ async function persistPrepRuntimeBindings(
   ds: DataService,
   worldId: string,
   sessionId: string,
-  isCurrent: () => boolean,
-): Promise<void> {
+): Promise<Record<string, string> | null> {
   const prepBindings = api.getPrepRuntimeBindings(worldId);
-  if (Object.keys(prepBindings).length === 0) return;
+  if (Object.keys(prepBindings).length === 0) return null;
 
   const overrides: Record<string, string> = {};
   for (const [runtimeId, slot] of Object.entries(prepBindings)) {
@@ -59,14 +58,10 @@ async function persistPrepRuntimeBindings(
     }
   }
 
-  try {
-    await ds.updateSession(sessionId, {
-      runtimeModelOverrides: overrides,
-    });
-    if (isCurrent()) api.clearPrepRuntimeBindings(worldId);
-  } catch {
-    // Non-fatal: keep the Prep bindings so a later retry can persist them.
-  }
+  await ds.updateSession(sessionId, {
+    runtimeModelOverrides: overrides,
+  });
+  return prepBindings;
 }
 
 export async function startGameSession({
@@ -102,13 +97,24 @@ export async function startGameSession({
 
     // Local mode creates the browser record first. Establish the authoritative
     // server mirror before publishing an executable session or issuing any
-    // server-backed hydration / model-binding calls. Remote mode is already
+    // server-backed hydration calls. Remote mode is already
     // authoritative and implements syncToServer as a no-op.
     await workspace.hydrate(session.id);
     if (!isCurrent()) return;
     api.markServerAck();
-    await persistPrepRuntimeBindings(ds, world.id, session.id, isCurrent);
+    const prepBindings = await persistPrepRuntimeBindings(
+      ds,
+      world.id,
+      session.id,
+    );
     if (!isCurrent()) return;
+    if (prepBindings) {
+      // The first hydrate resolves the fresh session's setup clock. A local
+      // binding edit then changes only its browser checkpoint; upload it before
+      // publishing or reading the server view. Remote hydrate is a no-op.
+      await workspace.hydrate(session.id);
+      if (!isCurrent()) return;
+    }
     const hydratedSession = (await ds.getSession(session.id)) ?? session;
     if (!isCurrent()) return;
 
@@ -124,6 +130,19 @@ export async function startGameSession({
       await hydratePluginDataForUiSpecs(session.id, dispatch, isCurrent);
     } catch {
       // Right-panel hydration will retry when its own ui-spec loader runs.
+    }
+    if (isCurrent() && prepBindings) {
+      const currentBindings = api.getPrepRuntimeBindings(world.id);
+      // A newer prep edit owns its saved selection while bootstrap is pending.
+      if (
+        Object.keys(currentBindings).length ===
+          Object.keys(prepBindings).length &&
+        Object.entries(prepBindings).every(
+          ([runtimeId, slot]) => currentBindings[runtimeId] === slot,
+        )
+      ) {
+        api.clearPrepRuntimeBindings(world.id);
+      }
     }
   } catch (err) {
     const current = isCurrent();

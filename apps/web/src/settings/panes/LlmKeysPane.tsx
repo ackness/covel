@@ -21,6 +21,7 @@ import {
   SettingsDraftConflict,
   useSettingDraft,
 } from "../use-setting-draft.js";
+import { useSettingsSave } from "../use-settings-save.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 
 /**
@@ -65,6 +66,9 @@ export function LlmKeysPane({
   const [priceMultipliers, setPriceMultipliersLocal] = useState<
     Record<string, number>
   >(() => getProviderPriceMultipliers());
+  const { save, saving, writable } = useSettingsSave(() =>
+    setPriceMultipliersLocal(getProviderPriceMultipliers()),
+  );
   const revision = useSettingsRevision(["llm.providerPriceMultipliers"]);
   useEffect(() => {
     setPriceMultipliersLocal(getProviderPriceMultipliers());
@@ -176,6 +180,11 @@ export function LlmKeysPane({
           ? entry.key.slice(5)
           : entry.key;
         const hasKey = (store.get<string>(entry.key) ?? "").trim().length > 0;
+        const serverKeyConfigured = Object.values(
+          state.llmConfig?.slots ?? {},
+        ).some(
+          (slot) => slot.provider === providerId && slot.serverKeyConfigured,
+        );
         const providerPresets = allPresets.filter(
           (p) => p.provider === providerId,
         );
@@ -199,13 +208,18 @@ export function LlmKeysPane({
               </span>
             </div>
             <SettingWidget entry={entry} />
+            {serverKeyConfigured && (
+              <p className="text-[10px] text-muted-foreground">
+                {t("settings.serverKeyAvailable")}
+              </p>
+            )}
             <ProviderPriceMultiplierField
               provider={providerId}
               value={priceMultipliers[providerId] ?? 1}
+              disabled={saving || !writable}
               onChange={(value) => {
                 const next = { ...priceMultipliers, [providerId]: value };
-                setPriceMultipliersLocal(next);
-                setProviderPriceMultipliers(next);
+                return save(() => setProviderPriceMultipliers(next));
               }}
             />
             {showPresetTests && hasKey && providerPresets.length > 0 && (
@@ -229,22 +243,24 @@ function ProviderPriceMultiplierField({
   provider,
   value,
   onChange,
+  disabled,
 }: {
   provider: string;
   value: number;
-  onChange: (value: number) => void;
+  onChange: (value: number) => Promise<boolean>;
+  disabled: boolean;
 }) {
   const { t } = useTranslation();
   const { draft, setDraft, conflict, reset } = useSettingDraft(
     String(value),
     provider,
   );
-  const commit = () => {
-    if (conflict) return;
+  const commit = async () => {
+    if (disabled || conflict) return;
     const parsed = Number(draft);
     if (Number.isFinite(parsed) && parsed > 0) {
-      onChange(parsed);
-      setDraft(String(parsed));
+      if (await onChange(parsed)) setDraft(String(parsed));
+      else reset();
       return;
     }
     setDraft(String(value));
@@ -267,6 +283,7 @@ function ProviderPriceMultiplierField({
         <span className="text-xs text-muted-foreground">×</span>
         <input
           aria-label={`${provider} ${t("settings.priceMultiplier", "Price multiplier")}`}
+          disabled={disabled}
           type="number"
           min="0.0001"
           step="0.1"

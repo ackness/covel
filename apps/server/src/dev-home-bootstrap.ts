@@ -15,8 +15,8 @@
  * including on fresh checkouts without a user home directory.
  *
  * Existing process env values always win — `.env` / `.env.llm` overrides
- * are never overwritten. Each path is set only if both the env var is
- * unset AND the underlying file/directory actually exists.
+ * are never overwritten. User resource directories must exist; the selected
+ * model file path stays fixed even before the user creates that file.
  *
  * This module's top-level call runs at import time so the side effect
  * lands before `app.ts` evaluates its `readRuntimeEnv()` snapshot. Keep
@@ -105,9 +105,12 @@ function bootstrap(): BootstrapSummary {
 
   const applied: string[] = [];
   // Source development uses the configuration copied by the root README.
-  // Explicit overrides win; user-home configuration is the fallback.
+  // Explicit overrides win. Desktop independently uses its user-home file.
   const workspaceLlm = path.resolve(import.meta.dirname, "../../../llm.toml");
-  setIfMissing("COVEL_LLM_TOML", workspaceLlm, applied);
+  if (!process.env.COVEL_LLM_TOML) {
+    process.env.COVEL_LLM_TOML = workspaceLlm;
+    applied.push("COVEL_LLM_TOML");
+  }
 
   const home = process.env.COVEL_HOME ?? path.join(os.homedir(), ".covel");
   if (!fs.existsSync(home)) {
@@ -121,7 +124,6 @@ function bootstrap(): BootstrapSummary {
 
   setIfMissing("COVEL_USER_PLUGINS_DIR", path.join(home, "plugins"), applied);
   setIfMissing("COVEL_USER_WORLDS_DIR", path.join(home, "worlds"), applied);
-  setIfMissing("COVEL_LLM_TOML", path.join(home, "llm.toml"), applied);
   setIfMissing(
     "SQLITE_PATH",
     path.join(home, "data", "covel.db"),

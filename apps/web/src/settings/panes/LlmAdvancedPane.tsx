@@ -28,7 +28,8 @@ import { MaxOutputTokensCard, ValueCell } from "./llm-max-output-tokens.js";
 import { ModelTokenLimits } from "./llm-token-limits.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 import { useLlmSlotIds } from "./use-llm-slot-ids.js";
-import { useSetting } from "../use-settings.js";
+import { useSetting, useSettingsStore } from "../use-settings.js";
+import { useSettingsSave } from "../use-settings-save.js";
 
 type NumericParameter = Exclude<
   keyof ModelParameterOverrides,
@@ -118,6 +119,7 @@ export function LlmAdvancedPane({
 }: { slotId?: string; catalogRevision?: string } = {}) {
   const { t } = useTranslation();
   const { state } = useSession();
+  const store = useSettingsStore();
   const llm = state.llmConfig;
   const { slots } = useLlmSlotIds();
   const [, updateSlotConfig] =
@@ -126,6 +128,9 @@ export function LlmAdvancedPane({
   const [paramOverrides, setParamOverridesLocal] = useState<
     Record<string, ModelParameterOverrides>
   >(() => getParamOverrides());
+  const { save, saving, writable } = useSettingsSave(() =>
+    setParamOverridesLocal(getParamOverrides()),
+  );
   const [selected, setSelectedSlot] = useState<string>(slots[0] ?? "");
   const selectedSlot =
     slotId ?? (slots.includes(selected) ? selected : (slots[0] ?? ""));
@@ -180,9 +185,8 @@ export function LlmAdvancedPane({
     ].filter((value) => value !== undefined).length;
 
   const commit = (next: Record<string, ModelParameterOverrides>) => {
-    if (!selectedSlot) return;
-    setParamOverridesLocal(next);
-    setParamOverrides(next);
+    if (!selectedSlot) return Promise.resolve(false);
+    return save(() => setParamOverrides(next));
   };
 
   const setField = <K extends keyof ModelParameterOverrides>(
@@ -196,7 +200,7 @@ export function LlmAdvancedPane({
     const next = { ...paramOverrides };
     if (Object.keys(nextSlot).length === 0) delete next[selectedSlot];
     else next[selectedSlot] = nextSlot;
-    commit(next);
+    return commit(next);
   };
 
   useEffect(() => {
@@ -217,7 +221,6 @@ export function LlmAdvancedPane({
   const resetSlot = () => {
     const next = { ...paramOverrides };
     delete next[selectedSlot];
-    commit(next);
     const capabilities = { ...getCapabilityOverrides() };
     const slotCapability = { ...capabilities[selectedSlot] };
     delete slotCapability.contextWindow;
@@ -225,7 +228,12 @@ export function LlmAdvancedPane({
     if (Object.keys(slotCapability).length)
       capabilities[selectedSlot] = slotCapability;
     else delete capabilities[selectedSlot];
-    setCapabilityOverrides(capabilities);
+    void save(() =>
+      store.setMany({
+        "llm.paramOverrides": next,
+        "llm.capabilityOverrides": capabilities,
+      }),
+    );
   };
 
   return (
@@ -283,6 +291,7 @@ export function LlmAdvancedPane({
           <Button
             variant="outline"
             size="sm"
+            disabled={saving || !writable}
             onClick={() => {
               const next = { ...getSlotConfig() };
               delete next[selectedSlot];
@@ -296,7 +305,7 @@ export function LlmAdvancedPane({
 
       {supportsTextGeneration ? (
         <fieldset
-          disabled={!selectedSlot}
+          disabled={!selectedSlot || saving || !writable}
           className="grid grid-cols-1 gap-3 md:grid-cols-2"
         >
           <ModelTokenLimits
@@ -305,10 +314,12 @@ export function LlmAdvancedPane({
             override={getCapabilityOverrides()[selectedSlot]}
             onUpdate={(patch) => {
               const overrides = getCapabilityOverrides();
-              setCapabilityOverrides({
-                ...overrides,
-                [selectedSlot]: { ...overrides[selectedSlot], ...patch },
-              });
+              return save(() =>
+                setCapabilityOverrides({
+                  ...overrides,
+                  [selectedSlot]: { ...overrides[selectedSlot], ...patch },
+                }),
+              );
             }}
           />
           <MaxOutputTokensCard
@@ -349,7 +360,7 @@ export function LlmAdvancedPane({
         variant="outline"
         size="sm"
         onClick={resetSlot}
-        disabled={overrideCount === 0}
+        disabled={overrideCount === 0 || saving || !writable}
         className="w-full text-xs"
       >
         <RotateCcw className="h-3.5 w-3.5" />

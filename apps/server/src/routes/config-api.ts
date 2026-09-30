@@ -2,8 +2,7 @@
  * Config surface — paths and API key management.
  *
  * Frontends read `/api/config/info` at boot to discover where the server
- * thinks its data lives and whether it's a desktop deployment (i.e. the
- * server has access to `~/.covel/keys.env`).
+ * thinks its data lives and whether desktop administration was explicitly enabled.
  *
  * When `isDesktop: true`, the Settings UI may additionally use:
  *   GET  /api/config/keys        — list provider names with a configured key
@@ -568,9 +567,8 @@ function resolveDataRoot(): string | null {
  * firing platform `open` commands are **privileged** — we only expose
  * them when the caller process was explicitly started as a desktop shell.
  *
- * Trigger conditions (explicit only — filesystem presence is NOT enough):
- *   1. `COVEL_DESKTOP_REST=1` (opt-in flag for embedded/self-host cases)
- *   2. `COVEL_HOME` set by Electron
+ * Only `COVEL_DESKTOP_REST=1` enables these capabilities. `COVEL_HOME`
+ * selects a directory and grants no administration capability.
  *
  * A shared-backend deployment that happens to have `~/.covel/` on disk
  * (docker image bundling, admin home dir) therefore CAN'T reach these
@@ -578,8 +576,7 @@ function resolveDataRoot(): string | null {
  */
 function resolveCovelHome(): string | null {
   const env = readRuntimeEnv();
-  const explicitDesktop = env.desktopRest || !!env.covelHome;
-  if (!explicitDesktop) return null;
+  if (!env.desktopRest) return null;
   if (env.covelHome) return env.covelHome;
   const candidate = join(homedir(), ".covel");
   return existsSync(candidate) ? candidate : null;

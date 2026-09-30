@@ -26,7 +26,7 @@ import {
   resolveTsx,
   userServerPortFile,
 } from "./paths.js";
-import { loadEnvFiles, loadKeysEnvForChild } from "./env-files.js";
+import { loadChildEnvironment } from "./env-files.js";
 import { fetchWithTimeout, findFreePort, waitForServer } from "./network.js";
 import { diagnoseStartupError, type DiagnosedError } from "./startup-errors.js";
 import {
@@ -233,17 +233,18 @@ async function startServer(
   const projectRoot = resolveProjectRoot();
   const tsxPath = resolveTsx();
 
-  const envOverrides = loadEnvFiles(projectRoot);
-  const keysEnv = loadKeysEnvForChild(paths.userKeysEnvPath);
+  const configuredEnv = loadChildEnvironment(
+    projectRoot,
+    paths.userKeysEnvPath,
+    process.env,
+  );
   // Data dir lives at <dataRoot>/; ensure the db's parent (and logs dir) exist.
   fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
 
   const env: Record<string, string> = {
-    ...(process.env as Record<string, string>),
-    ...envOverrides,
-    ...keysEnv,
+    ...configuredEnv,
     SERVER_PORT: String(port),
-    STORE_BACKEND: envOverrides.STORE_BACKEND ?? "sqlite",
+    STORE_BACKEND: configuredEnv.STORE_BACKEND ?? "sqlite",
     SQLITE_PATH: paths.dbPath,
     NODE_ENV: isDev ? "development" : "production",
     ...(isDev ? {} : { SERVE_STATIC: "true" }),
@@ -252,9 +253,7 @@ async function startServer(
     COVEL_DESKTOP_REST: "1",
     COVEL_DESKTOP_REST_TOKEN: desktopRestToken,
     COVEL_MEDIA_TOKEN_SECRET:
-      envOverrides.COVEL_MEDIA_TOKEN_SECRET ??
-      process.env.COVEL_MEDIA_TOKEN_SECRET ??
-      desktopMediaTokenSecret,
+      configuredEnv.COVEL_MEDIA_TOKEN_SECRET ?? desktopMediaTokenSecret,
     COVEL_PLUGINS_DIR: paths.pluginsDirs[0] ?? "",
     COVEL_WORLDS_DIR: paths.worldsDirs[0] ?? "",
     COVEL_USER_WORLDS_DIR: paths.userWorldsDir,

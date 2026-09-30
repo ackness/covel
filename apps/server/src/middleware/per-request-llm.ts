@@ -28,6 +28,8 @@
  * base-startup `llmAdapter` stays in place.
  */
 
+import { withRequestLlmOptions } from "../request-llm-context.js";
+import type { PluginLlmModelTarget } from "@covel/runtime";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import {
@@ -46,6 +48,7 @@ import { llmModelBindingSchema, readRuntimeEnv } from "@covel/shared";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
+  readonly modelTargets?: ReadonlyMap<string, PluginLlmModelTarget>;
   /** Base API keys from process.env (*_API_KEY). Client keys override. */
   readonly envApiKeys: Record<string, string>;
   /**
@@ -118,16 +121,21 @@ export function createPerRequestLlmMiddleware(
         Object.keys(slotOverrides.slotBindings ?? {}).length > 0 ||
         Object.keys(slotOverrides.capabilityOverrides ?? {}).length > 0);
 
-    if (!hasRequestKeys && !hasOverrides) {
-      await next();
-      return;
-    }
-
-    const perRequestAdapter = createGatewayAdapter(opts.ai.gateway, {
+    const requestOptions = {
       apiKeys: requestKeys ?? {},
       envApiKeys: opts.envApiKeys,
       ...(slotOverrides ? { slotOverrides } : {}),
       capabilityOverridePolicy,
+    } as const;
+
+    if (!hasRequestKeys && !hasOverrides) {
+      await withRequestLlmOptions(requestOptions, next);
+      return;
+    }
+
+    const perRequestAdapter = createGatewayAdapter(opts.ai.gateway, {
+      ...requestOptions,
+      modelTargets: opts.modelTargets,
     });
 
     // Keep the function-runtime gateway in lock-step with the
@@ -152,7 +160,7 @@ export function createPerRequestLlmMiddleware(
     if (slotOverrides?.slotBindings?.memory) {
       c.set("requestMemorySlot", "memory");
     }
-    await next();
+    await withRequestLlmOptions(requestOptions, next);
   };
 }
 

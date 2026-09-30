@@ -1,29 +1,6 @@
-/**
- * Embedding-lock helper.
- *
- * Resolves the embed slot, probes its output dimension on first use, and
- * locks the session row to a `vector_models` registry entry. After this
- * runs once per session, all `store.upsertVector()` / `searchVectors()`
- * calls route to the right per-model physical table automatically.
- *
- * Why "lazy lock at first turn" instead of "lock at session create":
- * - `POST /api/sessions` may be called without API keys; the embedding
- *   probe needs them to call `gateway.embed`. Deferring the lock to the
- *   first action call (which always carries keys via the bound adapter)
- *   keeps session creation free of LLM-config coupling.
- * - Sessions that never trigger RAG never pay the probe cost.
- *
- * Concurrency: the per-session promise cache below collapses parallel
- * first-action calls into one probe. The store layer's `vector_models`
- * UNIQUE(model_id, dim) constraint makes the database write idempotent
- * even across processes.
- *
- * Once `sessions.embedding_model_id` is set, `lockSessionEmbeddingModel`
- * throws on re-lock attempts (ADR-005), so duplicate calls are safe.
- */
-
+import { createHash } from "node:crypto";
 import type { EmbedFn } from "@covel/memory";
-
+import type { GatewayOptions, ResolvedSlotConfig } from "@covel/ai-provider";
 import type {
   DataStore,
   EmbeddingModelIdentity,
@@ -31,132 +8,150 @@ import type {
 } from "@covel/store";
 import { supportsVector } from "@covel/store/vector";
 import type { AiStack } from "./ai-setup.js";
+import { getRequestLlmOptions } from "./request-llm-context.js";
 
-interface CachedDim {
-  dim: number;
-  modelId: string;
+function embeddingOptions(apiKeys?: Record<string, string>): GatewayOptions {
+  return getRequestLlmOptions() ?? (apiKeys ? { envApiKeys: apiKeys } : {});
 }
 
-/** Build a session-locking helper bound to a specific store + AI stack. */
+function embeddingRole(options: GatewayOptions): string | undefined {
+  return options.slotOverrides?.slotBindings?.embed ? "embed" : undefined;
+}
+
+/** Pin the effective vector space, including endpoint and encoding, without storing credentials. */
+export function embeddingModelIdentity(target: ResolvedSlotConfig): string {
+  const endpoint = target.baseUrl?.replace(/\/+$/, "") ?? null;
+  const routing = JSON.stringify([
+    target.provider,
+    target.model,
+    endpoint,
+    target.protocol,
+    target.metadata?.embeddingFormat ?? "openai",
+  ]);
+  return `${target.provider}/${target.model}#${createHash("sha256").update(routing).digest("hex")}`;
+}
+
+function resolveEmbedding(
+  ai: Pick<AiStack, "gateway">,
+  options: GatewayOptions,
+): ResolvedSlotConfig | null {
+  return ai.gateway.resolveSlot(embeddingRole(options), {
+    ...options,
+    fallbackTag: "embedding",
+  });
+}
+
+function embeddingConfiguration(target: ResolvedSlotConfig) {
+  return {
+    ...(target.baseUrl ? { baseUrl: target.baseUrl.replace(/\/+$/, "") } : {}),
+    protocol: target.protocol,
+    embeddingFormat: target.metadata?.embeddingFormat,
+  };
+}
+
+/** Share one lock per session while every probe uses its originating request configuration. */
 export function createEmbeddingLockHelper(opts: {
   store: DataStore;
   ai: AiStack;
-  /**
-   * API keys to pass to the embedding probe. Should match the same keys
-   * the runtime uses for chat calls. In practice the server boot path
-   * supplies env-derived keys; per-request key overrides are not yet
-   * supported on this hot path.
-   */
   apiKeys?: Record<string, string>;
 }): (sessionId: string) => Promise<void> {
   const { store, ai, apiKeys } = opts;
-
-  // Per-session promise cache — collapses concurrent first-turn calls.
   const inflight = new Map<string, Promise<VectorTarget | null>>();
-  // (provider, modelName) → cached dim — avoids re-probing the same
-  // embedding model across sessions.
-  const dimCache = new Map<string, CachedDim>();
+  const dimCache = new Map<string, number>();
 
-  async function probeDimension(
-    provider: string,
-    modelName: string,
-  ): Promise<CachedDim | null> {
-    const cacheKey = `${provider}/${modelName}`;
-    const cached = dimCache.get(cacheKey);
-    if (cached) return cached;
-
-    try {
-      const result = await ai.gateway.embed(
-        { values: ["covel-embed-probe"], expectedModelId: cacheKey },
-        // Boot-path keys are env-derived → origin-gated channel.
-        apiKeys ? { envApiKeys: apiKeys } : undefined,
-      );
-      const vector = result.embeddings?.[0];
-      if (!Array.isArray(vector) || vector.length === 0) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[embedding-lock] embed probe for ${cacheKey} returned no vector`,
-        );
-        return null;
-      }
-      const entry: CachedDim = { dim: vector.length, modelId: cacheKey };
-      dimCache.set(cacheKey, entry);
-      return entry;
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[embedding-lock] embed probe failed for ${cacheKey}: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-      return null;
-    }
-  }
-
-  async function lockOnce(sessionId: string): Promise<VectorTarget | null> {
+  async function lockOnce(
+    sessionId: string,
+    options: GatewayOptions,
+  ): Promise<VectorTarget | null> {
     if (!supportsVector(store)) return null;
-
-    // Already locked? Fast path.
     const existing = await store.resolveSessionVectorTarget(sessionId);
     if (existing) return existing;
 
-    // Find the embed slot. Throws when none configured — treat as RAG off.
-    let target;
+    let target: ResolvedSlotConfig | null;
     try {
-      target = ai.presetRegistry.resolveEmbeddingTarget();
+      target = resolveEmbedding(ai, options);
     } catch {
       return null;
     }
-
-    const provider = target.profile.provider;
-    const modelName = target.profile.model;
-
-    const probed = await probeDimension(provider, modelName);
-    if (!probed) return null;
-
+    if (!target) return null;
+    const modelId = embeddingModelIdentity(target);
+    let dim = dimCache.get(modelId);
+    if (dim === undefined) {
+      try {
+        const result = await ai.gateway.embed(
+          {
+            presetId: embeddingRole(options),
+            values: ["covel-embed-probe"],
+            expectedModelId: `${target.provider}/${target.model}`,
+            expectedConfiguration: embeddingConfiguration(target),
+          },
+          options,
+        );
+        const vector = result.embeddings[0];
+        if (!Array.isArray(vector) || vector.length === 0) return null;
+        dim = vector.length;
+        dimCache.set(modelId, dim);
+      } catch (error) {
+        console.warn(
+          `[embedding-lock] embed probe failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return null;
+      }
+    }
     const identity: EmbeddingModelIdentity = {
-      provider,
-      modelName,
-      dim: probed.dim,
-      modelId: `${provider}/${modelName}`,
+      provider: target.provider,
+      modelName: target.model,
+      dim,
+      modelId,
     };
-
-    const vt = await store.ensureVectorModel(identity);
+    const vectorTarget = await store.ensureVectorModel(identity);
     try {
-      await store.lockSessionEmbeddingModel(sessionId, vt);
-    } catch (err) {
-      // Race: another concurrent call may have locked first. Re-resolve
-      // and trust whatever is now persisted on the session row.
+      await store.lockSessionEmbeddingModel(sessionId, vectorTarget);
+    } catch (error) {
       const reread = await store.resolveSessionVectorTarget(sessionId);
       if (reread) return reread;
-      throw err;
+      throw error;
     }
-    return vt;
+    return vectorTarget;
   }
 
-  return async (sessionId: string): Promise<void> => {
+  return async (sessionId) => {
     const pending = inflight.get(sessionId);
     if (pending) {
       await pending;
       return;
     }
-    const promise = lockOnce(sessionId).finally(() => {
-      inflight.delete(sessionId);
-    });
+    const promise = lockOnce(sessionId, embeddingOptions(apiKeys)).finally(
+      () => {
+        inflight.delete(sessionId);
+      },
+    );
     inflight.set(sessionId, promise);
     await promise;
   };
 }
 
-/** Bind every memory query and ingest to the caller's persisted model identity. */
+/** Shared retrieval/ingestion services inherit keys and model settings through async request scope. */
 export function createMemoryEmbed(opts: {
   ai: Pick<AiStack, "gateway">;
   apiKeys?: Record<string, string>;
 }): EmbedFn {
   return async (texts, context) => {
+    const options = embeddingOptions(opts.apiKeys);
+    const target = resolveEmbedding(opts.ai, options);
+    if (!target || embeddingModelIdentity(target) !== context.modelId) {
+      throw new Error(
+        "Embedding configuration changed for this session; restore its locked model settings.",
+      );
+    }
     const result = await opts.ai.gateway.embed(
-      { values: [...texts], expectedModelId: context.modelId },
-      opts.apiKeys ? { envApiKeys: opts.apiKeys } : undefined,
+      {
+        presetId: embeddingRole(options),
+        values: [...texts],
+        expectedModelId: `${target.provider}/${target.model}`,
+        expectedConfiguration: embeddingConfiguration(target),
+      },
+      options,
     );
     return result.embeddings.map((vector) => Float32Array.from(vector));
   };

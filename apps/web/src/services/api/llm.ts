@@ -46,6 +46,8 @@ export interface ModelCapabilityInfo {
 }
 
 export interface LlmSlotInfo {
+  /** Availability of the instance credential; its value stays on the server. */
+  serverKeyConfigured?: boolean;
   baseUrl?: string;
   provider: string;
   model: string;
@@ -60,7 +62,8 @@ export interface LlmConfigResponse {
   configured: boolean;
   slots: Record<string, LlmSlotInfo>;
   providers: string[];
-  /** Present only when the last llm.toml load failed to parse (fell back to default). */
+  source?: { kind: "file" | "builtin"; path: string };
+  /** A failed load preserves the last valid active configuration. */
   error?: string;
 }
 
@@ -232,8 +235,8 @@ export function getCapabilityOverrides(): Record<
 
 export function setCapabilityOverrides(
   overrides: Record<string, Partial<ModelCapabilityInfo>>,
-): void {
-  void getSettings().set("llm.capabilityOverrides", overrides);
+): Promise<void> {
+  return getSettings().set("llm.capabilityOverrides", overrides);
 }
 
 /**

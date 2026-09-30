@@ -64,11 +64,51 @@ export interface GatewaySlotResolutionDependencies {
   };
   presetRegistry: {
     resolveTextTarget(input: { presetId?: string }): ResolvedTarget;
+    resolveEmbeddingTarget?(input?: { presetId?: string }): ResolvedTarget;
     hasPreset?(id: string): boolean;
     addPreset?(preset: PresetConfig): void;
     removePreset?(id: string): void;
   };
   slotRegistry?: SlotRegistry;
+}
+
+/** Resolve explicit embedding selections after applying request capability facts. */
+export function resolveGatewayEmbeddingTarget(
+  registry: GatewaySlotResolutionDependencies["presetRegistry"],
+  presetId: string | undefined,
+  requestedId: string | undefined,
+  options?: GatewayOptions,
+): ResolvedTarget {
+  if (!presetId) {
+    if (!registry.resolveEmbeddingTarget)
+      throw new ModelConfigurationError(
+        "Embedding configuration is unavailable",
+      );
+    return registry.resolveEmbeddingTarget();
+  }
+  const target = applyRequestCapabilityOverlay(
+    registry.resolveTextTarget({ presetId }),
+    requestedId,
+    options?.slotOverrides,
+    options?.capabilityOverridePolicy ?? "restrict-only",
+    true,
+  );
+  const capable = target.preset?.capability
+    ? target.preset.capability.output.includes("embedding")
+    : target.preset?.supportedModes.includes("embed");
+  if (!capable)
+    throw new ModelConfigurationError(
+      "Selected model does not support embedding",
+    );
+  return {
+    ...target,
+    profile: {
+      ...target.profile,
+      provider: targetProvider(target),
+      model: targetModel(target),
+      supportedModes: ["embed"],
+    },
+  };
 }
 
 export interface GatewayOptions {
@@ -218,8 +258,11 @@ export function createGatewaySlotResolution(
     presetId: string | undefined,
     fallbackTag: string,
     options?: GatewayOptions,
+    visited = new Set<string>(),
   ): string | undefined {
     if (!presetId) return presetId;
+    if (visited.has(presetId)) return presetId;
+    visited.add(presetId);
 
     const binding = options?.slotOverrides?.slotBindings?.[presetId];
     if (binding) {
@@ -288,7 +331,7 @@ export function createGatewaySlotResolution(
           `(same tag="${fallbackTag}"). Add [covel.${presetId}] to llm.toml to silence.`,
       );
     }
-    return fallback.presetId;
+    return resolvePresetId(fallback.slotId, fallbackTag, options, visited);
   }
 
   /**
@@ -413,6 +456,8 @@ export function createGatewaySlotResolution(
     try {
       const tag = options?.fallbackTag ?? "text";
       if (tag === "image") presetId ??= "image";
+      if (tag === "embedding" && options?.slotOverrides?.slotBindings?.embed)
+        presetId ??= "embed";
       const effectivePresetId = resolveSlotOrPassthrough(
         presetId,
         tag,
@@ -421,9 +466,17 @@ export function createGatewaySlotResolution(
       let baseTarget: ResolvedTarget;
       try {
         // An omitted slot must resolve the same default as generateText.
-        baseTarget = deps.presetRegistry.resolveTextTarget({
-          presetId: effectivePresetId,
-        });
+        baseTarget =
+          tag === "embedding" && deps.presetRegistry.resolveEmbeddingTarget
+            ? resolveGatewayEmbeddingTarget(
+                deps.presetRegistry,
+                effectivePresetId,
+                presetId,
+                options,
+              )
+            : deps.presetRegistry.resolveTextTarget({
+                presetId: effectivePresetId,
+              });
       } catch (error) {
         if (effectivePresetId === undefined) return null;
         throw error;
@@ -437,7 +490,10 @@ export function createGatewaySlotResolution(
       );
       let resolved = deps.providerRegistry.resolve(
         target.preset ?? target.profile,
-        { mode: tag === "image" ? "image" : "text" },
+        {
+          mode:
+            tag === "image" ? "image" : tag === "embedding" ? "embed" : "text",
+        },
       );
       if (options?.apiKeys || options?.envApiKeys) {
         resolved = deps.providerRegistry.withApiKeys(

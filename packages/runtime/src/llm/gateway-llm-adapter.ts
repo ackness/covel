@@ -1,3 +1,4 @@
+import type { PluginLlmModelTarget } from "./model-resolver.js";
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
@@ -211,6 +212,8 @@ export interface GatewayLike {
 }
 
 export interface GatewayAdapterConfig {
+  /** Complete plugin model preferences, shared with the runtime model resolver. */
+  readonly modelTargets?: ReadonlyMap<string, PluginLlmModelTarget>;
   /** API keys from the request (e.g., from X-Provider-Keys header). */
   readonly apiKeys?: Record<string, string>;
   /**
@@ -243,12 +246,13 @@ export function createGatewayAdapter(
   config?: GatewayAdapterConfig,
 ): LLMAdapter {
   const resolveSlot = (slot?: string) => {
+    const selection = resolveGatewayModelSelection(slot, config);
     try {
-      return gateway.resolveSlot(slot, {
+      return gateway.resolveSlot(selection.presetId, {
         apiKeys: config?.apiKeys,
         ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
-        ...(config?.slotOverrides
-          ? { slotOverrides: config.slotOverrides }
+        ...(selection.slotOverrides
+          ? { slotOverrides: selection.slotOverrides }
           : {}),
         ...(config?.capabilityOverridePolicy
           ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
@@ -280,6 +284,10 @@ export function createGatewayAdapter(
     },
 
     async generate(params): Promise<LLMResponse> {
+      const selection = resolveGatewayModelSelection(
+        params.model ?? undefined,
+        config,
+      );
       // Convert LLMToolDefinition[] → gateway ToolDefinition[]
       const tools = params.tools?.map(toGatewayTool);
 
@@ -290,7 +298,7 @@ export function createGatewayAdapter(
 
       const result = await gateway.generateText(
         {
-          presetId: params.model ?? undefined,
+          presetId: selection.presetId,
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
@@ -300,8 +308,8 @@ export function createGatewayAdapter(
           apiKeys: config?.apiKeys,
           ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
           traceId: config?.traceId,
-          ...(config?.slotOverrides
-            ? { slotOverrides: config.slotOverrides }
+          ...(selection.slotOverrides
+            ? { slotOverrides: selection.slotOverrides }
             : {}),
           ...(config?.capabilityOverridePolicy
             ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
@@ -351,6 +359,10 @@ export function createGatewayAdapter(
     },
 
     async *stream(params): AsyncIterable<LLMStreamEvent> {
+      const selection = resolveGatewayModelSelection(
+        params.model ?? undefined,
+        config,
+      );
       if (!gateway.streamText) {
         throw new Error("Gateway does not support streaming");
       }
@@ -362,7 +374,7 @@ export function createGatewayAdapter(
 
       for await (const event of gateway.streamText(
         {
-          presetId: params.model ?? undefined,
+          presetId: selection.presetId,
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
@@ -372,8 +384,8 @@ export function createGatewayAdapter(
           apiKeys: config?.apiKeys,
           ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
           traceId: config?.traceId,
-          ...(config?.slotOverrides
-            ? { slotOverrides: config.slotOverrides }
+          ...(selection.slotOverrides
+            ? { slotOverrides: selection.slotOverrides }
             : {}),
           ...(config?.capabilityOverridePolicy
             ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
@@ -429,6 +441,43 @@ export function createGatewayAdapter(
           };
         }
       }
+    },
+  };
+}
+
+/** Translate a plugin preference into the same isolated overlay used by request selections. */
+export function resolveGatewayModelSelection(
+  model: string | undefined,
+  config?: Pick<GatewayAdapterConfig, "modelTargets" | "slotOverrides">,
+): { presetId?: string; slotOverrides?: SlotOverridesInput } {
+  const target = model ? config?.modelTargets?.get(model) : undefined;
+  if (!target) return { presetId: model, slotOverrides: config?.slotOverrides };
+  const overrides = config?.slotOverrides;
+  // The role is retained for capability/parameter overrides and fallback policy.
+  if (overrides?.slotBindings?.[target.role])
+    return { presetId: target.role, slotOverrides: overrides };
+  const protocol = target.protocol as NonNullable<
+    SlotOverridesInput["customPresets"]
+  >[number]["protocol"];
+  return {
+    presetId: target.role,
+    slotOverrides: {
+      ...overrides,
+      customPresets: [
+        ...(overrides?.customPresets ?? []),
+        {
+          id: model!,
+          name: target.model,
+          provider: target.provider,
+          model: target.model,
+          ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
+          ...(protocol ? { protocol } : {}),
+        },
+      ],
+      slotBindings: {
+        ...overrides?.slotBindings,
+        [target.role]: { modelRef: model! },
+      },
     },
   };
 }

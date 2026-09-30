@@ -25,6 +25,7 @@ import {
 } from "./api/session/session-guard.js";
 import { errorBody } from "../api-error.js";
 import { modelParameters } from "./misc-api/model-parameters.js";
+import { hasServerRuntimeJobCredentials } from "../runtime-job-readiness.js";
 import {
   parseProviderKeys,
   parseSlotOverrides,
@@ -34,6 +35,7 @@ export function createMiscApiRoutes(
   ai: AiStack,
   registry: PluginRegistry,
   store: DataStore,
+  apiKeys: Readonly<Record<string, string>> = providerApiKeysFromEnv(),
 ): Hono {
   const app = new Hono();
 
@@ -160,6 +162,11 @@ export function createMiscApiRoutes(
         provider: preset.provider,
         model: preset.model,
         protocol: resolved.protocol,
+        serverKeyConfigured: hasServerRuntimeJobCredentials(
+          ai.gateway,
+          slotId,
+          apiKeys,
+        ),
         tag: slot.tag,
         ...(fallbackSlotId ? { fallback: fallbackSlotId } : {}),
         ...(preset.capability ? { capability: preset.capability } : {}),
@@ -176,8 +183,8 @@ export function createMiscApiRoutes(
       providers: [
         ...new Set(ai.presetRegistry.listPresets().map((p) => p.provider)),
       ],
-      // Present only when the last llm.toml load failed to parse and fell back
-      // to the built-in default — lets the UI explain why slots are missing.
+      source: ai.configSource,
+      // Reload failures preserve the last valid active configuration.
       ...(ai.lastLoadError ? { error: ai.lastLoadError } : {}),
     });
   });
@@ -186,8 +193,7 @@ export function createMiscApiRoutes(
   // gateway in place (no restart). Mirrors the desktop write-endpoint auth:
   // when a desktop REST token is configured the request must carry it; dev/web
   // tiers (no token) stay open, matching the rest of misc-api. Always returns
-  // 200 on a completed reload — the body's `ok` / `error` conveys whether the
-  // file parsed (a broken file falls back to the default, reported via `error`).
+  // 200 on a completed reload. A parse failure keeps the active configuration.
   app.post("/api/llm-config/reload", (c) => {
     const env = readRuntimeEnv();
     const provided = bearerToken(c);
@@ -200,37 +206,15 @@ export function createMiscApiRoutes(
     return c.json(reloadAiStack(ai));
   });
 
-  // GET /api/provider-keys — return server-configured API keys to desktop bearer clients only.
+  // GET /api/provider-keys — live availability only; secrets stay at their owner.
   app.get("/api/provider-keys", (c) => {
-    // Which providers the deployment has configured — and the masked key
-    // fragments below — are operator-only facts on hosted tiers. Strict no-op
-    // on self/desktop, where the raw-key branch below is the real path.
     const denied = checkHostedOperator(c);
     if (denied) return denied;
-    const env = readRuntimeEnv();
-    // Raw keys are a desktop-shell contract: the bearer token alone is not
-    // enough, and COVEL_HOME is not proof — it is a plain path setting that
-    // docker-compose and .env.example both document for ordinary self-hosts.
-    // Only the explicit desktop flag (Electron sidecar or the documented
-    // COVEL_DESKTOP_REST=1 opt-in) plus the token unlocks raw key material.
-    const provided = bearerToken(c);
-    const allowRawKeys =
-      env.desktopRest &&
-      !!env.desktopRestToken &&
-      provided !== undefined &&
-      safeEqual(provided, env.desktopRestToken);
-    const configuredKeys = providerApiKeysFromEnv();
-    const providers: Record<string, { configured: boolean; masked: string }> =
-      {};
-    for (const [provider, value] of Object.entries(configuredKeys)) {
-      const masked =
-        value.length > 8 ? `${value.slice(0, 4)}...${value.slice(-4)}` : "****";
-      providers[provider] = { configured: true, masked };
+    const providers: Record<string, { configured: boolean }> = {};
+    for (const [provider, value] of Object.entries(apiKeys)) {
+      if (value.trim()) providers[provider] = { configured: true };
     }
-    return c.json({
-      keys: allowRawKeys ? configuredKeys : {},
-      providers,
-    });
+    return c.json({ providers });
   });
 
   // POST /api/ai/ping — real provider latency probe.

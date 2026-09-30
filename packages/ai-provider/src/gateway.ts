@@ -48,6 +48,7 @@ import {
 import {
   createGatewaySlotResolution,
   targetMetadata,
+  resolveGatewayEmbeddingTarget,
 } from "./gateway-slot-resolution.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
@@ -526,6 +527,11 @@ export function createGateway(deps: GatewayDependencies) {
       values: string[];
       /** Reject configuration drift before sending vectors to a locked index. */
       expectedModelId?: string;
+      expectedConfiguration?: {
+        baseUrl?: string;
+        protocol: string;
+        embeddingFormat?: unknown;
+      };
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
@@ -545,9 +551,12 @@ export function createGateway(deps: GatewayDependencies) {
         mode: "embed",
         fallbackTag: "embedding",
         resolveTargets: (presetId) => {
-          const target = deps.presetRegistry.resolveEmbeddingTarget({
+          const target = resolveGatewayEmbeddingTarget(
+            deps.presetRegistry,
             presetId,
-          });
+            input.presetId,
+            options,
+          );
           const modelId = `${target.profile.provider}/${target.profile.model}`;
           if (
             input.expectedModelId !== undefined &&
@@ -583,6 +592,23 @@ export function createGateway(deps: GatewayDependencies) {
               opts.envApiKeys,
             );
           }
+          const expected = input.expectedConfiguration;
+          if (
+            expected &&
+            ((resolved.config.baseUrl?.replace(/\/+$/, "") ?? undefined) !==
+              expected.baseUrl ||
+              resolved.protocol !== expected.protocol ||
+              (target.preset?.embeddingFormat ?? "openai") !==
+                (expected.embeddingFormat ?? "openai"))
+          )
+            throw new AiProviderError({
+              code: "CONFIG_ERROR",
+              message:
+                "Embedding endpoint or encoding changed for the locked model",
+              provider: targetProvider(target),
+              model: targetModel(target),
+              retriable: false,
+            });
           return { provider: targetProvider(target), resolved };
         },
         execute: async (target, resolved) => {
