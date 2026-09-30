@@ -68,6 +68,7 @@
     "better-sqlite3": "^13.0.3",
     "cross-spawn": "^7.0.6",
     "fallow": "3.28.0",
+    "oxlint": "1.86.0",
     "playwright": "^1.63.0",
     "prettier": "3.9.8",
     "sqlite-vec": "^0.1.9",

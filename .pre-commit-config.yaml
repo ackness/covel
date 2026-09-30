@@ -1,10 +1,5 @@
 minimum_pre_commit_version: "4.0.0"
 
-default_language_version:
-  # Use the Node 26 toolchain selected by mise; older nodeenv releases require
-  # an exact version when downloading Node and cannot resolve a major alone.
-  node: system
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -33,19 +28,19 @@ repos:
         # while still catching accidental large blobs (videos, dumps, bundles).
         args: [--maxkb=3072]
 
-  - repo: https://github.com/oxc-project/mirrors-oxlint
-    rev: v1.63.0
-    hooks:
-      - id: oxlint
-        args: [--fix]
-        types_or: [javascript, jsx, ts, tsx]
-        exclude: ^apps/web/src/routeTree\.gen\.ts$
-
   - repo: local
     hooks:
+      # Resolve the lockfile-pinned linter through the project toolchain.
+      - id: oxlint
+        name: oxlint
+        entry: mise exec -- node scripts/run-with-project-node.mjs pnpm exec oxlint
+        args: [--fix]
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        exclude: ^apps/web/src/routeTree\.gen\.ts$
       - id: prettier
         name: prettier
-        entry: mise exec -- pnpm exec prettier --write --ignore-unknown
+        entry: mise exec -- node scripts/run-with-project-node.mjs pnpm exec prettier --write --ignore-unknown
         language: system
         types_or:
           - css
@@ -60,7 +55,7 @@ repos:
           - yaml
       - id: pnpm-lint
         name: pnpm lint
-        entry: mise exec -- pnpm lint
+        entry: mise exec -- node scripts/run-with-project-node.mjs pnpm lint
         language: system
         pass_filenames: false
         types_or: [ts, tsx, javascript, jsx]
