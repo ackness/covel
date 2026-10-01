@@ -48,7 +48,7 @@ function makeLoaded(manifest: RuntimeManifest): LoadedRuntime {
   return {
     manifest,
     promptTemplate:
-      "Lore: {{ world.lore }}. Tone: {{ world.tone }}. Player said: {{ player.message }}.",
+      "Lore: {{ world.lore }}. Dimensions: {{ world.dimensions }}. Player said: {{ player.message }}.",
   };
 }
 
@@ -118,8 +118,16 @@ async function seedWorld(
     lore: "The Sundered Coast",
     metadata: {
       dimensions: {
-        tone: "noir",
-        startingConditions: { openingScenario: "Dawn on the quay" },
+        tone: {
+          name: "Tone",
+          schema: { type: "string" },
+          initialValue: "noir",
+        },
+        startingConditions: {
+          name: "Starting conditions",
+          schema: { type: "string" },
+          initialValue: "Dawn on the quay",
+        },
       },
     },
     createdAt: ts(),
@@ -176,7 +184,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
 
     const systemPrompt = llm.captured.systemPrompts[0]!;
     expect(systemPrompt).toContain("The Sundered Coast");
-    expect(systemPrompt).toContain("noir");
+    expect(systemPrompt).not.toContain("noir"); // no provider: world initial values are not session snapshots.
   });
 
   it("snapshot build fails → turn still completes", async () => {

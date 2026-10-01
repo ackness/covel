@@ -577,6 +577,8 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据             |
 | DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                  |
 
+所有 `_` 前缀 namespace 保留给内核领域路径；PUT/DELETE 和通用 plugin-data 工具不能修改 `_dimensions` / `_dimension-settlements`。玩家维度修改走[manual runtime RPC](#维度编辑与待结算恢复)，公共读取使用 session view，不扫描提供者私有规则。
+
 ### 插件记忆
 
 故事记忆由 `memory` 插件管理。通过 `GET /api/sessions/:id/plugin-data/memory/blocks` 读取已提交的记忆块，通过该插件的 `definitions/world` 记录读取世界定义。后台提取是声明了 `before-next-execution` 屏障的 detached runtime，已提交块通过 `prompt.segment@1` 进入后续提示词。
@@ -959,7 +961,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `GET /api/worlds/:id/dimensions/export`
 
-导出世界维度数据。支持 YAML 和 JSON 格式。
+导出作者的完整维度 definition map（含 schema、initialValue、可选 updateRule），支持 YAML 和 JSON；不是会话当前值导出。
 
 **参数:**
 
@@ -972,22 +974,28 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `POST /api/worlds/:id/dimensions/import`
 
-导入维度数据到世界（全量替换 dimensions）。导入后自动通知使用该世界的活跃 session。
+全量替换世界的维度声明。导入后通知活跃 session 作者源已变化，不自动重置会话当前值；已有会话通过 sync 显式采用并检查冲突。任意合法维度 ID 使用统一 definition，不受旧九类名称限制。
 
 **请求体:**
 
 ```json
 {
   "dimensions": {
-    "geography": { "overview": "...", "regions": [...] },
-    "factions": [...]
+    "reputation": {
+      "name": "声望",
+      "schema": { "type": "integer", "minimum": 0, "maximum": 100 },
+      "initialValue": 0,
+      "updateRule": "完成居民委托后增加 5，只计已完成的委托。"
+    }
   }
 }
 ```
 
 **响应:** 更新后的 WorldRecord。
 
-**响应 422:** 维度数据校验失败。
+**响应 422:** 维度声明、schema 或初值校验失败；未知 schema 关键字拒绝，不做类型转换或默认值填充。格式与限制见 [World Data](world-data.md#动态世界维度dimensions)。
+
+> **BREAKING CHANGE**：旧九类 raw dimensions 不再合法；需要更新世界文件，并重建受影响的开发世界、会话与快照。不提供旧格式迁移或读取回退。
 
 #### `PATCH /api/worlds/:id`
 
@@ -1005,21 +1013,27 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 {
   "description": "更新后的描述",
   "dimensions": {
-    "geography": { "overview": "新的地理结构" },
-    "factions": { "groups": ["Guild"] }
+    "cityWall": {
+      "name": "城墙耐久",
+      "schema": { "type": "number", "minimum": 0, "maximum": 100 },
+      "initialValue": 100,
+      "updateRule": "只根据明确发生的损坏或修复更新；程度不明时保持原值。"
+    }
   }
 }
 ```
 
 #### `POST /api/worlds/:id/sync-dimensions`
 
-将世界最新维度数据同步到指定 session 的 `plugin_data` 与 lorebook 常量词条中。
+仅同步指定 session 的维度声明，使用 `world_data_import_ledger` 与受保护 `_dimensions` 记录，不写 `entries` 或 constant lorebook。此端点直接尝试写入；预览或通用同步选项使用 `sync-data`。
 
 行为：
 
-- 覆盖同名维度 key
-- 清理目标 session 中已经失效的旧维度 key
-- 保持 `SessionContextSnapshot.world.entries` 下一轮读取到最新世界词条
+- 声明未变：保留演化值，不重新应用初值。
+- 新维度：用合法初值初始化。
+- 修改/删除：仅未偏离导入基线的记录可直接应用；已演化、手改或有待结算义务时返回冲突，保留 definition/value/version。
+- 有冲突时返回报告且不应用本次同步；事务内再次校验，竞态不覆盖新值。schema 改变不自动迁移当前数据。
+- 只处理维度账本，不清理其他导入领域。成功后公共读取从已提交当前值重新发布。
 
 **请求体:**
 
@@ -1030,7 +1044,18 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 **响应:**
 
 ```json
-{ "ok": true, "syncedKeys": ["geography", "factions", ...], "entryCount": 9 }
+{
+  "ok": true,
+  "imported": true,
+  "dryRun": false,
+  "diagnostics": [],
+  "planned": 2,
+  "upserted": 1,
+  "deleted": 0,
+  "unchanged": 1,
+  "conflicts": [],
+  "mediaRefs": []
+}
 ```
 
 #### `POST /api/worlds/:id/world-data/preflight`
@@ -1073,6 +1098,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 同步已有 session 中由 worldData importer 管理的数据。默认 dry-run；传 `dryRun:false` 才写入。同步只处理 `world_data_import_ledger.managed=true` 的 row，并用 `valueHash` 检测玩家或插件是否修改过目标数据。
 
+维度声明也进入同一同步账本，包括 inline、dimensionSources 及存储型世界的有效定义。维度源未变不重置进度；作者变更/移除遇到已演化或手改数据、待结算回执时报告冲突。`force:true` 不解除这些维度保护，不触发结构迁移或强制重置。有冲突时报告计划而不应用本次同步。
+
 source 读取、schema 校验与 projection Worker 在 session 写锁外完成；dry-run 全程只读。实际写入取得短锁后会重新校验 world、locale、active plugin 与审批 scope，计划准备期间这些字段发生变化时返回 `409`（`world_data_sync_plan_stale`）。
 
 **请求体:**
@@ -1087,7 +1114,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 { "sessionId": "haruka-academy-abcd1234", "dryRun": false }
 ```
 
-强制覆盖冲突：
+强制覆盖普通导入 row 的 modified/missing 冲突（不绕过维度保护）：
 
 ```json
 { "sessionId": "haruka-academy-abcd1234", "dryRun": false, "force": true }
@@ -1257,6 +1284,21 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
   "code": "session_not_found"
 }
 ```
+
+#### `GET /api/sessions/:id/view`
+
+恢复/重连使用的聚合 `SessionSnapshot`。除消息、角色、插件及执行状态外，顶层提供维度公开快照与结算摘要：
+
+| 字段                        | 说明                                                                              |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| `dimensions`                | `{id: {name,description?,schema,value,version}}`，当前值而非作者初值              |
+| `dimensionProviderPluginId` | 可选，host 绑定的活跃提供者 ID                                                    |
+| `dimensionRecovery`         | 可选，host 验证的 `{editorRuntimeId,trackerRuntimeId}`                            |
+| `dimensionSettlements`      | 回执摘要数组：`{source:{resultId,turnNumber},status,sourceTurnId,version,error?}` |
+
+`status` 为 `pending-settlement/settled/no-change/manual/skipped`；摘要的 `version` 是回执版本，不是某个维度的值版本。响应不包含维度规则、初值或完整回执 definitions/readVersions。未初始化时维度可为空，已绑定提供者缺失或读取失败则显式报错，不回退 `WorldRecord.metadata.dimensions`。
+
+浏览器私有模式通过相同快照形状及原子 BrowserVault checkpoint 保留当前值、版本与结算义务；不是另一套 IndexedDB DataStore。字段与冻结时序见 [World Model](world-model.md#动态维度快照)。
 
 #### `PATCH /api/sessions/:id`
 
@@ -1662,6 +1704,60 @@ command 成功也使用同一信封；如果命令声明了 `context`，顶层 `
 }
 ```
 
+##### 维度编辑与待结算恢复
+
+使用上方 runtime 级 RPC，不新增专用 REST 写入端点。客户端从 session view 的 `dimensionProviderPluginId` / `dimensionRecovery` 获取受信 ID；以下 `world-init` 名称仅示例，不能在通用客户端中硬编码。
+
+普通改值（不自动解除任何待结算义务）：
+
+```json
+{
+  "kind": "runtime",
+  "pluginId": "world-init",
+  "runtimeId": "world-init/edit-dimensions",
+  "payload": {
+    "updates": [{ "id": "reputation", "expectedVersion": 2, "value": 10 }]
+  }
+}
+```
+
+editor 的 payload 为 `{updates, resultId?, resolution?}`：最多 64 项，`id` 不重复，值按同一 schema 校验；没有来源时必须至少一项。解决已有 pending 来源时，`resultId` 与 `resolution:"manual"|"skipped"` 必须成对：
+
+- `manual`：确认已人工处理，可同时提交修正，也可 `updates:[]` 明确确认。
+- `skipped`：必须 `updates:[]`，保留当前值并记录终态，不再补算该来源。
+- 普通 `updates` 没有 `resultId/resolution`，只改值；玩家不能在此新建 definition 或修改 schema。
+
+例如明确跳过 `dimensionSettlements[].source.resultId` 指定的来源：
+
+```json
+{
+  "kind": "runtime",
+  "pluginId": "world-init",
+  "runtimeId": "world-init/edit-dimensions",
+  "payload": {
+    "updates": [],
+    "resultId": "narrative-result-1",
+    "resolution": "skipped"
+  }
+}
+```
+
+重试直接调用 `trackerRuntimeId`，携带该回执的 **`sourceTurnId`**，而非 resultId：
+
+```json
+{
+  "kind": "runtime",
+  "pluginId": "world-init",
+  "runtimeId": "world-init/dimension-tracker",
+  "payload": {},
+  "retryFromTurnId": "source-turn-1"
+}
+```
+
+服务端从已持久化的原 turn artifact 绑定 narrative 与上游 seed，不信任客户端正文或来源号；种子只作上下文，不重复提交。普通 manual 不获得叙事输入，editor 不递归调用 tracker，已终结来源不再次结算。旧计划或读版本已过期时保留 pending，必须明确人工处理/跳过或符合来源边界的重试，不能自动 rebase。
+
+版本冲突没有最后写入获胜：editor 前检可在 runtime `output` 返回 `{applied:false,code:"dimension-version-conflict",currentVersions}`；提交阶段冲突的 RPC 返回 `409 {error,code:"dimension-version-conflict",details:{currentVersions}}`。客户端须读取 `GET /api/sessions/:id/view` 刷新、核对值及回执后再提交，不以 `status:"ok"` 或 `submitted:true` 证明修改已落库。自动维护的结算拒绝可以保留已提交叙事和 `pending-settlement`，同样需要检查回执。五态意义见 [World Model](world-model.md#回合时序与结算回执)。
+
 **图像/媒体生成输出:**
 
 Function handler 以 `HandlerResult.success.effects.assetGenerations[]` 返回媒体产出；API 的 runtime `output` 会物化该数组。每一项会被提交为 `asset.generate` proposal,并以 MediaRef 形式进入 trace / SSE / 视图层。
@@ -1756,13 +1852,13 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 **错误响应:**
 
-| 状态码 | 触发条件                                                                                                                        |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `kind` 或该 kind 的必填字段缺失 / 字段跨 kind 混用 / `RpcValidationError` / `plugin_mismatch`                                   |
-| 404    | `session_not_found` / `unknown_action` / `runtime_not_active` / `command_not_active`                                            |
-| 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed`                            |
-| 429    | `queue_full`(community 来源的待批准队列满)                                                                                      |
-| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed` |
+| 状态码 | 触发条件                                                                                                                            |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `kind` 或该 kind 的必填字段缺失 / 字段跨 kind 混用 / `RpcValidationError` / `plugin_mismatch`                                       |
+| 404    | `session_not_found` / `unknown_action` / `runtime_not_active` / `command_not_active`                                                |
+| 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed` / `dimension-version-conflict` |
+| 429    | `queue_full`(community 来源的待批准队列满)                                                                                          |
+| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`     |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
@@ -3131,37 +3227,39 @@ Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/ev
 
 完整定义见 `packages/shared/src/types/protocol.ts`。所有 server→client 事件收口为单一 discriminated union `CovelEvent`，事件名类型直接使用 `CovelEventType`。事件是否转发到 `/api/actions` 流由 `COVEL_EVENT_META[type].forwardToActionStream` 决定，转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据派生。完整分类表见 [protocol.md § 一、事件类型](./protocol.md#一事件类型covelevent)。
 
-| 类型                       | 分类         | 说明                                                                                           |
-| -------------------------- | ------------ | ---------------------------------------------------------------------------------------------- |
-| `narrative.delta`          | 叙事         | 叙事文本增量（逐 token 流式）                                                                  |
-| `narrative.completed`      | 叙事         | 叙事文本完成                                                                                   |
-| `interaction.requested`    | 交互         | 请求玩家输入（表单/选择/确认）                                                                 |
-| `interaction.completed`    | 交互         | 玩家交互完成                                                                                   |
-| `ui.rendered`              | UI           | `ui.render` proposal commit 后发出                                                             |
-| `ui.part.update`           | UI           | UI part 状态更新（每个 part 一条）                                                             |
-| `state.changed`            | 状态         | 游戏状态变更                                                                                   |
-| `state.snapshot`           | 状态         | 状态快照                                                                                       |
-| `state.snapshot.created`   | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出                                                        |
-| `session.forked`           | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                                            |
-| `execution.started`        | 执行生命周期 | Turn 执行开始                                                                                  |
-| `runtime.started`          | 执行生命周期 | 单个 Runtime 开始执行                                                                          |
-| `runtime.deferred`         | 执行生命周期 | staged runtime 已随原始回合提交并进入后台；payload 含 `jobId/sourceTurnId`                     |
-| `runtime.completed`        | 执行生命周期 | 单个 Runtime 执行完成                                                                          |
-| `runtime.failed`           | 执行生命周期 | Runtime 执行失败                                                                               |
-| `execution.completed`      | 执行生命周期 | Turn 执行完成                                                                                  |
-| `record.updated`           | 会话生命周期 | 记录更新（角色、任务等）                                                                       |
-| `event.emitted`            | 会话生命周期 | 事件发射                                                                                       |
-| `asset.progress`           | 资产         | 多模态生成进度（`0..100`）                                                                     |
-| `asset.generated`          | 资产         | `asset.generate` proposal commit 后发出                                                        |
-| `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                                                                     |
-| `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径                                                |
-| `turn.suspended`           | 流程控制     | `finalizeExecution` 成功提交 suspension artifact 后发出                                        |
-| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime                         |
-| `proposal.failed`          | 流程控制     | 单条 proposal 提交失败——显式上报而非静默丢弃，由提交方直接写入 action stream                   |
-| `job-status.updated`       | 流程控制     | 后台 function runtime 经 `ctx.progress` 汇报进度（append-only job 通道，转发到 action stream） |
-| `context.pruned`           | 系统         | prompt 装配超出 slot 预算、历史被硬裁剪；仅 trace（`/debug` 用），不进 action stream           |
-| `error.occurred`           | 系统         | 执行错误                                                                                       |
-| `connection.restored`      | 系统         | 连接恢复                                                                                       |
+| 类型                            | 分类         | 说明                                                                                           |
+| ------------------------------- | ------------ | ---------------------------------------------------------------------------------------------- |
+| `narrative.delta`               | 叙事         | 叙事文本增量（逐 token 流式）                                                                  |
+| `narrative.completed`           | 叙事         | 叙事文本完成                                                                                   |
+| `interaction.requested`         | 交互         | 请求玩家输入（表单/选择/确认）                                                                 |
+| `interaction.completed`         | 交互         | 玩家交互完成                                                                                   |
+| `ui.rendered`                   | UI           | `ui.render` proposal commit 后发出                                                             |
+| `ui.part.update`                | UI           | UI part 状态更新（每个 part 一条）                                                             |
+| `state.changed`                 | 状态         | 游戏状态变更                                                                                   |
+| `state.snapshot`                | 状态         | 状态快照                                                                                       |
+| `state.snapshot.created`        | 状态         | 自动 / 手动 / fork 写入 snapshot 后发出                                                        |
+| `session.forked`                | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                                            |
+| `execution.started`             | 执行生命周期 | Turn 执行开始                                                                                  |
+| `runtime.started`               | 执行生命周期 | 单个 Runtime 开始执行                                                                          |
+| `runtime.deferred`              | 执行生命周期 | staged runtime 已随原始回合提交并进入后台；payload 含 `jobId/sourceTurnId`                     |
+| `runtime.completed`             | 执行生命周期 | 单个 Runtime 执行完成                                                                          |
+| `runtime.failed`                | 执行生命周期 | Runtime 执行失败                                                                               |
+| `execution.completed`           | 执行生命周期 | Turn 执行完成                                                                                  |
+| `record.updated`                | 会话生命周期 | 记录更新（角色、任务等）                                                                       |
+| `event.emitted`                 | 会话生命周期 | 事件发射                                                                                       |
+| `asset.progress`                | 资产         | 多模态生成进度（`0..100`）                                                                     |
+| `asset.generated`               | 资产         | `asset.generate` proposal commit 后发出                                                        |
+| `world.dimensions.changed`      | 世界         | 作者维度声明变更（热更新），不重置会话当前值                                                   |
+| `dimensions.changed`            | 状态         | 已提交当前值变化，payload 包含提供者、公共 snapshot 子集及可选 settlement 摘要                 |
+| `dimensions.settlement.changed` | 状态         | pending 或无数值变化的回执变更，payload 不包含规则、初值                                       |
+| `plugin-data.changed`           | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径                                                |
+| `turn.suspended`                | 流程控制     | `finalizeExecution` 成功提交 suspension artifact 后发出                                        |
+| `turn.resumed`                  | 流程控制     | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime                         |
+| `proposal.failed`               | 流程控制     | 单条 proposal 提交失败——显式上报而非静默丢弃，由提交方直接写入 action stream                   |
+| `job-status.updated`            | 流程控制     | 后台 function runtime 经 `ctx.progress` 汇报进度（append-only job 通道，转发到 action stream） |
+| `context.pruned`                | 系统         | prompt 装配超出 slot 预算、历史被硬裁剪；仅 trace（`/debug` 用），不进 action stream           |
+| `error.occurred`                | 系统         | 执行错误                                                                                       |
+| `connection.restored`           | 系统         | 连接恢复                                                                                       |
 
 ### 转发的运行时内部事件（已纳入 `CovelEventType`）
 

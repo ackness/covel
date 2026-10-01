@@ -210,14 +210,14 @@ describe("world data session importer", () => {
     "imports %s time definitions before narration",
     async (worldId) => {
       const registry = await builtinPluginRegistry();
-      const store = await makeStore(["world-time"]);
+      const store = await makeStore(["world-init", "world-time"]);
       const result = await importWorldDataForSession({
         store,
         sessionId: "sess-1",
         worldId,
         worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
         now: NOW,
-        preflight: { registry, activePlugins: ["world-time"] },
+        preflight: { registry, activePlugins: ["world-init", "world-time"] },
       });
       expect(
         result.diagnostics.filter((item) => item.level === "error"),
@@ -249,14 +249,14 @@ describe("world data session importer", () => {
 
   it("leaves Emberback without an imported definition so the plugin uses its default", async () => {
     const registry = await builtinPluginRegistry();
-    const store = await makeStore(["world-time"]);
+    const store = await makeStore(["world-init", "world-time"]);
     const result = await importWorldDataForSession({
       store,
       sessionId: "sess-1",
       worldId: "emberback",
       worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
       now: NOW,
-      preflight: { registry, activePlugins: ["world-time"] },
+      preflight: { registry, activePlugins: ["world-init", "world-time"] },
     });
     expect(result.diagnostics.filter((item) => item.level === "error")).toEqual(
       [],
@@ -273,7 +273,7 @@ describe("world data session importer", () => {
       worldId: "mistport",
       worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
       now: NOW,
-      preflight: { registry, activePlugins: [] },
+      preflight: { registry, activePlugins: ["world-init"] },
     });
     expect(result.diagnostics.filter((item) => item.level === "error")).toEqual(
       [],
@@ -301,8 +301,7 @@ describe("world data session importer", () => {
     const compiledSchemaPaths = new Set<string>();
 
     for (const discovery of discoveries) {
-      const { manifests, packageManifest } =
-        await loadPluginDefinition(discovery);
+      const { packageManifest } = await loadPluginDefinition(discovery);
       for (const parsed of [packageManifest]) {
         for (const [namespace, decl] of Object.entries(
           parsed.manifest.dataSchemas ?? {},
@@ -1720,6 +1719,7 @@ sources: {}
     const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
     const worldId = "haruka-academy";
     const activePlugins = [
+      "world-init",
       "chat-mode-narrator",
       "scene-cast",
       "scene-stage",
@@ -1790,6 +1790,7 @@ sources: {}
     const worldId = "mistport";
     const ruleSourceId = "tideRules";
     const activePlugins = [
+      "world-init",
       "living-world-rules",
       "character-blueprint",
       "char-creator",
@@ -1852,6 +1853,7 @@ sources: {}
       const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
       const pluginRegistry = await builtinPluginRegistry();
       const activePlugins = [
+        "world-init",
         "living-world-rules",
         "character-blueprint",
         "char-creator",

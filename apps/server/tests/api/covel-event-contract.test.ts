@@ -58,8 +58,10 @@ describe("CovelEvent contract", () => {
       "ui.slot.cleared",
       "ui.slot.preview",
       "world.dimensions.changed",
+      "dimensions.changed",
+      "dimensions.settlement.changed",
     ];
-    expect([...FORWARDED_EVENT_TYPES].sort()).toEqual(expected);
+    expect([...FORWARDED_EVENT_TYPES].sort()).toEqual(expected.sort());
   });
 
   it("function.* trace events are union members, trace-only (not forwarded)", () => {

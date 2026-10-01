@@ -22,6 +22,8 @@ export const FRAMEWORK_TOOL_NAMES = [
   "get-character",
   "get-character-schema",
   "memory-search",
+  "world-dimension-get",
+  "world-dimension-list",
 ] as const;
 
 const reservedNames: ReadonlySet<string> = new Set(FRAMEWORK_TOOL_NAMES);

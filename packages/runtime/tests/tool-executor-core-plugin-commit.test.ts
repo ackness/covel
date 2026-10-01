@@ -24,8 +24,19 @@ function makeAttributes() {
 }
 
 describe("ToolExecutor + core plugin pending proposals + commit pipeline", () => {
-  it("executes world-init tools, records calls, then commits schema, entries and lorebook rows", async () => {
+  it("executes world-init tools, records calls, then commits schema and protected dimension records without duplicate lorebook rows", async () => {
     const store = createMemoryStore();
+    await store.createSession({
+      id: context.sessionId,
+      status: "active",
+      phase: "initializing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: ["world-init"],
+      metadata: { _dimensionProviderPluginId: "world-init" },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
     const initializeTool = initializeWorld({ tool, z, store });
     const toolMap = new Map([[initializeTool.name, initializeTool]]);
     const executor = createToolExecutor({
@@ -40,20 +51,20 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
         name: "initialize-world",
         arguments: JSON.stringify({
           attributes: makeAttributes(),
-          entries: [
-            { key: "geography", value: { regions: ["云梦泽"] } },
-            { key: "factions", value: { groups: ["青萍宗"] } },
-            { key: "power-system", value: { name: "灵脉" } },
-            { key: "social-structure", value: { ranks: ["外门", "内门"] } },
-            { key: "currency", value: { name: "灵石" } },
-          ],
+          definitions: {
+            reputation: {
+              name: "Reputation",
+              schema: { type: "integer" },
+              initialValue: 0,
+            },
+          },
         }),
       },
       context,
     );
 
     expect(initializeResult.success).toBe(true);
-    expect(initializeResult.pendingProposals).toHaveLength(3);
+    expect(initializeResult.pendingProposals).toHaveLength(2);
 
     const calls = await store.listToolCalls(context.sessionId);
     expect(calls.map((call) => call.toolName)).toEqual(["initialize-world"]);
@@ -74,32 +85,16 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
       expect.objectContaining({ id: "field2", category: "bio" }),
     ]);
 
-    const entries = await store.listPluginData(
+    const dimensions = await store.listPluginData(
       context.sessionId,
       context.pluginId,
-      "entries",
+      "_dimensions",
     );
-    expect(entries.map((entry) => entry.key).sort()).toEqual([
-      "currency",
-      "factions",
-      "geography",
-      "power-system",
-      "social-structure",
+    expect(dimensions).toMatchObject([
+      { key: "reputation", value: { value: 0, version: 1 } },
     ]);
-
-    const lorebook = await store.listSessionLorebookEntries(context.sessionId);
-    expect(lorebook.map((entry) => entry.id)).toEqual([
-      "world-entry:geography",
-      "world-entry:factions",
-      "world-entry:power-system",
-      "world-entry:social-structure",
-      "world-entry:currency",
-    ]);
-    expect(lorebook[0]).toMatchObject({
-      owner: { kind: "plugin", pluginId: "world-init" },
-      keys: ["geography"],
-      strategy: "constant",
-      insertionOrder: 100,
-    });
+    expect(await store.listSessionLorebookEntries(context.sessionId)).toEqual(
+      [],
+    );
   });
 });

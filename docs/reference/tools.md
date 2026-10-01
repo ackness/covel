@@ -24,15 +24,18 @@
 | **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                               |
 | **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                          |
 | **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                   |
-| **world-dimension-get**               | local   | world-init          | auto-allow | 按需读取当前 session 世界的结构化维度字段                                           |
+| **world-dimension-get**               | builtin | —                   | auto-allow | 按 ID/path 分页读取回合冻结的当前维度值                                             |
+| **world-dimension-list**              | builtin | —                   | auto-allow | 列出开放维度 ID、名称、类型与版本，不倾倒值或规则                                   |
 | **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema    |
 | **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
 | **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
 | **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
 | **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 lorebook/角色)                 |
-| initialize-world                      | local   | world-init          | auto-allow | 原子提交角色属性 Schema 与世界词条                                                  |
-| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部 schema 写入原语                                      |
-| set-world-entries-batch               | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部词条写入原语                                          |
+| initialize-world                      | local   | world-init          | auto-allow | 组合角色属性 schema 与维度声明初始化                                                |
+| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的内部 schema 写入原语                                           |
+| set-world-dimensions                  | local   | world-init          | auto-allow | 采纳维度声明，不重置会话进度                                                        |
+| dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                   |
+| update-dimensions                     | local   | world-init          | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化                                         |
 | submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1`                        |
 | sync-codex-entries                    | local   | codex               | auto-allow | 原子批量提交本轮图鉴新增与补充                                                      |
 | unlock-codex-entries                  | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部新增原语                                            |
@@ -180,7 +183,7 @@ Builtin 工具承接系统级 building blocks，例如：
 - `create-form`
 - `create-choices`
 - `create-character`
-- `world-dimension-get`
+- `world-dimension-get` / `world-dimension-list`
 
 这类能力适合被多个插件直接复用。
 
@@ -394,66 +397,41 @@ interface UIRenderPart {
 
 ### world-dimension-get
 
-按需读取当前 session 绑定世界的结构化维度数据。适合 world 信息字段很多、但 LLM 只需要少量精确字段时使用。
+框架 builtin，定义于 `packages/tools/src/builtin/world-dimension-tools.ts`。所有插件使用同一公开 `ctx.world.dimensions` 冻结快照，不读取提供者私有 namespace、不叠加自身未提交写入，也不回退世界初值。`dimension` 接受任意[合法作者 ID](world-data.md#声明格式)，不以旧九类名称作为白名单。
 
-此工具由 `world-init` 的 entry 注册，只读取自身 `entries` namespace，叠加自身尚未提交的写入和删除；没有会话覆盖时读取 `ctx.world.worldRecord.metadata.dimensions`。其他插件通过公开的 `world.dimensions@1` 服务查询世界维度，不读取该插件的私有 store。
+| 参数          | 类型                                       | 必需 | 描述                                            |
+| ------------- | ------------------------------------------ | ---- | ----------------------------------------------- |
+| `queries`     | Array<{dimension, path?, offset?, limit?}> | ✓    | 至少 1 项，最多 20 项                           |
+| `resolveI18n` | boolean                                    |      | 默认 `true`，只解析 schema 中显式 `x-i18n` 节点 |
 
-| 参数        | 类型                        | 必需 | 描述                                                  |
-| ----------- | --------------------------- | ---- | ----------------------------------------------------- |
-| queries     | Array<{ dimension, path? }> | ✓    | 查询列表，至少 1 项，最多 20 项                       |
-| resolveI18n | boolean                     |      | 是否按 session locale 解析 i18n 文本对象，默认 `true` |
+`path` 相对于该项的 **`value`**，不是 definition 或公共 entry。支持点路径（`durability`）、数组下标（`regions[0].name`）、根数组（`[0].name`）及 JSON Pointer（`/regions/0/name`，支持 `~0` / `~1`）。只读自有属性，不读取原型链；路径不存在返回 `found:false`，语法错误另带 `error`。
 
-`dimension` 可选值：
+查询含 `offset` 或 `limit` 时，字符串按 Unicode 字符、数组按元素、object 按自有条目分页。`offset` 默认为 0，`limit` 默认为 100，范围 1–2000。结构化 `results` 保留选中的值，并添加 `page:{value,total,nextOffset?}`；分页改变模型回读范围，不改变快照。
 
-- `geography`
-- `factions`
-- `powerSystem`
-- `history`
-- `economy`
-- `socialStructure`
-- `tone`
-- `mechanics`
-- `startingConditions`
-
-`path` 语法支持对象点路径与数组下标，例如：
-
-- `contentRating`
-- `regions[0].name`
-- `tiers[2].description`
-- `startingResources.硬币`
-
-路径只读取对象自身的字段和数组元素，不读取原型链属性。JSON 自身声明的同名键仍可读取。数组下标必须是非负安全整数；`regions.[0]`、`regions[0]name`、小数或缺失分隔符等非法语法返回该查询的 `error`。根数组可使用 `[0].name`，嵌套数组可使用连续下标。
-
-**输出 (parsedResult)**:
+例如查询 `{queries:[{dimension:"reputation"}]}`：
 
 ```json
 {
-  "_text": "1. tone.contentRating [plugin-data] = \"mature\"",
   "success": true,
-  "locale": "zh-CN",
   "results": [
     {
-      "dimension": "tone",
-      "path": "contentRating",
+      "dimension": "reputation",
       "found": true,
-      "source": "plugin-data",
-      "value": "mature",
-      "error": null
+      "value": 5,
+      "name": "声望",
+      "schema": { "type": "integer", "minimum": 0, "maximum": 100 },
+      "version": 2
     }
-  ]
+  ],
+  "_text": "reputation (v2) = 5"
 }
 ```
 
-**文本优先约定**：
+LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。未分页的长值有截断提示，应继续查询更窄路径或更小页面，不能将截断内容当成完整值。公共结果不带 `initialValue`、`updateRule` 或追踪来源。
 
-- LLM 看到的是 `_text`
-- trace / 调试里保留完整 `results`
+### world-dimension-list
 
-**适用场景**：
-
-- narrator 只需读取 `startingConditions.openingScenario`
-- guide 只需读取 `tone.themes`
-- 角色或剧情 agent 只需读取某个势力、地区、力量阶位的精确字段
+同一 builtin 模块。参数为 `{}`，返回 `{dimensions:[{id,name,type,version}], _text}`；`type` 来自 schema 的 `type`，未声明时可以缺失。此工具只发现 ID 与版本，不返回值、规则或初值。随后用 `world-dimension-get` 选择所需路径，避免全量注入大行集。
 
 ---
 
@@ -714,14 +692,15 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/initialize-world.js`)
 
-开局一次性提交角色属性 schema 和世界参考词条。工具组合下方两个低层原语，并把它们产生的 `character.schema.set`、`plugin.data.batch` 与 `lorebook.upsert` proposals 作为一个结果返回；任一部分校验或执行失败时都不会向 finalizer 暴露半套写入。
+开局组合角色属性 schema 与维度声明，作为一个工具结果返回 `character.schema.set` 和 `dimension.initialize` proposals；任一部分失败不暴露半套写入，执行成功后由 finalizer 原子提交。作者已有声明时使用作者 definition，拒绝模型替换；没有声明的 lore-only 世界才可生成 definitions。不把资源结构转成角色字段或 constant lorebook。
 
-| 参数         | 类型           | 必需 | 描述                                                                          |
-| ------------ | -------------- | ---- | ----------------------------------------------------------------------------- |
-| `attributes` | AttributeDef[] | ✓    | 至少 15 项，且必须覆盖 `stats` / `bio` / `abilities` / `equipment` / `social` |
-| `entries`    | WorldEntry[]   | ✓    | 至少 5 项世界参考资料                                                         |
+| 参数          | 类型            | 必需 | 描述                                                                    |
+| ------------- | --------------- | ---- | ----------------------------------------------------------------------- |
+| `types`       | string[]        |      | 默认 `["npc", "companion"]`                                             |
+| `attributes`  | AttributeDef[]  | ✓    | 至少 15 项，覆盖 `stats` / `bio` / `abilities` / `equipment` / `social` |
+| `definitions` | WorldDimensions |      | 没有作者声明时可提供生成的 definition map                               |
 
-**输出**: `{ success, attributeCount, categories, count, keys, worldSchema, preGameDone: true }`
+**输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
 
 `worldSchema` 同时作为 `world-init/schema-gen` 的 runtime output 交给同一 setup execution 中的 `char-creator/player-init`，避免下游读取尚未提交的 store。该 runtime 声明 `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`，因此模型只需生成一次工具参数；工具成功后框架直接把结果过 schema gate 并结束。
 
@@ -757,32 +736,40 @@ Attributes:
 
 **输出**: `{ success, attributeCount, categories, worldSchema }`
 
-**当前用途**: `initialize-world` 的内部组合原语。为兼容已有插件代码仍由 entry 注册，但捆绑的 `world-init/schema-gen` 不再直接向模型声明它。
+**当前用途**: `initialize-world` 的内部组合原语；捆绑的 `world-init/schema-gen` 不直接向模型声明它。
 
 ---
 
-### set-world-entries-batch
+### set-world-dimensions
 
-**所属**: world-init (`plugins/world-init/tools/set-world-entries-batch.js`)
+**所属**: world-init (`plugins/world-init/tools/set-world-dimensions.js`)
 
-批量写入世界词条。一次调用传入所有词条（地理、阵营、货币等）。
+参数 `{definitions}` 使用[开放 definition map](world-data.md#声明格式)，返回 `{success, dimensionCount}` 与一个 `dimension.initialize` proposal。创建缺失记录，同定义重复初始化不重置值，已采用定义不同则冲突。声明变更通过 world sync 处理，不使用此工具覆盖进度。旧 `set-world-entries-batch` 维度双写路径已移除。
 
-返回 `lorebook.upsert` proposal，每个词条成为一条 `constant` lorebook row，owner 绑定来源插件，id 稳定化为 `world-entry:<key>`，`insertionOrder` 按批次递增（100, 200, …）。世界文件导入的词条使用独立的 world owner；两者不会覆盖。
+### dimension-rule-get
 
-| 参数    | 类型         | 必需 | 描述                      |
-| ------- | ------------ | ---- | ------------------------- |
-| entries | WorldEntry[] | ✓    | 世界词条数组（至少 1 个） |
+**所属**: world-init (`plugins/world-init/tools/dimension-rule-get.js`)
 
-**WorldEntry**:
+维护专用 plugin tool，依赖已绑定的 narrative 来源，只读本插件的有效 definition。不是其他插件读取规则的公开入口。重试优先使用源回执冻结的 definition，并校验当前版本与执行快照一致。
 
-| 字段  | 类型   | 必需 | 描述                                   |
-| ----- | ------ | ---- | -------------------------------------- |
-| key   | string | ✓    | 词条标识（如 `geography`, `factions`） |
-| value | object | ✓    | 词条内容（任意 JSON 对象）             |
+| 参数     | 类型              | 必需 | 描述                                        |
+| -------- | ----------------- | ---- | ------------------------------------------- |
+| `id`     | string            | ✓    | 合法维度 ID                                 |
+| `part`   | `rule` / `schema` | ✓    | 本地化更新规则或 schema JSON                |
+| `offset` | integer           |      | 默认 0                                      |
+| `limit`  | integer           |      | 默认 6000，范围 1–6000，按 Unicode 字符分页 |
 
-**输出**: `{ success, count, keys, worldSchema, preGameDone: true }`
+返回 `{id,version,content,complete,nextOffset?,_text}`。当 `complete:false` 时继续取下一页，不能仅根据截断的规则预览结算。
 
-**当前用途**: `initialize-world` 的内部组合原语。它要求同一执行的 pending proposals 中已经有 schema 写入；为兼容已有插件代码仍由 entry 注册，但捆绑 runtime 不再直接向模型声明它。
+### update-dimensions
+
+**所属**: world-init (`plugins/world-init/tools/update-dimensions.js`)
+
+参数 `{updates:[{id,expectedVersion,value,reason?}]}`，最多 64 项，ID 不重复。提交的是新完整值，不是增量或 JSON Patch；删除命名记录/数组行也提交完整维度值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
+
+叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
+
+本轮无变化也必须调用 `update-dimensions({updates:[]})`。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 
 ---
 

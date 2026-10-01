@@ -6,6 +6,10 @@ import { createEmitEventTool, type EventDirectoryLike } from "./emit-event.js";
 import { createPluginDataTools } from "./plugin-data-tools.js";
 import { runtimeDoneTool } from "./runtime-done.js";
 import { suspendTool } from "./suspend.js";
+import {
+  worldDimensionGetTool,
+  worldDimensionListTool,
+} from "./world-dimension-tools.js";
 import { builtinUITools } from "./ui-tools.js";
 
 type DefaultToolStore = Parameters<typeof createPluginDataTools>[0] &
@@ -24,6 +28,8 @@ export function createDefaultToolRegistry(
   for (const module of builtinUITools) registry.registerBuiltin(module);
   registry.registerBuiltin(suspendTool);
   registry.registerBuiltin(runtimeDoneTool);
+  registry.registerBuiltin(worldDimensionGetTool);
+  registry.registerBuiltin(worldDimensionListTool);
   for (const module of createPluginDataTools(deps.store)) {
     registry.registerBuiltin(module);
   }

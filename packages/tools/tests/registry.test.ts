@@ -12,6 +12,8 @@ import {
   runtimeDoneTool,
   SEARCH_TOOLS_TOOL_NAME,
   suspendTool,
+  worldDimensionGetTool,
+  worldDimensionListTool,
 } from "../src/index.js";
 
 const module = (name: string) =>
@@ -28,6 +30,8 @@ describe("ToolRegistry", () => {
       ...builtinUITools,
       suspendTool,
       runtimeDoneTool,
+      worldDimensionGetTool,
+      worldDimensionListTool,
       ...createCharacterTools({} as Parameters<typeof createCharacterTools>[0]),
       ...createPluginDataTools(
         {} as Parameters<typeof createPluginDataTools>[0],

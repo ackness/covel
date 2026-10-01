@@ -300,6 +300,7 @@ export async function executeFunctionRuntime({
         upstreamProposals,
         writeBuffer,
         () => handlerAbort.signal.throwIfAborted(),
+        deps.dimensionContext,
       )
     : undefined;
   const handlerStore = deps.store

@@ -22,7 +22,7 @@ import {
   sessionApprovalScope,
 } from "../session/session-guard.js";
 import { withLockedSessionMutation } from "../session/locked-mutation.js";
-import { type WorldEnv, formatWorldEntryContent } from "./shared.js";
+import type { WorldEnv } from "./shared.js";
 
 export const worldDataSyncRoutes = new Hono<WorldEnv>();
 
@@ -245,7 +245,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
 });
 
 // POST /worlds/:id/sync-dimensions — re-import world dimensions into a session's
-// plugin_data and lorebook canonical entries.
+// protected versioned dimension records through the import ledger.
 worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
@@ -273,70 +273,52 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
 
-  const meta = world.metadata as Record<string, unknown> | undefined;
-  const dimensions = (meta?.dimensions ?? {}) as Record<string, unknown>;
+  const worldsDirs = c.get("worldsDirs");
+  const covelHome = c.get("covelHome");
 
-  if (Object.keys(dimensions).length === 0) {
-    return c.json(errorBody("World has no dimensions to sync"), 422);
-  }
+  // Resolve the EFFECTIVE dimension declaration (inline + external
+  // dimensionSources + worldData descriptor) through the same path the normal
+  // worldData sync uses — not the pre-merged `metadata.dimensions`, which
+  // would make the import ledger hash permanently mismatch the authored source.
+  const syncOptions = (liveSession: typeof session) => ({
+    store,
+    sessionId,
+    worldId: id,
+    worldsDirs,
+    covelHome,
+    now: new Date().toISOString(),
+    dryRun: false,
+    dimensionOnly: true,
+    locale: liveSession.locale,
+    preflight: {
+      activePlugins: liveSession.activePlugins,
+      registry: pluginRegistry,
+      canExecuteProjection: (pluginId: string) =>
+        c
+          .get("rpcApprovalGate")
+          .hasGrant(
+            liveSession.id,
+            pluginId,
+            COMMUNITY_SERVER_CODE_ACTION,
+            sessionApprovalScope(liveSession, pluginId),
+          ),
+    },
+  });
 
-  const now = new Date().toISOString();
-  const nextKeys = new Set(Object.keys(dimensions));
+  // Planning is non-mutating and may touch files; keep it outside the lock,
+  // matching the sync-data route. The locked phase revalidates session fields.
+  const prepared = await prepareWorldDataSyncForSession(syncOptions(session));
 
-  // World-owned lore is replaced atomically; plugin data stays plugin-owned.
-  const applyDimensionSync = async (
-    s: import("@covel/store").StoreTransaction,
-  ): Promise<void> => {
-    const lorebookRecords = Object.entries(dimensions).map(
-      ([key, value], idx) => ({
-        id: `world-entry:${key}`,
-        sessionId,
-        owner: { kind: "world" } as const,
-        keys: [key],
-        content: formatWorldEntryContent(key, value),
-        strategy: "constant" as const,
-        position: "after_char_defs",
-        insertionOrder: 100 + idx * 100,
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
-      }),
-    );
-    await s.upsertLorebookEntries(lorebookRecords);
-
-    if (
-      typeof s.listSessionLorebookEntries !== "function" ||
-      typeof s.deleteLorebookEntry !== "function"
-    ) {
-      return;
-    }
-    const staleLorebookEntries = (
-      await s.listSessionLorebookEntries(sessionId)
-    ).filter((entry) => {
-      if (entry.owner.kind !== "world" || entry.strategy !== "constant")
-        return false;
-      if (!entry.id.startsWith("world-entry:")) return false;
-      const key = entry.keys[0] ?? entry.id.slice("world-entry:".length);
-      return !nextKeys.has(key);
-    });
-    for (const entry of staleLorebookEntries) {
-      await s.deleteLorebookEntry(sessionId, { kind: "world" }, entry.id);
-    }
-  };
-
+  let report: Awaited<ReturnType<typeof syncWorldDataForSession>> | undefined;
   const runSync = async (
     liveSession: typeof session,
   ): Promise<Response | undefined> => {
-    if (liveSession.worldId !== id) {
+    if (liveSession.worldId !== id)
       return c.json(errorBody("Session not found or world mismatch"), 404);
-    }
-    if (typeof pluginRegistry.syncSessionActivations === "function") {
-      pluginRegistry.syncSessionActivations(
-        sessionId,
-        liveSession.activePlugins,
-      );
-    }
-    await store.withTransaction(applyDimensionSync);
+    report = await syncWorldDataForSession({
+      ...syncOptions(liveSession),
+      prepared,
+    });
     return undefined;
   };
 
@@ -372,10 +354,5 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     );
   }
 
-  return c.json(
-    okBody({
-      syncedKeys: Object.keys(dimensions),
-      entryCount: Object.keys(dimensions).length,
-    }),
-  );
+  return c.json(okBody({ ...report }));
 });

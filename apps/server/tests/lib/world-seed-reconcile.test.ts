@@ -74,7 +74,7 @@ it("keeps the last good override when a higher-priority package fails to load", 
   await writeFile(path.join(packageDir, "world.yaml"), manifest, "utf8");
   await writeFile(
     path.join(packageDir, "tone.yaml"),
-    "genres: [fantasy]\ncontentRating: teen\n",
+    "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - fantasy\n  contentRating: teen\n",
     "utf8",
   );
   const store = createMemoryStore();

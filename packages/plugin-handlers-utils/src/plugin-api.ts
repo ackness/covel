@@ -7,7 +7,7 @@ import type {
   PluginExtensionApi,
 } from "./extension-points.js";
 import type { FunctionStoreView } from "./function-runtime.js";
-import type { MediaReference } from "./types.js";
+import type { JsonValue, MediaReference } from "./types.js";
 import type { withPendingProposals } from "./tool-result.js";
 export type { PluginToolResult } from "./tool-result.js";
 
@@ -111,6 +111,23 @@ export interface PluginProposalPayloads {
   "character.schema.set": {
     readonly types: readonly string[];
     readonly attributes: readonly ExtensionAttributeDefinition[];
+  };
+  "dimension.initialize": {
+    readonly definitions: import("./world-dimensions.js").ExtensionWorldDimensions;
+  };
+  "dimension.update": {
+    readonly updates: readonly {
+      readonly id: string;
+      readonly expectedVersion: number;
+      readonly value: JsonValue;
+      readonly reason?: string;
+    }[];
+    readonly source?: {
+      readonly resultId: string;
+      readonly turnNumber: number;
+    };
+    readonly readVersions?: Readonly<Record<string, number>>;
+    readonly settlement?: "no-change" | "manual" | "skipped";
   };
   "lorebook.upsert": {
     readonly entries: readonly {

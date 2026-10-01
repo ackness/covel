@@ -10,6 +10,10 @@ export interface TurnCommitOutcome {
   readonly committed: boolean;
   readonly failedProposalCount: number;
   readonly snapshotFailed: boolean;
+  readonly dimensionConflict?: {
+    readonly code: "dimension-version-conflict";
+    readonly currentVersions: Readonly<Record<string, number>>;
+  };
   readonly error?: string;
 }
 

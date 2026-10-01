@@ -1,3 +1,4 @@
+import { DIMENSION_DATA_NAMESPACE, dimensionRecordSchema } from "@covel/shared";
 import { randomUUID } from "node:crypto";
 import type {
   CharacterRecord,
@@ -95,6 +96,14 @@ export function valueHashForWrite(options: {
       canonicalJson(stableLorebookValue(options.lorebookRecord)),
     );
   }
+  if (
+    write.kind === "plugin-data" &&
+    write.namespace === DIMENSION_DATA_NAMESPACE
+  ) {
+    const { lastTrackedSource: _source, ...value } =
+      dimensionRecordSchema.parse(write.value);
+    return hashImportValue(value);
+  }
   return hashImportValue(write.value);
 }
 
@@ -120,6 +129,11 @@ export async function currentHashForLedger(options: {
       ledger.namespace,
       ledger.key,
     );
+    if (record && ledger.namespace === DIMENSION_DATA_NAMESPACE) {
+      const { lastTrackedSource: _source, ...value } =
+        dimensionRecordSchema.parse(record.value);
+      return hashImportValue(value);
+    }
     return record ? hashImportValue(record.value) : null;
   }
   if (ledger.target === "characters" && ledger.key) {

@@ -66,6 +66,14 @@ export async function emitCommittedProposal(
       proposalId: proposal.id,
       asset: view,
     });
+  } else if (
+    (proposal.type === "dimension.initialize" ||
+      proposal.type === "dimension.update") &&
+    result.event &&
+    (result.event.type === "dimensions.changed" ||
+      result.event.type === "dimensions.settlement.changed")
+  ) {
+    await emitter.emit(result.event.type, result.event.payload);
   } else if (proposal.type === "character.schema.set" && result.event) {
     await emitter.emit("character-schema.changed", {
       runtimeId: proposal.source.runtimeId,

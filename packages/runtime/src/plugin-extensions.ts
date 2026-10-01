@@ -21,6 +21,10 @@ export interface PluginExtensionExecutionScope {
   readonly sessionId: string;
   readonly locale: string;
   readonly turnId?: string;
+  readonly runtimeIdentities?: readonly {
+    readonly name: string;
+    readonly pluginId: string;
+  }[];
   readonly signal: AbortSignal;
   readonly gateway?: PluginServiceContext["gateway"];
   readonly utils?: PluginServiceContext["utils"];
@@ -178,7 +182,7 @@ export class PluginExtensionHost {
     scope: PluginExtensionExecutionScope,
   ): PluginExtensionExecution {
     const world = structuredClone(
-      scope.world ?? { characterSchema: null, characters: [] },
+      scope.world ?? { characterSchema: null, characters: [], dimensions: {} },
     );
     const reads = new Map<
       string,
@@ -303,7 +307,41 @@ export class PluginExtensionHost {
               collected.push(value);
             }
             if (point.mode === "collect") return collected;
-            if (point.mode === "single") return output;
+            if (point.mode === "single") {
+              if (
+                point.id === sessionWorldContextV1.id &&
+                typeof output === "object" &&
+                output !== null
+              ) {
+                const supplied = output as {
+                  dimensionRecovery?: {
+                    editorRuntimeId: string;
+                    trackerRuntimeId: string;
+                  };
+                };
+                if (supplied.dimensionRecovery) {
+                  for (const name of Object.values(
+                    supplied.dimensionRecovery,
+                  )) {
+                    if (
+                      !scope.runtimeIdentities?.some(
+                        (runtime) =>
+                          runtime.name === name &&
+                          runtime.pluginId === providers[0]!.pluginId,
+                      )
+                    )
+                      throw new Error(
+                        "Dimension recovery runtime is not owned by the active provider",
+                      );
+                  }
+                }
+                return {
+                  ...output,
+                  dimensionProviderPluginId: providers[0]!.pluginId,
+                };
+              }
+              return output;
+            }
             return (
               output ??
               point.output.parse(

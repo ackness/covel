@@ -1,3 +1,14 @@
+import {
+  appendDimensionPlan,
+  readEffectiveDimensions,
+} from "./session-import/dimensions.js";
+import {
+  DIMENSION_DATA_NAMESPACE,
+  DIMENSION_SETTLEMENT_NAMESPACE,
+  dimensionRecordSchema,
+  dimensionSettlementReceiptSchema,
+  dimensionsJsonEqual,
+} from "@covel/shared";
 import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
 import { loadWorldDataDescriptor } from "./descriptor.js";
@@ -62,11 +73,18 @@ export async function prepareWorldDataImportForSession(
     ? await resolveWorldRoot(options.worldId, options.worldsDirs)
     : null;
   const manifest = worldRoot ? await readWorldManifest(worldRoot) : null;
+  const effectiveDimensions = worldRoot
+    ? await readEffectiveDimensions({
+        worldRoot,
+        manifest: manifest!,
+        locale: options.locale,
+      })
+    : options.dimensions;
   if (!worldRoot || !manifest?.worldData) {
     const sources = portableContractSources(options.contractData);
-    if (options.contractData === undefined)
+    if (options.contractData === undefined && effectiveDimensions === undefined)
       return { imported: false, diagnostics: [] };
-    const plan = await buildImportPlan({
+    const basePlan = await buildImportPlan({
       sessionId: options.sessionId,
       worldId: options.worldId,
       sources,
@@ -74,6 +92,11 @@ export async function prepareWorldDataImportForSession(
       now: options.now,
       locale: options.locale,
     });
+    const plan = appendDimensionPlan(
+      basePlan,
+      effectiveDimensions,
+      options.preflight,
+    );
     return {
       imported: true,
       portableOnly: true,
@@ -100,7 +123,7 @@ export async function prepareWorldDataImportForSession(
     );
   }
 
-  const plan = await buildImportPlan({
+  const basePlan = await buildImportPlan({
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
@@ -108,6 +131,17 @@ export async function prepareWorldDataImportForSession(
     now: options.now,
     locale: options.locale,
   });
+  const resolvedDimensions = await readEffectiveDimensions({
+    worldRoot,
+    manifest: manifest!,
+    sources: descriptor.sources,
+    locale: options.locale,
+  });
+  const plan = appendDimensionPlan(
+    basePlan,
+    resolvedDimensions,
+    options.preflight,
+  );
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   let materializedWrites = plan.writes;
   if (options.mediaStore) {
@@ -191,6 +225,9 @@ export async function importWorldDataForSession(
       ? await options.store.getSession(options.sessionId)
       : null;
   const prepared = await prepareWorldDataImportForSession({
+    dimensions: options.worldId
+      ? (await options.store.getWorld(options.worldId))?.metadata?.dimensions
+      : undefined,
     contractData: options.worldId
       ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
       : undefined,
@@ -288,7 +325,7 @@ export async function preflightWorldDataForSession(
     };
   }
 
-  const plan = await buildImportPlan({
+  const basePlan = await buildImportPlan({
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
@@ -302,6 +339,18 @@ export async function preflightWorldDataForSession(
     locale: options.locale,
   });
 
+  const plan = basePlan.diagnostics.some((item) => item.level === "error")
+    ? basePlan
+    : appendDimensionPlan(
+        basePlan,
+        await readEffectiveDimensions({
+          worldRoot,
+          manifest,
+          sources: descriptor.sources,
+          locale: options.locale,
+        }),
+        options.preflight,
+      );
   return preflightPlanResult(plan, [
     ...descriptor.diagnostics,
     ...plan.diagnostics,
@@ -371,7 +420,24 @@ export async function prepareWorldDataSyncForSession(
   }
   const manifest = await readWorldManifest(worldRoot);
   if (!manifest.worldData) {
-    return preparePortableWorldDataSync(options);
+    const session = await options.store.getSession(options.sessionId);
+    const definitions = await readEffectiveDimensions({
+      worldRoot,
+      manifest,
+      locale: options.locale ?? session?.locale,
+    });
+    const plan = appendDimensionPlan(emptyImportPlan(), definitions, {
+      ...options.preflight,
+      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
+    });
+    // There is no descriptor for other domains: do not treat their old ledger
+    // rows as removed merely because inline dimensions are now synchronizable.
+    return {
+      imported: true,
+      dimensionOnly: true,
+      diagnostics: [...plan.diagnostics, ...plan.mergeEvents],
+      plan,
+    };
   }
 
   const descriptor = await loadWorldDataDescriptor({
@@ -390,11 +456,35 @@ export async function prepareWorldDataSyncForSession(
     };
   }
 
+  if (options.dimensionOnly) {
+    const session = await options.store.getSession(options.sessionId);
+    const definitions = await readEffectiveDimensions({
+      worldRoot,
+      manifest,
+      sources: descriptor.sources,
+      locale: options.locale ?? session?.locale,
+    });
+    const plan = appendDimensionPlan(emptyImportPlan(), definitions, {
+      ...options.preflight,
+      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
+    });
+    return {
+      imported: true,
+      dimensionOnly: true,
+      diagnostics: [
+        ...descriptor.diagnostics,
+        ...plan.diagnostics,
+        ...plan.mergeEvents,
+      ],
+      plan,
+    };
+  }
+
   const session =
     !options.preflight?.activePlugins && options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
-  const plan = await buildImportPlan({
+  const basePlan = await buildImportPlan({
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
@@ -404,6 +494,16 @@ export async function prepareWorldDataSyncForSession(
     },
     now: options.now,
     locale: options.locale ?? session?.locale,
+  });
+  const effectiveDimensions = await readEffectiveDimensions({
+    worldRoot,
+    manifest,
+    sources: descriptor.sources,
+    locale: options.locale,
+  });
+  const plan = appendDimensionPlan(basePlan, effectiveDimensions, {
+    ...options.preflight,
+    activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
   });
   return {
     imported: true,
@@ -427,6 +527,9 @@ async function preparePortableWorldDataSync(
     worldId: options.worldId,
     now: options.now,
     locale: options.locale ?? session?.locale,
+    dimensions: options.worldId
+      ? (await options.store.getWorld(options.worldId))?.metadata?.dimensions
+      : undefined,
     contractData: options.worldId
       ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
       : undefined,
@@ -471,15 +574,45 @@ export async function syncWorldDataForSession(
   // Capture the narrowed worldId so it stays `string` in transaction closures.
   const worldId = options.worldId;
 
+  const dimensionOnly = options.dimensionOnly || prepared.dimensionOnly;
+  const selectedWrites = dimensionOnly
+    ? plan.writes.filter(
+        (write) =>
+          write.kind === "plugin-data" &&
+          write.namespace === DIMENSION_DATA_NAMESPACE,
+      )
+    : plan.writes;
   const ledgers = (
     await options.store.listWorldDataImportLedger(options.sessionId)
-  ).filter((ledger) => ledger.managed && ledger.sourceWorldId === worldId);
+  ).filter(
+    (ledger) =>
+      ledger.managed &&
+      ledger.sourceWorldId === worldId &&
+      (!dimensionOnly || ledger.namespace === DIMENSION_DATA_NAMESPACE),
+  );
   const ledgerByKey = new Map(
     ledgers.map((ledger) => [ledgerKey(ledger), ledger]),
   );
   const writesByKey = new Map(
-    plan.writes.map((write) => [writeKey(write), write]),
+    selectedWrites.map((write) => [writeKey(write), write]),
   );
+  const dimensionProvider = ledgers.find(
+    (ledger) => ledger.namespace === DIMENSION_DATA_NAMESPACE,
+  )?.pluginId;
+  const pendingDimensions = dimensionProvider
+    ? (
+        await options.store.listPluginData(
+          options.sessionId,
+          dimensionProvider,
+          DIMENSION_SETTLEMENT_NAMESPACE,
+        )
+      ).some(
+        (row) =>
+          dimensionSettlementReceiptSchema.parse(row.value).status ===
+          "pending-settlement",
+      )
+    : false;
+
   const deferredProjectionKeys = new Set(
     plan.deferredProjectionOutputs.map(
       (output) =>
@@ -514,7 +647,11 @@ export async function syncWorldDataForSession(
       deleted++;
       continue;
     }
-    if (currentHash !== ledger.valueHash && !options.force) {
+    if (
+      (ledger.namespace === DIMENSION_DATA_NAMESPACE && pendingDimensions) ||
+      (currentHash !== ledger.valueHash &&
+        (!options.force || ledger.namespace === DIMENSION_DATA_NAMESPACE))
+    ) {
       conflicts.push(syncConflictForLedger(ledger, "modified"));
       continue;
     }
@@ -526,8 +663,44 @@ export async function syncWorldDataForSession(
     const key = writeKey(write);
     const ledger = ledgerByKey.get(key);
     if (!ledger) {
+      // Dimensions committed via `dimension.initialize` carry no import ledger
+      // row. If the live record already evolved or was hand-edited, re-import
+      // must surface a conflict instead of silently resetting it to
+      // initialValue.
+      if (
+        write.kind === "plugin-data" &&
+        write.namespace === DIMENSION_DATA_NAMESPACE
+      ) {
+        const row = await options.store.getPluginData(
+          options.sessionId,
+          write.pluginId,
+          DIMENSION_DATA_NAMESPACE,
+          write.key,
+        );
+        const record = row ? dimensionRecordSchema.parse(row.value) : undefined;
+        const evolved =
+          record !== undefined &&
+          (record.lastTrackedSource !== undefined ||
+            !dimensionsJsonEqual(record.value, record.definition.initialValue));
+        if (evolved) {
+          conflicts.push({
+            target: `plugin-data:${write.pluginId}:${write.namespace}`,
+            key: write.key,
+            sourceId: write.source.id,
+            reason: "modified",
+          });
+          continue;
+        }
+      }
       writesToApply.push(write);
       upserted++;
+      continue;
+    }
+    if (
+      ledger.namespace === DIMENSION_DATA_NAMESPACE &&
+      write.sourceDigest === ledger.sourceDigest
+    ) {
+      unchanged++;
       continue;
     }
     const currentHash = await currentHashForLedger({
@@ -545,7 +718,11 @@ export async function syncWorldDataForSession(
       upserted++;
       continue;
     }
-    if (currentHash !== ledger.valueHash && !options.force) {
+    if (
+      (ledger.namespace === DIMENSION_DATA_NAMESPACE && pendingDimensions) ||
+      (currentHash !== ledger.valueHash &&
+        (!options.force || ledger.namespace === DIMENSION_DATA_NAMESPACE))
+    ) {
       conflicts.push(syncConflictForLedger(ledger, "modified"));
       continue;
     }
@@ -594,8 +771,19 @@ export async function syncWorldDataForSession(
       // hash inside the transaction and abort the whole thing if it moved.
       // The caller's session lock closes the turn-interleave window; this
       // closes the rest.
-      if (!options.force) {
+      const dimensionProvider = ledgers.find(
+        (ledger) => ledger.namespace === DIMENSION_DATA_NAMESPACE,
+      )?.pluginId;
+      if (dimensionProvider)
+        await tx.compareAndSetPluginDataBatch(
+          options.sessionId,
+          dimensionProvider,
+          [],
+        );
+      {
         for (const ledger of ledgersToDelete) {
+          if (options.force && ledger.namespace !== DIMENSION_DATA_NAMESPACE)
+            continue;
           const freshHash = await currentHashForLedger({
             store: tx,
             sessionId: options.sessionId,
@@ -612,12 +800,16 @@ export async function syncWorldDataForSession(
       }
 
       for (const ledger of ledgersToDelete) {
-        await deleteLedgerTarget({
-          store: tx,
-          sessionId: options.sessionId,
-          ledger,
-          onMediaUnref: (mediaId) => pendingMediaUnrefs.push(mediaId),
-        });
+        if (!(
+          ledger.namespace === DIMENSION_DATA_NAMESPACE &&
+          writesByKey.has(ledgerKey(ledger))
+        ))
+          await deleteLedgerTarget({
+            store: tx,
+            sessionId: options.sessionId,
+            ledger,
+            onMediaUnref: (mediaId) => pendingMediaUnrefs.push(mediaId),
+          });
         await tx.deleteWorldDataImportLedger(options.sessionId, ledger.id);
       }
       if (materializedWritesToApply.length > 0) {

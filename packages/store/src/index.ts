@@ -99,6 +99,7 @@ export type {
   MessageRecord,
   CharacterRecord,
   PluginDataRecord,
+  PluginDataBatchCasEntry,
   TraceEventRecord,
   RuntimeOutputRecord,
   InteractionRecordRow,

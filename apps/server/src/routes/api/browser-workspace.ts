@@ -1,3 +1,6 @@
+import { appendDimensionPlan } from "../../world-data/session-import/dimensions.js";
+import { applyPreparedWorldDataImportForSession } from "../../world-data/session-import.js";
+import { DIMENSION_DATA_NAMESPACE } from "@covel/shared";
 import { withMemoryIngestLock } from "../../lib/memory-ingest-lock.js";
 import { scheduleMemoryIngest } from "./commit-execution.js";
 import {
@@ -410,6 +413,48 @@ export function createBrowserWorkspaceRoutes(
                   c.get("store"),
                   admittedCheckpoint,
                   {
+                    afterRestoreInTx: async (tx) => {
+                      if (
+                        checkpoint.session.phase !== "setup" ||
+                        checkpoint.session.completedPlayerTurns !== 0 ||
+                        checkpoint.pluginData.some(
+                          (row) => row.namespace === DIMENSION_DATA_NAMESPACE,
+                        ) ||
+                        checkpoint.worldDataLedger.some(
+                          (row) => row.namespace === DIMENSION_DATA_NAMESPACE,
+                        )
+                      )
+                        return;
+                      const world = checkpoint.session.worldId
+                        ? await tx.getWorld(checkpoint.session.worldId)
+                        : null;
+                      if (!world?.metadata?.dimensions) return;
+                      const plan = appendDimensionPlan(
+                        {
+                          writes: [],
+                          diagnostics: [],
+                          mergeEvents: [],
+                          deferredProjectionOutputs: [],
+                        },
+                        world.metadata.dimensions,
+                        {
+                          registry: c.get("pluginRegistry"),
+                          activePlugins: checkpoint.session.activePlugins,
+                        },
+                      );
+                      await applyPreparedWorldDataImportForSession({
+                        store: tx,
+                        sessionId,
+                        worldId: world.id,
+                        now: checkpoint.committedAt,
+                        prepared: {
+                          imported: true,
+                          diagnostics: [],
+                          mediaRefs: [],
+                          plan,
+                        },
+                      });
+                    },
                     writeWorld,
                     session: {
                       ...checkpoint.session,

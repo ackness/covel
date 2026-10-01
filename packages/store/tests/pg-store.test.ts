@@ -37,6 +37,82 @@ if (pgAvailable) {
     const store = await createPgStore(isolated.url, { freshSchema: true });
     return store;
   });
+  it("batch CAS serializes independent PostgreSQL clients and rejects partial stale batches", async () => {
+    const left = await createPgStore(isolated.url, { freshSchema: true });
+    const right = await createPgStore(isolated.url);
+    const at = "2026-10-01T00:00:00Z";
+    try {
+      await left.createSession({
+        id: "cas-session",
+        worldId: null,
+        phase: "playing",
+        status: "active",
+        setupRuntimes: {},
+        completedPlayerTurns: 0,
+        metadata: {},
+        locale: "en-US",
+        activePlugins: [],
+        createdAt: at,
+        updatedAt: at,
+      });
+      const batch = (
+        expectedVersion: number | null,
+        version: number,
+        value: number,
+      ) =>
+        ["one", "two"].map((key) => ({
+          namespace: "_dimensions",
+          key,
+          expectedVersion,
+          value: { version, value },
+          timestamp: at,
+        }));
+      expect(
+        await left.compareAndSetPluginDataBatch(
+          "cas-session",
+          "authority",
+          batch(null, 1, 0),
+        ),
+      ).toBe(true);
+      const results = await Promise.all([
+        left.compareAndSetPluginDataBatch(
+          "cas-session",
+          "authority",
+          batch(1, 2, 1),
+        ),
+        right.compareAndSetPluginDataBatch(
+          "cas-session",
+          "authority",
+          batch(1, 2, 2),
+        ),
+      ]);
+      expect(results.filter(Boolean)).toHaveLength(1);
+      const before = await left.listPluginData(
+        "cas-session",
+        "authority",
+        "_dimensions",
+      );
+      expect(before.map((row) => row.value)).toEqual([
+        before[0]!.value,
+        before[0]!.value,
+      ]);
+      expect(before[0]!.value).toMatchObject({ version: 2 });
+      const stale = batch(2, 3, 3);
+      stale[1]!.expectedVersion = 1;
+      expect(
+        await right.compareAndSetPluginDataBatch(
+          "cas-session",
+          "authority",
+          stale,
+        ),
+      ).toBe(false);
+      expect(
+        await left.listPluginData("cas-session", "authority", "_dimensions"),
+      ).toEqual(before);
+    } finally {
+      await Promise.all([left.close(), right.close()]);
+    }
+  });
 } else {
   describe("PgStore (skipped)", () => {
     it("skipped — PostgreSQL not available", () => {

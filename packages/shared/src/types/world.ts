@@ -1,6 +1,7 @@
-/**
- * World dimension types for world building and editing.
- */
+/** World packages declare open dimension definitions; sessions own their values. */
+
+import type { WorldDimensions } from "./dimensions.js";
+export type { WorldDimensions } from "./dimensions.js";
 
 // ── Common ───────────────────────────────────────────────────────
 
@@ -187,20 +188,6 @@ export interface WorldStartingConditions {
    * tokens work best (e.g. ["青萍外门", "试炼前夜", "野生灵脉"]).
    */
   readonly openingChips?: readonly I18nText[];
-}
-
-// ── Aggregate ────────────────────────────────────────────────────
-
-export interface WorldDimensions {
-  readonly geography?: WorldGeography;
-  readonly factions?: WorldFaction[];
-  readonly powerSystem?: WorldPowerSystem;
-  readonly history?: WorldHistoryEvent[];
-  readonly economy?: WorldEconomy;
-  readonly socialStructure?: WorldSocialStructure;
-  readonly tone?: WorldTone;
-  readonly mechanics?: WorldMechanics;
-  readonly startingConditions?: WorldStartingConditions;
 }
 
 // ── Plugin Selection Policy ─────────────────────────────────────

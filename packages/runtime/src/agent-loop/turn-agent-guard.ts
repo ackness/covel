@@ -172,6 +172,7 @@ export async function executeAgentGuard({
           upstreamProposals,
           writeBuffer,
           assertLive,
+          deps.dimensionContext,
         )
       : undefined;
     const guardStore = deps.store

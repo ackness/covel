@@ -86,6 +86,7 @@ export interface PreparedWorldDataSync {
   readonly imported: boolean;
   readonly diagnostics: readonly WorldDataDiagnostic[];
   readonly plan: ImportPlan;
+  readonly dimensionOnly?: boolean;
 }
 
 export interface WorldDataImportedMediaRef {
@@ -159,6 +160,7 @@ export type PreparedWorldDataImport =
 
 export interface PrepareWorldDataImportForSessionOptions {
   readonly contractData?: unknown;
+  readonly dimensions?: unknown;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];
@@ -181,6 +183,7 @@ export interface ApplyPreparedWorldDataImportForSessionOptions {
 
 export interface PreflightWorldDataForSessionOptions {
   readonly contractData?: unknown;
+  readonly dimensions?: unknown;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];
@@ -206,6 +209,7 @@ export interface PreflightWorldDataForSessionResult {
 }
 
 export interface SyncWorldDataForSessionOptions {
+  readonly dimensionOnly?: boolean;
   readonly store: DataStore;
   readonly mediaStore?: MediaStore;
   readonly sessionId: string;

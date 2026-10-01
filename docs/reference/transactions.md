@@ -64,6 +64,75 @@ backend must pass:
 
 Any new store backend MUST pass this suite.
 
+## Versioned plugin-data batch CAS
+
+Versioned domain records use a host-owned `PluginDataStore` primitive, available
+on both root `DataStore` and transaction-bound views:
+
+```ts
+compareAndSetPluginDataBatch(
+  sessionId: string,
+  pluginId: string,
+  records: readonly {
+    namespace: string;
+    key: string;
+    expectedVersion: number | null;
+    value: unknown;
+    timestamp: string;
+  }[],
+): Promise<boolean>;
+```
+
+`expectedVersion: null` requires absence; a positive integer must exactly match
+the existing JSON record's `value.version`. All comparisons succeed before any
+row changes. A conflict returns `false` with no writes; invalid or duplicate
+(namespace, key) entries and infrastructure failures throw. An enclosing
+transaction still owns rollback of every other write. This is not a new table,
+a generic JSON merge API, or a permission to write another plugin's partition.
+
+- Memory compares and replaces the batch under its serialized store boundary.
+- SQLite uses `BEGIN IMMEDIATE` when it owns the transaction; a caller's
+  transaction is reused, not nested.
+- PostgreSQL acquires the parent session row with `FOR UPDATE` inside the
+  transaction before comparisons and writes. The lock remains held through
+  the caller's ledger/receipt writes; a read followed by ordinary upsert, or
+  an in-process session lock alone, is not CAS.
+- BrowserVault keeps its existing atomic checkpoint/revision contract, not an
+  IndexedDB implementation of `DataStore`. Checkpoints retain adopted
+  dimension records, versions, source references and settlement receipts.
+
+Dimension initialization, updates and imports use this primitive. The shared
+schema/value validator runs again at the commit boundary; generic
+`plugin.data`/batch/delete paths cannot write `_dimensions` or
+`_dimension-settlements`. All read versions, including evaluated dimensions
+whose values do not change, must still match before a successful settlement.
+
+### Dimension settlement and execution atomicity
+
+The host registers an obligation in the committed narrative's transaction,
+using the authoritative result ID and logical turn number. Frozen definitions
+and read versions live in the receipt; narrative text is read from the source
+turn artifact rather than copied into every receipt. Updated values and the
+success receipt commit in one CAS batch/transaction. Explicit `no-change` also
+validates the read set and writes a receipt; it is not inferred from a missing
+tool call or a successful runtime.
+
+A rejected tracked plan can retain the story with an explicit
+`pending-settlement` domain result: it writes no values and no success receipt.
+This does **not** change `finalizeExecution`'s global rule that any
+`committed:false` proposal rolls back the whole execution. Ordinary manual
+version conflicts remain write rejection; infrastructure errors still throw
+and roll back. Notifications are published only after durable commit. The next
+narrative is blocked until the pending source is retried, explicitly marked
+`manual`, or explicitly `skipped`; a plain value edit does not resolve it.
+
+Receipts and adopted definitions/values follow existing snapshot, fork and
+browser checkpoint paths. Terminal sources are not settled again after restore
+or retry. See [World Model](world-model.md#回合时序与结算回执) for the five states
+and [API](api.md#维度编辑与待结算恢复) for editor/tracker RPC boundaries. Old raw
+dimension worlds and development sessions/checkpoints must be recreated; no
+legacy read or dimension-to-lorebook double write is maintained.
+
 ## Backend implementations
 
 An execution veto or cancellation captured in the prepared commit plan rejects
@@ -374,7 +443,13 @@ the session row plus importer-managed writes in one transaction:
 session row: target, plugin id, namespace, key, source digest, value hash,
 schema ref, source id, and managed flag. `/api/worlds/:id/sync-data` uses
 that ledger for dry-run, hash-based conflict detection, and explicit
-`force` sync.
+`force` sync. Dimension declarations also enter the ledger, including inline
+and external declarations and stored worlds. An unchanged declaration preserves
+progress; a new declaration initializes its value. Changing or removing a
+record that has evolved or been edited, or has pending settlement, produces a
+conflict. `force` does not bypass those dimension protections or migrate values
+to a new schema. Apply rechecks ledger hashes and record versions in its
+transaction; conflicts preserve the existing definition/value/version.
 
 Media bytes live in `MediaStore`, which has a separate lifecycle from
 `DataStore`. World-data import validates media during preflight, writes the
@@ -432,8 +507,8 @@ the affected table in the relevant reference doc.
 
 ## World data 写入的一致性边界
 
-- **`POST /worlds/:id/sync-dimensions`** — 世界所有的 Lorebook 条目更新（upsert 新条目 → 删除过期条目，不写插件私有数据）在**一个 SessionLock + 一个 store transaction** 内完成。失败整体回滚并返回 500，不会让下一轮 prompt 读到「删了一半」的世界数据。
-- **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑（新扫描会把该改动报为正常 conflict）或显式 `force`。路由同时持 SessionLock，挡住回合并发写。
+- **`POST /worlds/:id/sync-dimensions`** — 只同步维度账本与受保护 `_dimensions` 记录，在 **SessionLock + store transaction** 中重新验证并应用；不重建 `entries` 或 Lorebook。已演化/手改或待结算时返回冲突报告且不写入，存储异常整体回滚并返回 500。
+- **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑，新扫描将改动报为正常 conflict；普通领域可显式 `force`，维度的已演化/待结算保护不因此解除。维度使用 batch CAS 并持有会话写屏障；路由同时持 SessionLock，挡住回合并发写。
 - **媒体与 DataStore 分属不同生命周期**。session create 和 sync 在语义事务前准备媒体，`put` 原子建立本次导入专属临时引用。发布成功先建立 session claims 再释放临时引用；提交前失败只释放本次临时引用，无归属字节交给 GC，不强制删除内容。提交后 finalization 失败则保留保护，创建回滚成功删除会话后才可释放。兼容调用入口若在 DataStore 事务内 materialize，也遵守同一引用规则。进程崩溃可能留下无自动过期的临时引用，需确认导入已停止后人工清理。
 - **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。
 

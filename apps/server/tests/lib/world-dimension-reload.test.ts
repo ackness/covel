@@ -53,24 +53,37 @@ id: fixture-world
 name: Fixture world
 summary: Synthetic world for dimension recovery.
 defaultLocale: en-US
-supportedLocales: [en-US]
+supportedLocales:
+  - en-US
 dimensions:
   tone:
-    genres: [fantasy]
-    contentRating: teen
+    name: tone
+    schema: {}
+    initialValue:
+      genres:
+        - fantasy
+      contentRating: teen
 dimensionSources:
   tone: tone.yaml
 `;
       await writeFile(manifestFile, manifest, "utf8");
       await writeFile(
         toneFile,
-        "genres: [mystery]\ncontentRating: teen\n",
+        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - mystery\n  contentRating: teen\n",
         "utf8",
       );
       await seedWorlds(store, root, sessionLock);
       const before = (await store.getWorld("fixture-world"))!;
       expect(before).toMatchObject({
-        metadata: { dimensions: { tone: { genres: ["mystery"] } } },
+        metadata: {
+          dimensions: {
+            tone: {
+              name: "tone",
+              schema: {},
+              initialValue: { genres: ["mystery"] },
+            },
+          },
+        },
       });
       await store.upsertWorld({ ...before, id: "absent-package" });
       watcher.start();
@@ -102,7 +115,7 @@ dimensionSources:
       if (failure === "unreadable") await rm(toneFile, { recursive: true });
       await writeFile(
         toneFile,
-        "genres: [adventure]\ncontentRating: teen\n",
+        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - adventure\n  contentRating: teen\n",
         "utf8",
       );
       if (failure === "unreadable") {
@@ -112,7 +125,15 @@ dimensionSources:
       await vi.waitFor(
         async () => {
           expect(await store.getWorld("fixture-world")).toMatchObject({
-            metadata: { dimensions: { tone: { genres: ["adventure"] } } },
+            metadata: {
+              dimensions: {
+                tone: {
+                  name: "tone",
+                  schema: {},
+                  initialValue: { genres: ["adventure"] },
+                },
+              },
+            },
           });
         },
         { timeout: 5000 },

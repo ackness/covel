@@ -63,6 +63,9 @@ import {
 } from "./execution-context.js";
 import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
 import { planTurnDetachment } from "../schedule/turn-completion.js";
+import { DIMENSION_CONTRACT } from "@covel/shared";
+import { dimensionExecutionBarrier } from "./dimension-barrier.js";
+import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import {
   loadSessionSummaries,
   refreshSessionContextSnapshot,
@@ -269,6 +272,30 @@ async function executeTurnImpl(
   // main-loop player turns plus one. Drives scheduled cadence / startTurn and
   // is independent of the raw player-message count `turnNumber`.
   const logicalTurn = sessionState.completedPlayerTurns + 1;
+  const dimensionBarrier = await dimensionExecutionBarrier({
+    store: deps.store,
+    sessionId: input.sessionId,
+    runtimes: activeRuntimes,
+    willNarrate: activeRuntimes.some(
+      (runtime) =>
+        runtime.outputKind === "story" &&
+        (!isTargeted || targetedRuntimeIds.has(runtime.name)),
+    ),
+  });
+  if (dimensionBarrier)
+    return {
+      turnId: input.turnId,
+      sessionId: input.sessionId,
+      runtimeResults: [],
+      executionContext,
+      durationMs: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      abortReason: dimensionBarrier,
+    };
+  const dimensionProvider = activeRuntimes.find(
+    (runtime) => runtime.outputContract === DIMENSION_CONTRACT,
+  );
+  deps = { ...deps, dimensionProviderPluginId: dimensionProvider?.pluginId };
   // Scheduling observes the current player action even though its journal row
   // is still uncommitted. This preserves cooldown semantics from the former
   // append-before-schedule path without exposing the row to the store,
@@ -333,22 +360,17 @@ async function executeTurnImpl(
     }
   }
   if (deps.extensions) {
-    const extensionSession = await deps.store?.getSession(input.sessionId);
     deps = {
       ...deps,
       extensionExecution: deps.extensions.createExecution({
         emitter: deps.emitter,
+        runtimeIdentities: activeRuntimes,
         sessionId: input.sessionId,
         turnId: input.turnId,
         locale: input.locale ?? "zh-CN",
-        world: {
-          characterSchema:
-            (await deps.store?.getCharacterSchema(input.sessionId)) ?? null,
-          characters: (await deps.store?.listCharacters(input.sessionId)) ?? [],
-          worldRecord: extensionSession?.worldId
-            ? ((await deps.store?.getWorld(extensionSession.worldId)) ?? null)
-            : null,
-        },
+        world: deps.store
+          ? await createWorldModelView(deps.store, input.sessionId)
+          : { characterSchema: null, characters: [], dimensions: {} },
         signal:
           getTurnExecutionSignal(deps.turnControl) ??
           new AbortController().signal,
@@ -493,6 +515,14 @@ async function executeTurnImpl(
       sessionSummaries,
     });
   let sessionContext = await loadSessionContext();
+  if (dimensionProvider)
+    deps = {
+      ...deps,
+      dimensionContext: {
+        dimensions: sessionContext!.world?.dimensions ?? {},
+        dimensionProviderPluginId: dimensionProvider.pluginId,
+      },
+    };
   const refreshSessionContext = async () =>
     (await loadSessionContext()) ?? sessionContext;
 
@@ -606,8 +636,23 @@ async function executeTurnImpl(
     manifest: RuntimeManifest,
     triggerEvent: RuntimeInvocation["triggerEvent"],
     identity?: ParallelRuntimeIdentity,
-  ): Promise<RuntimeResult> =>
-    executeOneRuntime({
+  ): Promise<RuntimeResult> => {
+    if (
+      manifest.outputKind === "story" &&
+      dimensionProvider &&
+      completedResults.get(dimensionProvider.name)?.status !== "success"
+    ) {
+      return Promise.resolve(
+        makeSkippedResult(
+          manifest,
+          input,
+          "dimension-snapshot-unavailable",
+          "framework:dimensionSnapshot",
+          {},
+        ),
+      );
+    }
+    return executeOneRuntime({
       manifest,
       input,
       activeRuntimes,
@@ -646,6 +691,7 @@ async function executeTurnImpl(
         nestedRuntimeResults.push(...results);
       },
     });
+  };
 
   // Player abort — stop scheduling further groups/followers as soon as
   // the signal fires. The in-flight runtime is cut by the loop/retry layer;

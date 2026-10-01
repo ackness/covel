@@ -86,13 +86,25 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | npc-graph/extractor                                                      | npc-graph           | network            | npc-graph     | nodes + edges      | NPC 关系图（force-directed 可视化）                                                              |
 | scene-cast                                                               | scene-cast          | users-round        | （无）        | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                           |
 | scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）    |
-| world-init/schema-gen                                                    | world-overview      | layout-dashboard   | world-data    | (汇总)             | 世界总览（词条 + 维度的概览页）                                                                  |
+| world-init/schema-gen                                                    | world-overview      | map                | world-data    | session.dimensions | 任意维度当前值、版本、编辑及待结算恢复                                                           |
 | world-init/schema-gen                                                    | world-schema        | sliders-horizontal | world-data    | schema             | 角色属性 schema                                                                                  |
 
-> `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则 之间切换。（旧 `world-entries` 子 Tab 已移除：对导入型世界它只是 `world-overview` 已格式化渲染的同一份 dimensions 的原始 JSON 重复；`entries` 的 lorebook/prompt 写入不变，`/debug` Data Explorer 仍可查看。）
+> `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则之间切换。总览的 `WorldDimensions` 直接读取公开会话当前值，不从 `entries` 或世界初值拼装；维度不再双写 constant lorebook。
 > `character` 组汇聚 `char-creator` 的 character-panel（从会话 World Model 的 `session.characters` 读取活角色）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；角色创建或导入经 World Model 写入，不依靠跨插件角色镜像。
 > `npc-graph/extractor` 的 npc-graph-panel 通过 `dataSource.bindings` 把自身 `nodes` + `edges` 两个 namespace 注入面板状态，再作为 props 传给 `GraphCanvas` 呈现关系图（react-force-graph-2d 懒加载）。
 > `memory` 包注册 `prompt.segment@1`、`memory.block-definitions@1` 服务和右侧面板。`runtimes/extract/RUNTIME.md` 消费冻结的 `turn-digest@1`，以 `settle: before-next-execution` 的脱离回合任务更新本插件 `blocks` namespace。面板直接读取这些块；提示词片段位于缓存边界之后。禁用该插件的会话不运行提取、不等待它的任务，也不注入其记忆。
+
+### 动态维度总览与修正
+
+`WorldDimensions` 由通用 `SessionDimensionsPanel` 接入 session snapshot 的 `dimensions`、`dimensionSettlements` 与受信 provider/recovery 元数据，不按维度 ID 分支。公共项为 `{name,description?,schema,value,version}`；显示名称、稳定 ID 和值版本，不展示初值或维护规则。
+
+- 标量直接显示；object 按字段展示，数组或动态命名 object 的记录可按 schema properties 呈现为行和列，列标题使用 `title` 或字段名。
+- 基础 schema 支持字段编辑及数组/命名记录的增删；复杂嵌套值提供明确 JSON 编辑入口。客户端与提交边界共用 `validateDimensionValue`，缺值、可空值、范围错误不靠类型强转修复。`x-i18n` 节点按 locale 展示，普通 JSON 不猜翻译。
+- 保存携带编辑开始时的 `expectedVersion`，通过 host 指定的 `editorRuntimeId` 发 runtime RPC，不绕过保留 namespace 写入。冲突刷新当前值并显示错误，玩家检查后重新提交，不静默覆盖。
+- pending 卡显示源逻辑回合及失败原因，提供重试、明确人工处理、明确跳过。重试直接调用 `trackerRuntimeId` 并带回执 `sourceTurnId`；后两者由 editor 针对 `source.resultId` 写终态。普通保存值不解除 pending。
+- 回合执行或请求处理中编辑按钮禁用；操作后重新取 session view，检查已提交值与回执，不把 runtime 的 `submitted` 当作落库凭据。没有受信恢复入口时只读，不回退到作者初值。
+
+世界作者编辑器编辑的是完整开放 definition map，允许任意合法 ID，九类题材结构只是可选模板；游戏面板编辑的是会话当前值，不能新建 definition 或修改 schema。原始声明格式、开发数据重建要求及恢复调用见 [World Data](world-data.md#动态世界维度dimensions) 和 [API](api.md#维度编辑与待结算恢复)。本期没有隐藏事件的触发/载荷编辑器（#97）。
 
 ### 世界文档（框架自持 Tab）
 

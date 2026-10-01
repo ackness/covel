@@ -387,7 +387,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           : {}),
         ...(body.payload !== undefined ? { payload: body.payload } : {}),
         ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
-        ...(retrySeedResults ? { retrySeedResults } : {}),
+        ...(retrySeedResults
+          ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
+          : {}),
       });
 
     const jobRunner = createPluginRpcJobRunner({
@@ -533,6 +535,17 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       // turn whose writes never committed is not a successful turn: report it
       // as an error and do not chain followers onto rolled-back state.
       if (!summary.commit.committed) {
+        if (summary.commit.dimensionConflict)
+          return c.json(
+            errorBody("dimension-version-conflict", {
+              code: "dimension-version-conflict",
+              details: {
+                currentVersions:
+                  summary.commit.dimensionConflict.currentVersions,
+              },
+            }),
+            409,
+          );
         return c.json(
           errorBody(commitFailureMessage(summary.commit), {
             code: "turn_commit_failed",

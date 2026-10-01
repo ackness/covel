@@ -5,6 +5,7 @@ import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
   upsertGameStateCharacter,
+  mergeCommittedDimensions,
 } from "./game-state.js";
 import {
   buildDurableRuntimeJobExecutionStep,
@@ -437,6 +438,11 @@ export function reducer(
       return {
         ...state,
         gameState: upsertGameStateCharacter(state.gameState, action.character),
+      };
+    case "MERGE_COMMITTED_DIMENSIONS":
+      return {
+        ...state,
+        gameState: mergeCommittedDimensions(state.gameState, action.payload),
       };
     case "SET_CHARACTER_SCHEMA":
       return {

@@ -154,6 +154,12 @@ export async function buildSnapshotPayload(
       ...(typeof session.metadata?.loreOverride === "string"
         ? { loreOverride: session.metadata.loreOverride }
         : {}),
+      ...(typeof session.metadata?._dimensionProviderPluginId === "string"
+        ? {
+            dimensionProviderPluginId:
+              session.metadata._dimensionProviderPluginId,
+          }
+        : {}),
     },
     characters,
     characterSchema: await store.getCharacterSchema(sessionId),

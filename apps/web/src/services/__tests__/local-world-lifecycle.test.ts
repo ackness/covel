@@ -42,7 +42,9 @@ afterEach(async () => {
 it("keeps edited worlds through later local checkpoint writes and a fresh service", async () => {
   await service.createSession("world-a", "session-a");
   await service.updateWorld("world-a", {
-    dimensions: { history: [] },
+    dimensions: {
+      history: { name: "History", schema: { type: "array" }, initialValue: [] },
+    },
     name: "Edited",
   });
   await service.addMessage({

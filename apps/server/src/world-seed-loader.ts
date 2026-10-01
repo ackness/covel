@@ -11,7 +11,7 @@
  *
  * External dimension files:
  *   world.yaml `dimensionSources` maps dimension keys to relative file paths.
- *   Each file is validated against the corresponding sub-schema.
+ *   Each file contains a validated dimension definition.
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
@@ -26,7 +26,7 @@ import {
   validateWorldManifest,
   validateDimensionData,
   formatValidationErrors,
-  DIMENSION_KEYS,
+  dimensionIdSchema,
   localeLookupCandidates,
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
@@ -103,35 +103,43 @@ async function resolveLocaleDimensionPath(
 
 /**
  * Load external dimension files referenced by `dimensionSources` in world.yaml.
- * Each file contains the data for a single dimension key (e.g., geography.yaml → WorldGeography).
+ * Each file contains one dimension definition (name, schema, initialValue, rule).
  * External files take precedence over inline dimensions for the same key.
  *
  * Locale resolution: for each source path, tries `<name>.<lang>.<ext>` first
  * (e.g., `geography.zh.yaml`), then falls back to the declared path.
  */
-async function loadExternalDimensions(
+export async function loadExternalDimensions(
   worldDir: string,
   sources: Record<string, string>,
   worldId: string,
   defaultLocale?: string,
+  /**
+   * Optional sink for the specific failure reason. Session import surfaces
+   * these to the author instead of a bare "sources failed validation".
+   */
+  onDiagnostic?: (message: string) => void,
 ): Promise<Record<string, unknown> | null> {
   const result: Record<string, unknown> = {};
+  const fail = (message: string): null => {
+    console.warn(message);
+    onDiagnostic?.(message);
+    return null;
+  };
 
   for (const [key, relativePath] of Object.entries(sources)) {
     // Validate dimension key
-    if (!DIMENSION_KEYS.includes(key)) {
-      console.warn(
-        `[world-seed] ${worldId}: unknown dimension key "${key}" in dimensionSources`,
+    if (!dimensionIdSchema.safeParse(key).success) {
+      return fail(
+        `[world-seed] ${worldId}: invalid dimension ID "${key}" in dimensionSources`,
       );
-      return null;
     }
 
     // Path traversal check on the declared path
     if (!(await resolveSafePath(worldDir, relativePath))) {
-      console.warn(
+      return fail(
         `[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}`,
       );
-      return null;
     }
 
     // Resolve with locale awareness
@@ -141,32 +149,30 @@ async function loadExternalDimensions(
       defaultLocale,
     );
     if (!resolvedPath) {
-      console.warn(
+      return fail(
         `[world-seed] ${worldId}: dimension file not found for "${key}": ${relativePath}`,
       );
-      return null;
     }
 
     try {
       const content = await readFile(resolvedPath, "utf-8");
       const data = parseYaml(content);
 
-      // Validate against dimension-specific sub-schema
+      // All authored dimensions use the same definition contract.
       const validation = validateDimensionData(key, data);
       if (!validation.valid) {
-        console.warn(
+        return fail(
           `[world-seed] ${worldId}: invalid dimension file "${relativePath}" for "${key}":\n${formatValidationErrors(validation.errors!)}`,
         );
-        return null;
       }
 
       result[key] = validation.data;
     } catch (err) {
-      console.warn(
-        `[world-seed] ${worldId}: failed to load dimension file "${relativePath}":`,
-        err,
+      return fail(
+        `[world-seed] ${worldId}: failed to load dimension file "${relativePath}": ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       );
-      return null;
     }
   }
 

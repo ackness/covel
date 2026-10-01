@@ -1,3 +1,4 @@
+import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import {
   createPluginRegistry,
   parsePluginMd,
@@ -27,7 +28,7 @@ import { createApplicationWork } from "../../src/application-work.js";
 const WORLD_YAML = `schemaVersion: "1.0"
 id: generated-world
 name: 生成世界
-version: "0.1.0"
+version: 0.1.0
 summary: 一个生成世界。
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
@@ -36,15 +37,25 @@ requiredPlugins: []
 recommendedPlugins: []
 dimensions:
   geography:
-    regions:
-      - name: 中央区
-        description: 核心区域。
-        climate: 温和
+    name: geography
+    schema: {}
+    initialValue:
+      regions:
+        - name: 中央区
+          description: 核心区域。
+          climate: 温和
   tone:
-    genres: [mystery]
-    contentRating: teen
+    name: tone
+    schema: {}
+    initialValue:
+      genres:
+        - mystery
+      contentRating: teen
   startingConditions:
-    openingScenario: 钟声提前响起，玩家必须立刻选择追踪声源或保护证人。
+    name: startingConditions
+    schema: {}
+    initialValue:
+      openingScenario: 钟声提前响起，玩家必须立刻选择追踪声源或保护证人。
 `;
 
 const WORLD_MD = `# 生成世界
@@ -186,7 +197,13 @@ describe("ai world generation route", () => {
         name: "生成世界",
         lore: WORLD_MD,
         metadata: {
-          dimensions: { geography: { regions: [{ name: "中央区" }] } },
+          dimensions: {
+            geography: {
+              name: "geography",
+              schema: {},
+              initialValue: { regions: [{ name: "中央区" }] },
+            },
+          },
         },
       });
       expect(exporter).not.toHaveBeenCalled();
@@ -241,7 +258,13 @@ describe("ai world generation route", () => {
             ],
           },
           pluginSettings: { memory: { cadence: 2 } },
-          dimensions: { geography: { regions: [{ name: "中央区" }] } },
+          dimensions: {
+            geography: {
+              name: "geography",
+              schema: {},
+              initialValue: { regions: [{ name: "中央区" }] },
+            },
+          },
         },
       });
       if (saveTarget === "return-only") {
@@ -280,6 +303,7 @@ describe("ai world generation route", () => {
         loadedRuntimes: new Map(),
         status: "registered",
       });
+      await registerDimensionProvider(registry);
       const blocks = [
         {
           label: "tides",
@@ -329,7 +353,7 @@ describe("ai world generation route", () => {
         phase: "playing",
         completedPlayerTurns: 0,
         setupRuntimes: {},
-        activePlugins: ["memory"],
+        activePlugins: ["world-init", "memory"],
         createdAt: now,
         updatedAt: now,
       });
@@ -339,7 +363,7 @@ describe("ai world generation route", () => {
         worldId: done.world.id,
         worldsDirs: [worldsDir],
         now,
-        preflight: { registry, activePlugins: ["memory"] },
+        preflight: { registry, activePlugins: ["world-init", "memory"] },
       });
       expect(
         imported.diagnostics.filter((item) => item.level === "error"),
@@ -389,6 +413,7 @@ describe("ai world generation route", () => {
         loadedRuntimes: new Map(),
         status: "registered",
       });
+      await registerDimensionProvider(registry);
       const value = {
         id: "world",
         definition: {
@@ -443,7 +468,7 @@ describe("ai world generation route", () => {
         phase: "playing",
         setupRuntimes: {},
         locale: "en-US",
-        activePlugins: [pluginId],
+        activePlugins: ["world-init", pluginId],
         completedPlayerTurns: 0,
         createdAt: now,
         updatedAt: now,
@@ -454,7 +479,7 @@ describe("ai world generation route", () => {
         worldId: "generated-world",
         worldsDirs: [worldsDir],
         now,
-        preflight: { registry, activePlugins: [pluginId] },
+        preflight: { registry, activePlugins: ["world-init", pluginId] },
       });
       expect(
         imported.diagnostics.filter((item) => item.level === "error"),
@@ -484,7 +509,7 @@ describe("ai world generation route", () => {
           worldId: "generated-world",
           contractData: records,
           now,
-          preflight: { registry, activePlugins: [pluginId] },
+          preflight: { registry, activePlugins: ["world-init", pluginId] },
         });
         expect(preflight.targets).toContainEqual(
           expect.objectContaining({ pluginId, namespace, key: "world" }),
@@ -521,7 +546,7 @@ describe("ai world generation route", () => {
           sessionId: "clock-session",
           worldId: "generated-world",
           now,
-          preflight: { registry, activePlugins: [pluginId] },
+          preflight: { registry, activePlugins: ["world-init", pluginId] },
         });
         expect(sync.upserted).toBe(1);
         expect(

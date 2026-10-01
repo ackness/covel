@@ -3,90 +3,68 @@ import {
   getPendingProposals,
 } from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
-
 import guard from "../guard.js";
-
-function context(
-  worldRecord: unknown,
-  characterSchema: unknown = null,
-  entries: unknown[] = [],
-  locale = "en-US",
-) {
+const definition = {
+  name: "City wall",
+  schema: { type: "integer", minimum: 0, maximum: 100 },
+  initialValue: 100,
+};
+function context(worldRecord, characterSchema = null) {
   return {
     sessionId: "session",
     turnId: "turn",
     pluginId: "world-init",
     runtimeId: "world-init/schema-gen",
-    locale,
-    world: { worldRecord, characterSchema, characters: [] },
-    store: { listPluginData: async () => entries },
+    locale: "en-US",
+    world: { worldRecord, characterSchema, characters: [], dimensions: {} },
   };
 }
-
 describe("world-init schema guard", () => {
-  it("reuses the authoritative session schema without regenerating it", async () => {
+  it("reuses the session schema and idempotently adopts declarations, without resetting state", async () => {
     const schema = { version: 2, types: ["enemy"], attributes: [] };
     const result = await guard(
-      context(null, schema, [{ key: "geography", value: {} }]),
+      context({ metadata: { dimensions: { cityWall: definition } } }, schema),
     );
     expect(getToolContent(result)).toMatchObject({
       skip: true,
       preGameDone: true,
-      worldSchema: schema,
+      worldSchema: { types: ["enemy"], attributes: [] },
     });
-    expect(getPendingProposals(result)).toEqual([]);
+    expect(
+      getPendingProposals(result).map((proposal) => proposal.type),
+    ).toEqual(["dimension.initialize"]);
   });
-  it("derives locale-aware fields from authored dimensions and buffers both writes", async () => {
-    const world = {
-      metadata: {
-        dimensions: {
-          economy: { currencies: [{ name: { ja: "円", "en-US": "Yen" } }] },
-          powerSystem: {
-            name: { ja: "魔法階級", "en-US": "Magic rank" },
-            tiers: [{ name: { ja: "見習い", "en-US": "Apprentice" } }],
-          },
-        },
-      },
-    };
-    for (const [locale, currency, tier] of [
-      ["ja-JP", "円", "見習い"],
-      ["zh-Hant-TW", "Yen", "Apprentice"],
-    ]) {
-      const result = await guard(context(world, null, [], locale));
-      expect(getToolContent(result)).toMatchObject({
-        skip: true,
-        importedDimensions: true,
-      });
-      const proposals = getPendingProposals(result);
-      expect(proposals.map((proposal) => proposal.type)).toEqual([
-        "character.schema.set",
-        "plugin.data.batch",
-      ]);
-      const attributes = proposals[0].payload.attributes;
-      expect(attributes).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: currency }),
-          expect.objectContaining({ id: "powerTier", defaultValue: tier }),
-        ]),
-      );
-    }
+  it("does not derive character-owned fields from global dimensions", async () => {
+    expect(
+      await guard(
+        context({ metadata: { dimensions: { cityWall: definition } } }),
+      ),
+    ).toEqual({ skip: false, initialized: false });
   });
-  it("uses declared character types and attributes when importing an uninitialized world", async () => {
-    const declared = {
+  it("buffers author character schema and dimensions together", async () => {
+    const schema = {
       types: ["spirit"],
       attributes: [
         { id: "energy", name: "Energy", type: "number", category: "stats" },
       ],
     };
     const result = await guard(
-      context({ metadata: { characterSchema: declared } }),
+      context({
+        metadata: {
+          characterSchema: schema,
+          dimensions: { cityWall: definition },
+        },
+      }),
     );
-    expect(getPendingProposals(result)[0]).toMatchObject({
-      type: "character.schema.set",
-      payload: declared,
-    });
+    expect(getPendingProposals(result)).toMatchObject([
+      { type: "character.schema.set", payload: schema },
+      {
+        type: "dimension.initialize",
+        payload: { definitions: { cityWall: definition } },
+      },
+    ]);
   });
-  it("lets the model generate a schema when the world declares no usable data", async () => {
+  it("lets the model generate missing character schema", async () => {
     expect(await guard(context({ metadata: {} }))).toEqual({
       skip: false,
       initialized: false,

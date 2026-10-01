@@ -107,6 +107,7 @@ describe("debug route components", () => {
 
   it("renders snapshot data and trace discovery without route state", () => {
     const snapshot: SessionSnapshot = {
+      dimensions: {},
       session: {
         id: "session-data",
         worldId: "world-1",

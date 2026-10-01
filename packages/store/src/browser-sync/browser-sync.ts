@@ -1,4 +1,10 @@
-import { isJsonValue } from "@covel/shared";
+import {
+  isJsonValue,
+  DIMENSION_DATA_NAMESPACE,
+  DIMENSION_SETTLEMENT_NAMESPACE,
+  dimensionRecordSchema,
+  dimensionSettlementReceiptSchema,
+} from "@covel/shared";
 import { checkpointDomainsSchema } from "./checkpoint-domains-schema.js";
 import type {
   CharacterRecord,
@@ -247,6 +253,30 @@ export function validateBrowserCheckpoint(value: unknown): BrowserCheckpoint {
     throw new BrowserSyncValidationError(
       "checkpoint domains must contain JSON-serialisable values",
     );
+  }
+  const provider = normalized.session.metadata?._dimensionProviderPluginId;
+  for (const row of normalized.pluginData) {
+    if (
+      row.namespace !== DIMENSION_DATA_NAMESPACE &&
+      row.namespace !== DIMENSION_SETTLEMENT_NAMESPACE
+    )
+      continue;
+    if (
+      typeof provider !== "string" ||
+      row.pluginId !== provider ||
+      !normalized.session.activePlugins.includes(provider)
+    )
+      throw new BrowserSyncValidationError(
+        "Protected dimension rows require the bound active provider",
+      );
+    const parsed =
+      row.namespace === DIMENSION_DATA_NAMESPACE
+        ? dimensionRecordSchema.safeParse(row.value)
+        : dimensionSettlementReceiptSchema.safeParse(row.value);
+    if (!parsed.success)
+      throw new BrowserSyncValidationError(
+        `Invalid protected dimension record: ${row.key}`,
+      );
   }
   return normalized;
 }

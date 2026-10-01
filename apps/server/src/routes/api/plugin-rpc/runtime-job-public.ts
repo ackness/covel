@@ -1,4 +1,11 @@
 import type { PluginDataRecord } from "@covel/store";
+import {
+  DIMENSION_DATA_NAMESPACE,
+  DIMENSION_SETTLEMENT_NAMESPACE,
+  dimensionRecordSchema,
+  dimensionSettlementSummarySchema,
+  dimensionSnapshotFromRecords,
+} from "@covel/shared";
 import type { RuntimeJobValue } from "./jobs.js";
 
 const PUBLIC_REASON_MESSAGES = {
@@ -68,6 +75,20 @@ export function publicRuntimeJob<T extends RuntimeJobValue>(
 export function publicPluginDataValue(
   record: Pick<PluginDataRecord, "namespace" | "value">,
 ): unknown {
+  // Dimension records are framework-owned (`_` namespace) but still readable
+  // for UI hydration. Project them to their PUBLIC shape: a dimension row
+  // exposes only the snapshot entry (name/schema/value/version) — never the
+  // updateRule, initialValue, or lastTrackedSource — and a settlement row
+  // exposes only the summary, never the frozen definitions/readVersions/narrative.
+  if (record.namespace === DIMENSION_DATA_NAMESPACE) {
+    const parsed = dimensionRecordSchema.safeParse(record.value);
+    if (!parsed.success) return undefined;
+    return dimensionSnapshotFromRecords({ ["_"]: parsed.data })["_"];
+  }
+  if (record.namespace === DIMENSION_SETTLEMENT_NAMESPACE) {
+    const parsed = dimensionSettlementSummarySchema.safeParse(record.value);
+    return parsed.success ? parsed.data : undefined;
+  }
   if (record.namespace !== "_runtime_jobs") return record.value;
   if (
     !record.value ||

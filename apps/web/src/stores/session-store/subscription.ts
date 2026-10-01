@@ -525,7 +525,9 @@ export function useSessionSubscription({
       if (
         event.type === "state.changed" ||
         event.type === "character.upserted" ||
-        event.type === "character-schema.changed"
+        event.type === "character-schema.changed" ||
+        event.type === "dimensions.changed" ||
+        event.type === "dimensions.settlement.changed"
       ) {
         // These are committed state notifications. Reuse the in-flight snapshot
         // read instead of buffering reset triggers or duplicating action-stream

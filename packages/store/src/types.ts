@@ -312,8 +312,23 @@ export interface CharacterStore {
   deleteCharacter(sessionId: string, id: string): Promise<void>;
 }
 
+export interface PluginDataBatchCasEntry {
+  readonly namespace: string;
+  readonly key: string;
+  /** Null creates only if absent; otherwise match the JSON envelope's version. */
+  readonly expectedVersion: number | null;
+  readonly value: unknown;
+  readonly timestamp: string;
+}
+
 /** Session-scoped plugin KV data (`common/sql-data-crud.ts`). */
 export interface PluginDataStore {
+  /** All comparisons succeed and all rows commit, or no rows change. */
+  compareAndSetPluginDataBatch(
+    sessionId: string,
+    pluginId: string,
+    records: readonly PluginDataBatchCasEntry[],
+  ): Promise<boolean>;
   setPluginData(record: PluginDataRecord): Promise<void>;
   setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void>;
   /**

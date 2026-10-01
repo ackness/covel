@@ -49,6 +49,7 @@ function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
 }
 
 const snapshot = {
+  dimensions: {},
   session: {
     id: "s1",
     worldId: "w1",

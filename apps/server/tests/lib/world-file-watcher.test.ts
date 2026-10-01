@@ -42,7 +42,7 @@ dimensionSources:
       const dimensionFile = path.join(dimensionsDir, "tone.yaml");
       await writeFile(
         dimensionFile,
-        "genres: [mystery]\ncontentRating: teen\n",
+        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - mystery\n  contentRating: teen\n",
         "utf8",
       );
       const storage = {
@@ -84,7 +84,7 @@ dimensionSources:
       watcher.start();
       await writeFile(
         dimensionFile,
-        "genres: [adventure]\ncontentRating: teen\n",
+        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - adventure\n  contentRating: teen\n",
         "utf8",
       );
 
@@ -95,7 +95,13 @@ dimensionSources:
             metadata: {
               source: "generated-file",
               storage,
-              dimensions: { tone: { genres: ["adventure"] } },
+              dimensions: {
+                tone: {
+                  name: "tone",
+                  schema: {},
+                  initialValue: { genres: ["adventure"] },
+                },
+              },
             },
           });
           expect(emit).toHaveBeenCalledWith(

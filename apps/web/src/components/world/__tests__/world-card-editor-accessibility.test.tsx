@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
 import type { WorldRecord } from "@/services/api.js";
+import { projectDimensionTemplates } from "../editor-helpers.js";
 import { HistoryTab } from "../tabs/history-tab.js";
 import { WorldCard } from "../world-card.js";
 import { getDataService } from "@/services/data-service.js";
@@ -28,16 +29,21 @@ const world = {
   locale: "en-US",
   tags: ["test"],
   dimensions: {
-    history: [
-      {
-        era: "First Age",
-        year: "10",
-        name: "Arrival",
-        description: "The first travelers arrived.",
-        significance: "major",
-      },
-    ],
+    history: {
+      name: "History",
+      schema: {},
+      initialValue: [
+        {
+          era: "First Age",
+          year: "10",
+          name: "Arrival",
+          description: "The first travelers arrived.",
+          significance: "major",
+        },
+      ],
+    },
   },
+  createdAt: "2026-10-02",
 } as WorldRecord;
 
 describe("WorldCard", () => {
@@ -118,7 +124,7 @@ describe("WorldEditor", () => {
   it("associates history labels and keeps the event grid responsive", () => {
     render(
       <HistoryTab
-        dimensions={world.dimensions ?? {}}
+        dimensions={projectDimensionTemplates(world.dimensions ?? {})}
         onChange={vi.fn()}
         t={i18n.t}
       />,

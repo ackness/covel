@@ -8,18 +8,7 @@ import { Separator } from "@/components/ui/separator.js";
 import { text } from "./world-detail/detail-primitives.js";
 import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
-import {
-  GeographySection,
-  FactionsSection,
-  PowerSystemSection,
-  HistorySection,
-  EconomySection,
-  SocialSection,
-  ToneSection,
-  MechanicsSection,
-  StartingSection,
-} from "./world-detail/world-detail-sections.js";
-
+import { DimensionValueView } from "@/components/session/dimension-value-view.js";
 export interface WorldDetailViewProps {
   world: WorldRecord;
   onClose: () => void;
@@ -146,29 +135,23 @@ export function WorldDetailView({
         {/* Dimensions */}
         {hasDimensions && dims ? (
           <div className="space-y-4">
-            {dims.geography && dims.geography.regions.length > 0 && (
-              <GeographySection geo={dims.geography} t={t} />
-            )}
-            {dims.factions && dims.factions.length > 0 && (
-              <FactionsSection factions={dims.factions} t={t} />
-            )}
-            {dims.powerSystem && (
-              <PowerSystemSection ps={dims.powerSystem} t={t} />
-            )}
-            {dims.history && dims.history.length > 0 && (
-              <HistorySection events={dims.history} t={t} />
-            )}
-            {dims.economy && <EconomySection economy={dims.economy} t={t} />}
-            {dims.socialStructure && (
-              <SocialSection social={dims.socialStructure} t={t} />
-            )}
-            {dims.tone && <ToneSection tone={dims.tone} t={t} />}
-            {dims.mechanics && (
-              <MechanicsSection mechanics={dims.mechanics} t={t} />
-            )}
-            {dims.startingConditions && (
-              <StartingSection sc={dims.startingConditions} t={t} />
-            )}
+            {Object.entries(dims).map(([id, definition]) => (
+              <section key={id} className="space-y-2 rounded border p-4">
+                <h2 className="font-medium">
+                  {text(definition.name)}{" "}
+                  <span className="text-xs text-muted-foreground">{id}</span>
+                </h2>
+                {definition.description && (
+                  <p className="text-sm text-muted-foreground">
+                    {text(definition.description)}
+                  </p>
+                )}
+                <DimensionValueView
+                  schema={definition.schema}
+                  value={definition.initialValue}
+                />
+              </section>
+            ))}
           </div>
         ) : (
           <div className="space-y-2 text-sm text-muted-foreground">

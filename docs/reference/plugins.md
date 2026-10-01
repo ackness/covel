@@ -199,13 +199,33 @@ Agent 继续使用现有的提示词输出协议。执行边界统一将声明�
 
 ## World Model 与数据边界
 
-角色 schema、角色和世界记录是内核 World Model。`ctx.world.characterSchema`、`ctx.world.characters` 及 `ctx.world.worldRecord` 为只读视图；同一 execution 的合法上游 proposals 和本 runtime 已缓冲 proposals 对后续读取可见。写入通过 proposals，并在提交时统一校验。
+角色 schema、角色和世界记录是内核 World Model。`ctx.world.characterSchema`、`ctx.world.characters` 及 `ctx.world.worldRecord` 为只读视图；这些领域的合法上游 proposals 和本 runtime 已缓冲 proposals 对后续读取可见。写入通过 proposals，并在提交时统一校验。`ctx.world.dimensions` 则是提供者发布的公共当前值快照，遵守下方独立的冻结边界。
 
 角色类型是 schema 中声明的开放字符串；`player` 为保留语义且每个会话最多一个。角色字段遵守 CharacterSchema 的 attributes。修改 schema 的 proposal 为 `character.schema.set`，payload 直接包含 `types`、`attributes`，版本由内核递增。
 
 插件自有持久数据经绑定的 `ctx.store.getPluginData(namespace, key)`、`listPluginData(namespace?)` 访问。插件不能指定任意 sessionId/pluginId 读其他插件私有数据。跨插件公开数据使用契约、服务或扩展，不扫描对方 namespace。
 
 Lorebook 使用 owner 与 id 的复合身份，owner 为 world、plugin 或 player。HTTP 玩家编辑路径只管理 player owner。不要用字符 ID、插件 ID 或任意 namespace 模拟角色表和 Lorebook 归属。
+
+### 动态维度
+
+`world.dimensions@1` 发布 `{id: {name, description?, schema, value, version}}`。插件读取 `ctx.world.dimensions.<id>.value`；不要从 `worldRecord.dimensions` / `metadata.dimensions` 取当前值，那里是作者 definition 与初值，也不要扫描另一个插件的 `_dimensions`。
+
+捆绑的 `world-init` 使用三个 runtime：
+
+| Runtime             | 阶段              | 职责                                                 |
+| ------------------- | ----------------- | ---------------------------------------------------- |
+| `dimension-context` | pre-turn function | 不调用模型，读取已提交值并发布 `world.dimensions@1`  |
+| `dimension-tracker` | post-turn agent   | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证 |
+| `edit-dimensions`   | manual function   | 玩家改值、确认人工处理或明确跳过                     |
+
+同一次执行的公共 dimension 读取冻结。setup 初始化和写入者自身 proposal 可形成局部预览，但不替换公共快照，不泄露给并行 sibling。公共 builtin `world-dimension-get/list` 始终读取冻结快照，不叠加自身写入，也不回退初值。模板选取 `{{ world.dimensions.<id>.value }}`；默认提示词段是预算内投影，而非全量记录。
+
+写入使用 `dimension.initialize` / `dimension.update` 领域 proposal；只有受信属主可写，更新带 `expectedVersion` 并整批 CAS。普通 `plugin.data`、batch、delete 或 action RPC store 写入不能触碰 `_dimensions` / `_dimension-settlements`。维护工具的来源及读取版本集由框架获取，模型只提交新值；没有变化也调用 `update-dimensions({updates: []})`，不能以 runtime 成功推断已结算。
+
+自动维护失败或未运行保留 `pending-settlement` 回执，下一次叙事前须解决。恢复元数据由 `session.world-context@1` 提供并经 host 验证：editor 为 manual runtime RPC，重试直接调用 tracker 加 `retryFromTurnId`。普通手改不自动解决源回合义务，已终结回执不重复补算。完整状态与接口见 [World Model](world-model.md#回合时序与结算回执)和 [API](api.md#维度编辑与待结算恢复)。
+
+> **BREAKING CHANGE**：旧九类 raw dimension 格式和旧副本读取移除。世界作者使用[统一 definition](world-data.md#动态世界维度dimensions)，开发世界、会话与快照需重建。这里不提供 #97 的隐藏事件触发层，也不改变角色、背包、好感或时间的权威属主。
 
 ### 世界数据导入
 

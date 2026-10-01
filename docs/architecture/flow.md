@@ -483,7 +483,7 @@ stage 屏障保证 narrative 阶段结束后才运行 post-turn。stage 内独�
   │  首次执行 (phase === 'setup'，只运行 setup stage):              │
   │  ┌────────────────────────────────────────────────────────────┐ │
   │  │ pregame               → 初始化会话级元数据             │ │
-  │  │ world-init/schema-gen → 生成/复用世界维度 schema        │ │
+  │  │ world-init/schema-gen → 初始化角色 schema/维度声明        │ │
   │  │   (schema-gen 的 after: [pregame] 保证两者串行；           │ │
   │  │    narrative / post-turn stage 的 runtime 在 setup 阶段    │ │
   │  │    不会被调度——后续 setup 子轮继续派发剩余 runtime)         │ │
@@ -590,7 +590,7 @@ Lorebook 使用 `(sessionId, owner, id)` 标识条目；owner 为 world、player
 
 世界包的数据来源声明版本化 contract，插件通过 `contributes.data.<namespace>.accepts` 接收匹配数据。框架校验 contract 与 namespace schema，并向匹配的启用消费者分发；它不识别蓝图、立绘或规则插件的具体 ID，也不写某个插件的私有 wrapper。世界级 characterSchema、lore 和 metadata 是领域导入，业务数据由接收插件解释。
 
-例如，`character.blueprints@1` 承载原始蓝图记录，`memory.blocks@1` 承载 `{ id: "world", blocks: [...] }` 定义。`world-init` 通过 `session.world-context@1` 合并世界 metadata dimensions 和自己的 entries，玩家定制 entries 覆盖世界源。参见 [世界数据参考](../reference/world-data.md)。
+例如，`character.blueprints@1` 承载原始蓝图记录，`memory.blocks@1` 承载 `{ id: "world", blocks: [...] }` 定义。动态维度由世界包声明开放 definition map，会话单一提供者管理当前值。捆绑的 `world-init` 在 pre-turn 发布 `world.dimensions@1` 冻结快照，通过 single `session.world-context@1` 提供公共读取；post-turn 绑定叙事来源结算，值与回执使用 batch CAS 同事务提交。它不合并 `entries`，不回退 metadata 初值，不双写 constant lorebook；pending 义务需在下次叙事前解决。参见 [世界数据参考](../reference/world-data.md#动态世界维度dimensions)与 [World Model](../reference/world-model.md#动态维度快照)。
 
 ### 6.3 消息历史模型
 

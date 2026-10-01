@@ -13,6 +13,7 @@
 
 import type { KernelStore } from "../session/session-kernel-store.js";
 import { createCharacterCommitHandlers } from "./commit-character.js";
+import { createDimensionCommitHandlers } from "./commit-dimensions.js";
 import { createEventCommitHandlers } from "./commit-event.js";
 import type { CommitHandlerMap } from "./commit-handler-types.js";
 import { createMemoryLoreCommitHandlers } from "./commit-memory-lore.js";
@@ -34,6 +35,7 @@ export function createCommitHandlers(store: KernelStore): CommitHandlerMap {
     ...createEventCommitHandlers(store),
     ...createPluginDataCommitHandlers(store),
     ...createCharacterCommitHandlers(store),
+    ...createDimensionCommitHandlers(store),
     ...createMemoryLoreCommitHandlers(store),
   };
 }

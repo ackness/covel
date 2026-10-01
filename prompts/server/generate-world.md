@@ -49,70 +49,35 @@ pluginPolicy:
 # Set to stage only for dialogue-mode; omit for traditional-story.
 defaultViewMode: stage
 
+# Example IDs only: the author chooses every dimension ID and data structure.
 dimensions:
-  geography:
-    overview: <one sentence>
-    regions: # 2
-      - name: <region>
-        description: <one sentence>
-        climate: <climate>
-        landmarks:
-          - name: <landmark>
-            description: <one sentence>
-  factions: # 2
-    - id: <kebab-case>
-      name: <name>
-      description: <one sentence>
-      type: <political|guild|corporate|religious|criminal|military|other>
-      influence: <major|minor>
-      leader: <leader>
-      headquarters: <location>
-      relations:
-        - targetId: <other faction id>
-          type: <hostile|neutral|allied>
-          description: <desc>
-  powerSystem:
-    name: <name>
-    type: <magic|technology|cultivation|psychic|hybrid|other>
-    description: <one sentence>
-    rules: [<rule1>, <rule2>] # exactly 2
-    tiers: # 2
-      - name: <tier>
-        rank: 1
-        description: <one sentence>
-  history: # 2 events
-    - era: <era>
-      name: <event>
-      description: <one sentence>
-      significance: <major|minor>
-  economy:
-    currencies:
-      - name: <currency>
-        symbol: <symbol>
-    resources: [<resource1>, <resource2>]
-    tradeNotes: <one sentence>
-  socialStructure:
-    classes: # 2
-      - name: <class>
-        rank: 1
-        description: <one sentence>
-    notes: <one sentence>
-  tone:
-    genres: [<genre1>, ...]
-    contentRating: <all-ages|teen|mature>
-    narrativeStyle: <style>
-    themes: [<theme1>, ...]
-  mechanics:
-    combatStyle: <turn-based|real-time|narrative|none>
-    difficulty: <easy|normal|hard|adaptive>
-    skillSystem: <description>
-    customRules: [<rule1>, ...]
-  startingConditions:
-    openingScenario: <2 sentences, immediate tension/choice>
-    playerConstraints: [<constraint1>]
-    startingLocation: <location>
-    startingResources:
-      <resource>: <amount>
+  setting:
+    name: <world reference>
+    description: <what this reference describes>
+    schema: { type: string }
+    initialValue: <compact geography, factions, history and narrative constraints>
+  opening:
+    name: <opening choices>
+    schema: { type: string }
+    initialValue: <2 sentences with immediate tension and concrete choices>
+  repairBudget:
+    name: <a world-specific resource>
+    schema: { type: integer, minimum: 0 }
+    initialValue: 10
+    updateRule: <optional natural-language rule; only count explicitly completed actions>
+  discoveries:
+    name: <discovered places>
+    schema:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          description: { type: string }
+          visited: { type: boolean }
+        required: [description, visited]
+        additionalProperties: false
+    initialValue: {}
+    updateRule: <optional rule for adding named places from completed narrative>
 ```
 
 ## WORLD.md
@@ -193,11 +158,14 @@ rules:
 - ALL content in {{ language }}. Only IDs in kebab-case English.
 - Use only schema fields shown above. Do not add extra fields.
 - Quote schemaVersion and version as strings.
-- startingResources values must be numbers.
-- Enum values must exactly match one listed option.
+- Every dimension is a strict definition: name, optional description, schema, initialValue, optional updateRule. No fixed dimension ID whitelist exists.
+- initialValue must satisfy schema without coercion. Supported schema keywords: type (string/number/integer/boolean/null/object/array or a type array), title, description, enum, const, minimum/maximum/exclusiveMinimum/exclusiveMaximum, minLength/maxLength, items/minItems/maxItems, properties/required/additionalProperties, x-i18n. Do not use $ref, format, pattern or unsupported keywords.
+- Rules describe how already completed narrative changes values; do not declare hidden event triggers, deterministic periodic scheduling, or duplicate data owned by inventory/characters/time plugins.
+- Omit updateRule for static references. Use x-i18n: true only on explicitly multilingual text nodes; ordinary JSON maps are not translation maps.
+- If opening-kit is requested, supply at least two resource dimensions with numeric initialValue and a dimension describing opening choices.
 - Be creative and specific. Avoid generic fantasy tropes.
 - Never expose the generation process or describe world content as a test fixture, prompt/model output, evaluation artifact, or framework implementation example. Technical vocabulary is allowed when it belongs to the fictional setting.
 - Avoid literal generic names built only from genre nouns. Coin proper nouns with a local cultural or historical reason.
-- The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.
-- The openingScenario must present an immediate choice or tension tied to that crisis.
+- The opening choices and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.
+- The opening dimension must present an immediate choice or tension tied to that crisis.
 - Do NOT output anything except the three delimited sections.

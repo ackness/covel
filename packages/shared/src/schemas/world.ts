@@ -8,6 +8,8 @@
 import { z } from "zod";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
 import type { AttributeDefinition } from "../types/character-schema.js";
+import { dimensionIdSchema, worldDimensionsSchema } from "./dimensions.js";
+export { worldDimensionsSchema } from "./dimensions.js";
 
 // ── Common ──────────────────────────────────────────────────────
 
@@ -222,42 +224,6 @@ export const worldStartingConditionsSchema = z
   })
   .strict();
 
-// ── Dimensions ──────────────────────────────────────────────────
-
-export const worldDimensionsSchema = z
-  .object({
-    geography: worldGeographySchema.optional(),
-    factions: z.array(worldFactionSchema).optional(),
-    powerSystem: worldPowerSystemSchema.optional(),
-    history: z.array(worldHistoryEventSchema).optional(),
-    economy: worldEconomySchema.optional(),
-    socialStructure: worldSocialStructureSchema.optional(),
-    tone: worldToneSchema.optional(),
-    mechanics: worldMechanicsSchema.optional(),
-    startingConditions: worldStartingConditionsSchema.optional(),
-  })
-  .strict();
-
-// ── Dimension Key → Sub-Schema Map ─────────────────────────────
-
-/** Maps each dimension key to its Zod sub-schema for per-file validation. */
-export const DIMENSION_KEY_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
-  geography: worldGeographySchema,
-  factions: z.array(worldFactionSchema),
-  powerSystem: worldPowerSystemSchema,
-  history: z.array(worldHistoryEventSchema),
-  economy: worldEconomySchema,
-  socialStructure: worldSocialStructureSchema,
-  tone: worldToneSchema,
-  mechanics: worldMechanicsSchema,
-  startingConditions: worldStartingConditionsSchema,
-};
-
-/** Valid dimension key names. */
-export const DIMENSION_KEYS = Object.keys(
-  DIMENSION_KEY_SCHEMAS,
-) as readonly string[];
-
 // ── World Manifest (world.yaml root) ────────────────────────────
 
 const pluginPackSchema = z
@@ -385,7 +351,7 @@ export const worldManifestSchema = z
       .optional(),
     dimensions: worldDimensionsSchema.optional(),
     /** Map of dimension key → relative file path for external dimension files. */
-    dimensionSources: z.record(z.string(), z.string().min(1)).optional(),
+    dimensionSources: z.record(dimensionIdSchema, z.string().min(1)).optional(),
     /**
      * World-authored default values for plugins' declared `userSettings`,
      * keyed `pluginId → settingKey → value`. Middle layer of the resolution

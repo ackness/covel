@@ -3,6 +3,10 @@
  */
 
 export interface KernelStore {
+  getSession?: import("@covel/store").DataStore["getSession"];
+  getPluginData?: import("@covel/store").DataStore["getPluginData"];
+  listPluginData?: import("@covel/store").DataStore["listPluginData"];
+  compareAndSetPluginDataBatch?: import("@covel/store").DataStore["compareAndSetPluginDataBatch"];
   getCharacterSchema?(
     sessionId: string,
   ): Promise<import("@covel/shared").CharacterSchemaRecord | null>;

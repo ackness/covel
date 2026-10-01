@@ -30,6 +30,8 @@ export interface BuildSessionContextSnapshotOpts {
   readonly worldContext?: {
     readonly schema?: Record<string, unknown>;
     readonly entries?: Record<string, unknown>;
+    readonly dimensions?: import("@covel/shared").DimensionSnapshot;
+    readonly dimensionProviderPluginId?: string;
   };
   /**
    * Pre-loaded session summaries. Caller decides whether to load them
@@ -79,6 +81,8 @@ export async function buildSessionContextSnapshot(
       worldRecord,
       schemaMap: worldSchema,
       entriesMap: worldEntriesMap,
+      dimensions: opts.worldContext?.dimensions,
+      dimensionProviderPluginId: opts.worldContext?.dimensionProviderPluginId,
       locale: opts.locale,
     }),
     characters,

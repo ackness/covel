@@ -10,7 +10,10 @@
 
 import type { JsonValue, MediaReference } from "./types.js";
 import type { PluginServiceContext } from "./plugin-api.js";
-import type { ExtensionWorldDimensions } from "./world-dimensions.js";
+import type {
+  ExtensionDimensionSnapshot,
+  ExtensionWorldDimensions,
+} from "./world-dimensions.js";
 
 export type I18nText = string | Readonly<Record<string, string>>;
 
@@ -138,6 +141,12 @@ export type MediaImageFlow = {
 export type SessionWorldContextOutput = {
   readonly schema?: Record<string, unknown>;
   readonly entries?: Record<string, unknown>;
+  readonly dimensions?: ExtensionDimensionSnapshot;
+  readonly dimensionRecovery?: {
+    readonly editorRuntimeId: string;
+    readonly trackerRuntimeId: string;
+  };
+  readonly dimensionProviderPluginId?: string;
 };
 
 // ── ui.slot@1 ────────────────────────────────────────────────────
@@ -338,6 +347,8 @@ export type ExtensionWorldModel = {
   readonly worldRecord?: ExtensionWorldRecord | null;
   readonly characterSchema: ExtensionCharacterSchema | null;
   readonly characters: readonly ExtensionWorldCharacter[];
+  readonly dimensions: ExtensionDimensionSnapshot;
+  readonly dimensionProviderPluginId?: string;
 };
 
 /**
@@ -388,15 +399,8 @@ export type { JsonValue };
 export type {
   ExtensionWorldDimensions,
   ExtensionWorldI18nText,
-  ExtensionWorldLandmark,
-  ExtensionWorldRegion,
-  ExtensionWorldGeography,
-  ExtensionWorldFaction,
-  ExtensionWorldPowerSystem,
-  ExtensionWorldHistoryEvent,
-  ExtensionWorldEconomy,
-  ExtensionWorldSocialStructure,
-  ExtensionWorldTone,
-  ExtensionWorldMechanics,
-  ExtensionWorldStartingConditions,
+  ExtensionDimensionValueSchema,
+  ExtensionDimensionDefinition,
+  ExtensionDimensionSnapshot,
+  ExtensionDimensionSnapshotEntry,
 } from "./world-dimensions.js";

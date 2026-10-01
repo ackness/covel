@@ -1,37 +1,17 @@
 import type { ComponentRenderer } from "@json-render/react";
-import { useTranslation } from "react-i18next";
-import { WorldDimensionsPanel } from "@/components/session/world-dimensions-panel.js";
+import { SessionDimensionsPanel } from "@/components/session/session-dimensions-panel.js";
 import {
   AssetRender as AssetRenderComponent,
   AssetTurnSidebar as AssetTurnSidebarComponent,
 } from "@/components/asset-render/index.js";
-import { useSession } from "@/stores/session-store.js";
 import type { AssetGenerateView } from "@covel/shared";
 import { useI18nResolver } from "./helpers.js";
 import { useActiveSessionId } from "./session-context.js";
 
-/**
- * WorldDimensions — renders the current world's structured dimensions
- * (geography, factions, powerSystem, history, economy, tone, mechanics)
- * via the reusable WorldDimensionsPanel. Reads directly from session
- * context; no data bindings required from the plugin spec.
- *
- * Falls back to a muted empty-state message when the world has no
- * dimensions attached (e.g. pre-generation).
- */
-export const WorldDimensions: ComponentRenderer = () => {
-  const { t } = useTranslation();
-  const { state } = useSession();
-  const dims = state.world?.dimensions;
-  if (!dims) {
-    return (
-      <p className="text-xs text-muted-foreground italic">
-        {t("world.dimensionsEmpty")}
-      </p>
-    );
-  }
-  return <WorldDimensionsPanel dimensions={dims} />;
-};
+/** Generic, versioned session values. World-package initial values are not a read fallback. */
+export const WorldDimensions: ComponentRenderer = () => (
+  <SessionDimensionsPanel />
+);
 
 /**
  * `AssetRender` registry entry — surfaces a single `AssetGenerateView`

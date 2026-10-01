@@ -1,278 +1,229 @@
-/**
- * Compact world dimensions panel for the right panel world tab.
- * Shows geography, factions, power system, history, economy, tone, mechanics
- * in collapsible sections.
- */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  MapPin,
-  Users,
-  Zap,
-  Clock,
-  Coins,
-  Building2,
-  Palette,
-  Gamepad2,
-  ChevronRight,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge.js";
-import type { WorldDimensions } from "@covel/shared";
-import { text } from "@/components/world/editor-helpers.js";
+  validateDimensionValue,
+  type DimensionSnapshot,
+  type JsonValue,
+  type DimensionSettlementSummary,
+} from "@covel/shared";
+import { Button } from "@/components/ui/button.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
+import {
+  DimensionValueEditor,
+  supportsDimensionFields,
+} from "./dimension-value-editor.js";
+import { DimensionValueView } from "./dimension-value-view.js";
 
-/**
- * `WorldDimensions` declares these arrays as required, but the data is
- * LLM-generated world content — an external boundary. `?.` only covers
- * null/undefined; `regions: {}` would still throw on `.map`. Keeps the declared
- * element type so the render bodies stay typed.
- */
-function asArray<T>(value: readonly T[] | undefined): readonly T[] {
-  return Array.isArray(value) ? value : [];
+export interface DimensionEditRequest {
+  updates: { id: string; expectedVersion: number; value: JsonValue }[];
+  resultId?: string;
+  resolution?: "manual" | "skipped" | "retry";
 }
-
-function Section({
-  title,
-  icon: Icon,
-  children,
-  defaultOpen = false,
-}: {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div>
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <ChevronRight
-          className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`}
-        />
-        <Icon className="w-3 h-3" />
-        <span>{title}</span>
-      </button>
-      {open && (
-        <div className="border-l border-border pl-3 ml-1.5 space-y-1 pb-1">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function WorldDimensionsPanel({
   dimensions,
+  settlements = [],
+  onEdit,
+  disabled,
 }: {
-  dimensions: WorldDimensions;
+  dimensions?: DimensionSnapshot;
+  settlements?: readonly DimensionSettlementSummary[];
+  onEdit?: (
+    request: DimensionEditRequest,
+    sourceTurnId?: string,
+  ) => Promise<void>;
+  disabled?: boolean;
 }) {
-  const { t } = useTranslation();
-  const dims = dimensions;
-
+  const { t, i18n } = useTranslation();
+  const [editing, setEditing] = useState<{
+    id: string;
+    version: number;
+  } | null>(null);
+  const [jsonMode, setJsonMode] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  async function submit(request: DimensionEditRequest, sourceTurnId?: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await onEdit?.(request, sourceTurnId);
+      setEditing(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save(id: string) {
+    const entry = dimensions?.[id];
+    if (!entry || editing?.id !== id) return;
+    try {
+      const value: unknown = JSON.parse(draft);
+      const issues = validateDimensionValue(entry.schema, value);
+      if (issues.length)
+        throw new Error(
+          issues
+            .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+            .join("; "),
+        );
+      await submit({
+        updates: [
+          { id, expectedVersion: editing.version, value: value as JsonValue },
+        ],
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+  if (
+    (!dimensions || !Object.keys(dimensions).length) &&
+    !settlements.some((receipt) => receipt.status === "pending-settlement")
+  )
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        {t("world.noStructuredData")}
+      </p>
+    );
+  const inactive = disabled || busy;
   return (
-    <div className="space-y-1">
-      {/* Geography */}
-      {dims.geography && (
-        <Section title={t("world.geography")} icon={MapPin}>
-          {dims.geography.overview && (
-            <p className="text-[11px] text-muted-foreground">
-              {text(dims.geography.overview)}
+    <div className="space-y-4 p-4">
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {settlements
+        .filter((receipt) => receipt.status === "pending-settlement")
+        .map((receipt) => (
+          <section
+            key={receipt.source.resultId}
+            className="space-y-2 rounded border border-amber-500 p-3"
+          >
+            <p>
+              {t("world.pendingDimensions", "Dimension settlement pending")} ·{" "}
+              {receipt.source.turnNumber}
             </p>
-          )}
-          {asArray(dims.geography.regions).map((r, i) => (
-            <div key={i} className="text-[11px]">
-              <span className="font-medium">{text(r.name)}</span>
-              {r.climate && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {text(r.climate)}
-                </span>
-              )}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {/* Factions */}
-      {dims.factions && dims.factions.length > 0 && (
-        <Section title={t("world.factions")} icon={Users}>
-          {dims.factions.map((f) => (
-            <div
-              key={f.id}
-              className="text-[11px] flex items-center gap-1 flex-wrap"
-            >
-              <span className="font-medium">{text(f.name)}</span>
-              <Badge
-                variant="outline"
-                className="text-[9px] rounded-none py-0 h-4"
-              >
-                {f.influence}
-              </Badge>
-              {f.leader && (
-                <span className="text-muted-foreground text-[10px]">
-                  {text(f.leader)}
-                </span>
-              )}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {/* Power System */}
-      {dims.powerSystem && (
-        <Section title={t("world.powerSystem")} icon={Zap}>
-          <div className="text-[11px]">
-            <span className="font-medium">{text(dims.powerSystem.name)}</span>
-            <span className="text-muted-foreground">
-              {" "}
-              ({dims.powerSystem.type})
-            </span>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            {text(dims.powerSystem.description)}
-          </p>
-          {dims.powerSystem.tiers && dims.powerSystem.tiers.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-0.5">
-              {[...dims.powerSystem.tiers]
-                .sort((a, b) => a.rank - b.rank)
-                .map((tier, i) => (
-                  <Badge
-                    key={i}
+            {receipt.error && <p className="text-sm">{receipt.error}</p>}
+            {onEdit && (
+              <div className="flex flex-wrap gap-2">
+                {(["retry", "manual", "skipped"] as const).map((resolution) => (
+                  <Button
+                    key={resolution}
                     variant="outline"
-                    className="text-[9px] rounded-none py-0 h-4"
+                    size="sm"
+                    disabled={
+                      inactive ||
+                      (resolution === "retry" && !receipt.sourceTurnId)
+                    }
+                    onClick={() =>
+                      void submit(
+                        {
+                          updates: [],
+                          resultId: receipt.source.resultId,
+                          resolution,
+                        },
+                        receipt.sourceTurnId,
+                      )
+                    }
                   >
-                    {tier.rank}. {text(tier.name)}
-                  </Badge>
+                    {t(`world.dimensionResolution.${resolution}`, resolution)}
+                  </Button>
                 ))}
-            </div>
-          )}
-        </Section>
-      )}
-
-      {/* History */}
-      {dims.history && dims.history.length > 0 && (
-        <Section title={t("world.history")} icon={Clock}>
-          {dims.history.map((evt, i) => (
-            <div key={i} className="text-[11px]">
-              <span className="font-medium">{text(evt.name)}</span>
-              <span className="text-muted-foreground">
-                {" "}
-                · {[text(evt.era), text(evt.year)].filter(Boolean).join(" ")}
-              </span>
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {/* Economy */}
-      {dims.economy && (
-        <Section title={t("world.economy")} icon={Coins}>
-          {asArray(dims.economy.currencies).map((c, i) => (
-            <div key={i} className="text-[11px]">
-              <span className="font-medium">{text(c.name)}</span>
-              {c.symbol && <span> ({c.symbol})</span>}
-              {c.description && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  — {text(c.description)}
-                </span>
-              )}
-            </div>
-          ))}
-          {dims.economy.resources && dims.economy.resources.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-0.5">
-              {dims.economy.resources.map((r, i) => (
-                <Badge
-                  key={i}
-                  variant="outline"
-                  className="text-[9px] rounded-none py-0 h-4"
-                >
-                  {text(r)}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </Section>
-      )}
-
-      {/* Social Structure */}
-      {dims.socialStructure && (
-        <Section title={t("world.socialStructure")} icon={Building2}>
-          {asArray(dims.socialStructure.classes).map((cls, i) => (
-            <div key={i} className="text-[11px]">
-              <span className="font-medium">{text(cls.name)}</span>
-              {cls.description && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  — {text(cls.description)}
-                </span>
-              )}
-            </div>
-          ))}
-        </Section>
-      )}
-
-      {/* Tone */}
-      {dims.tone && (
-        <Section title={t("world.tone")} icon={Palette}>
-          <div className="flex flex-wrap gap-1">
-            {asArray(dims.tone.genres).map((g, i) => (
-              <Badge
-                key={i}
-                variant="secondary"
-                className="text-[9px] rounded-none py-0 h-4"
-              >
-                {g}
-              </Badge>
-            ))}
-          </div>
-          {dims.tone.themes && dims.tone.themes.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {dims.tone.themes.map((th, i) => (
-                <Badge
-                  key={i}
-                  variant="outline"
-                  className="text-[9px] rounded-none py-0 h-4"
-                >
-                  {text(th)}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </Section>
-      )}
-
-      {/* Mechanics */}
-      {dims.mechanics && (
-        <Section title={t("world.mechanics")} icon={Gamepad2}>
-          <div className="flex flex-wrap gap-1">
-            {dims.mechanics.combatStyle && (
-              <Badge
-                variant="secondary"
-                className="text-[9px] rounded-none py-0 h-4"
-              >
-                {dims.mechanics.combatStyle}
-              </Badge>
+              </div>
             )}
-            {dims.mechanics.difficulty && (
-              <Badge
+          </section>
+        ))}
+      {Object.entries(dimensions ?? {}).map(([id, entry]) => (
+        <section key={id} className="space-y-2 rounded border p-3">
+          <div className="flex items-center gap-2">
+            <h3 className="font-medium">
+              {resolveDisplayText(entry.name, locale)}
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              {id} · v{entry.version}
+            </span>
+            {onEdit && (
+              <Button
+                className="ml-auto"
                 variant="outline"
-                className="text-[9px] rounded-none py-0 h-4"
+                size="sm"
+                disabled={inactive}
+                onClick={() => {
+                  setEditing({ id, version: entry.version });
+                  setJsonMode(
+                    !supportsDimensionFields(entry.schema, entry.value),
+                  );
+                  setDraft(JSON.stringify(entry.value, null, 2));
+                  setError(null);
+                }}
               >
-                {dims.mechanics.difficulty}
-              </Badge>
+                {t("common.edit")}
+              </Button>
             )}
           </div>
-          {dims.mechanics.skillSystem && (
-            <p className="text-[11px] text-muted-foreground">
-              {text(dims.mechanics.skillSystem)}
+          {entry.description && (
+            <p className="text-sm text-muted-foreground">
+              {resolveDisplayText(entry.description, locale)}
             </p>
           )}
-        </Section>
-      )}
+          {editing?.id === id ? (
+            <div className="space-y-2">
+              <label htmlFor={`dimension-value-${id}`} className="text-sm">
+                {t("world.currentValue", "Current value")} · {id}
+              </label>
+              {supportsDimensionFields(entry.schema, entry.value) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    try {
+                      JSON.parse(draft);
+                      setJsonMode(!jsonMode);
+                    } catch (cause) {
+                      setError(String(cause));
+                    }
+                  }}
+                >
+                  {jsonMode
+                    ? t("world.dimensionFields", "Edit fields")
+                    : t("world.dimensionJson", "Edit JSON")}
+                </Button>
+              )}
+              {jsonMode ? (
+                <textarea
+                  id={`dimension-value-${id}`}
+                  className="min-h-40 w-full rounded border bg-background p-2 font-mono text-xs"
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                />
+              ) : (
+                <DimensionValueEditor
+                  schema={entry.schema}
+                  value={JSON.parse(draft) as JsonValue}
+                  label={`${t("world.currentValue", "Current value")} · ${id}`}
+                  onChange={(value) => setDraft(JSON.stringify(value, null, 2))}
+                />
+              )}
+              <div className="flex gap-2">
+                <Button disabled={inactive} onClick={() => void save(id)}>
+                  {t("common.save")}
+                </Button>
+                <Button
+                  disabled={inactive}
+                  variant="outline"
+                  onClick={() => setEditing(null)}
+                >
+                  {t("common.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <DimensionValueView schema={entry.schema} value={entry.value} />
+          )}
+        </section>
+      ))}
     </div>
   );
 }

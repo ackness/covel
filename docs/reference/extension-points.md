@@ -44,6 +44,22 @@ export default function (covel) {
 
 **`order` 与段落排序**：同一 `volatility` 层级内，段落按 `order`（升序，默认 0）排列。多个插件以相同 `order` 注册时，最终顺序由 `providerPluginId`（字典序）再到 `id` 决定，是确定性的实现细节而非设计承诺——这意味着插件改名会静默地改变它在同层的相对位置。需要明确相对顺序的插件应设置不同的 `order` 值。
 
+## 会话世界上下文
+
+`session.world-context@1` 保持 `single`，不合并多个插件的状态。输出字段都是可选的；没有已初始化内容时可以返回 `{}`，空 map/entries 合法。世界包声明与会话快照是不同形状：
+
+| 字段                        | 形状                                  | 说明                                                                 |
+| --------------------------- | ------------------------------------- | -------------------------------------------------------------------- |
+| `schema`                    | `Record<string, unknown>`             | 会话角色 schema                                                      |
+| `entries`                   | `Record<string, unknown>`             | 其他世界上下文条目，不作为维度当前值副本                             |
+| `dimensions`                | `DimensionSnapshot`                   | `{id: {name, description?, schema, value, version}}`，不含初值或规则 |
+| `dimensionRecovery`         | `{editorRuntimeId, trackerRuntimeId}` | 已注册的同属主恢复 runtime 全名，由 host 校验                        |
+| `dimensionProviderPluginId` | string                                | host 按实际提供者注入，不采纳插件自报的属主身份                      |
+
+非空维度声明要求唯一活跃的 `world.dimensions@1` 提供者；该契约定义公开快照并用于提供者发现，真实输出由只读 pre-turn runtime 发布，不是让各插件把私有 namespace 合并成状态总线。捆绑提供者 `world-init` 的 `dimension-context` 只读已提交 `_dimensions`，`session.world-context@1` 将同形快照交给 runtime 与客户端。提供者被移除或权威读取失败时不回退作者初值。
+
+公共读取在一次执行内冻结；post-turn 更新提交后，下一执行重新发布新版。恢复入口分别指向 manual editor 和 tracker；玩家重试直接触发 tracker，并带 `retryFromTurnId`，不是 editor 递归调用 tracker。参见[动态维度快照](world-model.md#动态维度快照)与[编辑及恢复 API](api.md#维度编辑与待结算恢复)。
+
 ## 契约版本与兼容性
 
 契约 ID 中的 `@N` 是版本标识（如 `prompt.segment@1`）。内核采用 **current-only** 策略：每个扩展点只有一个当前版本，不做版本协商，旧版本不保留兼容期。

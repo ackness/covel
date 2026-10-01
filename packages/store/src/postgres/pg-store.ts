@@ -6,6 +6,8 @@
  */
 
 import postgres from "postgres";
+import { eq } from "drizzle-orm";
+import { applyPluginDataBatchCas } from "../common/plugin-data-batch-cas.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 
 import type { DataStore, StoreTransaction } from "../types.js";
@@ -41,8 +43,11 @@ export interface PgStoreOptions {
  * and each `withTransaction` scope (resolver returns that call's private tx
  * handle), so a tx scope is built without any shared/global state.
  */
-function buildPgData(getDb: () => PgDb): StoreTransaction {
-  return {
+function buildPgData(
+  getDb: () => PgDb,
+  transactionBound = false,
+): StoreTransaction {
+  const data = {
     ...createPgSessionRecords(getDb),
     ...createPgRuntimeRecords(getDb),
     ...createPgStateRecords(getDb),
@@ -53,6 +58,29 @@ function buildPgData(getDb: () => PgDb): StoreTransaction {
     ...createPgSnapshotRecords(getDb),
     ...createPgLifecycleRecords(getDb),
     ...createPgExportRecords(getDb),
+  };
+  return {
+    ...data,
+    async compareAndSetPluginDataBatch(sessionId, pluginId, records) {
+      if (!transactionBound) {
+        return getDb().transaction(async (tx) =>
+          buildPgData(
+            () => tx as unknown as PgDb,
+            true,
+          ).compareAndSetPluginDataBatch(sessionId, pluginId, records),
+        );
+      }
+      // All dimension writers use this barrier; the row lock lasts until the
+      // caller's transaction commits, including subsequent ledger updates.
+      const sessions = await getDb()
+        .select({ id: schema.sessions.id })
+        .from(schema.sessions)
+        .where(eq(schema.sessions.id, sessionId))
+        .for("update");
+      if (sessions.length === 0)
+        throw new Error(`Session not found: ${sessionId}`);
+      return applyPluginDataBatchCas(data, sessionId, pluginId, records);
+    },
   };
 }
 
@@ -133,7 +161,7 @@ export async function createPgStore(
       }
       return nesting.runScoped(() =>
         pooledDb.transaction(async (tx) =>
-          fn(buildPgData(() => tx as unknown as PgDb)),
+          fn(buildPgData(() => tx as unknown as PgDb, true)),
         ),
       );
     },

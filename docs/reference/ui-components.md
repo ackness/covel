@@ -133,10 +133,12 @@ See [form tools](./tools.md#create-form) and [plugin testing](../guide/plugin-te
 
 ### Visualization
 
-| Component         | Purpose                                                                                                                                       | Key props                                   |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `GraphCanvas`     | Force-directed graph via `react-force-graph-2d` (lazy-loaded, ~60 KB gzip). Renders the nodes and edges supplied by the panel.                | `nodes`, `edges`, `node`, `edge`, `height?` |
-| `WorldDimensions` | Renders the active world's structured dimensions (geography / factions / power system / …). Reads from session context; no bindings required. | —                                           |
+| Component         | Purpose                                                                                                                                                                                                                                                      | Key props                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `GraphCanvas`     | Force-directed graph via `react-force-graph-2d` (lazy-loaded, ~60 KB gzip). Renders the nodes and edges supplied by the panel.                                                                                                                               | `nodes`, `edges`, `node`, `edge`, `height?` |
+| `WorldDimensions` | Schema-aware session dimension values and versions, with editing and pending-settlement recovery when host-validated runtime metadata is available. Reads the public session snapshot, not author initial values or plugin namespaces; no bindings required. | —                                           |
+
+`WorldDimensions` accepts arbitrary author-defined IDs and renders scalars, nested values, arrays and named record collections using their schemas. Public entries exclude initial values and maintenance rules. Writes use the host-provided manual runtime with `expectedVersion`; conflict refresh and explicit retry/manual/skip recovery are described in [dynamic dimension panels](ui-panels.md#动态维度总览与修正).
 
 `GraphCanvas` accepts arrays or key-to-record objects for `nodes` and `edges`.
 The `node` mapping declares `idField`, `labelField`, `typeField`,

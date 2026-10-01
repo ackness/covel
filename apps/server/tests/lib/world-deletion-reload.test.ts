@@ -49,8 +49,11 @@ summary: Synthetic deletion fixture.
 defaultLocale: en-US
 dimensions:
   tone:
-    genres: [${genre}]
-    contentRating: teen
+    name: tone
+    schema: {}
+    initialValue:
+      genres: [${genre}]
+      contentRating: teen
 `,
     "utf8",
   );

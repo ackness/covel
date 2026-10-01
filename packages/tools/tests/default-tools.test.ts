@@ -34,6 +34,8 @@ describe("default tool registry", () => {
         "sync-characters",
         "list-characters",
         "get-character",
+        "world-dimension-get",
+        "world-dimension-list",
       ].sort(),
     );
   });

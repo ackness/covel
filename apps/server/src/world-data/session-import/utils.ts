@@ -23,6 +23,9 @@ export function sourceItems(value: unknown): readonly unknown[] {
 export async function readWorldManifest(worldRoot: string): Promise<{
   id?: string;
   worldData?: string;
+  dimensions?: unknown;
+  dimensionSources?: unknown;
+  defaultLocale?: string;
 }> {
   const raw = parseYaml(
     await readFile(path.join(worldRoot, "world.yaml"), "utf-8"),
@@ -30,6 +33,10 @@ export async function readWorldManifest(worldRoot: string): Promise<{
   return isRecord(raw)
     ? {
         id: typeof raw.id === "string" ? raw.id : undefined,
+        dimensions: raw.dimensions,
+        dimensionSources: raw.dimensionSources,
+        defaultLocale:
+          typeof raw.defaultLocale === "string" ? raw.defaultLocale : undefined,
         worldData:
           typeof raw.worldData === "string" ? raw.worldData : undefined,
       }

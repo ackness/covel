@@ -303,6 +303,9 @@ sessionRoutes.post("/", async (c) => {
   // Do that before taking the session lock or opening the DB transaction; the
   // prepared plan is immutable input to the atomic write phase below.
   const preparedWorldData = await prepareWorldDataImportForSession({
+    dimensions: rawWorldId
+      ? (await store.getWorld(rawWorldId))?.metadata?.dimensions
+      : undefined,
     contractData: rawWorldId
       ? (await store.getWorld(rawWorldId))?.metadata?.contractData
       : undefined,

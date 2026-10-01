@@ -1,6 +1,9 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import { type WorldDataMetadataSummary } from "@covel/shared";
+import {
+  worldDimensionsSchema,
+  type WorldDataMetadataSummary,
+} from "@covel/shared";
 import { digestFile, sha256Hex } from "./digest.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { readWorldDataSource } from "./source-reader.js";
@@ -127,7 +130,15 @@ async function summarizeSource(
     parsedTarget.path.join(".") === "dimensions" &&
     diagnostics.every((d) => d.level !== "error")
   ) {
-    setMetadataPath(metadata, parsedTarget.path, read.value);
+    const definitions = worldDimensionsSchema.safeParse(read.value);
+    if (definitions.success)
+      setMetadataPath(metadata, parsedTarget.path, definitions.data);
+    else
+      diagnostics.push({
+        level: "error",
+        sourceId: source.id,
+        message: `Invalid dimension declarations: ${definitions.error.message}`,
+      });
   } else if (parsedTarget?.kind === "world-metadata") {
     diagnostics.push({
       level: "warning",

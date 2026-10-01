@@ -1,5 +1,8 @@
 import {
   materializeWorldModel,
+  DIMENSION_DATA_NAMESPACE,
+  dimensionRecordSchema,
+  dimensionSnapshotFromRecords,
   type Proposal,
   type RuntimeResult,
   type WorldModelView,
@@ -18,7 +21,9 @@ export function collectUpstreamWorldProposals(
             .filter(
               (proposal) =>
                 proposal.type === "character.upsert" ||
-                proposal.type === "character.schema.set",
+                proposal.type === "character.schema.set" ||
+                proposal.type === "dimension.initialize" ||
+                proposal.type === "dimension.update",
             )
             .map((proposal) => ({
               ...proposal,
@@ -36,11 +41,22 @@ export function collectUpstreamWorldProposals(
 
 /** Snapshot the execution base, then provide fresh own-write overlays per read. */
 export async function createWorldModelView(
-  store: DataStore,
+  store: Pick<
+    DataStore,
+    | "listCharacters"
+    | "getCharacterSchema"
+    | "getSession"
+    | "getWorld"
+    | "listPluginData"
+  >,
   sessionId: string,
   upstream: readonly Proposal[] = [],
   pending: readonly Proposal[] = [],
   assertLive: () => void = () => {},
+  frozenDimensions?: Pick<
+    WorldModelView,
+    "dimensions" | "dimensionProviderPluginId"
+  >,
 ): Promise<WorldModelView> {
   assertLive();
   const [characters, characterSchema, session] = await Promise.all([
@@ -52,8 +68,38 @@ export async function createWorldModelView(
     ? await store.getWorld(session.worldId)
     : null;
   assertLive();
+  const providerId =
+    frozenDimensions?.dimensionProviderPluginId ??
+    session?.metadata?._dimensionProviderPluginId;
+  if (providerId !== undefined && typeof providerId !== "string")
+    throw new Error("Invalid dimension provider binding");
+  const dimensionRows =
+    !frozenDimensions && providerId
+      ? await store.listPluginData(
+          sessionId,
+          providerId,
+          DIMENSION_DATA_NAMESPACE,
+        )
+      : [];
+  const dimensions =
+    frozenDimensions?.dimensions ??
+    dimensionSnapshotFromRecords(
+      Object.fromEntries(
+        dimensionRows.map((row) => [
+          row.key,
+          dimensionRecordSchema.parse(row.value),
+        ]),
+      ),
+    );
+  assertLive();
   const base = materializeWorldModel(
-    { characters, characterSchema, worldRecord },
+    {
+      characters,
+      characterSchema,
+      worldRecord,
+      dimensions,
+      ...(providerId ? { dimensionProviderPluginId: providerId } : {}),
+    },
     upstream,
     sessionId,
   );
@@ -81,6 +127,13 @@ export function overlayWorldModelView(
     get worldRecord() {
       assertLive();
       return structuredClone(snapshot.worldRecord);
+    },
+    get dimensions() {
+      return current().dimensions;
+    },
+    get dimensionProviderPluginId() {
+      assertLive();
+      return snapshot.dimensionProviderPluginId;
     },
   });
 }

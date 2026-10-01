@@ -1,363 +1,269 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryStore } from "@covel/store/memory";
 import {
   getPendingProposals,
   getToolContent,
 } from "@covel/plugin-handlers-utils";
 import { tool, z } from "@covel/tools";
-import { createCommitPipeline } from "../../../packages/runtime/src/session/session-kernel.ts";
 import initializeWorld from "../tools/initialize-world.js";
 import setWorldSchema from "../tools/set-world-schema.js";
-import setWorldEntriesBatch from "../tools/set-world-entries-batch.js";
+import setWorldDimensions from "../tools/set-world-dimensions.js";
+import updateDimensions from "../tools/update-dimensions.js";
+import editDimensions from "../runtimes/edit-dimensions/handler.js";
+import trackerGuard from "../runtimes/dimension-tracker/guard.js";
+import ruleGet from "../tools/dimension-rule-get.js";
 
-const context = {
-  sessionId: "sess-world-init",
-  turnId: "turn-world-init",
+const categories = ["stats", "bio", "abilities", "equipment", "social"];
+const attributes = Array.from({ length: 15 }, (_, index) => ({
+  id: `field${index}`,
+  name: `Field ${index}`,
+  type: "string",
+  category: categories[index % 5],
+}));
+const definition = {
+  name: "Reputation",
+  schema: { type: "integer", minimum: 0, maximum: 100 },
+  initialValue: 0,
+  updateRule: "Completed commissions add five.",
+};
+const record = { definition, value: 0, version: 1 };
+const base = {
+  sessionId: "s",
+  turnId: "t",
   pluginId: "world-init",
   runtimeId: "world-init/schema-gen",
 };
-
-const categories = ["stats", "bio", "abilities", "equipment", "social"];
-
-function makeAttributes() {
-  return Array.from({ length: 15 }, (_, index) => ({
-    id: `field${index + 1}`,
-    name: `字段 ${index + 1}`,
-    type: "string",
-    category: categories[index % categories.length],
-  }));
-}
-
-function makeEntries() {
-  return [
-    "geography",
-    "factions",
-    "power-system",
-    "social-structure",
-    "currency",
-  ].map((key) => ({ key, value: { summary: `${key} data` } }));
-}
-
-describe("world-init local tools", () => {
-  it("constructs the schema and entries tool modules", () => {
-    const store = createMemoryStore();
-    const injection = { tool, z, store };
-
-    const schemaTool = setWorldSchema(injection);
-    const entriesTool = setWorldEntriesBatch(injection);
-    const initializeTool = initializeWorld(injection);
-
-    expect(schemaTool._type).toBe("covel-tool");
-    expect(schemaTool.name).toBe("set-world-schema");
-    expect(entriesTool._type).toBe("covel-tool");
-    expect(entriesTool.name).toBe("set-world-entries-batch");
-    expect(initializeTool._type).toBe("covel-tool");
-    expect(initializeTool.name).toBe("initialize-world");
-  });
-
-  it("publishes the complete atomic initialization schema to the model", () => {
-    const store = createMemoryStore();
-    const initializeTool = initializeWorld({ tool, z, store });
-
-    expect(initializeTool.jsonSchema).toMatchObject({
-      type: "object",
-      properties: {
-        attributes: { type: "array", minItems: 15 },
-        entries: { type: "array", minItems: 5 },
+function trackerContext(receipt = null) {
+  return {
+    ...base,
+    runtimeId: "world-init/dimension-tracker",
+    locale: "en-US",
+    inputSlots: {
+      narrative: {
+        cardinality: "one",
+        value: "Commission completed.",
+        source: { pluginId: "story", runtimeId: "story", resultId: "source" },
       },
-    });
-  });
-
-  it("queues schema, plugin-data, and lorebook writes in one atomic call", async () => {
-    const store = createMemoryStore();
-    const initializeTool = initializeWorld({ tool, z, store });
-
-    const rawResult = await initializeTool.execute(
-      { attributes: makeAttributes(), entries: makeEntries() },
-      context,
+    },
+    world: {
+      dimensions: {
+        reputation: {
+          name: "Reputation",
+          schema: definition.schema,
+          value: 0,
+          version: 1,
+        },
+      },
+    },
+    store: {
+      listPluginData: async () => [{ key: "reputation", value: record }],
+      getPluginData: async () => (receipt ? { value: receipt } : null),
+      getSession: async () => ({ completedPlayerTurns: 0, locale: "en-US" }),
+    },
+  };
+}
+describe("world-init domain tools", () => {
+  it("initializes attributes and arbitrary declarations in one buffered call without lorebook/legacy state writes", async () => {
+    const result = await initializeWorld({ tool, z }).execute(
+      { attributes, definitions: { reputation: definition } },
+      base,
     );
-    const result = getToolContent(rawResult);
-
     expect(getToolContent(result)).toMatchObject({
       success: true,
       attributeCount: 15,
-      categories,
-      count: 5,
-      keys: [
-        "geography",
-        "factions",
-        "power-system",
-        "social-structure",
-        "currency",
-      ],
-      worldSchema: {
-        types: ["npc", "companion"],
-        attributes: expect.any(Array),
-      },
+      dimensionCount: 1,
       preGameDone: true,
     });
     expect(
-      getPendingProposals(rawResult).map((proposal) => proposal.type),
-    ).toEqual(["character.schema.set", "plugin.data.batch", "lorebook.upsert"]);
+      getPendingProposals(result).map((proposal) => proposal.type),
+    ).toEqual(["character.schema.set", "dimension.initialize"]);
   });
-
-  it("rejects incomplete input before exposing any pending write", async () => {
-    const store = createMemoryStore();
-    const initializeTool = initializeWorld({ tool, z, store });
-
+  it("publishes the current definition contract to the model and rejects raw old values", async () => {
+    const toolInstance = initializeWorld({ tool, z });
+    expect(toolInstance.jsonSchema.properties).toHaveProperty("definitions");
+    expect(toolInstance.jsonSchema.properties).not.toHaveProperty("entries");
     await expect(
-      initializeTool.execute(
-        {
-          attributes: makeAttributes(),
-          entries: makeEntries().slice(0, 4),
-        },
-        context,
+      toolInstance.execute(
+        { attributes, definitions: { reputation: 0 } },
+        base,
       ),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-
-    expect(
-      await store.listPluginData(context.sessionId, "world-init", "schema"),
-    ).toEqual([]);
-    expect(
-      await store.listPluginData(context.sessionId, "world-init", "entries"),
-    ).toEqual([]);
-    expect(await store.listSessionLorebookEntries(context.sessionId)).toEqual(
-      [],
-    );
+    ).rejects.toThrow();
   });
-
-  it("requires all five attribute categories in the atomic call", async () => {
-    const store = createMemoryStore();
-    const initializeTool = initializeWorld({ tool, z, store });
-    const attributes = makeAttributes().map((attribute) => ({
-      ...attribute,
-      category: attribute.category === "social" ? "bio" : attribute.category,
-    }));
-
+  it("preserves all five character categories and validates before exposing any proposal", async () => {
     await expect(
-      initializeTool.execute({ attributes, entries: makeEntries() }, context),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      initializeWorld({ tool, z }).execute(
+        { attributes: attributes.slice(0, 14) },
+        base,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      initializeWorld({ tool, z }).execute(
+        {
+          attributes: attributes.map((attribute) => ({
+            ...attribute,
+            category: "stats",
+          })),
+        },
+        base,
+      ),
+    ).rejects.toThrow();
   });
-
-  it("queues one schema proposal with versioned character attributes", async () => {
-    const store = createMemoryStore();
-    const schemaTool = setWorldSchema({ tool, z, store });
-
-    const result = await schemaTool.execute(
+  it("keeps author declarations authoritative over generated definitions", async () => {
+    const ctx = {
+      ...base,
+      world: {
+        worldRecord: { metadata: { dimensions: { reputation: definition } } },
+      },
+    };
+    await expect(
+      initializeWorld({ tool, z }).execute(
+        {
+          attributes,
+          definitions: { reputation: { ...definition, initialValue: 50 } },
+        },
+        ctx,
+      ),
+    ).rejects.toThrow("author");
+    expect(
+      getPendingProposals(
+        await initializeWorld({ tool, z }).execute({ attributes }, ctx),
+      )[1].payload.definitions,
+    ).toEqual({ reputation: definition });
+  });
+  it("validates dimension schemas/ranges and exposes a single initialization proposal", async () => {
+    const instance = setWorldDimensions({ tool, z });
+    expect(
+      getPendingProposals(
+        await instance.execute(
+          { definitions: { reputation: definition } },
+          base,
+        ),
+      ),
+    ).toHaveLength(1);
+    await expect(
+      instance.execute(
+        { definitions: { reputation: { ...definition, initialValue: 101 } } },
+        base,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      instance.execute(
+        {
+          definitions: {
+            reputation: { ...definition, schema: { $ref: "unsafe" } },
+          },
+        },
+        base,
+      ),
+    ).rejects.toThrow();
+  });
+  it("keeps structured character attributes separate from global values", async () => {
+    const result = await setWorldSchema({ tool, z }).execute(
       {
         attributes: [
           {
             id: "hp",
-            name: "生命值",
+            name: "Health",
             type: "number",
+            category: "stats",
             min: 0,
             max: 100,
             defaultValue: 100,
-            category: "stats",
-            description: "当前生命值",
-          },
-          {
-            id: "relationships",
-            name: "人际",
-            type: "map",
-            valueType: "string",
-            category: "social",
           },
         ],
       },
-      context,
+      base,
     );
-
-    expect(getToolContent(result)).toMatchObject({
-      success: true,
-      attributeCount: 2,
-      categories: ["stats", "social"],
-      worldSchema: {
-        types: ["npc", "companion"],
-        attributes: expect.any(Array),
-      },
-    });
-
-    const proposals = getPendingProposals(result);
-    expect(proposals).toHaveLength(1);
-    expect(proposals[0]).toMatchObject({
+    expect(getPendingProposals(result)[0]).toMatchObject({
       type: "character.schema.set",
-      sessionId: context.sessionId,
-      source: { pluginId: "world-init", runtimeId: "world-init/schema-gen" },
       payload: {
-        types: ["npc", "companion"],
-        attributes: [
-          expect.objectContaining({
-            id: "hp",
-            type: "number",
-            category: "stats",
-          }),
-          expect.objectContaining({
-            id: "relationships",
-            type: "map",
-            category: "social",
-          }),
-        ],
+        attributes: [expect.objectContaining({ id: "hp", type: "number" })],
       },
     });
   });
-
-  it("queues plugin-data and lorebook proposals for world entries", async () => {
-    const store = createMemoryStore();
-    const schemaTool = setWorldSchema({ tool, z, store });
-    const entriesTool = setWorldEntriesBatch({ tool, z, store });
-    const schemaResult = await schemaTool.execute(
-      {
-        attributes: [
-          {
-            id: "hp",
-            name: "生命值",
-            type: "number",
-            category: "stats",
-          },
-        ],
-      },
-      context,
+  it("takes source identity and read versions from the host, including explicit no-change", async () => {
+    const result = await updateDimensions({ tool, z }).execute(
+      { updates: [] },
+      trackerContext(),
     );
-
-    const result = await entriesTool.execute(
-      {
-        entries: [
-          { key: "geography", value: { regions: ["云梦泽"] } },
-          { key: "factions", value: { groups: ["青萍宗"] } },
-        ],
-      },
-      { ...context, pendingProposals: getPendingProposals(schemaResult) },
-    );
-
-    expect(getToolContent(result)).toMatchObject({
-      success: true,
-      count: 2,
-      keys: ["geography", "factions"],
-      preGameDone: true,
-      worldSchema: {
-        types: ["npc", "companion"],
-        attributes: [expect.objectContaining({ id: "hp" })],
-      },
-    });
-
-    const proposals = getPendingProposals(result);
-    expect(proposals).toHaveLength(2);
-    expect(proposals[0]).toMatchObject({
-      type: "plugin.data.batch",
+    expect(getPendingProposals(result)[0]).toMatchObject({
+      type: "dimension.update",
       payload: {
-        items: [
-          {
-            namespace: "entries",
-            key: "geography",
-            value: { regions: ["云梦泽"] },
-          },
-          {
-            namespace: "entries",
-            key: "factions",
-            value: { groups: ["青萍宗"] },
-          },
-        ],
+        source: { resultId: "source", turnNumber: 1 },
+        readVersions: { reputation: 1 },
+        settlement: "no-change",
+        updates: [],
       },
     });
-    expect(proposals[1]).toMatchObject({
-      type: "lorebook.upsert",
-      payload: {
-        entries: [
-          {
-            id: "world-entry:geography",
-            keys: ["geography"],
-            content: '[geography]\n{\n  "regions": [\n    "云梦泽"\n  ]\n}',
-            strategy: "constant",
-            position: "after_char_defs",
-            insertionOrder: 100,
-            enabled: true,
-          },
-          {
-            id: "world-entry:factions",
-            insertionOrder: 200,
-          },
-        ],
-      },
-    });
-  });
-
-  it("requires the schema proposal before completing world entries", async () => {
-    const store = createMemoryStore();
-    const entriesTool = setWorldEntriesBatch({ tool, z, store });
-
     await expect(
-      entriesTool.execute(
-        {
-          entries: [{ key: "geography", value: { regions: ["云梦泽"] } }],
-        },
-        context,
+      updateDimensions({ tool, z }).execute(
+        { updates: [], source: { resultId: "forged", turnNumber: 1 } },
+        trackerContext(),
       ),
-    ).rejects.toThrow(
-      "set-world-schema must succeed before set-world-entries-batch",
-    );
+    ).rejects.toThrow();
   });
-
-  it("commits queued world entries atomically through the kernel path", async () => {
-    const store = createMemoryStore();
-    const schemaTool = setWorldSchema({ tool, z, store });
-    const entriesTool = setWorldEntriesBatch({ tool, z, store });
-    const schemaResult = await schemaTool.execute(
-      {
-        attributes: [
-          {
-            id: "hp",
-            name: "生命值",
-            type: "number",
-            category: "stats",
-          },
-        ],
+  it("rejects missing narrative provenance and skips model maintenance when no rules exist", async () => {
+    await expect(
+      updateDimensions({ tool, z }).execute(
+        { updates: [] },
+        { ...trackerContext(), inputSlots: {} },
+      ),
+    ).rejects.toThrow("narrative");
+    expect(
+      await trackerGuard({
+        ...trackerContext(),
+        store: {
+          listPluginData: async () => [
+            {
+              key: "reputation",
+              value: {
+                ...record,
+                definition: { ...definition, updateRule: "   " },
+              },
+            },
+          ],
+        },
+      }),
+    ).toEqual({ skip: true });
+    expect(await trackerGuard(trackerContext())).toEqual({ skip: false });
+  });
+  it("reports stable conflicts/current versions on player edits rather than overwriting", async () => {
+    const ctx = {
+      ...trackerContext(),
+      manualPayload: {
+        updates: [{ id: "reputation", expectedVersion: 2, value: 5 }],
       },
-      context,
-    );
-
-    const result = await entriesTool.execute(
-      {
-        entries: [
-          { key: "geography", value: { regions: ["云梦泽"] } },
-          { key: "factions", value: { groups: ["青萍宗"] } },
-        ],
+    };
+    const result = await editDimensions(ctx);
+    expect(result).toMatchObject({
+      outcome: "success",
+      value: {
+        applied: false,
+        code: "dimension-version-conflict",
+        currentVersions: { reputation: 1 },
       },
-      { ...context, pendingProposals: getPendingProposals(schemaResult) },
-    );
-
-    const commitResults = await createCommitPipeline(store).commitAll(
-      getPendingProposals(result),
-    );
-    expect(commitResults.every((item) => item.committed)).toBe(true);
-
-    const pluginData = await store.listPluginData(
-      context.sessionId,
-      context.pluginId,
-      "entries",
-    );
-    expect(pluginData.map((row) => row.key).sort()).toEqual([
-      "factions",
-      "geography",
-    ]);
-
-    const lorebook = await store.listSessionLorebookEntries(context.sessionId);
-    expect(lorebook).toHaveLength(2);
-    expect(lorebook[0]).toMatchObject({
-      id: "world-entry:geography",
-      owner: { kind: "plugin", pluginId: "world-init" },
-      keys: ["geography"],
-      strategy: "constant",
-      position: "after_char_defs",
-      insertionOrder: 100,
-      enabled: true,
     });
-    expect(lorebook[0].content).toBe(
-      '[geography]\n{\n  "regions": [\n    "云梦泽"\n  ]\n}',
+    expect(getPendingProposals(result)).toEqual([]);
+  });
+  it("pages adopted rule text instead of injecting unbounded definitions", async () => {
+    const ctx = trackerContext();
+    ctx.store.getPluginData = async (namespace) =>
+      namespace === "_dimensions"
+        ? {
+            value: {
+              ...record,
+              definition: { ...definition, updateRule: "r".repeat(8000) },
+            },
+          }
+        : null;
+    const result = await ruleGet({ tool, z }).execute(
+      { id: "reputation", part: "rule", limit: 100 },
+      ctx,
     );
-    expect(lorebook[1]).toMatchObject({
-      id: "world-entry:factions",
-      insertionOrder: 200,
+    expect(result).toMatchObject({
+      content: "r".repeat(100),
+      complete: false,
+      nextOffset: 100,
     });
+    expect(result._text.length).toBeLessThan(500);
   });
 });

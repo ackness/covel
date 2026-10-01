@@ -6,6 +6,7 @@
  */
 
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { applyPluginDataBatchCas } from "../common/plugin-data-batch-cas.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -70,7 +71,7 @@ export function createSqliteStore(
 
   // Data methods first; the transaction scope is the same single-connection
   // store, so `withTransaction` hands `fn` these data methods.
-  const data = {
+  const records = {
     ...createSqliteSessions(sqlite, db),
     ...createSqliteRuntimeRecords(db),
     ...createSqliteState(db),
@@ -80,6 +81,26 @@ export function createSqliteStore(
     ...createSqliteSnapshotRecords(db),
     ...createSqliteLifecycleRecords(db),
     ...createSqliteExportRecords(db),
+  };
+  const data: StoreTransaction = {
+    ...records,
+    async compareAndSetPluginDataBatch(sessionId, pluginId, entries) {
+      const ownTransaction = !sqlite.inTransaction;
+      if (ownTransaction) sqlite.exec("BEGIN IMMEDIATE");
+      try {
+        const applied = await applyPluginDataBatchCas(
+          records,
+          sessionId,
+          pluginId,
+          entries,
+        );
+        if (ownTransaction) sqlite.exec("COMMIT");
+        return applied;
+      } catch (error) {
+        if (ownTransaction) sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    },
   };
 
   // One connection exposes its own uncommitted rows to every statement issued

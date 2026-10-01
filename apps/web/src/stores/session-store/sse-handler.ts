@@ -631,6 +631,15 @@ export function createSseEventHandler(
         reducePluginDataChanged(deps.dispatch, payload, envelope.sessionId);
         break;
       }
+      case "dimensions.changed":
+      case "dimensions.settlement.changed": {
+        invalidateSessionResource(deps.dispatch, [
+          "game-state",
+          envelope.sessionId,
+        ]);
+        deps.dispatch({ type: "MERGE_COMMITTED_DIMENSIONS", payload });
+        break;
+      }
       case "character-schema.changed": {
         invalidateSessionResource(deps.dispatch, [
           "game-state",

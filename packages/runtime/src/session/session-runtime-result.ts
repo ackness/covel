@@ -46,6 +46,8 @@ export async function processRuntimeResult(
     pluginId: string;
     runtimeId: string;
     turnId: string;
+    runId?: string;
+    canonicalValue?: { readonly value?: import("@covel/shared").JsonValue };
     status: string;
     output: Record<string, unknown> | null;
     effects?: RuntimeEffects;

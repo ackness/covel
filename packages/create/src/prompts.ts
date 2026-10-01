@@ -113,7 +113,7 @@ function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
     requestedLine(
       requested,
       "opening-kit",
-      "at least 2 numeric startingResources plus concrete opening choices in startingConditions.",
+      "at least 2 resource dimensions with numeric initialValue plus a dimension describing concrete opening choices; choose author-defined IDs.",
     ),
     brief.additionalInstructions?.trim()
       ? `Additional author direction:\n${brief.additionalInstructions.trim()}`

@@ -18,7 +18,7 @@ import { buildWorldPrompt } from "./prompts.js";
 const WORLD_YAML = `schemaVersion: "1.0"
 id: test-world
 name: 测试世界
-version: "0.1.0"
+version: 0.1.0
 summary: 一个用于生成器测试的世界。
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
@@ -28,41 +28,70 @@ pluginPolicy:
   recommended: []
 dimensions:
   geography:
-    overview: 小型测试地区。
-    regions:
-      - name: 中央街区
-        description: 所有测试都从这里开始。
-        climate: 温和
+    name: geography
+    schema: {}
+    initialValue:
+      overview: 小型测试地区。
+      regions:
+        - name: 中央街区
+          description: 所有测试都从这里开始。
+          climate: 温和
   factions:
-    - id: clock-guild
-      name: 钟表公会
-      description: 维护城镇时间秩序。
-      type: guild
-      influence: major
+    name: factions
+    schema: {}
+    initialValue:
+      - id: clock-guild
+        name: 钟表公会
+        description: 维护城镇时间秩序。
+        type: guild
+        influence: major
   powerSystem:
-    name: 分针术
-    type: magic
-    description: 通过时间刻度施法。
-    rules: [每次施法都会留下刻痕]
+    name: powerSystem
+    schema: {}
+    initialValue:
+      name: 分针术
+      type: magic
+      description: 通过时间刻度施法。
+      rules:
+        - 每次施法都会留下刻痕
   history:
-    - name: 第一次倒转
-      description: 城镇钟楼首次倒转。
-      significance: major
+    name: history
+    schema: {}
+    initialValue:
+      - name: 第一次倒转
+        description: 城镇钟楼首次倒转。
+        significance: major
   economy:
-    currencies:
-      - name: 铜分
-        symbol: m
+    name: economy
+    schema: {}
+    initialValue:
+      currencies:
+        - name: 铜分
+          symbol: m
   socialStructure:
-    classes:
-      - name: 守钟人
-        description: 负责巡街。
+    name: socialStructure
+    schema: {}
+    initialValue:
+      classes:
+        - name: 守钟人
+          description: 负责巡街。
   tone:
-    genres: [mystery]
-    contentRating: teen
+    name: tone
+    schema: {}
+    initialValue:
+      genres:
+        - mystery
+      contentRating: teen
   mechanics:
-    combatStyle: narrative
+    name: mechanics
+    schema: {}
+    initialValue:
+      combatStyle: narrative
   startingConditions:
-    openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。
+    name: startingConditions
+    schema: {}
+    initialValue:
+      openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。
 `;
 
 const WORLD_LORE = `# 测试世界
@@ -180,7 +209,13 @@ describe("createWorld", () => {
         ],
       },
       pluginSettings: { memory: { cadence: 2 } },
-      dimensions: { geography: { regions: [{ name: "中央街区" }] } },
+      dimensions: {
+        geography: {
+          name: "geography",
+          schema: {},
+          initialValue: { regions: [{ name: "中央街区" }] },
+        },
+      },
     });
   });
 
@@ -391,30 +426,50 @@ pluginPolicy:
 extraRoot: ignored
 dimensions:
   factions:
-    - id: clock-guild
-      name: 钟表公会
-      description: 维护城镇时间秩序。
-      type: Guild
-      influence: Important
+    name: factions
+    schema: {}
+    initialValue:
+      - id: clock-guild
+        name: 钟表公会
+        description: 维护城镇时间秩序。
+        type: Guild
+        influence: Important
   powerSystem:
-    name: 分针术
-    type: mystic
-    description: 通过时间刻度施法。
-    rules: [每次施法都会留下刻痕]
+    name: powerSystem
+    schema: {}
+    initialValue:
+      name: 分针术
+      type: mystic
+      description: 通过时间刻度施法。
+      rules:
+        - 每次施法都会留下刻痕
   history:
-    - name: 第一次倒转
-      description: 城镇钟楼首次倒转。
-      significance: Critical
+    name: history
+    schema: {}
+    initialValue:
+      - name: 第一次倒转
+        description: 城镇钟楼首次倒转。
+        significance: Critical
   tone:
-    genres: [mystery]
-    contentRating: TEEN
+    name: tone
+    schema: {}
+    initialValue:
+      genres:
+        - mystery
+      contentRating: TEEN
   mechanics:
-    combatStyle: story
-    difficulty: ADAPTIVE
+    name: mechanics
+    schema: {}
+    initialValue:
+      combatStyle: story
+      difficulty: ADAPTIVE
   startingConditions:
-    openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。
-    startingResources:
-      铜分: "3"
+    name: startingConditions
+    schema: {}
+    initialValue:
+      openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。
+      startingResources:
+        铜分: "3"
 `;
 
     const result = await createWorld({
@@ -438,22 +493,26 @@ dimensions:
     );
     expect(manifest).toContain('schemaVersion: "1"');
     expect(manifest).not.toContain("extraRoot:");
-    expect(dimensions).toContain("type: guild");
-    expect(dimensions).toContain("influence: minor");
-    expect(dimensions).toContain("contentRating: teen");
-    expect(dimensions).toContain("combatStyle: narrative");
-    expect(dimensions).toContain("difficulty: adaptive");
-    expect(dimensions).toContain("铜分: 3");
+    expect(dimensions).toContain("type: Guild");
+    expect(dimensions).toContain("influence: Important");
+    expect(dimensions).toContain("contentRating: TEEN");
+    expect(dimensions).toContain("combatStyle: story");
+    expect(dimensions).toContain("difficulty: ADAPTIVE");
+    expect(dimensions).toContain('铜分: "3"');
   });
 
   it("writes requested portable world-package supplements", async () => {
     const enrichedYaml = WORLD_YAML.replace(
-      "    openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。",
-      `    openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。
-    openingChips: [追踪钟声, 保护证人, 封锁钟楼]
-    startingResources:
-      铜分: 8
-      防水火柴: 2`,
+      "  startingConditions:",
+      `  coins:
+    name: Coins
+    schema: { type: integer, minimum: 0 }
+    initialValue: 8
+  matches:
+    name: Matches
+    schema: { type: integer, minimum: 0 }
+    initialValue: 2
+  startingConditions:`,
     );
     const memoryPackage =
       WORLD_PACKAGE_YAML +
@@ -544,7 +603,7 @@ describe("buildWorldPrompt", () => {
       "Technical vocabulary is allowed when it belongs to the fictional setting",
     );
     expect(prompt).toContain(
-      "The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.",
+      "The opening choices and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.",
     );
   });
 
