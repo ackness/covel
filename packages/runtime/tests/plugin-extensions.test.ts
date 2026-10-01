@@ -367,6 +367,25 @@ describe("kernel extension execution", () => {
     );
   });
 
+  it("never exposes hidden world data to extension handlers", async () => {
+    const { point, host, execution, readPluginData } = fixture("pipeline");
+    host.register(
+      "alpha",
+      { point: point.id, id: "one" },
+      {
+        handler: async (_input, context) => {
+          expect(await context.pluginData.list("_hidden.events")).toEqual([]);
+          expect(
+            await context.pluginData.get("_hidden.events", "one"),
+          ).toBeUndefined();
+          return { value: 1 };
+        },
+      },
+    );
+    await expect(execution().run(point, input)).resolves.toEqual({ value: 1 });
+    expect(readPluginData).not.toHaveBeenCalled();
+  });
+
   it("reuses timeout cancellation and skips only the failing provider", async () => {
     const { point, host, execution, events } = fixture("pipeline");
     let signal!: AbortSignal;

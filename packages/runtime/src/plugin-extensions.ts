@@ -11,6 +11,7 @@ import {
   type ExtensionPoint,
   type ExtensionResult,
   type PluginExtensionDefinition,
+  isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "./plugin-services.js";
@@ -191,6 +192,10 @@ export class PluginExtensionHost {
     // Providers only ever see their own namespaces, so the host never loads
     // the whole session. Filtering keeps isolation independent of the reader.
     const namespaceRows = (pluginId: string, namespace: string) => {
+      // Extension output reaches prompts or clients, so hidden world data is
+      // never readable here — only the owning plugin's runtimes see it.
+      if (isHiddenPluginDataNamespace(namespace))
+        return Promise.resolve([] as readonly ExtensionPluginDataRecord[]);
       const key = JSON.stringify([pluginId, namespace]);
       let rows = reads.get(key);
       if (!rows) {

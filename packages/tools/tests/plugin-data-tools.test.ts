@@ -158,6 +158,37 @@ describe("builtin plugin-data tools", () => {
     expect(getToolContent(result).items[0]?.key).toBe("alpha");
     expect(store.listPluginData).toHaveBeenCalledOnce();
   });
+
+  it("never returns hidden world data to the model", async () => {
+    const get = await findByName(tools, "plugin-data-get").execute(
+      { namespace: "_hidden.events", key: "alpha" },
+      ctx(),
+    );
+    expect(getToolContent(get)).toEqual({
+      found: false,
+      namespace: "_hidden.events",
+      key: "alpha",
+    });
+    expect(store.getPluginData).not.toHaveBeenCalled();
+
+    const scoped = await findByName(tools, "plugin-data-list").execute(
+      { namespace: "_hidden.events" },
+      ctx(),
+    );
+    expect(getToolContent(scoped)).toEqual({ count: 0, items: [] });
+
+    store.listPluginData.mockResolvedValueOnce([
+      { namespace: "entries", key: "alpha", value: 1, updatedAt: "t" },
+      { namespace: "_hidden.events", key: "secret", value: 2, updatedAt: "t" },
+    ]);
+    const all = (await findByName(tools, "plugin-data-list").execute(
+      {},
+      ctx(),
+    )) as { count: number; items: Array<{ key: string }> };
+    expect(getToolContent(all).items.map((item) => item.key)).toEqual([
+      "alpha",
+    ]);
+  });
 });
 
 describe("plugin-data reads see this loop's own pending writes", () => {

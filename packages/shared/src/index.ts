@@ -82,7 +82,12 @@ export {
   isJsonValue,
   toJsonValueOrDiagnostic,
 } from "./utils/json-value.js";
-export { reservedPluginDataNamespaceError } from "./utils/plugin-data-namespace.js";
+export {
+  HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
+  hiddenPluginDataNamespace,
+  isHiddenPluginDataNamespace,
+  reservedPluginDataNamespaceError,
+} from "./utils/plugin-data-namespace.js";
 export { decodePageCursor, encodePageCursor } from "./utils/page-cursor.js";
 export {
   parseSlashCommandInvocation,
@@ -275,6 +280,7 @@ export {
   worldDataSourceKindSchema,
   worldDataMergeModeSchema,
   worldDataEffectSchema,
+  worldDataVisibilitySchema,
   worldDataSourceDescriptorSchema,
   worldDataDescriptorSchema,
   worldDataSourceDescriptorOverrideSchema,

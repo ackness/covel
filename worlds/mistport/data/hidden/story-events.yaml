@@ -1,0 +1,27 @@
+# Hidden story events (visibility: hidden in world.data.yaml). Payloads are
+# briefs for the narrator, not finished prose, and must not resolve the deep
+# truth early.
+- id: frost-hears-it
+  title: 雾在说话
+  when:
+    all:
+      - dimension: deepWithdrawal
+        path: stage
+        in: [full-exposure, return-bell]
+      - dimension: factionStanding
+        path: congregation.attitude
+        gte: 2
+  payload: 小霜在遗迹完全暴露时找到主角，避开教会其他人，带主角走下回声廊旁一段只有深退潮才露出的石阶。她说雾正在用齐老说话的停顿方式低语，并让主角看她手腕上与主角相似的潮纹，问主角是否也听得见。她不知道这意味着什么，也害怕被教会当成证据。只演出这次相遇与她的恐惧，不解释雾之主的真相，不确认齐老的下落。
+  priority: 10
+- id: meg-shows-the-fragment
+  title: 铁姑的碎片
+  when:
+    all:
+      - dimension: caseBoard
+        path: report-74.status
+        equals: corroborated
+      - dimension: factionStanding
+        path: saltFangs.attitude
+        gte: 2
+  payload: 铁姑私下约主角到盐牙会的暗仓，取出一块铰齿状的灰色碎片——正是第七十四号鉴定报告缺页上记载的那一块。她承认碎片是她派人从公会封档库带出来的，因为陈远山的人比她先一步在找它。她不肯说钥匙能打开什么，只要求主角在她和议会之间做出选择。演出这场摊牌与她的条件，不替主角做决定。
+  priority: 5

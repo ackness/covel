@@ -21,6 +21,12 @@ export const worldDataMergeModeSchema = z.enum(["replace", "skipExisting"]);
 
 export const worldDataEffectSchema = z.enum(["characters", "projections"]);
 
+/**
+ * `hidden` sources import into the receiving plugin's reserved hidden bucket
+ * and never reach prompts, public APIs, or the lorebook. Defaults to public.
+ */
+export const worldDataVisibilitySchema = z.enum(["public", "hidden"]);
+
 const afterSchema = z.union([
   worldDataSourceIdSchema,
   z.array(worldDataSourceIdSchema).min(1),
@@ -39,6 +45,7 @@ export const worldDataSourceDescriptorSchema = z
     locale: z.string().min(2).optional(),
     merge: worldDataMergeModeSchema.optional(),
     after: afterSchema.optional(),
+    visibility: worldDataVisibilitySchema.optional(),
   })
   .strict();
 

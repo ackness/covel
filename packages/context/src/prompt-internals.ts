@@ -26,6 +26,7 @@ import {
   localeDisplayName,
   localeRegistry,
   resolveI18nText,
+  isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import type { PluginDataRecord } from "./session-context-store.js";
 import type { ContextBuildParams } from "./types.js";
@@ -224,6 +225,13 @@ async function resolvePluginDataInject(
     throw new Error(
       `[plugin-data inject] store is required for runtime "${params.manifest.name}" ` +
         `but was not provided to buildContext`,
+    );
+  }
+
+  if (isHiddenPluginDataNamespace(inject.namespace)) {
+    throw new Error(
+      `[plugin-data inject] runtime "${params.manifest.name}" cannot inject hidden world data ` +
+        `("${inject.namespace}") into a prompt; reveal it through a runtime output instead`,
     );
   }
 

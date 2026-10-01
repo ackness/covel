@@ -1,0 +1,36 @@
+# Hidden encounters for the game master (visibility: hidden in world.data.yaml).
+# Payloads are GM briefs: stage the scene and its stakes, never the outcome.
+- id: night-singing
+  title: The Singing Reaches the Village
+  when:
+    all:
+      - time: phase
+        equals: 4
+      - dimension: lantern
+        path: lamp
+        equals: dark
+  payload: >-
+    Deep in the night, the singing carries over the barrow hill for the first time. The miller's daughter walks out barefoot with her eyes closed, humming her grandfather's name along with the tune under the ground, heading for the hill. Not a single dog in the village barks. Play the scene and the villagers' panic, and give the party the chance to stop her, follow her, or find the source; do not explain where the singing comes from.
+  priority: 5
+- id: corvin-cornered
+  title: The Scholar's Trap
+  when:
+    all:
+      - dimension: barrowAlarm
+        path: level
+        gte: 3
+      - dimension: lantern
+        path: heart
+        in: [missing, traced]
+  payload: >-
+    Ahead in the dark, someone is arguing with the choir — Corvin Ashe. A ring of the dead has stopped singing and simply turned to stare at him, pinning him in the corner of a crypt, and he is clutching a faintly glowing crystal to his chest: the Lantern Heart. He recognizes the party, begs for help, then starts bargaining, insisting he "isn't finished studying it." Play the encounter, his arrogance and his fear, and let the party decide whether to rescue him, take the Heart, or negotiate; call for checks when needed and never choose for the players.
+  priority: 10
+- id: king-wakes
+  title: The Barrow King
+  when:
+    dimension: barrowAlarm
+    path: level
+    gte: 6
+  payload: >-
+    The choir stops dead. Deep in the heart of the hill, a voice older than the crypts speaks the marsh-king's own name, and cold green light rises from the direction of the throne. The Barrow King is awake. He is in no hurry to strike; he speaks to the party in the voices of villagers and offers a bargain. Play his menace and his terms and make the danger clear; leave fighting, fleeing, or bargaining to the players and call for checks when needed.
+  priority: 20

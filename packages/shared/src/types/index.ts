@@ -39,6 +39,7 @@ export type {
 export type {
   WorldDataSourceKind,
   WorldDataMergeMode,
+  WorldDataVisibility,
   WorldDataEffect,
   WorldDataKey,
   WorldDataSourceDescriptor,

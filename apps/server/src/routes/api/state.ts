@@ -10,7 +10,10 @@
 import { Hono } from "hono";
 import type { StateChangeEntry, StateTableSchema } from "@covel/shared";
 import type { DataStore } from "@covel/store";
-import { publicPluginDataValue } from "./plugin-rpc/runtime-job-public.js";
+import {
+  isPublicPluginDataRecord,
+  publicPluginDataValue,
+} from "./plugin-rpc/runtime-job-public.js";
 import {
   publicSessionMetadata,
   resolveSessionParam,
@@ -116,6 +119,7 @@ stateRoutes.get("/:id/state", async (c) => {
       { keys: Set<string>; data: Record<string, unknown> }
     >();
     for (const row of pluginRows) {
+      if (!isPublicPluginDataRecord(row)) continue;
       const tableName = `plugin_data/${row.pluginId}:${row.namespace}`;
       let entry = byTable.get(tableName);
       if (!entry) {

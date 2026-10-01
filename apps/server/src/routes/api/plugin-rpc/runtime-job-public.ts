@@ -5,6 +5,7 @@ import {
   dimensionRecordSchema,
   dimensionSettlementSummarySchema,
   dimensionSnapshotFromRecords,
+  isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import type { RuntimeJobValue } from "./jobs.js";
 
@@ -69,6 +70,16 @@ export function publicRuntimeJob<T extends RuntimeJobValue>(
 ): Omit<T, "payload" | "error" | "reason"> & PublicRuntimeJobDiagnostics {
   const { payload: _payload, error: _error, reason: _reason, ...visible } = job;
   return { ...visible, ...publicRuntimeJobDiagnostics(job) };
+}
+
+/**
+ * Hidden world data never crosses a public boundary: callers drop these rows
+ * from listings and answer single reads as not found.
+ */
+export function isPublicPluginDataRecord(
+  record: Pick<PluginDataRecord, "namespace">,
+): boolean {
+  return !isHiddenPluginDataNamespace(record.namespace);
 }
 
 /** Apply the same boundary to generic plugin-data reads used by Web hydration. */

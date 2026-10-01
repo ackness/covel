@@ -577,7 +577,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | PUT    | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 写入/更新数据             |
 | DELETE | `/api/sessions/:id/plugin-data/:pluginId/:namespace/:key` | 删除数据                  |
 
-所有 `_` 前缀 namespace 保留给内核领域路径；PUT/DELETE 和通用 plugin-data 工具不能修改 `_dimensions` / `_dimension-settlements`。玩家维度修改走[manual runtime RPC](#维度编辑与待结算恢复)，公共读取使用 session view，不扫描提供者私有规则。
+所有 `_` 前缀 namespace 保留给内核领域路径；PUT/DELETE 和通用 plugin-data 工具不能修改 `_dimensions` / `_dimension-settlements`。`_hidden.<namespace>`（`visibility: hidden` 世界数据）不出现在列表、`/state` 与 discovery 中，单条读取返回 404。玩家维度修改走[manual runtime RPC](#维度编辑与待结算恢复)，公共读取使用 session view，不扫描提供者私有规则。
 
 ### 插件记忆
 

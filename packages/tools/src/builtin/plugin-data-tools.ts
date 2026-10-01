@@ -8,10 +8,11 @@
  * actual persistence.
  */
 
-import type {
-  PluginDataBatchPayload,
-  PluginDataPayload,
-  Proposal,
+import {
+  isHiddenPluginDataNamespace,
+  type PluginDataBatchPayload,
+  type PluginDataPayload,
+  type Proposal,
 } from "@covel/shared";
 import { z } from "zod";
 import { withPendingProposals } from "../result.js";
@@ -189,6 +190,9 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
       key: z.string().min(1).describe("数据键名"),
     }),
     execute: async (params, context) => {
+      // Tool results enter the model's context; hidden world data stays out.
+      if (isHiddenPluginDataNamespace(params.namespace))
+        return { found: false, namespace: params.namespace, key: params.key };
       const targetPlugin = context.pluginId;
       const pending = overlayPluginDataValue(
         (context.pendingProposals ?? []).filter(
@@ -244,11 +248,15 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
     }),
     execute: async (params, context) => {
       const targetPlugin = context.pluginId;
-      const records = await store.listPluginData(
-        context.sessionId,
-        targetPlugin,
-        params.namespace,
-      );
+      if (params.namespace && isHiddenPluginDataNamespace(params.namespace))
+        return { count: 0, items: [] };
+      const records = (
+        await store.listPluginData(
+          context.sessionId,
+          targetPlugin,
+          params.namespace,
+        )
+      ).filter((record) => !isHiddenPluginDataNamespace(record.namespace));
 
       const now = new Date().toISOString();
       const merged = new Map<

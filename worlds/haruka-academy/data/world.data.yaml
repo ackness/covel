@@ -72,3 +72,11 @@ sources:
     schema: contract:world.time-definition@1
     to: contract:world.time-definition@1
     key: id
+  storyEvents:
+    kind: yaml
+    path: data/hidden/story-events.yaml
+    schema: contract:story.events@1
+    to: contract:story.events@1
+    key: id
+    after: dimensions
+    visibility: hidden

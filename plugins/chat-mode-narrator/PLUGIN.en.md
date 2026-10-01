@@ -123,3 +123,5 @@ When `tabletopCheck.value` in `<runtime-inputs>` contains `Settled tabletop chec
 ## World time
 
 When `<runtime-inputs>` contains `worldTime`, use its value as this turn's authoritative starting date/phase. Follow the definition's direction and evolution.prompt; describe elapsed time or transitions coherently. The time plugin settles after narration. Old memory must not override this starting time.
+
+When `storyEvent.value` in `<runtime-inputs>` is a hidden event cue (not `No hidden story event this turn.`), the world state has just met a condition the author set. Let that event happen naturally in this turn as part of the scene; never mention conditions, triggers, or that it was hidden, and do not resolve everything at once — leave the player room to respond. When the input is empty or absent, narrate as usual and never invent hidden events.

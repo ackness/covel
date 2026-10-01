@@ -1,0 +1,33 @@
+# Hidden encounters for the game master (visibility: hidden in world.data.yaml).
+# Payloads are GM briefs: stage the scene and its stakes, never the outcome.
+- id: night-singing
+  title: 歌声到了村子
+  when:
+    all:
+      - time: phase
+        equals: 4
+      - dimension: lantern
+        path: lamp
+        equals: dark
+  payload: 深夜，歌声第一次越过了古冢山。磨坊主的女儿赤着脚、闭着眼走出家门，嘴里跟着地底的调子哼着她祖父的名字，朝山上走去。村里的狗一声不叫。演出这一幕和村民的惊慌，给队伍拦下她、跟上她或去找源头的机会；不要揭示歌声的来历。
+  priority: 5
+- id: corvin-cornered
+  title: 学者的困境
+  when:
+    all:
+      - dimension: barrowAlarm
+        path: level
+        gte: 3
+      - dimension: lantern
+        path: heart
+        in: [missing, traced]
+  payload: 前方的黑暗里传来一个人在和合唱争吵——是科尔文・艾什。他被一圈不再唱歌、只是转头盯着他的亡者困在一间墓室角落，怀里死死抱着一块发着微光的晶石：灯心。他认出队伍，先是求救，再是讲条件，坚持灯心"还没研究完"。演出这场遭遇和他的傲慢与恐惧，让队伍决定救他、夺灯心还是谈判；需要时要求检定，不要替玩家做选择。
+  priority: 10
+- id: king-wakes
+  title: 古冢之王
+  when:
+    dimension: barrowAlarm
+    path: level
+    gte: 6
+  payload: 合唱戛然而止。山心深处，一个比墓室更古老的声音念出了沼泽之王自己的名字，王座厅的方向亮起冷绿色的光。古冢之王醒了：他不急着动手，先用村民的声音和队伍说话，提出交易。演出他的压迫感和条件，明确危险程度；把战斗、逃跑或交易的选择留给玩家，需要时要求检定。
+  priority: 20

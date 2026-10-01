@@ -1,0 +1,40 @@
+# Hidden route events (visibility: hidden in world.data.yaml). Payloads are
+# briefs for the narrator: play the moment, never decide the player's answer.
+- id: mio-the-club-room
+  title: 澪没说出口的事
+  when:
+    all:
+      - dimension: routes
+        path: mio.stage
+        in: [heartbeat, confession-eve]
+      - dimension: routes
+        path: mio.trust
+        gte: 3
+      - time: hour
+        gte: 16
+  payload: 放学后只剩两个人的文艺部活动室里，澪终于说出她一直瞒着部员的事：学生会有人提议把社团楼三层的旧活动室改成学园祭执行仓库，合并审查不只是人数问题。她把一份翻修草案压在《春日薄荷》的目录下面，问你如果是你，会不会告诉大家。演出她的疲惫和犹豫，让玩家决定怎么回应；不要替她做决定，也不要让事情当场解决。
+  priority: 10
+- id: kaho-last-verse
+  title: 没有名字的歌
+  when:
+    all:
+      - dimension: routes
+        path: kaho.stage
+        in: [heartbeat, confession-eve]
+      - dimension: festival
+        path: projects.closingSong.progress
+        gte: 60
+  payload: 夏帆在樱坂海堤的自动贩卖机旁等你，吉他背在身后。她说新歌差最后一段写不出来，然后第一次认真地弹给你听已经写好的部分，在空着的那一段停下。她承认写不出来的原因：如果学园祭演砸了，轻音部可能失去主舞台资格，她不敢写一个"之后"。演出这段旋律和她的不安，让玩家回应；不要替她写出歌词。
+  priority: 8
+- id: akane-sisters-note
+  title: 旧刊扉页上的字
+  when:
+    all:
+      - dimension: routes
+        path: akane.stage
+        in: [familiar, heartbeat, confession-eve, together]
+      - dimension: clubReview
+        path: status
+        equals: building-case
+  payload: 图书馆打烊前，东条茜把那架最旧的学园祭特刊取下来，翻到扉页给你看一行褪色的字："希望明年还能在这里。"她安静地说，这是七年前带头"旧社团楼保留运动"的姐姐写的，她一直想把这件事守下去。她问你愿不愿意把这本旧刊的故事交给文艺部。演出她少见的主动，留出沉默；不要替她说完全部心事。
+  priority: 6

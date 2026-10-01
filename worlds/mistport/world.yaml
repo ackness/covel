@@ -50,6 +50,7 @@ pluginPolicy:
         - character-blueprint
         - character-presence
         - director
+        - story-events
         - cost-gate
       recommended: []
   presetId: mistport-investigation
@@ -74,6 +75,7 @@ pluginPolicy:
     - character-blueprint
     - character-presence
     - director
+    - story-events
     - cost-gate
 pluginSettings:
   cost-gate:
