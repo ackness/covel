@@ -11,6 +11,7 @@
  * subsequent `freshSchema` destroy another worker's schema.
  */
 import { randomUUID } from "node:crypto";
+import type { Sql } from "postgres";
 
 export interface IsolatedPgDatabase {
   readonly url: string;
@@ -24,6 +25,48 @@ function uniqueDatabaseName(prefix: string): string {
   const suffix = `${process.pid}_${randomUUID().slice(0, 8)}`;
   const maxPrefixLength = PG_IDENTIFIER_MAX_LENGTH - suffix.length - 1;
   return `${normalized.slice(0, maxPrefixLength)}_${suffix}`;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * DROP DATABASE can transiently fail under parallel workers: a sibling test
+ * still holding a connection, or a catalog lock from a concurrent
+ * CREATE/DROP, surfaces as `55006 database is being accessed by other users`
+ * (FORCE only terminates connections that already finished their query) or a
+ * lock_timeout. These clear within a few hundred ms, so retry with backoff
+ * instead of failing the hook on a timing race. The database name is unique
+ * per file, so retries only ever target this file's own database.
+ */
+const CLEANUP_ATTEMPTS = 5;
+const CLEANUP_BACKOFF_MS = [250, 500, 1000, 2000];
+
+async function dropDatabaseWithRetry(
+  postgres: (
+    url: string,
+    opts?: { max?: number; connect_timeout?: number },
+  ) => Sql,
+  baseUrl: string,
+  dbName: string,
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
+    const cleanupAdmin = postgres(baseUrl, { max: 1, connect_timeout: 5 });
+    try {
+      await cleanupAdmin.unsafe(
+        `DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`,
+      );
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < CLEANUP_ATTEMPTS - 1) {
+        await sleep(CLEANUP_BACKOFF_MS[attempt]);
+      }
+    } finally {
+      await cleanupAdmin.end().catch(() => {});
+    }
+  }
+  throw lastError;
 }
 
 export async function createIsolatedPgDatabase(
@@ -50,15 +93,6 @@ export async function createIsolatedPgDatabase(
   url.pathname = `/${dbName}`;
   return {
     url: url.toString(),
-    cleanup: async () => {
-      const cleanupAdmin = postgres(baseUrl, { max: 1, connect_timeout: 5 });
-      try {
-        await cleanupAdmin.unsafe(
-          `DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`,
-        );
-      } finally {
-        await cleanupAdmin.end();
-      }
-    },
+    cleanup: () => dropDatabaseWithRetry(postgres, baseUrl, dbName),
   };
 }

@@ -62,7 +62,7 @@ describe.skipIf(!database)(
         recoveryPool?.end(),
       ]);
       await database?.cleanup();
-    }, 30_000);
+    }, 90_000);
 
     async function seed(committing: boolean) {
       const sessionId = crypto.randomUUID();
