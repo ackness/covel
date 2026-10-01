@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "contract:story-event-cue@1",
+  "title": "Covel hidden story event cue output v1",
+  "type": "object",
+  "required": ["cue", "cueContext"],
+  "properties": {
+    "cue": {
+      "type": ["object", "null"],
+      "required": ["eventId", "payload"],
+      "properties": {
+        "eventId": { "type": "string" },
+        "title": { "type": "string" },
+        "payload": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "cueContext": { "type": "string" },
+    "diagnostics": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

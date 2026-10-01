@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contract:story.events@1",
+  "title": "Covel hidden story event v1",
+  "description": "One hidden story event. Import it from a worldData source declared with `visibility: hidden` so its payload stays out of prompts and player views until it fires.",
+  "type": "object",
+  "required": ["id", "when", "payload"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "title": {
+      "description": "Optional public name shown once the event has fired.",
+      "$ref": "#/$defs/text"
+    },
+    "when": {
+      "$ref": "#/$defs/condition"
+    },
+    "payload": {
+      "description": "What happens when the event fires: a brief for the narrator, not finished prose.",
+      "$ref": "#/$defs/text"
+    },
+    "once": {
+      "type": "boolean",
+      "default": true
+    },
+    "cooldownTurns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "priority": {
+      "type": "integer"
+    },
+    "enabled": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "text": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "condition": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["all"],
+          "properties": {
+            "all": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/condition"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["any"],
+          "properties": {
+            "any": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/condition"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["not"],
+          "properties": {
+            "not": {
+              "$ref": "#/$defs/condition"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "$ref": "#/$defs/leaf"
+        }
+      ]
+    },
+    "leaf": {
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": ["string", "integer"]
+              }
+            }
+          ]
+        },
+        "time": {
+          "type": "string",
+          "minLength": 1
+        },
+        "equals": {},
+        "notEquals": {},
+        "in": {
+          "type": "array"
+        },
+        "gte": {
+          "type": "number"
+        },
+        "gt": {
+          "type": "number"
+        },
+        "lte": {
+          "type": "number"
+        },
+        "lt": {
+          "type": "number"
+        },
+        "exists": {
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["dimension"],
+          "not": {
+            "required": ["time"]
+          }
+        },
+        {
+          "required": ["time"],
+          "not": {
+            "required": ["dimension"]
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -31,6 +31,7 @@ optional:
   - dice-check@1
   - world-time-context@1
   - tabletop-check@1
+  - story-event-cue@1
 contracts:
   narrative-engine@1:
     schema: ./schemas/narrative-engine.schema.json
@@ -149,6 +150,12 @@ runtime:
           contract: world-time-context@1
           cardinality: one
         required: false
+      storyEvent:
+        from:
+          contract: story-event-cue@1
+          cardinality: one
+        select: /cueContext
+        required: false
       tabletopCheck:
         from:
           contract: tabletop-check@1
@@ -248,3 +255,5 @@ runtime:
 ## 世界时间
 
 若 `<runtime-inputs>` 中有 `worldTime`，以其 `value` 的日期、时段和时间定义作为本轮起点。遵循定义的方向与 `evolution.prompt`，在叙事中明确自然耗时或时间跳转，不随意重置日期。时间插件在叙事后确定性结算，旧记忆中的时间不能覆盖此权威起点。
+
+若 `<runtime-inputs>` 中的 `storyEvent.value` 是一段隐藏事件提示（而不是 `No hidden story event this turn.`），说明世界状态刚刚满足了作者预设的条件。在本回合让这件事作为场景中真实发生的事自然出现；不要提及条件、触发或"隐藏"，也不要一次交代完后续，留出让玩家回应的空间。该输入为空或缺失时照常叙事，不要自行编造隐藏事件。
