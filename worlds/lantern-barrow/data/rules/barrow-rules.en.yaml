@@ -1,0 +1,86 @@
+- schemaVersion: 1
+  id: lantern-fair-table
+  title: A Fair Table
+  content: Honest dice and a fair GM. Call for a check only when the outcome is uncertain and failure has a cost. For picking a lock, climbing, or talking past a guard, name the attribute and the difficulty first (easy 8, normal 12, hard 16, very hard 20), then roll and honor the result. Failure must move the story — spending time, torches, hit points, position, or trust — rather than stalling it. A natural 20 goes beyond what was hoped; a natural 1 brings a new problem.
+  kind: constant
+  category: style
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  insertionOrder: 410
+- schemaVersion: 1
+  id: lantern-party
+  title: The Party Is Alive
+  content: Brannoc and Wren are companions with their own judgment, not tools. They suggest, disagree, act on their own in danger, and remember how the player treated them. Never speak or decide for the player's character; end each turn by handing the choice back to the player.
+  kind: constant
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  insertionOrder: 420
+- schemaVersion: 1
+  id: lantern-alarm
+  title: Stirring the Barrow
+  content: "The barrow is asleep, but lightly. Fighting, forcing doors, loud talk, raising light in the Choir Gallery, or resting too long inside all make it more awake; relighting the wall-lamps or slipping past quietly lets it settle. The Barrow Alarm panel holds the current level — make the change audible on the page: singing that is closer, a torch that gutters, skulls that begin to turn."
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 古冢
+    - 墓
+    - 合唱
+    - 歌声
+    - 噪音
+    - 火光
+    - barrow
+    - choir
+    - singing
+    - noise
+  insertionOrder: 430
+- schemaVersion: 1
+  id: lantern-truth
+  title: The Truth of the Barrow
+  content: "The Lantern Barrow is not a tomb but a prison. A century ago the marsh-king traded the peace of his village's dead for undeath, and the first keeper sealed him under the hill with the Lantern Heart's flame: while the lamp burns he sleeps, and the dead stop singing. The scholar Corvin took the Heart to study the power bound inside it; Ysolde went in after him. The reeve took Corvin's money for information about the lantern. Reveal this through clues, layer by layer, never all at once early on. No ending is fixed — returning the Heart, bargaining with the Barrow King, destroying him for good, or something else — and every one has a price."
+  kind: evolving
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 灯心
+    - 古冢之王
+    - 守灯人
+    - 科尔文
+    - Lantern Heart
+    - Barrow King
+    - Ysolde
+    - Corvin
+  insertionOrder: 440
+- schemaVersion: 1
+  id: lantern-supplies
+  title: Torches and Rations
+  content: "Inside the barrow, light is time: each torch burns about an hour, and in the dark you cannot see the way or the traps. A short rest restores a few hit points but costs time, and camping inside stirs the barrow. Say plainly on the page when torches, rations, or draughts are used, so inventory and hit points stay accurate."
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 火把
+    - 干粮
+    - 休息
+    - 受伤
+    - 生命
+    - torch
+    - rations
+    - rest
+    - wounded
+    - hit points
+  insertionOrder: 450

@@ -31,15 +31,15 @@ dimensionSources:
     await writeFile(path.join(root, "WORLD.ru-RU.md"), "exact Russian lore");
     await writeFile(
       path.join(root, "dimensions/tone.yaml"),
-      "genres: [canonical]\ncontentRating: teen\n",
+      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - canonical\n  contentRating: teen\n",
     );
     await writeFile(
       path.join(root, "dimensions/tone.ru.yaml"),
-      "genres: [short]\ncontentRating: teen\n",
+      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - short\n  contentRating: teen\n",
     );
     await writeFile(
       path.join(root, "dimensions/tone.ru-RU.yaml"),
-      "genres: [exact]\ncontentRating: teen\n",
+      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - exact\n  contentRating: teen\n",
     );
 
     const record = await loadSingleWorld(root);
@@ -47,7 +47,7 @@ dimensionSources:
     expect(record?.locale).toBe("ru-RU");
     expect(record?.lore).toBe("exact Russian lore");
     expect(record?.metadata?.dimensions).toMatchObject({
-      tone: { genres: ["exact"] },
+      tone: { name: "tone", schema: {}, initialValue: { genres: ["exact"] } },
     });
   });
 
@@ -69,18 +69,22 @@ dimensionSources:
     await writeFile(path.join(root, "WORLD.zh.md"), "simplified lore");
     await writeFile(
       path.join(root, "dimensions/tone.yaml"),
-      "genres: [canonical]\ncontentRating: teen\n",
+      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - canonical\n  contentRating: teen\n",
     );
     await writeFile(
       path.join(root, "dimensions/tone.zh.yaml"),
-      "genres: [simplified]\ncontentRating: teen\n",
+      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - simplified\n  contentRating: teen\n",
     );
 
     const record = await loadSingleWorld(root);
 
     expect(record?.lore).toBe("canonical lore");
     expect(record?.metadata?.dimensions).toMatchObject({
-      tone: { genres: ["canonical"] },
+      tone: {
+        name: "tone",
+        schema: {},
+        initialValue: { genres: ["canonical"] },
+      },
     });
   });
 
@@ -232,7 +236,7 @@ sources:
     );
     await writeFile(
       path.join(root, "data/dimensions.yaml"),
-      "tone:\n  genres: [校园]\n  contentRating: teen\n",
+      "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - 校园\n    contentRating: teen\n",
     );
     await writeFile(path.join(root, "data/opening.md"), "# Opening");
 
@@ -244,7 +248,11 @@ sources:
     });
 
     expect(result.metadata.dimensions).toEqual({
-      tone: { genres: ["校园"], contentRating: "teen" },
+      tone: {
+        name: "tone",
+        schema: {},
+        initialValue: { genres: ["校园"], contentRating: "teen" },
+      },
     });
     expect(result.metadata.worldData).toMatchObject({
       schemaVersion: 1,
@@ -276,7 +284,7 @@ sources:
     );
     await writeFile(
       path.join(root, "data/dimensions.yaml"),
-      "tone:\n  genres: [原版]\n  contentRating: teen\n",
+      "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - 原版\n    contentRating: teen\n",
     );
     await writeFile(
       path.join(home, "world-overrides/demo/world.data.override.yaml"),
@@ -288,7 +296,7 @@ sources:
     );
     await writeFile(
       path.join(home, "world-overrides/demo/data/dimensions.override.yaml"),
-      "tone:\n  genres: [覆盖]\n  contentRating: teen\n",
+      "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - 覆盖\n    contentRating: teen\n",
     );
 
     const result = await loadWorldDataSummary({
@@ -299,7 +307,11 @@ sources:
     });
 
     expect(result.metadata.dimensions).toEqual({
-      tone: { genres: ["覆盖"], contentRating: "teen" },
+      tone: {
+        name: "tone",
+        schema: {},
+        initialValue: { genres: ["覆盖"], contentRating: "teen" },
+      },
     });
     expect((result.metadata.worldData as any).sources[0]).toMatchObject({
       origin: "world",
@@ -357,7 +369,7 @@ sources:
     );
     await writeFile(
       path.join(root, "data/dimensions.yaml"),
-      "tone:\n  genres: [原版]\n  contentRating: teen\n",
+      "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - 原版\n    contentRating: teen\n",
     );
     await writeFile(
       path.join(home, "world-overrides/demo/world.data.override.yaml"),
@@ -398,7 +410,7 @@ sources:
     );
     await writeFile(
       path.join(root, "data/dimensions.yaml"),
-      "tone:\n  genres: []\n  contentRating: teen\n",
+      "tone:\n  name: tone\n  schema: {type: array, minItems: 1}\n  initialValue: []\n",
     );
 
     const result = await loadWorldDataSummary({
@@ -618,13 +630,17 @@ sources:
     );
     await writeFile(
       path.join(root, "data/dimensions.yaml"),
-      "tone:\n  genres: [测试]\n  contentRating: teen\n",
+      "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - 测试\n    contentRating: teen\n",
     );
 
     const record = await loadSingleWorld(root);
 
     expect(record?.metadata?.dimensions).toEqual({
-      tone: { genres: ["测试"], contentRating: "teen" },
+      tone: {
+        name: "tone",
+        schema: {},
+        initialValue: { genres: ["测试"], contentRating: "teen" },
+      },
     });
     expect(record?.metadata?.worldData).toMatchObject({
       schemaVersion: 1,
@@ -679,13 +695,10 @@ sources:
     // Each flagship world declares its own genre-specific core-memory blocks.
     const memoryBlocksByWorld = {
       mistport: ["clues", "commitments", "relics", "tides"],
-      "haruka-academy": [
-        "campus_schedule",
-        "festival",
-        "promises",
-        "relationships",
-        "rumors",
-      ],
+      // Promises, rumors and festival prep are structured dimensions now.
+      "haruka-academy": ["campus_schedule", "relationships"],
+      emberback: ["promises", "signal_log"],
+      "lantern-barrow": ["clues", "party"],
     } as const;
     for (const [worldId, labels] of Object.entries(memoryBlocksByWorld)) {
       const record = await loadSingleWorld(path.join(worldsRoot, worldId));

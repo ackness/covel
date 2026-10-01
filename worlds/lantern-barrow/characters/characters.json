@@ -1,0 +1,98 @@
+[
+  {
+    "id": "char-brannoc-hale",
+    "name": "布兰诺克・黑尔",
+    "type": "companion",
+    "description": "五十岁的退役老兵，在歪角鹿酒馆的角落里喝了三天闷酒。他说只是路过，却一直盯着古冢的方向。剑很旧，保养得很好。",
+    "fields": {
+      "calling": "佣兵",
+      "might": 4,
+      "agility": 2,
+      "endurance": 4,
+      "wits": 1,
+      "insight": 2,
+      "presence": 2,
+      "hp": 16
+    }
+  },
+  {
+    "id": "char-sister-wren",
+    "name": "雷恩修女",
+    "type": "companion",
+    "description": "十九岁的黎明灯修会见习祭司，奉命来灰苇村检查古冢之灯，晚到了三天。她会治伤，会读古灯铭文，也藏着一个对信仰的疑问。",
+    "fields": {
+      "calling": "见习祭司",
+      "might": 1,
+      "agility": 2,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 3,
+      "presence": 3,
+      "hp": 10
+    }
+  },
+  {
+    "id": "char-mirelle-voss",
+    "name": "梅瑞尔・沃斯",
+    "type": "npc",
+    "description": "歪角鹿酒馆的老板娘，四十出头，记性好、嘴巴紧、账算得清。村里所有的传闻都会先经过她的吧台。",
+    "fields": {
+      "calling": "酒馆老板",
+      "might": 2,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 4,
+      "presence": 3,
+      "hp": 10
+    }
+  },
+  {
+    "id": "char-aldous-penn",
+    "name": "阿尔多斯・潘恩",
+    "type": "npc",
+    "description": "灰苇村的村长，在酒馆贴出了赏金告示。他急着把事情解决，却对守灯人失踪前的那几天含糊其辞。",
+    "fields": {
+      "calling": "村长",
+      "might": 1,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 2,
+      "insight": 2,
+      "presence": 3,
+      "hp": 9
+    }
+  },
+  {
+    "id": "char-keeper-ysolde",
+    "name": "守灯人伊索德",
+    "type": "npc",
+    "description": "七十多岁的守灯人，守了古冢之灯四十年。三天前灯灭的那晚，她独自走进了洞开的青铜墓门，再没出来。",
+    "fields": {
+      "calling": "守灯人",
+      "might": 0,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 4,
+      "insight": 4,
+      "presence": 3,
+      "hp": 6
+    }
+  },
+  {
+    "id": "char-corvin-ashe",
+    "name": "科尔文・艾什",
+    "type": "npc",
+    "description": "从王都来的年轻学者，一个月前住进酒馆，四处打听古冢之灯。灯灭前一天他退了房。没人看见他离开村子。",
+    "fields": {
+      "calling": "学者",
+      "might": 1,
+      "agility": 2,
+      "endurance": 1,
+      "wits": 5,
+      "insight": 3,
+      "presence": 3,
+      "hp": 8
+    }
+  }
+]

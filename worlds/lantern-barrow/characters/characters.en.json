@@ -1,0 +1,98 @@
+[
+  {
+    "id": "char-brannoc-hale",
+    "name": "Brannoc Hale",
+    "type": "companion",
+    "description": "A fifty-year-old retired soldier who has been drinking quietly in the corner of the Crooked Antler for three days. He says he is only passing through, yet he keeps watching the barrow hill. His sword is old and very well kept.",
+    "fields": {
+      "calling": "Sellsword",
+      "might": 4,
+      "agility": 2,
+      "endurance": 4,
+      "wits": 1,
+      "insight": 2,
+      "presence": 2,
+      "hp": 16
+    }
+  },
+  {
+    "id": "char-sister-wren",
+    "name": "Sister Wren",
+    "type": "companion",
+    "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to inspect the barrow lantern — three days too late. She can treat wounds and read the old lantern script, and she is hiding a question about her faith.",
+    "fields": {
+      "calling": "Acolyte",
+      "might": 1,
+      "agility": 2,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 3,
+      "presence": 3,
+      "hp": 10
+    }
+  },
+  {
+    "id": "char-mirelle-voss",
+    "name": "Mirelle Voss",
+    "type": "npc",
+    "description": "Owner of the Crooked Antler, early forties, with a long memory, a closed mouth, and exact accounts. Every rumor in the village crosses her bar first.",
+    "fields": {
+      "calling": "Innkeeper",
+      "might": 2,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 4,
+      "presence": 3,
+      "hp": 10
+    }
+  },
+  {
+    "id": "char-aldous-penn",
+    "name": "Reeve Aldous Penn",
+    "type": "npc",
+    "description": "Greyreed's reeve, who posted the bounty at the tavern. He wants this solved fast, and goes vague about the days before the keeper disappeared.",
+    "fields": {
+      "calling": "Reeve",
+      "might": 1,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 2,
+      "insight": 2,
+      "presence": 3,
+      "hp": 9
+    }
+  },
+  {
+    "id": "char-keeper-ysolde",
+    "name": "Keeper Ysolde",
+    "type": "npc",
+    "description": "A keeper in her seventies who tended the barrow lantern for forty years. The night it went out, three days ago, she walked alone through the open bronze doors and has not come out.",
+    "fields": {
+      "calling": "Lantern Keeper",
+      "might": 0,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 4,
+      "insight": 4,
+      "presence": 3,
+      "hp": 6
+    }
+  },
+  {
+    "id": "char-corvin-ashe",
+    "name": "Corvin Ashe",
+    "type": "npc",
+    "description": "A young scholar from the capital who took a room at the tavern a month ago and asked everyone about the barrow lantern. He checked out the day before it went dark. No one saw him leave the village.",
+    "fields": {
+      "calling": "Scholar",
+      "might": 1,
+      "agility": 2,
+      "endurance": 1,
+      "wits": 5,
+      "insight": 3,
+      "presence": 3,
+      "hp": 8
+    }
+  }
+]

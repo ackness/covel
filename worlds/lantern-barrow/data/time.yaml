@@ -1,0 +1,19 @@
+id: world
+definition:
+  kind: phases
+  name: { zh-CN: 灰苇村时辰, en-US: Greyreed hours }
+  cycleLabel: { zh-CN: 日, en-US: Day }
+  phases:
+    - { zh-CN: 黎明, en-US: Dawn }
+    - { zh-CN: 白昼, en-US: Day }
+    - { zh-CN: 黄昏, en-US: Dusk }
+    - { zh-CN: 夜晚, en-US: Night }
+    - { zh-CN: 深夜, en-US: Deep night }
+  initial: { cycle: 1, phase: 3 }
+  evolution:
+    mode: forward
+    defaultStep: 1
+    maxStep: 5
+    prompt:
+      zh-CN: 以时辰计时。酒馆里的短对话保持当前时辰；在村里走访、调查小屋或下墓探索一段应推进一格；在古冢里扎营休息会推进一到两格。古冢里不见天日，但时辰照常流逝。
+      en-US: Count in watches of the day. A short conversation in the tavern stays in the current watch; visiting around the village, searching the cottage, or a stretch of delving advances one; camping in the barrow advances one or two. There is no daylight in the barrow, but the hours still pass.

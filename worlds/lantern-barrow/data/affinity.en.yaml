@@ -1,0 +1,16 @@
+- id: brannoc-hale
+  name: Brannoc Hale
+  score: 5
+  notes: The veteran in the tavern corner. He is still deciding whether you are worth going underground with.
+- id: sister-wren
+  name: Sister Wren
+  score: 10
+  notes: The acolyte who arrived three days late. You are the first person who listened to her read the lantern script all the way through.
+- id: mirelle-voss
+  name: Mirelle Voss
+  score: 3
+  notes: The innkeeper. You paid for your room, which counts as a start with her.
+- id: aldous-penn
+  name: Reeve Aldous Penn
+  score: 0
+  notes: The reeve. He needs you, but he does not trust outsiders.

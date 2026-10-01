@@ -25,87 +25,104 @@ recommendedPlugins:
 
 dimensions:
   geography:
-    overview: 九州大陆东南的广袤灵域，水汽充沛、灵气浓郁。
-    regions:
-      - name: 青萍山
-        description: 青萍宗所在的灵脉山峰，山腰以下是外门，山顶是内门禁地。
-        climate: 四季如春，常有灵雾缭绕
-        landmarks:
-          - name: 试炼场
-            description: 年度试炼大会的比武场地。
-      - name: 云梦泽深处
-        description: 未经开发的原始灵域，瘴气与灵兽并存。
-        climate: 湿热多瘴
-      - name: 灵渡镇
-        description: 各宗门势力交汇的中立市镇。
-        climate: 温和湿润
+    name: 地理
+    schema:
+      type: object
+      properties:
+        overview: { type: string }
+        regions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              description: { type: string }
+              climate: { type: string }
+            required: [name, description]
+            additionalProperties: false
+      additionalProperties: false
+    initialValue:
+      overview: 九州大陆东南的广袤灵域，水汽充沛、灵气浓郁。
+      regions:
+        - name: 青萍山
+          description: 青萍宗所在的灵脉山峰，山腰以下是外门，山顶是内门禁地。
+          climate: 四季如春，常有灵雾缭绕
+        - name: 云梦泽深处
+          description: 未经开发的原始灵域，瘴气与灵兽并存。
+          climate: 湿热多瘴
+        - name: 灵渡镇
+          description: 各宗门势力交汇的中立市镇。
+          climate: 温和湿润
 
   factions:
-    - id: qingping-sect
-      name: 青萍宗
-      description: 偏居一隅的中小宗门，擅水系法术与灵植培育。
-      type: guild
-      influence: minor
-      leader: 宗主・陆沉渊（金丹后期）
-      headquarters: 青萍山
-    - id: tianji-pavilion
-      name: 天机阁
-      description: 云梦泽最强宗门，以炼丹术闻名天下。
-      type: guild
-      influence: major
-      leader: 阁主・玄清子（元婴期）
-      relations:
-        - targetId: heiyuan-sect
-          type: hostile
-          description: 暗中争夺灵脉控制权
-    - id: heiyuan-sect
-      name: 黑渊宗
-      description: 行事阴狠的宗门，修炼偏门功法。
-      type: guild
-      influence: major
-
-  powerSystem:
-    name: 灵气修炼
-    type: cultivation
-    description: 吸纳天地灵气淬炼己身。
-    rules:
-      - 修炼需功法、灵石和天赋
-      - 灵脉附近灵气浓郁，修炼效率倍增
-      - 跨境界突破需机缘与资源
-    tiers:
-      - name: 练气
-        rank: 1
-      - name: 筑基
-        rank: 2
-      - name: 金丹
-        rank: 3
-      - name: 元婴
-        rank: 4
-
-  tone:
-    genres: [xianxia, adventure]
-    contentRating: teen
-    narrativeStyle: 古风仙侠笔触，山水灵秀中暗藏宗门权谋。
-
-  mechanics:
-    combatStyle: turn-based
-    difficulty: normal
+    name: 阵营
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          id: { type: string }
+          name: { type: string }
+          description: { type: string }
+          influence: { type: string, enum: [major, minor] }
+          relations:
+            type: array
+            items:
+              type: object
+              properties:
+                targetId: { type: string }
+                type: { type: string }
+                description: { type: string }
+              required: [targetId, type]
+              additionalProperties: false
+        required: [id, name, description, influence]
+        additionalProperties: false
+    initialValue:
+      - id: qingping-sect
+        name: 青萍宗
+        description: 偏居一隅的中小宗门，擅水系法术与灵植培育。
+        influence: minor
+      - id: tianji-pavilion
+        name: 天机阁
+        description: 云梦泽最强宗门，以炼丹术闻名天下。
+        influence: major
+        relations:
+          - targetId: heiyuan-sect
+            type: hostile
+            description: 暗中争夺灵脉控制权
+      - id: heiyuan-sect
+        name: 黑渊宗
+        description: 行事阴狠的宗门，修炼偏门功法。
+        influence: major
 
   startingConditions:
-    openingScenario: >-
-      试炼大会三日后举行，你正在坊市采购备战物资。师姐匆匆赶来，说她在云梦泽深处发现了一处野生灵脉。消息若泄露，各大宗门必定争抢。她问你：大会之前，要不要先去探查？
-    playerConstraints:
-      - 初始为练气三层，水灵根
-      - 仅限使用青萍宗入门功法
-    startingLocation: 青萍山・坊市
-    startingResources:
-      下品灵石: 30
-      丹药: 3
+    name: 开局
+    schema:
+      type: object
+      properties:
+        openingScenario: { type: string }
+        startingLocation: { type: string }
+      required: [openingScenario]
+      additionalProperties: false
+    initialValue:
+      openingScenario: >-
+        试炼大会三日后举行，你正在坊市采购备战物资。师姐匆匆赶来，说她在云梦泽深处发现了一处野生灵脉。消息若泄露，各大宗门必定争抢。她问你：大会之前，要不要先去探查？
+      startingLocation: 青萍山・坊市
+
+  # 演化维度：有 updateRule，每回合由 dimension-tracker 按叙事结算
+  sectMerit:
+    name: 宗门贡献
+    description: 外门弟子在青萍宗的贡献点，可兑换功法与丹药。
+    schema: { type: integer, minimum: 0 }
+    initialValue: 0
+    updateRule: 完成宗门任务按任务难度 +5~+20；兑换物资时扣除对应点数。只计本轮明确完成的任务或兑换。
 ```
 
 要点：
 
-- history、economy、socialStructure 为节省篇幅省略了，真实世界应当写全
+- powerSystem、history、economy、socialStructure、tone、mechanics 为节省篇幅省略了，真实世界应当写全（schema 抄 `worlds/mistport/data/dimensions.yaml`）
+- 静态设定不写 `updateRule`；只有需要随剧情变化的数据（如 `sectMerit`）才写；只要有一个维度带规则，每回合就多一次维护模型调用（所有规则维度共用这一次）
 - 所有 id 字段用 kebab-case 英文，其余内容用中文
 - 这里把 `dimensions` 内联进 manifest，适合小世界；**仓库里两个真实世界都不是这么做的**——见下
 

@@ -1,0 +1,45 @@
+- id: find-the-keeper
+  name: Find the Keeper
+  description: Keeper Ysolde walked into the barrow the night the lantern went out and has not come back in three days. The reeve has posted a bounty to bring her home alive.
+  status: active
+  giver: Reeve Aldous Penn
+  reward: Thirty silver and the village's gratitude
+  objectives:
+    - id: keepers-cottage
+      text: Search the keeper's cottage for what she left behind
+      done: false
+    - id: enter-the-barrow
+      text: Pass through the open bronze doors
+      done: false
+    - id: find-ysolde
+      text: Find Ysolde inside the barrow
+      done: false
+- id: the-lantern-heart
+  name: The Missing Lantern Heart
+  description: The barrow lantern did not simply go out — the heart-stone that lit it was taken. Learn who took it and why, then decide where it belongs.
+  status: active
+  giver: Sister Wren
+  reward: The Order of the Dawn Lantern's recognition, and a barrow that sleeps again
+  objectives:
+    - id: inspect-the-lantern
+      text: Climb the barrow hill and examine the dark lantern
+      done: false
+    - id: who-took-it
+      text: Find out who took the Lantern Heart
+      done: false
+    - id: decide-its-fate
+      text: Recover the Lantern Heart and decide its fate
+      done: false
+- id: the-singing-below
+  name: The Singing Below
+  description: The miller's daughter says she hears singing under the ground at night — singing her dead grandfather's name. Mirelle would like you to look into it on your way.
+  status: active
+  giver: Mirelle Voss, innkeeper
+  reward: A free night's room and board, and a favor from Mirelle
+  objectives:
+    - id: talk-to-the-millers-daughter
+      text: Talk to the miller's daughter
+      done: false
+    - id: find-the-choir
+      text: Find the source of the singing
+      done: false

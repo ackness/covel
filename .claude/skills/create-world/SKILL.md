@@ -33,8 +33,10 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 **维度写在哪** —— 三选一，越往下越适合大世界：
 
 1. 内联 `world.yaml` 的 `dimensions:` —— 小世界最省事
-2. `dimensionSources:` 按维度键指向外部文件
+2. `dimensionSources:` 按维度 ID 指向外部文件（文件内容是单项 definition）
 3. `worldData` descriptor 里一条 `to: world:metadata.dimensions` 的 source —— **`worlds/mistport` 和 `worlds/haruka-academy` 都是这种**，维度全写在 `data/dimensions.yaml`
+
+每个维度都是 `{name, description?, schema, initialValue, updateRule?}` 的开放定义，格式见 `references/world-yaml-schema.md`。只给需要随剧情变化的数据写 `updateRule`。
 
 创作要求：
 
@@ -43,6 +45,7 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 - 按玩法选 `pluginPolicy.presetId`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`
 - **视觉小说世界**（对话模式的增强档）：声明 `defaultViewMode: stage` 进全屏舞台（背景 + 立绘 + 打字机）。资产是**渐进增强**——没有立绘/场景图也能跑（回退世界头图 + 占位卡），后续可用 `scripts/generate-portraits.mjs` / `generate-scenes.mjs` 补。成品参考 `worlds/haruka-academy`
 - **RPG 世界**（判定/任务/背包/好感玩法）：`pluginPolicy.requested` 拉起 `dice-check`、`core-quest`、`inventory`、`affinity` 四件套；worldData 预置三类种子——`contract:quests@1`（任务）、`contract:inventory.items@1`（开局物资，货币 tag `currency`）、`contract:character.affinity@1`（关键 NPC 初始好感），记录形状见 `docs/reference/world-data.md`「内置 RPG 玩法种子」；`characterSchema.attributes` 声明 0-5 小整数属性作判定修正来源（描述里写明各自管哪类判定）。种子的 NPC/giver 必须与 lore 和角色蓝图同名对齐。成品参考 `worlds/emberback`
+- **跑团世界**（开局配点 + 掷骰检定）：请求 `tabletop-rules` 与 `dice-check`；`characterSchema` 声明 `category: abilities` 的有界整数属性，再用 `contract:tabletop-rules.rules.initial@1` 提供 `{id: creation, budget, attributes:[{id,label,base,max}]}`（`label` 只能是字符串，双语世界用 `.en.json` 变体）。成品参考 `worlds/lantern-barrow`
 - **写任何插件 ID 之前先 `ls plugins/` 确认它存在**——schema 不校验插件 ID，拼错要拖到建会话时才暴露
 - 避免泛化的奇幻套路，追求独特的世界设定
 - 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文

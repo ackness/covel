@@ -1,0 +1,45 @@
+- id: find-the-keeper
+  name: 寻找守灯人
+  description: 守灯人伊索德在灯灭那晚走进了古冢，三天没有出来。村长贴出赏金：把她带回来，活要见人。
+  status: active
+  giver: 村长阿尔多斯・潘恩
+  reward: 三十枚银币，以及村子的感激
+  objectives:
+    - id: keepers-cottage
+      text: 去守灯人的小屋看看她留下了什么
+      done: false
+    - id: enter-the-barrow
+      text: 穿过洞开的青铜墓门
+      done: false
+    - id: find-ysolde
+      text: 在古冢里找到伊索德
+      done: false
+- id: the-lantern-heart
+  name: 消失的灯心
+  description: 古冢之灯不是自己熄灭的——点燃它的灯心被人取走了。查清是谁、为什么，然后决定它该回到哪里。
+  status: active
+  giver: 雷恩修女
+  reward: 黎明灯修会的认可，以及古冢重新沉睡
+  objectives:
+    - id: inspect-the-lantern
+      text: 登上古冢山顶检查熄灭的灯
+      done: false
+    - id: who-took-it
+      text: 查出是谁取走了灯心
+      done: false
+    - id: decide-its-fate
+      text: 找回灯心，并决定它的去处
+      done: false
+- id: the-singing-below
+  name: 地下的歌声
+  description: 磨坊主的女儿说，夜里能听见地底有人在唱歌，唱的是她死去祖父的名字。梅瑞尔希望你顺路弄清楚。
+  status: active
+  giver: 酒馆老板娘梅瑞尔
+  reward: 一晚免费的食宿，以及梅瑞尔的一个人情
+  objectives:
+    - id: talk-to-the-millers-daughter
+      text: 和磨坊主的女儿谈谈
+      done: false
+    - id: find-the-choir
+      text: 找到歌声的源头
+      done: false

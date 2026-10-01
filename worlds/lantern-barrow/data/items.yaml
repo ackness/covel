@@ -1,0 +1,40 @@
+- id: silver
+  name: 银币
+  quantity: 12
+  description: 冒险者的全部积蓄。酒馆一晚食宿两枚，一瓶治疗药水八枚。
+  tags:
+    - currency
+- id: torch
+  name: 火把
+  quantity: 3
+  description: 浸过松脂的火把，每支大约烧一个时辰。古冢里的黑暗会吞掉光。
+  tags:
+    - light
+    - supply
+- id: rope
+  name: 麻绳（十五米）
+  quantity: 1
+  description: 结实的麻绳，适合下竖井、过断桥，或绑住不该醒的东西。
+  tags:
+    - tool
+- id: healing-draught
+  name: 治疗药水
+  quantity: 2
+  description: 苦得要命的草药水。喝下后恢复数点生命，战斗中喝要花一个动作。
+  tags:
+    - consumable
+    - healing
+- id: rations
+  name: 干粮
+  quantity: 3
+  description: 黑面包、硬奶酪和咸肉，够一个人吃三天。
+  tags:
+    - supply
+    - food
+- id: adventurers-blade
+  name: 随身短剑
+  quantity: 1
+  equipped: true
+  description: 普通但趁手的短剑。不管你是什么职业，下墓总得带把刀。
+  tags:
+    - weapon

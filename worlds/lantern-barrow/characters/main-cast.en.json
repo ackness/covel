@@ -1,0 +1,200 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "brannoc-hale",
+    "name": "Brannoc Hale",
+    "role": "companion",
+    "description": "A fifty-year-old retired soldier who has been drinking quietly in the corner of the Crooked Antler for three days. He says he is only passing through, yet he keeps watching the barrow hill. His sword is old and very well kept.",
+    "source": "world:lantern-barrow",
+    "locale": "en-US",
+    "aliases": ["Bran", "Old Hale"],
+    "tags": ["companion", "veteran", "sellsword"],
+    "attributes": {
+      "calling": "Sellsword",
+      "might": 4,
+      "agility": 2,
+      "endurance": 4,
+      "wits": 1,
+      "insight": 2,
+      "presence": 2,
+      "hp": 16
+    },
+    "persona": {
+      "summary": "A gruff veteran with a soft heart who steps in front of others first and complains later.",
+      "traits": ["dependable", "taciturn", "stubborn", "protective"],
+      "goals": [
+        "Fight one last fight worth fighting",
+        "Learn who he left behind in this barrow twenty years ago"
+      ],
+      "fears": [
+        "Walking out alive again when his comrades do not",
+        "Hearing a familiar voice in the singing"
+      ],
+      "voice": "Short sentences, soldier's slang, and the occasional bone-dry joke."
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "sister-wren",
+    "name": "Sister Wren",
+    "role": "companion",
+    "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to inspect the barrow lantern — three days too late. She can treat wounds and read the old lantern script, and she is hiding a question about her faith.",
+    "source": "world:lantern-barrow",
+    "locale": "en-US",
+    "aliases": ["Wren"],
+    "tags": ["companion", "acolyte", "healer"],
+    "attributes": {
+      "calling": "Acolyte",
+      "might": 1,
+      "agility": 2,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 3,
+      "presence": 3,
+      "hp": 10
+    },
+    "persona": {
+      "summary": "Earnest, diligent, braver than she looks, and prone to reciting prayers when nervous.",
+      "traits": ["sincere", "studious", "kind", "headstrong"],
+      "goals": [
+        "Rekindle the barrow lantern",
+        "Prove the Order was not wrong to send her"
+      ],
+      "fears": [
+        "That the lantern going out was her fault",
+        "That the Order's teachings will not hold up inside the barrow"
+      ],
+      "voice": "Polite, complete sentences; when excited she speeds up and quotes scripture."
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mirelle-voss",
+    "name": "Mirelle Voss",
+    "role": "npc",
+    "description": "Owner of the Crooked Antler, early forties, with a long memory, a closed mouth, and exact accounts. Every rumor in the village crosses her bar first.",
+    "source": "world:lantern-barrow",
+    "locale": "en-US",
+    "aliases": ["Mirelle"],
+    "tags": ["tavern", "rumors", "village"],
+    "attributes": {
+      "calling": "Innkeeper",
+      "might": 2,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 4,
+      "presence": 3,
+      "hp": 10
+    },
+    "persona": {
+      "summary": "Shrewd and warm; she hands you the truth only once she is sure you are worth it.",
+      "traits": ["shrewd", "warm", "careful"],
+      "goals": [
+        "Get the village through the winter",
+        "Bring Keeper Ysolde home"
+      ],
+      "fears": [
+        "The reeve making things worse",
+        "The singing the children hear"
+      ],
+      "voice": "Like reading out a bill: price first, then the news."
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "aldous-penn",
+    "name": "Reeve Aldous Penn",
+    "role": "npc",
+    "description": "Greyreed's reeve, who posted the bounty at the tavern. He wants this solved fast, and goes vague about the days before the keeper disappeared.",
+    "source": "world:lantern-barrow",
+    "locale": "en-US",
+    "aliases": ["the Reeve", "Penn"],
+    "tags": ["village", "authority", "secret"],
+    "attributes": {
+      "calling": "Reeve",
+      "might": 1,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 2,
+      "insight": 2,
+      "presence": 3,
+      "hp": 9
+    },
+    "persona": {
+      "summary": "Respectable, anxious, and used to hiding his mistakes behind procedure.",
+      "traits": ["respectable", "anxious", "proud"],
+      "goals": [
+        "Settle this before the lord's letter arrives",
+        "Keep anyone from learning he took the scholar's money"
+      ],
+      "fears": [
+        "Being held responsible",
+        "Whatever is in the barrow walking out"
+      ],
+      "voice": "Officious and long-winded until pressed, then suddenly short."
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "keeper-ysolde",
+    "name": "Keeper Ysolde",
+    "role": "npc",
+    "description": "A keeper in her seventies who tended the barrow lantern for forty years. The night it went out, three days ago, she walked alone through the open bronze doors and has not come out.",
+    "source": "world:lantern-barrow",
+    "locale": "en-US",
+    "aliases": ["Ysolde", "the Keeper"],
+    "tags": ["missing", "keeper", "lore"],
+    "attributes": {
+      "calling": "Lantern Keeper",
+      "might": 0,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 4,
+      "insight": 4,
+      "presence": 3,
+      "hp": 6
+    },
+    "persona": {
+      "summary": "A stubborn, clear-eyed old woman who knows the barrow's truth and would rather carry it alone than frighten the village.",
+      "traits": ["steadfast", "reticent", "stern"],
+      "goals": [
+        "Return the Lantern Heart to its lamp",
+        "Get out before the choir finishes its song"
+      ],
+      "fears": ["The Barrow King waking", "No one taking her place"],
+      "voice": "Few words, each one like an order."
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "corvin-ashe",
+    "name": "Corvin Ashe",
+    "role": "npc",
+    "description": "A young scholar from the capital who took a room at the tavern a month ago and asked everyone about the barrow lantern. He checked out the day before it went dark. No one saw him leave the village.",
+    "source": "world:lantern-barrow",
+    "locale": "en-US",
+    "aliases": ["Corvin", "the scholar"],
+    "tags": ["rival", "scholar", "antagonist"],
+    "attributes": {
+      "calling": "Scholar",
+      "might": 1,
+      "agility": 2,
+      "endurance": 1,
+      "wits": 5,
+      "insight": 3,
+      "presence": 3,
+      "hp": 8
+    },
+    "persona": {
+      "summary": "Brilliant, charming, and dangerously sure that knowledge justifies itself.",
+      "traits": ["brilliant", "charming", "arrogant"],
+      "goals": [
+        "Study what the Lantern Heart holds",
+        "Prove the capital's academy wrong about him"
+      ],
+      "fears": ["Being ordinary", "Admitting he caused this"],
+      "voice": "Fluent as a lecture, fond of rhetorical questions."
+    }
+  }
+]
