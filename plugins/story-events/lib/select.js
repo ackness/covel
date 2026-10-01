@@ -18,9 +18,15 @@ function available(event, record, turn) {
 export function selectEvent({ events, revealed, state, turn }) {
   const diagnostics = [];
   const candidates = [];
+  const chainState = {
+    ...state,
+    revealed,
+    turn,
+    eventIds: new Set(events.map((event) => event.id)),
+  };
   for (const event of events) {
     if (!available(event, revealed[event.id], turn)) continue;
-    const { met, issues } = evaluateCondition(event.when, state);
+    const { met, issues } = evaluateCondition(event.when, chainState);
     // Issues name only IDs and fields, never the hidden payload.
     for (const issue of issues) diagnostics.push(`${event.id}: ${issue}`);
     if (met) candidates.push(event);

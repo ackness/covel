@@ -82,6 +82,40 @@ describe("evaluateCondition", () => {
   });
 });
 
+describe("revealed leaves", () => {
+  const chain = {
+    dimensions: {},
+    time: null,
+    turn: 9,
+    eventIds: new Set(["first", "second"]),
+    revealed: { first: { firstTurn: 4, lastTurn: 5 } },
+  };
+
+  it("holds once the referenced event fired, bounded by turns since", () => {
+    expect(evaluateCondition({ revealed: "first" }, chain).met).toBe(true);
+    expect(evaluateCondition({ revealed: "second" }, chain).met).toBe(false);
+    expect(
+      evaluateCondition({ revealed: "first", turnsSinceGte: 4 }, chain).met,
+    ).toBe(true);
+    expect(
+      evaluateCondition({ revealed: "first", turnsSinceGte: 5 }, chain).met,
+    ).toBe(false);
+    expect(
+      evaluateCondition({ revealed: "first", turnsSinceLte: 3 }, chain).met,
+    ).toBe(false);
+    expect(evaluateCondition({ not: { revealed: "second" } }, chain).met).toBe(
+      true,
+    );
+  });
+
+  it("reports references to events that do not exist", () => {
+    expect(evaluateCondition({ revealed: "missing" }, chain)).toEqual({
+      met: false,
+      issues: ["unknown event: missing"],
+    });
+  });
+});
+
 describe("localizedText", () => {
   it("prefers the exact locale, then the same language, then any text", () => {
     const text = { "zh-CN": "灯塔", "en-US": "Lighthouse" };

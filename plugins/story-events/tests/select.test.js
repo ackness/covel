@@ -44,6 +44,31 @@ describe("selectEvent", () => {
     ).toBe("choir");
   });
 
+  it("unlocks a follow-up event only after its predecessor and the delay", () => {
+    const first = {
+      id: "first",
+      when: { dimension: "alarm", gte: 1 },
+      payload: "a",
+    };
+    const second = {
+      id: "second",
+      when: { revealed: "first", turnsSinceGte: 2 },
+      payload: "b",
+      priority: 9,
+    };
+    const events = [first, second];
+    expect(
+      selectEvent({ events, revealed: {}, state, turn: 1 }).event?.id,
+    ).toBe("first");
+    const afterFirst = { first: { firstTurn: 1, lastTurn: 1 } };
+    expect(
+      selectEvent({ events, revealed: afterFirst, state, turn: 2 }).event,
+    ).toBeNull();
+    expect(
+      selectEvent({ events, revealed: afterFirst, state, turn: 3 }).event?.id,
+    ).toBe("second");
+  });
+
   it("skips disabled events and reports unresolved references without payloads", () => {
     const disabled = { ...loud, enabled: false };
     const broken = {

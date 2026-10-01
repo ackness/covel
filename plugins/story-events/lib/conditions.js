@@ -77,9 +77,29 @@ function leafOperator(condition) {
 }
 
 /**
- * Evaluate a condition tree against `{ dimensions, time }`.
+ * `{ revealed: id }` holds once that event has fired; `turnsSinceGte` /
+ * `turnsSinceLte` bound the turns elapsed since it last fired.
+ */
+function revealedLeaf(node, state, issues) {
+  if (state.eventIds && !state.eventIds.has(node.revealed)) {
+    issues.push(`unknown event: ${node.revealed}`);
+    return false;
+  }
+  const record = state.revealed?.[node.revealed];
+  if (!record) return false;
+  const since = (state.turn ?? 0) - (record.lastTurn ?? 0);
+  if (Number.isInteger(node.turnsSinceGte) && since < node.turnsSinceGte)
+    return false;
+  if (Number.isInteger(node.turnsSinceLte) && since > node.turnsSinceLte)
+    return false;
+  return true;
+}
+
+/**
+ * Evaluate a condition tree against `{ dimensions, time, revealed, turn }`.
  * `dimensions` maps dimension IDs to snapshot entries (`{ value, version }`);
- * `time` is the world-time context value, or null when world time is absent.
+ * `time` is the world-time context value, or null when world time is absent;
+ * `revealed` maps event IDs to their reveal records for chained events.
  * Unknown references never match and are reported in `issues`.
  */
 export function evaluateCondition(condition, state) {
@@ -92,6 +112,8 @@ export function evaluateCondition(condition, state) {
     if (Array.isArray(node.all)) return node.all.map(visit).every(Boolean);
     if (Array.isArray(node.any)) return node.any.map(visit).some(Boolean);
     if (Object.hasOwn(node, "not")) return !visit(node.not);
+    if (typeof node.revealed === "string")
+      return revealedLeaf(node, state, issues);
     const operator = leafOperator(node);
     if (!operator) {
       issues.push("a condition leaf needs exactly one operator");

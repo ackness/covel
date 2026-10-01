@@ -22,3 +22,15 @@
   payload: >-
     Once the 06:14 call has been traced or verified, Eli finally pulls the hero aside. After the hero's voice stopped, he heard something else in the static — a second voice counting down from ten, and he is almost sure it was Mina's. He kept quiet because he thought he had broken something on his shift. Play his nerves and his relief at telling someone; do not confirm what the countdown means.
   priority: 5
+- id: arch-transmits
+  title: The Arch Transmits
+  when:
+    all:
+      - revealed: second-echo
+        turnsSinceGte: 1
+      - dimension: convoy
+        path: position
+        equals: at-mile-seventeen
+  payload: >-
+    With the convoy under the basalt arch at Mile Seventeen, the field repeater bolted beneath it switches on by itself and starts transmitting on the relay's emergency channel. For one second every radio in range carries the opening breath of the 06:14 call — live, from here, now. Then it cuts to static. Make the technical facts concrete (the channel, the repeater's status light, the crawler instruments) and let the crew react; do not explain the mechanism or who will finish the transmission.
+  priority: 12

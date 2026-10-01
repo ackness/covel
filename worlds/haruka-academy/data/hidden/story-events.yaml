@@ -38,3 +38,14 @@
         equals: building-case
   payload: 图书馆打烊前，东条茜把那架最旧的学园祭特刊取下来，翻到扉页给你看一行褪色的字："希望明年还能在这里。"她安静地说，这是七年前带头"旧社团楼保留运动"的姐姐写的，她一直想把这件事守下去。她问你愿不愿意把这本旧刊的故事交给文艺部。演出她少见的主动，留出沉默；不要替她说完全部心事。
   priority: 6
+- id: kaho-names-the-song
+  title: 给歌起个名字
+  when:
+    all:
+      - revealed: kaho-last-verse
+        turnsSinceGte: 3
+      - dimension: festival
+        path: milestones.stagePreview
+        in: [passed, rough]
+  payload: 主舞台预演之后，夏帆在轻音部练习室门口拦住你，把一张写满涂改的歌词纸塞给你——最后一段终于写完了，句子里有春天、海风和"你"。她说想让你第一个听完整版，然后别开视线问：这首歌该叫什么名字？演出她难得的紧张和期待，让玩家回应或起名；不要替玩家决定歌名，也不要把这当成告白场面一次说穿。
+  priority: 9

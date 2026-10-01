@@ -34,3 +34,15 @@
   payload: >-
     The choir stops dead. Deep in the heart of the hill, a voice older than the crypts speaks the marsh-king's own name, and cold green light rises from the direction of the throne. The Barrow King is awake. He is in no hurry to strike; he speaks to the party in the voices of villagers and offers a bargain. Play his menace and his terms and make the danger clear; leave fighting, fleeing, or bargaining to the players and call for checks when needed.
   priority: 20
+- id: keeper-in-the-choir
+  title: The Keeper in the Choir
+  when:
+    all:
+      - revealed: night-singing
+        turnsSinceGte: 2
+      - dimension: lantern
+        path: keeper
+        equals: missing
+  payload: >-
+    A familiar, aged voice has joined the singing: Keeper Ysolde. She is not singing along with the choir; she is humming the tune keepers use on their rounds of the hill, over and over, pressing down on the melody as if holding something back. Whenever the party is near the barrow or inside it, they can make out her voice coming from somewhere deeper. Play the urgency this clue brings; do not explain what she is doing or how long she can last.
+  priority: 7

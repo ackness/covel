@@ -31,3 +31,14 @@
     gte: 6
   payload: 合唱戛然而止。山心深处，一个比墓室更古老的声音念出了沼泽之王自己的名字，王座厅的方向亮起冷绿色的光。古冢之王醒了：他不急着动手，先用村民的声音和队伍说话，提出交易。演出他的压迫感和条件，明确危险程度；把战斗、逃跑或交易的选择留给玩家，需要时要求检定。
   priority: 20
+- id: keeper-in-the-choir
+  title: 合唱里的守灯人
+  when:
+    all:
+      - revealed: night-singing
+        turnsSinceGte: 2
+      - dimension: lantern
+        path: keeper
+        equals: missing
+  payload: 歌声里多了一个熟悉的苍老声音——守灯人伊索德。她没有跟着合唱，而是用守灯人巡山时哼的调子一遍遍压着那段旋律，像是在拖住什么。只要队伍靠近古冢或身处墓中，就能辨认出她的声音从更深处传来。演出这条线索带来的紧迫感；不要说明她在做什么、还能撑多久。
+  priority: 7
