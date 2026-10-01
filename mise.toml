@@ -1,5 +1,5 @@
 [tools]
 # Keep in sync with the root package.json `packageManager` field.
-pnpm = "11.22.0"
+pnpm = "12.6.0"
 # Keep the Node major aligned with engines.node and the Docker runtime.
 node = "26"

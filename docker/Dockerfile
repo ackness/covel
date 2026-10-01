@@ -9,7 +9,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     COREPACK_HOME=/opt/corepack
 RUN npm i -g corepack@0.35.0 \
     && corepack enable pnpm \
-    && corepack install --global pnpm@11.22.0 \
+    && corepack install --global pnpm@12.6.0 \
     && chmod -R a+rX /opt/corepack
 WORKDIR /app
 
