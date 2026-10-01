@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.44] - 2026-10-01
+
+This release turns world dimensions into author-defined, session-evolving data, rebuilds the bundled worlds around it, and adds Lantern Barrow, a classic tabletop world (#98, #96, #97).
+
+### Added
+
+- **Dynamic world dimensions.** World packages declare any number of dimensions as `{name, description?, schema, initialValue, updateRule?}`. Scalars, objects, arrays, and named records share one model. Dimensions with a natural-language `updateRule` are settled after every narrative by `world-init/dimension-tracker`; values are versioned, validated at the commit boundary, and written with batch compare-and-set on every store backend. Worlds without rules make no extra model calls.
+- **Visible settlement and recovery.** Each narrative registers a settlement receipt (`pending-settlement`, `settled`, `no-change`, `manual`, `skipped`). A failed settlement is never treated as "no change": after one automatic model retry it blocks the next narrative until the player retries, resolves it manually, or skips it.
+- **Player-facing dimension panel.** Session values render from their schema, with field and row editing, version-checked saves, and recovery actions. Schema `title` accepts localized text, and the new `x-enumLabels` keyword gives enum values localized display names while storing stable IDs.
+- **Lantern Barrow.** A bilingual (Chinese/English) dungeon crawl built for `tabletop-rules` and `dice-check`: point-buy character creation, d20 attribute checks, quests, inventory, companion affinity, and live Delve Map, Barrow Alarm, Lantern, and Renown panels.
+
+### Changed
+
+- **Bundled worlds are rebuilt for their audiences.** Haruka Academy gets a visual-novel pack with affinity, heart routes, festival prep, promises, and rumors; Mistport gets a case board, deep-withdrawal stage, faction standing, and key fragments; Emberback gets an expanded English world guide, two new characters, and live storm, power-grid, signal, and convoy panels.
+- **Dimension reads are frozen per turn.** `ctx.world.dimensions`, prompt templates, builtin `world-dimension-list` / `world-dimension-get`, and clients read the same versioned snapshot; update rules and initial values stay private.
+- **World sync protects progress.** Changing or deleting an adopted definition reports a conflict instead of resetting evolved or player-edited values. Dimensions are no longer duplicated into constant lorebook entries.
+
+### Breaking contracts and upgrade notes
+
+- `dimensions` no longer accepts the old raw format for the nine fixed categories. World packages, external dimension files, worldData sources, generators, and plugin consumers must use the definition format and read versioned `.value` entries instead of world-package values or `world.entries`. There is no compatibility path or migration; update development worlds and recreate affected development sessions and browser checkpoints.
+- macOS Apple Silicon and Windows x64 artifacts remain unsigned, and macOS artifacts are not notarized. First launch may show Gatekeeper or SmartScreen warnings.
+
 ## [0.0.43] - 2026-09-30
 
 This release adds native Gemini support, tightens provider request contracts, and makes execution commits and memory indexing more explicit and atomic. It also fixes plugin panel state and aligns local verification with CI (#91, #92, #93).
