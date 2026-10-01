@@ -345,8 +345,11 @@ console.log("  ✓ web-dist copied");
 // `pnpm deploy` 创建 standalone 部署目录。
 // - --filter 锁定目标 workspace 包
 // - --prod 剔除 devDeps
-// - --legacy disables the dedicated lockfile but may still create hardlinks.
-// - --ignore-scripts 阻止 legacy deploy 因 binding.gyp 隐式调用 node-gyp；
+// - --config.inject-workspace-packages=true 选择 pnpm 12 的非 legacy deploy：
+//   它按共享 lockfile 安装并把 workspace 包（如 @covel/store）及其传递依赖
+//   （better-sqlite3）真实复制进来。pnpm 12 下 `--legacy` + hoisted 只打印
+//   安装列表、node_modules 却是空的，导致桌面打包缺 better-sqlite3。
+// - --ignore-scripts 阻止 deploy 因 binding.gyp 隐式调用 node-gyp；
 //   better-sqlite3 13 已随包携带 Node-API prebuild，下面会逐架构校验，
 //   esbuild 的平台包也由 ensureRuntimePackages + 完整性检查显式保证。
 // - --config.node-linker=hoisted 让 node_modules 里全是真实文件夹而非
@@ -354,7 +357,7 @@ console.log("  ✓ web-dist copied");
 //   这种软链 macOS 可用，Windows 上 electron-builder 复制 extraResources
 //   时会断链，导致打包后 resources/server/node_modules/tsx 不存在）。
 execSync(
-  `pnpm --filter @covel/server deploy --prod --legacy --ignore-scripts --config.node-linker=hoisted "${serverStaging}"`,
+  `pnpm --filter @covel/server deploy --prod --ignore-scripts --config.node-linker=hoisted --config.inject-workspace-packages=true "${serverStaging}"`,
   {
     cwd: projectRoot,
     stdio: "inherit",
