@@ -17,3 +17,19 @@ export function reservedPluginDataNamespaceError(
   }
   return null;
 }
+
+/**
+ * World data imported from a `visibility: hidden` source lands in a reserved
+ * per-namespace bucket. Only the receiving plugin's runtime code reads it; the
+ * public plugin-data APIs, LLM-facing plugin-data tools, and prompt injection
+ * never expose it, and generic plugin writes cannot rewrite it.
+ */
+export const HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX = "_hidden.";
+
+export function hiddenPluginDataNamespace(namespace: string): string {
+  return `${HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX}${namespace}`;
+}
+
+export function isHiddenPluginDataNamespace(namespace: string): boolean {
+  return namespace.startsWith(HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX);
+}

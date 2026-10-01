@@ -3,6 +3,7 @@ import {
   type ResolvedWorldDataTarget,
 } from "../contract-targets.js";
 import path from "node:path";
+import { hiddenPluginDataNamespace } from "@covel/shared";
 import { canonicalJson, digestFile, sha256Hex } from "../digest.js";
 import { collectMediaSourceFiles } from "../media.js";
 import { readWorldDataSource } from "../source-reader.js";
@@ -115,17 +116,24 @@ async function appendStructuredPlans(options: {
         options.diagnostics.push(validationError);
         continue;
       }
+      const hidden = source.descriptor.visibility === "hidden";
       options.writes.push({
         kind: "plugin-data",
         target: source.descriptor.to,
         source,
         sourceDigest: options.sourceDigest,
         pluginId: target.pluginId,
-        namespace: target.namespace,
+        namespace: hidden
+          ? hiddenPluginDataNamespace(target.namespace)
+          : target.namespace,
         key,
         value: pluginValue,
       });
-      if (target.lorebook && options.includeKernelEffects !== false) {
+      if (
+        !hidden &&
+        target.lorebook &&
+        options.includeKernelEffects !== false
+      ) {
         options.writes.push({
           kind: "lorebook",
           target: source.descriptor.to,
@@ -198,6 +206,24 @@ async function appendStructuredPlans(options: {
   }
 }
 
+/**
+ * Hidden world data may only feed a plugin-data contract: it must never be
+ * projected into the lorebook, character records, world metadata, or media,
+ * because every one of those is visible to prompts or players.
+ */
+function hiddenSourceError(
+  source: OrderedWorldDataSource,
+  target: NonNullable<ReturnType<typeof parseWorldDataTarget>>,
+): string | null {
+  if (target.kind !== "contract-data")
+    return `hidden source "${source.id}" must target a data contract (contract:<id>), not ${source.descriptor.to}`;
+  if (target.lorebook)
+    return `hidden source "${source.id}" cannot project into the lorebook (+lorebook)`;
+  if (source.descriptor.kind === "media" || source.descriptor.indexTo)
+    return `hidden source "${source.id}" cannot be a media source or declare indexTo`;
+  return null;
+}
+
 export async function buildImportPlan(options: {
   sessionId: string;
   worldId: string;
@@ -221,6 +247,17 @@ export async function buildImportPlan(options: {
         message: `invalid target URI: ${source.descriptor.to}`,
       });
       continue;
+    }
+    if (source.descriptor.visibility === "hidden") {
+      const hiddenError = hiddenSourceError(source, parsedTarget);
+      if (hiddenError) {
+        diagnostics.push({
+          level: "error",
+          sourceId: source.id,
+          message: hiddenError,
+        });
+        continue;
+      }
     }
     const targets = resolveWorldDataTargets(
       parsedTarget,
@@ -370,6 +407,9 @@ export async function buildImportPlan(options: {
       });
     }
 
+    // Projections derive lorebook/plugin rows from source values, so they
+    // would republish hidden data; hidden sources skip them entirely.
+    if (source.descriptor.visibility === "hidden") continue;
     const projections = await executeWorldProjections({
       source,
       sourceDigest,

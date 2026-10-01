@@ -332,6 +332,7 @@ describe("world data session importer", () => {
       "memory/definitions",
       "scene-stage/assets",
       "scene-stage/scenes",
+      "story-events/events",
       "tabletop-rules/rules",
       "world-time/definitions",
     ]);
@@ -375,6 +376,92 @@ sources:
       ),
     ).toEqual(["rain", "gate"]);
     expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(2);
+  });
+
+  it("imports hidden sources into the receiver's reserved hidden namespace", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  secrets:
+    kind: json
+    path: data/hidden/facts.json
+    to: contract:world-notes.facts@1
+    key: id
+    visibility: hidden
+`,
+      files: {
+        "data/hidden/facts.json": JSON.stringify([
+          { id: "heir", content: "The keeper's child is the heir." },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(1);
+    expect(
+      await store.listPluginData("sess-1", "world-notes", "facts"),
+    ).toEqual([]);
+    expect(
+      (
+        await store.listPluginData("sess-1", "world-notes", "_hidden.facts")
+      ).map((row) => row.key),
+    ).toEqual(["heir"]);
+    expect(await store.listSessionLorebookEntries("sess-1")).toEqual([]);
+  });
+
+  it.each([
+    [
+      "contract:world-notes.facts@1+lorebook",
+      /cannot project into the lorebook/,
+    ],
+    ["characters", /must target a data contract/],
+  ])("rejects a hidden source targeting %s", async (to, message) => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  secrets:
+    kind: json
+    path: data/hidden/facts.json
+    to: ${to}
+    key: id
+    visibility: hidden
+`,
+      files: {
+        "data/hidden/facts.json": JSON.stringify([
+          { id: "heir", content: "x" },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    await expect(
+      importWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight: {
+          activePlugins: ["world-notes"],
+          registry: registry({ "world-notes": ["facts"] }),
+        },
+      }),
+    ).rejects.toThrow(message);
+    expect(
+      await store.listPluginData("sess-1", "world-notes", "_hidden.facts"),
+    ).toEqual([]);
   });
 
   it("prefers an exact locale source variant before the short key", async () => {

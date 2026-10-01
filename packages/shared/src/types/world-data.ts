@@ -7,6 +7,9 @@ export type WorldDataEffect = "characters" | "projections";
 
 export type WorldDataKey = "id" | "characterId" | "filename" | string;
 
+/** `hidden` data stays out of prompts and public APIs until a plugin reveals it. */
+export type WorldDataVisibility = "public" | "hidden";
+
 export interface WorldDataSourceDescriptor {
   readonly kind: WorldDataSourceKind;
   readonly path: string;
@@ -19,6 +22,7 @@ export interface WorldDataSourceDescriptor {
   readonly locale?: string;
   readonly merge?: WorldDataMergeMode;
   readonly after?: string | readonly string[];
+  readonly visibility?: WorldDataVisibility;
 }
 
 export interface WorldDataDescriptor {

@@ -367,6 +367,8 @@ interface UIRenderPart {
 
 读取会叠加**本次执行内尚未提交**的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` proposal（read-your-own-write）。写入走 proposal、在执行完成时才提交；叠加只覆盖**当前会话、当前插件**的 pending 操作。同 key 按 proposal 顺序应用，最后一次为准：删除后读取返回 `found: false`，随后重新写入则读取新值。写入 `null` 是存储一个值，不能等同于删除。不同 runtime 的独立缓冲区不会在此合并。
 
+隐藏世界数据（`_hidden.<namespace>`，来自 `visibility: hidden` source）不会返回给模型：读取一律视为 `found: false`。
+
 ---
 
 ### plugin-data-list
@@ -379,7 +381,7 @@ interface UIRenderPart {
 
 **输出**: `{ count, items: [{ namespace, key, value, updatedAt }] }`
 
-与 `plugin-data-get` 一样叠加本次执行内未提交的写入和删除；被删除的条目不出现在列表中。`namespace` 过滤同样作用于 pending 项，不传时合并所有 namespace。
+与 `plugin-data-get` 一样叠加本次执行内未提交的写入和删除；被删除的条目不出现在列表中。`namespace` 过滤同样作用于 pending 项，不传时合并所有 namespace。隐藏世界数据命名空间不会出现在结果中。
 
 读取和合并按完整的 `(namespace, key)` 字符串元组精确匹配，不以控制字符拆分或改写字段。框架导出的 `overlayPluginDataRows()` 使用 `JSON.stringify([namespace, key])` 作为 Map key；function runtime / guard 的缓冲读取遵循同样规则。
 

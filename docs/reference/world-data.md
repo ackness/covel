@@ -181,12 +181,12 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 
 世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内三个世界展示了不同的数据组合：
 
-| 示例                    | 玩家体验                                    | 主要能力                                                                                                                                                                                                         | 适合参考的文件                                                                                                                     |
-| ----------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；按 locale 选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                           | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
-| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台 | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；透明立绘与日 / 夜场景注册表                               | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
-| `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」                                                                              | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
-| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」 | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
+| 示例                    | 玩家体验                                    | 主要能力                                                                                                                                                                                                                                        | 适合参考的文件                                                                                                                     |
+| ----------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按 locale 选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                       | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台 | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；三段隐藏个人线事件；透明立绘与日 / 夜场景注册表                                          | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
+| `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；两段隐藏事件                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
+| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；三段隐藏遭遇（含 `.en` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
 
 四个世界都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
@@ -325,21 +325,52 @@ sources:
 
 字段：
 
-| 字段      | 必填 | 可选值 / 格式                                                                | 说明                                                                                      |
-| --------- | ---- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `kind`    | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                  | source 读取器类型。                                                                       |
-| `path`    | yes  | 非空字符串                                                                   | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。 |
-| `schema`  | no   | `covel://world/dimensions`、`contract:<contractId>`、或本地 JSON Schema path | 校验用 schema。contract 的 JSON Schema 由已注册包声明。                                   |
-| `to`      | yes  | 见 [Target URI](#target-uri)                                                 | 写入目标 URI。contract target 解析为活跃接收方。                                          |
-| `key`     | no   | 简单字段名，例如 `id`、`characterId`、`filename`                             | 批量 source 的稳定 key。media 常用 `filename`。                                           |
-| `indexTo` | no\* | `contract:<contractId>`                                                      | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。        |
-| `effects` | no   | `characters`、`projections`                                                  | 额外投影；`characters` 实例化角色，`projections` 调用已启用插件声明的纯投影。             |
-| `after`   | no   | source id 或 source id 数组                                                  | source 顺序依赖。source id 必须先声明且满足命名规则。                                     |
-| `enabled` | no   | boolean                                                                      | `false` 会跳过该 source。                                                                 |
-| `locale`  | no   | 长度至少 2 的字符串                                                          | source 对应的内容语言。                                                                   |
-| `merge`   | no   | `replace`、`skipExisting`                                                    | 写入冲突策略。                                                                            |
+| 字段         | 必填 | 可选值 / 格式                                                                | 说明                                                                                                    |
+| ------------ | ---- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `kind`       | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                  | source 读取器类型。                                                                                     |
+| `path`       | yes  | 非空字符串                                                                   | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。               |
+| `schema`     | no   | `covel://world/dimensions`、`contract:<contractId>`、或本地 JSON Schema path | 校验用 schema。contract 的 JSON Schema 由已注册包声明。                                                 |
+| `to`         | yes  | 见 [Target URI](#target-uri)                                                 | 写入目标 URI。contract target 解析为活跃接收方。                                                        |
+| `key`        | no   | 简单字段名，例如 `id`、`characterId`、`filename`                             | 批量 source 的稳定 key。media 常用 `filename`。                                                         |
+| `indexTo`    | no\* | `contract:<contractId>`                                                      | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。                      |
+| `effects`    | no   | `characters`、`projections`                                                  | 额外投影；`characters` 实例化角色，`projections` 调用已启用插件声明的纯投影。                           |
+| `after`      | no   | source id 或 source id 数组                                                  | source 顺序依赖。source id 必须先声明且满足命名规则。                                                   |
+| `enabled`    | no   | boolean                                                                      | `false` 会跳过该 source。                                                                               |
+| `locale`     | no   | 长度至少 2 的字符串                                                          | source 对应的内容语言。                                                                                 |
+| `merge`      | no   | `replace`、`skipExisting`                                                    | 写入冲突策略。                                                                                          |
+| `visibility` | no   | `public`（默认）、`hidden`                                                   | `hidden` 时数据在被插件揭示前不进入提示词和任何玩家可见界面，见[隐藏数据](#隐藏数据visibility-hidden)。 |
 
 media source 应同时声明 `key: filename` 和 `indexTo: contract:<contractId>`。缺 key 会产生 error；缺 indexTo 无法生成媒体索引写入。当前媒体字节持久化随有效 media-index write 执行，因此没有活跃索引接收方时不会导入该 source 的字节。此时产生 warning，不阻断其他数据与投影；启用接收插件后可通过 sync 补导入。
+
+### 隐藏数据（`visibility: hidden`）
+
+source 默认是公开的。声明 `visibility: hidden` 的 source 承载「条件满足前不能被知道」的内容，例如隐藏剧情。它只能写入数据合约（`to: contract:<contractId>`），导入后落在接收插件的保留命名空间 `_hidden.<namespace>`（例如 `story-events` 的 `events` 命名空间对应 `_hidden.events`）。
+
+```yaml
+sources:
+  storyEvents:
+    kind: yaml
+    path: data/hidden/story-events.yaml
+    schema: contract:story.events@1
+    to: contract:story.events@1
+    key: id
+    visibility: hidden
+```
+
+框架统一保证：
+
+| 出口            | 处理                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 提示词          | `input.inject` 注入隐藏命名空间时直接报错；扩展点（`prompt.segment@1`、`ui.slot@1`、`session.world-context@1`）的 `ctx.pluginData` 读不到隐藏数据 |
+| 模型工具        | 内置 `plugin-data-get` / `plugin-data-list` 不返回隐藏命名空间                                                                                    |
+| 玩家可见接口    | 插件数据 API、`/state` 数据面板与 discovery 不列出，单条读取返回 404                                                                              |
+| lorebook 与投影 | 不允许 `+lorebook`；`worldProjections` 跳过隐藏 source                                                                                            |
+| 其他目标        | `characters`、`lorebook`、`world:metadata.*`、media 与 `indexTo` 都会被拒绝                                                                       |
+| 写入            | 保留前缀，插件的通用写入（`plugin.data` 提案、`ctx.pluginData.set`、REST）不能改写                                                                |
+
+只有接收插件自己的 runtime 代码能读取隐藏数据。插件决定揭示时，应通过本回合的 runtime 输出把内容交给需要的消费者，并在公开命名空间里留下不含原文的揭示记录；内置的 [`story-events`](plugins.md) 就是这样做的。揭示之后，内容会作为该回合的 runtime 输入出现在执行详情里。
+
+隐藏的意义是「不剧透」，不是加密：世界包文件就在玩家本地，浏览器本地模式的工作区 checkpoint 也包含这些数据以便执行。不要把真正需要保密的信息写进世界包。
 
 ### Locale 变体解析（`<name>.<locale>.<ext>`）
 

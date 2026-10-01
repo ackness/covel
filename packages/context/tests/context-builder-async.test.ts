@@ -239,6 +239,27 @@ describe("buildContext — plugin-data inject", () => {
     };
   }
 
+  it("refuses to inject hidden world data into a prompt", async () => {
+    const store = makeStoreStub([]);
+    const params = makeParams(store);
+    const manifest = makeManifest({
+      input: {
+        inject: [
+          {
+            kind: "plugin-data",
+            namespace: "_hidden.events",
+            as: "<events>",
+            format: "summary",
+            maxEntries: 50,
+          },
+        ],
+      },
+    });
+    await expect(buildContext({ ...params, manifest })).rejects.toThrow(
+      /cannot inject hidden world data/,
+    );
+  });
+
   it("injects <existing-entries>暂无</existing-entries> when namespace is empty", async () => {
     const store = makeStoreStub([]);
     const result = await buildContext(makeParams(store));

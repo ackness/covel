@@ -7,6 +7,7 @@ import {
   worldDataEffectSchema,
   worldDataMergeModeSchema,
   worldDataSourceKindSchema,
+  isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import type { PluginDetail } from "@covel/shared";
 import { resolveEffectsPolicy } from "@covel/runtime";
@@ -237,7 +238,9 @@ export async function buildSessionDiscoverySnapshot(options: {
       activePluginIds.map(async (pluginId) => ({
         pluginId,
         namespaces: buildPluginDataIndex(
-          await options.store.listPluginData(options.sessionId, pluginId),
+          (
+            await options.store.listPluginData(options.sessionId, pluginId)
+          ).filter((record) => !isHiddenPluginDataNamespace(record.namespace)),
         ),
       })),
     ),

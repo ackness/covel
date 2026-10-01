@@ -17,7 +17,10 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import { reservedPluginDataNamespaceError } from "@covel/shared";
 import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
-import { publicPluginDataValue } from "./plugin-rpc/runtime-job-public.js";
+import {
+  isPublicPluginDataRecord,
+  publicPluginDataValue,
+} from "./plugin-rpc/runtime-job-public.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
@@ -103,7 +106,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
 
   const records = await store.listPluginData(sessionId, pluginId, namespace);
   return c.json({
-    items: records.map((r) => ({
+    items: records.filter(isPublicPluginDataRecord).map((r) => ({
       namespace: r.namespace,
       key: r.key,
       value: publicPluginDataValue(r),
@@ -134,7 +137,7 @@ pluginDataRoutes.get(
       namespace,
       key,
     );
-    if (!record) {
+    if (!record || !isPublicPluginDataRecord(record)) {
       return c.json(errorBody("Not found"), 404);
     }
     return c.json({
@@ -271,7 +274,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId", async (c) => {
 
   const records = await store.listPluginData(sessionId, pluginId);
   return c.json({
-    items: records.map((r) => ({
+    items: records.filter(isPublicPluginDataRecord).map((r) => ({
       namespace: r.namespace,
       key: r.key,
       value: publicPluginDataValue(r),
