@@ -1170,9 +1170,6 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
-      '@covel/store':
-        specifier: workspace:*
-        version: link:../../packages/store
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools

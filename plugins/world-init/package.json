@@ -14,7 +14,6 @@
   },
   "devDependencies": {
     "vitest": "^5.0.1",
-    "@covel/tools": "workspace:*",
-    "@covel/store": "workspace:*"
+    "@covel/tools": "workspace:*"
   }
 }
