@@ -47,6 +47,13 @@ sources:
     to: contract:character.portraits@1
     key: characterId
     after: portraits
+  affinity:
+    kind: yaml
+    path: data/affinity.yaml
+    schema: contract:character.affinity@1
+    to: contract:character.affinity@1
+    key: id
+    after: cast
   characters:
     kind: json
     path: characters/characters.json

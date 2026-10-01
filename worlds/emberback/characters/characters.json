@@ -49,5 +49,39 @@
       "rapport": 2,
       "signature": "Mustard field coat, portable spectrum analyzer, and color-coded paper notes tucked into every pocket"
     }
+  },
+  {
+    "id": "char-priya-nair",
+    "name": "Priya Nair",
+    "type": "npc",
+    "description": "Emberback's forty-five-year-old lead medic. Priya runs an eight-bed clinic with two heat-stroke patients and a cold room full of medicine that cannot lose power. Every watt the array takes is a watt she has to argue for.",
+    "fields": {
+      "community": "Emberback Relay",
+      "duty": "Clinic lead",
+      "specialty": "Heat injury, triage, and keeping cold chains alive",
+      "grit": 3,
+      "systems": 2,
+      "fieldcraft": 2,
+      "insight": 4,
+      "rapport": 3,
+      "signature": "Rolled sleeves, a grey clinic vest, reading glasses pushed into graying hair, and a battery tester on a lanyard"
+    }
+  },
+  {
+    "id": "char-eli-varga",
+    "name": "Eli Varga",
+    "type": "npc",
+    "description": "A nineteen-year-old night-shift signal operator who logged the 06:14 call. Eli is brilliant with receivers and shaky under pressure, and he is certain he heard something in the static after your voice stopped. He has not told anyone yet.",
+    "fields": {
+      "community": "Emberback Relay",
+      "duty": "Night-shift signal operator",
+      "specialty": "Receivers, signal analysis, and recording hardware",
+      "grit": 1,
+      "systems": 4,
+      "fieldcraft": 1,
+      "insight": 4,
+      "rapport": 2,
+      "signature": "Oversized cooperative jacket, headphones around his neck, ink-stained fingers, and a notebook of frequencies"
+    }
   }
 ]

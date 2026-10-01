@@ -1,7 +1,7 @@
 - schemaVersion: 1
   id: emberback-power-budget
   title: Power Is a Public Choice
-  content: Emberback has one shared power budget. Long-range transmission, storm shielding, vehicle charging, clinic reserve, and research scans all draw from it. When a major system is powered, state what loses access or how much charge remains. Essential care is never paywalled, but it can still be limited by physics.
+  content: Emberback has one shared power budget. Long-range transmission, storm shielding, vehicle charging, clinic reserve, and research scans all draw from it. The Relay Grid panel holds the authoritative reserve and which systems are powered. When a major system is switched, say so plainly on the page and state what loses access; never contradict the current grid values. Essential care is never paywalled, but it can still be limited by physics.
   kind: constant
   category: world
   enabled: true
@@ -30,7 +30,7 @@
 - schemaVersion: 1
   id: emberback-crownfire-clock
   title: Crownfire Countdown
-  content: Crownfire reaches Emberback three hours after the opening call. Meaningful travel, repairs, investigations, and arguments consume time. State the remaining window when it changes. As the storm approaches, radio reliability falls, exposed electronics become dangerous, and time-shifted echoes become stronger.
+  content: Crownfire reaches Emberback three hours after the opening call. Meaningful travel, repairs, investigations, and arguments consume time. The Crownfire Countdown panel holds the authoritative remaining window; mention it when it matters and never contradict it. As the storm approaches, radio reliability falls, exposed electronics become dangerous, and time-shifted echoes become stronger.
   kind: triggered
   category: scene
   enabled: true

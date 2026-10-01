@@ -3,7 +3,7 @@ id: haruka-academy
 name:
   zh-CN: 遥风学园・春日薄荷
   en-US: Haruka Academy · Spring Mint
-version: 0.2.0
+version: 0.3.0
 summary:
   zh-CN: 转入海边私立高中，在二十一天的学园祭倒计时里选择社团、守住约定，也回应那些没能说出口的喜欢。
   en-US: Transfer to a seaside private high school, choose a club, keep your
@@ -21,9 +21,44 @@ tags:
   - chat-mode
   - ensemble
   - visual-novel
+  - galgame
   - school-festival
 pluginPolicy:
-  presetId: dialogue-mode
+  packs:
+    - id: haruka-galgame
+      label:
+        zh-CN: 学园恋爱 · 视觉小说
+        en-US: Campus Romance · Visual Novel
+      description:
+        zh-CN: 全屏舞台、立绘与日夜场景，多条回复可选，好感度与心之路线、约定、传闻和学园祭筹备随对话实时变化。
+        en-US: Full-screen stage with portraits and day/night scenes, selectable
+          replies, and live affection, heart routes, promises, rumors, and
+          festival prep that change with every conversation.
+      tags:
+        - mode:dialogue
+        - role:character
+      reason:
+        zh-CN: 二十一天的学园祭倒计时里，每一次赴约、失约和传闻都会留在面板上，五条心之路线只靠真实发生的事件推进。
+        en-US:
+          Across the twenty-one-day festival countdown, every promise kept or
+          broken and every rumor stays on the panels, and the five heart routes
+          advance only through moments that actually happen.
+      requested:
+        - pregame
+        - world-init
+        - char-creator
+        - chat-mode-narrator
+        - scene-cast
+        - scene-stage
+        - scene-prompts
+        - character-blueprint
+        - character-presence
+        - living-world-rules
+        - branch-reply
+        - affinity
+      recommended:
+        - npc-graph
+  presetId: haruka-galgame
   preferredTags:
     - mode:dialogue
     - role:character
@@ -43,6 +78,7 @@ pluginPolicy:
     - character-presence
     - living-world-rules
     - branch-reply
+    - affinity
     - npc-graph
 pluginSettings:
   chat-mode-narrator:

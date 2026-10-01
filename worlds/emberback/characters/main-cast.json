@@ -106,5 +106,77 @@
       ],
       "voice": "Measured, literal English. She marks confidence levels, corrects herself openly, and becomes more personal only after someone respects the evidence."
     }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "priya-nair",
+    "name": "Priya Nair",
+    "role": "npc",
+    "description": "Emberback's forty-five-year-old lead medic. Priya runs an eight-bed clinic with two heat-stroke patients and a cold room full of medicine that cannot lose power. Every watt the array takes is a watt she has to argue for.",
+    "source": "world:emberback",
+    "locale": "en-US",
+    "aliases": ["Priya", "Doc Nair"],
+    "tags": ["clinic", "medic", "cooperative"],
+    "attributes": {
+      "community": "Emberback Relay",
+      "duty": "Clinic lead",
+      "specialty": "Heat injury, triage, and keeping cold chains alive",
+      "grit": 3,
+      "systems": 2,
+      "fieldcraft": 2,
+      "insight": 4,
+      "rapport": 3,
+      "signature": "Rolled sleeves, a grey clinic vest, reading glasses pushed into graying hair, and a battery tester on a lanyard"
+    },
+    "persona": {
+      "summary": "A dry, practical medic who refuses to be rushed and refuses to let a machine matter more than a patient.",
+      "traits": ["practical", "dry", "unhurried", "stubborn about care"],
+      "goals": [
+        "Keep the clinic reserve powered through Crownfire",
+        "Get the convoy's cryo-packs to the people who need them",
+        "Make the table count patients when it counts watts"
+      ],
+      "fears": [
+        "Choosing which patient loses power",
+        "Being out-voted by people who never work a night shift in the clinic"
+      ],
+      "voice": "Short, level sentences and a deadpan sense of humor. When she is angry she gets quieter and more precise."
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "eli-varga",
+    "name": "Eli Varga",
+    "role": "npc",
+    "description": "A nineteen-year-old night-shift signal operator who logged the 06:14 call. Eli is brilliant with receivers and shaky under pressure, and he is certain he heard something in the static after your voice stopped. He has not told anyone yet.",
+    "source": "world:emberback",
+    "locale": "en-US",
+    "aliases": ["Eli"],
+    "tags": ["operations", "signal-operator", "witness"],
+    "attributes": {
+      "community": "Emberback Relay",
+      "duty": "Night-shift signal operator",
+      "specialty": "Receivers, signal analysis, and recording hardware",
+      "grit": 1,
+      "systems": 4,
+      "fieldcraft": 1,
+      "insight": 4,
+      "rapport": 2,
+      "signature": "Oversized cooperative jacket, headphones around his neck, ink-stained fingers, and a notebook of frequencies"
+    },
+    "persona": {
+      "summary": "A gifted, anxious young operator who notices everything and trusts himself too little to say it.",
+      "traits": ["observant", "nervous", "earnest", "quietly brilliant"],
+      "goals": [
+        "Find out what was hidden in the static after the call",
+        "Prove he did not make a mistake on his shift",
+        "Earn a real place on the operations crew"
+      ],
+      "fears": [
+        "Being blamed for the network failure",
+        "Being right about the static"
+      ],
+      "voice": "Quick, technical, and full of half-finished sentences. Calms down when he is explaining equipment."
+    }
   }
 ]

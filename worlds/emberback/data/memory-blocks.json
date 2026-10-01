@@ -3,15 +3,15 @@
   "blocks": [
     {
       "label": "signal_log",
-      "displayName": "Signal Log",
-      "extractionHint": "Record intercepted transmissions, timestamps, inconsistencies, decoded clues, competing interpretations, and any evidence that a message arrived before it was sent.",
+      "displayName": "Signal Theories",
+      "extractionHint": "Interpretations, competing theories, and who believes what about the echoes — and why. Each signal's source, channel, timestamp, and status live in the Signal Log dimension; do not repeat them.",
       "icon": "Radio"
     },
     {
-      "label": "relay_state",
-      "displayName": "Relay State",
-      "extractionHint": "Track power allocation, network coverage, crawler charge, storm timing, damaged equipment, and which communities or routes are currently cut off.",
-      "icon": "RadioTower"
+      "label": "promises",
+      "displayName": "Promises & Debts",
+      "extractionHint": "What the player promised, owes, or was promised by Tomas, June, Mina, Priya, Eli, or the cooperative — and whether it was kept. Numeric relationship scores belong to the affinity panel.",
+      "icon": "Handshake"
     }
   ]
 }
