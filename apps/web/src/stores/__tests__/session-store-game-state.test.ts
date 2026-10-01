@@ -85,6 +85,8 @@ describe("enrichGameStateFromSnapshot", () => {
       gameState: { location: "dock", mood: "calm" },
       characters,
       characterSchema,
+      dimensions: {},
+      dimensionSettlements: [],
     });
 
     expect(enriched).toEqual({
@@ -92,6 +94,8 @@ describe("enrichGameStateFromSnapshot", () => {
       mood: "calm",
       characters,
       characterSchema,
+      dimensions: {},
+      dimensionSettlements: [],
     });
     // characters arrives from the snapshot even though no character.upserted
     // SSE event fires on the direct-write character path.
@@ -108,6 +112,8 @@ describe("enrichGameStateFromSnapshot", () => {
       turn: 3,
       characters: [],
       characterSchema: null,
+      dimensions: {},
+      dimensionSettlements: [],
     });
     expect(enriched.characterSchema).toBeNull();
   });
@@ -117,7 +123,12 @@ describe("enrichGameStateFromSnapshot", () => {
 
     const enriched = enrichGameStateFromSnapshot({ characters });
 
-    expect(enriched).toEqual({ characters, characterSchema: null });
+    expect(enriched).toEqual({
+      characters,
+      characterSchema: null,
+      dimensions: {},
+      dimensionSettlements: [],
+    });
   });
 });
 

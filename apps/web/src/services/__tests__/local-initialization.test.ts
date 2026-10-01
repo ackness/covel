@@ -17,7 +17,9 @@ const catalog: WorldRecord[] = [
     lore: "A twenty-one-day festival countdown",
     tags: ["school", "ensemble"],
     locale: "en-US",
-    dimensions: { history: [] },
+    dimensions: {
+      history: { name: "History", schema: { type: "array" }, initialValue: [] },
+    },
     metadata: {
       source: "file",
       packageManaged: true,

@@ -1,3 +1,7 @@
+import {
+  DIMENSION_DATA_NAMESPACE,
+  DIMENSION_SETTLEMENT_NAMESPACE,
+} from "@covel/shared";
 import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import {
   pluginSchemaUriForTarget,
@@ -32,6 +36,18 @@ export function preflightPluginTarget(
   deps: WorldDataImportPreflightDeps | undefined,
 ): readonly WorldDataDiagnostic[] {
   const diagnostics: WorldDataDiagnostic[] = [];
+  if (
+    target.namespace === DIMENSION_DATA_NAMESPACE ||
+    target.namespace === DIMENSION_SETTLEMENT_NAMESPACE
+  )
+    return [
+      {
+        level: "error",
+        sourceId: source.id,
+        message:
+          "Protected dimension data must be authored through world:metadata.dimensions, not plugin-data targets",
+      },
+    ];
   const entry = getPreflightPluginEntry(deps, target.pluginId);
   if (deps?.registry) {
     if (!entry) {

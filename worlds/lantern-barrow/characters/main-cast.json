@@ -1,0 +1,170 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "brannoc-hale",
+    "name": "布兰诺克・黑尔",
+    "role": "companion",
+    "description": "五十岁的退役老兵，在歪角鹿酒馆的角落里喝了三天闷酒。他说只是路过，却一直盯着古冢的方向。剑很旧，保养得很好。",
+    "source": "world:lantern-barrow",
+    "locale": "zh-CN",
+    "aliases": ["布兰", "老黑尔"],
+    "tags": ["companion", "veteran", "sellsword"],
+    "attributes": {
+      "calling": "佣兵",
+      "might": 4,
+      "agility": 2,
+      "endurance": 4,
+      "wits": 1,
+      "insight": 2,
+      "presence": 2,
+      "hp": 16
+    },
+    "persona": {
+      "summary": "嘴硬心软的老兵，习惯先挡在别人前面再抱怨。",
+      "traits": ["可靠", "寡言", "固执", "护短"],
+      "goals": ["再打最后一场值得的仗", "弄清二十年前他在这座古冢里丢下了谁"],
+      "fears": ["又一次活着出来而同伴没有", "听见合唱里有熟悉的声音"],
+      "voice": "短句，军中俚语，偶尔冒出一句干巴巴的笑话。"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "sister-wren",
+    "name": "雷恩修女",
+    "role": "companion",
+    "description": "十九岁的黎明灯修会见习祭司，奉命来灰苇村检查古冢之灯，晚到了三天。她会治伤，会读古灯铭文，也藏着一个对信仰的疑问。",
+    "source": "world:lantern-barrow",
+    "locale": "zh-CN",
+    "aliases": ["雷恩"],
+    "tags": ["companion", "acolyte", "healer"],
+    "attributes": {
+      "calling": "见习祭司",
+      "might": 1,
+      "agility": 2,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 3,
+      "presence": 3,
+      "hp": 10
+    },
+    "persona": {
+      "summary": "真诚、认真、比看起来勇敢，紧张时会背诵祷词。",
+      "traits": ["真诚", "好学", "心软", "倔强"],
+      "goals": ["重燃古冢之灯", "证明修会派她来不是个错误"],
+      "fears": ["灯熄灭是她的错", "修会的教义在古冢里站不住脚"],
+      "voice": "礼貌、完整的句子；激动时语速变快，会引用经文。"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mirelle-voss",
+    "name": "梅瑞尔・沃斯",
+    "role": "npc",
+    "description": "歪角鹿酒馆的老板娘，四十出头，记性好、嘴巴紧、账算得清。村里所有的传闻都会先经过她的吧台。",
+    "source": "world:lantern-barrow",
+    "locale": "zh-CN",
+    "aliases": ["梅瑞尔", "老板娘"],
+    "tags": ["tavern", "rumors", "village"],
+    "attributes": {
+      "calling": "酒馆老板",
+      "might": 2,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 3,
+      "insight": 4,
+      "presence": 3,
+      "hp": 10
+    },
+    "persona": {
+      "summary": "精明热络，只在确定你值得时才把真话递过来。",
+      "traits": ["精明", "热络", "谨慎"],
+      "goals": ["让村子撑过这个冬天", "找回守灯人伊索德"],
+      "fears": ["村长把事情越弄越糟", "孩子们听见的歌声"],
+      "voice": "像在报账：先说价钱，再说消息。"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "aldous-penn",
+    "name": "阿尔多斯・潘恩",
+    "role": "npc",
+    "description": "灰苇村的村长，在酒馆贴出了赏金告示。他急着把事情解决，却对守灯人失踪前的那几天含糊其辞。",
+    "source": "world:lantern-barrow",
+    "locale": "zh-CN",
+    "aliases": ["村长", "潘恩"],
+    "tags": ["village", "authority", "secret"],
+    "attributes": {
+      "calling": "村长",
+      "might": 1,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 2,
+      "insight": 2,
+      "presence": 3,
+      "hp": 9
+    },
+    "persona": {
+      "summary": "体面、焦虑、习惯用规矩遮住自己的错。",
+      "traits": ["体面", "焦虑", "爱面子"],
+      "goals": ["在领主来信之前把事情摆平", "别让人知道他收过那个学者的钱"],
+      "fears": ["被追责", "古冢里的东西走出来"],
+      "voice": "官腔，句子很长，被逼问时突然变短。"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "keeper-ysolde",
+    "name": "守灯人伊索德",
+    "role": "npc",
+    "description": "七十多岁的守灯人，守了古冢之灯四十年。三天前灯灭的那晚，她独自走进了洞开的青铜墓门，再没出来。",
+    "source": "world:lantern-barrow",
+    "locale": "zh-CN",
+    "aliases": ["伊索德", "守灯人"],
+    "tags": ["missing", "keeper", "lore"],
+    "attributes": {
+      "calling": "守灯人",
+      "might": 0,
+      "agility": 1,
+      "endurance": 2,
+      "wits": 4,
+      "insight": 4,
+      "presence": 3,
+      "hp": 6
+    },
+    "persona": {
+      "summary": "固执、清醒、知道古冢真相的老人，宁可自己扛也不愿吓到村民。",
+      "traits": ["坚毅", "沉默", "严厉"],
+      "goals": ["把灯心带回灯里", "在合唱唱完之前出去"],
+      "fears": ["古冢之王醒来", "没有人接她的班"],
+      "voice": "话很少，每句都像命令。"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "corvin-ashe",
+    "name": "科尔文・艾什",
+    "role": "npc",
+    "description": "从王都来的年轻学者，一个月前住进酒馆，四处打听古冢之灯。灯灭前一天他退了房。没人看见他离开村子。",
+    "source": "world:lantern-barrow",
+    "locale": "zh-CN",
+    "aliases": ["科尔文", "学者"],
+    "tags": ["rival", "scholar", "antagonist"],
+    "attributes": {
+      "calling": "学者",
+      "might": 1,
+      "agility": 2,
+      "endurance": 1,
+      "wits": 5,
+      "insight": 3,
+      "presence": 3,
+      "hp": 8
+    },
+    "persona": {
+      "summary": "聪明、迷人、自信到危险，相信知识本身就是正当理由。",
+      "traits": ["聪明", "迷人", "傲慢"],
+      "goals": ["研究灯心里封存的东西", "证明王都学院错看了他"],
+      "fears": ["平庸", "承认自己闯了祸"],
+      "voice": "讲课般流畅，喜欢反问。"
+    }
+  }
+]

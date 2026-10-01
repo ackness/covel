@@ -68,16 +68,20 @@ console.log('worldData OK');
 
 ## L2 — 引用一致性(有 relations 就跑)
 
-如果 `dimensions.factions[].relations[]` 用到了 `targetId`,必须确保它指向真实存在的 faction id,否则世界初始化时图就断了。
+如果 `factions` 维度的 `initialValue[].relations[]` 用到了 `targetId`,必须确保它指向真实存在的 faction id。框架不解析这类引用,但叙事会读到这份当前值,悬空 id 会让模型编出不存在的势力。维度可能内联在 `world.yaml`,也可能外置在 `data/dimensions.yaml`,下面的脚本两处都读。
 
 ```bash
 node --input-type=module -e "
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
+import { existsSync } from 'fs';
 const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
-const ids = new Set((y.dimensions?.factions ?? []).map(f => f.id));
+const ext = 'worlds/<id>/data/dimensions.yaml';
+const dims = { ...(y.dimensions ?? {}), ...(existsSync(ext) ? parse(readFileSync(ext,'utf-8')) : {}) };
+const factions = dims.factions?.initialValue ?? [];
+const ids = new Set(factions.map(f => f.id));
 const broken = [];
-for (const f of y.dimensions?.factions ?? []) {
+for (const f of factions) {
   for (const r of f.relations ?? []) {
     if (!ids.has(r.targetId)) broken.push(\`\${f.id} → \${r.targetId}\`);
   }
@@ -90,7 +94,7 @@ console.log('refs OK');
 "
 ```
 
-> 同样的检查思路适用于:`history[].era`、`socialStructure.classes[].rank` 之间是否单调,等等。但只有 `faction.relations.targetId` 是真正会被框架消费的硬引用。
+> 同样的检查思路适用于:`history[].era`、`socialStructure.classes[].rank` 之间是否单调,等等。这些都是内容一致性检查;dimension 只按声明的 schema 校验,框架不解析跨项引用。
 
 ---
 
@@ -98,9 +102,9 @@ console.log('refs OK');
 
 `WORLD.md` 是给主叙事插件 (`narrator`) 当世界书塞进 prompt 的;`world.yaml` 是给所有插件 (`codex` / `npc-graph` / `world-init` 等) 结构化消费的。两者**应该**互相覆盖以下"关键名词":
 
-- 所有 `dimensions.geography.regions[].name`
-- `dimensions.factions[].name`(至少 major)
-- `dimensions.powerSystem.tiers[].name`
+- `geography.initialValue.regions[].name`
+- `factions.initialValue[].name`(至少 major)
+- `powerSystem.initialValue.tiers[].name`
 - 至少 1 条 major `history[]`
 - `startingConditions.openingScenario` 提到的 NPC、地点、物品
 
@@ -110,12 +114,15 @@ console.log('refs OK');
 node --input-type=module -e "
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
+import { existsSync } from 'fs';
 const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
+const ext = 'worlds/<id>/data/dimensions.yaml';
+const dims = { ...(y.dimensions ?? {}), ...(existsSync(ext) ? parse(readFileSync(ext,'utf-8')) : {}) };
 const lore = readFileSync('worlds/<id>/WORLD.md','utf-8');
 const i18n = (v) => typeof v === 'string' ? v : (v?.['zh-CN'] ?? Object.values(v ?? {})[0] ?? '');
 const names = [
-  ...(y.dimensions?.geography?.regions ?? []).map(r => i18n(r.name)),
-  ...(y.dimensions?.factions ?? []).filter(f => f.influence === 'major').map(f => i18n(f.name)),
+  ...(dims.geography?.initialValue?.regions ?? []).map(r => i18n(r.name)),
+  ...(dims.factions?.initialValue ?? []).filter(f => f.influence === 'major').map(f => i18n(f.name)),
 ];
 const missing = names.filter(n => n && !lore.includes(n));
 if (missing.length){

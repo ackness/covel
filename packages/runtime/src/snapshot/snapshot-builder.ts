@@ -8,6 +8,11 @@
  */
 
 import {
+  DIMENSION_DATA_NAMESPACE,
+  DIMENSION_SETTLEMENT_NAMESPACE,
+  dimensionRecordSchema,
+  dimensionSettlementReceiptSchema,
+  dimensionSnapshotFromRecords,
   encodePageCursor,
   type SessionSnapshot,
   type SnapshotCharacter,
@@ -43,7 +48,14 @@ export interface SnapshotStore {
     completedPlayerTurns: number;
     setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
     locale: string;
+    metadata?: Readonly<Record<string, unknown>>;
+    activePlugins?: readonly string[];
   } | null>;
+  listPluginData?(
+    sessionId: string,
+    pluginId: string,
+    namespace: string,
+  ): Promise<readonly { key: string; value: unknown }[]>;
   listMessagesPage(
     sessionId: string,
     opts: { limit: number; before?: TimeCursor },
@@ -168,7 +180,47 @@ export async function buildSessionSnapshot(
     timestamp: t.createdAt,
   }));
 
+  const provider = session.metadata?._dimensionProviderPluginId;
+  if (
+    provider !== undefined &&
+    (typeof provider !== "string" || !session.activePlugins?.includes(provider))
+  )
+    throw new Error("Authoritative dimension provider unavailable");
+  if (provider && !store.listPluginData)
+    throw new Error("Dimension read store unavailable");
+  const [dimensionRows, receiptRows] = provider
+    ? await Promise.all([
+        store.listPluginData!(sessionId, provider, DIMENSION_DATA_NAMESPACE),
+        store.listPluginData!(
+          sessionId,
+          provider,
+          DIMENSION_SETTLEMENT_NAMESPACE,
+        ),
+      ])
+    : [[], []];
+  const dimensions = dimensionSnapshotFromRecords(
+    Object.fromEntries(
+      dimensionRows.map((row) => [
+        row.key,
+        dimensionRecordSchema.parse(row.value),
+      ]),
+    ),
+  );
+  const dimensionSettlements = receiptRows.map((row) => {
+    const { source, status, sourceTurnId, error, version } =
+      dimensionSettlementReceiptSchema.parse(row.value);
+    return {
+      source,
+      status,
+      sourceTurnId,
+      version,
+      ...(error ? { error } : {}),
+    };
+  });
   return {
+    dimensions,
+    ...(provider ? { dimensionProviderPluginId: provider } : {}),
+    dimensionSettlements,
     session: {
       id: session.id,
       worldId: session.worldId,

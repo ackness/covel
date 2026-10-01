@@ -337,6 +337,11 @@ export type CovelEvent =
       readonly type: "character-schema.changed";
       readonly payload: CharacterSchemaChangedPayload;
     }
+  | { readonly type: "dimensions.changed"; readonly payload: CovelEventPayload }
+  | {
+      readonly type: "dimensions.settlement.changed";
+      readonly payload: CovelEventPayload;
+    }
   | {
       readonly type: "character.upserted";
       readonly payload: CharacterUpsertedPayload;
@@ -481,6 +486,8 @@ export const COVEL_EVENT_META = {
   "plugin-data.changed": { forwardToActionStream: true },
   "character.upserted": { forwardToActionStream: true },
   "character-schema.changed": { forwardToActionStream: true },
+  "dimensions.changed": { forwardToActionStream: true },
+  "dimensions.settlement.changed": { forwardToActionStream: true },
   "ui.slot.changed": { forwardToActionStream: true },
   "ui.slot.preview": { forwardToActionStream: true },
   "ui.slot.cleared": { forwardToActionStream: true },
@@ -613,6 +620,10 @@ export interface SessionExecutionStatus {
 }
 
 export interface SessionSnapshot {
+  readonly dimensions: import("./dimensions.js").DimensionSnapshot;
+  readonly dimensionProviderPluginId?: string;
+  readonly dimensionSettlements?: readonly import("./dimensions.js").DimensionSettlementSummary[];
+  readonly dimensionRecovery?: import("./dimensions.js").DimensionRecovery;
   readonly session: {
     readonly id: string;
     readonly worldId?: string;

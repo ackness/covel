@@ -1,0 +1,42 @@
+{
+  "id": "creation",
+  "budget": 6,
+  "attributes": [
+    {
+      "id": "might",
+      "label": "Might",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "agility",
+      "label": "Agility",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "endurance",
+      "label": "Endurance",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "wits",
+      "label": "Wits",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "insight",
+      "label": "Insight",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "presence",
+      "label": "Presence",
+      "base": 1,
+      "max": 4
+    }
+  ]
+}

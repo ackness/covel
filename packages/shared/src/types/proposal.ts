@@ -150,6 +150,8 @@ export interface ProposalPayloadMap {
   "plugin.data.delete": PluginDataDeletePayload;
   "character.upsert": CharacterUpsertPayload;
   "character.schema.set": CharacterSchemaSetPayload;
+  "dimension.initialize": import("./dimensions.js").DimensionInitializePayload;
+  "dimension.update": import("./dimensions.js").DimensionUpdatePayload;
   "lorebook.upsert": LorebookUpsertPayload;
 }
 
@@ -197,6 +199,8 @@ export const PROPOSAL_TYPES = [
   "plugin.data.delete",
   "character.upsert",
   "character.schema.set",
+  "dimension.initialize",
+  "dimension.update",
   "lorebook.upsert",
 ] as const satisfies readonly ProposalType[];
 

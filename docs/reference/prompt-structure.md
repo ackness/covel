@@ -80,7 +80,7 @@ api.provideExtension("prompt.segment@1", "status", {
 
 provider 获得当前执行的 locale、只读世界视图和自身数据访问能力。相同扩展点输入在一次执行内复用结果；provider 不能依赖某个正在调用它的 runtime 身份来返回不同内容。`providerPluginId` 由宿主添加，插件不能伪造归属。
 
-`memory` 插件通过此扩展点把自身 `blocks` 数据渲染为回合段，块定义经 `memory.block-definitions@1` 服务收集。内核不读取某个记忆插件的私有 namespace，也不提供 Core Memory、Working Memory 或 persona 专用段。世界结构补充由 `session.world-context@1` 返回 `schema` / `entries`；世界书仍使用领域记录的 prompt position。
+`memory` 插件通过此扩展点把自身 `blocks` 数据渲染为回合段，块定义经 `memory.block-definitions@1` 服务收集。内核不读取某个记忆插件的私有 namespace，也不提供 Core Memory、Working Memory 或 persona 专用段。世界结构补充由 `session.world-context@1` 返回 `schema` / `entries` 与当前值 `dimensions`；维度不是 `entries` 或 constant lorebook 副本。世界书仍使用领域记录的 prompt position。
 
 `PostContextAssembly` 仍可改写最终 `systemPrompt` / `messages`。它收到的原始本地化 `promptTemplate`、已解析 `inputSlots` 和角色摘要是只读来源；这些来源不接受 hook replacement。挂起时输入槽冻结进 continuation，恢复使用同一输入。
 
@@ -100,7 +100,17 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 - `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。
 - `userSettings.*`，由根 `contributes.settings` 默认值和玩家配置合成。
 
-世界扩展视图通过公共扩展点提供；插件不能从其他插件的私有数据中拼装它。较长世界内容应按当前任务选取，避免每轮内联全部 lore。`world-dimension-get` 是 `world-init` 自有工具，不是内核通用工具。
+世界扩展视图通过公共扩展点提供；插件不能从其他插件的私有数据中拼装它。较长世界内容应按当前任务选取，避免每轮内联全部 lore。`world-dimension-get` / `world-dimension-list` 是框架 builtin，从同一冻结 `world.dimensions@1` 快照按需读取。
+
+### 动态维度的提示词投影
+
+`world.dimensions.<id>` 包含 `{name,description?,schema,value,version}`，具体值写作 `{{ world.dimensions.reputation.value }}`。`worldRecord.dimensions` / `metadata.dimensions` 是作者声明，不是会话进度；旧 raw 值路径及 `world.tone/openingScenario` 不再是公共快捷字段。
+
+捆绑 `world-init` 通过 `prompt.segment@1` 提供 story 受众的 `<world-dimensions>` turn 段。它保留 ID、版本及预算内的本地化值预览：当前默认总预算 8192 字符，单项值预览最多 240 字符；超出预算的维度计数会显式显示，长值使用省略号，并指引按 ID/path 或分页查询。省略不代表值不存在，预览不冒充完整 JSON。选择了某个模板路径也不意味着框架会自动全量展开所有行集。
+
+投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 使用 self-only 规则预览与 `dimension-rule-get` 获取完整维护规则。没有有效规则时不调用维护模型。
+
+pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post-turn 提交后新执行再发布新版，不反向绑定 tracker 输出，不以 `recordAs` 或世界初值兜底。来源重试通过 `retryFromTurnId` 使用原 turn artifact，失败/未结算不是无变化。完整状态见 [World Model](world-model.md#回合时序与结算回执)。本期没有 #97 的隐藏事件载荷或条件触发层。
 
 声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。
 

@@ -1,4 +1,10 @@
-import { validateWorldModel } from "@covel/shared";
+import {
+  DIMENSION_DATA_NAMESPACE,
+  dimensionRecordSchema,
+  dimensionsJsonEqual,
+  validateWorldModel,
+} from "@covel/shared";
+import { createWorldModelView } from "@covel/runtime";
 import { randomUUID } from "node:crypto";
 import type {
   LorebookEntryRecord,
@@ -158,14 +164,86 @@ export async function writeImportPlan(options: {
     writes: selected,
   });
   try {
-    const materializedWrites = materialized.writes;
+    const materializedWrites = [...materialized.writes];
+    const dimensionWrites = materializedWrites.filter(
+      (write) =>
+        write.kind === "plugin-data" &&
+        write.namespace === DIMENSION_DATA_NAMESPACE,
+    );
+    const providerIds = new Set(
+      dimensionWrites.map((write) =>
+        "pluginId" in write ? write.pluginId : "",
+      ),
+    );
+    if (providerIds.size > 1)
+      throw new Error("Conflicting dimension import providers");
+    const provider = [...providerIds][0];
+    if (provider) {
+      const session = await options.store.getSession(options.sessionId);
+      const bound = session?.metadata?._dimensionProviderPluginId;
+      if (bound !== undefined && bound !== provider)
+        throw new Error("Dimension provider changed");
+      const entries = [];
+      for (const write of dimensionWrites) {
+        if (write.kind !== "plugin-data") continue;
+        const row = await options.store.getPluginData(
+          options.sessionId,
+          provider,
+          DIMENSION_DATA_NAMESPACE,
+          write.key,
+        );
+        const before = row ? dimensionRecordSchema.parse(row.value) : undefined;
+        const incoming = dimensionRecordSchema.parse(write.value);
+        const value = {
+          ...incoming,
+          version: before
+            ? before.version +
+              (dimensionsJsonEqual(before.definition, incoming.definition)
+                ? 0
+                : 1)
+            : 1,
+        };
+        if (
+          before &&
+          dimensionsJsonEqual(before.definition, incoming.definition)
+        ) {
+          if (!dimensionsJsonEqual(before.value, incoming.value))
+            throw new Error(`Dimension already evolved: ${write.key}`);
+        }
+        const index = materializedWrites.indexOf(write);
+        materializedWrites[index] = { ...write, value };
+        entries.push({
+          namespace: DIMENSION_DATA_NAMESPACE,
+          key: write.key,
+          expectedVersion: before?.version ?? null,
+          value,
+          timestamp: options.now,
+        });
+      }
+      if (
+        !(await options.store.compareAndSetPluginDataBatch(
+          options.sessionId,
+          provider,
+          entries,
+        ))
+      )
+        throw new Error("Dimension import version conflict");
+      // Bind the provider only AFTER the dimension rows committed — a failed
+      // CAS must not leave a bound provider with zero dimension rows, which
+      // would deadlock the settlement barrier on the next narrative.
+      await options.store.updateSession(options.sessionId, {
+        metadata: { _dimensionProviderPluginId: provider },
+      });
+    }
 
     const pluginWrites = materializedWrites.filter(
       (
         write,
       ): write is PlannedWrite &
         ({ kind: "plugin-data" } | { kind: "media-index" }) =>
-        write.kind === "plugin-data" || write.kind === "media-index",
+        (write.kind === "plugin-data" &&
+          write.namespace !== DIMENSION_DATA_NAMESPACE) ||
+        write.kind === "media-index",
     );
     const pluginRecords = pluginWrites.map((write) =>
       toPluginDataRecord(options.sessionId, write, options.now),
@@ -198,14 +276,13 @@ export async function writeImportPlan(options: {
         write.kind === "character",
     );
     if (characterWrites.length > 0) {
-      const [characters, characterSchema] = await Promise.all([
-        options.store.listCharacters(options.sessionId),
-        options.store.getCharacterSchema(options.sessionId),
-      ]);
-      const merged = new Map(characters.map((record) => [record.id, record]));
+      const view = await createWorldModelView(options.store, options.sessionId);
+      const merged = new Map(
+        view.characters.map((record) => [record.id, record]),
+      );
       for (const write of characterWrites)
         merged.set(write.record.id, write.record);
-      validateWorldModel({ characters: [...merged.values()], characterSchema });
+      validateWorldModel({ ...view, characters: [...merged.values()] });
     }
     for (const write of materializedWrites) {
       if (write.kind === "character") {

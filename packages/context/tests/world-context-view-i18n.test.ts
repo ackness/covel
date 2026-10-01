@@ -1,78 +1,72 @@
 import { describe, expect, it } from "vitest";
+import {
+  projectDimensionSnapshot,
+  type DimensionSnapshot,
+} from "@covel/shared";
 import { buildWorldContextView } from "../src/session-context-views.js";
 
-// A WorldRecord whose dimensions mix i18n leaves with structured objects.
-const worldRecord = {
-  id: "w1",
-  name: "W",
-  description: "A concise setting summary",
-  tags: ["mystery", "fog"],
-  createdAt: "2026-01-01T00:00:00.000Z",
-  metadata: {
-    dimensions: {
-      tone: { "zh-CN": "压抑的雾港", "en-US": "Oppressive fog-port" },
-      factions: [
-        {
-          id: "salt-fangs",
-          type: "guild",
-          name: { "zh-CN": "盐牙会", "en-US": "Salt-Fangs" },
-          description: { "zh-CN": "走私帮", "en-US": "Smugglers" },
+const dimensions: DimensionSnapshot = {
+  factions: {
+    name: "Factions",
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string", "x-i18n": true },
         },
-      ],
-      startingConditions: {
-        openingScenario: { "zh-CN": "潮钟三鸣", "en-US": "Three tide-bells" },
       },
     },
+    value: [
+      { id: "salt-fangs", name: { "zh-CN": "盐牙会", "en-US": "Salt-Fangs" } },
+    ],
+    version: 3,
   },
-} as unknown as Parameters<typeof buildWorldContextView>[0]["worldRecord"];
-
-describe("buildWorldContextView i18n localization", () => {
-  it("resolves i18n dimension leaves to the session locale, preserving structure", () => {
-    const view = buildWorldContextView({
-      worldRecord,
-      schemaMap: undefined,
-      entriesMap: undefined,
-      locale: "zh-CN",
-    });
-    const dims = view.dimensions as Record<string, any>;
-
-    // i18n leaves resolved to the locale string…
-    expect(dims.factions[0].name).toBe("盐牙会");
-    expect(dims.factions[0].description).toBe("走私帮");
-    // …while non-i18n structured fields are untouched.
-    expect(dims.factions[0].id).toBe("salt-fangs");
-    expect(dims.factions[0].type).toBe("guild");
-
-    // tone / openingScenario (authored as i18n) now extract cleanly.
-    expect(view.tone).toBe("压抑的雾港");
-    expect(view.openingScenario).toBe("潮钟三鸣");
-    expect(view.name).toBe("W");
-    expect(view.description).toBe("A concise setting summary");
-    expect(view.tags).toEqual(["mystery", "fog"]);
+  codes: {
+    name: "Codes",
+    schema: { type: "object", additionalProperties: { type: "string" } },
+    value: { "zh-CN": "business-a", "en-US": "business-b" },
+    version: 1,
+  },
+};
+function view(locale: string) {
+  return buildWorldContextView({
+    worldRecord: {
+      id: "w1",
+      name: "W",
+      description: "Summary",
+      tags: ["fog"],
+      createdAt: "2026-01-01T00:00:00Z",
+    },
+    schemaMap: undefined,
+    entriesMap: undefined,
+    dimensions,
+    locale,
   });
-
-  it("does not leak a raw bilingual record into the dimensions", () => {
-    const view = buildWorldContextView({
-      worldRecord,
-      schemaMap: undefined,
-      entriesMap: undefined,
-      locale: "zh-CN",
-    });
-    const json = JSON.stringify(view.dimensions);
-    expect(json).not.toContain("en-US");
-    expect(json).not.toContain("Salt-Fangs");
+}
+describe("buildWorldContextView frozen dimensions and explicit localization", () => {
+  it("keeps the same versioned raw public values, with a detached snapshot", () => {
+    const current = view("zh-CN");
+    expect(current.dimensions).toEqual(dimensions);
+    expect(current.dimensions).not.toBe(dimensions);
+    expect(current.name).toBe("W");
+    expect(current.tags).toEqual(["fog"]);
   });
-
-  it("falls back (language-only / first) when the exact locale is absent", () => {
-    const view = buildWorldContextView({
-      worldRecord,
-      schemaMap: undefined,
-      entriesMap: undefined,
-      locale: "ja-JP",
-    });
-    // No ja value → shared resolver prefers English before the first value.
-    expect((view.dimensions as Record<string, any>).factions[0].name).toBe(
-      "Salt-Fangs",
+  it("localizes only marked fields in bounded model projections", () => {
+    const projection = projectDimensionSnapshot(
+      view("zh-CN").dimensions!,
+      "zh-CN",
     );
+    expect(projection).toContain("盐牙会");
+    expect(projection).not.toContain("Salt-Fangs");
+    expect(projection).toContain("salt-fangs");
+    expect(projection).toContain("business-a");
+    expect(projection).toContain("business-b");
+  });
+  it("uses the shared locale resolver only on explicitly localized fields", () => {
+    expect(
+      projectDimensionSnapshot(view("ja-JP").dimensions!, "ja-JP"),
+    ).toContain("Salt-Fangs");
   });
 });

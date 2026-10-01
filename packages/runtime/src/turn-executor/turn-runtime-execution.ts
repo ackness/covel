@@ -505,6 +505,15 @@ export async function executeOneRuntime(
       activation,
       activeRuntimes,
       completedResults,
+      ...(input.manualTrigger?.sourceTurnId &&
+      input.manualTrigger.retrySeedResults?.length
+        ? {
+            frozenManualRetry: {
+              sourceTurnId: input.manualTrigger.sourceTurnId,
+              results: input.manualTrigger.retrySeedResults,
+            },
+          }
+        : {}),
       acceptsSchemas: loaded.bindingAcceptsSchemas ?? {},
       contractSchemas: loaded.bindingContractSchemas ?? {},
       // Same shared canonicalizer as the activation boundary: an injected

@@ -700,3 +700,46 @@ describe("hasIllegalDetachedContract", () => {
     ).toBe(false);
   });
 });
+
+describe("source-anchored manual IO recovery", () => {
+  const provider = rt("p/story", { outputContract: "narrative" });
+  const consumer = rt("c/repair", {
+    inputs: { story: { from: { capability: "narrative" }, select: "/text" } },
+  });
+  const args = () =>
+    baseArgs({
+      manifest: consumer,
+      activation: { source: "manual", detached: false, payload: null },
+      activeRuntimes: [provider, consumer],
+      completedResults: new Map([
+        [provider.name, success(provider.name, { text: "live output" })],
+      ]),
+    });
+  it("still omits live turn inputs from ordinary manual calls", async () => {
+    expect(await resolveInputBindings(args())).toMatchObject({
+      ok: true,
+      slots: {},
+    });
+  });
+  it("uses only frozen seeds from the explicitly anchored source turn", async () => {
+    const original = success(provider.name, { text: "original source" });
+    const resolved = await resolveInputBindings({
+      ...args(),
+      frozenManualRetry: { sourceTurnId: "t", results: [original] },
+    });
+    expect(resolved).toMatchObject({
+      ok: true,
+      slots: {
+        story: {
+          value: "original source",
+          source: { resultId: original.runId },
+        },
+      },
+    });
+    const wrong = await resolveInputBindings({
+      ...args(),
+      frozenManualRetry: { sourceTurnId: "other", results: [original] },
+    });
+    expect(wrong).toMatchObject({ ok: false, skipReason: "upstream-failed" });
+  });
+});

@@ -18,7 +18,13 @@ import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guar
 const OPERATOR_TOKEN = "test-world-operator";
 const OWNER_TOKEN = "test-world-session-owner";
 const WORLD_ID = "shared-world";
-const DIMENSIONS = { tone: { genres: ["mystery"], contentRating: "teen" } };
+const DIMENSIONS = {
+  tone: {
+    name: "tone",
+    schema: {},
+    initialValue: { genres: ["mystery"], contentRating: "teen" },
+  },
+};
 const WORLD: WorldRecord = {
   id: WORLD_ID,
   name: "Shared world",

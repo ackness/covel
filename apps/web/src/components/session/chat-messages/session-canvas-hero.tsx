@@ -1,3 +1,5 @@
+import { dimensionSnapshotSchema, localizeDimensionValue } from "@covel/shared";
+import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import { Flame } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -7,6 +9,7 @@ import type { WorldRecord } from "@/services/api.js";
 
 interface SessionCanvasHeroProps {
   world: WorldRecord | null;
+  dimensions?: unknown;
   onBegin: () => void;
   beginLabel: string;
   hintLabel: string;
@@ -14,6 +17,7 @@ interface SessionCanvasHeroProps {
 
 export function SessionCanvasHero({
   world,
+  dimensions,
   onBegin,
   beginLabel,
   hintLabel,
@@ -22,7 +26,20 @@ export function SessionCanvasHero({
   const locale = i18n.language;
 
   const worldName = world ? resolveI18n(world.name, locale) : "";
-  const start = world?.dimensions?.startingConditions;
+  const entry = dimensionSnapshotSchema.parse(
+    dimensions ?? {},
+  ).startingConditions;
+  const parsed = z
+    .object({
+      openingHook: z.string().optional(),
+      openingChips: z.array(z.string()).optional(),
+    })
+    .safeParse(
+      entry
+        ? localizeDimensionValue(entry.schema, entry.value, locale)
+        : undefined,
+    );
+  const start = parsed.success ? parsed.data : undefined;
   const hook = start?.openingHook
     ? resolveI18n(start.openingHook, locale)
     : worldName;

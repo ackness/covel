@@ -167,16 +167,16 @@ export function registerRuntimeRecordStoreSuites(
     it("persists top-level dimensions and keeps projections aligned after replacement and removal", async () => {
       const original = {
         geography: {
-          regions: [
-            { name: "Original", description: "Fixture", climate: "Mild" },
-          ],
+          name: "Geography",
+          schema: { type: "string" as const },
+          initialValue: "Original",
         },
       };
       const replacement = {
         geography: {
-          regions: [
-            { name: "Replacement", description: "Fixture", climate: "Mild" },
-          ],
+          name: "Geography",
+          schema: { type: "string" as const },
+          initialValue: "Replacement",
         },
       };
       const world = makeWorld({ dimensions: original });

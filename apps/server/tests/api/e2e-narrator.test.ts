@@ -1,3 +1,4 @@
+import { DIMENSION_SETTLEMENT_NAMESPACE } from "@covel/shared";
 /**
  * E2E test: Complete narrator game flow through the API.
  *
@@ -59,16 +60,38 @@ async function drainActionStream(res: Response): Promise<ActionEnvelope[]> {
 
 class MockNarratorLLM implements LLMAdapter {
   callCount = 0;
+  dimensionUpdates?: readonly {
+    id: string;
+    expectedVersion: number;
+    value: number;
+  }[];
   lastMessages: Array<{ role: string; content: string }> = [];
   allMessages: Array<readonly { role: string; content: string }[]> = [];
 
   async generate(params: {
     messages: readonly { role: string; content: string }[];
+    tools?: readonly { name: string }[];
   }): Promise<LLMResponse> {
     this.callCount++;
     this.lastMessages = [...params.messages];
     this.allMessages.push([...params.messages]);
 
+    const updateTool = params.tools?.find(
+      (tool) => tool.name.includes("update") && tool.name.includes("dimension"),
+    );
+    if (updateTool && this.dimensionUpdates)
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: crypto.randomUUID(),
+            name: updateTool.name,
+            arguments: JSON.stringify({ updates: this.dimensionUpdates }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
     // Find the player message to echo back — use the LAST user turn so
     // seed messages from the turn-band bootstrap don't shadow the current
     // player action.
@@ -125,6 +148,14 @@ describe("E2E: Narrator game flow", () => {
     const session = await store.getSession(sessionId);
     if (!session) throw new Error("expected session");
     const now = new Date().toISOString();
+    await store.upsertCharacterSchema({
+      sessionId,
+      version: 1,
+      types: ["npc", "companion"],
+      attributes: [],
+      createdAt: now,
+      updatedAt: now,
+    });
     const setupRuntimes = Object.fromEntries(
       Object.entries(session.setupRuntimes).map(([runtimeId, state]) => [
         runtimeId,
@@ -304,5 +335,161 @@ describe("E2E: Narrator game flow", () => {
 
     const body = (await res.json()) as { status: string };
     expect(body.status).toBe("ok");
+  });
+  it("recovers one original dimension source through real RPC without advancing or settling twice", async () => {
+    const created = await (
+      await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale: "zh-CN", plugins: ["narrator"] }),
+      })
+    ).json();
+    const id = created.id as string;
+    await markPreGameComplete(id);
+    const now = new Date().toISOString();
+    const definition = {
+      name: "Study",
+      schema: { type: "integer", minimum: 0 },
+      initialValue: 0,
+      updateRule: "明确完成学习后加一；没有完成则不变。",
+    };
+    await store.setPluginData({
+      id: crypto.randomUUID(),
+      createdAt: now,
+      sessionId: id,
+      pluginId: "world-init",
+      namespace: "_dimensions",
+      key: "study",
+      value: { definition, value: 0, version: 1 },
+      updatedAt: now,
+    });
+    await store.updateSession(id, {
+      metadata: { _dimensionProviderPluginId: "world-init" },
+    });
+    const send = async (requestId: string) =>
+      drainActionStream(
+        await app.request("/api/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId,
+            type: "send_message",
+            sessionId: id,
+            payload: { content: "完成学习" },
+          }),
+        }),
+      );
+    const events = await send("dimension-source");
+    const receiptRow = (
+      await store.listPluginData(
+        id,
+        "world-init",
+        DIMENSION_SETTLEMENT_NAMESPACE,
+      )
+    )[0]!;
+    const receipt = receiptRow.value as {
+      source: { resultId: string };
+      sourceTurnId: string;
+      status: string;
+    };
+    expect(receipt.status).toBe("pending-settlement");
+    expect(
+      events.some((event) => event.type === "dimensions.settlement.changed"),
+    ).toBe(true);
+    expect((await store.getSession(id))?.completedPlayerTurns).toBe(1);
+    await send("dimension-barrier");
+    expect((await store.getSession(id))?.completedPlayerTurns).toBe(1);
+    const rpc = (payload: unknown, retry = false) =>
+      app.request(`/api/sessions/${id}/plugin-rpc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "runtime",
+          pluginId: "world-init",
+          runtimeId: retry
+            ? "world-init/dimension-tracker"
+            : "world-init/edit-dimensions",
+          payload: retry ? {} : payload,
+          ...(retry ? { retryFromTurnId: receipt.sourceTurnId } : {}),
+        }),
+      });
+    mockLLM.dimensionUpdates = [{ id: "study", expectedVersion: 1, value: 1 }];
+    try {
+      const original = (await store.listTurnResults(id)).find(
+        (row) => row.turnId === receipt.sourceTurnId,
+      )!;
+      expect(
+        original.runtimeResults.some(
+          (result) => result.runId === receipt.source.resultId,
+        ),
+        JSON.stringify(original.runtimeResults),
+      ).toBe(true);
+      const response = await rpc(
+        { updates: [], resultId: receipt.source.resultId, resolution: "retry" },
+        true,
+      );
+      expect(
+        response.status,
+        JSON.stringify(await response.clone().json()),
+      ).toBe(200);
+      expect(
+        (await store.getPluginData(id, "world-init", "_dimensions", "study"))
+          ?.value,
+        JSON.stringify({
+          response: await response.clone().json(),
+          receipt: await store.getPluginData(
+            id,
+            "world-init",
+            DIMENSION_SETTLEMENT_NAMESPACE,
+            receipt.source.resultId,
+          ),
+        }),
+      ).toMatchObject({ value: 1, version: 2 });
+      expect(
+        (
+          await store.getPluginData(
+            id,
+            "world-init",
+            DIMENSION_SETTLEMENT_NAMESPACE,
+            receipt.source.resultId,
+          )
+        )?.value,
+      ).toMatchObject({ status: "settled", source: receipt.source });
+      expect((await store.getSession(id))?.completedPlayerTurns).toBe(1);
+      expect(
+        (
+          await rpc(
+            {
+              updates: [],
+              resultId: receipt.source.resultId,
+              resolution: "retry",
+            },
+            true,
+          )
+        ).status,
+      ).toBe(200);
+      expect(
+        (await store.getPluginData(id, "world-init", "_dimensions", "study"))
+          ?.value,
+      ).toMatchObject({ value: 1, version: 2 });
+      const conflict = await (
+        await rpc({ updates: [{ id: "study", expectedVersion: 1, value: 9 }] })
+      ).json();
+      expect(conflict.runtimeResults[0].output).toMatchObject({
+        applied: false,
+        code: "dimension-version-conflict",
+        currentVersions: { study: 2 },
+      });
+      const view = await (await app.request(`/api/sessions/${id}/view`)).json();
+      expect(view.dimensionRecovery).toEqual({
+        editorRuntimeId: "world-init/edit-dimensions",
+        trackerRuntimeId: "world-init/dimension-tracker",
+      });
+      expect(view.dimensions.study).toMatchObject({ value: 1, version: 2 });
+      expect(view.dimensions.study).not.toHaveProperty("initialValue");
+      expect(view.dimensions.study).not.toHaveProperty("updateRule");
+    } finally {
+      mockLLM.dimensionUpdates = undefined;
+    }
   });
 });

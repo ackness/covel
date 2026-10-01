@@ -432,7 +432,13 @@ describe("LocalDataService browser-authoritative sync", () => {
       lore: "Local lore",
       locale: "en-US",
       tags: ["mystery"],
-      dimensions: { history: [] },
+      dimensions: {
+        history: {
+          name: "History",
+          schema: { type: "array" },
+          initialValue: [],
+        },
+      },
     });
     api.getWorld.mockRejectedValueOnce(
       new ApiError(404, "/api/worlds/world-local", ""),
@@ -447,7 +453,13 @@ describe("LocalDataService browser-authoritative sync", () => {
       lore: "Local lore",
       tags: ["mystery"],
       locale: "en-US",
-      dimensions: { history: [] },
+      dimensions: {
+        history: {
+          name: "History",
+          schema: { type: "array" },
+          initialValue: [],
+        },
+      },
       metadata: {
         pluginPolicy: { requiredPluginIds: ["world-notes"] },
         source: "browser-indexeddb",

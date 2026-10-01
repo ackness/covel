@@ -1,5 +1,7 @@
 import type { Hono } from "hono";
-import { buildSessionSnapshot } from "@covel/runtime";
+import { buildSessionSnapshot, createWorldModelView } from "@covel/runtime";
+import { pluginRuntimeManifests } from "@covel/plugin-loader";
+import { sessionWorldContextV1 } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
 import {
   resolveSessionParam,
@@ -41,8 +43,38 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
       );
     }
 
+    const extensionHost = c.get("pluginExtensions");
+    const context =
+      snapshot.dimensionProviderPluginId && extensionHost
+        ? await extensionHost
+            .createExecution({
+              sessionId: id,
+              locale: currentSession.locale,
+              signal: c.req.raw.signal,
+              runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
+                ([pluginId, entry]) =>
+                  currentSession.activePlugins.includes(pluginId)
+                    ? pluginRuntimeManifests(entry).map(
+                        (parsed) => parsed.manifest,
+                      )
+                    : [],
+              ),
+              world: await createWorldModelView(store, id),
+              readPluginData: (pluginId, namespace) =>
+                store.listPluginData(id, pluginId, namespace),
+            })
+            .run(sessionWorldContextV1, {})
+        : undefined;
+    if (
+      snapshot.dimensionProviderPluginId &&
+      context?.dimensionProviderPluginId !== snapshot.dimensionProviderPluginId
+    )
+      throw new Error("Authoritative dimension context unavailable");
     const view = {
       ...snapshot,
+      ...(context?.dimensionRecovery
+        ? { dimensionRecovery: context.dimensionRecovery }
+        : {}),
       execution,
       plugins: buildSnapshotPluginList(
         pluginRegistry,

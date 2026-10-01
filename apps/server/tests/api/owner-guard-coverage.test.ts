@@ -1,3 +1,4 @@
+import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 /**
  * Owner-guard coverage for session-scoped routes that receive
  * the session id outside the `:id` route param (query, body, or via an
@@ -273,13 +274,22 @@ describe("commercial tier — owner guard on indirect session-scoped routes", ()
         name: "World 1",
         description: "",
         createdAt: new Date().toISOString(),
-        metadata: { dimensions: { geography: "hills" } },
+        metadata: {
+          dimensions: {
+            geography: {
+              name: "Geography",
+              schema: { type: "string" },
+              initialValue: "hills",
+            },
+          },
+        },
       });
+      await registerDimensionProvider(h.registry);
+      await h.store.updateSession(victim.id, { activePlugins: ["world-init"] });
       const path = "/api/worlds/w1/sync-dimensions";
       const body = { sessionId: victim.id };
       expect((await post(path, body)).status).toBe(401);
-      // Owner passes the guard; world dimension sync no longer needs a plugin.
-      // proving the request advanced past authorization.
+      // Only the owner reaches the protected dimension import boundary.
       expect((await post(path, body, bearer(victim.ownerToken))).status).toBe(
         200,
       );

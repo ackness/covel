@@ -136,7 +136,7 @@
 - schemaVersion: 1
   id: mistport-consequence-ledger
   title: Choices Leave Marks
-  content: A costly action should keep changing state instead of resetting next scene. Explicitly update tide-time and location; a character's vitality, stress, fog-rot, trust, and disposition; faction permits, warrants, and favors; or a clue's unverified, corroborated, contaminated, or resolved state. Update only changes the narrative has clearly caused, and carry each consequence into later scenes.
+  content: A costly action should keep changing state instead of resetting next scene. Keep updating tide-time, location, vitality, stress, fog-rot, and personal trust as usual. The Case Board (clue status), Faction Standing (attitudes plus permits, warrants, and favors), the Deep Withdrawal stage, and the Key Fragments are settled from the narrative after each turn — so make those changes explicit on the page (who saw it, how evidence was corroborated or tainted, which tide sign sounded) and never contradict their current values. Write only changes the narrative has clearly caused, and carry each consequence into later scenes.
   kind: evolving
   category: relationship
   enabled: true

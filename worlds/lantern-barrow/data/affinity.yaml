@@ -1,0 +1,16 @@
+- id: brannoc-hale
+  name: 布兰诺克・黑尔
+  score: 5
+  notes: 酒馆角落的老兵。他还在打量你值不值得一起下墓。
+- id: sister-wren
+  name: 雷恩修女
+  score: 10
+  notes: 晚到三天的见习祭司。你是第一个认真听她说完古灯铭文的人。
+- id: mirelle-voss
+  name: 梅瑞尔・沃斯
+  score: 3
+  notes: 酒馆老板娘。你付了房钱，这在她这里算个开始。
+- id: aldous-penn
+  name: 阿尔多斯・潘恩
+  score: 0
+  notes: 村长。他需要你，但不信任外乡人。

@@ -550,7 +550,7 @@ const effectResourceSchema = z.union([
     "interaction:*",
     "unknown:*",
   ]),
-  z.string().regex(/^plugin-data:self:[a-zA-Z][a-zA-Z0-9_-]*$/, {
+  z.string().regex(/^plugin-data:self:[a-zA-Z_][a-zA-Z0-9_-]*$/, {
     message: "plugin-data effect must be `plugin-data:self:<namespace>`",
   }),
   z.string().regex(/^event:[^\s]+$/, {

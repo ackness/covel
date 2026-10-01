@@ -247,6 +247,7 @@ export function ChatMessages({
               !executing &&
               (isPreGame ? (
                 <SessionCanvasHero
+                  dimensions={sessionState.gameState.dimensions}
                   world={world}
                   onBegin={onBeginAdventure}
                   beginLabel={t("session.beginAdventure")}

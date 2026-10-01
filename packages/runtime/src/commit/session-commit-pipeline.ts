@@ -163,7 +163,10 @@ export function createCommitPipeline(
       if (
         result.committed &&
         event &&
-        (event.type === "interaction.requested" || event.type === "ui.rendered")
+        (event.type === "interaction.requested" ||
+          event.type === "ui.rendered" ||
+          event.type === "dimensions.changed" ||
+          event.type === "dimensions.settlement.changed")
       ) {
         eventBus?.emit({
           id: event.id,

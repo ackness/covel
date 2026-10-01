@@ -240,7 +240,14 @@ export async function executeAgentRuntime({
   ];
 
   const worldBase = deps.store
-    ? await createWorldModelView(deps.store, input.sessionId, upstreamProposals)
+    ? await createWorldModelView(
+        deps.store,
+        input.sessionId,
+        upstreamProposals,
+        [],
+        () => {},
+        deps.dimensionContext,
+      )
     : undefined;
   const toolLoop = await runAgentToolLoop({
     worldBase,

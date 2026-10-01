@@ -81,6 +81,11 @@ export type { EventDirectoryLike } from "./builtin/emit-event.js";
 export { createDefaultToolRegistry } from "./builtin/default-tools.js";
 export type { DefaultToolRegistryDeps } from "./builtin/default-tools.js";
 
+export {
+  worldDimensionGetTool,
+  worldDimensionListTool,
+} from "./builtin/world-dimension-tools.js";
+
 // ── Short ID (LLM-friendly entity references) ──────────────────
 export { shortId, shortIdBatch } from "./short-id.js";
 

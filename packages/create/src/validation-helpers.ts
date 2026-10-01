@@ -2,8 +2,8 @@
  * Generated world-manifest normalization + lore-quality validation.
  *
  * Extracted from create-world.ts: repairs common LLM mistakes in the YAML
- * manifest (unknown root fields, non-string versions, invalid enum values,
- * string-typed numeric resources), normalizes the WORLD.md document heading,
+ * manifest (unknown root fields and non-string versions), normalizes the
+ * WORLD.md document heading,
  * and enforces lore quality rules.
  */
 
@@ -48,27 +48,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function normalizeEnum(
-  record: Record<string, unknown>,
-  key: string,
-  allowed: readonly string[],
-  fallback: string,
-): void {
-  const value = record[key];
-  if (typeof value !== "string") return;
-  const normalized = value.trim().toLowerCase();
-  record[key] = allowed.includes(normalized) ? normalized : fallback;
-}
-
 export function normalizeGeneratedManifest(
   manifest: Record<string, unknown>,
 ): string[] {
@@ -88,86 +67,8 @@ export function normalizeGeneratedManifest(
     }
   }
 
-  if (!isRecord(manifest.dimensions)) return repairs;
-  const dimensions = manifest.dimensions;
-
-  if (Array.isArray(dimensions.factions)) {
-    for (const faction of dimensions.factions) {
-      if (!isRecord(faction)) continue;
-      normalizeEnum(
-        faction,
-        "type",
-        [
-          "political",
-          "guild",
-          "corporate",
-          "religious",
-          "criminal",
-          "military",
-          "other",
-        ],
-        "other",
-      );
-      normalizeEnum(faction, "influence", ["major", "minor"], "minor");
-    }
-  }
-
-  if (isRecord(dimensions.powerSystem)) {
-    normalizeEnum(
-      dimensions.powerSystem,
-      "type",
-      ["magic", "technology", "cultivation", "psychic", "hybrid", "other"],
-      "other",
-    );
-  }
-
-  if (Array.isArray(dimensions.history)) {
-    for (const event of dimensions.history) {
-      if (isRecord(event)) {
-        normalizeEnum(event, "significance", ["major", "minor"], "minor");
-      }
-    }
-  }
-
-  if (isRecord(dimensions.tone)) {
-    normalizeEnum(
-      dimensions.tone,
-      "contentRating",
-      ["all-ages", "teen", "mature"],
-      "teen",
-    );
-  }
-
-  if (isRecord(dimensions.mechanics)) {
-    normalizeEnum(
-      dimensions.mechanics,
-      "combatStyle",
-      ["turn-based", "real-time", "narrative", "none"],
-      "narrative",
-    );
-    normalizeEnum(
-      dimensions.mechanics,
-      "difficulty",
-      ["easy", "normal", "hard", "adaptive"],
-      "adaptive",
-    );
-  }
-
-  const startingConditions = dimensions.startingConditions;
-  if (
-    isRecord(startingConditions) &&
-    isRecord(startingConditions.startingResources)
-  ) {
-    for (const [key, value] of Object.entries(
-      startingConditions.startingResources,
-    )) {
-      const numberValue = toFiniteNumber(value);
-      if (numberValue !== undefined && numberValue !== value) {
-        startingConditions.startingResources[key] = numberValue;
-        repairs.push(`numeric startingResources.${key}`);
-      }
-    }
-  }
+  // Authored dimension values are validated against their own schemas, never
+  // coerced or rewritten according to a fixed list of world-building topics.
 
   return repairs;
 }

@@ -3,90 +3,79 @@ import {
   getToolContent,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
+import { dimensionsJsonEqual } from "@covel/shared";
 import makeSetWorldSchema, {
   createWorldAttributeSchema,
 } from "./set-world-schema.js";
-import makeSetWorldEntriesBatch, {
-  createWorldEntrySchema,
-} from "./set-world-entries-batch.js";
+import makeSetWorldDimensions, {
+  createDimensionDefinitionSchema,
+} from "./set-world-dimensions.js";
 
 export default function (toolkit) {
   const { tool, z } = toolkit;
-  const setWorldSchema = makeSetWorldSchema(toolkit);
-  const setWorldEntriesBatch = makeSetWorldEntriesBatch(toolkit);
-  const requiredCategories = [
-    "stats",
-    "bio",
-    "abilities",
-    "equipment",
-    "social",
-  ];
-
+  const setSchema = makeSetWorldSchema(toolkit);
+  const setDimensions = makeSetWorldDimensions(toolkit);
   return tool({
     name: "initialize-world",
     description:
-      "Atomically initialize this session's character attribute schema and world reference entries. Submit exactly once with at least 15 attributes across all five categories and at least 5 world entries.",
+      "Initialize character schema and dimension declarations together. Author declarations are authoritative; only a world without them needs generated definitions. Never mirror global dimension values into character fields or lorebook.",
     parameters: z
-      .object({
+      .strictObject({
         types: z.array(z.string().min(1)).default(["npc", "companion"]),
-        attributes: z
-          .array(createWorldAttributeSchema(z))
-          .min(15)
-          .describe(
-            "Character attributes covering stats, bio, abilities, equipment, and social mechanics.",
-          ),
-        entries: z
-          .array(createWorldEntrySchema(z))
-          .min(5)
-          .describe(
-            "World reference entries such as geography, factions, currency, power system, and social structure.",
-          ),
+        attributes: z.array(createWorldAttributeSchema(z)).min(15),
+        definitions: z
+          .record(z.string(), createDimensionDefinitionSchema(z))
+          .optional(),
       })
-      .superRefine(({ attributes }, refinementContext) => {
-        const actualCategories = new Set(
+      .superRefine(({ attributes }, ctx) => {
+        const categories = new Set(
           attributes.map((attribute) => attribute.category),
         );
-        for (const category of requiredCategories) {
-          if (!actualCategories.has(category)) {
-            refinementContext.addIssue({
+        for (const category of [
+          "stats",
+          "bio",
+          "abilities",
+          "equipment",
+          "social",
+        ]) {
+          if (!categories.has(category))
+            ctx.addIssue({
               code: "custom",
               path: ["attributes"],
               message: `attributes must include category: ${category}`,
             });
-          }
         }
       }),
-    execute: async ({ types, attributes, entries }, context) => {
-      const schemaResult = await setWorldSchema.execute(
-        { types, attributes },
-        context,
+    execute: async ({ types, attributes, definitions }, ctx) => {
+      const declared =
+        ctx.world?.worldRecord?.dimensions ??
+        ctx.world?.worldRecord?.metadata?.dimensions;
+      if (
+        declared &&
+        definitions &&
+        !dimensionsJsonEqual(declared, definitions)
+      )
+        throw new Error(
+          "Generated definitions cannot replace world author declarations",
+        );
+      const schemaResult = await setSchema.execute({ types, attributes }, ctx);
+      const dimensionsResult = await setDimensions.execute(
+        { definitions: declared ?? definitions ?? {} },
+        ctx,
       );
-      const schemaProposals = getPendingProposals(schemaResult);
-      const entriesResult = await setWorldEntriesBatch.execute(
-        { entries },
-        {
-          ...context,
-          pendingProposals: [
-            ...(context.pendingProposals ?? []),
-            ...schemaProposals,
-          ],
-        },
-      );
-
-      const schemaOutput = getToolContent(schemaResult);
-      const entriesOutput = getToolContent(entriesResult);
-
+      const schema = getToolContent(schemaResult);
       return withPendingProposals(
         {
           success: true,
-          attributeCount: schemaOutput.attributeCount,
-          categories: schemaOutput.categories,
-          count: entriesOutput.count,
-          keys: entriesOutput.keys,
-          worldSchema: schemaOutput.worldSchema,
           preGameDone: true,
+          worldSchema: schema.worldSchema,
+          attributeCount: schema.attributeCount,
+          dimensionCount: getToolContent(dimensionsResult).dimensionCount,
         },
-        [...schemaProposals, ...getPendingProposals(entriesResult)],
+        [
+          ...getPendingProposals(schemaResult),
+          ...getPendingProposals(dimensionsResult),
+        ],
       );
     },
   });

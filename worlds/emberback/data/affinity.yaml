@@ -10,3 +10,11 @@
   name: Dr. Mina Park
   score: -2
   notes: Lead scientist at Nightglass Observatory. She thinks you are capable but too willing to trust intuition before the instruments agree.
+- id: priya-nair
+  name: Priya Nair
+  score: 4
+  notes: Lead medic. She likes you, but she will not trade a patient's power for anyone's hunch — including yours.
+- id: eli-varga
+  name: Eli Varga
+  score: 12
+  notes: Night-shift operator who looks up to you. He wants to tell you what he heard in the static, if he can find the nerve.

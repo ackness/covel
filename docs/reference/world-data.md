@@ -53,6 +53,120 @@ defaultViewMode: stage
 
 `worldData` path 相对 world root。
 
+### 动态世界维度（dimensions）
+
+`dimensions` 是世界作者声明的开放 map，不是固定的九类设定枚举。`geography`、`factions`、`powerSystem` 等只作为内容示例；金钱、声望、城墙、图鉴等可以使用作者自己的 ID 和数据结构。声明属于世界包，当前值属于会话：同一世界的两个会话独立演化，不回写包中的初值。
+
+#### 声明格式
+
+```yaml
+# world.yaml
+dimensions:
+  reputation:
+    name: { zh-CN: 声望, en-US: Reputation }
+    description: 主角在当地的公开声望。
+    schema:
+      type: integer
+      minimum: 0
+      maximum: 100
+    initialValue: 0
+    updateRule: 完成居民委托后增加 5；只计已完成的委托，不计承诺。
+  discoveries:
+    name: 已知地点
+    schema:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          description: { type: string }
+          visited: { type: boolean }
+        required: [description, visited]
+        additionalProperties: false
+    initialValue: {}
+    updateRule: 明确发现具名地点时增加条目，亲自抵达后将 visited 设为 true。
+```
+
+| 字段           | 必填 | 说明                                                                  |
+| -------------- | ---- | --------------------------------------------------------------------- |
+| `name`         | yes  | 显示名称，支持 `I18nText`                                             |
+| `description`  | no   | 含义说明，支持 `I18nText`                                             |
+| `schema`       | yes  | 当前支持的 JSON Schema 子集，见下表                                   |
+| `initialValue` | yes  | 满足 schema 的 JSON 初值；`null` 是值，不是删除                       |
+| `updateRule`   | no   | 自然语言更新规则，支持 `I18nText`；有效 locale 下非空时才启用自动维护 |
+
+ID 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`，且不能是 `__proto__`、`prototype`、`constructor`。每项 definition 拒绝未知顶层字段。标量表示单例，嵌套对象表示复合状态，数组的 object items 表示行集，`additionalProperties` schema 表示动态命名记录；无需另一套 table/singleton 格式。玩家可修改值及 schema 允许的行，但不能在会话内新建 definition 或修改其结构。
+
+#### 值校验与本地化
+
+这里使用明确、封闭的 JSON Schema 子集，不是完整 JSON Schema 实现：
+
+| 类别   | 支持的关键字                                                                                |
+| ------ | ------------------------------------------------------------------------------------------- |
+| 类型   | `type`：`string/number/integer/boolean/null/object/array`，也可用类型数组表示可空等联合类型 |
+| 公共   | `title`、`description`、`enum`、`const`                                                     |
+| 数值   | `minimum`、`maximum`、`exclusiveMinimum`、`exclusiveMaximum`                                |
+| 文本   | `minLength`、`maxLength`                                                                    |
+| 数组   | 单一 `items` schema、`minItems`、`maxItems`                                                 |
+| 对象   | `properties`、`required`、`additionalProperties`（boolean 或 schema）                       |
+| 本地化 | `x-i18n: true`；`title` 可写 `I18nText`；`x-enumLabels` 为标量枚举成员提供显示名            |
+
+不支持的关键字（包括 `$ref`、远程 schema、表达式与代码）直接拒绝，不会忽略。初值、玩家修改和自动提交共用校验，不做类型强转或默认值填充。共享 JSON 边界限制深度 32、节点数 10,000、UTF-8 序列化体积 256 KiB；维度 map 与 schema 同样接受边界校验，不仅检查单个字段。
+
+名称、说明和更新规则按声明的 `I18nText` 解析；普通值不经过猜测式深度翻译。只有 schema 明确标记 `x-i18n: true` 的节点按 `I18nText` 校验和显示本地化，例如：
+
+```yaml
+name: 港口传闻
+schema: { type: string, x-i18n: true }
+initialValue:
+  { zh-CN: 灯塔有人守夜。, en-US: Someone keeps watch at the lighthouse. }
+```
+
+`title` 与 `x-enumLabels` 只影响面板显示：值仍是稳定的枚举 ID（模型、规则和校验都使用 ID），`x-enumLabels` 的键必须是该节点 `enum` 中的标量成员：
+
+```yaml
+schema:
+  type: string
+  title: { zh-CN: 状态, en-US: Status }
+  enum: [unverified, corroborated]
+  x-enumLabels:
+    unverified: { zh-CN: 未核实, en-US: Unverified }
+    corroborated: { zh-CN: 已佐证, en-US: Corroborated }
+```
+
+公共快照保留原始值；展示投影或查询可按注解本地化。正常 JSON `{zh: 1, en: 2}` 不会被当成翻译，ID、属性名和枚举成员不翻译。
+
+#### 三种作者入口
+
+三种入口使用相同 definition 格式：
+
+1. `world.yaml` 内联 `dimensions` map。
+2. `dimensionSources`：每个合法 dimension ID 指向一个相对 world root 的 YAML/JSON 文件，文件内容为**单项 definition**。
+3. `worldData` descriptor：`schema: covel://world/dimensions`、`to: world:metadata.dimensions`，文件内容为**完整 definition map**，见 [Descriptor](#descriptor)。
+
+```yaml
+# world.yaml；data/reputation.yaml 的内容为上例 reputation 下的 definition
+dimensionSources:
+  reputation: data/reputation.yaml
+```
+
+外部单项覆盖同 ID 的内联声明；descriptor 中写向 `world:metadata.dimensions` 的 source 按加载顺序替换有效 map。只有最终有效声明进入会话，不分别初始化被覆盖的来源。外部文件沿用 locale 变体与 containment 校验；任何声明读取或校验失败保留上一份完整世界。
+
+#### 初始化、演化与公共读取
+
+会话导入器通过 `world.dimensions@1` 发现唯一活跃提供者，将最终声明、初值和 provenance ledger 一起导入；内联、外部文件以及没有 `worldData` 的存储型世界也进入账本。捆绑的 `world-init` 负责初始化与持续维护，不在框架中按插件 ID 选择属主。
+
+- `dimension-context` 是不调用模型的 pre-turn function，发布已提交快照。
+- `dimension-tracker` 在 post-turn 按规则与本轮叙事结算；已激活的 WorldIR 可作为共享辅证，不强制启用抽取器。没有有效更新规则时跳过维护模型调用。
+- 规则判断交给模型，结构和范围由提交边界校验；这不是确定性公式或周期结算引擎。
+- 当前值通过 `ctx.world.dimensions.<id>.value`、`{{ world.dimensions.<id>.value }}` 与 session snapshot 的 `dimensions.<id>.value` 公共读取。公共项包含名称、说明、schema、值、版本，不包含更新规则或初值。
+- 提示词使用有预算的当前值投影，较大的值通过 builtin `world-dimension-list/get` 按需查询；维度不再双写为 constant lorebook。
+
+数值更新需要 `expectedVersion` 并整批原子提交。无变化也有显式回执；维护失败、未运行或冲突保留 `pending-settlement`，下次叙事前需重试、人工确认或明确跳过。玩家编辑走受信恢复元数据指定的 manual runtime RPC，不使用通用 plugin-data 写入。快照时序、五种回执状态与读写边界见 [World Model](world-model.md#动态维度快照)，调用示例见 [API](api.md#维度编辑与待结算恢复)。
+
+角色、背包、好感和时间仍由各自领域属主维护，本期没有把它们复制成另一份 dimension 权威。状态条件事件、隐藏载荷注入与触发调度（#97）不属于本能力，不能把不公开更新规则理解为事件载荷保密机制。
+
+> **BREAKING CHANGE**：旧九类 raw dimension 数据不再合法，每项都必须改成 definition 格式。旧 `entries`/constant lorebook 维度副本不是当前值来源；需要重建受影响的开发世界、会话与快照。不提供旧格式读取、双写或自动迁移。
+
 ### AI 生成结果与文件导出
 
 `@covel/create` 的 `createWorld({ llm, concept, ... })` 生成并验证内容，成功时返回 `id`、`manifest`、`lore`、`locale` 与 `packageContent`；失败时返回 `success: false` 和 `errors`。返回的 manifest 是 schema 校验后的规范值，包含 locale 的规范形式和 `characterSchema.types` 等默认值；三种保存目标消费同一份规范值。生成过程不写世界包，也不接收 `outputDir`。生成 manifest 必须包含内联数据，不能引用尚未生成的 `worldData` 或 `dimensionSources` 文件。 简报生成的 `memoryDefinitions` 在规范化时转换成 `packageContent.contractData` 中的 `memory.blocks@1/world` 记录；文件与非文件模式消费同一份合同数据，同一目标重复声明会被拒绝。
@@ -67,13 +181,14 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 
 世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内三个世界展示了不同的数据组合：
 
-| 示例                    | 玩家体验                                 | 主要能力                                                                                                                                                         | 适合参考的文件                                                                                                                    |
-| ----------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，行动与环境叙事为主         | 基于传统叙事的自定义 `mistport-investigation` 组合、按 locale 选择的世界观 / 角色 / 规则 / presence、题材记忆块、角色属性 schema、角色蓝图、立绘、潮汐与势力规则 | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                       |
-| `worlds/haruka-academy` | 校园群像恋爱，对话与视觉小说舞台为主     | `dialogue-mode` 策略、`defaultViewMode: stage`、关系数值、题材记忆块、角色蓝图、透明立绘 presence、地点对应的日 / 夜场景注册表、校园日程规则                     | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/scenes.json`、`media/scenes.registry.json` |
-| `worlds/emberback`      | 太阳风暴中的协作救援，RPG 资源与任务推进 | 领域角色、插件角色卡、记忆定义、规则、任务、物品和好感种子                                                                                                       | `data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/characters.json`                                         |
+| 示例                    | 玩家体验                                    | 主要能力                                                                                                                                                                                                         | 适合参考的文件                                                                                                                     |
+| ----------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；按 locale 选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                           | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台 | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；透明立绘与日 / 夜场景注册表                               | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
+| `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」                                                                              | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
+| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」 | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
 
-三者都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
+四个世界都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。接受 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）或 `parsed`。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
@@ -107,7 +222,7 @@ seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后�
 
 世界包安装与 AI 生成的 `server-file` 目标写入用户世界目录，不回写内置资源。安装接口成功激活后返回 `restartRequired: false`，立即可从世界列表查询；激活失败只移除本次新建目录，允许重试。
 
-server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，包含 Linux。已有世界的 YAML / Markdown 文件变化会按物理目录延迟 500ms 合并后重读，读取后使用清单的 `id` 查询、更新世界并通知会话（目录名无需与 `id` 相同）；**仅维度发生变化时**更新存储，并向使用该世界的 session 发出 `world.dimensions.changed`。它不是完整世界包或插件的热重载：直接放入一个新世界目录需重启 seed 或走安装入口，其他世界内容更新也应重启加载。
+server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，包含 Linux。已有世界的 YAML / Markdown 文件变化会按物理目录延迟 500ms 合并后重读，读取后使用清单的 `id` 查询、更新世界并通知会话（目录名无需与 `id` 相同）；**仅维度发生变化时**更新存储，并向使用该世界的 session 发出 `world.dimensions.changed`。这是作者声明变化通知，不会将会话的演化值重置成新初值；已有会话需显式同步并检查冲突。它不是完整世界包或插件的热重载：直接放入一个新世界目录需重启 seed 或走安装入口，其他世界内容更新也应重启加载。
 
 若文件系统不支持监听，启动会记录 warning；维度也可通过 `POST /api/worlds/:id/dimensions/import` 导入。插件安装后仍需重启服务。实现见 `apps/server/src/world-file-watcher.ts`，安装响应见 [API 参考](./api.md#installed-resource-storage-and-vector-configuration)。
 
@@ -384,7 +499,7 @@ handler 必须返回以声明的 output id 为 key 的对象；每个 output 值
 
 开发工具和 Agent 可通过 `GET /api/framework/capabilities` 发现 `projections` effect 和 contract URI 语法，再通过 `GET /api/plugins/:id` 读取每个插件聚合后的 `worldProjections`。公开 discovery 只返回声明元数据，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
 
-静态 world-data projection 与实时 story 管线使用同一 `contract:world-ir@1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine@1` 输出抽取一次，`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph/extractor` 再通过 typed input 并行消费。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。
+静态 world-data projection 与实时 story 管线使用同一 `contract:world-ir@1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine@1` 输出抽取一次，`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph/extractor` 再通过 typed input 并行消费。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。有自动维度维护义务的会话同时保留 `pending-settlement` 回执，不能将失败或跳过视为维度无变化；恢复完成前阻止下一次叙事。
 
 ## 世界角色 Schema
 
@@ -405,7 +520,7 @@ characterSchema:
 
 清单保存在世界 metadata 的同名字段中，会话初始化将其写入领域 schema。`character.schema.set` proposal 使用 `{types,attributes}`，版本由内核递增。工具、`ctx.world` 和最终提交共用校验规则；角色 `fields` 必须符合 schema，非 player 类型必须在声明中。
 
-`world-init` guard 依次使用当前会话已有 schema、世界声明的 schema、由 dimensions 推导的属性；均不可用时才调用模型生成。不会从其他会话或其他插件的私有 schema 数据复制。世界声明变更影响新会话，已有会话通过领域操作显式修改 schema。
+`world-init` guard 优先使用当前会话已有 schema，再使用世界声明的 schema；均不可用时才调用模型生成。维度初始化与角色属性生成是两种职责，不再将 dimension 资源结构自动推导成角色字段，也不会从其他会话或其他插件的私有 schema 数据复制。世界声明变更影响新会话，已有会话通过领域操作显式修改角色 schema。
 
 ## 领域角色与插件角色卡
 
@@ -524,13 +639,13 @@ preflight 要求对应 contract 的 schema 和接收声明已注册。`character
 
 `media/scenes.json` 字段：
 
-| 字段           | 说明                                                                                                                    |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `id`           | 场景机器键，也是文件名前缀（`<id>-day.png` / `<id>-night.png`）。                                                       |
-| `name`         | 场景显示名。                                                                                                            |
-| `locationRef`  | 对应 `dimensions.yaml` 里 `geography.regions[].name` 或其 `landmarks[].name`（dimensions 数据模型无 id，name 即身份）。 |
-| `subject`      | 英文画面描述（日图），composes 为 `style.prefix + subject + style.suffix`。                                             |
-| `subjectNight` | 可选，夜图专用画面描述；留空则夜图回退用 `subject`（配合 `style.nightSuffix`）。                                        |
+| 字段           | 说明                                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | 场景机器键，也是文件名前缀（`<id>-day.png` / `<id>-night.png`）。                                                                                 |
+| `name`         | 场景显示名。                                                                                                                                      |
+| `locationRef`  | 对应作者定义的地点名。内置 geography 模板的声明路径为 `geography.initialValue.regions[].name` 或其 `landmarks[].name`；这不是框架要求的维度结构。 |
+| `subject`      | 英文画面描述（日图），composes 为 `style.prefix + subject + style.suffix`。                                                                       |
+| `subjectNight` | 可选，夜图专用画面描述；留空则夜图回退用 `subject`（配合 `style.nightSuffix`）。                                                                  |
 
 world 包用一条 media source 把生成好的 PNG 导入媒体库（沿用 portraits 的 `kind: media` 机制，按 sha256 内容寻址），再用第二条 json source 导入注册表。**两条都不可省**，且 media source 必须带 `key` + `indexTo`（否则字节不落库，见上方 media source 说明）：
 
@@ -696,7 +811,11 @@ POST /api/worlds/<world-id>/sync-data
 3. 目标 row 被玩家或插件改动时返回 `conflicts.reason = "modified"`。
 4. planned write 仍存在但目标 row 缺失时返回 `conflicts.reason = "missing"`。
 5. source 已移除且目标 row 也已缺失时，只清理 stale ledger，不报告 conflict。
-6. 传 `force:true` 时允许覆盖 modified/missing 冲突。
+6. 普通导入 row 可通过 `force:true` 覆盖 modified/missing 冲突；维度的已演化值及待结算保护不因此解除。
+
+维度同步另有领域约束：作者 definition 的摘要未变时保留当前进度，不重复应用初值；新增维度以初值初始化。修改或删除已演化/手改的维度，或尚有待结算义务时，返回 `modified` 冲突并保留值和 definition。未改动的导入基线才可采用新声明或删除，schema 改变不自动迁移旧值。同步在事务内重验 hash 与版本，预检通过不授权随后无条件覆盖。有冲突时返回计划及冲突，不应用本次同步。
+
+`POST /api/worlds/:id/sync-dimensions` 仅同步维度，使用相同账本和冲突规则；不清理其他导入领域，也不重建 lorebook。热更新通知本身不改变会话当前值。
 
 media index 同步删除只在事务提交后移除当前 session 的显式 media ref；ownership 随会话生命周期释放，底层内容寻址字节由媒体 GC 回收。准备阶段将字节和本次导入专属的 `world-data-import:<uuid>` 临时引用原子写入，防止发布完成前被 GC 回收。finalization 先建立真实会话的归属与引用，再释放临时引用；准备、事务或会话准入失败只释放本次导入的临时引用，不强制删除共享字节，不释放已有会话的 claims。新建会话的媒体 finalization 失败时，在同一会话生命周期锁内删除该会话并释放其媒体归属与引用。语义事务已提交但媒体 finalization 失败时保留临时引用，避免已提交索引失去保护；会话创建回滚删除失败时同样保留。临时引用释放失败仅记录日志；进程崩溃或释放失败可能遗留临时引用，GC 会保守保留其字节，不会自动过期，需确认导入已停止后人工清理。此机制复用现有引用表，无需迁移。
 

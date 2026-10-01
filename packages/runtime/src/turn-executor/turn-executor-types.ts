@@ -80,6 +80,11 @@ export interface AgentLoopDeps {
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
+  readonly dimensionProviderPluginId?: string;
+  readonly dimensionContext?: Pick<
+    import("@covel/shared").WorldModelView,
+    "dimensions" | "dimensionProviderPluginId"
+  >;
   /** Persisted session activation scope, including plugins without runtimes. */
   readonly hookScope?: HookScope;
   readonly services?: import("../plugin-services.js").PluginServiceRegistry;

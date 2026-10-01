@@ -1,175 +1,611 @@
+crownfire:
+  name: Crownfire Countdown
+  description: Minutes until the Crownfire storm reaches the ridge, and how close it feels.
+  schema:
+    type: object
+    properties:
+      minutesRemaining:
+        type: integer
+        title: Minutes left
+        minimum: 0
+        maximum: 180
+      stage:
+        type: string
+        title: Storm
+        enum: [distant, approaching, imminent, overhead, passing]
+        x-enumLabels:
+          distant: On the horizon
+          approaching: Approaching
+          imminent: Imminent
+          overhead: Overhead
+          passing: Passing
+    required: [minutesRemaining, stage]
+    additionalProperties: false
+  initialValue:
+    minutesRemaining: 180
+    stage: distant
+  updateRule: >-
+    Subtract the story time this turn's narrative actually spends: a short conversation 5–10 minutes, a repair, search, or argument 15–40, a crawler run to Mile Seventeen or Nightglass 30–60. If the narrative states the remaining window, use that number. Time never comes back. Set stage approaching at 120 minutes or less, imminent at 30 or less, overhead at 0, and passing only when the narrative says the storm front has moved on.
+
+relayGrid:
+  name: Relay Grid
+  description: The shared power reserve and what it is currently feeding. Nothing important can run at full at once.
+  schema:
+    type: object
+    properties:
+      reserve:
+        type: integer
+        title: Reserve %
+        minimum: 0
+        maximum: 100
+      systems:
+        type: object
+        title: Systems
+        properties:
+          longRange:
+            type: string
+            title: Long-range array
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          stormShields:
+            type: string
+            title: Storm shields
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          clinic:
+            type: string
+            title: Clinic reserve
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          crawlerChargers:
+            type: string
+            title: Crawler chargers
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+          nightglassLink:
+            type: string
+            title: Nightglass link
+            enum: [off, low, full]
+            x-enumLabels: { off: Off, low: Low, full: Full }
+        required:
+          [longRange, stormShields, clinic, crawlerChargers, nightglassLink]
+        additionalProperties: false
+    required: [reserve, systems]
+    additionalProperties: false
+  initialValue:
+    reserve: 64
+    systems:
+      longRange: off
+      stormShields: low
+      clinic: full
+      crawlerChargers: low
+      nightglassLink: low
+  updateRule: >-
+    Change a system only when the narrative powers it up or down. Over roughly an hour of story time, each system at full drains 6–10 reserve and each at low drains 2–4; dragging the solar fields into light or a successful repair can restore 5–20. Settle the drain for the time this turn actually spent. At 0 reserve every system except the clinic drops to off; the clinic only goes off if the narrative explicitly says so.
+
+signalLog:
+  name: Signal Log
+  description: Every transmission and echo worth keeping, with the technical facts that have been established.
+  schema:
+    type: object
+    additionalProperties:
+      type: object
+      properties:
+        source:
+          type: string
+          title: Source
+        channel:
+          type: string
+          title: Channel
+        timestamp:
+          type: string
+          title: Timestamp
+        status:
+          type: string
+          title: Status
+          enum: [unexplained, traced, verified, disproven]
+          x-enumLabels:
+            unexplained: Unexplained
+            traced: Traced
+            verified: Verified
+            disproven: Disproven
+        note:
+          type: string
+          title: Note
+          maxLength: 240
+      required: [source, channel, timestamp, status]
+      additionalProperties: false
+  initialValue:
+    call-0614:
+      source: Unknown — the voice is yours
+      channel: Every receiver at once, then the long-range network died
+      timestamp: 06:14 station time (claims to be +72 hours)
+      status: unexplained
+      note: Stop the convoy at Mile Seventeen. Keep Mina off the tower. Don't let Tomas shut down the signal.
+  updateRule: >-
+    Add an entry (short kebab-case ID) when the narrative receives, records, or uncovers a new transmission or echo. Fill in source, channel, and timestamp as they become known; set traced when its origin is located, verified when independent instruments or witnesses confirm it, disproven when it is shown to be fake or misread. Once a technical fact is established, do not change it unless the narrative explicitly overturns it. Never delete entries.
+
+convoy:
+  name: Medical Convoy
+  description: June's crawler convoy and its thirty cryo-packs — heading for Mile Seventeen.
+  schema:
+    type: object
+    properties:
+      position:
+        type: string
+        title: Position
+        enum:
+          [
+            en-route,
+            holding,
+            rerouted,
+            at-mile-seventeen,
+            arrived,
+            stranded,
+            lost,
+          ]
+        x-enumLabels:
+          en-route: En route to Mile Seventeen
+          holding: Holding position
+          rerouted: Rerouted
+          at-mile-seventeen: At Mile Seventeen
+          arrived: Delivered safely
+          stranded: Stranded
+          lost: Lost
+      contact:
+        type: string
+        title: Contact
+        enum: [none, intermittent, open]
+        x-enumLabels:
+          none: No contact
+          intermittent: Intermittent
+          open: Open channel
+      cryoPacks:
+        type: integer
+        title: Cryo-packs intact
+        minimum: 0
+        maximum: 30
+    required: [position, contact, cryoPacks]
+    additionalProperties: false
+  initialValue:
+    position: en-route
+    contact: none
+    cryoPacks: 30
+  updateRule: >-
+    Change position only when the narrative shows the convoy stopping, turning, reaching a place, or getting stuck. Set contact from what the radio actually achieves this turn. Reduce cryo-packs only when the narrative explicitly shows packs damaged, spoiled, or lost.
+
 geography:
-  overview: Vesper is a tidally locked world. Its white-hot day side and frozen night side meet along the Duskline, a habitable ribbon of red ridges, cold wind, and settlements linked by radio.
-  regions:
-    - name: Emberback Ridge
-      description: A long rust-red escarpment carrying the relay, its homes, workshops, and movable solar fields. The ridge is isolated but never quiet.
-      climate: Dry, windy, and sharply divided between brightward heat and nightward cold.
-      landmarks:
-        - name: The Three Masts
-          description: Emberback's long-range array. The central mast can reach every settlement on the western relay chain when the sky is clear.
-        - name: Switchyard
-          description: A public workshop, charging bay, kitchen, and meeting floor built around the station's oldest transformer.
-    - name: Brightward Road
-      description: A hard-packed crawler route running toward the sun through glass flats and basalt shade. Mile Seventeen is its most exposed crossing.
-      climate: Blinding glare, abrasive dust, and heat fronts that can overtake a vehicle in minutes.
-      landmarks:
-        - name: Mile Seventeen
-          description: A field repeater beside a natural stone arch. The future warning names this place, but its maintenance log shows nothing unusual.
-        - name: Mirror Farm
-          description: Mobile solar collectors that power Emberback. Their daily alignment determines how much charge the community can spend.
-    - name: Nightward Shelf
-      description: A descending plateau of dark blue stone, frost grass, and buried ice conduits leading toward permanent night.
-      climate: Clear, bitterly cold, and prone to fast-moving ice squalls.
-      landmarks:
-        - name: Nightglass Observatory
-          description: A compact research station that studies magnetic storms, atmospheric echoes, and the moving edge of Vesper's ice.
-    - name: Crownfire Front
-      description: A continent-scale magnetic storm moving along the Duskline. Its charged dust bends radio signals and paints gold ribbons across the sky.
-      climate: Electrically active, unpredictable, and dangerous to exposed people, vehicles, and antenna arrays.
+  name: Geography
+  schema:
+    type: object
+    properties:
+      overview:
+        type: string
+        title: Overview
+      regions:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              title: Name
+            description:
+              type: string
+              title: Description
+            climate:
+              type: string
+              title: Climate
+            landmarks:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    title: Name
+                  description:
+                    type: string
+                    title: Description
+                additionalProperties: false
+              title: Landmarks
+          additionalProperties: false
+        title: Regions
+    additionalProperties: false
+  initialValue:
+    overview: Vesper is a tidally locked world. Its white-hot day side and frozen night side meet along the Duskline, a habitable ribbon of red ridges, cold wind, and settlements linked by radio.
+    regions:
+      - name: Emberback Ridge
+        description: A long rust-red escarpment carrying the relay, its homes, workshops, and movable solar fields. The ridge is isolated but never quiet.
+        climate: Dry, windy, and sharply divided between brightward heat and nightward cold.
+        landmarks:
+          - name: The Three Masts
+            description: Emberback's long-range array. The central mast can reach every settlement on the western relay chain when the sky is clear.
+          - name: Switchyard
+            description: A public workshop, charging bay, kitchen, and meeting floor built around the station's oldest transformer.
+      - name: Brightward Road
+        description: A hard-packed crawler route running toward the sun through glass flats and basalt shade. Mile Seventeen is its most exposed crossing.
+        climate: Blinding glare, abrasive dust, and heat fronts that can overtake a vehicle in minutes.
+        landmarks:
+          - name: Mile Seventeen
+            description: A field repeater beside a natural stone arch. The future warning names this place, but its maintenance log shows nothing unusual.
+          - name: Mirror Farm
+            description: Mobile solar collectors that power Emberback. Their daily alignment determines how much charge the community can spend.
+      - name: Nightward Shelf
+        description: A descending plateau of dark blue stone, frost grass, and buried ice conduits leading toward permanent night.
+        climate: Clear, bitterly cold, and prone to fast-moving ice squalls.
+        landmarks:
+          - name: Nightglass Observatory
+            description: A compact research station that studies magnetic storms, atmospheric echoes, and the moving edge of Vesper's ice.
+      - name: Crownfire Front
+        description: A continent-scale magnetic storm moving along the Duskline. Its charged dust bends radio signals and paints gold ribbons across the sky.
+        climate: Electrically active, unpredictable, and dangerous to exposed people, vehicles, and antenna arrays.
 factions:
-  - id: relay-cooperative
-    name: Emberback Relay Cooperative
-    description: The station's technicians, operators, medics, growers, and cooks jointly maintain the relay and decide how its limited power is spent.
-    type: guild
-    influence: major
-    leader: Tomas Reed, elected shift lead
-    headquarters: Emberback Ridge, Switchyard
-    relations:
-      - targetId: sunrunners
-        type: interdependent
-        description: The relay keeps couriers out of storms; couriers keep the isolated station supplied.
-      - targetId: nightglass-observatory
-        type: strained
-        description: The cooperative needs the observatory's forecasts but resents experiments that consume relay time and power.
-  - id: sunrunners
-    name: Sunrunners
-    description: Independent crawler crews who carry medicine, mail, spare parts, and passengers between Duskline settlements.
-    type: guild
-    influence: major
-    leader: A rotating road captain chosen at each route meeting
-    headquarters: The road itself
-    relations:
-      - targetId: relay-cooperative
-        type: loyal
-        description: They trust Emberback's operators with their lives, even while complaining about every route closure.
-      - targetId: nightglass-observatory
-        type: skeptical
-        description: Forecast models matter less to most drivers than landmarks, instinct, and a clear voice on the radio.
-  - id: nightglass-observatory
-    name: Nightglass Observatory
-    description: A small civilian research team tracking Vesper's atmosphere and the radio echoes that sometimes arrive before their source transmission.
-    type: other
-    influence: minor
-    leader: Dr. Mina Park
-    headquarters: Nightward Shelf
-    relations:
-      - targetId: relay-cooperative
-        type: dependent
-        description: Nightglass needs Emberback's array to test its theories; Emberback needs Nightglass to predict Crownfire.
+  name: Factions
+  schema:
+    type: array
+    items:
+      type: object
+      properties:
+        id:
+          type: string
+          title: ID
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        type:
+          type: string
+          title: Type
+        influence:
+          type: string
+          title: Influence
+        leader:
+          type: string
+          title: Leader
+        headquarters:
+          type: string
+          title: Headquarters
+        relations:
+          type: array
+          items:
+            type: object
+            properties:
+              targetId:
+                type: string
+                title: Target
+              type:
+                type: string
+                title: Type
+              description:
+                type: string
+                title: Description
+            additionalProperties: false
+          title: Relations
+      additionalProperties: false
+  initialValue:
+    - id: relay-cooperative
+      name: Emberback Relay Cooperative
+      description: The station's technicians, operators, medics, growers, and cooks jointly maintain the relay and decide how its limited power is spent.
+      type: guild
+      influence: major
+      leader: Tomas Reed, elected shift lead
+      headquarters: Emberback Ridge, Switchyard
+      relations:
+        - targetId: sunrunners
+          type: interdependent
+          description: The relay keeps couriers out of storms; couriers keep the isolated station supplied.
+        - targetId: nightglass-observatory
+          type: strained
+          description: The cooperative needs the observatory's forecasts but resents experiments that consume relay time and power.
+    - id: sunrunners
+      name: Sunrunners
+      description: Independent crawler crews who carry medicine, mail, spare parts, and passengers between Duskline settlements.
+      type: guild
+      influence: major
+      leader: A rotating road captain chosen at each route meeting
+      headquarters: The road itself
+      relations:
+        - targetId: relay-cooperative
+          type: loyal
+          description: They trust Emberback's operators with their lives, even while complaining about every route closure.
+        - targetId: nightglass-observatory
+          type: skeptical
+          description: Forecast models matter less to most drivers than landmarks, instinct, and a clear voice on the radio.
+    - id: nightglass-observatory
+      name: Nightglass Observatory
+      description: A small civilian research team tracking Vesper's atmosphere and the radio echoes that sometimes arrive before their source transmission.
+      type: other
+      influence: minor
+      leader: Dr. Mina Park
+      headquarters: Nightward Shelf
+      relations:
+        - targetId: relay-cooperative
+          type: dependent
+          description: Nightglass needs Emberback's array to test its theories; Emberback needs Nightglass to predict Crownfire.
 powerSystem:
   name: Echo Reading
-  type: technology
-  description: The craft of extracting useful information from time-shifted radio echoes caused by Vesper's magnetic weather. It is technical practice, not prophecy.
-  rules:
-    - An echo must be recorded, timestamped, and compared against an independent signal before it can count as evidence.
-    - Clearer future information creates stronger interference when people act on it; certainty is never free.
-    - Echoes show a possible transmission, not a fixed future. Choices can prevent, alter, or cause what was heard.
-    - Crownfire improves echo range while making ordinary communications less reliable and exposed electronics more dangerous.
-  tiers:
-    - name: Listener
-      rank: 1
-      description: Can identify patterns, false repeats, and deliberate speech inside heavy static.
-    - name: Tracer
-      rank: 2
-      description: Can estimate where and when an echo originated by comparing phase drift across receivers.
-    - name: Splicer
-      rank: 3
-      description: Can reconstruct missing fragments from several conflicting echoes without pretending uncertainty has vanished.
-    - name: Caller
-      rank: 4
-      description: Theoretical ability to transmit a reply into an earlier window. No verified caller is known.
+  schema:
+    type: object
+    properties:
+      name:
+        type: string
+        title: Name
+      type:
+        type: string
+        title: Type
+      description:
+        type: string
+        title: Description
+      rules:
+        type: array
+        items:
+          type: string
+        title: Rules
+      tiers:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              title: Name
+            rank:
+              type: integer
+              title: Rank
+            description:
+              type: string
+              title: Description
+          additionalProperties: false
+        title: Tiers
+    additionalProperties: false
+  initialValue:
+    name: Echo Reading
+    type: technology
+    description: The craft of extracting useful information from time-shifted radio echoes caused by Vesper's magnetic weather. It is technical practice, not prophecy.
+    rules:
+      - An echo must be recorded, timestamped, and compared against an independent signal before it can count as evidence.
+      - Clearer future information creates stronger interference when people act on it; certainty is never free.
+      - Echoes show a possible transmission, not a fixed future. Choices can prevent, alter, or cause what was heard.
+      - Crownfire improves echo range while making ordinary communications less reliable and exposed electronics more dangerous.
+    tiers:
+      - name: Listener
+        rank: 1
+        description: Can identify patterns, false repeats, and deliberate speech inside heavy static.
+      - name: Tracer
+        rank: 2
+        description: Can estimate where and when an echo originated by comparing phase drift across receivers.
+      - name: Splicer
+        rank: 3
+        description: Can reconstruct missing fragments from several conflicting echoes without pretending uncertainty has vanished.
+      - name: Caller
+        rank: 4
+        description: Theoretical ability to transmit a reply into an earlier window. No verified caller is known.
 history:
-  - era: Settlement Era
-    year: 214 years ago
-    name: The Duskline Landing
-    description: The first permanent habitats were placed where Vesper's light and cold could be balanced with ordinary engineering.
-    significance: major
-  - era: Relay Era
-    year: 86 years ago
-    name: Emberback Goes Live
-    description: Three ridge masts closed the longest dead zone in the western chain and turned a repair camp into a community.
-    significance: major
-  - era: Modern Era
-    year: 19 years ago
-    name: The Long Blackout
-    description: A Crownfire storm cut six settlements off for eleven days. The cooperative's promise that no call goes unanswered dates from the recovery.
-    significance: major
-  - era: Present
-    year: 4 months ago
-    name: First Verified Echo
-    description: Mina Park recorded a weather bulletin nine minutes before Nightglass transmitted it. Repeat incidents have grown longer and more specific.
-    significance: major
+  name: History
+  schema:
+    type: array
+    items:
+      type: object
+      properties:
+        era:
+          type: string
+          title: Era
+        year:
+          type: string
+          title: Year
+        name:
+          type: string
+          title: Name
+        description:
+          type: string
+          title: Description
+        significance:
+          type: string
+          title: Significance
+      additionalProperties: false
+  initialValue:
+    - era: Settlement Era
+      year: 214 years ago
+      name: The Duskline Landing
+      description: The first permanent habitats were placed where Vesper's light and cold could be balanced with ordinary engineering.
+      significance: major
+    - era: Relay Era
+      year: 86 years ago
+      name: Emberback Goes Live
+      description: Three ridge masts closed the longest dead zone in the western chain and turned a repair camp into a community.
+      significance: major
+    - era: Modern Era
+      year: 19 years ago
+      name: The Long Blackout
+      description: A Crownfire storm cut six settlements off for eleven days. The cooperative's promise that no call goes unanswered dates from the recovery.
+      significance: major
+    - era: Present
+      year: 4 months ago
+      name: First Verified Echo
+      description: Mina Park recorded a weather bulletin nine minutes before Nightglass transmitted it. Repeat incidents have grown longer and more specific.
+      significance: major
 economy:
-  currencies:
-    - name: Trade chits
-      symbol: tc
-      description: Cooperative credit accepted for food, repairs, route passage, and personal supplies. Essential emergency service is never denied for lack of chits.
-  resources:
-    - Battery charge
-    - Condensed water
-    - Ceramic electronics
-    - Crawler parts
-    - Medical cryo-packs
-  tradeNotes: Power is Emberback's real budget. Every major repair, transmission, vehicle charge, or research scan takes energy away from another public need.
+  name: Economy
+  schema:
+    type: object
+    properties:
+      currencies:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              title: Name
+            symbol:
+              type: string
+              title: Symbol
+            description:
+              type: string
+              title: Description
+          additionalProperties: false
+        title: Currencies
+      resources:
+        type: array
+        items:
+          type: string
+        title: Resources
+      tradeNotes:
+        type: string
+        title: Trade
+    additionalProperties: false
+  initialValue:
+    currencies:
+      - name: Trade chits
+        symbol: tc
+        description: Cooperative credit accepted for food, repairs, route passage, and personal supplies. Essential emergency service is never denied for lack of chits.
+    resources:
+      - Battery charge
+      - Condensed water
+      - Ceramic electronics
+      - Crawler parts
+      - Medical cryo-packs
+    tradeNotes: Power is Emberback's real budget. Every major repair, transmission, vehicle charge, or research scan takes energy away from another public need.
 socialStructure:
-  classes:
-    - name: Residents
-      rank: 1
-      description: Cooperative members who live at Emberback and share maintenance shifts, votes, and emergency obligations.
-    - name: Route crews
-      rank: 2
-      description: Couriers, haulers, and mechanics who move between settlements and rely on temporary station berths.
-    - name: Visitors
-      rank: 3
-      description: Researchers, passengers, and traders under the same emergency protections as everyone else but without a cooperative vote.
-  notes: Rank describes civic responsibility, not personal worth. During an emergency, the person with the relevant expertise leads the response.
+  name: Society
+  schema:
+    type: object
+    properties:
+      classes:
+        type: array
+        items:
+          type: object
+          properties:
+            name:
+              type: string
+              title: Name
+            rank:
+              type: integer
+              title: Rank
+            description:
+              type: string
+              title: Description
+          additionalProperties: false
+        title: Classes
+      notes:
+        type: string
+        title: Notes
+    additionalProperties: false
+  initialValue:
+    classes:
+      - name: Residents
+        rank: 1
+        description: Cooperative members who live at Emberback and share maintenance shifts, votes, and emergency obligations.
+      - name: Route crews
+        rank: 2
+        description: Couriers, haulers, and mechanics who move between settlements and rely on temporary station berths.
+      - name: Visitors
+        rank: 3
+        description: Researchers, passengers, and traders under the same emergency protections as everyone else but without a cooperative vote.
+    notes: Rank describes civic responsibility, not personal worth. During an emergency, the person with the relevant expertise leads the response.
 tone:
-  genres:
-    - frontier science fiction
-    - community adventure
-    - temporal mystery
-  contentRating: teen
-  narrativeStyle: Clear, character-led adventure prose with tactile technical detail, moments of dry humor, and visible consequences. Wonder should come from people solving impossible problems together.
-  themes:
-    - Whether warning someone changes or creates the danger
-    - Public infrastructure as a promise between strangers
-    - Expertise, trust, and shared responsibility
-    - Hope as a practical discipline
+  name: Tone
+  schema:
+    type: object
+    properties:
+      genres:
+        type: array
+        items:
+          type: string
+        title: Genres
+      contentRating:
+        type: string
+        title: Rating
+      narrativeStyle:
+        type: string
+        title: Narrative style
+      themes:
+        type: array
+        items:
+          type: string
+        title: Themes
+    additionalProperties: false
+  initialValue:
+    genres:
+      - frontier science fiction
+      - community adventure
+      - temporal mystery
+    contentRating: teen
+    narrativeStyle: Clear, character-led adventure prose with tactile technical detail, moments of dry humor, and visible consequences. Wonder should come from people solving impossible problems together.
+    themes:
+      - Whether warning someone changes or creates the danger
+      - Public infrastructure as a promise between strangers
+      - Expertise, trust, and shared responsibility
+      - Hope as a practical discipline
 mechanics:
-  combatStyle: narrative
-  difficulty: normal
-  skillSystem: Risky actions use Grit, Systems, Fieldcraft, Insight, or Rapport. Failure changes time, charge, trust, safety, or the quality of available information rather than simply stopping the story.
-  customRules:
-    - Track the Crownfire countdown and state the cost when an action consumes meaningful time.
-    - Vehicles, radios, and station systems require charge; power committed in one place is unavailable elsewhere.
-    - Future echoes provide clues, never mandatory outcomes. Player choices may prevent, alter, or cause the heard transmission.
-    - Commitments and discoveries belong in the quest and signal logs.
-    - Important characters remember honesty, care, competence, and whose safety the player prioritized.
+  name: Mechanics
+  schema:
+    type: object
+    properties:
+      combatStyle:
+        type: string
+        title: Combat
+      difficulty:
+        type: string
+        title: Difficulty
+      skillSystem:
+        type: string
+        title: Checks
+      customRules:
+        type: array
+        items:
+          type: string
+        title: House rules
+    additionalProperties: false
+  initialValue:
+    combatStyle: narrative
+    difficulty: normal
+    skillSystem: Risky actions use Grit, Systems, Fieldcraft, Insight, or Rapport. Failure changes time, charge, trust, safety, or the quality of available information rather than simply stopping the story.
+    customRules:
+      - Track the Crownfire countdown and state the cost when an action consumes meaningful time.
+      - Vehicles, radios, and station systems require charge; power committed in one place is unavailable elsewhere.
+      - Future echoes provide clues, never mandatory outcomes. Player choices may prevent, alter, or cause the heard transmission.
+      - Commitments and discoveries belong in the quest and signal logs.
+      - Important characters remember honesty, care, competence, and whose safety the player prioritized.
 startingConditions:
-  openingScenario: At 06:14 every receiver at Emberback plays the same impossible distress call—your own voice, speaking from seventy-two hours ahead. The message warns you to stop a medical convoy at Mile Seventeen, keep Mina off the tower, and prevent Tomas from shutting down the signal. The network then fails as a Crownfire storm approaches.
-  openingHook: The future used your voice. Who do you warn first?
-  openingChips:
-    - Play the recording for Tomas
-    - Call June and stop the convoy
-    - Climb after Mina
-    - Trace the signal before it fades
-    - Check the station's remaining charge
-  playerConstraints:
-    - You are Emberback's newest linekeeper, trained but not yet trusted to run a crisis alone.
-    - Crownfire reaches the ridge in three hours.
-    - The medical convoy is already moving and long-range communication is failing.
-  startingLocation: Emberback Relay, Signal Room
-  startingResources:
-    Trade chits: 60
-    Water cells: 2
-    Crawler charge: 65
+  name: Opening
+  schema:
+    type: object
+    properties:
+      openingScenario:
+        type: string
+        title: Opening scene
+      openingHook:
+        type: string
+        title: Hook
+      openingChips:
+        type: array
+        items:
+          type: string
+        title: Opening moves
+      playerConstraints:
+        type: array
+        items:
+          type: string
+        title: Constraints
+      startingLocation:
+        type: string
+        title: Starting point
+    additionalProperties: false
+  initialValue:
+    openingScenario: At 06:14 every receiver at Emberback plays the same impossible distress call—your own voice, speaking from seventy-two hours ahead. The message warns you to stop a medical convoy at Mile Seventeen, keep Mina off the tower, and prevent Tomas from shutting down the signal. The network then fails as a Crownfire storm approaches.
+    openingHook: The future used your voice. Who do you warn first?
+    openingChips:
+      - Play the recording for Tomas
+      - Call June and stop the convoy
+      - Climb after Mina
+      - Trace the signal before it fades
+      - Check the station's remaining charge
+    playerConstraints:
+      - You are Emberback's newest linekeeper, trained but not yet trusted to run a crisis alone.
+      - Crownfire reaches the ridge in three hours.
+      - The medical convoy is already moving and long-range communication is failing.
+    startingLocation: Emberback Relay, Signal Room

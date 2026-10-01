@@ -114,9 +114,9 @@ async function scaffold(args) {
     "dimensions.yaml",
   );
   const dims = parseYaml(await readFile(dimPath, "utf-8"));
-  // dimensions.yaml nests the region list under geography.regions (verified
-  // against worlds/haruka-academy/data/dimensions.yaml — NOT location.regions).
-  const regions = dims?.geography?.regions ?? [];
+  // dimensions.yaml holds dimension definitions; the authored region list is
+  // the `geography` dimension's initial value (geography.initialValue.regions).
+  const regions = dims?.geography?.initialValue?.regions ?? [];
   if (regions.length === 0) {
     console.error(`no regions found in ${dimPath} — nothing to scaffold`);
     process.exit(1);

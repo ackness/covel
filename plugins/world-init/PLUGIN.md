@@ -2,13 +2,11 @@
 id: world-init
 kind: core
 displayName:
-  zh: 世界初始化
-  en: World Setup
+  zh: 世界维度
+  en: World Dimensions
 description:
-  zh: 开局整理世界资料，让角色属性和世界词条更符合当前世界。
-  en: >-
-    Prepares the world's key details at the start so characters and lore fit the
-    setting.
+  zh: 初始化角色属性和作者声明的世界维度，持续维护可变状态。
+  en: Initializes character attributes and authored dimensions, maintaining evolving state.
 tags:
   - "data:world-data"
   - "data:characters"
@@ -16,20 +14,32 @@ tags:
   - "ui:right-panel"
 provides:
   - world-data-provider@1
+  - world.dimensions@1
+optional:
+  - narrative-engine@1
+  - world-ir-provider@1
+contracts:
+  world.dimensions@1:
+    schema: ./schemas/dimension-snapshot.schema.json
 entry: ./server/index.js
 contributes:
   extensions:
     - point: session.world-context@1
       id: world-context
+    - point: prompt.segment@1
+      id: dimensions
+    - point: prompt.segment@1
+      id: dimension-rules
   ui:
     right:
       - ./runtimes/schema-gen/ui/world-overview.json
       - ./runtimes/schema-gen/ui/world-schema.json
   tools:
-    - world-dimension-get
     - set-world-schema
-    - set-world-entries-batch
+    - set-world-dimensions
     - initialize-world
+    - dimension-rule-get
+    - update-dimensions
 ---
 
 # World Setup

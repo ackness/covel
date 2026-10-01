@@ -584,7 +584,21 @@
     "delete": "删除世界",
     "deleteConfirmTitle": "删除世界？",
     "deleteConfirmDesc": "将永久删除「{{name}}」及其关联的所有会话数据，此操作无法撤销。",
-    "deleteConfirmAction": "删除"
+    "deleteConfirmAction": "删除",
+    "dimensionFields": "编辑字段",
+    "dimensionJson": "编辑 JSON",
+    "dimensionAddRow": "添加记录",
+    "dimensionRemoveRow": "移除记录",
+    "dimensionRowKey": "新记录标识",
+    "currentValue": "当前值",
+    "pendingDimensions": "维度结算待处理",
+    "dimensionResolution": {
+      "retry": "重试原回合",
+      "manual": "已人工处理",
+      "skipped": "明确跳过本次结算"
+    },
+    "dimensionDefinitions": "维度定义（JSON）",
+    "applyDimensions": "应用定义"
   },
   "settings": {
     "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",
@@ -1739,7 +1753,9 @@
     "new": "新增",
     "newUpper": "新增",
     "active": "生效中",
-    "retry": "重试"
+    "retry": "重试",
+    "add": "添加",
+    "remove": "移除"
   },
   "debugger": {
     "title": "追踪检查器",

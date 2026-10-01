@@ -1,0 +1,42 @@
+{
+  "id": "creation",
+  "budget": 6,
+  "attributes": [
+    {
+      "id": "might",
+      "label": "力量",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "agility",
+      "label": "敏捷",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "endurance",
+      "label": "体魄",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "wits",
+      "label": "智识",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "insight",
+      "label": "感知",
+      "base": 1,
+      "max": 4
+    },
+    {
+      "id": "presence",
+      "label": "魅力",
+      "base": 1,
+      "max": 4
+    }
+  ]
+}

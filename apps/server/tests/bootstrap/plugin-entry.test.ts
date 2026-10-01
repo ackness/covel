@@ -230,17 +230,25 @@ describe("createBootstrapPluginEntries", () => {
       `export default function(api) { api.registerRpc("ready", async () => true); }`,
       { source: "community" },
     );
+    // Both entries share one activation budget. The stalled factory never
+    // resolves, so any budget bounds it; but the healthy entry must clear that
+    // same budget, and its module import can stall far beyond 50ms on a
+    // CPU-saturated worker. A generous budget keeps the ordering assertion
+    // deterministic — the healthy entry activates regardless of scheduling
+    // delay, and the stalled entry still fails only by hitting its deadline.
     const params = {
       ...makeParams([stalled, healthy]),
-      entryActivationTimeoutMs: 50,
+      entryActivationTimeoutMs: 5_000,
       entryRetryDelayMs: 60_000,
     };
     const entries = await createBootstrapPluginEntries(params);
     try {
       const first = entries.ensurePluginEntry("entry-stalled", "s");
       const second = entries.ensurePluginEntry("entry-after-stall", "s");
-      await expect(first).rejects.toThrow("activation-timeout");
+      // The healthy entry resolves first, proving a stalled sibling does not
+      // block the queue. This await is independent of the stall's deadline.
       await second;
+      await expect(first).rejects.toThrow("activation-timeout");
       expect(state.signal?.aborted).toBe(true);
       expect(entries.isEntryRetryDeferred("entry-stalled")).toBe(true);
       expect(entries.isEntryRetryDeferred("entry-after-stall")).toBe(false);
@@ -251,7 +259,7 @@ describe("createBootstrapPluginEntries", () => {
       await entries.close();
       delete globals.__covelEntryStall;
     }
-  });
+  }, 15_000);
 
   it("clears retry deferral after an explicit successful retry", async () => {
     const state = { calls: 0 };

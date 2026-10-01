@@ -207,6 +207,14 @@ describe("buildSessionContextSnapshot — world context", () => {
       turnNumber: 0,
       worldId: "w1",
       worldContext: {
+        dimensions: {
+          tone: {
+            name: "Tone",
+            schema: { type: "string" },
+            value: "noir",
+            version: 2,
+          },
+        },
         schema: {
           dimensions: { tone: "noir" },
           startingConditions: { openingScenario: "X" },
@@ -218,11 +226,18 @@ describe("buildSessionContextSnapshot — world context", () => {
     expect(snapshot.world.name).toBe(world.name);
     expect(snapshot.world.description).toBe(world.description);
     expect(snapshot.world.lore).toBe("The land of Ash");
+    // `world.tone` is derived from the tone dimension's value so authored
+    // prompts (`{{ world.tone }}`) keep resolving after dimensions became
+    // open snapshot entries.
     expect(snapshot.world.tone).toBe("noir");
-    expect(snapshot.world.openingScenario).toBe("You wake in a cell");
+    expect(snapshot.world.openingScenario).toBeUndefined();
     expect(snapshot.world.dimensions).toEqual({
-      tone: "noir",
-      startingConditions: { openingScenario: "You wake in a cell" },
+      tone: {
+        name: "Tone",
+        schema: { type: "string" },
+        value: "noir",
+        version: 2,
+      },
     });
     expect(snapshot.world.schema).toEqual({
       dimensions: { tone: "noir" },
@@ -516,7 +531,11 @@ describe("buildSessionContextSnapshot — graceful degradation", () => {
 
     expect(snapshot.characters).toEqual([]);
     expect(snapshot.loreEntries).toEqual([]);
-    expect(snapshot.world).toEqual({ id: "w-broken", entries: [] });
+    expect(snapshot.world).toMatchObject({
+      id: "w-broken",
+      entries: [],
+      dimensions: {},
+    });
     expect(snapshot.sessionMeta.lastFormValues).toBeUndefined();
   });
 });

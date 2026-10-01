@@ -586,7 +586,21 @@
     "delete": "Удалить мир",
     "deleteConfirmTitle": "Удалить мир?",
     "deleteConfirmDesc": "Это приведет к безвозвратному удалению «{{name}}» и всех данных его сеанса. Это действие невозможно отменить.",
-    "deleteConfirmAction": "Удалить"
+    "deleteConfirmAction": "Удалить",
+    "dimensionFields": "Редактировать поля",
+    "dimensionJson": "Редактировать JSON",
+    "dimensionAddRow": "Добавить строку",
+    "dimensionRemoveRow": "Удалить строку",
+    "dimensionRowKey": "Ключ новой строки",
+    "currentValue": "Текущее значение",
+    "pendingDimensions": "Ожидается расчёт параметров",
+    "dimensionResolution": {
+      "retry": "Повторить исходный ход",
+      "manual": "Обработано вручную",
+      "skipped": "Пропустить этот расчёт"
+    },
+    "dimensionDefinitions": "Определения параметров (JSON)",
+    "applyDimensions": "Применить определения"
   },
   "settings": {
     "loadFailedReadOnly": "Не удалось загрузить настройки. Изменения отключены для защиты существующих данных. Исправьте ошибку хранилища и перезагрузите приложение.",
@@ -1741,7 +1755,9 @@
     "new": "новый",
     "newUpper": "НОВЫЙ",
     "active": "Активно",
-    "retry": "Повторить попытку"
+    "retry": "Повторить попытку",
+    "add": "Добавить",
+    "remove": "Удалить"
   },
   "debugger": {
     "title": "Инспектор трассировок",

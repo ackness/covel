@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
-import type {
-  PluginExtensionHost,
-  PluginServiceRegistry,
+import {
+  createWorldModelView,
+  type PluginExtensionHost,
+  type PluginServiceRegistry,
 } from "@covel/runtime";
 import {
   uiSlotV1,
@@ -138,17 +139,14 @@ export function createUiSlotHost(args: {
       sessions.delete(sessionId);
       return;
     }
-    const [characters, characterSchema] = await Promise.all([
-      args.store.listCharacters(sessionId),
-      args.store.getCharacterSchema(sessionId),
-    ]);
+    const world = await createWorldModelView(args.store, sessionId);
     const execution = args.extensionHost.createExecution({
       sessionId,
       locale: session.locale,
       signal: abort.signal,
       readPluginData: (pluginId, namespace) =>
         args.store.listPluginData(sessionId, pluginId, namespace),
-      world: { characters, characterSchema },
+      world,
       ...(turnId ? { turnId } : {}),
     });
     for (const slot of slots) {

@@ -30,18 +30,34 @@ export async function refreshSessionContextSnapshot(args: {
 
   try {
     const sessionRecord = await deps.store.getSession(input.sessionId);
-    return await buildSessionContextSnapshot(deps.store, input.sessionId, {
-      locale: input.locale ?? DEFAULT_LOCALE,
-      turnNumber,
-      worldId: sessionRecord?.worldId ?? undefined,
-      worldContext: await deps.extensionExecution?.run(
-        sessionWorldContextV1,
-        {},
-      ),
-      summaries: sessionSummaries,
-      playerMessage: input.playerMessage,
-    });
+    const worldContext = await deps.extensionExecution?.run(
+      sessionWorldContextV1,
+      {},
+    );
+    if (
+      deps.dimensionProviderPluginId &&
+      (worldContext?.dimensionProviderPluginId !==
+        deps.dimensionProviderPluginId ||
+        worldContext.dimensions === undefined)
+    )
+      throw new Error("Authoritative dimension snapshot unavailable");
+    const context = await buildSessionContextSnapshot(
+      deps.store,
+      input.sessionId,
+      {
+        locale: input.locale ?? DEFAULT_LOCALE,
+        turnNumber,
+        worldId: sessionRecord?.worldId ?? undefined,
+        worldContext,
+        summaries: sessionSummaries,
+        playerMessage: input.playerMessage,
+      },
+    );
+    return deps.dimensionContext
+      ? { ...context, world: { ...context.world!, ...deps.dimensionContext } }
+      : context;
   } catch (err) {
+    if (deps.dimensionProviderPluginId) throw err;
     console.warn("[turn-executor] SessionContextSnapshot build failed:", err);
     return undefined;
   }

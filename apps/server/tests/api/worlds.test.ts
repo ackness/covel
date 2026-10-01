@@ -1,3 +1,4 @@
+import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { access, mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -6,7 +7,10 @@ import path from "node:path";
 import { createEventBus } from "@covel/events";
 import { type DataStore, type MediaStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
-import type { PluginRegistry } from "@covel/plugin-loader";
+import {
+  createPluginRegistry,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
 import {
   createInProcessSessionLock,
@@ -54,23 +58,31 @@ function createTestApp(
 function makeDimensions(regionName: string, factionName: string) {
   return {
     geography: {
-      regions: [
+      name: "geography",
+      schema: {},
+      initialValue: {
+        regions: [
+          {
+            name: regionName,
+            description: `${regionName} description`,
+            climate: "temperate",
+          },
+        ],
+      },
+    },
+    factions: {
+      name: "factions",
+      schema: {},
+      initialValue: [
         {
-          name: regionName,
-          description: `${regionName} description`,
-          climate: "temperate",
+          id: "guild",
+          name: factionName,
+          description: `${factionName} description`,
+          type: "guild" as const,
+          influence: "minor" as const,
         },
       ],
     },
-    factions: [
-      {
-        id: "guild",
-        name: factionName,
-        description: `${factionName} description`,
-        type: "guild" as const,
-        influence: "minor" as const,
-      },
-    ],
   };
 }
 
@@ -311,136 +323,107 @@ describe("world routes", () => {
     expect(await store.getWorld("built-in-world")).not.toBeNull();
   });
 
-  it("POST /api/worlds/:id/sync-dimensions refreshes world-owned lorebook entries and preserves opaque plugin data", async () => {
+  it("sync-dimensions adopts protected records and never rewrites lorebook/plugin data", async () => {
     const now = new Date().toISOString();
+    const registry = createPluginRegistry();
+    await registerDimensionProvider(registry);
+    app = createTestApp(store, registry);
     await store.upsertWorld({
       id: "world-2",
       name: "World 2",
-      description: "desc",
-      metadata: {
-        dimensions: makeDimensions("North", "Guild"),
-      },
+      description: "",
+      metadata: { dimensions: makeDimensions("North", "Guild") },
       createdAt: now,
-      updatedAt: now,
     });
     await store.createSession({
-      phase: "playing",
-      setupRuntimes: {},
-      metadata: {
-        approvalScopeNonce: globalThis.crypto.randomUUID(),
-        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
-      },
       id: "sess-1",
       worldId: "world-2",
       status: "active",
-      completedPlayerTurns: 1,
-
-      locale: "zh-CN",
-      activePlugins: [],
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      completedPlayerTurns: 0,
+      locale: "en-US",
+      activePlugins: ["world-init"],
       createdAt: now,
       updatedAt: now,
     });
-    await store.setPluginDataBatch([
-      {
-        id: "pd-geography-old",
-        sessionId: "sess-1",
-        pluginId: "world-data-provider",
-        namespace: "entries",
-        key: "geography",
-        value: {
-          regions: [
-            {
-              name: "Old",
-              description: "Old description",
-              climate: "dry",
-            },
-          ],
-        },
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: "pd-obsolete",
-        sessionId: "sess-1",
-        pluginId: "world-data-provider",
-        namespace: "entries",
-        key: "obsolete",
-        value: { keep: false },
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    await store.upsertLorebookEntries([
-      {
-        id: "world-entry:geography",
-        sessionId: "sess-1",
-        owner: { kind: "world" },
-        keys: ["geography"],
-        content: "[geography]\nold lore",
-        strategy: "constant",
-        position: "after_char_defs",
-        insertionOrder: 100,
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: "world-entry:obsolete",
-        sessionId: "sess-1",
-        owner: { kind: "world" },
-        keys: ["obsolete"],
-        content: "[obsolete]\nold lore",
-        strategy: "constant",
-        position: "after_char_defs",
-        insertionOrder: 200,
-        enabled: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-
-    const res = await app.request("/api/worlds/world-2/sync-dimensions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: "sess-1" }),
+    await store.setPluginData({
+      sessionId: "sess-1",
+      pluginId: "opaque",
+      namespace: "default",
+      key: "counter",
+      value: { n: 9 },
+      updatedAt: now,
     });
-
-    expect(res.status).toBe(200);
-    await expect(res.clone().json()).resolves.toMatchObject({
-      ok: true,
-      entryCount: 2,
-    });
-
-    const pluginData = await store.listPluginData(
+    const sync = () =>
+      app.request("/api/worlds/world-2/sync-dimensions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: "sess-1" }),
+      });
+    expect((await sync()).status).toBe(200);
+    const imported = await store.getPluginData(
       "sess-1",
-      "world-data-provider",
-      "entries",
-    );
-    expect(pluginData.map((record) => record.key).sort()).toEqual([
+      "world-init",
+      "_dimensions",
       "geography",
-      "obsolete",
+    );
+    expect(imported?.value).toMatchObject({
+      version: 1,
+      value: { regions: [{ name: "North" }] },
+    });
+    expect(
+      (await store.listWorldDataImportLedger("sess-1")).filter(
+        (entry) => entry.namespace === "_dimensions",
+      ),
+    ).toHaveLength(2);
+    const evolved = {
+      ...(imported!.value as Record<string, unknown>),
+      version: 2,
+      value: { regions: [{ name: "Player correction" }] },
+    };
+    await store.compareAndSetPluginDataBatch("sess-1", "world-init", [
+      {
+        namespace: "_dimensions",
+        key: "geography",
+        expectedVersion: 1,
+        value: evolved,
+        timestamp: now,
+      },
+    ]);
+    expect((await (await sync()).json()).conflicts).toEqual([]);
+    await store.upsertWorld({
+      id: "world-2",
+      name: "World 2",
+      description: "",
+      metadata: { dimensions: makeDimensions("South", "Guild") },
+      createdAt: now,
+    });
+    const conflicted = await (await sync()).json();
+    expect(conflicted.conflicts).toEqual([
+      {
+        sourceId: "dimensions",
+        target: "contract:world.dimensions@1",
+        key: "geography",
+        reason: "modified",
+      },
     ]);
     expect(
-      pluginData.find((record) => record.key === "geography")?.value,
-    ).toEqual({
-      regions: [
-        { name: "Old", description: "Old description", climate: "dry" },
-      ],
-    });
-
-    const lorebookEntries = (await store.listSessionLorebookEntries("sess-1"))
-      .filter((entry) => entry.owner.kind === "world")
-      .sort((a, b) => a.id.localeCompare(b.id));
-    expect(lorebookEntries.map((entry) => entry.id)).toEqual([
-      "world-entry:factions",
-      "world-entry:geography",
-    ]);
-    expect(lorebookEntries[0]?.content).toBe(
-      '[factions]\n[\n  {\n    "id": "guild",\n    "name": "Guild",\n    "description": "Guild description",\n    "type": "guild",\n    "influence": "minor"\n  }\n]',
-    );
-    expect(lorebookEntries[1]?.content).toBe(
-      '[geography]\n{\n  "regions": [\n    {\n      "name": "North",\n      "description": "North description",\n      "climate": "temperate"\n    }\n  ]\n}',
-    );
+      (
+        await store.getPluginData(
+          "sess-1",
+          "world-init",
+          "_dimensions",
+          "geography",
+        )
+      )?.value,
+    ).toEqual(evolved);
+    expect(
+      (await store.getPluginData("sess-1", "opaque", "default", "counter"))
+        ?.value,
+    ).toEqual({ n: 9 });
+    expect(await store.listSessionLorebookEntries("sess-1")).toEqual([]);
   });
 
   it.each(["world-data/preflight", "sync-data", "sync-dimensions"])(

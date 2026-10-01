@@ -195,11 +195,60 @@ export {
   worldToneSchema,
   worldMechanicsSchema,
   worldStartingConditionsSchema,
-  DIMENSION_KEY_SCHEMAS,
-  DIMENSION_KEYS,
 } from "./schemas/world.js";
 
 export type { WorldManifestInput } from "./schemas/world.js";
+export type {
+  DimensionValueType,
+  DimensionValueSchema,
+  WorldDimensionDefinition,
+  DimensionSource,
+  DimensionRecord,
+  DimensionSnapshotEntry,
+  DimensionSnapshot,
+  DimensionSettlementStatus,
+  DimensionSettlementReceipt,
+  DimensionSettlementSummary,
+  DimensionRecovery,
+  DimensionUpdate,
+  DimensionInitializePayload,
+  DimensionUpdatePayload,
+} from "./types/dimensions.js";
+export {
+  dimensionInitializePayloadSchema,
+  dimensionUpdatePayloadSchema,
+  DimensionConflictError,
+  DimensionValidationError,
+  dimensionsJsonEqual,
+  materializeDimensionRecords,
+} from "./proposals/dimensions.js";
+export {
+  dimensionQuerySchema,
+  queryDimensionSnapshot,
+  projectDimensionSnapshot,
+} from "./proposals/dimension-query.js";
+export {
+  DIMENSION_DATA_NAMESPACE,
+  DIMENSION_SETTLEMENT_NAMESPACE,
+  DIMENSION_CONTRACT,
+  DIMENSION_MAX_DEPTH,
+  DIMENSION_MAX_NODES,
+  DIMENSION_MAX_BYTES,
+  DIMENSION_MAX_UPDATES,
+  dimensionIdSchema,
+  dimensionJsonSchema,
+  dimensionJsonError,
+  dimensionValueSchema,
+  worldDimensionDefinitionSchema,
+  dimensionSourceSchema,
+  dimensionRecordSchema,
+  dimensionSnapshotSchema,
+  dimensionSettlementReceiptSchema,
+  dimensionSettlementSummarySchema,
+  validateDimensionValue,
+  dimensionSnapshotFromRecords,
+  localizeDimensionValue,
+} from "./schemas/dimensions.js";
 
 // ── API Transport Contracts ────────────────────────────────────
 export {

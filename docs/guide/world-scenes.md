@@ -54,19 +54,19 @@ node scripts/emit-scenes.mjs haruka-academy
 
 ## 参数表
 
-| 参数                   | 说明                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------ |
-| `--scaffold`           | 从 `dimensions.yaml` 的 `geography.regions` 派生草稿清单，幂等、不覆盖已有 `locationRef`。 |
-| `--landmarks`          | 配合 `--scaffold`，额外把每个 region 的 `landmarks` 也派生成草稿。                         |
-| `--only id1,id2`       | 只处理指定场景 id。                                                                        |
-| `--variant day\|night` | 只生成日图或夜图（默认两者都生成）。                                                       |
-| `--size WxH`           | 覆盖 `defaults.size`（默认 `1536x1024`，横版构图）。                                       |
-| `--quality q`          | 覆盖 `defaults.quality`。                                                                  |
-| `--limit N`            | 只取清单前 N 个场景。                                                                      |
-| `--concurrency N`      | 并发数（默认 5）。                                                                         |
-| `--force`              | 覆盖已存在的文件（默认已存在的文件跳过）。                                                 |
-| `--slot`               | 指定生效 `llm.toml` 中的图像 slot（默认 `gpt-image-2`）。                                  |
-| `--dry-run`            | 只打印 prompt 队列，不出图、不联网。                                                       |
+| 参数                   | 说明                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `--scaffold`           | 从 `dimensions.yaml` 中 `geography` 维度的 `initialValue.regions` 派生草稿清单，幂等、不覆盖已有 `locationRef`。 |
+| `--landmarks`          | 配合 `--scaffold`，额外把每个 region 的 `landmarks` 也派生成草稿。                                               |
+| `--only id1,id2`       | 只处理指定场景 id。                                                                                              |
+| `--variant day\|night` | 只生成日图或夜图（默认两者都生成）。                                                                             |
+| `--size WxH`           | 覆盖 `defaults.size`（默认 `1536x1024`，横版构图）。                                                             |
+| `--quality q`          | 覆盖 `defaults.quality`。                                                                                        |
+| `--limit N`            | 只取清单前 N 个场景。                                                                                            |
+| `--concurrency N`      | 并发数（默认 5）。                                                                                               |
+| `--force`              | 覆盖已存在的文件（默认已存在的文件跳过）。                                                                       |
+| `--slot`               | 指定生效 `llm.toml` 中的图像 slot（默认 `gpt-image-2`）。                                                        |
+| `--dry-run`            | 只打印 prompt 队列，不出图、不联网。                                                                             |
 
 ## 接入插件
 

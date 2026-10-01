@@ -24,7 +24,7 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
   const update = (dir: string, genre: string) =>
     writeFile(
       path.join(dir, "tone.yaml"),
-      `genres: [${genre}]\ncontentRating: teen\n`,
+      `name: tone\nschema: {}\ninitialValue:\n  genres: [${genre}]\n  contentRating: teen\n`,
       "utf8",
     );
   try {
@@ -40,7 +40,7 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
     await seedAndReconcileWorlds(store, roots, sessionLock);
     const before = await store.getWorld("shared-world");
     expect(before?.metadata?.dimensions).toMatchObject({
-      tone: { genres: ["fantasy"] },
+      tone: { name: "tone", schema: {}, initialValue: { genres: ["fantasy"] } },
     });
     const upsert = vi.spyOn(store, "upsertWorld");
     for (const watcher of watchers) watcher.start();
@@ -53,7 +53,15 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
     await vi.waitFor(
       async () => {
         expect(await store.getWorld("shared-world")).toMatchObject({
-          metadata: { dimensions: { tone: { genres: ["horror"] } } },
+          metadata: {
+            dimensions: {
+              tone: {
+                name: "tone",
+                schema: {},
+                initialValue: { genres: ["horror"] },
+              },
+            },
+          },
         });
       },
       { timeout: 5000 },

@@ -202,6 +202,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "core-quest",
       "inventory",
       "npc-graph/extractor",
+      "world-init/dimension-tracker",
     ]);
   });
 

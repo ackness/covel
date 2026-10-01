@@ -65,127 +65,35 @@ Other data contracts include `character.blueprints@1`, `world.rules@1`, `quests@
 
 Domain destinations remain `characters`, `lorebook`, `media`, and `world:metadata.<path>`. Keep paths package-relative. Validate descriptor schemas, references between sources, and content records; validating `world.yaml` alone does not validate imported values.
 
-## dimensions.geography
+## dimensions（开放定义）
+
+`dimensions` 是作者自定义 ID 的开放 map，不再是九类固定键。每项都是一份完整 definition，权威说明见 `docs/reference/world-data.md`「动态世界维度」：
 
 ```yaml
-geography:
-  overview: <I18nText> # 可选
-  regions: # 必需，至少 1 个
-    - name: <I18nText> # 必需
-      description: <I18nText> # 必需
-      climate: <I18nText> # 必需
-      landmarks: # 可选
-        - name: <I18nText>
-          description: <I18nText> # 可选
-```
-
-## dimensions.factions
-
-```yaml
-factions: # 数组
-  - id: <kebab-case> # 必需，正则 ^[a-z][a-z0-9-]*$
+dimensions:
+  <id>: # 正则 ^[a-z][a-zA-Z0-9_-]{0,63}$
     name: <I18nText> # 必需
-    description: <I18nText> # 必需
-    type: <enum> # 必需：political|guild|corporate|religious|criminal|military|other
-    influence: <enum> # 必需：major|minor
-    leader: <I18nText> # 可选
-    headquarters: <I18nText> # 可选
-    relations: # 可选
-      - type: <string> # 如 hostile|neutral|allied
-        targetId: <string> # 其他 faction 的 id
-        description: <I18nText> # 可选
+    description: <I18nText> # 可选
+    schema: <JSON Schema 子集> # 必需；未支持的关键字直接报错
+    initialValue: <JSON> # 必需，必须通过 schema 校验
+    updateRule: <I18nText> # 可选；非空时 dimension-tracker 每回合按规则结算
 ```
 
-## dimensions.powerSystem
+- **静态设定**（地理、阵营、力量体系、历史等）：不写 `updateRule`，只作为当前值注入叙事，不产生额外模型调用。`geography` / `factions` / `powerSystem` / `history` / `economy` / `socialStructure` / `tone` / `mechanics` / `startingConditions` 仍是推荐的内容分类，但只是 ID 惯例，不是白名单。它们的完整 schema 直接参考 `worlds/mistport/data/dimensions.yaml`。
+- **演化数据**（金钱、声望、城墙耐久、图鉴）：写 `updateRule`，用自然语言说明何时、如何变化。规则只计本轮叙事中明确发生的事实；类型和范围由 schema 在提交时校验。
+- 文本字段需要多语言时在 schema 节点上标 `x-i18n: true`，值写成 `{zh-CN: ..., en-US: ...}`；没有 `x-i18n` 的对象不会被当作翻译。
+- 标量 = 单例；`type: array` + object `items` = 行集；`additionalProperties: <schema>` = 动态命名记录（如图鉴）。
+- 角色属性、背包、好感、世界时间各有专属插件，不要用 dimension 重复记录。
+
+演化维度示例：
 
 ```yaml
-powerSystem:
-  name: <I18nText> # 必需
-  type: <enum> # 必需：magic|technology|cultivation|psychic|hybrid|other
-  description: <I18nText> # 必需
-  rules: # 必需，至少 1 条，每条为 I18nText
-    - <I18nText>
-  tiers: # 可选
-    - name: <I18nText>
-      rank: <int, ≥1> # 必需
-      description: <I18nText> # 可选
-```
-
-## dimensions.history
-
-```yaml
-history: # 数组
-  - name: <I18nText> # 必需
-    description: <I18nText> # 必需
-    significance: <enum> # 必需：major|minor
-    era: <I18nText> # 可选
-    year: <I18nText> # 可选
-```
-
-## dimensions.economy
-
-```yaml
-economy:
-  currencies: # 必需，至少 1 个
-    - name: <I18nText> # 必需
-      symbol: <string> # 可选
-      description: <I18nText> # 可选
-  resources: # 可选，I18nText 数组
-    - <I18nText>
-  tradeNotes: <I18nText> # 可选
-```
-
-## dimensions.socialStructure
-
-```yaml
-socialStructure:
-  classes: # 可选
-    - name: <I18nText> # 必需
-      description: <I18nText> # 必需
-      rank: <int> # 可选
-  races: # 可选
-    - name: <I18nText>
-      description: <I18nText>
-      traits: [<I18nText>] # 可选
-  notes: <I18nText> # 可选
-```
-
-## dimensions.tone
-
-```yaml
-tone:
-  genres: # 必需，至少 1 个，I18nText 数组
-    - <I18nText>
-  contentRating: <enum> # 必需：all-ages|teen|mature
-  narrativeStyle: <I18nText> # 可选
-  themes: # 可选，I18nText 数组
-    - <I18nText>
-```
-
-## dimensions.mechanics
-
-```yaml
-mechanics:
-  combatStyle: <enum> # 可选：turn-based|real-time|narrative|none
-  difficulty: <enum> # 可选：easy|normal|hard|adaptive
-  skillSystem: <I18nText> # 可选
-  customRules: # 可选，I18nText 数组
-    - <I18nText>
-```
-
-## dimensions.startingConditions
-
-```yaml
-startingConditions:
-  openingScenario: <I18nText> # 必需，2-3 句呈现即时紧张感
-  startingLocation: <I18nText> # 可选
-  playerConstraints: # 可选，I18nText 数组
-    - <I18nText>
-  startingResources: # 可选，Record<string, number>
-    <资源名>: <数量>
-  openingHook: <I18nText> # 可选，开场短钩子
-  openingChips: # 可选，开场快捷行动建议
-    - <I18nText>
+dimensions:
+  reputation:
+    name: { zh-CN: 声望, en-US: Reputation }
+    schema: { type: integer, minimum: 0, maximum: 100 }
+    initialValue: 10
+    updateRule: 完成居民委托后 +5；公开背信 -10。只计已完成的行为，不计承诺。
 ```
 
 ## 文件结构

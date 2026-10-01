@@ -5,6 +5,11 @@ import type { Proposal } from "../types/proposal.js";
 import { characterSchemaSchema } from "../schemas/world.js";
 import { buildFieldsZodFromSchema } from "../schemas/character-fields.js";
 import { materializeCharacterUpsert } from "./character-upsert.js";
+import {
+  dimensionInitializePayloadSchema,
+  materializeDimensionRecords,
+} from "./dimensions.js";
+import { dimensionSnapshotFromRecords } from "../schemas/dimensions.js";
 
 export interface WorldModelView {
   readonly worldRecord?: {
@@ -21,6 +26,8 @@ export interface WorldModelView {
   } | null;
   readonly characterSchema: CharacterSchemaRecord | null;
   readonly characters: readonly CharacterRecord[];
+  readonly dimensions: import("../types/dimensions.js").DimensionSnapshot;
+  readonly dimensionProviderPluginId?: string;
 }
 
 export const characterSchemaSetPayloadSchema = characterSchemaSchema.omit({
@@ -59,11 +66,16 @@ export function validateWorldModel(view: WorldModelView): void {
 
 /** The same domain validation runs for commit and execution-local reads. */
 export function materializeWorldModel(
-  base: WorldModelView,
+  base: Omit<WorldModelView, "dimensions"> & {
+    readonly dimensions?: WorldModelView["dimensions"];
+  },
   proposals: readonly Proposal[],
   sessionId: string,
 ): WorldModelView {
-  let state = structuredClone(base);
+  let state: WorldModelView = {
+    ...structuredClone(base),
+    dimensions: structuredClone(base.dimensions ?? {}),
+  };
   for (const proposal of proposals) {
     if (proposal.sessionId !== sessionId) continue;
     if (proposal.type === "character.schema.set") {
@@ -104,6 +116,46 @@ export function materializeWorldModel(
           ...state.characters.filter((character) => character.id !== record.id),
           record,
         ],
+      };
+    } else if (
+      proposal.type === "dimension.initialize" &&
+      proposal.source.pluginId === state.dimensionProviderPluginId
+    ) {
+      const { definitions } = dimensionInitializePayloadSchema.parse(
+        proposal.payload,
+      );
+      const dimensions = { ...state.dimensions };
+      for (const [id, definition] of Object.entries(definitions)) {
+        if (dimensions[id]) continue;
+        dimensions[id] = dimensionSnapshotFromRecords({
+          [id]: { definition, value: definition.initialValue, version: 1 },
+        })[id]!;
+      }
+      state = { ...state, dimensions };
+    } else if (
+      proposal.type === "dimension.update" &&
+      proposal.source.pluginId === state.dimensionProviderPluginId
+    ) {
+      const records = Object.fromEntries(
+        Object.entries(state.dimensions).map(([id, entry]) => [
+          id,
+          {
+            definition: {
+              name: entry.name,
+              ...(entry.description ? { description: entry.description } : {}),
+              schema: entry.schema,
+              initialValue: entry.value,
+            },
+            value: entry.value,
+            version: entry.version,
+          },
+        ]),
+      );
+      state = {
+        ...state,
+        dimensions: dimensionSnapshotFromRecords(
+          materializeDimensionRecords(records, proposal),
+        ),
       };
     } else continue;
     validateWorldModel(state);

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Braces,
   MapPin,
   Users,
   Zap,
@@ -26,7 +27,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs.js";
-import type { WorldDimensions } from "@covel/shared";
+import { worldDimensionsSchema, type WorldDimensions } from "@covel/shared";
+import {
+  projectDimensionTemplates,
+  dimensionTemplateSchemas,
+  type DimensionsState,
+} from "./editor-helpers.js";
+import { DimensionsJsonEditor } from "./dimensions-json-editor.js";
 import type { WorldRecord } from "@/services/api.js";
 import { getDataService } from "@/services/data-service.js";
 import { GeographyTab } from "./tabs/geography-tab.js";
@@ -52,6 +59,11 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  {
+    id: "definitions",
+    labelKey: "world.dimensionDefinitions",
+    icon: <Braces className="h-4 w-4" />,
+  },
   {
     id: "geography",
     labelKey: "world.geography",
@@ -102,6 +114,39 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const templateValues = projectDimensionTemplates(dimensions);
+  function updateTemplates(next: DimensionsState) {
+    try {
+      setDimensions(
+        worldDimensionsSchema.parse({
+          ...dimensions,
+          ...Object.fromEntries(
+            Object.entries(next).map(([id, initialValue]) => [
+              id,
+              {
+                ...(dimensions[id] ?? { name: t(`world.${id}`), schema: {} }),
+                initialValue,
+              },
+            ]),
+          ),
+        }),
+      );
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+  const templateComponents = {
+    geography: GeographyTab,
+    factions: FactionsTab,
+    powerSystem: PowerSystemTab,
+    history: HistoryTab,
+    economy: EconomyTab,
+    socialStructure: SocialStructureTab,
+    tone: ToneTab,
+    mechanics: MechanicsTab,
+    startingConditions: StartingConditionsTab,
+  };
 
   async function handleSave() {
     setSaving(true);
@@ -144,7 +189,7 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
         </CardHeader>
 
         <CardContent className="min-h-0 flex-1 overflow-hidden pt-4">
-          <Tabs defaultValue="geography" className="flex flex-col h-full">
+          <Tabs defaultValue="definitions" className="flex flex-col h-full">
             <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto overscroll-x-contain">
               {TABS.map((tab) => (
                 <TabsTrigger
@@ -162,69 +207,32 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
             </TabsList>
 
             <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <TabsContent value="geography">
-                <GeographyTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="factions">
-                <FactionsTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="powerSystem">
-                <PowerSystemTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="history">
-                <HistoryTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="economy">
-                <EconomyTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="socialStructure">
-                <SocialStructureTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="tone">
-                <ToneTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="mechanics">
-                <MechanicsTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
-              <TabsContent value="startingConditions">
-                <StartingConditionsTab
-                  dimensions={dimensions}
-                  onChange={setDimensions}
-                  t={t}
-                />
-              </TabsContent>
+              {TABS.map((tab) => {
+                const id = tab.id as keyof typeof templateComponents;
+                const Component =
+                  tab.id === "definitions" ? undefined : templateComponents[id];
+                const compatible =
+                  !dimensions[id] ||
+                  dimensionTemplateSchemas[id]?.safeParse(
+                    dimensions[id]?.initialValue,
+                  ).success;
+                return (
+                  <TabsContent value={tab.id} key={tab.id}>
+                    {Component && compatible ? (
+                      <Component
+                        dimensions={templateValues}
+                        onChange={updateTemplates}
+                        t={t}
+                      />
+                    ) : (
+                      <DimensionsJsonEditor
+                        dimensions={dimensions}
+                        onChange={setDimensions}
+                      />
+                    )}
+                  </TabsContent>
+                );
+              })}
             </div>
           </Tabs>
         </CardContent>

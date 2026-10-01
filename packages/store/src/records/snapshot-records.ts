@@ -121,6 +121,12 @@ export type SnapshotSessionState = Readonly<
   > & {
     /** Captured metadata override. Empty means clear; absent keeps world fallback. */
     loreOverride?: string;
+    /**
+     * Bound dimension provider plugin id. Forks must restore it so the
+     * child's settlement barrier resolves the same owner; without it the
+     * child deadlocks on a missing provider while rows exist.
+     */
+    readonly dimensionProviderPluginId?: string;
   }
 >;
 

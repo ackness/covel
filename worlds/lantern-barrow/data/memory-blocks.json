@@ -1,0 +1,31 @@
+{
+  "id": "world",
+  "blocks": [
+    {
+      "label": "clues",
+      "displayName": {
+        "zh-CN": "线索与推理",
+        "en-US": "Clues & Theories"
+      },
+      "extractionHint": {
+        "zh-CN": "关于灯心、守灯人、科尔文与古冢真相的线索、证词和推理过程。",
+        "en-US": "Clues, testimony, and reasoning about the Lantern Heart, the keeper, Corvin, and the truth of the barrow."
+      },
+      "icon": "Search",
+      "maxChars": 3000
+    },
+    {
+      "label": "party",
+      "displayName": {
+        "zh-CN": "队伍羁绊",
+        "en-US": "Party Bonds"
+      },
+      "extractionHint": {
+        "zh-CN": "布兰诺克与雷恩说过的心事、分歧、承诺，以及玩家在危险时为谁做过什么。好感数值由好感面板记录。",
+        "en-US": "What Brannoc and Wren confided, argued about, or promised, and what the player did for whom when it was dangerous. Affinity scores live in the affinity panel."
+      },
+      "icon": "Users",
+      "maxChars": 2400
+    }
+  ]
+}

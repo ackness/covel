@@ -150,7 +150,22 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 | 事件类型                   | 方向 | 描述                       | 负载                         |
 | -------------------------- | ---- | -------------------------- | ---------------------------- |
-| `world.dimensions.changed` | S→C  | 世界维度文件变更（热更新） | `{ worldId, changedKeys[] }` |
+| `world.dimensions.changed` | S→C  | 作者维度声明变更（热更新） | `{ worldId, changedKeys[] }` |
+
+这是世界包声明通知，不是会话当前值更新。客户端不能据此将当前进度换成新的 `initialValue`；已有会话需显式 sync 并检查冲突。
+
+### 会话维度事件
+
+| 事件类型                        | 方向 | 触发点                                         | 负载                                                                                      |
+| ------------------------------- | ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `dimensions.changed`            | S→C  | 初始化或当前值/有效定义提交                    | `{providerPluginId, dimensions: DimensionSnapshot, settlement?}`                          |
+| `dimensions.settlement.changed` | S→C  | 登记 pending、结算失败，或无数值变化的终态回执 | `{providerPluginId, source:{resultId,turnNumber}, sourceTurnId, version, status, error?}` |
+
+`dimensions.changed.dimensions` 仅包含已变化的公开 entry，按 ID 合并，不是全量替换。entry 为 `{name,description?,schema,value,version}`；可选 `settlement` 与第二个事件使用同形摘要（属主在外层），其中 `version` 是回执版本。摘要不含冻结的 definitions/readVersions，也不重复传叙事正文。五种 `status` 为 `pending-settlement/settled/no-change/manual/skipped`。
+
+两个事件在事务提交后沿现有通知屏障发布；回滚、版本冲突或仅元数据变化不发布虚假的数值变化事件。无变化、manual/skipped 的无值修改及失败/pending 以回执事件独立可见，值变化可同时携带回执摘要。`execution.completed.committed:true` 可以表示叙事和 pending 义务已提交，不等于维度已结算；客户端必须检查回执，不能从 runtime 成功、工具成功或未收到变化事件推断 `no-change`。
+
+恢复/重连从 session view 读取 `dimensions`、`dimensionSettlements`、host 绑定的 `dimensionProviderPluginId` 和经验证的 `dimensionRecovery:{editorRuntimeId,trackerRuntimeId}`。公共读取在执行内冻结；回合结束或新的手改执行完成后装载已提交快照，不回退世界初值。pending 保留最后可用值并阻止下一次叙事，恢复通过[manual/runtime RPC](api.md#维度编辑与待结算恢复)，不引入新的 action 类型或 #97 事件触发调度。
 
 ### 插件数据事件
 
@@ -305,13 +320,15 @@ Provider 图片输入矩阵：
 
 `context.compacted` 是 trace-only 事件，由历史压缩编排写入 `trace_events`，不进入 `CovelEvent` union。摘要策略通过 `history.compact@1` 扩展提供。`recursive.calling/completed/failed` 是 union 内 trace 事件，仅由订阅 topic `trace` 下发，不转发到 `/api/actions`。
 
-| 事件                       | 触发点                | payload                                                    |
-| -------------------------- | --------------------- | ---------------------------------------------------------- |
-| `character-schema.changed` | domain schema 提交    | `{schema}`                                                 |
-| `character.upserted`       | domain character 提交 | `{character}`                                              |
-| `plugin-data.changed`      | 所属插件数据提交      | pluginId、namespace 和受影响 key                           |
-| `proposal.failed`          | proposal 提交失败     | `{proposalId,proposalType,runtimeId,pluginId,error}`       |
-| `context.compacted`        | 压缩摘要保存          | `{summaryId,messagesCompacted,tokenSavings,focusSections}` |
+| 事件                            | 触发点                | payload                                                             |
+| ------------------------------- | --------------------- | ------------------------------------------------------------------- |
+| `character-schema.changed`      | domain schema 提交    | `{schema}`                                                          |
+| `character.upserted`            | domain character 提交 | `{character}`                                                       |
+| `dimensions.changed`            | dimension batch 提交  | `{providerPluginId, dimensions, settlement?}`                       |
+| `dimensions.settlement.changed` | 回执提交              | `{providerPluginId, source, sourceTurnId, version, status, error?}` |
+| `plugin-data.changed`           | 所属插件数据提交      | pluginId、namespace 和受影响 key                                    |
+| `proposal.failed`               | proposal 提交失败     | `{proposalId,proposalType,runtimeId,pluginId,error}`                |
+| `context.compacted`             | 压缩摘要保存          | `{summaryId,messagesCompacted,tokenSavings,focusSections}`          |
 
 提交失败会扣留执行完成屏障；客户端将错误呈现为执行失败。后台结果不能重新打开已经结束的 action stream，重连使用持久化会话状态恢复。
 
@@ -395,6 +412,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `session.create`  | POST   | `/api/sessions`          | JSON: `SessionRecord`   |
 | `session.restore` | GET    | `/api/sessions/:id/view` | JSON: `SessionSnapshot` |
 | `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
+
+`SessionSnapshot` 顶层的 `dimensions` 是[当前值公开快照](world-model.md#动态维度快照)，不是旧 raw dimension 格式；可选 `dimensionSettlements` 是回执摘要，provider/recovery 元数据由 host 绑定并校验。受影响的旧开发世界、会话与快照需重建，不提供旧格式兼容。
 
 ### 回合执行（SSE 流式响应）
 

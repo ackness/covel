@@ -88,6 +88,11 @@ export interface ResolveBindingsInput {
   readonly activation: RuntimeActivation;
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
+  /** Only explicit source-anchored retries may bind immutable original outputs. */
+  readonly frozenManualRetry?: {
+    readonly sourceTurnId: string;
+    readonly results: readonly RuntimeResult[];
+  };
   /** Consumer's loaded `accepts` schemas, keyed by binding name. */
   readonly acceptsSchemas: Readonly<Record<string, Schema>>;
   /**
@@ -310,15 +315,27 @@ function extractFailureDiagnostic(
 export async function resolveInputBindings(
   args: ResolveBindingsInput,
 ): Promise<BindingResolution> {
-  const { manifest, activation, activeRuntimes, completedResults } = args;
+  const { manifest, activation, activeRuntimes } = args;
+  let completedResults = args.completedResults;
   const spec = getRuntimeSpec(manifest);
   const bindingEntries = Object.entries(spec.bindings);
   const diagnostics: SchedulingDiagnostic[] = [];
 
-  // manual activation projects turn bindings away (01 §4): the target runs on
-  // its activation payload, not the turn's visible set.
+  // Ordinary manual calls have no visible turn set. A deliberate retry can
+  // use only its anchored immutable seeds, never this execution's live output.
   if (activation.source === "manual") {
-    return { ok: true, slots: {}, diagnostics };
+    if (
+      !args.frozenManualRetry?.sourceTurnId ||
+      !args.frozenManualRetry.results.length
+    )
+      return { ok: true, slots: {}, diagnostics };
+    completedResults = new Map(
+      args.frozenManualRetry.results
+        .filter(
+          (result) => result.turnId === args.frozenManualRetry!.sourceTurnId,
+        )
+        .map((result) => [result.runtimeId, result]),
+    );
   }
   if (bindingEntries.length === 0) {
     return { ok: true, slots: {}, diagnostics };

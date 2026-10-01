@@ -7,7 +7,7 @@ import type {
   LLMResponse,
   LLMToolDefinition,
 } from "@covel/runtime";
-import type { LLMMessage } from "@covel/shared";
+import { DIMENSION_SETTLEMENT_NAMESPACE, type LLMMessage } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
@@ -27,6 +27,7 @@ class ChatModeMockLLM implements LLMAdapter {
   memoryCalls = 0;
   trackerCalls = 0;
   timeCalls = 0;
+  dimensionCalls = 0;
   readonly calls: Array<{
     readonly tools: readonly string[];
     readonly messages: readonly LLMMessage[];
@@ -99,6 +100,24 @@ class ChatModeMockLLM implements LLMAdapter {
         ],
         finishReason: "tool_calls",
         usage: { inputTokens: 120, outputTokens: 40 },
+      };
+    }
+
+    // world-init/dimension-tracker: the haruka pack declares update rules, so
+    // every narrative must be settled explicitly — report "no change".
+    if (toolNames.includes("update-dimensions")) {
+      this.dimensionCalls += 1;
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `tc-dimensions-${this.dimensionCalls}`,
+            name: "update-dimensions",
+            arguments: JSON.stringify({ updates: [] }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 90, outputTokens: 10 },
       };
     }
 
@@ -400,6 +419,17 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     // chat engine succeeds (it gates on the narrative-engine capability now).
     expect(mockLLM.trackerCalls).toBe(3);
     expect(mockLLM.timeCalls).toBe(3);
+    // Authored update rules are settled once per narrative, as an explicit
+    // no-change here, so no receipt is left pending to block the next turn.
+    expect(mockLLM.dimensionCalls).toBe(3);
+    const receipts = await store.listPluginData(
+      sessionId,
+      "world-init",
+      DIMENSION_SETTLEMENT_NAMESPACE,
+    );
+    expect(
+      receipts.map((row) => (row.value as { status: string }).status),
+    ).toEqual(["no-change", "no-change", "no-change"]);
     expect(
       (await store.getPluginData(sessionId, "world-time", "clock", "current"))
         ?.value,
@@ -436,5 +466,5 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     const finalSession = await store.getSession(sessionId);
     expect(finalSession?.completedPlayerTurns).toBe(3);
-  });
+  }, 15_000);
 });

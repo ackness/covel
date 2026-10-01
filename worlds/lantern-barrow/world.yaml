@@ -1,0 +1,226 @@
+schemaVersion: "1.0"
+id: lantern-barrow
+name:
+  zh-CN: 提灯古冢・初次远征
+  en-US: "Lantern Barrow: First Expedition"
+version: 0.1.0
+summary:
+  zh-CN: 守了百年的古冢之灯熄灭，守灯人失踪，青铜墓门洞开。在灰苇村的酒馆里组队、分配点数、掷骰下墓——经典跑团，从第一次远征开始。
+  en-US:
+    The lantern that guarded the barrow for a century has gone out, its keeper
+    is missing, and the bronze doors stand open. Form a party at the Greyreed
+    tavern, spend your points, and roll your way down — a classic tabletop
+    adventure, starting with your first expedition.
+defaultLocale: zh-CN
+supportedLocales:
+  - zh-CN
+  - en-US
+tags:
+  - fantasy
+  - tabletop
+  - dungeon-crawl
+  - party
+  - dice
+pluginPolicy:
+  packs:
+    - id: classic-tabletop
+      label:
+        zh-CN: 经典跑团
+        en-US: Classic Tabletop
+      description:
+        zh-CN: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
+        en-US:
+          Point-buy character creation, form checks and dice-pool rolls, quests
+          and inventory, companion affinity, and live panels for the delve map,
+          the barrow's alarm, and your renown.
+      tags:
+        - mode:traditional-story
+        - role:world-rules
+      reason:
+        zh-CN: 跑团的乐趣在于规则可见：属性是你分的，骰子是真掷的，每个房间、每次惊动墓穴的响动都会记在面板上。
+        en-US: Tabletop play is fun when the rules are visible — you spent the
+          points, the dice are really rolled, and every room and every noise
+          that stirs the barrow stays on the panels.
+      requested:
+        - pregame
+        - world-init
+        - char-creator
+        - narrator
+        - tabletop-rules
+        - dice-check
+        - core-quest
+        - inventory
+        - affinity
+        - guide
+        - codex
+        - npc-graph
+        - living-world-rules
+        - character-blueprint
+        - director
+      recommended:
+        - branch-reply
+        - cost-gate
+  presetId: classic-tabletop
+  preferredTags:
+    - mode:traditional-story
+    - role:codex
+    - role:world-rules
+  avoidedTags:
+    - mode:dialogue
+  requested:
+    - pregame
+    - world-init
+    - char-creator
+    - narrator
+    - tabletop-rules
+    - dice-check
+  recommended:
+    - core-quest
+    - inventory
+    - affinity
+    - guide
+    - codex
+    - npc-graph
+    - living-world-rules
+    - character-blueprint
+    - director
+    - branch-reply
+    - cost-gate
+characterSchema:
+  types:
+    - npc
+    - companion
+  attributes:
+    - id: persona
+      name:
+        zh-CN: 性格
+        en-US: Personality
+      type: string
+      category: bio
+      description:
+        zh-CN: 你的冒险者是什么样的人、怎么说话——如「嘴硬心软的老兵，说话简短」。影响叙事如何刻画你。
+        en-US: Who your adventurer is and how they talk — e.g. "a gruff veteran with a soft heart who speaks in short sentences." Shapes how the narrator portrays you.
+    - id: calling
+      name:
+        zh-CN: 职业
+        en-US: Calling
+      type: string
+      category: bio
+      description:
+        zh-CN: 你的冒险者靠什么吃饭：战士、游荡者、学者、祭司、猎人，或你自己的说法。
+        en-US: What your adventurer does for a living — fighter, rogue, scholar, priest, hunter, or your own idea.
+    - id: background
+      name:
+        zh-CN: 来历
+        en-US: Background
+      type: string
+      category: bio
+      description:
+        zh-CN: 你为什么来到灰苇村，以及一件只有你知道的往事。
+        en-US: Why you came to Greyreed, and one thing from your past only you know.
+    - id: might
+      name:
+        zh-CN: 力量
+        en-US: Might
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 1
+      category: abilities
+      description:
+        zh-CN: 搏斗、破门、攀爬与负重。
+        en-US: Fighting, forcing doors, climbing, and carrying.
+    - id: agility
+      name:
+        zh-CN: 敏捷
+        en-US: Agility
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 1
+      category: abilities
+      description:
+        zh-CN: 闪避、潜行、开锁与解除机关。
+        en-US: Dodging, sneaking, lockpicking, and disarming traps.
+    - id: endurance
+      name:
+        zh-CN: 体魄
+        en-US: Endurance
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 1
+      category: abilities
+      description:
+        zh-CN: 抵抗毒、寒冷、疲惫与恐惧带来的身体崩溃。
+        en-US: Resisting poison, cold, exhaustion, and the body's response to terror.
+    - id: wits
+      name:
+        zh-CN: 智识
+        en-US: Wits
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 1
+      category: abilities
+      description:
+        zh-CN: 辨认符文、回忆传说、推理谜题与识破陷阱的原理。
+        en-US: Reading runes, recalling lore, solving puzzles, and understanding how traps work.
+    - id: insight
+      name:
+        zh-CN: 感知
+        en-US: Insight
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 1
+      category: abilities
+      description:
+        zh-CN: 察觉埋伏、听出谎言、发现暗门与追踪痕迹。
+        en-US: Spotting ambushes, hearing lies, finding hidden doors, and tracking.
+    - id: presence
+      name:
+        zh-CN: 魅力
+        en-US: Presence
+      type: number
+      min: 0
+      max: 5
+      defaultValue: 1
+      category: abilities
+      description:
+        zh-CN: 说服、威吓、安抚与谈判——包括和不该被叫醒的东西谈判。
+        en-US: Persuading, intimidating, calming, and bargaining — including with things that should not be awake.
+    - id: hp
+      name:
+        zh-CN: 生命
+        en-US: Hit Points
+      type: number
+      min: 0
+      max: 20
+      defaultValue: 12
+      category: stats
+      description:
+        zh-CN: 受伤时下降，休息与治疗时恢复。降到 0 会倒下，而不是立刻死亡。
+        en-US: Drops when hurt and recovers with rest or healing. At 0 you fall unconscious rather than dying outright.
+    - id: condition
+      name:
+        zh-CN: 状态
+        en-US: Condition
+      type: string
+      category: stats
+      description:
+        zh-CN: 当前受伤、中毒、惊惧等明显状态。
+        en-US: Current visible conditions such as wounded, poisoned, or shaken.
+    - id: trust
+      name:
+        zh-CN: 信任
+        en-US: Trust
+      type: number
+      min: 0
+      max: 100
+      defaultValue: 0
+      category: social
+      description:
+        zh-CN: 对玩家的信任
+        en-US: Trust toward the player
+worldData: data/world.data.yaml

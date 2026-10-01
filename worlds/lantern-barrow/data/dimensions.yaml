@@ -1,0 +1,416 @@
+delveMap:
+  name:
+    zh-CN: 古冢地图
+    en-US: Delve Map
+  description:
+    zh-CN: 提灯古冢里已知的房间和它们现在的状态。
+    en-US: The rooms known inside the Lantern Barrow and their current state.
+  schema:
+    type: object
+    additionalProperties:
+      type: object
+      properties:
+        room:
+          type: string
+          title: { zh-CN: 房间, en-US: Room }
+          x-i18n: true
+        status:
+          type: string
+          title: { zh-CN: 状态, en-US: Status }
+          enum: [rumored, explored, cleared, sealed, collapsed]
+          x-enumLabels:
+            rumored: { zh-CN: 只听说过, en-US: Rumored }
+            explored: { zh-CN: 已探索, en-US: Explored }
+            cleared: { zh-CN: 已肃清, en-US: Cleared }
+            sealed: { zh-CN: 已封闭, en-US: Sealed }
+            collapsed: { zh-CN: 已坍塌, en-US: Collapsed }
+        note:
+          type: string
+          title: { zh-CN: 记录, en-US: Notes }
+          maxLength: 200
+          x-i18n: true
+      required: [room, status]
+      additionalProperties: false
+  initialValue:
+    bronze-doors:
+      room: { zh-CN: 青铜墓门, en-US: The Bronze Doors }
+      status: rumored
+      note:
+        zh-CN: 灯灭那晚之后一直洞开。门上的封印被人从里面推开了。
+        en-US: Standing open since the night the lantern died. The seal was pushed open from the inside.
+    hall-of-lamps:
+      room: { zh-CN: 千灯廊, en-US: Hall of Lamps }
+      status: rumored
+      note:
+        zh-CN: 守灯人说过，墓里第一条走廊两侧全是壁灯。
+        en-US: The keeper once said the first passage inside is lined with wall-lamps.
+  updateRule:
+    zh-CN: 叙事中第一次进入、看见或从可靠来源得知一个具名房间时新增条目（ID 用简短英文 kebab-case），只听说时为 rumored。玩家亲自进入并查看后改为 explored；危险被解决后为 cleared；门被封上为 sealed；塌了为 collapsed。note 写一句最重要的发现（出口、陷阱、遗物或危险）。不删除条目，不替玩家探索没去过的房间。
+    en-US: Add a room (short English kebab-case ID) the first time the narrative enters, sees, or reliably learns of a named room; use rumored if only heard of. Set explored once the player has been inside and looked around, cleared when its danger is dealt with, sealed when its way is shut, collapsed if it falls in. Keep note to one sentence about the most important find — an exit, a trap, a relic, or a threat. Never delete rooms or explore rooms the player has not visited.
+
+barrowAlarm:
+  name:
+    zh-CN: 古冢警戒
+    en-US: Barrow Alarm
+  description:
+    zh-CN: 古冢有多清醒。走到 6，古冢之王就会睁开眼睛。
+    en-US: How awake the barrow is. At 6, the Barrow King opens his eyes.
+  schema:
+    type: object
+    properties:
+      level:
+        type: integer
+        title: { zh-CN: 警戒, en-US: Alarm }
+        minimum: 0
+        maximum: 6
+      stage:
+        type: string
+        title: { zh-CN: 动静, en-US: Signs }
+        enum: [sleeping, murmuring, restless, singing, stirring, awake]
+        x-enumLabels:
+          sleeping: { zh-CN: 沉睡, en-US: Sleeping }
+          murmuring: { zh-CN: 低语, en-US: Murmuring }
+          restless: { zh-CN: 躁动, en-US: Restless }
+          singing: { zh-CN: 合唱响起, en-US: The choir sings }
+          stirring: { zh-CN: 王座震动, en-US: The throne stirs }
+          awake: { zh-CN: 古冢之王苏醒, en-US: The Barrow King wakes }
+    required: [level, stage]
+    additionalProperties: false
+  initialValue:
+    level: 1
+    stage: murmuring
+  updateRule:
+    zh-CN: 只在玩家一行人进入古冢后结算。本轮叙事出现打斗、破门、大声喧哗、在合唱廊点亮火光、检定大失败或在墓中长时间休息时 level +1（一回合最多 +2）；重燃一盏壁灯、安静绕开危险或安抚亡者时 -1。stage 随 level 对应：0 沉睡，1 低语，2 躁动，3–4 合唱响起，5 王座震动，6 苏醒。灯心被放回古灯并重新点燃后归零。
+    en-US: Settle only once the party is inside the barrow. Raise level by 1 when this turn's narrative has fighting, a forced door, loud shouting, light raised in the Choir Gallery, a critical failure, or a long rest inside (at most +2 per turn); lower it by 1 for relighting a wall-lamp, slipping quietly past danger, or calming the dead. Match stage to level — 0 sleeping, 1 murmuring, 2 restless, 3–4 singing, 5 stirring, 6 awake. Reset to 0 once the Lantern Heart is returned and the lantern relit.
+
+lantern:
+  name:
+    zh-CN: 古冢之灯
+    en-US: The Barrow Lantern
+  description:
+    zh-CN: 灯心在哪里，灯有没有重新亮起。
+    en-US: Where the Lantern Heart is, and whether the lamp burns again.
+  schema:
+    type: object
+    properties:
+      heart:
+        type: string
+        title: { zh-CN: 灯心, en-US: Lantern Heart }
+        enum: [missing, traced, recovered, returned, shattered, bargained-away]
+        x-enumLabels:
+          missing: { zh-CN: 下落不明, en-US: Missing }
+          traced: { zh-CN: 找到线索, en-US: Traced }
+          recovered: { zh-CN: 已夺回, en-US: Recovered }
+          returned: { zh-CN: 放回灯中, en-US: Returned }
+          shattered: { zh-CN: 已碎裂, en-US: Shattered }
+          bargained-away: { zh-CN: 交易出去, en-US: Bargained away }
+      lamp:
+        type: string
+        title: { zh-CN: 古灯, en-US: Lamp }
+        enum: [dark, flickering, burning]
+        x-enumLabels:
+          dark: { zh-CN: 熄灭, en-US: Dark }
+          flickering: { zh-CN: 摇曳, en-US: Flickering }
+          burning: { zh-CN: 燃烧, en-US: Burning }
+      keeper:
+        type: string
+        title: { zh-CN: 守灯人, en-US: Keeper }
+        enum: [missing, found, rescued, lost]
+        x-enumLabels:
+          missing: { zh-CN: 失踪, en-US: Missing }
+          found: { zh-CN: 已找到, en-US: Found }
+          rescued: { zh-CN: 已救出, en-US: Rescued }
+          lost: { zh-CN: 未能生还, en-US: Lost }
+    required: [heart, lamp, keeper]
+    additionalProperties: false
+  initialValue:
+    heart: missing
+    lamp: dark
+    keeper: missing
+  updateRule:
+    zh-CN: 只按叙事明确发生的事推进。得知灯心下落为 traced，拿到手为 recovered，放回古灯为 returned，被毁为 shattered，交给古冢之王或他人为 bargained-away。灯心放回并点燃后 lamp 为 burning，只靠临时火种勉强点亮为 flickering。见到伊索德为 found，带她离开古冢为 rescued，她死去为 lost。
+    en-US: Advance only on events the narrative makes explicit. Set heart to traced when its whereabouts are learned, recovered when the party holds it, returned when it is set back in the lamp, shattered if destroyed, bargained-away if handed to the Barrow King or anyone else. The lamp is burning once the Heart is returned and lit, flickering if it is lit only with a makeshift flame. Keeper is found when the party meets Ysolde, rescued once she is out of the barrow, lost if she dies.
+
+renown:
+  name:
+    zh-CN: 名望
+    en-US: Renown
+  description:
+    zh-CN: 灰苇村和周边的人怎么谈论你。
+    en-US: What Greyreed and the country around it say about you.
+  schema:
+    type: object
+    properties:
+      score:
+        type: integer
+        title: { zh-CN: 名望, en-US: Renown }
+        minimum: 0
+        maximum: 10
+      title:
+        type: string
+        title: { zh-CN: 称号, en-US: Known as }
+        enum: [stranger, sellsword, trusted, hero-of-greyreed, legend]
+        x-enumLabels:
+          stranger: { zh-CN: 外乡人, en-US: Stranger }
+          sellsword: { zh-CN: 拿钱办事的, en-US: Hired hand }
+          trusted: { zh-CN: 可靠的人, en-US: Trusted }
+          hero-of-greyreed: { zh-CN: 灰苇村的英雄, en-US: Hero of Greyreed }
+          legend: { zh-CN: 传说, en-US: Legend }
+      deeds:
+        type: array
+        title: { zh-CN: 事迹, en-US: Deeds }
+        maxItems: 10
+        items:
+          type: string
+          maxLength: 120
+    required: [score, title, deeds]
+    additionalProperties: false
+  initialValue:
+    score: 0
+    title: stranger
+    deeds: []
+  updateRule:
+    zh-CN: 村民亲眼看见或确实听说玩家的作为时调整：帮村民解决具体麻烦 +1，救回守灯人或重燃古灯 +2，欺骗、勒索或连累村民 -1。每次变化在 deeds 加一句话。称号随 score：0–1 外乡人，2–3 拿钱办事的，4–6 可靠的人，7–8 灰苇村的英雄，9–10 传说。没人知道的事不计入名望。
+    en-US: Adjust only when villagers witness or credibly hear of what the player did — +1 for solving a concrete problem for someone, +2 for bringing the keeper home or relighting the lantern, -1 for lying to, extorting, or endangering villagers. Add one sentence to deeds for each change. Title follows score — 0–1 stranger, 2–3 hired hand, 4–6 trusted, 7–8 hero of Greyreed, 9–10 legend. Deeds no one knows about do not count.
+
+geography:
+  name:
+    zh-CN: 地理
+    en-US: Geography
+  schema:
+    type: object
+    properties:
+      overview:
+        { type: string, title: { zh-CN: 概况, en-US: Overview }, x-i18n: true }
+      regions:
+        type: array
+        title: { zh-CN: 地区, en-US: Regions }
+        items:
+          type: object
+          properties:
+            name:
+              {
+                type: string,
+                title: { zh-CN: 名称, en-US: Name },
+                x-i18n: true,
+              }
+            description:
+              {
+                type: string,
+                title: { zh-CN: 描述, en-US: Description },
+                x-i18n: true,
+              }
+            climate:
+              {
+                type: string,
+                title: { zh-CN: 气候, en-US: Climate },
+                x-i18n: true,
+              }
+          required: [name, description]
+          additionalProperties: false
+    additionalProperties: false
+  initialValue:
+    overview:
+      zh-CN: 灰苇村坐落在灰苇沼泽的边缘，村北的小山就是提灯古冢。一百年来，山顶的古灯每夜都亮着。
+      en-US: Greyreed sits at the edge of the Greyreed Marsh. The hill north of the village is the Lantern Barrow, and for a hundred years the lamp on its crown has burned every night.
+    regions:
+      - name: { zh-CN: 灰苇村, en-US: Greyreed Village }
+        description:
+          zh-CN: 三十来户人家、一座磨坊、一间歪角鹿酒馆和一座小礼拜堂。村民务实、迷信、彼此知根知底。
+          en-US: Thirty-odd households, a mill, the Crooked Antler tavern, and a small chapel. The villagers are practical, superstitious, and know each other's business.
+        climate:
+          {
+            zh-CN: 潮湿多雾，深秋已冷。,
+            en-US: "Damp and foggy, already cold in late autumn.",
+          }
+      - name: { zh-CN: 守灯人小屋, en-US: The Keeper's Cottage }
+        description:
+          zh-CN: 古冢山脚的石屋，伊索德住了四十年。屋里有灯油、旧日志和一扇从不上锁的门。
+          en-US: A stone cottage at the foot of the barrow hill, Ysolde's home for forty years — lamp oil, old logbooks, and a door that was never locked.
+      - name: { zh-CN: 提灯古冢, en-US: The Lantern Barrow }
+        description:
+          zh-CN: 长满枯草的圆丘，山顶立着熄灭的古灯，山腰是洞开的青铜墓门。墓里比山更大。
+          en-US: A grassy mound with the dark lantern on its crown and the open bronze doors in its side. It is bigger inside than the hill.
+        climate:
+          {
+            zh-CN: 墓内阴冷，空气里有灯油和潮土的味道。,
+            en-US: "Cold inside, smelling of lamp oil and wet earth.",
+          }
+      - name: { zh-CN: 灰苇沼泽, en-US: Greyreed Marsh }
+        description:
+          zh-CN: 一望无际的芦苇和黑水。传说沼泽之王的旧村就沉在里面。
+          en-US: Endless reeds and black water. The marsh-king's old village is said to lie drowned somewhere inside.
+
+factions:
+  name:
+    zh-CN: 势力
+    en-US: Factions
+  schema:
+    type: array
+    items:
+      type: object
+      properties:
+        id: { type: string, title: ID }
+        name:
+          { type: string, title: { zh-CN: 名称, en-US: Name }, x-i18n: true }
+        description:
+          {
+            type: string,
+            title: { zh-CN: 描述, en-US: Description },
+            x-i18n: true,
+          }
+      required: [id, name, description]
+      additionalProperties: false
+  initialValue:
+    - id: greyreed-village
+      name: { zh-CN: 灰苇村, en-US: Greyreed Village }
+      description:
+        zh-CN: 村长潘恩主事，酒馆老板娘梅瑞尔消息最灵。他们想要的是古灯重新亮起、日子回到原样。
+        en-US: Led by Reeve Penn, with Mirelle at the tavern hearing everything first. They want the lamp lit and life back the way it was.
+    - id: dawn-lantern-order
+      name: { zh-CN: 黎明灯修会, en-US: Order of the Dawn Lantern }
+      description:
+        zh-CN: 维护各地古灯的修会，相信光能让亡者安息。雷恩修女是他们派来的见习祭司。
+        en-US: An order that tends ancient lamps across the realm, believing light lets the dead rest. Sister Wren is their acolyte here.
+    - id: hollow-choir
+      name: { zh-CN: 空心合唱团, en-US: The Hollow Choir }
+      description:
+        zh-CN: 古冢里的亡者。他们不攻击唱歌的人，只是一直唱，唱沼泽之王的名字，唱生者的名字。
+        en-US: The dead of the barrow. They do not attack those who sing along; they only keep singing — the marsh-king's name, and the names of the living.
+
+tone:
+  name:
+    zh-CN: 基调
+    en-US: Tone
+  schema:
+    type: object
+    properties:
+      genres:
+        {
+          type: array,
+          title: { zh-CN: 类型, en-US: Genres },
+          items: { type: string, x-i18n: true },
+        }
+      contentRating:
+        type: string
+        title: { zh-CN: 分级, en-US: Rating }
+        enum: [all-ages, teen, mature]
+        x-enumLabels:
+          all-ages: { zh-CN: 全年龄, en-US: All ages }
+          teen: { zh-CN: 青少年, en-US: Teen }
+          mature: { zh-CN: 成人, en-US: Mature }
+      narrativeStyle:
+        {
+          type: string,
+          title: { zh-CN: 叙事风格, en-US: Narrative style },
+          x-i18n: true,
+        }
+    required: [genres, contentRating]
+    additionalProperties: false
+  initialValue:
+    genres:
+      - { zh-CN: 经典奇幻, en-US: classic fantasy }
+      - { zh-CN: 地城探索, en-US: dungeon crawl }
+      - { zh-CN: 民间恐怖, en-US: folk horror }
+    contentRating: teen
+    narrativeStyle:
+      zh-CN: 像一位好主持人那样讲故事：场景具体、节奏利落，危险真实但不血腥，酒馆里有笑声，墓里有歌声。
+      en-US: Tell it like a good game master — concrete scenes, brisk pacing, danger that feels real without gore, laughter in the tavern and singing in the tomb.
+
+mechanics:
+  name:
+    zh-CN: 玩法
+    en-US: Mechanics
+  schema:
+    type: object
+    properties:
+      combatStyle:
+        type: string
+        title: { zh-CN: 战斗, en-US: Combat }
+        enum: [turn-based, real-time, narrative, none]
+        x-enumLabels:
+          turn-based: { zh-CN: 回合制, en-US: Turn-based }
+          real-time: { zh-CN: 即时, en-US: Real-time }
+          narrative: { zh-CN: 叙事式, en-US: Narrative }
+          none: { zh-CN: 无, en-US: None }
+      difficulty:
+        type: string
+        title: { zh-CN: 难度, en-US: Difficulty }
+        enum: [easy, normal, hard, adaptive]
+        x-enumLabels:
+          easy: { zh-CN: 简单, en-US: Easy }
+          normal: { zh-CN: 普通, en-US: Normal }
+          hard: { zh-CN: 困难, en-US: Hard }
+          adaptive: { zh-CN: 自适应, en-US: Adaptive }
+      skillSystem:
+        {
+          type: string,
+          title: { zh-CN: 检定规则, en-US: Checks },
+          x-i18n: true,
+        }
+      customRules:
+        {
+          type: array,
+          title: { zh-CN: 附加规则, en-US: House rules },
+          items: { type: string, x-i18n: true },
+        }
+    additionalProperties: false
+  initialValue:
+    combatStyle: turn-based
+    difficulty: normal
+    skillSystem:
+      zh-CN: 六项属性（力量、敏捷、体魄、智识、感知、魅力）开局各 1 点，再自由分配 6 点，单项最高 4。检定为 d20 + 属性，对抗难度 8/12/16/20；天然 20 大成功，天然 1 大失败。
+      en-US: Six attributes (Might, Agility, Endurance, Wits, Insight, Presence) start at 1, then you spend 6 more points, up to 4 in any one. Checks are d20 + attribute against difficulty 8/12/16/20; a natural 20 is a critical success and a natural 1 a critical failure.
+    customRules:
+      - zh-CN: 生命降到 0 会倒下而不是立刻死亡；队友可以把你拖回来。
+        en-US: At 0 hit points you fall unconscious rather than dying outright; a companion can drag you back.
+      - zh-CN: 火把约烧一个时辰。古冢里没有光就看不见路和陷阱。
+        en-US: A torch burns about an hour. Without light in the barrow you cannot see the way or the traps.
+      - zh-CN: 噪音、火光和在墓里休息都会抬高古冢警戒。
+        en-US: Noise, light, and resting inside all raise the Barrow Alarm.
+
+startingConditions:
+  name:
+    zh-CN: 开局
+    en-US: Opening
+  schema:
+    type: object
+    properties:
+      openingScenario:
+        {
+          type: string,
+          title: { zh-CN: 开场, en-US: Opening scene },
+          x-i18n: true,
+        }
+      openingHook:
+        { type: string, title: { zh-CN: 引子, en-US: Hook }, x-i18n: true }
+      openingChips:
+        {
+          type: array,
+          title: { zh-CN: 开局行动, en-US: Opening moves },
+          items: { type: string, x-i18n: true },
+        }
+      startingLocation:
+        {
+          type: string,
+          title: { zh-CN: 起点, en-US: Starting point },
+          x-i18n: true,
+        }
+    additionalProperties: false
+  initialValue:
+    openingScenario:
+      zh-CN: 深秋的雨夜，你推开歪角鹿酒馆的门。吧台上方钉着村长的赏金告示：守灯人失踪，古冢之灯熄灭，青铜墓门洞开，三十枚银币请人下墓。角落里的老兵在擦剑，靠窗的年轻修女在翻一本古灯铭文。老板娘把一杯热麦酒推到你面前：“你也是为告示来的？”
+      en-US: On a rainy late-autumn night you push open the door of the Crooked Antler. Above the bar the reeve's bounty notice is nailed up — the keeper is missing, the barrow lantern is dark, the bronze doors stand open, thirty silver to whoever goes down. In the corner an old soldier is cleaning his sword; by the window a young sister turns the pages of a book of lantern script. The innkeeper slides a hot mug of ale toward you. "Here for the notice too?"
+    openingHook:
+      zh-CN: 古灯熄灭三天了。今晚，谁和你一起下墓？
+      en-US: The lantern has been dark for three days. Who goes down with you tonight?
+    openingChips:
+      - { zh-CN: 问老板娘守灯人的事, en-US: Ask the innkeeper about the keeper }
+      - { zh-CN: 坐到老兵对面, en-US: Sit down across from the old soldier }
+      - {
+          zh-CN: 请修女读一读古灯铭文,
+          en-US: Ask the sister to read the lantern script,
+        }
+      - { zh-CN: 去找村长谈价钱, en-US: Find the reeve and talk money }
+    startingLocation:
+      { zh-CN: 灰苇村・歪角鹿酒馆, en-US: "Greyreed, the Crooked Antler" }

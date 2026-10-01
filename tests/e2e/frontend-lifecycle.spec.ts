@@ -124,10 +124,37 @@ test("browser world edits and cascading deletion survive reload without a server
       description: "Synthetic lifecycle fixture",
       dimensions: {
         geography: {
-          overview: "Original overview",
-          regions: [
-            { name: "Harbor", description: "A quiet harbor", climate: "Mild" },
-          ],
+          name: "Geography",
+          schema: {
+            type: "object",
+            properties: {
+              overview: { type: "string" },
+              regions: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    description: { type: "string" },
+                    climate: { type: "string" },
+                  },
+                  required: ["name", "description", "climate"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            additionalProperties: false,
+          },
+          initialValue: {
+            overview: "Original overview",
+            regions: [
+              {
+                name: "Harbor",
+                description: "A quiet harbor",
+                climate: "Mild",
+              },
+            ],
+          },
         },
       },
       createdAt: "2026-01-01T00:00:00Z",
@@ -140,6 +167,8 @@ test("browser world edits and cascading deletion survive reload without a server
     .filter({ hasText: "Review local world" });
   await card.getByRole("button", { name: "查看详情" }).click();
   await page.getByRole("button", { name: "编辑", exact: true }).click();
+  // The editor opens on the JSON definitions tab; the template form is a tab.
+  await page.getByRole("tab", { name: "地理" }).click();
   await page
     .locator("#world-geography-overview")
     .fill("Edited browser overview");
@@ -150,6 +179,7 @@ test("browser world edits and cascading deletion survive reload without a server
   await page.reload();
   await card.getByRole("button", { name: "查看详情" }).click();
   await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.getByRole("tab", { name: "地理" }).click();
   await expect(page.locator("#world-geography-overview")).toHaveValue(
     "Edited browser overview",
   );

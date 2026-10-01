@@ -448,21 +448,32 @@ Plugin-facing data APIs bind both session ID and plugin owner. A namespace is a
 name inside that owner's partition, not a way to select another owner. Ordinary
 plugin writes are buffered as proposals and committed under the source owner.
 
-| Owner / namespace                                                                        | Authority                               | Plugin access                                                                                                                              |
-| ---------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                  | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                   |
-| Plugin owner, `_jobs`                                                                    | RPC job status and progress             | Read only; job APIs own transitions.                                                                                                       |
-| Plugin owner, `_runtime_jobs`                                                            | Durable runtime scheduling and recovery | Read only; runtime workers own transitions.                                                                                                |
-| Plugin owner, `_logs`                                                                    | Runtime log ring                        | Read only through data APIs; entries are produced through the scoped logger.                                                               |
-| Plugin owner, `message`                                                                  | Plugin                                  | Ordinary proposal-backed data; the UI host prefetches and forwards it for declared message panels without interpreting its business shape. |
-| Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | Plugin                                  | Read own data and write through proposals. The old character mirrors are not recreated.                                                    |
-| `__kernel:<subsystem>` owner, including `__kernel:vector`                                | Kernel                                  | Not visible through plugin-bound store or extension APIs. This is an owner partition, not a plugin namespace.                              |
+| Owner / namespace                                                                        | Authority                                        | Plugin access                                                                                                                              |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                           | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                   |
+| Plugin owner, `_jobs`                                                                    | RPC job status and progress                      | Read only; job APIs own transitions.                                                                                                       |
+| Plugin owner, `_runtime_jobs`                                                            | Durable runtime scheduling and recovery          | Read only; runtime workers own transitions.                                                                                                |
+| Plugin owner, `_logs`                                                                    | Runtime log ring                                 | Read only through data APIs; entries are produced through the scoped logger.                                                               |
+| Active dimension provider, `_dimensions`                                                 | Adopted definitions, current values and versions | Read own records; writes only through `dimension.initialize` / `dimension.update` and validated import/sync batch CAS.                     |
+| Active dimension provider, `_dimension-settlements`                                      | Narrative settlement obligations and receipts    | Read own records; host-owned source registration and verified settlement transitions, not generic writes.                                  |
+| Plugin owner, `message`                                                                  | Plugin                                           | Ordinary proposal-backed data; the UI host prefetches and forwards it for declared message panels without interpreting its business shape. |
+| Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | Plugin                                           | Read own data and write through proposals. The old character mirrors are not recreated.                                                    |
+| `__kernel:<subsystem>` owner, including `__kernel:vector`                                | Kernel                                           | Not visible through plugin-bound store or extension APIs. This is an owner partition, not a plugin namespace.                              |
 
-The full underscore prefix remains reserved. Enumerating today's three names as
+The full underscore prefix remains reserved. Enumerating today's names as
 exceptions would allow future kernel bookkeeping to become plugin-writable before
 all callers were updated. `_memory` stays protected even though the old memory
 mirror and queue were removed; no compatibility reads or data restoration are
 implied. Jobs and logs retain their existing snapshot/fork inclusion policies.
+Dimension records and receipts use existing `plugin_data`, not a new table or a
+`state_entries` mirror. Definitions and current values share a versioned record;
+receipts retain frozen source definitions/read versions without copying narrative
+text. Snapshot, fork and BrowserVault checkpoint transfers preserve both data
+and pending obligations. Public session views expose only current-value entries
+and receipt summaries, never maintenance rules or initial values. See
+[World Model](../reference/world-model.md#动态维度快照) and
+[batch CAS](../reference/transactions.md#versioned-plugin-data-batch-cas).
+
 These are API authority boundaries, not encryption or a process sandbox.
 
 **Stability commitment**: The `_` prefix reservation is a permanent design decision.

@@ -1,0 +1,86 @@
+- schemaVersion: 1
+  id: lantern-fair-table
+  title: 公平的牌桌
+  content: 坦白的骰子，公平的主持。只有结果不确定、失败有代价的行动才需要检定；开锁、爬墙、说服守卫这类事先说明使用哪项属性和难度（简单 8、普通 12、困难 16、极难 20），再掷骰，并尊重结果。失败要推动故事——付出时间、火把、生命、位置或信任——而不是原地卡住。天然 20 让事情超出预期，天然 1 带来新的麻烦。
+  kind: constant
+  category: style
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  insertionOrder: 410
+- schemaVersion: 1
+  id: lantern-party
+  title: 队伍是活的
+  content: 布兰诺克和雷恩是有自己判断的队友，不是工具。他们会提建议、表达不同意见、在危险时各自行动，也会记得玩家怎样对待他们。不要替玩家角色说话或做决定；每回合结束时，把选择权交还给玩家。
+  kind: constant
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  insertionOrder: 420
+- schemaVersion: 1
+  id: lantern-alarm
+  title: 惊动古冢
+  content: 古冢在沉睡，但睡得很浅。打斗、破门、大声说话、在合唱廊点亮火光、在墓里休息过久，都会让它更清醒；重燃壁灯或安静绕行能让它重新沉下去。当前警戒程度以「古冢警戒」面板为准，叙事中要让玩家听见变化——更近的歌声、熄灭的火把、开始转动的头颅。
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 古冢
+    - 墓
+    - 合唱
+    - 歌声
+    - 噪音
+    - 火光
+    - barrow
+    - choir
+    - singing
+    - noise
+  insertionOrder: 430
+- schemaVersion: 1
+  id: lantern-truth
+  title: 古冢的真相
+  content: 提灯古冢不是坟墓，而是牢笼。一百年前，沼泽之王用全村亡者的安宁换来了不死，被初代守灯人以灯心之火封进山下；灯亮着，他就睡着，亡者的歌声就停着。学者科尔文取走灯心想研究其中封存的力量；伊索德追了进去。村长收过科尔文的钱打听灯的事。真相要靠线索一层层揭开，不要在前期直接说破。结局不预设：把灯心放回、与古冢之王交易、彻底毁掉他，或者别的，都要付出代价。
+  kind: evolving
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 灯心
+    - 古冢之王
+    - 守灯人
+    - 科尔文
+    - Lantern Heart
+    - Barrow King
+    - Ysolde
+    - Corvin
+  insertionOrder: 440
+- schemaVersion: 1
+  id: lantern-supplies
+  title: 火把与干粮
+  content: 古冢里光就是时间：每支火把约烧一个时辰，熄灭后看不清路、找不到陷阱。短休息恢复少量生命但要花时间，在墓里扎营会惊动古冢。消耗火把、干粮、药水时要在叙事里写清楚，让背包与生命值能被准确记录。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 火把
+    - 干粮
+    - 休息
+    - 受伤
+    - 生命
+    - torch
+    - rations
+    - rest
+    - wounded
+    - hit points
+  insertionOrder: 450

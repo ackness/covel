@@ -3,7 +3,7 @@ id: mistport
 name:
   zh-CN: 雾港・裂潮纪
   en-US: Mistport Chronicles
-version: 0.2.0
+version: 0.3.0
 summary:
   zh-CN: 潮钟三鸣，失踪的公会长与一把破碎的钥匙，把你卷入永雾港城的四方暗战。
   en-US: Three tide-bells, a missing Guildmaster, and a shattered Key draw you
@@ -32,10 +32,11 @@ pluginPolicy:
         - role:world-rules
         - data:characters
       reason:
-        zh-CN: 让潮时、线索、雾蚀、阵营态度与七名核心角色在长线调查中持续演化。
-        en-US:
-          Keeps tide-time, evidence, fog-rot, faction attitudes, and seven core
-          characters evolving through a long-form investigation.
+        zh-CN: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
+        en-US: A Case Board, Faction Standing, the Deep Withdrawal, and the Key
+          Fragments settle after every turn alongside tide-time, fog-rot, and
+          seven core characters, so every choice in the long investigation
+          leaves a mark.
       requested:
         - pregame
         - world-init
@@ -48,6 +49,7 @@ pluginPolicy:
         - living-world-rules
         - character-blueprint
         - character-presence
+        - director
         - cost-gate
       recommended: []
   presetId: mistport-investigation
@@ -71,6 +73,7 @@ pluginPolicy:
     - living-world-rules
     - character-blueprint
     - character-presence
+    - director
     - cost-gate
 pluginSettings:
   cost-gate:

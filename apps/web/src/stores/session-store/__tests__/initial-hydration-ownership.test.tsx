@@ -523,6 +523,8 @@ it.each(["restore", "reconnect"])(
     });
     expect(stateRef.current.gameState).toEqual({
       characterSchema: null,
+      dimensions: {},
+      dimensionSettlements: [],
       ...currentView.gameState,
       characters: [],
     });
@@ -535,6 +537,8 @@ it.each(["restore", "reconnect"])(
     });
     expect(stateRef.current.gameState).toEqual({
       characterSchema: null,
+      dimensions: {},
+      dimensionSettlements: [],
       ...currentView.gameState,
       characters: [],
     });
@@ -561,6 +565,8 @@ it("accepts an empty authoritative initial view after committed state was delete
   });
   expect(stateRef.current.gameState).toEqual({
     characterSchema: null,
+    dimensions: {},
+    dimensionSettlements: [],
     characters: [],
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
@@ -675,6 +681,8 @@ it("does not rebuild deleted fields from cached patches after an authoritative e
   });
   expect(stateRef.current.gameState).toEqual({
     characterSchema: null,
+    dimensions: {},
+    dimensionSettlements: [],
     characters: [],
   });
   expect(stateRef.current.statePatches).toHaveLength(1);

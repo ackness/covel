@@ -1,7 +1,7 @@
 schemaVersion: "1.0"
 id: emberback
 name: Emberback Relay
-version: 1.0.0
+version: 1.1.0
 summary: A lonely relay on a tidally locked world receives a distress call in
   your own voice—sent from seventy-two hours in the future.
 defaultLocale: en-US
@@ -13,7 +13,39 @@ tags:
   - mystery
   - exploration
 pluginPolicy:
-  presetId: traditional-story
+  packs:
+    - id: emberback-rescue
+      label: Emberback Rescue
+      description: >-
+        A traditional story with dice checks, quests, a field inventory, crew
+        relationships, and live panels for the storm, the power grid, the signal
+        log, and the convoy.
+      tags:
+        - mode:traditional-story
+        - role:world-rules
+      reason: >-
+        Every choice in the three hours before Crownfire spends something —
+        time, charge, cargo, or trust — and the panels show exactly what is
+        left.
+      requested:
+        - pregame
+        - world-init
+        - char-creator
+        - narrator
+        - dice-check
+        - core-quest
+        - inventory
+        - affinity
+        - guide
+        - codex
+        - npc-graph
+        - living-world-rules
+        - character-blueprint
+        - character-presence
+        - director
+      recommended:
+        - branch-reply
+  presetId: emberback-rescue
   preferredTags:
     - mode:traditional-story
     - role:codex
@@ -32,6 +64,7 @@ pluginPolicy:
     - character-blueprint
     - character-presence
     - living-world-rules
+    - director
 characterSchema:
   types:
     - npc

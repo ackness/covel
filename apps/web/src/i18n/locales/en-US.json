@@ -584,7 +584,21 @@
     "delete": "Delete world",
     "deleteConfirmTitle": "Delete world?",
     "deleteConfirmDesc": "This will permanently delete \"{{name}}\" and all of its session data. This action cannot be undone.",
-    "deleteConfirmAction": "Delete"
+    "deleteConfirmAction": "Delete",
+    "dimensionFields": "Edit fields",
+    "dimensionJson": "Edit JSON",
+    "dimensionAddRow": "Add row",
+    "dimensionRemoveRow": "Remove row",
+    "dimensionRowKey": "New row key",
+    "currentValue": "Current value",
+    "pendingDimensions": "Dimension settlement pending",
+    "dimensionResolution": {
+      "retry": "Retry original turn",
+      "manual": "Handled manually",
+      "skipped": "Skip this settlement"
+    },
+    "dimensionDefinitions": "Dimension definitions (JSON)",
+    "applyDimensions": "Apply definitions"
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",
@@ -1739,7 +1753,9 @@
     "new": "new",
     "newUpper": "NEW",
     "active": "Active",
-    "retry": "Retry"
+    "retry": "Retry",
+    "add": "Add",
+    "remove": "Remove"
   },
   "debugger": {
     "title": "Trace Inspector",

@@ -366,6 +366,16 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 ...(snapshotSession.loreOverride !== undefined
                   ? { loreOverride: snapshotSession.loreOverride }
                   : {}),
+                // Carry the dimension provider binding into the fork so the
+                // child's settlement barrier can resolve its owner instead of
+                // deadlocking on a missing provider. The snapshot surfaces it
+                // under SnapshotSessionState.dimensionProviderPluginId.
+                ...(snapshotSession.dimensionProviderPluginId !== undefined
+                  ? {
+                      _dimensionProviderPluginId:
+                        snapshotSession.dimensionProviderPluginId,
+                    }
+                  : {}),
                 [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
                 [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
                 [SESSION_INCARNATION_KEY]: randomUUID(),

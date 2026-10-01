@@ -58,6 +58,7 @@ import {
 } from "../media/canonicalize-media-refs.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
+import { prepareDimensionFinalization } from "./dimension-finalization.js";
 
 /**
  * The subset of a manifest needed to resolve output kind, capabilities, scope
@@ -68,7 +69,13 @@ import { storyOutputError } from "../agent-loop/story-output.js";
  */
 type FinalizeManifest = Pick<
   RuntimeManifest,
-  "name" | "pluginId" | "outputKind" | "version" | "output" | "userSettings"
+  | "name"
+  | "pluginId"
+  | "outputKind"
+  | "version"
+  | "output"
+  | "outputContract"
+  | "userSettings"
 >;
 
 /** The loose runtime-result shape `processRuntimeResult` accepts (top-level or nested). */
@@ -469,7 +476,34 @@ export async function finalizeExecution(
                 : undefined;
           if (error) throw new Error(error);
         }
-        const events: SessionEvent[] = [];
+        const dimensionEvents = await prepareDimensionFinalization({
+          tx,
+          sessionId,
+          executionContext,
+          runtimes,
+          results,
+        });
+        const events: SessionEvent[] = [...dimensionEvents];
+        for (const event of dimensionEvents)
+          postCommit.push(async () => {
+            if (
+              event.type === "dimensions.changed" ||
+              event.type === "dimensions.settlement.changed"
+            )
+              await emitter?.emit(event.type, event.payload);
+            eventBus?.emit({
+              id: event.id,
+              type: "event",
+              topic: "state",
+              sessionId,
+              timestamp: event.timestamp,
+              payload: {
+                ...event.payload,
+                _subType: event.type,
+                turnId: event.turnId,
+              },
+            });
+          });
         for (const result of results) {
           args.signal?.throwIfAborted();
           const out = await processRuntimeResult(

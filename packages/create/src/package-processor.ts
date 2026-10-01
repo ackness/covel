@@ -327,17 +327,15 @@ export function applyCreationBriefToManifest(
     const dimensions = isRecord(manifest.dimensions)
       ? manifest.dimensions
       : undefined;
-    const starting =
-      dimensions && isRecord(dimensions.startingConditions)
-        ? dimensions.startingConditions
-        : undefined;
-    if (
-      !starting ||
-      !isRecord(starting.startingResources) ||
-      Object.keys(starting.startingResources).length < 2
-    ) {
+    const numericResources = Object.values(dimensions ?? {}).filter(
+      (definition) =>
+        isRecord(definition) &&
+        typeof definition.initialValue === "number" &&
+        Number.isFinite(definition.initialValue),
+    );
+    if (numericResources.length < 2) {
       errors.push(
-        "dimensions.startingConditions.startingResources must include at least 2 resources",
+        "opening-kit must include at least 2 numeric dimension initial values",
       );
     }
   }

@@ -1,4 +1,5 @@
 import { validateWorldModel } from "@covel/shared";
+import { createWorldModelView } from "@covel/runtime";
 import type { StoreTransaction } from "@covel/store";
 import { characterRecordFromValue } from "../../../world-data/character-effects.js";
 
@@ -20,9 +21,7 @@ export async function importWorldEmbeddedCharacters(
     if (!record) throw new Error("Invalid embedded character record");
     return record;
   });
-  validateWorldModel({
-    characters: records,
-    characterSchema: await store.getCharacterSchema(sessionId),
-  });
+  const view = await createWorldModelView(store, sessionId);
+  validateWorldModel({ ...view, characters: records });
   for (const record of records) await store.upsertCharacter(record);
 }

@@ -4,7 +4,6 @@
 
 import type {
   ContentPart,
-  I18nText,
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
@@ -220,7 +219,8 @@ export interface WorldContextView {
   readonly lore?: string;
   readonly tone?: string;
   readonly openingScenario?: string;
-  readonly dimensions?: Readonly<Record<string, unknown>>;
+  readonly dimensions?: import("@covel/shared").DimensionSnapshot;
+  readonly dimensionProviderPluginId?: string;
   readonly schema?: Readonly<Record<string, unknown>>;
   readonly entries?: readonly Readonly<Record<string, unknown>>[];
   /** Free-form extra fields from world metadata. */

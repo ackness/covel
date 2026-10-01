@@ -1,3 +1,4 @@
+import { DIMENSION_DATA_NAMESPACE, dimensionRecordSchema } from "@covel/shared";
 import { commitExecution } from "../commit-execution.js";
 import {
   createTurnEmitter,
@@ -83,6 +84,7 @@ export interface RunManualTurnArgs {
    * the target's inject/needs against them.
    */
   readonly retrySeedResults?: readonly RuntimeResult[];
+  readonly sourceTurnId?: string;
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
@@ -291,7 +293,34 @@ export function createPluginRpcRuntimeTurnRunner(
     });
 
     const committed = outcome.status === "committed";
+    const conflict = outcome.failedProposals.find(
+      (item) =>
+        item.proposal.type === "dimension.update" &&
+        item.error?.startsWith("dimension-version-conflict"),
+    );
+    const currentVersions = conflict
+      ? Object.fromEntries(
+          (
+            await ctx.store.listPluginData(
+              ctx.sessionId,
+              conflict.proposal.source.pluginId,
+              DIMENSION_DATA_NAMESPACE,
+            )
+          ).map((row) => [
+            row.key,
+            dimensionRecordSchema.parse(row.value).version,
+          ]),
+        )
+      : undefined;
     return {
+      ...(currentVersions
+        ? {
+            dimensionConflict: {
+              code: "dimension-version-conflict" as const,
+              currentVersions,
+            },
+          }
+        : {}),
       committed,
       failedProposalCount: outcome.failedProposals.length,
       snapshotFailed: outcome.snapshotFailed,
@@ -529,6 +558,7 @@ export function createPluginRpcRuntimeTurnRunner(
       origin: "manual",
       manualTrigger: {
         runtimeId: args.runtimeId,
+        ...(args.sourceTurnId ? { sourceTurnId: args.sourceTurnId } : {}),
         ...(args.payload !== undefined && args.payload !== null
           ? { payload: args.payload as Record<string, unknown> }
           : {}),
