@@ -43,6 +43,7 @@ pluginPolicy:
         - character-blueprint
         - character-presence
         - director
+        - story-events
       recommended:
         - branch-reply
   presetId: emberback-rescue
@@ -65,6 +66,7 @@ pluginPolicy:
     - character-presence
     - living-world-rules
     - director
+    - story-events
 characterSchema:
   types:
     - npc

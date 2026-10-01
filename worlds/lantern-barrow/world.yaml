@@ -57,6 +57,7 @@ pluginPolicy:
         - living-world-rules
         - character-blueprint
         - director
+        - story-events
       recommended:
         - branch-reply
         - cost-gate
@@ -84,6 +85,7 @@ pluginPolicy:
     - living-world-rules
     - character-blueprint
     - director
+    - story-events
     - branch-reply
     - cost-gate
 characterSchema:

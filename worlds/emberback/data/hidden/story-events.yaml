@@ -1,0 +1,24 @@
+# Hidden story events (visibility: hidden in world.data.yaml). Payloads are
+# briefs for the narrator; echoes stay possibilities, never fixed fate.
+- id: second-echo
+  title: The Second Echo
+  when:
+    all:
+      - dimension: crownfire
+        path: stage
+        in: [imminent, overhead]
+      - dimension: relayGrid
+        path: systems.longRange
+        in: [low, full]
+  payload: >-
+    With Crownfire close and the long-range array powered, every receiver picks up a second, badly broken transmission in the hero's own voice, timestamped further ahead than the first. Only fragments survive — a breath, the words "under the arch", and a carrier shape that matches the Mile Seventeen field repeater. Make the technical facts concrete and consistent, let the crew react, and leave its meaning open; do not reveal who sends the call or why.
+  priority: 10
+- id: eli-heard-more
+  title: What Eli Heard
+  when:
+    dimension: signalLog
+    path: call-0614.status
+    in: [traced, verified]
+  payload: >-
+    Once the 06:14 call has been traced or verified, Eli finally pulls the hero aside. After the hero's voice stopped, he heard something else in the static — a second voice counting down from ten, and he is almost sure it was Mina's. He kept quiet because he thought he had broken something on his shift. Play his nerves and his relief at telling someone; do not confirm what the countdown means.
+  priority: 5
