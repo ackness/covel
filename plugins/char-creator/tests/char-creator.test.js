@@ -150,7 +150,11 @@ describe("char-creator plugin", () => {
       expect(manifest.completeAfterTools).toEqual(["sync-characters"]);
       expect(manifest.tools?.defer).toBeUndefined();
       expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
-      expect(manifest.maxRetries).toBe(0);
+      // One retry rides out a stalled provider call; reasoning stays off so
+      // a normal settlement is a single short call.
+      expect(manifest.maxRetries).toBe(1);
+      expect(manifest.callTimeoutMs).toBe(30000);
+      expect(manifest.llm?.reasoningEffort).toBe("disabled");
     });
 
     it("does not declare list-characters — the roster is injected", () => {

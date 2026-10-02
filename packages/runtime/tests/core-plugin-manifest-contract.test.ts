@@ -187,7 +187,9 @@ describe("core plugin manifest contract", () => {
         builtin: ["sync-characters", "get-character"],
       },
       completeAfterTools: ["sync-characters"],
-      maxRetries: 0,
+      llm: { reasoningEffort: "disabled" },
+      maxRetries: 1,
+      callTimeoutMs: 30000,
     });
 
     for (const downstream of [
