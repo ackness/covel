@@ -66,7 +66,7 @@ fallback = "story"
 # model    = "qwen3.8-flash"
 # baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 # protocol = "openai-chat-v1"
-# reasoning_effort = "disabled"
+# reasoningEffort = "disabled"
 # fallback = "utility"
 #
 # [covel.memory]
@@ -74,7 +74,7 @@ fallback = "story"
 # model    = "qwen3.8-flash"
 # baseUrl  = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 # protocol = "openai-chat-v1"
-# reasoning_effort = "disabled"
+# reasoningEffort = "disabled"
 # fallback = "utility"
 
 # -- Optional: Google Gemini native text -------------------------
