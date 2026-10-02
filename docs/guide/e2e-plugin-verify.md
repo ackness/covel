@@ -142,7 +142,7 @@ Trigger Verification 的裁决列：
 **期望推导规则（复刻 stage 调度器）——三道闸门依次判定：**
 
 1. **激活集**：`pluginId` 不在会话 `activePlugins` 里 → 永不调度（`SKIP`）。互斥 provider（如 `narrator` vs `chat-mode-narrator`、多家 image 引擎）在这一步天然收敛——只期望激活的那一个。
-2. **stage**：无 `stage` 的 runtime（event / manual / 仅贡献型，如 `memory` / `director` / `cost-gate`——它们 `trigger.type` 可能是 `auto` 但没有 stage）**永不进入 stage 调度**，与 trigger.type 无关（`SKIP`；若因自身 event/manual 触发而运行则记 `FIRE`）。
+2. **stage**：无 `stage` 的 runtime（event / manual / 仅贡献型，如 `memory` / `cost-gate`——它们 `trigger.type` 可能是 `auto` 但没有 stage）**永不进入 stage 调度**，与 trigger.type 无关（`SKIP`；若因自身 event/manual 触发而运行则记 `FIRE`）。
 3. **band**：`setup` stage 只在开场阶段跑；其余 stage（`pre-turn` / `narrative` / `post-turn` / `audit`）只在 playing 回合跑。越 band → `SKIP`。
 
 命中三道闸门后，按执行所在的逻辑回合（`completedPlayerTurns + 1`，开场接力与第一条玩家消息同为 1）判定：

@@ -56,7 +56,6 @@ pluginPolicy:
         - npc-graph
         - living-world-rules
         - character-blueprint
-        - director
         - story-events
         - story-plotter
       recommended:
@@ -85,7 +84,6 @@ pluginPolicy:
     - npc-graph
     - living-world-rules
     - character-blueprint
-    - director
     - story-events
     - story-plotter
     - branch-reply
