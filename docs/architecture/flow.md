@@ -248,7 +248,7 @@ plugin_data 写入      ──►    │ SSE emit()               │  插件消
 LLM 决定调用工具                框架处理                        结果
 ──────────────               ────────                       ──────
 
-LLM: "调用 unlock-         ToolExecutor:
+LLM: "调用 sync-           ToolExecutor:
       codex-entries"       1. findTool(name, context)
       { entries: [...] }      ├─ builtin? → 直接访问
                               └─ local? → 检查 pluginToolAccess
@@ -425,7 +425,7 @@ stage 屏障保证 narrative 阶段结束后才运行 post-turn。stage 内独�
   ────────────                   ──────                     ──────
 
   sync-codex-entries
-  params: { unlocks: [...], updates: [...] }
+  params: { entries: [...] }
         │
         ▼
   withPendingProposals()       ──► execution write buffer

@@ -37,9 +37,7 @@
 | dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                   |
 | update-dimensions                     | local   | world-init          | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化                                         |
 | submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1`                        |
-| sync-codex-entries                    | local   | codex               | auto-allow | 原子批量提交本轮图鉴新增与补充                                                      |
-| unlock-codex-entries                  | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部新增原语                                            |
-| update-codex-entry                    | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部更新原语                                            |
+| sync-codex-entries                    | local   | codex               | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目                                          |
 | generate-guide                        | local   | guide               | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
 | upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
 | list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                 |
@@ -803,64 +801,26 @@ Attributes:
 
 **所属**: codex (`plugins/codex/tools/sync-codex-entries.js`)
 
-一次提交本轮全部图鉴变化，新发现放入 `unlocks`，已有条目的补充放入 `updates`。工具复用下方新增/更新原语并累积 pending proposals；任一更新找不到 `entryId` 时抛错，整个调用不返回 proposal，避免只提交前半批。
+一次提交本轮全部图鉴变化。每条记录按标题（去首尾空白、不区分大小写）匹配已有条目：匹配到就把 `content` 追加到原内容、合并标签、稀有度只升不降（类别保留原值）；否则新建条目。模型不处理 entryId，也不需要在新建和更新两个调用之间选择，猜错 id 不会让调用失败。一轮最多新建 3 条，超出的新标题跳过并列在 `skipped` 里；同一标题在一批里出现多次时依次追加。
 
-| 参数      | 类型          | 必需 | 描述                               |
-| --------- | ------------- | ---- | ---------------------------------- |
-| `unlocks` | CodexEntry[]  |      | 默认 `[]`，最多 3 个真正的新条目   |
-| `updates` | CodexUpdate[] |      | 默认 `[]`，最多 5 个已有条目的补充 |
+新条目的 key 是标题本身（`codex-west-herb-garden`、`codex-西侧旧药园`），不含随机串；该 key 已被别的条目占用时加 `-2` 等后缀。全部写入合成一个 `plugin.data.batch` proposal。
 
-两组不能同时为空；没有值得记录的新事实时调用 `runtime-done`。输出为 `{ unlocked, updated, entries, updates, ui }`。`codex` 将它列入 `completeAfterTools`，成功后立即结束。
-
----
-
-### unlock-codex-entries
-
-**所属**: codex (`plugins/codex/tools/unlock-codex-entries.js`)
-
-批量解锁图鉴条目，每个条目生成一张"知识发现"UI 卡片。
-
-返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic-<random>`、`codex-<random>`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
-
-| 参数    | 类型         | 必需 | 描述             |
-| ------- | ------------ | ---- | ---------------- |
-| entries | CodexEntry[] | ✓    | 要解锁的条目列表 |
+| 参数      | 类型         | 必需 | 描述                 |
+| --------- | ------------ | ---- | -------------------- |
+| `entries` | CodexEntry[] | ✓    | 1-8 条，按重要性排序 |
 
 **CodexEntry**:
 
-| 字段      | 类型     | 必需 | 描述                                                             |
-| --------- | -------- | ---- | ---------------------------------------------------------------- |
-| category  | enum     | ✓    | `monster` / `item` / `location` / `lore` / `character` / `skill` |
-| title     | string   | ✓    | 条目标题                                                         |
-| content   | string   | ✓    | 2-3 句话描述                                                     |
-| tags      | string[] | ✓    | 标签列表（1-5 个）                                               |
-| rarity    | enum     |      | `common`(默认) / `uncommon` / `rare` / `legendary`               |
-| imageHint | string   |      | 视觉描述提示                                                     |
+| 字段      | 类型     | 必需 | 描述                                                                     |
+| --------- | -------- | ---- | ------------------------------------------------------------------------ |
+| category  | enum     | ✓    | `monster` / `item` / `location` / `lore` / `character` / `skill`         |
+| title     | string   | ✓    | 条目标题；与已有标题相同即补充该条目                                     |
+| content   | string   | ✓    | 新条目写 2-3 句；补充已有条目只写新信息                                  |
+| tags      | string[] |      | 至多 5 个                                                                |
+| rarity    | enum     |      | `common`(新条目默认) / `uncommon` / `rare` / `legendary`；补充时只升不降 |
+| imageHint | string   |      | 视觉描述提示                                                             |
 
-**输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组。每个 entry 包含 `entryId`（短 ID）。
-
-**ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，每个新 ID 都含随机标识；英文标题额外保留可读 slug，中文等非 ASCII 标题不依赖计数器。更新已有条目应保留其返回 ID。
-
-**当前用途**: `sync-codex-entries` 的内部组合原语。为兼容已有插件代码仍注册，但捆绑的 `codex` runtime 不再直接向模型声明它。
-
----
-
-### update-codex-entry
-
-**所属**: codex (`plugins/codex/tools/update-codex-entry.js`)
-
-更新已有图鉴条目，追加新发现的信息。
-
-| 参数          | 类型     | 必需 | 描述                                       |
-| ------------- | -------- | ---- | ------------------------------------------ |
-| entryId       | string   | ✓    | 要更新的条目短 ID（如 `codex-fire-magic`） |
-| appendContent | string   | ✓    | 追加的新内容                               |
-| newTags       | string[] |      | 新增标签                                   |
-| rarityUpgrade | enum     |      | 提升稀有度                                 |
-
-**输出**: `{ updated, entryId, ui }` — 含更新动画的 UI 卡片
-
-**当前用途**: `sync-codex-entries` 的内部组合原语。它支持读取同一次 sync 已缓冲的新增条目；捆绑 runtime 不再直接向模型声明它。
+输出为 `{ created, updated, skipped, ui }`（`created` / `updated` 是写入的 key）。没有值得记录的新事实时调用 `runtime-done`。`codex` 将它列入 `completeAfterTools`，成功后立即结束。
 
 ---
 

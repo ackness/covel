@@ -3,23 +3,18 @@ import {
   bindToolStore,
   createPluginTestStore,
   executeToolAndCommit as executeAndCommit,
-  commitToolResults,
 } from "@covel/plugin-test-utils";
 /**
  * codex plugin tests.
  *
- * After the function→agent runtime switch (see PLUGIN.md rewrite), the
- * deterministic-extraction path is gone and the plugin is now LLM-driven
- * with local tools. These tests cover:
- *
- * 1. Local tools: `unlock-codex-entries` + `update-codex-entry` (pure,
- *    independent of runtime type — verified against the real in-memory store and commit boundary)
- * 2. Plugin manifest: agent runtime shape, declares local tools,
- *    `input.inject` contains both `narrator` runtime inject and the
+ * 1. `sync-codex-entries`: one call creates new entries and adds to
+ *    existing ones matched by title, verified against the real in-memory
+ *    store and commit boundary.
+ * 2. Plugin manifest: agent runtime shape, the single local tool, and the
  *    plugin-data inject that feeds existing entries into the prompt.
- * 3. UI declarations unchanged.
+ * 3. UI declarations.
  *
- * Integration-level coverage (real LLM calling the tool chain) lives in
+ * Integration-level coverage (real LLM calling the tool) lives in
  * `scripts/e2e-plugin-verify.ts`, not here.
  */
 
@@ -34,11 +29,8 @@ import {
 import {
   getPendingProposals,
   getToolContent,
-  shortIdBatch,
 } from "@covel/plugin-handlers-utils";
 import { tool, z } from "@covel/tools";
-import createUnlockCodexEntries from "../tools/unlock-codex-entries.js";
-import createUpdateCodexEntry from "../tools/update-codex-entry.js";
 import createSyncCodexEntries from "../tools/sync-codex-entries.js";
 import {
   CODEX_CATEGORY_METADATA,
@@ -49,7 +41,7 @@ const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
 // ── Tool unit tests ──────────────────────────────────────────────
 
-describe("codex tools", () => {
+describe("sync-codex-entries", () => {
   const ctx = {
     sessionId: "sess-1",
     turnId: "turn-1",
@@ -57,511 +49,156 @@ describe("codex tools", () => {
     runtimeId: "codex",
   };
   let mockStore;
-  let unlockCodexEntriesTool;
-  let updateCodexEntryTool;
-  let syncCodexEntriesTool;
+  let syncTool;
+  const sync = async (entries) =>
+    getToolContent(
+      await executeAndCommit(syncTool, { entries }, ctx, mockStore),
+    );
+  const stored = async (key) =>
+    (await mockStore.getPluginData("sess-1", "codex", "entries", key))?.value;
+  const mountain = {
+    category: "location",
+    title: "青萍山",
+    content: "青萍宗所在的灵脉山峰，外门在山腰，内门在山顶。",
+    tags: ["宗门", "灵脉"],
+  };
 
   beforeEach(async () => {
     mockStore = await createPluginTestStore(ctx);
-    unlockCodexEntriesTool = bindToolStore(
-      createUnlockCodexEntries({
-        tool,
-        z,
-        shortIdBatch,
-      }),
-      mockStore,
-    );
-    updateCodexEntryTool = bindToolStore(
-      createUpdateCodexEntry({
-        tool,
-        z,
-      }),
-      mockStore,
-    );
-    syncCodexEntriesTool = bindToolStore(
-      createSyncCodexEntries({
-        tool,
-        z,
-        shortIdBatch,
-      }),
-      mockStore,
-    );
+    syncTool = bindToolStore(createSyncCodexEntries({ tool, z }), mockStore);
   });
 
-  describe("unlock-codex-entries", () => {
-    it("should unlock a single entry with UI card", async () => {
-      const result = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: [
-            {
-              category: "location",
-              title: "青萍山",
-              content: "青萍宗所在的灵脉山峰，外门在山腰，内门在山顶。",
-              tags: ["宗门", "灵脉"],
-              rarity: "common",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
+  it("creates an entry keyed by its title, with a discovery card", async () => {
+    const result = await sync([mountain]);
 
-      expect(getToolContent(result).unlocked).toBe(1);
-      expect(getToolContent(result).entries[0].title).toBe("青萍山");
-      expect(getToolContent(result).entries[0].entryId).toBeDefined();
-      // UI blocks use the generic `ui-spec` convention: the block carries a
-      // self-contained json-render spec tree instead of a codex-specific type.
-      expect(getToolContent(result).ui[0].type).toBe("ui-spec");
-      expect(getToolContent(result).ui[0].spec.type).toBe("EntryCard");
-      expect(getToolContent(result).ui[0].spec.props.title).toBe("青萍山");
-      expect(getToolContent(result).ui[0].spec.props.category).toBe("location");
-      expect(getToolContent(result).ui[0].spec.props.isNew).toBe(true);
+    expect(result.created).toEqual(["codex-青萍山"]);
+    expect(result.ui[0]).toMatchObject({
+      type: "ui-spec",
+      entryId: "codex-青萍山",
+      spec: {
+        type: "EntryCard",
+        props: { title: "青萍山", category: "location", isNew: true },
+      },
     });
-
-    it("should persist entries to plugin-data store", async () => {
-      const result = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: [
-            {
-              category: "location",
-              title: "青萍山",
-              content: "青萍宗所在的灵脉山峰。",
-              tags: ["宗门"],
-              rarity: "common",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
-
-      const entryId = getToolContent(result).entries[0].entryId;
-      const stored = await mockStore.getPluginData(
-        "sess-1",
-        "codex",
-        "entries",
-        entryId,
-      );
-      expect(stored).not.toBeNull();
-      expect(stored.value.title).toBe("青萍山");
-      expect(stored.value.category).toBe("location");
-      // Freshly unlocked entries carry the generic `isNew` flag so the UI
-      // can decorate the card without a codex-specific side-channel.
-      expect(stored.value.isNew).toBe(true);
-      // Each persisted value self-describes its category for the UI.
-      expect(stored.value.categoryMeta).toEqual({
-        displayName: { zh: "地点", en: "Locations" },
-        icon: "MapPin",
-        color: "blue",
-      });
-    });
-
-    it("should attach categoryMeta for every known category", async () => {
-      const categories = Object.keys(CODEX_CATEGORY_METADATA);
-      const result = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: categories.map((category) => ({
-            category,
-            title: `测试-${category}`,
-            content: `这是一个 ${category} 类目的测试条目，用于验证 categoryMeta 注入逻辑。`,
-            tags: [category],
-            rarity: "common",
-          })),
-        },
-        ctx,
-        mockStore,
-      );
-
-      for (let i = 0; i < categories.length; i++) {
-        const category = categories[i];
-        const stored = await mockStore.getPluginData(
-          "sess-1",
-          "codex",
-          "entries",
-          getToolContent(result).entries[i].entryId,
-        );
-        expect(stored.value.categoryMeta).toEqual(
-          CODEX_CATEGORY_METADATA[category],
-        );
-      }
-    });
-
-    it("should batch unlock multiple entries", async () => {
-      const result = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: [
-            {
-              category: "character",
-              title: "苏婉",
-              content: "青萍宗外门首席弟子，冰灵根。",
-              tags: ["弟子", "冰灵根"],
-              rarity: "uncommon",
-            },
-            {
-              category: "item",
-              title: "梦莲",
-              content: "野生灵植，可短暂扩展灵识但有成瘾风险。",
-              tags: ["灵植", "危险"],
-              rarity: "rare",
-            },
-            {
-              category: "monster",
-              title: "瘴气蟾蜍",
-              content: "百灵沼泽常见妖兽，练气中期实力。",
-              tags: ["妖兽", "沼泽"],
-              rarity: "common",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
-
-      expect(getToolContent(result).unlocked).toBe(3);
-      expect(getToolContent(result).ui).toHaveLength(3);
-      // Each block is a generic ui-spec carrying an EntryCard spec.
-      // Rarity is reflected in spec.props.rarity; the renderer handles
-      // rarity → border/animation mapping (no plugin-side style tokens).
-      expect(getToolContent(result).ui[0].spec.props.rarity).toBe("uncommon");
-      expect(getToolContent(result).ui[1].spec.props.rarity).toBe("rare");
-      expect(getToolContent(result).ui[2].spec.props.rarity).toBe("common");
-
-      const stored = await mockStore.listPluginData(
-        "sess-1",
-        "codex",
-        "entries",
-      );
-      expect(stored).toHaveLength(3);
-    });
-
-    it("should generate legendary entry with glow animation", async () => {
-      const result = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: [
-            {
-              category: "lore",
-              title: "上古灵潮",
-              content: "远古天地灵气复苏事件，云梦泽由此成为灵气最浓郁的区域。",
-              tags: ["上古", "灵气", "历史"],
-              rarity: "legendary",
-              imageHint: "远古天空裂开，金色灵气如瀑布倾泻而下",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
-
-      expect(getToolContent(result).ui[0].spec.props.rarity).toBe("legendary");
-      // imageHint is kept in block `meta` so tools/traces can still see it,
-      // without pushing codex-specific styling into the spec tree.
-      expect(getToolContent(result).ui[0].meta.imageHint).toBe(
-        "远古天空裂开，金色灵气如瀑布倾泻而下",
-      );
+    expect(await stored("codex-青萍山")).toMatchObject({
+      title: "青萍山",
+      category: "location",
+      rarity: "common",
+      isNew: true,
+      categoryMeta: { displayName: { zh: "地点", en: "Locations" } },
     });
   });
 
-  describe("update-codex-entry", () => {
-    it("should update existing entry from store", async () => {
-      const unlockResult = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: [
-            {
-              category: "location",
-              title: "青萍山",
-              content: "青萍宗所在的灵脉山峰。",
-              tags: ["宗门"],
-              rarity: "common",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
+  it("adds to the entry with the same title instead of creating one", async () => {
+    await sync([mountain]);
+    const result = await sync([
+      {
+        category: "lore",
+        title: "  青萍山 ",
+        content: "山顶近来出现了新的古阵波动。",
+        tags: ["古阵"],
+        rarity: "rare",
+      },
+    ]);
 
-      const entryId = getToolContent(unlockResult).entries[0].entryId;
-
-      const result = await executeAndCommit(
-        updateCodexEntryTool,
-        {
-          entryId,
-          appendContent: "据传青萍山灵脉近年有衰退迹象，原因不明。",
-        },
-        ctx,
-        mockStore,
-      );
-
-      expect(getToolContent(result).updated).toBe(true);
-      expect(getToolContent(result).entryId).toBe(entryId);
-      // Updates use the same generic ui-spec convention as unlocks.
-      expect(getToolContent(result).ui[0].type).toBe("ui-spec");
-      expect(getToolContent(result).ui[0].spec.type).toBe("EntryCard");
-
-      const stored = await mockStore.getPluginData(
-        "sess-1",
-        "codex",
-        "entries",
-        entryId,
-      );
-      expect(stored.value.content).toContain("衰退迹象");
+    expect(result).toMatchObject({ created: [], updated: ["codex-青萍山"] });
+    expect(result.ui[0].spec.props).toMatchObject({
+      content: "山顶近来出现了新的古阵波动。",
+      tags: ["古阵"],
     });
-
-    it("should backfill categoryMeta when updating a pre-B2 entry", async () => {
-      // Simulate an entry written before B2 (no categoryMeta on the value).
-      const legacyId = "codex-legacy-entry";
-      await mockStore.setPluginData({
-        id: "legacy-record-id",
-        sessionId: "sess-1",
-        pluginId: "codex",
-        namespace: "entries",
-        key: legacyId,
-        value: {
-          category: "lore",
-          title: "上古传说",
-          content: "一段在 B2 之前已经写入的旧条目。",
-          tags: ["legacy"],
-          rarity: "common",
-        },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-
-      await executeAndCommit(
-        updateCodexEntryTool,
-        {
-          entryId: legacyId,
-          appendContent: "新增补充信息。",
-        },
-        ctx,
-        mockStore,
-      );
-
-      const stored = await mockStore.getPluginData(
-        "sess-1",
-        "codex",
-        "entries",
-        legacyId,
-      );
-      expect(stored.value.categoryMeta).toEqual(getCategoryMetadata("lore"));
-    });
-
-    it("should update a freshly unlocked entry before the turn commits", async () => {
-      const unlockResult = await unlockCodexEntriesTool.execute(
-        {
-          entries: [
-            {
-              category: "location",
-              title: "青萍山",
-              content: "青萍宗所在的灵脉山峰。",
-              tags: ["宗门"],
-              rarity: "common",
-            },
-          ],
-        },
-        ctx,
-      );
-
-      const entryId = getToolContent(unlockResult).entries[0].entryId;
-      const result = await updateCodexEntryTool.execute(
-        {
-          entryId,
-          appendContent: "山顶近来出现新的古阵波动。",
-        },
-        {
-          ...ctx,
-          pendingProposals: getPendingProposals(unlockResult),
-        },
-      );
-
-      expect(getToolContent(result).updated).toBe(true);
-      expect(getToolContent(result).entryId).toBe(entryId);
-
-      await commitToolResults([unlockResult, result], ctx, mockStore);
-
-      const stored = await mockStore.getPluginData(
-        "sess-1",
-        "codex",
-        "entries",
-        entryId,
-      );
-      expect(stored.value.content).toContain("古阵波动");
-    });
-
-    it("should return error for non-existent entry", async () => {
-      const result = await executeAndCommit(
-        updateCodexEntryTool,
-        {
-          entryId: "codex-nonexistent",
-          appendContent: "some content",
-        },
-        ctx,
-        mockStore,
-      );
-
-      expect(getToolContent(result).updated).toBe(false);
-      expect(getToolContent(result).error).toBeDefined();
-    });
-
-    it("should support rarity upgrade", async () => {
-      const unlockResult = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: [
-            {
-              category: "item",
-              title: "梦莲",
-              content: "野生灵植，可短暂扩展灵识但有成瘾风险。",
-              tags: ["灵植"],
-              rarity: "common",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
-      const entryId = getToolContent(unlockResult).entries[0].entryId;
-
-      const result = await executeAndCommit(
-        updateCodexEntryTool,
-        {
-          entryId,
-          appendContent: "发现梦莲与上古封印有直接关联！",
-          rarityUpgrade: "legendary",
-        },
-        ctx,
-        mockStore,
-      );
-
-      // rarityUpgrade lives in block meta (observability only). The spec
-      // props surface the new rarity via `rarity`; the renderer handles the
-      // visual treatment without any upgrade-specific plugin tokens.
-      expect(getToolContent(result).ui[0].meta.rarityUpgrade).toBe("legendary");
-      expect(getToolContent(result).ui[0].spec.props.rarity).toBe("legendary");
-
-      const stored = await mockStore.getPluginData(
-        "sess-1",
-        "codex",
-        "entries",
-        entryId,
-      );
-      expect(stored.value.rarity).toBe("legendary");
-    });
+    const value = await stored("codex-青萍山");
+    expect(value.category).toBe("location");
+    expect(value.content).toBe(
+      `${mountain.content}\n\n山顶近来出现了新的古阵波动。`,
+    );
+    expect(value.tags).toEqual(["宗门", "灵脉", "古阵"]);
+    expect(value.rarity).toBe("rare");
+    // Adding with a lower rarity never downgrades the entry.
+    await sync([{ ...mountain, content: "外门正在扩建。", rarity: "common" }]);
+    expect((await stored("codex-青萍山")).rarity).toBe("rare");
   });
 
-  describe("sync-codex-entries", () => {
-    it("publishes the full batch schema to the model", () => {
-      expect(syncCodexEntriesTool.jsonSchema).toMatchObject({
-        type: "object",
-        properties: {
-          unlocks: { type: "array", maxItems: 3 },
-          updates: { type: "array", maxItems: 5 },
-        },
-      });
+  it("matches titles case-insensitively and keys English titles as words", async () => {
+    await sync([{ ...mountain, title: "West Herb Garden" }]);
+    const result = await sync([
+      { ...mountain, title: "west herb garden", content: "Fenced at night." },
+    ]);
+    expect(result.updated).toEqual(["codex-west-herb-garden"]);
+  });
+
+  it("finds entries under any key and backfills their category metadata", async () => {
+    await mockStore.setPluginData({
+      id: "older-record",
+      sessionId: "sess-1",
+      pluginId: "codex",
+      namespace: "entries",
+      key: "codex-0f3a9c",
+      value: {
+        category: "lore",
+        title: "上古传说",
+        content: "一段较早写入的条目。",
+        tags: [],
+        rarity: "common",
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
-    it("commits new entries and existing-entry updates in one call", async () => {
-      const initial = await executeAndCommit(
-        unlockCodexEntriesTool,
-        {
-          entries: [
-            {
-              category: "location",
-              title: "青萍山",
-              content: "青萍宗所在的灵脉山峰，山腰分布着外门建筑。",
-              tags: ["宗门", "灵脉"],
-              rarity: "common",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
-      const existingId = getToolContent(initial).entries[0].entryId;
+    const result = await sync([
+      { category: "lore", title: "上古传说", content: "新增补充信息。" },
+    ]);
 
-      const rawResult = await executeAndCommit(
-        syncCodexEntriesTool,
-        {
-          unlocks: [
-            {
-              category: "item",
-              title: "梦莲",
-              content: "生于雾泽深处的灵植，花瓣能短暂增强灵识。",
-              tags: ["灵植", "雾泽"],
-              rarity: "uncommon",
-            },
-          ],
-          updates: [
-            {
-              entryId: existingId,
-              appendContent: "山顶近来出现了新的古阵波动。",
-              newTags: ["古阵"],
-              rarityUpgrade: "rare",
-            },
-          ],
-        },
-        ctx,
-        mockStore,
-      );
-      const result = getToolContent(rawResult);
+    expect(result.updated).toEqual(["codex-0f3a9c"]);
+    expect((await stored("codex-0f3a9c")).categoryMeta).toEqual(
+      getCategoryMetadata("lore"),
+    );
+  });
 
-      expect(getToolContent(result).unlocked).toBe(1);
-      expect(getToolContent(result).updated).toBe(1);
-      expect(getToolContent(result).ui).toHaveLength(2);
-      expect(getPendingProposals(rawResult)).toHaveLength(2);
+  it("writes one batch and keeps only the first three new titles", async () => {
+    const entry = (title) => ({ ...mountain, title });
+    const raw = await executeAndCommit(
+      syncTool,
+      {
+        entries: [
+          entry("一号"),
+          entry("二号"),
+          entry("一号"),
+          entry("三号"),
+          entry("四号"),
+        ],
+      },
+      ctx,
+      mockStore,
+    );
 
-      const updated = await mockStore.getPluginData(
-        "sess-1",
-        "codex",
-        "entries",
-        existingId,
-      );
-      expect(updated.value.content).toContain("古阵波动");
-      expect(updated.value.tags).toContain("古阵");
-      expect(updated.value.rarity).toBe("rare");
-
-      const rows = await mockStore.listPluginData("sess-1", "codex", "entries");
-      expect(rows).toHaveLength(2);
+    expect(getPendingProposals(raw)).toHaveLength(1);
+    expect(getToolContent(raw)).toMatchObject({
+      created: ["codex-一号", "codex-二号", "codex-三号"],
+      updated: [],
+      skipped: ["四号"],
     });
+    expect((await stored("codex-一号")).content).toBe(
+      `${mountain.content}\n\n${mountain.content}`,
+    );
+  });
 
-    it("fails atomically when an update target does not exist", async () => {
-      await expect(
-        syncCodexEntriesTool.execute(
-          {
-            unlocks: [
-              {
-                category: "item",
-                title: "未提交的梦莲",
-                content: "这条新记录不应在同批更新失败后被持久化。",
-                tags: ["测试"],
-                rarity: "common",
-              },
-            ],
-            updates: [
-              {
-                entryId: "codex-missing",
-                appendContent: "无法追加的内容。",
-              },
-            ],
-          },
-          ctx,
-        ),
-      ).rejects.toThrow("Entry codex-missing not found");
-
-      expect(
-        await mockStore.listPluginData("sess-1", "codex", "entries"),
-      ).toHaveLength(0);
+  it("gives a new entry a free key when its title's key is taken", async () => {
+    await mockStore.setPluginData({
+      id: "other",
+      sessionId: "sess-1",
+      pluginId: "codex",
+      namespace: "entries",
+      key: "codex-青萍山",
+      value: { category: "lore", title: "另一条", content: "占用键名。" },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
+    expect((await sync([mountain])).created).toEqual(["codex-青萍山-2"]);
+  });
 
-    it("rejects an empty sync and reserves runtime-done for no-change turns", async () => {
-      await expect(
-        syncCodexEntriesTool.execute({ unlocks: [], updates: [] }, ctx),
-      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  it("rejects an empty sync and reserves runtime-done for no-change turns", async () => {
+    await expect(syncTool.execute({ entries: [] }, ctx)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
     });
   });
 });

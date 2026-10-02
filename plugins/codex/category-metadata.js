@@ -1,8 +1,8 @@
 /**
  * Codex category display metadata. Owned by `codex` plugin.
  *
- * Used by tools (`unlock-codex-entries`, `update-codex-entry`) to enrich the
- * persisted entry payload at write time. The UI (json-render spec) reads
+ * Used by `sync-codex-entries` to enrich the persisted entry payload at
+ * write time. The UI (json-render spec) reads
  * `value.categoryMeta` directly so the framework does NOT need a hardcoded
  * category lookup table — the framework stays plugin-agnostic.
  *
@@ -13,7 +13,7 @@
  *     color: string,  // Semantic color token; UI maps to Tailwind classes
  *   }
  *
- * Categories MUST stay in sync with the enum in `tools/unlock-codex-entries.js`.
+ * Categories MUST stay in sync with the enum in `tools/sync-codex-entries.js`.
  */
 
 /** @typedef {{ displayName: { zh: string, en: string }, icon: string, color: string }} CodexCategoryMeta */

@@ -18,8 +18,9 @@ contributes:
         - Existing entries are listed in the `<existing-entries>` block
         (injected automatically during prompt build)
 
-        - Put genuinely new discoveries in `unlocks` and additions to existing
-        records in `updates`, then call `sync-codex-entries` once
+        - Put every discovery of this turn in `entries` and call
+        `sync-codex-entries` once; a title that matches an existing entry adds
+        to it, any other title creates one
 
         - If nothing qualifies, do not call any business tool
 
@@ -45,15 +46,15 @@ The framework has already injected the session's full set of entries into the `<
 - <entryId> | <updatedAt> | <value-summary>
 ```
 
-`<entryId>` is the plugin-data key (e.g. `codex-bailing-marsh`). Put it in `sync-codex-entries.updates[].entryId` when supplementing an existing record.
+`<value-summary>` contains the entry title. To add to an existing entry, reuse its title; no entryId is needed. The tool matches titles case-insensitively, appends to a match, and creates an entry otherwise.
 
 ## Workflow
 
 1. Read `worldIR.value` inside `<runtime-inputs>` carefully
-2. Scan `<existing-entries>` for entryIds whose titles/tags overlap any potential discovery in the WorldIR
+2. Scan `<existing-entries>` for titles/tags that overlap any potential discovery in the WorldIR
 3. Pick **at most 3** truly codex-worthy new discoveries using the rules below
-4. If a discovery matches an existing entryId → put it in `updates`; if it is entirely new → put it in `unlocks`
-5. Submit both kinds of change in **one** `sync-codex-entries` call
+4. Reuse the existing title for an addition to an entry and a new title for a new discovery; put both in `entries`, most important first
+5. Submit them in **one** `sync-codex-entries` call
 6. If nothing qualifies → **call `runtime-done`**. Do not force records.
 
 ## Qualification Rules (STRICT)
@@ -105,7 +106,7 @@ A candidate must satisfy **all three** rules:
 
 ```json
 {
-  "unlocks": [
+  "entries": [
     {
       "category": "location",
       "title": "West-Side Old Herb Garden",
@@ -124,16 +125,17 @@ A candidate must satisfy **all three** rules:
 }
 ```
 
-**Case 2 — supplement existing entry**
+**Case 2 — supplement an existing entry (same title; `content` holds only the new information)**
 
 ```json
 {
-  "updates": [
+  "entries": [
     {
-      "entryId": "codex-west-side-old-herb-garden",
-      "appendContent": "Late at night, at least two figures were seen secretly moving heavy objects deep in the garden; one figure stood upright in a manner resembling the Inner-Sect Steward.",
-      "newTags": ["night investigation", "Inner-Sect Steward"],
-      "rarityUpgrade": "rare"
+      "category": "location",
+      "title": "West-Side Old Herb Garden",
+      "content": "Late at night, at least two figures were seen secretly moving heavy objects deep in the garden; one figure stood upright in a manner resembling the Inner-Sect Steward.",
+      "tags": ["night investigation", "Inner-Sect Steward"],
+      "rarity": "rare"
     }
   ]
 }
@@ -145,7 +147,7 @@ Do not call any writer tool. Call `runtime-done` to finish. Existing entries are
 
 ## Hard constraints
 
-- Up to 3 new entries per turn; beyond that keep only the top 3
+- Up to 3 new entries per turn; the tool keeps only the first 3 new titles, so order by importance
 - `title` must stand alone — readers must grasp its meaning without context
 - `content` must be 2–3 **factual sentences**, never adjective soup or exclamations
 - `tags` are 2–5 nouns; no verbs, no adjectives
