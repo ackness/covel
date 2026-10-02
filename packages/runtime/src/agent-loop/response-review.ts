@@ -21,10 +21,15 @@ export function createResponseReviewer(
       throw new Error(`Response validation failed: ${reviewed.correction}`);
     }
     // No tool-call IDs: this rejected batch was deliberately not executed.
+    // The reasoning goes back with the draft: thinking-mode providers
+    // (DeepSeek, DashScope Qwen) reject an assistant turn without it.
     if (reviewed.response.content) {
       transcript.push({
         role: "assistant",
         content: reviewed.response.content,
+        ...(reviewed.response.reasoningContent
+          ? { reasoningContent: reviewed.response.reasoningContent }
+          : {}),
       });
     }
     transcript.push({

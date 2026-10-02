@@ -147,6 +147,17 @@ describe("plugin response validation", () => {
       output: { narrativeOutput: "I watch the harbor." },
     });
   });
+  it("sends a rejected draft back with its reasoning", async () => {
+    const { generate } = await run([
+      { ...text("Rejected draft"), reasoningContent: "Plan the scene." },
+      text("I watch the harbor."),
+    ]);
+    const retry = generate.mock.calls[1]![0].messages;
+    // Thinking-mode providers reject an assistant turn without its reasoning.
+    expect(
+      retry.find((message) => message.content === "Rejected draft"),
+    ).toMatchObject({ role: "assistant", reasoningContent: "Plan the scene." });
+  });
   it("streams drafts and resets the rejected one before the accepted story", async () => {
     const { result, stream, onDelta } = await run(
       [text("Rejected draft"), text("I watch the harbor.")],
