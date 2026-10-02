@@ -19,6 +19,7 @@ requires:
 optional:
   - world.dimensions@1
   - world-time-context@1
+  - world-ir-provider@1
 entry: ./server/index.js
 contributes:
   tools:

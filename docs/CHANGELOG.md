@@ -8,11 +8,12 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 - **Hidden world data.** worldData sources accept `visibility: hidden`. Hidden data imports into the receiving plugin's `_hidden.<namespace>` and stays out of prompts, LLM data tools, extension handlers, and every public API until a plugin reveals it (#101).
 - **Hidden story events.** The new `story-events` plugin reveals world-authored events when their dimension, world-time, or `revealed` (chained) conditions hold, handing narration a one-turn cue. All bundled worlds ship hidden events (#101, #102).
-- **Story Plotter.** The new `story-plotter` plugin plants hidden follow-up events during play every few turns. Plans travel through the `story-event.plan@1` contract; `story-events/intake` validates them and stores accepted events in `_hidden.planned`, where they fire once. All bundled worlds enable it.
+- **Story Plotter.** The new `story-plotter` plugin plants hidden follow-up events during play every few turns. Plans travel through the `story-event.plan@1` contract; `story-events/intake` validates them and stores accepted events in `_hidden.planned`, where they fire once. The planner sees the world summary, the hero, and this turn's WorldIR when available. Mistport, Emberback, and Lantern Barrow recommend it; Haruka Academy keeps its authored romance routes without it.
 - **Concealed runtimes.** `io.concealed: true` strips a runtime's prompts, tool arguments, tool results, and outputs from traces, the live stream, the session view, `/turns`, and manual RPC responses, keeping only names, status, timing, and usage.
 
 ### Changed
 
+- **cost-gate keeps narrative inputs.** Past the soft cap it now trims only runtimes after the narrative; `pre-turn` runtimes (dice pools, tabletop checks, dimension and world-time context, hidden story cues) keep running so the story itself does not change.
 - A plugin's own code (function runtimes and its local tools) may now write its own `_hidden.*` namespaces. The REST API and the builtin `plugin-data-set` / `plugin-data-set-batch` tools reject every `_` namespace.
 
 ## [0.0.44] - 2026-10-01

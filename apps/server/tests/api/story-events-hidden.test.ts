@@ -395,6 +395,13 @@ describe("hidden world data and story events", () => {
     for (let turn = 1; turn <= 4 && !(await plannedRows()).length; turn += 1)
       await sendTurn(id, "I ask the dockhands about the missing keeper.");
     const planned = await plannedRows();
+    // The planner knows the world it is planning for.
+    const plannerPrompt = llm.calls.find((call) =>
+      call.tools.includes("plan-story-events"),
+    )!.text;
+    expect(plannerPrompt).toContain("Hidden Demo");
+    expect(plannerPrompt).toContain("A harbor with a secret.");
+    expect(plannerPrompt).toContain("Ren");
     expect(planned.map((row) => row.key)).toEqual(["keeper-returns"]);
     expect(planned[0]!.value).toMatchObject({
       once: true,

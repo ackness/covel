@@ -184,16 +184,16 @@ describe("normalize golden (bundled plugin set)", () => {
     // Raw narrative consumers stay in the first level. Structured state
     // consumers depend on the shared world-ir provider and form a second
     // parallel level, so one extraction is reused instead of each plugin
-    // independently parsing the same story text.
+    // independently parsing the same story text. Hidden-event plans from the
+    // second level are validated last.
     const levels = levelsOf(postTurn);
-    expect(levels).toHaveLength(2);
+    expect(levels).toHaveLength(3);
     expect(levels[0]).toEqual([
       "branch-reply",
       "char-creator/character-tracker",
       "guide",
       "memory/extract",
       "scene-prompts",
-      "story-plotter/plot",
       "world-ir",
       "world-time/advance",
     ]);
@@ -203,9 +203,10 @@ describe("normalize golden (bundled plugin set)", () => {
       "core-quest",
       "inventory",
       "npc-graph/extractor",
-      "story-events/intake",
+      "story-plotter/plot",
       "world-init/dimension-tracker",
     ]);
+    expect(levels[2]).toEqual(["story-events/intake"]);
   });
 
   it("maps the documented core chain onto the single-declaration surface", async () => {
