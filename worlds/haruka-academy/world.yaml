@@ -57,6 +57,7 @@ pluginPolicy:
         - branch-reply
         - affinity
         - story-events
+        - story-plotter
       recommended:
         - npc-graph
   presetId: haruka-galgame
@@ -81,6 +82,7 @@ pluginPolicy:
     - branch-reply
     - affinity
     - story-events
+    - story-plotter
     - npc-graph
 pluginSettings:
   chat-mode-narrator:

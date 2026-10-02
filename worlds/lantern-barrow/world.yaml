@@ -58,6 +58,7 @@ pluginPolicy:
         - character-blueprint
         - director
         - story-events
+        - story-plotter
       recommended:
         - branch-reply
         - cost-gate
@@ -86,6 +87,7 @@ pluginPolicy:
     - character-blueprint
     - director
     - story-events
+    - story-plotter
     - branch-reply
     - cost-gate
 characterSchema:
