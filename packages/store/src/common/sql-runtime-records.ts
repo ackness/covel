@@ -28,8 +28,10 @@ import type {
   TurnResultRow,
 } from "./mappers/runtime-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
+import { settleFailedRuntimeResults } from "../records/runtime-records.js";
 import type {
   DataStore,
+  FailedRuntimeResult,
   InteractionRecordFilters,
   InteractionRecordRow,
   RuntimeOutputFilters,
@@ -39,6 +41,7 @@ import type {
 } from "../types.js";
 
 type TurnResultsTable = Table & {
+  id: Column;
   sessionId: Column;
   turnId: Column;
   createdAt: Column;
@@ -73,6 +76,7 @@ export interface SqlRuntimeRecordsDeps {
   readonly values: Pick<
     InsertValueBuilders,
     | "turnResultInsert"
+    | "turnResultSettlement"
     | "toolCallInsert"
     | "runtimeOutputInsert"
     | "interactionRecordInsert"
@@ -120,15 +124,33 @@ export function createSqlRuntimeRecords(
       sessionId: string,
       turnId: string,
       status: TurnResultRecord["commitStatus"],
+      failedRuntimes: readonly FailedRuntimeResult[] = [],
     ): Promise<void> {
-      await runner.update(
-        turnResults,
-        { commitStatus: status },
-        and(
-          eq(turnResults.sessionId, sessionId),
-          eq(turnResults.turnId, turnId),
-        )!,
-      );
+      const where = and(
+        eq(turnResults.sessionId, sessionId),
+        eq(turnResults.turnId, turnId),
+      )!;
+      if (failedRuntimes.length === 0) {
+        await runner.update(turnResults, { commitStatus: status }, where);
+        return;
+      }
+      // Nested recursive rows share the turnId; settle each row's results.
+      const rows = await runner.select<TurnResultRow>(turnResults, { where });
+      for (const row of rows) {
+        const record = toTurnResultRecord(row, json);
+        await runner.update(
+          turnResults,
+          values.turnResultSettlement({
+            ...record,
+            commitStatus: status,
+            runtimeResults: settleFailedRuntimeResults(
+              record.runtimeResults,
+              failedRuntimes,
+            ),
+          }),
+          eq(turnResults.id, row.id),
+        );
+      }
     },
 
     async saveToolCall(record: ToolCallRecordRow): Promise<void> {

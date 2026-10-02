@@ -91,6 +91,8 @@ export interface InsertValueBuilders {
   stateSchemaUpdate(record: StateSchemaRecord): Record<string, unknown>;
   stateChangeInsert(record: StateChangeRecord): Record<string, unknown>;
   turnResultInsert(record: TurnResultRecord): Record<string, unknown>;
+  /** Commit settlement: status plus the settled `runtimeResults`. */
+  turnResultSettlement(record: TurnResultRecord): Record<string, unknown>;
   toolCallInsert(record: ToolCallRecordRow): Record<string, unknown>;
   runtimeOutputInsert(record: RuntimeOutputRecord): Record<string, unknown>;
   interactionRecordInsert(
@@ -217,6 +219,13 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         commitStatus: record.commitStatus,
         durationMs: record.durationMs,
         createdAt: record.createdAt,
+      };
+    },
+
+    turnResultSettlement(record) {
+      return {
+        commitStatus: record.commitStatus,
+        runtimeResults: json.writeJson(record.runtimeResults),
       };
     },
 

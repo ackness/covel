@@ -67,14 +67,14 @@ export async function commitExecution(
     ),
     hookSettings: deepFreeze(plan.hookSettings),
     loadOutputSchema: async (runtimeId) => plan.outputSchemas[runtimeId],
-    extraInTx: async (tx) => {
+    extraInTx: async (tx, isolation) => {
       if (
         plan.resolvedSuspensionId &&
         plan.results.some((result) => result.status !== "success")
       ) {
         throw new Error("Cannot commit an unsuccessful resumed execution");
       }
-      await args.extraInTx?.(tx);
+      await args.extraInTx?.(tx, isolation);
       if (plan.resolvedSuspensionId) {
         await tx.markSuspensionResolved(plan.resolvedSuspensionId);
       }

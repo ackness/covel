@@ -392,7 +392,9 @@ for (const [backend, create] of [
       const outcome = await finalize(store, bad);
       expect(outcome).toMatchObject({
         status: "committed",
-        isolatedRuntimeIds: ["owner/tracker"],
+        isolatedRuntimes: [
+          { runtimeId: "owner/tracker", error: expect.any(String) },
+        ],
       });
       expect(outcome.failedProposals.map((fp) => fp.proposal.id)).toEqual([
         bad.id,

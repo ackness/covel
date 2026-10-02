@@ -193,12 +193,21 @@ export type {
   CommitExecutionOutcome,
   ExecutionCompletion,
 } from "./commit/commit-execution.js";
-export { finalizeExecution } from "./commit/finalize-execution.js";
+export {
+  applyIsolatedRuntimes,
+  finalizeExecution,
+} from "./commit/finalize-execution.js";
+export {
+  droppedEmitter,
+  droppedUpstream,
+} from "./commit/commit-dependencies.js";
 export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
 export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";
 export type {
+  CommitIsolation,
   FinalizeExecutionArgs,
   FinalizeExecutionOutcome,
+  IsolatedRuntime,
 } from "./commit/finalize-execution.js";
 
 // ── Snapshot Builder ────────────────────────────────────────────

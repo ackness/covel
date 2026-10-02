@@ -293,6 +293,55 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       const list = await store.listTurnResults("sess-1", 1);
       expect(list).toHaveLength(1);
     });
+
+    it("settles listed runtimes as failed on every row of the turn", async () => {
+      const results = [
+        { runtimeId: "story", status: "success", output: { text: "kept" } },
+        { runtimeId: "tracker", status: "success", output: { n: 1 } },
+      ];
+      const top = makeTurnResult({
+        turnId: "turn-x",
+        runtimeResults: results,
+      });
+      const nested = makeTurnResult({
+        turnId: "turn-x",
+        origin: "recursive",
+        runtimeResults: [results[1]],
+        createdAt: ts(1),
+      });
+      const other = makeTurnResult({
+        turnId: "turn-y",
+        runtimeResults: results,
+      });
+      await store.saveTurnResult(top);
+      await store.saveTurnResult(nested);
+      await store.saveTurnResult(other);
+
+      await store.setTurnResultCommitStatus("sess-1", "turn-x", "committed", [
+        { runtimeId: "tracker", error: "proposal rejected" },
+      ]);
+
+      const rows = await store.listTurnResults("sess-1");
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      const failedTracker = {
+        runtimeId: "tracker",
+        status: "failed",
+        output: { n: 1 },
+        error: "proposal rejected",
+      };
+      expect(byId.get(top.id)).toMatchObject({
+        commitStatus: "committed",
+        runtimeResults: [results[0], failedTracker],
+      });
+      expect(byId.get(nested.id)).toMatchObject({
+        commitStatus: "committed",
+        runtimeResults: [failedTracker],
+      });
+      expect(byId.get(other.id)).toMatchObject({
+        commitStatus: "pending",
+        runtimeResults: results,
+      });
+    });
   });
 
   describe("ToolCalls", () => {
