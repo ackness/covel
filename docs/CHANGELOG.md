@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Narration streams again.** The narrator's review hook no longer turns streaming off. A story step whose text will not be final (preparation before tool calls, or a draft the review rejects) now ends with a `narrative.delta` carrying `reset: true`, and the client clears it before the next step; the reviewed final text still replaces the stream on completion.
 - **Retries need a committed source.** A plugin-RPC runtime retry with `retryFromTurnId` now returns `409 retry_source_not_committed` when that turn rolled back, instead of seeding its uncommitted results so a downstream runtime passes its `needs` gate on writes that never landed.
 - **Detached jobs use their source request's models.** The readiness check and the execution of a queued detached job both resolve the model under the request that queued it — slot bindings, custom presets, and plugin `llm.toml` targets included. A job pinned to a plugin model target no longer stays queued while the request holds the matching key, and a worker woken by an unrelated request no longer reads that request's configuration.
+- **Job status follows the save result.** When a function runtime reports a job `succeeded` through `ctx.progress` but its writes do not commit, the job now ends `failed` instead of keeping the success.
 
 ### Added
 
