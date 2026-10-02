@@ -29,6 +29,8 @@ io:
   visibility: system
 agent:
   model: plugin
+  history:
+    maxTurns: 2
   llm:
     reasoningEffort: disabled
     toolChoice: required

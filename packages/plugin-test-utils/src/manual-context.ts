@@ -60,6 +60,7 @@ export function makeManualFunctionContext({
       listPlayerInputs: missingRead("listPlayerInputs"),
       getSession: missingRead("getSession"),
       listTurnMessages: missingRead("listTurnMessages"),
+      readTurnMessages: missingRead("readTurnMessages"),
       ...store,
     },
     recursiveCall: async () => {

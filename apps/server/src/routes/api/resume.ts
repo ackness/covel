@@ -1,6 +1,14 @@
 import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
-import { withSettledExecutionLock } from "./plugin-rpc/settled-request.js";
+import {
+  requestJobServices,
+  withSettledExecutionLock,
+} from "./plugin-rpc/settled-request.js";
+import {
+  enqueueDeferredRuntimeJobs,
+  type QueuedRuntimeJob,
+} from "./plugin-rpc/runtime-job-enqueue.js";
+import { publishRuntimeJobStatusEvent } from "./plugin-rpc/runtime-job-worker.js";
 /**
  * Resume route — resumes a suspended runtime.
  *
@@ -34,7 +42,7 @@ import { z } from "zod";
 // Under NodeNext + esModuleInterop, TS sees the default-import as the module's
 // namespace rather than the class constructor. The named export works cleanly.
 import { Ajv, type ErrorObject } from "ajv";
-import type { DataStore } from "@covel/store";
+import type { DataStore, StoreTransaction } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import {
@@ -43,7 +51,11 @@ import {
   createTurnEmitter,
   runWithHookScope,
 } from "@covel/runtime";
-import type { RuntimeManifest, SuspensionSummary } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  type RuntimeManifest,
+  type SuspensionSummary,
+} from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
@@ -378,7 +390,37 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           );
         }
 
+        // The resume that completes a suspended turn queues the detached
+        // jobs that turn held back, inside the same commit.
+        const releasedJobs = execution.commit.releasedRuntimeJobs ?? [];
+        const queuedRuntimeJobs: QueuedRuntimeJob[] = [];
         const outcome = await commitExecution({
+          ...(releasedJobs.length > 0
+            ? {
+                extraInTx: async (tx: StoreTransaction) => {
+                  queuedRuntimeJobs.push(
+                    ...(await enqueueDeferredRuntimeJobs(tx, {
+                      sessionId,
+                      session: liveSession,
+                      activeRuntimes,
+                      descriptors: releasedJobs,
+                      locale: liveSession.locale ?? DEFAULT_LOCALE,
+                      ...(userSettings ? { userSettings } : {}),
+                      skipInactive: true,
+                      registerCredentials: (key, maxQueueMs) => {
+                        const services = requestJobServices(c);
+                        if (services)
+                          c.get("runtimeJobCredentials")?.register(
+                            key,
+                            services,
+                            maxQueueMs,
+                          );
+                      },
+                    })),
+                  );
+                },
+              }
+            : {}),
           memorySystem: c.get("memorySystem"),
           imageFlowRuntimeIds: (
             await resolveMediaImageFlow(
@@ -421,6 +463,25 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           );
         }
         const events = outcome.events;
+        for (const queued of queuedRuntimeJobs) {
+          if (eventBus) publishRuntimeJobStatusEvent(eventBus, queued.status);
+          eventBus?.emit({
+            id: crypto.randomUUID(),
+            type: "event",
+            topic: "runtime",
+            sessionId,
+            timestamp: new Date().toISOString(),
+            payload: {
+              runtimeId: queued.job.runtimeId,
+              pluginId: queued.job.pluginId,
+              jobId: queued.job.jobId,
+              sourceTurnId: queued.job.origin.sourceTurnId,
+              _subTopic: "runtime",
+              _subType: "runtime.deferred",
+            },
+          });
+        }
+        if (queuedRuntimeJobs.length > 0) c.get("runtimeJobWorker")?.wake();
 
         return c.json({ result, events });
       });

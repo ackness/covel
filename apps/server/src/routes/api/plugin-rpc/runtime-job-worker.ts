@@ -13,6 +13,7 @@ import {
   claimNextRuntimeJob,
   getRuntimeJob,
   listRuntimeJobs,
+  pruneTerminalRuntimeJobs,
   recoverExpiredRuntimeJobs,
   renewRuntimeJobLease,
   transitionRuntimeJob,
@@ -25,6 +26,8 @@ const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_LEASE_MS = 120_000;
 const DRAIN_RETRY_MS = 1_000;
 const MAINTENANCE_INTERVAL_MS = 30_000;
+/** Clock-skew margin when revisiting jobs finished since the last full pass. */
+const RECONCILE_OVERLAP_MS = 5_000;
 
 export interface StagedRuntimeJobPayload {
   readonly schemaVersion: 1;
@@ -71,6 +74,73 @@ export function parseStagedRuntimeJobPayload(
   } as StagedRuntimeJobPayload;
 }
 
+export interface RuntimeJobTriggerEvent {
+  readonly topic: string;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Durable input for a runtime activated outside the stage scheduler: a
+ * plugin-rpc `execution: background` call (`manual`) or a background follower
+ * of an emitted event (`event`). `turnId` is fixed at enqueue so the caller can
+ * correlate the execution before it runs.
+ */
+export interface ActivatedRuntimeJobPayload {
+  readonly schemaVersion: 1;
+  readonly activation: "manual" | "event";
+  readonly turnId: string;
+  readonly expectedSessionIncarnation: string;
+  readonly expectedApprovalScope: string;
+  readonly locale: string;
+  readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
+  readonly userSettings?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  /** Manual activation input (`ctx.activation` payload). */
+  readonly input?: unknown;
+  /** Manual retry of a recorded turn; its results seed the run at execution. */
+  readonly retryFromTurnId?: string;
+  /** Event activation trigger. */
+  readonly triggerEvent?: RuntimeJobTriggerEvent;
+  /** The runtime only prepares input for a background follower it must emit. */
+  readonly expectFollower?: boolean;
+}
+
+export function parseActivatedRuntimeJobPayload(
+  value: unknown,
+): ActivatedRuntimeJobPayload | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const payload = value as Partial<ActivatedRuntimeJobPayload>;
+  if (
+    payload.schemaVersion !== 1 ||
+    (payload.activation !== "manual" && payload.activation !== "event") ||
+    typeof payload.turnId !== "string" ||
+    typeof payload.expectedSessionIncarnation !== "string" ||
+    typeof payload.expectedApprovalScope !== "string" ||
+    typeof payload.locale !== "string"
+  ) {
+    return undefined;
+  }
+  if (
+    payload.activation === "event" &&
+    (!payload.triggerEvent ||
+      typeof payload.triggerEvent.topic !== "string" ||
+      !payload.triggerEvent.data ||
+      typeof payload.triggerEvent.data !== "object")
+  ) {
+    return undefined;
+  }
+  return payload as ActivatedRuntimeJobPayload;
+}
+
+/** Session incarnation a queued job was admitted under, for either payload kind. */
+export function runtimeJobIncarnation(value: unknown): string | undefined {
+  return (
+    parseStagedRuntimeJobPayload(value) ??
+    parseActivatedRuntimeJobPayload(value)
+  )?.expectedSessionIncarnation;
+}
+
 export interface RuntimeJobExecutionControl {
   /** Checked after same-runtime serialization, before any provider call. */
   assertCurrent(): Promise<void>;
@@ -83,7 +153,28 @@ export interface RuntimeJobExecutionControl {
   }): Promise<void>;
   /** Persist success in the same transaction as every domain write. */
   completeInTx(tx: StoreTransaction, result?: unknown): Promise<void>;
+  /**
+   * Persist a failure the runtime reported in its own result. The domain
+   * writes still commit with it (a handler may record its own failure state).
+   */
+  failInTx(
+    tx: StoreTransaction,
+    failure: {
+      readonly reason: RuntimeJobReportedFailure;
+      readonly error: string;
+      readonly result?: unknown;
+    },
+  ): Promise<void>;
 }
+
+/** Failures settled inside the commit rather than by rolling it back. */
+export type RuntimeJobReportedFailure =
+  "runtime-reported-failure" | "follower-not-emitted";
+
+const REPORTED_FAILURES: ReadonlySet<string> = new Set([
+  "runtime-reported-failure",
+  "follower-not-emitted",
+]);
 
 export type RuntimeJobExecutor = (
   job: RuntimeJobRecord,
@@ -463,6 +554,21 @@ export function createRuntimeJobWorker(args: {
           // This transaction can still roll back. Do not publish status or
           // treat the in-memory job as successful until the executor settles.
         },
+        failInTx: async (tx, failure) => {
+          executionAbort.signal.throwIfAborted();
+          const failed = await transitionRuntimeJob(tx, {
+            sessionId: current.sessionId,
+            pluginId: current.pluginId,
+            jobId: current.jobId,
+            ownerId,
+            from: ["committing"],
+            to: "failed",
+            reason: failure.reason,
+            error: failure.error,
+            ...(failure.result === undefined ? {} : { result: failure.result }),
+          });
+          if (!failed) throw new RuntimeJobNoLongerCurrentError();
+        },
       });
       executions.add(execution);
       void execution.then(
@@ -471,12 +577,19 @@ export function createRuntimeJobWorker(args: {
       );
       await Promise.race([execution, aborted]);
       if (timeoutTimer) clearTimeout(timeoutTimer);
-      const succeeded = await getRuntimeJob(args.store, current);
-      if (succeeded?.status !== "succeeded" || succeeded.ownerId !== ownerId) {
+      const settled = await getRuntimeJob(args.store, current);
+      const reportedFailure =
+        settled?.status === "failed" &&
+        REPORTED_FAILURES.has(settled.reason ?? "");
+      if (
+        !settled ||
+        (settled.status !== "succeeded" && !reportedFailure) ||
+        settled.ownerId !== ownerId
+      ) {
         throw new Error("runtime job returned without a committed result");
       }
-      current = succeeded;
-      await appendRuntimeJobStatus(args.store, args.eventBus, succeeded);
+      current = settled;
+      await appendRuntimeJobStatus(args.store, args.eventBus, settled);
     } catch (error) {
       if (timeoutTimer) clearTimeout(timeoutTimer);
       await stopLeaseRenewal();
@@ -519,30 +632,52 @@ export function createRuntimeJobWorker(args: {
       if (onAbort) executionAbort.signal.removeEventListener("abort", onAbort);
       await Promise.allSettled([renewalTask, deadlineTask]);
       stopExecutions.delete(stop);
+      touchedSessions.add(claimed.sessionId);
       activeRuntimeKeys.delete(runtimeKey(claimed));
       activeCount--;
       wake();
     }
   };
 
-  const reconcileTerminalJobs = async (): Promise<void> => {
+  // The first pass after startup reconciles every retained terminal job; later
+  // passes only revisit jobs finished since the previous successful pass.
+  let reconciledThrough: number | undefined;
+  const touchedSessions = new Set<string>();
+  const reconcileTerminalJobs = async (
+    scope: "all" | "touched",
+  ): Promise<void> => {
     // Durable state can outlive its event projection after a crash or a
     // failed notification. Reconcile it independently of execution capacity.
-    for (const session of await args.store.listSessions()) {
+    const startedAt = Date.now();
+    const since =
+      reconciledThrough === undefined
+        ? -Infinity
+        : reconciledThrough - RECONCILE_OVERLAP_MS;
+    const sessionIds =
+      scope === "all"
+        ? (await args.store.listSessions()).map((session) => session.id)
+        : [...touchedSessions];
+    touchedSessions.clear();
+    for (const sessionId of sessionIds) {
       if (closed) return;
-      const terminal = await listRuntimeJobs(args.store, {
-        sessionId: session.id,
-        statuses: [
-          "succeeded",
-          "failed",
-          "timed_out",
-          "cancelled",
-          "stale",
-          "orphaned",
-        ],
-      });
+      const terminal = await pruneTerminalRuntimeJobs(
+        args.store,
+        sessionId,
+        await listRuntimeJobs(args.store, {
+          sessionId,
+          statuses: [
+            "succeeded",
+            "failed",
+            "timed_out",
+            "cancelled",
+            "stale",
+            "orphaned",
+          ],
+        }),
+      );
       for (const job of terminal) {
         if (closed) return;
+        if (Date.parse(job.finishedAt ?? job.updatedAt) < since) continue;
         const rows = await args.store.listJobStatus(job.sessionId, {
           progressScopeId: job.jobId,
           jobId: job.jobId,
@@ -559,6 +694,9 @@ export function createRuntimeJobWorker(args: {
         }
       }
     }
+    // Only a complete pass advances the watermark: a touched-session pass does
+    // not see jobs terminalised elsewhere (queue deadlines, other workers).
+    if (scope === "all") reconciledThrough = startedAt;
   };
 
   const drain = async (): Promise<void> => {
@@ -568,7 +706,7 @@ export function createRuntimeJobWorker(args: {
         await recoverExpiredRuntimeJobs(args.store, {
           tryWithCommitLock: args.tryWithCommitLock,
         });
-        await reconcileTerminalJobs();
+        await reconcileTerminalJobs("all");
         maintained = true;
         nextMaintenanceAt = Date.now() + MAINTENANCE_INTERVAL_MS;
       } catch (error) {
@@ -594,7 +732,7 @@ export function createRuntimeJobWorker(args: {
         },
       });
       if (!claimed) {
-        if (!maintained) await reconcileTerminalJobs();
+        if (!maintained) await reconcileTerminalJobs("touched");
         return;
       }
       sessionCursor = claimed.nextSessionCursor;

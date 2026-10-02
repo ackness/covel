@@ -8,6 +8,23 @@ import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
+/** Runtime results recorded on the turn's execution artifact(s). */
+async function turnRuntimeResults(
+  store: Pick<DataStore, "listTurnResults">,
+  sessionId: string,
+  turnId: string,
+): Promise<{ readonly runtimeId: string; readonly status: string }[]> {
+  return (await store.listTurnResults(sessionId))
+    .filter((row) => row.turnId === turnId)
+    .flatMap(
+      (row) =>
+        row.runtimeResults as {
+          readonly runtimeId: string;
+          readonly status: string;
+        }[],
+    );
+}
+
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
     return {
@@ -284,7 +301,7 @@ describe("start-game flow scenario at runtime level", () => {
     expect(calls["narrator"]).toBeUndefined();
     expect(
       (
-        await store.listRuntimeResults("sess-start-flow", "turn-form-submit")
+        await turnRuntimeResults(store, "sess-start-flow", "turn-form-submit")
       ).map((result) => result.runtimeId),
     ).toEqual(["char-creator/player-init"]);
 
@@ -305,7 +322,7 @@ describe("start-game flow scenario at runtime level", () => {
     expect(calls["narrator"]).toBe(1);
     expect(
       (
-        await store.listRuntimeResults("sess-start-flow", "turn-first-main")
+        await turnRuntimeResults(store, "sess-start-flow", "turn-first-main")
       ).map((result) => result.runtimeId),
     ).toEqual(["narrator"]);
   });

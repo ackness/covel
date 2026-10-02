@@ -29,6 +29,7 @@ runtime:
         required: true
   agent:
     model: plugin
+    history: { maxTurns: 2 }
     tools: { plugin: [save-note] }
     loop:
       maxRetries: 0
@@ -78,6 +79,17 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
 
 `withPendingProposals(content, proposals)` 始终返回显式对象 `{kind: "covel.tool-result", content, pendingProposals}`，也适用于字符串或冻结的正文。组合工具和测试通过公开 SDK 的 `getToolContent(result)` 读取正文、`getPendingProposals(result)` 读取写入；普通对象展开和 `structuredClone` 会保留两个通道。不要把完整 envelope 当成业务正文。纯读取工具可直接返回正文。
 
+## 控制历史窗口
+
+不声明 `agent.history` 时，agent 看到会话共享的历史视图：未压缩的消息加压缩摘要，长度随会话增长，直到触发压缩。只处理本轮输入的提取类 runtime 应声明窗口：
+
+```yaml
+agent:
+  history: { maxTurns: 2 } # 0 表示不带历史
+```
+
+`maxTurns` 按 `turnId` 计数，保留最近 N 个回合的可见消息，不再附带压缩摘要，也不参与本轮压缩屏障。当前玩家输入、`<runtime-inputs>`、selfData 与扩展段不受影响。需要长期回顾的 runtime 改用自有 plugin-data，或在 function runtime 中用 `ctx.store.readTurnMessages()` 分页读取完整原始记录。
+
 ## 读取角色和自有数据
 
 角色通过 `context.world` 的只读 World Model 获取。工具上下文包含上游合法 proposals 和自己的 pending proposals；需要手动物化视图时，使用共享 `materializeWorldModel`，不要重新实现角色字段验证。
@@ -91,6 +103,22 @@ const characters = ctx.world?.characters ?? [];
 ```
 
 这里的 namespace 属于当前插件，会话身份由执行上下文绑定。跨插件共享需要公开服务、输入契约或扩展，不能通过额外 pluginId 参数读取对方私有记录。
+
+需要回看完整故事记录时，按游标分页读取已提交的时间线，包括已被压缩摘要替代的原文：
+
+```js
+const saved = await ctx.store.getPluginData("progress", "cursor");
+let after = saved?.value ?? undefined;
+let page;
+do {
+  page = await ctx.store.readTurnMessages({ after, limit: 200 });
+  for (const message of page.messages) collect(message); // {turnId, role, content, compacted, ...}
+  after = page.cursor ?? undefined;
+} while (page.hasMore);
+await ctx.pluginData.set("progress", "cursor", after ?? null);
+```
+
+`limit` 默认 100、最大 500。`cursor` 是不透明字符串，指向最后读到的消息（空页时原样返回 `after`），`hasMore` 为 `false` 表示已读到当前末尾。把游标存进自己的 plugin-data，下次执行只读新增部分。
 
 ## RPC 与玩家命令
 

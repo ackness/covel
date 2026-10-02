@@ -84,6 +84,36 @@ describe("commitExecution lifecycle", () => {
     );
   });
 
+  it("drops traces older than the configured retention after a commit", async () => {
+    vi.stubEnv("COVEL_TRACE_RETENTION_DAYS", "1");
+    try {
+      const { args, store } = await fixture();
+      for (const [id, createdAt] of [
+        ["old", "2000-01-01T00:00:00.000Z"],
+        ["new", new Date().toISOString()],
+      ] as const) {
+        await store.addTraceEvent({
+          id,
+          sessionId: "session",
+          turnId: "turn",
+          traceId: "trace",
+          type: "llm.calling",
+          payload: {},
+          createdAt,
+        });
+      }
+      expect((await commitExecution(args)).status).toBe("committed");
+      expect(
+        (await store.listTraceEvents("session")).map((event) => event.id),
+      ).not.toContain("old");
+      expect(
+        (await store.listTraceEvents("session")).map((event) => event.id),
+      ).toContain("new");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("rolls back all writes and withholds every follow-up when the transaction fails", async () => {
     const { args, store, events } = await fixture();
     const outcome = await commitExecution({

@@ -140,6 +140,7 @@ const value = await ctx.services.call(
 ## 模型与新协议
 
 - 已支持的模型能力：复用 `ctx.gateway`、`ctx.images`、`ctx.speech`。Evaluation 使用 `ctx.gateway.evaluate({ presetId, state, questions, signal })`，支持 Boolean、Choice、Score。
+- 自行拼装长提示词时，`ctx.gateway.resolveSlot({ presetId })?.limits` 给出 gateway 对该 slot 实际采用的 `{ contextWindow, maxOutputTokens }`；模型未声明上下文窗口时省略，不把框架兜底值当作真实上限。`generateText` / `generateObject` 可传 `maxOutputTokens` 作为单次调用上限，只能低于玩家为该 slot 配置的输出预算，不能提高它。
 - 新供应商使用既有 wire：只配置 provider、base URL、模型和用途，无须改插件或框架。
 - 新 wire 或新的返回形式：服务内部用 `ctx.gateway.resolveSlot` 取得本次请求的模型配置，再用 `ctx.utils.validateBaseUrl` / `fetchWithRetry` 实现协议，定义自己的输入输出 schema。结果通过服务契约提供给其他插件。密钥只留在服务端，不写入结果、日志或 UI。
 - 图片、语音和转写需要复用统一媒体管线时，继续使用 `covel.registerWires`。媒体落库仍通过现有媒体接口。

@@ -10,6 +10,7 @@ import type { Proposal, RuntimeEffects, SessionEvent } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
   createCommitPipeline,
+  runPreStateCommitHook,
   type KernelStore,
 } from "../commit/session-commit-pipeline.js";
 import { normalizeOutput } from "../commit/session-output-normalizer.js";
@@ -29,60 +30,67 @@ export interface ProcessRuntimeResultOutput {
   }>;
 }
 
+type FailedProposal = { readonly proposal: Proposal; readonly error: string };
+
+/** The result shape every commit entry point accepts (top-level or nested). */
+export interface CommittableRuntimeResult {
+  pluginId: string;
+  runtimeId: string;
+  turnId: string;
+  runId?: string;
+  canonicalValue?: { readonly value?: import("@covel/shared").JsonValue };
+  status: string;
+  output: Record<string, unknown> | null;
+  effects?: RuntimeEffects;
+  pendingProposals?: readonly Proposal[];
+  toolCalls?: ReadonlyArray<{ output?: unknown }>;
+}
+
+export interface RuntimeCommitOptions {
+  readonly signal?: AbortSignal;
+  readonly hookPipeline?: HookPipeline;
+  readonly eventBus?: EventBus;
+  readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
+  readonly enforceImageFlow?: boolean;
+  /** Source content anchor supplied by the execution finalizer for retries. */
+  readonly messageSourceTurnId?: string;
+  /**
+   * Optional commit-boundary policy for restricted execution classes such
+   * as scheduler-detached jobs. Returning a message rejects the entire
+   * proposal batch before any proposal reaches a commit handler.
+   */
+  readonly proposalGuard?: (proposal: Proposal) => string | undefined;
+  /**
+   * Commit barrier for callers running this inside their own store
+   * transaction (passing a tx-bound view as `store`): externally-visible
+   * fan-out (emitter events + PostStateCommit hooks) is handed to this
+   * callback instead of firing inline, so the caller can flush it after its
+   * transaction commits — or drop it on rollback.
+   */
+  readonly deferPostCommit?: (fn: () => Promise<void>) => void;
+}
+
+/** Proposals ready to persist, plus the ones already rejected on the way. */
+export interface PreparedRuntimeProposals {
+  readonly proposals: readonly Proposal[];
+  readonly failedProposals: readonly FailedProposal[];
+}
+
 /**
- * Process a single RuntimeResult through the full Kernel pipeline:
- *   RuntimeResult → normalizeOutput → commitAll → SessionEvent[]
- *
- * This lower-level operation handles normalization, persistence, tracing,
- * and event generation for one result. Hosts commit a complete execution
- * through commitExecution, whose finalizer calls this inside one transaction
- * for all top-level and nested results.
- *
- * Returns a structured result with both successful events and failed proposals.
- * Returns empty arrays for failed/skipped runtimes.
+ * Normalize one result into proposals and apply the image-flow checks.
+ * `commit: false` means nothing of this result may be written.
  */
-export async function processRuntimeResult(
-  result: {
-    pluginId: string;
-    runtimeId: string;
-    turnId: string;
-    runId?: string;
-    canonicalValue?: { readonly value?: import("@covel/shared").JsonValue };
-    status: string;
-    output: Record<string, unknown> | null;
-    effects?: RuntimeEffects;
-    pendingProposals?: readonly Proposal[];
-    toolCalls?: ReadonlyArray<{ output?: unknown }>;
-  },
+async function collectRuntimeProposals(
+  result: CommittableRuntimeResult,
   store: KernelStore,
   sessionId: string,
-  outputKind?: string,
-  opts?: {
-    readonly signal?: AbortSignal;
-    readonly hookPipeline?: HookPipeline;
-    readonly eventBus?: EventBus;
-    readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
-    readonly enforceImageFlow?: boolean;
-    /** Source content anchor supplied by the execution finalizer for retries. */
-    readonly messageSourceTurnId?: string;
-    /**
-     * Optional commit-boundary policy for restricted execution classes such
-     * as scheduler-detached jobs. Returning a message rejects the entire
-     * proposal batch before any proposal reaches a commit handler.
-     */
-    readonly proposalGuard?: (proposal: Proposal) => string | undefined;
-    /**
-     * Commit barrier for callers running this inside their own store
-     * transaction (passing a tx-bound view as `store`): externally-visible
-     * fan-out (emitter events + PostStateCommit hooks) is handed to this
-     * callback instead of firing inline, so the caller can flush it after its
-     * transaction commits — or drop it on rollback.
-     */
-    readonly deferPostCommit?: (fn: () => Promise<void>) => void;
-  },
-): Promise<ProcessRuntimeResultOutput> {
-  const empty: ProcessRuntimeResultOutput = { events: [], failedProposals: [] };
-
+  outputKind: string | undefined,
+  opts: RuntimeCommitOptions | undefined,
+): Promise<{
+  readonly proposals: Proposal[];
+  readonly failures: FailedProposal[];
+  readonly commit: boolean;
+}> {
   const source = { pluginId: result.pluginId, runtimeId: result.runtimeId };
 
   // Buffered domain writes attached to the result — by the agent tool loop
@@ -106,10 +114,8 @@ export async function processRuntimeResult(
   // drops everything (its writes must not land), and a SUSPENDED runtime
   // stashes proposals in the suspension record instead.
   if (result.status !== "success" || !result.output) {
-    if (result.status === "skipped" && pendingProposals.length > 0) {
-      return commitProposals(pendingProposals, store, sessionId, result, opts);
-    }
-    return empty;
+    const commit = result.status === "skipped" && pendingProposals.length > 0;
+    return { proposals: commit ? pendingProposals : [], failures: [], commit };
   }
 
   const proposals = normalizeOutput(
@@ -122,8 +128,7 @@ export async function processRuntimeResult(
   );
   proposals.push(...pendingProposals);
 
-  const imageGenerationFailures: Array<{ proposal: Proposal; error: string }> =
-    [];
+  const failures: FailedProposal[] = [];
   const missingAssetFailure = await enforceImageAssetOutput(
     result,
     store,
@@ -131,9 +136,7 @@ export async function processRuntimeResult(
     proposals,
     opts?.enforceImageFlow,
   );
-  if (missingAssetFailure) {
-    imageGenerationFailures.push(missingAssetFailure);
-  }
+  if (missingAssetFailure) failures.push(missingAssetFailure);
   const inlineMediaFailures = await enforceImagePluginDataRefs(
     result,
     store,
@@ -141,63 +144,156 @@ export async function processRuntimeResult(
     proposals,
     opts?.enforceImageFlow,
   );
-  imageGenerationFailures.push(...inlineMediaFailures);
-  if (inlineMediaFailures.length > 0) {
-    return { events: [], failedProposals: imageGenerationFailures };
+  failures.push(...inlineMediaFailures);
+  if (inlineMediaFailures.length > 0 || proposals.length === 0) {
+    return { proposals: [], failures, commit: false };
   }
+  return { proposals, failures, commit: true };
+}
 
-  if (proposals.length === 0) {
+/** Anchor plugin messages and apply the execution's proposal guard. */
+function screenProposals(
+  proposals: readonly Proposal[],
+  opts: RuntimeCommitOptions | undefined,
+): PreparedRuntimeProposals {
+  const anchored = proposals.map((proposal) =>
+    anchorPluginMessage(proposal, opts?.messageSourceTurnId),
+  );
+  if (opts?.proposalGuard) {
+    const rejected = anchored.flatMap((proposal) => {
+      const error = opts.proposalGuard?.(proposal);
+      return error ? [{ proposal, error }] : [];
+    });
+    if (rejected.length > 0)
+      return { proposals: [], failedProposals: rejected };
+  }
+  return { proposals: anchored, failedProposals: [] };
+}
+
+/**
+ * Process a single RuntimeResult through the full Kernel pipeline:
+ *   RuntimeResult → normalizeOutput → commitAll → SessionEvent[]
+ *
+ * This lower-level operation handles normalization, persistence, tracing,
+ * and event generation for one result, running PreStateCommit hooks inline.
+ * The execution finalizer instead uses {@link prepareRuntimeProposals} before
+ * its transaction and {@link commitPreparedProposals} inside it.
+ *
+ * Returns a structured result with both successful events and failed proposals.
+ * Returns empty arrays for failed/skipped runtimes.
+ */
+export async function processRuntimeResult(
+  result: CommittableRuntimeResult,
+  store: KernelStore,
+  sessionId: string,
+  outputKind?: string,
+  opts?: RuntimeCommitOptions,
+): Promise<ProcessRuntimeResultOutput> {
+  const collected = await collectRuntimeProposals(
+    result,
+    store,
+    sessionId,
+    outputKind,
+    opts,
+  );
+  if (!collected.commit) {
+    return { events: [], failedProposals: collected.failures };
+  }
+  const screened = screenProposals(collected.proposals, opts);
+  if (screened.failedProposals.length > 0) {
     return {
       events: [],
-      failedProposals: imageGenerationFailures,
+      failedProposals: [...collected.failures, ...screened.failedProposals],
     };
   }
-
-  const committed = await commitProposals(
-    proposals,
+  const committed = await persistProposals(
+    screened.proposals,
     store,
     sessionId,
     result,
     opts,
+    false,
   );
   return {
     events: committed.events,
-    failedProposals: [...imageGenerationFailures, ...committed.failedProposals],
+    failedProposals: [...collected.failures, ...committed.failedProposals],
   };
 }
 
 /**
- * Commit a proposal list through the Kernel pipeline and collect the resulting
- * events / failures. Shared by the normalized success path and the
- * pending-only path (a skipped pre-game guard that carries buffered writes).
+ * Everything before persistence for one result: normalization, image-flow
+ * checks, retry anchoring, the proposal guard and PreStateCommit hooks. Reads
+ * only committed state and writes nothing but diagnostics, so the finalizer
+ * runs it before opening its transaction.
  */
-async function commitProposals(
+export async function prepareRuntimeProposals(
+  result: CommittableRuntimeResult,
+  store: KernelStore,
+  sessionId: string,
+  outputKind: string | undefined,
+  opts?: RuntimeCommitOptions,
+): Promise<PreparedRuntimeProposals> {
+  const collected = await collectRuntimeProposals(
+    result,
+    store,
+    sessionId,
+    outputKind,
+    opts,
+  );
+  if (!collected.commit) {
+    return { proposals: [], failedProposals: collected.failures };
+  }
+  const screened = screenProposals(collected.proposals, opts);
+  if (screened.failedProposals.length > 0) {
+    return {
+      proposals: [],
+      failedProposals: [...collected.failures, ...screened.failedProposals],
+    };
+  }
+  if (!opts?.hookPipeline) {
+    return {
+      proposals: screened.proposals,
+      failedProposals: collected.failures,
+    };
+  }
+  const proposals: Proposal[] = [];
+  const failedProposals: FailedProposal[] = [...collected.failures];
+  for (const proposal of screened.proposals) {
+    const hooked = await runPreStateCommitHook(opts.hookPipeline, proposal, {
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.eventBus ? { eventBus: opts.eventBus } : {}),
+      ...(opts.emitter ? { emitter: opts.emitter } : {}),
+    });
+    if ("error" in hooked)
+      failedProposals.push({ proposal, error: hooked.error });
+    else proposals.push(hooked.proposal);
+  }
+  return { proposals, failedProposals };
+}
+
+/** Persist proposals produced by {@link prepareRuntimeProposals}. */
+export function commitPreparedProposals(
   proposals: readonly Proposal[],
   store: KernelStore,
   sessionId: string,
   result: { readonly runtimeId: string; readonly turnId: string },
-  opts?: {
-    readonly signal?: AbortSignal;
-    readonly hookPipeline?: HookPipeline;
-    readonly eventBus?: EventBus;
-    readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
-    readonly deferPostCommit?: (fn: () => Promise<void>) => void;
-    readonly proposalGuard?: (proposal: Proposal) => string | undefined;
-    readonly messageSourceTurnId?: string;
-  },
+  opts?: RuntimeCommitOptions,
 ): Promise<ProcessRuntimeResultOutput> {
-  proposals = proposals.map((proposal) =>
-    anchorPluginMessage(proposal, opts?.messageSourceTurnId),
-  );
-  if (opts?.proposalGuard) {
-    const rejected = proposals.flatMap((proposal) => {
-      const error = opts.proposalGuard?.(proposal);
-      return error ? [{ proposal, error }] : [];
-    });
-    if (rejected.length > 0) {
-      return { events: [], failedProposals: rejected };
-    }
-  }
+  return persistProposals(proposals, store, sessionId, result, opts, true);
+}
+
+/**
+ * Commit a proposal list through the Kernel pipeline and collect the resulting
+ * events / failures.
+ */
+async function persistProposals(
+  proposals: readonly Proposal[],
+  store: KernelStore,
+  sessionId: string,
+  result: { readonly runtimeId: string; readonly turnId: string },
+  opts: RuntimeCommitOptions | undefined,
+  preStateCommitApplied: boolean,
+): Promise<ProcessRuntimeResultOutput> {
   // Thread the hook pipeline + eventBus through so PreStateCommit /
   // PostStateCommit actually run on real turn commits (previously these
   // hooks only fired in tests because callers didn't pass them).
@@ -207,6 +303,7 @@ async function commitProposals(
     opts?.eventBus,
     opts?.emitter,
     opts?.signal,
+    { preStateCommitApplied },
   );
   const commitResults = await pipeline.commitAll(
     proposals,
@@ -214,7 +311,7 @@ async function commitProposals(
   );
 
   const events: SessionEvent[] = [];
-  const failedProposals: Array<{ proposal: Proposal; error: string }> = [];
+  const failedProposals: FailedProposal[] = [];
 
   for (let i = 0; i < commitResults.length; i++) {
     const cr = commitResults[i];

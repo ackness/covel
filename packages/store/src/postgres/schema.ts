@@ -94,30 +94,6 @@ export const turnResults = pgTable(
   ],
 );
 
-// ── Runtime Results ─────────────────────────────────────────────
-
-export const runtimeResults = pgTable(
-  "runtime_results",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    turnId: text("turn_id").notNull(),
-    pluginId: text("plugin_id").notNull(),
-    runtimeId: text("runtime_id").notNull(),
-    status: text("status").notNull(),
-    output: jsonb("output"), // JSON
-    toolCalls: jsonb("tool_calls"), // JSON
-    durationMs: integer("duration_ms").notNull(),
-    tokenUsage: jsonb("token_usage"), // JSON
-    error: text("error"),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [
-    index("pg_runtime_results_session_id_idx").on(table.sessionId),
-    index("pg_runtime_results_turn_id_idx").on(table.turnId),
-  ],
-);
-
 // ── Tool Calls ──────────────────────────────────────────────────
 
 export const toolCalls = pgTable(

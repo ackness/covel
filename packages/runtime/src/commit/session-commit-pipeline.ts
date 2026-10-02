@@ -38,12 +38,73 @@ export interface CommitPipeline {
   ): Promise<CommitResult[]>;
 }
 
+/**
+ * Run the PreStateCommit hook for one proposal. A hook may veto the write or
+ * rewrite its PAYLOAD only: the envelope — id, type, sessionId, turnId,
+ * source — stays pinned to the original so a hook cannot redirect the write to
+ * another session, another plugin's namespace, or a different proposal type
+ * (which would also dodge the handler's schema validation).
+ *
+ * Hooks are plugin code with their own timeouts and read no store state, so
+ * transactional callers run them before opening the transaction: a slow hook
+ * must never hold the store's write gate.
+ */
+export async function runPreStateCommitHook(
+  hookPipeline: HookPipeline,
+  proposal: Proposal,
+  opts: {
+    readonly signal?: AbortSignal;
+    readonly eventBus?: EventBus;
+    readonly emitter?: TurnEmitter;
+  } = {},
+): Promise<{ readonly proposal: Proposal } | { readonly error: string }> {
+  const hookCtx: HookContext = {
+    event: "PreStateCommit",
+    sessionId: proposal.sessionId,
+    turnId: proposal.turnId,
+    pluginId: proposal.source.pluginId,
+    runtimeId: proposal.source.runtimeId,
+    signal: opts.signal,
+  };
+  const preResult = await hookPipeline.run(
+    "PreStateCommit",
+    hookCtx,
+    { proposal },
+    { eventBus: opts.eventBus, emitter: opts.emitter },
+  );
+  // Parent cancellation stops the whole batch, including later proposals.
+  opts.signal?.throwIfAborted();
+  if (preResult.action === "abort") {
+    return { error: `pre-state-commit hook aborted: ${preResult.reason}` };
+  }
+  if (
+    preResult.action === "continue" &&
+    "replace" in preResult &&
+    preResult.replace?.proposal
+  ) {
+    const replacement = preResult.replace.proposal as Proposal;
+    return {
+      proposal: { ...proposal, payload: replacement.payload } as Proposal,
+    };
+  }
+  return { proposal };
+}
+
+export interface CommitPipelineOptions {
+  /**
+   * The caller already ran {@link runPreStateCommitHook} for every proposal,
+   * outside its transaction. PostStateCommit still runs after commit.
+   */
+  readonly preStateCommitApplied?: boolean;
+}
+
 export function createCommitPipeline(
   store: KernelStore,
   hookPipeline?: HookPipeline,
   eventBus?: EventBus,
   emitter?: TurnEmitter,
   signal?: AbortSignal,
+  options: CommitPipelineOptions = {},
 ): CommitPipeline {
   const handlers = createCommitHandlers(store);
 
@@ -70,6 +131,7 @@ export function createCommitPipeline(
     writeStore: KernelStore,
     proposal: Proposal,
     defer?: (fn: () => Promise<void>) => void,
+    preStateCommitApplied = options.preStateCommitApplied ?? false,
   ): Promise<CommitResult> {
     signal?.throwIfAborted();
     // `handlerMap` is a correlated map (each value expects its own proposal
@@ -90,45 +152,14 @@ export function createCommitPipeline(
     // Pipeline presence is the gate. Callers that don't want hooks pass
     // hookPipeline: undefined, such as tests for the bare commit path.
     let effectiveProposal = proposal;
-    if (hookPipeline) {
-      const hookCtx: HookContext = {
-        event: "PreStateCommit",
-        sessionId: proposal.sessionId,
-        turnId: proposal.turnId,
-        pluginId: proposal.source.pluginId,
-        runtimeId: proposal.source.runtimeId,
+    if (hookPipeline && !preStateCommitApplied) {
+      const hooked = await runPreStateCommitHook(hookPipeline, proposal, {
         signal,
-      };
-      const preResult = await hookPipeline.run(
-        "PreStateCommit",
-        hookCtx,
-        { proposal },
-        { eventBus, emitter },
-      );
-      // Parent cancellation stops the whole batch, including later proposals.
-      signal?.throwIfAborted();
-      if (preResult.action === "abort") {
-        return {
-          committed: false,
-          error: `pre-state-commit hook aborted: ${preResult.reason}`,
-        };
-      }
-      if (
-        preResult.action === "continue" &&
-        "replace" in preResult &&
-        preResult.replace?.proposal
-      ) {
-        // A PreStateCommit hook may only rewrite the PAYLOAD. The
-        // envelope — id, type, sessionId, turnId, source — is pinned to the
-        // original proposal so a hook cannot redirect the write to another
-        // session, another plugin's namespace, or a different proposal type
-        // (which would also dodge this handler's schema validation).
-        const replacement = preResult.replace.proposal as Proposal;
-        effectiveProposal = {
-          ...proposal,
-          payload: replacement.payload,
-        } as Proposal;
-      }
+        eventBus,
+        emitter,
+      });
+      if ("error" in hooked) return { committed: false, error: hooked.error };
+      effectiveProposal = hooked.proposal;
     }
 
     const result = await handler(effectiveProposal);
@@ -264,12 +295,36 @@ export function createCommitPipeline(
       // the buffer along with the rollback — clients never see events for
       // rolled-back data.
       const postCommit: Array<() => Promise<void>> = [];
+      // PreStateCommit runs before the transaction opens; a vetoed proposal
+      // keeps its slot as a failed result without reaching a handler.
+      const screened: Array<
+        { readonly proposal: Proposal } | { readonly error: string }
+      > = [];
+      for (const p of proposals) {
+        screened.push(
+          hookPipeline && !options.preStateCommitApplied
+            ? await runPreStateCommitHook(hookPipeline, p, {
+                signal,
+                eventBus,
+                emitter,
+              })
+            : { proposal: p },
+        );
+      }
       const results = await store.withTransaction(async (tx) => {
         const txHandlers = createCommitHandlers(tx);
         const txResults: CommitResult[] = [];
-        for (const p of proposals) {
+        for (const entry of screened) {
           txResults.push(
-            await commitWith(txHandlers, tx, p, (fn) => postCommit.push(fn)),
+            "error" in entry
+              ? { committed: false, error: entry.error }
+              : await commitWith(
+                  txHandlers,
+                  tx,
+                  entry.proposal,
+                  (fn) => postCommit.push(fn),
+                  true,
+                ),
           );
         }
         signal?.throwIfAborted();

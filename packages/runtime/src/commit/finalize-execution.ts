@@ -9,12 +9,15 @@
  * Transaction boundary (the deliberate change from the old per-runtime one):
  * the FULL set of runtime results — top-level plus flattened nested
  * `recursiveCall` results — commits inside a SINGLE `store.withTransaction`.
- * Any proposal failure (a thrown store error OR a handler returning
- * `{ committed: false }`, e.g. a PreStateCommit veto or a schema-validation
- * reject) throws out of the callback, so the whole execution rolls back —
- * a sibling runtime that already committed is undone too. `commit_status` for
- * the execution's `turn_results` rows is settled inside that same transaction
- * on success, and best-effort to `failed` outside it on rollback.
+ * Normalization and PreStateCommit hooks run before it opens, so plugin hook
+ * code never holds the store's write gate. A rejected proposal (a handler
+ * returning `{ committed: false }`, a PreStateCommit veto or a guard reject)
+ * rolls back the whole execution, except for optional runtimes next to a
+ * committed story: each of those commits in its own savepoint and a rejection
+ * drops only its writes. A thrown store error always rolls back everything.
+ * `commit_status` for the execution's `turn_results` rows is settled inside
+ * that same transaction on success, and best-effort to `failed` outside it on
+ * rollback.
  *
  * `DataStore.withTransaction` is mandatory, so every execution has this same
  * atomic boundary in production and tests.
@@ -37,7 +40,12 @@ import type { HookPipeline } from "../hooks/pipeline.js";
 import { buildHookSettings } from "../hooks/hook-settings.js";
 import { runWithHookScope, type HookScope } from "../hooks/hook-scope.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
-import { processRuntimeResult } from "../session/session-runtime-result.js";
+import {
+  commitPreparedProposals,
+  prepareRuntimeProposals,
+  type CommittableRuntimeResult,
+  type PreparedRuntimeProposals,
+} from "../session/session-runtime-result.js";
 import {
   applySessionClockTx,
   needsSessionClockWrite,
@@ -78,8 +86,8 @@ type FinalizeManifest = Pick<
   | "userSettings"
 >;
 
-/** The loose runtime-result shape `processRuntimeResult` accepts (top-level or nested). */
-type FinalizableResult = Parameters<typeof processRuntimeResult>[0];
+/** The loose runtime-result shape the commit pipeline accepts (top-level or nested). */
+type FinalizableResult = CommittableRuntimeResult;
 
 interface FailedProposal {
   readonly proposal: Proposal;
@@ -175,7 +183,14 @@ export interface FinalizeExecutionOutcome {
   readonly status: "committed" | "failed";
   /** SessionEvents from committed proposals, flushed only on success. */
   readonly events: readonly SessionEvent[];
+  /**
+   * Rejected proposals. On `failed` they caused the rollback; on `committed`
+   * they belong to optional runtimes whose writes were rolled back alone (see
+   * `isolatedRuntimeIds`) while the story and every other runtime committed.
+   */
   readonly failedProposals: readonly FailedProposal[];
+  /** Optional runtimes whose proposals were dropped without failing the turn. */
+  readonly isolatedRuntimeIds?: readonly string[];
   /** A non-proposal error (store error / `extraInTx` throw) that rolled back the execution. */
   readonly error?: string;
 }
@@ -341,8 +356,9 @@ export async function finalizeExecution(
   }
   const publishExports = async (
     sink: Parameters<typeof publishExecutionExports>[0]["sink"],
+    committedResults: readonly FinalizableResult[],
   ): Promise<void> => {
-    const exportedResults = results.filter(
+    const exportedResults = committedResults.filter(
       (result) =>
         result.status === "success" &&
         exportDeclByRuntime.has(result.runtimeId),
@@ -366,7 +382,7 @@ export async function finalizeExecution(
     await publishExecutionExports({
       sink,
       sessionId,
-      results,
+      results: committedResults,
       declFor: (runtimeId) => exportDeclByRuntime.get(runtimeId),
       loadOutputSchema: async (runtimeId) => schemas.get(runtimeId),
       committedAt: sessionClock?.now ?? new Date().toISOString(),
@@ -396,7 +412,7 @@ export async function finalizeExecution(
     }
   };
 
-  const processOpts = (
+  const commitOpts = (
     result: FinalizableResult,
     deferPostCommit?: (fn: () => Promise<void>) => void,
   ) => ({
@@ -421,6 +437,22 @@ export async function finalizeExecution(
   });
   const kindOf = (result: FinalizableResult): string =>
     outputKindByRuntime.get(result.runtimeId) ?? "plugin";
+
+  // A committed story must not be lost to an optional runtime's rejected
+  // write. When the execution produced a story, every other non-setup runtime
+  // commits in its own savepoint: a rejection rolls back that runtime alone.
+  // Without a story (manual, background, detached, setup), the execution stays
+  // all-or-nothing so a job never reports success for writes that did not land.
+  const hasStory = results.some(
+    (result) => kindOf(result) === "story" && result.status === "success",
+  );
+  const setupRuntimeIds = new Set(
+    (args.setupRan ?? []).map((ran) => ran.runtimeId),
+  );
+  const isolates = (result: FinalizableResult): boolean =>
+    hasStory &&
+    kindOf(result) !== "story" &&
+    !setupRuntimeIds.has(result.runtimeId);
 
   // Every exit funnels through here so reported jobs always reach a terminal
   // state, whatever the domain outcome.
@@ -458,9 +490,28 @@ export async function finalizeExecution(
     // flushed only after it commits. A rollback discards the buffer.
     const postCommit: Array<() => Promise<void>> = [];
     let committedEvents: readonly SessionEvent[] = [];
+    const isolatedFailures: FailedProposal[] = [];
+    const isolatedRuntimeIds = new Set<string>();
     try {
       if (args.abortReason !== undefined) {
         throw new Error(`Execution aborted: ${args.abortReason}`);
+      }
+      // Normalization, guards and PreStateCommit hooks run before the
+      // transaction: hooks are plugin code with their own timeouts and must
+      // never hold the store's write gate. The transaction then only writes.
+      const prepared = new Map<FinalizableResult, PreparedRuntimeProposals>();
+      for (const result of results) {
+        args.signal?.throwIfAborted();
+        prepared.set(
+          result,
+          await prepareRuntimeProposals(
+            result,
+            store,
+            sessionId,
+            kindOf(result),
+            commitOpts(result),
+          ),
+        );
       }
       committedEvents = await store.withTransaction(async (tx) => {
         args.signal?.throwIfAborted();
@@ -504,18 +555,50 @@ export async function finalizeExecution(
               },
             });
           });
+        const commitResult = async (
+          result: FinalizableResult,
+          sink: StoreTransaction,
+          defer: (fn: () => Promise<void>) => void,
+        ): Promise<readonly SessionEvent[]> => {
+          const { proposals, failedProposals } = prepared.get(result)!;
+          const out =
+            proposals.length > 0
+              ? await commitPreparedProposals(
+                  proposals,
+                  sink,
+                  sessionId,
+                  result,
+                  commitOpts(result, defer),
+                )
+              : { events: [], failedProposals: [] };
+          const failed = [...failedProposals, ...out.failedProposals];
+          if (failed.length > 0) throw new ProposalCommitFailure(failed);
+          return out.events;
+        };
         for (const result of results) {
           args.signal?.throwIfAborted();
-          const out = await processRuntimeResult(
-            result,
-            tx,
-            sessionId,
-            kindOf(result),
-            processOpts(result, (fn) => postCommit.push(fn)),
-          );
-          events.push(...out.events);
-          if (out.failedProposals.length > 0) {
-            throw new ProposalCommitFailure(out.failedProposals);
+          if (!isolates(result) || !tx.savepoint) {
+            events.push(
+              ...(await commitResult(result, tx, (fn) => postCommit.push(fn))),
+            );
+            continue;
+          }
+          const buffered: Array<() => Promise<void>> = [];
+          try {
+            events.push(
+              ...(await tx.savepoint((sp) =>
+                commitResult(result, sp, (fn) => buffered.push(fn)),
+              )),
+            );
+            postCommit.push(...buffered);
+          } catch (err) {
+            if (!(err instanceof ProposalCommitFailure)) throw err;
+            isolatedFailures.push(...err.failedProposals);
+            isolatedRuntimeIds.add(result.runtimeId);
+            console.warn(
+              `[finalize-execution] dropped writes of ${result.runtimeId} for session ${sessionId}: ` +
+                err.failedProposals.map((fp) => fp.error).join("; "),
+            );
           }
         }
         for (const message of args.journalMessages ?? []) {
@@ -531,7 +614,10 @@ export async function finalizeExecution(
             update: sessionClock!,
           });
         }
-        await publishExports(tx);
+        await publishExports(
+          tx,
+          results.filter((result) => !isolatedRuntimeIds.has(result.runtimeId)),
+        );
         for (const turnId of turnIds) {
           await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
         }
@@ -573,7 +659,10 @@ export async function finalizeExecution(
     return conclude({
       status: "committed",
       events: committedEvents,
-      failedProposals: [],
+      failedProposals: isolatedFailures,
+      ...(isolatedRuntimeIds.size > 0
+        ? { isolatedRuntimeIds: [...isolatedRuntimeIds] }
+        : {}),
     });
   });
 }

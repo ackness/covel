@@ -57,6 +57,8 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
       store,
       storeBackend: "memory",
       llmAdapter: { generate },
+      // Queued background jobs may run on the server's (mock) adapter.
+      canRunRuntimeJobWithServerServices: () => true,
     });
   }
 
@@ -263,10 +265,10 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
         await boot.store.getPluginData(
           sessionId,
           pluginId,
-          "_jobs",
+          "_runtime_jobs",
           accepted.jobId,
         ),
-      ).toMatchObject({ value: { status: "done" } });
+      ).toMatchObject({ value: { status: "succeeded" } });
     });
     expect(await readNote("background")).toMatchObject({ kind: "background" });
 

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
 import type { DataStore } from "@covel/store";
@@ -357,7 +358,7 @@ for (const [backend, create] of [
       });
       expect(await record(store)).toMatchObject({ value: 0, version: 1 });
     });
-    it("retains the global rollback boundary for ordinary invalid proposals", async () => {
+    it("drops only the tracker's writes when its proposal is rejected", async () => {
       const store = await setup(create);
       const bad = proposal(
         {
@@ -367,10 +368,19 @@ for (const [backend, create] of [
         },
         "plugin.data",
       );
-      expect((await finalize(store, bad)).status).toBe("failed");
+      const outcome = await finalize(store, bad);
+      expect(outcome).toMatchObject({
+        status: "committed",
+        isolatedRuntimeIds: ["owner/tracker"],
+      });
+      expect(outcome.failedProposals.map((fp) => fp.proposal.id)).toEqual([
+        bad.id,
+      ]);
       expect(await record(store)).toMatchObject({ value: 0, version: 1 });
-      expect(await receipt(store)).toBeUndefined();
-      expect(await store.listMessages("s")).toEqual([]);
+      // The narrative committed, so its obligation stays open for recovery.
+      expect(await receipt(store)).toMatchObject({
+        status: "pending-settlement",
+      });
     });
     it("never resets evolved values on repeated initialization", async () => {
       const store = await setup(create);
@@ -437,4 +447,100 @@ it("keeps frozen public reads separate from later writes, and publishes committe
   expect(
     (await createWorldModelView(store, "s")).dimensions.reputation?.value,
   ).toBe(5);
+});
+
+describe("story gate on the dimension provider", () => {
+  const manifests = (providerFails: boolean): RuntimeManifest[] => [
+    {
+      name: "owner/context",
+      pluginId: "owner",
+      description: "provider",
+      stage: "pre-turn",
+      runtimeType: "function",
+      handler: "./context.js",
+      trigger: { type: "auto" },
+      outputKind: "system",
+      outputContract: DIMENSION_CONTRACT,
+      ...(providerFails ? { maxRetries: 0 } : {}),
+    },
+    {
+      name: "story/manual",
+      pluginId: "story",
+      description: "story",
+      runtimeType: "function",
+      handler: "./story.js",
+      trigger: { type: "manual" },
+      outputKind: "story",
+    },
+    {
+      name: "story/auto",
+      pluginId: "story",
+      description: "story",
+      stage: "narrative",
+      runtimeType: "function",
+      handler: "./story.js",
+      trigger: { type: "auto" },
+      outputKind: "story",
+    },
+  ];
+  const run = async (
+    providerFails: boolean,
+    manualTrigger?: { runtimeId: string },
+  ) => {
+    const store = await setup();
+    const seen: unknown[] = [];
+    const result = await executeTurn(
+      {
+        sessionId: "s",
+        turnId: "t",
+        playerMessage: "go",
+        ...(manualTrigger ? { manualTrigger } : {}),
+      },
+      manifests(providerFails),
+      {
+        store,
+        // The host's world-context provider publishes committed dimensions.
+        extensionExecution: {
+          run: async () => ({
+            dimensionProviderPluginId: "owner",
+            dimensions: (await createWorldModelView(store, "s")).dimensions,
+          }),
+        } as never,
+        llm: {
+          generate: async () => {
+            throw new Error("Function runtimes do not use the LLM");
+          },
+        },
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            if (manifest.outputContract === DIMENSION_CONTRACT) {
+              if (providerFails) throw new Error("provider down");
+              return { outcome: "success", value: ctx.world!.dimensions };
+            }
+            seen.push(ctx.world?.dimensions.reputation?.value);
+            return { outcome: "success", value: { narrativeOutput: "ok" } };
+          },
+        }),
+      },
+    );
+    return { result, seen };
+  };
+
+  it("narrates a targeted manual story run from the frozen committed snapshot", async () => {
+    const { result, seen } = await run(false, { runtimeId: "story/manual" });
+    expect(
+      result.runtimeResults.map((entry) => [entry.runtimeId, entry.status]),
+    ).toEqual([["story/manual", "success"]]);
+    expect(seen).toEqual([0]);
+  });
+
+  it("still blocks narration when the provider ran and failed", async () => {
+    const { result, seen } = await run(true);
+    expect(
+      result.runtimeResults.find((entry) => entry.runtimeId === "story/auto"),
+    ).toMatchObject({ status: "skipped" });
+    expect(seen).toEqual([]);
+  });
 });

@@ -39,6 +39,24 @@ export const FEATURE_ENV_VARS = [
       "Auto-snapshot checkpoint cadence: save a kind=auto snapshot every N completed player turns (the first one always snapshots). 1 = every turn.",
   },
   {
+    name: "COVEL_TRACE_RETENTION_DAYS",
+    group: "feature",
+    type: "integer",
+    status: "active",
+    defaultValue: "0",
+    description:
+      "Delete a session's runtime trace events older than N days after each committed execution. 0 keeps all traces.",
+  },
+  {
+    name: "COVEL_AUTO_SNAPSHOT_RETENTION",
+    group: "feature",
+    type: "integer",
+    status: "active",
+    defaultValue: "20",
+    description:
+      "Auto snapshots kept per session; older kind=auto snapshots are deleted after each checkpoint unless a fork names them as parent. 0 keeps all.",
+  },
+  {
     name: "COVEL_TRACE_TRUNCATE",
     group: "feature",
     type: "boolean",

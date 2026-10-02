@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { DataStore, SnapshotPayload } from "../../types.js";
 import {
   makeJobStatus,
+  makeTraceEvent,
   makeLogicalTurnCompletion,
   makeSession,
   makeSetupAttempt,
@@ -283,6 +284,46 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("JobStatus", () => {
+    it("deletes every event of the given jobs in one session only", async () => {
+      for (const [sessionId, jobId, sequence] of [
+        ["sess-js-del", "job-a", 0],
+        ["sess-js-del", "job-a", 1],
+        ["sess-js-del", "job-b", 0],
+        ["sess-js-other", "job-a", 0],
+      ] as const) {
+        await store.appendJobStatus(
+          makeJobStatus({ sessionId, jobId, sequence }),
+        );
+      }
+
+      await store.deleteJobStatus("sess-js-del", ["job-a"]);
+
+      expect(
+        (await store.listJobStatus("sess-js-del")).map((r) => r.jobId),
+      ).toEqual(["job-b"]);
+      expect(await store.listJobStatus("sess-js-other")).toHaveLength(1);
+    });
+
+    it("deletes trace events older than a cutoff in one session only", async () => {
+      for (const [sessionId, createdAt] of [
+        ["sess-trace-del", "2024-01-01T00:00:00.000Z"],
+        ["sess-trace-del", "2024-01-03T00:00:00.000Z"],
+        ["sess-trace-other", "2024-01-01T00:00:00.000Z"],
+      ] as const) {
+        await store.addTraceEvent(makeTraceEvent({ sessionId, createdAt }));
+      }
+
+      await store.deleteTraceEventsBefore(
+        "sess-trace-del",
+        "2024-01-02T00:00:00.000Z",
+      );
+
+      expect(
+        (await store.listTraceEvents("sess-trace-del")).map((r) => r.createdAt),
+      ).toEqual(["2024-01-03T00:00:00.000Z"]);
+      expect(await store.listTraceEvents("sess-trace-other")).toHaveLength(1);
+    });
+
     it("append is idempotent on (jobId, sequence); earlier event wins", async () => {
       const first = makeJobStatus({
         sessionId: "sess-js",
@@ -385,6 +426,39 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("Snapshot payload", () => {
+    it("prunes old auto snapshots but keeps manual ones and fork parents", async () => {
+      const auto = (n: number) =>
+        makeSnapshot({
+          id: `auto-${n}`,
+          sessionId: "sess-prune",
+          kind: "auto",
+          createdAt: `2024-01-01T00:00:0${n}.000Z`,
+        });
+      for (const n of [1, 2, 3, 4]) await store.saveSnapshot(auto(n));
+      await store.saveSnapshot(
+        makeSnapshot({
+          id: "manual-0",
+          sessionId: "sess-prune",
+          kind: "manual",
+          createdAt: "2024-01-01T00:00:00.000Z",
+        }),
+      );
+      await store.saveSnapshot(
+        makeSnapshot({
+          id: "fork-child",
+          sessionId: "sess-prune-fork",
+          kind: "fork",
+          parentId: "auto-1",
+        }),
+      );
+
+      expect(await store.pruneAutoSnapshots("sess-prune", 2)).toBe(1);
+
+      const ids = (await store.listSnapshots("sess-prune")).map((s) => s.id);
+      expect(ids.sort()).toEqual(["auto-1", "auto-3", "auto-4", "manual-0"]);
+      expect(await store.pruneAutoSnapshots("sess-prune", 2)).toBe(0);
+    });
+
     it("rejects an uncaptured summary reference without overwriting the snapshot", async () => {
       const snapshot = makeSnapshot();
       await store.saveSnapshot(snapshot);

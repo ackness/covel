@@ -73,7 +73,20 @@ export interface PluginRpcRuntimeTurnContext {
   readonly hookPipeline?: TurnExecutorDeps["hookPipeline"];
 }
 
-export interface RunManualTurnArgs {
+/**
+ * Durable-worker hooks for a queued run: admission and commit barriers, and a
+ * write that settles the job in the same transaction as the domain commit.
+ */
+export interface QueuedRunControl {
+  readonly expectedSessionIncarnation?: string;
+  readonly beforeExecute?: () => Promise<void>;
+  readonly beforeCommit?: (args: {
+    readonly backgroundTurnId: string;
+    readonly backgroundExecutionId: string;
+  }) => Promise<void>;
+}
+
+export interface RunManualTurnArgs extends QueuedRunControl {
   readonly executionSignal?: AbortSignal;
   readonly turnId: string;
   readonly runtimeId: string;
@@ -95,9 +108,14 @@ export interface RunManualTurnArgs {
    * and are short enough that holding the lock throughout costs nothing.
    */
   readonly detached?: boolean;
+  /** Runs inside the commit transaction, in both modes. */
+  readonly completeInTx?: (
+    tx: StoreTransaction,
+    result: import("@covel/shared").TurnResult,
+  ) => Promise<void>;
 }
 
-export interface RunDeferredFollowerArgs {
+export interface RunDeferredFollowerArgs extends QueuedRunControl {
   readonly executionSignal?: AbortSignal;
   readonly followerTurnId: string;
   readonly runtimeId: string;
@@ -108,6 +126,10 @@ export interface RunDeferredFollowerArgs {
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  readonly completeInTx?: (
+    tx: StoreTransaction,
+    result: import("@covel/shared").TurnResult,
+  ) => Promise<void>;
 }
 
 export interface RunDetachedStageArgs {
@@ -145,6 +167,16 @@ export function backgroundRuntimeLockId(
   runtimeId: string,
 ): string {
   return `background-runtime:${JSON.stringify([sessionId, runtimeId])}`;
+}
+
+function queuedRunOptions(control: QueuedRunControl): QueuedRunControl {
+  return {
+    ...(control.expectedSessionIncarnation
+      ? { expectedSessionIncarnation: control.expectedSessionIncarnation }
+      : {}),
+    ...(control.beforeExecute ? { beforeExecute: control.beforeExecute } : {}),
+    ...(control.beforeCommit ? { beforeCommit: control.beforeCommit } : {}),
+  };
 }
 
 export function createPluginRpcRuntimeTurnRunner(
@@ -476,8 +508,8 @@ export function createPluginRpcRuntimeTurnRunner(
                   // Minutes can pass while the generation runs, so the session state
                   // read before it started is no longer trustworthy. Re-read under
                   // the lock and refuse to commit into a session the player has since
-                  // paused or ended — the throw is caught by the background job
-                  // runner, which settles the job row as failed.
+                  // paused or ended — the runtime job worker settles the throw
+                  // as a stale job.
                   const live = await ctx.store.getSession(ctx.sessionId);
                   if (!live) {
                     throw new SessionNotActiveError("deleted");
@@ -587,6 +619,8 @@ export function createPluginRpcRuntimeTurnRunner(
     const { result, commit } = args.detached
       ? await runDetached(args.runtimeId, executionInput, emitter, {
           executionSignal: args.executionSignal,
+          ...queuedRunOptions(args),
+          ...(args.completeInTx ? { completeInTx: args.completeInTx } : {}),
         }).then((r) => ({
           result: r.turnResult,
           commit: r.commit,
@@ -612,11 +646,17 @@ export function createPluginRpcRuntimeTurnRunner(
                 ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
               },
             );
+            const completeInTx = args.completeInTx;
             const outcome = await processTurnResults(
               execution,
               emitter,
               hookScope,
-              { executionSignal },
+              {
+                executionSignal,
+                ...(completeInTx
+                  ? { extraInTx: (tx) => completeInTx(tx, execution.result) }
+                  : {}),
+              },
             );
             return { result: execution.result, commit: outcome };
           }),
@@ -672,6 +712,8 @@ export function createPluginRpcRuntimeTurnRunner(
 
     return runDetached(args.runtimeId, turnInput, emitter, {
       executionSignal: args.executionSignal,
+      ...queuedRunOptions(args),
+      ...(args.completeInTx ? { completeInTx: args.completeInTx } : {}),
     });
   }
 

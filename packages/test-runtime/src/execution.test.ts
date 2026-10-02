@@ -131,7 +131,12 @@ async function getJobRow(
   store: Awaited<ReturnType<typeof createSessionStore>>,
   jobId: string,
 ): Promise<PluginDataRecord> {
-  const row = await store.getPluginData(SESSION_ID, PLUGIN_ID, "_jobs", jobId);
+  const row = await store.getPluginData(
+    SESSION_ID,
+    PLUGIN_ID,
+    "_runtime_jobs",
+    jobId,
+  );
   if (!row) throw new Error(`missing job row: ${jobId}`);
   return row;
 }
@@ -333,8 +338,8 @@ describe("test-runtime execution helpers", () => {
       expect(job.result.status).toBe(outcome);
       expect(job.status).toBe("done");
       expect((await getJobRow(store, job.jobId)).value).toMatchObject({
-        status: "done",
-        runtimeResults: [{ status: outcome }],
+        status: "succeeded",
+        result: { runtimeResults: [{ status: outcome }] },
       });
       expect(
         await store.listPluginData(SESSION_ID, PLUGIN_ID, "notes"),
@@ -479,10 +484,9 @@ describe("test-runtime execution helpers", () => {
     expect(row.value).toMatchObject({
       status: "failed",
       runtimeId: RUNTIME_ID,
-      turnId: "turn-1",
-      reason: "expected-background-follower-missing",
+      reason: "runtime-reported-failure",
       error: "runtime failed before emitting the event",
-      runtimeResults: [failed],
+      result: { turnId: "turn-1", runtimeResults: [failed] },
     });
   });
 
@@ -503,10 +507,10 @@ describe("test-runtime execution helpers", () => {
     expect(row.value).toMatchObject({
       status: "failed",
       runtimeId: RUNTIME_ID,
-      turnId: "turn-1",
+      reason: "follower-not-emitted",
       error:
         'runtime "plugin/follower" completed without emitting a matching background follower event',
-      runtimeResults: [successful],
+      result: { turnId: "turn-1", runtimeResults: [successful] },
     });
   });
 
@@ -594,15 +598,17 @@ describe("test-runtime execution helpers", () => {
 
     const row = await getJobRow(store, job.jobId);
     expect(row.value).toMatchObject({
-      status: "done",
+      status: "succeeded",
       runtimeId: RUNTIME_ID,
-      runtimeResults: [
-        {
-          runtimeId: RUNTIME_ID,
-          pluginId: PLUGIN_ID,
-          status: "success",
-        },
-      ],
+      result: {
+        runtimeResults: [
+          {
+            runtimeId: RUNTIME_ID,
+            pluginId: PLUGIN_ID,
+            status: "success",
+          },
+        ],
+      },
     });
   });
 
@@ -643,7 +649,7 @@ describe("test-runtime execution helpers", () => {
       status: "failed",
       runtimeId: RUNTIME_ID,
       error: "boom",
-      runtimeResults: [{ status: "failed", error: "boom" }],
+      result: { runtimeResults: [{ status: "failed", error: "boom" }] },
     });
   });
 
@@ -682,7 +688,9 @@ describe("test-runtime execution helpers", () => {
     expect(row.value).toMatchObject({
       status: "failed",
       error: "reported failure",
-      runtimeResults: [{ status: "failed", error: "reported failure" }],
+      result: {
+        runtimeResults: [{ status: "failed", error: "reported failure" }],
+      },
     });
   });
 

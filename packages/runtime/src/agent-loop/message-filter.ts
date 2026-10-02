@@ -16,6 +16,7 @@
  * orchestration.
  */
 
+import type { RuntimeHistoryPolicy } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import { looksLikeStructuredRuntimeOutput } from "../turn-executor/turn-output-helpers.js";
 
@@ -34,6 +35,8 @@ export function filterRuntimeHistory(
   return messageHistory.filter((m) => {
     if (m.sourceType === "player" || m.sourceType === "system") return true;
     if (m.sourceType === "runtime") {
+      // Rows without text only carry trigger accounting or UI attachments.
+      if (!m.content.trim()) return false;
       // Keep own previous outputs.
       if (m.sourceRuntimeId === runtimeName) return true;
       // Drop messages that look like another runtime's structured tool
@@ -44,4 +47,26 @@ export function filterRuntimeHistory(
     }
     return true;
   });
+}
+
+/**
+ * Keep only the newest `maxTurns` turns of an already-filtered history.
+ * Turns are counted by distinct `turnId`, newest first, so one turn's player
+ * input and runtime outputs stay together. `maxTurns: 0` yields no history.
+ */
+export function applyHistoryWindow(
+  messageHistory: readonly TurnMessageRecord[],
+  policy: RuntimeHistoryPolicy,
+): readonly TurnMessageRecord[] {
+  const kept = new Set<string>();
+  let start = messageHistory.length;
+  while (start > 0) {
+    const turnId = messageHistory[start - 1]!.turnId;
+    if (!kept.has(turnId)) {
+      if (kept.size === policy.maxTurns) break;
+      kept.add(turnId);
+    }
+    start--;
+  }
+  return messageHistory.slice(start);
 }

@@ -7,11 +7,12 @@
  * cannot use them to reach another plugin's data.
  */
 
-import type { DataStore } from "@covel/store";
+import type { DataStore, TurnMessageRecord } from "@covel/store";
 import type {
   PluginDataWriter,
   PluginLogger,
   FunctionStoreView,
+  PluginTurnMessage,
 } from "@covel/shared/plugin-runtime";
 import {
   reservedPluginDataNamespaceError,
@@ -94,6 +95,78 @@ function assertWritableNamespace(namespace: string): void {
   if (reserved) throw new Error(reserved);
 }
 
+const TURN_MESSAGE_PAGE_DEFAULT = 100;
+const TURN_MESSAGE_PAGE_MAX = 500;
+
+/** The cursor is opaque to plugins; it encodes the store's keyset position. */
+function encodeTurnMessageCursor(message: TurnMessageRecord): string {
+  return JSON.stringify([message.createdAt, message.id]);
+}
+
+function decodeTurnMessageCursor(cursor: string): {
+  readonly createdAt: string;
+  readonly id: string;
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cursor);
+  } catch {
+    parsed = undefined;
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length !== 2 ||
+    typeof parsed[0] !== "string" ||
+    typeof parsed[1] !== "string"
+  )
+    throw new TypeError("Invalid turn message cursor");
+  return { createdAt: parsed[0], id: parsed[1] };
+}
+
+function toPluginTurnMessage(message: TurnMessageRecord): PluginTurnMessage {
+  return {
+    id: message.id,
+    turnId: message.turnId,
+    sourceType: message.sourceType,
+    ...(message.sourcePluginId !== undefined
+      ? { sourcePluginId: message.sourcePluginId }
+      : {}),
+    ...(message.sourceRuntimeId !== undefined
+      ? { sourceRuntimeId: message.sourceRuntimeId }
+      : {}),
+    role: message.role,
+    content: message.content,
+    createdAt: message.createdAt,
+    compacted: message.compactedAtTurnId != null,
+  };
+}
+
+/**
+ * Keyset page over the committed timeline. Long-context plugins walk the whole
+ * log in bounded reads instead of cloning every message on each execution.
+ */
+async function readTurnMessagePage(
+  store: DataStore,
+  sessionId: string,
+  options: Parameters<FunctionStoreView["readTurnMessages"]>[0],
+): ReturnType<FunctionStoreView["readTurnMessages"]> {
+  const requested = options?.limit ?? TURN_MESSAGE_PAGE_DEFAULT;
+  if (!Number.isSafeInteger(requested) || requested < 1)
+    throw new RangeError("readTurnMessages limit must be a positive integer");
+  const limit = Math.min(requested, TURN_MESSAGE_PAGE_MAX);
+  const after =
+    options?.after === undefined
+      ? null
+      : decodeTurnMessageCursor(options.after);
+  const rows = await store.listTurnMessagesAfter(sessionId, after, limit);
+  const last = rows.at(-1);
+  return {
+    messages: rows.map(toPluginTurnMessage),
+    cursor: last ? encodeTurnMessageCursor(last) : (options?.after ?? null),
+    hasMore: rows.length === limit,
+  };
+}
+
 /** Builtin runtime reads and proposal-backed writes; host control stays private. */
 export interface TrustedHandlerStore extends FunctionStoreView {
   getWorld(): ReturnType<DataStore["getWorld"]>;
@@ -149,6 +222,8 @@ export function createTrustedHandlerStore(
           ? await store.listRecentTurnMessages(sessionId, limit)
           : await store.listTurnMessages(sessionId),
       ),
+    readTurnMessages: (options) =>
+      readTurnMessagePage(store, sessionId, options),
     setPluginData(record) {
       assertWritableNamespace(record.namespace);
       bufferPluginData(buffer, ctx, record.namespace, record.key, record.value);
@@ -296,17 +371,21 @@ type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LOGS_NAMESPACE = "_logs";
 const MAX_LOG_ENTRIES = 200;
+const LOG_EVICTION_INTERVAL = 20;
 
 /**
  * Build a per-runtime logger that appends rows to the plugin's `_logs`
  * namespace. Keys are `<timestampMs>-<uuid>` so natural sort matches
- * chronological order. When the ring hits `MAX_LOG_ENTRIES`, the oldest
- * rows are evicted so a chatty plugin can't balloon the table.
+ * chronological order. When the ring exceeds `MAX_LOG_ENTRIES`, the oldest
+ * rows are evicted so a chatty plugin can't balloon the table. The ring is
+ * checked on a logger's first write and every `LOG_EVICTION_INTERVAL` writes
+ * after, so a log line costs one write instead of a full namespace read.
  */
 export function createPluginLogger(
   store: DataStore,
   ctx: HandlerHelperContext,
 ): PluginLogger {
+  let appended = 0;
   async function append(
     level: LogLevel,
     message: string,
@@ -336,9 +415,10 @@ export function createPluginLogger(
         createdAt: nowIso,
         updatedAt: nowIso,
       });
-      // Evict oldest entries beyond MAX_LOG_ENTRIES. Done eagerly rather than
+      // Evict oldest entries beyond MAX_LOG_ENTRIES. Done on write rather than
       // on a timer so a background plugin that never touches the store again
-      // still rotates naturally on its last write.
+      // still rotates naturally.
+      if (appended++ % LOG_EVICTION_INTERVAL !== 0) return;
       const rows = await store.listPluginData(
         ctx.sessionId,
         ctx.pluginId,
@@ -407,6 +487,7 @@ export function createFunctionStoreView(
       getSession: unavailable,
       listPlayerInputs: unavailable,
       listTurnMessages: unavailable,
+      readTurnMessages: unavailable,
     };
   }
   const reads = createTrustedHandlerStore(store, ctx, buffer ?? []);
@@ -429,6 +510,9 @@ export function createFunctionStoreView(
       // `listTurnMessages(sessionId, { limit })` would return the OLDEST N, so
       // route a numeric limit through the tail query. No limit → full history.
       return reads.listTurnMessages(limit);
+    },
+    readTurnMessages(options) {
+      return reads.readTurnMessages(options);
     },
   };
 }

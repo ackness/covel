@@ -295,7 +295,7 @@ export async function executeFunctionRuntime({
       : undefined;
   const world = deps.store
     ? await createWorldModelView(
-        deps.store,
+        deps.worldModelReads ?? deps.store,
         input.sessionId,
         upstreamProposals,
         writeBuffer,

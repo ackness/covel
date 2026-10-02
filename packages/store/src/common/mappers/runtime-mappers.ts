@@ -6,7 +6,6 @@
 import type {
   InteractionRecordRow,
   RuntimeOutputRecord,
-  RuntimeResultRecord,
   ToolCallRecordRow,
   TurnResultRecord,
 } from "../../types.js";
@@ -24,21 +23,6 @@ export interface TurnResultRow {
   parentTurnId: string | null;
   commitStatus: string;
   durationMs: number;
-  createdAt: string;
-}
-
-export interface RuntimeResultRow {
-  id: string;
-  sessionId: string;
-  turnId: string;
-  pluginId: string;
-  runtimeId: string;
-  status: string;
-  output: unknown;
-  toolCalls: unknown;
-  durationMs: number;
-  tokenUsage: unknown;
-  error: string | null;
   createdAt: string;
 }
 
@@ -127,26 +111,6 @@ export function toTurnResultRecord(
     ...(row.parentTurnId ? { parentTurnId: row.parentTurnId } : {}),
     commitStatus: requireCommitStatus(row.commitStatus),
     durationMs: row.durationMs,
-    createdAt: row.createdAt,
-  };
-}
-
-export function toRuntimeResultRecord(
-  row: RuntimeResultRow,
-  json: JsonReader,
-): RuntimeResultRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    turnId: row.turnId,
-    pluginId: row.pluginId,
-    runtimeId: row.runtimeId,
-    status: row.status,
-    output: json.read(row.output),
-    toolCalls: json.read(row.toolCalls),
-    durationMs: row.durationMs,
-    tokenUsage: json.read(row.tokenUsage),
-    error: row.error ?? undefined,
     createdAt: row.createdAt,
   };
 }

@@ -12,8 +12,8 @@
 
 1. 读取 canonical `turn_messages` 中未压缩的后缀和全量消息统计。当前玩家输入先保留在 execution journal，提交成功后才落库。
 2. 对历史副本运行 `prompt.history-transform@1` pipeline。每个 provider 接收前一个 provider 的结果；该投影不改写 canonical 消息，也不改变调度计数。
-3. 按当前 runtime 过滤其他插件的结构化历史输出，组装实际 system prompt，并合并已持久化摘要。
-4. 首个 agent 以这个 system prompt 估算压缩需求。同一 turn 的 agent 共用一次压缩屏障；成功后重载历史与摘要，重新投影并组装 context。
+3. 按当前 runtime 过滤其他插件的结构化历史输出和没有文本的 runtime 行，组装实际 system prompt，并合并已持久化摘要。声明了 `agent.history.maxTurns` 的 runtime 只保留最近 N 个回合（按 `turnId` 计数）的可见消息，不合并摘要。
+4. 首个使用共享历史视图的 agent 以这个 system prompt 估算压缩需求。同一 turn 的这类 agent 共用一次压缩屏障；成功后重载历史与摘要，重新投影并组装 context。声明了历史窗口的 runtime 不触发也不等待该屏障。
 5. 执行 `PostContextAssembly`，应用预算；每次 `PreLLMCall` 后再按实际请求校验预算。
 
 `history.compact@1` 是 single 扩展点。框架负责阈值、返回值校验及摘要与消息标记的原子持久化；默认 `history-compaction` 插件负责选择连续历史前缀、调用摘要模型和限制摘要长度。当前默认策略保护最近两个用户回合和最后五条消息，将旧摘要与新前缀合并为单块滚动摘要，预算为 context window 的 4%，最少 128、最多 1024 estimated tokens。

@@ -134,6 +134,14 @@ export function createLifecycleMethods(state: MemoryState): MemoryStoreMethods {
         );
     },
 
+    async deleteJobStatus(sessionId: string, jobIds: readonly string[]) {
+      const doomed = new Set(jobIds);
+      for (const [key, record] of state.jobStatus) {
+        if (record.sessionId === sessionId && doomed.has(record.jobId))
+          state.jobStatus.delete(key);
+      }
+    },
+
     async appendJobStatus(record: JobStatusRecord) {
       const key = jobKey(record);
       if (state.jobStatus.has(key)) return false;

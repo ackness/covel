@@ -1,5 +1,5 @@
 /**
- * Parallel executor — runs same-priority runtimes concurrently with failure isolation.
+ * Parallel executor — runs one DAG level's runtimes concurrently with failure isolation.
  */
 
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";

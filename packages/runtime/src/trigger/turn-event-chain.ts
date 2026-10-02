@@ -4,11 +4,7 @@ import type {
   SetupRuntimeState,
   TurnResult,
 } from "@covel/shared";
-import {
-  getRuntimeSpec,
-  isSetupDoneForVersion,
-  isSetupRuntime,
-} from "@covel/shared";
+import { isSetupDoneForVersion, isSetupRuntime } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
 import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { shouldTrigger } from "./trigger.js";
@@ -53,6 +49,12 @@ export interface RunEventChainParams {
   readonly runtimeTurnsSinceLastTrigger?: ReadonlyMap<string, number>;
   /** Setup mirror frozen at execution start. */
   readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
+  /**
+   * A later emission of a topic already collected at this depth is not
+   * delivered (one payload per topic per depth). Reported so the loss is
+   * observable instead of silent.
+   */
+  readonly onDroppedEvent?: (topic: string, runtimeId: string) => void;
 }
 
 /**
@@ -66,7 +68,7 @@ export interface RunEventChainParams {
  * Absent maps fall back to "never triggered" for direct callers (tests).
  * `isManualTrigger` is irrelevant to the `event` branch.
  *
- * Fan-out is deliberately NOT filtered by the current priority band: it is a
+ * Fan-out is deliberately NOT filtered by the current stage band: it is a
  * causal reaction to something that actually happened, not a scheduled slot.
  * Band filtering would silently drop a subscriber whenever the emitter sat in
  * the other band. Completed setup runtimes are filtered against the
@@ -98,11 +100,12 @@ function eventFanoutTriggerContext(
 
 /**
  * Collect emitted runtime events into a topic -> payload map. First emission
- * wins inside a depth to keep fan-out deterministic.
+ * wins inside a depth to keep fan-out deterministic; later ones are reported.
  */
 function collectEventsFrom(
   result: RuntimeResult,
   sink: Map<string, Record<string, unknown>>,
+  onDropped?: (topic: string, runtimeId: string) => void,
 ): void {
   // Domain events belong only to successful producers, including at later depths.
   if (result.status !== "success") return;
@@ -112,7 +115,10 @@ function collectEventsFrom(
   for (const evt of events) {
     const topic = evt?.topic;
     if (typeof topic !== "string" || topic.length === 0) continue;
-    if (sink.has(topic)) continue;
+    if (sink.has(topic)) {
+      onDropped?.(topic, result.runtimeId);
+      continue;
+    }
     const data = (evt?.data as Record<string, unknown> | undefined) ?? {};
     sink.set(topic, data);
   }
@@ -130,10 +136,11 @@ export async function runEventChain({
   runtimeTriggerCounts,
   runtimeTurnsSinceLastTrigger,
   setupRuntimes,
+  onDroppedEvent,
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, Record<string, unknown>>();
   for (const [, result] of completedResults) {
-    collectEventsFrom(result, emittedEvents);
+    collectEventsFrom(result, emittedEvents, onDroppedEvent);
   }
 
   const deferredFollowers: DeferredFollower[] = [];
@@ -234,7 +241,7 @@ export async function runEventChain({
     );
     for (const [name, result] of results) {
       completedResults.set(name, result);
-      collectEventsFrom(result, newEvents);
+      collectEventsFrom(result, newEvents, onDroppedEvent);
     }
 
     emittedEvents.clear();

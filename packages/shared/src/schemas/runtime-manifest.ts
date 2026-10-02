@@ -90,6 +90,7 @@ export const runtimeAuthoringManifestSchema = z
       .strictObject({
         model: z.string().optional(),
         llm: runtimeManifestInputSchema.shape.llm,
+        history: runtimeManifestInputSchema.shape.history,
         tools: toolsConfigSchema.optional(),
         advertiseEvents: z.boolean().optional(),
         loop: z

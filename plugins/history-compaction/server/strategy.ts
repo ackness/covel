@@ -139,7 +139,10 @@ function buildCompactorUserPrompt(
   priorSummaries: readonly SessionSummaryRecord[],
   maxSummaryTokens: number,
 ): string {
+  // Empty rows only carry trigger accounting or UI attachments; they are still
+  // compacted (the prefix must stay contiguous) but add nothing to summarize.
   const formatted = messages
+    .filter((m) => m.content.trim())
     .map((m) => `[${m.role}]: ${m.content}`)
     .join("\n\n");
   const prior = priorSummaries
@@ -251,8 +254,8 @@ export async function compactHistory(
   const estimator = deps.estimator ?? estimateTokens;
   const protectStart = computeProtectStart(
     messages,
-    opts.protectLastNUserTurns ?? 2,
-    opts.protectLastNMessages ?? 5,
+    opts.protectLastNUserTurns ?? DEFAULT_PROTECT_LAST_USER_TURNS,
+    opts.protectLastNMessages ?? DEFAULT_PROTECT_LAST_N_MESSAGES,
   );
   const lastCompactedIndex = messages.findLastIndex(
     (m) => m.compactedAtTurnId != null,

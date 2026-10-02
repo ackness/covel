@@ -7,10 +7,11 @@
  * `executeTurn()`'s `result.deferredFollowers` — an `execution: 'background'`
  * runtime triggered by an event emitted on the main turn path (e.g.
  * scene-stage/background-gen off scene-stage/resolver) would never run.
- * This test pins the fix: the follower actually executes and commits.
+ * This test pins the fix: the follower is queued as a durable event job in
+ * the turn's commit, and the runtime job worker executes and commits it.
  */
 
-import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
+import { createTestRuntimeJobWorker } from "./__helpers/runtime-job-worker.js";
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
 import { type DataStore } from "@covel/store";
@@ -64,7 +65,7 @@ function makeManifest(args: {
 
 async function waitFor(
   predicate: () => Promise<boolean>,
-  maxAttempts = 200,
+  maxAttempts = 2_000,
 ): Promise<void> {
   for (let i = 0; i < maxAttempts; i++) {
     if (await predicate()) return;
@@ -160,10 +161,21 @@ describe("POST /api/actions — deferred background followers (main path)", () =
           ? followerLoaded
           : undefined;
 
-    const pluginBackgroundQueue = createTestBackgroundQueue();
+    const runtimeJobWorker = createTestRuntimeJobWorker({
+      store,
+      eventBus,
+      sessionLock,
+      pluginRegistry,
+      deps: {
+        loadRuntime: loadRuntimeFn,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        llm: { generate: async () => ({}) } as any,
+        resolveModel: () => undefined,
+      },
+    });
     const app = new Hono();
     app.use("*", async (c, next) => {
-      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
+      c.set("runtimeJobWorker", runtimeJobWorker);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -216,11 +228,8 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       }
     }
 
-    // Follower must not have run synchronously within the request — it's
-    // scheduled via setImmediate, same as plugin-rpc.ts's sync mode.
-    // (By the time the stream is fully drained the setImmediate may already
-    // have fired, so this only documents intent — the real assertion is the
-    // committed output below.)
+    // The follower runs on the runtime job worker, not within the request;
+    // the real assertion is the committed output below.
     await waitFor(async () => {
       const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "seen");
       return rows.length === 1;
@@ -230,11 +239,26 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     const seen = await store.listPluginData(SESSION_ID, PLUGIN_ID, "seen");
     expect(seen[0]?.value).toEqual({ value: "hello" });
 
-    // The pending job row the scheduler writes before setImmediate must have
-    // settled to done.
-    const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+    // The turn queued one durable event job, which settled as succeeded.
+    await waitFor(async () => {
+      const jobs = await store.listPluginData(
+        SESSION_ID,
+        PLUGIN_ID,
+        "_runtime_jobs",
+      );
+      return (jobs[0]?.value as { status?: string })?.status === "succeeded";
+    });
+    const jobs = await store.listPluginData(
+      SESSION_ID,
+      PLUGIN_ID,
+      "_runtime_jobs",
+    );
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]?.value).toMatchObject({ status: "done" });
+    expect(jobs[0]?.value).toMatchObject({
+      runtimeId: FOLLOWER,
+      status: "succeeded",
+      origin: { activation: "event" },
+    });
   });
 
   // A background follower is typically a media generation: scene-stage's
@@ -329,10 +353,21 @@ describe("POST /api/actions — deferred background followers (main path)", () =
           ? followerLoaded
           : undefined;
 
-    const pluginBackgroundQueue = createTestBackgroundQueue();
+    const runtimeJobWorker = createTestRuntimeJobWorker({
+      store,
+      eventBus,
+      sessionLock,
+      pluginRegistry,
+      deps: {
+        loadRuntime: loadRuntimeFn,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        llm: { generate: async () => ({}) } as any,
+        resolveModel: () => undefined,
+      },
+    });
     const app = new Hono();
     app.use("*", async (c, next) => {
-      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
+      c.set("runtimeJobWorker", runtimeJobWorker);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -391,7 +426,13 @@ describe("POST /api/actions — deferred background followers (main path)", () =
 
     // The commit itself still takes the session lock, so the follower's writes
     // land exactly as before — freeing the lock must not cost durability.
-    const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-    expect(jobs[0]?.value).toMatchObject({ status: "done" });
+    await waitFor(async () => {
+      const jobs = await store.listPluginData(
+        SESSION_ID,
+        PLUGIN_ID,
+        "_runtime_jobs",
+      );
+      return (jobs[0]?.value as { status?: string })?.status === "succeeded";
+    });
   });
 });

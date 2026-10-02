@@ -5,18 +5,49 @@ import type {
   PluginDataRecord,
   StoreTransaction,
 } from "@covel/store";
+import {
+  isPublicPluginDataRecord,
+  publicPluginDataValue,
+} from "../plugin-rpc/runtime-job-public.js";
+
+interface PluginDataChange {
+  readonly namespace: string;
+  readonly key: string;
+  readonly value: unknown;
+  readonly operation: "set" | "delete";
+}
+
+/**
+ * The event stream is a public plugin-data surface, persisted and pushed to
+ * clients: hidden world data never enters it, and framework rows carry the
+ * same public projection the REST reads return.
+ */
+function publicChanges(
+  changes: readonly PluginDataChange[],
+): PluginDataChange[] {
+  const visible: PluginDataChange[] = [];
+  for (const change of changes) {
+    if (!isPublicPluginDataRecord(change)) continue;
+    if (change.operation === "delete") {
+      visible.push(change);
+      continue;
+    }
+    try {
+      visible.push({ ...change, value: publicPluginDataValue(change) });
+    } catch {
+      // A malformed framework row has no public shape; announce nothing.
+    }
+  }
+  return visible;
+}
 
 function emitPluginDataChangedEvent(
   eventBus: EventBus,
   pluginId: string,
   sessionId: string,
-  changes: readonly {
-    namespace: string;
-    key: string;
-    value: unknown;
-    operation: "set" | "delete";
-  }[],
+  rawChanges: readonly PluginDataChange[],
 ): void {
+  const changes = publicChanges(rawChanges);
   if (changes.length === 0) return;
   eventBus.emit({
     id: crypto.randomUUID(),
@@ -152,6 +183,39 @@ export function wrapStoreWithPluginDataEvents(
             ),
           );
           // Preserves write order; flush happens post-COMMIT.
+          for (const message of buffered) eventBus.emit(message);
+          return result;
+        };
+      }
+
+      // Inside a transaction this proxy wraps the tx view with a buffering bus.
+      // A savepoint keeps its own buffer and hands it on only when it
+      // succeeds, so a rolled-back savepoint never announces its writes.
+      if (prop === "savepoint") {
+        const savepoint = (target as unknown as StoreTransaction).savepoint;
+        if (typeof savepoint !== "function") return savepoint;
+        return async <T>(
+          fn: (tx: StoreTransaction) => Promise<T>,
+        ): Promise<T> => {
+          const buffered: CovelMessage[] = [];
+          const bufferingBus: EventBus = {
+            ...eventBus,
+            emit: (message: CovelMessage): void => {
+              buffered.push(message);
+            },
+          };
+          const result = await savepoint.call<
+            StoreTransaction,
+            [(sp: StoreTransaction) => Promise<T>],
+            Promise<T>
+          >(target as unknown as StoreTransaction, (sp) =>
+            fn(
+              wrapStoreWithPluginDataEvents(
+                sp as unknown as DataStore,
+                bufferingBus,
+              ) as unknown as StoreTransaction,
+            ),
+          );
           for (const message of buffered) eventBus.emit(message);
           return result;
         };

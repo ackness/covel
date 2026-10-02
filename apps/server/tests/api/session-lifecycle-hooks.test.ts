@@ -848,10 +848,10 @@ describe("Session lifecycle hooks", () => {
       id: "pending-late-job",
       sessionId: id,
       pluginId: "community-plugin",
-      namespace: "_jobs",
+      namespace: "_runtime_jobs",
       key: "late-job",
       value: {
-        status: "pending",
+        status: "running",
         runtimeId: "community-plugin/runtime",
       },
       createdAt: new Date().toISOString(),

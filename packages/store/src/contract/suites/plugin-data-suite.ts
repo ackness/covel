@@ -1,35 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type {
-  CharacterRecord,
-  DataStore,
-  StateEntryRecord,
-} from "../../types.js";
-import {
-  id,
-  makeCharacter,
-  makeEvent,
-  makeInteractionRecord,
-  makeLorebookEntry,
-  makeMessage,
-  makePlayerInput,
-  makeRuntimeOutput,
-  makeRuntimeResult,
-  makeSession,
-  makeSessionSummary,
-  makeSnapshot,
-  makeSnapshotPayload,
-  makeStateChange,
-  makeStateEntry,
-  makeStateSchema,
-  makeSuspension,
-  makeToolCall,
-  makeTraceEvent,
-  makeTurnMessage,
-  makeTurnResult,
-  makeWorld,
-  makeWorldDataImportLedger,
-  ts,
-} from "../test-fixtures.js";
+import type { DataStore } from "../../types.js";
 
 export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
   let store: DataStore;
@@ -489,6 +459,47 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
     it("listPluginDataSessionScope returns an empty array for a session with no plugin_data", async () => {
       const rows = await store.listPluginDataSessionScope("sess-no-data");
       expect(rows).toEqual([]);
+    });
+
+    it("listPluginDataByNamespace returns one namespace across plugins in (createdAt, id) order", async () => {
+      const row = (
+        id: string,
+        sessionId: string,
+        pluginId: string,
+        namespace: string,
+        createdAt: string,
+      ) => ({
+        id,
+        sessionId,
+        pluginId,
+        namespace,
+        key: id,
+        value: { id },
+        createdAt,
+        updatedAt: createdAt,
+      });
+      await store.setPluginDataBatch([
+        row("ns-b", "sess-ns", "plugin-b", "jobs", "2024-01-01T00:00:02.000Z"),
+        row("ns-a2", "sess-ns", "plugin-a", "jobs", "2024-01-01T00:00:01.000Z"),
+        row("ns-a1", "sess-ns", "plugin-a", "jobs", "2024-01-01T00:00:01.000Z"),
+        row("ns-other", "sess-ns", "plugin-a", "notes", "2024-01-01T00:00:00Z"),
+      ]);
+      await store.setPluginData(
+        row(
+          "ns-x",
+          "sess-ns-other",
+          "plugin-a",
+          "jobs",
+          "2024-01-01T00:00:00Z",
+        ),
+      );
+
+      const rows = await store.listPluginDataByNamespace("sess-ns", "jobs");
+      expect(rows.map((r) => r.id)).toEqual(["ns-a1", "ns-a2", "ns-b"]);
+      expect(rows[0]!.value).toEqual({ id: "ns-a1" });
+      expect(await store.listPluginDataByNamespace("sess-ns", "none")).toEqual(
+        [],
+      );
     });
 
     it("compareAndSetPluginData provides atomic insert and revision swap", async () => {

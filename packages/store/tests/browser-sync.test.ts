@@ -36,7 +36,6 @@ const firstCheckpoint: BrowserCheckpoint = {
   messages: [],
   turnMessages: [],
   turnResults: [],
-  runtimeResults: [],
   toolCalls: [],
   runtimeOutputs: [],
   interactions: [],

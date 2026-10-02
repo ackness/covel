@@ -69,7 +69,6 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   // runtime records
   saveTurnResult: ["turnResults"],
   setTurnResultCommitStatus: ["turnResults"],
-  saveRuntimeResult: ["runtimeResults"],
   saveToolCall: ["toolCalls"],
   saveStateSchema: ["stateSchemas"],
   deleteStateSchema: ["stateSchemas"],
@@ -82,6 +81,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   upsertCharacterSchema: ["characterSchemas"],
   deleteCharacter: ["characters"],
   addTraceEvent: ["traceEvents"],
+  deleteTraceEventsBefore: ["traceEvents"],
   saveRuntimeOutput: ["runtimeOutputs"],
   saveInteractionRecord: ["interactionRecords"],
   appendTurnMessage: ["turnMessages"],
@@ -108,11 +108,13 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteSuspension: ["suspensions"],
   deleteExpiredSuspensions: ["suspensions"],
   saveSnapshot: ["snapshots"],
+  pruneAutoSnapshots: ["snapshots"],
   // scheduling-redesign lifecycle records
   insertLogicalTurnCompletion: ["logicalTurnLedger"],
   insertSetupAttempt: ["setupAttempts"],
   updateSetupAttempt: ["setupAttempts"],
   appendJobStatus: ["jobStatus"],
+  deleteJobStatus: ["jobStatus"],
   // runtime exports (output.recordAs publications)
   appendRuntimeExport: ["runtimeExports"],
   // worlds + vectors
@@ -201,9 +203,11 @@ function restoreSnapshot(state: MemoryState, snapshot: MemorySnapshot): void {
 function makeTrackingScope(
   base: StoreTransaction,
   onTouch: (methodName: string) => void,
+  savepoint: NonNullable<StoreTransaction["savepoint"]>,
 ): StoreTransaction {
   return new Proxy(base, {
     get(target, prop, receiver) {
+      if (prop === "savepoint") return savepoint;
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== "function" || typeof prop !== "string") {
         return value;
@@ -243,13 +247,37 @@ export function createTransactionMethods(
         );
       }
       return gate.runExclusive(async () => {
+        // One snapshot per open level: the transaction plus each savepoint.
+        // A write captures its collections into every open level, so each
+        // level can restore the state it started from.
         const snap: MemorySnapshot = new Map();
-        const scope = makeTrackingScope(getScope(), (methodName) => {
-          // Unknown mutating method → capture everything (safe fallback,
-          // equivalent to the pre-touched-only eager snapshot).
-          const touched = WRITE_METHOD_TOUCHES[methodName] ?? ALL_SNAPSHOT_KEYS;
-          for (const key of touched) captureCollection(state, snap, key);
-        });
+        const levels: MemorySnapshot[] = [snap];
+        const scope: StoreTransaction = makeTrackingScope(
+          getScope(),
+          (methodName) => {
+            // Unknown mutating method → capture everything (safe fallback,
+            // equivalent to the pre-touched-only eager snapshot).
+            const touched =
+              WRITE_METHOD_TOUCHES[methodName] ?? ALL_SNAPSHOT_KEYS;
+            for (const level of levels) {
+              for (const key of touched) captureCollection(state, level, key);
+            }
+          },
+          async <S>(
+            savepointFn: (tx: StoreTransaction) => Promise<S>,
+          ): Promise<S> => {
+            const level: MemorySnapshot = new Map();
+            levels.push(level);
+            try {
+              return await savepointFn(scope);
+            } catch (err) {
+              restoreSnapshot(state, level);
+              throw err;
+            } finally {
+              levels.splice(levels.indexOf(level), 1);
+            }
+          },
+        );
         try {
           // Resolve on success = commit (discard snapshot).
           return await fn(scope);

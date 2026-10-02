@@ -55,8 +55,8 @@ export function createSuspensionMethods(
 
     async deleteExpiredSuspensions(olderThanIso) {
       let deleted = 0;
-      // Snapshot the entries before mutating the map.
-      for (const [id, record] of [...state.suspensions.entries()]) {
+      // Deleting the current entry while iterating a Map is safe.
+      for (const [id, record] of state.suspensions.entries()) {
         if (!record.resolvedAt && record.createdAt < olderThanIso) {
           state.suspensions.delete(id);
           deleted += 1;
@@ -108,6 +108,28 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
         createdAt: r.createdAt,
         size: JSON.stringify(r.payload).length,
       }));
+    },
+
+    async pruneAutoSnapshots(sessionId, keep) {
+      const autos = sortByCursorAsc(
+        [...state.snapshots.values()].filter(
+          (r) => r.sessionId === sessionId && r.kind === "auto",
+        ),
+      );
+      const candidates = autos.slice(0, Math.max(0, autos.length - keep));
+      if (candidates.length === 0) return 0;
+      const parents = new Set(
+        [...state.snapshots.values()].flatMap((r) =>
+          r.parentId != null ? [r.parentId] : [],
+        ),
+      );
+      let deleted = 0;
+      for (const candidate of candidates) {
+        if (parents.has(candidate.id)) continue;
+        state.snapshots.delete(candidate.id);
+        deleted++;
+      }
+      return deleted;
     },
   };
 }

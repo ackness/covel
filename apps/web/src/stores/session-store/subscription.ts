@@ -72,13 +72,11 @@ function containsTerminalBackgroundJob(
   return changes.some((change) => {
     if (!change || typeof change !== "object") return false;
     const row = change as Record<string, unknown>;
-    if (row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs")
-      return false;
+    if (row.namespace !== "_runtime_jobs") return false;
     const value = row.value;
     if (!value || typeof value !== "object") return false;
     const status = (value as Record<string, unknown>).status;
     return [
-      "done",
       "succeeded",
       "failed",
       "timed_out",

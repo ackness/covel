@@ -11,6 +11,7 @@ import { withPendingProposals } from "@covel/tools";
 import {
   createWorldModelView,
   collectUpstreamWorldProposals,
+  memoizeWorldModelReads,
 } from "../src/function-runtime/world-model-view.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -193,6 +194,27 @@ describe("execution World Model", () => {
       turnId: "actual-turn",
       source: { pluginId: "actual", runtimeId: "actual/run" },
     });
+  });
+
+  it("shares one committed read per execution while handing each caller its own copy", async () => {
+    const store = createMemoryStore();
+    await createCommitPipeline(store).commitAll([schema(), character()]);
+    let characterReads = 0;
+    const counted = {
+      ...store,
+      listCharacters: (id: string) => {
+        characterReads += 1;
+        return store.listCharacters(id);
+      },
+    } as typeof store;
+    const reads = memoizeWorldModelReads(counted);
+    const first = await createWorldModelView(reads, sessionId);
+    const firstCharacters = await reads.listCharacters(sessionId);
+    firstCharacters[0]!.fields.hp = 0;
+    const second = await createWorldModelView(reads, sessionId);
+    expect(characterReads).toBe(1);
+    expect(second.characters).toEqual(first.characters);
+    expect(second.characters[0]?.fields).toEqual({ hp: 5 });
   });
 
   it("makes upstream schema and character output visible across a single scheduled execution", async () => {

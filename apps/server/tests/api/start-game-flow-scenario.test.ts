@@ -23,6 +23,23 @@ import { actionRoutes } from "../../src/routes/api/actions.js";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
+/** Runtime results recorded on the turn's execution artifact(s). */
+async function turnRuntimeResults(
+  store: Pick<DataStore, "listTurnResults">,
+  sessionId: string,
+  turnId: string,
+): Promise<{ readonly runtimeId: string; readonly status: string }[]> {
+  return (await store.listTurnResults(sessionId))
+    .filter((row) => row.turnId === turnId)
+    .flatMap(
+      (row) =>
+        row.runtimeResults as {
+          readonly runtimeId: string;
+          readonly status: string;
+        }[],
+    );
+}
+
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
     return {
@@ -406,7 +423,8 @@ describe("start-game API lifecycle scenario", () => {
 
     // The form-submit turn itself runs ONLY the setup runtime that creates the
     // player (Step 2 transaction discipline: its execution commits on its own).
-    const runtimeRows = await store.listRuntimeResults(
+    const runtimeRows = await turnRuntimeResults(
+      store,
       "sess-start-flow-api",
       followupTurnId,
     );
@@ -429,7 +447,7 @@ describe("start-game API lifecycle scenario", () => {
     expect(turnIds).toHaveLength(2);
     const openingTurnId = turnIds.find((id) => id !== followupTurnId)!;
     const openingRuntimeIds = (
-      await store.listRuntimeResults("sess-start-flow-api", openingTurnId)
+      await turnRuntimeResults(store, "sess-start-flow-api", openingTurnId)
     ).map((row) => row.runtimeId);
     expect(
       openingRuntimeIds.filter((runtimeId) => runtimeId === "narrator"),
@@ -467,7 +485,11 @@ describe("start-game API lifecycle scenario", () => {
     // A regular playing-band request runs the narrator once and does NOT chain
     // a continuation turn.
     const mainLoopRuntimeIds = (
-      await store.listRuntimeResults("sess-start-flow-api", firstMainLoopTurnId)
+      await turnRuntimeResults(
+        store,
+        "sess-start-flow-api",
+        firstMainLoopTurnId,
+      )
     ).map((row) => row.runtimeId);
     expect(
       mainLoopRuntimeIds.filter((runtimeId) => runtimeId === "narrator"),

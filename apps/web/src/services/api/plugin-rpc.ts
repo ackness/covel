@@ -11,7 +11,8 @@ import type { PluginRpcRequest, PluginRpcResponse } from "./types.js";
 //
 // Responses carry a `status` discriminator:
 //   - 'ok'                - sync result or action-level completion
-//   - 'accepted'          - background runtime queued; poll _jobs/{jobId}
+//   - 'accepted'          - background runtime queued as a durable runtime job;
+//                           track it via _runtime_jobs/{jobId} or job status
 //                           via plugin-data.changed SSE
 //   - 'approval-required' - community plugin needs user approval
 // Non-2xx failures use the shared ApiError response and are thrown by request().

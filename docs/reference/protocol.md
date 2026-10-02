@@ -173,7 +173,7 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 | --------------------- | ---- | ------------------ | -------------------------------------------------------------------------- |
 | `plugin-data.changed` | S→C  | 插件持久化数据变更 | `{ pluginId, runtimeId, changes: [{ namespace, key, value, operation }] }` |
 
-`plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。
+`plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。事件与 REST 读取使用同一公开投影：隐藏世界数据（`_hidden.*`）的变更不发出；`_runtime_jobs` 与维度记录只携带公开形状（不含任务 `payload`、原始错误或维度规则）。
 
 ### 作业进度事件（job-status，实验性）
 
@@ -242,37 +242,23 @@ Provider 图片输入矩阵：
 
 该文本协议没有实现 Google embedding、原生图片或音频生成、File API 上传及 grounding 工具；模型目录声称支持这些能力也不会使文本适配器自动获得对应 wire。Gemini 原生思考强度、`providerOptions.google.thinkingConfig`、`cachedContent`、`seed` 与 OpenAI 兼容端点的差别见[模型用途配置](slots.md#思考强度)和 [Google thinking 文档](https://ai.google.dev/gemini-api/docs/generate-content/thinking)。
 
-**保留命名空间 `_jobs`（后台任务协议）:**
+**保留命名空间 `_runtime_jobs`（后台任务）:**
 
-`POST /api/sessions/:id/plugin-rpc` 的 runtime 级 + `execution: background` 分支使用 `_jobs` 命名空间写回任务进度：
+所有后台 runtime 都使用 `_runtime_jobs/<jobId>` 作为 durable source of truth：`turnCompletion.mode: detached` 的 scheduler 作业（`origin.activation: "stage"`）、plugin-rpc `execution: background` 或 `expectsBackgroundFollower` 的手动激活（`"manual"`），以及事件链中 `execution: background` 的 follower（`"event"`，在触发它的执行的提交事务内排队）。插件不能写入该命名空间。queued 记录与原始回合 proposal、journal 和会话时钟在同一事务中落库；worker 再通过 `compareAndSetPluginData` claim 并续租，防止多 Pod 重复执行或迟到结果复活。
 
-| `value.status` | 语义                                                  | 前端行为                           |
-| -------------- | ----------------------------------------------------- | ---------------------------------- |
-| `pending`      | 任务已受理,runtime 尚未完成                           | 渲染 loading 占位                  |
-| `done`         | 成功完成,`value.runtimeResults` 为 `executeTurn` 汇总 | 把结果合并回业务命名空间或直接显示 |
-| `failed`       | runtime 抛错,`value.error` 为消息                     | 展示错误并让用户重试               |
+| durable status        | 语义                                                                                                                                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`                                                                                                                                                         |
+| `claimed` / `running` | worker 已取得 CAS lease / 正在执行；同一 session/plugin/runtime 保持串行                                                                                                                                                |
+| `committing`          | 已通过 owner CAS，正在 session lock 内做 stale/effect guard 和领域提交                                                                                                                                                  |
+| `succeeded`           | 后台 proposal 已提交，`result` 保存 background turn/execution/runtime 摘要                                                                                                                                              |
+| `failed`              | 执行、effect guard 或领域提交失败；`reason/error` 为权威原因。手动/事件激活中 runtime 自报失败（`runtime-reported-failure`）或未发出预期 follower（`follower-not-emitted`）时，该执行的领域写入与失败终态在同一事务提交 |
+| `timed_out`           | 排队或 `maxExecutionMs` 到期；迟到执行不能再进入 committing                                                                                                                                                             |
+| `cancelled`           | 控制面取消终态；不能转回 active 或接受迟到结果                                                                                                                                                                          |
+| `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果                                                                                                        |
+| `orphaned`            | 在途 owner 停止续租且 lease 过期                                                                                                                                                                                        |
 
-所有 `_jobs/<jobId>` 的写入都是普通 `setPluginData` 调用，因此都会通过标准 `plugin-data.changed` 频道广播。插件**禁止**直接写入 `_jobs` —— 框架独占该命名空间。业务数据请使用自定义命名空间（如 `images`、`prompts`）。
-
-`pending` 行也作为跨 Pod 删除 drain 的权威索引：入队会在 session lock 内先持久化 runtimeId，再启动 detached work。Memory/SQLite 启动时可按进程 owner 将孤儿标为 failed；PostgreSQL 多 Pod 不做不安全的 owner 扫描，崩溃遗留 pending 的自动回收需等待可续租 job lease/持久队列。
-
-**保留命名空间 `_runtime_jobs`（staged detached runtime）:**
-
-`turnCompletion.mode: detached` 的 scheduler 作业使用 `_runtime_jobs/<jobId>` 作为 durable source of truth。queued 记录与原始回合 proposal、journal 和会话时钟在同一事务中落库；worker 再通过 `compareAndSetPluginData` claim 并续租，防止多 Pod 重复执行或迟到结果复活。
-
-| durable status        | 语义                                                                                                             |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`                                                  |
-| `claimed` / `running` | worker 已取得 CAS lease / 正在执行；同一 session/plugin/runtime 保持串行                                         |
-| `committing`          | 已通过 owner CAS，正在 session lock 内做 stale/effect guard 和领域提交                                           |
-| `succeeded`           | 后台 proposal 已提交，`result` 保存 background turn/execution/runtime 摘要                                       |
-| `failed`              | 执行、effect guard 或领域提交失败；`reason/error` 为权威原因                                                     |
-| `timed_out`           | 排队或 `maxExecutionMs` 到期；迟到执行不能再进入 committing                                                      |
-| `cancelled`           | 控制面取消终态；不能转回 active 或接受迟到结果                                                                   |
-| `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果 |
-| `orphaned`            | 在途 owner 停止续租且 lease 过期                                                                                 |
-
-启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。`_runtime_jobs` 不进入 snapshot/fork payload，写入由框架控制；现有插件 store 的保留 namespace 读取合同仍适用。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
+启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。终态作业每个 session runtime 只保留最近 20 条，worker 在对账时删除更早的记录。作业描述符只为该 runtime 声明依赖的上游保留完整输出，其余上游只保留身份与状态，且不复制工具调用记录。`_runtime_jobs` 不进入 snapshot/fork payload，写入由框架控制；现有插件 store 的保留 namespace 读取合同仍适用。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
 
 领域结果与 `succeeded/result` 在同一事务内持久化，事务回滚不会留下成功任务。事务后通知失败不改变任务成功状态，也不会开放重试。恢复扫描仅处理扫描 revision 未变化的过期租约；worker 首次唤醒及后续 30 秒维护间隔恢复过期任务，失败后 1 秒重试；`committing` 须先取得非阻塞 session 提交锁，锁忙则推迟。维护独立于执行容量，关闭等待实际扫描与锁回调退出。
 
@@ -509,16 +495,16 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 **响应分支:**
 
-| 状态码 | 成功 `status` / 错误 `code`                                                                          | 触发                                                                                                                |
-| ------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                                                 | action / command 级成功，或 runtime 级 sync 模式成功                                                                |
-| 202    | `approval-required`                                                                                  | community-trust 首次调用(action、command 或 runtime 级)                                                             |
-| 202    | `accepted`                                                                                           | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
-| 400    | 通用错误信封                                                                                         | kind/字段组合、参数或 payload 校验失败                                                                              |
-| 404    | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | action 未注册 / runtime 未激活 / command 不在当前会话目录                                                           |
-| 409    | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
-| 429    | `queue_full`                                                                                         | pending approvals 超过 cap                                                                                          |
-| 500    | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+| 状态码 | 成功 `status` / 错误 `code`                                                                          | 触发                                                                                                                                    |
+| ------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | `ok`                                                                                                 | action / command 级成功，或 runtime 级 sync 模式成功                                                                                    |
+| 202    | `approval-required`                                                                                  | community-trust 首次调用(action、command 或 runtime 级)                                                                                 |
+| 202    | `accepted`                                                                                           | runtime 级 `execution: background` 或 `expectsBackgroundFollower`，含 `jobId` + `turnId`；状态走 `job-status.updated` + `_runtime_jobs` |
+| 400    | 通用错误信封                                                                                         | kind/字段组合、参数或 payload 校验失败                                                                                                  |
+| 404    | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | action 未注册 / runtime 未激活 / command 不在当前会话目录                                                                               |
+| 409    | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                                      |
+| 429    | `queue_full`                                                                                         | pending approvals 超过 cap                                                                                                              |
+| 500    | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                                            |
 
 所有非 2xx 响应均使用 `{ error, code?, details? }`，不返回业务 `status`。
 

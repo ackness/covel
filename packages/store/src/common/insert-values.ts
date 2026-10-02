@@ -26,7 +26,6 @@ import type {
   PluginDataRecord,
   RuntimeExportRecord,
   RuntimeOutputRecord,
-  RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
   SetupAttemptRecord,
@@ -92,7 +91,6 @@ export interface InsertValueBuilders {
   stateSchemaUpdate(record: StateSchemaRecord): Record<string, unknown>;
   stateChangeInsert(record: StateChangeRecord): Record<string, unknown>;
   turnResultInsert(record: TurnResultRecord): Record<string, unknown>;
-  runtimeResultInsert(record: RuntimeResultRecord): Record<string, unknown>;
   toolCallInsert(record: ToolCallRecordRow): Record<string, unknown>;
   runtimeOutputInsert(record: RuntimeOutputRecord): Record<string, unknown>;
   interactionRecordInsert(
@@ -218,23 +216,6 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         parentTurnId: record.parentTurnId ?? null,
         commitStatus: record.commitStatus,
         durationMs: record.durationMs,
-        createdAt: record.createdAt,
-      };
-    },
-
-    runtimeResultInsert(record) {
-      return {
-        id: record.id,
-        sessionId: record.sessionId,
-        turnId: record.turnId,
-        pluginId: record.pluginId,
-        runtimeId: record.runtimeId,
-        status: record.status,
-        output: json.writeNullableJson(record.output),
-        toolCalls: json.writeNullableJson(record.toolCalls),
-        durationMs: record.durationMs,
-        tokenUsage: json.writeNullableJson(record.tokenUsage),
-        error: record.error ?? null,
         createdAt: record.createdAt,
       };
     },

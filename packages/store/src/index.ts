@@ -90,7 +90,6 @@ export type {
   WorldRecord,
   SessionRecord,
   TurnResultRecord,
-  RuntimeResultRecord,
   ToolCallRecordRow,
   StateSchemaRecord,
   StateEntryRecord,

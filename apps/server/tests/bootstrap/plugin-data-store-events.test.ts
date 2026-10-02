@@ -27,6 +27,43 @@ function pluginDataChangedEmits(emit: ReturnType<typeof vi.fn>): unknown[] {
 }
 
 describe("wrapStoreWithPluginDataEvents", () => {
+  it("announces only the public projection of framework and hidden rows", async () => {
+    const emit = vi.fn();
+    const base = {
+      setPluginDataBatch: vi.fn(async () => {}),
+    } as unknown as DataStore;
+    const store = wrapStoreWithPluginDataEvents(base, {
+      emit,
+    } as unknown as EventBus);
+    await store.setPluginDataBatch([
+      { ...makeRecord(), namespace: "_hidden.events", value: { secret: 1 } },
+      {
+        ...makeRecord(),
+        namespace: "_runtime_jobs",
+        key: "job-1",
+        value: {
+          status: "failed",
+          payload: { input: "private" },
+          error: "raw provider text",
+          reason: "execution-failed",
+        },
+      },
+    ]);
+    const [event] = pluginDataChangedEmits(emit) as {
+      payload: { changes: { namespace: string; value: unknown }[] };
+    }[];
+    expect(event!.payload.changes).toEqual([
+      expect.objectContaining({
+        namespace: "_runtime_jobs",
+        value: {
+          status: "failed",
+          reason: "execution-failed",
+          error: "Runtime job execution failed.",
+        },
+      }),
+    ]);
+  });
+
   it.each([false, true])(
     "isolates batch notifications by session and plugin (transaction=%s)",
     async (transaction) => {

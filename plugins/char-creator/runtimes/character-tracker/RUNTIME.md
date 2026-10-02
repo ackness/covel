@@ -23,6 +23,8 @@ io:
   visibility: system
 agent:
   model: plugin
+  history:
+    maxTurns: 2
   tools:
     builtin:
       - sync-characters

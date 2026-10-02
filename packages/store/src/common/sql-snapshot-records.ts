@@ -15,7 +15,7 @@
  * `changes`).
  */
 
-import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
@@ -86,6 +86,7 @@ export type SqlSnapshotRecords = Pick<
   | "getSnapshot"
   | "listSnapshots"
   | "listSnapshotsPage"
+  | "pruneAutoSnapshots"
   | "saveSuspension"
   | "getSuspension"
   | "markSuspensionResolved"
@@ -166,6 +167,31 @@ export function createSqlSnapshotRecords(
         createdAt: row.createdAt,
         size: Number(row.size),
       }));
+    },
+
+    async pruneAutoSnapshots(sessionId: string, keep: number): Promise<number> {
+      const autos = await runner.select<{ id: string }>(stateSnapshots, {
+        columns: { id: stateSnapshots.id },
+        where: and(
+          eq(stateSnapshots.sessionId, sessionId),
+          eq(stateSnapshots.kind, "auto"),
+        ),
+        orderBy: [desc(stateSnapshots.createdAt), desc(stateSnapshots.id)],
+      });
+      const candidates = autos.slice(Math.max(0, keep)).map((row) => row.id);
+      if (candidates.length === 0) return 0;
+      const referenced = new Set(
+        (
+          await runner.select<{ parentId: string | null }>(stateSnapshots, {
+            columns: { parentId: stateSnapshots.parentId },
+            where: inArray(stateSnapshots.parentId, candidates),
+          })
+        ).flatMap((row) => (row.parentId != null ? [row.parentId] : [])),
+      );
+      const doomed = candidates.filter((id) => !referenced.has(id));
+      if (doomed.length === 0) return 0;
+      await runner.delete(stateSnapshots, inArray(stateSnapshots.id, doomed));
+      return doomed.length;
     },
 
     // ── Suspensions ──────────────────────────────────────────────

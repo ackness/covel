@@ -50,7 +50,7 @@ Options:
   --llm-responses <json>     Array of mock LLM responses, consumed one per model call.
   --mock-preset-id <id>      Override the synthetic preset id surfaced by the mock gateway's resolveSlot() (default mock-image).
   --expects-background-follower
-                             Write a failed _jobs row when no deferred follower is emitted.
+                             Record a failed runtime job when no deferred follower is emitted.
   --show-prompts             Include captured LLM messages in output.
   --ignore-upstreams         Clear the runtime's needs gate during this debug run.
   --pretty                   Pretty-print JSON output.

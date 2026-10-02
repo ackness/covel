@@ -28,6 +28,7 @@ vi.mock("@/stores/plugin-data-store.js", () => ({
   replaceSessionPluginData: vi.fn(),
   applyChanges: vi.fn(),
   getPluginNamespaceSnapshot: () => ({}),
+  backgroundJobRecord: () => null,
 }));
 const { useSessionSubscription } = await import("../subscription.js");
 
@@ -428,12 +429,12 @@ it.each([false, true])(
     });
     expect(options.stateRef.current.hasGameStateSnapshot).toBe(true);
     const done = {
-      status: "done",
+      status: "succeeded",
       runtimeId: "current/background",
-      durationMs: 1,
+      origin: { activation: "manual", sourceTurnId: "rpc-turn" },
     };
     api.listPluginData.mockResolvedValue([
-      { namespace: "_jobs", key: "job", value: done },
+      { namespace: "_runtime_jobs", key: "job", value: done },
     ]);
     streams[0]!.emit({
       ...event("plugin-data.changed"),
@@ -441,7 +442,12 @@ it.each([false, true])(
       payload: {
         pluginId: "current",
         changes: [
-          { namespace: "_jobs", key: "job", operation: "set", value: done },
+          {
+            namespace: "_runtime_jobs",
+            key: "job",
+            operation: "set",
+            value: done,
+          },
         ],
       },
     });
@@ -454,9 +460,9 @@ it.each([false, true])(
       pendingPlugins.resolve(plugins("current"));
     });
     expect(api.getSessionView).toHaveBeenCalledTimes(2);
-    expect(options.stateRef.current.pluginData.current?._jobs?.job).toEqual(
-      done,
-    );
+    expect(
+      options.stateRef.current.pluginData.current?._runtime_jobs?.job,
+    ).toEqual(done);
     expect(options.workspace.checkpoint).toHaveBeenCalledOnce();
   },
 );
@@ -522,10 +528,10 @@ it.each(["session switch", "revisit", "cross-session envelope", "unmount"])(
           pluginId: "current",
           changes: [
             {
-              namespace: "_jobs",
+              namespace: "_runtime_jobs",
               key: "job",
               operation: "set",
-              value: { status: "done" },
+              value: { status: "succeeded" },
             },
           ],
         },

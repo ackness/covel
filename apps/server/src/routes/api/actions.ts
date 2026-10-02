@@ -2,8 +2,8 @@ import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import { listRuntimeJobs } from "./plugin-rpc/jobs.js";
 import {
+  announceQueuedRuntimeJobs,
   withSettledExecutionLock,
-  withSettledSessionLock,
   requestJobServices,
 } from "./plugin-rpc/settled-request.js";
 /**
@@ -17,12 +17,7 @@ import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
-import type {
-  LLMAdapter,
-  ToolExecutor,
-  HookPipeline,
-  TurnExecutorDeps,
-} from "@covel/runtime";
+import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import {
   executeTurn,
@@ -34,15 +29,12 @@ import type {
   CovelEventType,
   JobStatusRecord,
   RuntimeManifest,
-  RuntimeResult,
   RuntimeRetryScope,
   SseEnvelope,
 } from "@covel/shared";
 import {
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
-  assertJsonValue,
-  getRuntimeSpec,
   readRuntimeEnv,
 } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
@@ -53,14 +45,13 @@ import {
 } from "../../api-error.js";
 import { SessionLockTimeoutError } from "../../lib/session-lock.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
-import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
-import { createRuntimeJob, type RuntimeJobRecord } from "./plugin-rpc/jobs.js";
+import { type RuntimeJobRecord } from "./plugin-rpc/jobs.js";
 import {
-  makeRuntimeJobStatusRecord,
-  publishRuntimeJobStatusEvent,
-  type StagedRuntimeJobPayload,
-} from "./plugin-rpc/runtime-job-worker.js";
+  enqueueDeferredRuntimeJobs,
+  enqueueEventFollowers,
+  type QueuedActivatedRuntimeJob,
+} from "./plugin-rpc/runtime-job-enqueue.js";
+import { publishRuntimeJobStatusEvent } from "./plugin-rpc/runtime-job-worker.js";
 import {
   decodePluginUserSettingsHeader,
   mergePluginUserSettings,
@@ -74,7 +65,6 @@ import {
 import {
   checkSessionOwner,
   sessionIncarnationIdentity,
-  sessionApprovalScope,
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
@@ -117,7 +107,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const eventBus = c.get("eventBus");
-  const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
   const runtimeJobWorker = c.get("runtimeJobWorker");
@@ -603,9 +592,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             userSettings,
             // Snapshot session-level per-runtime slot overrides so the
             // turn executor can consult them when resolving each runtime's
-            // model. The session record was loaded above (line ~67).
-            ...(session?.runtimeModelOverrides
-              ? { runtimeModelOverrides: session.runtimeModelOverrides }
+            // model. Read from the record loaded under the lock, so an edit
+            // made while this request queued is honoured.
+            ...(effectiveSession.runtimeModelOverrides
+              ? {
+                  runtimeModelOverrides: effectiveSession.runtimeModelOverrides,
+                }
               : {}),
             ...(turnArgs.suppressPlayerMessage
               ? { suppressPlayerMessage: true }
@@ -692,6 +684,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly job: RuntimeJobRecord;
             readonly status: JobStatusRecord;
           }> = [];
+          const followerJobs: QueuedActivatedRuntimeJob[] = [];
           const outcome = await commitExecution({
             memorySystem: c.get("memorySystem"),
             imageFlowRuntimeIds: (
@@ -732,7 +725,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             signal: commitSignal,
             store,
             execution,
-            ...(playerInputWrites || result.deferredRuntimeJobs?.length
+            ...(playerInputWrites ||
+            result.deferredRuntimeJobs?.length ||
+            result.deferredFollowers?.length
               ? {
                   extraInTx: async (tx) => {
                     if (playerInputWrites) {
@@ -743,88 +738,40 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                         playerInputWrites.interaction,
                       );
                     }
-                    for (const descriptor of result.deferredRuntimeJobs ?? []) {
-                      const target = activeRuntimes.find(
-                        (runtime) => runtime.name === descriptor.runtimeId,
-                      );
-                      if (!target || target.pluginId !== descriptor.pluginId) {
-                        throw new Error(
-                          `detached runtime ${descriptor.runtimeId} left the active graph before enqueue`,
-                        );
-                      }
-                      const policy =
-                        getRuntimeSpec(target).turnCompletionPolicy;
-                      const jobPayload: StagedRuntimeJobPayload = {
-                        schemaVersion: 1,
-                        descriptor,
-                        expectedSessionIncarnation:
-                          sessionIncarnationIdentity(effectiveSession),
-                        expectedApprovalScope: sessionApprovalScope(
-                          effectiveSession,
-                          descriptor.pluginId,
-                        ),
+                    queuedRuntimeJobs.push(
+                      ...(await enqueueDeferredRuntimeJobs(tx, {
+                        sessionId,
+                        session: effectiveSession,
+                        activeRuntimes,
+                        descriptors: result.deferredRuntimeJobs ?? [],
                         locale: effectiveLocale,
                         ...(model ? { modelOverride: model } : {}),
-                        ...(effectiveSession.runtimeModelOverrides
-                          ? {
-                              runtimeModelOverrides:
-                                effectiveSession.runtimeModelOverrides,
-                            }
-                          : {}),
                         ...(userSettings ? { userSettings } : {}),
-                      };
-                      assertJsonValue(
-                        jobPayload,
-                        `detached runtime job ${descriptor.jobId}`,
-                      );
-                      const job = await createRuntimeJob(tx, {
-                        jobId: descriptor.jobId,
-                        sessionId,
-                        pluginId: descriptor.pluginId,
-                        runtimeId: descriptor.runtimeId,
-                        origin: {
-                          activation: "stage",
-                          sourceTurnId: descriptor.sourceTurnId,
-                          sourceExecutionId: descriptor.sourceExecutionId,
-                          sourceRuntimeId: descriptor.runtimeId,
+                        registerCredentials: (credentialKey, maxQueueMs) => {
+                          const services = requestJobServices(c);
+                          if (!services) return;
+                          c.get("runtimeJobCredentials")?.register(
+                            credentialKey,
+                            services,
+                            maxQueueMs,
+                          );
+                          credentialKeys.push(credentialKey);
                         },
-                        payload: jobPayload,
-                        ...(policy.settle
-                          ? {
-                              settle: policy.settle,
-                              maxSettleWaitMs: policy.maxSettleWaitMs,
-                            }
-                          : {}),
-                        ...(policy.maxQueueMs !== undefined
-                          ? { maxQueueMs: policy.maxQueueMs }
-                          : {}),
-                        ...(policy.maxExecutionMs !== undefined
-                          ? { maxExecutionMs: policy.maxExecutionMs }
-                          : {}),
-                      });
-                      const status = makeRuntimeJobStatusRecord(job, 0);
-                      if (!(await tx.appendJobStatus(status))) {
-                        throw new Error(
-                          `could not append queued status for detached runtime job ${job.jobId}`,
-                        );
-                      }
-                      queuedRuntimeJobs.push({ job, status });
-                      const credentialKey = {
-                        jobId: job.jobId,
+                      })),
+                    );
+                    // Background followers (e.g. scene-stage's background-gen)
+                    // are queued with the writes they react to, so a
+                    // rolled-back turn queues none.
+                    followerJobs.push(
+                      ...(await enqueueEventFollowers(tx, {
                         sessionId,
-                        expectedSessionIncarnation:
-                          jobPayload.expectedSessionIncarnation,
-                      };
-                      const services = requestJobServices(c);
-                      if (services) {
-                        c.get("runtimeJobCredentials")?.register(
-                          credentialKey,
-                          services,
-                          policy.maxQueueMs,
-                        );
-                        credentialKeys.push(credentialKey);
-                      }
-                    }
+                        activeRuntimes,
+                        followers: result.deferredFollowers ?? [],
+                        sourceTurnId: result.turnId,
+                        locale: effectiveLocale,
+                        ...(userSettings ? { userSettings } : {}),
+                      })),
+                    );
                   },
                 }
               : {}),
@@ -854,18 +801,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 ? { ...result, abortReason: PLAYER_ABORT_REASON }
                 : result,
             trace,
-            userSettings,
             committed,
             commitError,
             wasPreGamePending,
-            followerSession: effectiveSession,
-            approvalScopes: new Map(
-              activeRuntimes.map((runtime) => [
-                runtime.pluginId,
-                sessionApprovalScope(effectiveSession, runtime.pluginId),
-              ]),
-            ),
             queuedRuntimeJobs: committed ? queuedRuntimeJobs : [],
+            followerJobs: committed ? followerJobs : [],
           };
         } finally {
           // Torn down while the lock is still held: after release the next
@@ -878,13 +818,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       const {
         result,
         trace,
-        userSettings,
         committed,
         commitError,
         wasPreGamePending,
-        followerSession,
-        approvalScopes,
         queuedRuntimeJobs,
+        followerJobs,
       } = await withSettledExecutionLock(
         c,
         sessionId,
@@ -894,12 +832,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       );
 
       // ——— Post-lock tail (per turn) ———
-      // Deferred-follower scheduling and the final SSE writes deliberately run
-      // AFTER the session lock releases: followers acquire the lock themselves
-      // (scheduling them under it would start their PG acquire budget while
-      // the turn still held the lock), and a slow client draining
-      // execution.completed must not extend the critical section.
-      const hookPipeline = c.get("hookPipeline");
+      // Job announcements and the final SSE writes deliberately run AFTER the
+      // session lock releases: a slow client draining execution.completed must
+      // not extend the critical section.
 
       for (const queued of queuedRuntimeJobs) {
         publishRuntimeJobStatusEvent(eventBus, queued.status);
@@ -925,67 +860,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       }
       if (queuedRuntimeJobs.length > 0) runtimeJobWorker?.wake();
 
-      // Main turn path: `executeTurn` can surface `deferredFollowers`
-      // — event-chain followers with `execution: 'background'` that were
-      // skipped so the player gets an immediate response (e.g. scene-stage's
-      // background-gen). Schedule them the same way plugin-rpc.ts's sync mode
-      // does: a pending `_jobs` row + `setImmediate`, so they actually run
-      // instead of silently never firing on the main narrative path.
-      // Only when this turn's writes actually landed — a follower chained onto
-      // a rolled-back turn operates on state that no longer exists.
-      if (committed && result.deferredFollowers?.length) {
-        const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
-          memorySystem: c.get("memorySystem"),
-          resolveImageFlowRuntimeIds: async () =>
-            (
-              await resolveMediaImageFlow(
-                store,
-                c.get("pluginExtensions"),
-                sessionId,
-              )
-            )?.assetRuntimeIds,
-          withSettledLock: (fn, waitBudget) =>
-            withSettledSessionLock(c, sessionId, fn, waitBudget),
-          withSnapshot: async (fn, beforeCapture) => {
-            const snapshot = c.get("withPluginSnapshot");
-            if (snapshot) return snapshot(sessionId, fn, beforeCapture);
-            if (beforeCapture)
-              await sessionLock.withLock(sessionId, beforeCapture);
-            return fn();
-          },
-          store,
-          eventBus,
-          sessionLock,
-          sessionId,
-          // effectiveLocale, not session.locale — the in-memory `session` may
-          // still hold the pre-update value even though the store write above
-          // already persisted the live locale.
-          session: { ...followerSession, locale: effectiveLocale },
-          activeRuntimes,
-          pluginRegistry,
-          approvalScopes,
-          deps: buildTurnExecutorDeps(c),
-          ...(hookPipeline ? { hookPipeline } : {}),
-        });
-        const jobRunner = createPluginRpcJobRunner({
-          queue: c.get("pluginBackgroundQueue"),
-          store,
-          sessionId,
-          sessionLock,
-          approvalScopes,
-          userSettings,
-          // The main turn path has no manual-trigger concept —
-          // `scheduleDeferredFollowers` is the only method this route calls.
-          runManualTurn: () => {
-            throw new Error("runManualTurn is unused on the main turn path");
-          },
-          runDeferredFollowerTurn: (args) =>
-            runtimeTurnRunner.runDeferredFollowerTurn(args),
-          hasActiveRuntime: (runtimeId) =>
-            activeRuntimes.some((rt) => rt.name === runtimeId),
-        });
-        await jobRunner.scheduleDeferredFollowers(result.deferredFollowers);
-      }
+      announceQueuedRuntimeJobs(c, followerJobs);
 
       // Emit runtime progress: complete + persist trace
       await trace.turnCompleted(

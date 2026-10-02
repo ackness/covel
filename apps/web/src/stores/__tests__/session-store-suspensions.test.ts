@@ -299,18 +299,21 @@ describe("session-store — suspensions", () => {
     );
   });
 
-  it("hydrates legacy _jobs rows into session-level background visibility", () => {
+  it("hydrates background manual jobs into session-level background visibility", () => {
     const state = reducer(initialState, {
       type: "REPLACE_PLUGIN_DATA",
       pluginData: {
         "image-gen": {
-          _jobs: {
+          _runtime_jobs: {
             "job-image-1": {
-              status: "pending",
-              progress: 12,
+              schemaVersion: 1,
+              jobId: "job-image-1",
+              pluginId: "image-gen",
               runtimeId: "image-gen/render",
-              turnId: "background-turn-1",
-              startedAt: SUSPENDED_AT,
+              status: "running",
+              origin: { activation: "manual", sourceTurnId: "rpc-turn-1" },
+              enqueuedAt: SUSPENDED_AT,
+              updatedAt: SUSPENDED_AT,
             },
           },
         },
@@ -324,7 +327,7 @@ describe("session-store — suspensions", () => {
         status: "deferred",
         detached: true,
         jobId: "job-image-1",
-        progress: 12,
+        turnId: "rpc-turn-1",
       }),
     ]);
   });

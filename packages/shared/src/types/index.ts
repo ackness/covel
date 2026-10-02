@@ -96,6 +96,7 @@ export type {
 export type {
   PluginType,
   RuntimeType,
+  RuntimeHistoryPolicy,
   TriggerType,
   TriggerConfig,
   TurnCompletionMode,

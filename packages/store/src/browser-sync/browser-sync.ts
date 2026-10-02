@@ -16,7 +16,6 @@ import type {
   PluginDataRecord,
   PlayerInputRecord,
   RuntimeOutputRecord,
-  RuntimeResultRecord,
   RuntimeExportRecord,
   SessionRecord,
   SessionSummaryRecord,
@@ -75,7 +74,6 @@ export interface BrowserCheckpoint {
   readonly messages: ReadonlyArray<MessageRecord>;
   readonly turnMessages: ReadonlyArray<TurnMessageRecord>;
   readonly turnResults: ReadonlyArray<TurnResultRecord>;
-  readonly runtimeResults: ReadonlyArray<RuntimeResultRecord>;
   readonly toolCalls: ReadonlyArray<ToolCallRecordRow>;
   readonly runtimeOutputs: ReadonlyArray<RuntimeOutputRecord>;
   readonly interactions: ReadonlyArray<InteractionRecordRow>;

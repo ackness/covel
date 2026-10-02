@@ -221,6 +221,11 @@ export interface SuspensionRecord {
     readonly emittedEvents?: readonly unknown[];
     /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */
     readonly suspendToolCallId?: string;
+    /**
+     * Detached stage jobs the suspended turn held back. The resume that
+     * completes the turn queues them in its commit transaction.
+     */
+    readonly withheldRuntimeJobs?: readonly unknown[];
   };
   readonly createdAt: string;
   /** Set to ISO timestamp when resume completes successfully. */

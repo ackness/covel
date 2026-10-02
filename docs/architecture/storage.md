@@ -442,24 +442,41 @@ then use a new `SQLITE_PATH` or recreate the development database. Creating only
 new sessions in the old database is insufficient. See the
 [development migration steps](../guide/env-registry.md#plugin-extension-development-data).
 
+## Retention Of Operational Records
+
+Execution bookkeeping grows with every turn, so each kind has an explicit bound:
+
+| Record                                      | Bound                                                                                                                                                                                                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind=auto` snapshots                       | One per `completedPlayerTurns` value (later commits at the same count refresh it); the newest `COVEL_AUTO_SNAPSHOT_RETENTION` (default 20) are kept, except snapshots a fork names as `parentId`. Manual and fork snapshots are never pruned. |
+| Snapshot payload                            | Omits control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs` (and `_jobs` rows older databases kept).                                                                                                                   |
+| `_runtime_jobs` and their `job_status` rows | Unfinished jobs are kept; terminal jobs keep the newest 20 per session runtime.                                                                                                                                                               |
+| `_logs`                                     | Ring of 200 rows per plugin, trimmed on a logger's first write and every 20th after, so one execution can briefly exceed it.                                                                                                                  |
+| `trace_events`                              | Kept unless `COVEL_TRACE_RETENTION_DAYS` is set.                                                                                                                                                                                              |
+
+`turn_results` is the authoritative execution artifact: retries rebuild their
+seeds from its full runtime results, including effects and canonical values,
+and media reference scans read it directly. `runtime_outputs` is the narrower
+projection behind the runtime-output API. The former per-runtime
+`runtime_results` table duplicated those rows and is dropped at boot.
+
 ## Plugin-data ownership and reserved names
 
 Plugin-facing data APIs bind both session ID and plugin owner. A namespace is a
 name inside that owner's partition, not a way to select another owner. Ordinary
 plugin writes are buffered as proposals and committed under the source owner.
 
-| Owner / namespace                                                                        | Authority                                        | Plugin access                                                                                                                              |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                           | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                   |
-| Plugin owner, `_jobs`                                                                    | RPC job status and progress                      | Read only; job APIs own transitions.                                                                                                       |
-| Plugin owner, `_runtime_jobs`                                                            | Durable runtime scheduling and recovery          | Read only; runtime workers own transitions.                                                                                                |
-| Plugin owner, `_logs`                                                                    | Runtime log ring                                 | Read only through data APIs; entries are produced through the scoped logger.                                                               |
-| Plugin owner, `_hidden.<namespace>`                                                      | `visibility: hidden` world data                  | Readable only by the owning plugin's runtimes; excluded from public data APIs, extension handlers, LLM data tools, and prompt injection.   |
-| Active dimension provider, `_dimensions`                                                 | Adopted definitions, current values and versions | Read own records; writes only through `dimension.initialize` / `dimension.update` and validated import/sync batch CAS.                     |
-| Active dimension provider, `_dimension-settlements`                                      | Narrative settlement obligations and receipts    | Read own records; host-owned source registration and verified settlement transitions, not generic writes.                                  |
-| Plugin owner, `message`                                                                  | Plugin                                           | Ordinary proposal-backed data; the UI host prefetches and forwards it for declared message panels without interpreting its business shape. |
-| Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | Plugin                                           | Read own data and write through proposals. The old character mirrors are not recreated.                                                    |
-| `__kernel:<subsystem>` owner, including `__kernel:vector`                                | Kernel                                           | Not visible through plugin-bound store or extension APIs. This is an owner partition, not a plugin namespace.                              |
+| Owner / namespace                                                                        | Authority                                                                      | Plugin access                                                                                                                              |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Plugin owner, any `_`-prefixed namespace                                                 | Kernel                                                                         | Read through the scoped APIs; no generic writes or deletes, including unknown `_` names.                                                   |
+| Plugin owner, `_runtime_jobs`                                                            | Durable background jobs (detached stages, background manual/event activations) | Read only; runtime workers own transitions.                                                                                                |
+| Plugin owner, `_logs`                                                                    | Runtime log ring                                                               | Read only through data APIs; entries are produced through the scoped logger.                                                               |
+| Plugin owner, `_hidden.<namespace>`                                                      | `visibility: hidden` world data                                                | Readable only by the owning plugin's runtimes; excluded from public data APIs, extension handlers, LLM data tools, and prompt injection.   |
+| Active dimension provider, `_dimensions`                                                 | Adopted definitions, current values and versions                               | Read own records; writes only through `dimension.initialize` / `dimension.update` and validated import/sync batch CAS.                     |
+| Active dimension provider, `_dimension-settlements`                                      | Narrative settlement obligations and receipts                                  | Read own records; host-owned source registration and verified settlement transitions, not generic writes.                                  |
+| Plugin owner, `message`                                                                  | Plugin                                                                         | Ordinary proposal-backed data; the UI host prefetches and forwards it for declared message panels without interpreting its business shape. |
+| Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | Plugin                                                                         | Read own data and write through proposals. The old character mirrors are not recreated.                                                    |
+| `__kernel:<subsystem>` owner, including `__kernel:vector`                                | Kernel                                                                         | Not visible through plugin-bound store or extension APIs. This is an owner partition, not a plugin namespace.                              |
 
 The full underscore prefix remains reserved. Enumerating today's names as
 exceptions would allow future kernel bookkeeping to become plugin-writable before

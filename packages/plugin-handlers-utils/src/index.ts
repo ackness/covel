@@ -381,6 +381,7 @@ export function makeProposal<
 
 export type {
   FunctionStoreView,
+  PluginTurnMessage,
   PluginDataWriter,
   PluginLogger,
   JobStatusState,

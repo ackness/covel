@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BROWSER_CHECKPOINT_SCHEMA_VERSION } from "@covel/store/browser-sync";
 import type {
   BrowserCheckpoint,
@@ -42,7 +42,6 @@ function checkpoint(
     messages: [],
     turnMessages: [],
     turnResults: [],
-    runtimeResults: [],
     toolCalls: [],
     runtimeOutputs: [],
     interactions: [],
