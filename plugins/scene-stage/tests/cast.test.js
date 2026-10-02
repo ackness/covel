@@ -12,16 +12,16 @@ import {
 } from "@covel/plugin-loader";
 import { scheduleByDag } from "@covel/runtime";
 
-import handler from "../handler.js";
+import handler from "../runtimes/cast/handler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
-describe("chat foundation manifests", () => {
+describe("scene cast manifests", () => {
   let sceneCast;
   let chatNarrator;
   let loadedSceneCast;
   let loadedChatNarrator;
-  let sceneCastUi;
+  let sceneStageUi;
 
   beforeAll(async () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
@@ -29,25 +29,28 @@ describe("chat foundation manifests", () => {
       discoveries.map((discovery) => [discovery.id, discovery]),
     );
 
-    const sceneCastDiscovery = byId.get("scene-cast");
+    const sceneStageDiscovery = byId.get("scene-stage");
     const chatNarratorDiscovery = byId.get("chat-mode-narrator");
-    expect(sceneCastDiscovery).toBeDefined();
+    expect(sceneStageDiscovery).toBeDefined();
     expect(chatNarratorDiscovery).toBeDefined();
 
-    sceneCast = (await loadPluginManifest(sceneCastDiscovery))[0].manifest;
+    sceneCast = (await loadPluginManifest(sceneStageDiscovery)).find(
+      (entry) => entry.manifest.name === "scene-stage/cast",
+    ).manifest;
     chatNarrator = (await loadPluginManifest(chatNarratorDiscovery))[0]
       .manifest;
-    loadedSceneCast = await loadRuntime(sceneCastDiscovery, sceneCast.name);
-    sceneCastUi = await loadPluginUi(sceneCastDiscovery);
+    loadedSceneCast = await loadRuntime(sceneStageDiscovery, sceneCast.name);
+    sceneStageUi = await loadPluginUi(sceneStageDiscovery);
     loadedChatNarrator = await loadRuntime(
       chatNarratorDiscovery,
       chatNarrator.name,
     );
   });
 
-  it("loads scene-cast as a function runtime before chat-mode-narrator", () => {
+  it("loads the cast runtime as a function runtime before chat-mode-narrator", () => {
     expect(sceneCast).toMatchObject({
-      name: "scene-cast",
+      name: "scene-stage/cast",
+      pluginId: "scene-stage",
       pluginType: "plugin",
       runtimeType: "function",
       handler: "./handler.js",
@@ -57,7 +60,10 @@ describe("chat foundation manifests", () => {
     expect(sceneCast.outputContract).toBe("scene-cast@1");
     expect(sceneCast.trigger).toMatchObject({ type: "scheduled", interval: 1 });
     expect(loadedSceneCast.handler).toBeTypeOf("function");
-    expect(sceneCastUi.uiSpecs.right).toHaveLength(1);
+    expect(sceneStageUi.uiSpecs.right.map((spec) => spec.id)).toEqual([
+      "scene-stage",
+      "scene-cast",
+    ]);
   });
 
   it("loads chat-mode-narrator with active cast contract injection", () => {
@@ -85,7 +91,7 @@ describe("chat foundation manifests", () => {
     );
   });
 
-  it("schedules scene-cast before chat-mode-narrator in the DAG runtime layer", () => {
+  it("schedules the cast runtime before chat-mode-narrator in the DAG runtime layer", () => {
     const { groups, error } = scheduleByDag([
       sceneCast,
       chatNarrator,
@@ -109,14 +115,14 @@ describe("chat foundation manifests", () => {
     expect(error).toBeUndefined();
     expect(
       groups.map((group) => group.runtimes.map((runtime) => runtime.name)),
-    ).toEqual([["scene-cast"], ["chat-mode-narrator"], ["guide"]]);
+    ).toEqual([["scene-stage/cast"], ["chat-mode-narrator"], ["guide"]]);
   });
 });
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business value
 // (speakers / activeCastContext) is under `getToolContent(result).value`; pending proposals
 // stay on the envelope (result).
-describe("scene-cast handler", () => {
+describe("scene-stage cast handler", () => {
   it("selects mentioned NPCs and writes active cast plugin data", async () => {
     const store = {
       async listCharacters(sessionId) {
@@ -163,8 +169,8 @@ describe("scene-cast handler", () => {
     const result = await handler({
       sessionId: "sess-chat",
       turnId: "turn-7",
-      pluginId: "scene-cast",
-      runtimeId: "scene-cast",
+      pluginId: "scene-stage",
+      runtimeId: "scene-stage/cast",
       playerMessage: "Mira, what do you see?",
       store,
       completedResults: new Map(),
@@ -190,7 +196,7 @@ describe("scene-cast handler", () => {
       type: "plugin.data",
       sessionId: "sess-chat",
       turnId: "turn-7",
-      source: { pluginId: "scene-cast", runtimeId: "scene-cast" },
+      source: { pluginId: "scene-stage", runtimeId: "scene-stage/cast" },
       payload: {
         namespace: "active-cast",
         key: "current",
@@ -239,8 +245,8 @@ describe("scene-cast handler", () => {
     const result = await handler({
       sessionId: "sess-chat",
       turnId: "turn-8",
-      pluginId: "scene-cast",
-      runtimeId: "scene-cast",
+      pluginId: "scene-stage",
+      runtimeId: "scene-stage/cast",
       playerMessage: "I listen at the door.",
       store,
       completedResults: new Map(),

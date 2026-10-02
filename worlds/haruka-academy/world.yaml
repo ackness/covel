@@ -48,7 +48,6 @@ pluginPolicy:
         - world-init
         - char-creator
         - chat-mode-narrator
-        - scene-cast
         - scene-stage
         - scene-prompts
         - character-blueprint
@@ -72,7 +71,6 @@ pluginPolicy:
     - char-creator
   recommended:
     - chat-mode-narrator
-    - scene-cast
     - scene-stage
     - scene-prompts
     - character-blueprint
@@ -86,7 +84,7 @@ pluginSettings:
   chat-mode-narrator:
     dialogueRatio: 80
     proseLength: short
-  scene-cast:
+  scene-stage:
     activeSpeakerCount: 2
 characterSchema:
   types:

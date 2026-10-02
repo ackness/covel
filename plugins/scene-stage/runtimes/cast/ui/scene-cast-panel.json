@@ -1,8 +1,13 @@
 {
   "id": "scene-cast",
-  "label": {
+  "group": "scene-stage",
+  "groupLabel": {
     "zh": "当前场景",
     "en": "Scene"
+  },
+  "label": {
+    "zh": "在场角色",
+    "en": "Cast"
   },
   "shortLabel": {
     "zh": "场景",

@@ -87,7 +87,7 @@ Tags: {{ world.tags }}
 
 - Dialogue ratio: {{ userSettings.dialogueRatio }}%
 - Reply length: {{ userSettings.proseLength }}
-- Target active speaker count: defer to the characters actually listed in `runtime-inputs.active-cast.value` (decided by scene-cast from the player's setting)
+- Target active speaker count: defer to the characters actually listed in `runtime-inputs.active-cast.value` (decided by scene-stage from the player's setting)
 
 ## Settled Tabletop Checks
 

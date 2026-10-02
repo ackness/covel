@@ -18,8 +18,8 @@ function:
 ---
 
 The direction runtime is the authoritative, persistent actor layout for stage
-mode. It is additive to `scene-cast`: worlds and narrators that never emit
-`stage.direction` continue to use the deterministic cast fallback.
+mode. It is additive to the cast runtime: worlds and narrators that never emit
+`stage.direction` continue to use the deterministic cast selection.
 
 Dialogue attribution is independent from actor focus. The optional
 `dialogue.paragraphSpeakers` array supplies one exact character ID or `null`

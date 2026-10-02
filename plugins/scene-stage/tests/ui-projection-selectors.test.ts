@@ -72,7 +72,7 @@ describe("applySceneSetPreview", () => {
 describe("resolveStageSpeakers", () => {
   const fallback: StageSpeaker[] = [{ id: "legacy-rin", name: "朝仓凛" }];
 
-  it("uses scene-cast until direction state exists", () => {
+  it("uses the cast selection until direction state exists", () => {
     expect(resolveStageSpeakers(undefined, fallback)).toEqual(fallback);
   });
 

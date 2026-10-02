@@ -219,7 +219,7 @@ runtime:
 
 - 对话占比：{{ userSettings.dialogueRatio }}%
 - 回复长度：{{ userSettings.proseLength }}
-- 目标活跃说话人数：以 `runtime-inputs.active-cast.value` 中实际列出的角色为准（由 scene-cast 按玩家设置决定）
+- 目标活跃说话人数：以 `runtime-inputs.active-cast.value` 中实际列出的角色为准（由 scene-stage 按玩家设置决定）
 
 ## 已结算的跑团检定
 

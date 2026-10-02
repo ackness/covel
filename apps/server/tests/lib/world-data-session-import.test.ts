@@ -1808,7 +1808,6 @@ sources: {}
     const activePlugins = [
       "world-init",
       "chat-mode-narrator",
-      "scene-cast",
       "scene-stage",
       "scene-prompts",
       "character-blueprint",

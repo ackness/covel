@@ -240,12 +240,12 @@ describe("normalize golden (bundled plugin set)", () => {
       { capability: "world-data-provider@1" },
     ]);
 
-    // pre-turn band: rag-retriever + scene-cast, both scheduled.
+    // pre-turn band: rag-retriever + scene-stage/cast, both scheduled.
     const retriever = requireSpec(specs, "npc-graph/rag-retriever");
     expect(retriever.stage).toBe("pre-turn");
     expect(retriever.declaredTrigger.type).toBe("scheduled");
 
-    const sceneCast = requireSpec(specs, "scene-cast");
+    const sceneCast = requireSpec(specs, "scene-stage/cast");
     expect(sceneCast.stage).toBe("pre-turn");
     expect(sceneCast.declaredTrigger.type).toBe("scheduled");
 

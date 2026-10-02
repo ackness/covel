@@ -88,7 +88,7 @@ function isStageTransition(value) {
 }
 
 /** Prefer persistent stage-direction actors when that capability has produced
- * state; otherwise preserve the legacy scene-cast behavior. */
+ * state; otherwise keep the cast runtime's speaker selection. */
 export function resolveStageSpeakers(direction, fallback) {
   if (!direction) return [...fallback];
 

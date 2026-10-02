@@ -84,8 +84,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | living-world-rules                                                       | living-world-rules  | book-marked        | world-data    | rules              | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）          |
 | memory                                                                   | memory              | brain              | memory        | blocks             | 记忆插件在脱离回合的 post-turn function runtime 中更新自己的记忆块并展示                         |
 | npc-graph/extractor                                                      | npc-graph           | network            | npc-graph     | nodes + edges      | NPC 关系图（force-directed 可视化）                                                              |
-| scene-cast                                                               | scene-cast          | users-round        | （无）        | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                           |
 | scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（未命中注册表时"无背景"）       |
+| scene-stage/cast                                                         | scene-cast          | users-round        | scene-stage   | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                           |
 | world-init/schema-gen                                                    | world-overview      | map                | world-data    | session.dimensions | 任意维度当前值、版本、编辑及待结算恢复                                                           |
 | world-init/schema-gen                                                    | world-schema        | sliders-horizontal | world-data    | schema             | 角色属性 schema                                                                                  |
 

@@ -281,7 +281,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(created.activePlugins).toEqual(
       expect.arrayContaining([
         "chat-mode-narrator",
-        "scene-cast",
+        "scene-stage",
         "scene-prompts",
         "character-blueprint",
         "world-time",
@@ -407,7 +407,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         .map((row) => row.runtimeId);
       expect(successfulRuntimeIds).toEqual(
         expect.arrayContaining([
-          "scene-cast",
+          "scene-stage/cast",
           "chat-mode-narrator",
           "scene-prompts",
           "world-time/advance",

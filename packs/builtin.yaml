@@ -44,7 +44,6 @@
     - world-init
     - char-creator
     - chat-mode-narrator
-    - scene-cast
     - scene-stage
     - scene-prompts
     - character-blueprint

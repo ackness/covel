@@ -5,23 +5,35 @@ displayName:
   zh: 场景舞台
   en: Scene Stage
 description:
-  zh: 跟踪叙事当前所在的场景与昼夜，为舞台背景提供数据。
-  en: Tracks the current scene and time of day for the visual stage.
+  zh: 跟踪当前场景、昼夜和在场角色，为舞台背景与立绘提供数据。
+  en: >-
+    Tracks the current scene, time of day, and who is on stage for the visual
+    stage.
 tags:
   - "mode:dialogue"
+  - "data:characters"
   - "cost:function"
   - "ui:right-panel"
 provides:
   - stage-direction@1
   - scene-stage@1
+  - scene-cast@1
 entry: ./server/index.js
 contracts:
+  scene-cast@1:
+    schema: ./schemas/scene-cast.schema.json
   stage.scene-assets@1:
     schema: ./schemas/assets.schema.json
   stage.scenes@1:
     schema: ./schemas/scenes.schema.json
 contributes:
   extensions:
+    - point: ui.slot@1
+      id: cast
+      slot: stage.cast@1
+      order: 0
+      watch:
+        - active-cast
     - point: ui.slot@1
       id: backdrop
       slot: stage.backdrop@1
@@ -79,6 +91,16 @@ contributes:
           turn): the very first turn establishing the opening scene, a
           scene/location change, or a day-night shift. Use the in-narrative
           location name; keep previous values when unsure.
+  settings:
+    - key: activeSpeakerCount
+      type: number
+      default: 2
+      min: 1
+      max: 4
+      step: 1
+      label:
+        zh: 活跃说话人数
+        en: Active speakers
   data:
     assets:
       schema: ./schemas/assets.schema.json
@@ -95,6 +117,7 @@ contributes:
   ui:
     right:
       - ./runtimes/resolver/ui/scene-stage-panel.json
+      - ./runtimes/cast/ui/scene-cast-panel.json
 ---
 
-Scene Stage tracks the current scene/location and time of day for the visual stage, resolving `scene.set` events into `stage/current` against the world's scene registry; an unmatched location has no backdrop. It also applies structured `stage.direction` cues for actor presence, focus, position, and visual variants. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.
+Scene Stage tracks the current scene/location and time of day for the visual stage, resolving `scene.set` events into `stage/current` against the world's scene registry; an unmatched location has no backdrop. Before each narrative its cast runtime picks the active speakers for `chat-mode-narrator` (`scene-cast@1`). It also applies structured `stage.direction` cues for actor presence, focus, position, and visual variants. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.

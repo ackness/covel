@@ -15,7 +15,9 @@ it("passes this turn's cast to graph retrieval while its stored cast is still un
     path.resolve(import.meta.dirname, "../../../../plugins"),
   );
   const byId = new Map(discoveries.map((d) => [d.id, d]));
-  const cast = (await loadPluginManifest(byId.get("scene-cast")!))[0].manifest;
+  const cast = (await loadPluginManifest(byId.get("scene-stage")!)).find(
+    (p) => p.manifest.name === "scene-stage/cast",
+  )!.manifest;
   const graph = (await loadPluginManifest(byId.get("npc-graph")!)).find(
     (p) => p.manifest.name === "npc-graph/rag-retriever",
   )!.manifest;
@@ -88,7 +90,7 @@ it("passes this turn's cast to graph retrieval while its stored cast is still un
     },
   );
   expect(result.runtimeResults.map((r) => [r.runtimeId, r.status])).toEqual([
-    ["scene-cast", "success"],
+    ["scene-stage/cast", "success"],
     ["npc-graph/rag-retriever", "success"],
   ]);
   expect(result.runtimeResults[0]?.output?.speakers).toEqual(
@@ -102,7 +104,7 @@ it("passes this turn's cast to graph retrieval while its stored cast is still un
   expect(
     await store.getPluginData(
       sessionId,
-      "scene-cast",
+      "scene-stage",
       "active-cast",
       "current",
     ),
