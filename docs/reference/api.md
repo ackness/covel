@@ -1393,7 +1393,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 后台 worker 优先使用来源请求在内存中短期保留的 adapter/gateway，凭据不写入作业。来源凭据过期或进程重启后，只有服务端解析出的有效模型配置带 API key 或认证 header 时，才使用服务端 adapter；否则保留 `queued`，等待已认证的新执行请求提供服务，或达到排队期限。服务端的默认 adapter 对象本身不代表已配置凭据。
 
-该就绪判断使用与执行相同的模型解析及环境密钥来源校验。它不能静态证明 function handler 是否调用 LLM，也不会自动放行无密钥的本地端点。嵌入式宿主或测试可通过 `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` 显式确认自有 adapter 可用；此确认不改变运行时授权、会话代次或提交校验。
+该就绪判断使用与执行相同的模型解析及环境密钥来源校验：使用来源请求服务时，判断与执行都按该请求的模型配置（槽位绑定、自定义预设、插件 `llm.toml` 模型目标）和凭据解析；使用服务端 adapter 时只按服务端配置解析，不受恰好唤醒 worker 的其他请求影响。它不能静态证明 function handler 是否调用 LLM，也不会自动放行无密钥的本地端点。嵌入式宿主或测试可通过 `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` 显式确认自有 adapter 可用；此确认不改变运行时授权、会话代次或提交校验。
 
 #### `GET /api/sessions/:id/runtime-jobs`
 

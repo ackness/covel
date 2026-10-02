@@ -1,3 +1,4 @@
+import type { GatewayOptions } from "@covel/ai-provider";
 import type { LLMAdapter, TurnExecutorDeps } from "@covel/runtime";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 
@@ -6,6 +7,12 @@ export interface RuntimeJobServices {
   readonly llm: LLMAdapter;
   /** Request services must resolve usable credentials for the queued target model. */
   readonly canRun?: (model: string | undefined) => boolean;
+  /**
+   * The source request's LLM configuration. The job's model is resolved and
+   * executed under it, never under whichever request happens to wake the
+   * worker. Absent for server services.
+   */
+  readonly llmOptions?: GatewayOptions;
   readonly gateway?: PluginRuntimeGateway;
   readonly compactor?: TurnExecutorDeps["compactor"];
 }
