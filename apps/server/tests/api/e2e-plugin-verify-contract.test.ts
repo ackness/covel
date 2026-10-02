@@ -41,7 +41,7 @@ describe("e2e plugin verification CLI HTTP contract", () => {
           case "GET /api/health":
             return json({ status: "ok", bootId: "contract-boot" });
           case "GET /api/plugin-flows":
-            return json({ version: "1", plugins: [], steps: [], segments: [] });
+            return json({ plugins: [], steps: [], segments: [] });
           case "GET /api/worlds":
             return json({ items: [{ id: "contract-world" }] });
           case "POST /api/sessions":
@@ -53,7 +53,13 @@ describe("e2e plugin verification CLI HTTP contract", () => {
           case "POST /api/actions":
             actionCount += 1;
             res.writeHead(200, { "content-type": "text/event-stream" });
-            res.end('data: {"type":"execution.completed","payload":{}}\n\n');
+            res.end(
+              `data: ${JSON.stringify({
+                type: "execution.completed",
+                turnId: `contract-turn-${actionCount}`,
+                payload: { committed: true },
+              })}\n\n`,
+            );
             return;
           case "GET /api/sessions/contract-session/turns":
             return json({
@@ -68,9 +74,10 @@ describe("e2e plugin verification CLI HTTP contract", () => {
                       pluginId: "contract-plugin",
                       status: "success",
                       durationMs: 1,
-                      output:
-                        actionCount === 1
-                          ? {
+                      output: {},
+                      ...(actionCount === 1
+                        ? {
+                            effects: {
                               interactions: [
                                 {
                                   type: "form",
@@ -80,8 +87,9 @@ describe("e2e plugin verification CLI HTTP contract", () => {
                                   ],
                                 },
                               ],
-                            }
-                          : {},
+                            },
+                          }
+                        : {}),
                     },
                   ],
                 },
@@ -98,6 +106,20 @@ describe("e2e plugin verification CLI HTTP contract", () => {
               messages: [],
               characters: [],
               plugins: [{ id: "contract-plugin", active: true }],
+            });
+          case "GET /api/sessions/contract-session/runtime-jobs":
+            return json({
+              items: [
+                {
+                  jobId: "contract-job",
+                  runtimeId: "contract-plugin/detached",
+                  status: "succeeded",
+                  origin: {
+                    activation: "stage",
+                    sourceTurnId: "contract-turn-2",
+                  },
+                },
+              ],
             });
           case "GET /api/traces/contract-session":
             return json({
@@ -180,7 +202,15 @@ describe("e2e plugin verification CLI HTTP contract", () => {
         path: "/api/sessions/contract-session/view",
         body: undefined,
       });
+      expect(requests).toContainEqual({
+        method: "GET",
+        path: "/api/sessions/contract-session/runtime-jobs",
+        body: undefined,
+      });
       expect(stdout).toMatch(/Active plugins\s*: 1\b/u);
+      expect(stdout).toMatch(
+        /PASS\s+contract-plugin\/detached\s+stage\s+succeeded/u,
+      );
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) => {

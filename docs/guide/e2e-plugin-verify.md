@@ -98,35 +98,38 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 脚本把一次运行拆成 7 个阶段，每个 Phase 都会写出小节标题和带固定列宽的表格：
 
-| #   | Phase                     | 做了什么                                                                                                                         |
-| --- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Health Check**          | `GET /api/health`，确认 store backend 在线                                                                                       |
-| 2   | **Plugin Flow Discovery** | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                         |
-| 3   | **World Selection**       | 挑选 `--world` 或第一个可用世界包                                                                                                |
-| 4   | **Session Creation**      | `POST /api/sessions` 建新会话，按需启用 `--enable-plugins`，并读取最终真实 `activePlugins`                                       |
-| 5   | **Turn Execution**        | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                              |
-| 6   | **Final Session View**    | `GET /api/sessions/:id/view`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时；保存完整 trace，并执行长运行严格断言 |
-| 7   | **Summary**               | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                    |
+| #   | Phase                     | 做了什么                                                                                                                                       |
+| --- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Health Check**          | `GET /api/health`，确认 store backend 在线                                                                                                     |
+| 2   | **Plugin Flow Discovery** | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                                       |
+| 3   | **World Selection**       | 挑选 `--world` 或第一个可用世界包                                                                                                              |
+| 4   | **Session Creation**      | `POST /api/sessions` 建新会话，按需启用 `--enable-plugins`，并读取最终真实 `activePlugins`                                                     |
+| 5   | **Turn Execution**        | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                            |
+| 6   | **Final Session View**    | `GET /api/sessions/:id/view`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时与后台作业终态；保存完整 trace，并执行长运行严格断言 |
+| 7   | **Summary**               | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                                  |
 
 ### Phase 5 每轮产出
 
-对于每一轮 turn，脚本都会打印四块信息：
+每个动作按 SSE 信封里的 `turnId` 从 `GET /api/sessions/:id/turns` 读回本次请求的执行记录（该列表也包含后台与 detached 作业各自的执行，最新一行不一定属于本次请求）。完成最后一个 setup runtime 的请求会接力开场回合，此时两条执行都会报告：先是 setup 执行，再是 playing 段的开场接力。`execution.completed.committed` 为 `false` 时该轮判 FAIL。
+
+对于每一条执行，脚本都会打印四块信息：
 
 1. **Runtime Timeline** — 按 `(stage, name)` 排序的 runtime 列表，含 `stage`、`runtime`、`status`、`dur`、`output` 摘要
 2. **Tool Calls** — 所有工具调用（runtime、tool、status、dur、approval、output 前 40 字符）
 3. **Trigger Verification** — 对每个已声明的 runtime 按 stage 调度语义比对「期望 vs 实际」，结果列见下表
-4. **Detected interaction form**（仅首次）— 自动识别角色创建表单并填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交
+4. **Detected interaction form**（仅首次）— 从 runtime 结果的 `effects.interactions`（或 `create-form` / `create-character-form` 工具调用）识别角色创建表单，填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交
 
 Trigger Verification 的裁决列：
 
-| 裁决   | 含义                                                                                                                  |
-| ------ | --------------------------------------------------------------------------------------------------------------------- |
-| `PASS` | 期望触发（auto/setup）且成功运行                                                                                      |
-| `FAIL` | in-band `auto` 运行时未触发，或任一期望运行时以 `failed` 状态运行                                                     |
-| `WAIT` | scheduled 运行时本轮空转（interval/cooldown 可能门控），或 setup 尚未在 `setupRuntimes` 中落为 `done`（Phase 6 裁决） |
-| `SKIP` | 本轮不期望（未激活 / 无 stage / 越 band / 已到达但 `skipped` 空转）                                                   |
-| `FIRE` | 无 stage 的 event/manual 运行时触发了（仅信息）                                                                       |
-| `WARN` | 未激活 / 越 band 的运行时意外运行了（软异常，不判 FAIL）                                                              |
+| 裁决    | 含义                                                                                                                   |
+| ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `PASS`  | 期望触发（auto/setup）且成功运行                                                                                       |
+| `DEFER` | detached 运行时随回合提交并转入后台作业（流内有 `runtime.deferred`），作业结果在 Phase 6 裁决                          |
+| `FAIL`  | in-band `auto` 运行时未触发，或任一期望运行时以 `failed` 状态运行                                                      |
+| `WAIT`  | scheduled 运行时本轮空转（cooldown / 触发次数可能门控），或 setup 尚未在 `setupRuntimes` 中落为 `done`（Phase 6 裁决） |
+| `SKIP`  | 本轮不期望（未激活 / 无 stage / 越 band / `startTurn` 或 `interval` 不覆盖本逻辑回合 / 已到达但 `skipped` 空转）       |
+| `FIRE`  | 无 stage 的 event/manual 运行时触发了（仅信息）                                                                        |
+| `WARN`  | 未激活 / 越 band 的运行时意外运行了（软异常，不判 FAIL）                                                               |
 
 ## 自动发现 & 触发断言
 
@@ -142,10 +145,12 @@ Trigger Verification 的裁决列：
 2. **stage**：无 `stage` 的 runtime（event / manual / 仅贡献型，如 `memory` / `director` / `cost-gate`——它们 `trigger.type` 可能是 `auto` 但没有 stage）**永不进入 stage 调度**，与 trigger.type 无关（`SKIP`；若因自身 event/manual 触发而运行则记 `FIRE`）。
 3. **band**：`setup` stage 只在开场阶段跑；其余 stage（`pre-turn` / `narrative` / `post-turn` / `audit`）只在 playing 回合跑。越 band → `SKIP`。
 
-命中三道闸门后，in-band 的触发语义**保持宽松，不复刻调度器**：
+命中三道闸门后，按执行所在的逻辑回合（`completedPlayerTurns + 1`，开场接力与第一条玩家消息同为 1）判定：
 
-- `auto`：每个 in-band 回合都期望触发（严格 `PASS`/`FAIL`）。
-- `scheduled`：只断言在整个窗口内**至少触发 1 次**（`interval` / `cooldownTurns` / `startTurn` / `maxTriggerCount` **不再逐轮复刻**）；本轮空转记 `WAIT`，run 级的「≥1 次」断言在 Phase 7 兜底。
+- `startTurn` 大于逻辑回合，或 `scheduled` 的 `interval` 不整除逻辑回合 → 本轮不期望（`SKIP`）。
+- 不带 `cooldownTurns` / `maxTriggerCount` 的 `auto`：每个 in-band 回合都期望触发（严格 `PASS`/`FAIL`）。
+- `scheduled`，以及带 `cooldownTurns` / `maxTriggerCount` 的 `auto`：只断言在允许的回合里**至少触发 1 次**（冷却与触发次数不逐轮复刻）；本轮空转记 `WAIT`，run 级的「≥1 次」断言在 Phase 7 兜底。
+- `turnCompletion.mode: detached` 的运行时不出现在本回合结果里；流内的 `runtime.deferred` 算作触发（`DEFER`）。Phase 6 等待后台队列清空，要求本会话每个后台作业以 `succeeded`（或主动 `cancelled`）结束。
 - `setup` stage：完成信号直接取自会话 `setupRuntimes[runtimeId].state === "done"`，在 Phase 6 权威裁决——因为 setup 工作可能落在 `submit-form` 子执行里，逐轮 timeline 未必看得到。
 - `skipped` 状态**不是失败**：表示调度器已到达但运行时 guard/空转，计入「已触发」。只有 `failed` 才判 FAIL。
 
@@ -223,7 +228,8 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 | `stage: setup`                              | 只在开场跑；Phase 6 断言 `setupRuntimes[runtimeId].state === "done"`        |
 | `stage: pre-turn/narrative/post-turn/audit` | 只在 playing 回合跑；越 band 期望 `SKIP`                                    |
 | `trigger.type: auto`（有 stage）            | 每个 in-band 回合都期望触发（严格 PASS/FAIL）                               |
-| `trigger.type: scheduled`（有 stage）       | 窗口内至少触发 1 次（Phase 7 「≥1」断言；不逐轮复刻 interval/cooldown）     |
+| `trigger.type: scheduled`（有 stage）       | `interval` / `startTurn` 允许的回合里至少触发 1 次（Phase 7 「≥1」断言）    |
+| `turnCompletion.mode: detached`             | 回合内记 `DEFER`；Phase 6 断言对应后台作业 `succeeded`                      |
 | 无 `stage`（event/manual/贡献型）           | 永不进入 stage 调度，期望 `SKIP`（自身 event/manual 触发时记 `FIRE`）       |
 | 未被会话激活                                | 全程 `SKIP`，原因 `plugin not in session active set`                        |
 | `outputKind: story`                         | Runtime Timeline 的 output 列显示 `narrative(<字符数>c)`                    |
