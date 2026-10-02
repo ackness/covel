@@ -1,4 +1,7 @@
-import { getRequestLlmOptions } from "../../request-llm-context.js";
+import {
+  getRequestLlmOptions,
+  withRequestLlmOptions,
+} from "../../request-llm-context.js";
 import type { PluginLlmModelTarget } from "@covel/runtime";
 import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
 import type { EmbedFn, MemorySystem } from "@covel/memory";
@@ -682,13 +685,18 @@ async function assembleApi(
         manifest?.outputKind === "story" && modelOverride
           ? modelOverride
           : payload.runtimeModelOverrides?.[job.runtimeId];
-      const model = manifest ? resolveModel(manifest, override) : override;
+      // The worker may drain inside an unrelated request's scope. Resolve the
+      // job's model under the configuration of the services that will run it.
+      const modelFor = (services: RuntimeJobServices | undefined) =>
+        withRequestLlmOptions(services?.llmOptions, () =>
+          manifest ? resolveModel(manifest, override) : override,
+        );
       let selectedServices = runtimeJobCredentials.peek(key);
       let handoff = selectedServices !== undefined;
       if (selectedServices?.canRun) {
         let ready = false;
         try {
-          ready = selectedServices.canRun(model);
+          ready = selectedServices.canRun(modelFor(selectedServices));
         } catch {
           /* Fail closed. */
         }
@@ -700,7 +708,12 @@ async function assembleApi(
         }
       }
       if (!selectedServices) {
-        if (!config.canRunRuntimeJobWithServerServices?.({ job, model }))
+        if (
+          !config.canRunRuntimeJobWithServerServices?.({
+            job,
+            model: modelFor(undefined),
+          })
+        )
           return undefined;
         selectedServices = {
           llm: config.llmAdapter,
@@ -708,6 +721,7 @@ async function assembleApi(
           compactor: compactorRunner,
         };
       }
+      // The executor restores the selected services' LLM scope around the job.
       const execute = executeRuntimeJob(selectedServices, handoff);
       return async (claimed, control) => {
         runtimeJobCredentials.discard(key);

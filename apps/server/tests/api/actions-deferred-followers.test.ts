@@ -435,4 +435,238 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       return (jobs[0]?.value as { status?: string })?.status === "succeeded";
     });
   });
+
+  // Next to a committed story an optional runtime's writes can be dropped
+  // alone. Its event must not start a follower, and the player must see it
+  // failed, live and in the persisted turn.
+  it("queues no follower from a runtime whose writes were dropped and reports it failed", async () => {
+    const store: DataStore = createMemoryStore();
+    const pluginRegistry = createPluginRegistry();
+    const eventBus = createEventBus(store);
+    const sessionLock = createInProcessSessionLock();
+    const STORY = "test-deferred/story";
+
+    const storyManifest = {
+      ...makeManifest({
+        runtimeId: STORY,
+        stage: "narrative",
+        trigger: { type: "auto" },
+      }),
+      outputKind: "story",
+    } as RuntimeManifest;
+    const targetManifest = makeManifest({
+      runtimeId: TARGET,
+      stage: "post-turn",
+      trigger: { type: "auto" },
+    });
+    const followerManifest = makeManifest({
+      runtimeId: FOLLOWER,
+      execution: "background",
+      trigger: { type: "event", topic: "test-deferred.ready" },
+    });
+    // Ordered after the dropped runtime but not dependent on it, so it is
+    // still queued and its frozen inputs include the dropped result.
+    const NOTES = "test-deferred/notes";
+    const notesManifest = {
+      ...makeManifest({
+        runtimeId: NOTES,
+        stage: "post-turn",
+        trigger: { type: "auto" },
+      }),
+      after: [TARGET],
+      turnCompletion: { mode: "detached" },
+      input: {
+        inject: [{ kind: "kernel", from: "turn-digest@1", name: "turn" }],
+      },
+      effects: { writes: ["plugin-data:self:notes"] },
+    } as RuntimeManifest;
+    let followerRan = false;
+    const loaded = new Map<string, LoadedRuntime>([
+      [
+        NOTES,
+        {
+          manifest: notesManifest,
+          promptTemplate: "",
+          handler: async () => ({ outcome: "success", value: {} }),
+        },
+      ],
+      [
+        STORY,
+        {
+          manifest: storyManifest,
+          promptTemplate: "",
+          handler: async () => ({
+            outcome: "success",
+            value: { narrativeOutput: "The harbour is quiet." },
+          }),
+        },
+      ],
+      [
+        TARGET,
+        {
+          manifest: targetManifest,
+          promptTemplate: "",
+          // Plugin code may not write a framework namespace: rejected at commit.
+          handler: async () => ({
+            outcome: "success",
+            value: { ok: true },
+            effects: {
+              pluginData: [{ namespace: "_jobs", key: "x", value: 1 }],
+              events: [{ topic: "test-deferred.ready", data: {} }],
+            },
+          }),
+        },
+      ],
+      [
+        FOLLOWER,
+        {
+          manifest: followerManifest,
+          promptTemplate: "",
+          handler: async () => {
+            followerRan = true;
+            return { outcome: "success", value: {} };
+          },
+        },
+      ],
+    ]);
+    pluginRegistry.register({
+      id: PLUGIN_ID,
+      summary: { ...makeSummary(PLUGIN_ID), runtimeCount: 4 },
+      manifests: [
+        storyManifest,
+        targetManifest,
+        followerManifest,
+        notesManifest,
+      ].map((manifest) => ({
+        runtime: { type: "function" as const },
+        manifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      })),
+      loadedRuntimes: loaded,
+      status: "registered",
+      source: "builtin",
+    } as PluginRegistryEntry);
+    const loadRuntimeFn = async (m: RuntimeManifest) => loaded.get(m.name);
+    const runtimeJobWorker = createTestRuntimeJobWorker({
+      store,
+      eventBus,
+      sessionLock,
+      pluginRegistry,
+      deps: {
+        loadRuntime: loadRuntimeFn,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        llm: { generate: async () => ({}) } as any,
+        resolveModel: () => undefined,
+      },
+    });
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("runtimeJobWorker", runtimeJobWorker);
+      c.set("store", store);
+      c.set("pluginRegistry", pluginRegistry);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      c.set("llmAdapter", { generate: async () => ({}) } as any);
+      c.set("loadRuntimeFn", loadRuntimeFn);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      c.set("toolExecutor", undefined as any);
+      c.set("resolveModel", () => undefined);
+      c.set("eventBus", eventBus);
+      c.set("sessionLock", sessionLock);
+      await next();
+    });
+    app.route("/api/actions", actionRoutes);
+    const now = new Date().toISOString();
+    await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
+      id: SESSION_ID,
+      worldId: null,
+      status: "active",
+      activePlugins: [PLUGIN_ID],
+      completedPlayerTurns: 1,
+      locale: "en-US",
+      createdAt: now,
+    });
+
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-dropped",
+        type: "send_message",
+        sessionId: SESSION_ID,
+        payload: { content: "go" },
+      }),
+    });
+    const events = (await res.text())
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map(
+        (line) =>
+          JSON.parse(line.slice(6)) as {
+            type: string;
+            payload: Record<string, unknown>;
+          },
+      );
+
+    const completed = events.find(
+      (event) => event.type === "execution.completed",
+    )?.payload;
+    expect(completed, JSON.stringify(completed)).toMatchObject({
+      committed: true,
+    });
+    expect(
+      events.find(
+        (event) =>
+          event.type === "runtime.failed" && event.payload.runtimeId === TARGET,
+      )?.payload,
+    ).toMatchObject({ status: "failed", error: expect.any(String) });
+    const [turn] = await store.listTurnResults(SESSION_ID);
+    expect(turn?.commitStatus).toBe("committed");
+    expect(
+      (turn!.runtimeResults as { runtimeId: string; status: string }[]).map(
+        (result) => [result.runtimeId, result.status],
+      ),
+    ).toEqual([
+      [STORY, "success"],
+      [TARGET, "failed"],
+    ]);
+    runtimeJobWorker.wake();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const jobs = (
+      await store.listPluginData(SESSION_ID, PLUGIN_ID, "_runtime_jobs")
+    ).map(
+      (row) =>
+        row.value as {
+          runtimeId: string;
+          payload: {
+            descriptor: {
+              turnDigest: {
+                runtimeResults: { runtimeId: string; status: string }[];
+              };
+              upstreamResults: { runtimeId: string; status: string }[];
+            };
+          };
+        },
+    );
+    // Only the independent detached job is queued, and its frozen inputs
+    // record the dropped runtime as failed.
+    expect(jobs.map((job) => job.runtimeId)).toEqual([NOTES]);
+    const { descriptor } = jobs[0]!.payload;
+    expect(
+      descriptor.turnDigest.runtimeResults.find(
+        (result) => result.runtimeId === TARGET,
+      )?.status,
+    ).toBe("failed");
+    expect(
+      descriptor.upstreamResults.find((result) => result.runtimeId === TARGET)
+        ?.status,
+    ).toBe("failed");
+    expect(followerRan).toBe(false);
+  });
 });

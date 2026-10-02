@@ -20,7 +20,11 @@ import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import {
+  applyIsolatedRuntimes,
+  droppedEmitter,
+  droppedUpstream,
   executeTurn,
+  settleDroppedInputs,
   createTraceRecorder,
   createTurnEmitter,
   snapshotUserSettings,
@@ -724,6 +728,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   error: fp.error,
                 });
               }
+              // A runtime already streamed as completed whose writes were
+              // dropped at commit: show the saved result, not the run.
+              for (const isolated of outcome.isolatedRuntimes ?? []) {
+                const dropped = result.runtimeResults.find(
+                  (item) => item.runtimeId === isolated.runtimeId,
+                );
+                if (!dropped) continue;
+                await writeEvent("runtime.failed", {
+                  runtimeId: dropped.runtimeId,
+                  pluginId: dropped.pluginId,
+                  status: "failed",
+                  durationMs: dropped.durationMs,
+                  error: isolated.error,
+                });
+              }
             },
             signal: commitSignal,
             store,
@@ -732,7 +751,33 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             result.deferredRuntimeJobs?.length ||
             result.deferredFollowers?.length
               ? {
-                  extraInTx: async (tx) => {
+                  extraInTx: async (tx, { droppedRuntimeIds }) => {
+                    // Work derived from a runtime whose writes were dropped
+                    // builds on output that never landed: queue none of it.
+                    const committedView = {
+                      runtimes: activeRuntimes,
+                      results: result.runtimeResults,
+                      dropped: droppedRuntimeIds,
+                    };
+                    const descriptors = (result.deferredRuntimeJobs ?? [])
+                      .filter((descriptor) => {
+                        const target = activeRuntimes.find(
+                          (runtime) => runtime.name === descriptor.runtimeId,
+                        );
+                        return (
+                          !target || !droppedUpstream(target, committedView)
+                        );
+                      })
+                      .map((descriptor) =>
+                        settleDroppedInputs(descriptor, droppedRuntimeIds),
+                      );
+                    const followers = (result.deferredFollowers ?? []).filter(
+                      (follower) =>
+                        !droppedEmitter(
+                          follower.triggerEvent.topic,
+                          committedView,
+                        ),
+                    );
                     if (playerInputWrites) {
                       await tx.commitPlayerInputMessage(
                         playerInputWrites.message,
@@ -746,7 +791,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                         sessionId,
                         session: effectiveSession,
                         activeRuntimes,
-                        descriptors: result.deferredRuntimeJobs ?? [],
+                        descriptors,
                         locale: effectiveLocale,
                         ...(model ? { modelOverride: model } : {}),
                         ...(userSettings ? { userSettings } : {}),
@@ -769,7 +814,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                       ...(await enqueueEventFollowers(tx, {
                         sessionId,
                         activeRuntimes,
-                        followers: result.deferredFollowers ?? [],
+                        followers,
                         sourceTurnId: result.turnId,
                         locale: effectiveLocale,
                         ...(userSettings ? { userSettings } : {}),
@@ -787,7 +832,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const committed = outcome.status === "committed";
           currentRetryScope = settleRuntimeRetry(
             retryPlan,
-            result.runtimeResults,
+            applyIsolatedRuntimes(
+              result.runtimeResults,
+              outcome.isolatedRuntimes,
+            ),
             committed,
           );
           const proposalErrors = outcome.failedProposals

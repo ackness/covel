@@ -11,6 +11,7 @@ import {
   assertCommittedPlayerInput,
 } from "../common/player-input-message.js";
 import type { SessionSummaryRecord } from "../types.js";
+import { settleFailedRuntimeResults } from "../records/runtime-records.js";
 import { replaceArrayContents } from "./collection-helpers.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
@@ -20,11 +21,23 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       state.turnResults.push(record);
     },
 
-    async setTurnResultCommitStatus(sessionId, turnId, status) {
+    async setTurnResultCommitStatus(
+      sessionId,
+      turnId,
+      status,
+      failedRuntimes = [],
+    ) {
       for (let i = 0; i < state.turnResults.length; i += 1) {
         const row = state.turnResults[i]!;
         if (row.sessionId === sessionId && row.turnId === turnId) {
-          state.turnResults[i] = { ...row, commitStatus: status };
+          state.turnResults[i] = {
+            ...row,
+            commitStatus: status,
+            runtimeResults: settleFailedRuntimeResults(
+              row.runtimeResults,
+              failedRuntimes,
+            ),
+          };
         }
       }
     },

@@ -14,7 +14,10 @@
  * returning `{ committed: false }`, a PreStateCommit veto or a guard reject)
  * rolls back the whole execution, except for optional runtimes next to a
  * committed story: each of those commits in its own savepoint and a rejection
- * drops only its writes. A thrown store error always rolls back everything.
+ * drops only its writes, plus the writes of every runtime that hard-depends on
+ * it (`commit-dependencies.ts`). A story or setup runtime whose hard upstream
+ * was dropped rolls back everything. A thrown store error always rolls back
+ * everything.
  * `commit_status` for the execution's `turn_results` rows is settled inside
  * that same transaction on success, and best-effort to `failed` outside it on
  * rollback.
@@ -67,24 +70,16 @@ import {
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
 import { prepareDimensionFinalization } from "./dimension-finalization.js";
+import { droppedUpstream } from "./commit-dependencies.js";
 
 /**
- * The subset of a manifest needed to resolve output kind, capabilities, scope
- * and the persistent `recordAs` export (docs 02 §3.4). `output.recordAs` and
- * `version` come free from the manifest, so callers keep passing their active
- * runtimes unchanged; the export VALUE's schema is loaded lazily via
- * `loadOutputSchema` (below) only when a success result actually needs it.
+ * Manifests resolve output kind, capabilities, scope, the persistent
+ * `recordAs` export (docs 02 §3.4) and, for savepoint isolation, the hard
+ * dependencies between runtimes. Callers pass their active runtimes; the
+ * export VALUE's schema is loaded lazily via `loadOutputSchema` (below) only
+ * when a success result actually needs it.
  */
-type FinalizeManifest = Pick<
-  RuntimeManifest,
-  | "name"
-  | "pluginId"
-  | "outputKind"
-  | "version"
-  | "output"
-  | "outputContract"
-  | "userSettings"
->;
+type FinalizeManifest = RuntimeManifest;
 
 /** The loose runtime-result shape the commit pipeline accepts (top-level or nested). */
 type FinalizableResult = CommittableRuntimeResult;
@@ -143,8 +138,13 @@ export interface FinalizeExecutionArgs {
    * Caller-specific writes folded into the same transaction, run after every
    * result commits and before `commit_status` settles. Resume uses it for the
    * assistant turn message + resolved marker. A throw rolls the execution back.
+   * `isolation` names the runtimes whose writes were dropped, so follow-up work
+   * derived from them is not queued.
    */
-  readonly extraInTx?: (tx: StoreTransaction) => Promise<void>;
+  readonly extraInTx?: (
+    tx: StoreTransaction,
+    isolation: CommitIsolation,
+  ) => Promise<void>;
   /**
    * Session-clock write folded into the same transaction: logical-turn
    * counting (from `executionContext`) plus the setup-band mirror / phase flip
@@ -186,13 +186,43 @@ export interface FinalizeExecutionOutcome {
   /**
    * Rejected proposals. On `failed` they caused the rollback; on `committed`
    * they belong to optional runtimes whose writes were rolled back alone (see
-   * `isolatedRuntimeIds`) while the story and every other runtime committed.
+   * `isolatedRuntimes`) while the story and every other runtime committed.
    */
   readonly failedProposals: readonly FailedProposal[];
-  /** Optional runtimes whose proposals were dropped without failing the turn. */
-  readonly isolatedRuntimeIds?: readonly string[];
+  /**
+   * Optional runtimes whose writes were dropped without failing the turn: a
+   * rejected proposal, or a hard upstream that was itself dropped. Their
+   * persisted results are settled as `failed` with `error`.
+   */
+  readonly isolatedRuntimes?: readonly IsolatedRuntime[];
   /** A non-proposal error (store error / `extraInTx` throw) that rolled back the execution. */
   readonly error?: string;
+}
+
+export interface IsolatedRuntime {
+  readonly runtimeId: string;
+  readonly error: string;
+}
+
+export interface CommitIsolation {
+  readonly droppedRuntimeIds: ReadonlySet<string>;
+}
+
+/** Results as committed: a runtime whose writes were dropped reads as failed. */
+export function applyIsolatedRuntimes<
+  T extends { readonly runtimeId: string; readonly status: string },
+>(
+  results: readonly T[],
+  isolated: readonly IsolatedRuntime[] | undefined,
+): T[] {
+  const errors = new Map(
+    (isolated ?? []).map((item) => [item.runtimeId, item.error]),
+  );
+  return results.map((result) =>
+    errors.has(result.runtimeId)
+      ? { ...result, status: "failed", error: errors.get(result.runtimeId) }
+      : result,
+  );
 }
 
 /** Carries the failed proposals out of the transaction callback for the caller. */
@@ -264,8 +294,9 @@ function emitCommittedSuspension(
  */
 async function terminalizeExecutionJobs(
   args: FinalizeExecutionArgs,
-  status: "committed" | "failed",
+  outcome: FinalizeExecutionOutcome,
 ): Promise<void> {
+  const status = outcome.status;
   const scopeId = args.executionContext?.executionId;
   if (!scopeId) return;
   try {
@@ -274,7 +305,9 @@ async function terminalizeExecutionJobs(
     });
     if (reported.length === 0) return;
     const statusByRuntime = new Map(
-      args.results.map((result) => [result.runtimeId, result.status]),
+      applyIsolatedRuntimes(args.results, outcome.isolatedRuntimes).map(
+        (result) => [result.runtimeId, result.status],
+      ),
     );
     const groups = new Map<
       string,
@@ -459,7 +492,7 @@ export async function finalizeExecution(
   const conclude = async (
     outcome: FinalizeExecutionOutcome,
   ): Promise<FinalizeExecutionOutcome> => {
-    await terminalizeExecutionJobs(args, outcome.status);
+    await terminalizeExecutionJobs(args, outcome);
     if (args.setupRan && args.setupRan.length > 0) {
       try {
         await settleSetupRuntimes({
@@ -491,7 +524,19 @@ export async function finalizeExecution(
     const postCommit: Array<() => Promise<void>> = [];
     let committedEvents: readonly SessionEvent[] = [];
     const isolatedFailures: FailedProposal[] = [];
-    const isolatedRuntimeIds = new Set<string>();
+    // runtimeId -> why its writes were dropped.
+    const isolated = new Map<string, string>();
+    const manifestByRuntime = new Map(runtimes.map((rt) => [rt.name, rt]));
+    const lostUpstreamOf = (result: FinalizableResult): string | undefined => {
+      const manifest = manifestByRuntime.get(result.runtimeId);
+      return manifest && result.status === "success"
+        ? droppedUpstream(manifest, {
+            runtimes,
+            results,
+            dropped: new Set(isolated.keys()),
+          })
+        : undefined;
+    };
     try {
       if (args.abortReason !== undefined) {
         throw new Error(`Execution aborted: ${args.abortReason}`);
@@ -575,8 +620,23 @@ export async function finalizeExecution(
           if (failed.length > 0) throw new ProposalCommitFailure(failed);
           return out.events;
         };
+        // Results arrive in execution order, so every upstream settles before
+        // the runtimes that depend on it.
         for (const result of results) {
           args.signal?.throwIfAborted();
+          const lostUpstream = lostUpstreamOf(result);
+          if (lostUpstream) {
+            const error = `upstream ${lostUpstream} did not commit`;
+            // A story or setup runtime cannot stand on writes that did not land.
+            if (!isolates(result)) {
+              throw new Error(`${result.runtimeId}: ${error}`);
+            }
+            isolated.set(result.runtimeId, error);
+            console.warn(
+              `[finalize-execution] dropped writes of ${result.runtimeId} for session ${sessionId}: ${error}`,
+            );
+            continue;
+          }
           if (!isolates(result) || !tx.savepoint) {
             events.push(
               ...(await commitResult(result, tx, (fn) => postCommit.push(fn))),
@@ -594,7 +654,11 @@ export async function finalizeExecution(
           } catch (err) {
             if (!(err instanceof ProposalCommitFailure)) throw err;
             isolatedFailures.push(...err.failedProposals);
-            isolatedRuntimeIds.add(result.runtimeId);
+            isolated.set(
+              result.runtimeId,
+              err.failedProposals.map((fp) => fp.error).join("; ") ||
+                "proposal rejected",
+            );
             console.warn(
               `[finalize-execution] dropped writes of ${result.runtimeId} for session ${sessionId}: ` +
                 err.failedProposals.map((fp) => fp.error).join("; "),
@@ -604,7 +668,9 @@ export async function finalizeExecution(
         for (const message of args.journalMessages ?? []) {
           await tx.appendTurnMessage(message);
         }
-        await extraInTx?.(tx);
+        await extraInTx?.(tx, {
+          droppedRuntimeIds: new Set(isolated.keys()),
+        });
         args.signal?.throwIfAborted();
         await saveSuspensions(tx, (fn) => postCommit.push(fn));
         if (shouldWriteClock) {
@@ -616,10 +682,21 @@ export async function finalizeExecution(
         }
         await publishExports(
           tx,
-          results.filter((result) => !isolatedRuntimeIds.has(result.runtimeId)),
+          results.filter((result) => !isolated.has(result.runtimeId)),
         );
+        // Persisted results were written before commit; settle dropped ones
+        // as failed so history, retries and reloads match what was saved.
+        const failedRuntimes = [...isolated].map(([runtimeId, error]) => ({
+          runtimeId,
+          error,
+        }));
         for (const turnId of turnIds) {
-          await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
+          await tx.setTurnResultCommitStatus(
+            sessionId,
+            turnId,
+            "committed",
+            failedRuntimes,
+          );
         }
         args.signal?.throwIfAborted();
         return events;
@@ -660,8 +737,13 @@ export async function finalizeExecution(
       status: "committed",
       events: committedEvents,
       failedProposals: isolatedFailures,
-      ...(isolatedRuntimeIds.size > 0
-        ? { isolatedRuntimeIds: [...isolatedRuntimeIds] }
+      ...(isolated.size > 0
+        ? {
+            isolatedRuntimes: [...isolated].map(([runtimeId, error]) => ({
+              runtimeId,
+              error,
+            })),
+          }
         : {}),
     });
   });

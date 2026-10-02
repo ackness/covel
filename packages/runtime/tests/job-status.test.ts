@@ -9,6 +9,9 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
 import type { FunctionHandlerContext } from "@covel/plugin-loader";
+import type { RuntimeManifest } from "@covel/shared";
+import { commitExecution } from "../src/commit/commit-execution.js";
+import { executeTurn } from "../src/execution.js";
 import {
   createProgressReporter,
   finalizeJobStatuses,
@@ -212,7 +215,26 @@ describe("finalizeJobStatuses", () => {
     },
   );
 
-  it("does not re-map a job already in a terminal state", async () => {
+  it.each([
+    ["failed", "success"],
+    ["cancelled", "failed"],
+    ["succeeded", "skipped"],
+  ] as const)(
+    "does not re-map a job the handler settled as %s on outcome %s",
+    async (reported, outcome) => {
+      const h = makeHarness();
+      const reporter = createProgressReporter(h.deps);
+      await reporter.report({ jobId: "job-a", state: reported, sequence: 1 });
+
+      await finalizeJobStatuses(h.deps, { outcome, reportedJobs: ["job-a"] });
+
+      const rows = await h.store.listJobStatus(SESSION, { jobId: "job-a" });
+      expect(rows).toHaveLength(1); // untouched
+      expect(rows[0].state).toBe(reported);
+    },
+  );
+
+  it("fails a job the handler reported succeeded when its writes did not land", async () => {
     const h = makeHarness();
     const reporter = createProgressReporter(h.deps);
     await reporter.report({ jobId: "job-a", state: "succeeded", sequence: 1 });
@@ -223,8 +245,10 @@ describe("finalizeJobStatuses", () => {
     });
 
     const rows = await h.store.listJobStatus(SESSION, { jobId: "job-a" });
-    expect(rows).toHaveLength(1); // untouched
-    expect(rows[0].state).toBe("succeeded");
+    expect(rows.map((row) => [row.state, row.sequence])).toEqual([
+      ["succeeded", 1],
+      ["failed", 2],
+    ]);
   });
 
   it("finalizes only the reported jobs", async () => {
@@ -290,5 +314,84 @@ describe("ctx.progress full chain", () => {
     const rows = await h.store.listJobStatus(SESSION, { jobId: "img-1" });
     expect(rows.map((r) => r.state)).toEqual(["queued", "progress"]);
     expect(h.jobEvents).toHaveLength(2);
+  });
+});
+
+describe("job status after the execution commit", () => {
+  it("does not leave a reported success standing when the plugin data rolled back", async () => {
+    const store = createMemoryStore();
+    const now = "2026-10-02T00:00:00.000Z";
+    await store.createSession({
+      id: SESSION,
+      worldId: null,
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: [PLUGIN],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const worker: RuntimeManifest = {
+      name: RUNTIME,
+      pluginId: PLUGIN,
+      description: "worker",
+      runtimeType: "function",
+      handler: "./worker.js",
+      stage: "post-turn",
+      outputKind: "plugin",
+      trigger: { type: "auto" },
+    };
+    const handler = async (ctx: FunctionHandlerContext) => {
+      await ctx.progress?.report({
+        jobId: "img-1",
+        state: "succeeded",
+        sequence: 1,
+      });
+      // Rejected at commit: plugin code cannot write a framework namespace.
+      return {
+        outcome: "success",
+        value: {},
+        effects: {
+          pluginData: [{ namespace: "_jobs", key: "img-1", value: true }],
+        },
+      };
+    };
+    const execution = await executeTurn(
+      {
+        sessionId: SESSION,
+        turnId: "turn-1",
+        playerMessage: "",
+        locale: "en",
+        origin: "manual",
+      },
+      [worker],
+      {
+        store,
+        llm: {
+          generate: async () => {
+            throw new Error("unexpected agent generation");
+          },
+        },
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler,
+        }),
+      },
+    );
+
+    const outcome = await commitExecution({
+      store,
+      execution,
+      completion: { kind: "turn", turnId: "turn-1", durationMs: 0 },
+    });
+
+    expect(outcome.status).toBe("failed");
+    expect(await store.getPluginData(SESSION, PLUGIN, "_jobs", "img-1")).toBe(
+      null,
+    );
+    const rows = await store.listJobStatus(SESSION, { jobId: "img-1" });
+    expect(rows.map((row) => row.state)).toEqual(["succeeded", "failed"]);
   });
 });
