@@ -13,6 +13,44 @@ import makeUpdateDimensions from "../tools/update-dimensions.js";
 
 /** Characters of complete rules, schemas, and values given to the tracker. */
 const FULL_RULES_BUDGET = 24000;
+const TRUNCATED_HEADING =
+  "Truncated (read with dimension-rule-get and world-dimension-get before settling these):";
+const READ_TOOLS = new Set([
+  "world-dimension-get",
+  "world-dimension-list",
+  "dimension-rule-get",
+]);
+
+const messageText = (message) =>
+  typeof message.content === "string"
+    ? message.content
+    : JSON.stringify(message.content);
+
+/**
+ * The tracker's prompt carries every rule, schema, and value that fits the
+ * budget. Offered the read tools anyway, the model often reads first and
+ * settles one model call later, so they are offered only when the rules
+ * block lists truncated dimensions.
+ */
+function trackerTools(_ctx, payload) {
+  if (payload.runtimeId !== "world-init/dimension-tracker" || !payload.tools)
+    return { action: "continue" };
+  const system = payload.messages
+    .filter((message) => message.role === "system")
+    .map(messageText)
+    .join("\n");
+  if (
+    !system.includes("<dimension-rules>") ||
+    system.includes(TRUNCATED_HEADING)
+  )
+    return { action: "continue" };
+  return {
+    action: "continue",
+    replace: {
+      tools: payload.tools.filter((tool) => !READ_TOOLS.has(tool.name)),
+    },
+  };
+}
 
 export default function (covel) {
   covel.provideExtension("session.world-context@1", "world-context", {
@@ -96,12 +134,7 @@ export default function (covel) {
       }
       const sections = [
         ...complete,
-        ...(truncated.length
-          ? [
-              "Truncated (read with dimension-rule-get and world-dimension-get before settling these):",
-              ...truncated,
-            ]
-          : []),
+        ...(truncated.length ? [TRUNCATED_HEADING, ...truncated] : []),
       ];
       return [
         {
@@ -114,6 +147,7 @@ export default function (covel) {
       ];
     },
   });
+  covel.on("PreLLMCall", trackerTools);
   covel.registerTool(makeDimensionRuleGet(covel.toolkit));
   covel.registerTool(makeSetWorldSchema(covel.toolkit));
   covel.registerTool(makeSetWorldDimensions(covel.toolkit));
