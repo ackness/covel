@@ -107,7 +107,7 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 
 `world.dimensions.<id>` 包含 `{name,description?,schema,value,version}`，具体值写作 `{{ world.dimensions.reputation.value }}`。`worldRecord.dimensions` / `metadata.dimensions` 是作者声明，不是会话进度；旧 raw 值路径及 `world.tone/openingScenario` 不再是公共快捷字段。
 
-捆绑 `world-init` 通过 `prompt.segment@1` 提供 story 受众的 `<world-dimensions>` turn 段。它保留 ID、版本及预算内的本地化值预览：当前默认总预算 8192 字符，单项值预览最多 240 字符；超出预算的维度计数会显式显示，长值使用省略号，并指引按 ID/path 或分页查询。省略不代表值不存在，预览不冒充完整 JSON。选择了某个模板路径也不意味着框架会自动全量展开所有行集。
+捆绑 `world-init` 通过 `prompt.segment@1` 提供 story 受众的 `<world-dimensions>` turn 段。它保留 ID、版本及预算内的本地化值：默认总预算 12000 字符，放得下时每个值都完整给出，因为每个被截断的值都会让模型多调一次 `world-dimension-get`，而那一轮要重发整个提示词；超出预算时从最长的值开始截到 240 字符（以省略号标记），仍放不下的维度计数会显式显示，并指引按 ID/path 或分页查询。省略不代表值不存在，预览不冒充完整 JSON。选择了某个模板路径也不意味着框架会自动全量展开所有行集。
 
 投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 的 self-only `<dimension-rules>` 段在预算内直接带完整规则、schema 与冻结值，超出预算的维度再用 `dimension-rule-get` 分页获取。没有有效规则时不调用维护模型。
 
