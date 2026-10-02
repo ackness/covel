@@ -301,6 +301,14 @@ export function createSseEventHandler(
         const deltaKind =
           (payload.kind as string) ??
           deps.runtimeKindRef.current.get(runtimeId);
+        if (deltaKind === "story" && payload.reset === true) {
+          // The text streamed so far was a preparation step or a rejected
+          // draft; drop it (buffered and rendered) before the next step.
+          deps.deltaBufferRef.current.delete(
+            `${turnId ?? "unknown"}_${runtimeId}`,
+          );
+          clearStreamingText(`stream_${turnId ?? "unknown"}_${runtimeId}`);
+        }
         if (delta && deltaKind === "story") {
           queueNarrativeDelta(deps, { turnId, runtimeId, pluginId, delta });
         }

@@ -111,6 +111,23 @@ afterEach(() => {
 });
 
 describe("sse-handler narrative delta buffer", () => {
+  it("drops streamed and buffered text on a reset before the next step", () => {
+    const raf = installRafHarness();
+    const harness = createHarness();
+
+    harness.handle(narrativeDelta("Checking the archive... "));
+    raf.flush(raf.pendingFrameId());
+    harness.handle(narrativeDelta("more prep"));
+    harness.handle({
+      ...narrativeDelta(""),
+      payload: { ...narrativeDelta("").payload, reset: true },
+    });
+    harness.handle(narrativeDelta("The fog lifts."));
+    raf.flush(raf.pendingFrameId());
+
+    expect(getStreamingText("stream_turn-1_narrator")).toBe("The fog lifts.");
+  });
+
   it("flushes coalesced story deltas into the current session's reducer state", () => {
     const raf = installRafHarness();
     const harness = createHarness();
