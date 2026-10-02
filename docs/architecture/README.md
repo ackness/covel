@@ -11,6 +11,7 @@
 | [`packages.md`](./packages.md)                   | 工作区库的实际消费方、依赖注入链路与复用限制。                                  |
 | [`npc-graph.md`](./npc-graph.md)                 | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。                      |
 | [`storage.md`](./storage.md)                     | DataStore 后端、事务与持久化边界。                                              |
+| [`security.md`](./security.md)                   | 出站请求 SSRF/DNS 防护、provider key 绑定、托管鉴权与服务端防护。               |
 | [`refactoring-plan.md`](./refactoring-plan.md)   | current-only 架构收敛的范围、阶段、验收与回滚计划（实施中）。                   |
 | [`technical-debt.md`](./technical-debt.md)       | 当前有意保留的实现上限，以及触发升级的可观测条件。                              |
 

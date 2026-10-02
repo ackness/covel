@@ -189,7 +189,7 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 - [架构与回合管线](./docs/architecture/flow.md) —— 一个回合如何流经触发 → 调度 → agents → 提交
 - 参考：[插件注册表](./docs/reference/plugins.md) · [工具注册表](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [完整文档索引](./docs/README.md)
 
-pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle。仓库布局与包清单 → [`CLAUDE.md`](./CLAUDE.md#monorepo-structure)。
+pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle。仓库布局与包清单 → [`AGENTS.md`](./AGENTS.md#monorepo-structure)。
 
 ## 路线图
 

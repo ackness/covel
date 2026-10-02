@@ -94,7 +94,7 @@ PRs, main, and releases reuse the same CI gates, including independent Web unit 
 
 ### Framework / plugin isolation (important)
 
-Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) **must not** reference any specific plugin ID or plugin name. Plugin capabilities are discovered via `RuntimeManifest.capabilities` and `outputKind`. See the [Framework–Plugin Isolation Rule in CLAUDE.md](../CLAUDE.md).
+Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) **must not** reference any specific plugin ID or plugin name. Plugin capabilities are discovered via `RuntimeManifest.capabilities` and `outputKind`. See the [Framework–Plugin Isolation Rule in AGENTS.md](../AGENTS.md#framework--plugin-isolation-rule).
 
 ### Documentation sync
 

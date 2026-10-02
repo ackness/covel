@@ -94,7 +94,7 @@ PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试�
 
 ### 框架/插件隔离（重要）
 
-框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中**禁止**出现任何具体插件 ID 或插件名称。插件能力通过 `RuntimeManifest.capabilities` 与 `outputKind` 发现，详见 [`CLAUDE.md` Framework–Plugin Isolation Rule](../CLAUDE.md)。
+框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中**禁止**出现任何具体插件 ID 或插件名称。插件能力通过 `RuntimeManifest.capabilities` 与 `outputKind` 发现，详见 [`AGENTS.md` Framework–Plugin Isolation Rule](../AGENTS.md#framework--plugin-isolation-rule)。
 
 ### 文档同步
 

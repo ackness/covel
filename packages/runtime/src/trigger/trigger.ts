@@ -44,7 +44,7 @@ export function shouldTrigger(
       // Dead in the production selection path: selectTriggeredRuntimes picks
       // manual runtimes by name match and never calls shouldTrigger for them
       // (an explicit plugin-rpc call IS the trigger decision). Kept for direct
-      // callers (tests, event fan-out reuse) — see CLAUDE.md "Trigger modes".
+      // callers (tests, event fan-out reuse) — see AGENTS.md "Trigger modes".
       return context.isManualTrigger;
 
     case "scheduled": {
