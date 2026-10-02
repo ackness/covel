@@ -1,0 +1,18 @@
+version: 2
+
+# Workflows pin actions to commit SHAs; Dependabot keeps those pins and their
+# version comments current. npm dependencies are upgraded deliberately by hand.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Match pnpm-workspace.yaml `minimumReleaseAge` (seven days).
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci

@@ -9,7 +9,7 @@
 ## 开发环境
 
 - Node.js 26.x
-- pnpm 11.22.0（见根目录 `package.json` 的 `packageManager`）
+- pnpm 12.6.0（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash
@@ -20,7 +20,7 @@ cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
 ```
 
-每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26 和 pnpm 11.22，因此还需安装 mise 并准备相应工具链。`pnpm check` 中的工作流检查另需 `actionlint`（安装方法见下文）。
+每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26、pnpm 12.6 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
 
 提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier、类型检查一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。
 
@@ -80,7 +80,7 @@ pnpm e2e:smoke                             # CI 的确定性 Chromium 核心流�
 pnpm e2e                                   # Playwright 端到端
 ```
 
-`pnpm check` 包含 peer 依赖、类型、包边界、依赖声明、插件 manifest、i18n、脚本回归和工作流检查。工作流检查要求安装 `actionlint`（CI 固定使用 1.7.12；本地可用 `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`）。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
+`pnpm check` 包含 peer 依赖、类型、包边界、依赖声明、插件 manifest、i18n、脚本回归和工作流检查。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
 
 安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile`、`pnpm check`、`VITEST_MAX_WORKERS=2 pnpm test --concurrency=2` 和 `pnpm e2e --list`；任何一步失败都会阻止推送。检查不复制工作区的 `.env`、`node_modules`、`test-results` 或 `.turbo`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。这会使每次推送增加数分钟；需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。该检查只收集 E2E 测试，不执行 PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
 
@@ -90,7 +90,7 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。覆盖率目标 ≥ 80% 当前为参考目标，CI（[`ci.yml`](../.github/workflows/ci.yml)）尚未设阈值强制拦截。
 
-PR、main 和发布复用同一份 CI 检查，包含独立 PostgreSQL 与 Chromium smoke job。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
+PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试、PostgreSQL 与 Chromium smoke job。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物；保存缓存前会删除两天前写入的条目，避免缓存无限增长。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
 
 ### 框架/插件隔离（重要）
 
