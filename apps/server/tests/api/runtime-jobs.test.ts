@@ -10,6 +10,9 @@ import {
   claimRuntimeJob,
   createRuntimeJob,
   getRuntimeJob,
+  listRuntimeJobs,
+  listSettlingRuntimeJobs,
+  pruneTerminalRuntimeJobs,
   recoverExpiredRuntimeJobs,
   renewRuntimeJobLease,
   transitionRuntimeJob,
@@ -884,11 +887,11 @@ describe.each([
       leaseMs: 1_000,
       now: ENQUEUED_AT,
     });
-    const list = store.listPluginDataSessionScope.bind(store);
+    const list = store.listPluginDataByNamespace.bind(store);
     const intercepted = vi
-      .spyOn(store, "listPluginDataSessionScope")
-      .mockImplementationOnce(async (sessionId) => {
-        const rows = await list(sessionId);
+      .spyOn(store, "listPluginDataByNamespace")
+      .mockImplementationOnce(async (sessionId, namespace) => {
+        const rows = await list(sessionId, namespace);
         await renewRuntimeJobLease(store, {
           ...job(),
           ownerId: "worker",
@@ -1014,5 +1017,96 @@ describe.each([
       afterSessionId: first?.nextSessionCursor,
     });
     expect(second?.job.sessionId).toBe("session-b");
+  });
+
+  it("reads session jobs without loading other plugin data", async () => {
+    await store.setPluginData({
+      id: "unrelated-row",
+      sessionId: "session-a",
+      pluginId: "codex",
+      namespace: "entries",
+      key: "large",
+      value: { text: "x".repeat(10_000) },
+      createdAt: ENQUEUED_AT,
+      updatedAt: ENQUEUED_AT,
+    });
+    await createRuntimeJob(
+      store,
+      job("session-a", "settling", {
+        settle: "before-next-execution",
+        maxSettleWaitMs: 1000,
+      }),
+    );
+    const sessionScope = vi.spyOn(store, "listPluginDataSessionScope");
+
+    const jobs = await listRuntimeJobs(store, { sessionId: "session-a" });
+    const settling = await listSettlingRuntimeJobs(store, "session-a");
+    const claimed = await claimNextRuntimeJob(store, {
+      ownerId: "worker",
+      leaseMs: 30_000,
+    });
+
+    expect(jobs.map((row) => row.jobId)).toEqual(["settling"]);
+    expect(settling.map((row) => row.jobId)).toEqual(["settling"]);
+    expect(claimed?.job.jobId).toBe("settling");
+    expect(sessionScope).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the newest terminal jobs per runtime", async () => {
+    for (const id of ["old-1", "old-2", "new-1"]) {
+      const created = await createRuntimeJob(store, job("session-a", id));
+      await store.appendJobStatus(makeRuntimeJobStatusRecord(created, 0));
+      await transitionRuntimeJob(store, {
+        ...job("session-a", id),
+        from: ["queued"],
+        to: "failed",
+      });
+    }
+    await createRuntimeJob(store, job("session-a", "pending"));
+
+    const remaining = await pruneTerminalRuntimeJobs(
+      store,
+      "session-a",
+      await listRuntimeJobs(store, { sessionId: "session-a" }),
+      1,
+    );
+
+    expect(remaining.map((row) => row.jobId)).toEqual(["new-1", "pending"]);
+    expect(
+      (await listRuntimeJobs(store, { sessionId: "session-a" })).map(
+        (row) => row.jobId,
+      ),
+    ).toEqual(["new-1", "pending"]);
+    expect(
+      (await store.listJobStatus("session-a")).map((row) => row.jobId),
+    ).toEqual(["new-1"]);
+  });
+
+  it("prunes terminal history during worker maintenance", async () => {
+    for (let index = 0; index < 22; index += 1) {
+      const id = `done-${String(index).padStart(2, "0")}`;
+      await createRuntimeJob(store, job("session-a", id));
+      await transitionRuntimeJob(store, {
+        ...job("session-a", id),
+        from: ["queued"],
+        to: "cancelled",
+      });
+    }
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(store),
+      execute: vi.fn(),
+    });
+
+    worker.wake();
+    await vi.waitFor(async () => {
+      const remaining = await listRuntimeJobs(store, {
+        sessionId: "session-a",
+      });
+      expect(remaining).toHaveLength(20);
+      expect(remaining[0]!.jobId).toBe("done-02");
+    });
+    await worker.close();
   });
 });

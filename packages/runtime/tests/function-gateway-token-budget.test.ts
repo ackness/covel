@@ -9,6 +9,65 @@ import { createPluginRuntimeGateway } from "../src/function-runtime/plugin-runti
 
 afterEach(() => vi.unstubAllGlobals());
 
+function setup(capacity: number | undefined, requested: number | undefined) {
+  const fetch = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const presetRegistry = createPresetRegistry({
+    profiles: [],
+    presets: [
+      {
+        id: "fast",
+        name: "Synthetic fast",
+        provider: "fixture",
+        model: "synthetic-model",
+        tier: "medium",
+        supportedModes: ["text"],
+        enabled: true,
+        capability: {
+          contextWindow: 131_072,
+          ...(capacity === undefined ? {} : { maxOutputTokens: capacity }),
+        },
+      },
+    ],
+  });
+  const providerRegistry = createProviderRegistry({
+    providers: {
+      fixture: {
+        adapter: createAnthropicMessagesAdapter(),
+        defaults: {
+          baseUrl: "https://fixture.example",
+          protocol: "anthropic-messages-v1",
+        },
+      },
+    },
+  });
+  const gateway = createPluginRuntimeGateway(
+    createGateway({ presetRegistry, providerRegistry }),
+    requested === undefined
+      ? {}
+      : {
+          slotOverrides: {
+            parameterOverrides: { fast: { maxOutputTokens: requested } },
+          },
+        },
+  );
+  const sentMaxTokens = () =>
+    JSON.parse(
+      (fetch.mock.calls as unknown as Array<[string, RequestInit]>)[0]![1]
+        .body as string,
+    ).max_tokens;
+  return { gateway, sentMaxTokens };
+}
+
 describe("function plugin output budget", () => {
   it.each([
     [262_144, undefined, 16_384],
@@ -19,64 +78,36 @@ describe("function plugin output budget", () => {
   ])(
     "serializes capacity %s and request %s as %s tokens",
     async (capacity, requested, expected) => {
-      const fetch = vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              content: [{ type: "text", text: "ok" }],
-              stop_reason: "end_turn",
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          ),
-      );
-      vi.stubGlobal("fetch", fetch);
-      const presetRegistry = createPresetRegistry({
-        profiles: [],
-        presets: [
-          {
-            id: "fast",
-            name: "Synthetic fast",
-            provider: "fixture",
-            model: "synthetic-model",
-            tier: "medium",
-            supportedModes: ["text"],
-            enabled: true,
-            capability: {
-              contextWindow: 131_072,
-              ...(capacity === undefined ? {} : { maxOutputTokens: capacity }),
-            },
-          },
-        ],
-      });
-      const providerRegistry = createProviderRegistry({
-        providers: {
-          fixture: {
-            adapter: createAnthropicMessagesAdapter(),
-            defaults: {
-              baseUrl: "https://fixture.example",
-              protocol: "anthropic-messages-v1",
-            },
-          },
-        },
-      });
-      const gateway = createPluginRuntimeGateway(
-        createGateway({ presetRegistry, providerRegistry }),
-        requested === undefined
-          ? {}
-          : {
-              slotOverrides: {
-                parameterOverrides: { fast: { maxOutputTokens: requested } },
-              },
-            },
-      );
+      const { gateway, sentMaxTokens } = setup(capacity, requested);
       await gateway.generateText({
         presetId: "fast",
         prompt: "Synthetic rewrite",
       });
-      const init = (
-        fetch.mock.calls as unknown as Array<[string, RequestInit]>
-      )[0]![1];
-      expect(JSON.parse(init.body as string).max_tokens).toBe(expected);
+      expect(sentMaxTokens()).toBe(expected);
     },
   );
+
+  it.each([
+    [undefined, 4096, 4096],
+    [2048, 4096, 2048],
+  ])(
+    "treats a per-call output under slot request %s as a ceiling (%s → %s)",
+    async (requested, perCall, expected) => {
+      const { gateway, sentMaxTokens } = setup(65_536, requested);
+      await gateway.generateText({
+        presetId: "fast",
+        prompt: "Synthetic rewrite",
+        maxOutputTokens: perCall,
+      });
+      expect(sentMaxTokens()).toBe(expected);
+    },
+  );
+
+  it("reports the limits the gateway will apply to the slot", () => {
+    const { gateway } = setup(65_536, 32_768);
+    expect(gateway.resolveSlot({ presetId: "fast" })?.limits).toEqual({
+      contextWindow: 131_072,
+      maxOutputTokens: 32_768,
+    });
+  });
 });

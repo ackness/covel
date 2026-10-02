@@ -139,6 +139,30 @@ describe("createPluginLogger", () => {
     expect(rows[0].value).not.toHaveProperty("meta");
   });
 
+  it("bounds the ring without reading the namespace on every write", async () => {
+    let reads = 0;
+    const countingStore = {
+      ...store,
+      listPluginData: (...args: Parameters<DataStore["listPluginData"]>) => {
+        reads += 1;
+        return store.listPluginData(...args);
+      },
+    } as DataStore;
+    const chatty = createPluginLogger(countingStore, ctx);
+    for (let i = 0; i < 230; i += 1) await chatty.info(`line ${i}`);
+    expect(reads).toBe(12);
+    expect(
+      (await store.listPluginData(SESSION_ID, PLUGIN_ID, "_logs")).length,
+    ).toBeLessThanOrEqual(220);
+
+    await createPluginLogger(store, ctx).info("next execution");
+    const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_logs");
+    expect(rows).toHaveLength(200);
+    expect(
+      rows.map((row) => (row.value as { message: string }).message),
+    ).toContain("next execution");
+  });
+
   it("never throws when the store rejects writes", async () => {
     const rejectingStore = {
       ...store,
@@ -208,5 +232,66 @@ describe("createFunctionStoreView", () => {
     });
     const rows = await view.listPluginData("notes");
     expect(rows.map((r) => r.value)).toEqual([{ owner: "self" }]);
+  });
+
+  it("pages the full session timeline with an opaque cursor", async () => {
+    for (const [i, sessionId] of [
+      SESSION_ID,
+      SESSION_ID,
+      "other-session",
+      SESSION_ID,
+    ].entries()) {
+      await store.appendTurnMessage({
+        id: `m${i}`,
+        sessionId,
+        turnId: `t${i}`,
+        sourceType: i % 2 === 0 ? "player" : "runtime",
+        role: i % 2 === 0 ? "user" : "assistant",
+        content: `message ${i}`,
+        order: 0,
+        createdAt: `2024-01-01T00:00:0${i}Z`,
+      });
+    }
+    await store.tagTurnMessagesCompacted(SESSION_ID, ["m0"], "summary-1");
+    const view = createFunctionStoreView(store, ctx);
+
+    const first = await view.readTurnMessages({ limit: 2 });
+    expect(first.messages.map((m) => [m.id, m.compacted])).toEqual([
+      ["m0", true],
+      ["m1", false],
+    ]);
+    expect(first.messages[0]).not.toHaveProperty("sessionId");
+    expect(first.hasMore).toBe(true);
+    const second = await view.readTurnMessages({
+      after: first.cursor!,
+      limit: 2,
+    });
+    expect(second.messages.map((m) => m.id)).toEqual(["m3"]);
+    expect(second.hasMore).toBe(false);
+    // The end cursor resumes later: new messages appear after it.
+    await store.appendTurnMessage({
+      id: "m4",
+      sessionId: SESSION_ID,
+      turnId: "t4",
+      sourceType: "player",
+      role: "user",
+      content: "message 4",
+      order: 0,
+      createdAt: "2024-01-01T00:00:04Z",
+    });
+    const resumed = await view.readTurnMessages({ after: second.cursor! });
+    expect(resumed.messages.map((m) => m.id)).toEqual(["m4"]);
+    const empty = await view.readTurnMessages({ after: resumed.cursor! });
+    expect(empty).toMatchObject({
+      messages: [],
+      cursor: resumed.cursor,
+      hasMore: false,
+    });
+    await expect(view.readTurnMessages({ after: "forged" })).rejects.toThrow(
+      "Invalid turn message cursor",
+    );
+    await expect(view.readTurnMessages({ limit: 0 })).rejects.toThrow(
+      RangeError,
+    );
   });
 });

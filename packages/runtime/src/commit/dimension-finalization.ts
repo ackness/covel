@@ -209,14 +209,8 @@ export async function prepareDimensionFinalization(args: {
           ...(receipt.error ? { error: receipt.error } : {}),
         },
       };
-      await tx.saveEvent({
-        id: event.id,
-        sessionId,
-        type: event.type,
-        topic: "state",
-        payload: event.payload,
-        createdAt: now,
-      });
+      // The event bus records the event when finalize publishes it after
+      // commit; saving it here too collided on the same event id.
       events.push(event);
     }
   }

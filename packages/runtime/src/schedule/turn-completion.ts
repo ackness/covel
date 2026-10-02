@@ -5,6 +5,7 @@ import {
   type EffectResource,
   type Proposal,
   type RuntimeManifest,
+  type RuntimeResult,
 } from "@covel/shared";
 
 export interface TurnDetachmentDiagnostic {
@@ -238,4 +239,35 @@ export function planTurnDetachment(
   }
 
   return { eligibleRuntimeIds, diagnostics };
+}
+
+/**
+ * Upstream results persisted with a detached job. Declared dependencies keep
+ * their outputs for bindings and gates; every other result keeps only its
+ * identity and status. Tool-call traces stay in the source turn's records
+ * instead of being copied into each job row.
+ */
+export function detachedUpstreamResults(
+  candidate: RuntimeManifest,
+  results: readonly RuntimeResult[],
+  activeRuntimes: readonly RuntimeManifest[],
+): RuntimeResult[] {
+  const producers = new Map(activeRuntimes.map((rt) => [rt.name, rt]));
+  return results.map((result) => {
+    const producer = producers.get(result.runtimeId);
+    if (producer && consumerDependsOn(candidate, producer)) {
+      return { ...result, toolCalls: [] };
+    }
+    return {
+      pluginId: result.pluginId,
+      runtimeId: result.runtimeId,
+      runId: result.runId,
+      turnId: result.turnId,
+      status: result.status,
+      output: null,
+      toolCalls: [],
+      durationMs: result.durationMs,
+      timestamp: result.timestamp,
+    };
+  });
 }

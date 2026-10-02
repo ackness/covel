@@ -224,13 +224,13 @@ describe.each([
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     releaseGates.push(() => release.resolve());
-    const list = store.listPluginDataSessionScope.bind(store);
+    const list = store.listPluginDataByNamespace.bind(store);
     const read = vi
-      .spyOn(store, "listPluginDataSessionScope")
-      .mockImplementationOnce(async (sessionId) => {
+      .spyOn(store, "listPluginDataByNamespace")
+      .mockImplementationOnce(async (sessionId, namespace) => {
         entered.resolve();
         await release.promise;
-        return list(sessionId);
+        return list(sessionId, namespace);
       });
     const worker = start();
     await vi.advanceTimersByTimeAsync(1);
@@ -288,7 +288,7 @@ describe.each([
   it("retries a failed scan with sanitized diagnostics", async () => {
     await seed();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(store, "listPluginDataSessionScope").mockRejectedValueOnce(
+    vi.spyOn(store, "listPluginDataByNamespace").mockRejectedValueOnce(
       new Error("synthetic-secret-in-store-error"),
     );
     start();

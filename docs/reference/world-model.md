@@ -56,7 +56,7 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
   → 原子写入当前值与成功回执；回合结束后客户端读取已提交新版
 ```
 
-回合内公共读取冻结，不因玩家并发手改或 tracker 的局部预览换版；新执行重新读取已提交存储。`recordAs` export 不替代权威状态库，叙事不能反向依赖 post-turn tracker 的输出。提示词使用预算投影与按需查询，不默认展开全部大行集。
+回合内公共读取冻结，不因玩家并发手改或 tracker 的局部预览换版；新执行重新读取已提交存储。dimension-context 在本次执行中运行但未成功时，叙事 runtime 被跳过（`dimension-snapshot-unavailable`）；它未被调度时（定向的手动叙事或重试），叙事直接使用执行开始时冻结的已提交快照。`recordAs` export 不替代权威状态库，叙事不能反向依赖 post-turn tracker 的输出。提示词使用预算投影与按需查询，不默认展开全部大行集。
 
 有自动维护规则时，host 在叙事提交事务中登记源回合义务，身份绑定服务器确定的 narrative result ID 和逻辑回合号。tracker 未运行、失败或发生版本冲突不等于无变化。回执保存在 `_dimension-settlements`，有五种状态：
 

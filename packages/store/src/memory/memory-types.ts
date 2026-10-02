@@ -12,7 +12,6 @@ import type {
   PluginDataRecord,
   RuntimeExportRecord,
   RuntimeOutputRecord,
-  RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
   SetupAttemptRecord,
@@ -48,7 +47,6 @@ export interface MemoryVectorRow {
 export interface MemoryState {
   readonly sessions: Map<string, SessionRecord>;
   readonly turnResults: TurnResultRecord[];
-  readonly runtimeResults: RuntimeResultRecord[];
   readonly toolCalls: ToolCallRecordRow[];
   readonly stateSchemas: StateSchemaRecord[];
   readonly stateEntries: Map<string, StateEntryRecord>;

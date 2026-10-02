@@ -1,7 +1,6 @@
 /**
- * Backend-agnostic runtime-domain queries (turn results, runtime results, tool
- * calls, runtime outputs, interaction records), shared by the PostgreSQL and
- * SQLite backends.
+ * Backend-agnostic runtime-domain queries (turn results, tool calls, runtime
+ * outputs, interaction records), shared by the PostgreSQL and SQLite backends.
  *
  * Previously `postgres/pg-runtime-records.ts` and
  * `sqlite/sqlite-runtime-records.ts` were mirrors differing only in the
@@ -19,14 +18,12 @@ import type { JsonReader } from "./mappers.js";
 import {
   toInteractionRecordRow,
   toRuntimeOutputRecord,
-  toRuntimeResultRecord,
   toToolCallRecord,
   toTurnResultRecord,
 } from "./mappers.js";
 import type {
   InteractionRow,
   RuntimeOutputRow,
-  RuntimeResultRow,
   ToolCallRow,
   TurnResultRow,
 } from "./mappers/runtime-mappers.js";
@@ -37,7 +34,6 @@ import type {
   InteractionRecordRow,
   RuntimeOutputFilters,
   RuntimeOutputRecord,
-  RuntimeResultRecord,
   ToolCallRecordRow,
   TurnResultRecord,
 } from "../types.js";
@@ -47,7 +43,6 @@ type TurnResultsTable = Table & {
   turnId: Column;
   createdAt: Column;
 };
-type RuntimeResultsTable = Table & { sessionId: Column; turnId: Column };
 type ToolCallsTable = Table & { sessionId: Column; turnId: Column };
 type RuntimeOutputsTable = Table & {
   sessionId: Column;
@@ -66,7 +61,6 @@ type InteractionRecordsTable = Table & {
 
 export interface SqlRuntimeTables {
   readonly turnResults: TurnResultsTable;
-  readonly runtimeResults: RuntimeResultsTable;
   readonly toolCalls: ToolCallsTable;
   readonly runtimeOutputs: RuntimeOutputsTable;
   readonly interactionRecords: InteractionRecordsTable;
@@ -79,7 +73,6 @@ export interface SqlRuntimeRecordsDeps {
   readonly values: Pick<
     InsertValueBuilders,
     | "turnResultInsert"
-    | "runtimeResultInsert"
     | "toolCallInsert"
     | "runtimeOutputInsert"
     | "interactionRecordInsert"
@@ -91,8 +84,6 @@ export type SqlRuntimeRecords = Pick<
   | "saveTurnResult"
   | "listTurnResults"
   | "setTurnResultCommitStatus"
-  | "saveRuntimeResult"
-  | "listRuntimeResults"
   | "saveToolCall"
   | "listToolCalls"
   | "saveRuntimeOutput"
@@ -106,13 +97,7 @@ export function createSqlRuntimeRecords(
   deps: SqlRuntimeRecordsDeps,
 ): SqlRuntimeRecords {
   const { runner, tables, json, values } = deps;
-  const {
-    turnResults,
-    runtimeResults,
-    toolCalls,
-    runtimeOutputs,
-    interactionRecords,
-  } = tables;
+  const { turnResults, toolCalls, runtimeOutputs, interactionRecords } = tables;
 
   return {
     async saveTurnResult(record: TurnResultRecord): Promise<void> {
@@ -144,27 +129,6 @@ export function createSqlRuntimeRecords(
           eq(turnResults.turnId, turnId),
         )!,
       );
-    },
-
-    async saveRuntimeResult(record: RuntimeResultRecord): Promise<void> {
-      await runner.insert(runtimeResults, values.runtimeResultInsert(record));
-    },
-
-    async listRuntimeResults(
-      sessionId: string,
-      turnId?: string,
-    ): Promise<RuntimeResultRecord[]> {
-      const where =
-        turnId !== undefined
-          ? and(
-              eq(runtimeResults.sessionId, sessionId),
-              eq(runtimeResults.turnId, turnId),
-            )
-          : eq(runtimeResults.sessionId, sessionId);
-      const rows = await runner.select<RuntimeResultRow>(runtimeResults, {
-        where,
-      });
-      return rows.map((row) => toRuntimeResultRecord(row, json));
     },
 
     async saveToolCall(record: ToolCallRecordRow): Promise<void> {

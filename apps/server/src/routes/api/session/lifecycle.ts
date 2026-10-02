@@ -25,21 +25,19 @@ export async function backgroundLocksForSession(
   store: DataStore,
 ): Promise<string[]> {
   const runtimeNames = new Set<string>();
-  for (const row of await store.listPluginDataSessionScope(sessionId)) {
-    if (row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs") {
-      continue;
-    }
+  for (const row of await store.listPluginDataByNamespace(
+    sessionId,
+    "_runtime_jobs",
+  )) {
     const value = row.value as {
       readonly status?: unknown;
       readonly runtimeId?: unknown;
     };
     const active =
-      row.namespace === "_jobs"
-        ? value?.status === "pending"
-        : value?.status === "queued" ||
-          value?.status === "claimed" ||
-          value?.status === "running" ||
-          value?.status === "committing";
+      value?.status === "queued" ||
+      value?.status === "claimed" ||
+      value?.status === "running" ||
+      value?.status === "committing";
     if (active && typeof value.runtimeId === "string") {
       runtimeNames.add(value.runtimeId);
     }

@@ -62,10 +62,16 @@ import {
   createExecutionContext,
 } from "./execution-context.js";
 import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
-import { planTurnDetachment } from "../schedule/turn-completion.js";
+import {
+  detachedUpstreamResults,
+  planTurnDetachment,
+} from "../schedule/turn-completion.js";
 import { DIMENSION_CONTRACT } from "@covel/shared";
 import { dimensionExecutionBarrier } from "./dimension-barrier.js";
-import { createWorldModelView } from "../function-runtime/world-model-view.js";
+import {
+  createWorldModelView,
+  memoizeWorldModelReads,
+} from "../function-runtime/world-model-view.js";
 import {
   loadSessionSummaries,
   refreshSessionContextSnapshot,
@@ -102,14 +108,17 @@ export {
 
 /**
  * Execute a complete turn through the full pipeline: trigger filtering,
- * priority scheduling, context assembly, LLM calls with tool loops, and result persistence.
+ * stage/DAG scheduling, context assembly, LLM calls with tool loops, and
+ * result collection.
  *
- * Each active runtime is evaluated for triggering, then scheduled into priority groups.
- * Groups execute sequentially (lower priority number = earlier), with runtimes in the same
- * group running in parallel. Results are persisted to the store when available.
+ * Triggered runtimes run in their stage band (`setup` while the session is in
+ * setup; otherwise `pre-turn → narrative → post-turn → audit` with a barrier
+ * between stages). Inside a stage, `needs` / `after` / `inputs` edges form a
+ * DAG whose independent runtimes run in parallel. Writes stay buffered as
+ * proposals for the caller to commit.
  *
  * @param input - Player's turn input (session ID, turn ID, player message).
- * @param activeRuntimes - All active `RuntimeManifest` entries for this session, sorted by priority.
+ * @param activeRuntimes - All active `RuntimeManifest` entries for this session.
  * @param deps - External dependencies: LLM adapter, runtime loader, store, tool executor, config resolver.
  * @param options - Optional execution limits (`maxSteps` for tool-calling loops, `timeoutMs` per runtime).
  * @returns The aggregated `TurnResult` containing all runtime results, pending inputs, and timing info.
@@ -359,6 +368,10 @@ async function executeTurnImpl(
       }
     }
   }
+  // Committed world-model state is fixed from here until finalize; every
+  // runtime in this execution shares one read of it.
+  if (deps.store && !deps.worldModelReads)
+    deps = { ...deps, worldModelReads: memoizeWorldModelReads(deps.store) };
   if (deps.extensions) {
     deps = {
       ...deps,
@@ -369,7 +382,10 @@ async function executeTurnImpl(
         turnId: input.turnId,
         locale: input.locale ?? "zh-CN",
         world: deps.store
-          ? await createWorldModelView(deps.store, input.sessionId)
+          ? await createWorldModelView(
+              deps.worldModelReads ?? deps.store,
+              input.sessionId,
+            )
           : { characterSchema: null, characters: [], dimensions: {} },
         signal:
           getTurnExecutionSignal(deps.turnControl) ??
@@ -523,12 +539,11 @@ async function executeTurnImpl(
         dimensionProviderPluginId: dimensionProvider.pluginId,
       },
     };
-  const refreshSessionContext = async () =>
-    (await loadSessionContext()) ?? sessionContext;
 
   // Compaction needs the real assembled system prompt to make a meaningful
-  // threshold decision. The first agent runtime supplies that preview after
-  // assembly; all parallel/successive agents share this promise so hooks and
+  // threshold decision. The first agent runtime reading the shared history
+  // view supplies that preview after assembly (runtimes with a declared
+  // history window skip it); all such agents share this promise so hooks and
   // the compactor run at most once per turn. The current player message stays
   // in the execution journal and cannot enter a summary before commit.
   let compactionPreparation:
@@ -637,10 +652,16 @@ async function executeTurnImpl(
     triggerEvent: RuntimeInvocation["triggerEvent"],
     identity?: ParallelRuntimeIdentity,
   ): Promise<RuntimeResult> => {
+    // A provider that ran and did not publish blocks narration. One that was
+    // not scheduled (a targeted manual run or retry) only republishes
+    // committed values, which `deps.dimensionContext` already froze.
+    const providerStatus = dimensionProvider
+      ? completedResults.get(dimensionProvider.name)?.status
+      : undefined;
     if (
       manifest.outputKind === "story" &&
-      dimensionProvider &&
-      completedResults.get(dimensionProvider.name)?.status !== "success"
+      providerStatus !== undefined &&
+      providerStatus !== "success"
     ) {
       return Promise.resolve(
         makeSkippedResult(
@@ -806,7 +827,11 @@ async function executeTurnImpl(
           ? { sourceLogicalTurnId: executionContext.logicalTurnId }
           : {}),
         ...(manifest.version ? { pluginVersion: manifest.version } : {}),
-        upstreamResults: frozenUpstreamResults,
+        upstreamResults: detachedUpstreamResults(
+          manifest,
+          frozenUpstreamResults,
+          activeRuntimes,
+        ),
         turnDigest: buildTurnDigest(
           input,
           frozenUpstreamResults,
@@ -875,6 +900,16 @@ async function executeTurnImpl(
           // throttle gates only work if the real history reaches them. The setup
           // mirror prevents a completed setup runtime from re-firing.
           setupRuntimes: setupTracker.mirror,
+          onDroppedEvent: (topic, runtimeId) =>
+            emitHazardDiagnostics([
+              {
+                code: "event-payload-dropped",
+                severity: "warn",
+                runtimeId,
+                message: `event "${topic}" from ${runtimeId} was not delivered: one payload per topic per fan-out depth`,
+                data: { topic, runtimeId },
+              },
+            ]),
           runtimeTriggerCounts,
           runtimeTurnsSinceLastTrigger: new Map(
             activeRuntimes.map((rt) => [
@@ -938,11 +973,12 @@ async function executeTurnImpl(
   });
   setupTracker.foldSetupRan(setupRan);
 
-  const canPublishDeferredJobs =
-    !executionAborted() &&
-    ![...completedResults.values()].some(
-      (result) => result.status === "suspended",
-    );
+  // A suspended turn is not complete yet: its detached jobs ride with the
+  // suspension and are queued when the final resume commits.
+  const turnSuspended = [...completedResults.values()].some(
+    (result) => result.status === "suspended",
+  );
+  const canPublishDeferredJobs = !executionAborted() && !turnSuspended;
 
   const baseResult = await finalizeTurnResult({
     input,
@@ -951,6 +987,9 @@ async function executeTurnImpl(
     completedResults,
     deferredFollowers,
     deferredRuntimeJobs: canPublishDeferredJobs ? deferredRuntimeJobs : [],
+    ...(!executionAborted() && turnSuspended
+      ? { withheldRuntimeJobs: deferredRuntimeJobs }
+      : {}),
     deps,
     turnNumber,
     nestedRuntimeResults,

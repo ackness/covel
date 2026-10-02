@@ -441,8 +441,7 @@ export type CovelEvent =
   // function runtime reports progress via `ctx.progress` — the sole real-time
   // exception to effects isolation. Forwarded to the action stream so media
   // generation progress reaches the client live. Payload is the full record.
-  // Experimental / compat-period: coexists with the legacy `plugin-data` `_jobs`
-  // placeholder path until that is retired.
+  // The runtime job worker reports queued/background job lifecycle here too.
   | { readonly type: "job-status.updated"; readonly payload: JobStatusRecord };
 
 /** The closed vocabulary of every server→client event name. */

@@ -22,18 +22,13 @@ import {
   listSettlingRuntimeJobs,
   type RuntimeJobRecord,
 } from "./plugin-rpc/jobs.js";
-import type { RuntimeJobExecutor } from "./plugin-rpc/runtime-job-worker.js";
 /** Wire the API dependency graph for production and tests. */
 
-import {
-  createPluginBackgroundQueue,
-  type PluginBackgroundQueue,
-} from "./plugin-rpc/background-queue.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
+import type { RuntimeManifest } from "@covel/shared";
 import {
   loadPluginLlmConfig,
-  pluginDeclarations,
   pluginRuntimeManifests,
   resolvePluginRuntimeManifest,
   deriveBuiltinPluginIds,
@@ -54,7 +49,6 @@ import {
   PluginExtensionHost,
   createHookPipeline,
   createModelResolver,
-  planTurnDetachment,
 } from "@covel/runtime";
 import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
@@ -96,13 +90,13 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
-import { sweepStalePendingJobs } from "./plugin-rpc/jobs.js";
 import {
   createRuntimeJobWorker,
+  parseActivatedRuntimeJobPayload,
   parseStagedRuntimeJobPayload,
-  RuntimeJobNoLongerCurrentError,
   type RuntimeJobWorker,
 } from "./plugin-rpc/runtime-job-worker.js";
+import { createRuntimeJobExecutor } from "./plugin-rpc/runtime-job-executor.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { snapshotRoutes } from "./snapshots.js";
 import { lorebookRoutes } from "./lorebook.js";
@@ -130,7 +124,6 @@ import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
   sessionApprovalScope,
-  sessionIncarnationIdentity,
   verifyResolvedSessionRead,
 } from "./session/session-guard.js";
 
@@ -251,7 +244,6 @@ export interface ApiBootstrapResult {
   readonly eventBus: EventBus;
   readonly compactorRunner: CompactorRunner;
   readonly runtimeJobWorker: RuntimeJobWorker;
-  readonly pluginBackgroundQueue: PluginBackgroundQueue;
   /** Non-blocking startup scans; the host must drain these before closing storage. */
   readonly startupMaintenance: Promise<void>;
   /** Stop tool admission and drain cancelled callbacks before releasing dependencies. */
@@ -598,143 +590,66 @@ async function assembleApi(
     }
   }
 
-  const pluginBackgroundQueue = createPluginBackgroundQueue();
   const runtimeJobCredentials = createRuntimeJobCredentials();
-  const executeRuntimeJob =
-    (requestServices: RuntimeJobServices): RuntimeJobExecutor =>
-    async (job, control) => {
-      const payload = parseStagedRuntimeJobPayload(job.payload);
-      if (
-        !payload ||
-        payload.descriptor.jobId !== job.jobId ||
-        payload.descriptor.pluginId !== job.pluginId ||
-        payload.descriptor.runtimeId !== job.runtimeId
-      ) {
-        throw new Error("invalid detached runtime job payload");
-      }
-      const live = await store.getSession(job.sessionId);
-      if (!live || live.status !== "active") {
-        throw new RuntimeJobNoLongerCurrentError();
-      }
-      if (
-        sessionIncarnationIdentity(live) !==
-          payload.expectedSessionIncarnation ||
-        sessionApprovalScope(live, job.pluginId) !==
-          payload.expectedApprovalScope
-      ) {
-        throw new RuntimeJobNoLongerCurrentError();
-      }
-
-      registry.syncSessionActivations(job.sessionId, live.activePlugins);
-      const activeRuntimes = registry.getActiveRuntimes(job.sessionId);
-      const target = activeRuntimes.find(
-        (runtime) => runtime.name === job.runtimeId,
-      );
-      if (
-        !target ||
-        target.pluginId !== job.pluginId ||
-        target.version !== payload.descriptor.pluginVersion ||
-        !planTurnDetachment(activeRuntimes).eligibleRuntimeIds.has(
-          job.runtimeId,
-        )
-      ) {
-        throw new RuntimeJobNoLongerCurrentError();
-      }
-
-      const runner = createPluginRpcRuntimeTurnRunner({
-        memorySystem: bootstrapMemory.memorySystem,
-        pluginRegistry: registry,
-        store,
-        eventBus,
-        sessionLock,
-        sessionId: job.sessionId,
-        withSnapshot: (fn, beforeCapture) =>
-          withPluginSnapshot(job.sessionId, fn, beforeCapture),
-        session: {
-          locale: payload.locale,
-          ...(payload.runtimeModelOverrides
-            ? { runtimeModelOverrides: payload.runtimeModelOverrides }
-            : {}),
-        },
-        activeRuntimes,
-        approvalScopes: new Map([
-          [job.pluginId, payload.expectedApprovalScope],
-        ]),
-        deps: {
-          loadRuntime: (manifest, locale) =>
-            loadRuntimeFn(manifest, locale, job.sessionId),
-          llm: requestServices.llm,
-          services,
-          extensions,
-          ...(requestServices.gateway
-            ? { gateway: requestServices.gateway }
-            : {}),
-          ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
-          getPluginSource,
-          ...(config.mediaStore ? { mediaStore: config.mediaStore } : {}),
-          toolExecutor,
-          resolveModel,
-          compactor: requestServices.compactor ?? compactorRunner,
-          estimator: estimateTokens,
-          contextBudget: turnContextBudget,
-          eventDirectory,
-        },
-        hookPipeline,
-        resolveImageFlowRuntimeIds: async () =>
-          (await resolveMediaImageFlow(store, extensions, job.sessionId))
-            ?.assetRuntimeIds,
-      });
-      const backgroundTurnId = crypto.randomUUID();
-      const outcome = await runner.runDetachedStage({
-        descriptor: payload.descriptor,
-        backgroundTurnId,
-        expectedSessionIncarnation: payload.expectedSessionIncarnation,
-        ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
-        ...(payload.modelOverride
-          ? { modelOverride: payload.modelOverride }
+  const createJobRunner = (
+    job: RuntimeJobRecord,
+    requestServices: RuntimeJobServices,
+    activeRuntimes: readonly RuntimeManifest[],
+    session: {
+      readonly locale: string;
+      readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
+    },
+    expectedApprovalScope: string,
+  ) =>
+    createPluginRpcRuntimeTurnRunner({
+      memorySystem: bootstrapMemory?.memorySystem,
+      pluginRegistry: registry,
+      store,
+      eventBus,
+      sessionLock,
+      sessionId: job.sessionId,
+      withSnapshot: (fn, beforeCapture) =>
+        withPluginSnapshot(job.sessionId, fn, beforeCapture),
+      session: {
+        locale: session.locale,
+        ...(session.runtimeModelOverrides
+          ? { runtimeModelOverrides: session.runtimeModelOverrides }
           : {}),
-        ...(payload.runtimeModelOverrides
-          ? { runtimeModelOverrides: payload.runtimeModelOverrides }
+      },
+      activeRuntimes,
+      approvalScopes: new Map([[job.pluginId, expectedApprovalScope]]),
+      deps: {
+        loadRuntime: (manifest, locale) =>
+          loadRuntimeFn(manifest, locale, job.sessionId),
+        llm: requestServices.llm,
+        services,
+        extensions,
+        ...(requestServices.gateway
+          ? { gateway: requestServices.gateway }
           : {}),
-        completeInTx: async (tx, turnResult) => {
-          const runtimeResult = turnResult.runtimeResults.find(
-            (result) => result.runtimeId === job.runtimeId,
-          );
-          if (runtimeResult?.status !== "success") {
-            throw new Error(
-              runtimeResult?.error ??
-                `detached runtime ended with ${runtimeResult?.status ?? "no result"}`,
-            );
-          }
-          const runtimeOutput = runtimeResult.output;
-          if (
-            runtimeOutput?.status === "failed" ||
-            (typeof runtimeOutput?.error === "string" && runtimeOutput.error)
-          ) {
-            throw new Error(
-              typeof runtimeOutput.error === "string"
-                ? runtimeOutput.error
-                : "detached runtime reported a failed business result",
-            );
-          }
-          await control.completeInTx(tx, {
-            turnId: turnResult.turnId,
-            executionId: turnResult.executionContext.executionId,
-            runtimeId: runtimeResult.runtimeId,
-            durationMs: runtimeResult.durationMs,
-            output: runtimeResult.output,
-          });
-        },
-        beforeCommit: control.beforeCommit,
-        beforeExecute: control.assertCurrent,
-        executionSignal: control.signal,
-      });
-      if (!outcome.commit.committed) {
-        throw new Error(
-          outcome.commit.error ?? "detached runtime proposals did not commit",
-        );
-      }
-    };
+        ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
+        getPluginSource,
+        ...(config.mediaStore ? { mediaStore: config.mediaStore } : {}),
+        toolExecutor,
+        resolveModel,
+        compactor: requestServices.compactor ?? compactorRunner,
+        estimator: estimateTokens,
+        contextBudget: turnContextBudget,
+        eventDirectory,
+      },
+      hookPipeline,
+      resolveImageFlowRuntimeIds: async () =>
+        (await resolveMediaImageFlow(store, extensions, job.sessionId))
+          ?.assetRuntimeIds,
+    });
+
+  const executeRuntimeJob = createRuntimeJobExecutor({
+    store,
+    eventBus,
+    registry,
+    credentials: runtimeJobCredentials,
+    createRunner: createJobRunner,
+  });
   const runtimeJobWorker = createRuntimeJobWorker({
     store,
     eventBus,
@@ -745,7 +660,9 @@ async function assembleApi(
       compactor: compactorRunner,
     }),
     prepareExecution: (job) => {
-      const payload = parseStagedRuntimeJobPayload(job.payload);
+      const payload =
+        parseStagedRuntimeJobPayload(job.payload) ??
+        parseActivatedRuntimeJobPayload(job.payload);
       if (!payload) return executeRuntimeJob({ llm: config.llmAdapter });
       const key = {
         jobId: job.jobId,
@@ -762,9 +679,11 @@ async function assembleApi(
         entry && parsed
           ? resolvePluginRuntimeManifest(entry, parsed.manifest)
           : undefined;
+      const modelOverride =
+        "modelOverride" in payload ? payload.modelOverride : undefined;
       const override =
-        manifest?.outputKind === "story" && payload.modelOverride
-          ? payload.modelOverride
+        manifest?.outputKind === "story" && modelOverride
+          ? modelOverride
           : payload.runtimeModelOverrides?.[job.runtimeId];
       // The worker may drain inside an unrelated request's scope. Resolve the
       // job's model under the configuration of the services that will run it.
@@ -773,6 +692,7 @@ async function assembleApi(
           manifest ? resolveModel(manifest, override) : override,
         );
       let selectedServices = runtimeJobCredentials.peek(key);
+      let handoff = selectedServices !== undefined;
       if (selectedServices?.canRun) {
         let ready = false;
         try {
@@ -784,6 +704,7 @@ async function assembleApi(
           // An unusable handoff must not block the next authenticated request.
           runtimeJobCredentials.discard(key);
           selectedServices = undefined;
+          handoff = false;
         }
       }
       if (!selectedServices) {
@@ -800,14 +721,11 @@ async function assembleApi(
           compactor: compactorRunner,
         };
       }
-      const execute = executeRuntimeJob(selectedServices);
-      const { llmOptions } = selectedServices;
+      // The executor restores the selected services' LLM scope around the job.
+      const execute = executeRuntimeJob(selectedServices, handoff);
       return async (claimed, control) => {
         runtimeJobCredentials.discard(key);
-        // Execute under the same LLM scope the readiness check resolved.
-        await withRequestLlmOptions(llmOptions, () =>
-          execute(claimed, control),
-        );
+        await execute(claimed, control);
       };
     },
   });
@@ -865,7 +783,6 @@ async function assembleApi(
     c.set("runtimeJobWorker", runtimeJobWorker);
     c.set("runtimeJobCredentials", runtimeJobCredentials);
     c.set("settledSessionLock", settledSessionLock);
-    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
@@ -944,19 +861,13 @@ async function assembleApi(
 
   // Start maintenance only after assembly succeeds. These scans remain
   // non-blocking for readiness, but belong to the host's drain boundary.
-  const startupMaintenance = Promise.all([
-    maybeSweepExpiredSuspensions(store, { force: true }).catch(() => {
+  const startupMaintenance = maybeSweepExpiredSuspensions(store, {
+    force: true,
+  })
+    .catch(() => {
       console.warn("[suspension-sweep] startup sweep failed");
-    }),
-    // Legacy ownership is process-local; PG may still have other live owners.
-    ...(config.storeBackend !== "pg"
-      ? [
-          sweepStalePendingJobs(store).catch(() => {
-            console.warn("[job-sweep] startup sweep failed");
-          }),
-        ]
-      : []),
-  ]).then(() => undefined);
+    })
+    .then(() => undefined);
   runtimeJobWorker.wake();
 
   return {
@@ -968,7 +879,6 @@ async function assembleApi(
     eventBus,
     compactorRunner,
     runtimeJobWorker,
-    pluginBackgroundQueue,
     startupMaintenance,
     closeTools: () => toolExecutor.close(),
     closePluginEntries: async () => {

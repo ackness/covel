@@ -222,12 +222,14 @@ export function usePluginNamespace(
   );
 }
 
-// ── Background job (`_jobs`) namespace helpers ──────────────────
+// ── Background job helpers ──────────────────────────────────────
 //
-// Background runtimes (plugin-rpc with `execution: 'background'`) write
-// progress records to `(pluginId, '_jobs', jobId)`. The server emits the
-// same `plugin-data.changed` events for them, so the generic store above
-// already caches them — these helpers are purely for typed consumption.
+// Background runtimes (plugin-rpc `execution: 'background'`, prompt-builders
+// invoked with `expectsBackgroundFollower`, and background event followers)
+// run as durable runtime jobs recorded under `(pluginId, '_runtime_jobs',
+// jobId)`. Those rows also hold scheduler-detached stages; only manual and
+// event activations are background jobs here. Panels bind them through the
+// virtual `_jobs` data source in the record shape below.
 
 export type PluginJobStatus = "pending" | "done" | "failed";
 
@@ -242,6 +244,7 @@ export interface PluginJobRecord {
   readonly message?: string;
   readonly messageKey?: string;
   readonly error?: string;
+  readonly reason?: string;
   readonly runtimeResults?: readonly {
     readonly runtimeId: string;
     readonly pluginId: string;
@@ -250,34 +253,112 @@ export interface PluginJobRecord {
     readonly error?: string;
     readonly output: unknown;
   }[];
+  readonly deferredJobs?: readonly {
+    readonly jobId: string;
+    readonly runtimeId: string;
+  }[];
   readonly abortReason?: string;
 }
 
-function asJobRecord(jobId: string, value: unknown): PluginJobRecord | null {
-  if (!value || typeof value !== "object") return null;
-  const v = value as Record<string, unknown>;
-  const status = v["status"];
-  if (status !== "pending" && status !== "done" && status !== "failed") {
-    return null;
+const PENDING_JOB_STATUSES = new Set([
+  "queued",
+  "claimed",
+  "running",
+  "committing",
+]);
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** The runtime's own error from its output, preferred over the generic one. */
+function reportedError(
+  result: Record<string, unknown> | undefined,
+  runtimeId: string | undefined,
+): string | undefined {
+  const results = Array.isArray(result?.runtimeResults)
+    ? (result.runtimeResults as unknown[])
+    : [];
+  for (const entry of results) {
+    const item = record(entry);
+    if (!item || (runtimeId && item.runtimeId !== runtimeId)) continue;
+    if (typeof item.error === "string" && item.error) return item.error;
+    const output = record(item.output);
+    if (typeof output?.error === "string" && output.error) return output.error;
   }
-  return { ...v, jobId, status } as PluginJobRecord;
+  return undefined;
+}
+
+/**
+ * Map one `_runtime_jobs` row to a background job record; `null` for
+ * scheduler-detached stages and malformed rows.
+ */
+export function backgroundJobRecord(
+  jobId: string,
+  value: unknown,
+): PluginJobRecord | null {
+  const row = record(value);
+  const activation = record(row?.origin)?.activation;
+  if (!row || (activation !== "manual" && activation !== "event")) return null;
+  const durable = typeof row.status === "string" ? row.status : "";
+  if (!durable) return null;
+  const status: PluginJobStatus = PENDING_JOB_STATUSES.has(durable)
+    ? "pending"
+    : durable === "succeeded"
+      ? "done"
+      : "failed";
+  const runtimeId =
+    typeof row.runtimeId === "string" ? row.runtimeId : undefined;
+  const result = record(row.result);
+  const error =
+    status === "failed"
+      ? (reportedError(result, runtimeId) ??
+        (typeof row.error === "string" ? row.error : undefined))
+      : undefined;
+  return {
+    jobId,
+    status,
+    ...(runtimeId ? { runtimeId } : {}),
+    ...(typeof result?.turnId === "string" ? { turnId: result.turnId } : {}),
+    ...(typeof row.enqueuedAt === "string"
+      ? { startedAt: row.enqueuedAt }
+      : {}),
+    ...(typeof row.finishedAt === "string"
+      ? { completedAt: row.finishedAt }
+      : {}),
+    ...(typeof result?.durationMs === "number"
+      ? { durationMs: result.durationMs }
+      : {}),
+    ...(error ? { error } : {}),
+    ...(typeof row.reason === "string" ? { reason: row.reason } : {}),
+    ...(Array.isArray(result?.runtimeResults)
+      ? {
+          runtimeResults:
+            result.runtimeResults as PluginJobRecord["runtimeResults"],
+        }
+      : {}),
+    ...(Array.isArray(result?.deferredJobs)
+      ? { deferredJobs: result.deferredJobs as PluginJobRecord["deferredJobs"] }
+      : {}),
+  };
 }
 
 /**
  * React hook — returns every background-job record for a plugin, newest
- * first. Keyed by jobId. Updates automatically when the server writes
- * new status records into `_jobs`.
+ * first. Updates automatically as the server writes `_runtime_jobs` rows.
  */
 export function usePluginJobs(pluginId: string): readonly PluginJobRecord[] {
   const ns = useSyncExternalStore(subscribe, () =>
-    getPluginNamespaceSnapshot(pluginId, "_jobs"),
+    getPluginNamespaceSnapshot(pluginId, "_runtime_jobs"),
   );
   return useMemo(() => {
     if (ns === EMPTY_NAMESPACE) return EMPTY_JOBS;
     const jobs: PluginJobRecord[] = [];
     for (const jobId of Object.keys(ns)) {
-      const record = asJobRecord(jobId, ns[jobId]);
-      if (record) jobs.push(record);
+      const job = backgroundJobRecord(jobId, ns[jobId]);
+      if (job) jobs.push(job);
     }
     jobs.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
     return jobs;

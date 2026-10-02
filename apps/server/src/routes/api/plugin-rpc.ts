@@ -1,5 +1,8 @@
 import { resolveMediaImageFlow } from "./media-image-flow.js";
-import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
+import {
+  announceQueuedRuntimeJobs,
+  withSettledSessionLock,
+} from "./plugin-rpc/settled-request.js";
 /**
  * Plugin RPC route.
  *
@@ -27,9 +30,9 @@ import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
  *      Sub-modes via `manifest.execution`:
  *        - `'sync'` (default) — awaits runtime completion, commits proposals,
  *          returns a JSON summary with the runtime results.
- *        - `'background'` (M4) — schedules work off-request and returns a
- *          jobId; progress streams via `plugin-data.changed` SSE under the
- *          reserved `_jobs` namespace.
+ *        - `'background'` — queues a durable runtime job and returns its
+ *          jobId; status streams as `job-status.updated` and `_runtime_jobs`
+ *          plugin-data changes.
  *
  *   3. Command-level (`kind: "command"`) — resolves `commandId` against the
  *      active session command directory, validates text or structured args,
@@ -42,6 +45,7 @@ import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
 
 import { Hono } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
+import { snapshotUserSettings } from "@covel/runtime";
 import {
   type RpcCommandInvocation,
   type RuntimeResult,
@@ -54,7 +58,12 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
-import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
+import {
+  enqueueActivatedRuntimeJob,
+  enqueueEventFollowers,
+  type QueuedActivatedRuntimeJob,
+} from "./plugin-rpc/runtime-job-enqueue.js";
+import { RuntimeJobQueueFullError } from "./plugin-rpc/jobs.js";
 import {
   createPluginRpcRuntimeTurnRunner,
   SessionApprovalScopeChangedError,
@@ -65,7 +74,6 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
   checkHostedOperator,
   checkSessionOwner,
-  sessionIncarnationIdentity,
   sessionApprovalScope,
 } from "./session/session-guard.js";
 import {
@@ -117,7 +125,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // (full turn pipeline) and mutate plugin data.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
-  const expectedIncarnation = sessionIncarnationIdentity(session);
   if (session.status !== "active") {
     return c.json(
       errorBody(`session is ${session.status}; plugin RPC execution refused`, {
@@ -182,9 +189,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   //
   // Execution sub-mode comes from `manifest.execution`:
   //   - `'sync'` (default) → await results, commit, return JSON.
-  //   - `'background'` → enqueue a `_jobs/{jobId}` row, return 202 + {jobId},
-  //     and run the turn off-request (see the background branch below). The
-  //     UI tracks completion via `plugin-data.changed` SSE.
+  //   - `'background'` → queue a durable runtime job, return 202 + {jobId};
+  //     the runtime job worker executes and commits it (see below).
   if (body.kind === "runtime") {
     const pluginRegistry = c.get("pluginRegistry");
     const eventBus = c.get("eventBus");
@@ -389,99 +395,85 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 
-    const runManualTurn = (executionSignal?: AbortSignal) =>
-      runtimeTurnRunner.runManualTurn({
-        executionSignal,
-        turnId,
-        runtimeId: body.runtimeId!,
-        // Background mode returns 202 and detaches from this request, and the
-        // runtimes that use it are media generations that run for minutes —
-        // they must not hold the session lock while doing so. Sync mode is
-        // awaited by the caller and stays fully serialised.
-        ...((target.execution ?? "sync") === "background"
-          ? { detached: true }
-          : {}),
-        ...(body.payload !== undefined ? { payload: body.payload } : {}),
-        ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
-        ...(retrySeedResults
-          ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
-          : {}),
-      });
-
-    const jobRunner = createPluginRpcJobRunner({
-      queue: c.get("pluginBackgroundQueue"),
-      store,
-      sessionId,
-      sessionLock,
-      approvalScopes: new Map(
-        activeRuntimes.map((runtime) => [
-          runtime.pluginId,
-          sessionApprovalScope(session, runtime.pluginId),
-        ]),
-      ),
-      ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
-      runManualTurn,
-      runDeferredFollowerTurn: (args) =>
-        runtimeTurnRunner.runDeferredFollowerTurn(args),
-      hasActiveRuntime: (runtimeId) =>
-        activeRuntimes.some((rt) => rt.name === runtimeId),
-    });
-
     const mode: "sync" | "background" = target.execution ?? "sync";
+    const queueError = (err: unknown) => {
+      if (err instanceof SessionNotActiveError)
+        return c.json(
+          errorBody(err.message, { code: "session_not_active" }),
+          409,
+        );
+      if (err instanceof SessionApprovalScopeChangedError)
+        return c.json(
+          errorBody(err.message, { code: "approval_scope_changed" }),
+          409,
+        );
+      if (err instanceof RuntimeJobQueueFullError)
+        return c.json(
+          errorBody(err.message, { code: "background_queue_full" }),
+          429,
+        );
+      return c.json(
+        errorBody(
+          err instanceof Error ? err.message : "failed to enqueue runtime job",
+          { code: "background_enqueue_failed" },
+        ),
+        500,
+      );
+    };
 
-    // ── Background mode ────────────────────────────────────────────
+    // ── Background mode / expected follower ────────────────────────
     //
-    // Write `_jobs/{jobId}` as `pending` immediately so the frontend can
-    // render a loading state, return 202 + {jobId}, and continue the
-    // work in `setImmediate`. Dependencies (store, eventBus, executor,
-    // locks) are all captured from the bootstrap closure via `c.get(...)`
-    // above — they are long-lived and safe to reference after the
-    // response has been flushed.
-    //
-    // The `_jobs` namespace is reserved by the framework. Any write to
-    // `setPluginData` flows through the store-proxy, which emits
-    // `plugin-data.changed` on the event bus; SSE subscribers pick it
-    // up and update the UI. No bespoke streaming protocol.
-    if (mode === "background") {
-      let job;
+    // `execution: background` runtimes, and sync prompt-builders whose client
+    // declares `expectsBackgroundFollower`, run on the durable runtime job
+    // worker: the job is queued here, returned as 202 + {jobId}, and its
+    // status streams as `job-status.updated` plus `_runtime_jobs` plugin-data
+    // changes. Queuing the prompt-builder lets the UI show progress at once
+    // instead of waiting for the prompt LLM call.
+    if (mode === "background" || body.expectsBackgroundFollower === true) {
+      const expectFollower =
+        mode !== "background" && body.expectsBackgroundFollower === true;
+      let queued;
       try {
-        job = await jobRunner.enqueueBackgroundRuntime({
-          pluginId: body.pluginId,
-          runtimeId: body.runtimeId,
-          turnId,
-          payload: body.payload,
+        queued = await sessionLock.withLock(sessionId, async () => {
+          const live = await store.getSession(sessionId);
+          if (!live) throw new SessionNotActiveError("deleted");
+          if (live.status !== "active")
+            throw new SessionNotActiveError(live.status);
+          if (sessionApprovalScope(live, body.pluginId) !== approvalScope)
+            throw new SessionApprovalScopeChangedError();
+          return store.withTransaction((tx) =>
+            enqueueActivatedRuntimeJob(tx, {
+              sessionId,
+              session: live,
+              pluginId: body.pluginId,
+              runtimeId: body.runtimeId!,
+              activation: "manual",
+              sourceTurnId: body.retryFromTurnId ?? turnId,
+              turnId,
+              locale: live.locale,
+              ...(userSettingsMap
+                ? { userSettings: snapshotUserSettings(userSettingsMap) }
+                : {}),
+              ...(body.payload !== undefined ? { input: body.payload } : {}),
+              ...(body.retryFromTurnId
+                ? { retryFromTurnId: body.retryFromTurnId }
+                : {}),
+              ...(expectFollower ? { expectFollower: true } : {}),
+            }),
+          );
         });
       } catch (err) {
-        if (err instanceof SessionNotActiveError) {
-          return c.json(
-            errorBody(err.message, { code: "session_not_active" }),
-            409,
-          );
-        }
-        if (err instanceof SessionApprovalScopeChangedError) {
-          return c.json(
-            errorBody(err.message, { code: "approval_scope_changed" }),
-            409,
-          );
-        }
-        return c.json(
-          errorBody(
-            err instanceof Error
-              ? err.message
-              : "failed to enqueue background job",
-            { code: "background_enqueue_failed" },
-          ),
-          500,
-        );
+        return queueError(err);
       }
-
+      announceQueuedRuntimeJobs(c, [queued]);
       return c.json(
         {
           status: "accepted",
-          jobId: job.jobId,
+          jobId: queued.job.jobId,
           pending: true,
           turnId,
-          runtimeId: job.runtimeId,
+          runtimeId: queued.job.runtimeId,
+          ...(expectFollower ? { phase: "prompt" } : {}),
         },
         202,
       );
@@ -489,67 +481,39 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
     // ── Sync mode ──────────────────────────────────────────────────
     //
-    // The sync turn may surface `deferredFollowers` — event-chain
-    // followers with `execution: 'background'` that were skipped so the
-    // user gets an immediate response. Persist one `_jobs/<jobId>` pending
-    // row per follower BEFORE responding so the frontend can render a
-    // loading state, then fire each follower with setImmediate so the
-    // response flushes without waiting for image generation etc.
-    //
-    // UX: some sync entry runtimes are only prompt-builders for a background
-    // follower (e.g. image prompt-generator → image-generator). When the
-    // client declares `expectsBackgroundFollower`, write a `_jobs` placeholder
-    // immediately and run the sync prompt-builder off-request as well. The UI
-    // can then show "generating prompt" at once instead of waiting 20–40s for
-    // the prompt LLM call before any job row exists.
-    if (body.expectsBackgroundFollower === true) {
-      let job;
-      try {
-        job = await jobRunner.enqueueExpectedFollowerRuntime({
-          pluginId: body.pluginId,
-          runtimeId: body.runtimeId,
-          turnId,
-        });
-      } catch (err) {
-        if (err instanceof SessionNotActiveError) {
-          return c.json(
-            errorBody(err.message, { code: "session_not_active" }),
-            409,
-          );
-        }
-        if (err instanceof SessionApprovalScopeChangedError) {
-          return c.json(
-            errorBody(err.message, { code: "approval_scope_changed" }),
-            409,
-          );
-        }
-        return c.json(
-          errorBody(
-            err instanceof Error ? err.message : "failed to enqueue prompt job",
-            { code: "prompt_job_enqueue_failed" },
-          ),
-          500,
-        );
-      }
-
-      return c.json(
-        {
-          status: "accepted",
-          jobId: job.jobId,
-          pending: true,
-          turnId,
-          runtimeId: job.runtimeId,
-          phase: job.phase,
-        },
-        202,
-      );
-    }
-
+    // The sync turn may surface `deferredFollowers` — event-chain followers
+    // with `execution: 'background'` that were skipped so the user gets an
+    // immediate response. They are queued as durable event jobs inside the
+    // same commit transaction, so a rolled-back turn queues nothing.
+    const followerJobs: QueuedActivatedRuntimeJob[] = [];
     try {
-      const summary = await runManualTurn();
+      const summary = await runtimeTurnRunner.runManualTurn({
+        turnId,
+        runtimeId: body.runtimeId,
+        ...(body.payload !== undefined ? { payload: body.payload } : {}),
+        ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+        ...(retrySeedResults
+          ? { retrySeedResults, sourceTurnId: body.retryFromTurnId }
+          : {}),
+        completeInTx: async (tx, result) => {
+          followerJobs.push(
+            ...(await enqueueEventFollowers(tx, {
+              sessionId,
+              activeRuntimes,
+              followers: result.deferredFollowers ?? [],
+              sourceTurnId: result.turnId,
+              sourceRuntimeId: body.runtimeId,
+              locale: session.locale,
+              ...(userSettingsMap
+                ? { userSettings: snapshotUserSettings(userSettingsMap) }
+                : {}),
+            })),
+          );
+        },
+      });
       // The runtime can report success while its proposals fail to land. A
       // turn whose writes never committed is not a successful turn: report it
-      // as an error and do not chain followers onto rolled-back state.
+      // as an error; its follower jobs rolled back with it.
       if (!summary.commit.committed) {
         if (summary.commit.dimensionConflict)
           return c.json(
@@ -576,10 +540,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           500,
         );
       }
-      const deferredJobs =
-        summary.deferredFollowers.length > 0
-          ? await jobRunner.scheduleDeferredFollowers(summary.deferredFollowers)
-          : [];
+      announceQueuedRuntimeJobs(c, followerJobs);
+      const deferredJobs = followerJobs.map(({ job }) => ({
+        jobId: job.jobId,
+        runtimeId: job.runtimeId,
+      }));
       return c.json({
         status: "ok",
         turnId: summary.turnId,
@@ -602,6 +567,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         return c.json(
           errorBody(err.message, { code: "approval_scope_changed" }),
           409,
+        );
+      }
+      if (err instanceof RuntimeJobQueueFullError) {
+        return c.json(
+          errorBody(err.message, { code: "background_queue_full" }),
+          429,
         );
       }
       return c.json(

@@ -64,34 +64,12 @@ function executionOwner(observation: ExecutionObservation): string {
   return `${ownsStream}|${state.actionGeneration ?? 0}|${observation.activeTurnIdRef.current ?? ""}`;
 }
 
-function containsTerminalBackgroundJob(
-  payload: Readonly<Record<string, unknown>>,
-): boolean {
-  const changes = payload.changes;
-  if (!Array.isArray(changes)) return false;
-  return changes.some((change) => {
-    if (!change || typeof change !== "object") return false;
-    const row = change as Record<string, unknown>;
-    if (row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs")
-      return false;
-    const value = row.value;
-    if (!value || typeof value !== "object") return false;
-    const status = (value as Record<string, unknown>).status;
-    return [
-      "done",
-      "succeeded",
-      "failed",
-      "timed_out",
-      "cancelled",
-      "stale",
-      "orphaned",
-    ].includes(String(status));
-  });
-}
-
+/**
+ * Every durable runtime job reports its lifecycle as `job-status.updated`;
+ * its `_runtime_jobs` row changes are the same transitions, so only the status
+ * event marks a terminal background result.
+ */
 function isTerminalBackgroundEvent(event: SubscriptionEvent): boolean {
-  if (event.type === "plugin-data.changed")
-    return containsTerminalBackgroundJob(event.payload ?? {});
   if (event.type !== "job-status.updated") return false;
   const payload = event.payload ?? {};
   // Plugin progress may finish before its durable parent's domain commit.
@@ -214,9 +192,6 @@ export function createSubscriptionEventHandler(
           event.payload ?? {},
           event.sessionId,
         );
-        if (containsTerminalBackgroundJob(event.payload ?? {})) {
-          options.onReset();
-        }
         break;
       }
       case "turn.suspended": {

@@ -22,6 +22,15 @@ interface DataStore {
    */
   withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T>;
 }
+
+type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
+  /**
+   * Run `fn` in a savepoint nested in the open transaction. A throw rolls back
+   * only the writes made inside `fn` and rethrows; the enclosing transaction
+   * stays open. Provided by every bundled backend's transaction scope.
+   */
+  savepoint?<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T>;
+};
 ```
 
 ### Rules
@@ -38,7 +47,11 @@ interface DataStore {
    transaction never strands the store.
 4. **Writes outside a transaction auto-commit.** Calling any write method
    without a surrounding `withTransaction` is immediately durable.
-5. **Nesting is rejected** on every backend (see below).
+5. **Nesting is rejected** on every backend (see below). Use `tx.savepoint`
+   for a nested rollback scope: SQLite issues `SAVEPOINT` / `ROLLBACK TO` on the
+   single connection, PostgreSQL opens a Drizzle nested transaction (a savepoint
+   on the reserved connection), and MemoryStore keeps one lazy snapshot per open
+   savepoint level.
 
 Snapshot, suspension, and world-data import ledger IDs have one session owner.
 Upserting an existing ID for another session throws
@@ -58,6 +71,8 @@ backend must pass:
 - `returns the callback result`
 - `does not swallow writes across concurrent transactions`
 - `rolls back only the failing concurrent transaction`
+- `rolls back only a failed savepoint and keeps the enclosing transaction`
+- `rolls back savepoint writes with the enclosing transaction`
 - `does not expose writes through the root store before the transaction settles`
 - `rejects a nested withTransaction with a clear error instead of deadlocking`
 - `recovers and accepts a fresh withTransaction after a nested rejection`
@@ -219,8 +234,10 @@ nested-call rejection) but differ in concurrency and isolation:
 > so a vector or media write issued from another session still joined an open
 > transaction and disappeared on its rollback.
 >
-> Throughput is unaffected — better-sqlite3 is synchronous, so its statements
-> were already serialized. **Per-transaction connections (as PgStore has) remain
+> Statements were already serialized — better-sqlite3 is synchronous — but the
+> gate is held for a transaction's whole callback, including its awaits. Keep
+> transaction bodies to store work: the execution finalizer runs plugin
+> `PreStateCommit` hooks before opening its transaction for this reason. **Per-transaction connections (as PgStore has) remain
 > the long-term answer for real concurrency**; the gate closes the correctness
 > gap without a store-connection rearchitecture. Regression coverage:
 > `packages/store/tests/serialized-write-gate.test.ts`.
@@ -361,9 +378,18 @@ server transaction API in the browser.
 > **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
 > `recursiveCall` 结果）聚合进单一事务：
 >
-> - **任一 proposal 失败即整回合回滚**——无论是抛出的 store 错误，还是 handler 校验
->   失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）。
->   已提交的兄弟 runtime 一并回滚，事务外不留痕迹。
+> - **叙事优先的失败边界**——抛出的 store 错误总是整回合回滚。handler 校验失败返回
+>   的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）在本次执
+>   行有成功的 story 结果时，只回滚提出它的那个可选 runtime：每个非 story、非 setup
+>   的 runtime 在自己的 savepoint 内提交，被拒绝时只撤销它自己的写入，叙事与其他
+>   runtime 照常提交，`FinalizeExecutionOutcome` 以 `committed` 返回并在
+>   `failedProposals` / `isolatedRuntimeIds` 中列出被丢弃的部分（主回合以
+>   `proposal.failed` SSE 告知）。没有 story 的执行（manual、background、detached、
+>   setup）仍是整体原子：任一 proposal 失败即整体回滚，作业不会为未落库的写入报告成功。
+> - **PreStateCommit 在事务外运行**：finalize 先完成规范化、守卫和 PreStateCommit
+>   Hook，再开启事务，事务内只做写入；`createCommitPipeline().commitAll` 同理。Hook
+>   不读取存储状态，提前运行不改变语义，但插件 Hook 的等待不再占用 SQLite / Memory
+>   的串行门。
 > - **玩家停止与提交共享边界**：`finalizeExecution` 接受可选 `signal`，在事务开始、结果处理及返回前检查取消，并传递到每个提案的 `PreStateCommit` Hook。取消会立即结束 Hook 等待、停止后续提案并整体回滚。主回合传入玩家控制信号；即使剧情已生成、取消发生在后处理或提交 Hook 中，事务仍整体回滚。数据库已提交后的通知和 `PostStateCommit` Hook 不继承这个取消信号，按自身超时完成收尾。
 > - **对话 execution journal 共享提交命运**：当前玩家输入与非 manual runtime 的
 >   `TurnMessage` 在执行期只缓存在内存 journal；所有 proposal 通过后才由

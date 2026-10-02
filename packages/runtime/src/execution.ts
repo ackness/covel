@@ -1,4 +1,5 @@
 import type {
+  DeferredRuntimeJob,
   RuntimeManifest,
   RuntimeResult,
   TurnInput,
@@ -47,6 +48,11 @@ export interface ExecutionCommitPlan extends Pick<
 > {
   readonly outputSchemas: Readonly<Record<string, Schema>>;
   readonly resolvedSuspensionId?: string;
+  /**
+   * Detached jobs the suspended turn held back, released by the resume that
+   * completes it. The host queues them inside the same commit.
+   */
+  readonly releasedRuntimeJobs?: readonly DeferredRuntimeJob[];
 }
 
 /** Only `result` is a transport payload. The commit plan stays with the host. */
@@ -120,6 +126,14 @@ export async function executeTurn(
         : "Execution was cancelled"
       : undefined);
   const suspended = results.some((result) => result.status === "suspended");
+  // Every sibling suspension carries the held-back jobs; whichever resume
+  // completes the turn queues them.
+  const withheldRuntimeJobs = turn.withheldRuntimeJobs?.length
+    ? turn.withheldRuntimeJobs.map((job) => ({
+        ...job,
+        upstreamResults: job.upstreamResults.map(publicRuntimeResult),
+      }))
+    : undefined;
   return {
     result: {
       ...structuredClone(turn),
@@ -152,22 +166,28 @@ export async function executeTurn(
         results,
         ...(abortReason !== undefined ? { abortReason } : {}),
         journalMessages: collectExecutionJournal(turn),
-        suspensions: collectExecutionSuspensions(turn).map((record) =>
-          turn.executionContext.countPolicy === "complete-player-turn" &&
-          turn.executionContext.logicalTurnId ===
-            record.pendingContinuation.executionContext.logicalTurnId
-            ? {
-                ...record,
-                pendingContinuation: {
-                  ...record.pendingContinuation,
-                  executionContext: {
-                    ...record.pendingContinuation.executionContext,
-                    countPolicy: "complete-player-turn" as const,
-                  },
-                },
-              }
-            : record,
-        ),
+        suspensions: collectExecutionSuspensions(turn).map((record) => {
+          const counted =
+            turn.executionContext.countPolicy === "complete-player-turn" &&
+            turn.executionContext.logicalTurnId ===
+              record.pendingContinuation.executionContext.logicalTurnId;
+          if (!counted && !withheldRuntimeJobs) return record;
+          return {
+            ...record,
+            pendingContinuation: {
+              ...record.pendingContinuation,
+              ...(counted
+                ? {
+                    executionContext: {
+                      ...record.pendingContinuation.executionContext,
+                      countPolicy: "complete-player-turn" as const,
+                    },
+                  }
+                : {}),
+              ...(withheldRuntimeJobs ? { withheldRuntimeJobs } : {}),
+            },
+          };
+        }),
         turnIds: [turn.turnId],
         activePluginIds: hookScope.activePluginIds,
         ...(input.origin === "player"
@@ -225,6 +245,11 @@ export async function resumeSuspendedRuntime(
             inherited.logicalTurnId,
       )
     : false;
+  const releasedRuntimeJobs =
+    !hasUnresolvedSibling && result.status === "success"
+      ? (suspension.pendingContinuation.withheldRuntimeJobs as
+          readonly DeferredRuntimeJob[] | undefined)
+      : undefined;
   const carrier = { runtimeResults: [result] };
   if (
     result.status === "success" &&
@@ -265,6 +290,7 @@ export async function resumeSuspendedRuntime(
         sessionClock: { now: new Date().toISOString() },
         outputSchemas: captured.outputSchemas,
         resolvedSuspensionId: suspension.id,
+        ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
       hookSettings: hookScope.settings,
     },

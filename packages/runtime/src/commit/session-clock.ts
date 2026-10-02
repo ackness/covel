@@ -1,12 +1,16 @@
 /**
  * Session-clock write, folded into the finalize transaction.
  *
- * Single mutation point for a session's `phase` / `completedPlayerTurns` /
- * `setupRuntimes`. It runs INSIDE
- * `finalizeExecution`'s transaction, after every proposal has committed, so a
- * proposal failure rolls back the counter, the phase flip, and the setup mirror
- * together with the domain writes — the clock never advances for a turn that
- * did not commit.
+ * Sole writer of `phase` and `completedPlayerTurns`, and of the setup "done"
+ * signal. It runs INSIDE `finalizeExecution`'s transaction, after every
+ * proposal has committed, so a proposal failure rolls back the counter, the
+ * phase flip, and the setup mirror together with the domain writes — the clock
+ * never advances for a turn that did not commit.
+ *
+ * `setupRuntimes` has three further writers, none of which flips `phase`:
+ * `settleSetupRuntimes` (attempt-ledger reconciliation after the transaction,
+ * so a rolled-back attempt still burns budget), the executor's up-front block
+ * of `needs(scope: session)` cycles, and the player's retry / waive routes.
  *
  * Two concerns are applied here:
  *  1. Logical-turn counting — an idempotent ledger insert per `logicalTurnId`

@@ -70,6 +70,8 @@ runtime:
     visibility: system
   agent:
     model: plugin
+    history:
+      maxTurns: 2
     tools:
       plugin:
         - upsert-quests

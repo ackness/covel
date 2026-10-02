@@ -121,7 +121,7 @@ export function buildFrameworkCapabilities(
       },
       pluginData: {
         scope: "(sessionId, pluginId, namespace, key)",
-        reservedNamespaces: ["_jobs", "_runtime_jobs", "_logs"],
+        reservedNamespaces: ["_runtime_jobs", "_logs"],
         writePaths: [
           "builtin-tool:plugin-data-set",
           "builtin-tool:plugin-data-set-batch",

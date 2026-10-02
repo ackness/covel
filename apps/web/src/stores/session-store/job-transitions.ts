@@ -2,8 +2,10 @@ import i18n from "i18next";
 import { compactJobId, formatJobDuration } from "@/lib/job-ui.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import {
+  backgroundJobRecord,
   getPluginNamespaceSnapshot,
   type PluginDataChange,
+  type PluginJobRecord,
 } from "@/stores/plugin-data-store.js";
 
 interface JobTransition {
@@ -11,47 +13,39 @@ interface JobTransition {
   readonly jobId: string;
   readonly prevStatus: string | null;
   readonly nextStatus: string;
-  readonly value: Record<string, unknown> | null;
+  readonly job: PluginJobRecord;
 }
 
-function readJobStatus(value: unknown): string | null {
-  if (!value || typeof value !== "object") return null;
-  const status = (value as Record<string, unknown>).status;
-  return typeof status === "string" ? status : null;
-}
-
+/** Background jobs that reached a terminal state in this change batch. */
 export function collectJobTransitions(
   pluginId: string,
   changes: readonly PluginDataChange[],
 ): readonly JobTransition[] {
   const transitions: JobTransition[] = [];
-  const priorSnapshot = getPluginNamespaceSnapshot(pluginId, "_jobs");
+  const priorSnapshot = getPluginNamespaceSnapshot(pluginId, "_runtime_jobs");
   for (const change of changes) {
-    if (change.namespace !== "_jobs") continue;
+    if (change.namespace !== "_runtime_jobs") continue;
     if (change.operation === "delete") continue;
-    const prevStatus = readJobStatus(priorSnapshot[change.key]);
-    const nextStatus = readJobStatus(change.value);
-    if (!nextStatus) continue;
-    if (prevStatus === nextStatus) continue;
-    if (nextStatus !== "done" && nextStatus !== "failed") continue;
+    const job = backgroundJobRecord(change.key, change.value);
+    if (!job || job.status === "pending") continue;
+    const prevStatus =
+      backgroundJobRecord(change.key, priorSnapshot[change.key])?.status ??
+      null;
+    if (prevStatus === job.status) continue;
     transitions.push({
       pluginId,
       jobId: change.key,
       prevStatus,
-      nextStatus,
-      value:
-        change.value && typeof change.value === "object"
-          ? (change.value as Record<string, unknown>)
-          : null,
+      nextStatus: job.status,
+      job,
     });
   }
   return transitions;
 }
 
 export function emitJobTransitionToast(tr: JobTransition): void {
-  const value = tr.value ?? {};
-  const runtimeId = (value.runtimeId as string | undefined) ?? "";
-  const durationMs = value.durationMs as number | undefined;
+  const runtimeId = tr.job.runtimeId ?? "";
+  const durationMs = tr.job.durationMs;
   const shortId = compactJobId(tr.jobId, {
     maxLength: 14,
     prefixLength: 14,
@@ -72,10 +66,7 @@ export function emitJobTransitionToast(tr: JobTransition): void {
       }),
     );
   } else if (tr.nextStatus === "failed") {
-    const errorMessage =
-      (value.error as string | undefined) ??
-      (value.abortReason as string | undefined) ??
-      "";
+    const errorMessage = tr.job.error ?? tr.job.abortReason ?? "";
     const trimmedError =
       errorMessage.length > 200
         ? `${errorMessage.slice(0, 200)}…`

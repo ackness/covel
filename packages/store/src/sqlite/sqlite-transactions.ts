@@ -8,6 +8,38 @@ import type { SqliteConnection } from "./sqlite-types.js";
 
 export type SqliteTransactions = Pick<DataStore, "withTransaction">;
 
+let savepointSequence = 0;
+
+/**
+ * Savepoints stack on the single connection. Only valid inside an open
+ * `withTransaction`; outside one, SQLite would silently start a transaction.
+ */
+export function createSqliteSavepoint(
+  sqlite: SqliteConnection,
+  getScope: () => StoreTransaction,
+): NonNullable<StoreTransaction["savepoint"]> {
+  return async <T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> => {
+    if (!sqlite.inTransaction) {
+      throw new Error("SqliteStore savepoint requires an open transaction");
+    }
+    const name = `covel_sp_${++savepointSequence}`;
+    sqlite.exec(`SAVEPOINT ${name}`);
+    try {
+      const result = await fn(getScope());
+      sqlite.exec(`RELEASE ${name}`);
+      return result;
+    } catch (err) {
+      try {
+        sqlite.exec(`ROLLBACK TO ${name}`);
+        sqlite.exec(`RELEASE ${name}`);
+      } catch {
+        // A failed savepoint rollback must not mask the original error.
+      }
+      throw err;
+    }
+  };
+}
+
 /**
  * better-sqlite3 is a single synchronous connection, so it cannot hold two
  * concurrent transactions. `withTransaction` therefore *serializes* concurrent

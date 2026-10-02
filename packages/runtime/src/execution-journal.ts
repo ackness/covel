@@ -63,7 +63,14 @@ export function collectExecutionJournal(
   });
 }
 
-/** Manual outputs stay out of history unless a committed interaction needs validation. */
+/**
+ * Manual outputs stay out of history unless a committed interaction needs
+ * validation. Only text (`narrativeOutput` / `content`) becomes message
+ * content: structured outputs already live on the `turn_results` row, and copying
+ * them here made every turn's JSON count toward compaction, feed the summary
+ * model and enter recall. The row itself stays, empty, because trigger
+ * counts, interaction validation and UI attachments key off it.
+ */
 export function attachRuntimeJournal(
   result: RuntimeResult,
   input: TurnInput,
@@ -84,7 +91,7 @@ export function attachRuntimeJournal(
       ? output.narrativeOutput
       : typeof output.content === "string"
         ? output.content
-        : JSON.stringify(output);
+        : "";
   attachExecutionJournal(result, [
     {
       id: crypto.randomUUID(),

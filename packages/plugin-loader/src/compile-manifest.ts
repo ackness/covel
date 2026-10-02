@@ -72,6 +72,7 @@ export function compileRuntimeManifest(
     guard: runtime.guard,
     model: a?.model,
     llm: a?.llm,
+    history: a?.history,
     tools: runtime.function?.tools ?? a?.tools,
     advertiseEvents: a?.advertiseEvents,
     stage: schedule?.stage,

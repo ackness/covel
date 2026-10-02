@@ -33,21 +33,6 @@ export interface TurnResultRecord {
   readonly createdAt: string;
 }
 
-export interface RuntimeResultRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly status: string;
-  readonly output: unknown; // JSON
-  readonly toolCalls: unknown; // JSON — ToolCallRecord[]
-  readonly durationMs: number;
-  readonly tokenUsage?: unknown; // JSON — { input, output }
-  readonly error?: string;
-  readonly createdAt: string;
-}
-
 export interface ToolCallRecordRow {
   readonly id: string;
   readonly sessionId: string;
@@ -77,7 +62,7 @@ export interface RuntimeOutputRecord {
   readonly id: string;
   readonly sessionId: string;
   readonly turnId: string;
-  /** Optional FK back to `runtime_results.id`. */
+  /** Run id of the runtime result inside `turn_results.runtimeResults`. */
   readonly runtimeResultId?: string;
   readonly pluginId: string;
   readonly runtimeId: string;

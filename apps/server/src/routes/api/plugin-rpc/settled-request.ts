@@ -3,7 +3,11 @@ import type { RuntimeJobServices } from "./runtime-job-credentials.js";
 import type { SettleWaitBudget } from "./settled-session-lock.js";
 import { getRequestLlmOptions } from "../../../request-llm-context.js";
 import { listRuntimeJobs } from "./jobs.js";
-import { parseStagedRuntimeJobPayload } from "./runtime-job-worker.js";
+import {
+  publishRuntimeJobStatusEvent,
+  runtimeJobIncarnation,
+} from "./runtime-job-worker.js";
+import type { QueuedActivatedRuntimeJob } from "./runtime-job-enqueue.js";
 import {
   checkSessionOwner,
   sessionIncarnationIdentity,
@@ -39,8 +43,7 @@ export async function withSettledSessionLock<T>(
     const queued = await listRuntimeJobs(c.get("store"), { sessionId });
     for (const job of queued) {
       if (job.status !== "queued") continue;
-      const payload = parseStagedRuntimeJobPayload(job.payload);
-      if (payload?.expectedSessionIncarnation !== incarnation) continue;
+      if (runtimeJobIncarnation(job.payload) !== incarnation) continue;
       c.get("runtimeJobCredentials")?.register(
         {
           jobId: job.jobId,
@@ -101,4 +104,22 @@ export async function withSettledExecutionLock<T>(
     },
     waitBudget,
   );
+}
+
+/**
+ * After the transaction that queued them commits: hand this request's provider
+ * credentials to the worker, publish the queued status, and wake the worker.
+ */
+export function announceQueuedRuntimeJobs(
+  c: Context,
+  queued: readonly QueuedActivatedRuntimeJob[],
+): void {
+  if (queued.length === 0) return;
+  const services = requestJobServices(c);
+  for (const { credentialKey, status } of queued) {
+    if (services)
+      c.get("runtimeJobCredentials")?.register(credentialKey, services);
+    publishRuntimeJobStatusEvent(c.get("eventBus"), status);
+  }
+  c.get("runtimeJobWorker")?.wake();
 }

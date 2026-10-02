@@ -28,6 +28,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   sql,
 } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
@@ -109,6 +110,7 @@ export type SqlSessionJournalRecords = Pick<
   | "addTraceEvent"
   | "listTraceEvents"
   | "listTraceEventsPage"
+  | "deleteTraceEventsBefore"
   | "appendTurnMessage"
   | "listTurnMessages"
   | "listUncompactedTurnMessages"
@@ -148,6 +150,19 @@ export function createSqlSessionJournalRecords(
         offset: pagination?.offset,
       });
       return rows.map((row) => toTraceEventRecord(row, json));
+    },
+
+    async deleteTraceEventsBefore(
+      sessionId: string,
+      before: string,
+    ): Promise<void> {
+      await runner.delete(
+        traceEvents,
+        and(
+          eq(traceEvents.sessionId, sessionId),
+          lt(traceEvents.createdAt, before),
+        ),
+      );
     },
 
     async listTraceEventsPage(

@@ -17,12 +17,17 @@
 import type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
+  SlotTokenLimits,
   ImageGenerationTarget,
   PluginEvaluationInput,
   EvaluationQuestions,
   EvaluationResult,
 } from "@covel/shared/plugin-runtime";
-import type { LLMDiagnostics, LLMUsageSummary } from "@covel/shared";
+import {
+  resolveLlmTokenLimits,
+  type LLMDiagnostics,
+  type LLMUsageSummary,
+} from "@covel/shared";
 import type { ZodType } from "zod";
 import type {
   CapabilityOverridePolicy,
@@ -43,6 +48,8 @@ interface FullGatewayOptions {
   signal?: AbortSignal;
   slotOverrides?: SlotOverridesInput;
   capabilityOverridePolicy?: CapabilityOverridePolicy;
+  /** Per-call output ceiling; the gateway keeps the lower of it and the slot's. */
+  parameterOverrides?: { maxOutputTokens?: number };
 }
 
 /**
@@ -111,6 +118,8 @@ export interface FullGatewayLike {
     model: string;
     tag: string;
     metadata: Record<string, unknown>;
+    capability?: { contextWindow?: number; maxOutputTokens?: number };
+    parameterOverrides?: { maxOutputTokens?: number };
   } | null;
 
   /**
@@ -206,6 +215,16 @@ export function createPluginRuntimeGateway(
       ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
       : {}),
   });
+  const callOptions = (input: {
+    readonly maxOutputTokens?: number;
+    readonly signal?: AbortSignal;
+  }) => ({
+    ...commonOptions(),
+    ...(input.maxOutputTokens !== undefined
+      ? { parameterOverrides: { maxOutputTokens: input.maxOutputTokens } }
+      : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
 
   const facade: PluginRuntimeGateway = {
     async generateText(input) {
@@ -227,10 +246,7 @@ export function createPluginRuntimeGateway(
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
             : {}),
         },
-        {
-          ...commonOptions(),
-          ...(input.signal ? { signal: input.signal } : {}),
-        },
+        callOptions(input),
       );
       return {
         text: result.text,
@@ -255,6 +271,7 @@ export function createPluginRuntimeGateway(
         readonly role: "system" | "user" | "assistant";
         readonly content: string;
       }[];
+      readonly maxOutputTokens?: number;
       readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
       readonly providerOptions?: Readonly<
         Record<string, Readonly<Record<string, unknown>>>
@@ -298,10 +315,7 @@ export function createPluginRuntimeGateway(
             ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
             : {}),
         },
-        {
-          ...commonOptions(),
-          ...(input.signal ? { signal: input.signal } : {}),
-        },
+        callOptions(input),
       );
       return {
         object: result.object,
@@ -336,6 +350,7 @@ export function createPluginRuntimeGateway(
         model: resolved.model,
         tag: resolved.tag,
         metadata: { ...resolved.metadata },
+        ...slotLimits(resolved),
       };
     },
   };
@@ -430,6 +445,31 @@ export function createPluginRuntimeGateway(
   }
 
   return facade;
+}
+
+/**
+ * Project the limits the gateway applies when it serializes this slot's
+ * requests. Omitted when the model declares no context window, so plugins
+ * never mistake the framework fallback for a real model limit.
+ */
+function slotLimits(resolved: {
+  capability?: { contextWindow?: number; maxOutputTokens?: number };
+  parameterOverrides?: { maxOutputTokens?: number };
+}): { limits?: SlotTokenLimits } {
+  const contextWindow = resolved.capability?.contextWindow;
+  if (contextWindow === undefined) return {};
+  try {
+    return {
+      limits: resolveLlmTokenLimits({
+        contextWindow,
+        maxOutputTokens: resolved.capability?.maxOutputTokens,
+        requestedMaxOutputTokens: resolved.parameterOverrides?.maxOutputTokens,
+      }),
+    };
+  } catch {
+    // An inconsistent model configuration fails at request time instead.
+    return {};
+  }
 }
 
 function toMessages(opts: { system?: string; prompt?: string }): Array<{

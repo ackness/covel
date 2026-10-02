@@ -7,7 +7,15 @@
 
 import { describe, it, expect } from "vitest";
 import { looksLikeStructuredRuntimeOutput } from "../src/turn-executor/turn-executor.js";
-import { filterRuntimeHistory } from "../src/agent-loop/message-filter.js";
+import {
+  applyHistoryWindow,
+  filterRuntimeHistory,
+} from "../src/agent-loop/message-filter.js";
+import {
+  attachRuntimeJournal,
+  collectExecutionJournal,
+} from "../src/execution-journal.js";
+import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 
 function msg(
@@ -79,5 +87,78 @@ describe("filterRuntimeHistory (applies to every agent runtime)", () => {
     const contents = kept.map((m) => m.content);
     expect(contents).toContain('{"entries":[{"id":"codex-1"}]}'); // own output
     expect(contents).not.toContain('[{"id":"npc-1"}]'); // other plugin JSON
+  });
+});
+
+describe("applyHistoryWindow", () => {
+  const turn = (turnId: string, content: string): TurnMessageRecord =>
+    ({ turnId, sourceType: "player", content }) as TurnMessageRecord;
+  const history = [
+    turn("t1", "one"),
+    turn("t2", "two-player"),
+    turn("t2", "two-narrator"),
+    turn("t3", "three"),
+  ];
+
+  it("keeps whole turns, newest first", () => {
+    expect(
+      applyHistoryWindow(history, { maxTurns: 2 }).map((m) => m.content),
+    ).toEqual(["two-player", "two-narrator", "three"]);
+  });
+
+  it("returns no history for maxTurns 0 and everything for a large window", () => {
+    expect(applyHistoryWindow(history, { maxTurns: 0 })).toEqual([]);
+    expect(applyHistoryWindow(history, { maxTurns: 10 })).toEqual(history);
+  });
+});
+
+describe("runtime journal content", () => {
+  const journalContent = (output: Record<string, unknown>): string => {
+    const result = {
+      pluginId: "p",
+      runtimeId: "p/r",
+      runId: "run",
+      turnId: "t",
+      status: "success",
+      output,
+      toolCalls: [],
+      durationMs: 0,
+      timestamp: "2024-01-01T00:00:00Z",
+    } as RuntimeResult;
+    attachRuntimeJournal(
+      result,
+      { sessionId: "s", turnId: "t", playerMessage: "hi" },
+      {
+        name: "p/r",
+        pluginId: "p",
+        description: "",
+        stage: "post-turn",
+      } as RuntimeManifest,
+      output,
+    );
+    return collectExecutionJournal({ runtimeResults: [result] })[0]!.content;
+  };
+
+  it("records text outputs and leaves structured outputs empty", () => {
+    expect(journalContent({ narrativeOutput: "The door opens." })).toBe(
+      "The door opens.",
+    );
+    expect(journalContent({ content: "Two facts saved." })).toBe(
+      "Two facts saved.",
+    );
+    expect(journalContent({ storm: { value: 3 }, grid: { value: 1 } })).toBe(
+      "",
+    );
+  });
+
+  it("drops empty runtime rows from agent history", () => {
+    const kept = filterRuntimeHistory(
+      [
+        msg("player", "look"),
+        msg("runtime", "", "world-init/dimension-context"),
+      ],
+      "codex",
+    );
+    expect(kept.map((m) => m.content)).toEqual(["look"]);
   });
 });

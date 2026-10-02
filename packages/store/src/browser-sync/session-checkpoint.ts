@@ -36,7 +36,6 @@ export async function exportSessionCheckpoint(
     messages,
     turnMessages,
     turnResults,
-    runtimeResults,
     toolCalls,
     runtimeOutputs,
     interactions,
@@ -61,7 +60,6 @@ export async function exportSessionCheckpoint(
     store.listMessages(sessionId),
     store.listTurnMessages(sessionId),
     store.listTurnResults(sessionId),
-    store.listRuntimeResults(sessionId),
     store.listToolCalls(sessionId),
     store.listRuntimeOutputs(sessionId),
     store.listInteractionRecords(sessionId),
@@ -107,7 +105,6 @@ export async function exportSessionCheckpoint(
     messages,
     turnMessages,
     turnResults,
-    runtimeResults,
     toolCalls,
     runtimeOutputs,
     interactions,
@@ -160,8 +157,6 @@ async function writeCheckpoint(
 
   for (const record of checkpoint.turnResults)
     await store.saveTurnResult(record);
-  for (const record of checkpoint.runtimeResults)
-    await store.saveRuntimeResult(record);
   for (const record of checkpoint.toolCalls) await store.saveToolCall(record);
   for (const record of checkpoint.runtimeOutputs)
     await store.saveRuntimeOutput(record);

@@ -27,6 +27,37 @@ export interface FunctionStoreView {
   getSession(): Promise<unknown>;
   /** List recent turn messages for the session (read-only timeline access). */
   listTurnMessages(limit?: number): Promise<unknown[]>;
+  /**
+   * Page the full turn-message log oldest-first, including messages already
+   * folded into compaction summaries. `cursor` marks the last message read
+   * (or echoes `after` for an empty page); pass it back as `after` to
+   * continue, or persist it to resume incrementally later. `hasMore` is
+   * false once the current end of the log is reached. `limit` defaults to
+   * 100 and is capped at 500.
+   */
+  readTurnMessages(options?: {
+    readonly after?: string;
+    readonly limit?: number;
+  }): Promise<{
+    readonly messages: readonly PluginTurnMessage[];
+    readonly cursor: string | null;
+    readonly hasMore: boolean;
+  }>;
+}
+
+/** One committed timeline entry as exposed to plugin code. */
+export interface PluginTurnMessage {
+  readonly id: string;
+  readonly turnId: string;
+  /** `player`, `system` or `runtime` for ordinary timeline entries. */
+  readonly sourceType: string;
+  readonly sourcePluginId?: string;
+  readonly sourceRuntimeId?: string;
+  readonly role: string;
+  readonly content: string;
+  readonly createdAt: string;
+  /** True when prompts show this message through a compaction summary. */
+  readonly compacted: boolean;
 }
 
 export interface PluginDataWriter {

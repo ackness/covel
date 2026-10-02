@@ -351,18 +351,9 @@ async function buildProtectedMediaIds(
       exceeded = scanRows(snapshots);
       if (exceeded) return exceeded;
 
-      const turnResults = await store.listTurnResults(session.id);
-      exceeded = scanRows(turnResults);
+      // Each turn row embeds that execution's full runtime results.
+      exceeded = scanRows(await store.listTurnResults(session.id));
       if (exceeded) return exceeded;
-
-      for (const turn of turnResults) {
-        const runtimeResults = await store.listRuntimeResults(
-          session.id,
-          turn.turnId,
-        );
-        exceeded = scanRows(runtimeResults);
-        if (exceeded) return exceeded;
-      }
 
       scannedSessions += 1;
     }

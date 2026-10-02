@@ -331,3 +331,32 @@ describe("event producer terminal status", () => {
     expect(deferred).toEqual([]);
   });
 });
+
+describe("runEventChain same-topic delivery", () => {
+  it("delivers the first payload of a topic per depth and reports the rest", async () => {
+    const completedResults = new Map<string, RuntimeResult>([
+      ["a/emitter", resultEmitting("a/emitter", "topic-x", { n: 1 })],
+      ["b/emitter", resultEmitting("b/emitter", "topic-x", { n: 2 })],
+    ]);
+    const delivered: unknown[] = [];
+    const dropped: Array<[string, string]> = [];
+
+    await runEventChain({
+      activeRuntimes: [relay],
+      completedResults,
+      executeRuntime: async (manifest, triggerEvent) => {
+        delivered.push(triggerEvent?.data);
+        return resultEmitting(manifest.name, "noop", {});
+      },
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      turnNumber: 1,
+      logicalTurn: 1,
+      setupRuntimes: {},
+      onDroppedEvent: (topic, runtimeId) => dropped.push([topic, runtimeId]),
+    });
+
+    expect(delivered).toEqual([{ n: 1 }]);
+    expect(dropped).toEqual([["topic-x", "b/emitter"]]);
+  });
+});

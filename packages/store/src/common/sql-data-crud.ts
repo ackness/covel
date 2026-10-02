@@ -88,6 +88,7 @@ export type SqlDataCrud = Pick<
   | "getPluginData"
   | "listPluginData"
   | "listPluginDataSessionScope"
+  | "listPluginDataByNamespace"
   | "deletePluginData"
   | "saveWorldDataImportLedgerBatch"
   | "listWorldDataImportLedger"
@@ -223,6 +224,20 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
         orderBy: [asc(pluginData.createdAt), asc(pluginData.id)],
         limit: pagination?.limit,
         offset: pagination?.offset,
+      });
+      return rows.map((row) => toPluginDataRecord(row, json));
+    },
+
+    async listPluginDataByNamespace(
+      sessionId: string,
+      namespace: string,
+    ): Promise<readonly PluginDataRecord[]> {
+      const rows = await runner.select<PluginDataRow>(pluginData, {
+        where: and(
+          eq(pluginData.sessionId, sessionId),
+          eq(pluginData.namespace, namespace),
+        ),
+        orderBy: [asc(pluginData.createdAt), asc(pluginData.id)],
       });
       return rows.map((row) => toPluginDataRecord(row, json));
     },

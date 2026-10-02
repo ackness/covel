@@ -29,14 +29,13 @@ an object payload before publishing.
 
 PostgreSQL 提供共享数据和部分跨进程协调；选择 `pg` 不会把所有进程内能力变为共享服务。
 
-| 能力                             | Memory / SQLite                         | PostgreSQL 多实例                                                                                        |
-| -------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 会话写入互斥                     | 进程内锁；按单进程部署使用              | 共享数据库的 advisory lock                                                                               |
-| EventBus 到 SSE 订阅者的事件投递 | 当前进程内广播                          | 通过 PG LISTEN/NOTIFY 转发；初始化失败会阻止宿主启动，不静默降级                                         |
-| 活跃回合的 `steer` / `abort`     | 操作当前进程持有的执行句柄              | 仍为进程内能力；请求必须到达执行该回合的实例。命中其它实例时，即使数据库显示回合正在执行，也会返回 `409` |
-| 旧式后台任务 `_jobs` 的重启清理  | 启动时可将前进程遗留的 pending 标为失败 | 禁用基于进程 owner 的清理，避免误判其它存活实例；没有跨实例租约恢复保证                                  |
-| 分阶段任务 `_runtime_jobs`       | 持久性取决于存储后端                    | 通过 CAS 和可续期租约认领；过期的 claimed/running/committing 任务标为 orphaned，不自动重放外部效果       |
-| 媒体二进制数据                   | 由独立的 `MEDIA_BACKEND` 决定           | `mirror` 使用 PG；显式选择本地媒体后端不会自动共享其文件                                                 |
+| 能力                                                                 | Memory / SQLite               | PostgreSQL 多实例                                                                                        |
+| -------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 会话写入互斥                                                         | 进程内锁；按单进程部署使用    | 共享数据库的 advisory lock                                                                               |
+| EventBus 到 SSE 订阅者的事件投递                                     | 当前进程内广播                | 通过 PG LISTEN/NOTIFY 转发；初始化失败会阻止宿主启动，不静默降级                                         |
+| 活跃回合的 `steer` / `abort`                                         | 操作当前进程持有的执行句柄    | 仍为进程内能力；请求必须到达执行该回合的实例。命中其它实例时，即使数据库显示回合正在执行，也会返回 `409` |
+| 后台任务 `_runtime_jobs`（detached stage、background 手动/事件激活） | 持久性取决于存储后端          | 通过 CAS 和可续期租约认领；过期的 claimed/running/committing 任务标为 orphaned，不自动重放外部效果       |
+| 媒体二进制数据                                                       | 由独立的 `MEDIA_BACKEND` 决定 | `mirror` 使用 PG；显式选择本地媒体后端不会自动共享其文件                                                 |
 
 需要可靠控制当前回合的部署应使用单实例，或确保动作与其 `steer` / `abort` 请求路由到同一执行实例。实例退出后的内存执行句柄不能迁移；共享数据库不代表活跃回合可以由另一实例无缝接管。任务恢复细节见 [Protocol](protocol.md)，浏览器与服务器的数据权威划分见 [Storage Architecture](../architecture/storage.md)。
 
@@ -416,11 +415,11 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 安全叶节点若声明 `turnCompletion.mode: detached`，会在原始回合事务中进入 durable 队列，回合无需等待其完成：
 
-| 方法 | 路径                                           | 描述                                                             |
-| ---- | ---------------------------------------------- | ---------------------------------------------------------------- |
-| GET  | `/api/sessions/:id/runtime-jobs`               | 列出该 session 的 staged detached jobs，不返回内部冻结 `payload` |
-| POST | `/api/sessions/:id/runtime-jobs/:jobId/cancel` | 取消仍处于 `queued/claimed/running` 的 job                       |
-| POST | `/api/sessions/:id/runtime-jobs/:jobId/retry`  | 对失败类终态显式创建新的 queued job；返回 202 和新 `jobId`       |
+| 方法 | 路径                                           | 描述                                                         |
+| ---- | ---------------------------------------------- | ------------------------------------------------------------ |
+| GET  | `/api/sessions/:id/runtime-jobs`               | 列出该 session 的后台 runtime jobs，不返回内部冻结 `payload` |
+| POST | `/api/sessions/:id/runtime-jobs/:jobId/cancel` | 取消仍处于 `queued/claimed/running` 的 job                   |
+| POST | `/api/sessions/:id/runtime-jobs/:jobId/retry`  | 对失败类终态显式创建新的 queued job；返回 202 和新 `jobId`   |
 
 ### 回合中控制（W4）
 
@@ -527,7 +526,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
   id: string,
   sessionId: string,
   turnId: string,
-  runtimeResultId?: string,  // 关联到 runtime_results 表
+  runtimeResultId?: string,  // 对应 turn_results.runtimeResults 中该 runtime 的 runId
   pluginId: string,
   runtimeId: string,         // "{plugin}" 或 "{plugin}/{runtime}"
   timestamp: string,
@@ -1324,7 +1323,7 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 
 **字段说明:**
 
-- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400；`ended` 是终态，不能再 PATCH 回 `active` / `paused`（返回 `409 session_ended`）。`phase`、`completedPlayerTurns` 与 `setupRuntimes` 只由 finalize transaction 写入，PATCH 不可修改。
+- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400；`ended` 是终态，不能再 PATCH 回 `active` / `paused`（返回 `409 session_ended`）。`phase`、`completedPlayerTurns` 与 `setupRuntimes` 是会话时钟，PATCH 不可修改：`phase` 与 `completedPlayerTurns` 只由 finalize 事务写入；`setupRuntimes` 另由事务后的 attempt 账本结算（回滚的尝试仍消耗预算）、执行器对 `needs(scope: session)` 环的预先阻断以及 `retry` / `waive` 端点更新。
 - `runtimeModelOverrides`(可选,object) — Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
@@ -1338,7 +1337,7 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 
 #### `DELETE /api/sessions/:id`
 
-删除一个游戏会话。删除先在 session lock 内暂停准入、写入删除代次并轮换授权作用域，再从持久化 `_jobs` 行枚举 `pending` runtime、等待对应 detached runtime lock 排空；随后在不持 advisory lock 的情况下运行 observe-only `SessionEnd`，最后短持 session lock 清理 MediaStore 的 owner/ref 并级联删除 DataStore。旧后台任务的最终 scope/status 检查会失败，不能在删除后写回孤儿记录。
+删除一个游戏会话。删除先在 session lock 内暂停准入、写入删除代次并轮换授权作用域，再从持久化 `_runtime_jobs` 行枚举未结束（queued/claimed/running/committing）的 runtime、等待对应 detached runtime lock 排空；随后在不持 advisory lock 的情况下运行 observe-only `SessionEnd`，最后短持 session lock 清理 MediaStore 的 owner/ref 并级联删除 DataStore。旧后台任务的最终 scope/status 检查会失败，不能在删除后写回孤儿记录。
 
 `SessionStart` / `SessionEnd` 运行期间 lifecycle mutation 返回 `409 session_lifecycle_busy`，调用方应在 hook 完成后重试；普通同 session API 不被 hook lease 阻塞。删除进行中返回 `409 session_deleting`。若 drain、媒体或数据库删除失败，会话保持 `paused`、授权代次保持轮换、删除 marker 保持有效，普通 mutation 继续 fail-closed；服务端记录一次性 retry nonce，下一次 `DELETE` 可接管且不会重复触发已完成的 `SessionEnd`。进程在错误恢复前崩溃时，10 分钟 deletion lease 到期后允许新 `DELETE` 接管。
 
@@ -1397,7 +1396,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 #### `GET /api/sessions/:id/runtime-jobs`
 
-按 `enqueuedAt, jobId` 返回所有作业。公开对象包含 `jobId/pluginId/runtimeId/status/origin/enqueuedAt/updatedAt/attempt`、期限/lease 时间、后台 turn/execution 身份以及终态 `result/error/reason`；不会返回内部 `payload`，因此不泄露冻结输入、user settings 或审批代次。
+按 `enqueuedAt, jobId` 返回仍保留的作业：未终态的作业全部保留；终态作业每个 runtime 只保留最近 20 条，更早的由后台 worker 清理，清理后不能再 retry。公开对象包含 `jobId/pluginId/runtimeId/status/origin/enqueuedAt/updatedAt/attempt`、期限/lease 时间、后台 turn/execution 身份以及终态 `result/error/reason`；不会返回内部 `payload`，因此不泄露冻结输入、user settings 或审批代次。
 
 ```json
 {
@@ -1432,7 +1431,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 #### `POST /api/sessions/:id/runtime-jobs/:jobId/retry`
 
-只接受 `failed/timed_out/cancelled/stale/orphaned`，并要求 session 仍为 active。显式重试保留冻结的原始输入和稳定设置，刷新当前 session incarnation、插件 approval scope、locale 与 runtime model overrides，创建**新的** `jobId` 和 queued status；原终态不变。成功以 `202` 直接返回新 job 资源，不可重试返回 `409`、`code: "runtime_job_not_retryable"`。未 claim 的普通 queued 作业可在重启后继续执行，但框架不会自动 replay 失败类终态，以免重复调用已经计费但未成功落库的 provider 工作。
+只接受 `failed/timed_out/cancelled/stale/orphaned`，并要求 session 仍为 active。显式重试保留冻结的原始输入和稳定设置，刷新当前 session incarnation、插件 approval scope、locale 与 runtime model overrides，创建**新的** `jobId` 和 queued status（手动/事件激活同时换用新的执行 turnId）；原终态不变。成功以 `202` 直接返回新 job 资源，不可重试返回 `409`、`code: "runtime_job_not_retryable"`。未 claim 的普通 queued 作业可在重启后继续执行，但框架不会自动 replay 失败类终态，以免重复调用已经计费但未成功落库的 provider 工作。
 
 作业由 CAS claim + renewable lease 驱动，默认 worker 并发为 4，同一 `(session, plugin, runtime)` 串行。`maxQueueMs` 约束排队时间，`maxExecutionMs` 约束 claim 后控制面执行时间；重启后会继续 claim 合法 queued 作业，过期排队项置为 `timed_out`、过期在途 lease 置为 `orphaned`。提交前再次检查 session active/incarnation、插件 approval scope/version 和实际 proposal effects；执行前校验或提交屏障处的 session/plugin 身份检查失败落 `stale`（执行前被拒记 `reason: pre-execution-rejected`，到达提交屏障后被拒记 `reason: commit-barrier-rejected`），effect 或领域提交失败落 `failed`，两者都不会写入领域状态。
 
@@ -1573,7 +1572,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 1. **Action 级**: `{ kind: "action", pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
 2. **Runtime 级**: `{ kind: "runtime", pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
-   - `'background'`: 立即返回 202 + `jobId`,后台通过有界进程内队列继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。入口 runtime 发出的 background follower 会继续建立子任务，并记录在父任务的 `deferredJobs`。
+   - `'background'`: 在会话锁内排入一条持久 runtime job（`_runtime_jobs`，`origin.activation: "manual"`）后立即返回 202 + `jobId`；runtime job worker 认领、执行并在同一事务内提交领域写入与任务终态。状态经 `job-status.updated` 与 `_runtime_jobs` 的 `plugin-data.changed` 推送。入口 runtime 发出的 background follower 在同一提交事务内排为事件任务（`origin.activation: "event"`），记录在父任务 `result.deferredJobs`。
 3. **Command 级**: `{ kind: "command", commandId, input }` 或 `{ kind: "command", commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
 
 **写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行，例如 `submit-form` 的表单批次原子提交。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#handler-store-and-commit-ownership)。
@@ -1658,7 +1657,7 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 | `input`                     | string(可选)  | command 输入框模式的完整原始输入；与 `args` 必须且只能提供一个；服务端按命令声明再次分词、类型转换和校验                                                                                                                                                                                                                                                                                                                                                                                 |
 | `args`                      | object(可选)  | command JSON-RENDER 模式的命名参数；与 `input` 必须且只能提供一个；未知字段、类型、choices、required 与 variadic 都按服务端命令声明校验                                                                                                                                                                                                                                                                                                                                                  |
 | `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                                                                                                                                                                            |
-| `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                                                                                                                                                                    |
+| `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即排入一条持久 runtime job 并返回 202，由 worker 执行入口 runtime 并排入 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                                                                                                                                                        |
 | `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry_turn_not_found`）；该 turn 未提交（`commitStatus` 不是 `committed`，即已回滚或仍待定）时 409（`retry_source_not_committed`），其中的成功结果不能满足下游 `needs` 门控。 |
 
 **解析顺序(action 级):**
@@ -1816,41 +1815,38 @@ For asset runtimes declared by the active `media.image-flow@1` extension, a succ
 }
 ```
 
-当请求体包含 `expectsBackgroundFollower: true` 时，sync prompt-builder 也会使用同样的 202 形态立即返回（响应中 `phase: "prompt"`）；此时 `_jobs/{jobId}` 先以 `phase: "prompt"` / `message: "Generating image prompt..."` 写入，prompt 完成并排入后续 background follower 后会更新为 `status: "done"` 且包含 `deferredJobs`。如果 prompt-builder 返回但**没有**触发任何 background follower，框架会把 `_jobs/{jobId}` 标记为 `status: "failed"` 并附带 `reason: "expected-background-follower-missing"`。
+当请求体包含 `expectsBackgroundFollower: true` 时，sync prompt-builder 也会使用同样的 202 形态立即返回（响应中 `phase: "prompt"`），入口 runtime 作为后台任务执行：排入 background follower 后任务为 `succeeded`，`result.deferredJobs` 列出 follower 任务；若没有触发任何 background follower，任务为 `failed`，`reason: "follower-not-emitted"`。
 
-**`_jobs` 命名空间协议(background 模式):**
+**后台任务记录（`_runtime_jobs`）:**
 
-框架在 `plugin_data` 表中为每个后台任务保留以下 row,插件 **禁止**直接写该命名空间,但可订阅 SSE 读取:
+background 手动激活和 background 事件 follower 与 scheduler detached stage 共用同一个持久队列。每个任务一行，插件**禁止**写入该命名空间，可通过 SSE、`GET /api/sessions/:id/runtime-jobs` 或 plugin-data 读取其公开投影（不含 `payload`；`error` 只给出固定诊断文案）：
 
 ```
 sessionId     : <session>
-pluginId      : <触发插件>
-namespace     : "_jobs"
+pluginId      : <所属插件>
+namespace     : "_runtime_jobs"
 key           : <jobId>
 value         : {
-  status: "pending" | "done" | "failed",
+  status: "queued" | "claimed" | "running" | "committing"
+        | "succeeded" | "failed" | "timed_out" | "cancelled" | "stale" | "orphaned",
   runtimeId: string,
-  turnId: string,
-  owner?: string,                             // status=pending：写入该行的进程 id
-  startedAt: ISO8601,
-  completedAt?: ISO8601,
-  durationMs?: number,
-  runtimeResults?: RuntimeResultSummary[],   // status=done
-  deferredJobs?: { jobId: string; runtimeId: string }[], // prompt-builder follower 队列
-  phase?: "prompt" | string,
-  message?: string,
-  progress?: number,
-  error?: string,                             // status=failed
-  reason?: "expected-background-follower-missing" | "orphaned" | string, // status=failed 时的细分原因
-  abortReason?: string
+  origin: { activation: "stage" | "manual" | "event", sourceTurnId: string, sourceRuntimeId?: string },
+  enqueuedAt: ISO8601,
+  finishedAt?: ISO8601,
+  result?: {                                  // 手动/事件激活提交后
+    turnId: string,                           // 本次执行的 turnId（手动激活与 202 响应一致）
+    durationMs: number,
+    runtimeResults: RuntimeResultSummary[],
+    deferredJobs?: { jobId: string; runtimeId: string }[]
+  },
+  reason?: "runtime-reported-failure" | "follower-not-emitted" | "execution-failed" | …,
+  error?: string                              // 公开诊断文案
 }
 ```
 
-**崩溃恢复**：后台任务由进程内队列驱动，没有持久队列。Memory / SQLite 单进程部署会在开机时按 `owner` 回收旧 `pending` 行，写为 `failed` + `reason: "orphaned"`，并保留 payload/triggerEvent 供 UI 或玩家重试；框架不会自动重跑，避免图像/语音二次计费。
+runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败的 runtime 结果）时，任务以 `reason: "runtime-reported-failure"` 失败，但该执行的领域写入照常提交（handler 可借此记录自己的失败状态）；runtime 原始错误保留在 `result.runtimeResults`。proposal 提交失败时整次执行回滚，任务以 `execution-failed` 失败，且不排入任何 follower。会话在执行期间被暂停、结束或撤销授权时，任务标为 `stale`，不提交写入。
 
-PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租约，新 Pod 无法区分“另一个 Pod 正在执行”和“旧 Pod 已崩溃”，贸然回收会把活任务误判失败。因此 Pod 崩溃留下的 PG `pending` 行目前会保留，直到玩家显式重试/清理；完整自动恢复仍需要持久队列或可续租的 `leaseExpiresAt`。
-
-每次写入都会通过 store-proxy 发出 `plugin-data.changed` SSE 事件(见 [protocol.md](./protocol.md)),前端据此刷新 loading / final UI。
+**重启与凭证**：任务行持久化，服务重启后仍为 `queued` 的任务会在凭证可用时继续执行（下一次携带 provider key 的请求会重新移交凭证，或服务端自有凭证满足就绪检查）；执行中断的任务在租约过期后标为 `orphaned`，框架不自动重放，避免图像/语音二次计费。失败或取消的任务可经 `POST /api/sessions/:id/runtime-jobs/:jobId/retry` 以新的 turnId 重试。
 
 **错误响应:**
 
@@ -1859,12 +1855,12 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 | 400    | `kind` 或该 kind 的必填字段缺失 / 字段跨 kind 混用 / `RpcValidationError` / `plugin_mismatch`                                       |
 | 404    | `session_not_found` / `unknown_action` / `runtime_not_active` / `command_not_active`                                                |
 | 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed` / `dimension-version-conflict` |
-| 429    | `queue_full`(community 来源的待批准队列满)                                                                                          |
+| 429    | `queue_full`(community 来源的待批准队列满) / `background_queue_full`(会话排队中的后台任务达到上限)                                  |
 | 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`     |
 
-> 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
+> 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败记录在该 runtime job 上,前端通过 SSE 感知。
 
-> **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn_commit_failed`，诊断位于通用错误信封的 `details`；background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
+> **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn_commit_failed`，诊断位于通用错误信封的 `details`；background job 标记 `failed`（`reason: "execution-failed"`），且**不会**排入该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
 
 > **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并在同一请求重复索取同一 `(pluginId, action)` 授权时终止重试。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
 >
@@ -2046,7 +2042,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
     },
     "pluginData": {
       "scope": "(sessionId, pluginId, namespace, key)",
-      "reservedNamespaces": ["_jobs", "_runtime_jobs", "_logs"],
+      "reservedNamespaces": ["_runtime_jobs", "_logs"],
       "writePaths": [
         "builtin-tool:plugin-data-set",
         "function-output:pluginData[]"
@@ -3138,7 +3134,7 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 #### `POST /api/media/cleanup`
 
-破坏性维护端点：扫描 `messages` / `plugin_data` / `runtime_outputs` / `trace_events` / `snapshots` / `turn_results` / `runtime_results` 收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删除未引用的资产。
+破坏性维护端点：扫描 `messages` / `plugin_data` / `runtime_outputs` / `trace_events` / `snapshots` / `turn_results` 收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删除未引用的资产。
 
 **默认禁用。** 必须显式启用：
 

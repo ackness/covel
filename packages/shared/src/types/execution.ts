@@ -288,8 +288,8 @@ export interface TurnResult {
   readonly abortReason?: string;
   /**
    * Event-chain followers with `manifest.execution === 'background'` that
-   * were matched in this turn but intentionally NOT executed, so the sync
-   * caller can schedule them as `_jobs` and return immediately.
+   * were matched in this turn but intentionally NOT executed, so the caller
+   * can queue them as durable event jobs in its commit and return at once.
    *
    * Each entry carries the triggering event so the caller can re-enter the
    * runtime without reconstructing it. Empty / absent when no background
@@ -305,6 +305,11 @@ export interface TurnResult {
   }[];
   /** Scheduler-driven runtimes durably queued beyond this turn's barrier. */
   readonly deferredRuntimeJobs?: readonly DeferredRuntimeJob[];
+  /**
+   * Detached jobs held back because a runtime suspended. They travel with the
+   * suspension records and are queued when the turn's final resume commits.
+   */
+  readonly withheldRuntimeJobs?: readonly DeferredRuntimeJob[];
 }
 
 // ── Interaction protocol ────────────────────────────────────────

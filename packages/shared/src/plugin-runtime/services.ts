@@ -1,6 +1,5 @@
 import type { LLMUsageSummary, MediaRef } from "../index.js";
 import type { LLMDiagnostics } from "../types/llm-diagnostics.js";
-import type { FunctionHandlerContext } from "./handler.js";
 import type {
   EvaluationParams,
   EvaluationQuestions,
@@ -46,6 +45,8 @@ export interface PluginRuntimeGateway {
       readonly content: string;
     }[];
     readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
+    /** Output ceiling for this call; never raises the slot's configured budget. */
+    readonly maxOutputTokens?: number;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     /** Namespaced options are validated by the host provider gateway. */
     readonly providerOptions?: Readonly<
@@ -72,6 +73,8 @@ export interface PluginRuntimeGateway {
       readonly content: string;
     }[];
     readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
+    /** Output ceiling for this call; never raises the slot's configured budget. */
+    readonly maxOutputTokens?: number;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly providerOptions?: Readonly<
       Record<string, Readonly<Record<string, unknown>>>
@@ -178,6 +181,18 @@ export interface ResolvedSlotForPlugin {
   readonly model: string;
   readonly tag: string;
   readonly metadata: Readonly<Record<string, unknown>>;
+  /**
+   * Effective token limits the gateway applies to this slot, present when the
+   * model declares a context window. Plugins that assemble their own long
+   * prompts size them against `contextWindow - maxOutputTokens`.
+   */
+  readonly limits?: SlotTokenLimits;
+}
+
+export interface SlotTokenLimits {
+  readonly contextWindow: number;
+  /** Output budget after the player's slot override and model capacity. */
+  readonly maxOutputTokens: number;
 }
 
 export type ImageGenerationTarget = Pick<

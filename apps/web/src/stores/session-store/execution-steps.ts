@@ -190,44 +190,7 @@ export function runtimeJobCorrelationId(
       : undefined;
 }
 
-/** Convert the legacy plugin-data `_jobs` row into the same timeline model. */
-export function buildLegacyJobExecutionStep(
-  pluginId: string,
-  jobId: string,
-  value: unknown,
-): ExecutionStep | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const row = value as Record<string, unknown>;
-  const runtimeId = typeof row.runtimeId === "string" ? row.runtimeId : "";
-  const state = typeof row.status === "string" ? row.status : "";
-  if (!runtimeId || !state) return null;
-  const status: ExecutionStep["status"] =
-    state === "done" ? "completed" : state === "failed" ? "failed" : "deferred";
-  return {
-    runtimeId,
-    pluginId,
-    status,
-    detached: true,
-    jobId,
-    jobState: state,
-    turnId: typeof row.turnId === "string" ? row.turnId : undefined,
-    startedAt: typeof row.startedAt === "string" ? row.startedAt : undefined,
-    durationMs: typeof row.durationMs === "number" ? row.durationMs : undefined,
-    progress: typeof row.progress === "number" ? row.progress : undefined,
-    ...(status === "failed"
-      ? {
-          detail:
-            typeof row.error === "string"
-              ? row.error
-              : typeof row.abortReason === "string"
-                ? row.abortReason
-                : undefined,
-        }
-      : {}),
-  };
-}
-
-/** Convert the durable staged-runtime `_runtime_jobs` record for hydration. */
+/** Convert a durable `_runtime_jobs` record into the timeline model. */
 export function buildDurableRuntimeJobExecutionStep(
   fallbackPluginId: string,
   jobId: string,

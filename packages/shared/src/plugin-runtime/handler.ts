@@ -21,6 +21,7 @@ import type {
 
 export type {
   FunctionStoreView,
+  PluginTurnMessage,
   PluginDataWriter,
   PluginLogger,
   ProgressEffect,

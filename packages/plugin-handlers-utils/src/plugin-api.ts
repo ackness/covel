@@ -171,7 +171,11 @@ export interface PluginToolContext {
   readonly inputSlots?: Readonly<Record<string, PluginInputSlot>>;
   /** Earlier writes in this execution; ordinary scoped reads already include them. */
   readonly pendingProposals?: readonly PluginProposal[];
-  /** Logical player-message count, absent outside a turn. */
+  /**
+   * Player messages recorded in this session, setup-form submissions included;
+   * absent outside a turn. Monotonic, but not the scheduler's logical turn
+   * (`startTurn` / `interval` count committed main-loop player turns).
+   */
   readonly turnNumber?: number;
   /** Topics emitted earlier in this tool loop, used for event deduplication. */
   readonly emittedEventTopics?: readonly string[];
@@ -335,6 +339,8 @@ export interface PluginServiceGateway {
       readonly reasoningEffort?: "disabled";
       readonly toolChoice?: "required" | { readonly name: string };
     };
+    /** Output ceiling for this call; never raises the slot's configured budget. */
+    readonly maxOutputTokens?: number;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly signal?: AbortSignal;
   }): Promise<{
@@ -358,6 +364,8 @@ export interface PluginServiceGateway {
       readonly reasoningEffort?: "disabled";
       readonly toolChoice?: "required" | { readonly name: string };
     };
+    /** Output ceiling for this call; never raises the slot's configured budget. */
+    readonly maxOutputTokens?: number;
     readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
     readonly signal?: AbortSignal;
   }): Promise<{
@@ -381,6 +389,11 @@ export interface PluginServiceGateway {
     readonly model: string;
     readonly tag: string;
     readonly metadata: Readonly<Record<string, unknown>>;
+    /** Effective limits, present when the model declares a context window. */
+    readonly limits?: {
+      readonly contextWindow: number;
+      readonly maxOutputTokens: number;
+    };
   } | null;
   generateImage?(input: {
     presetId?: string;

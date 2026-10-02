@@ -119,19 +119,6 @@ export const checkpointRecordArrays = {
       durationMs: z.number(),
     }),
   ),
-  runtimeResults: z.array(
-    createdRow.extend({
-      turnId: z.string(),
-      pluginId: z.string(),
-      runtimeId: z.string(),
-      status: z.string(),
-      output: jsonValue,
-      toolCalls: jsonValue,
-      durationMs: z.number(),
-      tokenUsage: jsonValue.optional(),
-      error: z.string().optional(),
-    }),
-  ),
   toolCalls: z.array(
     createdRow.extend({
       turnId: z.string(),

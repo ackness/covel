@@ -18,6 +18,7 @@ export interface FinalizeTurnResultParams {
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly deferredFollowers: NonNullable<TurnResult["deferredFollowers"]>;
   readonly deferredRuntimeJobs: readonly DeferredRuntimeJob[];
+  readonly withheldRuntimeJobs?: readonly DeferredRuntimeJob[];
   readonly deps: TurnExecutorDeps;
   readonly turnNumber: number;
   /**
@@ -74,20 +75,6 @@ async function persistTurnResult(
   const now = new Date().toISOString();
 
   for (const rr of turnResult.runtimeResults) {
-    await deps.store.saveRuntimeResult({
-      id: rr.runId,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: rr.pluginId,
-      runtimeId: rr.runtimeId,
-      status: rr.status,
-      output: rr.output,
-      toolCalls: rr.toolCalls,
-      durationMs: rr.durationMs,
-      error: rr.error,
-      createdAt: rr.timestamp ?? now,
-    });
-
     try {
       await deps.store.saveRuntimeOutput(
         buildRuntimeOutputFromResult(rr, input.sessionId, turnNumber, now),
@@ -128,6 +115,7 @@ export async function finalizeTurnResult({
   completedResults,
   deferredFollowers,
   deferredRuntimeJobs,
+  withheldRuntimeJobs,
   deps,
   turnNumber,
   nestedRuntimeResults,
@@ -146,6 +134,9 @@ export async function finalizeTurnResult({
     timestamp: new Date().toISOString(),
     ...(deferredFollowers.length > 0 ? { deferredFollowers } : {}),
     ...(deferredRuntimeJobs.length > 0 ? { deferredRuntimeJobs } : {}),
+    ...(withheldRuntimeJobs && withheldRuntimeJobs.length > 0
+      ? { withheldRuntimeJobs }
+      : {}),
   };
   await persistTurnResult(
     turnResult,

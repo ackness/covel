@@ -17,6 +17,7 @@ export type {
   PluginRuntimeGateway,
   PluginEvaluationInput,
   ResolvedSlotForPlugin,
+  SlotTokenLimits,
   PluginRuntimeUtils,
   IngestUrlOptions,
   MediaContext,
@@ -40,6 +41,7 @@ export type {
 export type {
   FunctionHandlerContext,
   FunctionStoreView,
+  PluginTurnMessage,
   PluginDataWriter,
   PluginLogger,
   ProgressEffect,

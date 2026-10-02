@@ -2,11 +2,11 @@
  * Whole-execution finalize primitive tests.
  *
  * `finalizeExecution` is the shared commit boundary for a completed execution's
- * runtime results. Unlike the old per-runtime `commitAll`, it wraps the FULL
- * set of results in one `store.withTransaction`, so any proposal failure rolls
- * the whole turn back — a committed sibling included (the deliberate change).
- * These tests pin that boundary on the real MemoryStore, which rolls back via
- * snapshot restore.
+ * runtime results. It wraps the FULL set of results in one
+ * `store.withTransaction`: a proposal failure rolls the whole execution back,
+ * except that optional runtimes next to a committed story roll back alone in
+ * their own savepoint. These tests pin that boundary on the real MemoryStore,
+ * which rolls back via snapshot restore.
  */
 
 import { describe, it, expect } from "vitest";
@@ -18,6 +18,7 @@ import { withPendingProposals } from "@covel/tools";
 import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
 
 const SESSION_ID = "sess-finalize";
 const TURN_ID = "turn-finalize";
@@ -537,12 +538,12 @@ describe("finalizeExecution", () => {
     expect(await commitStatusOf(store)).toBe("failed");
   });
 
-  it("rolls back on a handler validation failure even without a thrown store error", async () => {
+  it("keeps a committed story when an optional sibling's proposal is rejected", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);
 
     // Runtime A commits a narrative message; runtime B is rejected by the
-    // validator (no throw). The rollback must still undo A's message.
+    // validator (no throw). Only B's writes are dropped.
     const outcome = await finalizeExecution({
       executionContext: {
         executionId: crypto.randomUUID(),
@@ -554,6 +555,72 @@ describe("finalizeExecution", () => {
       runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
       results: [
         makeResult("rt-a", { narrativeOutput: "committed line" }),
+        makeResult("rt-b", {}, badStatePatch()),
+      ],
+      turnIds: [TURN_ID],
+    });
+
+    expect(outcome).toMatchObject({
+      status: "committed",
+      isolatedRuntimeIds: ["rt-b"],
+    });
+    expect(outcome.failedProposals).toHaveLength(1);
+    expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+    expect(await commitStatusOf(store)).toBe("committed");
+  });
+
+  it("runs PreStateCommit hooks before opening the transaction", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const order: string[] = [];
+    const withTransaction = store.withTransaction.bind(store);
+    store.withTransaction = (fn) => {
+      order.push("transaction");
+      return withTransaction(fn);
+    };
+    const hookPipeline = createHookPipeline();
+    hookPipeline.register({
+      id: "observe",
+      event: "PreStateCommit",
+      async handler() {
+        order.push("hook");
+        return { action: "continue" };
+      },
+    });
+
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a", "story")],
+      results: [makeResult("rt-a", { narrativeOutput: "line" })],
+      turnIds: [TURN_ID],
+      hookPipeline,
+    });
+
+    expect(outcome.status).toBe("committed");
+    expect(order).toEqual(["hook", "transaction"]);
+  });
+
+  it("rolls back on a handler validation failure when no story committed", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
+      results: [
+        makeResult("rt-a", { narrativeOutput: "plugin line" }),
         makeResult("rt-b", {}, badStatePatch()),
       ],
       turnIds: [TURN_ID],

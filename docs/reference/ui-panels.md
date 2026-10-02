@@ -174,7 +174,7 @@ ui:
 - `shortLabel` — activity-bar 垂直 Tab 条上的短标签（可选，见下方「activity-bar 短标签」章节）
 - `icon` — 框架允许列表内的 Lucide 图标名（kebab-case）；完整列表见
   [UI Components / Display](ui-components.md#display)
-- `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
+- `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据。`_jobs` 是框架虚拟源：数据为该插件后台手动/事件任务（由 `_runtime_jobs` 映射），以 jobId 为键，值含 `status`（`pending` / `done` / `failed`）、`runtimeId`、`turnId`、`startedAt`、`completedAt`、`durationMs`、`error`、`reason`、`runtimeResults`、`deferredJobs`
 - `dataSource.bindings` — 可选的至多 8 个具名自有 namespace 绑定，例如 `{ "nodes": "characters", "edges": "relations" }`；面板在 `/sources/nodes`、`/sources/edges` 暴露其当前会话数据供 `$state` 引用。名称与 namespace 必须为字面量，无法指定其他插件；切换会话时这些值随数据源刷新，缺失的 namespace 为空对象。主 `namespace` 仍决定普通面板数据和空态。
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件。当前 Web UI 只执行这类声明式 spec；`.tsx`、`.js` 等非 JSON UI 声明不受支持，API 会给出对应诊断并剔除该项

@@ -6,6 +6,8 @@ import {
 const ACTIVE_CAST_NAMESPACE = "active-cast";
 const ACTIVE_CAST_KEY = "current";
 const DEFAULT_MAX_SPEAKERS = 2;
+const RECENT_MESSAGE_COUNT = 12;
+const RECENT_MESSAGE_SCAN_FACTOR = 4;
 
 /**
  * Choose active speakers for Chat Mode before narration.
@@ -19,7 +21,7 @@ export default async function handler(ctx) {
 
   const [characters, messages, previousCast] = await Promise.all([
     listCharacters(ctx.store, ctx.sessionId),
-    listTurnMessages(ctx.store, ctx.sessionId, 12),
+    listRecentTextMessages(ctx.store, ctx.sessionId, RECENT_MESSAGE_COUNT),
     readPreviousCast(ctx),
   ]);
 
@@ -256,6 +258,21 @@ async function listCharacters(store, sessionId) {
     return normalizeCharacters(rows);
   }
   return [];
+}
+
+/**
+ * Most recent messages that carry text. Each turn also records one empty row
+ * per structured runtime, so read a wider tail and keep the text ones.
+ */
+async function listRecentTextMessages(store, sessionId, count) {
+  const rows = await listTurnMessages(
+    store,
+    sessionId,
+    count * RECENT_MESSAGE_SCAN_FACTOR,
+  );
+  return rows
+    .filter((message) => messagesToText([message]).trim())
+    .slice(-count);
 }
 
 async function listTurnMessages(store, sessionId, limit) {

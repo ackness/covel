@@ -22,7 +22,6 @@ export function createSqliteRuntimeRecords(db: SqliteDb): SqliteRuntimeRecords {
     runner: createSqliteSqlRunner(db),
     tables: {
       turnResults: schema.turnResults,
-      runtimeResults: schema.runtimeResults,
       toolCalls: schema.toolCalls,
       runtimeOutputs: schema.runtimeOutputs,
       interactionRecords: schema.interactionRecords,
