@@ -784,7 +784,7 @@ Attributes:
 | `summary`                                          | ✓    | 本轮事实摘要                                                      |
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
-工具原样返回校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
+关系、事件参与者和陈述主体引用了会话已知角色、却没在 `entities` 中登记时，工具按会话角色名册自动补登记（`type: character`），不再让模型为此重交；引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
 
 两类事件另有固定字段，由工具一并校验（其余事件的 `attributes` 保持自由）。`inventory` 与 `core-quest` 的 function runtime 只读取这些字段，不再调用模型：
 

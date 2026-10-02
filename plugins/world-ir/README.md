@@ -18,6 +18,8 @@ runtime:
 
 框架由 typed input 自动建立 DAG 边、失败 gate 和 provenance；agent 在 `<runtime-inputs>` 的 `worldIR.value` 读取 IR。消费者包根声明 `requires: [world-ir-provider@1]`，让会话依赖解析器补齐生产者。生产者的 `runtime.io.output.recordAs: world-ir-v1` 还会把成功结果保留为跨执行 export。
 
+引用会话已知角色却漏登记在 `entities` 里是最常见的校验失败，每次都要多一轮模型调用；工具执行时按会话角色名册自动补登记这些角色，只有引用其他未登记 id 才会退回模型修正。
+
 该设计不会修改 narrator/story prompt。函数调用避免模型把 `strength`、`actor` 等扩展字段误放到受限顶层；校验失败会把字段路径返回给模型，并允许下一步修正。`maxRetries: 0` 避免 provider 超时重试独占整个 120 秒 runtime 预算，同时保留第二个 agent step 处理参数校验错误。
 
 插件的 `PostContextAssembly` hook 只保留本地化任务、权威 `inputs.narrative`（含来源）、角色规范 ID/姓名名册，以及可选的 `vocabulary`（见下文）。完整历史、记忆块、旧世界状态不再重复发送；这样既避免把旧变化当作本轮变化，也降低提取请求体积。提示要求简短描述、避免重复证据，以约 1000 tokens 为典型输出目标，保留所有明确的物品、任务与属性变化；硬性 World IR 上限和原有 60 秒单次时限保持不变。

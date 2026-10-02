@@ -83,8 +83,33 @@ describe("submit-world-facts", () => {
     );
   });
 
-  it("rejects dangling entity references before accepting the output", async () => {
-    const result = submitWorldFacts.parameters.safeParse({
+  it("declares referenced session characters the model left out of entities", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      events: [
+        {
+          id: "mira-hands-key",
+          type: "interaction",
+          participantIds: ["session-mira", "player-ren"],
+        },
+      ],
+    });
+
+    const result = await submitWorldFacts.execute(facts, {
+      world: {
+        characters: [{ id: "session-mira", name: "Mira", type: "npc" }],
+      },
+    });
+
+    expect(result.entities).toContainEqual({
+      id: "session-mira",
+      type: "character",
+      name: "Mira",
+    });
+  });
+
+  it("rejects references to ids that are neither declared nor known characters", async () => {
+    const facts = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,
       relations: [
         {
@@ -96,11 +121,10 @@ describe("submit-world-facts", () => {
       ],
     });
 
-    expect(result.success).toBe(false);
-    expect(result.error?.issues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ path: ["relations", 0, "to"] }),
-      ]),
+    await expect(
+      submitWorldFacts.execute(facts, { world: { characters: [] } }),
+    ).rejects.toThrow(
+      'relations.0.to: entity reference "missing-place" does not exist in entities',
     );
   });
 
