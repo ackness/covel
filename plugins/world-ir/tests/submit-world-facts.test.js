@@ -61,8 +61,8 @@ describe("submit-world-facts", () => {
     ).toBe(false);
   });
 
-  it("rejects extra top-level fields with a precise validation path", async () => {
-    const result = submitWorldFacts.parameters.safeParse({
+  it("moves details written beside a fact's fields into its attributes", async () => {
+    const parsed = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,
       relations: [
         {
@@ -73,12 +73,52 @@ describe("submit-world-facts", () => {
           strength: 1,
         },
       ],
+      events: [
+        {
+          id: "took-job",
+          type: "quest_change",
+          quest: "Find the keeper",
+          status: "accepted",
+          attributes: { giver: "Mira" },
+        },
+      ],
     });
 
+    expect(parsed.relations[0]).toEqual({
+      id: "trusts",
+      type: "TRUSTS",
+      from: "brass-key",
+      to: "brass-key",
+      attributes: { strength: 1 },
+    });
+    expect(parsed.events[0].attributes).toEqual({
+      giver: "Mira",
+      quest: "Find the keeper",
+      status: "accepted",
+    });
+  });
+
+  it("parses a fact array sent as a JSON string", async () => {
+    const parsed = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      statements: JSON.stringify([
+        { id: "rule", type: "rule", content: "The tower closes at dusk." },
+      ]),
+    });
+    expect(parsed.statements).toEqual([
+      { id: "rule", type: "rule", content: "The tower closes at dusk." },
+    ]);
+  });
+
+  it("still rejects a fact with a malformed field", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      relations: [{ id: "trusts", type: "TRUSTS", from: "brass-key", to: 7 }],
+    });
     expect(result.success).toBe(false);
     expect(result.error?.issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: ["relations", 0] }),
+        expect.objectContaining({ path: ["relations", 0, "to"] }),
       ]),
     );
   });
@@ -126,6 +166,15 @@ describe("submit-world-facts", () => {
     ).rejects.toThrow(
       'relations.0.to: entity reference "missing-place" does not exist in entities',
     );
+  });
+
+  it("drops extraction input the model copied into its arguments", async () => {
+    const parsed = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      vocabulary: [{ type: "item", name: "Brass Key" }],
+      characters: [{ id: "player-ren", name: "Ren", type: "player" }],
+    });
+    expect(parsed).toEqual(VALID_FACTS);
   });
 
   it("requires the fixed attributes of profiled events", async () => {

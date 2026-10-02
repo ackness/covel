@@ -18,7 +18,7 @@ runtime:
 
 框架由 typed input 自动建立 DAG 边、失败 gate 和 provenance；agent 在 `<runtime-inputs>` 的 `worldIR.value` 读取 IR。消费者包根声明 `requires: [world-ir-provider@1]`，让会话依赖解析器补齐生产者。生产者的 `runtime.io.output.recordAs: world-ir-v1` 还会把成功结果保留为跨执行 export。
 
-引用会话已知角色却漏登记在 `entities` 里是最常见的校验失败，每次都要多一轮模型调用；工具执行时按会话角色名册自动补登记这些角色，只有引用其他未登记 id 才会退回模型修正。
+每次校验失败都要多一轮模型调用，所以工具先修正机械性失误：丢弃误抄进参数的抽取输入、解析以 JSON 字符串传入的事实数组、把写在事实顶层的细节移入 `attributes`；引用会话已知角色却漏登记时，按会话角色名册自动补登记。只有其他错误（例如引用未登记的非角色 id）才会退回模型修正。
 
 该设计不会修改 narrator/story prompt。函数调用避免模型把 `strength`、`actor` 等扩展字段误放到受限顶层；校验失败会把字段路径返回给模型，并允许下一步修正。`maxRetries: 0` 避免 provider 超时重试独占整个 120 秒 runtime 预算，同时保留第二个 agent step 处理参数校验错误。
 
