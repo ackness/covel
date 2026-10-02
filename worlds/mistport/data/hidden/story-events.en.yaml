@@ -27,3 +27,15 @@
   payload: >-
     Iron Meg arranges a private meeting in a Salt Fangs storehouse and brings out a hinged-tooth grey fragment — the very piece described on the missing page of Appraisal Report 74. She admits her people took it from the Guild's Sealed Archive because Chen's men were already hunting it. She will not say what the Key opens; she only demands that the hero choose between her and the Council. Play this confrontation and her terms; do not make the choice for the hero.
   priority: 5
+- id: meg-calls-the-debt
+  title: The Salt Fangs Collect
+  when:
+    all:
+      - revealed: meg-shows-the-fragment
+        turnsSinceGte: 3
+      - dimension: factionStanding
+        path: saltFangs.attitude
+        lte: 0
+  payload: >-
+    Iron Meg gave the hero a choice, and the hero did not side with the Salt Fangs. Now her people come to collect: two Salt Fangs enforcers stop the hero at the mouth of a damp alley and politely ask for the "price" of what Meg revealed — either a piece of Council intelligence or one lead from the case board handed over to the Salt Fangs. Meg herself does not appear. Play this threatening negotiation and let the player decide whether to pay, stall, or refuse; do not let it collapse into a fight to the death on the spot.
+  priority: 6

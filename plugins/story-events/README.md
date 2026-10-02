@@ -41,8 +41,22 @@ sources:
   priority: 10
 ```
 
-- 条件组合：`all` / `any` / `not`；叶子引用 `dimension`（可带 `path`，点号或数组）或 `time`（world-time 输出的数值字段，如时段制的 `phase` / `cycle`，历法制的 `hour` / `day` / `month` / `weekdayIndex`）。
-- 运算符（每个叶子恰好一个）：`equals`、`notEquals`、`in`、`gte`、`gt`、`lte`、`lt`、`exists`。
+- 条件组合：`all` / `any` / `not`；叶子引用 `dimension`（可带 `path`，点号或数组）、`time`（world-time 输出的数值字段，如时段制的 `phase` / `cycle`，历法制的 `hour` / `day` / `month` / `weekdayIndex`）或 `revealed`（另一个事件）。
+- 事件链：`{ revealed: <事件 ID> }` 在该事件发生过后成立，可加 `turnsSinceGte` / `turnsSinceLte` 限定距它最近一次发生过了多少回合；配合 `not` 可以写「某事还没发生」。`revealed` 叶子不需要比较运算符，引用不存在的事件 ID 视为不满足并写入诊断。
+
+```yaml
+- id: fangs-collect
+  when:
+    all:
+      - revealed: meg-shows-the-fragment
+        turnsSinceGte: 3
+      - dimension: factionStanding
+        path: saltFangs.attitude
+        lte: 0
+  payload: 盐牙会派人来讨账……
+```
+
+- 运算符（`dimension` / `time` 叶子恰好一个）：`equals`、`notEquals`、`in`、`gte`、`gt`、`lte`、`lt`、`exists`。
 - 时间请用与语言无关的数值字段；`period` 是本地化文字，不适合写进条件。
 - `once` 默认 `true`；可重复事件用 `once: false` + `cooldownTurns`。多个事件同时满足时，`priority` 高者先触发，同级按 ID 排序。
 - 引用了不存在的维度或世界时间不可用时，条件视为不满足，原因写进输出的 `diagnostics`（只含 ID，不含剧情内容）。
@@ -56,7 +70,7 @@ sources:
 ## 边界
 
 - 这是「不剧透」，不是加密：世界包文件就在玩家本地，翻文件仍能看到。
-- 本期只做确定性条件；需要模型判断的模糊条件、事件链与作者调试视图留作后续。
+- 目前只做确定性条件；需要模型判断的模糊条件、由插件 agent 动态生成的隐藏事件和作者调试视图留作后续。
 
 ## 开发与验证
 

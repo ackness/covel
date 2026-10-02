@@ -25,3 +25,14 @@
         gte: 2
   payload: 铁姑私下约主角到盐牙会的暗仓，取出一块铰齿状的灰色碎片——正是第七十四号鉴定报告缺页上记载的那一块。她承认碎片是她派人从公会封档库带出来的，因为陈远山的人比她先一步在找它。她不肯说钥匙能打开什么，只要求主角在她和议会之间做出选择。演出这场摊牌与她的条件，不替主角做决定。
   priority: 5
+- id: meg-calls-the-debt
+  title: 盐牙会讨账
+  when:
+    all:
+      - revealed: meg-shows-the-fragment
+        turnsSinceGte: 3
+      - dimension: factionStanding
+        path: saltFangs.attitude
+        lte: 0
+  payload: 铁姑给过主角选择，而主角没有站到盐牙会这边。现在她的人来讨这笔账：两个盐牙会的打手在潮湿的巷口拦住主角，客气地要回她摊牌时透露的情报的"价钱"——要么交出一条议会的消息，要么把案情板上的一条线索让给盐牙会。铁姑本人不露面。演出这场带威胁的交涉，让玩家决定付、拖还是翻脸；不要当场让局面失控成死斗。
+  priority: 6
