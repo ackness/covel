@@ -366,10 +366,16 @@ function findEquivalentObjectiveIndex(existing, incomingText) {
   const candidates = existing
     .map((objective, index) => ({
       index,
-      score: objectiveSimilarity(
-        normalizeObjectiveText(objective.text),
-        incoming,
-      ),
+      // Character overlap suits Han text. Stripped of spaces, any two English
+      // sentences share enough letters to look alike, so other scripts
+      // compare significant words instead.
+      score:
+        containsHan(objective.text) || containsHan(incomingText)
+          ? objectiveSimilarity(
+              normalizeObjectiveText(objective.text),
+              incoming,
+            )
+          : wordSimilarity(objective.text, incomingText),
     }))
     .filter((candidate) => candidate.score > 0)
     .sort((left, right) => right.score - left.score);
@@ -382,6 +388,50 @@ function findEquivalentObjectiveIndex(existing, incomingText) {
     return -1;
   }
   return candidates[0].index;
+}
+
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "before",
+  "by",
+  "for",
+  "from",
+  "in",
+  "into",
+  "of",
+  "on",
+  "or",
+  "the",
+  "their",
+  "to",
+  "with",
+  "you",
+  "your",
+]);
+
+function significantWords(text) {
+  return new Set(
+    (
+      (text ?? "")
+        .normalize("NFKC")
+        .toLowerCase()
+        .match(/[\p{L}\p{N}]+/gu) ?? []
+    ).filter((word) => word.length > 1 && !STOP_WORDS.has(word)),
+  );
+}
+
+/** Share of the shorter objective's significant words found in the other. */
+function wordSimilarity(leftText, rightText) {
+  const left = significantWords(leftText);
+  const right = significantWords(rightText);
+  const shorter = Math.min(left.size, right.size);
+  if (shorter < 2) return 0;
+  const common = [...left].filter((word) => right.has(word)).length;
+  const overlap = common / shorter;
+  return common >= 2 && overlap >= 0.6 ? overlap : 0;
 }
 
 function objectiveSimilarity(left, right) {

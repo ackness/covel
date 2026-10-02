@@ -421,6 +421,66 @@ describe("upsert-quests", () => {
     ]);
   });
 
+  it("keeps distinct English objectives apart and matches paraphrases by words", async () => {
+    await mockStore.setPluginData({
+      id: "imported-call",
+      sessionId: "sess-1",
+      pluginId: "core-quest",
+      namespace: "quests",
+      key: "call-from-tomorrow",
+      value: {
+        id: "call-from-tomorrow",
+        name: "The Call from Tomorrow",
+        status: "active",
+        objectives: [
+          {
+            id: "preserve-recording",
+            text: "Make an isolated copy of the future transmission",
+            done: false,
+          },
+          {
+            id: "compare-voiceprint",
+            text: "Compare the signal against your station voiceprint",
+            done: false,
+          },
+          {
+            id: "trace-echo",
+            text: "Trace the echo's time and location signature",
+            done: false,
+          },
+        ],
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "The Call from Tomorrow",
+            objectives: [
+              {
+                text: "Compare the signal with the station voiceprint",
+                done: true,
+              },
+            ],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    const stored = await findQuestByName("The Call from Tomorrow");
+    expect(stored.value.objectives.map(({ id, done }) => [id, done])).toEqual([
+      ["preserve-recording", false],
+      ["compare-voiceprint", true],
+      ["trace-echo", false],
+    ]);
+  });
+
   it("keeps similar but distinct objectives separate", async () => {
     await executeAndCommit(
       upsertQuestsTool,
