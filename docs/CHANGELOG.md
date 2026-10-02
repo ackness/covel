@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Narration streams again.** The narrator's review hook no longer turns streaming off. A story step whose text will not be final (preparation before tool calls, or a draft the review rejects) now ends with a `narrative.delta` carrying `reset: true`, and the client clears it before the next step; the reviewed final text still replaces the stream on completion.
+
 ### Added
 
 - **Hidden world data.** worldData sources accept `visibility: hidden`. Hidden data imports into the receiving plugin's `_hidden.<namespace>` and stays out of prompts, LLM data tools, extension handlers, and every public API until a plugin reveals it (#101).
@@ -13,6 +17,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Changed
 
+- **Faster dimension settlement.** The tracker's prompt now carries every rule, schema, and frozen value it needs (within a 24000-character budget), it runs without reasoning, and `update-dimensions` accepts `changes: [{path, value}]` so large dimensions are patched instead of rewritten. In a Mistport session settlement dropped from 20–100 s to about 5 s per turn.
 - **cost-gate keeps narrative inputs.** Past the soft cap it now trims only runtimes after the narrative; `pre-turn` runtimes (dice pools, tabletop checks, dimension and world-time context, hidden story cues) keep running so the story itself does not change.
 - A plugin's own code (function runtimes and its local tools) may now write its own `_hidden.*` namespaces. The REST API and the builtin `plugin-data-set` / `plugin-data-set-batch` tools reject every `_` namespace.
 

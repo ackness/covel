@@ -108,7 +108,7 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 
 捆绑 `world-init` 通过 `prompt.segment@1` 提供 story 受众的 `<world-dimensions>` turn 段。它保留 ID、版本及预算内的本地化值预览：当前默认总预算 8192 字符，单项值预览最多 240 字符；超出预算的维度计数会显式显示，长值使用省略号，并指引按 ID/path 或分页查询。省略不代表值不存在，预览不冒充完整 JSON。选择了某个模板路径也不意味着框架会自动全量展开所有行集。
 
-投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 使用 self-only 规则预览与 `dimension-rule-get` 获取完整维护规则。没有有效规则时不调用维护模型。
+投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 的 self-only `<dimension-rules>` 段在预算内直接带完整规则、schema 与冻结值，超出预算的维度再用 `dimension-rule-get` 分页获取。没有有效规则时不调用维护模型。
 
 pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post-turn 提交后新执行再发布新版，不反向绑定 tracker 输出，不以 `recordAs` 或世界初值兜底。来源重试通过 `retryFromTurnId` 使用原 turn artifact，失败/未结算不是无变化。完整状态见 [World Model](world-model.md#回合时序与结算回执)。本期没有 #97 的隐藏事件载荷或条件触发层。
 
