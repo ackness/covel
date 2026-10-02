@@ -39,7 +39,7 @@ describe("intake handler", () => {
             },
           ],
         },
-        source: { pluginId: "story-plotter", runtimeId: "story-plotter/plot" },
+        source: { pluginId: "story-events", runtimeId: "story-events/plot" },
       },
     ]);
     const result = await handler(ctx);
@@ -49,7 +49,7 @@ describe("intake handler", () => {
       rejected: [
         {
           id: "nowhere",
-          origin: "story-plotter/plot",
+          origin: "story-events/plot",
           reason: "unknown dimension: weather",
         },
       ],

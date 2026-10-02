@@ -1,14 +1,15 @@
 # story-events
 
-官方维护的可选插件：世界包可以声明「满足条件才发生」的隐藏剧情。条件满足前，剧情内容对模型和玩家都不可见；满足的那一回合，插件把剧情作为一次性提示交给叙事，由叙事自然演出。零依赖、不调用模型。
+官方维护的可选插件：世界包可以声明「满足条件才发生」的隐藏剧情。条件满足前，剧情内容对模型和玩家都不可见；满足的那一回合，插件把剧情作为一次性提示交给叙事，由叙事自然演出。判断与揭示零依赖、不调用模型；可选的剧情策划（默认关闭）会调用模型在幕后追加事件。
 
 ## 运行时结构
 
 - `evaluate`：pre-turn function runtime。每回合读取隐藏事件、冻结的维度快照（`world.dimensions@1`）和世界时间（`world-time-context@1`），按确定性规则判断，最多揭示一个事件，输出 `story-event-cue@1`。
 - `narrator` 与 `chat-mode-narrator` 以可选输入 `storyEvent` 消费该合约；没有启用本插件时输入为空，叙事行为不变。
-- `intake`：post-turn function runtime。接收其他插件在剧情中发布的 `story-event.plan@1` 计划，校验后写入 `_hidden.planned`（见下文「剧情中追加事件」）。
+- `intake`：post-turn function runtime。接收在剧情中发布的 `story-event.plan@1` 计划（内置的 `plot` 或其他插件），校验后写入 `_hidden.planned`（见下文「剧情中追加事件」）。
+- `plot`：post-turn agent runtime，即剧情策划，只在设置 `planner` 开启时运行（见下文「剧情策划」）。
 - `evaluate` 输出里的 `ledger` 是给策划者的公开账本：当前回合、已发生事件和已埋下但未发生的计划事件（只有 ID 与公开标题）。世界作者尚未发生的事件不会出现在账本里。
-- `evaluate` 与 `intake` 都声明 `io.concealed: true`，它们的输出不会出现在 trace、实时流和执行历史里。
+- `evaluate`、`intake` 与 `plot` 都声明 `io.concealed: true`，它们的输出不会出现在 trace、实时流和执行历史里。
 
 ## 世界包写法
 
@@ -72,7 +73,7 @@ sources:
 
 ## 剧情中追加事件
 
-任何插件都可以在 post-turn 发布 `story-event.plan@1` 输出（例如内置的 [story-plotter](../story-plotter/README.md)），本插件的 `intake` 在同一回合接收：
+任何 runtime 都可以在 post-turn 发布 `story-event.plan@1` 输出（例如本插件的 `plot`），本插件的 `intake` 在同一回合接收：
 
 ```json
 {
@@ -99,6 +100,16 @@ sources:
 
 发布计划的 runtime 会接触剧情内容，应声明 `io.concealed: true`。
 
+## 剧情策划
+
+设置 `planner`（默认 `false`）开启内置的 `plot` agent：它从第 2 回合起每 3 回合读一次剧情，找到正在发展、还没收束的线索（许下的承诺、欠下的债、放过的人、NPC 背着主角做的事），写一条带触发条件的后续事件交给 `intake` 保管。每次规划调用一次 `plugin` 模型槽。世界包用 `pluginSettings.story-events.planner: true` 设定默认开启，玩家可在插件设置中改。
+
+- 提示词带世界名称、简介、标签和主角信息；输入本回合叙事、可选的本回合 WorldIR 抽取（`world-ir-provider@1`，有人物、关系、事件和说出口的话时更准确）、维度快照、世界时间，以及 `evaluate` 的公开账本。世界作者尚未发生的隐藏事件不在其中。
+- 工具 `plan-story-events` 把模型提交的 `all` / `none` 条件列表转成条件树，并检查引用的维度、时间字段和事件是否存在；出错时把原因返回给模型修正。每次最多埋 2 个事件，也可以用 `retire` 撤回已经和剧情不符的旧计划，或者提交空计划。
+- 条件写「现在不成立、剧情顺着发展会成立」的状态，或接在已发生 / 已埋下的事件之后，用 `turnsSinceGte` 留出延迟；`payload` 是给叙事者的 2–4 句简述，不写成稿，不替玩家做决定，不揭开世界核心谜底，不让重要角色死亡。
+- 适合线索多、讲后果的世界：调查、地城探险、倒计时救援。作者逐条编排角色路线的恋爱 / 视觉小说世界不建议开启，随手加的事件容易破坏角色和路线节奏。
+- `cost-gate` 超过软上限后会停掉策划（它在叙事之后运行）；`evaluate` 在叙事之前运行，不受影响。条件只能引用维度和世界时间，好感度等插件数据不能直接作为条件。
+
 ## 边界
 
 - 这是「不剧透」，不是加密：世界包文件就在玩家本地，翻文件仍能看到；浏览器本地模式的 checkpoint 也包含隐藏数据和计划事件。
@@ -106,4 +117,4 @@ sources:
 
 ## 开发与验证
 
-`pnpm --filter @covel/plugin-story-events test` 运行条件判断与选择逻辑的单元测试。
+`pnpm --filter @covel/plugin-story-events test` 运行条件判断、选择逻辑与策划工具的单元测试；`apps/server/tests/api/story-events-hidden.test.ts` 覆盖从规划、隐藏存储到揭示的完整链路。

@@ -118,14 +118,3 @@ describe("plan-story-events", () => {
     });
   });
 });
-
-describe("story-event.plan@1 schema", () => {
-  it("matches the copy owned by story-events", async () => {
-    const { readFile } = await import("node:fs/promises");
-    const read = (path) =>
-      readFile(new URL(path, import.meta.url), "utf8").then(JSON.parse);
-    expect(await read("../schemas/story-event-plan.schema.json")).toEqual(
-      await read("../../story-events/schemas/story-event-plan.schema.json"),
-    );
-  });
-});

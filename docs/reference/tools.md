@@ -47,6 +47,7 @@
 | upsert-quests                         | local   | core-quest          | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）       |
 | update-affinity                       | local   | affinity            | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
 | update-inventory                      | local   | inventory           | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
+| plan-story-events                     | local   | story-events        | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划）                             |
 | submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                       |
 | submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                     |
 | submit-openai-image-text-prompt       | local   | openai-image-gen    | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件                               |

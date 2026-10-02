@@ -42,7 +42,6 @@ pluginPolicy:
         - living-world-rules
         - character-blueprint
         - story-events
-        - story-plotter
       recommended:
         - branch-reply
   presetId: emberback-rescue
@@ -64,7 +63,9 @@ pluginPolicy:
     - character-blueprint
     - living-world-rules
     - story-events
-    - story-plotter
+pluginSettings:
+  story-events:
+    planner: true
 characterSchema:
   types:
     - npc

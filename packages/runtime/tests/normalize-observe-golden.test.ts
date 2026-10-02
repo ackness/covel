@@ -203,7 +203,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "core-quest",
       "inventory",
       "npc-graph/extractor",
-      "story-plotter/plot",
+      "story-events/plot",
       "world-init/dimension-tracker",
     ]);
     expect(levels[2]).toEqual(["story-events/intake"]);

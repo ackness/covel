@@ -58,7 +58,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 跨插件调用使用版本化契约，例如 `narrative-engine@1`。根 `requires` 驱动会话依赖解析，`io.inputs` 绑定执行结果，`schedule.needs` 控制运行条件。普通契约可以有多个提供者；用 `cardinality: one/all` 指定输入要求，用显式 `conflicts` 或单提供者扩展点表达互斥。
 
-runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声明 `io.concealed: true`。它的提示词、工具参数、工具结果和输出不会进入 trace、实时流和玩家可见的执行历史，只留下名称、状态、耗时和用量。需要把隐藏内容交给其他插件时，用契约输出传递，由接收插件写入它自己的 `_hidden.<namespace>`；参见 [story-plotter](../../plugins/story-plotter/PLUGIN.md) 与 [World Data · 隐藏数据](../reference/world-data.md#隐藏数据visibility-hidden)。
+runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声明 `io.concealed: true`。它的提示词、工具参数、工具结果和输出不会进入 trace、实时流和玩家可见的执行历史，只留下名称、状态、耗时和用量。需要把隐藏内容交给其他插件时，用契约输出传递，由接收插件写入它自己的 `_hidden.<namespace>`；参见 [story-events 的 plot runtime](../../plugins/story-events/runtimes/plot/RUNTIME.md) 与 [World Data · 隐藏数据](../reference/world-data.md#隐藏数据visibility-hidden)。
 
 **跨包依赖边界**：`needs`、`after` 和 `io.inputs` 的跨包引用必须使用版本化契约（如 `narrative-engine@1`），不允许直接引用其他插件的 runtime 名称（如 `other-plugin/some-runtime`）。包内多个 runtime 之间可以使用 runtime 名称建立排序和输入关系，但跨包必须通过公开契约解耦。违反此规则的 manifest 加载时会被拒绝。
 
