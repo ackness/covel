@@ -22,14 +22,15 @@ export function createResponseReviewer(
     }
     // No tool-call IDs: this rejected batch was deliberately not executed.
     // The reasoning goes back with the draft: thinking-mode providers
-    // (DeepSeek, DashScope Qwen) reject an assistant turn without it.
+    // (DeepSeek, DashScope Qwen) reject an assistant turn without it, and the
+    // continuation tells the adapter which wire field carries it.
     if (reviewed.response.content) {
+      const { reasoningContent, providerContinuation } = reviewed.response;
       transcript.push({
         role: "assistant",
         content: reviewed.response.content,
-        ...(reviewed.response.reasoningContent
-          ? { reasoningContent: reviewed.response.reasoningContent }
-          : {}),
+        ...(reasoningContent ? { reasoningContent } : {}),
+        ...(providerContinuation ? { providerContinuation } : {}),
       });
     }
     transcript.push({

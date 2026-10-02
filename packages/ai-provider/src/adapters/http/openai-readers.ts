@@ -74,20 +74,39 @@ export function readOpenAiChatStreamDelta(
   return typeof delta === "string" ? delta : null;
 }
 
+/**
+ * Wire field that carried a Chat Completions reasoning trace. DeepSeek and
+ * DashScope use `reasoning_content`; groq, OpenRouter and recent vLLM use
+ * `reasoning`. A follow-up turn has to echo it under the same field: groq
+ * rejects `reasoning_content` on an assistant message.
+ */
+export type OpenAiChatReasoningField = "reasoning_content" | "reasoning";
+
+export interface OpenAiChatReasoning {
+  readonly text: string;
+  readonly field: OpenAiChatReasoningField;
+}
+
+function readOpenAiChatReasoning(
+  record: Record<string, unknown> | undefined,
+): OpenAiChatReasoning | null {
+  for (const field of ["reasoning_content", "reasoning"] as const) {
+    const text = record?.[field];
+    if (typeof text === "string" && text.length > 0) return { text, field };
+  }
+  return null;
+}
+
 export function readOpenAiChatStreamReasoningDelta(
   payload: Record<string, unknown>,
-): string | null {
-  const delta = asRecord(firstChoice(payload)?.delta)?.reasoning_content;
-  return typeof delta === "string" && delta.length > 0 ? delta : null;
+): OpenAiChatReasoning | null {
+  return readOpenAiChatReasoning(asRecord(firstChoice(payload)?.delta));
 }
 
 export function readOpenAiChatReasoningContent(
   payload: Record<string, unknown>,
-): string | null {
-  const reasoning = asRecord(firstChoice(payload)?.message)?.reasoning_content;
-  return typeof reasoning === "string" && reasoning.length > 0
-    ? reasoning
-    : null;
+): OpenAiChatReasoning | null {
+  return readOpenAiChatReasoning(asRecord(firstChoice(payload)?.message));
 }
 
 export function readOpenAiChatStreamFinishReason(
