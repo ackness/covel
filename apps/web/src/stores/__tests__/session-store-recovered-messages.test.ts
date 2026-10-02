@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { initialState, reducer } from "../session-store/reducer.js";
 import type { StreamMessage } from "../session-store/types.js";

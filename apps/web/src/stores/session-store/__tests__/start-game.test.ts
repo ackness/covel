@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { DataService } from "@/services/data-service.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";

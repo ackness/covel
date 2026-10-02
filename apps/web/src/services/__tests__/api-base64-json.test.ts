@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression test: AI request headers are base64 of UTF-8 bytes, not `btoa`
  * of a JS string. The app's default locale is zh-CN, so a Chinese custom-preset

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import { configuredTextSlots } from "../model-state.js";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression tests for the service-boundary error handling:
  *

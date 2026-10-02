@@ -150,6 +150,17 @@
     "@covel/web#lint": {
       "dependsOn": ["^build", "generate:routes"]
     },
+    "@covel/web#test": {
+      "dependsOn": ["^build", "generate:routes"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts"
+      ]
+    },
     "clean": {
       "cache": false
     }

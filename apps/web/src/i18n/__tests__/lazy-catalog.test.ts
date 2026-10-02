@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
 import i18n, { i18nReady } from "../index.js";
 

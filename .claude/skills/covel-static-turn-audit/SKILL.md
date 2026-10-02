@@ -1,6 +1,6 @@
 ---
 name: covel-static-turn-audit
-description: "Static Covel audit for start-game, plugin activation, runtime scheduling, prompt assembly, SSE/commit flow, multi-turn simulation, and dead-code findings under devs/docs/audits/."
+description: "Static Covel audit for start-game, plugin activation, runtime scheduling, prompt assembly, SSE/commit flow, multi-turn simulation, and dead-code findings under devs/docs/audits/. Use only when the user explicitly asks for a static turn-flow audit or for this skill by name."
 ---
 
 # Covel Static Turn Audit
@@ -11,11 +11,10 @@ Perform a code-only Covel gameplay-flow audit from the first start-game click th
 
 ## Operating Rules
 
-- Follow repository-local `AGENTS.md`, `CLAUDE.md`, `RTK.md` (when present), and closer instruction files before this skill.
+- Follow repository-local `AGENTS.md` (Claude Code loads it through `CLAUDE.md`) and closer instruction files before this skill.
 - If the user requests a static audit or says not to run the program, do not start dev servers, browsers, tests, builds, or model calls. Use read-only shell inspection plus Markdown file writes.
-- Use `rtk` for shell commands only when a repository-local rule file requires it; otherwise plain shell commands are fine.
 - Use `rg`/`fd` or local equivalents for discovery, and `nl -ba ... | sed -n` for line-backed evidence.
-- Use `apply_patch` for audit file creation and edits.
+- Create and edit audit files with the agent's normal file-editing tools.
 - Preserve unrelated worktree changes. Check `git status --short` before edits and before final reporting.
 - Use subagents only when the user explicitly asks for parallel agent work.
 
@@ -37,7 +36,7 @@ If the user asks for "当前审计流程", create a reusable audit method, not a
 
 Read only the context needed for the audit:
 
-- `AGENTS.md`, `CLAUDE.md`, `RTK.md`.
+- `AGENTS.md`.
 - Relevant architecture docs, especially `docs/architecture/flow.md`, `docs/reference/plugins.md`, `docs/reference/api.md`, `docs/reference/protocol.md`.
 - Existing `devs/docs/audits/` folders to avoid duplicate names and learn prior framing.
 - Memory entries for Covel when available, especially world-data, manual-trigger, plugin runtime docs, storage, and prior audit follow-through notes. Treat memory as hints; verify current code when cheap.
@@ -65,7 +64,7 @@ Trace `/api/actions` and executor orchestration:
 3. Active runtime lookup and plugin activation after restart.
 4. SSE forwarded subtypes and frontend SSE handling.
 5. `executeTurn` session lock, hooks, session state load (frozen `logicalTurn = completedPlayerTurns + 1`), trigger selection (`selectTriggeredRuntimes`: manual name-match bypass / setup mirror-pending + `needs(scope: session)` gate / main-loop `shouldTrigger`), per-stage DAG scheduling (`setup` single DAG; main loop `pre-turn → narrative → post-turn → audit` with strict barriers), runtime execution (turn-scope upstream gate + `inputs` bindings), event-chain followers (fan-out is name-ordered and not stage-barriered), setup completion mirroring, finalization, commit processing.
-6. Turn counting is single-writer: the finalize transaction writes the session clock (`phase` / `completedPlayerTurns` / `setupRuntimes`) and the logical-turn ledger guarantees at-most-once counting; `markPreGameCompletion` only collects newly-done setup mirrors (it does not write counts), and the legacy `turnCount` / `preGameCompleted` are derived at read time. Also check the opening continuation in `/api/actions`: the request that completes the LAST setup runtime chains exactly one main-loop turn on the same SSE stream.
+6. Turn counting is single-writer: the finalize transaction writes the session clock (`phase` / `completedPlayerTurns` / `setupRuntimes`) and the logical-turn ledger guarantees at-most-once counting; `markPreGameCompletion` only collects newly-done setup mirrors (it does not write counts). Deprecated clock fields are neither accepted nor reconstructed — flag any code that still reads them. Also check the opening continuation in `/api/actions`: the request that completes the LAST setup runtime chains exactly one main-loop turn on the same SSE stream.
 
 ### 5. Map Prompt And Commit Semantics
 
@@ -84,17 +83,18 @@ Use an expected/actual/delta/effect/evidence structure. At minimum simulate:
 | Phase | Meaning |
 | --- | --- |
 | Prep Start Game | Session creation, plugin selection, worldData import; `phase` initialized from whether the active set declares a setup runtime; no turn execution. |
-| Turn0 / start_session | Setup stage only (`phase === "setup"`), normally `pregame`, `world-init/schema-gen`, `char-creator/player-init` — DAG-ordered by `needs` plus the conservative legacy chain; narrator never runs. |
+| Turn0 / start_session | Setup stage only (`phase === "setup"`), normally `pregame`, `world-init/schema-gen`, `char-creator/player-init` — DAG-ordered only by declared `needs` / `after` edges; narrator never runs. |
 | Turn0b / form submission | `framework/submit-form` (plugin-rpc) writes `player_inputs`, then filled narrative triggers `send_message`; the guard synthesizes the player deterministically and reports done. When the LAST setup runtime completes, the finalize transaction flips `phase` to `playing` and the **opening continuation** chains exactly one main-loop turn in the same request (narrator opening without another player message). |
-| Turn1 | First normal main-loop player message: `pre-turn → narrative → post-turn → audit` with strict barriers; downstream gates use `needs: [capability: narrative-engine]`. |
+| Turn1 | First normal main-loop player message: `pre-turn → narrative → post-turn → audit` with strict barriers; downstream runtimes gate with `needs: [contract: narrative-engine@1]`. |
 | Turn2 | Second normal main-loop message, using state written by Turn1 (plugin-data injects, extractor increments). |
 | Turn3 | Third normal main-loop message, verifying `phase` stays `playing` and the per-stage schedule repeats identically. |
 
 For each phase, check whether traditional-story and dialogue-mode branch differently:
 
-- Traditional path: retrieval -> narrator -> guide/codex/npc graph extractor/character tracker.
+- Traditional path: `npc-graph/rag-retriever` -> narrator -> guide / codex / `npc-graph/extractor` / `char-creator/character-tracker`.
 - Dialogue path: retrieval + scene-cast -> chat-mode-narrator -> scene-prompts and enabled trackers.
-- The two narrators are mutually exclusive via `relations.conflicts`; downstream plugins gate on `capability: narrative-engine` so both modes share one declaration.
+- Both narrators provide `narrative-engine@1` and list it under `conflicts`, so only one is active; downstream runtimes gate on `contract: narrative-engine@1`, so both modes share one declaration.
+- Derive the path from the active plugins' `stage` declarations rather than trusting this list; plugins change faster than this skill.
 - Manual plugins such as identity/profile or branch reply require plugin-rpc/manual triggers; active does not mean auto-scheduled (manual/event runtimes declare no `stage`).
 
 ### 7. Identify Dead Or Redundant Code
@@ -140,9 +140,9 @@ Keep reports factual and line-backed. State explicitly that the audit is static 
 Use targeted reads; avoid huge bundles:
 
 ```bash
-rtk git status --short
-rtk rg -n "startGameSession|beginAdventure|sendMessage|resolveSessionPlugins|executeTurn|markPreGameCompletion|submit-form" apps packages plugins docs
-rtk nl -ba <file> | sed -n '<start>,<end>p'
+git status --short
+rg -n "startGameSession|beginAdventure|sendMessage|resolveSessionPlugins|executeTurn|markPreGameCompletion|submit-form" apps packages plugins docs
+nl -ba <file> | sed -n '<start>,<end>p'
 ```
 
 Prefer current source over old audit notes. Use old audits only to identify prior known risks or terminology.

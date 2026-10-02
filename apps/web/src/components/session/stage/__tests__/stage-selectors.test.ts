@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { WorldVisual } from "@/lib/world-visuals.js";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsStore, type SettingsBackendAdapter } from "@covel/settings";
 import { registerLlmSettings } from "@/settings/registry/llm.js";

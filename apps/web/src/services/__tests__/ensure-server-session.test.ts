@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression test: a failed session-context sync must NOT be swallowed.
  *

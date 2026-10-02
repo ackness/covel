@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, expect, it, vi } from "vitest";
 import { createSessionWorkspace } from "@/services/data-service/workspace.js";
 import type { DataService } from "@/services/data-service.js";

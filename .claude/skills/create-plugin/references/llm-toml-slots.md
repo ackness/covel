@@ -1,86 +1,31 @@
-# `llm.toml` Slot 配置参考
+# `llm.toml` Slot 配置：插件作者踩雷点
 
-第三方插件**不修改 llm.toml 本身**——只在 README 里告诉用户怎么配。本文是给你写 README + handler 错误信息时的对照表，是 SDK 级合约，不需要看框架源码。
+第三方插件**不修改 llm.toml 本身**——只在 README 里告诉用户怎么配。本文只收集写 README 和 handler 错误信息时容易踩的坑。
 
-> 框架对这份 schema 用 Zod **strict** 模式：未声明字段 / 错枚举值会让**整份** llm.toml 拒载。
-> **承诺**：所有字段、所有枚举值都已穷举。schema 改了但本文没改 = skill 的 bug。
-
-## 完整字段表
-
-```toml
-[covel.<slot-name>]                # slot-name 任意小写串，惯例用 plugin id
-provider = "<provider-id>"         # 必填；string 任意，按 {PROVIDER}_API_KEY 找 key
-model    = "<model-id>"            # 必填
-baseUrl  = "https://..."           # 必填；必须合法 URL
-protocol = "openai-chat-v1"        # 必填；enum 见下
-
-# ── 以下全部可选 ───────────────────────────────────────
-fallback        = "<another-slot-name>"   # slot 失败时回退
-tag             = "speech"                # capability tag；省略时按 output 自动推断（见踩雷点 #1）
-output          = ["audio"]               # 模型 output modality；缺省时按 known-models DB 推断
-input           = ["text", "image"]       # 模型 input modality
-features        = ["function_calling", "streaming"]
-contextWindow   = 131072
-maxOutputTokens = 8192
-embeddingFormat = "openai"                # 仅 embedding slot 用
-reasoning_effort = "medium"               # reasoning 模型用
-[covel.<slot-name>.thinking]
-type = "enabled"                          # 'enabled' | 'disabled'
-[covel.<slot-name>.pricing]
-inputPerMToken      = 0.27
-outputPerMToken     = 1.10
-imageInputPerMToken = 0
-audioInputPerMToken = 0
-audioOutputPerMToken = 0
-perImage             = 0
-[covel.<slot-name>.providerRequestMetadata]
-# 任意 key=value，merge 到 provider 请求 body（per-call metadata 优先级更高）
-enable_thinking = true
-```
-
-## 枚举字段——填错就 ZodError，整份 toml 拒载
-
-| 字段 | 允许值 |
-|---|---|
-| `protocol` | `"openai-chat-v1"` / `"openai-responses-v1"` / `"anthropic-messages-v1"` |
-| `output[]` | `"text"` / `"image"` / `"audio"` / `"embedding"` |
-| `input[]` | `"text"` / `"image"` / `"audio"` / `"video"` / `"file"` |
-| `features[]` | `"function_calling"` / `"structured_output"` / `"streaming"` / `"reasoning"` / `"vision"` / `"prompt_caching"` / `"web_search"` / `"computer_use"` |
-| `embeddingFormat` | `"openai"` / `"nemotron-multimodal"` |
-| `reasoning_effort` | `"low"` / `"medium"` / `"high"` |
-| `thinking.type` | `"enabled"` / `"disabled"` |
-
-> **后果严重**：strict zod 单字段 schema fail → 整份 `llm.toml` 拒载，**所有** slot（包括与你无关的 `[covel.story]`）一起停摆。Server 启动时会回退到内置 DeepSeek `story` 兜底，但用户看到的现象是"我配的别的 provider 都没生效"。
+**字段全集、枚举值和默认值以 [`docs/reference/slots.md`](../../../../docs/reference/slots.md) 为准**（schema 源码：`packages/ai-provider/src/config/llm-schema.ts`）。不要在这里或插件 README 里另抄一份字段表：schema 是 Zod **strict**，抄错一个枚举值，用户照着填会让**整份** `llm.toml` 拒载——所有 slot（包括与你无关的 `[covel.story]`）一起停摆，服务端回退到内置 DeepSeek `story`，用户看到的现象是"我配的别的 provider 都没生效"。
 
 ## 踩雷点（第三方插件作者必须在 README 里教用户）
 
-### 1. `tag` 自动推断**只产 `text` 或 `image`**
+### 1. 只有转写 slot 必须手写 `tag`
 
-框架按 `output` 推断 `tag` 的规则：
+省略 `tag` 时，框架按 `output` 推断（`modelOutputTag`，`packages/shared/src/model-capabilities.ts`）：
 
-- `output` 含 `"image"` → tag = `"image"`
-- 其它情况 → tag = `"text"`
+- `output` 含 `"evaluation"` → `evaluation`
+- 含 `"image"` → `image`
+- 含 `"audio"` → `speech`
+- 含 `"embedding"` → `embedding`
+- 其它 → `text`
 
-**音频 / 嵌入 / 转录 slot 不会被自动推到对应 tag**，必须手动写：
+**语音转文字模型例外**：它的 output 是 `text`，会被推成 `text`，必须手写 `tag = "transcription"`，否则 handler 里 `gateway.resolveSlot({ fallbackTag: "transcription" })` 找不到这个 slot。
 
-| Modality | 必须写的 `tag` |
-|---|---|
-| `output = ["audio"]` | `tag = "speech"` |
-| `output = ["embedding"]` | `tag = "embedding"` |
-| input 含 `audio`（语音转文字） | `tag = "transcription"`（plus 传 fallbackTag 时这么找） |
-| `output = ["text"]` | 可省，自动推断 |
-| `output = ["image"]` | 可省，自动推断 |
-
-不写的话你 handler 里 `gateway.resolveSlot({fallbackTag: 'speech'})` 找不到这个 slot。
-
-### 2. `output = [""]` / `tag = ""` 不是空——是 enum 拒绝
+### 2. 空字符串不等于"没写"
 
 ```toml
-output = [""]   # ❌ z.enum 拒空字符串
-tag    = ""     # ❌ z.string().min(1) 拒空（等价于 undefined）
+output = [""]   # ❌ 不在 enum 里，整份 llm.toml 拒载
+tag    = ""     # ❌ schema 接受，但得到空 tag：不会回落到按 output 推断，按 tag 找不到这个 slot
 ```
 
-**正确**：留空就直接**删掉这一行**，让 schema 走默认（缺省 = `optional`）。
+**正确**：不想设置就直接**删掉这一行**，让框架走默认推断。
 
 ### 3. baseUrl 末尾的 `/v1` 取决于 provider
 

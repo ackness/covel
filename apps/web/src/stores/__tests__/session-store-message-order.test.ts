@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { initialState, reducer } from "../session-store/reducer.js";
 import { orderStoryBeforePluginMessages } from "../session-store/message-order.js";

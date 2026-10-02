@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression tests for the PREPEND_MESSAGES / SET_OLDER_MESSAGES_CURSOR slice
  * of the session-store reducer (backward "load older" cursor pagination).
