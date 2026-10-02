@@ -11,25 +11,82 @@ import {
   materializeDimensionRecords,
 } from "@covel/shared";
 
+/** Set `value` at a dot path inside a copy of `base`, creating containers. */
+function setAtPath(base, path, value) {
+  const segments = path.split(".").filter(Boolean);
+  if (!segments.length) return structuredClone(value);
+  const root = base && typeof base === "object" ? structuredClone(base) : {};
+  let node = root;
+  for (const [index, segment] of segments.entries()) {
+    const key = Array.isArray(node) ? Number(segment) : segment;
+    if (index === segments.length - 1) {
+      node[key] = structuredClone(value);
+      break;
+    }
+    if (!node[key] || typeof node[key] !== "object")
+      node[key] = /^\d+$/.test(segments[index + 1]) ? [] : {};
+    node = node[key];
+  }
+  return root;
+}
+
+/**
+ * Resolve each update to a complete value. `changes` patch the frozen value
+ * by path so a large dimension does not have to be rewritten in full.
+ */
+function resolveUpdates(updates, dimensions) {
+  return updates.map(({ changes, ...update }) => {
+    if (!changes) {
+      if (!Object.hasOwn(update, "value"))
+        throw new Error(`${update.id}: provide value or changes`);
+      return update;
+    }
+    if (Object.hasOwn(update, "value"))
+      throw new Error(
+        `${update.id}: provide either value or changes, not both`,
+      );
+    const current = dimensions[update.id];
+    if (!current) throw new Error(`Unknown dimension: ${update.id}`);
+    return {
+      ...update,
+      value: changes.reduce(
+        (value, change) => setAtPath(value, change.path, change.value),
+        current.value,
+      ),
+    };
+  });
+}
+
 /** The model supplies values, never the authoritative source or read set. */
 export default function ({ tool, z }) {
   return tool({
     name: "update-dimensions",
     description:
-      "Settle this narrative's dimension rules once. Submit a batch of {id, expectedVersion, value, reason}; submit updates: [] to explicitly settle no change. Values must match the declared schema. Never invent facts or copy character/inventory/time state.",
+      'Settle this narrative\'s dimension rules once. Submit a batch of {id, expectedVersion, changes | value, reason}. Prefer changes: [{path, value}] to set only the fields or entries that changed (dot path inside the dimension value, e.g. "torn-letter.status"; a new key adds an entry); use value only to replace the whole value. Submit updates: [] to explicitly settle no change. Results must match the declared schema. Never invent facts or copy character/inventory/time state.',
     parameters: z.strictObject({
       updates: z
         .array(
           z.strictObject({
             id: z.string().min(1),
             expectedVersion: z.number().int().positive(),
-            value: z.unknown(),
+            value: z.unknown().optional(),
+            changes: z
+              .array(
+                z.strictObject({
+                  path: z.string().min(1),
+                  value: z.unknown(),
+                }),
+              )
+              .min(1)
+              .max(32)
+              .optional(),
             reason: z.string().max(2000).optional(),
           }),
         )
         .max(64),
     }),
-    execute: async ({ updates }, ctx) => {
+    execute: async (params, ctx) => {
+      const updates = resolveUpdates(params.updates, ctx.world.dimensions);
       const narrative = ctx.inputSlots?.narrative;
       if (
         narrative?.cardinality !== "one" ||

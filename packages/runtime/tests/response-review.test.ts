@@ -24,7 +24,11 @@ const text = (content: string): LLMResponse => ({
   usage: { inputTokens: 1, outputTokens: 1 },
 });
 
-async function run(replies: LLMResponse[], maxSteps = 6) {
+async function run(
+  replies: LLMResponse[],
+  maxSteps = 6,
+  { streaming = false } = {},
+) {
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
@@ -38,12 +42,13 @@ async function run(replies: LLMResponse[], maxSteps = 6) {
     updatedAt: now,
   });
   const pipeline = createHookPipeline();
-  pipeline.register({
-    id: "buffer",
-    pluginId: story.pluginId,
-    event: "PreLLMCall",
-    handler: async () => ({ action: "continue", replace: { stream: false } }),
-  });
+  if (!streaming)
+    pipeline.register({
+      id: "buffer",
+      pluginId: story.pluginId,
+      event: "PreLLMCall",
+      handler: async () => ({ action: "continue", replace: { stream: false } }),
+    });
   pipeline.register<PostLLMResponsePayload>({
     id: "review",
     pluginId: story.pluginId,
@@ -63,7 +68,17 @@ async function run(replies: LLMResponse[], maxSteps = 6) {
   const generate = vi.fn<LLMAdapter["generate"]>(
     async () => replies.shift() ?? text("Rejected again"),
   );
-  const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>();
+  const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>(async function* () {
+    const reply = replies.shift() ?? text("Rejected again");
+    if (reply.content) yield { type: "text-delta", textDelta: reply.content };
+    for (const call of reply.toolCalls) yield { type: "tool-call", ...call };
+    yield {
+      type: "done",
+      finishReason: reply.finishReason,
+      usage: reply.usage,
+    };
+  });
+  const onDelta = vi.fn(async () => undefined);
   const toolExecutor = {
     execute: vi.fn(),
     getToolInfo: () => ({
@@ -85,7 +100,7 @@ async function run(replies: LLMResponse[], maxSteps = 6) {
       hookPipeline: pipeline,
       llm: { generate, stream },
       toolExecutor,
-      onDelta: vi.fn(),
+      onDelta,
       loadRuntime: async () => ({
         manifest: { ...story, maxSteps },
         promptTemplate: "Continue the scene.",
@@ -107,7 +122,7 @@ async function run(replies: LLMResponse[], maxSteps = 6) {
     sessionClock: { now },
     journalMessages: collectExecutionJournal(result),
   });
-  return { result, committed, generate, stream, toolExecutor, store };
+  return { result, committed, generate, stream, toolExecutor, store, onDelta };
 }
 
 describe("plugin response validation", () => {
@@ -132,6 +147,29 @@ describe("plugin response validation", () => {
       output: { narrativeOutput: "I watch the harbor." },
     });
   });
+  it("streams drafts and resets the rejected one before the accepted story", async () => {
+    const { result, stream, onDelta } = await run(
+      [text("Rejected draft"), text("I watch the harbor.")],
+      6,
+      { streaming: true },
+    );
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(
+      onDelta.mock.calls.map(([delta]) => [
+        (delta as { textDelta: string }).textDelta,
+        (delta as { reset?: true }).reset ?? false,
+      ]),
+    ).toEqual([
+      ["Rejected draft", false],
+      ["", true],
+      ["I watch the harbor.", false],
+    ]);
+    expect(result.runtimeResults[0]).toMatchObject({
+      status: "success",
+      output: { narrativeOutput: "I watch the harbor." },
+    });
+  });
+
   it("fails after two corrections instead of publishing a rejected draft", async () => {
     const { result, committed, generate, store } = await run([]);
     expect(generate).toHaveBeenCalledTimes(3);

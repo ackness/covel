@@ -14,6 +14,12 @@ export interface DeltaForwarder {
   /** Forward one text delta to the SSE consumer (no-throw). */
   readonly forward: (textDelta: string) => Promise<void>;
   /**
+   * Tell the consumer to discard what this run streamed since the last
+   * reset, because that step's text will not be the final narrative. A no-op
+   * when nothing was streamed.
+   */
+  readonly reset: () => Promise<void>;
+  /**
    * How many chunks the narrative was assembled from. Non-streaming
    * runtimes keep this at 0; trace consumers treat that as "not streamed".
    */
@@ -26,18 +32,29 @@ export function createDeltaForwarder(params: {
   readonly pluginId: string;
 }): DeltaForwarder {
   let deltaCount = 0;
+  let pending = false;
+  const send = async (textDelta: string, reset?: true): Promise<void> => {
+    try {
+      await params.onDelta?.({
+        runtimeId: params.runtimeId,
+        pluginId: params.pluginId,
+        textDelta,
+        ...(reset ? { reset } : {}),
+      });
+    } catch {
+      // Client disconnected — keep streaming to capture full content.
+    }
+  };
   return {
     forward: async (textDelta: string): Promise<void> => {
       deltaCount++;
-      try {
-        await params.onDelta?.({
-          runtimeId: params.runtimeId,
-          pluginId: params.pluginId,
-          textDelta,
-        });
-      } catch {
-        // Client disconnected — keep streaming to capture full content.
-      }
+      pending = true;
+      await send(textDelta);
+    },
+    reset: async (): Promise<void> => {
+      if (!pending) return;
+      pending = false;
+      await send("", true);
     },
     count: () => deltaCount,
   };

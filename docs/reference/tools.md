@@ -767,7 +767,7 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/update-dimensions.js`)
 
-参数 `{updates:[{id,expectedVersion,value,reason?}]}`，最多 64 项，ID 不重复。提交的是新完整值，不是增量或 JSON Patch；删除命名记录/数组行也提交完整维度值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
+参数 `{updates:[{id,expectedVersion,value|changes,reason?}]}`，最多 64 项，ID 不重复。`value` 是新的完整值；`changes:[{path,value}]`（最多 32 项）按点路径在冻结的当前值上设置字段或新增条目，工具合并成完整值后提交，大维度不必整体重写。两者二选一；删除命名记录/数组行仍提交完整 `value`。`dimension.update` proposal 里始终是完整值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
 
 叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 

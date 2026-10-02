@@ -345,10 +345,14 @@ async function runAgentToolLoopWithinBudget(
     budget.assertLive();
     if (!response) {
       finalContent = null;
+      // The rejected draft may already be on screen.
+      await delta.reset();
       continue;
     }
 
     if (response.toolCalls.length > 0) {
+      // Preparation text before tool calls is not the final narrative.
+      await delta.reset();
       // LLM requested tool calls — execute them and feed results back.
       // Capture any narrative text produced alongside tool calls.
       if (response.content) {
@@ -771,6 +775,7 @@ async function runAgentToolLoopWithinBudget(
     });
     if (completion.correction) {
       noToolCallCorrections++;
+      await delta.reset();
       messages.push({ role: "system", content: completion.correction });
       continue;
     }
