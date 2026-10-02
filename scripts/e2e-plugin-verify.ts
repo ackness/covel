@@ -11,11 +11,12 @@
  *      GET /api/plugin-flows at runtime, so adding a new plugin "just works"
  *      without touching this script.
  *
- *   2. Real config by default. Story-runtime LLM calls are routed through
- *      the `e2e` slot via the `model` override field on /api/actions.
- *      Slot names are the bare part of `[covel.xxx]` in llm.toml (i.e. `e2e`,
- *      `e2e_local`, `e2e3`), not the full `covel.xxx` table path.
- *      Override with `--slot <name>` or `E2E_MODEL_SLOT=<name>`.
+ *   2. Real config by default. Every runtime uses the model the server's
+ *      configuration routes it to, exactly as in play; Phase 6 prints the
+ *      slot / provider / model each runtime called. `--slot <name>` or
+ *      `E2E_MODEL_SLOT=<name>` overrides the story runtime through the
+ *      `model` field on /api/actions. Slot names are the bare part of
+ *      `[covel.xxx]` in llm.toml (e.g. `story`, `e2e_local`).
  *
  *   3. Observable output. Each turn prints a runtime timeline, tool calls,
  *      trigger verification, and session-state delta. Plain text, no
@@ -38,7 +39,7 @@
  *
  * Options:
  *   --server <url>         API base (default: http://localhost:3001/api)
- *   --slot <name>          Model slot for story runtimes (default: e2e)
+ *   --slot <name>          Override the story runtimes' model slot (default: configured routing)
  *   --world <id>           World to use (default: first world returned by /api/worlds)
  *   --turns <n>            Number of playing-phase turns to run after char-creation (default: 3)
  *   --runtime <id>         Filter output + assertions to this runtime only
@@ -75,7 +76,8 @@ import { writeFileSync } from "node:fs";
 
 interface CliArgs {
   server: string;
-  slot: string;
+  /** Story-runtime slot override; absent means the configured routing. */
+  slot?: string;
   world?: string;
   turns: number;
   runtimeFilter?: string;
@@ -98,7 +100,7 @@ interface CliArgs {
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     server: "http://localhost:3001/api",
-    slot: process.env.E2E_MODEL_SLOT?.trim() || "e2e",
+    slot: process.env.E2E_MODEL_SLOT?.trim() || undefined,
     turns: 3,
     enablePlugins: [],
     formValues: {},
@@ -218,7 +220,7 @@ Usage:
 
 Options:
   --server <url>          API base (default: http://localhost:3001/api)
-  --slot <name>           Model slot for story runtimes (default: e2e)
+  --slot <name>           Override the story runtimes' model slot (default: configured routing)
                           Slot names come from [covel.xxx] in llm.toml,
                           pass only the xxx part (e.g. e2e, e2e_local)
   --world <id>            World to use (default: first available)
@@ -1527,7 +1529,7 @@ async function runMain(
 ): Promise<void> {
   header("Covel E2E Plugin Verification");
   kv("Server", args.server);
-  kv("Slot", args.slot);
+  kv("Slot", args.slot ?? "(configured routing)");
   kv("Turns", args.turns);
   kv("Runtime filter", args.runtimeFilter ?? "(none)");
   kv("Plugin filter", args.pluginFilter ?? "(none)");
@@ -1940,6 +1942,30 @@ async function runMain(
   }>(args.server, `/traces/${encodeURIComponent(session.id)}`);
   state.traces = tracesBody;
   const seenTypes = new Set(tracesBody.events.map((e) => e.type));
+
+  // The models each runtime actually called, as the configuration (or the
+  // --slot override) routed them.
+  const modelsByRuntime = new Map<string, Set<string>>();
+  for (const event of tracesBody.events) {
+    if (event.type !== "llm.calling" && event.type !== "gateway.responded")
+      continue;
+    const { runtimeId, slot, provider, model } = event.payload;
+    if (typeof runtimeId !== "string" || typeof model !== "string") continue;
+    const route = `${typeof slot === "string" ? slot : "-"} → ${
+      typeof provider === "string" ? `${provider}/` : ""
+    }${model}`;
+    const routes = modelsByRuntime.get(runtimeId) ?? new Set<string>();
+    routes.add(route);
+    modelsByRuntime.set(runtimeId, routes);
+  }
+  console.log("");
+  console.log("  Models used (from traces):");
+  printTable(
+    ["runtime", "slot → model"],
+    [...modelsByRuntime]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([runtimeId, routes]) => [runtimeId, [...routes].join(", ")]),
+  );
   const hasActiveStory = flow.steps.some(
     (s) => ctx.active.has(s.pluginId) && s.isStoryRuntime,
   );

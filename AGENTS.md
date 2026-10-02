@@ -62,7 +62,7 @@ pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
-pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); --slot e2e_local --turns 3
+pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
 pnpm validate:plugin  # validate PLUGIN.md manifests; a plugin DIR also gets cross-runtime checks
 pnpm validate:world   # validate world packages: pnpm validate:world worlds/<id>
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs
