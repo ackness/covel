@@ -200,6 +200,7 @@ export {
 export {
   droppedEmitter,
   droppedUpstream,
+  settleDroppedInputs,
 } from "./commit/commit-dependencies.js";
 export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
 export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";

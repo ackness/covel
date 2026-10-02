@@ -24,6 +24,7 @@ import {
   droppedEmitter,
   droppedUpstream,
   executeTurn,
+  settleDroppedInputs,
   createTraceRecorder,
   createTurnEmitter,
   snapshotUserSettings,
@@ -758,14 +759,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                       results: result.runtimeResults,
                       dropped: droppedRuntimeIds,
                     };
-                    const descriptors = (
-                      result.deferredRuntimeJobs ?? []
-                    ).filter((descriptor) => {
-                      const target = activeRuntimes.find(
-                        (runtime) => runtime.name === descriptor.runtimeId,
+                    const descriptors = (result.deferredRuntimeJobs ?? [])
+                      .filter((descriptor) => {
+                        const target = activeRuntimes.find(
+                          (runtime) => runtime.name === descriptor.runtimeId,
+                        );
+                        return (
+                          !target || !droppedUpstream(target, committedView)
+                        );
+                      })
+                      .map((descriptor) =>
+                        settleDroppedInputs(descriptor, droppedRuntimeIds),
                       );
-                      return !target || !droppedUpstream(target, committedView);
-                    });
                     const followers = (result.deferredFollowers ?? []).filter(
                       (follower) =>
                         !droppedEmitter(

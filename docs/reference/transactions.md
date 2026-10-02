@@ -393,7 +393,7 @@ server transaction API in the browser.
 >   `required: false` 的输入只表达顺序或尽力读取，不级联；`cardinality: one` 的能力依赖
 >   在另有提供者提交成功时仍满足。story 或 setup runtime 的硬上游被丢弃时整回合回滚。
 >   `extraInTx` 的第二个参数给出被丢弃的 runtime，主回合据此不排入依赖它们的 detached
->   作业与后台事件 follower。
+>   作业与后台事件 follower；仍排入的 detached 作业在冻结的 turn digest 与上游结果中把被丢弃的 runtime 记为 `failed`。
 > - **PreStateCommit 在事务外运行**：finalize 先完成规范化、守卫和 PreStateCommit
 >   Hook，再开启事务，事务内只做写入；`createCommitPipeline().commitAll` 同理。Hook
 >   不读取存储状态，提前运行不改变语义，但插件 Hook 的等待不再占用 SQLite / Memory

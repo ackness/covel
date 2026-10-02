@@ -464,8 +464,32 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       execution: "background",
       trigger: { type: "event", topic: "test-deferred.ready" },
     });
+    // Ordered after the dropped runtime but not dependent on it, so it is
+    // still queued and its frozen inputs include the dropped result.
+    const NOTES = "test-deferred/notes";
+    const notesManifest = {
+      ...makeManifest({
+        runtimeId: NOTES,
+        stage: "post-turn",
+        trigger: { type: "auto" },
+      }),
+      after: [TARGET],
+      turnCompletion: { mode: "detached" },
+      input: {
+        inject: [{ kind: "kernel", from: "turn-digest@1", name: "turn" }],
+      },
+      effects: { writes: ["plugin-data:self:notes"] },
+    } as RuntimeManifest;
     let followerRan = false;
     const loaded = new Map<string, LoadedRuntime>([
+      [
+        NOTES,
+        {
+          manifest: notesManifest,
+          promptTemplate: "",
+          handler: async () => ({ outcome: "success", value: {} }),
+        },
+      ],
       [
         STORY,
         {
@@ -507,15 +531,18 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     ]);
     pluginRegistry.register({
       id: PLUGIN_ID,
-      summary: { ...makeSummary(PLUGIN_ID), runtimeCount: 3 },
-      manifests: [storyManifest, targetManifest, followerManifest].map(
-        (manifest) => ({
-          runtime: { type: "function" as const },
-          manifest,
-          promptTemplate: "",
-          rawFrontmatter: {},
-        }),
-      ),
+      summary: { ...makeSummary(PLUGIN_ID), runtimeCount: 4 },
+      manifests: [
+        storyManifest,
+        targetManifest,
+        followerManifest,
+        notesManifest,
+      ].map((manifest) => ({
+        runtime: { type: "function" as const },
+        manifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      })),
       loadedRuntimes: loaded,
       status: "registered",
       source: "builtin",
@@ -562,6 +589,7 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       status: "active",
       activePlugins: [PLUGIN_ID],
       completedPlayerTurns: 1,
+      locale: "en-US",
       createdAt: now,
     });
 
@@ -586,9 +614,12 @@ describe("POST /api/actions — deferred background followers (main path)", () =
           },
       );
 
-    expect(
-      events.find((event) => event.type === "execution.completed")?.payload,
-    ).toMatchObject({ committed: true });
+    const completed = events.find(
+      (event) => event.type === "execution.completed",
+    )?.payload;
+    expect(completed, JSON.stringify(completed)).toMatchObject({
+      committed: true,
+    });
     expect(
       events.find(
         (event) =>
@@ -607,9 +638,35 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     ]);
     runtimeJobWorker.wake();
     await new Promise((resolve) => setTimeout(resolve, 50));
+    const jobs = (
+      await store.listPluginData(SESSION_ID, PLUGIN_ID, "_runtime_jobs")
+    ).map(
+      (row) =>
+        row.value as {
+          runtimeId: string;
+          payload: {
+            descriptor: {
+              turnDigest: {
+                runtimeResults: { runtimeId: string; status: string }[];
+              };
+              upstreamResults: { runtimeId: string; status: string }[];
+            };
+          };
+        },
+    );
+    // Only the independent detached job is queued, and its frozen inputs
+    // record the dropped runtime as failed.
+    expect(jobs.map((job) => job.runtimeId)).toEqual([NOTES]);
+    const { descriptor } = jobs[0]!.payload;
     expect(
-      await store.listPluginData(SESSION_ID, PLUGIN_ID, "_runtime_jobs"),
-    ).toEqual([]);
+      descriptor.turnDigest.runtimeResults.find(
+        (result) => result.runtimeId === TARGET,
+      )?.status,
+    ).toBe("failed");
+    expect(
+      descriptor.upstreamResults.find((result) => result.runtimeId === TARGET)
+        ?.status,
+    ).toBe("failed");
     expect(followerRan).toBe(false);
   });
 });

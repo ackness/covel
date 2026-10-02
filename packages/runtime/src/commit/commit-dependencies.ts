@@ -9,6 +9,7 @@
 
 import type {
   BindingSource,
+  DeferredRuntimeJob,
   DependencyRef,
   RuntimeManifest,
 } from "@covel/shared";
@@ -74,6 +75,38 @@ export function droppedEmitter(
     emitters.every((result) => view.dropped.has(result.runtimeId))
     ? emitters[0]!.runtimeId
     : undefined;
+}
+
+/**
+ * A queued job's frozen source facts as committed: a dropped runtime reads as
+ * failed in both the turn digest and the seeded upstream results, so later
+ * background work never sees it as a successful upstream.
+ */
+export function settleDroppedInputs(
+  job: DeferredRuntimeJob,
+  dropped: ReadonlySet<string>,
+): DeferredRuntimeJob {
+  if (dropped.size === 0) return job;
+  return {
+    ...job,
+    turnDigest: {
+      ...job.turnDigest,
+      runtimeResults: job.turnDigest.runtimeResults.map((result) =>
+        dropped.has(result.runtimeId)
+          ? { ...result, status: "failed" as const }
+          : result,
+      ),
+    },
+    upstreamResults: job.upstreamResults.map((result) =>
+      dropped.has(result.runtimeId)
+        ? {
+            ...result,
+            status: "failed" as const,
+            error: "writes did not commit",
+          }
+        : result,
+    ),
+  };
 }
 
 function droppedSource(
