@@ -219,11 +219,11 @@ Lorebook 使用 owner 与 id 的复合身份，owner 为 world、plugin 或 play
 
 捆绑的 `world-init` 使用三个 runtime：
 
-| Runtime             | 阶段              | 职责                                                 |
-| ------------------- | ----------------- | ---------------------------------------------------- |
-| `dimension-context` | pre-turn function | 不调用模型，读取已提交值并发布 `world.dimensions@1`  |
-| `dimension-tracker` | post-turn agent   | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证 |
-| `edit-dimensions`   | manual function   | 玩家改值、确认人工处理或明确跳过                     |
+| Runtime             | 阶段              | 职责                                                                                                                             |
+| ------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `dimension-context` | pre-turn function | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                              |
+| `dimension-tracker` | post-turn agent   | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证；`toolChoice: required`，无变化也以 `update-dimensions({updates: []})` 结算 |
+| `edit-dimensions`   | manual function   | 玩家改值、确认人工处理或明确跳过                                                                                                 |
 
 同一次执行的公共 dimension 读取冻结。setup 初始化和写入者自身 proposal 可形成局部预览，但不替换公共快照，不泄露给并行 sibling。公共 builtin `world-dimension-get/list` 始终读取冻结快照，不叠加自身写入，也不回退初值。模板选取 `{{ world.dimensions.<id>.value }}`；默认提示词段是预算内投影，而非全量记录。
 

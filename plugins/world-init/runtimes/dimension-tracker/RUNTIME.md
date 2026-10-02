@@ -27,6 +27,7 @@ agent:
     maxTurns: 2
   llm:
     reasoningEffort: disabled
+    toolChoice: required
   tools:
     builtin:
       - world-dimension-get

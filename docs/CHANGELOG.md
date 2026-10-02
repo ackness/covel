@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Reasoning from groq and similar hosts is read.** The Chat adapter accepts reasoning sent as `reasoning` as well as `reasoning_content`, so a reasoning model no longer hits the first-token timeout while it thinks. A follow-up echoes reasoning under the field its endpoint emits; groq rejects `reasoning_content` on assistant messages.
 - **Symlinked plugin directories load.** A plugin directory symlinked into the user plugins dir is discovered like any other, with file reads confined to its resolved root; a dangling symlink is skipped with a warning.
 - **Rate limits no longer trip the first-token timeout.** While the transport waits out a 429 or 5xx `retry-after`, the first-token timer pauses and restarts once a later attempt is answered; the call timeout still bounds the wait. On a rate-limited provider the narrator was aborted and retried into the same limit every turn.
+- **Dimension settlement stops slipping into prose.** `world-init/dimension-tracker` now requires a tool call (`toolChoice: required`). Its conversation ends on the player's unanswered message, and without the requirement the model continued the story about half the time; once it only read a value and then wrote prose, leaving settlement pending and blocking the next turn. Over 10 DeepSeek turns it now settles on the first call every time.
 
 ### Added
 

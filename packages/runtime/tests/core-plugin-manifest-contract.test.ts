@@ -228,6 +228,9 @@ describe("core plugin manifest contract", () => {
     expect(worldIr.tools?.plugin).toEqual(["submit-world-facts"]);
     expect(worldIr.requireToolUse).toBe(true);
     expect(worldIr.completeAfterTools).toEqual(["submit-world-facts"]);
+    expect(
+      requireRuntime(manifests, "world-init/dimension-tracker").llm,
+    ).toEqual({ reasoningEffort: "disabled", toolChoice: "required" });
     expect(worldIr.llm).toEqual({
       reasoningEffort: "disabled",
       toolChoice: { name: "submit-world-facts" },
