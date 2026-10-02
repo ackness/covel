@@ -861,7 +861,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           },
         });
       }
-      if (queuedRuntimeJobs.length > 0) runtimeJobWorker?.wake();
+      if (queuedRuntimeJobs.length > 0) runtimeJobWorker?.wake(sessionId);
 
       announceQueuedRuntimeJobs(c, followerJobs);
 

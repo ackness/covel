@@ -485,7 +485,8 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             },
           });
         }
-        if (queuedRuntimeJobs.length > 0) c.get("runtimeJobWorker")?.wake();
+        if (queuedRuntimeJobs.length > 0)
+          c.get("runtimeJobWorker")?.wake(sessionId);
 
         return c.json({ result, events });
       });

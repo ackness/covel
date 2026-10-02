@@ -613,15 +613,17 @@ export async function claimNextRuntimeJob(
     readonly ownerId: string;
     readonly leaseMs: number;
     readonly afterSessionId?: string;
-    readonly sessionId?: string;
+    /** Only these sessions; every session when omitted. */
+    readonly sessionIds?: readonly string[];
     readonly excludeRuntimeKeys?: ReadonlySet<string>;
     /** Missing request services keep a job queued, without consuming an attempt. */
     readonly canClaim?: (job: RuntimeJobRecord) => boolean | Promise<boolean>;
   },
 ): Promise<ClaimedRuntimeJob | null> {
-  const sessionIds = args.sessionId
-    ? [args.sessionId]
-    : (await store.listSessions()).map((session) => session.id).sort();
+  const sessionIds = [
+    ...(args.sessionIds ??
+      (await store.listSessions()).map((session) => session.id)),
+  ].sort();
   if (sessionIds.length === 0) return null;
   const cursorIndex = args.afterSessionId
     ? sessionIds.indexOf(args.afterSessionId)

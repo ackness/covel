@@ -182,8 +182,11 @@ export type RuntimeJobExecutor = (
 ) => Promise<void>;
 
 export interface RuntimeJobWorker {
-  /** Signal that newly committed queue rows may be available. */
-  wake(): void;
+  /**
+   * Signal that newly committed queue rows may be available in `sessionId`.
+   * Without a session the next pass scans every session.
+   */
+  wake(sessionId?: string): void;
   /** Stop claiming, cancel uncommitted work, and await worker-owned storage operations. */
   close(): Promise<void>;
   readonly activeCount: number;
@@ -368,6 +371,11 @@ export function createRuntimeJobWorker(args: {
   let draining: Promise<void> | undefined;
   let wakeTimer: ReturnType<typeof setTimeout> | undefined;
   let nextMaintenanceAt = 0;
+  // Between maintenance passes a drain claims only from sessions named by
+  // wake(). A wake without a session, and every maintenance pass, scans all
+  // sessions, which also picks up work another process queued.
+  const hintedSessions = new Set<string>();
+  let fullScanRequested = false;
   let wakeRequested = false;
   let closed = false;
   let closing: Promise<void> | undefined;
@@ -635,7 +643,7 @@ export function createRuntimeJobWorker(args: {
       touchedSessions.add(claimed.sessionId);
       activeRuntimeKeys.delete(runtimeKey(claimed));
       activeCount--;
-      wake();
+      wake(claimed.sessionId);
     }
   };
 
@@ -715,11 +723,27 @@ export function createRuntimeJobWorker(args: {
       }
     }
 
-    while (!closed && activeCount < concurrency) {
+    const scope =
+      maintained || fullScanRequested ? undefined : [...hintedSessions];
+    fullScanRequested = false;
+    hintedSessions.clear();
+    if (scope?.length === 0) {
+      if (!maintained) await reconcileTerminalJobs("touched");
+      return;
+    }
+
+    while (!closed) {
+      if (activeCount >= concurrency) {
+        // A finishing job wakes the worker; resume this pass's scope then.
+        if (scope) for (const sessionId of scope) hintedSessions.add(sessionId);
+        else fullScanRequested = true;
+        return;
+      }
       let prepared: RuntimeJobExecutor | undefined;
       const claimed = await claimNextRuntimeJob(args.store, {
         ownerId,
         leaseMs,
+        ...(scope ? { sessionIds: scope } : {}),
         ...(sessionCursor ? { afterSessionId: sessionCursor } : {}),
         excludeRuntimeKeys: activeRuntimeKeys,
         canClaim: async (job) => {
@@ -744,7 +768,14 @@ export function createRuntimeJobWorker(args: {
     }
   };
 
-  function wake(): void {
+  function wake(sessionId?: string): void {
+    if (closed) return;
+    if (sessionId === undefined) fullScanRequested = true;
+    else hintedSessions.add(sessionId);
+    schedule();
+  }
+
+  function schedule(): void {
     if (closed) return;
     if (draining) {
       wakeRequested = true;
@@ -758,6 +789,8 @@ export function createRuntimeJobWorker(args: {
       draining = drain()
         .catch(() => {
           retryDrain = true;
+          // The failed pass may have consumed session hints.
+          fullScanRequested = true;
           console.warn("[runtime-job-worker] drain failed; retry scheduled");
         })
         .finally(() => {
@@ -765,14 +798,14 @@ export function createRuntimeJobWorker(args: {
           if (closed) return;
           if (wakeRequested) {
             wakeRequested = false;
-            wake();
+            schedule();
             return;
           }
           const untilMaintenance = Math.max(1, nextMaintenanceAt - Date.now());
           wakeTimer = setTimeout(
             () => {
               wakeTimer = undefined;
-              wake();
+              schedule();
             },
             retryDrain
               ? Math.min(DRAIN_RETRY_MS, untilMaintenance)

@@ -212,6 +212,6 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
     );
   }
   publishRuntimeJobStatusEvent(eventBus, created.status);
-  c.get("runtimeJobWorker")?.wake();
+  c.get("runtimeJobWorker")?.wake(created.job.sessionId);
   return c.json(publicRuntimeJob(created.job), 202);
 });
