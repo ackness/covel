@@ -350,26 +350,32 @@ function createSyncCharactersTool(
   return tool({
     name: "sync-characters",
     description:
-      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Duplicate creates are returned as unchanged and never overwrite existing profiles; put changes in updates. Correct and resubmit the full batch after a failure; use runtime-done when neither array has changes." +
+      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Duplicate creates are returned as unchanged and never overwrite existing profiles; put changes in updates. Correct and resubmit the full batch after a failure. When nothing changed, submit empty arrays to settle the turn." +
       characterFieldsHint(schema),
-    parameters: z
-      .object({
-        creates: z
-          .array(createCharacterParametersSchema(schema))
-          .max(5)
-          .default([])
-          .describe("Up to 5 named, plot-relevant new NPCs."),
-        updates: z
-          .array(createUpdateCharacterParametersSchema())
-          .max(10)
-          .default([])
-          .describe("Explicit patches for existing character ids."),
-      })
-      .refine((value) => value.creates.length + value.updates.length > 0, {
-        message:
-          "submit at least one create or update; use runtime-done when nothing changed",
-      }),
+    parameters: z.object({
+      creates: z
+        .array(createCharacterParametersSchema(schema))
+        .max(5)
+        .default([])
+        .describe("Up to 5 named, plot-relevant new NPCs."),
+      updates: z
+        .array(createUpdateCharacterParametersSchema())
+        .max(10)
+        .default([])
+        .describe("Explicit patches for existing character ids."),
+    }),
     execute: async ({ creates, updates }, context) => {
+      // An empty batch is the explicit "no character changed" settlement, the
+      // same shape a bookkeeping runtime uses when it must call a tool.
+      if (creates.length + updates.length === 0) {
+        return {
+          _text: "No character changes this turn.",
+          success: true,
+          created: [],
+          updated: [],
+          unchanged: [],
+        };
+      }
       const proposals: Proposal[] = [];
       const created: Array<Record<string, unknown>> = [];
       const updated: Array<Record<string, unknown>> = [];
@@ -493,29 +499,68 @@ function createListCharactersTool(store: CharacterStore): ToolModule {
 
 // ── get-character ────────────────────────────────────────────────
 
+const MAX_NAMES_ON_MISS = 30;
+
+/**
+ * Resolve a name the way a model writes it: exact, then case-insensitive,
+ * then the one character whose name contains the query or is contained in
+ * it ("Mina Park" finds "Dr. Mina Park"). Several partial matches come back
+ * as candidates, so a miss does not cost a `list-characters` round trip.
+ */
+function findCharacterByName<C extends { name: string }>(
+  all: readonly C[],
+  name: string,
+): { match?: C; candidates: readonly C[] } {
+  const exact = all.find((c) => c.name === name);
+  if (exact) return { match: exact, candidates: [] };
+  const query = name.trim().toLowerCase();
+  const same = all.filter((c) => c.name.toLowerCase() === query);
+  if (same.length === 1) return { match: same[0], candidates: [] };
+  const partial = all.filter((c) => {
+    const candidate = c.name.toLowerCase();
+    return candidate.includes(query) || query.includes(candidate);
+  });
+  if (partial.length === 1) return { match: partial[0], candidates: [] };
+  return { candidates: same.length > 1 ? same : partial };
+}
+
 function createGetCharacterTool(store: CharacterStore): ToolModule {
   return tool({
     name: "get-character",
     description:
-      "按 id 或 name 查询单个角色的完整属性（包括所有 fields、description、version、时间戳）。必须传入 id 或 name 其中之一。返回多行文本详情——与 list-characters 的简洁列表形成对照，适合需要深入了解某个角色全部状态的场景。",
+      "按 id 或 name 查询单个角色的完整属性（包括所有 fields、description、version、时间戳）。必须传入 id 或 name 其中之一；name 不必完全一致，唯一包含或被包含的名字也算命中。找不到时返回候选名字，无需再调用 list-characters。",
     parameters: z
       .object({
         id: z.string().optional().describe("角色 id"),
-        name: z.string().optional().describe("角色名称（精确匹配）"),
+        name: z
+          .string()
+          .optional()
+          .describe("角色名称；也可写名字的一部分，如省略头衔"),
       })
       .refine((v) => Boolean(v.id || v.name), {
         message: "either id or name is required",
       }),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
-      const match = all.find((c) =>
-        params.id ? c.id === params.id : c.name === params.name,
-      );
+      const { match, candidates } = params.id
+        ? { match: all.find((c) => c.id === params.id), candidates: [] }
+        : findCharacterByName(all, params.name!);
       if (!match) {
         const lookupKey = params.id ? `id=${params.id}` : `name=${params.name}`;
+        const names = (candidates.length > 0 ? candidates : all)
+          .slice(0, MAX_NAMES_ON_MISS)
+          .map((c) => c.name);
         return {
-          _text: `Character not found (${lookupKey}).`,
+          _text: [
+            `Character not found (${lookupKey}).`,
+            ...(names.length > 0
+              ? [
+                  `${candidates.length > 0 ? "Did you mean" : "Characters in session"}: ${names.join(", ")}`,
+                ]
+              : []),
+          ].join("\n"),
           found: false,
+          candidates: names,
         };
       }
 

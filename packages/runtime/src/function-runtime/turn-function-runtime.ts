@@ -62,6 +62,8 @@ import { deepFreeze } from "../hooks/hook-settings.js";
 export interface ExecuteFunctionRuntimeOptions {
   readonly lastPlayerInput?:
     import("@covel/shared").PlayerInputSubmission | null;
+  /** The scheduler's logical turn for this execution. */
+  readonly logicalTurn?: number;
   readonly upstreamProposals?: readonly import("@covel/shared").Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
@@ -116,6 +118,7 @@ export interface ExecuteFunctionRuntimeOptions {
 
 export async function executeFunctionRuntime({
   lastPlayerInput = null,
+  logicalTurn,
   upstreamProposals = [],
   manifest,
   input,
@@ -439,6 +442,7 @@ export async function executeFunctionRuntime({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
       playerMessage: input.playerMessage,
+      ...(logicalTurn !== undefined ? { logicalTurn } : {}),
       session: {
         lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
       },

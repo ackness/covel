@@ -273,11 +273,24 @@ describe("hidden world data and story events", () => {
     return activePlugins;
   }
 
-  async function sendTurn(id: string, content: string): Promise<void> {
+  async function sendTurn(
+    id: string,
+    content: string,
+    settings?: Record<string, Record<string, unknown>>,
+  ): Promise<void> {
     requestIndex += 1;
     const res = await boot.app.request("/api/actions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(settings
+          ? {
+              "X-Plugin-User-Settings": Buffer.from(
+                JSON.stringify(settings),
+              ).toString("base64"),
+            }
+          : {}),
+      },
       body: JSON.stringify({
         requestId: `hidden-${requestIndex}`,
         type: "send_message",
@@ -361,6 +374,10 @@ describe("hidden world data and story events", () => {
     expect(withSecret).toHaveLength(1);
     expect(withSecret[0]!.tools).not.toContain("advance-world-time");
     expect(withSecret[0]!.tools).not.toContain("sync-characters");
+    // The planner is off unless the world or player turns it on.
+    expect(
+      llm.calls.some((call) => call.tools.includes("plan-story-events")),
+    ).toBe(false);
 
     const revealed = await boot.store.listPluginData(
       sessionId,
@@ -382,18 +399,19 @@ describe("hidden world data and story events", () => {
   it("stores events planned during play as hidden data and reveals them later", async () => {
     const id = "hidden-demo-planned";
     expect(
-      await createPlayingSession(id, [
-        "narrator",
-        "story-events",
-        "story-plotter",
-      ]),
-    ).toEqual(expect.arrayContaining(["story-events", "story-plotter"]));
+      await createPlayingSession(id, ["narrator", "story-events"]),
+    ).toEqual(expect.arrayContaining(["story-events"]));
+    const planner = { "story-events": { planner: true } };
 
     const plannedRows = () =>
       boot.store.listPluginData(id, "story-events", "_hidden.planned");
     // The planner runs every few turns; stay at the harbor until it has.
     for (let turn = 1; turn <= 4 && !(await plannedRows()).length; turn += 1)
-      await sendTurn(id, "I ask the dockhands about the missing keeper.");
+      await sendTurn(
+        id,
+        "I ask the dockhands about the missing keeper.",
+        planner,
+      );
     const planned = await plannedRows();
     // The planner knows the world it is planning for.
     const plannerPrompt = llm.calls.find((call) =>
@@ -405,7 +423,7 @@ describe("hidden world data and story events", () => {
     expect(planned.map((row) => row.key)).toEqual(["keeper-returns"]);
     expect(planned[0]!.value).toMatchObject({
       once: true,
-      origin: { pluginId: "story-plotter", runtimeId: "story-plotter/plot" },
+      origin: { pluginId: "story-events", runtimeId: "story-events/plot" },
     });
 
     // Only the planner itself has handled the planned payload so far.

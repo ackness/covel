@@ -2,25 +2,39 @@
 id: character-blueprint
 kind: plugin
 displayName:
-  zh: 角色蓝图
-  en: Character Blueprints
+  zh: 角色资料
+  en: Character Profiles
 description:
-  zh: 保存预设人物资料，方便在故事中快速加入重要角色。
+  zh: 保存世界预设的人物资料，以及他们的头像、立绘和声音。
   en: >-
-    Saves preset character profiles so important people can be added to the
-    story quickly.
+    Saves the world's preset character profiles along with their portraits,
+    sprites, and voices.
 tags:
   - "data:world-data"
   - "data:characters"
+  - "data:media-assets"
   - "cost:function"
   - "ui:right-panel"
   - "ui:manual-action"
 provides:
   - character-blueprint@1
+  - character-presence@1
+entry: ./server/index.js
 contracts:
   character.blueprints@1:
     schema: ./schemas/blueprints.schema.json
+  character.portraits@1:
+    schema: ./schemas/presence.schema.json
+  character.portrait-assets@1:
+    schema: ./schemas/assets.schema.json
 contributes:
+  extensions:
+    - point: ui.slot@1
+      id: visuals
+      slot: character.visual@1
+      order: 0
+      watch:
+        - presence
   data:
     blueprints:
       schema: ./schemas/blueprints.schema.json
@@ -28,63 +42,28 @@ contributes:
       version: 1
       accepts:
         - character.blueprints@1
+    presence:
+      schema: ./schemas/presence.schema.json
+      description: Importable character media presence records.
+      version: 1
+      accepts:
+        - character.portraits@1
+    assets:
+      schema: ./schemas/assets.schema.json
+      description: Media asset index records imported from world packages.
+      version: 1
+      accepts:
+        - character.portrait-assets@1
   ui:
     right:
       - ./ui/blueprints-panel.json
-runtime:
-  type: function
-  schedule:
-    trigger:
-      type: manual
-  io:
-    output:
-      contract: character-blueprint@1
-    visibility: system
-  function:
-    handler: ./handler.js
+      - ./ui/character-presence-panel.json
 ---
 
-# Character Blueprint
-
-Manual function runtime for importing a character source record into the session.
-
-## Manual payload
-
-```json
-{
-  "blueprintJson": "{\"schemaVersion\":1,\"id\":\"mentor-lin\",\"name\":\"Lin Yue\"}",
-  "blueprint": {
-    "schemaVersion": 1,
-    "id": "mentor-lin",
-    "name": "Lin Yue",
-    "role": "npc",
-    "description": "A cautious sword mentor.",
-    "attributes": { "realm": "Foundation" },
-    "persona": {
-      "summary": "Precise, patient, and suspicious of shortcuts.",
-      "traits": ["disciplined", "observant"]
-    },
-    "dialogueExamples": [
-      {
-        "user": "I can win quickly.",
-        "character": "Quickly is where errors hide."
-      }
-    ],
-    "scenarioDefaults": {
-      "opening": "Lin Yue waits in the rain-slick practice yard."
-    },
-    "rules": [
-      {
-        "text": "Keep sword advice concrete and grounded in the current scene."
-      }
-    ]
-  },
-  "instantiate": true
-}
-```
-
-## Behavior
-
-1. Stores the source blueprint under `plugin_data[character-blueprint][blueprints][blueprint.id]`
-2. Emits `character.upsert` when `instantiate: true` or `blueprint.instantiate` is present
-3. Keeps persona, dialogue examples, scenario defaults, rules, and media refs in the blueprint record for downstream runtimes
+Character Profiles holds the world's preset cast. The `import` runtime stores a
+character blueprint and can instantiate it as a session character; the
+`presence` runtime stores a character's portrait, sprite, voice, and visual
+variants, which the `character.visual@1` slot projects onto the stage. Both are
+manual function runtimes; world packages fill the same namespaces through
+world data. This root `PLUGIN.md` is metadata only — executable runtimes live
+under `runtimes/`.

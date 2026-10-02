@@ -4,8 +4,9 @@
  *  1. `reasoning_content` must round-trip across multi-turn calls so
  *     providers that enforce it (DashScope Qwen, DeepSeek v4 thinking)
  *     do not return HTTP 400 on the follow-up request.
- *  2. Slot-level TOML fields `thinking`, `reasoning_effort`, and
- *     `providerRequestMetadata` must be forwarded to the adapter body.
+ *  2. The portable slot-level `reasoningEffort` is a model default that the
+ *     adapter translates per provider; freeform `providerRequestMetadata`
+ *     still reaches the adapter.
  *  3. Per-call `providerRequestMetadata` must override slot defaults.
  */
 
@@ -405,32 +406,85 @@ describe("openai-chat adapter — reasoning_content", () => {
   });
 });
 
-// ── 2. thinking / reasoning_effort schema wiring ───────────────────
+// ── 2. Slot-level reasoningEffort wiring ───────────────────────────
 
 describe("llm-loader — thinking-mode controls", () => {
-  it("promotes `thinking`, `reasoning_effort`, and `providerRequestMetadata` onto the preset", () => {
+  it("stores the portable reasoningEffort as a model default beside freeform metadata", () => {
     const toml = `
+[covel.story]
+provider = "qwen"
+model = "qwen3.8-flash"
+baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+protocol = "openai-chat-v1"
+reasoningEffort = "disabled"
+
+[covel.story.providerRequestMetadata]
+user = "fixture"
+`;
+    const { aiConfig } = parseLlmConfig(toml);
+    const preset = aiConfig.presets.find((p) => p.id === "slot-story");
+    expect(preset?.providerRequestMetadata).toEqual({
+      user: "fixture",
+      parameterOverrides: { reasoningEffort: "disabled" },
+    });
+  });
+
+  it.each([
+    [
+      'reasoning_effort = "high"',
+      "`reasoning_effort` is now `reasoningEffort`",
+    ],
+    ['thinking = { type = "enabled" }', "`thinking` is now the portable"],
+  ])("rejects the removed slot field %s", (line, message) => {
+    expect(() =>
+      parseLlmConfig(`
 [covel.story]
 provider = "deepseek"
 model = "deepseek-v4-flash"
 baseUrl = "https://api.deepseek.com"
 protocol = "openai-chat-v1"
-reasoning_effort = "high"
-
-[covel.story.thinking]
-type = "enabled"
-
-[covel.story.providerRequestMetadata]
-enable_thinking = true
-`;
-    const { aiConfig } = parseLlmConfig(toml);
-    const preset = aiConfig.presets.find((p) => p.id === "slot-story");
-    expect(preset?.providerRequestMetadata).toEqual({
-      enable_thinking: true,
-      thinking: { type: "enabled" },
-      reasoning_effort: "high",
-    });
+${line}
+`),
+    ).toThrow(message);
   });
+
+  it.each([
+    ["qwen3.8-flash", { enable_thinking: false, reasoning_effort: "none" }],
+    ["qwen3.8-plus", { enable_thinking: false, reasoning_effort: "none" }],
+    ["deepseek-v4-flash", { thinking: { type: "disabled" } }],
+  ])(
+    "turns %s thinking off from the slot default despite a runtime default",
+    async (model, expected) => {
+      const { aiConfig } = parseLlmConfig(`
+[covel.story]
+provider = "fixture"
+model = "${model}"
+baseUrl = "https://fixture.invalid"
+protocol = "openai-chat-v1"
+reasoningEffort = "disabled"
+`);
+      const preset = aiConfig.presets.find((p) => p.id === "slot-story");
+      const captured = mockOpenAiChatResponse({
+        choices: [{ message: { content: "ok" } }],
+      });
+      await createOpenAiChatAdapter().generateText(
+        { baseUrl: "https://fixture.invalid" },
+        {
+          model,
+          messages: [{ role: "user", content: "fixture" }],
+          providerRequestMetadata: preset?.providerRequestMetadata,
+          defaults: { reasoningEffort: "automatic" },
+        },
+      );
+      const body = captured[0]!.body as Record<string, unknown>;
+      const fields = Object.fromEntries(
+        Object.entries(body).filter(([key]) =>
+          ["enable_thinking", "reasoning_effort", "thinking"].includes(key),
+        ),
+      );
+      expect(fields).toEqual(expected);
+    },
+  );
 
   it("leaves providerRequestMetadata undefined when no thinking fields are set", () => {
     const toml = `

@@ -27,7 +27,7 @@ describe("stage UI projections", () => {
           "scenes/scene-registry": { scenes: [{ sceneId: "gate", day: ref }] },
         }),
       ),
-    ).toEqual({ pending: false, preload: [ref] });
+    ).toEqual({ preload: [ref] });
   });
   it("maps dialogue speaker ids to kernel character names and preserves narration gaps", async () => {
     expect(

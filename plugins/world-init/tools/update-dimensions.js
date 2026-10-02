@@ -32,15 +32,16 @@ function setAtPath(base, path, value) {
 
 /**
  * Resolve each update to a complete value. `changes` patch the frozen value
- * by path so a large dimension does not have to be rewritten in full.
+ * by path so a large dimension does not have to be rewritten in full. An
+ * entry with neither a value nor any change says the dimension did not
+ * change; it is dropped rather than sent back for another model call.
  */
 function resolveUpdates(updates, dimensions) {
-  return updates.map(({ changes, ...update }) => {
-    if (!changes) {
-      if (!Object.hasOwn(update, "value"))
-        throw new Error(`${update.id}: provide value or changes`);
-      return update;
-    }
+  const changed = updates.filter(
+    (update) => Object.hasOwn(update, "value") || update.changes?.length,
+  );
+  return changed.map(({ changes, ...update }) => {
+    if (!changes?.length) return update;
     if (Object.hasOwn(update, "value"))
       throw new Error(
         `${update.id}: provide either value or changes, not both`,
@@ -77,7 +78,6 @@ export default function ({ tool, z }) {
                   value: z.unknown(),
                 }),
               )
-              .min(1)
               .max(32)
               .optional(),
             reason: z.string().max(2000).optional(),

@@ -193,17 +193,16 @@ describe("normalize golden (bundled plugin set)", () => {
       "char-creator/character-tracker",
       "guide",
       "memory/extract",
-      "scene-prompts",
       "world-ir",
       "world-time/advance",
     ]);
     expect(levels[1]).toEqual([
       "affinity",
       "codex",
-      "core-quest",
-      "inventory",
+      "core-quest/log",
+      "inventory/ledger",
       "npc-graph/extractor",
-      "story-plotter/plot",
+      "story-events/plot",
       "world-init/dimension-tracker",
     ]);
     expect(levels[2]).toEqual(["story-events/intake"]);
@@ -240,12 +239,12 @@ describe("normalize golden (bundled plugin set)", () => {
       { capability: "world-data-provider@1" },
     ]);
 
-    // pre-turn band: rag-retriever + scene-cast, both scheduled.
+    // pre-turn band: rag-retriever + scene-stage/cast, both scheduled.
     const retriever = requireSpec(specs, "npc-graph/rag-retriever");
     expect(retriever.stage).toBe("pre-turn");
     expect(retriever.declaredTrigger.type).toBe("scheduled");
 
-    const sceneCast = requireSpec(specs, "scene-cast");
+    const sceneCast = requireSpec(specs, "scene-stage/cast");
     expect(sceneCast.stage).toBe("pre-turn");
     expect(sceneCast.declaredTrigger.type).toBe("scheduled");
 
@@ -255,11 +254,9 @@ describe("normalize golden (bundled plugin set)", () => {
 
     // Raw-text post-turn consumers still bind directly to the narrative
     // engine. They remain independent of the structured extraction branch.
-    for (const id of ["guide", "char-creator/character-tracker"]) {
-      const spec = requireSpec(specs, id);
-      expect(spec.stage).toBe("post-turn");
-      expect(spec.deps.needs).toEqual([{ capability: "narrative-engine@1" }]);
-    }
+    const tracker = requireSpec(specs, "char-creator/character-tracker");
+    expect(tracker.stage).toBe("post-turn");
+    expect(tracker.deps.needs).toEqual([{ capability: "narrative-engine@1" }]);
 
     const worldIr = requireSpec(specs, "world-ir");
     expect(worldIr.stage).toBe("post-turn");
@@ -277,8 +274,8 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const id of [
       "affinity",
       "codex",
-      "core-quest",
-      "inventory",
+      "core-quest/log",
+      "inventory/ledger",
       "npc-graph/extractor",
     ]) {
       const spec = requireSpec(specs, id);
@@ -291,13 +288,13 @@ describe("normalize golden (bundled plugin set)", () => {
       });
     }
 
-    // scene-prompts uses a required typed binding instead of duplicating the
-    // same dependency in `needs`; the binding supplies both its DAG edge and
+    // guide uses a required typed binding instead of duplicating the same
+    // dependency in `needs`; the binding supplies both its DAG edge and
     // same-turn gate.
-    const scenePrompts = requireSpec(specs, "scene-prompts");
-    expect(scenePrompts.stage).toBe("post-turn");
-    expect(scenePrompts.deps.needs).toEqual([]);
-    expect(scenePrompts.bindings.narrative).toMatchObject({
+    const guide = requireSpec(specs, "guide");
+    expect(guide.stage).toBe("post-turn");
+    expect(guide.deps.needs).toEqual([]);
+    expect(guide.bindings.narrative).toMatchObject({
       from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       required: true,
@@ -326,13 +323,10 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(resolver.stage).toBeUndefined();
     expect(resolver.declaredTrigger.type).toBe("event");
 
-    const backgroundGen = requireSpec(specs, "scene-stage/background-gen");
-    expect(backgroundGen.stage).toBeUndefined();
-
     // Manual runtimes (real plugin-rpc actions): no stage, trigger untouched.
     for (const id of [
-      "character-blueprint",
-      "character-presence",
+      "character-blueprint/import",
+      "character-blueprint/presence",
       "living-world-rules",
     ]) {
       const spec = requireSpec(specs, id);
@@ -346,12 +340,7 @@ describe("normalize golden (bundled plugin set)", () => {
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    for (const id of [
-      "director",
-      "story-guard",
-      "cost-gate",
-      "history-compaction",
-    ]) {
+    for (const id of ["cost-gate", "history-compaction"]) {
       expect(specs.has(id), `${id}: no synthetic runtime`).toBe(false);
       const discovery = discoveries.find((entry) => entry.id === id)!;
       const definition = await loadPluginDefinition(discovery);

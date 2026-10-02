@@ -9,10 +9,6 @@
       "minLength": 1,
       "description": "Scene/location name as it appears in the narrative."
     },
-    "timeOfDay": { "enum": ["day", "night"] },
-    "visualHint": {
-      "type": "string",
-      "description": "One English sentence describing the visuals — REQUIRED when the location is new to this world."
-    }
+    "timeOfDay": { "enum": ["day", "night"] }
   }
 }

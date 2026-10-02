@@ -264,12 +264,21 @@ describe("world-init domain tools", () => {
     });
     // The frozen snapshot itself is never mutated.
     expect(board.letter.status).toBe("unverified");
-    await expect(
-      updateDimensions({ tool, z }).execute(
-        { updates: [{ id: "board", expectedVersion: 3 }] },
-        ctx,
-      ),
-    ).rejects.toThrow(/value or changes/);
+    // An entry with no value and no change means "unchanged": it settles
+    // as no change instead of costing another model call.
+    const unchanged = await updateDimensions({ tool, z }).execute(
+      {
+        updates: [
+          { id: "board", expectedVersion: 3 },
+          { id: "board", expectedVersion: 3, changes: [], reason: "Same." },
+        ],
+      },
+      ctx,
+    );
+    expect(getPendingProposals(unchanged)[0]?.payload).toMatchObject({
+      settlement: "no-change",
+      updates: [],
+    });
   });
   it("rejects missing narrative provenance and skips model maintenance when no rules exist", async () => {
     await expect(

@@ -348,4 +348,26 @@ describe("backgroundJobRecord", () => {
       backgroundJobRecord("job", row({ status: "succeeded" }))?.status,
     ).toBe("done");
   });
+
+  it("describes a prompt-builder job by its phase", () => {
+    expect(
+      backgroundJobRecord("job", row({ status: "running", phase: "prompt" })),
+    ).toMatchObject({ messageKey: "pluginRpc.jobs.imagePromptGenerating" });
+    expect(
+      backgroundJobRecord(
+        "job",
+        row({
+          status: "succeeded",
+          phase: "prompt",
+          result: { deferredJobs: [{ jobId: "f", runtimeId: "image/render" }] },
+        }),
+      ),
+    ).toMatchObject({ messageKey: "pluginRpc.jobs.imagePromptQueued" });
+    expect(
+      backgroundJobRecord("job", row({ status: "failed", phase: "prompt" })),
+    ).not.toHaveProperty("messageKey");
+    expect(
+      backgroundJobRecord("job", row({ status: "running" })),
+    ).not.toHaveProperty("messageKey");
+  });
 });

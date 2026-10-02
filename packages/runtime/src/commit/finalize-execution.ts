@@ -59,6 +59,7 @@ import {
   type ExecutionJobOutcome,
 } from "../job-status/job-status.js";
 import { settleSetupRuntimes, type RanSetupRuntime } from "./setup-settle.js";
+import { recordRuntimeTriggersTx } from "../trigger/trigger-ledger.js";
 import {
   publishExecutionExports,
   type ExportDecl,
@@ -109,6 +110,8 @@ export interface FinalizeExecutionArgs {
   readonly results: readonly FinalizableResult[];
   /** Conversation entries committed atomically with this execution. */
   readonly journalMessages?: readonly TurnMessageRecord[];
+  /** Runtime ids counted into the trigger ledger, one entry per run. */
+  readonly runtimeTriggers?: readonly string[];
   /**
    * Continuations created while the runtimes executed. Callers stage these
    * instead of publishing them immediately; finalize persists them inside the
@@ -680,6 +683,11 @@ export async function finalizeExecution(
             update: sessionClock!,
           });
         }
+        await recordRuntimeTriggersTx(tx, {
+          sessionId,
+          runtimeIds: args.runtimeTriggers ?? [],
+          now: new Date().toISOString(),
+        });
         await publishExports(
           tx,
           results.filter((result) => !isolated.has(result.runtimeId)),

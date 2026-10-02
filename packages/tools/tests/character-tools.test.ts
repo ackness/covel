@@ -624,10 +624,11 @@ describe("builtin character tools", () => {
       expect(store.characters).toHaveLength(0);
     });
 
-    it("rejects an empty sync", async () => {
+    it("settles an empty sync as no change", async () => {
       await expect(
         loop.call("sync-characters", { creates: [], updates: [] }),
-      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      ).resolves.toMatchObject({ success: true, created: [], updated: [] });
+      expect(loop.pending).toHaveLength(0);
     });
   });
 
@@ -813,6 +814,39 @@ describe("builtin character tools", () => {
       expect(getToolContent(result).found).toBe(true);
       expect(getToolContent(result)._text).toContain("柳无痕");
       expect(getToolContent(result)._text).toContain("player");
+    });
+
+    it("resolves a partial name and lists candidates on a miss", async () => {
+      await loop.call("create-character", {
+        name: "Dr. Mina Park",
+        type: "npc",
+      });
+      await loop.call("create-character", { name: "Mina Okafor", type: "npc" });
+      loop.commit();
+      const found = getToolContent(
+        (await loop.call("get-character", { name: "mina park" })) as {
+          _text: string;
+        },
+      );
+      expect(found._text).toContain("Dr. Mina Park");
+
+      const ambiguous = getToolContent(
+        (await loop.call("get-character", { name: "Mina" })) as {
+          found: boolean;
+          candidates: string[];
+        },
+      );
+      expect(ambiguous.found).toBe(false);
+      expect(ambiguous.candidates).toEqual(["Dr. Mina Park", "Mina Okafor"]);
+
+      const missing = getToolContent(
+        (await loop.call("get-character", { name: "Eli" })) as {
+          _text: string;
+          candidates: string[];
+        },
+      );
+      expect(missing._text).toContain("Characters in session:");
+      expect(missing.candidates).toContain("柳无痕");
     });
 
     it("returns text saying not found when id is missing", async () => {

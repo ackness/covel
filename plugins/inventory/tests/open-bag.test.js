@@ -26,7 +26,7 @@ describe("inventory open-bag command", () => {
       registerTool,
     });
 
-    expect(registerTool).toHaveBeenCalledOnce();
+    expect(registerTool).not.toHaveBeenCalled();
     expect(registerRpc.mock.calls.map(([action]) => action)).toEqual([
       "item-op",
       "open-bag",

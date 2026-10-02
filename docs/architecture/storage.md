@@ -449,7 +449,7 @@ Execution bookkeeping grows with every turn, so each kind has an explicit bound:
 | Record                                      | Bound                                                                                                                                                                                                                                         |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kind=auto` snapshots                       | One per `completedPlayerTurns` value (later commits at the same count refresh it); the newest `COVEL_AUTO_SNAPSHOT_RETENTION` (default 20) are kept, except snapshots a fork names as `parentId`. Manual and fork snapshots are never pruned. |
-| Snapshot payload                            | Omits control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs` (and `_jobs` rows older databases kept).                                                                                                                   |
+| Snapshot payload and forks                  | Omit control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs`; a fork also drops them from snapshots taken before they were excluded. Rows of the retired `_jobs` namespace are deleted at boot.                          |
 | `_runtime_jobs` and their `job_status` rows | Unfinished jobs are kept; terminal jobs keep the newest 20 per session runtime.                                                                                                                                                               |
 | `_logs`                                     | Ring of 200 rows per plugin, trimmed on a logger's first write and every 20th after, so one execution can briefly exceed it.                                                                                                                  |
 | `trace_events`                              | Kept unless `COVEL_TRACE_RETENTION_DAYS` is set.                                                                                                                                                                                              |
@@ -480,13 +480,15 @@ plugin writes are buffered as proposals and committed under the source owner.
 | Active dimension provider, `_dimension-settlements`                                      | Narrative settlement obligations and receipts                                  | Read own records; host-owned source registration and verified settlement transitions, not generic writes.                                                                               |
 | Plugin owner, `message`                                                                  | Plugin                                                                         | Ordinary proposal-backed data; the UI host prefetches and forwards it for declared message panels without interpreting its business shape.                                              |
 | Plugin owner, ordinary names such as `blocks`, `definitions`, `characters`, `blueprints` | Plugin                                                                         | Read own data and write through proposals. The old character mirrors are not recreated.                                                                                                 |
-| `__kernel:<subsystem>` owner, including `__kernel:vector`                                | Kernel                                                                         | Not visible through plugin-bound store or extension APIs. This is an owner partition, not a plugin namespace.                                                                           |
+| `__kernel:<subsystem>` owner, including `__kernel:vector` and `__kernel:triggers`        | Kernel                                                                         | Not visible through plugin-bound store or extension APIs, plugin-data REST reads or `plugin-data.changed` events. This is an owner partition, not a plugin namespace.                   |
 
 The full underscore prefix remains reserved. Enumerating today's names as
 exceptions would allow future kernel bookkeeping to become plugin-writable before
 all callers were updated. `_memory` stays protected even though the old memory
 mirror and queue were removed; no compatibility reads or data restoration are
 implied. Jobs and logs retain their existing snapshot/fork inclusion policies.
+Kernel-owned rows such as the per-runtime trigger ledger travel with snapshots,
+forks and checkpoints like the rest of the session's plugin data.
 Dimension records and receipts use existing `plugin_data`, not a new table or a
 `state_entries` mirror. Definitions and current values share a versioned record;
 receipts retain frozen source definitions/read versions without copying narrative

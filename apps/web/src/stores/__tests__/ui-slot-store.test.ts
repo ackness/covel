@@ -10,7 +10,7 @@ const request = vi.hoisted(() => vi.fn());
 vi.mock("@/services/api/request.js", () => ({ request }));
 const snapshot = (name: string) => ({
   slot: "stage.backdrop@1",
-  value: { name, pending: false },
+  value: { name },
   revision: name,
 });
 beforeEach(() => {

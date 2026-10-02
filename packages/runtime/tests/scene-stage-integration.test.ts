@@ -117,7 +117,6 @@ async function seedRegistry(store: DataStore): Promise<void> {
     value: {
       schemaVersion: 1,
       registryId: "scene-registry",
-      style: { prefix: "anime style, ", suffix: ", high detail" },
       scenes: [
         {
           sceneId: "library-01",

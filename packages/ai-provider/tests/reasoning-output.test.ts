@@ -103,6 +103,76 @@ describe("normalized provider reasoning", () => {
     },
   );
 
+  it("reads Chat reasoning sent as `reasoning` and echoes it under the same field", async () => {
+    stream([
+      { choices: [{ delta: { reasoning: "Visible " } }] },
+      { choices: [{ delta: { reasoning: "summary" } }] },
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "tool-1",
+                  function: { name: "lookup", arguments: "{}" },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      },
+    ]);
+    const adapter = createOpenAiChatAdapter();
+    const model = "openai/gpt-oss-120b";
+    const events = await Array.fromAsync(
+      adapter.streamText(config, { model, messages }),
+    );
+    expect(events.filter((event) => event.type === "reasoning-delta")).toEqual([
+      { type: "reasoning-delta", reasoningDelta: "Visible " },
+      { type: "reasoning-delta", reasoningDelta: "summary" },
+    ]);
+    const done = events.find((event) => event.type === "done")!;
+    expect(done.reasoningContent).toBe("Visible summary");
+
+    const fetcher = respond({ choices: [{ message: { content: "done" } }] });
+    const followUp = (providerContinuation: typeof done.providerContinuation) =>
+      adapter.generateText(config, {
+        model,
+        messages: [
+          ...messages,
+          {
+            role: "assistant",
+            content: "",
+            reasoningContent: "Visible summary",
+            toolCalls: [{ id: "tool-1", name: "lookup", arguments: "{}" }],
+            ...(providerContinuation ? { providerContinuation } : {}),
+          },
+          { role: "tool", toolCallId: "tool-1", content: "result" },
+          // A draft returned without its continuation still goes to the same
+          // endpoint, so it uses the endpoint's field.
+          {
+            role: "assistant",
+            content: "Draft",
+            reasoningContent: "Second thought",
+          },
+        ],
+      });
+    await followUp(done.providerContinuation);
+    await followUp(undefined);
+    const sent = fetcher.mock.calls.map(
+      ([, init]) => JSON.parse(String(init.body)).messages,
+    );
+    expect(sent[0][1]).toMatchObject({ reasoning: "Visible summary" });
+    expect(sent[0][1]).not.toHaveProperty("reasoning_content");
+    expect(sent[0][3]).toMatchObject({ reasoning: "Second thought" });
+    // Without a continuation the default field stays `reasoning_content`.
+    expect(sent[1][1]).toMatchObject({ reasoning_content: "Visible summary" });
+    expect(sent[1][1]).not.toHaveProperty("reasoning");
+    expect(sent[1][3]).toMatchObject({ reasoning_content: "Second thought" });
+  });
+
   it("accumulates Anthropic thinking and preserves signed block order across a tool follow-up", async () => {
     stream([
       {

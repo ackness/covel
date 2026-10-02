@@ -27,6 +27,7 @@ import {
   mirrorSetupDone,
   resolvePendingOrBlocked,
 } from "@covel/shared";
+import { updateSetupRuntimeStates } from "./session-clock.js";
 
 export type { RanSetupRuntime } from "@covel/shared";
 
@@ -72,47 +73,46 @@ export async function settleSetupRuntimes(args: {
     );
   }
 
-  const session = await store.getSession(sessionId);
-  if (!session) return;
-  const mirror: Record<string, SetupRuntimeState> = {
-    ...session.setupRuntimes,
-  };
-  let changed = false;
+  // Terminal-attempt totals come from the ledger written above.
+  const terminalAttempts = new Map<string, number>();
   for (const r of ran) {
-    const lastError =
-      r.doneSignal && !committed
-        ? (r.error ?? "proposal commit rolled back")
-        : r.error;
-    const terminal = (
-      await store.listSetupAttempts(sessionId, {
-        runtimeId: r.runtimeId,
-        generation: r.generation,
-      })
-    ).filter((a) => isBudgetedAttempt(a.state)).length;
-    if (r.doneSignal && committed) {
-      const current = session.setupRuntimes[r.runtimeId];
-      mirror[r.runtimeId] = mirrorSetupDone(
-        r.pluginVersion,
-        current?.state === "done" ? current.completedAt : now,
-        r.generation,
-        terminal,
-      );
-    } else {
-      mirror[r.runtimeId] = resolvePendingOrBlocked({
-        attempts: terminal,
-        budget: r.budget,
-        pluginVersion: r.pluginVersion,
-        generation: r.generation,
-        now,
-        ...(lastError ? { lastError } : {}),
-      });
-    }
-    changed = true;
+    const attempts = await store.listSetupAttempts(sessionId, {
+      runtimeId: r.runtimeId,
+      generation: r.generation,
+    });
+    terminalAttempts.set(
+      r.runtimeId,
+      attempts.filter((a) => isBudgetedAttempt(a.state)).length,
+    );
   }
-  if (!changed) return;
 
-  await store.updateSession(sessionId, {
-    setupRuntimes: mirror,
-    updatedAt: now,
+  await updateSetupRuntimeStates(store, sessionId, now, (current) => {
+    const entries: Record<string, SetupRuntimeState> = {};
+    for (const r of ran) {
+      const lastError =
+        r.doneSignal && !committed
+          ? (r.error ?? "proposal commit rolled back")
+          : r.error;
+      const terminal = terminalAttempts.get(r.runtimeId) ?? 0;
+      if (r.doneSignal && committed) {
+        const previous = current[r.runtimeId];
+        entries[r.runtimeId] = mirrorSetupDone(
+          r.pluginVersion,
+          previous?.state === "done" ? previous.completedAt : now,
+          r.generation,
+          terminal,
+        );
+      } else {
+        entries[r.runtimeId] = resolvePendingOrBlocked({
+          attempts: terminal,
+          budget: r.budget,
+          pluginVersion: r.pluginVersion,
+          generation: r.generation,
+          now,
+          ...(lastError ? { lastError } : {}),
+        });
+      }
+    }
+    return entries;
   });
 }

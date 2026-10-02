@@ -208,6 +208,25 @@ it("invalidates pending event refreshes when reconnect recovery starts", async (
   expect(options.dispatch).not.toHaveBeenCalled();
 });
 
+it("recovers once when a reconnect opens with a stale-cursor reset", async () => {
+  const { streams } = setup();
+  await act(async () => {
+    streams[0]!.state("connected");
+    streams[0]!.state("reconnecting");
+    streams[0]!.state("connected");
+    streams[0]!.emit(event("system.connected"));
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(1);
+
+  // A reset after live traffic still means events were missed.
+  await act(async () => {
+    streams[0]!.emit(event("turn.resumed"));
+    streams[0]!.emit(event("system.reset"));
+  });
+  expect(api.getSessionView).toHaveBeenCalledTimes(2);
+});
+
 it("ignores events and connection updates from a closed visit", () => {
   const { streams, options, rerender } = setup();
   options.sessionGenerationRef.current += 1;

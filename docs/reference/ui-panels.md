@@ -71,8 +71,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | ------------------------------------------------------------------------ | ------------------- | ------------------ | ------------- | ------------------ | ------------------------------------------------------------------------------------------------ |
 | affinity                                                                 | affinity            | heart              | affinity      | affinity           | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因）                                   |
 | char-creator/player-init                                                 | character           | users              | character     | session.characters | 角色列表（类型由当前角色 schema 定义）                                                           |
-| character-blueprint                                                      | character-blueprint | id-card            | character     | blueprints         | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                        |
-| character-presence                                                       | character-presence  | image              | character-art | presence           | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像）                                 |
+| character-blueprint/import                                               | character-blueprint | id-card            | character     | blueprints         | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                        |
+| character-blueprint/presence                                             | character-presence  | image              | character-art | presence           | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像）                                 |
 | codex                                                                    | codex               | book-open          | codex         | entries            | 知识图鉴                                                                                         |
 | core-quest                                                               | core-quest          | scroll-text        | core-quest    | quests             | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组）                                  |
 | dice-check/recorder                                                      | dice-check-panel    | dices              | （无）        | checks             | 判定记录（倒序 🎲 回执列表：骰式 / 成败配色 / critical 强调）                                    |
@@ -84,8 +84,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | living-world-rules                                                       | living-world-rules  | book-marked        | world-data    | rules              | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）          |
 | memory                                                                   | memory              | brain              | memory        | blocks             | 记忆插件在脱离回合的 post-turn function runtime 中更新自己的记忆块并展示                         |
 | npc-graph/extractor                                                      | npc-graph           | network            | npc-graph     | nodes + edges      | NPC 关系图（force-directed 可视化）                                                              |
-| scene-cast                                                               | scene-cast          | users-round        | （无）        | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                           |
-| scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）    |
+| scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（未命中注册表时"无背景"）       |
+| scene-stage/cast                                                         | scene-cast          | users-round        | scene-stage   | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                           |
 | world-init/schema-gen                                                    | world-overview      | map                | world-data    | session.dimensions | 任意维度当前值、版本、编辑及待结算恢复                                                           |
 | world-init/schema-gen                                                    | world-schema        | sliders-horizontal | world-data    | schema             | 角色属性 schema                                                                                  |
 
@@ -174,7 +174,7 @@ ui:
 - `shortLabel` — activity-bar 垂直 Tab 条上的短标签（可选，见下方「activity-bar 短标签」章节）
 - `icon` — 框架允许列表内的 Lucide 图标名（kebab-case）；完整列表见
   [UI Components / Display](ui-components.md#display)
-- `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据。`_jobs` 是框架虚拟源：数据为该插件后台手动/事件任务（由 `_runtime_jobs` 映射），以 jobId 为键，值含 `status`（`pending` / `done` / `failed`）、`runtimeId`、`turnId`、`startedAt`、`completedAt`、`durationMs`、`error`、`reason`、`runtimeResults`、`deferredJobs`
+- `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据。`_jobs` 是框架虚拟源：数据为该插件后台手动/事件任务（由 `_runtime_jobs` 映射），以 jobId 为键，值含 `status`（`pending` / `done` / `failed`）、`runtimeId`、`turnId`、`startedAt`、`completedAt`、`durationMs`、`message`、`error`、`reason`、`runtimeResults`、`deferredJobs`。`message` 只出现在以 `expectsBackgroundFollower` 排队的 prompt 生成任务上：进行中为「正在生成图像 Prompt」，排入 follower 后为「图像任务已入队」，按玩家语言显示
 - `dataSource.bindings` — 可选的至多 8 个具名自有 namespace 绑定，例如 `{ "nodes": "characters", "edges": "relations" }`；面板在 `/sources/nodes`、`/sources/edges` 暴露其当前会话数据供 `$state` 引用。名称与 namespace 必须为字面量，无法指定其他插件；切换会话时这些值随数据源刷新，缺失的 namespace 为空对象。主 `namespace` 仍决定普通面板数据和空态。
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件。当前 Web UI 只执行这类声明式 spec；`.tsx`、`.js` 等非 JSON UI 声明不受支持，API 会给出对应诊断并剔除该项
@@ -402,7 +402,7 @@ type I18nText = string | Record<LocaleTag, string>;
 ```yaml
 ui:
   message:
-    - ./ui/action-guide-block.json
+    - ./ui/guide-block.json
 ```
 
 > **Bootstrap 注意（重要）**：`ui.message` block 只有在其声明的 `message` namespace 被写入数据后才会渲染。因此一个**只能由 block 内部按钮触发的纯手动写入者无法自举**——首屏没有数据，block 不出现，按钮也就永远点不到（典型死锁：`branch-reply` 早期即如此完全不显示）。让 block 首次出现的写入必须来自一个**非手动**路径：`scheduled` / `auto` runtime（读取叙事引擎输出后播种）、上游 runtime 的 `plugin.data` 提案，或 world-data 导入。`branch-reply` 用 `trigger: auto`（`stage: post-turn`，叙事引擎之后）播种 candidate[0]，详见 [plugins.md#branch-reply](./plugins.md#branch-reply)。
@@ -422,7 +422,7 @@ ui:
 
 ```
 guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
-  → `ui.message` 渲染三组策略卡 + 自定义输入
+  → `ui.message` 渲染情境回顾、当前决策与 3–6 条短句（舞台模式同时经 `stage.choices@1` 显示）
   → 玩家点击建议后进入待发送区
   → InputBar 统一发送待发送草稿与手写输入
 ```
@@ -446,7 +446,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 | **Dialog**   | 最新 story 正文与 `stage.dialogue@1`                   | 打字、段落切分和逐段署名                         |
 | **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项与自由输入               |
 
-“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示，逐段暂停等待点击；最后一段读完同样停一次等收尾点击（自动播放按停顿计时自动推进，正文尾部空段落不产生空白暂停），不会在打字追上流结束时自动跳到决策面板。读完且回合执行结束后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后立即隐藏整个旧决策面板，包括插件扩展区域；等待新叙事时显示生成状态，不重播已读的旧叙事。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版 scene-prompts 行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
+“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示，逐段暂停等待点击；最后一段读完同样停一次等收尾点击（自动播放按停顿计时自动推进，正文尾部空段落不产生空白暂停），不会在打字追上流结束时自动跳到决策面板。读完且回合执行结束后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后立即隐藏整个旧决策面板，包括插件扩展区域；等待新叙事时显示生成状态，不重播已读的旧叙事。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版行动建议行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
 
 舞台槽位在当前执行中可接收预览事件，提交后由服务端重算并缓存；会话恢复时重新读取已提交槽位。`watch` 仅监听提供者自己的 namespace，预览失败或取消时丢弃，不把私有插件数据直接交给舞台。
 
@@ -462,12 +462,11 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 输入直接是 `stage.backdrop@1` 槽位值，符合 `stageBackdropSchema`；`label` 供状态文案展示，不控制回退。
 
-| 档                 | 触发                                         | 表现                                        |
-| ------------------ | -------------------------------------------- | ------------------------------------------- |
-| `scene`            | 槽位 `ref` 是 `MediaRef`                     | 渲染场景图（换图 600ms crossfade）          |
-| `previous-or-hero` | 无有效 `ref` 且 `pending: true`              | 保留上一帧场景图 + 呼吸徽标，无则退世界头图 |
-| `hero`             | 槽位缺失，或无有效 `ref` 且 `pending: false` | 世界头图（`worldVisual().image`）           |
-| `gradient`         | 理论兜底                                     | 世界 accent 渐变（选择器当前不返回）        |
+| 档         | 触发                     | 表现                                 |
+| ---------- | ------------------------ | ------------------------------------ |
+| `scene`    | 槽位 `ref` 是 `MediaRef` | 渲染场景图（换图 600ms crossfade）   |
+| `hero`     | 槽位缺失，或无有效 `ref` | 世界头图（`worldVisual().image`）    |
+| `gradient` | 理论兜底                 | 世界 accent 渐变（选择器当前不返回） |
 
 ### 履历抽屉与表单模态
 

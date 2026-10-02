@@ -185,6 +185,24 @@ describe("function output schema gate", () => {
     },
   );
 
+  it("validates a guard-provided output without its skip flag against a strict contract", async () => {
+    const loaded: LoadedRuntime = {
+      manifest: manifest({ runtimeType: "agent", outputContract: "prompt@1" }),
+      promptTemplate: "",
+      outputContractSchema: { ...VALUE_SCHEMA, additionalProperties: false },
+      guard: async () => ({ skip: true, prompt: "ok" }),
+    };
+    const result = await executeTurn(
+      input("sess-guard-strict"),
+      [loaded.manifest],
+      makeDeps(loaded),
+    );
+    expect(result.runtimeResults[0]).toMatchObject({
+      status: "skipped",
+      output: { skip: true, prompt: "ok" },
+    });
+  });
+
   it.each([false, true])(
     "validates PostRuntime output including recovered failures (throws=%s)",
     async (throws) => {

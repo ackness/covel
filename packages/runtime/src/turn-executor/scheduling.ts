@@ -11,9 +11,9 @@ import {
   isSetupRuntime,
   STAGE_ORDER,
 } from "@covel/shared";
-import type { TurnMessageRecord } from "@covel/store";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import { shouldTrigger } from "../trigger/trigger.js";
+import { NEVER_TRIGGERED_SENTINEL } from "../trigger/trigger-ledger.js";
 import type { ScheduledGroup, TriggerContext } from "../types.js";
 
 export interface TriggeredRuntimeSelection {
@@ -143,8 +143,8 @@ export function selectTriggeredRuntimes(args: {
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly manualRuntimeId: string | undefined;
   readonly manualRuntimeIds?: readonly string[];
-  readonly messageHistory: readonly TurnMessageRecord[];
   readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
+  readonly runtimeTurnsSinceLastTrigger: ReadonlyMap<string, number>;
   readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
   readonly sessionId: string;
   readonly turnNumber: number;
@@ -154,8 +154,8 @@ export function selectTriggeredRuntimes(args: {
   const {
     activeRuntimes,
     manualRuntimeId,
-    messageHistory,
     runtimeTriggerCounts,
+    runtimeTurnsSinceLastTrigger,
     setupRuntimes,
     sessionId,
     turnNumber,
@@ -214,10 +214,8 @@ export function selectTriggeredRuntimes(args: {
       turnNumber,
       logicalTurn,
       triggerCount: runtimeTriggerCounts.get(rt.name) ?? 0,
-      turnsSinceLastTrigger: countPlayerMessagesSinceRuntime(
-        messageHistory,
-        rt.name,
-      ),
+      turnsSinceLastTrigger:
+        runtimeTurnsSinceLastTrigger.get(rt.name) ?? NEVER_TRIGGERED_SENTINEL,
       pendingEventTopics: [],
       isManualTrigger: false,
     };
@@ -301,39 +299,4 @@ function runDag(runtimes: readonly RuntimeManifest[]): ScheduleResult {
     console.warn(`[turn-executor] DAG scheduler: ${dag.error}`);
   }
   return { groups: dag.groups, cyclic: dag.cyclic ?? [] };
-}
-
-/**
- * Not-found sentinel returned by `countPlayerMessagesSinceRuntime` when the
- * runtime has no trigger record in the (uncompacted) message history. Large
- * enough to satisfy any `turnInterval` gate — erring toward triggering.
- */
-const NEVER_TRIGGERED_SENTINEL = 999;
-
-/**
- * `messageHistory` is the uncompacted suffix of the session timeline. If a
- * runtime's last trigger was compacted away, the backward scan misses it and
- * returns the not-found sentinel (`NEVER_TRIGGERED_SENTINEL`) — erring toward
- * triggering, which is safe: the compactor's protect window keeps recent
- * turns raw, so any message old enough to be compacted is at least a
- * protect-window's worth of player turns in the past.
- */
-export function countPlayerMessagesSinceRuntime(
-  messageHistory: readonly TurnMessageRecord[],
-  runtimeId: string,
-): number {
-  let lastRuntimeMsgIdx = -1;
-  for (let i = messageHistory.length - 1; i >= 0; i--) {
-    const msg = messageHistory[i];
-    if (msg.sourceType === "runtime" && msg.sourceRuntimeId === runtimeId) {
-      lastRuntimeMsgIdx = i;
-      break;
-    }
-  }
-
-  if (lastRuntimeMsgIdx < 0) return NEVER_TRIGGERED_SENTINEL;
-
-  return messageHistory
-    .slice(lastRuntimeMsgIdx)
-    .filter((msg) => msg.sourceType === "player").length;
 }

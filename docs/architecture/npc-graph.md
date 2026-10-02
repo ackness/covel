@@ -106,13 +106,15 @@ edges are still loaded once to resolve names and current relation versions.
   The bundled extractor no longer declares it because nodes and edges are
   injected into its prompt before the LLM call.
 - **`upsert-npc-graph.js`** — the heavy-lift tool. Resolves node IDs
-  by name (case-insensitive), assigns collision-resistant IDs to new nodes via
-  `shortIdBatch`, merges aliases / labels / summary / attributes into
+  by name (case-insensitive), assigns word IDs to new nodes via `wordId`
+  (`npc-lin-yao`), merges aliases / labels / summary / attributes into
   existing nodes, de-duplicates edges by `(source, target, relation)`,
   and refreshes the adjacency index in one transaction.
 
-New node IDs use `shortIdBatch` with a UUID component; an occupied key rejects
-the operation rather than replacing a different node. Existing node IDs, edge
+New node IDs come from `wordId`, which skips every stored or buffered key, so
+a new node never replaces a different node; the model reads these IDs in the
+injected graph, so they stay short. Edge IDs use `shortIdBatch` (words plus an
+8-hex random part), unique per relation version. Existing node IDs, edge
 endpoints and first-seen turns remain stable across restarts. Already overwritten
 historical data requires an intact backup; installing a new version cannot
 reconstruct it.

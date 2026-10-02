@@ -42,7 +42,6 @@ export function StageHud({
   onExit,
 }: StageHudProps): ReactElement {
   const { t } = useTranslation();
-  const isPending = sceneCurrent?.pending;
   const isNight = sceneCurrent?.variant === "night";
   const sourceLabel = sceneCurrent?.label;
 
@@ -58,7 +57,6 @@ export function StageHud({
           <div
             className={clsx(
               "ui-stage-panel pointer-events-auto flex items-center gap-1.5 rounded-(--radius-control) px-2.5 py-1.5 text-xs",
-              isPending && "ui-pulse-dot",
             )}
           >
             {isNight ? (

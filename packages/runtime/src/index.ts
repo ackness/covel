@@ -197,6 +197,7 @@ export {
   applyIsolatedRuntimes,
   finalizeExecution,
 } from "./commit/finalize-execution.js";
+export { updateSetupRuntimeStates } from "./commit/session-clock.js";
 export {
   droppedEmitter,
   droppedUpstream,

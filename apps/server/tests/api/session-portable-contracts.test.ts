@@ -101,7 +101,7 @@ contributes:
   expect(result.status, await result.text()).toBe(201);
   expect(await store.getCharacterSchema("portable-session")).toBeNull();
   expect(await store.listCharacters("portable-session")).toEqual([
-    expect.objectContaining({ id: "portable-session-guide", name: "Guide" }),
+    expect.objectContaining({ id: "guide", name: "Guide" }),
   ]);
   expect(await store.listSessionLorebookEntries("portable-session")).toEqual([
     expect.objectContaining({ id: "tides", content: "Travel at low tide." }),

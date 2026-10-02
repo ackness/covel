@@ -87,7 +87,7 @@ export {
 } from "./builtin/world-dimension-tools.js";
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
-export { shortId, shortIdBatch } from "./short-id.js";
+export { shortId, shortIdBatch, wordId, wordSlug } from "./short-id.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {

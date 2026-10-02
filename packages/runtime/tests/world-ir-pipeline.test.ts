@@ -28,14 +28,20 @@ const VALID_WORLD_IR = {
   entities: [
     { id: "observatory", type: "location", name: "Observatory" },
     { id: "brass-key", type: "item", name: "Brass Key" },
+    { id: "player", type: "character", name: "Player" },
   ],
   relations: [],
   events: [
     {
       id: "found-brass-key",
       type: "inventory_change",
-      participantIds: ["brass-key"],
-      attributes: { operation: "acquire", quantity: 1 },
+      participantIds: ["player", "brass-key"],
+      attributes: {
+        item: "brass-key",
+        holder: "player",
+        operation: "gain",
+        quantity: 1,
+      },
     },
   ],
   statements: [],

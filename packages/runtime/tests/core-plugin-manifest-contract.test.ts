@@ -116,13 +116,13 @@ describe("core plugin manifest contract", () => {
     const retriever = requireRuntime(manifests, "npc-graph/rag-retriever");
     const narrator = requireRuntime(manifests, "narrator");
     const chatModeNarrator = requireRuntime(manifests, "chat-mode-narrator");
-    const rawDownstreamIds = ["guide", "char-creator/character-tracker"];
+    const rawDownstreamIds = ["char-creator/character-tracker"];
     const structuredDownstreamIds = [
       "codex",
       "npc-graph/extractor",
-      "core-quest",
+      "core-quest/log",
       "affinity",
-      "inventory",
+      "inventory/ledger",
     ];
     const rawDownstreams = rawDownstreamIds.map((id) =>
       requireRuntime(manifests, id),
@@ -171,7 +171,17 @@ describe("core plugin manifest contract", () => {
     ]);
 
     const guide = requireRuntime(manifests, "guide");
+    expect(getRuntimeSpec(guide).stage).toBe("post-turn");
+    // A required typed binding is both its DAG edge and same-turn gate.
+    expect(guide.needs ?? []).toEqual([]);
+    expect(guide.inputs?.narrative).toMatchObject({
+      from: { capability: "narrative-engine@1", cardinality: "one" },
+      select: "/narrativeOutput",
+      required: true,
+    });
     expect(guide).toMatchObject({
+      model: "plugin",
+      outputContract: "scene-prompts@1",
       requireToolUse: true,
       llm: {
         reasoningEffort: "disabled",
@@ -228,6 +238,9 @@ describe("core plugin manifest contract", () => {
     expect(worldIr.tools?.plugin).toEqual(["submit-world-facts"]);
     expect(worldIr.requireToolUse).toBe(true);
     expect(worldIr.completeAfterTools).toEqual(["submit-world-facts"]);
+    expect(
+      requireRuntime(manifests, "world-init/dimension-tracker").llm,
+    ).toEqual({ reasoningEffort: "disabled", toolChoice: "required" });
     expect(worldIr.llm).toEqual({
       reasoningEffort: "disabled",
       toolChoice: { name: "submit-world-facts" },
@@ -248,59 +261,46 @@ describe("core plugin manifest contract", () => {
       ).toBe(false);
     }
 
+    // Ledgers that only reconcile typed WorldIR events run without a model.
+    for (const id of ["core-quest/log", "inventory/ledger"]) {
+      expect(requireRuntime(manifests, id)).toMatchObject({
+        runtimeType: "function",
+        handler: "./handler.js",
+      });
+    }
     expect(requireRuntime(manifests, "affinity").completeAfterTools).toEqual([
       "update-affinity",
-    ]);
-    expect(requireRuntime(manifests, "inventory").completeAfterTools).toEqual([
-      "update-inventory",
-    ]);
-    expect(requireRuntime(manifests, "core-quest").completeAfterTools).toEqual([
-      "upsert-quests",
     ]);
     expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
       "sync-codex-entries",
     ]);
-    expect(requireRuntime(manifests, "scene-prompts").llm).toEqual({
-      reasoningEffort: "disabled",
-      toolChoice: { name: "generate-scene-prompts" },
-    });
     for (const id of [
       "npc-graph/extractor",
       "affinity",
       "codex",
-      "core-quest",
-      "inventory",
       "char-creator/character-tracker",
     ]) {
       const extractor = requireRuntime(manifests, id);
       expect(extractor.requireExplicitCompletion).toBe(true);
       expect(extractor.requireToolUse).not.toBe(true);
-      expect(extractor.llm?.toolChoice).toBe(
-        id === "npc-graph/extractor" ? "required" : undefined,
-      );
+      // Each ends on the player's message; a required tool call keeps the
+      // model from continuing the story, and runtime-done still settles a
+      // quiet turn.
+      expect(extractor.llm?.toolChoice).toBe("required");
     }
 
     expect(
-      [...rawDownstreams, worldIr, ...structuredDownstreams].map(
-        (manifest) => manifest.model,
-      ),
-    ).toEqual([
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-    ]);
+      [...rawDownstreams, worldIr, ...structuredDownstreams]
+        .filter((manifest) => manifest.runtimeType !== "function")
+        .map((manifest) => manifest.model),
+    ).toEqual(["plugin", "plugin", "plugin", "plugin", "plugin"]);
   });
 
   it("keeps manual Chat Mode utilities outside automatic scheduling", async () => {
     const manifests = await loadRuntimeManifests();
     const manualUtilityIds = [
-      "character-blueprint",
-      "character-presence",
+      "character-blueprint/import",
+      "character-blueprint/presence",
       "living-world-rules",
     ];
 

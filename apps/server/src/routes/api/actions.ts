@@ -807,8 +807,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                         },
                       })),
                     );
-                    // Background followers (e.g. scene-stage's background-gen)
-                    // are queued with the writes they react to, so a
+                    // Background followers (e.g. image generation) are
+                    // queued with the writes they react to, so a
                     // rolled-back turn queues none.
                     followerJobs.push(
                       ...(await enqueueEventFollowers(tx, {
@@ -909,7 +909,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           },
         });
       }
-      if (queuedRuntimeJobs.length > 0) runtimeJobWorker?.wake();
+      if (queuedRuntimeJobs.length > 0) runtimeJobWorker?.wake(sessionId);
 
       announceQueuedRuntimeJobs(c, followerJobs);
 

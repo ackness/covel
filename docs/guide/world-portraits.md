@@ -1,6 +1,6 @@
 # 角色立绘 — 提示词文档（Portrait Prompt Spec）
 
-为三个内置世界的角色生成**统一风格**的立绘 / 头像，接入 `character-presence` 插件，存入各世界的 `media/`，**生成一次、长期复用**。
+为三个内置世界的角色生成**统一风格**的立绘 / 头像，接入 `character-blueprint`（角色资料）插件，存入各世界的 `media/`，**生成一次、长期复用**。
 
 - 机器清单（脚本直接读）：`worlds/emberback/media/portraits.json` · `worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json`
 - 每张新图的提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`，`negative` 作为负向提示。共享前后缀减少风格漂移；同角色变体仍需以批准图为编辑参考，锁定身份和取景。
@@ -61,14 +61,14 @@ pnpm exec tsx scripts/generate-portraits.mjs haruka-academy --only shiina-kaho:u
 
 默认参数（可在 `portraits.json` 的 `defaults` 调）：`size 1024x1536`（竖构图立绘）、`quality medium`、`png`。
 
-## 接入 character-presence（已接线）
+## 接入 character-blueprint（已接线）
 
-展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，舞台模式（stage mode）下作为立绘。三个世界的 `data/world.data.yaml` 已加好两条 source：
+展示立绘的插件就是 **`character-blueprint`**（角色资料）的 `presence` 部分：右侧角色立绘面板显示头像，舞台模式（stage mode）下作为立绘。三个世界的 `data/world.data.yaml` 已加好两条 source：
 
 - `media` source：导入 `media/portraits/` 下的图，按 **sha256 内容寻址**存入媒体库，`to: media` + `indexTo: contract:character.portrait-assets@1`；
 - `presence` source（`media/presence.json`）：把与实例化角色匹配的 `characterId` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。
 
-`presence.json` 由 `scripts/emit-presence.mjs <world>` 从 `portraits/` 目录按 sha256 自动生成。角色条目可用 `visual` 描述默认图的 `id/outfit/expression/pose/stage`，并用 `variants[]` 添加同角色的其他服装、表情和姿势；脚本会写成 `character-presence.visuals` 目录，同时保留旧 `avatar` / `sprite`：
+`presence.json` 由 `scripts/emit-presence.mjs <world>` 从 `portraits/` 目录按 sha256 自动生成。角色条目可用 `visual` 描述默认图的 `id/outfit/expression/pose/stage`，并用 `variants[]` 添加同角色的其他服装、表情和姿势；脚本会写成 presence 记录的 `visuals` 目录，同时保留旧 `avatar` / `sprite`：
 
 ```bash
 node scripts/emit-presence.mjs mistport
@@ -78,7 +78,7 @@ node scripts/emit-presence.mjs emberback
 
 > ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。脚本只写默认语言文件；如有 `presence.en.json`，须同步媒体引用、保留英文显示名称，并运行世界资源测试。
 
-三个世界都已把 `character-presence` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
+三个世界都已把 `character-blueprint` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
 
 ## 复用与重生成
 

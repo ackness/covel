@@ -40,6 +40,9 @@ contributes:
     - initialize-world
     - dimension-rule-get
     - update-dimensions
+  hooks:
+    - event: PreLLMCall
+      enforce: normal
 ---
 
 # World Setup

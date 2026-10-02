@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -97,5 +97,35 @@ describe("discoverPluginsMulti — load-path-based source tagging", () => {
     expect(results).toHaveLength(1);
     expect(results[0].source).toBe("builtin");
     expect(results[0].rootPath).toBe(path.join(bundledDir, "codex"));
+  });
+});
+
+describe("discoverPluginsMulti — symlinked plugin directories", () => {
+  it("discovers a symlinked plugin directory and warns about a dangling one", async () => {
+    const elsewhere = await fs.mkdtemp(path.join(os.tmpdir(), "covel-linked-"));
+    try {
+      await writePlugin(elsewhere, "linked");
+      await fs.symlink(
+        path.join(elsewhere, "linked"),
+        path.join(userDir, "linked"),
+        "dir",
+      );
+      await fs.symlink(
+        path.join(elsewhere, "missing"),
+        path.join(userDir, "dangling"),
+        "dir",
+      );
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const results = await discoverPluginsMulti([bundledDir, userDir]);
+      expect(results.map((result) => [result.id, result.source])).toEqual([
+        ["linked", "community"],
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("dangling: symlink does not resolve"),
+      );
+      warn.mockRestore();
+    } finally {
+      await fs.rm(elsewhere, { recursive: true, force: true });
+    }
   });
 });

@@ -86,7 +86,7 @@ provider 获得当前执行的 locale、只读世界视图和自身数据访问�
 
 ### Runtime LLM 请求默认值
 
-runtime 的 `agent` 分组可声明 `llm.reasoningEffort: disabled` 和 `llm.toolChoice: { name: submit-facts }`。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
+runtime 的 `agent` 分组可声明 `llm.reasoningEffort: disabled`，以及 `llm.toolChoice: { name: submit-facts }`（指定工具）或 `llm.toolChoice: required`（必须调用某个已声明工具，由模型选择）。叙事后的记账 runtime 收到的对话以本轮玩家输入结尾，不强制工具时模型容易直接续写剧情。`required` 适合"无变化"也由同一个写入工具表达的 runtime（如 `update-dimensions({updates: []})`）；若无变化要改调 `runtime-done`，强制工具会让模型先提交一次被拒的空写入，而失败的写入不会被随后的 `runtime-done` 抵消。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
 
 provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，DeepSeek thinking 请求省略不兼容的 `tool_choice`。`deepseek-flash` 和 V4 模型未指定开关时也按默认开启思考处理；显式关闭后保留插件的工具选择偏好。此行为遵循 [DeepSeek Chat Completions 的工具选择限制](https://api-docs.deepseek.com/api/create-chat-completion/)，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
 
@@ -94,7 +94,8 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 
 根内联 runtime 的 `PLUGIN.md` 正文，或子 runtime 的 `RUNTIME.md` 正文，支持 `{{ variable }}` 插值。常用变量包括：
 
-- `player.message`、`player.lastFormValues`。
+- `player.message`、`player.lastFormValues`、`player.character`。
+- `characters.npcs`：全部非玩家角色的档案，每行 `姓名 [类型] | description | fields`（description 与 fields 各截至 400 字符，合计约 8000 字符；超出的角色只列姓名）。不含 id，模型按姓名用 `get-character` 查询。把它放进正文，模型就不必为每个出场人物各调一次 `get-character`。
 - `session.id`、`session.turnNumber`。
 - `inputs.<pluginId>.<runtimeId>.<field>`。
 - `world.name`、`world.description`、`world.tags`、`world.lore`、`world.schema`、`world.entries`、`world.dimensions`。
@@ -106,13 +107,13 @@ provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，�
 
 `world.dimensions.<id>` 包含 `{name,description?,schema,value,version}`，具体值写作 `{{ world.dimensions.reputation.value }}`。`worldRecord.dimensions` / `metadata.dimensions` 是作者声明，不是会话进度；旧 raw 值路径及 `world.tone/openingScenario` 不再是公共快捷字段。
 
-捆绑 `world-init` 通过 `prompt.segment@1` 提供 story 受众的 `<world-dimensions>` turn 段。它保留 ID、版本及预算内的本地化值预览：当前默认总预算 8192 字符，单项值预览最多 240 字符；超出预算的维度计数会显式显示，长值使用省略号，并指引按 ID/path 或分页查询。省略不代表值不存在，预览不冒充完整 JSON。选择了某个模板路径也不意味着框架会自动全量展开所有行集。
+捆绑 `world-init` 通过 `prompt.segment@1` 提供 story 受众的 `<world-dimensions>` turn 段。它保留 ID、版本及预算内的本地化值：默认总预算 12000 字符，放得下时每个值都完整给出，因为每个被截断的值都会让模型多调一次 `world-dimension-get`，而那一轮要重发整个提示词；超出预算时从最长的值开始截到 240 字符（以省略号标记），仍放不下的维度计数会显式显示，并指引按 ID/path 或分页查询。省略不代表值不存在，预览不冒充完整 JSON。选择了某个模板路径也不意味着框架会自动全量展开所有行集。
 
 投影只改变展示范围，不改原始快照或版本。普通 JSON 不猜翻译，只有 `x-i18n` 注解节点本地化。story 段、公共 get/list 及客户端快照均不带 `initialValue/updateRule/lastTrackedSource`；tracker 的 self-only `<dimension-rules>` 段在预算内直接带完整规则、schema 与冻结值，超出预算的维度再用 `dimension-rule-get` 分页获取。没有有效规则时不调用维护模型。
 
 pre-turn 只读发布 Sₙ，叙事与 tracker 公共读取同一份 Sₙ；post-turn 提交后新执行再发布新版，不反向绑定 tracker 输出，不以 `recordAs` 或世界初值兜底。来源重试通过 `retryFromTurnId` 使用原 turn artifact，失败/未结算不是无变化。完整状态见 [World Model](world-model.md#回合时序与结算回执)。本期没有 #97 的隐藏事件载荷或条件触发层。
 
-声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。
+声明输入块携带上游输出或本插件数据，XML 转义后作为数据注入，**不再执行模板插值**。模板只在 runtime 自身正文上解释一次，防止数据中的 `{{ ... }}` 再次展开并绕过数据边界。`io.inputs` 解析出的 typed slots 保留 cardinality、value/items 与 provenance，并通过 `<runtime-inputs>` 注入 agent；function runtime 从 `ctx.inputs` 读取。提示词里的 provenance 只有 `pluginId` 与 `runtimeId`：`resultId` 是只供工具和内核使用的 UUID，工具从 `ctx.inputSlots` 读取，不进入提示词（`<runtime-exports>` 同理）。
 
 ## 5. Token 预算与缓存
 

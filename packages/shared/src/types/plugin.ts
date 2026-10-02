@@ -261,7 +261,7 @@ export type PluginTag = string;
 
 /**
  * Plugin catalogue relations. Each entry is a plain string: a plugin id
- * (`scene-cast`) or `pluginId/runtimeId` — EXCEPT under `provides`, where the
+ * (`scene-stage`) or `pluginId/runtimeId` — EXCEPT under `provides`, where the
  * string is an opaque capability label two plugins can share to mark
  * themselves as interchangeable (`narrator` and `chat-mode-narrator` both
  * provide `narrative-engine`, which is how one may replace the other).

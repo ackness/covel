@@ -47,3 +47,32 @@ export function pluginCodeNamespaceWriteError(
   if (isHiddenPluginDataNamespace(namespace)) return null;
   return reservedPluginDataNamespaceError(namespace);
 }
+
+/**
+ * Framework bookkeeping that never travels with a snapshot or into a fork:
+ * job rows are incarnation-bound execution state (copying them would let a
+ * second worker see already-paid provider work as its own), and `_logs` is a
+ * bounded diagnostic ring, not game state. `_jobs` names the retired
+ * in-process queue's rows, which older databases and snapshots may still hold.
+ */
+const CONTROL_PLANE_NAMESPACES: ReadonlySet<string> = new Set([
+  "_jobs",
+  "_runtime_jobs",
+  "_runtime_job_control",
+  "_logs",
+]);
+
+export function isControlPlanePluginDataNamespace(namespace: string): boolean {
+  return CONTROL_PLANE_NAMESPACES.has(namespace);
+}
+
+/**
+ * Owner prefix of kernel bookkeeping rows in plugin data (`__kernel:vector`,
+ * `__kernel:triggers`). It is an owner partition, never a plugin id: these rows
+ * travel with snapshots but stay off every public plugin-data surface.
+ */
+export const KERNEL_PLUGIN_DATA_OWNER_PREFIX = "__kernel:";
+
+export function isKernelPluginDataOwner(pluginId: string): boolean {
+  return pluginId.startsWith(KERNEL_PLUGIN_DATA_OWNER_PREFIX);
+}

@@ -168,6 +168,49 @@ describe.each([
     worker.close();
   });
 
+  it("claims only from the woken session between maintenance passes", async () => {
+    const listSessions = vi.spyOn(store, "listSessions");
+    const executed: string[] = [];
+    const worker = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(store),
+      execute: async (claimed, control) => {
+        executed.push(claimed.jobId);
+        await control.beforeCommit({
+          backgroundTurnId: `turn-${claimed.jobId}`,
+          backgroundExecutionId: `execution-${claimed.jobId}`,
+        });
+        await store.withTransaction((tx) => control.completeInTx(tx, {}));
+      },
+    });
+    const status = (sessionId: string, jobId: string) =>
+      getRuntimeJob(store, { sessionId, pluginId: "mimo-tts", jobId }).then(
+        (found) => found?.status,
+      );
+
+    // Startup runs a maintenance pass that scans every session.
+    worker.wake();
+    await vi.waitFor(() => expect(listSessions).toHaveBeenCalledTimes(3));
+
+    await createRuntimeJob(store, job("session-b", "b-1"));
+    await createRuntimeJob(store, job("session-a", "a-1"));
+    worker.wake("session-a");
+    await vi.waitFor(async () =>
+      expect(await status("session-a", "a-1")).toBe("succeeded"),
+    );
+    expect(await status("session-b", "b-1")).toBe("queued");
+    expect(listSessions).toHaveBeenCalledTimes(3);
+
+    // A wake without a session falls back to a full scan.
+    worker.wake();
+    await vi.waitFor(async () =>
+      expect(await status("session-b", "b-1")).toBe("succeeded"),
+    );
+    expect(executed).toEqual(["a-1", "b-1"]);
+    await worker.close();
+  });
+
   it.each(["execution-failed", "SYNTHETIC_PRIVATE_REASON"])(
     "publishes safe SSE diagnostics for reason %s while preserving job identities",
     async (reason) => {

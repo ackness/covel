@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contract:world-ir.vocabulary@1",
+  "title": "Covel WorldIR vocabulary v1",
+  "description": "Names a session already tracks, published before extraction so the extractor reuses them. Disambiguation data only, never evidence of a new event.",
+  "type": "object",
+  "required": ["entries"],
+  "additionalProperties": false,
+  "properties": {
+    "entries": {
+      "type": "array",
+      "maxItems": 120,
+      "items": {
+        "type": "object",
+        "required": ["type", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "description": "What the name refers to, such as item or quest.",
+            "type": "string",
+            "minLength": 1
+          },
+          "name": { "type": "string", "minLength": 1 },
+          "details": {
+            "description": "Canonical sub-entries, such as a quest's open objectives.",
+            "type": "array",
+            "maxItems": 12,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

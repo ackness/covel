@@ -118,16 +118,14 @@ describe.each(worlds)("shipped art: %s", (world) => {
 
   const sceneManifestPath = path.join(mediaDir, "scenes.json");
   it.skipIf(!existsSync(sceneManifestPath))(
-    "keeps authored scene variants, style and hashes aligned with their registry",
+    "keeps authored scene variants and hashes aligned with their registry",
     async () => {
       const manifestPath = sceneManifestPath;
       const manifest = await readJson<{
         defaults: { size: string };
-        style: Record<string, unknown>;
         scenes: Array<{ id: string; name: string; locationRef: string }>;
       }>(manifestPath);
       const registry = await readJson<{
-        style: Record<string, unknown>;
         scenes: Array<{
           sceneId: string;
           name: string;
@@ -136,7 +134,6 @@ describe.each(worlds)("shipped art: %s", (world) => {
           night: MediaRef | null;
         }>;
       }>(path.join(mediaDir, "scenes.registry.json"));
-      expect(registry.style).toEqual(manifest.style);
       expect(registry.scenes.map((scene) => scene.sceneId).sort()).toEqual(
         manifest.scenes.map((scene) => scene.id).sort(),
       );

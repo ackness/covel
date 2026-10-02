@@ -12,7 +12,9 @@ export function characterRecordFromValue(
   const name = typeof value.name === "string" ? value.name : undefined;
   if (!id || !name) return null;
   return {
-    id: `${sessionId}-${id}`,
+    // Character keys are per session already; the world's own id is used
+    // as is, so prompts carry `npc-mio`, not `<sessionId>-npc-mio`.
+    id,
     sessionId,
     name,
     type: typeof value.type === "string" ? value.type : "npc",

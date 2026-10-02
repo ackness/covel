@@ -423,6 +423,11 @@ export function useSessionSubscription({
     let stateRefreshPending = false;
     let bufferedEvents: SubscriptionEvent[] = [];
     let hasConnected = false;
+    // A reconnect starts recovery as soon as the stream opens. After a server
+    // restart the stream then opens with a stale-cursor `system.reset`, which
+    // asks for that same recovery; it is skipped while only control frames
+    // have arrived on the new stream.
+    let reconnectRecoveryOpen = false;
 
     let startRecovery: () => void = () => undefined;
     const applySubscriptionEvent = createSubscriptionEventHandler({
@@ -487,6 +492,10 @@ export function useSessionSubscription({
       ) {
         return;
       }
+      if (reconnectRecoveryOpen && event.type !== "system.connected") {
+        reconnectRecoveryOpen = false;
+        if (event.type === "system.reset") return;
+      }
       if (isTerminalBackgroundEvent(event)) {
         // Recovery can replace buffered projections. Checkpoint the committed
         // background result on receipt, independently of projection replay.
@@ -530,6 +539,7 @@ export function useSessionSubscription({
       // Even a tab opened in the background can miss state changes before its
       // first subscription. Recover on visibility resume as on a reconnect.
       if (next === "paused") hasConnected = true;
+      reconnectRecoveryOpen = false;
       if (next === "connected") {
         const reconnected = hasConnected;
         hasConnected = true;
@@ -538,6 +548,7 @@ export function useSessionSubscription({
             ignoreError("refresh UI slots after reconnect"),
           );
           startRecovery();
+          reconnectRecoveryOpen = true;
         }
       }
     };

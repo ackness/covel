@@ -92,7 +92,7 @@ Use an expected/actual/delta/effect/evidence structure. At minimum simulate:
 For each phase, check whether traditional-story and dialogue-mode branch differently:
 
 - Traditional path: `npc-graph/rag-retriever` -> narrator -> guide / codex / `npc-graph/extractor` / `char-creator/character-tracker`.
-- Dialogue path: retrieval + scene-cast -> chat-mode-narrator -> scene-prompts and enabled trackers.
+- Dialogue path: retrieval + scene-stage/cast -> chat-mode-narrator -> guide and enabled trackers.
 - Both narrators provide `narrative-engine@1` and list it under `conflicts`, so only one is active; downstream runtimes gate on `contract: narrative-engine@1`, so both modes share one declaration.
 - Derive the path from the active plugins' `stage` declarations rather than trusting this list; plugins change faster than this skill.
 - Manual plugins such as identity/profile or branch reply require plugin-rpc/manual triggers; active does not mean auto-scheduled (manual/event runtimes declare no `stage`).

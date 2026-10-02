@@ -14,6 +14,7 @@ import {
 import {
   attachRuntimeJournal,
   collectExecutionJournal,
+  collectExecutionTriggers,
 } from "../src/execution-journal.js";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
@@ -113,7 +114,7 @@ describe("applyHistoryWindow", () => {
 });
 
 describe("runtime journal content", () => {
-  const journalContent = (output: Record<string, unknown>): string => {
+  const journal = (output: Record<string, unknown>) => {
     const result = {
       pluginId: "p",
       runtimeId: "p/r",
@@ -136,19 +137,26 @@ describe("runtime journal content", () => {
       } as RuntimeManifest,
       output,
     );
-    return collectExecutionJournal({ runtimeResults: [result] })[0]!.content;
+    return {
+      contents: collectExecutionJournal({ runtimeResults: [result] }).map(
+        (message) => message.content,
+      ),
+      triggers: collectExecutionTriggers({ runtimeResults: [result] }),
+    };
   };
 
-  it("records text outputs and leaves structured outputs empty", () => {
-    expect(journalContent({ narrativeOutput: "The door opens." })).toBe(
-      "The door opens.",
-    );
-    expect(journalContent({ content: "Two facts saved." })).toBe(
+  it("records text outputs and counts structured outputs without a row", () => {
+    expect(journal({ narrativeOutput: "The door opens." })).toEqual({
+      contents: ["The door opens."],
+      triggers: ["p/r"],
+    });
+    expect(journal({ content: "Two facts saved." }).contents).toEqual([
       "Two facts saved.",
-    );
-    expect(journalContent({ storm: { value: 3 }, grid: { value: 1 } })).toBe(
-      "",
-    );
+    ]);
+    expect(journal({ storm: { value: 3 }, grid: { value: 1 } })).toEqual({
+      contents: [],
+      triggers: ["p/r"],
+    });
   });
 
   it("drops empty runtime rows from agent history", () => {

@@ -16,6 +16,7 @@ import {
   reportRuntimeResult,
 } from "../trace/runtime-telemetry.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import { guardProvidedValue, isGuardProvided } from "./guard-output.js";
 import {
   getTurnExecutionSignal,
   RuntimeTimeoutError,
@@ -135,12 +136,7 @@ export async function finalizeRuntimeResult(
         error: `output-schema-invalid: ${error}`,
       };
   }
-  const guardProvided =
-    finalized.status === "skipped" &&
-    finalized.output !== null &&
-    typeof finalized.output === "object" &&
-    !Array.isArray(finalized.output) &&
-    (finalized.output as Record<string, unknown>).skip === true;
+  const guardProvided = isGuardProvided(finalized);
   if (
     manifest.outputContract &&
     (finalized.status === "success" || guardProvided)
@@ -157,7 +153,9 @@ export async function finalizeRuntimeResult(
         ? validateOutput(
             finalized.canonicalValue
               ? finalized.canonicalValue.value
-              : finalized.output,
+              : guardProvided
+                ? guardProvidedValue(finalized.output)
+                : finalized.output,
             schema,
           )
         : undefined;

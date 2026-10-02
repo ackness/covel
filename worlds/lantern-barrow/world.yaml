@@ -56,9 +56,7 @@ pluginPolicy:
         - npc-graph
         - living-world-rules
         - character-blueprint
-        - director
         - story-events
-        - story-plotter
       recommended:
         - branch-reply
         - cost-gate
@@ -85,11 +83,12 @@ pluginPolicy:
     - npc-graph
     - living-world-rules
     - character-blueprint
-    - director
     - story-events
-    - story-plotter
     - branch-reply
     - cost-gate
+pluginSettings:
+  story-events:
+    planner: true
 characterSchema:
   types:
     - npc

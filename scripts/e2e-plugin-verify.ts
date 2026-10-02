@@ -11,11 +11,12 @@
  *      GET /api/plugin-flows at runtime, so adding a new plugin "just works"
  *      without touching this script.
  *
- *   2. Real config by default. Story-runtime LLM calls are routed through
- *      the `e2e` slot via the `model` override field on /api/actions.
- *      Slot names are the bare part of `[covel.xxx]` in llm.toml (i.e. `e2e`,
- *      `e2e_local`, `e2e3`), not the full `covel.xxx` table path.
- *      Override with `--slot <name>` or `E2E_MODEL_SLOT=<name>`.
+ *   2. Real config by default. Every runtime uses the model the server's
+ *      configuration routes it to, exactly as in play; Phase 6 prints the
+ *      slot / provider / model each runtime called. `--slot <name>` or
+ *      `E2E_MODEL_SLOT=<name>` overrides the story runtime through the
+ *      `model` field on /api/actions. Slot names are the bare part of
+ *      `[covel.xxx]` in llm.toml (e.g. `story`, `e2e_local`).
  *
  *   3. Observable output. Each turn prints a runtime timeline, tool calls,
  *      trigger verification, and session-state delta. Plain text, no
@@ -38,12 +39,14 @@
  *
  * Options:
  *   --server <url>         API base (default: http://localhost:3001/api)
- *   --slot <name>          Model slot for story runtimes (default: e2e)
+ *   --slot <name>          Override the story runtimes' model slot (default: configured routing)
  *   --world <id>           World to use (default: first world returned by /api/worlds)
  *   --turns <n>            Number of playing-phase turns to run after char-creation (default: 3)
  *   --runtime <id>         Filter output + assertions to this runtime only
  *   --plugin <id>          Filter output + assertions to this plugin only
  *   --enable-plugins <ids> Enable comma-separated plugins before the first turn
+ *   --core-only            Create the session with core plugins only instead of
+ *                          the world's preset pack
  *   --player-message <str> Player text for each playing turn (default: cycles through built-ins)
  *   --form-values <json>   Default form field values (default: auto from field types)
  *   --timeout <seconds>    Per-turn SSE timeout (default: 300)
@@ -75,12 +78,14 @@ import { writeFileSync } from "node:fs";
 
 interface CliArgs {
   server: string;
-  slot: string;
+  /** Story-runtime slot override; absent means the configured routing. */
+  slot?: string;
   world?: string;
   turns: number;
   runtimeFilter?: string;
   pluginFilter?: string;
   enablePlugins: string[];
+  coreOnly: boolean;
   playerMessage?: string;
   formValues: Record<string, string>;
   timeoutSec: number;
@@ -98,9 +103,10 @@ interface CliArgs {
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     server: "http://localhost:3001/api",
-    slot: process.env.E2E_MODEL_SLOT?.trim() || "e2e",
+    slot: process.env.E2E_MODEL_SLOT?.trim() || undefined,
     turns: 3,
     enablePlugins: [],
+    coreOnly: false,
     formValues: {},
     timeoutSec: 300,
     verbose: false,
@@ -145,6 +151,9 @@ function parseArgs(argv: string[]): CliArgs {
           .split(",")
           .map((value) => value.trim())
           .filter(Boolean);
+        break;
+      case "--core-only":
+        args.coreOnly = true;
         break;
       case "--player-message":
         args.playerMessage = next();
@@ -218,7 +227,7 @@ Usage:
 
 Options:
   --server <url>          API base (default: http://localhost:3001/api)
-  --slot <name>           Model slot for story runtimes (default: e2e)
+  --slot <name>           Override the story runtimes' model slot (default: configured routing)
                           Slot names come from [covel.xxx] in llm.toml,
                           pass only the xxx part (e.g. e2e, e2e_local)
   --world <id>            World to use (default: first available)
@@ -226,6 +235,7 @@ Options:
   --runtime <id>          Filter output + assertions to this runtime only
   --plugin <id>           Filter output + assertions to this plugin only
   --enable-plugins <ids>  Enable comma-separated plugins before the first turn
+  --core-only             Core plugins only, not the world's preset pack
   --player-message <str>  Player text for each playing turn
   --form-values <json>    Default form field values
   --timeout <seconds>     Per-turn SSE timeout (default: 300)
@@ -273,20 +283,19 @@ interface PluginFlowStep {
   runtimeType: string;
   outputKind: string;
   trigger: PluginFlowTrigger;
+  /** `detached` runtimes commit with the turn and run as background jobs. */
+  turnCompletion?: { mode: string };
   tools: { builtin: string[]; local: string[] };
   isStoryRuntime: boolean;
 }
 
 interface PluginFlowResponse {
-  version: string;
   segments: Array<{
     id: FlowSegmentId;
     label: string;
-    rangeLabel: string;
   }>;
   plugins: Array<{
     id: string;
-    name: string;
     pluginType: string;
     runtimeIds: string[];
   }>;
@@ -299,7 +308,9 @@ interface SessionRecord {
   status: string;
   phase: "setup" | "playing";
   completedPlayerTurns: number;
-  setupRuntimes: Readonly<Record<string, { state: string }>>;
+  setupRuntimes: Readonly<
+    Record<string, { state: string; attempts?: number; reason?: string }>
+  >;
   locale?: string;
   activePlugins?: readonly string[];
   createdAt?: string;
@@ -320,6 +331,7 @@ interface RuntimeResultRecord {
   pluginId: string;
   status: string;
   output?: Record<string, unknown>;
+  effects?: { interactions?: unknown[] };
   toolCalls?: ToolCallRecord[];
   durationMs: number;
 }
@@ -327,6 +339,7 @@ interface RuntimeResultRecord {
 interface TurnRecord {
   turnId: string;
   sessionId: string;
+  origin?: string;
   runtimeResults: RuntimeResultRecord[];
   durationMs: number;
   timestamp: string;
@@ -334,7 +347,18 @@ interface TurnRecord {
 
 interface SseEvent {
   type: string;
+  /** Envelope turnId: one per execution on the stream. */
+  turnId?: string;
   payload: Record<string, unknown>;
+}
+
+interface RuntimeJobRecord {
+  jobId: string;
+  runtimeId: string;
+  status: string;
+  reason?: string;
+  error?: string;
+  origin: { activation: string; sourceTurnId?: string };
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -477,11 +501,16 @@ async function httpPostSse(
           try {
             const parsed = JSON.parse(raw) as {
               type?: string;
+              turnId?: string;
               payload?: Record<string, unknown>;
             };
             const type = parsed.type ?? "unknown";
             const payload = parsed.payload ?? {};
-            onEvent({ type, payload });
+            onEvent({
+              type,
+              ...(parsed.turnId ? { turnId: parsed.turnId } : {}),
+              payload,
+            });
             outcome.eventCount++;
             if (type === "execution.completed") {
               outcome.executionCompleted = true;
@@ -669,8 +698,11 @@ function printTable(headers: string[], rows: string[][]): void {
   for (const row of rows) console.log("  " + fmt(row));
 }
 
-function summariseOutput(output: Record<string, unknown> | undefined): string {
-  if (!output) return "-";
+function summariseOutput(rt: RuntimeResultRecord): string {
+  const output = rt.output;
+  const effectInteractions = rt.effects?.interactions?.length ?? 0;
+  if (!output)
+    return effectInteractions > 0 ? `interactions=${effectInteractions}` : "-";
   const parts: string[] = [];
   if (
     typeof output.narrativeOutput === "string" &&
@@ -678,9 +710,9 @@ function summariseOutput(output: Record<string, unknown> | undefined): string {
   ) {
     parts.push(`narrative(${output.narrativeOutput.length}c)`);
   }
-  const interactions = Array.isArray(output.interactions)
-    ? output.interactions.length
-    : 0;
+  const interactions =
+    effectInteractions +
+    (Array.isArray(output.interactions) ? output.interactions.length : 0);
   if (interactions > 0) parts.push(`interactions=${interactions}`);
   if (typeof output.playerCreated === "boolean")
     parts.push(`playerCreated=${output.playerCreated}`);
@@ -746,13 +778,27 @@ type TurnBand = "setup" | "playing";
  *               authoritatively from `session.setupRuntimes`, not per turn
  *               (setup work can settle inside the form-submit sub-execution
  *               the turn loop does not read back).
- *   auto      — staged, active, in-band, trigger auto → expected every turn.
- *   scheduled — staged, active, in-band, trigger scheduled → asserted to fire
- *               ≥1 time across the window (interval/cooldown/startTurn are NOT
- *               re-simulated; the run-level check lives in Phase 7).
+ *   gated     — staged, active, in-band, but `startTurn` or the `scheduled`
+ *               interval excludes this logical turn.
+ *   auto      — staged, active, in-band, plain trigger auto → expected every
+ *               turn.
+ *   scheduled — staged, active, in-band, trigger scheduled (or auto bounded by
+ *               cooldownTurns / maxTriggerCount) → asserted to fire ≥1 time
+ *               across the turns that allow it (cooldown and trigger counts
+ *               are not re-simulated; the run-level check lives in Phase 7).
+ *
+ * Detached runtimes (`turnCompletion.mode: detached`) count as run when the
+ * turn's stream announces them with `runtime.deferred`; their background
+ * outcome is checked in Phase 6.
  */
 type ExpectClass =
-  "inactive" | "unstaged" | "off-band" | "setup" | "auto" | "scheduled";
+  | "inactive"
+  | "unstaged"
+  | "off-band"
+  | "setup"
+  | "gated"
+  | "auto"
+  | "scheduled";
 
 interface StepExpectation {
   cls: ExpectClass;
@@ -776,6 +822,8 @@ function classifyStep(
   step: PluginFlowStep,
   band: TurnBand,
   active: ReadonlySet<string>,
+  /** `completedPlayerTurns + 1` as the execution saw it. */
+  logicalTurn: number,
 ): StepExpectation {
   if (!active.has(step.pluginId)) {
     return { cls: "inactive", reason: "plugin not in session active set" };
@@ -799,15 +847,36 @@ function classifyStep(
       reason: `${step.stage} stage — idle in setup band`,
     };
   }
-  if (step.trigger.type === "auto") {
+  const { type, startTurn, interval, cooldownTurns, maxTriggerCount } =
+    step.trigger;
+  if (type !== "auto" && type !== "scheduled") {
+    // Defensive: a staged runtime with an event/manual trigger is not
+    // expected by the stage scheduler.
+    return { cls: "unstaged", reason: `trigger ${type}` };
+  }
+  if (startTurn !== undefined && logicalTurn < startTurn) {
+    return {
+      cls: "gated",
+      reason: `startTurn ${startTurn} > logical turn ${logicalTurn}`,
+    };
+  }
+  if (type === "scheduled" && logicalTurn % (interval ?? 1) !== 0) {
+    return {
+      cls: "gated",
+      reason: `interval ${interval} skips logical turn ${logicalTurn}`,
+    };
+  }
+  if (
+    type === "auto" &&
+    cooldownTurns === undefined &&
+    maxTriggerCount === undefined
+  ) {
     return { cls: "auto", reason: "auto — every in-band turn" };
   }
-  if (step.trigger.type === "scheduled") {
-    return { cls: "scheduled", reason: "scheduled — ≥1 across window" };
-  }
-  // Defensive: a staged runtime with an event/manual trigger is not expected
-  // by the stage scheduler.
-  return { cls: "unstaged", reason: `trigger ${step.trigger.type}` };
+  return {
+    cls: "scheduled",
+    reason: `${type} — ≥1 across allowed turns`,
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -835,13 +904,12 @@ function detectFormInTurn(
   runtimeResults: RuntimeResultRecord[],
 ): DetectedForm | null {
   for (const rt of runtimeResults) {
-    const output = rt.output;
-    if (!output) continue;
-
-    // Path 1: output.interactions[] with type='form'
-    const interactions = Array.isArray(output.interactions)
-      ? output.interactions
-      : [];
+    // Path 1: interactions[] with type='form' — runtimes return them as
+    // effects; older outputs carried them on `output`.
+    const interactions = [
+      ...(rt.effects?.interactions ?? []),
+      ...(Array.isArray(rt.output?.interactions) ? rt.output.interactions : []),
+    ];
     for (const interaction of interactions) {
       if (!interaction || typeof interaction !== "object") continue;
       const obj = interaction as Record<string, unknown>;
@@ -853,7 +921,11 @@ function detectFormInTurn(
     // Path 2: create-form tool call input (fallback if output doesn't carry
     // the form but the tool call does)
     for (const tc of rt.toolCalls ?? []) {
-      if (tc.toolName !== "create-form") continue;
+      if (
+        tc.toolName !== "create-form" &&
+        tc.toolName !== "create-character-form"
+      )
+        continue;
       if (tc.input && typeof tc.input === "object") {
         return toDetectedForm(
           turnId,
@@ -942,7 +1014,18 @@ function buildFormValues(
 // ──────────────────────────────────────────────────────────────────
 
 interface TurnExecution {
+  /**
+   * Executions this request ran, in stream order: one, or two when the
+   * request completed setup and chained the opening continuation.
+   */
+  turnRecords: TurnRecord[];
+  /** The last execution — the one the session's current band belongs to. */
   turnRecord: TurnRecord;
+  /** Detached runtimes the stream announced with `runtime.deferred`. */
+  deferred: ReadonlySet<string>;
+  /** `execution.completed.committed`; undefined when the event never came. */
+  committed?: boolean;
+  completionError?: string;
   sseEvents: SseEvent[];
   elapsedMs: number;
   terminated: boolean;
@@ -950,11 +1033,13 @@ interface TurnExecution {
 }
 
 /**
- * Post an action, consume the SSE stream, and return the turn record
- * freshly fetched from /sessions/:id/turns. Soft stream terminations
- * (upstream LLM disconnects) are surfaced in the returned record so
- * the test can continue; the backend may still have committed a
- * partial turn that's worth inspecting.
+ * Post an action, consume the SSE stream, and return the executions it ran,
+ * read back from /sessions/:id/turns by the envelope turnIds. That listing
+ * also holds background and detached executions, so "the newest row" is not
+ * necessarily this request's. Soft stream terminations (upstream LLM
+ * disconnects) are surfaced in the returned record so the test can continue;
+ * the backend may still have committed a partial turn that's worth
+ * inspecting.
  */
 async function runTurn(
   args: CliArgs,
@@ -1002,7 +1087,6 @@ async function runTurn(
   // the next fetch reuses it.
   await new Promise((r) => setTimeout(r, outcome.terminated ? 1500 : 300));
 
-  // Pull the latest turn from the authoritative source
   const turnsResp = await httpGet<{ items: TurnRecord[] }>(
     args.server,
     `/sessions/${sessionId}/turns`,
@@ -1011,10 +1095,33 @@ async function runTurn(
   if (turns.length === 0) {
     throw new Error("No turns returned from /turns after action");
   }
-  const turnRecord = turns[turns.length - 1];
+  const streamTurnIds = [
+    ...new Set(sseEvents.flatMap((evt) => (evt.turnId ? [evt.turnId] : []))),
+  ];
+  const matched = streamTurnIds.flatMap((turnId) =>
+    turns.filter((turn) => turn.turnId === turnId),
+  );
+  // A stream cut before its first envelope leaves only the newest row.
+  const turnRecords = matched.length > 0 ? matched : [turns[turns.length - 1]];
+  const completed = sseEvents.find((evt) => evt.type === "execution.completed");
+  const deferred = new Set(
+    sseEvents
+      .filter((evt) => evt.type === "runtime.deferred")
+      .map((evt) => String(evt.payload.runtimeId ?? "")),
+  );
 
   return {
-    turnRecord,
+    turnRecords,
+    turnRecord: turnRecords[turnRecords.length - 1],
+    deferred,
+    ...(completed
+      ? {
+          committed: completed.payload.committed === true,
+          ...(typeof completed.payload.error === "string"
+            ? { completionError: completed.payload.error }
+            : {}),
+        }
+      : {}),
     sseEvents,
     elapsedMs,
     terminated: outcome.terminated,
@@ -1057,15 +1164,45 @@ function runtimePasses(
 }
 
 function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
-  const { turnRecord, elapsedMs } = exec;
+  console.log("");
+  console.log(`  Elapsed: ${(exec.elapsedMs / 1000).toFixed(1)}s`);
+  if (exec.committed === false) {
+    console.log(`  NOT COMMITTED: ${exec.completionError ?? "unknown error"}`);
+    ctx.assertions.fail(
+      `turn ${ctx.turnNumber + 1} did not commit: ${exec.completionError ?? "unknown error"}`,
+    );
+  } else if (exec.committed === undefined && !exec.terminated) {
+    ctx.assertions.warn(
+      `turn ${ctx.turnNumber + 1} ended without execution.completed`,
+    );
+  }
+  exec.turnRecords.forEach((turnRecord, index) => {
+    // A chained request first ran the execution that finished setup; only
+    // its last execution runs in the session's current band.
+    const last = index === exec.turnRecords.length - 1;
+    if (!last) console.log("  (setup execution)");
+    else if (exec.turnRecords.length > 1)
+      console.log("  (opening continuation)");
+    reportExecution(ctx, exec, turnRecord, last ? ctx.phase : "setup");
+  });
+}
+
+function reportExecution(
+  ctx: PerTurnContext,
+  exec: TurnExecution,
+  turnRecord: TurnRecord,
+  band: TurnBand,
+): void {
   const ran = new Map(
     turnRecord.runtimeResults.map((r) => [r.runtimeId, r] as const),
   );
+  // Only the last execution of a request carries this turn's deferrals.
+  const deferred: ReadonlySet<string> =
+    turnRecord === exec.turnRecord ? exec.deferred : new Set();
 
   // ── Runtime timeline ──────────────────────────────────────────
   console.log("");
   console.log(`  TurnId: ${turnRecord.turnId}`);
-  console.log(`  Elapsed: ${(elapsedMs / 1000).toFixed(1)}s`);
 
   const timelineRows: string[][] = [];
   // Order by (stage, name) — the priority-band ordinal is gone; the stage
@@ -1085,8 +1222,15 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
       step.runtimeId,
       rt.status,
       `${(rt.durationMs / 1000).toFixed(1)}s`,
-      summariseOutput(rt.output),
+      summariseOutput(rt),
     ]);
+  }
+  for (const runtimeId of deferred) {
+    if (ran.has(runtimeId)) continue;
+    const step = ctx.flow.steps.find((s) => s.runtimeId === runtimeId);
+    if (step && !runtimePasses(step, ctx.runtimeFilter, ctx.pluginFilter))
+      continue;
+    timelineRows.push([step?.stage ?? "-", runtimeId, "deferred", "-", "-"]);
   }
 
   // Include ran-but-not-in-flow runtimes (sub-runtimes discovered after flow fetch)
@@ -1100,7 +1244,7 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
       rt.runtimeId,
       rt.status,
       `${(rt.durationMs / 1000).toFixed(1)}s`,
-      summariseOutput(rt.output),
+      summariseOutput(rt),
     ]);
   }
 
@@ -1144,32 +1288,42 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
   //   FAIL  — an in-band `auto` runtime did not run, or any expected runtime
   //           ran with a non-success status. Scheduled misses are NOT failed
   //           here; the run-level ≥1 check in Phase 7 owns them.
-  //   WAIT  — scheduled runtime idle this turn (interval/cooldown may gate),
-  //           or a setup runtime not yet resolved (Phase 6 owns it).
+  //   DEFER — a detached runtime committed with the turn and moved to a
+  //           background job (`runtime.deferred`); Phase 6 checks the job.
+  //   WAIT  — scheduled runtime idle this turn (cooldown / trigger count may
+  //           gate), or a setup runtime not yet resolved (Phase 6 owns it).
   //   FIRE  — a stage-less event/manual runtime fired (informational).
   //   WARN  — an inactive / off-band runtime ran unexpectedly (soft anomaly).
   //   SKIP  — not expected this turn (inactive / unstaged / off-band / gated).
   console.log("");
   console.log("  Trigger Verification:");
-  const band = ctx.phase;
   const triggerRows: string[][] = [];
   for (const step of orderedSteps) {
     if (!runtimePasses(step, ctx.runtimeFilter, ctx.pluginFilter)) continue;
-    const { cls, reason } = classifyStep(step, band, ctx.active);
+    const { cls, reason } = classifyStep(
+      step,
+      band,
+      ctx.active,
+      ctx.completedPlayerTurns + 1,
+    );
     const rt = ran.get(step.runtimeId);
-    const ranIt = rt !== undefined;
+    const wasDeferred = rt === undefined && deferred.has(step.runtimeId);
+    const ranIt = rt !== undefined || wasDeferred;
     // A runtime that appears in the results was reached by the scheduler.
     // `skipped` means reached-but-declined (guard/no-op / already done) — it is
     // NOT a failure and counts as "triggered". Only `failed` is an error.
-    const ranActed = rt?.status === "success" || rt?.status === "completed";
+    const ranActed =
+      wasDeferred || rt?.status === "success" || rt?.status === "completed";
     const ranFailed = rt?.status === "failed";
     const ranSkipped = ranIt && !ranActed && !ranFailed;
+    const acted = wasDeferred ? "DEFER" : "PASS";
 
     let verdict: string;
     let expectedCol: string;
     switch (cls) {
       case "inactive":
       case "off-band":
+      case "gated":
         expectedCol = "no";
         if (ranIt) {
           verdict = "WARN";
@@ -1199,7 +1353,7 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
       case "auto":
         expectedCol = "yes";
         if (ranActed) {
-          verdict = "PASS";
+          verdict = acted;
           ctx.assertions.pass(`${step.runtimeId} triggered`);
         } else if (ranFailed) {
           verdict = "FAIL";
@@ -1208,6 +1362,10 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
           );
         } else if (ranSkipped) {
           // Reached but no-op'd this turn — not a failure.
+          verdict = "SKIP";
+        } else if (exec.committed === false) {
+          // A rolled-back turn never defers its detached runtimes; the
+          // commit failure is already asserted.
           verdict = "SKIP";
         } else {
           verdict = "FAIL";
@@ -1218,7 +1376,7 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
         expectedCol = "≥1";
         ctx.scheduledOpportunity.add(step.runtimeId);
         if (ranActed) {
-          verdict = "PASS";
+          verdict = acted;
           ctx.scheduledFired.add(step.runtimeId);
           ctx.assertions.pass(`${step.runtimeId} triggered`);
         } else if (ranFailed) {
@@ -1379,7 +1537,7 @@ async function runMain(
 ): Promise<void> {
   header("Covel E2E Plugin Verification");
   kv("Server", args.server);
-  kv("Slot", args.slot);
+  kv("Slot", args.slot ?? "(configured routing)");
   kv("Turns", args.turns);
   kv("Runtime filter", args.runtimeFilter ?? "(none)");
   kv("Plugin filter", args.pluginFilter ?? "(none)");
@@ -1421,7 +1579,7 @@ async function runMain(
     const segSteps = flow.steps.filter((s) => s.segmentId === seg.id);
     if (segSteps.length === 0) continue;
     console.log("");
-    console.log(`  ${seg.label} [${seg.rangeLabel}]`);
+    console.log(`  ${seg.label} [${seg.id}]`);
     const rows = segSteps
       .sort((a, b) => a.runtimeId.localeCompare(b.runtimeId))
       .map((s) => [
@@ -1473,10 +1631,29 @@ async function runMain(
   kv("World", chosen.id);
 
   // ── Phase 4: Session creation ──────────────────────────────────
+  // Start the way the prep screen does: the world's preset pack plus the
+  // plugins the world requires. A session created from worldId alone holds
+  // only the core plugins and would not exercise what players play.
   section("Phase 4: Session Creation");
+  let plugins: string[] | undefined;
+  if (!args.coreOnly) {
+    const plan = await httpGet<{
+      selectedPackId?: string;
+      defaultPluginIds?: string[];
+      policy?: { requested?: string[] };
+    }>(args.server, `/worlds/${encodeURIComponent(chosen.id)}/plugin-plan`);
+    plugins = [
+      ...new Set([
+        ...(plan.defaultPluginIds ?? []),
+        ...(plan.policy?.requested ?? []),
+      ]),
+    ];
+    kv("Preset pack", plan.selectedPackId ?? "(none)");
+  }
   const session = await httpJson<SessionRecord>(args.server, "/sessions", {
     worldId: chosen.id,
     locale: "zh-CN",
+    ...(plugins ? { plugins } : {}),
   });
   state.sessionId = session.id;
   kv("Session ID", session.id);
@@ -1615,25 +1792,14 @@ async function runMain(
       payload: { content: filled || "继续" },
     });
     // The request that completes the LAST setup runtime chains one main-loop
-    // turn onto the same SSE stream ("opening continuation", see api.md), and
-    // that continuation is a NEW turnId — which is the record `runTurn` reads
-    // back. Re-read the session before classifying so the band reflects the
-    // turn this record actually belongs to. Judging it by the pre-request
-    // phase marks every narrative / post-turn runtime that legitimately ran
-    // in the continuation as an off-band anomaly. When setup did NOT finish,
-    // phase stays setup and a genuine off-band run is still flagged.
-    const sessAfterTurn = await httpGet<SessionRecord>(
-      args.server,
-      `/sessions/${session.id}`,
+    // turn onto the same SSE stream ("opening continuation", see api.md) under
+    // a new turnId; `runTurn` returns both executions. Re-read the session
+    // before classifying so the continuation is judged in the band it ran in.
+    // When setup did NOT finish, phase stays setup and a genuine off-band run
+    // is still flagged.
+    refreshSession(
+      await httpGet<SessionRecord>(args.server, `/sessions/${session.id}`),
     );
-    const continued =
-      ctx.phase === "setup" && sessAfterTurn.phase === "playing";
-    refreshSession(sessAfterTurn);
-    if (continued) {
-      console.log(
-        `  (opening continuation: setup completed and chained a main-loop turn — band=${bandLabel()})`,
-      );
-    }
     reportTurn(ctx, exec);
     ctx.turnNumber += 1;
   }
@@ -1716,11 +1882,14 @@ async function runMain(
     if (step.stage !== "setup") continue;
     if (!runtimePasses(step, args.runtimeFilter, args.pluginFilter)) continue;
     if (!ctx.active.has(step.pluginId)) continue;
-    const done = finalSession.setupRuntimes[step.runtimeId]?.state === "done";
+    const mirror = finalSession.setupRuntimes[step.runtimeId];
+    const done = mirror?.state === "done";
     setupRows.push([
       done ? "PASS" : "FAIL",
       step.runtimeId,
-      done ? "done" : "-",
+      mirror
+        ? `${mirror.state}${mirror.attempts !== undefined ? ` (attempts ${mirror.attempts})` : ""}`
+        : "(not run)",
     ]);
     if (done) assertions.pass(`${step.runtimeId} setup complete`);
     else
@@ -1729,6 +1898,60 @@ async function runMain(
       );
   }
   printTable(["result", "runtime", "state"], setupRows);
+
+  // Background jobs: detached stages and background manual/event runtimes
+  // finish outside the turns above. Wait for the queue to drain, then require
+  // every job of the run to have succeeded (or been cancelled on purpose).
+  console.log("");
+  console.log("  Background Jobs (_runtime_jobs):");
+  const ACTIVE_JOB_STATUSES = new Set([
+    "queued",
+    "claimed",
+    "running",
+    "committing",
+  ]);
+  const jobsDeadline = Date.now() + args.timeoutSec * 1000;
+  let jobs: RuntimeJobRecord[] = [];
+  for (;;) {
+    jobs =
+      (
+        await httpGet<{ items: RuntimeJobRecord[] }>(
+          args.server,
+          `/sessions/${encodeURIComponent(session.id)}/runtime-jobs`,
+        )
+      ).items ?? [];
+    if (
+      !jobs.some((job) => ACTIVE_JOB_STATUSES.has(job.status)) ||
+      Date.now() >= jobsDeadline
+    )
+      break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  const jobRows: string[][] = [];
+  for (const job of jobs) {
+    if (args.runtimeFilter && job.runtimeId !== args.runtimeFilter) continue;
+    if (args.pluginFilter && !job.runtimeId.startsWith(`${args.pluginFilter}/`))
+      continue;
+    const ok = job.status === "succeeded" || job.status === "cancelled";
+    jobRows.push([
+      ok ? "PASS" : "FAIL",
+      job.runtimeId,
+      job.origin.activation,
+      job.status,
+      job.reason ?? job.error ?? "-",
+    ]);
+    if (ok) assertions.pass(`${job.runtimeId} job ${job.status}`);
+    else
+      assertions.fail(
+        `background job ${job.runtimeId} (${job.jobId}) ended ${job.status}${job.reason ? `: ${job.reason}` : ""}`,
+      );
+  }
+  if (jobRows.length > 0)
+    printTable(
+      ["result", "runtime", "activation", "status", "reason"],
+      jobRows,
+    );
+  else console.log("  (none)");
 
   // Trace coverage: split guaranteed structural types from feature-conditional
   // ones. The LLM/message/proposal trio is required only when the active set
@@ -1746,6 +1969,30 @@ async function runMain(
   }>(args.server, `/traces/${encodeURIComponent(session.id)}`);
   state.traces = tracesBody;
   const seenTypes = new Set(tracesBody.events.map((e) => e.type));
+
+  // The models each runtime actually called, as the configuration (or the
+  // --slot override) routed them.
+  const modelsByRuntime = new Map<string, Set<string>>();
+  for (const event of tracesBody.events) {
+    if (event.type !== "llm.calling" && event.type !== "gateway.responded")
+      continue;
+    const { runtimeId, slot, provider, model } = event.payload;
+    if (typeof runtimeId !== "string" || typeof model !== "string") continue;
+    const route = `${typeof slot === "string" ? slot : "-"} → ${
+      typeof provider === "string" ? `${provider}/` : ""
+    }${model}`;
+    const routes = modelsByRuntime.get(runtimeId) ?? new Set<string>();
+    routes.add(route);
+    modelsByRuntime.set(runtimeId, routes);
+  }
+  console.log("");
+  console.log("  Models used (from traces):");
+  printTable(
+    ["runtime", "slot → model"],
+    [...modelsByRuntime]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([runtimeId, routes]) => [runtimeId, [...routes].join(", ")]),
+  );
   const hasActiveStory = flow.steps.some(
     (s) => ctx.active.has(s.pluginId) && s.isStoryRuntime,
   );

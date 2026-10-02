@@ -4,14 +4,21 @@ import makeSubmitWorldFacts from "../tools/submit-world-facts.js";
 const VALID_FACTS = {
   schemaVersion: 1,
   summary: "The player found a brass key.",
-  entities: [{ id: "brass-key", type: "item", name: "Brass Key" }],
+  entities: [
+    { id: "brass-key", type: "item", name: "Brass Key" },
+    { id: "player-ren", type: "character", name: "Ren" },
+  ],
   relations: [],
   events: [
     {
       id: "found-key",
       type: "inventory_change",
-      participantIds: ["brass-key"],
-      attributes: { operation: "acquire" },
+      participantIds: ["player-ren", "brass-key"],
+      attributes: {
+        item: "brass-key",
+        holder: "player-ren",
+        operation: "gain",
+      },
     },
   ],
   statements: [],
@@ -54,8 +61,8 @@ describe("submit-world-facts", () => {
     ).toBe(false);
   });
 
-  it("rejects extra top-level fields with a precise validation path", async () => {
-    const result = submitWorldFacts.parameters.safeParse({
+  it("moves details written beside a fact's fields into its attributes", async () => {
+    const parsed = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,
       relations: [
         {
@@ -66,18 +73,125 @@ describe("submit-world-facts", () => {
           strength: 1,
         },
       ],
+      events: [
+        {
+          id: "took-job",
+          type: "quest_change",
+          quest: "Find the keeper",
+          status: "accepted",
+          attributes: { giver: "Mira" },
+        },
+      ],
     });
 
+    expect(parsed.relations[0]).toEqual({
+      id: "trusts",
+      type: "TRUSTS",
+      from: "brass-key",
+      to: "brass-key",
+      attributes: { strength: 1 },
+    });
+    expect(parsed.events[0].attributes).toEqual({
+      giver: "Mira",
+      quest: "Find the keeper",
+      status: "accepted",
+    });
+  });
+
+  it("still rejects a fact with a malformed field", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      relations: [{ id: "trusts", type: "TRUSTS", from: "brass-key", to: 7 }],
+    });
     expect(result.success).toBe(false);
     expect(result.error?.issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: ["relations", 0] }),
+        expect.objectContaining({ path: ["relations", 0, "to"] }),
       ]),
     );
   });
 
-  it("rejects dangling entity references before accepting the output", async () => {
-    const result = submitWorldFacts.parameters.safeParse({
+  it("restores session ids from character handles and declares the characters", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      entities: [{ id: "brass-key", type: "item", name: "Brass Key" }],
+      relations: [{ id: "trusts", type: "TRUSTS", from: "mira", to: "ren" }],
+      events: [
+        {
+          id: "mira-hands-key",
+          type: "inventory_change",
+          participantIds: ["mira", "ren"],
+          attributes: { item: "brass-key", holder: "ren", operation: "gain" },
+        },
+      ],
+      statements: [
+        {
+          id: "debt",
+          type: "rule",
+          content: "Ren owes Mira.",
+          subjectIds: ["ren"],
+        },
+      ],
+    });
+
+    const result = await submitWorldFacts.execute(facts, {
+      world: {
+        characters: [
+          { id: "session-mira", name: "Mira", type: "npc" },
+          { id: "char-0b9d-ren", name: "Ren", type: "player" },
+        ],
+      },
+    });
+
+    expect(result.entities).toEqual([
+      { id: "brass-key", type: "item", name: "Brass Key" },
+      { id: "session-mira", type: "character", name: "Mira" },
+      { id: "char-0b9d-ren", type: "character", name: "Ren" },
+    ]);
+    expect(result.relations[0]).toMatchObject({
+      from: "session-mira",
+      to: "char-0b9d-ren",
+    });
+    expect(result.events[0].participantIds).toEqual([
+      "session-mira",
+      "char-0b9d-ren",
+    ]);
+    expect(result.events[0].attributes.holder).toBe("char-0b9d-ren");
+    expect(result.statements[0].subjectIds).toEqual(["char-0b9d-ren"]);
+  });
+
+  it("keeps a character the model declared under its handle", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      entities: [
+        {
+          id: "mira",
+          type: "character",
+          name: "Mira",
+          description: "Revealed as the keeper.",
+        },
+      ],
+      events: [],
+    });
+
+    const result = await submitWorldFacts.execute(facts, {
+      world: {
+        characters: [{ id: "session-mira", name: "Mira", type: "npc" }],
+      },
+    });
+
+    expect(result.entities).toEqual([
+      {
+        id: "session-mira",
+        type: "character",
+        name: "Mira",
+        description: "Revealed as the keeper.",
+      },
+    ]);
+  });
+
+  it("rejects references to ids that are neither declared nor known characters", async () => {
+    const facts = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,
       relations: [
         {
@@ -89,11 +203,79 @@ describe("submit-world-facts", () => {
       ],
     });
 
+    await expect(
+      submitWorldFacts.execute(facts, { world: { characters: [] } }),
+    ).rejects.toThrow(
+      'relations.0.to: entity reference "missing-place" does not exist in entities',
+    );
+  });
+
+  it("drops extraction input the model copied into its arguments", async () => {
+    const parsed = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      vocabulary: [{ type: "item", name: "Brass Key" }],
+      characters: [{ id: "player-ren", name: "Ren", type: "player" }],
+    });
+    expect(parsed).toEqual(VALID_FACTS);
+  });
+
+  it("requires the fixed attributes of profiled events", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      events: [
+        {
+          id: "found-key",
+          type: "inventory_change",
+          attributes: { item: "brass-key", operation: "acquire" },
+        },
+        {
+          id: "took-job",
+          type: "quest_change",
+          attributes: { quest: "Find the keeper", status: "started" },
+        },
+      ],
+    });
+
     expect(result.success).toBe(false);
-    expect(result.error?.issues).toEqual(
+    const paths = result.error?.issues.map((issue) => issue.path.join("."));
+    expect(paths).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: ["relations", 0, "to"] }),
+        "events.0.attributes.holder",
+        "events.0.attributes.operation",
+        "events.1.attributes.status",
       ]),
     );
+  });
+
+  it("requires an inventory change to name an item entity of this output", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      events: [
+        {
+          id: "found-key",
+          type: "inventory_change",
+          attributes: {
+            item: "player-ren",
+            holder: "player-ren",
+            operation: "gain",
+          },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ path: ["events", 0, "attributes", "item"] }),
+    ]);
+  });
+
+  it("leaves other event types free-form", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      events: [
+        { id: "talked", type: "interaction", attributes: { mood: "tense" } },
+      ],
+    });
+    expect(result.success).toBe(true);
   });
 });

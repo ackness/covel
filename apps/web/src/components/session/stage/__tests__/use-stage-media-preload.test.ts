@@ -36,7 +36,6 @@ describe("useStageMediaPreload", () => {
         slot: "stage.backdrop@1",
         revision: "1",
         value: {
-          pending: false,
           ref: ref("gate"),
           preload: [ref("gate"), ref("hall"), ref("audio", "audio/wav")],
         },

@@ -250,7 +250,7 @@ describe("living-world-rules handler", () => {
 
     expect(getToolContent(result).value).toEqual({
       saved: true,
-      ruleId: expect.stringMatching(/^rule-club-room-rule-[a-f0-9]{32}$/),
+      ruleId: expect.stringMatching(/^rule-club-room-rule-[a-f0-9]{8}$/),
       lorebookEntryId: `lwr-${getToolContent(result).value.ruleId}`,
     });
   });

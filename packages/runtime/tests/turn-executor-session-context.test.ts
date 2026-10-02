@@ -205,10 +205,15 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
         // Only break store access during snapshot build — the turn-executor
         // calls `getSession` first, THEN `buildSessionContextSnapshot` which
         // internally calls `listCharacters`. We let `getSession` succeed and
-        // break `listPluginData` — that surface is exclusively called by the
-        // snapshot loader in this test scenario (no plugin-data injects).
+        // break `listPluginData` for plugin owners — the snapshot loader is
+        // its only plugin-owned caller here (no plugin-data injects); the
+        // kernel's trigger ledger keeps working.
         if (prop === "listPluginData") {
-          return async () => {
+          return async (
+            ...args: Parameters<DataStore["listPluginData"]>
+          ): ReturnType<DataStore["listPluginData"]> => {
+            if (args[1].startsWith("__kernel:"))
+              return target.listPluginData(...args);
             throw new Error("simulated listPluginData failure");
           };
         }

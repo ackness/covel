@@ -5,7 +5,7 @@
 ## 运行时结构
 
 - `PLUGIN.md`：单 agent runtime 和玩家可调设置。
-- 依赖 `scene-cast` 提供当前在场角色上下文。
+- 依赖 `scene-stage` 的 cast runtime（`scene-cast@1`）提供当前在场角色上下文。
 - 可读取 `npc-graph/rag-retriever` 提供的人物关系上下文。
 - 常驻 prompt 只使用世界名称、简介和标签；由世界上下文扩展提供世界条目。
 - 可调用 `memory-search` 检索已离开当前窗口的旧对话、承诺和线索。

@@ -16,6 +16,8 @@ import type {
 } from "@covel/shared/plugin-runtime";
 import {
   pluginCodeNamespaceWriteError,
+  readEnvChoice,
+  readEnvString,
   type RpcHandlerStore,
   type WorldModelView,
 } from "@covel/shared";
@@ -367,7 +369,17 @@ export function createPluginDataWriter(
   };
 }
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
+
+/** `COVEL_PLUGIN_LOG_LEVEL`, else `info` in production and `debug` otherwise. */
+function pluginLogThreshold(): number {
+  const fallback: LogLevel =
+    readEnvString("NODE_ENV") === "production" ? "info" : "debug";
+  return LOG_LEVELS.indexOf(
+    readEnvChoice("COVEL_PLUGIN_LOG_LEVEL", LOG_LEVELS, fallback),
+  );
+}
 
 const LOGS_NAMESPACE = "_logs";
 const MAX_LOG_ENTRIES = 200;
@@ -386,11 +398,13 @@ export function createPluginLogger(
   ctx: HandlerHelperContext,
 ): PluginLogger {
   let appended = 0;
+  const threshold = pluginLogThreshold();
   async function append(
     level: LogLevel,
     message: string,
     meta: Record<string, unknown> | undefined,
   ): Promise<void> {
+    if (LOG_LEVELS.indexOf(level) < threshold) return;
     const now = new Date();
     const nowMs = now.getTime();
     const nowIso = now.toISOString();

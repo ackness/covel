@@ -6,6 +6,7 @@ import {
   dimensionSettlementSummarySchema,
   dimensionSnapshotFromRecords,
   isHiddenPluginDataNamespace,
+  isKernelPluginDataOwner,
 } from "@covel/shared";
 import type { RuntimeJobValue } from "./jobs.js";
 
@@ -67,22 +68,38 @@ export function publicRuntimeJobDiagnostics(
   };
 }
 
-/** Retain game results and identities, excluding frozen inputs and raw failures. */
+/**
+ * Retain game results and identities, excluding frozen inputs and raw failures.
+ * A prompt-builder queued with `expectsBackgroundFollower` is marked
+ * `phase: "prompt"` so panels can say what it is doing.
+ */
 export function publicRuntimeJob<T extends RuntimeJobValue>(
   job: T,
-): Omit<T, "payload" | "error" | "reason"> & PublicRuntimeJobDiagnostics {
-  const { payload: _payload, error: _error, reason: _reason, ...visible } = job;
-  return { ...visible, ...publicRuntimeJobDiagnostics(job) };
+): Omit<T, "payload" | "error" | "reason"> &
+  PublicRuntimeJobDiagnostics & { readonly phase?: "prompt" } {
+  const { payload, error: _error, reason: _reason, ...visible } = job;
+  const expectsFollower =
+    typeof payload === "object" &&
+    payload !== null &&
+    (payload as { expectFollower?: unknown }).expectFollower === true;
+  return {
+    ...visible,
+    ...(expectsFollower ? { phase: "prompt" as const } : {}),
+    ...publicRuntimeJobDiagnostics(job),
+  };
 }
 
 /**
- * Hidden world data never crosses a public boundary: callers drop these rows
- * from listings and answer single reads as not found.
+ * Hidden world data and kernel bookkeeping never cross a public boundary:
+ * callers drop these rows from listings and answer single reads as not found.
  */
 export function isPublicPluginDataRecord(
-  record: Pick<PluginDataRecord, "namespace">,
+  record: Pick<PluginDataRecord, "pluginId" | "namespace">,
 ): boolean {
-  return !isHiddenPluginDataNamespace(record.namespace);
+  return (
+    !isHiddenPluginDataNamespace(record.namespace) &&
+    !isKernelPluginDataOwner(record.pluginId)
+  );
 }
 
 /** Apply the same boundary to generic plugin-data reads used by Web hydration. */

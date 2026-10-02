@@ -34,7 +34,9 @@ async function fileExists(p: string): Promise<boolean> {
  * Scan a directory for plugin packages.
  *
  * Rules:
- * - Each subdirectory is a plugin candidate
+ * - Each subdirectory is a plugin candidate, including a symlink to a
+ *   directory (a plugin developed in another checkout). File reads stay
+ *   confined to the plugin's resolved root (`assertInsideRoot`).
  * - If subdir has `runtimes/` → multi-runtime plugin
  * - If subdir has `PLUGIN.md` without `runtimes/` → single-runtime plugin
  * - `.disabled` suffix files are skipped
@@ -47,11 +49,19 @@ export async function discoverPlugins(
   const results: PluginDiscoveryResult[] = [];
 
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith(".")) {
+    if (entry.name.startsWith(".")) continue;
+    const rootPath = path.join(pluginsDir, entry.name);
+    if (entry.isSymbolicLink()) {
+      if (!(await isDirectory(rootPath))) {
+        console.warn(
+          `[plugin-loader] skipping ${rootPath}: symlink does not resolve to a directory`,
+        );
+        continue;
+      }
+    } else if (!entry.isDirectory()) {
       continue;
     }
 
-    const rootPath = path.join(pluginsDir, entry.name);
     const runtimesDir = path.join(rootPath, "runtimes");
     const pluginMdPath = path.join(rootPath, "PLUGIN.md");
     const disabledPath = path.join(rootPath, "PLUGIN.md.disabled");

@@ -1,0 +1,40 @@
+{
+  "id": "character-presence",
+  "label": {
+    "zh": "角色立绘",
+    "en": "Character Portraits"
+  },
+  "shortLabel": {
+    "zh": "立绘",
+    "en": "Art"
+  },
+  "icon": "image",
+  "group": "character-art",
+  "groupLabel": {
+    "zh": "角色立绘",
+    "en": "Portraits"
+  },
+  "groupOrder": 150,
+  "dataSource": {
+    "namespace": "presence"
+  },
+  "alwaysRender": true,
+  "view": {
+    "component": "PortraitGallery",
+    "props": {
+      "replaceAction": {
+        "pluginId": "character-blueprint",
+        "runtimeId": "character-blueprint/presence",
+        "payload": {
+          "action": "replacePortrait",
+          "characterId": {
+            "from": "item.characterId"
+          },
+          "ref": {
+            "from": "upload"
+          }
+        }
+      }
+    }
+  }
+}

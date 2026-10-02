@@ -37,6 +37,7 @@ import {
   type SessionLock,
 } from "../../src/lib/session-lock.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
+import { publicPluginDataValue } from "../../src/routes/api/plugin-rpc/runtime-job-public.js";
 import branchReplyHandler from "../../../../plugins/branch-reply/handler.js";
 import branchReplyEntry from "../../../../plugins/branch-reply/server/index.js";
 
@@ -1895,6 +1896,13 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       origin: { activation: "manual" },
     });
     expect(job.error).toContain("completed without emitting");
+    // Panels see the job as a prompt phase without its frozen payload.
+    const visible = publicPluginDataValue({
+      namespace: "_runtime_jobs",
+      value: job,
+    });
+    expect(visible).toMatchObject({ phase: "prompt" });
+    expect(visible).not.toHaveProperty("payload");
   });
 
   // ── X-Plugin-User-Settings header → ctx.userSettings ──

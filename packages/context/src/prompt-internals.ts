@@ -29,7 +29,7 @@ import {
   isHiddenPluginDataNamespace,
 } from "@covel/shared";
 import type { PluginDataRecord } from "./session-context-store.js";
-import type { ContextBuildParams } from "./types.js";
+import type { CharacterSummary, ContextBuildParams } from "./types.js";
 
 /**
  * Resolve a dot-separated path against a nested object.
@@ -349,6 +349,46 @@ function safeStringify(value: unknown): string {
   }
 }
 
+const NPC_PROFILES_BUDGET = 8000;
+const NPC_PROFILE_PART_CAP = 400;
+
+const capped = (text: string) =>
+  text.length > NPC_PROFILE_PART_CAP
+    ? `${text.slice(0, NPC_PROFILE_PART_CAP)}...`
+    : text;
+
+/**
+ * `{{ characters.npcs }}`: every non-player character's description and
+ * fields, one line each, so a template can give the model the profiles up
+ * front instead of a `get-character` round trip per person. Past the budget
+ * the rest are listed by name only, to be looked up when needed. No ids: a
+ * model looks characters up by name.
+ */
+export function renderNpcProfiles(
+  characters: readonly CharacterSummary[],
+): string {
+  const lines: string[] = [];
+  const unlisted: string[] = [];
+  let used = 0;
+  for (const character of characters) {
+    if (character.type === "player") continue;
+    const parts = [`- ${character.name} [${character.type}]`];
+    if (character.description) parts.push(capped(character.description));
+    if (character.fields && Object.keys(character.fields).length > 0)
+      parts.push(capped(safeStringify(character.fields)));
+    const line = parts.join(" | ");
+    if (unlisted.length > 0 || used + line.length > NPC_PROFILES_BUDGET) {
+      unlisted.push(character.name);
+      continue;
+    }
+    lines.push(line);
+    used += line.length + 1;
+  }
+  if (unlisted.length > 0)
+    lines.push(`- (profiles not shown: ${unlisted.join(", ")})`);
+  return lines.join("\n");
+}
+
 /**
  * Assemble the full variables object consumed by `interpolateTemplate`.
  *
@@ -395,6 +435,9 @@ export function assemblePromptVariables(
     session: {
       id: turnInput.sessionId,
       turnNumber: sessionMeta?.turnNumber ?? 0,
+    },
+    characters: {
+      npcs: renderNpcProfiles(sessionMeta?.characters ?? []),
     },
     player: {
       message: turnInput.playerMessage,

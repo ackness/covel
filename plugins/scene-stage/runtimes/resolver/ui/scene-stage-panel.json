@@ -1,15 +1,20 @@
 {
   "id": "scene-stage",
+  "group": "scene-stage",
+  "groupLabel": {
+    "zh": "当前场景",
+    "en": "Scene"
+  },
   "label": {
-    "zh": "场景舞台",
-    "en": "Scene Stage"
+    "zh": "场景",
+    "en": "Scene"
   },
   "shortLabel": {
-    "zh": "舞台",
-    "en": "Stage"
+    "zh": "场景",
+    "en": "Scene"
   },
   "icon": "image",
-  "groupOrder": 460,
+  "groupOrder": 450,
   "dataSource": { "namespace": "stage" },
   "emptyState": {
     "message": {

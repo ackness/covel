@@ -11,7 +11,8 @@
     "@covel/plugin-handlers-utils": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^5.0.1",
-    "@covel/tools": "workspace:*"
+    "@covel/plugin-loader": "workspace:*",
+    "@covel/tools": "workspace:*",
+    "vitest": "^5.0.1"
   }
 }

@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { loadTurnSessionState } from "../src/turn-executor/session-state.js";
+import { recordRuntimeTriggersTx } from "../src/trigger/trigger-ledger.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 
 /**
  * Audit 2026-07-11 R-13 + 2026-07-17 bounded-history follow-up:
  * loadTurnSessionState used to full-read listTurnMessages twice per turn.
  * Today the per-turn reads are (a) one listUncompactedTurnMessages for the
- * raw suffix, (b) one getTurnMessageStats aggregate for turnNumber / trigger
- * counts — never a full listTurnMessages. The current player record stays in
+ * raw suffix, (b) one getTurnMessageStats aggregate for turnNumber — never a
+ * full listTurnMessages. Trigger history comes from the trigger ledger. The current player record stays in
  * the execution journal until commit; these tests pin both the read pattern
  * and that committed history remains isolated from pending input.
  */
@@ -132,22 +133,13 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
 
   it("excludes compacted rows from the loaded history while counts still cover the full log", async () => {
     const base = await makeStore();
-    const now = new Date().toISOString();
-    await base.appendTurnMessage({
-      id: "tm-runtime-old",
-      sessionId: "sess-dedup",
-      turnId: "turn-0",
-      sourceType: "runtime",
-      sourceRuntimeId: "demo/narrator",
-      role: "assistant",
-      content: "old narrative",
-      order: 1,
-      createdAt: now,
-    });
-    await base.tagTurnMessagesCompacted(
-      "sess-dedup",
-      ["tm-0", "tm-runtime-old"],
-      "summary-1",
+    await base.tagTurnMessagesCompacted("sess-dedup", ["tm-0"], "summary-1");
+    await base.withTransaction((tx) =>
+      recordRuntimeTriggersTx(tx, {
+        sessionId: "sess-dedup",
+        runtimeIds: ["demo/narrator"],
+        now: new Date().toISOString(),
+      }),
     );
 
     const state = await loadTurnSessionState({
@@ -168,8 +160,10 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
     expect(state.messageHistory).toHaveLength(0);
     expect(state.journalMessages).toHaveLength(1);
     expect(state.journalMessages[0]?.content).toBe("hello");
-    // …but turnNumber / trigger counts still see the whole committed log.
+    // …but turnNumber still sees the whole committed log, and trigger history
+    // comes from the ledger rather than the compacted journal.
     expect(state.turnNumber).toBe(1);
     expect(state.runtimeTriggerCounts.get("demo/narrator")).toBe(1);
+    expect(state.runtimeTurnsSinceLastTrigger.get("demo/narrator")).toBe(1);
   });
 });

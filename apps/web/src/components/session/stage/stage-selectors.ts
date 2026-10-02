@@ -49,21 +49,19 @@ export function initialStageReadStoryKey(
 
 // ── Backdrop (scene-stage `stage/current`) ──────────────────────
 
-export type StageBackdropKind =
-  "scene" | "previous-or-hero" | "hero" | "gradient";
+export type StageBackdropKind = "scene" | "hero" | "gradient";
 
 export interface StageBackdrop {
   readonly kind: StageBackdropKind;
   /** MediaRef for "scene"; world header image URL for "hero". Absent otherwise. */
   readonly ref?: MediaRef | string;
-  readonly pendingBadge?: boolean;
 }
 
 /**
- * Four-tier backdrop fallback (spec §4: "none" and "no scene-stage data at
- * all" share the same fallback chain — world hero image first, since
- * `worldVisual` always resolves to a real image; "gradient" is kept in the
- * type as the theoretical last resort but this selector never returns it).
+ * Backdrop fallback: scene art when the scene resolved to an image, otherwise
+ * the world hero image (`worldVisual` always resolves to a real image;
+ * "gradient" is kept in the type as the theoretical last resort but this
+ * selector never returns it).
  */
 export function resolveBackdrop(
   stageCurrent: StageCurrentRecord | null | undefined,
@@ -73,13 +71,10 @@ export function resolveBackdrop(
   if (isMediaRef(stageCurrent.ref)) {
     return { kind: "scene", ref: stageCurrent.ref };
   }
-  if (stageCurrent.pending) {
-    return { kind: "previous-or-hero", pendingBadge: true };
-  }
   return { kind: "hero", ref: worldVisual.image };
 }
 
-// ── Sprites (scene-cast `active-cast` × character-presence `presence`) ──
+// ── Sprites (scene-stage `active-cast` × character-blueprint `presence`) ──
 export type { PresenceRecord } from "@/lib/character-visuals.js";
 
 export interface StageSpriteSlot {
@@ -139,7 +134,7 @@ function nearestFree(
 }
 
 /**
- * Sticky station assignment (classic-VN semantics): scene-cast's salience
+ * Sticky station assignment (classic-VN semantics): the cast's salience
  * order decides who is *on* stage and who is highlighted — never where
  * anyone stands. Stations only reshuffle when the cast membership changes
  * (someone enters or leaves), and even then movement is minimised:
@@ -233,9 +228,9 @@ export function computeSpriteLanes(
 }
 
 /**
- * Reconcile scoped speaker ids against bare presence characterIds. scene-cast
+ * Reconcile scoped speaker ids against bare presence characterIds. The cast
  * keys speakers by `<sessionId>-<characterId>` (scopedCharacterId) while
- * character-presence keys its records by the bare `characterId`, so a direct
+ * character-blueprint keys its presence records by the bare `characterId`, so a direct
  * `presenceMap[speaker.id]` lookup always misses. Match on the presence
  * *value*'s characterId by exact id or the `-<characterId>` suffix — mirrors
  * `resolveCharacterAvatar` in lib/catalog.
@@ -252,7 +247,7 @@ function findPresence(
  * kept as `ref: null` slots (the sprite layer renders a fallback card) rather
  * than dropped — dropping the primary speaker left the dialog nameplate
  * pointing at nobody on stage. `speakers[0]` (the highest-salience speaker
- * from scene-cast) is the fallback focus when no actor specifies `active`.
+ * from the scene-stage cast) is the fallback focus when no actor specifies `active`.
  *
  * `stations` is the sticky assignment from {@link assignStations} — pass the
  * previous render's map through it so sprites keep their spots across speaker
@@ -294,7 +289,7 @@ export function computeSpriteSlots(
   });
 }
 
-// ── Choices (interaction.request choice blocks + scene-prompts) ─────
+// ── Choices (interaction.request choice blocks + guide prompts) ─────
 
 /** One pending choice-type interaction block, ready to flatten into items. */
 export interface StageInteractionChoice {
@@ -414,7 +409,7 @@ const FALLBACK_RECAP_MAX_SENTENCES = 3;
 
 /**
  * Derive a compact, deterministic context excerpt for legacy prompt data that
- * predates scene-prompts' `recap` field. This is deliberately a fallback, not
+ * predates guide's `recap` field. This is deliberately a fallback, not
  * an LLM summary: prefer the latest complete sentences and keep the decision
  * panel bounded even when the story message is long.
  */
@@ -495,7 +490,7 @@ export interface MergedChoices {
 const TWO_COLUMN_THRESHOLD = 6;
 
 /**
- * Order: pending interaction choices, then scene-prompts short phrases
+ * Order: pending interaction choices, then guide short phrases
  * (unpacked from `prompt{N}Text/Label`, N sorted ascending, empty slots
  * skipped). Groups preserve the question each set answers; the flat `items`
  * array remains available for layout and backwards-compatible consumers.
@@ -580,9 +575,9 @@ export function mergeChoices(
 }
 
 /**
- * scene-prompts stamps its `message` namespace with the `__turnId` that
+ * guide stamps its `message` namespace with the `__turnId` that
  * produced the phrases. Once the story advances, the old prompts linger until
- * scene-prompts regenerates — drop them so the stage never offers phrases from
+ * guide regenerates — drop them so the stage never offers phrases from
  * a past turn. Returns the namespace untouched when the stamp is fresh, absent,
  * or uncomparable (no current turn yet) — the latter two keep back-compat with
  * pre-`__turnId` data. Interaction choices and the inline composer are

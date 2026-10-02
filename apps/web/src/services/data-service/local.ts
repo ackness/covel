@@ -116,7 +116,8 @@ function portableWorldContent(
       return [];
     return [
       {
-        id: `${session.id}-${value.id}`,
+        // Same ids as the server importer: character keys are per session.
+        id: value.id,
         sessionId: session.id,
         name: value.name,
         type: typeof value.type === "string" ? value.type : "npc",

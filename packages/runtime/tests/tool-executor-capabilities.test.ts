@@ -11,7 +11,7 @@ import {
 } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
-import upsertQuests from "../../../plugins/core-quest/tools/upsert-quests.js";
+import upsertQuests from "../../../plugins/core-quest/lib/upsert-quests.js";
 import listNpcGraph from "../../../plugins/npc-graph/tools/list-npc-graph.js";
 import syncCodexEntries from "../../../plugins/codex/tools/sync-codex-entries.js";
 
@@ -58,43 +58,46 @@ async function fixture() {
 }
 
 describe("tool invocation capabilities", () => {
-  it("preserves additions made between direct child calls inside a composite tool", async () => {
+  it("returns a batch tool's accumulated writes as pending proposals", async () => {
     const store = await fixture();
-    const entryId = "codex-port";
-    const module = syncCodexEntries({ tool, z, shortIdBatch: () => [entryId] });
+    const module = syncCodexEntries({ tool, z });
     const executor = createToolExecutor({ store, findTool: () => module });
-    const title = "Synthetic port";
+    const entry = (content: string) => ({
+      title: "Synthetic port",
+      category: "location",
+      content,
+    });
     const result = await executor.execute(
       {
         ...call,
         name: module.name,
         arguments: JSON.stringify({
-          unlocks: [
-            {
-              title,
-              category: "location",
-              content: "A synthetic port for this regression.",
-              tags: ["port"],
-              rarity: "common",
-            },
-          ],
-          updates: [
-            { entryId, appendContent: "First addition." },
-            { entryId, appendContent: "Second addition." },
+          entries: [
+            entry("A synthetic port for this regression."),
+            entry("First addition."),
+            entry("Second addition."),
           ],
         }),
       },
       identity,
     );
     expect(result.success, result.result).toBe(true);
-    expect(result.parsedResult).toMatchObject({ unlocked: 1, updated: 2 });
+    expect(result.parsedResult).toMatchObject({
+      created: ["codex-synthetic-port"],
+      updated: [],
+    });
     const proposals = result.pendingProposals!;
-    expect(proposals).toHaveLength(3);
-    expect(proposals[2]!.payload).toMatchObject({
-      value: {
-        content:
-          "A synthetic port for this regression.\n\nFirst addition.\n\nSecond addition.",
-      },
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]!.payload).toMatchObject({
+      items: [
+        {
+          key: "codex-synthetic-port",
+          value: {
+            content:
+              "A synthetic port for this regression.\n\nFirst addition.\n\nSecond addition.",
+          },
+        },
+      ],
     });
     expect(
       await store.listPluginData(
@@ -104,6 +107,7 @@ describe("tool invocation capabilities", () => {
       ),
     ).toEqual([]);
   });
+
   it("drains reads a tool did not await before the invocation releases its store", async () => {
     const store = await fixture();
     const reading = Promise.withResolvers<void>();

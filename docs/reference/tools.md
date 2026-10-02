@@ -37,16 +37,11 @@
 | dimension-rule-get                    | local   | world-init          | auto-allow | 维护时分页读取私有规则或值 schema                                                   |
 | update-dimensions                     | local   | world-init          | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化                                         |
 | submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1`                        |
-| sync-codex-entries                    | local   | codex               | auto-allow | 原子批量提交本轮图鉴新增与补充                                                      |
-| unlock-codex-entries                  | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部新增原语                                            |
-| update-codex-entry                    | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部更新原语                                            |
-| generate-guide                        | local   | guide               | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`      |
+| sync-codex-entries                    | local   | codex               | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目                                          |
+| generate-guide                        | local   | guide               | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
 | upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
 | list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                 |
-| generate-scene-prompts                | local   | scene-prompts       | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
-| upsert-quests                         | local   | core-quest          | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）       |
-| update-affinity                       | local   | affinity            | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
-| update-inventory                      | local   | inventory           | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
+| plan-story-events                     | local   | story-events        | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划）                             |
 | submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                       |
 | submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                     |
 | submit-openai-image-text-prompt       | local   | openai-image-gen    | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件                               |
@@ -139,7 +134,9 @@ Entry 工具应使用框架注入的 `covel.toolkit.tool` 与 `covel.toolkit.z`�
 Agent 调用 `echo-value` 时，成功内容是 `{ "ok": true, "value": "..." }`。
 参数先由 `tool()` 生成 JSON Schema，再由同一 Zod schema 在执行时校验；缺少
 `value`、空字符串或超过 80 个字符会得到 `VALIDATION_ERROR`，而不是进入
-handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
+handler。模型有时把数组或对象参数写成一段 JSON 文本；schema 在该位置要求
+数组或对象时，`tool()` 先解析这段文本再校验一次，省掉一轮模型重交，解析后
+的内容仍须通过同一 schema。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
 `tools.builtin`）；它返回成功内容 `{ success, namespace, key }`，并把写入
 作为 `plugin.data` proposal 交给回合末 commit chain。
 
@@ -265,7 +262,7 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 - category: `safe` | `aggressive` | `creative` | `wild` 等
 
-**使用者**: 通用交互插件。当前 `guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI。
+**使用者**: 通用交互插件。当前 `guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI，并经 `stage.choices@1` 把同一组短句交给舞台模式。
 
 ---
 
@@ -601,7 +598,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 | `creates` | CharacterCreate[] |      | 新角色，默认 `[]`，最多 5 条          |
 | `updates` | CharacterUpdate[] |      | 已有角色 patch，默认 `[]`，最多 10 条 |
 
-两组不能同时为空；没有明确变化时 runtime 应调用 `runtime-done`。`creates[]` 与 `create-character` 参数相同，`updates[]` 与 `update-character` 参数相同。
+两组可以同时为空：空批次是"本回合没有角色变化"的显式结算，成功返回且不产生 proposal。`creates[]` 与 `create-character` 参数相同，`updates[]` 与 `update-character` 参数相同。
 
 同 session 同 `(name, type)` 的重复 create 作为幂等命中返回 `unchanged`，包含已有角色 id；不覆盖已有 description/fields，也不阻断批次内其他合法操作。修改既有角色必须显式放入 `updates`。其他校验失败仍使整批失败，修正后需重新提交完整批次。
 
@@ -609,7 +606,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 **使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
 
-该 tracker 继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册在 12000 字符预算内带上每个角色当前的 `fields`，通常一次模型调用即可同步；超出预算的角色标为 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
+该 tracker 声明 `toolChoice: required`，每次回复都必须调用工具，无变化时提交空批次；它继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册在 12000 字符预算内带上每个角色当前的 `fields`，通常一次模型调用即可同步；超出预算的角色标为 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
 
 ---
 
@@ -771,7 +768,7 @@ Attributes:
 
 叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 
-本轮无变化也必须调用 `update-dimensions({updates:[]})`。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
+本轮无变化也必须调用 `update-dimensions({updates:[]})`。既没有 `value`、`changes` 也为空或缺失的条目表示该维度未变化，工具直接略去它，不为此退回模型重交。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 
 ---
 
@@ -787,7 +784,14 @@ Attributes:
 | `summary`                                          | ✓    | 本轮事实摘要                                                      |
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
-工具原样返回校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
+校验前先修正几类机械性失误，不再为此让模型重交：丢弃误抄进参数的抽取输入（`narrative` / `characters` / `vocabulary`），把写在事实顶层的额外细节移入该项 `attributes`。输出 token 数决定这一步的耗时，所以抽取输入中的会话角色不给真实 id（UUID 或带会话前缀的长串），而是由姓名生成的单词短名（如 `tomas-reed`；同名角色按 id 顺序加 `-2`），工具返回前把短名还原为真实 id（包括 `inventory_change` 的 `holder`）；提示词要求模型直接引用这些角色、不在 `entities` 中重复登记；关系、事件参与者和陈述主体引用的已知角色由工具按会话角色名册补登记（`type: character` 与 `name`）；引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
+
+两类事件另有固定字段，由工具一并校验（其余事件的 `attributes` 保持自由）。`inventory` 与 `core-quest` 的 function runtime 只读取这些字段，不再调用模型：
+
+| `event.type`       | 必需 `attributes`                                                                                                    | 可选 `attributes`                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `inventory_change` | `item`（本输出中 `type: item` 的实体 id）、`holder`（角色 id）、`operation`（`gain` / `lose` / `equip` / `unequip`） | `quantity`（正整数）                                                   |
+| `quest_change`     | `quest`（任务名）、`status`（`accepted` / `progressed` / `completed` / `failed`）                                    | `objectives`、`completedObjectives`（目标原文数组）、`giver`、`reward` |
 
 这里的 `events` 是 WorldIR **事实数组**，不是领域事件信封。只有形如 `{ topic, data? }` 且 `topic` 为字符串的条目才会被 output normalizer 转成 `event.emit`；普通 WorldIR event 不会再触发 `event.emit: topic must be a non-empty string`。
 
@@ -797,64 +801,26 @@ Attributes:
 
 **所属**: codex (`plugins/codex/tools/sync-codex-entries.js`)
 
-一次提交本轮全部图鉴变化，新发现放入 `unlocks`，已有条目的补充放入 `updates`。工具复用下方新增/更新原语并累积 pending proposals；任一更新找不到 `entryId` 时抛错，整个调用不返回 proposal，避免只提交前半批。
+一次提交本轮全部图鉴变化。每条记录按标题（去首尾空白、不区分大小写）匹配已有条目：匹配到就把 `content` 追加到原内容、合并标签、稀有度只升不降（类别保留原值）；否则新建条目。模型不处理 entryId，也不需要在新建和更新两个调用之间选择，猜错 id 不会让调用失败。一轮最多新建 3 条，超出的新标题跳过并列在 `skipped` 里；同一标题在一批里出现多次时依次追加。
 
-| 参数      | 类型          | 必需 | 描述                               |
-| --------- | ------------- | ---- | ---------------------------------- |
-| `unlocks` | CodexEntry[]  |      | 默认 `[]`，最多 3 个真正的新条目   |
-| `updates` | CodexUpdate[] |      | 默认 `[]`，最多 5 个已有条目的补充 |
+新条目的 key 是标题本身（`codex-west-herb-garden`、`codex-西侧旧药园`），不含随机串；该 key 已被别的条目占用时加 `-2` 等后缀。全部写入合成一个 `plugin.data.batch` proposal。
 
-两组不能同时为空；没有值得记录的新事实时调用 `runtime-done`。输出为 `{ unlocked, updated, entries, updates, ui }`。`codex` 将它列入 `completeAfterTools`，成功后立即结束。
-
----
-
-### unlock-codex-entries
-
-**所属**: codex (`plugins/codex/tools/unlock-codex-entries.js`)
-
-批量解锁图鉴条目，每个条目生成一张"知识发现"UI 卡片。
-
-返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic-<random>`、`codex-<random>`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
-
-| 参数    | 类型         | 必需 | 描述             |
-| ------- | ------------ | ---- | ---------------- |
-| entries | CodexEntry[] | ✓    | 要解锁的条目列表 |
+| 参数      | 类型         | 必需 | 描述                 |
+| --------- | ------------ | ---- | -------------------- |
+| `entries` | CodexEntry[] | ✓    | 1-8 条，按重要性排序 |
 
 **CodexEntry**:
 
-| 字段      | 类型     | 必需 | 描述                                                             |
-| --------- | -------- | ---- | ---------------------------------------------------------------- |
-| category  | enum     | ✓    | `monster` / `item` / `location` / `lore` / `character` / `skill` |
-| title     | string   | ✓    | 条目标题                                                         |
-| content   | string   | ✓    | 2-3 句话描述                                                     |
-| tags      | string[] | ✓    | 标签列表（1-5 个）                                               |
-| rarity    | enum     |      | `common`(默认) / `uncommon` / `rare` / `legendary`               |
-| imageHint | string   |      | 视觉描述提示                                                     |
+| 字段      | 类型     | 必需 | 描述                                                                     |
+| --------- | -------- | ---- | ------------------------------------------------------------------------ |
+| category  | enum     | ✓    | `monster` / `item` / `location` / `lore` / `character` / `skill`         |
+| title     | string   | ✓    | 条目标题；与已有标题相同即补充该条目                                     |
+| content   | string   | ✓    | 新条目写 2-3 句；补充已有条目只写新信息                                  |
+| tags      | string[] |      | 至多 5 个                                                                |
+| rarity    | enum     |      | `common`(新条目默认) / `uncommon` / `rare` / `legendary`；补充时只升不降 |
+| imageHint | string   |      | 视觉描述提示                                                             |
 
-**输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组。每个 entry 包含 `entryId`（短 ID）。
-
-**ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，每个新 ID 都含随机标识；英文标题额外保留可读 slug，中文等非 ASCII 标题不依赖计数器。更新已有条目应保留其返回 ID。
-
-**当前用途**: `sync-codex-entries` 的内部组合原语。为兼容已有插件代码仍注册，但捆绑的 `codex` runtime 不再直接向模型声明它。
-
----
-
-### update-codex-entry
-
-**所属**: codex (`plugins/codex/tools/update-codex-entry.js`)
-
-更新已有图鉴条目，追加新发现的信息。
-
-| 参数          | 类型     | 必需 | 描述                                       |
-| ------------- | -------- | ---- | ------------------------------------------ |
-| entryId       | string   | ✓    | 要更新的条目短 ID（如 `codex-fire-magic`） |
-| appendContent | string   | ✓    | 追加的新内容                               |
-| newTags       | string[] |      | 新增标签                                   |
-| rarityUpgrade | enum     |      | 提升稀有度                                 |
-
-**输出**: `{ updated, entryId, ui }` — 含更新动画的 UI 卡片
-
-**当前用途**: `sync-codex-entries` 的内部组合原语。它支持读取同一次 sync 已缓冲的新增条目；捆绑 runtime 不再直接向模型声明它。
+输出为 `{ created, updated, skipped, ui }`（`created` / `updated` 是写入的 key）。没有值得记录的新事实时调用 `runtime-done`。`codex` 将它列入 `completeAfterTools`，成功后立即结束。
 
 ---
 
@@ -875,7 +841,10 @@ Attributes:
 
 ## 短 ID（LLM 友好实体引用）
 
-`shortId()` 和 `shortIdBatch()` 为新实体分配不透明 ID。可读的 ASCII 标签会保留最多 24 个字符的 slug，所有 ID 都附带完整 UUID 的 32 位十六进制随机标识。中文、emoji、空标签也使用随机标识，不依赖进程计数器。
+模型会在注入数据里读到这些 ID，有时还要原样写回；每个字符都占 token，长随机串还容易抄错。所以 ID 尽量由单词组成，并保持在 `[a-z0-9-]` 字符集内（蓝图、规则和可移植 world data 的 ID 校验要求这一字符集）。
+
+- `wordId(prefix, label, taken)`（`@covel/plugin-handlers-utils`）：调用方能看到命名空间内全部已有 ID 时使用。返回前缀加标签单词（`npc-lin-yao`），已占用时加 `-2`、`-3`；标签没有 ASCII 字母或数字（中文、emoji）时用 8 位十六进制随机串（`char-3fa9c1d2`）。`codex`、`npc-graph` 节点和玩家角色使用它。
+- `shortId()` / `shortIdBatch()`：不读取命名空间时使用。标签单词（最多 32 个字符）加 8 位十六进制随机串，重复标签和截断后的 slug 也不会相撞，不依赖进程计数器。
 
 ```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
@@ -884,8 +853,8 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
     parameters: z.object({ name: z.string() }),
     execute: async (params, context) => {
       const id = shortId("item", params.name, context.sessionId);
-      // Dragon Sword -> item-dragon-sword-<32 hex characters>
-      // 龙息术 -> item-<32 hex characters>
+      // Dragon Sword -> item-dragon-sword-<8 hex characters>
+      // 龙息术 -> item-<8 hex characters>
       return { id };
     },
   });

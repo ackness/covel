@@ -2,29 +2,41 @@
 id: guide
 kind: plugin
 displayName:
-  zh: 行动引导
-  en: Action Guide
+  zh: 行动建议
+  en: Action Suggestions
 description:
-  zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
+  zh: 每轮故事后衔接相关前情，点明当前抉择，并给出可直接采用的行动短句。
   en: >-
-    Suggests a few possible actions after each story beat so you can choose your
-    next move faster.
+    After each story beat, recaps the relevant context, states the current
+    decision, and suggests actions you can use right away.
 tags:
-  - "mode:traditional-story"
   - "cost:llm"
   - "ui:message-block"
+provides:
+  - scene-prompts@1
 requires:
   - narrative-engine@1
 entry: ./server/index.js
 contributes:
+  extensions:
+    - point: ui.slot@1
+      id: choices
+      slot: stage.choices@1
+      order: 0
+      watch:
+        - message
   ui:
     message:
-      - ./ui/action-guide-block.json
+      - ./ui/guide-block.json
   prompt:
     - id: post-history
       content: |
-        本 runtime 只执行一步：必须调用一次 `generate-guide`。即使叙事看起来"平静"也要给出观望/试探/准备类建议。
-        工具成功后框架自动结束。禁止跳过工具、重复调用或输出纯文本。
+        本 runtime 工作流：
+        - 必须完成且只完成一次成功的 `generate-guide` 调用，根据最新叙事生成前情摘要、当前决策和场景化玩家行动短句
+        - 即使叙事看起来"平静"也要给出观望、试探、准备类短句
+        - 如果工具返回参数校验错误，修正参数后重试；成功后不要重复调用
+        - 工具成功后框架会自动结束 runtime，不要再调用 `runtime-done`
+        - 调用工具前后都不要输出额外文本
       position: post-history
       role: system
   tools:
@@ -36,16 +48,18 @@ runtime:
     trigger:
       type: scheduled
       interval: 1
-      cooldownTurns: 1
-    needs:
-      - contract: narrative-engine@1
   io:
     inputs:
-      narrator-output:
+      narrative:
         from:
           contract: narrative-engine@1
+          cardinality: one
         select: /narrativeOutput
-        required: false
+        accepts: ./schemas/narrative-output.schema.json
+        required: true
+    output:
+      schema: ./schemas/scene-prompts-output.schema.json
+      contract: scene-prompts@1
     visibility: system
   agent:
     model: plugin
@@ -64,27 +78,33 @@ runtime:
         require: tool-use
         afterTools:
           - generate-guide
+  effects:
+    parallelSafe: true
 ---
 
-你是行动引导 agent。你的任务是在叙事推进后，为玩家提供多风格的行动建议。
+你是行动建议 agent。你的任务是在叙事推进后，简要衔接此前信息，点明玩家眼下要回应的抉择，并提供一组可直接作为下一条玩家消息的场景化短句。
 
 ## 当前叙事结果
 
-最新一轮叙事见上方 `runtime-inputs.narrator-output.value` 区块（由当前模式的叙事引擎注入）。分析叙事的决策点，用 `generate-guide` 提供 3 个风格分类的建议。工具成功后本 runtime 自动结束。
+最新一轮叙事由框架按 `narrative-engine` capability 绑定，见 prompt 中的 `<runtime-inputs>` JSON：读取 `narrative.value`，不要把 `source` 元数据写进玩家可见内容。如果该必需输入缺失或不符合字符串 schema，调度器会在调用你之前跳过或拒绝本 runtime。
 
-## 风格分类
+会话历史、压缩摘要与工作记忆也由框架放在你的上下文中。生成 `recap` 时只选取和眼前回应直接相关的内容；当前叙事与较新的玩家消息优先，不能把其他 runtime 的工作指令当成故事事实。
 
-- **safe（稳妥）** — 低风险、谨慎的选择
-- **aggressive（激进）** — 直接、对抗性的选择
-- **creative（创意）** — 非常规、巧妙的选择
+## 提示类型
 
-## 硬规则
+- `observe`：观察、确认、倾听、等待对方反应
+- `ask`：提问、追问、要求解释
+- `act`：移动、使用物品、尝试技能、推进现场行动
+- `social`：安抚、试探、谈判、命令、示好
 
-- 每个分类包含 1-3 个具体可执行的建议，不要泛泛而谈
-- 建议必须与当前叙事情境直接相关
-- 固定提供 3 个分类：safe / aggressive / creative
-- **每轮都必须调用 `generate-guide`，没有例外**。"平静"/"已结束"/"没有悬念"都不是理由——即使玩家只是在散步或整理物品，也给出"继续前进 / 留在原地观察 / 换一条路试试"这类低烈度建议
-- 如果 narrator 内部写了 "你要：" / "你可以：" / "1. 2. 3." 等菜单，视为 narrator 违规。你必须用 generate-guide 生成一套更清晰的建议**覆盖**它
-- 只调用一次 `generate-guide`；不要调用 `runtime-done`，不要在工具前后输出文本
+## 生成规则
 
-Keep the guide brief: default to one short suggestion per category (about 25 English words or 45 Chinese characters). Add alternatives only for materially different actions. Keep the topic to one sentence; do not repeat the narrative or predeclare outcomes.
+- `scene` 用 4-16 个字概括当前场景或决策点
+- `recap` 用 1-3 句、20-240 个字符概括与当前回应有关的此前信息、本轮变化和玩家已明确作出的约定
+- `recap` 只写叙事或对话中已经确认的事实和玩家明确表达的意图、承诺或约定，不推测隐藏动机，不补写未发生的事件
+- `decision` 用 8-120 个字符写出玩家当前需要回应的一个问题或决策点，让玩家清楚选项是在回答什么
+- `prompts` 生成 3-6 条，每条 8-45 个字，尽量覆盖不同类型，给出稳妥与大胆两种走向
+- 每条提示都必须是玩家可以直接发送的第一人称或祈使行动文本，不预告结果，不复述叙事
+- 优先覆盖当前叙事里的关键对象、地点、角色、危险、线索
+- 使用具体动作和目标
+- 叙事里若写了"你要：""你可以：""1. 2. 3."等选项菜单，视为叙事违规；用本工具给出一组更清晰的短句覆盖它

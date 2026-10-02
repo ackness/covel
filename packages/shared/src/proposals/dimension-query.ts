@@ -150,20 +150,47 @@ export function queryDimensionSnapshot(
   return { success: true, results, _text: text.slice(0, 8192) };
 }
 
-/** Small opt-in summary; never includes author initial values or maintenance rules. */
+const CUT_VALUE_LENGTH = 240;
+
+/**
+ * Model projection of the current dimensions. Values are shown whole while
+ * the snapshot fits `maxChars`, because each value cut short sends the model
+ * to `world-dimension-get`, a round trip that resends the whole prompt.
+ * Over budget, the longest values are cut to 240 characters (marked `…`)
+ * until it fits; dimensions that still do not fit are omitted by count.
+ * Current values only: never author initial values or maintenance rules.
+ */
 export function projectDimensionSnapshot(
   snapshot: DimensionSnapshot,
   locale?: string,
-  maxChars = 8192,
+  maxChars = 12000,
 ): string {
+  const entries = Object.entries(snapshot).map(([id, entry]) => ({
+    head: `${id} (${resolveI18nText(entry.name, locale)}, v${entry.version}): `,
+    value: JSON.stringify(
+      localizeDimensionValue(entry.schema, entry.value, locale),
+    ),
+    cut: false,
+  }));
+  const shown = (entry: (typeof entries)[number]) =>
+    entry.cut ? `${entry.value.slice(0, CUT_VALUE_LENGTH)}…` : entry.value;
+  const budget = maxChars - 100;
+  let total = entries.reduce(
+    (sum, entry) => sum + entry.head.length + entry.value.length + 1,
+    0,
+  );
+  for (const entry of [...entries].sort(
+    (a, b) => b.value.length - a.value.length,
+  )) {
+    if (total <= budget || entry.value.length <= CUT_VALUE_LENGTH) break;
+    total -= entry.value.length - shown({ ...entry, cut: true }).length;
+    entry.cut = true;
+  }
   let text = "";
   let omitted = 0;
-  for (const [id, entry] of Object.entries(snapshot)) {
-    const value = JSON.stringify(
-      localizeDimensionValue(entry.schema, entry.value, locale),
-    );
-    const line = `${id} (${resolveI18nText(entry.name, locale)}, v${entry.version}): ${value.length > 240 ? `${value.slice(0, 240)}…` : value}\n`;
-    if (text.length + line.length > maxChars - 100) {
+  for (const entry of entries) {
+    const line = `${entry.head}${shown(entry)}\n`;
+    if (text.length + line.length > budget) {
       omitted++;
       continue;
     }

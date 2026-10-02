@@ -76,7 +76,7 @@ describe("UI slot projection host", () => {
           started.resolve();
           await blocked.promise;
         }
-        return { pending: false, name: ctx.sessionId };
+        return { name: ctx.sessionId };
       },
     );
     f.extensionHost.register(
@@ -100,7 +100,7 @@ describe("UI slot projection host", () => {
     }
     for (const result of await Promise.all([first, queued]))
       expect(result).toEqual([
-        expect.objectContaining({ value: { pending: false, name: "session" } }),
+        expect.objectContaining({ value: { name: "session" } }),
       ]);
     expect(
       handler.mock.calls.filter(([, ctx]) => ctx.sessionId === "session"),
@@ -121,7 +121,7 @@ describe("UI slot projection host", () => {
     const handler = vi.fn(
       async (_input: UiSlotProjectionInput, ctx: PluginExtensionContext) => {
         await blocked.promise;
-        return { pending: false, name: ctx.sessionId };
+        return { name: ctx.sessionId };
       },
     );
     f.extensionHost.register(
@@ -144,7 +144,7 @@ describe("UI slot projection host", () => {
     for (const [index, result] of results.entries())
       expect(result).toEqual([
         expect.objectContaining({
-          value: { pending: false, name: ids[index] },
+          value: { name: ids[index] },
         }),
       ]);
     // Finishing work trims temporary overflow without dropping its response.
@@ -162,7 +162,7 @@ describe("UI slot projection host", () => {
     const handler = vi.fn(
       async (_input: UiSlotProjectionInput, ctx: PluginExtensionContext) => {
         if (ctx.sessionId !== "session") await blocked.promise;
-        return { pending: false, name: ctx.sessionId };
+        return { name: ctx.sessionId };
       },
     );
     f.extensionHost.register(
@@ -189,7 +189,7 @@ describe("UI slot projection host", () => {
           expect.objectContaining({
             type: "ui.slot.changed",
             payload: expect.objectContaining({
-              value: { pending: false, name: "session" },
+              value: { name: "session" },
             }),
           }),
         ),
@@ -212,7 +212,6 @@ describe("UI slot projection host", () => {
     });
     const first = vi.fn(
       async (_input: UiSlotProjectionInput, ctx: PluginExtensionContext) => ({
-        pending: false,
         name: (await ctx.pluginData.get("stage", "current"))?.value && "Gate",
       }),
     );
@@ -244,7 +243,7 @@ describe("UI slot projection host", () => {
     );
     expect(
       (await f.host.get("session", { slot: "stage.backdrop@1" }))[0]?.value,
-    ).toEqual({ pending: false, name: "Gate lit" });
+    ).toEqual({ name: "Gate lit" });
     await f.host.get("session", { slot: "stage.backdrop@1" });
     expect(first).toHaveBeenCalledOnce();
     f.emit("plugin-data.changed", {
@@ -347,7 +346,6 @@ describe("UI slot projection host", () => {
             });
           }
           return {
-            pending: false,
             name: input.events.length ? "Preview" : "Committed",
           };
         },
@@ -374,7 +372,7 @@ describe("UI slot projection host", () => {
     f.extensionHost.register(
       "alpha",
       { point: uiSlotV1.id, id: "a", slot: "stage.backdrop@1" },
-      { handler: () => ({ pending: false, name: "Gate" }) },
+      { handler: () => ({ name: "Gate" }) },
     );
     await f.host.get("session", { slot: "stage.backdrop@1" });
     f.active.delete("alpha");
@@ -394,7 +392,7 @@ describe("UI slot projection host", () => {
         slot: "stage.backdrop@1",
         preview: ["scene.set"],
       },
-      { handler: () => ({ pending: false, name }) },
+      { handler: () => ({ name }) },
     );
     await f.host.get("session", { slot: "stage.backdrop@1" });
     f.emit("domain-event.previewed", {
@@ -425,7 +423,7 @@ describe("UI slot projection host", () => {
     f.extensionHost.register(
       "alpha",
       { point: uiSlotV1.id, id: "good", slot: "stage.backdrop@1" },
-      { handler: () => ({ pending: false, name: "Gate" }) },
+      { handler: () => ({ name: "Gate" }) },
     );
     f.extensionHost.register(
       "beta",
@@ -434,7 +432,7 @@ describe("UI slot projection host", () => {
     );
     expect(
       (await f.host.get("session", { slot: "stage.backdrop@1" }))[0]?.value,
-    ).toEqual({ pending: false, name: "Gate" });
+    ).toEqual({ name: "Gate" });
   });
 });
 
@@ -444,7 +442,6 @@ it("coalesces repeated multi-provider bursts and reports each real projection on
   const first = vi.fn(async (_input, ctx) => ({
     name:
       (await ctx.pluginData.get("places", "current"))?.value?.name ?? "Cold",
-    pending: false,
   }));
   const second = vi.fn((input) => ({
     ...input.previous,
@@ -491,7 +488,7 @@ it("coalesces repeated multi-provider bursts and reports each real projection on
     expect(second).toHaveBeenCalledTimes(batch + 1);
     expect(
       (await f.host.get("session", { slot: "stage.backdrop@1" }))[0]?.value,
-    ).toEqual({ name: `Place ${batch} lit`, pending: false });
+    ).toEqual({ name: `Place ${batch} lit` });
   }
   const count = f.changes.filter(
     (event) => event.type === "ui.slot.changed",

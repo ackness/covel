@@ -738,7 +738,7 @@ async function assembleApi(
   const settledSessionLock = createSettledSessionLock({
     sessionLock,
     listPendingJobs: (sessionId) => listSettlingRuntimeJobs(store, sessionId),
-    wake: () => runtimeJobWorker.wake(),
+    wake: (sessionId) => runtimeJobWorker.wake(sessionId),
   });
 
   // 9. Create app with dependency injection middleware

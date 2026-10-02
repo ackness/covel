@@ -1,62 +1,80 @@
 import path from "node:path";
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
-  compileInlineRuntime,
-  loadPluginUi,
   loadPluginManifest,
+  loadPluginUi,
   loadRuntime,
-  parsePluginMd,
 } from "@covel/plugin-loader";
 
 const pluginDir = path.resolve(import.meta.dirname, "..");
 const pluginsDir = path.dirname(pluginDir);
-const pluginMdPath = path.join(pluginDir, "PLUGIN.md");
+
+async function discover() {
+  const discoveries = await discoverPlugins(pluginsDir);
+  const discovery = discoveries.find(
+    (candidate) => candidate.id === "character-blueprint",
+  );
+  expect(discovery).toBeDefined();
+  return discovery;
+}
 
 describe("character-blueprint manifest and UI loading", () => {
-  it("parses the manual runtime manifest through the strict schema", () => {
-    const parsed = parsePluginMd(
-      readFileSync(pluginMdPath, "utf-8"),
-      pluginMdPath,
+  it("loads the import and presence runtimes as manual functions", async () => {
+    const discovery = await discover();
+    const manifests = (await loadPluginManifest(discovery)).map(
+      (entry) => entry.manifest,
     );
 
-    expect(parsed.manifest).toMatchObject({
-      name: "character-blueprint",
-      pluginId: "character-blueprint",
-      ui: {
-        right: ["./ui/blueprints-panel.json"],
-      },
-    });
-    expect(compileInlineRuntime(parsed).manifest).toMatchObject({
-      name: "character-blueprint",
-      pluginId: "character-blueprint",
-      runtimeType: "function",
-      handler: "./handler.js",
-      trigger: { type: "manual" },
+    expect(manifests.map((manifest) => manifest.name).sort()).toEqual([
+      "character-blueprint/import",
+      "character-blueprint/presence",
+    ]);
+    for (const manifest of manifests) {
+      expect(manifest).toMatchObject({
+        pluginId: "character-blueprint",
+        runtimeType: "function",
+        handler: "./handler.js",
+        trigger: { type: "manual" },
+      });
+      const loaded = await loadRuntime(discovery, manifest.name);
+      expect(loaded.handler).toBeTypeOf("function");
+    }
+    expect(
+      Object.fromEntries(
+        manifests.map((manifest) => [manifest.name, manifest.outputContract]),
+      ),
+    ).toEqual({
+      "character-blueprint/import": "character-blueprint@1",
+      "character-blueprint/presence": "character-presence@1",
     });
   });
 
-  it("loads the blueprint right panel through plugin-loader", async () => {
-    const discoveries = await discoverPlugins(pluginsDir);
-    const discovery = discoveries.find(
-      (candidate) => candidate.id === "character-blueprint",
-    );
-    expect(discovery).toBeDefined();
+  it("loads the preset and portrait panels", async () => {
+    const ui = await loadPluginUi(await discover());
+    const [blueprints, portraits] = ui.uiSpecs?.right ?? [];
 
-    const manifests = await loadPluginManifest(discovery);
-    expect(manifests).toHaveLength(1);
-
-    const loaded = await loadRuntime(discovery, "character-blueprint");
-    const ui = await loadPluginUi(discovery);
-    expect(loaded.handler).toBeTypeOf("function");
-    expect(ui.uiSpecs?.right).toHaveLength(1);
     // Read-only display panel (no editing): relies on emptyState rather than
     // alwaysRender, so a world without preset characters shows the empty hint.
-    expect(ui.uiSpecs?.right?.[0]).toMatchObject({
+    expect(blueprints).toMatchObject({
       id: "character-blueprint",
+      group: "character",
       dataSource: { namespace: "blueprints" },
     });
-    expect(ui.uiSpecs?.right?.[0]?.emptyState).toBeDefined();
+    expect(blueprints?.emptyState).toBeDefined();
+    expect(portraits).toMatchObject({
+      id: "character-presence",
+      group: "character-art",
+      dataSource: { namespace: "presence" },
+      alwaysRender: true,
+      view: {
+        props: {
+          replaceAction: {
+            pluginId: "character-blueprint",
+            runtimeId: "character-blueprint/presence",
+          },
+        },
+      },
+    });
   });
 });

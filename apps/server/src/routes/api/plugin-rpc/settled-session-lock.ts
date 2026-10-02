@@ -99,7 +99,7 @@ export function createSettledSessionLock(args: {
   readonly listPendingJobs: (
     sessionId: string,
   ) => Promise<readonly SettlingJob[]>;
-  readonly wake?: () => void;
+  readonly wake?: (sessionId: string) => void;
   readonly pollIntervalMs?: number;
 }): SettledSessionLock {
   const pollIntervalMs = args.pollIntervalMs ?? 25;
@@ -146,7 +146,7 @@ export function createSettledSessionLock(args: {
         if (pending.length > 0) {
           await options.provideCredentials?.(pending);
           options.signal?.throwIfAborted();
-          args.wake?.();
+          args.wake?.(sessionId);
           const remaining = budget.deadline - performance.now();
           if (remaining > 0) {
             await wait(Math.min(remaining, pollDelay), options.signal);

@@ -173,7 +173,7 @@ flowchart LR
     Terminal --> Status
 ```
 
-`maxQueueMs` 从 `enqueuedAt` 限制 claim 等待，`maxExecutionMs` 从 running 限制后台控制面期限；它们不代替 runtime 的 `timeoutMs`。worker 默认最多并行 4 个不同 runtime，以 session round-robin 取队列，同一 `(session, plugin, runtime)` 只允许一个 active job。重启后，未过排队期限且从未 claim 的 `queued` 作业可以继续执行；排队超时会变为 `timed_out`，lease 已过期的在途作业会变为 `orphaned`，后两者不会自动 replay。玩家明确 retry 时创建新 jobId。
+`maxQueueMs` 从 `enqueuedAt` 限制 claim 等待，`maxExecutionMs` 从 running 限制后台控制面期限；它们不代替 runtime 的 `timeoutMs`。worker 默认最多并行 4 个不同 runtime，以 session round-robin 取队列，同一 `(session, plugin, runtime)` 只允许一个 active job。入队、retry、resume、等待屏障和任务结束都按会话唤醒 worker，平时只认领被唤醒会话的队列；启动、不带会话的唤醒和 30 秒维护轮扫描全部会话，其他进程排入的作业也由此接走。重启后，未过排队期限且从未 claim 的 `queued` 作业可以继续执行；排队超时会变为 `timed_out`，lease 已过期的在途作业会变为 `orphaned`，后两者不会自动 replay。玩家明确 retry 时创建新 jobId。
 
 worker 进入提交屏障前排空自身续租；`extraInTx` 在领域提交事务内完成 job 的成功 CAS。业务失败、完成 CAS 失败和事务末尾失败均回滚领域写入及 job 成功。成功事件在事务外发布；事件丢失可从已持久化终态补齐，不重跑任务。worker 首次唤醒及后续 30 秒维护间隔扫描过期租约，扫描失败 1 秒后重试；维护不受执行槽满影响。`committing` 任务须先非阻塞取得同一提交锁，锁忙时留待下一轮。关闭会停止后续调度并等待在途扫描及锁回调。
 
@@ -248,7 +248,7 @@ plugin_data 写入      ──►    │ SSE emit()               │  插件消
 LLM 决定调用工具                框架处理                        结果
 ──────────────               ────────                       ──────
 
-LLM: "调用 unlock-         ToolExecutor:
+LLM: "调用 sync-           ToolExecutor:
       codex-entries"       1. findTool(name, context)
       { entries: [...] }      ├─ builtin? → 直接访问
                               └─ local? → 检查 pluginToolAccess
@@ -352,8 +352,8 @@ stage 屏障保证 narrative 阶段结束后才运行 post-turn。stage 内独�
                               │
                     ┌─────────┴──────────┐
                     │ startTurn?         │ ← 逻辑回合数 < startTurn？
-                    │ maxTriggerCount?   │ ← 超过 session 最大次数？
-                    │ cooldownTurns?     │ ← 冷却中？
+                    │ maxTriggerCount?   │ ← 超过 session 最大次数？（trigger 台账）
+                    │ cooldownTurns?     │ ← 冷却中？（trigger 台账）
                     └─────────┬──────────┘
                               │ 通过
                     ┌─────────┴──────────┐
@@ -425,7 +425,7 @@ stage 屏障保证 narrative 阶段结束后才运行 post-turn。stage 内独�
   ────────────                   ──────                     ──────
 
   sync-codex-entries
-  params: { unlocks: [...], updates: [...] }
+  params: { entries: [...] }
         │
         ▼
   withPendingProposals()       ──► execution write buffer
@@ -607,12 +607,16 @@ turn_messages (canonical 追加式执行日志):
   │ turn-2 │ player   │ user       │ 我决定跟师姐去探查灵脉       │
   │ turn-2 │ runtime  │ assistant  │ 清晨，你在老槐树下等到了...   │
   │ turn-2 │ tool     │ tool       │ {"entries":[...]}             │
-  │ turn-2 │ runtime  │ assistant  │ (空：codex 只有结构化输出)    │
   └────────┴──────────┴────────────┴──────────────────────────────┘
 
-  runtime 行只把 narrativeOutput / content 文本写入 content。结构化输出
-  保留在 turn_results，行本身留空，只用于 trigger 计数、表单校验与 UI
-  附件；空行不进入 prompt、压缩摘要和向量召回。
+  runtime 行只把 narrativeOutput / content 文本写入 content，并携带表单
+  （pendingInput）与 UI 附件。结构化输出保留在 turn_results；既无文本也
+  无附件的运行（如 codex 只写结构化条目）不写 runtime 行。
+
+  trigger 台账（kernel 所有的 plugin data，owner `__kernel:triggers`）
+  按 runtime 记录已提交的运行次数和最后一次运行时的
+  completedPlayerTurns，随 finalize 事务写入，回滚的执行不计数。
+  maxTriggerCount / cooldownTurns 读它，不再数 runtime 行，也不受压缩影响。
 
   canonical 未压缩后缀
     → prompt.history-transform@1 投影
@@ -620,7 +624,7 @@ turn_messages (canonical 追加式执行日志):
     → prompt.segment@1 + 世界书 + 当前玩家输入
     → token budget → LLM messages[]
 
-  调度统计读取 canonical 日志；prompt 投影不改写它。
+  玩家消息计数读取 canonical 日志，trigger 历史读取台账；prompt 投影不改写它们。
   history.compact@1 生成摘要，框架原子保存摘要与压缩标记。
 
   注意：玩家输入只以 `user` 角色追加一行（叙事模板填充结果），

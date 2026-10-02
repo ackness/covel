@@ -2,6 +2,7 @@ import {
   pickLocaleText as pick,
   makeProposal,
   withPendingProposals,
+  wordId,
 } from "@covel/plugin-handlers-utils";
 import {
   CharacterFieldValidationError,
@@ -66,7 +67,13 @@ export default async function guard(ctx) {
       const name = pickName(values);
       if (name) {
         const now = new Date().toISOString();
-        const id = `char-${crypto.randomUUID()}`;
+        // A word id from the name (`char-lin-yao`): models read and write
+        // character ids, and a UUID is long and easy to miscopy.
+        const id = wordId(
+          "char",
+          name,
+          new Set((characters ?? []).map((character) => character.id)),
+        );
         try {
           // Merge declared schema defaults into stored fields so the player
           // record the model reads (get-character / prompt context) matches

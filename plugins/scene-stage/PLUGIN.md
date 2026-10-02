@@ -5,23 +5,35 @@ displayName:
   zh: 场景舞台
   en: Scene Stage
 description:
-  zh: 跟踪叙事当前所在的场景与昼夜，为舞台背景提供数据。
-  en: Tracks the current scene and time of day for the visual stage.
+  zh: 跟踪当前场景、昼夜和在场角色，为舞台背景与立绘提供数据。
+  en: >-
+    Tracks the current scene, time of day, and who is on stage for the visual
+    stage.
 tags:
   - "mode:dialogue"
+  - "data:characters"
   - "cost:function"
   - "ui:right-panel"
 provides:
   - stage-direction@1
   - scene-stage@1
+  - scene-cast@1
 entry: ./server/index.js
 contracts:
+  scene-cast@1:
+    schema: ./schemas/scene-cast.schema.json
   stage.scene-assets@1:
     schema: ./schemas/assets.schema.json
   stage.scenes@1:
     schema: ./schemas/scenes.schema.json
 contributes:
   extensions:
+    - point: ui.slot@1
+      id: cast
+      slot: stage.cast@1
+      order: 0
+      watch:
+        - active-cast
     - point: ui.slot@1
       id: backdrop
       slot: stage.backdrop@1
@@ -73,46 +85,22 @@ contributes:
       description:
         zh: >-
           发射条件：第一回合开场确立场景时、场景/地点切换时、昼夜变化时——满足任一即须发射（每回合最多一次）。location
-          用叙事中的地点名；无把握沿用上次值；新地点须附英文 visualHint。
+          用叙事中的地点名；无把握沿用上次值。
         en: >-
           Emission conditions (any one requires emitting, at most once per
           turn): the very first turn establishing the opening scene, a
           scene/location change, or a day-night shift. Use the in-narrative
-          location name; keep previous values when unsure; add an English
-          visualHint for brand-new places.
-    - topic: scene-stage.generate.requested
-      schema: ./schemas/generate-requested.event.json
-      description:
-        zh: 内部信令——场景未命中注册表且门控放行时，向增量生成 runtime 请求补图。
-        en: >-
-          Internal signal — requests background generation when a scene misses
-          the registry and the auto-generate gate allows it.
-      advertise: false
+          location name; keep previous values when unsure.
   settings:
-    - key: modelPresetId
-      type: slot
-      default: image
-      label:
-        zh: 场景背景图像用途
-        en: Scene background image slot
-      description:
-        zh: 选择用于自动生成场景背景的图像模型用途，对应 llm.toml 中的 [covel.<用途名>]。
-        en: Selects the image model slot used for generated scene backgrounds, configured under [covel.<slot>] in llm.toml.
-    - key: autoGenerateScenes
-      type: toggle
-      default: true
-      label:
-        zh: 自动生成新场景背景
-        en: Auto-generate new scene backgrounds
-    - key: maxGeneratedScenes
+    - key: activeSpeakerCount
       type: number
-      default: 10
-      min: 0
-      max: 50
+      default: 2
+      min: 1
+      max: 4
       step: 1
       label:
-        zh: 每会话生成上限
-        en: Per-session generation cap
+        zh: 活跃说话人数
+        en: Active speakers
   data:
     assets:
       schema: ./schemas/assets.schema.json
@@ -129,6 +117,7 @@ contributes:
   ui:
     right:
       - ./runtimes/resolver/ui/scene-stage-panel.json
+      - ./runtimes/cast/ui/scene-cast-panel.json
 ---
 
-Scene Stage tracks the current scene/location and time of day for the visual stage, resolving `scene.set` events into `stage/current` and queuing background generation for unmatched locations. It also applies structured `stage.direction` cues for actor presence, focus, position, and visual variants. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.
+Scene Stage tracks the current scene/location and time of day for the visual stage, resolving `scene.set` events into `stage/current` against the world's scene registry; an unmatched location has no backdrop. Before each narrative its cast runtime picks the active speakers for `chat-mode-narrator` (`scene-cast@1`). It also applies structured `stage.direction` cues for actor presence, focus, position, and visual variants. This root `PLUGIN.md` is metadata only — executable runtimes live under `runtimes/`.

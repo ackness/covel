@@ -214,14 +214,14 @@ function deriveSupportedModes(
 }
 
 /**
- * Fold the slot-level thinking-mode controls into a single
- * providerRequestMetadata bag. Explicit `thinking` / `reasoning_effort`
- * fields are promoted for ergonomic TOML authoring; users can still
- * drop arbitrary keys into `providerRequestMetadata` for provider
- * extensions that don't have a dedicated slot in the schema yet.
+ * Build the preset's slot-wide request metadata. The portable
+ * `reasoningEffort` is stored as a model default under `parameterOverrides`,
+ * the same shape a model configured in Settings carries, so both sources
+ * follow one precedence and the Settings UI shows the inherited value.
+ * Freeform `providerRequestMetadata` keys pass through for provider
+ * extensions without a dedicated field.
  *
- * Later entries win: per-call metadata at request time always beats
- * the slot-wide defaults.
+ * Per-call metadata at request time beats these slot-wide defaults.
  */
 function buildProviderRequestMetadata(
   def: SlotDefinition,
@@ -229,9 +229,11 @@ function buildProviderRequestMetadata(
   const merged: Record<string, unknown> = {
     ...def.providerRequestMetadata,
   };
-  if (def.thinking !== undefined) merged.thinking = def.thinking;
-  if (def.reasoning_effort !== undefined)
-    merged.reasoning_effort = def.reasoning_effort;
+  if (def.reasoningEffort !== undefined)
+    merged.parameterOverrides = {
+      ...(merged.parameterOverrides as Record<string, unknown> | undefined),
+      reasoningEffort: def.reasoningEffort,
+    };
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 

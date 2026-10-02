@@ -53,7 +53,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                                                                                                        |
 | `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                                                                                                |
 | `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                                                                                              |
-| `thinking` / `reasoning_effort`     | —    | 思考模式与强度；按目标协议转换为对应请求字段                                                                                                                                  |
+| `reasoningEffort`                   | —    | 可移植的思考档位（如 `disabled` 关闭思考），作为模型默认按目标协议转换，见[思考强度](#思考强度)                                                                               |
 | `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                                                                                              |
 | `providerRequestMetadata`           | —    | 生成请求的自由 KV（per-call 优先）；评估请求不使用。媒体 wire 路由键也放这里，见下                                                                                            |
 | `providerOptions`                   | —    | 文本 / 对象 / 流式调用的供应商或协议命名空间参数，只解析当前目标的设置，见下                                                                                                  |
@@ -149,6 +149,17 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 ## 思考强度
 
 “生成参数”页面按原始模型 ID 的上游命名空间识别思考档位。例如服务商为 `openai`、模型 ID 为 `deepseek/deepseek-v4-flash` 时仍使用 DeepSeek 的 `关闭 / high / max` 档位。选项由模型能力决定，不把各厂商的强度假定为等价。
+
+TOML 槽位用 `reasoningEffort` 设置模型默认，取值与界面和 runtime 的 `llm.reasoningEffort` 相同，类似 AI SDK 顶层的 [`reasoning`](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) 选项：只写一个可移植档位，由适配器翻译成各家的原生字段，模型不支持的档位记录 warning 并沿用服务商默认。它与在“服务商与模型”页面为模型设置的思考档位是同一份默认值。需要原生字段时改用下文的 `providerOptions`。
+
+```toml
+[covel.story]
+provider = "qwen"
+model    = "qwen3.8-flash"
+baseUrl  = "${QWEN_BASE_URL}"
+protocol = "openai-chat-v1"
+reasoningEffort = "disabled"
+```
 
 用户设置的生效顺序为：用途显式覆盖 → 模型 / TOML 默认 → 任务默认 → 服务商默认。用途留空表示继承；模型留空表示按任务决定。显式 `provider-default` 表示让服务商决定，清除继承的思考请求字段并跳过任务默认，不能把它当成未配置。记忆提取的任务默认仍为关闭思考，用户在用途或模型上设置的档位优先。界面分别显示继承值和显式覆盖，不把服务商文档中的默认档位冒充本次任务的实际参数。
 

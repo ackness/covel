@@ -1,113 +1,122 @@
-/**
- * Plugin-local tool: generate-guide
- *
- * Generates a categorized action guide for the player.
- * Each category (safe/aggressive/creative/wild) provides
- * 1-3 concrete, actionable suggestions.
- *
- * Returns UI blocks that json-render renders as styled choice cards.
- */
-
 import {
   makeProposal,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
-const STYLE_CONFIG = {
-  safe: { zh: "稳妥", en: "Safe", icon: "shield", color: "blue" },
-  aggressive: { zh: "激进", en: "Aggressive", icon: "swords", color: "red" },
-  creative: { zh: "创意", en: "Creative", icon: "lightbulb", color: "purple" },
-  wild: { zh: "疯狂", en: "Wild", icon: "flame", color: "amber" },
+// Labels are stored as I18nText into plugin_data so the Badge renderer resolves
+// them to the session locale (a bare zh string would render Chinese for en
+// players). The CI i18n gate doesn't scan tool-written values, so keep these
+// bilingual by hand.
+const KIND_CONFIG = {
+  observe: { label: { zh: "观察", en: "Observe" }, icon: "eye", color: "blue" },
+  ask: { label: { zh: "追问", en: "Ask" }, icon: "lightbulb", color: "purple" },
+  act: { label: { zh: "行动", en: "Act" }, icon: "zap", color: "green" },
+  social: {
+    label: { zh: "交涉", en: "Negotiate" },
+    icon: "user",
+    color: "amber",
+  },
 };
 
 export default function ({ tool, z }) {
-  const categorySchema = z.object({
-    style: z.enum(["safe", "aggressive", "creative", "wild"]),
-    label: z.string().optional(),
-    suggestions: z
-      .array(z.string().min(1))
+  const promptSchema = z.object({
+    kind: z
+      .enum(["observe", "ask", "act", "social"])
+      .describe("Prompt type: observe/ask/act/social"),
+    text: z
+      .string()
       .min(1)
-      .max(3)
-      .describe("1-3 concrete, actionable suggestions"),
+      .max(80)
+      .describe(
+        "A short, scene-specific action phrase the player can send directly",
+      ),
   });
 
   return tool({
     name: "generate-guide",
     description:
-      "Generate a style-categorized action guide, offering the player choices in different styles (safe / aggressive / creative / wild).",
+      "Summarize confirmed context and generate scene-specific quick replies. Written to the message namespace; the frontend renders the recap, current decision, and prompt buttons together.",
     parameters: z.object({
-      topic: z
+      scene: z
         .string()
         .min(1)
-        .describe("A brief description of the current decision point"),
-      categories: z
-        .array(categorySchema)
-        // Capped at 3: the message block has exactly 3 strategy slots and the
-        // handler slices to 3, so a 4th category would be silently dropped.
-        .min(2)
-        .max(3)
-        .describe("2-3 style categories, each with 1-3 suggestions"),
+        .max(40)
+        .describe("Title of the current scene or decision point"),
+      recap: z
+        .string()
+        .trim()
+        .min(20)
+        .max(240)
+        .describe(
+          "A 1-3 sentence recap using only confirmed facts and explicit player intentions, commitments, or agreements",
+        ),
+      decision: z
+        .string()
+        .trim()
+        .min(8)
+        .max(120)
+        .describe(
+          "The current question or decision the player needs to answer",
+        ),
+      prompts: z
+        .array(promptSchema)
+        .min(3)
+        .max(6)
+        .describe("3-6 short player action phrases that can be sent directly"),
     }),
     execute: async (params, context) => {
-      const { topic, categories } = params;
-
-      const resolvedCategories = categories.map((cat, index) => {
-        const config = STYLE_CONFIG[cat.style];
+      const now = new Date().toISOString();
+      const prompts = params.prompts.slice(0, 6).map((prompt) => {
+        const config = KIND_CONFIG[prompt.kind];
         return {
-          slot: index + 1,
-          style: cat.style,
-          // Store an I18nText label so the block resolves it to the session
-          // locale. An LLM-supplied `cat.label` is a single string in the
-          // session language; otherwise fall back to the bilingual config
-          // (previously only the zh half was used → en players saw Chinese).
-          label: cat.label ?? { zh: config.zh, en: config.en },
+          kind: prompt.kind,
+          label: config.label,
           icon: config.icon,
           color: config.color,
-          suggestions: cat.suggestions,
+          text: prompt.text,
         };
       });
 
-      const now = new Date().toISOString();
-      // plugin.data.batch items only need {namespace, key, value} — the commit
-      // handler owns ids/timestamps.
       const items = [
         { namespace: "message", key: "__turnId", value: context.turnId },
-        { namespace: "message", key: "topic", value: topic },
+        { namespace: "message", key: "scene", value: params.scene },
+        { namespace: "message", key: "recap", value: params.recap },
+        { namespace: "message", key: "decision", value: params.decision },
       ];
 
-      for (let slot = 1; slot <= 3; slot += 1) {
-        const category = resolvedCategories[slot - 1];
+      for (let i = 0; i < 6; i += 1) {
+        const slot = i + 1;
+        const prompt = prompts[i];
         items.push(
           {
             namespace: "message",
-            key: `category${slot}Label`,
-            value: category?.label ?? "",
+            key: `prompt${slot}Text`,
+            value: prompt?.text ?? "",
           },
           {
             namespace: "message",
-            key: `category${slot}Icon`,
-            value: category?.icon ?? "",
+            key: `prompt${slot}Label`,
+            value: prompt?.label ?? "",
           },
           {
             namespace: "message",
-            key: `category${slot}Color`,
-            value: category?.color ?? "",
+            key: `prompt${slot}Icon`,
+            value: prompt?.icon ?? "",
+          },
+          {
+            namespace: "message",
+            key: `prompt${slot}Color`,
+            value: prompt?.color ?? "",
           },
         );
-
-        for (let i = 0; i < 3; i += 1) {
-          items.push({
-            namespace: "message",
-            key: `category${slot}Suggestion${i + 1}`,
-            value: category?.suggestions[i] ?? "",
-          });
-        }
       }
 
       return withPendingProposals(
         {
-          topic,
-          categories: resolvedCategories,
+          scene: params.scene,
+          recap: params.recap,
+          decision: params.decision,
+          prompts,
         },
         [makeProposal(context, now, "plugin.data.batch", { items })],
       );

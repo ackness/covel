@@ -409,6 +409,27 @@ describe("resolveInputBindings — select & required/optional", () => {
       }
     }
   });
+
+  it("binds a guard-provided output without the guard's skip flag", async () => {
+    const res = await resolveInputBindings(
+      baseArgs({
+        manifest: runtimeBinding(true, ""),
+        activeRuntimes: [provider],
+        completedResults: new Map([
+          [
+            provider.name,
+            {
+              ...success(provider.name, { skip: true, events: [] }),
+              status: "skipped",
+            },
+          ],
+        ]),
+      }),
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.slots.data).toMatchObject({ value: { events: [] } });
+    if (res.ok) expect(res.slots.data?.value).not.toHaveProperty("skip");
+  });
 });
 
 describe("resolveInputBindings — accepts double layer", () => {

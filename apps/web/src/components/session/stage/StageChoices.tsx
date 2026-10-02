@@ -25,7 +25,7 @@ export interface StageChoicesProps {
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
   readonly suggestions?: StageChoicesModel;
-  /** Current-story fallback for legacy scene-prompts rows without `recap`. */
+  /** Current-story fallback for legacy guide rows without `recap`. */
   readonly fallbackRecap?: string;
   readonly locale: string;
   readonly onSubmitInteraction?: (

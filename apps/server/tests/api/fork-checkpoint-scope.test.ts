@@ -90,4 +90,69 @@ describe("fork checkpoint scope", () => {
       exported.suspensions,
     );
   });
+
+  it("leaves job and log rows from a legacy snapshot behind", async () => {
+    const store = createMemoryStore();
+    await store.createWorld(makeWorld({ id: "world-1" }));
+    const parentId = "legacy-parent";
+    await store.createSession(
+      makeSession({
+        id: parentId,
+        metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      }),
+    );
+    const row = (namespace: string) => ({
+      id: `${parentId}:plugin-1:${namespace}:k`,
+      sessionId: parentId,
+      pluginId: "plugin-1",
+      namespace,
+      key: "k",
+      value: { namespace },
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    });
+    const sourceSnapshot = makeSnapshot({
+      sessionId: parentId,
+      payload: makeSnapshotPayload({
+        pluginData: [
+          row("notes"),
+          row("_jobs"),
+          row("_runtime_jobs"),
+          row("_runtime_job_control"),
+          row("_logs"),
+        ],
+      }),
+    });
+    await store.saveSnapshot(sourceSnapshot);
+    const app = new Hono<{
+      Variables: { store: DataStore; sessionLock: SessionLock };
+    }>();
+    app.use("*", async (context, next) => {
+      context.set("store", store);
+      context.set("sessionLock", createInProcessSessionLock());
+      await next();
+    });
+    app.route("/api/sessions", snapshotRoutes);
+
+    const response = await app.request(`/api/sessions/${parentId}/fork`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromSnapshotId: sourceSnapshot.id }),
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      sessionId: string;
+      forkSnapshotId: string;
+    };
+    expect(
+      (await store.listPluginDataSessionScope(body.sessionId)).map(
+        (record) => record.namespace,
+      ),
+    ).toEqual(["notes"]);
+    expect(
+      (await store.getSnapshot(body.forkSnapshotId))?.payload.pluginData.map(
+        (record) => record.namespace,
+      ),
+    ).toEqual(["notes"]);
+  });
 });

@@ -121,5 +121,6 @@ export function announceQueuedRuntimeJobs(
       c.get("runtimeJobCredentials")?.register(credentialKey, services);
     publishRuntimeJobStatusEvent(c.get("eventBus"), status);
   }
-  c.get("runtimeJobWorker")?.wake();
+  for (const sessionId of new Set(queued.map(({ job }) => job.sessionId)))
+    c.get("runtimeJobWorker")?.wake(sessionId);
 }

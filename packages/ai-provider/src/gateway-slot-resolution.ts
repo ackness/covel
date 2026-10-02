@@ -397,8 +397,9 @@ export function createGatewaySlotResolution(
   }
 
   /**
-   * Fold the preset's slot-wide `providerRequestMetadata` (thinking mode,
-   * reasoning_effort, freeform provider flags) into the per-call metadata.
+   * Fold the preset's slot-wide `providerRequestMetadata` (model defaults
+   * such as `parameterOverrides.reasoningEffort`, freeform provider flags)
+   * into the per-call metadata.
    *
    * Precedence: preset defaults < per-call metadata < parameterOverrides.
    * Per-call values always win so callers can override the TOML defaults.

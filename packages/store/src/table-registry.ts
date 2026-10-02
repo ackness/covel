@@ -233,3 +233,13 @@ export const RETIRED_TABLE_NAMES: readonly string[] = ["runtime_results"];
 export const DROP_RETIRED_TABLES_SQL = RETIRED_TABLE_NAMES.map(
   (table) => `DROP TABLE IF EXISTS ${table};`,
 ).join("\n");
+
+/**
+ * Plugin-data namespaces no writer uses any more. Boot deletes their rows:
+ * `_jobs` held the retired in-process background queue's job records.
+ */
+export const RETIRED_PLUGIN_DATA_NAMESPACES: readonly string[] = ["_jobs"];
+
+export const DELETE_RETIRED_PLUGIN_DATA_SQL = `DELETE FROM plugin_data WHERE namespace IN (${RETIRED_PLUGIN_DATA_NAMESPACES.map(
+  (namespace) => `'${namespace}'`,
+).join(", ")});`;

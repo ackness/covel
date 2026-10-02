@@ -15,6 +15,6 @@ function:
   handler: ./handler.js
 ---
 
-Scene Stage's resolver is a deterministic function runtime triggered by `scene.set`. It resolves the current location and time of day against the world's scene registry (and scenes generated earlier this session), then publishes `stage/current` for the visual stage to consume. Scenes with no registry match are queued for background generation via `scene-stage/background-gen`, gated by `autoGenerateScenes` and `maxGeneratedScenes`.
+Scene Stage's resolver is a deterministic function runtime triggered by `scene.set`. It resolves the current location and time of day against the world's scene registry and publishes `stage/current` for the visual stage to consume. A location with no registry match has no backdrop (`source: "none"`) and the stage falls back to the world image.
 
 Note: `events[].schema` and `dataSchemas.*.schema` paths resolve relative to the **plugin root** (`plugins/scene-stage/`), not this runtime's directory — see `apps/server/src/routes/api/bootstrap/event-directory.ts` and `apps/server/src/world-data/schema-registry.ts`. Only `handler` and `ui.*` paths resolve relative to this runtime's own directory.

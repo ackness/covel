@@ -14,7 +14,7 @@
             {
               "id": "call-generate-guide",
               "name": "generate-guide",
-              "arguments": "{\"topic\":\"雾港岔路的路线选择\",\"categories\":[{\"style\":\"safe\",\"suggestions\":[\"先检查脚印的新旧与方向\"]},{\"style\":\"aggressive\",\"suggestions\":[\"沿钟声方向快速突进\"]},{\"style\":\"creative\",\"suggestions\":[\"留下标记后反向绕行观察\"]}]}"
+              "arguments": "{\"scene\":\"雾港岔路\",\"recap\":\"旅人来到雾港岔路，一侧传来钟声，另一侧留有新鲜脚印。\",\"decision\":\"先追钟声，还是先查脚印？\",\"prompts\":[{\"kind\":\"observe\",\"text\":\"我先蹲下检查脚印的新旧与方向\"},{\"kind\":\"act\",\"text\":\"我沿着钟声的方向快步前进\"},{\"kind\":\"act\",\"text\":\"我在岔路口留下标记后反向绕行观察\"}]}"
             }
           ]
         },
@@ -25,8 +25,18 @@
         }
       ],
       "expect": {
-        "runtimeResults": [{ "runtimeId": "guide", "status": "success" }],
-        "pluginData": [{ "namespace": "message", "key": "category1Label" }]
+        "runtimeResults": [
+          {
+            "runtimeId": "guide",
+            "status": "success"
+          }
+        ],
+        "pluginData": [
+          {
+            "namespace": "message",
+            "key": "prompt1Label"
+          }
+        ]
       }
     },
     {

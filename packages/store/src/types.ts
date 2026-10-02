@@ -430,11 +430,6 @@ export interface TraceStore {
 export interface TurnMessageStats {
   /** Total messages with `sourceType === "player"` (the turn number). */
   readonly playerMessageCount: number;
-  /**
-   * Total messages per `sourceRuntimeId` for `sourceType === "runtime"` rows
-   * (the per-runtime trigger counts used by `maxTriggerCount`).
-   */
-  readonly runtimeMessageCounts: Readonly<Record<string, number>>;
 }
 
 /** Append-only turn-message log. Part of `sql-session-journal-records`. */

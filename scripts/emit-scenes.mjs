@@ -66,7 +66,6 @@ await writeFile(
     {
       schemaVersion: 1,
       registryId: "scene-registry",
-      ...(manifest.style ? { style: manifest.style } : {}),
       scenes,
     },
     null,

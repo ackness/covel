@@ -200,7 +200,7 @@ export function StageView(props: StageViewProps): ReactElement {
     () => extractPendingFormMessages(messages, submittedBlockIds),
     [messages, submittedBlockIds],
   );
-  // Drop scene-prompts left over from a previous turn (StageChoices merges them
+  // Drop guide prompts left over from a previous turn (StageChoices merges them
   // in via mergeChoices, which doesn't itself check freshness).
   const freshPrompts = useMemo(
     () =>

@@ -5,7 +5,7 @@
  * Scans worlds/<world>/media/portraits/, content-addresses each PNG with sha256
  * (the same hash the media store assigns on import, packages/store media-store
  * utils.sha256), maps filename → characterId via portraits.json, and writes
- * character-presence `presence` records that point avatar + sprite at the image.
+ * character-blueprint `presence` records that point avatar + sprite at the image.
  * Re-run after regenerating portraits to refresh the hashes.
  *
  * Usage: node scripts/emit-presence.mjs <world>

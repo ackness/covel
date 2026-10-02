@@ -24,7 +24,7 @@ export interface StageSpritesProps {
   readonly sessionId: string;
   /** Choice overlay open — pull focus off the sprites (classic VN dim). */
   readonly dimmed?: boolean;
-  /** Legacy scene-cast may briefly report no speakers between turns. An
+  /** The cast selection may briefly report no speakers between turns. An
    * authoritative stage-direction `actors: []` instead means clear now. */
   readonly retainWhenEmpty?: boolean;
 }

@@ -25,14 +25,12 @@ contributes:
       content: |
         本 runtime 工作流：
         - 已有条目见 `<existing-entries>` 块（由框架在 prompt 构建时自动注入）
-        - 把全新发现放进 `unlocks`，把已有条目的补充放进 `updates`，一次调用 `sync-codex-entries`
+        - 把本轮全部发现放进 `entries`，一次调用 `sync-codex-entries`；标题与已有条目相同时工具自动补充该条目，否则新建
         - 如果本轮没有符合标准的新发现，不调用任何业务工具
         - `sync-codex-entries` 成功后框架自动结束；决定不写入时调用 `runtime-done`
       position: post-history
       role: system
   tools:
-    - unlock-codex-entries
-    - update-codex-entry
     - sync-codex-entries
 runtime:
   type: agent
@@ -58,6 +56,10 @@ runtime:
     model: plugin
     history:
       maxTurns: 2
+    # The conversation ends on the player's message; without a required tool
+    # call the model sometimes continues the story first.
+    llm:
+      toolChoice: required
     tools:
       plugin:
         - sync-codex-entries
@@ -87,15 +89,15 @@ runtime:
 - <entryId> | <updatedAt> | <value-summary>
 ```
 
-其中 `<entryId>` 就是该条目在 plugin-data 里的 key（例如 `codex-百灵沼泽`）。需要补充已有条目时，把这个 id 放进 `sync-codex-entries.updates[].entryId`。
+`<value-summary>` 里有条目标题。补充已有条目时照抄它的标题即可，不需要 entryId：工具按标题（不区分大小写）匹配已有条目，匹配到就追加内容，否则新建。
 
 ## 工作流程
 
 1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
-2. 扫一遍 `<existing-entries>` 里的 entryId 与摘要，对 WorldIR 中出现的每个潜在发现做匹配
+2. 扫一遍 `<existing-entries>` 里的标题与摘要，对 WorldIR 中出现的每个潜在发现做匹配
 3. 按下面的"合格条目判定规则"挑出**最多 3 个**真正值得登记的新发现
-4. 如果一个新发现能匹配到已有 entryId → 放入 `updates`；全新发现 → 放入 `unlocks`
-5. 把两类变化合并成**一次** `sync-codex-entries` 调用
+4. 已有条目的补充沿用它的原标题，全新发现用新标题；两者都放进 `entries`，按重要性排序
+5. 用**一次** `sync-codex-entries` 调用提交
 6. 如果没有任何符合规则的新发现 → **调用 `runtime-done` 结束**，不要强行记录
 
 ## 合格条目判定规则（关键）
@@ -147,7 +149,7 @@ runtime:
 
 ```json
 {
-  "unlocks": [
+  "entries": [
     {
       "category": "location",
       "title": "西侧旧药园",
@@ -166,16 +168,17 @@ runtime:
 }
 ```
 
-**场景 2：补充已有条目**
+**场景 2：补充已有条目（沿用原标题，`content` 只写新信息）**
 
 ```json
 {
-  "updates": [
+  "entries": [
     {
-      "entryId": "codex-西侧旧药园",
-      "appendContent": "深夜观察到至少两道人影在药园深处秘密搬运重物，其中一人身形挺直疑似内门执事。",
-      "newTags": ["夜探", "内门执事"],
-      "rarityUpgrade": "rare"
+      "category": "location",
+      "title": "西侧旧药园",
+      "content": "深夜观察到至少两道人影在药园深处秘密搬运重物，其中一人身形挺直疑似内门执事。",
+      "tags": ["夜探", "内门执事"],
+      "rarity": "rare"
     }
   ]
 }
@@ -187,7 +190,7 @@ runtime:
 
 ## 硬约束
 
-- 一轮最多登记 3 个新条目;超过就只取最重要的 3 个
+- 一轮最多登记 3 个新条目;超过时工具只保留排在前面的 3 个,所以按重要性排序
 - `title` 必须**完整**可独立理解,不能依赖上下文才能明白意思
 - `content` 必须是 2-3 句**事实陈述**,不能是形容词堆砌或感叹
 - `tags` 2-5 个,用名词,不要用动词/形容词

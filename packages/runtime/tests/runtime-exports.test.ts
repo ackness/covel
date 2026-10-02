@@ -425,8 +425,14 @@ describe("agent export segment", () => {
       /<runtime-exports>\n([\s\S]*?)\n<\/runtime-exports>/,
     );
     expect(match).toBeTruthy();
-    // Same JSON shape a function handler reads from ctx.exports.
-    expect(JSON.parse(match![1]!)).toEqual(exportSlots);
+    // The shape a function handler reads from ctx.exports, without the
+    // result id: only tools and the kernel use it.
+    expect(JSON.parse(match![1]!)).toEqual({
+      cfg: {
+        ...exportSlots.cfg,
+        source: { pluginId: "p", runtimeId: "p/gen" },
+      },
+    });
   });
 });
 

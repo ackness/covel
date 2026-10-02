@@ -139,6 +139,41 @@ describe("createPluginLogger", () => {
     expect(rows[0].value).not.toHaveProperty("meta");
   });
 
+  it("records only levels at or above the configured threshold", async () => {
+    const previous = process.env.COVEL_PLUGIN_LOG_LEVEL;
+    process.env.COVEL_PLUGIN_LOG_LEVEL = "warn";
+    try {
+      const logger = createPluginLogger(store, ctx);
+      await logger.debug("d");
+      await logger.info("i");
+      await logger.warn("w");
+      await logger.error("e");
+    } finally {
+      if (previous === undefined) delete process.env.COVEL_PLUGIN_LOG_LEVEL;
+      else process.env.COVEL_PLUGIN_LOG_LEVEL = previous;
+    }
+    const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_logs");
+    expect(
+      rows.map((r) => (r.value as { level: string }).level).sort(),
+    ).toEqual(["error", "warn"]);
+  });
+
+  it("skips debug lines in production by default", async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const logger = createPluginLogger(store, ctx);
+      await logger.debug("d");
+      await logger.info("i");
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
+    const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_logs");
+    expect(rows.map((r) => (r.value as { level: string }).level)).toEqual([
+      "info",
+    ]);
+  });
+
   it("bounds the ring without reading the namespace on every write", async () => {
     let reads = 0;
     const countingStore = {

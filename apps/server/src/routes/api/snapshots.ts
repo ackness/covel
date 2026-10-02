@@ -25,7 +25,10 @@ import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { collectMediaRefIds } from "@covel/shared";
+import {
+  collectMediaRefIds,
+  isControlPlanePluginDataNamespace,
+} from "@covel/shared";
 import { rebindSnapshotPayloadSession } from "@covel/store/session";
 import type {
   DataStore,
@@ -394,6 +397,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               await tx.upsertCharacter(record);
             }
 
+            // Snapshots taken before control-plane rows were excluded may
+            // still carry them; a fork never inherits the parent's jobs.
+            const gamePluginData = snapshot.payload.pluginData.filter(
+              (pd) => !isControlPlanePluginDataNamespace(pd.namespace),
+            );
+
             const childStateSchemas = await copyForkStateSchemas(
               tx,
               snapshot,
@@ -411,12 +420,13 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               await tx.upsertStateEntry(record);
             }
 
-            const pluginDataBatch: PluginDataRecord[] =
-              snapshot.payload.pluginData.map((pd) => ({
+            const pluginDataBatch: PluginDataRecord[] = gamePluginData.map(
+              (pd) => ({
                 ...pd,
                 id: randomUUID(),
                 sessionId: childSessionId,
-              }));
+              }),
+            );
             if (pluginDataBatch.length > 0) {
               await tx.setPluginDataBatch(pluginDataBatch);
             }
@@ -596,7 +606,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               parentId: snapshot.id,
               payload: {
                 ...rebindSnapshotPayloadSession(
-                  snapshot.payload,
+                  { ...snapshot.payload, pluginData: gamePluginData },
                   childSessionId,
                 ),
                 suspensions: childSuspensions,

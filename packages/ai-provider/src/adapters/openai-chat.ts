@@ -26,6 +26,11 @@ import {
   readOpenAiChatStreamToolCallDeltas,
 } from "./http.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
+import {
+  captureContinuation,
+  continuationItems,
+} from "./provider-continuation.js";
+import type { OpenAiChatReasoningField } from "./http/openai-readers.js";
 import { extractReasoningRequestFields } from "../reasoning-effort.js";
 import {
   createMetadataSanitizer,
@@ -44,6 +49,7 @@ import {
 
 import type {
   ModelRequestContext,
+  ProviderConfig,
   TextMessage,
   TextMessageContent,
   ToolDefinition,
@@ -164,19 +170,62 @@ function attachOpenAiTools(
   }
 }
 
+const PROTOCOL = "openai-chat-v1";
+
+/**
+ * Remember a non-default reasoning field so a follow-up sent to the same
+ * target echoes the trace under the field it arrived in.
+ */
+function reasoningContinuation(
+  field: OpenAiChatReasoningField | undefined,
+  model: string,
+  config: ProviderConfig,
+) {
+  return field === "reasoning"
+    ? captureContinuation(PROTOCOL, model, config, [
+        { type: "reasoning", field },
+      ])
+    : undefined;
+}
+
+/**
+ * The reasoning field is a property of the endpoint, not of one message, so
+ * no provider list is needed: a request echoes reasoning under the field this
+ * endpoint was seen to emit, else under the common `reasoning_content`.
+ */
+function endpointReasoningField(
+  messages: readonly TextMessage[],
+  model: string,
+  config: ProviderConfig,
+): OpenAiChatReasoningField {
+  return messages.some((msg) =>
+    continuationItems(msg, PROTOCOL, model, config)?.some(
+      (item) => item.type === "reasoning" && item.field === "reasoning",
+    ),
+  )
+    ? "reasoning"
+    : "reasoning_content";
+}
+
 /**
  * Serialize TextMessage[] to OpenAI wire format.
  * Handles assistant messages with tool_calls and tool role messages.
  */
-function serializeMessages(messages: TextMessage[]): Record<string, unknown>[] {
+function serializeMessages(
+  messages: TextMessage[],
+  model: string,
+  config: ProviderConfig,
+): Record<string, unknown>[] {
+  const field = endpointReasoningField(messages, model, config);
   return messages.map((msg) => {
+    const reasoning = msg.reasoningContent
+      ? { [field]: msg.reasoningContent }
+      : {};
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
       return {
         role: "assistant",
         content: serializeOpenAiChatContent(msg.content) ?? "",
-        ...(msg.reasoningContent
-          ? { reasoning_content: msg.reasoningContent }
-          : {}),
+        ...reasoning,
         tool_calls: msg.toolCalls.map((tc) => ({
           id: tc.id,
           type: "function",
@@ -195,7 +244,7 @@ function serializeMessages(messages: TextMessage[]): Record<string, unknown>[] {
       return {
         role: "assistant",
         content: serializeOpenAiChatContent(msg.content),
-        reasoning_content: msg.reasoningContent,
+        ...reasoning,
       };
     }
     return { role: msg.role, content: serializeOpenAiChatContent(msg.content) };
@@ -216,7 +265,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
       const body: Record<string, unknown> = {
         model: params.model,
-        messages: serializeMessages(messages),
+        messages: serializeMessages(messages, params.model, config),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
           params.providerRequestMetadata,
@@ -254,14 +303,20 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
 
       const toolCalls = readOpenAiChatToolCalls(payload);
-      const reasoningContent = readOpenAiChatReasoningContent(payload);
+      const reasoning = readOpenAiChatReasoningContent(payload);
+      const providerContinuation = reasoningContinuation(
+        reasoning?.field,
+        params.model,
+        config,
+      );
       return {
         ...(diagnostics ? { diagnostics } : {}),
         text: readOpenAiChatText(payload),
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
         ...(toolCalls ? { toolCalls } : {}),
-        ...(reasoningContent ? { reasoningContent } : {}),
+        ...(reasoning ? { reasoningContent: reasoning.text } : {}),
+        ...(providerContinuation ? { providerContinuation } : {}),
       };
     },
 
@@ -275,7 +330,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
       const response = await postJson(config, "/chat/completions", {
         model: params.model,
-        messages: serializeMessages(messages),
+        messages: serializeMessages(messages, params.model, config),
         response_format: { type: "json_object" },
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
@@ -311,7 +366,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       return {
         ...(diagnostics ? { diagnostics } : {}),
         object: validation.data,
-        reasoningContent: readOpenAiChatReasoningContent(payload) ?? undefined,
+        reasoningContent: readOpenAiChatReasoningContent(payload)?.text,
         finishReason: readOpenAiChatFinishReason(payload),
         usage: readOpenAiChatUsage(payload),
       };
@@ -325,7 +380,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
       const body: Record<string, unknown> = {
         model: params.model,
-        messages: serializeMessages(messages),
+        messages: serializeMessages(messages, params.model, config),
         stream: true,
         // OpenAI Chat only includes a final usage chunk when this option is
         // explicit. Compatible providers that support usage follow the same
@@ -361,6 +416,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       let finishReason = "stop";
       let completed = false;
       let reasoningAcc = "";
+      let reasoningWireField: OpenAiChatReasoningField | undefined;
       const diagnostics = new ResponseDiagnostics("chat");
       // Accumulate tool_call deltas by index across chunks.
       const toolCallAcc = new Map<
@@ -373,10 +429,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           diagnostics.push(payload);
           if (payload.error) diagnostics.assertNotRefused("openai-chat");
           assertGenerationPayload(payload, "openai-chat");
-          const reasoningDelta = readOpenAiChatStreamReasoningDelta(payload);
-          if (reasoningDelta) {
-            reasoningAcc += reasoningDelta;
-            yield { type: "reasoning-delta", reasoningDelta };
+          const reasoning = readOpenAiChatStreamReasoningDelta(payload);
+          if (reasoning) {
+            reasoningAcc += reasoning.text;
+            reasoningWireField ??= reasoning.field;
+            yield { type: "reasoning-delta", reasoningDelta: reasoning.text };
           }
 
           const delta = readOpenAiChatStreamDelta(payload);
@@ -430,6 +487,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         }
       }
 
+      const providerContinuation = reasoningContinuation(
+        reasoningWireField,
+        params.model,
+        config,
+      );
       yield {
         type: "done",
         ...(diagnostics.diagnostics()
@@ -438,6 +500,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         finishReason,
         usage,
         ...(reasoningAcc ? { reasoningContent: reasoningAcc } : {}),
+        ...(providerContinuation ? { providerContinuation } : {}),
       };
     },
 

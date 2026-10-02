@@ -14,7 +14,10 @@
  */
 
 import { buildCreateTablesSql } from "../common/ddl-codegen.js";
-import { DROP_RETIRED_TABLES_SQL } from "../table-registry.js";
+import {
+  DELETE_RETIRED_PLUGIN_DATA_SQL,
+  DROP_RETIRED_TABLES_SQL,
+} from "../table-registry.js";
 import * as schema from "./schema.js";
 
 /**
@@ -49,4 +52,5 @@ export function createTables(sqlite: { exec(sql: string): void }): void {
   sqlite.exec(CREATE_TABLES_SQL);
   sqlite.exec(VECTOR_MODELS_TRIGGER_SQL);
   sqlite.exec(DROP_RETIRED_TABLES_SQL);
+  sqlite.exec(DELETE_RETIRED_PLUGIN_DATA_SQL);
 }

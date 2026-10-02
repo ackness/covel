@@ -24,11 +24,13 @@ interface PluginDataChange {
  * same public projection the REST reads return.
  */
 function publicChanges(
+  pluginId: string,
   changes: readonly PluginDataChange[],
 ): PluginDataChange[] {
   const visible: PluginDataChange[] = [];
   for (const change of changes) {
-    if (!isPublicPluginDataRecord(change)) continue;
+    if (!isPublicPluginDataRecord({ pluginId, namespace: change.namespace }))
+      continue;
     if (change.operation === "delete") {
       visible.push(change);
       continue;
@@ -48,7 +50,7 @@ function emitPluginDataChangedEvent(
   sessionId: string,
   rawChanges: readonly PluginDataChange[],
 ): void {
-  const changes = publicChanges(rawChanges);
+  const changes = publicChanges(pluginId, rawChanges);
   if (changes.length === 0) return;
   eventBus.emit({
     id: crypto.randomUUID(),
@@ -208,7 +210,7 @@ export function wrapStoreWithPluginDataEvents(
 
       // The commit pipeline prefers `withTransaction` (SQLite/PG). Its handlers
       // write through the tx-scoped store view, which is NOT this proxy — so
-      // proposal-backed plugin-data writes (e.g. scene-prompts' plugin.data.batch)
+      // proposal-backed plugin-data writes (e.g. guide's plugin.data.batch)
       // would commit without ever emitting `plugin-data.changed`, leaving the
       // live UI un-refreshed until a page reload re-reads the DB. Wrap the tx
       // handed to the callback with the same proxy so those writes emit too.

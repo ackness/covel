@@ -95,37 +95,39 @@ const slotDefinitionSchema = z.object({
   /** Pricing info */
   pricing: pricingSchema,
 
-  // ── Thinking-mode controls (optional) ────────────────────────────
+  // ── Thinking control (optional) ──────────────────────────────────
 
   /**
-   * Thinking-mode toggle for reasoning models that expose an explicit
-   * on/off control (DeepSeek v4, certain Anthropic profiles, etc.).
-   * Forwarded to the provider request body under the `thinking` key.
-   *
-   * ```toml
-   * [covel.story.thinking]
-   * type = "enabled"
-   * ```
-   */
-  thinking: z
-    .object({ type: z.enum(["enabled", "disabled"]) })
-    .passthrough()
-    .optional(),
-  /**
-   * Reasoning effort level. Forwarded as `reasoning_effort`.
+   * Portable thinking control for every call on this slot, in the spirit of
+   * the AI SDK's top-level `reasoning` option. The adapter translates it per
+   * provider (`enable_thinking` for Qwen, `thinking.type` for DeepSeek and
+   * Anthropic, `reasoning_effort` for OpenAI, `thinkingConfig` for Gemini).
+   * `disabled` turns thinking off; `provider-default` leaves it to the
+   * provider. It is the model default: an explicit role override beats it,
+   * and it beats a runtime's own default. A value the model does not support
+   * reports a warning and keeps the provider default. Native fields belong
+   * in `providerOptions` or `providerRequestMetadata`.
    *
    * ```toml
    * [covel.story]
-   * reasoning_effort = "high"
+   * reasoningEffort = "disabled"
    * ```
    */
-  reasoning_effort: z.enum(REASONING_EFFORT_VALUES).optional(),
+  reasoningEffort: z.enum(REASONING_EFFORT_VALUES).optional(),
+  reasoning_effort: z
+    .never({ error: "`reasoning_effort` is now `reasoningEffort`" })
+    .optional(),
+  thinking: z
+    .never({
+      error:
+        "`thinking` is now the portable `reasoningEffort`; put native fields in `providerOptions`",
+    })
+    .optional(),
   /**
    * Freeform provider request metadata. Merged into every LLM call's
    * body for this slot (with per-call metadata taking precedence). Use
    * for provider-specific flags that don't have a dedicated schema
-   * field yet (DashScope `enable_thinking`, OpenRouter routing hints,
-   * etc.).
+   * field yet (OpenRouter routing hints, media wire keys, etc.).
    *
    * ```toml
    * [covel.story.providerRequestMetadata]

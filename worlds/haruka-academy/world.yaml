@@ -48,11 +48,9 @@ pluginPolicy:
         - world-init
         - char-creator
         - chat-mode-narrator
-        - scene-cast
         - scene-stage
-        - scene-prompts
+        - guide
         - character-blueprint
-        - character-presence
         - living-world-rules
         - branch-reply
         - affinity
@@ -72,11 +70,9 @@ pluginPolicy:
     - char-creator
   recommended:
     - chat-mode-narrator
-    - scene-cast
     - scene-stage
-    - scene-prompts
+    - guide
     - character-blueprint
-    - character-presence
     - living-world-rules
     - branch-reply
     - affinity
@@ -86,11 +82,8 @@ pluginSettings:
   chat-mode-narrator:
     dialogueRatio: 80
     proseLength: short
-  scene-cast:
-    activeSpeakerCount: 2
   scene-stage:
-    autoGenerateScenes: true
-    maxGeneratedScenes: 6
+    activeSpeakerCount: 2
 characterSchema:
   types:
     - npc

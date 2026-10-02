@@ -6,6 +6,7 @@ import {
   dimensionSnapshotFromRecords,
   dimensionValueSchema,
   localizeDimensionValue,
+  projectDimensionSnapshot,
   validateDimensionData,
   validateDimensionValue,
   worldDimensionsSchema,
@@ -249,5 +250,39 @@ describe("public dimension snapshots and explicit localization", () => {
       data: { zh: 1, en: 2 },
     });
     expect(value.text).toEqual({ "zh-CN": "城墙", "en-US": "Wall" });
+  });
+});
+
+describe("projectDimensionSnapshot", () => {
+  const entry = (value: unknown) => ({
+    name: "D",
+    schema: { type: "string" } as DimensionValueSchema,
+    value,
+    version: 1,
+  });
+
+  it("shows every value whole while the snapshot fits", () => {
+    const long = "x".repeat(900);
+    const text = projectDimensionSnapshot({
+      lore: entry(long),
+      mood: entry("calm"),
+    });
+    expect(text).toContain(JSON.stringify(long));
+    expect(text).not.toContain("…");
+  });
+
+  it("cuts the longest values first until the snapshot fits", () => {
+    const text = projectDimensionSnapshot(
+      {
+        big: entry("b".repeat(3000)),
+        medium: entry("m".repeat(1500)),
+        small: entry("s".repeat(300)),
+      },
+      undefined,
+      2400,
+    );
+    expect(text).toContain(`big (D, v1): "${"b".repeat(239)}…`);
+    expect(text).toContain(JSON.stringify("m".repeat(1500)));
+    expect(text).toContain(JSON.stringify("s".repeat(300)));
   });
 });

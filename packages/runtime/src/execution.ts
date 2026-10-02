@@ -8,6 +8,7 @@ import type {
 import type { DataStore, SuspensionRecord } from "@covel/store";
 import {
   collectExecutionJournal,
+  collectExecutionTriggers,
   attachRuntimeJournal,
 } from "./execution-journal.js";
 import { collectExecutionSuspensions } from "./suspension-artifact.js";
@@ -38,6 +39,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "runtimes"
   | "results"
   | "journalMessages"
+  | "runtimeTriggers"
   | "suspensions"
   | "turnIds"
   | "activePluginIds"
@@ -166,6 +168,7 @@ export async function executeTurn(
         results,
         ...(abortReason !== undefined ? { abortReason } : {}),
         journalMessages: collectExecutionJournal(turn),
+        runtimeTriggers: collectExecutionTriggers(turn),
         suspensions: collectExecutionSuspensions(turn).map((record) => {
           const counted =
             turn.executionContext.countPolicy === "complete-player-turn" &&
@@ -254,7 +257,7 @@ export async function resumeSuspendedRuntime(
   if (
     result.status === "success" &&
     result.output &&
-    collectExecutionJournal(carrier).length === 0
+    collectExecutionTriggers(carrier).length === 0
   ) {
     attachRuntimeJournal(
       result,
@@ -284,6 +287,7 @@ export async function resumeSuspendedRuntime(
         runtimes: [manifest],
         results: [result],
         journalMessages: collectExecutionJournal(carrier),
+        runtimeTriggers: collectExecutionTriggers(carrier),
         suspensions: collectExecutionSuspensions(carrier),
         turnIds: [],
         activePluginIds: hookScope.activePluginIds,

@@ -71,8 +71,10 @@ export interface ToolCallContext {
   readonly runtimeId: string;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly pendingProposals?: readonly Proposal[];
-  /** Authoritative logical turn number, forwarded to ToolExecutionContext. */
+  /** Player messages recorded in the session, forwarded to the tool context. */
   readonly turnNumber?: number;
+  /** The scheduler's logical turn, forwarded to the tool context. */
+  readonly logicalTurn?: number;
   /** Topics already emitted via `emit-event` earlier in this tool loop — see @covel/tools ToolExecutionContext. */
   readonly emittedEventTopics?: readonly string[];
   /** Optional trace emitter — when present, tool.calling / tool.completed / tool.failed are traced. */

@@ -77,6 +77,7 @@ export interface RuntimeInvocation {
   readonly sessionMeta:
     | {
         turnNumber: number;
+        logicalTurn?: number;
         characters: readonly {
           name: string;
           type: string;
@@ -643,6 +644,9 @@ export async function executeOneRuntime(
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
+        ...(sessionMeta?.logicalTurn !== undefined
+          ? { logicalTurn: sessionMeta.logicalTurn }
+          : {}),
         upstreamProposals,
         manifest,
         input,

@@ -31,4 +31,30 @@ describe("retired tables", () => {
     expect(tables.map((table) => table.name)).not.toContain("runtime_results");
     expect(tables.map((table) => table.name)).toContain("turn_results");
   });
+
+  it("deletes rows of retired plugin-data namespaces at boot", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "covel-retired-"));
+    dirs.push(dir);
+    const dbPath = path.join(dir, "covel.db");
+    const first = createSqliteStore(dbPath);
+    for (const namespace of ["_jobs", "notes"]) {
+      await first.setPluginData({
+        id: `s:p:${namespace}:k`,
+        sessionId: "s",
+        pluginId: "p",
+        namespace,
+        key: "k",
+        value: { status: "pending" },
+        createdAt: "2026-10-01T00:00:00.000Z",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+      });
+    }
+    await first.close();
+
+    const store = createSqliteStore(dbPath);
+    expect(
+      (await store.listPluginDataSessionScope("s")).map((row) => row.namespace),
+    ).toEqual(["notes"]);
+    await store.close();
+  });
 });

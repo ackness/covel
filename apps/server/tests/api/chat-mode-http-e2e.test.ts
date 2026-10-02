@@ -95,14 +95,14 @@ class ChatModeMockLLM implements LLMAdapter {
       };
     }
 
-    if (toolNames.includes("generate-scene-prompts")) {
+    if (toolNames.includes("generate-guide")) {
       this.scenePromptCalls += 1;
       return {
         content: null,
         toolCalls: [
           {
             id: `tc-prompts-${this.scenePromptCalls}`,
-            name: "generate-scene-prompts",
+            name: "generate-guide",
             arguments: JSON.stringify({
               scene: `二年B组 第${this.scenePromptCalls}轮`,
               recap:
@@ -281,8 +281,8 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(created.activePlugins).toEqual(
       expect.arrayContaining([
         "chat-mode-narrator",
-        "scene-cast",
-        "scene-prompts",
+        "scene-stage",
+        "guide",
         "character-blueprint",
         "world-time",
       ]),
@@ -291,10 +291,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     const characters = await store.listCharacters(sessionId);
     expect(characters.map((character) => character.id)).toEqual(
-      expect.arrayContaining([
-        `${sessionId}-npc-kamishiro-mio`,
-        `${sessionId}-npc-asakura-rin`,
-      ]),
+      expect.arrayContaining(["npc-kamishiro-mio", "npc-asakura-rin"]),
     );
     const mioBlueprint = await store.getPluginData(
       sessionId,
@@ -310,14 +307,14 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       sessionId,
       "character-blueprint",
       "characters",
-      `${sessionId}-npc-kamishiro-mio`,
+      "npc-kamishiro-mio",
     );
     expect(mioBlueprintMirror).toBeNull();
     const mioCharacterPanelMirror = await store.getPluginData(
       sessionId,
       "char-creator",
       "characters",
-      `${sessionId}-npc-kamishiro-mio`,
+      "npc-kamishiro-mio",
     );
     expect(mioCharacterPanelMirror).toBeNull();
 
@@ -407,9 +404,9 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         .map((row) => row.runtimeId);
       expect(successfulRuntimeIds).toEqual(
         expect.arrayContaining([
-          "scene-cast",
+          "scene-stage/cast",
           "chat-mode-narrator",
-          "scene-prompts",
+          "guide",
           "world-time/advance",
         ]),
       );
@@ -462,19 +459,19 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     const promptTurn = await store.getPluginData(
       sessionId,
-      "scene-prompts",
+      "guide",
       "message",
       "__turnId",
     );
     const promptScene = await store.getPluginData(
       sessionId,
-      "scene-prompts",
+      "guide",
       "message",
       "scene",
     );
     const promptText = await store.getPluginData(
       sessionId,
-      "scene-prompts",
+      "guide",
       "message",
       "prompt1Text",
     );

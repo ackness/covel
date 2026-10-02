@@ -89,8 +89,11 @@ export {
 } from "./utils/concealed-runtime.js";
 export {
   HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
+  KERNEL_PLUGIN_DATA_OWNER_PREFIX,
   hiddenPluginDataNamespace,
+  isControlPlanePluginDataNamespace,
   isHiddenPluginDataNamespace,
+  isKernelPluginDataOwner,
   pluginCodeNamespaceWriteError,
   reservedPluginDataNamespaceError,
 } from "./utils/plugin-data-namespace.js";

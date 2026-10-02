@@ -8,12 +8,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@covel/plugin-handlers-utils": "workspace:*"
+    "@covel/plugin-handlers-utils": "workspace:*",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@covel/plugin-test-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
-    "vitest": "^5.0.1",
-    "@covel/tools": "workspace:*"
+    "@covel/plugin-test-utils": "workspace:*",
+    "@covel/tools": "workspace:*",
+    "vitest": "^5.0.1"
   }
 }

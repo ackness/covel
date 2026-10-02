@@ -136,23 +136,26 @@ describe("graph identity across SQLite and allocator restarts", () => {
         ),
       ).toEqual(oldEdges);
 
-      const colliding = createGraphTool({
-        ...freshToolkit,
-        shortIdBatch: () => ["npc-1"],
-      });
-      await expect(
-        colliding.execute(
-          { nodes: [node("新角色")] },
-          { ...context, store: createFunctionStoreView(store, context) },
-        ),
-      ).rejects.toThrow("ID collision");
+      // A new name whose word id is already a key gets the next free id
+      // instead of replacing the unrelated node stored there.
+      const third = await after.execute(
+        { nodes: [node("1")] },
+        { ...context, store: createFunctionStoreView(store, context) },
+      );
+      await createCommitPipeline(store).commitAll(
+        freshToolkit.getPendingProposals(third),
+      );
+      const finalNodes = await store.listPluginData(
+        context.sessionId,
+        context.pluginId,
+        "nodes",
+      );
+      expect(finalNodes.find((row) => row.key === "npc-1")?.value).toEqual(
+        nodes.find((row) => row.key === "npc-1")?.value,
+      );
       expect(
-        await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "nodes",
-        ),
-      ).toEqual(nodes);
+        finalNodes.find((row) => row.key === "npc-1-2")?.value,
+      ).toMatchObject({ name: "1" });
     } finally {
       await store.close();
       await rm(root, { recursive: true, force: true });

@@ -24,6 +24,21 @@ const actors = (speakers) =>
   }));
 
 export default function (covel) {
+  covel.provideExtension("ui.slot@1", "cast", {
+    async handler(_input, ctx) {
+      const current = await own(ctx, "active-cast", "current");
+      return {
+        actors: (current?.speakers ?? []).map((speaker, index) => ({
+          characterId: speaker.id,
+          displayName: speaker.name,
+          active: index === 0,
+          ...(speaker.type ? { type: speaker.type } : {}),
+          ...(speaker.description ? { description: speaker.description } : {}),
+        })),
+        retainWhenEmpty: true,
+      };
+    },
+  });
   covel.provideExtension("ui.slot@1", "backdrop", {
     async handler({ events }, ctx) {
       let current = await own(ctx, "stage", "current");
@@ -46,7 +61,6 @@ export default function (covel) {
         ...(current?.variant ? { variant: current.variant } : {}),
         ...(current?.sourceLabel ? { label: current.sourceLabel } : {}),
         ...(ref(current?.resolved) ? { ref: current.resolved } : {}),
-        pending: current?.source === "pending",
         preload,
       };
     },

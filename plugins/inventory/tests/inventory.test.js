@@ -15,14 +15,15 @@ import {
  *
  * Covers:
  *
- * 1. Local tool `update-inventory` (L2): add stacking, remove-to-zero
- *    tombstones, tolerant removes of missing items, equip/unequip toggling,
- *    set field updates, the 8-change batch cap, same-turn pending-proposal
- *    overlay, and the per-turn message summary.
- * 2. Plugin manifest: agent runtime shape, narrative-engine gate, injects,
- *    dataSchemas, and UI declarations.
+ * 1. Ledger `update-inventory`: add stacking, remove-to-zero tombstones,
+ *    tolerant removes of missing items, equip/unequip toggling, set field
+ *    updates, the 8-change batch cap, same-turn pending-proposal overlay,
+ *    and the per-turn message summary.
+ * 2. WorldIR mapping, the ledger handler, and the vocabulary handler.
+ * 3. Plugin manifest: function runtime shapes, WorldIR gate, dataSchemas,
+ *    and UI declarations.
  *
- * Integration-level coverage (real LLM calling the tool chain) lives in
+ * Integration-level coverage (real extraction feeding the ledger) lives in
  * `scripts/e2e-plugin-verify.ts`, not here.
  */
 
@@ -36,7 +37,10 @@ import {
 } from "@covel/plugin-loader";
 
 import { tool, z } from "@covel/tools";
-import createUpdateInventory from "../tools/update-inventory.js";
+import createUpdateInventory from "../lib/update-inventory.js";
+import { inventoryChangesFromWorldIR } from "../lib/world-ir.js";
+import ledger from "../runtimes/ledger/handler.js";
+import vocabulary from "../runtimes/vocabulary/handler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
@@ -47,7 +51,7 @@ describe("update-inventory", () => {
     sessionId: "sess-1",
     turnId: "turn-1",
     pluginId: "inventory",
-    runtimeId: "inventory",
+    runtimeId: "inventory/ledger",
   };
   let mockStore;
   let updateInventoryTool;
@@ -84,7 +88,7 @@ describe("update-inventory", () => {
     );
 
     const itemId = getToolContent(result).results[0].itemId;
-    expect(itemId).toMatch(/^item-iron-sword-[a-f0-9]{32}$/);
+    expect(itemId).toMatch(/^item-iron-sword-[a-f0-9]{8}$/);
 
     // Assert — result + persisted item
     expect(getToolContent(result).applied).toBe(1);
@@ -477,6 +481,7 @@ describe("update-inventory", () => {
 
 describe("inventory plugin manifest", () => {
   let manifest;
+  let vocabularyManifest;
   let loaded;
   let declaration;
   let packageManifest;
@@ -489,7 +494,12 @@ describe("inventory plugin manifest", () => {
     const manifests = definition.manifests;
     packageManifest = definition.packageManifest.manifest;
     loadedUi = await loadPluginUi(discovery, undefined, definition);
-    manifest = manifests[0].manifest;
+    manifest = manifests.find(
+      (entry) => entry.manifest.name === "inventory/ledger",
+    ).manifest;
+    vocabularyManifest = manifests.find(
+      (entry) => entry.manifest.name === "inventory/vocabulary",
+    ).manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
       "world-ir@1": JSON.parse(
@@ -504,9 +514,8 @@ describe("inventory plugin manifest", () => {
     });
   });
 
-  it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
+  it("records changes in a post-turn function runtime gated on typed WorldIR", () => {
     expect(manifest.pluginType).toBe("plugin");
-    expect(manifest.name).toBe("inventory");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.trigger?.type).toBe("auto");
     expect(manifest.needs).toBeUndefined();
@@ -516,30 +525,19 @@ describe("inventory plugin manifest", () => {
       required: true,
     });
     expect(declaration.requires).toContain("world-ir-provider@1");
-    // Agent runtime — no `runtimeType` field means default 'agent'
-    expect(manifest.runtimeType).toBe("agent");
-    expect(manifest.handler).toBeUndefined();
+    expect(manifest.runtimeType).toBe("function");
+    expect(manifest.handler).toBe("./handler.js");
+    expect(manifest.tools).toBeUndefined();
+    expect(loaded.handler).toBeTypeOf("function");
   });
 
-  it("injects existing inventory data without duplicating raw narrative", () => {
-    const injects = manifest.input?.inject ?? [];
-    expect(injects).toHaveLength(1);
-    expect(injects).toContainEqual(
-      expect.objectContaining({
-        kind: "plugin-data",
-        namespace: "items",
-        as: "<existing-inventory>",
-        format: "summary",
-        maxEntries: 80,
-      }),
-    );
-  });
-
-  it("declares the update-inventory plugin tool", () => {
-    expect(manifest.tools?.plugin).toEqual(["update-inventory"]);
-    expect(manifest.completeAfterTools).toEqual(["update-inventory"]);
-    expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
-    expect(manifest.maxRetries).toBe(0);
+  it("publishes the bag vocabulary before the narrative", () => {
+    expect(vocabularyManifest).toMatchObject({
+      runtimeType: "function",
+      stage: "pre-turn",
+      outputContract: "world-ir.vocabulary@1",
+    });
+    expect(declaration.provides).toContain("world-ir.vocabulary@1");
   });
 
   it("declares the player-facing bag command", () => {
@@ -574,9 +572,142 @@ describe("inventory plugin manifest", () => {
     expect(loadedUi.uiSpecs?.message).toHaveLength(1);
     expect(loadedUi.uiSpecs?.message?.[0].id).toBe("inventory-message");
   });
+});
 
-  it("loads PLUGIN.md body as the LLM prompt template", () => {
-    expect(loaded.promptTemplate).toContain("<existing-inventory>");
-    expect(loaded.promptTemplate).toContain("update-inventory");
+// ── WorldIR mapping, ledger and vocabulary ───────────────────────
+
+describe("inventory from WorldIR", () => {
+  const player = { id: "sess-1-player", name: "Ren", type: "player" };
+  const worldIR = (events) => ({
+    schemaVersion: 1,
+    entities: [
+      { id: "sess-1-player", type: "character", name: "Ren" },
+      { id: "mira", type: "character", name: "Mira" },
+      {
+        id: "iron-sword",
+        type: "item",
+        name: "Iron Sword",
+        description: "A standard-issue blade.",
+        attributes: { tags: ["weapon"] },
+      },
+      { id: "torch", type: "item", name: "Torch" },
+    ],
+    relations: [],
+    events,
+    statements: [],
+  });
+  const change = (attributes) => ({
+    id: `${attributes.operation}-${attributes.item}-${attributes.holder}`,
+    type: "inventory_change",
+    attributes,
+  });
+
+  it("maps the player's item events to ledger changes", () => {
+    expect(
+      inventoryChangesFromWorldIR(
+        worldIR([
+          change({
+            item: "iron-sword",
+            holder: "sess-1-player",
+            operation: "gain",
+          }),
+          change({ item: "iron-sword", holder: "Ren", operation: "equip" }),
+          change({
+            item: "torch",
+            holder: "sess-1-player",
+            operation: "lose",
+            quantity: 2,
+          }),
+        ]),
+        player,
+      ),
+    ).toEqual([
+      {
+        op: "add",
+        name: "Iron Sword",
+        quantity: 1,
+        description: "A standard-issue blade.",
+        tags: ["weapon"],
+      },
+      { op: "remove", name: "Torch", quantity: 2 },
+    ]);
+  });
+
+  it("ignores other holders, unknown items and malformed operations", () => {
+    expect(
+      inventoryChangesFromWorldIR(
+        worldIR([
+          change({ item: "torch", holder: "mira", operation: "gain" }),
+          change({
+            item: "missing",
+            holder: "sess-1-player",
+            operation: "gain",
+          }),
+          change({
+            item: "torch",
+            holder: "sess-1-player",
+            operation: "toString",
+          }),
+          { id: "moved", type: "movement", attributes: {} },
+        ]),
+        player,
+      ),
+    ).toEqual([]);
+    expect(inventoryChangesFromWorldIR(worldIR([]), undefined)).toEqual([]);
+  });
+
+  it("applies the changes through the ledger without a model call", async () => {
+    const result = await ledger({
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      pluginId: "inventory",
+      runtimeId: "inventory/ledger",
+      store: {
+        listPluginData: async () => [],
+        getPluginData: async () => null,
+      },
+      world: { characters: [player] },
+      inputs: {
+        worldIR: {
+          value: worldIR([
+            change({
+              item: "torch",
+              holder: "sess-1-player",
+              operation: "gain",
+            }),
+          ]),
+        },
+      },
+    });
+
+    expect(getToolContent(result)).toMatchObject({
+      outcome: "success",
+      value: { applied: 1 },
+    });
+    const [proposal] = getPendingProposals(result);
+    expect(proposal.payload.items).toContainEqual(
+      expect.objectContaining({
+        namespace: "items",
+        value: expect.objectContaining({ name: "Torch", quantity: 1 }),
+      }),
+    );
+  });
+
+  it("publishes carried item names and leaves lost items out", async () => {
+    const result = await vocabulary({
+      store: {
+        listPluginData: async () => [
+          { key: "item-1", value: { name: "Torch", quantity: 1 } },
+          {
+            key: "item-2",
+            value: { name: "Rope", quantity: 0, removed: true },
+          },
+        ],
+      },
+    });
+    expect(result).toEqual({
+      outcome: "success",
+      value: { entries: [{ type: "item", name: "Torch" }] },
+    });
   });
 });

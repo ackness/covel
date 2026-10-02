@@ -44,11 +44,9 @@
     - world-init
     - char-creator
     - chat-mode-narrator
-    - scene-cast
     - scene-stage
-    - scene-prompts
+    - guide
     - character-blueprint
-    - character-presence
     - living-world-rules
     - branch-reply
   recommended:

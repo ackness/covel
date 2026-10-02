@@ -456,13 +456,31 @@ export async function streamLLMWithRetry(
         const callTimeoutHandle = setTimeout(() => {
           callAborter.abort(new DOMException("call timeout", "TimeoutError"));
         }, budget);
-        const ttfbHandle = setTimeout(() => {
-          if (!firstTokenSeen) {
-            callAborter.abort(
-              new DOMException("first-token timeout", "TimeoutError"),
-            );
+        const armFirstTokenGuard = () =>
+          setTimeout(() => {
+            if (!firstTokenSeen) {
+              callAborter.abort(
+                new DOMException("first-token timeout", "TimeoutError"),
+              );
+            }
+          }, policy.firstTokenTimeoutMs);
+        let ttfbHandle = armFirstTokenGuard();
+        // A rate-limited or failed transport attempt is followed by a backoff
+        // the provider asked for (`retry-after`); the model has not been asked
+        // yet, so the guard pauses and restarts when a later attempt is
+        // answered. The call timeout still bounds the whole wait.
+        let firstTokenGuardPaused = false;
+        const onProviderRequest = (request: LLMProviderRequest): void => {
+          trace.onProviderRequest(request);
+          if (firstTokenSeen) return;
+          if (request.failed || (request.statusCode ?? 200) >= 400) {
+            clearTimeout(ttfbHandle);
+            firstTokenGuardPaused = true;
+          } else if (firstTokenGuardPaused) {
+            firstTokenGuardPaused = false;
+            ttfbHandle = armFirstTokenGuard();
           }
-        }, policy.firstTokenTimeoutMs);
+        };
 
         let firstTokenSeen = false;
         const streamedToolCalls: LLMToolCall[] = [];
@@ -501,9 +519,7 @@ export async function streamLLMWithRetry(
               signal: callAborter.signal,
               requestBudget: requestScope.budget,
               onTargetAttempt: trace.onTargetAttempt,
-              ...(params.emitter
-                ? { onProviderRequest: trace.onProviderRequest }
-                : {}),
+              onProviderRequest,
             }),
             callAborter.signal,
           )) {

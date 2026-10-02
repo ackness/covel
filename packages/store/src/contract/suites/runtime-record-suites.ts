@@ -643,7 +643,7 @@ export function registerRuntimeRecordStoreSuites(
       expect(list.map((m) => m.id)).toEqual([m2.id]);
     });
 
-    it("getTurnMessageStats aggregates player and per-runtime counts over the full log", async () => {
+    it("getTurnMessageStats counts player messages over the full log", async () => {
       await store.appendTurnMessage(
         makeTurnMessage({
           sessionId: "sess-stats",
@@ -697,11 +697,7 @@ export function registerRuntimeRecordStoreSuites(
       );
 
       const stats = await store.getTurnMessageStats("sess-stats");
-      expect(stats.playerMessageCount).toBe(2);
-      expect(stats.runtimeMessageCounts).toEqual({
-        "demo/narrator": 2,
-        "demo/codex": 1,
-      });
+      expect(stats).toEqual({ playerMessageCount: 2 });
     });
 
     it("listTurnMessagesAfter walks the log forward from a (createdAt, id) cursor", async () => {
@@ -764,8 +760,7 @@ export function registerRuntimeRecordStoreSuites(
 
     it("getTurnMessageStats returns zeroed stats for an empty session", async () => {
       const stats = await store.getTurnMessageStats("sess-none");
-      expect(stats.playerMessageCount).toBe(0);
-      expect(stats.runtimeMessageCounts).toEqual({});
+      expect(stats).toEqual({ playerMessageCount: 0 });
     });
 
     it("should support pagination with limit and offset", async () => {

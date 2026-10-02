@@ -322,9 +322,9 @@ describe("world data session importer", () => {
 
     expect(compiled.sort()).toEqual([
       "affinity/affinity",
+      "character-blueprint/assets",
       "character-blueprint/blueprints",
-      "character-presence/assets",
-      "character-presence/presence",
+      "character-blueprint/presence",
       "core-quest/quests",
       "inventory/items",
       "living-world-rules/rules",
@@ -1203,7 +1203,7 @@ sources:
 
     expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
-      { id: "sess-1-mio", name: "Mio" },
+      { id: "mio", name: "Mio" },
     ]);
     expect(
       await store.listPluginData("sess-1", "third-party-cast", "characters"),
@@ -1260,7 +1260,7 @@ sources:
     expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
       {
-        id: "sess-1-mio",
+        id: "mio",
         name: "Mio",
         type: "npc",
         description: "Keeps the archive keys.",
@@ -1302,7 +1302,7 @@ sources:
     };
     expect((await importWorldDataForSession(options)).written).toBe(1);
     expect((await store.listWorldDataImportLedger("sess-1"))[0]?.key).toBe(
-      "sess-1-npc",
+      "npc",
     );
     expect((await importWorldDataForSession(options)).skipped).toBe(1);
     expect(await syncWorldDataForSession(options)).toMatchObject({
@@ -1318,7 +1318,7 @@ sources:
     expect((await importWorldDataForSession(options)).skipped).toBe(1);
     expect((await store.listCharacters("sess-1"))[0]?.name).toBe("Player edit");
     expect(await syncWorldDataForSession(options)).toMatchObject({
-      conflicts: [{ reason: "modified", key: "sess-1-npc" }],
+      conflicts: [{ reason: "modified", key: "npc" }],
     });
     await store.upsertCharacter(character);
     await writeFile(path.join(worldRoot, "data/cast.json"), "[]");
@@ -1467,7 +1467,7 @@ sources:
 
     expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
-      { id: "sess-1-mio", name: "Mio" },
+      { id: "mio", name: "Mio" },
     ]);
     expect(
       await store.getPluginData(
@@ -1808,11 +1808,9 @@ sources: {}
     const activePlugins = [
       "world-init",
       "chat-mode-narrator",
-      "scene-cast",
       "scene-stage",
-      "scene-prompts",
+      "guide",
       "character-blueprint",
-      "character-presence",
       "living-world-rules",
       "branch-reply",
       "char-creator",
@@ -1871,9 +1869,9 @@ sources: {}
     const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
     const pluginRegistry = await builtinPluginRegistry();
 
-    // mistport ships a living-world-rules rule set, a character-blueprint cast,
-    // and character-presence portraits (media + presence); activate the plugins
-    // all its sources target so the import is clean.
+    // mistport ships a living-world-rules rule set, a character-blueprint cast
+    // and portraits (media + presence); activate the plugins all its sources
+    // target so the import is clean.
     const worldId = "mistport";
     const ruleSourceId = "tideRules";
     const activePlugins = [
@@ -1881,7 +1879,6 @@ sources: {}
       "living-world-rules",
       "character-blueprint",
       "char-creator",
-      "character-presence",
     ];
     const sessionId = `sess-${worldId}`;
     const store = createMemoryStore();
@@ -1944,7 +1941,6 @@ sources: {}
         "living-world-rules",
         "character-blueprint",
         "char-creator",
-        "character-presence",
         "scene-stage",
       ];
       const sessionId = `sess-portraits-${worldId}-${locale}`;
@@ -2033,7 +2029,7 @@ sources: {}
       // stored asset — i.e. the portrait actually displays for that character.
       const presence = await store.listPluginData(
         sessionId,
-        "character-presence",
+        "character-blueprint",
         "presence",
       );
       expect(presence).toHaveLength(portraitCount);

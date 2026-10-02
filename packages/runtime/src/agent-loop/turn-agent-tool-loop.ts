@@ -92,8 +92,10 @@ export interface RunAgentToolLoopOptions {
   readonly upstreamProposals?: readonly Proposal[];
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
-  /** Authoritative logical turn number, forwarded into ToolCallContext. */
+  /** Player messages recorded in the session, forwarded into the tool context. */
   readonly turnNumber?: number;
+  /** The scheduler's logical turn, forwarded into the tool context. */
+  readonly logicalTurn?: number;
   readonly loaded: LoadedRuntime;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly deps: AgentLoopDeps;
@@ -143,6 +145,7 @@ async function runAgentToolLoopWithinBudget(
     manifest,
     input,
     turnNumber,
+    logicalTurn,
     loaded,
     inputSlots,
     deps,
@@ -479,6 +482,7 @@ async function runAgentToolLoopWithinBudget(
               emittedEventTopics: emittedEvents.map((e) => e.topic),
               emitter: deps.emitter,
               ...(turnNumber !== undefined ? { turnNumber } : {}),
+              ...(logicalTurn !== undefined ? { logicalTurn } : {}),
               // Execution is bounded by the runtime's declared surface,
               // checked AFTER PreToolUse replacement produced effectiveTc.
               authorizedToolNames,

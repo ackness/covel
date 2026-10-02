@@ -223,33 +223,18 @@ export function createSqlSessionJournalRecords(
     },
 
     async getTurnMessageStats(sessionId: string): Promise<TurnMessageStats> {
-      // Single grouped count over (sourceType, sourceRuntimeId); COUNT(*)
-      // arrives as number on SQLite and string on PG, so normalise via Number.
-      const rows = await runner.select<{
-        sourceType: string;
-        sourceRuntimeId: string | null;
-        count: number | string;
-      }>(turnMessages, {
-        columns: {
-          sourceType: turnMessages.sourceType,
-          sourceRuntimeId: turnMessages.sourceRuntimeId,
-          count: sql`count(*)`,
+      // COUNT(*) arrives as number on SQLite and string on PG.
+      const [row] = await runner.select<{ count: number | string }>(
+        turnMessages,
+        {
+          columns: { count: sql`count(*)` },
+          where: and(
+            eq(turnMessages.sessionId, sessionId),
+            eq(turnMessages.sourceType, "player"),
+          ),
         },
-        where: eq(turnMessages.sessionId, sessionId),
-        groupBy: [turnMessages.sourceType, turnMessages.sourceRuntimeId],
-      });
-      let playerMessageCount = 0;
-      const runtimeMessageCounts: Record<string, number> = {};
-      for (const row of rows) {
-        const count = Number(row.count);
-        if (row.sourceType === "player") {
-          playerMessageCount += count;
-        } else if (row.sourceType === "runtime" && row.sourceRuntimeId) {
-          runtimeMessageCounts[row.sourceRuntimeId] =
-            (runtimeMessageCounts[row.sourceRuntimeId] ?? 0) + count;
-        }
-      }
-      return { playerMessageCount, runtimeMessageCounts };
+      );
+      return { playerMessageCount: Number(row?.count ?? 0) };
     },
 
     async listRecentTurnMessages(

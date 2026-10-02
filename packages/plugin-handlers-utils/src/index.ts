@@ -401,7 +401,7 @@ export type {
   RuntimeEffects,
 } from "./handler-result.js";
 
-export { shortId, shortIdBatch } from "./short-id.js";
+export { shortId, shortIdBatch, wordId, wordSlug } from "./short-id.js";
 
 export {
   overlayPluginDataValue,

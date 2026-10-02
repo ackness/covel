@@ -134,6 +134,8 @@ entry 注册与清单双向校验，未声明的注册和未实现的声明都�
 
 Function runtime 必须声明 `function.handler`，模块必须默认导出函数，不能同时配置 `agent`。Agent runtime 不能配置 `function`。
 
+Agent 的 guard 在调用模型前执行。返回 `{ skip: false }` 时照常运行；返回 `{ skip: true, ...fields }` 时不调用模型，结果记为 `skipped`，`skip` 之外的字段就是本 runtime 的输出：声明 `io.output.contract` 时按契约校验，并照常绑定给消费者，`skip` 标记本身不进入校验和绑定。需要在本轮放弃工作时，返回契约允许的最小输出，例如 `story-events/plot` 关闭时返回空计划 `{ skip: true, events: [] }`。
+
 `io.concealed: true` 用于处理隐藏内容的 runtime（例如在剧情中策划隐藏事件的 agent）。框架在写入 trace 和推送实时流之前去掉它的提示词、模型回复、工具参数、工具结果和输出，只保留 runtime / 工具名、状态、耗时与用量；`/turns` 和手动 RPC 返回的执行结果也会清空它的输出与工具内容。持久化的执行记录保留完整内容，供重试使用。
 
 `schedule.needs`、`schedule.after` 与 `io.inputs.*.from.runtime` 中的 runtime ID 只能属于本包（完整 `<pluginId>/<runtimeId>` 或单 runtime 的包 ID），裸字符串依赖也受此限制。跨包引用必须使用公开的版本化 contract；纯 `after` 不会自动激活提供者。
@@ -199,7 +201,7 @@ Agent 继续使用现有的提示词输出协议。执行边界统一将声明�
 
 上述内部结果结构变化需要重建受影响的开发期执行结果、exports、后台作业及快照；不兼容读取旧的平铺副作用结果。
 
-`ctx.playerMessage` 保持当前输入文本字符串。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
+`ctx.playerMessage` 保持当前输入文本字符串。`ctx.logicalTurn`（函数 handler 与插件工具上下文均有）是调度器的逻辑回合：已提交的主循环玩家回合数加一，setup 与开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `interval` 也以它计数；工具上下文的 `turnNumber` 则是会话中已记录的玩家消息数（含 setup 表单提交）。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
 
 内核输入 `turn-digest@1` 冻结同一份 lastPlayerInput 快照及 `runtimeResults`。后者包含已经观察到的终态 `{runtimeId, status}`，status 为 `success/failed/skipped/suspended`；没有把尚未结束的 runtime 预测为成功。detached worker 消费源执行快照，不重新查询最新表单或回合状态。此输入契约更新后，旧作业与快照需要重建，不做兼容读取。
 
@@ -219,11 +221,11 @@ Lorebook 使用 owner 与 id 的复合身份，owner 为 world、plugin 或 play
 
 捆绑的 `world-init` 使用三个 runtime：
 
-| Runtime             | 阶段              | 职责                                                 |
-| ------------------- | ----------------- | ---------------------------------------------------- |
-| `dimension-context` | pre-turn function | 不调用模型，读取已提交值并发布 `world.dimensions@1`  |
-| `dimension-tracker` | post-turn agent   | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证 |
-| `edit-dimensions`   | manual function   | 玩家改值、确认人工处理或明确跳过                     |
+| Runtime             | 阶段              | 职责                                                                                                                             |
+| ------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `dimension-context` | pre-turn function | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                              |
+| `dimension-tracker` | post-turn agent   | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证；`toolChoice: required`，无变化也以 `update-dimensions({updates: []})` 结算 |
+| `edit-dimensions`   | manual function   | 玩家改值、确认人工处理或明确跳过                                                                                                 |
 
 同一次执行的公共 dimension 读取冻结。setup 初始化和写入者自身 proposal 可形成局部预览，但不替换公共快照，不泄露给并行 sibling。公共 builtin `world-dimension-get/list` 始终读取冻结快照，不叠加自身写入，也不回退初值。模板选取 `{{ world.dimensions.<id>.value }}`；默认提示词段是预算内投影，而非全量记录。
 
@@ -303,8 +305,7 @@ pnpm lint
 | 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                         |
 | 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
 | 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)               |
-| 隐藏世界数据与揭示   | [story-events](../../plugins/story-events/PLUGIN.md)             |
-| 剧情中策划隐藏事件   | [story-plotter](../../plugins/story-plotter/PLUGIN.md)           |
+| 隐藏世界数据与策划   | [story-events](../../plugins/story-events/PLUGIN.md)             |
 
 ### 保留的数据命名空间
 

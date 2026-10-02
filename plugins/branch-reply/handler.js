@@ -117,7 +117,7 @@ async function seedFromNarrative(ctx) {
 
   // NOTE: as an auto/scheduled system function runtime, branch-reply's return
   // value is also appended to conversation history as an assistant TurnMessage
-  // (turn-function-runtime.ts) — same as scene-prompts / guide / codex. This
+  // (turn-function-runtime.ts) — same as guide / codex. This
   // compact `{action:"seed",…}` marker carries no `narrativeOutput`/`content`,
   // so it serialises to JSON and the story prompt filters it via
   // `looksLikeStructuredRuntimeOutput`. The prompt-history rewriter ignores it
