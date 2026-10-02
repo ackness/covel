@@ -175,7 +175,7 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 | --------------------- | ---- | ------------------ | -------------------------------------------------------------------------- |
 | `plugin-data.changed` | S→C  | 插件持久化数据变更 | `{ pluginId, runtimeId, changes: [{ namespace, key, value, operation }] }` |
 
-`plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。事件与 REST 读取使用同一公开投影：隐藏世界数据（`_hidden.*`）的变更不发出；`_runtime_jobs` 与维度记录只携带公开形状（不含任务 `payload`、原始错误或维度规则）。
+`plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件，包括成功的 compare-and-set 写入（runtime job 状态迁移、维度记录）。后台任务的终态以 `job-status.updated` 为准，`_runtime_jobs` 行的变更只用于数据同步。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。事件与 REST 读取使用同一公开投影：隐藏世界数据（`_hidden.*`）的变更不发出；`_runtime_jobs` 与维度记录只携带公开形状（不含任务 `payload`、原始错误或维度规则）。
 
 ### 作业进度事件（job-status，实验性）
 

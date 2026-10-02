@@ -2,6 +2,7 @@ import type { EventBus } from "@covel/events";
 import type { CovelMessage } from "@covel/shared";
 import type {
   DataStore,
+  PluginDataBatchCasEntry,
   PluginDataRecord,
   StoreTransaction,
 } from "@covel/store";
@@ -69,8 +70,9 @@ function emitPluginDataChangedEvent(
 /**
  * Wrap a DataStore with a transparent Proxy that emits a `plugin-data.changed`
  * event after every `setPluginData` / `setPluginDataBatch` / `deletePluginData`
- * call, regardless of caller (kernel commit pipeline, plugin RPC handlers,
- * plugin-local tool direct writes, admin API endpoints).
+ * call and every successful compare-and-set, regardless of caller (kernel
+ * commit pipeline, runtime job worker, plugin RPC handlers, plugin-local tool
+ * direct writes, admin API endpoints).
  *
  * Governance contract:
  * - Proposal-backed plugin-data writes now enter through the Session Kernel
@@ -88,6 +90,62 @@ export function wrapStoreWithPluginDataEvents(
 ): DataStore {
   return new Proxy(baseStore, {
     get(target, prop, receiver) {
+      // Durable control planes (runtime jobs, dimension records) write through
+      // compare-and-set; a change that landed is announced like any other.
+      if (prop === "compareAndSetPluginData") {
+        return async (
+          record: PluginDataRecord,
+          expectedUpdatedAt: string | null,
+        ): Promise<boolean> => {
+          const swapped = await target.compareAndSetPluginData(
+            record,
+            expectedUpdatedAt,
+          );
+          if (swapped)
+            emitPluginDataChangedEvent(
+              eventBus,
+              record.pluginId,
+              record.sessionId,
+              [
+                {
+                  namespace: record.namespace,
+                  key: record.key,
+                  value: record.value,
+                  operation: "set",
+                },
+              ],
+            );
+          return swapped;
+        };
+      }
+
+      if (prop === "compareAndSetPluginDataBatch") {
+        return async (
+          sessionId: string,
+          pluginId: string,
+          entries: readonly PluginDataBatchCasEntry[],
+        ): Promise<boolean> => {
+          const swapped = await target.compareAndSetPluginDataBatch(
+            sessionId,
+            pluginId,
+            entries,
+          );
+          if (swapped)
+            emitPluginDataChangedEvent(
+              eventBus,
+              pluginId,
+              sessionId,
+              entries.map((entry) => ({
+                namespace: entry.namespace,
+                key: entry.key,
+                value: entry.value,
+                operation: "set" as const,
+              })),
+            );
+          return swapped;
+        };
+      }
+
       if (prop === "setPluginData") {
         return async (record: PluginDataRecord): Promise<void> => {
           await target.setPluginData(record);
