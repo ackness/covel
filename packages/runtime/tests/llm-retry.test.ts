@@ -31,6 +31,7 @@ import type {
   LLMResponse,
   LLMStreamEvent,
 } from "../src/llm/llm-adapter.js";
+import type { LLMProviderRequest } from "@covel/shared";
 
 // ── Mock LLM builders ───────────────────────────────────────────────
 
@@ -618,6 +619,69 @@ describe("streamLLMWithRetry", () => {
     expect(result.response.content).toBe("recovered");
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onRetry.mock.calls[0]![0]!.reason).toBe("first-token-timeout");
+  });
+
+  it("pauses the first-token timeout while the provider backs off a rate limit", async () => {
+    const attempt = (statusCode: number) =>
+      ({
+        schemaVersion: 1,
+        provider: "fixture",
+        protocol: "openai-chat-v1",
+        transportAttempt: 0,
+        startedAt: new Date().toISOString(),
+        durationMs: 1,
+        statusCode,
+      }) as LLMProviderRequest;
+    // Like the transport's backoff, waits end early when the call aborts.
+    const wait = (ms: number, signal: AbortSignal | undefined) =>
+      new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      });
+    const streamAfterBackoff = (stallAfterAnswerMs: number): LLMAdapter => ({
+      generate: vi.fn(),
+      async *stream(params) {
+        params.onProviderRequest?.(attempt(429));
+        // `retry-after` longer than the first-token timeout.
+        await wait(150, params.signal);
+        params.onProviderRequest?.(attempt(200));
+        await wait(stallAfterAnswerMs, params.signal);
+        yield { type: "text-delta", textDelta: "answered" };
+        yield {
+          type: "done",
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    });
+    const run = (llm: LLMAdapter) =>
+      streamLLMWithRetry({
+        llm,
+        messages: baseMessages,
+        // buildRetryPolicy floors the guard at 1s; set it directly to keep
+        // the test fast.
+        policy: {
+          ...buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 0 }),
+          firstTokenTimeoutMs: 50,
+        },
+        deadline: Date.now() + 10_000,
+      });
+
+    await expect(run(streamAfterBackoff(0))).resolves.toMatchObject({
+      response: { content: "answered" },
+    });
+    // The guard restarts once an attempt is answered, so a real stall still
+    // times out.
+    await expect(run(streamAfterBackoff(150))).rejects.toThrow(
+      "first-token timeout",
+    );
   });
 
   it("does not forward deltas on retry attempts (avoid duplicate UX)", async () => {
