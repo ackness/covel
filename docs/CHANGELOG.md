@@ -12,6 +12,11 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Settlement events are recorded once.** A pending dimension settlement no longer fails to persist on the events table's primary key every narrative turn.
 - **Hidden data stays off the live stream.** `plugin-data.changed` events carry the same public projection as the REST reads: `_hidden.*` changes are not announced, and runtime job and dimension rows omit private fields.
 - **A targeted narrative uses the frozen dimension snapshot** when the dimension provider was not scheduled, instead of being skipped.
+- **Rejected drafts keep their reasoning.** When a review rejects a narrator draft, the draft goes back to the model with its `reasoning_content`; DeepSeek and DashScope thinking modes rejected the retry with HTTP 400, rolling the turn back.
+- **Prompt-builder jobs say what they are doing again.** A job queued with `expectsBackgroundFollower` carries `phase: "prompt"`, and the image jobs panel shows "Generating image prompt…" and then "image job queued" in the player's language.
+- **One recovery per reconnect.** After a server restart the client no longer runs a second full state reload for the `system.reset` that opens the new stream.
+- **Dimension tables stay readable in a narrow panel.** Cells keep a minimum width and the table scrolls, instead of squeezing CJK text to one character per line.
+- **Forks and old databases drop job rows.** Forks no longer copy job or log rows from snapshots taken before those were excluded, and rows of the retired `_jobs` namespace are deleted at boot.
 
 ### Added
 
@@ -22,6 +27,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Bounded agent history.** `agent.history.maxTurns` limits the shared conversation an agent runtime sees; the bundled bookkeeping agents keep two turns.
 - **Plugin gateway limits and paged history.** `ctx.gateway.generateText` / `generateObject` accept `maxOutputTokens` and report the slot's token limits; `ctx.readTurnMessages({ after, limit })` pages the turn journal.
 - **Retention settings.** `COVEL_AUTO_SNAPSHOT_RETENTION` (default 20) bounds automatic snapshots, and `COVEL_TRACE_RETENTION_DAYS` optionally prunes trace events.
+- **`ctx.logicalTurn` for plugins.** Function handlers and plugin tools see the scheduler's turn (committed main-loop player turns plus one), the number `startTurn` and `interval` count in; `turnNumber` stays the raw player-message count.
+- **Plugin log level.** `COVEL_PLUGIN_LOG_LEVEL` (`debug` / `info` / `warn` / `error`) sets the lowest level `ctx.logger` stores; it defaults to `info` in production and `debug` elsewhere.
 
 ### Changed
 
@@ -33,6 +40,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Background jobs share one durable queue.** plugin-rpc `execution: background` runtimes, prompt builders invoked with `expectsBackgroundFollower`, and background event followers now run as `_runtime_jobs` on the runtime job worker, queued in the commit that produced them, with the same lease, cancel, and retry routes as detached stages. The in-process queue and the legacy `_jobs` rows are removed; panels keep the virtual `_jobs` data source. A runtime that reports its own failure settles its job as failed while its writes still commit.
 - **Leaner storage.** Structured runtime outputs no longer enter the conversation timeline; automatic snapshots keep one row per completed player turn and exclude control-plane namespaces; terminal runtime jobs keep the newest 20 per runtime with their status rows; the write-only `runtime_results` table is removed and dropped at boot.
 - **Fewer reads per turn.** Runtime job listings query one namespace and reconcile incrementally, detached job descriptors carry only declared upstream outputs, committed world-model reads are shared once per execution, and the plugin log ring trims every 20 writes.
+- **Trigger history lives in a ledger.** `maxTriggerCount` and `cooldownTurns` read a kernel-owned per-runtime ledger written in the commit that ran the runtime, instead of counting runtime rows in the conversation journal. Rolled-back executions do not count, cooldowns survive compaction, and a run with no text, form, or UI block no longer writes an empty journal row. Existing sessions start with an empty ledger. `getTurnMessageStats` returns only the player-message count.
+- **The runtime job worker claims from the woken session.** Enqueues, retries, resumes, settle waits and job completions wake the worker for their session; a full scan of every session runs at startup, on a wake without a session, and in the 30 s maintenance pass.
+- **`setupRuntimes` writers share one helper** that re-reads the session and replaces only the entries each writer owns.
+- **The e2e plugin harness matches the current pipeline.** It finds forms in runtime effects, reads back each request's executions by `turnId`, counts `runtime.deferred` as a run of a detached runtime, checks background jobs end `succeeded`, fails uncommitted turns, and gates expectations on `startTurn` and `interval`.
 
 ## [0.0.44] - 2026-10-01
 
