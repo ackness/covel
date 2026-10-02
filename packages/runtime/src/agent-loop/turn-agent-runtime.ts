@@ -47,6 +47,7 @@ export interface ExecuteAgentRuntimeOptions {
   readonly sessionMeta:
     | {
         turnNumber: number;
+        logicalTurn?: number;
         characters: readonly {
           id?: string;
           name: string;
@@ -267,6 +268,9 @@ export async function executeAgentRuntime({
     input,
     ...(sessionMeta?.turnNumber !== undefined
       ? { turnNumber: sessionMeta.turnNumber }
+      : {}),
+    ...(sessionMeta?.logicalTurn !== undefined
+      ? { logicalTurn: sessionMeta.logicalTurn }
       : {}),
     loaded,
     inputSlots: resolvedInputSlots,

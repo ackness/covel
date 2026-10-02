@@ -23,6 +23,8 @@ export interface TurnSessionCharacter {
 
 export interface TurnSessionMeta {
   readonly turnNumber: number;
+  /** `completedPlayerTurns + 1`, frozen for the execution. */
+  readonly logicalTurn: number;
   readonly characters: readonly TurnSessionCharacter[];
   readonly lastPlayerInput: PlayerInputSubmission | null;
   readonly lastFormValues: Record<string, unknown> | undefined;
@@ -136,6 +138,7 @@ export async function loadTurnSessionState(args: {
     runtimeTriggerCounts,
     sessionMeta: {
       turnNumber,
+      logicalTurn: completedPlayerTurns + 1,
       characters: sessionCharacters,
       lastPlayerInput,
       lastFormValues: lastPlayerInput?.values,

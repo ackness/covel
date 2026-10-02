@@ -111,6 +111,12 @@ export interface PluginFunctionContext {
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly playerMessage: string;
+  /**
+   * The scheduler's logical turn: committed main-loop player turns plus one.
+   * Setup and the opening continuation share turn 1 with the first message;
+   * `startTurn` and `interval` gates count in these units.
+   */
+  readonly logicalTurn?: number;
   readonly locale?: string;
   readonly store: FunctionStoreView;
   readonly world?: ExtensionWorldModel;

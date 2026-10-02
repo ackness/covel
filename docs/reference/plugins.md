@@ -199,7 +199,7 @@ Agent 继续使用现有的提示词输出协议。执行边界统一将声明�
 
 上述内部结果结构变化需要重建受影响的开发期执行结果、exports、后台作业及快照；不兼容读取旧的平铺副作用结果。
 
-`ctx.playerMessage` 保持当前输入文本字符串。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
+`ctx.playerMessage` 保持当前输入文本字符串。`ctx.logicalTurn`（函数 handler 与插件工具上下文均有）是调度器的逻辑回合：已提交的主循环玩家回合数加一，setup 与开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `interval` 也以它计数；工具上下文的 `turnNumber` 则是会话中已记录的玩家消息数（含 setup 表单提交）。`ctx.session.lastPlayerInput` 是源执行开始时最近一条 `PlayerInputSubmission | null`，包含 `id/sessionId/turnId/formId/values/createdAt`；它可能来自更早回合，不能把存在该记录解释为本回合提交了表单。
 
 内核输入 `turn-digest@1` 冻结同一份 lastPlayerInput 快照及 `runtimeResults`。后者包含已经观察到的终态 `{runtimeId, status}`，status 为 `success/failed/skipped/suspended`；没有把尚未结束的 runtime 预测为成功。detached worker 消费源执行快照，不重新查询最新表单或回合状态。此输入契约更新后，旧作业与快照需要重建，不做兼容读取。
 

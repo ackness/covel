@@ -48,6 +48,15 @@ export const FEATURE_ENV_VARS = [
       "Delete a session's runtime trace events older than N days after each committed execution. 0 keeps all traces.",
   },
   {
+    name: "COVEL_PLUGIN_LOG_LEVEL",
+    group: "feature",
+    type: "enum",
+    status: "active",
+    values: ["debug", "info", "warn", "error"],
+    description:
+      "Lowest level a plugin's ctx.logger records into its _logs ring. Defaults to debug in development and info when NODE_ENV=production.",
+  },
+  {
     name: "COVEL_AUTO_SNAPSHOT_RETENTION",
     group: "feature",
     type: "integer",

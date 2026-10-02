@@ -72,6 +72,9 @@ export function createToolExecutionContext(
     ...(caller.turnNumber !== undefined
       ? { turnNumber: caller.turnNumber }
       : {}),
+    ...(caller.logicalTurn !== undefined
+      ? { logicalTurn: caller.logicalTurn }
+      : {}),
     signal,
     ...(view ? { store: view } : {}),
   });
