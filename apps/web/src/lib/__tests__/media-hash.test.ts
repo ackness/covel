@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Unit tests for the SHA-256 hex helper used by the media cache integrity
  * check. Skips gracefully when the runtime does not expose

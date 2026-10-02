@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression coverage for suspension state through the production reducer and
  * action-stream handler. The same events can arrive on the action stream and

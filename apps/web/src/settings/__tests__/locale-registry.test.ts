@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import type { SettingEntry, SettingsStoreApi } from "@covel/settings";
 import { supportedLocales } from "@/i18n/catalog-registry.js";

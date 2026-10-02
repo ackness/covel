@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * APPEND_DELTA reducer — streaming-buffer append behaviour.
  *

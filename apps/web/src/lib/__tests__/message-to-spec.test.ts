@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { messageToSpec } from "../message-to-spec.js";
 import type { StreamMessage } from "@/stores/session-store.js";

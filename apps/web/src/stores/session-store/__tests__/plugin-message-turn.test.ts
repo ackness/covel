@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { initialState, reducer } from "../reducer.js";
 import { pluginMessageTurnResolver } from "../plugin-message-turn.js";

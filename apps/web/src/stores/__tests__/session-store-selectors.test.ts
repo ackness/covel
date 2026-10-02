@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { SessionRecord } from "@/services/api";
 import { canRunSessionAction } from "../session-store/selectors.js";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { submitInteractionBlock } from "../interaction-submission.js";
 import { claimSessionAction } from "../runtime-refs.js";

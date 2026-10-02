@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * P0-b regression tests for the asset slices of session-store.tsx.
  *

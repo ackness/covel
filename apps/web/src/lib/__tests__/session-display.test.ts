@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import i18n from "@/i18n/index.js";
 import { sessionStatusLabel, sessionTurnLabel } from "../session-display.js";
