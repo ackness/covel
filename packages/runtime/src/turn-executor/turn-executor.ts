@@ -44,6 +44,7 @@ import {
 } from "./turn-executor-helpers.js";
 import { collectSetupRan, detectSetupSessionCycles } from "./setup-run.js";
 import { SetupCompletionTracker } from "./setup-completion-tracker.js";
+import { updateSetupRuntimeStates } from "../commit/session-clock.js";
 import {
   buildHookSettings,
   snapshotUserSettings,
@@ -359,12 +360,14 @@ async function executeTurnImpl(
     const cycles = detectSetupSessionCycles(pendingSetup);
     if (cycles.size > 0 && !isTargeted) {
       const now = new Date().toISOString();
-      const patched = setupTracker.blockSessionCycles(cycles, now);
+      const blocked = setupTracker.blockSessionCycles(cycles, now);
       if (deps.store) {
-        await deps.store.updateSession(input.sessionId, {
-          setupRuntimes: patched,
-          updatedAt: now,
-        });
+        await updateSetupRuntimeStates(
+          deps.store,
+          input.sessionId,
+          now,
+          () => blocked,
+        );
       }
     }
   }

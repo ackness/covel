@@ -100,21 +100,19 @@ export class SetupCompletionTracker {
    * Block the members of a `needs(scope: session)` cycle: such a cycle can
    * never resolve (a session-scope need reads a PERSISTED done state), so the
    * members are marked `blocked` up front — no run, no attempt burned. Returns
-   * the patched mirror for the caller to persist.
+   * the blocked entries for the caller to persist.
    */
   blockSessionCycles(
     cycles: ReadonlyMap<string, readonly string[]>,
     blockedAt: string,
   ): Record<string, SetupRuntimeState> {
-    const patched: Record<string, SetupRuntimeState> = {
-      ...this.currentMirror,
-    };
+    const blocked: Record<string, SetupRuntimeState> = {};
     for (const [name, path] of cycles) {
       const manifest = this.args.activeSetupRuntimes.find(
         (r) => r.name === name,
       );
       const prev = this.currentMirror[name];
-      patched[name] = {
+      blocked[name] = {
         state: "blocked",
         pluginVersion: manifest?.version ?? "0.0.0",
         generation: prev?.generation ?? 1,
@@ -123,8 +121,8 @@ export class SetupCompletionTracker {
         blockedAt,
       };
     }
-    this.currentMirror = patched;
-    return patched;
+    this.currentMirror = { ...this.currentMirror, ...blocked };
+    return blocked;
   }
 
   /** Live done predicate (the `setupRuntimeDone` gate for runtime invocation). */

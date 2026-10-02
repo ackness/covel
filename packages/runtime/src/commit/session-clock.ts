@@ -11,6 +11,7 @@
  * `settleSetupRuntimes` (attempt-ledger reconciliation after the transaction,
  * so a rolled-back attempt still burns budget), the executor's up-front block
  * of `needs(scope: session)` cycles, and the player's retry / waive routes.
+ * All three go through `updateSetupRuntimeStates`.
  *
  * Two concerns are applied here:
  *  1. Logical-turn counting — an idempotent ledger insert per `logicalTurnId`
@@ -21,7 +22,7 @@
  *     `setup → playing`.
  */
 
-import type { StoreTransaction } from "@covel/store";
+import type { DataStore, StoreTransaction } from "@covel/store";
 import type { ExecutionContext, SetupRuntimeState } from "@covel/shared";
 
 export interface SetupCompletionDelta {
@@ -93,5 +94,29 @@ export async function applySessionClockTx(
     completedPlayerTurns,
     setupRuntimes,
     updatedAt: update.now,
+  });
+}
+
+/**
+ * Replace some entries of the persisted `setupRuntimes` mirror outside the
+ * finalize transaction. The caller holds the session lock; this re-reads the
+ * session and writes back only the entries `resolve` returns, so a writer
+ * never rewrites another runtime's state from an older copy.
+ */
+export async function updateSetupRuntimeStates(
+  store: Pick<DataStore, "getSession" | "updateSession">,
+  sessionId: string,
+  now: string,
+  resolve: (
+    current: Readonly<Record<string, SetupRuntimeState>>,
+  ) => Readonly<Record<string, SetupRuntimeState>>,
+): Promise<void> {
+  const session = await store.getSession(sessionId);
+  if (!session) return;
+  const entries = resolve(session.setupRuntimes);
+  if (Object.keys(entries).length === 0) return;
+  await store.updateSession(sessionId, {
+    setupRuntimes: { ...session.setupRuntimes, ...entries },
+    updatedAt: now,
   });
 }

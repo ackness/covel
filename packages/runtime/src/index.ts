@@ -194,6 +194,7 @@ export type {
   ExecutionCompletion,
 } from "./commit/commit-execution.js";
 export { finalizeExecution } from "./commit/finalize-execution.js";
+export { updateSetupRuntimeStates } from "./commit/session-clock.js";
 export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
 export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";
 export type {

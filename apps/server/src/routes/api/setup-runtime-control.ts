@@ -17,6 +17,7 @@
 
 import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
+import { updateSetupRuntimeStates } from "@covel/runtime";
 import { retrySetup, waiveSetup, type SetupControlResult } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
@@ -35,30 +36,22 @@ const WAIVE_WARNING =
   "Setup was skipped by the player after repeated failures; this plugin is running in a degraded state.";
 
 /**
- * Apply a resolved control transition to `session.setupRuntimes[runtimeId]`.
+ * Persist a resolved control transition to `session.setupRuntimes[runtimeId]`.
  */
 async function applyTransition(args: {
   readonly store: DataStore;
   readonly sessionId: string;
   readonly runtimeId: string;
-  readonly session: {
-    readonly setupRuntimes: Readonly<
-      Record<string, import("@covel/shared").SetupRuntimeState>
-    >;
-  };
   readonly result: Extract<SetupControlResult, { ok: true }>;
 }): Promise<void> {
-  const { store, sessionId, runtimeId, session, result } = args;
+  const { store, sessionId, runtimeId, result } = args;
   if (result.noop) return; // idempotent: nothing to persist
-  const now = new Date().toISOString();
-  const setupRuntimes = {
-    ...session.setupRuntimes,
-    [runtimeId]: result.next,
-  };
-  await store.updateSession(sessionId, {
-    setupRuntimes,
-    updatedAt: now,
-  });
+  await updateSetupRuntimeStates(
+    store,
+    sessionId,
+    new Date().toISOString(),
+    () => ({ [runtimeId]: result.next }),
+  );
 }
 
 setupRuntimeControlRoutes.post(
@@ -83,7 +76,6 @@ setupRuntimeControlRoutes.post(
           store,
           sessionId: live.id,
           runtimeId,
-          session: live,
           result,
         });
         return c.json({ ok: true, runtimeId, state: result.next });
@@ -128,7 +120,6 @@ setupRuntimeControlRoutes.post(
           store,
           sessionId: live.id,
           runtimeId,
-          session: live,
           result,
         });
         return c.json({ ok: true, runtimeId, state: result.next });
