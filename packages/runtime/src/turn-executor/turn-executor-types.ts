@@ -52,6 +52,8 @@ export interface AgentLoopDeps {
     runtimeId: string;
     pluginId: string;
     textDelta: string;
+    /** Drop the text streamed so far for this runtime before appending. */
+    reset?: true;
   }) => Promise<void>;
   /** Called when a runtime completes execution (e.g. on suspension). */
   readonly onRuntimeComplete?: (info: {

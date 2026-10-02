@@ -201,6 +201,76 @@ describe("world-init domain tools", () => {
       ),
     ).rejects.toThrow();
   });
+  it("patches large dimensions by path instead of rewriting them", async () => {
+    const boardSchema = {
+      type: "object",
+      additionalProperties: {
+        type: "object",
+        properties: {
+          lead: { type: "string" },
+          status: { type: "string", enum: ["unverified", "corroborated"] },
+        },
+        required: ["lead", "status"],
+      },
+    };
+    const board = {
+      letter: { lead: "Torn letter", status: "unverified" },
+      report: { lead: "Report 74", status: "unverified" },
+    };
+    const boardRecord = {
+      definition: {
+        name: "Case board",
+        schema: boardSchema,
+        initialValue: {},
+        updateRule: "Track leads.",
+      },
+      value: board,
+      version: 3,
+    };
+    const ctx = trackerContext();
+    ctx.world.dimensions = {
+      board: {
+        name: "Case board",
+        schema: boardSchema,
+        value: board,
+        version: 3,
+      },
+    };
+    ctx.store.listPluginData = async () => [
+      { key: "board", value: boardRecord },
+    ];
+    const result = await updateDimensions({ tool, z }).execute(
+      {
+        updates: [
+          {
+            id: "board",
+            expectedVersion: 3,
+            changes: [
+              { path: "letter.status", value: "corroborated" },
+              {
+                path: "ledger",
+                value: { lead: "Pier ledger", status: "unverified" },
+              },
+            ],
+          },
+        ],
+      },
+      ctx,
+    );
+    expect(getPendingProposals(result)[0]?.payload.updates[0]?.value).toEqual({
+      letter: { lead: "Torn letter", status: "corroborated" },
+      report: { lead: "Report 74", status: "unverified" },
+      ledger: { lead: "Pier ledger", status: "unverified" },
+    });
+    // The frozen snapshot itself is never mutated.
+    expect(board.letter.status).toBe("unverified");
+    await expect(
+      updateDimensions({ tool, z }).execute(
+        { updates: [{ id: "board", expectedVersion: 3 }] },
+        ctx,
+      ),
+    ).rejects.toThrow(/value or changes/);
+  });
   it("rejects missing narrative provenance and skips model maintenance when no rules exist", async () => {
     await expect(
       updateDimensions({ tool, z }).execute(

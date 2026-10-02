@@ -95,6 +95,8 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 | `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`              |
 | `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId }` |
 
+`narrative.delta` 可带 `reset: true`（此时 `delta` 为空串）：同一 runtime 已流出的文本属于工具调用前的准备步骤或被审查驳回的草稿，不会成为最终叙事，客户端应清掉已显示的部分再接收后续片段。`narrative.completed` 的 `content` 始终是审查通过后的最终文本，并替换流式内容。
+
 ### 交互事件
 
 | 事件类型                | 方向 | 描述                           | 负载                                                       |

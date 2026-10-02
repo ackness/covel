@@ -37,7 +37,7 @@ dimensions:
 
 pre-turn 的 function publisher 不调用模型，发布 Sₙ；本轮 `ctx.world.dimensions.<id>.value`、公共 builtin 查询和有预算的提示投影读取相同冻结状态，不读取 pending proposals，也不回退作者初值。提交后 API/UI 发布 Sₙ₊₁。
 
-`world-dimension-list` 发现 ID/名称/类型/版本；`world-dimension-get` 接收 `{queries:[{dimension,path?,offset?,limit?,expectedVersion?}]}`，支持 dot/brackets、JSON Pointer 和 Unicode 分页。二者是跨插件可用的只读 builtin。完整值不全量注入模型，省略内容通过分页查询。`dimension-rule-get` 仅在 provider 内按冻结版本分页读取完整规则/schema；公共快照、故事 segment 和公共查询不含 updateRule/initialValue。
+`world-dimension-list` 发现 ID/名称/类型/版本；`world-dimension-get` 接收 `{queries:[{dimension,path?,offset?,limit?,expectedVersion?}]}`，支持 dot/brackets、JSON Pointer 和 Unicode 分页。二者是跨插件可用的只读 builtin。完整值不全量注入模型，省略内容通过分页查询。维护 runtime 的 self-only `<dimension-rules>` 段在 24000 字符预算内直接给出每个有规则维度的完整规则、schema 与冻结值，通常一次模型调用即可结算；超出预算的维度才回退到 `dimension-rule-get`（仅在 provider 内按冻结版本分页读取完整规则/schema）与 `world-dimension-get`。维护 runtime 关闭推理（`reasoningEffort: disabled`）。公共快照、故事 segment 和公共查询不含 updateRule/initialValue。
 
 world-init 的 post-turn tracker 以本轮 narrative 为必要来源，WorldIR 为可选辅证。没有非空规则时零维护模型调用，也不强制抽取 WorldIR。已有但失败的共享 WorldIR 不能解释成无变化。
 

@@ -649,6 +649,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 pluginId: delta.pluginId,
                 kind: outputKindByRuntime.get(delta.runtimeId) ?? "plugin",
                 delta: delta.textDelta,
+                ...(delta.reset ? { reset: true } : {}),
               });
             },
             onRuntimeStart: async (info) => {

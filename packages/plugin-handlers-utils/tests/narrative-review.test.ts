@@ -65,7 +65,7 @@ describe("narrative perspective review", () => {
       pluginId: "community-story",
       messages: [],
     });
-    expect(prepared.replace?.stream).toBe(false);
+    expect(prepared.replace).not.toHaveProperty("stream");
     expect(prepared.replace?.messages.at(-1)?.content).toContain(
       "first person",
     );
