@@ -43,7 +43,11 @@ import {
   createTurnEmitter,
   runWithHookScope,
 } from "@covel/runtime";
-import type { RuntimeManifest, SuspensionSummary } from "@covel/shared";
+import {
+  concealedRuntimeIds,
+  type RuntimeManifest,
+  type SuspensionSummary,
+} from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
@@ -203,6 +207,9 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     ...(eventBus ? { eventBus } : {}),
     sessionId,
     turnId: suspension.turnId,
+    concealedRuntimeIds: concealedRuntimeIds(
+      pluginRegistry.getActiveRuntimes(sessionId),
+    ),
   });
 
   let claimAcquired = false;

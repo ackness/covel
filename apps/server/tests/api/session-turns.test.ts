@@ -14,8 +14,23 @@ import { sessionTurnRoutes } from "../../src/routes/api/session-turns.js";
 async function makeApp(): Promise<{ app: Hono; store: DataStore }> {
   const store = createMemoryStore();
   const app = new Hono();
+  // One registered runtime declares `io.concealed`.
+  const pluginRegistry = {
+    getAll: () =>
+      new Map([
+        [
+          "planner",
+          {
+            manifests: [
+              { manifest: { name: "planner/plot", concealed: true } },
+            ],
+          },
+        ],
+      ]),
+  };
   app.use("*", async (c, next) => {
     c.set("store" as never, store as never);
+    c.set("pluginRegistry" as never, pluginRegistry as never);
     await next();
   });
   app.route("/api/sessions", sessionTurnRoutes);
@@ -45,7 +60,56 @@ describe("GET /api/sessions/:id/turns", () => {
       id: crypto.randomUUID(),
       sessionId: "sess-turns",
       turnId: "turn-1",
-      runtimeResults: [],
+      runtimeResults: [
+        {
+          pluginId: "planner",
+          runtimeId: "planner/plot",
+          runId: "run-planner",
+          turnId: "turn-1",
+          status: "success",
+          output: { plan: "spoiler" },
+          toolCalls: [
+            {
+              toolCallId: "call-planner",
+              toolName: "plan",
+              pluginId: "planner",
+              runtimeId: "planner/plot",
+              turnId: "turn-1",
+              input: { plan: "spoiler" },
+              output: { plan: "spoiler" },
+              durationMs: 1,
+              approvalStatus: "auto-allowed",
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          durationMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          pluginId: "narrator",
+          runtimeId: "narrator",
+          runId: "run-narrator",
+          turnId: "turn-1",
+          status: "success",
+          output: { plan: "spoiler" },
+          toolCalls: [
+            {
+              toolCallId: "call-narrator",
+              toolName: "plan",
+              pluginId: "narrator",
+              runtimeId: "narrator",
+              turnId: "turn-1",
+              input: { plan: "spoiler" },
+              output: { plan: "spoiler" },
+              durationMs: 1,
+              approvalStatus: "auto-allowed",
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          durationMs: 1,
+          timestamp: new Date().toISOString(),
+        },
+      ],
       origin: "player",
       commitStatus: "committed",
       durationMs: 5,
@@ -62,6 +126,14 @@ describe("GET /api/sessions/:id/turns", () => {
       turnId: "turn-1",
       commitStatus: "committed",
     });
+    const [concealed, open] = (
+      body.items[0] as unknown as {
+        runtimeResults: Array<{ output: unknown; toolCalls: unknown[] }>;
+      }
+    ).runtimeResults;
+    expect(JSON.stringify(concealed)).not.toContain("spoiler");
+    expect(concealed!.toolCalls).toHaveLength(1);
+    expect(open!.output).toEqual({ plan: "spoiler" });
   });
 
   it("404s for an unknown session", async () => {

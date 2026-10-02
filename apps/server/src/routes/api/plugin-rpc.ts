@@ -74,6 +74,10 @@ import {
 } from "./session/commands.js";
 import { buildTurnExecutorDeps } from "./turn-execution-deps.js";
 import { topLevelTurnResults } from "./actions/turn-history.js";
+import {
+  concealResultSummaries,
+  registeredConcealedRuntimeIds,
+} from "./concealed-runtimes.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
 
@@ -551,7 +555,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
             code: "turn_commit_failed",
             details: {
               turnId: summary.turnId,
-              runtimeResults: summary.runtimeResults,
+              runtimeResults: concealResultSummaries(
+                summary.runtimeResults,
+                registeredConcealedRuntimeIds(pluginRegistry),
+              ),
             },
           }),
           500,
@@ -564,7 +571,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       return c.json({
         status: "ok",
         turnId: summary.turnId,
-        runtimeResults: summary.runtimeResults,
+        runtimeResults: concealResultSummaries(
+          summary.runtimeResults,
+          registeredConcealedRuntimeIds(pluginRegistry),
+        ),
         durationMs: summary.durationMs,
         ...(summary.abortReason ? { abortReason: summary.abortReason } : {}),
         ...(deferredJobs.length > 0 ? { deferredJobs } : {}),

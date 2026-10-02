@@ -88,4 +88,26 @@ describe("reserved plugin-data namespaces", () => {
       await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs"),
     ).toHaveLength(0);
   });
+
+  it("lets plugin code write only its own hidden buckets", async () => {
+    const store = createMemoryStore();
+    const pipeline = createCommitPipeline(store as unknown as KernelStore);
+
+    const committed = await pipeline.commit(
+      makePluginDataProposal("_hidden.plotted"),
+    );
+    expect(committed.committed).toBe(true);
+    const writer = createPluginDataWriter(store, CTX);
+    await writer.set("_hidden.plotted", "job-2", { status: "ok" });
+
+    // Keyed by the source plugin: no other plugin's bucket is reachable.
+    expect(
+      (await store.listPluginData(SESSION_ID, PLUGIN_ID, "_hidden.plotted"))
+        .map((row) => row.key)
+        .sort(),
+    ).toEqual(["job-1", "job-2"]);
+    expect(
+      await store.listPluginData(SESSION_ID, "other-plugin", "_hidden.plotted"),
+    ).toHaveLength(0);
+  });
 });

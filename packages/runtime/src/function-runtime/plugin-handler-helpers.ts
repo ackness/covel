@@ -14,7 +14,7 @@ import type {
   FunctionStoreView,
 } from "@covel/shared/plugin-runtime";
 import {
-  reservedPluginDataNamespaceError,
+  pluginCodeNamespaceWriteError,
   type RpcHandlerStore,
   type WorldModelView,
 } from "@covel/shared";
@@ -86,11 +86,11 @@ export function makeRevocableFn<A extends readonly unknown[], R>(
 /**
  * Framework-owned (`_`-prefixed) namespaces are off-limits to plugin code —
  * these handles are the plugin-facing store surface, so they enforce the same
- * guard as the REST API and the commit boundary. Framework writers keep using
- * the raw store.
+ * guard as the commit boundary. The plugin's own `_hidden.*` buckets are the
+ * one exception. Framework writers keep using the raw store.
  */
 function assertWritableNamespace(namespace: string): void {
-  const reserved = reservedPluginDataNamespaceError(namespace);
+  const reserved = pluginCodeNamespaceWriteError(namespace);
   if (reserved) throw new Error(reserved);
 }
 

@@ -13,14 +13,20 @@
  */
 
 import { Hono } from "hono";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { listBody } from "../../api-error.js";
+import {
+  concealTurnResultRecord,
+  registeredConcealedRuntimeIds,
+} from "./concealed-runtimes.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
   Variables: {
     store: DataStore;
+    pluginRegistry: PluginRegistry;
   };
 };
 
@@ -38,5 +44,8 @@ sessionTurnRoutes.get("/:id/turns", rateLimiter({ max: 120 }), async (c) => {
 
   const store = c.get("store");
   const turns = await store.listTurnResults(resolved.session.id, limit);
-  return c.json(listBody(turns));
+  const concealed = registeredConcealedRuntimeIds(c.get("pluginRegistry"));
+  return c.json(
+    listBody(turns.map((turn) => concealTurnResultRecord(turn, concealed))),
+  );
 });

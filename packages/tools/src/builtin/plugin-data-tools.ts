@@ -10,6 +10,7 @@
 
 import {
   isHiddenPluginDataNamespace,
+  reservedPluginDataNamespaceError,
   type PluginDataBatchPayload,
   type PluginDataPayload,
   type Proposal,
@@ -92,6 +93,12 @@ function makePluginDataBatchProposal(
   };
 }
 
+/** Model-driven writes never reach framework or hidden namespaces. */
+function assertModelWritableNamespace(namespace: string): void {
+  const reserved = reservedPluginDataNamespaceError(namespace);
+  if (reserved) throw new Error(reserved);
+}
+
 // ── plugin-data-set ─────────────────────────────────────────────
 
 function createPluginDataSetTool(): ToolModule {
@@ -108,6 +115,7 @@ function createPluginDataSetTool(): ToolModule {
       value: z.unknown().describe("要存储的 JSON 数据"),
     }),
     execute: async (params, context) => {
+      assertModelWritableNamespace(params.namespace);
       const timestamp = new Date().toISOString();
       return withPendingProposals(
         {
@@ -151,6 +159,8 @@ function createPluginDataSetBatchTool(): ToolModule {
         .describe("要批量写入的数据条目数组"),
     }),
     execute: async (params, context) => {
+      for (const item of params.items)
+        assertModelWritableNamespace(item.namespace);
       const timestamp = new Date().toISOString();
       return withPendingProposals(
         {

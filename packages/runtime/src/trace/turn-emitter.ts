@@ -13,7 +13,11 @@
  */
 
 import type { EventBus } from "@covel/events";
-import type { CovelEventType, RuntimeRetryScope } from "@covel/shared";
+import {
+  concealTracePayload,
+  type CovelEventType,
+  type RuntimeRetryScope,
+} from "@covel/shared";
 
 export interface TurnEmitterStore {
   addTraceEvent(record: {
@@ -57,6 +61,11 @@ export interface CreateTurnEmitterOptions {
   readonly turnId: string;
   readonly traceId?: string;
   readonly retryScope?: RuntimeRetryScope;
+  /**
+   * Runtimes declared `io.concealed`. Their events lose every content field
+   * before they are persisted or streamed, so no trace consumer can read them.
+   */
+  readonly concealedRuntimeIds?: ReadonlySet<string>;
 }
 
 export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
@@ -71,12 +80,16 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
       // flowId mirrors traceId (protocol.md: `flowId = traceId`) so the
       // /api/traces payload carries a populated correlation id instead of "".
       // A payload that already sets flowId wins (spread after).
-      const enriched = {
+      const concealed =
+        typeof payload.runtimeId === "string" &&
+        opts.concealedRuntimeIds?.has(payload.runtimeId) === true;
+      const full = {
         flowId: traceId,
         ...payload,
         ...opts.retryScope,
         seq: seq++,
       };
+      const enriched = concealed ? concealTracePayload(full) : full;
       const createdAt = new Date().toISOString();
 
       // Invoke inside the guard: adapters may throw before returning a promise.
