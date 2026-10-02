@@ -39,6 +39,10 @@ import {
   resolveJsonPointer,
 } from "./accepts-compat.js";
 import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js";
+import {
+  guardProvidedValue,
+  isGuardProvided,
+} from "../turn-executor/guard-output.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -241,14 +245,15 @@ function extractValue(
   const result = completedResults.get(producer.name);
   // A guard can produce the value without an LLM call. Scheduling skips have
   // no such output and must still gate consumers; failed guards never qualify.
-  const guardProvided =
-    result?.status === "skipped" && result.output?.skip === true;
+  const guardProvided = isGuardProvided(result);
   if (!result || (result.status !== "success" && !guardProvided)) {
     return { ok: false, reason: "upstream-failed" };
   }
   let value: unknown = result.canonicalValue
     ? result.canonicalValue.value
-    : result.output;
+    : guardProvided
+      ? guardProvidedValue(result.output)
+      : result.output;
   if (value === undefined) return { ok: false, reason: "input-missing" };
   // The contract, not the original implementation, defines the output shape.
   if (contractSchema) {
