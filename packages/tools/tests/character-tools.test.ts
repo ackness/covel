@@ -624,10 +624,11 @@ describe("builtin character tools", () => {
       expect(store.characters).toHaveLength(0);
     });
 
-    it("rejects an empty sync", async () => {
+    it("settles an empty sync as no change", async () => {
       await expect(
         loop.call("sync-characters", { creates: [], updates: [] }),
-      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      ).resolves.toMatchObject({ success: true, created: [], updated: [] });
+      expect(loop.pending).toHaveLength(0);
     });
   });
 

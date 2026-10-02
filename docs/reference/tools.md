@@ -601,7 +601,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 | `creates` | CharacterCreate[] |      | 新角色，默认 `[]`，最多 5 条          |
 | `updates` | CharacterUpdate[] |      | 已有角色 patch，默认 `[]`，最多 10 条 |
 
-两组不能同时为空；没有明确变化时 runtime 应调用 `runtime-done`。`creates[]` 与 `create-character` 参数相同，`updates[]` 与 `update-character` 参数相同。
+两组可以同时为空：空批次是"本回合没有角色变化"的显式结算，成功返回且不产生 proposal。`creates[]` 与 `create-character` 参数相同，`updates[]` 与 `update-character` 参数相同。
 
 同 session 同 `(name, type)` 的重复 create 作为幂等命中返回 `unchanged`，包含已有角色 id；不覆盖已有 description/fields，也不阻断批次内其他合法操作。修改既有角色必须显式放入 `updates`。其他校验失败仍使整批失败，修正后需重新提交完整批次。
 
@@ -609,7 +609,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 **使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
 
-该 tracker 继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册在 12000 字符预算内带上每个角色当前的 `fields`，通常一次模型调用即可同步；超出预算的角色标为 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
+该 tracker 声明 `toolChoice: required`，每次回复都必须调用工具，无变化时提交空批次；它继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册在 12000 字符预算内带上每个角色当前的 `fields`，通常一次模型调用即可同步；超出预算的角色标为 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
 
 ---
 

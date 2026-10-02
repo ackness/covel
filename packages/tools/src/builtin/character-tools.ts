@@ -350,26 +350,32 @@ function createSyncCharactersTool(
   return tool({
     name: "sync-characters",
     description:
-      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Duplicate creates are returned as unchanged and never overwrite existing profiles; put changes in updates. Correct and resubmit the full batch after a failure; use runtime-done when neither array has changes." +
+      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Duplicate creates are returned as unchanged and never overwrite existing profiles; put changes in updates. Correct and resubmit the full batch after a failure. When nothing changed, submit empty arrays to settle the turn." +
       characterFieldsHint(schema),
-    parameters: z
-      .object({
-        creates: z
-          .array(createCharacterParametersSchema(schema))
-          .max(5)
-          .default([])
-          .describe("Up to 5 named, plot-relevant new NPCs."),
-        updates: z
-          .array(createUpdateCharacterParametersSchema())
-          .max(10)
-          .default([])
-          .describe("Explicit patches for existing character ids."),
-      })
-      .refine((value) => value.creates.length + value.updates.length > 0, {
-        message:
-          "submit at least one create or update; use runtime-done when nothing changed",
-      }),
+    parameters: z.object({
+      creates: z
+        .array(createCharacterParametersSchema(schema))
+        .max(5)
+        .default([])
+        .describe("Up to 5 named, plot-relevant new NPCs."),
+      updates: z
+        .array(createUpdateCharacterParametersSchema())
+        .max(10)
+        .default([])
+        .describe("Explicit patches for existing character ids."),
+    }),
     execute: async ({ creates, updates }, context) => {
+      // An empty batch is the explicit "no character changed" settlement, the
+      // same shape a bookkeeping runtime uses when it must call a tool.
+      if (creates.length + updates.length === 0) {
+        return {
+          _text: "No character changes this turn.",
+          success: true,
+          created: [],
+          updated: [],
+          unchanged: [],
+        };
+      }
       const proposals: Proposal[] = [];
       const created: Array<Record<string, unknown>> = [];
       const updated: Array<Record<string, unknown>> = [];

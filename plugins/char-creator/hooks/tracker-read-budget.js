@@ -40,7 +40,7 @@ export default function trackerReadBudget(_ctx, payload) {
         {
           role: "system",
           content:
-            "The character detail read is complete. Call sync-characters with confirmed changes, or runtime-done when no changes are supported. After a failed sync, correct and resubmit the full batch. Do not request more character details or invent missing values.",
+            "The character detail read is complete. Call sync-characters with the confirmed changes, or with empty arrays when no change is supported. After a failed sync, correct and resubmit the full batch. Do not request more character details or invent missing values.",
         },
       ],
     },

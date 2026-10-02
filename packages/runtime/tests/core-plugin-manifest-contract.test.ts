@@ -279,7 +279,9 @@ describe("core plugin manifest contract", () => {
       expect(extractor.requireExplicitCompletion).toBe(true);
       expect(extractor.requireToolUse).not.toBe(true);
       expect(extractor.llm?.toolChoice).toBe(
-        id === "npc-graph/extractor" ? "required" : undefined,
+        id === "npc-graph/extractor" || id === "char-creator/character-tracker"
+          ? "required"
+          : undefined,
       );
     }
 
