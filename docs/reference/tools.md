@@ -768,7 +768,7 @@ Attributes:
 
 叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 
-本轮无变化也必须调用 `update-dimensions({updates:[]})`。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
+本轮无变化也必须调用 `update-dimensions({updates:[]})`。既没有 `value`、`changes` 也为空或缺失的条目表示该维度未变化，工具直接略去它，不为此退回模型重交。无变化回执同样验证读取版本；维护失败、未运行或版本冲突保留 `pending-settlement`，不能因工具成功缓冲 proposal 或 runtime 正常结束宣称结算成功。玩家编辑与人工处理通过[manual runtime RPC](api.md#维度编辑与待结算恢复)，不用此模型工具填写来源。
 
 ---
 
