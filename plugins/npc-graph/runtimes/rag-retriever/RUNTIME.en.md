@@ -1,5 +1,4 @@
 ---
-type: agent
 description:
   zh: 当你提到某个人时，帮助故事想起相关人物和关系。
   en: >-
