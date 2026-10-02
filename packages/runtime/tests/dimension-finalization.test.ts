@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { createEventBus, type EventBus } from "@covel/events";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
 import type { DataStore } from "@covel/store";
@@ -95,6 +96,7 @@ async function finalize(
     trackerStatus?: string;
     irStatus?: string;
     records?: Record<string, DimensionRecord>;
+    eventBus?: EventBus;
   } = {},
 ) {
   await store.saveTurnResult({
@@ -122,6 +124,7 @@ async function finalize(
   });
   return finalizeExecution({
     store,
+    ...(options.eventBus ? { eventBus: options.eventBus } : {}),
     sessionId: "s",
     turnIds: ["t"],
     executionContext: {
@@ -218,6 +221,24 @@ for (const [backend, create] of [
         version: 2,
       });
     });
+    it("records the settlement event once when it is published", async () => {
+      const store = await setup(create);
+      const eventBus = createEventBus(store);
+      const failures = vi.spyOn(console, "error");
+      await finalize(store, undefined, { eventBus });
+      await eventBus.flush();
+      expect(
+        (await store.listEvents("s")).filter(
+          (event) =>
+            (event.payload as { _subType?: string })._subType ===
+            "dimensions.settlement.changed",
+        ),
+      ).toHaveLength(1);
+      expect(failures).not.toHaveBeenCalled();
+      failures.mockRestore();
+      await eventBus.close();
+    });
+
     it("registers obligations when initialization and narrative share one commit", async () => {
       const store = await setup(create);
       await store.deletePluginData(
