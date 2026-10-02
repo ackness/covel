@@ -19,7 +19,7 @@ const pluginDir = path.resolve(
 const pluginsDir = path.dirname(pluginDir);
 const pluginMdPath = path.join(pluginDir, "PLUGIN.md");
 
-describe("scene-prompts manifest and UI loading", () => {
+describe("guide manifest and UI loading", () => {
   it("parses package contributions separately from its inline runtime", () => {
     const parsed = parsePluginMd(
       readFileSync(pluginMdPath, "utf-8"),
@@ -27,29 +27,29 @@ describe("scene-prompts manifest and UI loading", () => {
     );
 
     expect(parsed.manifest).toMatchObject({
-      name: "scene-prompts",
-      pluginId: "scene-prompts",
+      name: "guide",
+      pluginId: "guide",
       pluginType: "plugin",
       entry: "./server/index.js",
-      ui: { message: ["./ui/scene-prompts-block.json"] },
+      ui: { message: ["./ui/guide-block.json"] },
     });
     expect(parsed.manifest).not.toHaveProperty("stage");
     expect(compileInlineRuntime(parsed)?.manifest).toMatchObject({
-      name: "scene-prompts",
-      pluginId: "scene-prompts",
+      name: "guide",
+      pluginId: "guide",
       pluginType: "plugin",
       stage: "post-turn",
       model: "plugin",
       outputKind: "system",
       requireToolUse: true,
-      completeAfterTools: ["generate-scene-prompts"],
+      completeAfterTools: ["generate-guide"],
       maxRetries: 0,
       trigger: {
         type: "scheduled",
         interval: 1,
       },
       tools: {
-        plugin: ["generate-scene-prompts"],
+        plugin: ["generate-guide"],
       },
       effects: { parallelSafe: true },
     });
@@ -57,15 +57,13 @@ describe("scene-prompts manifest and UI loading", () => {
 
   it("parses PLUGIN.md and loads ui.message through plugin-loader", async () => {
     const discoveries = await discoverPlugins(pluginsDir);
-    const discovery = discoveries.find(
-      (candidate) => candidate.id === "scene-prompts",
-    );
+    const discovery = discoveries.find((candidate) => candidate.id === "guide");
     expect(discovery).toBeDefined();
 
     const manifests = await loadPluginManifest(discovery!);
     expect(manifests).toHaveLength(1);
     expect(manifests[0].manifest).toMatchObject({
-      name: "scene-prompts",
+      name: "guide",
       pluginType: "plugin",
       stage: "post-turn",
       model: "plugin",
@@ -89,7 +87,7 @@ describe("scene-prompts manifest and UI loading", () => {
       },
     });
 
-    const loaded = await loadRuntime(discovery!, "scene-prompts");
+    const loaded = await loadRuntime(discovery!, "guide");
     // Engine-agnostic body reads the capability-bound runtime input instead of
     // hardcoding a particular narrative runtime id.
     expect(loaded.promptTemplate).toContain("<runtime-inputs>");
@@ -102,7 +100,7 @@ describe("scene-prompts manifest and UI loading", () => {
     const ui = await loadPluginUi(discovery!);
     expect(ui.uiSpecs?.message).toHaveLength(1);
     expect(ui.uiSpecs?.message?.[0]).toMatchObject({
-      id: "scene-prompts",
+      id: "guide",
       dataSource: { namespace: "message" },
       view: {
         component: "Stack",
@@ -112,10 +110,8 @@ describe("scene-prompts manifest and UI loading", () => {
 
   it("keeps the localized agent workflow aligned with the canonical tool contract", async () => {
     const discoveries = await discoverPlugins(pluginsDir);
-    const discovery = discoveries.find(
-      (candidate) => candidate.id === "scene-prompts",
-    );
-    const loaded = await loadRuntime(discovery!, "scene-prompts", "en-US");
+    const discovery = discoveries.find((candidate) => candidate.id === "guide");
+    const loaded = await loadRuntime(discovery!, "guide", "en-US");
 
     expect(loaded.promptTemplate).toContain("<runtime-inputs>");
     expect(loaded.promptTemplate).toContain("`recap`");
@@ -130,12 +126,9 @@ describe("scene-prompts manifest and UI loading", () => {
     );
   });
 
-  it("keeps scene prompt choices guide-like without per-card send buttons", async () => {
+  it("drafts suggestions into the composer without per-card send buttons", async () => {
     const ui = JSON.parse(
-      readFileSync(
-        path.join(pluginDir, "ui/scene-prompts-block.json"),
-        "utf-8",
-      ),
+      readFileSync(path.join(pluginDir, "ui/guide-block.json"), "utf-8"),
     ) as unknown;
 
     const actions: string[] = [];

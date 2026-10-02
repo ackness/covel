@@ -193,7 +193,6 @@ describe("normalize golden (bundled plugin set)", () => {
       "char-creator/character-tracker",
       "guide",
       "memory/extract",
-      "scene-prompts",
       "world-ir",
       "world-time/advance",
     ]);
@@ -255,11 +254,9 @@ describe("normalize golden (bundled plugin set)", () => {
 
     // Raw-text post-turn consumers still bind directly to the narrative
     // engine. They remain independent of the structured extraction branch.
-    for (const id of ["guide", "char-creator/character-tracker"]) {
-      const spec = requireSpec(specs, id);
-      expect(spec.stage).toBe("post-turn");
-      expect(spec.deps.needs).toEqual([{ capability: "narrative-engine@1" }]);
-    }
+    const tracker = requireSpec(specs, "char-creator/character-tracker");
+    expect(tracker.stage).toBe("post-turn");
+    expect(tracker.deps.needs).toEqual([{ capability: "narrative-engine@1" }]);
 
     const worldIr = requireSpec(specs, "world-ir");
     expect(worldIr.stage).toBe("post-turn");
@@ -291,13 +288,13 @@ describe("normalize golden (bundled plugin set)", () => {
       });
     }
 
-    // scene-prompts uses a required typed binding instead of duplicating the
-    // same dependency in `needs`; the binding supplies both its DAG edge and
+    // guide uses a required typed binding instead of duplicating the same
+    // dependency in `needs`; the binding supplies both its DAG edge and
     // same-turn gate.
-    const scenePrompts = requireSpec(specs, "scene-prompts");
-    expect(scenePrompts.stage).toBe("post-turn");
-    expect(scenePrompts.deps.needs).toEqual([]);
-    expect(scenePrompts.bindings.narrative).toMatchObject({
+    const guide = requireSpec(specs, "guide");
+    expect(guide.stage).toBe("post-turn");
+    expect(guide.deps.needs).toEqual([]);
+    expect(guide.bindings.narrative).toMatchObject({
       from: { capability: "narrative-engine@1", cardinality: "one" },
       select: "/narrativeOutput",
       required: true,

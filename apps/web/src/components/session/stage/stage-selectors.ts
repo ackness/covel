@@ -289,7 +289,7 @@ export function computeSpriteSlots(
   });
 }
 
-// ── Choices (interaction.request choice blocks + scene-prompts) ─────
+// ── Choices (interaction.request choice blocks + guide prompts) ─────
 
 /** One pending choice-type interaction block, ready to flatten into items. */
 export interface StageInteractionChoice {
@@ -409,7 +409,7 @@ const FALLBACK_RECAP_MAX_SENTENCES = 3;
 
 /**
  * Derive a compact, deterministic context excerpt for legacy prompt data that
- * predates scene-prompts' `recap` field. This is deliberately a fallback, not
+ * predates guide's `recap` field. This is deliberately a fallback, not
  * an LLM summary: prefer the latest complete sentences and keep the decision
  * panel bounded even when the story message is long.
  */
@@ -490,7 +490,7 @@ export interface MergedChoices {
 const TWO_COLUMN_THRESHOLD = 6;
 
 /**
- * Order: pending interaction choices, then scene-prompts short phrases
+ * Order: pending interaction choices, then guide short phrases
  * (unpacked from `prompt{N}Text/Label`, N sorted ascending, empty slots
  * skipped). Groups preserve the question each set answers; the flat `items`
  * array remains available for layout and backwards-compatible consumers.
@@ -575,9 +575,9 @@ export function mergeChoices(
 }
 
 /**
- * scene-prompts stamps its `message` namespace with the `__turnId` that
+ * guide stamps its `message` namespace with the `__turnId` that
  * produced the phrases. Once the story advances, the old prompts linger until
- * scene-prompts regenerates — drop them so the stage never offers phrases from
+ * guide regenerates — drop them so the stage never offers phrases from
  * a past turn. Returns the namespace untouched when the stamp is fresh, absent,
  * or uncomparable (no current turn yet) — the latter two keep back-compat with
  * pre-`__turnId` data. Interaction choices and the inline composer are

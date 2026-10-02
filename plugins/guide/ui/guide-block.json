@@ -1,5 +1,5 @@
 {
-  "id": "scene-prompts",
+  "id": "guide",
   "dataSource": { "namespace": "message" },
   "view": {
     "component": "Stack",
@@ -98,7 +98,7 @@
                     "action": "draftMessage",
                     "params": {
                       "text": { "$state": "/prompt1Text" },
-                      "selectionGroup": "scene-prompts:1"
+                      "selectionGroup": "guide:1"
                     }
                   }
                 }
@@ -142,7 +142,7 @@
                     "action": "draftMessage",
                     "params": {
                       "text": { "$state": "/prompt2Text" },
-                      "selectionGroup": "scene-prompts:2"
+                      "selectionGroup": "guide:2"
                     }
                   }
                 }
@@ -186,7 +186,7 @@
                     "action": "draftMessage",
                     "params": {
                       "text": { "$state": "/prompt3Text" },
-                      "selectionGroup": "scene-prompts:3"
+                      "selectionGroup": "guide:3"
                     }
                   }
                 }
@@ -230,7 +230,7 @@
                     "action": "draftMessage",
                     "params": {
                       "text": { "$state": "/prompt4Text" },
-                      "selectionGroup": "scene-prompts:4"
+                      "selectionGroup": "guide:4"
                     }
                   }
                 }
@@ -274,7 +274,7 @@
                     "action": "draftMessage",
                     "params": {
                       "text": { "$state": "/prompt5Text" },
-                      "selectionGroup": "scene-prompts:5"
+                      "selectionGroup": "guide:5"
                     }
                   }
                 }
@@ -318,7 +318,7 @@
                     "action": "draftMessage",
                     "params": {
                       "text": { "$state": "/prompt6Text" },
-                      "selectionGroup": "scene-prompts:6"
+                      "selectionGroup": "guide:6"
                     }
                   }
                 }
@@ -374,7 +374,7 @@
                 "action": "draftMessage",
                 "params": {
                   "text": { "$bindState": "/customText" },
-                  "selectionGroup": "scene-prompts:custom"
+                  "selectionGroup": "guide:custom"
                 }
               }
             }

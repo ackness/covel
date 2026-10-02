@@ -5,9 +5,9 @@ import {
 
 import { tool, z } from "@covel/tools";
 import { describe, expect, it } from "vitest";
-import createGenerateScenePrompts from "../tools/generate-scene-prompts.js";
+import createGenerateGuide from "../tools/generate-guide.js";
 
-describe("generate-scene-prompts", () => {
+describe("generate-guide", () => {
   const prompts = [
     { kind: "observe" as const, text: "我先观察破庙梁上的影子有没有呼吸声" },
     { kind: "ask" as const, text: "我低声问苏婉有没有认出这道符纹" },
@@ -16,13 +16,13 @@ describe("generate-scene-prompts", () => {
   const context = {
     sessionId: "session-1",
     turnId: "turn-7",
-    pluginId: "scene-prompts",
-    runtimeId: "scene-prompts",
+    pluginId: "guide",
+    runtimeId: "guide",
   };
 
   it("writes fixed-slot message data for the plugin-message UI", async () => {
-    const scenePromptsTool = createGenerateScenePrompts({ tool, z });
-    const result = await scenePromptsTool.execute(
+    const guideTool = createGenerateGuide({ tool, z });
+    const result = await guideTool.execute(
       {
         scene: "破庙暗影",
         recap:
@@ -49,7 +49,7 @@ describe("generate-scene-prompts", () => {
       type: "plugin.data.batch",
       sessionId: "session-1",
       turnId: "turn-7",
-      source: { pluginId: "scene-prompts", runtimeId: "scene-prompts" },
+      source: { pluginId: "guide", runtimeId: "guide" },
     });
 
     const items = proposal.payload.items as Array<{
@@ -96,8 +96,8 @@ describe("generate-scene-prompts", () => {
   });
 
   it("accepts recap and decision at their documented length boundaries", async () => {
-    const scenePromptsTool = createGenerateScenePrompts({ tool, z });
-    const minimumResult = await scenePromptsTool.execute(
+    const guideTool = createGenerateGuide({ tool, z });
+    const minimumResult = await guideTool.execute(
       {
         scene: "边界场景",
         recap: "前".repeat(20),
@@ -106,7 +106,7 @@ describe("generate-scene-prompts", () => {
       },
       context,
     );
-    const maximumResult = await scenePromptsTool.execute(
+    const maximumResult = await guideTool.execute(
       {
         scene: "边界场景",
         recap: "前".repeat(240),
@@ -123,7 +123,7 @@ describe("generate-scene-prompts", () => {
   });
 
   it("rejects recap and decision outside their documented boundaries", async () => {
-    const scenePromptsTool = createGenerateScenePrompts({ tool, z });
+    const guideTool = createGenerateGuide({ tool, z });
     const baseParams = {
       scene: "边界场景",
       recap: "前".repeat(20),
@@ -132,7 +132,7 @@ describe("generate-scene-prompts", () => {
     };
 
     await expect(
-      scenePromptsTool.execute(
+      guideTool.execute(
         { ...baseParams, recap: "短".repeat(19), decision: "短".repeat(7) },
         context,
       ),
@@ -145,7 +145,7 @@ describe("generate-scene-prompts", () => {
     });
 
     await expect(
-      scenePromptsTool.execute(
+      guideTool.execute(
         {
           ...baseParams,
           recap: "长".repeat(241),

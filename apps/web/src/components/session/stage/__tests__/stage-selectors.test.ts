@@ -510,7 +510,7 @@ describe("mergeChoices", () => {
     },
   ];
 
-  it("orders interaction choices before scene-prompts, unpacking prompt{N} by ascending N", () => {
+  it("orders interaction choices before guide prompts, unpacking prompt{N} by ascending N", () => {
     const prompts = {
       scene: "library",
       recap: "You followed the archivist into the restricted library.",
@@ -557,7 +557,7 @@ describe("mergeChoices", () => {
     expect(merged.twoColumn).toBe(false);
   });
 
-  it("uses scene-prompts context when no interaction question is pending", () => {
+  it("uses guide context when no interaction question is pending", () => {
     const merged = mergeChoices(
       [],
       {

@@ -40,10 +40,9 @@
 | sync-codex-entries                    | local   | codex               | auto-allow | 原子批量提交本轮图鉴新增与补充                                                      |
 | unlock-codex-entries                  | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部新增原语                                            |
 | update-codex-entry                    | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部更新原语                                            |
-| generate-guide                        | local   | guide               | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`      |
+| generate-guide                        | local   | guide               | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
 | upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
 | list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                 |
-| generate-scene-prompts                | local   | scene-prompts       | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
 | upsert-quests                         | local   | core-quest          | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）       |
 | update-affinity                       | local   | affinity            | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
 | update-inventory                      | local   | inventory           | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
@@ -266,7 +265,7 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 - category: `safe` | `aggressive` | `creative` | `wild` 等
 
-**使用者**: 通用交互插件。当前 `guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI。
+**使用者**: 通用交互插件。当前 `guide` 采用 `generate-guide + ui.message` 路径来承接更完整的插件自定义 UI，并经 `stage.choices@1` 把同一组短句交给舞台模式。
 
 ---
 

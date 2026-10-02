@@ -213,7 +213,7 @@ A: 传 `--keep` 保留通过后的 session；默认日志和 JSON 在 `debugs/e2
 **Q: Turn 4 开始一直 `WARNING: SSE stream terminated prematurely`？**
 A: 上游 LLM 会话被运营商断开，脚本会自动重读 turn 记录。只要 Runtime Timeline 里的 runtime 都是 `success`，可以当作正常通过。
 
-**Q: 某个插件（如 `codex` / `scene-prompts`）全程 `SKIP`？**
+**Q: 某个插件（如 `codex` / `guide`）全程 `SKIP`？**
 A: 期望推导按会话真实的 `activePlugins` 裁决。这些插件玩家没启用（不在世界种子集里）时就应当全程 `SKIP`，原因列会写 `plugin not in session active set`——这是正确行为，不是漏跑。要测它们就在建会话时激活对应插件。
 
 **Q: 我想只跑 `guide` 的回归？**

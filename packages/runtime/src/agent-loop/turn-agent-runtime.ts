@@ -126,7 +126,7 @@ export async function executeAgentRuntime({
   // structured tool-output JSON while keeping player/system messages,
   // narrative-like text, and the runtime's own previous outputs. Story
   // runtimes need this so they don't mimic JSON formats; post-turn extraction
-  // runtimes (character-tracker / codex / npc-graph / scene-prompts) need it so
+  // runtimes (character-tracker / codex / npc-graph / guide) need it so
   // other plugins' JSON doesn't accumulate in their prompt turn after turn —
   // they already get the current narrative via `<narrator-output>` and their
   // own state via plugin-data injects, and never read another plugin's output

@@ -1809,7 +1809,7 @@ sources: {}
       "world-init",
       "chat-mode-narrator",
       "scene-stage",
-      "scene-prompts",
+      "guide",
       "character-blueprint",
       "living-world-rules",
       "branch-reply",

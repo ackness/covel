@@ -49,7 +49,7 @@ pluginPolicy:
         - char-creator
         - chat-mode-narrator
         - scene-stage
-        - scene-prompts
+        - guide
         - character-blueprint
         - living-world-rules
         - branch-reply
@@ -71,7 +71,7 @@ pluginPolicy:
   recommended:
     - chat-mode-narrator
     - scene-stage
-    - scene-prompts
+    - guide
     - character-blueprint
     - living-world-rules
     - branch-reply

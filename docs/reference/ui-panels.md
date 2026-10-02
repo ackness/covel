@@ -402,7 +402,7 @@ type I18nText = string | Record<LocaleTag, string>;
 ```yaml
 ui:
   message:
-    - ./ui/action-guide-block.json
+    - ./ui/guide-block.json
 ```
 
 > **Bootstrap 注意（重要）**：`ui.message` block 只有在其声明的 `message` namespace 被写入数据后才会渲染。因此一个**只能由 block 内部按钮触发的纯手动写入者无法自举**——首屏没有数据，block 不出现，按钮也就永远点不到（典型死锁：`branch-reply` 早期即如此完全不显示）。让 block 首次出现的写入必须来自一个**非手动**路径：`scheduled` / `auto` runtime（读取叙事引擎输出后播种）、上游 runtime 的 `plugin.data` 提案，或 world-data 导入。`branch-reply` 用 `trigger: auto`（`stage: post-turn`，叙事引擎之后）播种 candidate[0]，详见 [plugins.md#branch-reply](./plugins.md#branch-reply)。
@@ -422,7 +422,7 @@ ui:
 
 ```
 guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
-  → `ui.message` 渲染三组策略卡 + 自定义输入
+  → `ui.message` 渲染情境回顾、当前决策与 3–6 条短句（舞台模式同时经 `stage.choices@1` 显示）
   → 玩家点击建议后进入待发送区
   → InputBar 统一发送待发送草稿与手写输入
 ```
@@ -446,7 +446,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 | **Dialog**   | 最新 story 正文与 `stage.dialogue@1`                   | 打字、段落切分和逐段署名                         |
 | **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项与自由输入               |
 
-“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示，逐段暂停等待点击；最后一段读完同样停一次等收尾点击（自动播放按停顿计时自动推进，正文尾部空段落不产生空白暂停），不会在打字追上流结束时自动跳到决策面板。读完且回合执行结束后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后立即隐藏整个旧决策面板，包括插件扩展区域；等待新叙事时显示生成状态，不重播已读的旧叙事。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版 scene-prompts 行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
+“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示，逐段暂停等待点击；最后一段读完同样停一次等收尾点击（自动播放按停顿计时自动推进，正文尾部空段落不产生空白暂停），不会在打字追上流结束时自动跳到决策面板。读完且回合执行结束后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后立即隐藏整个旧决策面板，包括插件扩展区域；等待新叙事时显示生成状态，不重播已读的旧叙事。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版行动建议行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
 
 舞台槽位在当前执行中可接收预览事件，提交后由服务端重算并缓存；会话恢复时重新读取已提交槽位。`watch` 仅监听提供者自己的 namespace，预览失败或取消时丢弃，不把私有插件数据直接交给舞台。
 

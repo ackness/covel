@@ -7,7 +7,7 @@
  * problems, one filter:
  *   - Story runtimes (narrator) would otherwise mimic that JSON in their prose.
  *   - Post-turn extraction runtimes (character-tracker / codex / extractor /
- *     scene-prompts) would otherwise carry every other plugin's JSON output
+ *     guide) would otherwise carry every other plugin's JSON output
  *     forward turn after turn — an unbounded, compounding token cost, since
  *     these agents already receive the current narrative via `<narrator-output>`
  *     and their own state via plugin-data injects, and never read another

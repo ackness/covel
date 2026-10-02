@@ -244,10 +244,10 @@ Covel 当前的工具层分成两类：
 
 #### Guide
 
-1. runtime 分析 narrator 输出
-2. tool 生成三类建议
-3. tool 把 `topic`、`category1Label`、`category1Suggestion1` 等写入 `plugin_data[guide][message]`
-4. `plugins/guide/ui/action-guide-block.json` 从 `message` namespace 读取并渲染
+1. runtime 分析叙事引擎输出
+2. tool 生成情境回顾、当前决策与 3–6 条短句
+3. tool 把 `recap`、`decision`、`prompt1Text`、`prompt1Label` 等写入 `plugin_data[guide][message]`
+4. `plugins/guide/ui/guide-block.json` 从 `message` namespace 读取并渲染；`stage.choices@1` 槽位把同一组短句交给舞台模式
 
 #### Codex
 
@@ -319,7 +319,7 @@ submitBehavior: {
 
 `form` 类提交（`submitForm` → `submitInteraction`）走另一条路径：原始字段值已经直接烘焙进 disabled 表单 spec，所以框架**不会**再额外渲染 footer。
 
-插件作者无需特殊适配——只要按 [`guide/ui/action-guide-block.json`](../../plugins/guide/ui/action-guide-block.json) 的方式使用 `draftMessage` 等动作，玩家选择就会被自动记录与回放。
+插件作者无需特殊适配——只要按 [`guide/ui/guide-block.json`](../../plugins/guide/ui/guide-block.json) 的方式使用 `draftMessage` 等动作，玩家选择就会被自动记录与回放。
 
 ---
 
@@ -424,9 +424,9 @@ submitBehavior: {
 
 对于高频消息面：
 
-- 直接写 `topic`
-- `category1Label`
-- `category1Suggestion1`
+- 直接写 `decision`
+- `prompt1Label`
+- `prompt1Text`
 - `item1Title`
 - `item1Category`
 

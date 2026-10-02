@@ -210,7 +210,7 @@ export function wrapStoreWithPluginDataEvents(
 
       // The commit pipeline prefers `withTransaction` (SQLite/PG). Its handlers
       // write through the tx-scoped store view, which is NOT this proxy — so
-      // proposal-backed plugin-data writes (e.g. scene-prompts' plugin.data.batch)
+      // proposal-backed plugin-data writes (e.g. guide's plugin.data.batch)
       // would commit without ever emitting `plugin-data.changed`, leaving the
       // live UI un-refreshed until a page reload re-reads the DB. Wrap the tx
       // handed to the callback with the same proxy so those writes emit too.

@@ -95,14 +95,14 @@ class ChatModeMockLLM implements LLMAdapter {
       };
     }
 
-    if (toolNames.includes("generate-scene-prompts")) {
+    if (toolNames.includes("generate-guide")) {
       this.scenePromptCalls += 1;
       return {
         content: null,
         toolCalls: [
           {
             id: `tc-prompts-${this.scenePromptCalls}`,
-            name: "generate-scene-prompts",
+            name: "generate-guide",
             arguments: JSON.stringify({
               scene: `二年B组 第${this.scenePromptCalls}轮`,
               recap:
@@ -282,7 +282,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       expect.arrayContaining([
         "chat-mode-narrator",
         "scene-stage",
-        "scene-prompts",
+        "guide",
         "character-blueprint",
         "world-time",
       ]),
@@ -409,7 +409,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         expect.arrayContaining([
           "scene-stage/cast",
           "chat-mode-narrator",
-          "scene-prompts",
+          "guide",
           "world-time/advance",
         ]),
       );
@@ -462,19 +462,19 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     const promptTurn = await store.getPluginData(
       sessionId,
-      "scene-prompts",
+      "guide",
       "message",
       "__turnId",
     );
     const promptScene = await store.getPluginData(
       sessionId,
-      "scene-prompts",
+      "guide",
       "message",
       "scene",
     );
     const promptText = await store.getPluginData(
       sessionId,
-      "scene-prompts",
+      "guide",
       "message",
       "prompt1Text",
     );

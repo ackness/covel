@@ -1,21 +1,26 @@
 # guide
 
-每段故事后给出具体的下一步行动建议，帮助玩家更快继续。
+行动建议：每段故事后衔接相关前情，点明玩家眼下要回应的抉择，并给出可直接发送的短行动句。传统故事模式在聊天区展示建议块；对话 / 舞台模式额外把短句填进舞台选项栏。
 
 ## 运行时结构
 
-- `PLUGIN.md`：叙事后执行的 agent runtime。
-- `tools/generate-guide.js`：整理分类行动建议。
-- `ui/action-guide-block.json`：叙事后展示的聊天区建议块。
+- `PLUGIN.md`：在 narrative engine 之后执行的 agent runtime。
+- `tools/generate-guide.js`：原子写入摘要、决策和场景短句。
+- `ui/guide-block.json`：展示摘要、决策与短句按钮的聊天区块；点击短句只填入输入框，由玩家在底部发送，也可补充自己的行动。
+- `server/index.js`：注册工具，并把最新一轮短句投影到 `stage.choices@1` 槽位。
 
 ## 数据与行为
 
-- 读取 `narrator.narrativeOutput`。
-- 生成稳妥、激进、创意三类行动建议。
-- 位于 narrator 下游，叙事缺失时跳过。
+- 通过 `runtime.io.inputs.narrative.from.contract: narrative-engine@1` 读取当前叙事，不绑定具体叙事器 ID；`select: /narrativeOutput` 取叙事文本。
+- 必需输入由 JSON Schema 校验；失败的叙事引擎不会调度本 runtime。
+- 一次工具调用生成 `scene`、`recap`、`decision` 和观察、提问、行动、社交四类共 3–6 条短句建议。
+- 工具通过一个 `plugin.data.batch` 写入本轮完整结果，`__turnId` 用于隔离旧轮数据。
+- `requireToolUse` 防止 agent 误写续篇，`completeAfterTools` 在工具成功后直接结束，避免第二次 LLM 调用。
 
 ## 开发
 
-修改建议分类、工具输出或 UI 绑定后，运行本插件测试。
+修改短句分类、工具输出或 UI 绑定后，运行本插件测试；`pnpm test:runtime guide` 运行 `tests/runtime-cases.json` 中的 mock 用例。
 
-The guide shows one action per category first, with additional suggestions under “More options”. Players send selected actions and optional text together from the story composer; the guide does not have a second custom-action input.
+## 供其他插件消费的输出
+
+`runtime.io.output.schema` 公开当轮 `{ scene, recap, decision, prompts }` 工具结果，`runtime.io.output.contract` 为 `scene-prompts@1`（`chat-mode-narrator` 依赖此能力）。消费者通过自己的 `runtime.io.inputs.<name>.from.contract: scene-prompts@1` 和 `accepts` schema，在当前执行中读取结果与来源，无须读取本插件内部数据。示例为 [Jev 选项推荐 Demo](https://github.com/covel-ai/covel-plugins/tree/main/examples/jev-choice-demo)。

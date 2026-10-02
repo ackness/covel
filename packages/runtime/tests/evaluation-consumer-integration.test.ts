@@ -27,7 +27,7 @@ import { processRuntimeResult } from "../src/session/session-kernel.js";
 
 const root = path.resolve(import.meta.dirname, "../../../plugins");
 describe("plugin-owned evaluation integration", () => {
-  it("passes real scene-prompts tool output into a synthetic consumer, calls its service, and commits its own data", async () => {
+  it("passes real guide tool output into a synthetic consumer, calls its service, and commits its own data", async () => {
     const discoveries = [
       ...(await discoverPlugins(root)),
       ...(await discoverPlugins(
@@ -40,7 +40,7 @@ describe("plugin-owned evaluation integration", () => {
       ensure: async () => {},
     });
     const tools = new Map<string, ToolModule>();
-    for (const id of ["scene-prompts", "evaluation-consumer"]) {
+    for (const id of ["guide", "evaluation-consumer"]) {
       const discovery = discoveries.find((d) => d.id === id)!;
       const definition = await loadPluginDefinition(discovery);
       const [parsed] = definition.manifests;
@@ -143,7 +143,7 @@ describe("plugin-owned evaluation integration", () => {
             toolCalls: [
               {
                 id: "call-1",
-                name: "generate-scene-prompts",
+                name: "generate-guide",
                 arguments: JSON.stringify(candidate),
               },
             ],
@@ -166,7 +166,7 @@ describe("plugin-owned evaluation integration", () => {
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          runtimeId: "scene-prompts",
+          runtimeId: "guide",
           status: "success",
         }),
         expect.objectContaining({
@@ -187,7 +187,7 @@ describe("plugin-owned evaluation integration", () => {
       turnId: "turn-1",
       status: "ready",
       selectedId: "prompt:2",
-      source: { pluginId: "scene-prompts" },
+      source: { pluginId: "guide" },
       options: [
         { probability: 0.2 },
         { probability: 0.6 },

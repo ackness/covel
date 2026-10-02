@@ -4,7 +4,7 @@
  * calls) is given one corrective retry — a system message telling it to call
  * its declared tool first. A second bare finish is released with a warn so a
  * stubborn model cannot wedge the runtime. Motivated by deepseek-v4-flash
- * skipping generate-scene-prompts and just continuing the narrative.
+ * skipping generate-guide and just continuing the narrative.
  */
 
 import { describe, it, expect, vi } from "vitest";

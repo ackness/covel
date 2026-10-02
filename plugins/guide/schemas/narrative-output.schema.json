@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Narrative output consumed by scene-prompts",
+  "title": "Narrative output consumed by guide",
   "type": "string",
   "minLength": 1
 }

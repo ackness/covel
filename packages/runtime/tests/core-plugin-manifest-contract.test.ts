@@ -116,7 +116,7 @@ describe("core plugin manifest contract", () => {
     const retriever = requireRuntime(manifests, "npc-graph/rag-retriever");
     const narrator = requireRuntime(manifests, "narrator");
     const chatModeNarrator = requireRuntime(manifests, "chat-mode-narrator");
-    const rawDownstreamIds = ["guide", "char-creator/character-tracker"];
+    const rawDownstreamIds = ["char-creator/character-tracker"];
     const structuredDownstreamIds = [
       "codex",
       "npc-graph/extractor",
@@ -171,7 +171,17 @@ describe("core plugin manifest contract", () => {
     ]);
 
     const guide = requireRuntime(manifests, "guide");
+    expect(getRuntimeSpec(guide).stage).toBe("post-turn");
+    // A required typed binding is both its DAG edge and same-turn gate.
+    expect(guide.needs ?? []).toEqual([]);
+    expect(guide.inputs?.narrative).toMatchObject({
+      from: { capability: "narrative-engine@1", cardinality: "one" },
+      select: "/narrativeOutput",
+      required: true,
+    });
     expect(guide).toMatchObject({
+      model: "plugin",
+      outputContract: "scene-prompts@1",
       requireToolUse: true,
       llm: {
         reasoningEffort: "disabled",
@@ -263,10 +273,6 @@ describe("core plugin manifest contract", () => {
     expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
       "sync-codex-entries",
     ]);
-    expect(requireRuntime(manifests, "scene-prompts").llm).toEqual({
-      reasoningEffort: "disabled",
-      toolChoice: { name: "generate-scene-prompts" },
-    });
     for (const id of [
       "npc-graph/extractor",
       "affinity",
@@ -290,7 +296,6 @@ describe("core plugin manifest contract", () => {
         (manifest) => manifest.model,
       ),
     ).toEqual([
-      "plugin",
       "plugin",
       "plugin",
       "plugin",

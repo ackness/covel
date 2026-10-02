@@ -144,7 +144,7 @@ export async function sendPlayerMessage(page: Page, text: string) {
  * a way to act. The composer may only be locked while a must-answer block is
  * on screen — optional suggestion panels must never lock it.
  *
- * This is what catches a plugin panel (scene-prompts, guide, …) accidentally
+ * This is what catches a plugin panel (guide, codex, …) accidentally
  * being classified as pending and freezing free-text input for the whole turn.
  */
 export async function expectPlayerCanAct(page: Page) {
