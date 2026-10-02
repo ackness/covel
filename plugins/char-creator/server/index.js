@@ -3,13 +3,33 @@ import makeCharacterForm from "../tools/create-character-form.js";
 import trackerReadBudget from "../hooks/tracker-read-budget.js";
 import protectCharacterProfiles from "../hooks/protect-character-profiles.js";
 
+/** Characters of current field values carried in the roster. */
+const ROSTER_FIELDS_BUDGET = 12000;
+
+/**
+ * Roster with each character's current fields while they fit, so the tracker
+ * can settle changes without a get-character round trip. Characters past the
+ * budget are marked `fieldsOmitted` and read on demand.
+ */
+function rosterRows(characters) {
+  let used = 0;
+  return characters.map(({ id, name, type, version, description, fields }) => {
+    const row = { id, name, type, version, description };
+    const size = JSON.stringify(fields ?? {}).length;
+    if (used + size > ROSTER_FIELDS_BUDGET)
+      return { ...row, fieldsOmitted: true };
+    used += size;
+    return { ...row, fields: fields ?? {} };
+  });
+}
+
 export default function (covel) {
   covel.provideExtension("prompt.segment@1", "character-roster", {
     handler(_input, ctx) {
       return [
         {
           id: "character-roster",
-          content: `<existing-characters>\n${JSON.stringify(ctx.world.characters.map(({ id, name, type, version, description }) => ({ id, name, type, version, description })))}\n</existing-characters>`,
+          content: `<existing-characters>\n${JSON.stringify(rosterRows(ctx.world.characters))}\n</existing-characters>`,
           position: "pre-history",
           audience: "self",
           volatility: "turn",
