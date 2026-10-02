@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **One recovery per reconnect.** After a server restart the client no longer runs a second full state reload for the `system.reset` that opens the new stream.
 - **Dimension tables stay readable in a narrow panel.** Cells keep a minimum width and the table scrolls, instead of squeezing CJK text to one character per line.
 - **Forks and old databases drop job rows.** Forks no longer copy job or log rows from snapshots taken before those were excluded, and rows of the retired `_jobs` namespace are deleted at boot.
+- **Reasoning from groq and similar hosts is read.** The Chat adapter accepts reasoning sent as `reasoning` as well as `reasoning_content`, so a reasoning model no longer hits the first-token timeout while it thinks. A follow-up echoes reasoning under the field its endpoint emits; groq rejects `reasoning_content` on assistant messages.
+- **Symlinked plugin directories load.** A plugin directory symlinked into the user plugins dir is discovered like any other, with file reads confined to its resolved root; a dangling symlink is skipped with a warning.
+- **Rate limits no longer trip the first-token timeout.** While the transport waits out a 429 or 5xx `retry-after`, the first-token timer pauses and restarts once a later attempt is answered; the call timeout still bounds the wait. On a rate-limited provider the narrator was aborted and retried into the same limit every turn.
 
 ### Added
 
@@ -43,7 +46,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Trigger history lives in a ledger.** `maxTriggerCount` and `cooldownTurns` read a kernel-owned per-runtime ledger written in the commit that ran the runtime, instead of counting runtime rows in the conversation journal. Rolled-back executions do not count, cooldowns survive compaction, and a run with no text, form, or UI block no longer writes an empty journal row. Existing sessions start with an empty ledger. `getTurnMessageStats` returns only the player-message count.
 - **The runtime job worker claims from the woken session.** Enqueues, retries, resumes, settle waits and job completions wake the worker for their session; a full scan of every session runs at startup, on a wake without a session, and in the 30 s maintenance pass.
 - **`setupRuntimes` writers share one helper** that re-reads the session and replaces only the entries each writer owns.
-- **The e2e plugin harness matches the current pipeline.** It finds forms in runtime effects, reads back each request's executions by `turnId`, counts `runtime.deferred` as a run of a detached runtime, checks background jobs end `succeeded`, fails uncommitted turns, and gates expectations on `startTurn` and `interval`.
+- **The e2e plugin harness matches the current pipeline.** It finds forms in runtime effects, reads back each request's executions by `turnId`, counts `runtime.deferred` as a run of a detached runtime, checks background jobs end `succeeded`, fails uncommitted turns, and gates expectations on `startTurn` and `interval`. By default every runtime now uses the configured models (`--slot` only overrides the story slot), and Phase 6 lists the model each runtime called.
 
 ## [0.0.44] - 2026-10-01
 
