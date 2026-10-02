@@ -26,11 +26,11 @@ contributes:
         en: Soft cap (tokens)
       description:
         zh: >-
-          本局累计 token 达到此值后，自动停掉后台生成，只保留主线叙事。留空则回退到 COST_GATE_SOFT_TOKENS 环境变量或默认
+          本局累计 token 达到此值后，自动停掉叙事之后的后台生成，只保留主线叙事和它所需的准备步骤。留空则回退到 COST_GATE_SOFT_TOKENS 环境变量或默认
           400000。
         en: >-
           Once the session's accumulated tokens reach this value, background
-          generation is trimmed and only story output keeps running. Leave unset
+          generation after the narrative is trimmed; story output and the steps that prepare it keep running. Leave unset
           to fall back to the COST_GATE_SOFT_TOKENS env var or the 400000
           default.
     - key: hardTokens
@@ -68,12 +68,12 @@ hooks are registered by its server entry (`server/index.js`).
 
 ## How it works
 
-| Hook                                | Role                                                                                                                                                                                                                        |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PostLLMResponse` (`enforce: post`) | Accumulates every LLM call's `usage` into an in-process per-session counter. Runs last so it measures the final response. Pure observer — never rewrites the response.                                                      |
-| `PreSchedule`                       | Once the session crosses the **soft** cap, narrows the turn's runtime set to story-output runtimes only (identified by `outputKind`, never by hardcoded id), skipping background LLM runtimes (codex / guide / extractors). |
-| `TurnStart` (`enforce: pre`)        | Once the session reaches the **hard** cap, aborts the whole turn; the abort reason surfaces to the client.                                                                                                                  |
-| `SessionEnd`                        | Drops the session's counter so the in-process map never leaks.                                                                                                                                                              |
+| Hook                                | Role                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PostLLMResponse` (`enforce: post`) | Accumulates every LLM call's `usage` into an in-process per-session counter. Runs last so it measures the final response. Pure observer — never rewrites the response.                                                                                                                       |
+| `PreSchedule`                       | Once the session crosses the **soft** cap, narrows the turn's runtime set to story-output runtimes (identified by `outputKind`, never by hardcoded id) and the `pre-turn` runtimes that prepare their inputs, skipping background runtimes after the narrative (codex / guide / extractors). |
+| `TurnStart` (`enforce: pre`)        | Once the session reaches the **hard** cap, aborts the whole turn; the abort reason surfaces to the client.                                                                                                                                                                                   |
+| `SessionEnd`                        | Drops the session's counter so the in-process map never leaks.                                                                                                                                                                                                                               |
 
 Setup-stage runtimes are protected by the framework regardless, so
 `PreSchedule` trimming only ever affects the main loop.
