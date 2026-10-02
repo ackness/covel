@@ -49,21 +49,19 @@ export function initialStageReadStoryKey(
 
 // ── Backdrop (scene-stage `stage/current`) ──────────────────────
 
-export type StageBackdropKind =
-  "scene" | "previous-or-hero" | "hero" | "gradient";
+export type StageBackdropKind = "scene" | "hero" | "gradient";
 
 export interface StageBackdrop {
   readonly kind: StageBackdropKind;
   /** MediaRef for "scene"; world header image URL for "hero". Absent otherwise. */
   readonly ref?: MediaRef | string;
-  readonly pendingBadge?: boolean;
 }
 
 /**
- * Four-tier backdrop fallback (spec §4: "none" and "no scene-stage data at
- * all" share the same fallback chain — world hero image first, since
- * `worldVisual` always resolves to a real image; "gradient" is kept in the
- * type as the theoretical last resort but this selector never returns it).
+ * Backdrop fallback: scene art when the scene resolved to an image, otherwise
+ * the world hero image (`worldVisual` always resolves to a real image;
+ * "gradient" is kept in the type as the theoretical last resort but this
+ * selector never returns it).
  */
 export function resolveBackdrop(
   stageCurrent: StageCurrentRecord | null | undefined,
@@ -72,9 +70,6 @@ export function resolveBackdrop(
   if (!stageCurrent) return { kind: "hero", ref: worldVisual.image };
   if (isMediaRef(stageCurrent.ref)) {
     return { kind: "scene", ref: stageCurrent.ref };
-  }
-  if (stageCurrent.pending) {
-    return { kind: "previous-or-hero", pendingBadge: true };
   }
   return { kind: "hero", ref: worldVisual.image };
 }

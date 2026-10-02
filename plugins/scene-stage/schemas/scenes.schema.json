@@ -5,7 +5,6 @@
   "properties": {
     "schemaVersion": { "const": 1 },
     "registryId": { "const": "scene-registry" },
-    "style": { "type": "object" },
     "scenes": {
       "type": "array",
       "items": {

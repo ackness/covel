@@ -12,8 +12,8 @@ function normalizeSceneLocation(value) {
 }
 
 /** Resolve a validated scene.set event against already-imported world art for
- * immediate display. Unknown locations enter a non-destructive pending state;
- * the durable resolver remains responsible for generation gates/session art. */
+ * immediate display, the same way the durable resolver will: an unknown
+ * location has no backdrop. */
 export function applySceneSetPreview(current, registry, data, turnId) {
   const location =
     typeof data.location === "string" ? data.location.trim() : "";
@@ -44,8 +44,8 @@ export function applySceneSetPreview(current, registry, data, turnId) {
       ...current,
       name: location,
       variant,
-      source: "pending",
-      sourceLabel: { zh: "场景解析中…", en: "Resolving…" }, // i18n-allow -- serialized I18nText data
+      source: "none",
+      sourceLabel: { zh: "无背景", en: "No backdrop" }, // i18n-allow -- serialized I18nText data
       resolved: undefined,
       ...(turnId ? { turnId } : {}),
     };

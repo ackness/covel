@@ -88,9 +88,6 @@ pluginSettings:
     proseLength: short
   scene-cast:
     activeSpeakerCount: 2
-  scene-stage:
-    autoGenerateScenes: true
-    maxGeneratedScenes: 6
 characterSchema:
   types:
     - npc

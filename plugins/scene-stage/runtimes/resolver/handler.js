@@ -1,12 +1,7 @@
-import {
-  withPendingProposals,
-  optionalString,
-} from "@covel/plugin-handlers-utils";
+import { withPendingProposals } from "@covel/plugin-handlers-utils";
 
 import { createHash } from "node:crypto";
 import {
-  GENERATED_NS,
-  GENERATE_REQUESTED_TOPIC,
   REGISTRY_KEY,
   SCENES_NS,
   STAGE_KEY,
@@ -15,15 +10,11 @@ import {
   makeStageProposal,
 } from "../../lib/stage-data.js";
 
-const DEFAULT_MAX_GENERATED = 10;
-
 /**
  * Resolve the current scene + time of day from a `scene.set` event and
- * publish `stage/current` for the visual stage. Matches the world scene
- * registry, then scenes already generated this session; unmatched
- * locations are queued for background generation
- * (`scene-stage/background-gen`), gated by `autoGenerateScenes` /
- * `maxGeneratedScenes`.
+ * publish `stage/current` for the visual stage. A location that matches the
+ * world scene registry uses its art; any other location has no backdrop and
+ * the stage falls back to the world image.
  *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  */
@@ -38,25 +29,16 @@ export default async function handler(ctx) {
     };
   }
   const variant = evt.data.timeOfDay === "night" ? "night" : "day";
-  const visualHint =
-    typeof evt.data.visualHint === "string" ? evt.data.visualHint : undefined;
 
-  const [registry, previous, generatedRows] = ctx.pluginData
+  const [registry, previous] = ctx.pluginData
     ? await Promise.all([
         ctx.pluginData.get(SCENES_NS, REGISTRY_KEY),
         ctx.pluginData.get(STAGE_NS, STAGE_KEY),
-        ctx.pluginData.list
-          ? ctx.pluginData.list(GENERATED_NS)
-          : Promise.resolve([]),
       ])
-    : [null, null, []];
+    : [null, null];
 
   const scenes = Array.isArray(registry?.scenes) ? registry.scenes : [];
   const worldMatch = matchScene(scenes, location);
-  const generatedMatch = worldMatch
-    ? null
-    : matchGenerated(generatedRows, location);
-
   const candidate = worldMatch
     ? {
         sceneId: String(worldMatch.sceneId),
@@ -65,22 +47,13 @@ export default async function handler(ctx) {
         day: worldMatch.day ?? null,
         night: worldMatch.night ?? null,
       }
-    : generatedMatch
-      ? {
-          sceneId: String(generatedMatch.sceneId),
-          name:
-            typeof generatedMatch.location === "string"
-              ? generatedMatch.location
-              : location,
-          source: "session",
-          day: generatedMatch.day ?? null,
-          night: generatedMatch.night ?? null,
-          visualHint:
-            typeof generatedMatch.visualHint === "string"
-              ? generatedMatch.visualHint
-              : undefined,
-        }
-      : buildUnmatchedCandidate(ctx, location, generatedRows);
+    : {
+        sceneId: sceneIdForLocation(location),
+        name: location,
+        source: "none",
+        day: null,
+        night: null,
+      };
 
   const stage = buildStageRecord({
     sceneId: candidate.sceneId,
@@ -92,14 +65,7 @@ export default async function handler(ctx) {
     turnId: ctx.turnId,
   });
 
-  // A repeated scene.set for the same scene+variant and source is a no-op,
-  // including while generation is pending. A source change (none -> pending
-  // after configuring an image slot, or pending -> none after removing it)
-  // must update the stage. Background followers execute
-  // outside the cross-process session lock, so re-emitting here can enqueue
-  // the same billed request on two pods before either one commits its cache.
-  // Failed background jobs retain their triggerEvent and are retried through
-  // the explicit job retry flow instead of a new scene.set.
+  // A repeated scene.set for the same scene, variant and source is a no-op.
   const isNoOp =
     previous &&
     typeof previous === "object" &&
@@ -113,104 +79,21 @@ export default async function handler(ctx) {
     };
   }
 
-  // Night lazy-gen steady-state gap: a session-generated scene (source
-  // "session") may only have its day variant on file (day-first, night
-  // lazy per A §4/spec §3). If the requested variant is still missing here,
-  // re-request generation for it — same gate as a fresh unmatched location,
-  // but the scene keeps its existing sceneId/source (no new "generated" row,
-  // background-gen merges into the existing one by sceneId).
-  const needsVariantBackfill =
-    candidate.source === "session" &&
-    candidate[variant] == null &&
-    isGenerationGateOpen(ctx, generatedRows);
-
-  // Prefer the current event's hint; fall back to the one stored on the
-  // generated row (a night backfill's scene.set usually carries no hint, so
-  // this keeps the night art aligned with the day subject).
-  const effectiveHint = visualHint ?? candidate.visualHint;
-  const proposal = makeStageProposal(ctx, stage);
-  // `stage` is the business value; the generate-requested event is a domain
-  // effect consumed by the event chain after the runtime commits.
-  const envelope =
-    candidate.source === "pending" || needsVariantBackfill
-      ? {
-          outcome: "success",
-          value: { stage },
-          effects: {
-            events: [
-              {
-                topic: GENERATE_REQUESTED_TOPIC,
-                data: {
-                  sceneId: candidate.sceneId,
-                  location,
-                  ...(effectiveHint ? { visualHint: effectiveHint } : {}),
-                  variant,
-                },
-              },
-            ],
-          },
-        }
-      : { outcome: "success", value: { stage } };
-
-  return withPendingProposals(envelope, [proposal]);
-}
-
-/**
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @param {string} location
- * @param {ReadonlyArray<{key: string, value: unknown}>} generatedRows
- */
-function buildUnmatchedCandidate(ctx, location, generatedRows) {
-  const sceneId = sceneIdForLocation(location);
-  const gated = isGenerationGateOpen(ctx, generatedRows);
-  return {
-    sceneId,
-    name: location,
-    source: gated ? "pending" : "none",
-    day: null,
-    night: null,
-  };
-}
-
-/**
- * Shared auto-generate gate: `autoGenerateScenes` (default true) and the
- * per-session `maxGeneratedScenes` cap. Used both for brand-new unmatched
- * locations and for backfilling a missing variant on an already-generated
- * scene (the latter doesn't consume a new cap slot — background-gen merges
- * into the existing `generated` row by sceneId — but still respects the
- * same on/off switch and cap).
- *
- * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
- * @param {ReadonlyArray<unknown>} generatedRows
- */
-function isGenerationGateOpen(ctx, generatedRows) {
-  const autoGenerate = ctx.userSettings?.autoGenerateScenes !== false;
-  const maxGenerated = resolveMaxGenerated(
-    ctx.userSettings?.maxGeneratedScenes,
-  );
-  if (!autoGenerate || generatedRows.length >= maxGenerated) return false;
-  const presetId = optionalString(ctx.userSettings?.modelPresetId) ?? "image";
-  return ctx.images ? ctx.images.isAvailable(presetId) : false;
+  return withPendingProposals({ outcome: "success", value: { stage } }, [
+    makeStageProposal(ctx, stage),
+  ]);
 }
 
 /**
  * Deterministic scene id for a location that has no registry entry —
- * `gen-` + first 8 hex chars of sha256(location). Stable across turns so
- * the same unmatched location always maps to the same id (used to key the
- * `generated` index and to dedupe repeated pending/none writes).
+ * `loc-` + first 8 hex chars of sha256(location) — so repeated scene.set
+ * events for the same unmatched location are recognised as no-ops.
  *
  * @param {string} location
  * @returns {string}
  */
 function sceneIdForLocation(location) {
-  return `gen-${createHash("sha256").update(location, "utf8").digest("hex").slice(0, 8)}`;
-}
-
-function resolveMaxGenerated(value) {
-  const num = Number(value);
-  return Number.isFinite(num) && num >= 0
-    ? Math.floor(num)
-    : DEFAULT_MAX_GENERATED;
+  return `loc-${createHash("sha256").update(location, "utf8").digest("hex").slice(0, 8)}`;
 }
 
 function normalizeLocation(text) {
@@ -248,32 +131,6 @@ function matchScene(scenes, location) {
     if (keys.some((key) => loc.includes(key) || key.includes(loc))) {
       return scene;
     }
-  }
-  return null;
-}
-
-/**
- * Match a location against scenes generated earlier this session (the
- * `generated` plugin_data namespace), same exact-then-fuzzy strategy as
- * `matchScene`.
- *
- * @param {ReadonlyArray<{key: string, value: unknown}>} rows
- * @param {string} location
- */
-function matchGenerated(rows, location) {
-  const loc = normalizeLocation(location);
-  if (!loc || !Array.isArray(rows)) return null;
-
-  const values = rows
-    .map((row) => row?.value)
-    .filter((value) => value && typeof value === "object");
-
-  for (const value of values) {
-    if (normalizeLocation(value.location) === loc) return value;
-  }
-  for (const value of values) {
-    const key = normalizeLocation(value.location);
-    if (key && (loc.includes(key) || key.includes(loc))) return value;
   }
   return null;
 }

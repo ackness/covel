@@ -4,42 +4,25 @@
 
 ## 运行时结构
 
-- `PLUGIN.md`：插件级元信息（名称/描述/关联），本身不是可执行 runtime——`runtimes/` 下才是实际发现、调度的四个 runtime。
+- `PLUGIN.md`：插件级元信息（名称/描述/关联），本身不是可执行 runtime——`runtimes/` 下才是实际发现、调度的三个 runtime。
 - `runtimes/resolver/RUNTIME.md` + `handler.js` + `ui/scene-stage-panel.json`：事件触发函数 runtime（消费 `scene.set`），场景匹配与舞台状态写入，声明右侧只读场景面板。
 - `runtimes/direction/RUNTIME.md` + `handler.js`：消费 `stage.direction`，持久化角色登退场、站位、焦点及视觉变体请求到 `direction/current`；动作流预览为退场与清场播放指定 transition，持久状态只保留仍在场角色。
-- `runtimes/background-gen/RUNTIME.md` + `handler.js`：后台函数 runtime，消费内部信令 `scene-stage.generate.requested`，调用 `ctx.images` 增量生成缺失的场景背景。
 - `runtimes/seed/RUNTIME.md` + `handler.js`：`stage: setup` 函数 runtime，开局把注册表第一个场景写入 `stage/current`，为"叙事整局不发 `scene.set`"兜底。
 - `lib/stage-data.js`：三个 runtime 共享的 namespace/key 常量、`source`/变体文案映射，以及 `stage/current` 记录的唯一构造入口（`buildStageRecord` / `makeStageProposal`）。
 - `schemas/scene-set.event.json`：`scene.set` 载荷校验。
 - `schemas/stage-direction.event.json`：`stage.direction` 批量 cues 载荷校验。
-- `schemas/generate-requested.event.json`：`scene-stage.generate.requested` 载荷校验（内部信令，`advertise: false`，不进 `<available-events>` 目录）。
-- `schemas/scenes.schema.json`：`scenes` namespace 校验，对齐世界包导入的场景注册表形状（`schemaVersion` + `registryId` + `style` + `scenes[]`）。
+- `schemas/scenes.schema.json`：`scenes` namespace 校验，对齐世界包导入的场景注册表形状（`schemaVersion` + `registryId` + `scenes[]`）。
 
-`events[].schema` 和 `dataSchemas.*.schema` 路径始终相对**插件根目录**解析；`handler` 和 `ui.*` 路径相对**各自 runtime 目录**解析——两个 runtime 的 `schemas/` 因此共享放在插件根，`ui/` 则跟着 `resolver` runtime 走。
+`events[].schema` 和 `dataSchemas.*.schema` 路径始终相对**插件根目录**解析；`handler` 和 `ui.*` 路径相对**各自 runtime 目录**解析——各 runtime 的 `schemas/` 因此共享放在插件根，`ui/` 则跟着 `resolver` runtime 走。
 
 ## 数据与行为
 
 - `scenes` namespace（`dataSchemas.scenes`，`acceptsWorldData: true`）：从世界包导入的场景注册表，key 为固定值 `scene-registry`，一行文档即整份 registry。
-- `stage/current`：解析后的当前场景状态（场景 id、名称、昼夜变体、来源、日/夜 `MediaRef`、解析后的展示图）。命中注册表或会话内已生成的场景时写入 `source: "world" | "session"`；未命中且门控放行时写入 `source: "pending"` 并向 `background-gen` 发内部事件；门控不放行则 `source: "none"`。同时写入 `sourceLabel`（`I18nText`，`source` 的展示文案，例如 `pending` → "背景生成中…"）与 `variantLabel`（`I18nText`，昼夜文案）供只读面板直接渲染——json-render spec 不支持按枚举值条件选文案，翻译需在 handler 侧算好（对齐 `scene-cast` 的 `signalView()`/`reasonLabel` 做法）。
-- `stage/generated`：会话内已增量生成的场景索引，供 `background-gen` 记账、场景解析器做会话内命中匹配、以及 `maxGeneratedScenes` 帽计数。
+- `stage/current`：解析后的当前场景状态（场景 id、名称、昼夜变体、来源、日/夜 `MediaRef`、解析后的展示图）。命中注册表时写入 `source: "world"`；未命中时写入 `source: "none"`，舞台回退到世界头图。同时写入 `sourceLabel`（`I18nText`，`source` 的展示文案，例如 `none` → "无背景"）与 `variantLabel`（`I18nText`，昼夜文案）供只读面板直接渲染——json-render spec 不支持按枚举值条件选文案，翻译需在 handler 侧算好（对齐 `scene-cast` 的 `signalView()`/`reasonLabel` 做法）。
 - `direction/current`：权威角色舞台状态。`actors[]` 记录角色、焦点、显式站位与 `variantId/outfit/expression/pose` 请求；`actors: []` 表示明确清空。未产生该记录时 Web 继续回退到 `scene-cast/active-cast`。
 - `dialogue/<turnId>`：独立于演员焦点的正文分段署名。`stage.direction.dialogue.paragraphSpeakers` 按空行分段顺序提交准确角色 ID 或 `null`，持久化为 `{ schemaVersion: 1, turnId, paragraphSpeakers: [{ characterId, displayName } | null] }`。每轮 1–80 项，未知 ID 记录诊断并降级为 `null`；只有对白映射时允许 `cues: []`，不会清空舞台。旧消息无映射、回合不匹配或最终段数不一致时，Web 不显示人物署名。
 - **开场种子**：`scene.set` 的唯一发射方是叙事 LLM（事件目录的【必做】指示是提示词约束，不是保证）。整局不发时 `resolver` 作为 `event` 触发的 runtime 永远不跑，舞台恒空。`seed` runtime 在 `stage: setup` 跑一次补上这条下限：`stage/current` 已存在（恢复会话、setup 重试）或世界没有场景注册表时跳过，否则按白天变体写入注册表第一个场景。它跑在任何叙事输出之前，因此不与 LLM 发的 `scene.set` 竞争——两者若落在同一回合，事件扇出顺序不定，后写的会盖掉正确场景。
 
-## userSettings
-
-- `autoGenerateScenes`（默认 `true`）：场景未命中注册表时，是否自动请求背景生成。关闭后未命中场景的 `stage/current.source` 恒为 `"none"`，由消费方（舞台 UI）走世界头图/渐变等回退链。
-- `maxGeneratedScenes`（默认 `10`）：单会话内允许增量生成的场景数上限，达到后新场景同样回退到 `source: "none"`，即使门控开启。
-- `modelPresetId`（`slot`，默认 `image`）：自动补图调用 `ctx.images` 时选用的图像模型用途。默认配置对应 `llm.toml` 中的 `[covel.image]`；可在插件设置或开局准备的提供方 slot 中选择其他已配置的图像用途。
-
-场景背景由本插件内置的 `background-gen` 工作流生成，与社区插画插件的 `media.image-flow@1` 扩展相互独立。安装或启用插画插件不会自动配置场景背景的模型。需要补图但所选 `[covel.<slot>]` 不存在、模型不支持图像输出或服务商未注册时，解析器直接写入 `source: "none"`，不排队生成；已排队的任务若运行时发现模型不可用，也会跳过而不发起请求，并将仍处于 `pending` 的同场景背景改为 `none`，避免持续显示生成中。配置好图像用途后，再次发射同场景的 `scene.set` 即可请求补图。若模型已可用但生成仍失败，查看后台任务及 `scene-stage.background-gen.failed` 日志中的提供方报错。
-
-## 已知边界
-
-- **同场景的会话图缺失昼夜变体时，门控变化不会立即补图**：会话中已生成某一变体（例如白天）而另一变体缺失时，`stage/current.source` 保持 `"session"`。若首次请求缺失变体时自动生成未开启或图像模型不可用，之后开启门控但场景/昼夜不变，no-op 防抖仍会跳过；切换地点或昼夜后，resolver 会重新评估缺失变体。
-- ~~**生成期间会话锁被长时间持有**~~：**已解决**（2026-07-28）。deferred follower 的执行（含 60-300s 的图像生成）现在跑在会话锁**外**，只有提交阶段（`processTurnResults`：finalize 事务 + auto-snapshot）进锁，玩家因此只需等毫秒级的提交而不是整张图。`resolver` 对相同 scene/variant 的 `pending` 状态不再重复发生成事件，避免多 Pod 在首个任务提交前各自计费；同一进程内的 follower 仍由 `<sessionId>::<runtimeId>` 作业锁串行。提交前会在锁内重读一次会话状态，玩家中途暂停/结束会话时 follower 的写入会被丢弃而不是提交进去。
-- **`execution: background` 任务的重启语义**：`background-gen` 作为持久 runtime job（`_runtime_jobs`，`origin.activation: "event"`）随触发它的回合一起提交。服务重启时仍在排队的任务会在凭证可用后继续执行；已开始执行的任务在租约过期后标为 `orphaned`，框架**不会**自动重跑（重跑要再计一次费），前端会弹出失败提示。`stage/current.source` 仍会停在 `"pending"`——那是插件自己的状态，框架不碰；直接重发相同 `scene.set` 会被幂等 no-op，玩家应对失败任务执行 retry（`POST /api/sessions/:id/runtime-jobs/:jobId/retry`），或先切换地点/昼夜再回来。
-
 ## 开发
 
-修改场景匹配逻辑、增量生成 prompt 拼装或面板数据路径后，运行本插件测试。
+修改场景匹配逻辑或面板数据路径后，运行本插件测试。

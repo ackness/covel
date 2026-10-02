@@ -9,7 +9,6 @@ export default function (covel) {
       );
       return {
         name: preview ? String(preview.data.name) : current.name,
-        pending: false,
         ...(current.ref ? { ref: current.ref } : {}),
       };
     },

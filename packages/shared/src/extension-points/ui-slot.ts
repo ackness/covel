@@ -45,7 +45,6 @@ export const stageBackdropSchema = z.strictObject({
   sceneId: z.string().optional(),
   name: z.string().optional(),
   ref: mediaRefSchema.optional(),
-  pending: z.boolean(),
   variant: z.enum(["day", "night"]).optional(),
   label: i18nTextSchema.optional(),
   preload: z.array(mediaRefSchema).optional(),

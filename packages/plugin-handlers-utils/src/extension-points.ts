@@ -162,7 +162,6 @@ export type StageBackdropModel = {
   readonly sceneId?: string;
   readonly name?: string;
   readonly ref?: MediaReference;
-  readonly pending: boolean;
   readonly variant?: "day" | "night";
   readonly label?: I18nText;
   readonly preload?: MediaReference[];

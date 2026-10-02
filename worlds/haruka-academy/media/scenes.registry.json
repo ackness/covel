@@ -1,13 +1,6 @@
 {
   "schemaVersion": 1,
   "registryId": "scene-registry",
-  "style": {
-    "direction": "anime visual-novel background art, painterly cel-shaded scenery, pastel spring palette, seaside Japanese high-school slice-of-life mood",
-    "prefix": "Visual novel background art, clean anime scenery style, soft cel-shaded painterly rendering, gentle pastel spring palette, seaside Japanese high-school slice-of-life mood, no people, no characters, ",
-    "suffix": ", clean wide establishing composition, readable foreground for character sprites, restrained detail behind faces and the lower dialogue area, consistent art style, no readable lettering, GalGame background",
-    "negative": "people, character, figure, silhouette, text, caption, watermark, logo, frame, signature",
-    "nightSuffix": ", after sunset under soft blue-violet ambient light, warm existing lamps and windows, readable midtones, preserve the approved daytime camera and geometry, keep the same dry weather and spring season"
-  },
   "scenes": [
     {
       "sceneId": "classroom-2b",

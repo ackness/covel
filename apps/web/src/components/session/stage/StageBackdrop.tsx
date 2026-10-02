@@ -1,9 +1,9 @@
 /**
  * Backdrop layer for stage mode (spec §2 `StageBackdrop`, §4 fallback
- * chain). Resolves scene art through `resolveBackdrop`'s four-tier
- * fallback and crossfades between frames: a static "previous" layer stays
+ * chain). Resolves scene art through `resolveBackdrop`'s fallback chain
+ * and crossfades between frames: a static "previous" layer stays
  * put underneath while the new frame fades in on top, so a scene change
- * or a `pending` regeneration never flashes to black.
+ * never flashes to black.
  */
 import {
   useEffect,
@@ -72,32 +72,16 @@ export function StageBackdrop({
   const visual = worldVisual(world);
   const backdrop = resolveBackdrop(sceneCurrent, visual);
 
-  // `previous-or-hero` carries no ref of its own (spec §4: keep whatever
-  // was last on screen while art regenerates) — remember the last frame
-  // that actually resolved to scene art.
-  const lastSceneRef = useRef<MediaRef | null>(null);
-  if (backdrop.kind === "scene" && isMediaRef(backdrop.ref)) {
-    lastSceneRef.current = backdrop.ref;
-  }
-
   const layer: ResolvedLayer =
     backdrop.kind === "scene" && isMediaRef(backdrop.ref)
       ? { kind: "media", key: backdrop.ref.id, ref: backdrop.ref }
-      : backdrop.kind === "previous-or-hero" && lastSceneRef.current
+      : backdrop.kind === "hero"
         ? {
-            kind: "media",
-            key: lastSceneRef.current.id,
-            ref: lastSceneRef.current,
+            kind: "url",
+            key: typeof backdrop.ref === "string" ? backdrop.ref : visual.image,
+            url: typeof backdrop.ref === "string" ? backdrop.ref : visual.image,
           }
-        : backdrop.kind === "hero" || backdrop.kind === "previous-or-hero"
-          ? {
-              kind: "url",
-              key:
-                typeof backdrop.ref === "string" ? backdrop.ref : visual.image,
-              url:
-                typeof backdrop.ref === "string" ? backdrop.ref : visual.image,
-            }
-          : { kind: "gradient", key: "gradient" };
+        : { kind: "gradient", key: "gradient" };
 
   // Two stacked layers drive the crossfade: `previous` is the last frame
   // shown (static, no animation) and `current` fades in on top via

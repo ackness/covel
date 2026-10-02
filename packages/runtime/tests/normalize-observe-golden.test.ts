@@ -326,9 +326,6 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(resolver.stage).toBeUndefined();
     expect(resolver.declaredTrigger.type).toBe("event");
 
-    const backgroundGen = requireSpec(specs, "scene-stage/background-gen");
-    expect(backgroundGen.stage).toBeUndefined();
-
     // Manual runtimes (real plugin-rpc actions): no stage, trigger untouched.
     for (const id of [
       "character-blueprint",

@@ -15,16 +15,10 @@ function ref(id) {
 const CLASSROOM_DAY = ref("1");
 const CLASSROOM_NIGHT = ref("2");
 const LIBRARY_DAY = ref("3");
-const SESSION_DAY = ref("4");
 
 const REGISTRY = {
   schemaVersion: 1,
   registryId: "scene-registry",
-  style: {
-    prefix: "Visual novel background, ",
-    suffix: ", clean composition",
-    nightSuffix: ", night time",
-  },
   scenes: [
     {
       sceneId: "classroom",
@@ -45,12 +39,8 @@ const REGISTRY = {
 function makeCtx({
   location,
   timeOfDay = "day",
-  visualHint,
   registry = REGISTRY,
   previous = null,
-  generatedRows = [],
-  userSettings = { autoGenerateScenes: true, maxGeneratedScenes: 10 },
-  images = { isAvailable: vi.fn().mockReturnValue(true) },
   noTriggerEvent = false,
 } = {}) {
   const get = vi.fn(async (namespace, key) => {
@@ -58,34 +48,20 @@ function makeCtx({
     if (namespace === "stage" && key === "current") return previous;
     return null;
   });
-  const list = vi.fn(async (namespace) => {
-    if (namespace === "generated") return generatedRows;
-    return [];
-  });
   return {
     pluginId: "scene-stage",
     runtimeId: "scene-stage/resolver",
     sessionId: "sess-1",
     turnId: "turn-1",
-    userSettings,
-    images,
     triggerEvent: noTriggerEvent
       ? undefined
-      : {
-          topic: TOPIC,
-          data: {
-            location,
-            timeOfDay,
-            ...(visualHint ? { visualHint } : {}),
-          },
-        },
-    pluginData: { get, set: vi.fn(), list, delete: vi.fn() },
+      : { topic: TOPIC, data: { location, timeOfDay } },
+    pluginData: { get, set: vi.fn(), list: vi.fn(), delete: vi.fn() },
   };
 }
 
-// Deliberate change: handler returns the canonical HandlerResult. The business value
-// (stage / skipped marker) is under `getToolContent(result).value`; the generate-requested
-// event is under `getToolContent(result).effects.events`.
+// The handler returns the canonical HandlerResult; the business value (stage /
+// skipped marker) is under `getToolContent(result).value`.
 describe("scene-stage resolver handler", () => {
   it("1. exact name match writes stage/current with source=world", async () => {
     const ctx = makeCtx({ location: "二年 B 组教室", timeOfDay: "day" });
@@ -164,278 +140,34 @@ describe("scene-stage resolver handler", () => {
     expect(getToolContent(result).effects?.events).toBeUndefined();
   });
 
-  it("5. unmatched location with the gate open queues a generate-requested event", async () => {
-    const ctx = makeCtx({
-      location: "废弃天文台",
-      timeOfDay: "day",
-      visualHint: "an abandoned observatory at dusk",
-      generatedRows: [],
-      userSettings: { autoGenerateScenes: true, maxGeneratedScenes: 10 },
-    });
-    const result = await handler(ctx);
+  it("5. unmatched location has no backdrop and requests nothing", async () => {
+    const result = await handler(makeCtx({ location: "废弃天文台" }));
 
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.value).toMatchObject({
-      source: "pending",
+      name: "废弃天文台",
+      source: "none",
       day: null,
       night: null,
       resolved: null,
-      sourceLabel: { zh: "背景生成中…", en: "Generating…" },
-    });
-    const sceneId = proposals[0].payload.value.sceneId;
-    expect(sceneId).toMatch(/^gen-[0-9a-f]{8}$/);
-    expect(getToolContent(result).effects?.events).toEqual([
-      {
-        topic: "scene-stage.generate.requested",
-        data: {
-          sceneId,
-          location: "废弃天文台",
-          visualHint: "an abandoned observatory at dusk",
-          variant: "day",
-        },
-      },
-    ]);
-  });
-
-  it("6a. unmatched location with the gate closed resolves source=none, no event", async () => {
-    const ctx = makeCtx({
-      location: "废弃天文台",
-      userSettings: { autoGenerateScenes: false, maxGeneratedScenes: 10 },
-    });
-    const result = await handler(ctx);
-
-    const proposals = getPendingProposals(result);
-    expect(proposals[0].payload.value).toMatchObject({
-      source: "none",
-      resolved: null,
       sourceLabel: { zh: "无背景", en: "No backdrop" },
     });
-    expect(getToolContent(result).effects?.events).toBeUndefined();
+    expect(proposals[0].payload.value.sceneId).toMatch(/^loc-[0-9a-f]{8}$/);
+    expect(getToolContent(result).effects).toBeUndefined();
   });
 
-  it("6b. unmatched location at the per-session generation cap resolves source=none", async () => {
-    const generatedRows = Array.from({ length: 10 }, (_, i) => ({
-      key: `gen-${i}`,
-      value: {
-        sceneId: `gen-${i}`,
-        location: `地点${i}`,
-        day: SESSION_DAY,
-        night: null,
-      },
-    }));
-    const ctx = makeCtx({
-      location: "废弃天文台",
-      generatedRows,
-      userSettings: { autoGenerateScenes: true, maxGeneratedScenes: 10 },
-    });
-    const result = await handler(ctx);
-
-    const proposals = getPendingProposals(result);
-    expect(proposals[0].payload.value.source).toBe("none");
-    expect(getToolContent(result).effects?.events).toBeUndefined();
-  });
-
-  it("skips missing image models without enqueueing, then generates after the slot is configured", async () => {
+  it("6. re-emitted scene.set for the same unmatched location is a no-op", async () => {
     const location = "废弃天文台";
-    const images = { isAvailable: vi.fn().mockReturnValue(false) };
-    const first = await handler(makeCtx({ location, images }));
-    const unavailableStage = getPendingProposals(first)[0].payload.value;
-    expect(unavailableStage.source).toBe("none");
-    expect(getToolContent(first).effects?.events).toBeUndefined();
+    const first = await handler(makeCtx({ location }));
+    const stage = getPendingProposals(first)[0].payload.value;
 
-    const repeated = await handler(
-      makeCtx({ location, previous: unavailableStage, images }),
-    );
-    expect(getToolContent(repeated).effects?.events).toBeUndefined();
-    expect(getPendingProposals(repeated)).toHaveLength(0);
+    const result = await handler(makeCtx({ location, previous: stage }));
 
-    images.isAvailable.mockReturnValue(true);
-    const configured = await handler(
-      makeCtx({ location, previous: unavailableStage, images }),
-    );
-    expect(getPendingProposals(configured)[0].payload.value.source).toBe(
-      "pending",
-    );
-    expect(getToolContent(configured).effects?.events).toHaveLength(1);
-    expect(images.isAvailable).toHaveBeenCalledWith("image");
-  });
-
-  it("checks the selected slot and clears a pending stage if it becomes unavailable", async () => {
-    const location = "废弃天文台";
-    const pending = await handler(makeCtx({ location }));
-    const pendingStage = getPendingProposals(pending)[0].payload.value;
-    const images = { isAvailable: vi.fn().mockReturnValue(false) };
-    const result = await handler(
-      makeCtx({
-        location,
-        previous: pendingStage,
-        images,
-        userSettings: { modelPresetId: "  illustration  " },
-      }),
-    );
-    expect(getPendingProposals(result)[0].payload.value.source).toBe("none");
-    expect(getToolContent(result).effects?.events).toBeUndefined();
-    expect(images.isAvailable).toHaveBeenCalledWith("illustration");
-  });
-
-  it("keeps world and cached art available without an image model", async () => {
-    const world = await handler(
-      makeCtx({ location: "二年 B 组教室", images: null }),
-    );
-    expect(getPendingProposals(world)[0].payload.value).toMatchObject({
-      source: "world",
-      resolved: CLASSROOM_DAY,
+    expect(getToolContent(result).value).toMatchObject({
+      skipped: true,
+      reason: "no-op: scene/variant unchanged",
     });
-    expect(getToolContent(world).effects?.events).toBeUndefined();
-
-    const cached = await handler(
-      makeCtx({
-        location: "地下室",
-        timeOfDay: "night",
-        images: null,
-        generatedRows: [
-          {
-            key: "gen-abcd1234",
-            value: {
-              sceneId: "gen-abcd1234",
-              location: "地下室",
-              day: SESSION_DAY,
-              night: null,
-            },
-          },
-        ],
-      }),
-    );
-    expect(getPendingProposals(cached)[0].payload.value).toMatchObject({
-      source: "session",
-      resolved: SESSION_DAY,
-    });
-    expect(getToolContent(cached).effects?.events).toBeUndefined();
-  });
-
-  it("7. session-generated scene match resolves source=session", async () => {
-    const generatedRows = [
-      {
-        key: "gen-abcd1234",
-        value: {
-          sceneId: "gen-abcd1234",
-          location: "地下室",
-          day: SESSION_DAY,
-          night: null,
-        },
-      },
-    ];
-    const ctx = makeCtx({ location: "地下室", generatedRows });
-    const result = await handler(ctx);
-
-    const proposals = getPendingProposals(result);
-    expect(proposals[0].payload.value).toMatchObject({
-      sceneId: "gen-abcd1234",
-      source: "session",
-      day: SESSION_DAY,
-      resolved: SESSION_DAY,
-      sourceLabel: { zh: "本局生成", en: "Generated this session" },
-    });
-  });
-
-  it("7b. session match missing the requested variant backfills via generate-requested when gated open", async () => {
-    const generatedRows = [
-      {
-        key: "gen-abcd1234",
-        value: {
-          sceneId: "gen-abcd1234",
-          location: "地下室",
-          day: SESSION_DAY,
-          night: null,
-        },
-      },
-    ];
-    const ctx = makeCtx({
-      location: "地下室",
-      timeOfDay: "night",
-      generatedRows,
-      userSettings: { autoGenerateScenes: true, maxGeneratedScenes: 10 },
-    });
-    const result = await handler(ctx);
-
-    const proposals = getPendingProposals(result);
-    expect(proposals[0].payload.value).toMatchObject({
-      sceneId: "gen-abcd1234",
-      source: "session",
-      variant: "night",
-      night: null,
-      resolved: SESSION_DAY,
-    });
-    expect(getToolContent(result).effects?.events).toEqual([
-      {
-        topic: "scene-stage.generate.requested",
-        data: { sceneId: "gen-abcd1234", location: "地下室", variant: "night" },
-      },
-    ]);
-  });
-
-  it("7b-hint. night backfill reuses the visualHint stored on the generated row when the scene.set carries none", async () => {
-    const generatedRows = [
-      {
-        key: "gen-abcd1234",
-        value: {
-          sceneId: "gen-abcd1234",
-          location: "地下室",
-          day: SESSION_DAY,
-          night: null,
-          visualHint: "a dim stone cellar lit by a single bulb",
-        },
-      },
-    ];
-    const ctx = makeCtx({
-      location: "地下室",
-      timeOfDay: "night",
-      // no visualHint on this scene.set — the day one is long gone
-      generatedRows,
-      userSettings: { autoGenerateScenes: true, maxGeneratedScenes: 10 },
-    });
-    const result = await handler(ctx);
-
-    expect(getToolContent(result).effects?.events).toEqual([
-      {
-        topic: "scene-stage.generate.requested",
-        data: {
-          sceneId: "gen-abcd1234",
-          location: "地下室",
-          visualHint: "a dim stone cellar lit by a single bulb",
-          variant: "night",
-        },
-      },
-    ]);
-  });
-
-  it("7c. session match missing the requested variant only falls back, no event, when the gate is closed", async () => {
-    const generatedRows = [
-      {
-        key: "gen-abcd1234",
-        value: {
-          sceneId: "gen-abcd1234",
-          location: "地下室",
-          day: SESSION_DAY,
-          night: null,
-        },
-      },
-    ];
-    const ctx = makeCtx({
-      location: "地下室",
-      timeOfDay: "night",
-      generatedRows,
-      userSettings: { autoGenerateScenes: false, maxGeneratedScenes: 10 },
-    });
-    const result = await handler(ctx);
-
-    const proposals = getPendingProposals(result);
-    expect(proposals[0].payload.value).toMatchObject({
-      source: "session",
-      variant: "night",
-      resolved: SESSION_DAY,
-    });
-    expect(getToolContent(result).effects?.events).toBeUndefined();
+    expect(getPendingProposals(result)).toHaveLength(0);
   });
 
   it("8a. skips without writing when there is no trigger event", async () => {
@@ -454,24 +186,6 @@ describe("scene-stage resolver handler", () => {
     expect(getToolContent(result).value.skipped).toBe(true);
     expect(getPendingProposals(result)).toHaveLength(0);
     expect(ctx.pluginData.get).not.toHaveBeenCalled();
-  });
-
-  it("10. re-emitted scene.set for a pending stage is a no-op to avoid duplicate billed jobs", async () => {
-    const location = "废弃天文台";
-    // First resolve queued generation. While its detached follower is still
-    // running, another turn may reach a different server pod.
-    const first = await handler(makeCtx({ location }));
-    const pendingStage = getPendingProposals(first)[0].payload.value;
-    expect(pendingStage.source).toBe("pending");
-
-    const result = await handler(makeCtx({ location, previous: pendingStage }));
-
-    expect(getToolContent(result).value).toMatchObject({
-      skipped: true,
-      reason: "no-op: scene/variant unchanged",
-    });
-    expect(getToolContent(result).effects?.events).toBeUndefined();
-    expect(getPendingProposals(result)).toHaveLength(0);
   });
 
   it("9. day-to-night switch on the same scene writes a new variant, not a no-op", async () => {

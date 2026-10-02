@@ -50,7 +50,7 @@ vi.mock("@/services/api", () => ({
 
 const slot = (name: string) => ({
   slot: "stage.backdrop@1",
-  value: { name, pending: false },
+  value: { name },
   revision: name,
 });
 const event = (type: string, payload: Record<string, unknown> = {}) =>

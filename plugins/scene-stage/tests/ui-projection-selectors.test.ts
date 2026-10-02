@@ -53,7 +53,7 @@ describe("applySceneSetPreview", () => {
     ).toMatchObject({ resolved: ref("classroom-day") });
   });
 
-  it("keeps the previous frame while an unknown scene awaits resolution", () => {
+  it("previews an unknown scene without a backdrop, as the resolver will", () => {
     const previous: StageCurrentRecord = {
       sceneId: "classroom",
       name: "二年 B 组",
@@ -65,7 +65,7 @@ describe("applySceneSetPreview", () => {
         location: "学生会室",
         timeOfDay: "day",
       }),
-    ).toMatchObject({ name: "学生会室", source: "pending" });
+    ).toMatchObject({ name: "学生会室", source: "none", resolved: undefined });
   });
 });
 

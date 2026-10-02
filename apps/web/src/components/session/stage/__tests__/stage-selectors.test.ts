@@ -53,7 +53,6 @@ describe("resolveBackdrop", () => {
   it("有图: a resolved MediaRef renders the scene", () => {
     const stage: StageCurrentRecord = {
       name: "教室",
-      pending: false,
       ref: ref("scene-1"),
     };
     expect(resolveBackdrop(stage, worldVisual)).toEqual({
@@ -62,21 +61,9 @@ describe("resolveBackdrop", () => {
     });
   });
 
-  it("pending: generating keeps the previous frame (or hero) with a badge", () => {
-    const stage: StageCurrentRecord = {
-      name: "unknown-alley",
-      pending: true,
-    };
-    expect(resolveBackdrop(stage, worldVisual)).toEqual({
-      kind: "previous-or-hero",
-      pendingBadge: true,
-    });
-  });
-
   it("none: explicit no-art location falls back to the world hero image", () => {
     const stage: StageCurrentRecord = {
       name: "storage-closet",
-      pending: false,
     };
     expect(resolveBackdrop(stage, worldVisual)).toEqual({
       kind: "hero",

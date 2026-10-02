@@ -85,7 +85,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | memory                                                                   | memory              | brain              | memory        | blocks             | 记忆插件在脱离回合的 post-turn function runtime 中更新自己的记忆块并展示                         |
 | npc-graph/extractor                                                      | npc-graph           | network            | npc-graph     | nodes + edges      | NPC 关系图（force-directed 可视化）                                                              |
 | scene-cast                                                               | scene-cast          | users-round        | （无）        | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data）                           |
-| scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（`pending` 时"背景生成中…"）    |
+| scene-stage/resolver                                                     | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（未命中注册表时"无背景"）       |
 | world-init/schema-gen                                                    | world-overview      | map                | world-data    | session.dimensions | 任意维度当前值、版本、编辑及待结算恢复                                                           |
 | world-init/schema-gen                                                    | world-schema        | sliders-horizontal | world-data    | schema             | 角色属性 schema                                                                                  |
 
@@ -462,12 +462,11 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 输入直接是 `stage.backdrop@1` 槽位值，符合 `stageBackdropSchema`；`label` 供状态文案展示，不控制回退。
 
-| 档                 | 触发                                         | 表现                                        |
-| ------------------ | -------------------------------------------- | ------------------------------------------- |
-| `scene`            | 槽位 `ref` 是 `MediaRef`                     | 渲染场景图（换图 600ms crossfade）          |
-| `previous-or-hero` | 无有效 `ref` 且 `pending: true`              | 保留上一帧场景图 + 呼吸徽标，无则退世界头图 |
-| `hero`             | 槽位缺失，或无有效 `ref` 且 `pending: false` | 世界头图（`worldVisual().image`）           |
-| `gradient`         | 理论兜底                                     | 世界 accent 渐变（选择器当前不返回）        |
+| 档         | 触发                     | 表现                                 |
+| ---------- | ------------------------ | ------------------------------------ |
+| `scene`    | 槽位 `ref` 是 `MediaRef` | 渲染场景图（换图 600ms crossfade）   |
+| `hero`     | 槽位缺失，或无有效 `ref` | 世界头图（`worldVisual().image`）    |
+| `gradient` | 理论兜底                 | 世界 accent 渐变（选择器当前不返回） |
 
 ### 履历抽屉与表单模态
 

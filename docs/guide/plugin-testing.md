@@ -101,7 +101,7 @@ it("saves data via a plugin.data proposal", async () => {
 });
 ```
 
-事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），直接断言 `HandlerResult.effects` 的产物，范例见 [`plugins/scene-stage/tests/background-gen.test.js`](../../plugins/scene-stage/tests/background-gen.test.js)。`expectAssetGenerated` 接受 `RuntimeResult`、结果数组或 `TurnResult`，只检查显式 effects，不接受裸业务输出。
+事件触发 / 媒体生成类 handler 通常手写 context 对象（`vi.fn()` 桩掉 `pluginData` / `images` / `logger`），直接断言 `HandlerResult.effects` 的产物，范例见 [`plugins/scene-stage/tests/handler.test.js`](../../plugins/scene-stage/tests/handler.test.js)（事件触发）与 [`packages/plugin-handlers-utils/tests/image-generation.test.ts`](../../packages/plugin-handlers-utils/tests/image-generation.test.ts)（媒体生成）。`expectAssetGenerated` 接受 `RuntimeResult`、结果数组或 `TurnResult`，只检查显式 effects，不接受裸业务输出。
 
 ### In-process turn（手搓 turn-executor）
 

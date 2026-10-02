@@ -1,12 +1,10 @@
 /**
  * Integration test: drive `createEventDirectory` off the *real* bundled
  * `plugins/scene-stage` manifest — discover → register → activate → directory,
- * the same chain `bootstrap.ts` wires. Pins two things a synthetic-manifest
- * unit test can't: (1) scene-stage's public event contracts really resolve and
- * validate against their on-disk schemas, and (2) the `advertise: false`
- * internal topic (`scene-stage.generate.requested`) stays out of the catalogue
- * even after the events decl migrated onto the resolver runtime. A future
- * layout regression (schema path or decl location) fails here.
+ * the same chain `bootstrap.ts` wires. Pins what a synthetic-manifest unit
+ * test can't: scene-stage's public event contracts really resolve and validate
+ * against their on-disk schemas. A future layout regression (schema path or
+ * decl location) fails here.
  */
 
 import path from "node:path";
@@ -49,17 +47,14 @@ async function setupSceneStageDirectory() {
 }
 
 describe("event directory — real scene-stage manifest", () => {
-  it("advertises public stage topics and hides the internal topic", async () => {
+  it("advertises the public stage topics", async () => {
     const directory = await setupSceneStageDirectory();
     const topics = await directory.listTopics(SESSION_ID);
-    expect(topics).toContain("scene.set");
-    expect(topics).toContain("stage.direction");
-    expect(topics).not.toContain("scene-stage.generate.requested");
+    expect([...topics].sort()).toEqual(["scene.set", "stage.direction"]);
     const catalog = await directory.catalogText(SESSION_ID, "en-US");
     expect(catalog).toContain('"enum":["actor.enter","actor.update"]');
     expect(catalog).toContain('"required":["type","character"]');
     expect(catalog).toContain('"$defs"');
-    expect(catalog).not.toContain("scene-stage.generate.requested");
   });
 
   it("validates a conforming scene.set payload against the on-disk schema", async () => {

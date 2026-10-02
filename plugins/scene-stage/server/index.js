@@ -46,7 +46,6 @@ export default function (covel) {
         ...(current?.variant ? { variant: current.variant } : {}),
         ...(current?.sourceLabel ? { label: current.sourceLabel } : {}),
         ...(ref(current?.resolved) ? { ref: current.resolved } : {}),
-        pending: current?.source === "pending",
         preload,
       };
     },

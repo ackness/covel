@@ -5,8 +5,8 @@
  * (see plugin-rpc.test.ts's "sync target + background follower" case), but
  * the main narrative route (/api/actions) never consumed
  * `executeTurn()`'s `result.deferredFollowers` — an `execution: 'background'`
- * runtime triggered by an event emitted on the main turn path (e.g.
- * scene-stage/background-gen off scene-stage/resolver) would never run.
+ * runtime triggered by an event emitted on the main turn path (e.g. an image
+ * generation follower reacting to a narrator event) would never run.
  * This test pins the fix: the follower is queued as a durable event job in
  * the turn's commit, and the runtime job worker executes and commits it.
  */
@@ -261,9 +261,8 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     });
   });
 
-  // A background follower is typically a media generation: scene-stage's
-  // background-gen declares `timeoutMs: 360000` and one image legitimately
-  // takes 60-300s. While it ran under the session lock, every player message
+  // A background follower is typically a media generation, and one image
+  // legitimately takes 60-300s. While it ran under the session lock, every player message
   // queued behind the artwork — and under PostgreSQL, where acquiring the lock
   // is capped at 30s, the player's action did not just wait, it failed.
   it("leaves the session lock free while the follower executes", async () => {
