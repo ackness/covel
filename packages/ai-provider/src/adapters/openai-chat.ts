@@ -188,13 +188,20 @@ function reasoningContinuation(
     : undefined;
 }
 
-function reasoningField(
-  msg: TextMessage,
+/**
+ * The reasoning field is a property of the endpoint, not of one message, so
+ * no provider list is needed: a request echoes reasoning under the field this
+ * endpoint was seen to emit, else under the common `reasoning_content`.
+ */
+function endpointReasoningField(
+  messages: readonly TextMessage[],
   model: string,
   config: ProviderConfig,
 ): OpenAiChatReasoningField {
-  return continuationItems(msg, PROTOCOL, model, config)?.some(
-    (item) => item.type === "reasoning" && item.field === "reasoning",
+  return messages.some((msg) =>
+    continuationItems(msg, PROTOCOL, model, config)?.some(
+      (item) => item.type === "reasoning" && item.field === "reasoning",
+    ),
   )
     ? "reasoning"
     : "reasoning_content";
@@ -209,9 +216,10 @@ function serializeMessages(
   model: string,
   config: ProviderConfig,
 ): Record<string, unknown>[] {
+  const field = endpointReasoningField(messages, model, config);
   return messages.map((msg) => {
     const reasoning = msg.reasoningContent
-      ? { [reasoningField(msg, model, config)]: msg.reasoningContent }
+      ? { [field]: msg.reasoningContent }
       : {};
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
       return {

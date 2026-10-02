@@ -150,18 +150,27 @@ describe("normalized provider reasoning", () => {
             ...(providerContinuation ? { providerContinuation } : {}),
           },
           { role: "tool", toolCallId: "tool-1", content: "result" },
+          // A draft returned without its continuation still goes to the same
+          // endpoint, so it uses the endpoint's field.
+          {
+            role: "assistant",
+            content: "Draft",
+            reasoningContent: "Second thought",
+          },
         ],
       });
     await followUp(done.providerContinuation);
     await followUp(undefined);
     const sent = fetcher.mock.calls.map(
-      ([, init]) => JSON.parse(String(init.body)).messages[1],
+      ([, init]) => JSON.parse(String(init.body)).messages,
     );
-    expect(sent[0]).toMatchObject({ reasoning: "Visible summary" });
-    expect(sent[0]).not.toHaveProperty("reasoning_content");
-    // Without the continuation the default field stays `reasoning_content`.
-    expect(sent[1]).toMatchObject({ reasoning_content: "Visible summary" });
-    expect(sent[1]).not.toHaveProperty("reasoning");
+    expect(sent[0][1]).toMatchObject({ reasoning: "Visible summary" });
+    expect(sent[0][1]).not.toHaveProperty("reasoning_content");
+    expect(sent[0][3]).toMatchObject({ reasoning: "Second thought" });
+    // Without a continuation the default field stays `reasoning_content`.
+    expect(sent[1][1]).toMatchObject({ reasoning_content: "Visible summary" });
+    expect(sent[1][1]).not.toHaveProperty("reasoning");
+    expect(sent[1][3]).toMatchObject({ reasoning_content: "Second thought" });
   });
 
   it("accumulates Anthropic thinking and preserves signed block order across a tool follow-up", async () => {
