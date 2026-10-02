@@ -41,6 +41,7 @@ import type {
 import {
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
+  concealedRuntimeIds,
   assertJsonValue,
   getRuntimeSpec,
   readRuntimeEnv,
@@ -529,6 +530,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             turnId: turnArgs.turnId,
             traceId,
             retryScope: currentRetryScope,
+            concealedRuntimeIds: concealedRuntimeIds(activeRuntimes),
           });
 
           // `phase` is persisted by the session-clock write in finalizeExecution.

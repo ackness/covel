@@ -22,9 +22,11 @@ function makeCtx({
   revealed = {},
   turnId = "t-1",
   sourceTurnId,
+  planned = {},
 } = {}) {
   const data = {
     "_hidden.events": { [event.id]: event },
+    "_hidden.planned": { ...planned },
     revealed: { ...revealed },
   };
   const writes = [];
@@ -111,5 +113,31 @@ describe("evaluate handler", () => {
       },
     });
     expect((await handler(ctx)).value.cue).toBeNull();
+  });
+
+  it("fires planned events and lists only fired and planned events for planners", async () => {
+    const debt = {
+      id: "harbor-debt",
+      title: "The Harbor Debt",
+      when: { dimension: "location", equals: "harbor" },
+      payload: "A debt collector waits by the bollards.",
+      once: true,
+      plannedTurn: 3,
+    };
+    const { ctx } = makeCtx({
+      location: "harbor",
+      planned: { [debt.id]: debt },
+    });
+    const result = await handler(ctx);
+    expect(result.value.cue?.eventId).toBe("harbor-debt");
+    expect(result.value.ledger).toEqual({
+      turn: 5,
+      revealed: [
+        { eventId: "harbor-debt", title: "The Harbor Debt", lastTurn: 5 },
+      ],
+      planned: [],
+    });
+    // The pending authored event is never named to planners.
+    expect(JSON.stringify(result.value.ledger)).not.toContain("lighthouse");
   });
 });

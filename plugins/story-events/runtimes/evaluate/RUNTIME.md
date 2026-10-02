@@ -23,6 +23,7 @@ io:
   output:
     contract: story-event-cue@1
   visibility: system
+  concealed: true
 function:
   handler: ./handler.js
 ---

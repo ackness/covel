@@ -192,6 +192,9 @@
       "type": "string",
       "enum": ["story", "plugin", "system"]
     },
+    "concealed": {
+      "type": "boolean"
+    },
     "outputContract": {
       "type": "string",
       "minLength": 1

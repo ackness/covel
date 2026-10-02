@@ -6,6 +6,9 @@
 
 - `evaluate`：pre-turn function runtime。每回合读取隐藏事件、冻结的维度快照（`world.dimensions@1`）和世界时间（`world-time-context@1`），按确定性规则判断，最多揭示一个事件，输出 `story-event-cue@1`。
 - `narrator` 与 `chat-mode-narrator` 以可选输入 `storyEvent` 消费该合约；没有启用本插件时输入为空，叙事行为不变。
+- `intake`：post-turn function runtime。接收其他插件在剧情中发布的 `story-event.plan@1` 计划，校验后写入 `_hidden.planned`（见下文「剧情中追加事件」）。
+- `evaluate` 输出里的 `ledger` 是给策划者的公开账本：当前回合、已发生事件和已埋下但未发生的计划事件（只有 ID 与公开标题）。世界作者尚未发生的事件不会出现在账本里。
+- `evaluate` 与 `intake` 都声明 `io.concealed: true`，它们的输出不会出现在 trace、实时流和执行历史里。
 
 ## 世界包写法
 
@@ -67,10 +70,39 @@ sources:
 - 触发时在公开命名空间 `revealed` 写一条揭示记录：事件 ID、可选的公开标题、首次与最近触发回合、次数。记录不包含剧情内容。
 - 同一回合重试时重新给出同一条提示，不会重复触发或丢失；整轮执行失败回滚时，揭示记录也不会提交，下回合可再次触发。
 
+## 剧情中追加事件
+
+任何插件都可以在 post-turn 发布 `story-event.plan@1` 输出（例如内置的 [story-plotter](../story-plotter/README.md)），本插件的 `intake` 在同一回合接收：
+
+```json
+{
+  "events": [
+    {
+      "id": "salt-fangs-collect",
+      "title": "盐牙讨账",
+      "when": {
+        "all": [{ "revealed": "meg-shows-the-fragment", "turnsSinceGte": 3 }]
+      },
+      "payload": "两个盐牙会的人在主角的住处门口等着……"
+    }
+  ],
+  "retire": ["dock-fire"],
+  "reason": "铁姑的条件被拒绝了"
+}
+```
+
+- 条件写法与世界包事件相同；每份计划最多 3 个事件，同时等待的计划事件最多 8 个。
+- 引用的维度、世界时间字段和事件必须存在；不能复用世界作者的事件 ID，也不能改写已经发生的事件。
+- 通过的事件写入 `_hidden.planned`，记录来源插件、runtime 和计划回合，只触发一次；`retire` 只能撤回尚未发生的计划事件。
+- 校验结果（接受、撤回、拒绝原因）只含事件 ID，不含剧情内容。
+- 计划事件和作者事件分属不同的隐藏命名空间，世界数据同步不会覆盖计划事件。
+
+发布计划的 runtime 会接触剧情内容，应声明 `io.concealed: true`。
+
 ## 边界
 
-- 这是「不剧透」，不是加密：世界包文件就在玩家本地，翻文件仍能看到。
-- 目前只做确定性条件；需要模型判断的模糊条件、由插件 agent 动态生成的隐藏事件和作者调试视图留作后续。
+- 这是「不剧透」，不是加密：世界包文件就在玩家本地，翻文件仍能看到；浏览器本地模式的 checkpoint 也包含隐藏数据和计划事件。
+- 目前只做确定性条件；需要模型判断的模糊条件和作者调试视图留作后续。
 
 ## 开发与验证
 

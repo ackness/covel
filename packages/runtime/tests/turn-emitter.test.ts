@@ -26,6 +26,41 @@ function makeBusSpy(): EventBus & {
 }
 
 describe("TurnEmitter", () => {
+  it("strips content from concealed runtimes before persisting or streaming", async () => {
+    const store = makeStoreSpy();
+    const bus = makeBusSpy();
+    const emitter = createTurnEmitter({
+      store,
+      eventBus: bus,
+      sessionId: "S",
+      turnId: "T",
+      concealedRuntimeIds: new Set(["planner/plot"]),
+    });
+    await emitter.emit("tool.calling", {
+      runtimeId: "planner/plot",
+      toolName: "plan",
+      arguments: '{"payload":"spoiler"}',
+    });
+    await emitter.emit("tool.calling", {
+      runtimeId: "narrator",
+      toolName: "emit-event",
+      arguments: '{"topic":"open"}',
+    });
+
+    const persisted = store.addTraceEvent.mock.calls.map(
+      (call) =>
+        (call as unknown as [{ payload: Record<string, unknown> }])[0].payload,
+    );
+    expect(persisted[0]).toMatchObject({
+      concealed: true,
+      runtimeId: "planner/plot",
+      toolName: "plan",
+    });
+    expect(JSON.stringify(persisted[0])).not.toContain("spoiler");
+    expect(JSON.stringify(bus.emitted[0])).not.toContain("spoiler");
+    expect(persisted[1]).toMatchObject({ arguments: '{"topic":"open"}' });
+  });
+
   it.each([false, true])(
     "isolates synchronous and asynchronous store failures and redacts fallback logs (async=%s)",
     async (asynchronous) => {

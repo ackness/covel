@@ -9,14 +9,76 @@
       "type": ["object", "null"],
       "required": ["eventId", "payload"],
       "properties": {
-        "eventId": { "type": "string" },
-        "title": { "type": "string" },
-        "payload": { "type": "string" }
+        "eventId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
-    "cueContext": { "type": "string" },
-    "diagnostics": { "type": "array", "items": { "type": "string" } }
+    "cueContext": {
+      "type": "string"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ledger": {
+      "description": "What planners may know: fired events and pending planned events, by ID and public title only.",
+      "type": "object",
+      "required": ["turn", "revealed", "planned"],
+      "properties": {
+        "turn": {
+          "type": "integer"
+        },
+        "revealed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["eventId"],
+            "properties": {
+              "eventId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "lastTurn": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "planned": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["eventId"],
+            "properties": {
+              "eventId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "plannedTurn": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

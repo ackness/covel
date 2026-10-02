@@ -367,7 +367,7 @@ interface UIRenderPart {
 
 读取会叠加**本次执行内尚未提交**的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` proposal（read-your-own-write）。写入走 proposal、在执行完成时才提交；叠加只覆盖**当前会话、当前插件**的 pending 操作。同 key 按 proposal 顺序应用，最后一次为准：删除后读取返回 `found: false`，随后重新写入则读取新值。写入 `null` 是存储一个值，不能等同于删除。不同 runtime 的独立缓冲区不会在此合并。
 
-隐藏世界数据（`_hidden.<namespace>`，来自 `visibility: hidden` source）不会返回给模型：读取一律视为 `found: false`。
+隐藏世界数据（`_hidden.<namespace>`，来自 `visibility: hidden` source 或插件在剧情中追加）不会返回给模型：读取一律视为 `found: false`。`plugin-data-set` / `plugin-data-set-batch` 拒绝任何 `_` 前缀命名空间，模型不能借通用工具写入隐藏数据。
 
 ---
 

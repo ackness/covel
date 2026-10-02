@@ -61,20 +61,22 @@ describe("cost-gate hooks", () => {
     expect(r).toEqual({ action: "continue" });
   });
 
-  it("trim-downstream drops non-story runtimes at/above the soft cap", async () => {
+  it("trim-downstream drops post-narrative runtimes at/above the soft cap", async () => {
     await accumulateUsage(
       { sessionId: SID },
       { response: { usage: { inputTokens: 60, outputTokens: 0 } } },
     ); // 60 >= 50
     const triggered = [
-      { name: "narrator", outputKind: "story" },
-      { name: "codex", outputKind: "plugin" },
-      { name: "guide", outputKind: "plugin" },
+      { name: "dice", outputKind: "system", stage: "pre-turn" },
+      { name: "narrator", outputKind: "story", stage: "narrative" },
+      { name: "codex", outputKind: "plugin", stage: "post-turn" },
+      { name: "guide", outputKind: "plugin", stage: "post-turn" },
     ];
     const r = await trimDownstream({ sessionId: SID }, { triggered });
     expect(r.action).toBe("continue");
     expect(r.replace.triggered).toEqual([
-      { name: "narrator", outputKind: "story" },
+      { name: "dice", outputKind: "system", stage: "pre-turn" },
+      { name: "narrator", outputKind: "story", stage: "narrative" },
     ]);
   });
 

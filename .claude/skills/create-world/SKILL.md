@@ -47,6 +47,7 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 - **RPG 世界**（判定/任务/背包/好感玩法）：`pluginPolicy.requested` 拉起 `dice-check`、`core-quest`、`inventory`、`affinity` 四件套；worldData 预置三类种子——`contract:quests@1`（任务）、`contract:inventory.items@1`（开局物资，货币 tag `currency`）、`contract:character.affinity@1`（关键 NPC 初始好感），记录形状见 `docs/reference/world-data.md`「内置 RPG 玩法种子」；`characterSchema.attributes` 声明 0-5 小整数属性作判定修正来源（描述里写明各自管哪类判定）。种子的 NPC/giver 必须与 lore 和角色蓝图同名对齐。成品参考 `worlds/emberback`
 - **跑团世界**（开局配点 + 掷骰检定）：请求 `tabletop-rules` 与 `dice-check`；`characterSchema` 声明 `category: abilities` 的有界整数属性，再用 `contract:tabletop-rules.rules.initial@1` 提供 `{id: creation, budget, attributes:[{id,label,base,max}]}`（`label` 只能是字符串，双语世界用 `.en.json` 变体）。成品参考 `worlds/lantern-barrow`
 - **隐藏剧情**（满足条件才发生、提前不能剧透）：请求 `story-events`，在 worldData 里加一个 `visibility: hidden` 的 source 指向 `contract:story.events@1`，条件只引用已声明的维度路径、世界时间的数值字段（如 `phase`、`hour`）或其他事件（`revealed` + `turnsSinceGte`，用来写「某事发生几回合后接着发生」的后续事件）。payload 写给叙事的剧情简述，不写成稿，也不要夹带更远的剧透。格式见 `plugins/story-events/README.md`，成品参考 `worlds/mistport/data/hidden/`
+- **剧情中自动追加后续事件**：调查、地城、倒计时这类讲后果的世界可以同时推荐 `story-plotter`；作者逐条编排角色路线的恋爱世界不要加。它每 3 回合根据游玩中的线索埋下只触发一次的隐藏事件；条件只能引用世界声明的维度和世界时间，所以维度设计得越贴合主线，它埋下的事件越扎实。不需要额外的世界数据。
 - **写任何插件 ID 之前先 `ls plugins/` 确认它存在**——schema 不校验插件 ID，拼错要拖到建会话时才暴露
 - 避免泛化的奇幻套路，追求独特的世界设定
 - 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文

@@ -8,12 +8,12 @@ entirely through four lifecycle hooks declared in `PLUGIN.md`.
 
 ## Behaviour
 
-| Hook              | Effect                                                                                                                                                                          |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PostLLMResponse` | Adds each LLM call's `usage` (input + output tokens) to an in-process per-session counter. `enforce: post` so it measures the final, post-rewrite response.                     |
-| `PreSchedule`     | At/above the **soft** cap, narrows the turn to story-output runtimes only (`outputKind === "story"`), skipping background LLM runtimes (codex / guide / extractors / trackers). |
-| `TurnStart`       | At/above the **hard** cap, aborts the turn with reason `cost-gate: session token budget exhausted`. `enforce: pre` so it vetoes earliest.                                       |
-| `SessionEnd`      | Drops the session's counter (no cross-session leak).                                                                                                                            |
+| Hook              | Effect                                                                                                                                                                                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PostLLMResponse` | Adds each LLM call's `usage` (input + output tokens) to an in-process per-session counter. `enforce: post` so it measures the final, post-rewrite response.                                                                                                 |
+| `PreSchedule`     | At/above the **soft** cap, narrows the turn to story-output runtimes (`outputKind === "story"`) and the `pre-turn` runtimes that prepare their inputs, skipping background runtimes after the narrative (codex / guide / extractors / trackers / planners). |
+| `TurnStart`       | At/above the **hard** cap, aborts the turn with reason `cost-gate: session token budget exhausted`. `enforce: pre` so it vetoes earliest.                                                                                                                   |
+| `SessionEnd`      | Drops the session's counter (no cross-session leak).                                                                                                                                                                                                        |
 
 While `session.phase === "setup"`, `stage: setup` runtimes are framework-protected and never trimmed — `PreSchedule` narrowing only affects the main loop.
 

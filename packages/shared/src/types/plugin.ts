@@ -595,6 +595,13 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    * Defaults to `'plugin'`. Only `'story'` outputs are shown in the main chat stream.
    */
   readonly outputKind?: OutputKind;
+  /**
+   * The runtime handles content that must stay hidden from the player (for
+   * example hidden story events). Its LLM messages, tool arguments, tool
+   * results, and outputs are stripped from traces, the live stream, and
+   * player-facing execution history; status, timing, and usage remain.
+   */
+  readonly concealed?: boolean;
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
   /**

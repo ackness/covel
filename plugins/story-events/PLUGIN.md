@@ -17,9 +17,12 @@ provides:
 optional:
   - world-time-context@1
   - world.dimensions@1
+  - story-event.plan@1
 contracts:
   story-event-cue@1:
     schema: ./schemas/story-event-cue.schema.json
+  story-event.plan@1:
+    schema: ./schemas/story-event-plan.schema.json
   story.events@1:
     schema: ./schemas/story-events.schema.json
 contributes:
@@ -34,3 +37,5 @@ contributes:
 Deterministic hidden story events. World packages import events through a
 `visibility: hidden` worldData source; the `evaluate` pre-turn runtime reveals
 at most one event per turn as a `story-event-cue@1` output for narration.
+Other runtimes can add follow-up events during play by publishing
+`story-event.plan@1`; the `intake` post-turn runtime validates and stores them.
