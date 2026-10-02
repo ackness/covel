@@ -158,8 +158,10 @@ export function createNarrativeReview(pluginId: string) {
           : " Quoted dialogue keeps each speaker's perspective. Do not restate the player's input or add player actions/thoughts. During lookups call tools without preparation chatter; afterward write the scene directly, with no lookup or writing commentary.");
       return {
         action: "continue" as const,
+        // Stream normally: a rejected draft or pre-tool text is cleared on the
+        // client by the loop's reset signal, and the reviewed final text
+        // replaces the streamed text on completion.
         replace: {
-          stream: false as const,
           messages: [
             ...payload.messages,
             { role: "system" as const, content: instruction },

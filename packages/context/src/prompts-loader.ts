@@ -2,7 +2,7 @@
  * Prompt loader — read locale-aware markdown prompt templates from disk.
  *
  * This is the runtime backing for the "All LLM prompts are externalized as
- * locale-aware markdown files" convention documented in CLAUDE.md.
+ * locale-aware markdown files" convention documented in AGENTS.md.
  *
  * Layout:
  *
@@ -16,7 +16,7 @@
  *       <name>.zh.md
  *       <name>.en.md
  *
- * Locale resolution order (matches the spec in CLAUDE.md):
+ * Locale resolution order (matches the spec in AGENTS.md):
  *   1. exact match           — `compactor.zh-CN.md`
  *   2. language fallback     — `compactor.zh.md`
  *   3. registry fallback     — `compactor.en-US.md` / `compactor.en.md`

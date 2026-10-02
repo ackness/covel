@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { SessionPlugin } from "@covel/shared";
 import { initialState, reducer } from "../session-store/reducer.js";

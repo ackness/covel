@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Staleness guard on the post-turn SessionRecord resync: a getSession
  * response that lands after the player has switched sessions must be

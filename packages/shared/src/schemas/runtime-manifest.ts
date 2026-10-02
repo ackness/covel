@@ -84,6 +84,7 @@ export const runtimeAuthoringManifestSchema = z
           })
           .optional(),
         visibility: z.enum(["story", "plugin", "system"]).optional(),
+        concealed: z.boolean().optional(),
       })
       .optional(),
     agent: z

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
+import { useSetting } from "@/settings/use-settings.js";
 import { subscribeToStreamingChanges } from "@/stores/streaming-text-store.js";
 import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
 import { ChatMessageRenderer } from "./chat-messages/chat-message-renderer.js";
@@ -91,6 +92,7 @@ export function ChatMessages({
   messagesEndRef,
 }: ChatMessagesProps) {
   const { t } = useTranslation();
+  const [expandUpdates] = useSetting<boolean>("ui.expandTurnUpdates");
   const { state: sessionState, loadOlderMessages } = useSession();
   const sessionId = sessionState.session?.id;
   // Sticky-bottom auto-scroll. Follows the stream only while the user is
@@ -229,6 +231,8 @@ export function ChatMessages({
     plugins,
     onRetryRuntime,
     renderMessage,
+    foldUpdates: viewMode === "parsed",
+    expandUpdates: expandUpdates === true,
   });
 
   return (

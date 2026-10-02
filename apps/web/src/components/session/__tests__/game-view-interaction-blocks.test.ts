@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { isPendingInteractionMessage } from "../game-view/interaction-blocks.js";

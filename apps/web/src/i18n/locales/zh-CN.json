@@ -226,6 +226,7 @@
     "startingUp": "正在启动...",
     "retryFrom": "从 {{label}} 重试",
     "executionSummary": "执行 · {{count}} 个运行任务",
+    "turnUpdates": "本回合更新 · {{count}} 项",
     "backgroundTask": "后台任务",
     "backgroundRunning": "后台运行中",
     "backgroundCount": "{{count}} 个后台任务",
@@ -731,6 +732,10 @@
       },
       "chatMessageWindow": {
         "label": "聊天窗口消息上限"
+      },
+      "expandTurnUpdates": {
+        "label": "展开本回合更新",
+        "description": "在每回合下方直接展开图鉴发现、成就和状态卡片，而不是折叠成一行。"
       },
       "onboardedVersion": {
         "label": "Onboarding 版本"

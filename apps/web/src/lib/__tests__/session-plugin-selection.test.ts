@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { PluginPack, PluginSummary, WorldPluginPlan } from "@covel/shared";
 import {

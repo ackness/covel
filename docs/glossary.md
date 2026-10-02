@@ -16,7 +16,7 @@ See: [docs/reference/plugins.md](./reference/plugins.md), [docs/architecture/flo
 
 A string tag on a runtime manifest that advertises what the runtime _does_ (e.g. `narrative`, `world-data-provider`, `image-generation`). Framework code discovers plugins by capability, never by hardcoded plugin ID.
 
-See: [docs/reference/plugins.md](./reference/plugins.md), CLAUDE.md "Framework ↔ Plugin Isolation Rule".
+See: [docs/reference/plugins.md](./reference/plugins.md), AGENTS.md "Framework ↔ Plugin Isolation Rule".
 
 ## Kernel
 
@@ -104,6 +104,6 @@ See: [docs/reference/world-data.md](./reference/world-data.md).
 
 ## Related
 
-- **pluginId vs runtimeId** — see CLAUDE.md "Identity model".
+- **pluginId vs runtimeId** — see AGENTS.md "Identity model".
 - **Plugin sources** — see `pluginType` above and [docs/reference/tools.md](./reference/tools.md).
 - **Outside scope here**: `Branch`, `Snapshot`, `PluginData`, `CharacterRecord`, `Lorebook` — see [docs/reference/transactions.md](./reference/transactions.md).

@@ -65,14 +65,15 @@ description: 一句话描述这个 skill 做什么、何时触发（代理通过
 2. **入口要短**。SKILL.md 控制在 50-150 行，用最少的字让代理知道“这个 skill 是干嘛的、流程是什么”。细节都丢进 `references/`。
 3. **References 按需加载**。代理只有真的需要时才会读 references，所以 references 可以写得很详细（几百行没问题）。
 4. **frontmatter 的 description 是匹配关键**。description 决定代理是否触发 skill；写得越具体越准，越泛越容易乱跳。
-5. **触发场景写进 description**。body 只有触发后才会加载；“何时使用”信息要放在 description 里。
+5. **触发场景写进 description**。body 只有触发后才会加载；“何时使用”信息要放在 description 里。只应在用户明确要求时运行的重型 skill，也在 description 里写明这一点。
+6. **References 不复制契约**。字段表、枚举值、组件清单等以 `docs/reference/` 为准，references 只链接过去；它们只记录代理的操作流程、可运行的校验命令和踩坑经验。复制出来的契约表会悄悄过期，代理照着写就会出错。
 
 ## 当前实际目录与调用方式
 
 当前仓库实际维护三个项目级 skill：
 
 - `.claude/skills/create-plugin/SKILL.md`：生成插件骨架、运行时声明与作者参考；细节在其 `references/`。
-- `.claude/skills/create-world/SKILL.md`：生成世界包与校验参考；细节在其 `references/`。
+- `.claude/skills/create-world/SKILL.md`：生成世界包，并用 `pnpm validate:world worlds/<id>` 校验；细节在其 `references/`。
 - `.claude/skills/covel-static-turn-audit/SKILL.md`：静态审计 start-game、插件启用、turn 调度和多轮流程。
 
 它们不是 npm/pnpm 命令，也不会被 Covel server 自动发现。使用支持 Agent Skills 的代理时，

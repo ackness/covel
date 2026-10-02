@@ -3,3 +3,6 @@
 pnpm = "12.6.0"
 # Keep the Node major aligned with engines.node and the Docker runtime.
 node = "26"
+# `pnpm check` validates workflows with actionlint. Keep in sync with the
+# version CI installs in .github/workflows/ci.yml.
+actionlint = "1.7.12"

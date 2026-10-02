@@ -188,7 +188,7 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 | `worlds/emberback`      | 英文科幻救援，RPG 资源与任务推进            | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
 | `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en.md`、`data/tabletop-rules.json`、`data/*.en.yaml`、`characters/*.en.json`                     |
 
-四个世界都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
+四个世界都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外推荐 `story-plotter`：作者预设的隐藏事件之外，剧情策划会根据游玩中留下的线索追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不启用剧情策划。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
 
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。接受 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）或 `parsed`。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
@@ -366,9 +366,19 @@ sources:
 | 玩家可见接口    | 插件数据 API、`/state` 数据面板与 discovery 不列出，单条读取返回 404                                                                              |
 | lorebook 与投影 | 不允许 `+lorebook`；`worldProjections` 跳过隐藏 source                                                                                            |
 | 其他目标        | `characters`、`lorebook`、`world:metadata.*`、media 与 `indexTo` 都会被拒绝                                                                       |
-| 写入            | 保留前缀，插件的通用写入（`plugin.data` 提案、`ctx.pluginData.set`、REST）不能改写                                                                |
+| 写入            | REST 与内置 `plugin-data-set` 工具不能写；只有所属插件自己的代码（function runtime、插件本地工具）能写自己的 `_hidden.*`                          |
 
-只有接收插件自己的 runtime 代码能读取隐藏数据。插件决定揭示时，应通过本回合的 runtime 输出把内容交给需要的消费者，并在公开命名空间里留下不含原文的揭示记录；内置的 [`story-events`](plugins.md) 就是这样做的。揭示之后，内容会作为该回合的 runtime 输入出现在执行详情里。
+只有接收插件自己的 runtime 代码能读取隐藏数据。插件决定揭示时，应通过本回合的 runtime 输出把内容交给需要的消费者，并在公开命名空间里留下不含原文的揭示记录；内置的 [`story-events`](plugins.md) 就是这样做的。揭示之后，内容会作为叙事该回合的输入出现在叙事的执行详情里。
+
+#### 剧情中追加的隐藏内容
+
+隐藏内容也可以在游玩中产生。其他插件发布带契约的 runtime 输出，接收插件校验后写入自己的 `_hidden.<namespace>`；处理这些内容的 runtime 声明 `io.concealed: true`，其提示词、工具参数、结果与输出不会进入 trace、实时流、`/view`、`/turns` 或手动 RPC 的返回。内置链路：
+
+1. `story-plotter/plot`（agent，post-turn，每 3 回合）读取世界简介、主角、本回合叙事、可选的本回合 WorldIR 抽取、维度快照、世界时间，以及 `story-events` 公开的账本（已发生事件与已埋下事件的 ID / 标题，不含世界作者尚未发生的事件），调用 `plan-story-events` 发布 `story-event.plan@1`。
+2. `story-events/intake`（function，post-turn）校验每份计划：事件结构、引用的维度 / 时间字段 / 事件是否存在，不能覆盖世界作者的事件或已发生的事件，同时等待的计划事件最多 8 个。通过的事件写入 `_hidden.planned`，只触发一次。
+3. `story-events/evaluate` 每回合同时评估 `_hidden.events` 与 `_hidden.planned`，条件满足时照常交给叙事。
+
+计划事件不随世界数据同步覆盖，因为它们和作者事件分属不同的隐藏命名空间。
 
 隐藏的意义是「不剧透」，不是加密：世界包文件就在玩家本地，浏览器本地模式的工作区 checkpoint 也包含这些数据以便执行。不要把真正需要保密的信息写进世界包。
 

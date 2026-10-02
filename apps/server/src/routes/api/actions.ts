@@ -35,6 +35,7 @@ import type {
 import {
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
+  concealedRuntimeIds,
   readRuntimeEnv,
 } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
@@ -518,6 +519,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             turnId: turnArgs.turnId,
             traceId,
             retryScope: currentRetryScope,
+            concealedRuntimeIds: concealedRuntimeIds(activeRuntimes),
           });
 
           // `phase` is persisted by the session-clock write in finalizeExecution.
@@ -639,6 +641,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 pluginId: delta.pluginId,
                 kind: outputKindByRuntime.get(delta.runtimeId) ?? "plugin",
                 delta: delta.textDelta,
+                ...(delta.reset ? { reset: true } : {}),
               });
             },
             onRuntimeStart: async (info) => {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { SseEnvelope } from "@/services/api.js";
 import { initialState, reducer } from "../reducer.js";

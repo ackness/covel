@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionRequest, SseEnvelope } from "@covel/shared";
 import type { MessageRecord, SessionRecord } from "@/services/api.js";

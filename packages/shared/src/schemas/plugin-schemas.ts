@@ -902,6 +902,7 @@ const runtimeManifestCommonShape = {
   maxRecursionDepth: z.number().int().min(0).max(50).optional(),
   pluginType: z.enum(["core-plugin", "plugin"]).optional(),
   outputKind: outputKindSchema.optional(),
+  concealed: z.boolean().optional(),
   outputContract: z.string().min(1).optional(),
   defaultProvider: z.boolean().optional(),
   tags: z.array(pluginTagSchema).optional(),

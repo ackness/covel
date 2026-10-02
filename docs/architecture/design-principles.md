@@ -8,7 +8,7 @@
 
 ## 核心：内核提供原语，插件承载玩法
 
-Covel 的一切都从这条出发（CLAUDE.md 把它定为强制的 "Framework ↔ Plugin Isolation Rule"）：
+Covel 的一切都从这条出发（AGENTS.md 把它定为强制的 "Framework ↔ Plugin Isolation Rule"）：
 
 - **Kernel**（`packages/` / `apps/server/src/` / `apps/web/src/`）只提供五个一类原语——**Runtime、Tool、Hook、Context、Proposal**——以及编排（调度、上下文装配、校验提交）。它不认识任何具体玩法。
 - **插件**承载玩法逻辑：声明自己**何时触发、看什么 Context、用哪种 Runtime 执行、产出什么 Proposal**。
@@ -22,7 +22,7 @@ Covel 的一切都从这条出发（CLAUDE.md 把它定为强制的 "Framework �
 - 是插头（如"插件怎么声明触发条件""有哪几种 Proposal 类型"）→ Kernel 管、要规范、进 `reference/`。
 - 是电器（如"这个 NPC 该不该相信玩家"）→ Kernel 不碰，交给插件。
 
-推论（CLAUDE.md 已强制）：**框架代码永不硬编码具体插件 ID，也永不为单个玩法改内核。** 当一个合理场景表达不出来时，正确动作是给 Kernel 加一根**通用**针脚（新 Proposal 类型 / 新 Hook 事件 / 新触发方式），而不是写死一段逻辑。这保证任何插件都能被替换而不动框架。
+推论（AGENTS.md 已强制）：**框架代码永不硬编码具体插件 ID，也永不为单个玩法改内核。** 当一个合理场景表达不出来时，正确动作是给 Kernel 加一根**通用**针脚（新 Proposal 类型 / 新 Hook 事件 / 新触发方式），而不是写死一段逻辑。这保证任何插件都能被替换而不动框架。
 
 ## 两个原语 + 组合 = 创作者的"三种写法"
 
@@ -48,4 +48,4 @@ Covel 的一切都从这条出发（CLAUDE.md 把它定为强制的 "Framework �
 - 怎么写插件（按技能分三条路径）：[plugin-authoring.md](../guide/plugin-authoring.md)
 - 端到端执行管线、状态模型：[flow.md](./flow.md)
 - 术语权威定义：[glossary.md](../glossary.md)
-- 隔离规则全文：CLAUDE.md "Framework ↔ Plugin Isolation Rule"
+- 隔离规则全文：AGENTS.md "Framework ↔ Plugin Isolation Rule"

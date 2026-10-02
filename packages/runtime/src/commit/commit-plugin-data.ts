@@ -1,7 +1,7 @@
 /** Commit handlers for plugin-data KV writes and deletes. */
 
 import {
-  reservedPluginDataNamespaceError,
+  pluginCodeNamespaceWriteError,
   type CommitResult,
   type ProposalFor,
 } from "@covel/shared";
@@ -15,8 +15,10 @@ import {
 } from "./commit-validators.js";
 
 /**
- * Proposals carry plugin-authored namespaces, so the commit boundary applies
- * the same framework-namespace guard as the REST write API. Framework writers
+ * Proposals carry plugin-authored namespaces, so the commit boundary rejects
+ * framework namespaces. Writes are keyed by the source plugin, so the only
+ * `_` namespaces it accepts are that plugin's own `_hidden.*` buckets; the LLM
+ * plugin-data tools refuse those before a proposal exists. Framework writers
  * (job runner, runtime logger) bypass proposals and reach the store directly.
  */
 function reservedNamespaceFailure(
@@ -24,7 +26,7 @@ function reservedNamespaceFailure(
   namespace: unknown,
 ): CommitResult | undefined {
   if (typeof namespace !== "string") return undefined;
-  const reserved = reservedPluginDataNamespaceError(namespace);
+  const reserved = pluginCodeNamespaceWriteError(namespace);
   return reserved ? commitError(`${proposalType}: ${reserved}`) : undefined;
 }
 

@@ -26,9 +26,11 @@ on:
 permissions:
   contents: read
 
+# Superseded PR pushes cancel; main keeps every post-merge run so each merged
+# commit is verified and built.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -43,6 +45,7 @@ jobs:
           ref: ${{ inputs.commit || github.sha }}
           persist-credentials: false
 
+      # Keep the version in sync with mise.toml, which provides it locally.
       - name: Install actionlint
         shell: bash
         run: |
@@ -59,7 +62,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "26"
+          node-version-file: package.json
           cache: pnpm
 
       - name: Install dependencies
@@ -92,20 +95,87 @@ jobs:
       - name: Check
         run: pnpm check
 
+      # Web unit tests run in the parallel `web` job; they were this step's
+      # critical path.
       - name: Test
         # Bound both workspace tasks and their worker pools on shared runners.
         env:
           VITEST_MAX_WORKERS: "2"
-        run: pnpm test --concurrency=2
+        run: pnpm test --concurrency=2 --filter=!@covel/web
 
       # The release matrix builds desktop and its web/server dependencies.
+      # Build outputs (the desktop staging tree is ~90 MB per entry) are read
+      # from the Turbo cache but never written back, which keeps the saved
+      # cache small.
       - name: Build
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !inputs.release }}
-        run: pnpm build
+        if: ${{ !inputs.release }}
+        run: pnpm build --cache=local:r
 
       - name: Release preflight
         if: ${{ inputs.release }}
         run: pnpm release:preflight
+
+      # Turbo never evicts local cache entries and actions/cache restores the
+      # whole directory (keeping file mtimes), so drop entries written more
+      # than two days ago before the post-job save.
+      - name: Prune turbo cache
+        if: ${{ !inputs.release }}
+        run: if [ -d .turbo/cache ]; then find .turbo/cache -type f -mtime +2 -delete; fi
+
+  web:
+    name: Web unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # A separate key namespace keeps this cache to the web test graph.
+      - name: Cache turbo
+        if: ${{ !inputs.release }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-web-${{ runner.os }}-
+
+      - name: Restore CI task cache
+        if: ${{ inputs.release }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit }}
+          restore-keys: |
+            turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-web-${{ runner.os }}-
+
+      # The only task in this job gets every runner core.
+      - name: Test
+        env:
+          VITEST_MAX_WORKERS: "4"
+        run: pnpm test --filter=@covel/web
+
+      - name: Prune turbo cache
+        if: ${{ !inputs.release }}
+        run: if [ -d .turbo/cache ]; then find .turbo/cache -type f -mtime +2 -delete; fi
 
   postgres:
     name: PostgreSQL integration
@@ -143,7 +213,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "26"
+          node-version-file: package.json
           cache: pnpm
 
       - name: Install dependencies
@@ -170,7 +240,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "26"
+          node-version-file: package.json
           cache: pnpm
 
       - name: Install dependencies

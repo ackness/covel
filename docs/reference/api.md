@@ -388,10 +388,10 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 ### 会话快照
 
-| 方法 | 路径                      | 描述                                                                                                                                             |
-| ---- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| GET  | `/api/sessions/:id/view`  | 获取会话聚合视图（客户端恢复/重连）                                                                                                              |
-| GET  | `/api/sessions/:id/turns` | 持久化 turn_results 执行工件列表，返回 `{ items }`（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。为 e2e-plugin-verify harness 恢复的薄路由 |
+| 方法 | 路径                      | 描述                                                                                                                                                                                                                 |
+| ---- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/sessions/:id/view`  | 获取会话聚合视图（客户端恢复/重连）                                                                                                                                                                                  |
+| GET  | `/api/sessions/:id/turns` | 持久化 turn_results 执行工件列表，返回 `{ items }`（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。声明 `io.concealed` 的 runtime 结果清空 `output` 与工具参数 / 结果。为 e2e-plugin-verify harness 恢复的薄路由 |
 
 > 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 >
@@ -1702,6 +1702,8 @@ command 成功也使用同一信封；如果命令声明了 `context`，顶层 `
   "durationMs": 3480
 }
 ```
+
+声明 `io.concealed` 的 runtime 在这里（以及失败响应 `details.runtimeResults`）的 `output` 为 `null`。
 
 ##### 维度编辑与待结算恢复
 

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { TFunction } from "i18next";
 import { beforeAll, describe, expect, it } from "vitest";
 import i18n, { i18nReady } from "@/i18n";

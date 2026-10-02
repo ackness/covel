@@ -91,6 +91,21 @@ describe("builtin plugin-data tools", () => {
     });
   });
 
+  it("refuses model writes to framework and hidden namespaces", async () => {
+    await expect(
+      findByName(tools, "plugin-data-set").execute(
+        { namespace: "_hidden.events", key: "spoiler", value: {} },
+        ctx(),
+      ),
+    ).rejects.toThrow(/reserved/);
+    await expect(
+      findByName(tools, "plugin-data-set-batch").execute(
+        { items: [{ namespace: "_jobs", key: "job", value: {} }] },
+        ctx(),
+      ),
+    ).rejects.toThrow(/reserved/);
+  });
+
   it("queues one batch proposal for plugin-data-set-batch", async () => {
     const tool = findByName(tools, "plugin-data-set-batch");
     const result = (await tool.execute(

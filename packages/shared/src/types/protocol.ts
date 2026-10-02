@@ -45,6 +45,12 @@ export interface NarrativeDeltaPayload {
   readonly pluginId: string;
   readonly kind?: string;
   readonly delta: string;
+  /**
+   * Discard the text streamed so far for this runtime before appending
+   * `delta`: the previous model step (preparation before tool calls, or a
+   * draft rejected by review) will not be part of the final narrative.
+   */
+  readonly reset?: true;
 }
 
 export interface NarrativeCompletedPayload {

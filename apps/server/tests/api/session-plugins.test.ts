@@ -8,7 +8,7 @@
  *
  * Covers:
  * - explicit plugin selection and core defaults (enforced by manifest.pluginType,
- *       not hardcoded plugin IDs — see CLAUDE.md framework-plugin isolation)
+ *       not hardcoded plugin IDs — see AGENTS.md framework-plugin isolation)
  * - H3: pluginId body validation
  */
 

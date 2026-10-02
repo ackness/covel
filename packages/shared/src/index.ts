@@ -83,9 +83,15 @@ export {
   toJsonValueOrDiagnostic,
 } from "./utils/json-value.js";
 export {
+  concealedRuntimeIds,
+  concealRuntimeResult,
+  concealTracePayload,
+} from "./utils/concealed-runtime.js";
+export {
   HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
   hiddenPluginDataNamespace,
   isHiddenPluginDataNamespace,
+  pluginCodeNamespaceWriteError,
   reservedPluginDataNamespaceError,
 } from "./utils/plugin-data-namespace.js";
 export { decodePageCursor, encodePageCursor } from "./utils/page-cursor.js";

@@ -95,6 +95,7 @@ export function compileRuntimeManifest(
       loop?.completion?.require === "explicit" || undefined,
     completeAfterTools: loop?.completion?.afterTools,
     outputKind: runtime.io?.visibility,
+    ...(runtime.io?.concealed ? { concealed: true } : {}),
     ...(output
       ? { output: { schema: output.schema, recordAs: output.recordAs } }
       : {}),

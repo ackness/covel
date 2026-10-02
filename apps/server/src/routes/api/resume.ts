@@ -52,6 +52,7 @@ import {
   runWithHookScope,
 } from "@covel/runtime";
 import {
+  concealedRuntimeIds,
   DEFAULT_LOCALE,
   type RuntimeManifest,
   type SuspensionSummary,
@@ -215,6 +216,9 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     ...(eventBus ? { eventBus } : {}),
     sessionId,
     turnId: suspension.turnId,
+    concealedRuntimeIds: concealedRuntimeIds(
+      pluginRegistry.getActiveRuntimes(sessionId),
+    ),
   });
 
   let claimAcquired = false;

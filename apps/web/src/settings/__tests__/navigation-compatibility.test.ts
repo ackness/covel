@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, expect, it } from "vitest";
 import { SettingsStore } from "@covel/settings";
 import i18n from "@/i18n";

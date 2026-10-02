@@ -388,6 +388,8 @@ type I18nText = string | Record<LocaleTag, string>;
 
 两条链路都使用同一套 json-render catalog。
 
+解析视图（`parsed`）下，每回合的只读插件卡片（`ui.render`、`ui-spec`，以及 level 为 info/success 的通知，例如图鉴发现、成就和状态变更）会合并成一条默认折叠的「本回合更新 · N 项」，摘要里预览前三个卡片标题，让叙事占据主要版面。表单、选项、确认、建议块（`plugin_message`）、图片和警告/错误通知不折叠。玩家可在设置「通用」中打开 `ui.expandTurnUpdates` 改为默认展开；`detailed` / `raw` 视图不折叠。实现见 `apps/web/src/components/session/chat-messages/turn-updates.tsx`。
+
 | 链路           | 当前承载内容                                                                                                                                   | 实现位置                                                                                              |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Turn message   | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知                                                                                    | `apps/web/src/components/session/chat-messages.tsx`, `apps/web/src/components/session/chat-messages/` |

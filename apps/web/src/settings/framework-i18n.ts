@@ -45,6 +45,16 @@ function frameworkSettingText(
         "Chat window message limit",
       ),
     },
+    "ui.expandTurnUpdates": {
+      label: t(
+        "settings.frameworkEntries.expandTurnUpdates.label",
+        "Expand turn updates",
+      ),
+      description: t(
+        "settings.frameworkEntries.expandTurnUpdates.description",
+        "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line.",
+      ),
+    },
     "ui.onboardedVersion": {
       label: t(
         "settings.frameworkEntries.onboardedVersion.label",

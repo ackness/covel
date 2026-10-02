@@ -9,7 +9,7 @@ Thanks for considering contributing! This document outlines the process for cont
 ## Development environment
 
 - Node.js 26.x
-- pnpm 11.22.0 (see the root `package.json` `packageManager`)
+- pnpm 12.6.0 (see the root `package.json` `packageManager`)
 - Optional: Docker (for PostgreSQL mode)
 
 ```bash
@@ -20,7 +20,7 @@ cp .env.llm.example .env.llm   # fill in API keys
 pnpm dev                       # start frontend + backend
 ```
 
-After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each new clone to install the local Git pre-push hook. It preserves the existing pre-commit hook and refuses to overwrite an unrelated pre-push hook; resolve that conflict yourself before installing. The hook uses `mise exec` to select the Node 26 and pnpm 11.22 toolchain from `mise.toml`, so install mise and those tools first. The workflow checks in `pnpm check` also require `actionlint` (installation instructions below).
+After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each new clone to install the local Git pre-push hook. It preserves the existing pre-commit hook and refuses to overwrite an unrelated pre-push hook; resolve that conflict yourself before installing. The hook uses `mise exec` to select the Node 26, pnpm 12.6, and actionlint toolchain from `mise.toml`, so install mise and run `mise install` first.
 
 The root `.pre-commit-config.yaml` defines commit checks. Install pre-commit and run `pre-commit install` to enable them, or run `pre-commit run --all-files` manually. Oxlint is pinned in the root `devDependencies` and `pnpm-lock.yaml`. Like Prettier and type checks, it uses the project toolchain through `mise exec` without creating a separate Node environment. `scripts/run-with-project-node.mjs` prepends the selected Node directory to the child PATH so CLI shims and subsequent commands use the same version. Existing hooks read the updated configuration automatically; no global cache cleanup is needed.
 
@@ -80,7 +80,7 @@ pnpm e2e:smoke                             # deterministic CI Chromium flows
 pnpm e2e                                   # Playwright end-to-end
 ```
 
-`pnpm check` runs peer dependency, type, package boundary, dependency declaration, plugin manifest, i18n, script regression, and workflow checks. Workflow validation requires `actionlint` (CI pins 1.7.12; install locally with `go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`). `pnpm lint` and `pnpm test` no longer build Web assets implicitly; run `pnpm build` separately to validate packaging.
+`pnpm check` runs peer dependency, type, package boundary, dependency declaration, plugin manifest, i18n, script regression, and workflow checks. Workflow validation requires `actionlint`, pinned in `mise.toml` to the version CI uses; `mise install` provides it. `pnpm lint` and `pnpm test` no longer build Web assets implicitly; run `pnpm build` separately to validate packaging.
 
 Once installed, the hook checks every distinct, non-deleted committed tip in each `git push`, including refs other than the current HEAD. For each tip it makes a disposable clean clone and runs `pnpm install --frozen-lockfile`, `pnpm check`, `VITEST_MAX_WORKERS=2 pnpm test --concurrency=2`, and `pnpm e2e --list`; a failure blocks the push. The clone does not copy the working tree's `.env`, `node_modules`, `test-results`, or `.turbo`, and the check removes `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS` to avoid connecting to a developer database. Expect several extra minutes per push. Run `pnpm check:push` to check the committed HEAD before pushing. This check collects E2E tests but does not run PostgreSQL integration, browser smoke, or release/build packaging checks. Run `pnpm test:pg`, `pnpm e2e:smoke`, `pnpm e2e`, `pnpm build`, and release checks explicitly when relevant, and rely on CI for the complete gate.
 
@@ -90,11 +90,11 @@ Once installed, the hook checks every distinct, non-deleted committed tip in eac
 
 `pnpm test:coverage` runs two coverage commands sequentially: `test:coverage:vitest` always reruns the Vitest workspaces and generates reports in each package's `coverage/` using its configured reporters; `test:coverage:desktop` runs all desktop Node tests and self-checks and writes per-process raw V8 coverage to `apps/desktop/coverage/` for separate analysis, outside the Vitest percentage. The ≥ 80% coverage target remains aspirational; [`ci.yml`](../.github/workflows/ci.yml) does not yet enforce a threshold.
 
-PRs, main, and releases reuse the same CI gates, including independent PostgreSQL and Chromium smoke jobs. The browser job collects the full E2E suite to detect broken imports before running the core flows. Releases also run `pnpm release:preflight`; lockfile validation uses a temporary metadata directory without modifying workspace dependencies or running install scripts.
+PRs, main, and releases reuse the same CI gates, including independent Web unit test, PostgreSQL, and Chromium smoke jobs. The browser job collects the full E2E suite to detect broken imports before running the core flows. PRs and main both run `pnpm build`, reading the Turbo cache without writing build outputs back; entries written more than two days earlier are pruned before the cache is saved so it cannot grow without bound. Releases also run `pnpm release:preflight`; lockfile validation uses a temporary metadata directory without modifying workspace dependencies or running install scripts.
 
 ### Framework / plugin isolation (important)
 
-Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) **must not** reference any specific plugin ID or plugin name. Plugin capabilities are discovered via `RuntimeManifest.capabilities` and `outputKind`. See the [Framework–Plugin Isolation Rule in CLAUDE.md](../CLAUDE.md).
+Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) **must not** reference any specific plugin ID or plugin name. Plugin capabilities are discovered via `RuntimeManifest.capabilities` and `outputKind`. See the [Framework–Plugin Isolation Rule in AGENTS.md](../AGENTS.md#framework--plugin-isolation-rule).
 
 ### Documentation sync
 

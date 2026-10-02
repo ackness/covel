@@ -367,7 +367,7 @@ interface UIRenderPart {
 
 读取会叠加**本次执行内尚未提交**的 `plugin.data` / `plugin.data.batch` / `plugin.data.delete` proposal（read-your-own-write）。写入走 proposal、在执行完成时才提交；叠加只覆盖**当前会话、当前插件**的 pending 操作。同 key 按 proposal 顺序应用，最后一次为准：删除后读取返回 `found: false`，随后重新写入则读取新值。写入 `null` 是存储一个值，不能等同于删除。不同 runtime 的独立缓冲区不会在此合并。
 
-隐藏世界数据（`_hidden.<namespace>`，来自 `visibility: hidden` source）不会返回给模型：读取一律视为 `found: false`。
+隐藏世界数据（`_hidden.<namespace>`，来自 `visibility: hidden` source 或插件在剧情中追加）不会返回给模型：读取一律视为 `found: false`。`plugin-data-set` / `plugin-data-set-batch` 拒绝任何 `_` 前缀命名空间，模型不能借通用工具写入隐藏数据。
 
 ---
 
@@ -609,7 +609,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 **使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
 
-该 tracker 继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。
+该 tracker 继承默认 20 步工具循环预算，允许读取角色并修正失败批次；成功同步后立即结束。每个批次的上限仍为 5 个新角色和 10 个已有角色更新。它的 self-only `<existing-characters>` 名册在 12000 字符预算内带上每个角色当前的 `fields`，通常一次模型调用即可同步；超出预算的角色标为 `fieldsOmitted`，再用 `get-character` 读取。tracker 关闭推理，单次调用超时 30 秒并重试一次。
 
 ---
 
@@ -767,7 +767,7 @@ Attributes:
 
 **所属**: world-init (`plugins/world-init/tools/update-dimensions.js`)
 
-参数 `{updates:[{id,expectedVersion,value,reason?}]}`，最多 64 项，ID 不重复。提交的是新完整值，不是增量或 JSON Patch；删除命名记录/数组行也提交完整维度值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
+参数 `{updates:[{id,expectedVersion,value|changes,reason?}]}`，最多 64 项，ID 不重复。`value` 是新的完整值；`changes:[{path,value}]`（最多 32 项）按点路径在冻结的当前值上设置字段或新增条目，工具合并成完整值后提交，大维度不必整体重写。两者二选一；删除命名记录/数组行仍提交完整 `value`。`dimension.update` proposal 里始终是完整值。`null` 仅在 schema 允许时是合法值，不表示删除维度。工具预检与提交边界共用 schema/版本校验，整批 CAS，不自动 rebase。
 
 叙事来源、逻辑回合号、读取版本集从 authoritative narrative slot、回执和冻结快照取得，模型不能自行指定。返回 `{success,updateCount}` 与 `dimension.update` proposal；已终结来源返回 `{success,alreadySettled:true}`，不重复补算。
 

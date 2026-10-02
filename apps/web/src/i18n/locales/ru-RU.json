@@ -228,6 +228,7 @@
     "startingUp": "Запуск...",
     "retryFrom": "Повторить попытку с {{label}}.",
     "executionSummary": "Выполнение · рантаймов: {{count}}",
+    "turnUpdates": "Обновления хода · {{count}}",
     "backgroundTask": "в фоне",
     "backgroundRunning": "выполняется в фоне",
     "backgroundCount": "В фоне: {{count}}",
@@ -733,6 +734,10 @@
       },
       "chatMessageWindow": {
         "label": "Ограничение сообщений в окне чата"
+      },
+      "expandTurnUpdates": {
+        "label": "Разворачивать обновления хода",
+        "description": "Показывать открытия кодекса, достижения и карточки состояния под каждым ходом развёрнутыми, а не свёрнутыми в одну строку."
       },
       "onboardedVersion": {
         "label": "Версия первоначальной настройки"

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { SessionExecutionStatus } from "@covel/shared";
 import { createRecoveryActionRequest } from "../execution-recovery-actions.js";

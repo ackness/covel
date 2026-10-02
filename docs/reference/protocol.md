@@ -95,6 +95,8 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 | `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`              |
 | `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId }` |
 
+`narrative.delta` 可带 `reset: true`（此时 `delta` 为空串）：同一 runtime 已流出的文本属于工具调用前的准备步骤或被审查驳回的草稿，不会成为最终叙事，客户端应清掉已显示的部分再接收后续片段。`narrative.completed` 的 `content` 始终是审查通过后的最终文本，并替换流式内容。
+
 ### 交互事件
 
 | 事件类型                | 方向 | 描述                           | 负载                                                       |
@@ -383,6 +385,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `hook.fired` / `hook.rewrote` / `hook.aborted`             | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
 | `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等） |
 
+> 声明 `io.concealed: true` 的 runtime，其 TurnEmitter 事件在持久化和转发前只保留不含内容的字段（`runtimeId`、`pluginId`、`toolName`、`toolCallId`、`status`、`durationMs`、`usage`、`finishReason`、`seq` 等），并带 `concealed: true`；`messages`、`text`、`toolCalls`、`arguments`、`result`、`parsedResult`、`output` 等内容字段被移除。
+>
 > `function.executing` / `function.completed` 为 function-runtime 的 handler 边界 trace 事件（TurnEmitter），`forwardToActionStream: false`——**仅经订阅通道 / trace_events 下发**，与 `recursive.*` 同类，不进入 `/api/actions`。`gateway.*` 则 `forwardToActionStream: true`（对齐 `llm.calling/responded`），故列在上表。两组都已纳入 `CovelEvent` union（发射端受 `CovelEventType` 闭合约束）。
 >
 > `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type * as api from "@/services/api.js";
 import { modelPriceKey, resolveLocalModelPrices } from "../-model-prices.js";

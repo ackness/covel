@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Narration streams again.** The narrator's review hook no longer turns streaming off. A story step whose text will not be final (preparation before tool calls, or a draft the review rejects) now ends with a `narrative.delta` carrying `reset: true`, and the client clears it before the next step; the reviewed final text still replaces the stream on completion.
+
+### Added
+
+- **Hidden world data.** worldData sources accept `visibility: hidden`. Hidden data imports into the receiving plugin's `_hidden.<namespace>` and stays out of prompts, LLM data tools, extension handlers, and every public API until a plugin reveals it (#101).
+- **Hidden story events.** The new `story-events` plugin reveals world-authored events when their dimension, world-time, or `revealed` (chained) conditions hold, handing narration a one-turn cue. All bundled worlds ship hidden events (#101, #102).
+- **Story Plotter.** The new `story-plotter` plugin plants hidden follow-up events during play every few turns. Plans travel through the `story-event.plan@1` contract; `story-events/intake` validates them and stores accepted events in `_hidden.planned`, where they fire once. The planner sees the world summary, the hero, and this turn's WorldIR when available. Mistport, Emberback, and Lantern Barrow recommend it; Haruka Academy keeps its authored romance routes without it.
+- **Concealed runtimes.** `io.concealed: true` strips a runtime's prompts, tool arguments, tool results, and outputs from traces, the live stream, the session view, `/turns`, and manual RPC responses, keeping only names, status, timing, and usage.
+
+### Changed
+
+- **Story-first chat layout.** Each turn's read-only plugin cards (codex discoveries, achievements, status changes) fold into one "Turn updates · N" line that previews the first titles, so narration keeps most of the screen. Forms, choices, suggestions, images, and warnings stay open. The new General setting "Expand turn updates" restores the open layout.
+- **Faster dimension settlement.** The tracker's prompt now carries every rule, schema, and frozen value it needs (within a 24000-character budget), it runs without reasoning, and `update-dimensions` accepts `changes: [{path, value}]` so large dimensions are patched instead of rewritten. In a Mistport session settlement dropped from 20–100 s to about 5 s per turn.
+- **Faster character tracking.** The character roster given to `char-creator/character-tracker` now carries each character's current fields (within a 12000-character budget), so most turns settle in one call without a `get-character` read. The tracker runs without reasoning, and a stalled call times out after 30 s and retries once instead of failing the runtime after 60 s.
+- **cost-gate keeps narrative inputs.** Past the soft cap it now trims only runtimes after the narrative; `pre-turn` runtimes (dice pools, tabletop checks, dimension and world-time context, hidden story cues) keep running so the story itself does not change.
+- A plugin's own code (function runtimes and its local tools) may now write its own `_hidden.*` namespaces. The REST API and the builtin `plugin-data-set` / `plugin-data-set-batch` tools reject every `_` namespace.
+
 ## [0.0.44] - 2026-10-01
 
 This release turns world dimensions into author-defined, session-evolving data, rebuilds the bundled worlds around it, and adds Lantern Barrow, a classic tabletop world (#98, #96, #97).

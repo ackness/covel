@@ -1,4 +1,8 @@
-import { DIMENSION_DATA_NAMESPACE, dimensionRecordSchema } from "@covel/shared";
+import {
+  DIMENSION_DATA_NAMESPACE,
+  concealedRuntimeIds,
+  dimensionRecordSchema,
+} from "@covel/shared";
 import { commitExecution } from "../commit-execution.js";
 import {
   createTurnEmitter,
@@ -580,6 +584,7 @@ export function createPluginRpcRuntimeTurnRunner(
       eventBus: ctx.eventBus,
       sessionId: ctx.sessionId,
       turnId: args.turnId,
+      concealedRuntimeIds: concealedRuntimeIds(activeRuntimes()),
     });
     const turnInput: TurnInput = {
       sessionId: ctx.sessionId,
@@ -690,6 +695,7 @@ export function createPluginRpcRuntimeTurnRunner(
       eventBus: ctx.eventBus,
       sessionId: ctx.sessionId,
       turnId: args.followerTurnId,
+      concealedRuntimeIds: concealedRuntimeIds(activeRuntimes()),
     });
     const turnInput: TurnInput = {
       sessionId: ctx.sessionId,
@@ -726,6 +732,7 @@ export function createPluginRpcRuntimeTurnRunner(
       eventBus: ctx.eventBus,
       sessionId: ctx.sessionId,
       turnId: args.backgroundTurnId,
+      concealedRuntimeIds: concealedRuntimeIds(activeRuntimes()),
     });
     const turnInput: TurnInput = {
       sessionId: ctx.sessionId,
