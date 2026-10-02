@@ -74,7 +74,7 @@ export function resolveBackdrop(
   return { kind: "hero", ref: worldVisual.image };
 }
 
-// ── Sprites (scene-stage `active-cast` × character-presence `presence`) ──
+// ── Sprites (scene-stage `active-cast` × character-blueprint `presence`) ──
 export type { PresenceRecord } from "@/lib/character-visuals.js";
 
 export interface StageSpriteSlot {
@@ -230,7 +230,7 @@ export function computeSpriteLanes(
 /**
  * Reconcile scoped speaker ids against bare presence characterIds. The cast
  * keys speakers by `<sessionId>-<characterId>` (scopedCharacterId) while
- * character-presence keys its records by the bare `characterId`, so a direct
+ * character-blueprint keys its presence records by the bare `characterId`, so a direct
  * `presenceMap[speaker.id]` lookup always misses. Match on the presence
  * *value*'s characterId by exact id or the `-<characterId>` suffix — mirrors
  * `resolveCharacterAvatar` in lib/catalog.

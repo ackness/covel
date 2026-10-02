@@ -48,7 +48,6 @@ pluginPolicy:
         - memory
         - living-world-rules
         - character-blueprint
-        - character-presence
         - story-events
         - story-plotter
         - cost-gate
@@ -73,7 +72,6 @@ pluginPolicy:
     - memory
     - living-world-rules
     - character-blueprint
-    - character-presence
     - story-events
     - story-plotter
     - cost-gate

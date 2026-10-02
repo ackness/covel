@@ -4,7 +4,7 @@ import {
 } from "@covel/plugin-handlers-utils";
 import { describe, expect, it } from "vitest";
 
-import handler from "../handler.js";
+import handler from "../runtimes/import/handler.js";
 
 function ctx(manualPayload) {
   return {

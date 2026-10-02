@@ -225,7 +225,7 @@ test("portrait replacement reaches the runtime and survives a browser checkpoint
       createdAt: "2026-01-01T00:00:00Z",
     });
     await ds.createSession("review-portrait-world", "review-portrait-session", [
-      "character-presence",
+      "character-blueprint",
     ]);
     return getSessionWorkspace().run(
       "review-portrait-session",
@@ -233,8 +233,8 @@ test("portrait replacement reaches the runtime and survives a browser checkpoint
       () =>
         postPluginRpc("review-portrait-session", {
           kind: "runtime",
-          pluginId: "character-presence",
-          runtimeId: "character-presence",
+          pluginId: "character-blueprint",
+          runtimeId: "character-blueprint/presence",
           payload: {
             presence: {
               schemaVersion: 1,

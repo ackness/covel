@@ -80,7 +80,7 @@ agent/function/background runtime、entry、工具、RPC、Hook、设置、UI、
 | `makeManualFunctionContext`                                  | 直接测试 function runtime handler                                    |
 | `expectAssetGenerated`                                       | 断言 RuntimeResult 的 `effects.assetGenerations[]` 中有合法 MediaRef |
 
-function handler 单元测试（真实范例：[`plugins/character-presence/tests/handler.test.js`](../../plugins/character-presence/tests/handler.test.js)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
+function handler 单元测试（真实范例：[`plugins/character-blueprint/tests/presence.test.js`](../../plugins/character-blueprint/tests/presence.test.js)）——用 `makeManualFunctionContext` 构造 handler context，直接调用 handler，再用 `@covel/tools` 的 `getPendingProposals` 断言 proposal：
 
 ```js
 import { describe, expect, it } from "vitest";

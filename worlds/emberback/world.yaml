@@ -41,7 +41,6 @@ pluginPolicy:
         - npc-graph
         - living-world-rules
         - character-blueprint
-        - character-presence
         - story-events
         - story-plotter
       recommended:
@@ -63,7 +62,6 @@ pluginPolicy:
     - codex
     - guide
     - character-blueprint
-    - character-presence
     - living-world-rules
     - story-events
     - story-plotter

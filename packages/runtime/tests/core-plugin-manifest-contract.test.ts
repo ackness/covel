@@ -304,8 +304,8 @@ describe("core plugin manifest contract", () => {
   it("keeps manual Chat Mode utilities outside automatic scheduling", async () => {
     const manifests = await loadRuntimeManifests();
     const manualUtilityIds = [
-      "character-blueprint",
-      "character-presence",
+      "character-blueprint/import",
+      "character-blueprint/presence",
       "living-world-rules",
     ];
 

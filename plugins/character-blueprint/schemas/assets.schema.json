@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "plugin://character-presence/assets",
+  "$id": "plugin://character-blueprint/assets",
   "type": "object",
   "required": ["import"],
   "properties": {

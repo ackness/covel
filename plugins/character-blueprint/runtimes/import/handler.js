@@ -9,7 +9,7 @@ import {
   shortId,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import { characterBlueprintToCharacterUpsert } from "./types/blueprint.ts";
+import { characterBlueprintToCharacterUpsert } from "../../types/blueprint.ts";
 
 const BLUEPRINT_NAMESPACE = "blueprints";
 const BLUEPRINT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;

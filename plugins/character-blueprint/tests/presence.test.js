@@ -5,13 +5,14 @@ import {
 import { describe, expect, it } from "vitest";
 import { makeManualFunctionContext } from "@covel/plugin-test-utils";
 
-import handler from "../handler.js";
+import handler from "../runtimes/presence/handler.js";
 
 function ctx(manualPayload) {
   return makeManualFunctionContext({
     sessionId: "sess-presence",
     turnId: "turn-presence",
-    pluginId: "character-presence",
+    pluginId: "character-blueprint",
+    runtimeId: "character-blueprint/presence",
     manualPayload,
   });
 }
@@ -24,7 +25,7 @@ const avatar = {
 
 // Deliberate change: handler returns the canonical HandlerResult, so the business return
 // is under `getToolContent(result).value`; pending proposals stay on the envelope (result).
-describe("character-presence handler", () => {
+describe("character-blueprint presence handler", () => {
   it("saves presence refs by character id", async () => {
     const result = await handler(
       ctx({
@@ -52,8 +53,8 @@ describe("character-presence handler", () => {
     expect(proposals[0]).toMatchObject({
       type: "plugin.data",
       source: {
-        pluginId: "character-presence",
-        runtimeId: "character-presence",
+        pluginId: "character-blueprint",
+        runtimeId: "character-blueprint/presence",
       },
       sessionId: "sess-presence",
       turnId: "turn-presence",

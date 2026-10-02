@@ -51,7 +51,6 @@ pluginPolicy:
         - scene-stage
         - scene-prompts
         - character-blueprint
-        - character-presence
         - living-world-rules
         - branch-reply
         - affinity
@@ -74,7 +73,6 @@ pluginPolicy:
     - scene-stage
     - scene-prompts
     - character-blueprint
-    - character-presence
     - living-world-rules
     - branch-reply
     - affinity

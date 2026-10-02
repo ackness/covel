@@ -328,8 +328,8 @@ describe("normalize golden (bundled plugin set)", () => {
 
     // Manual runtimes (real plugin-rpc actions): no stage, trigger untouched.
     for (const id of [
-      "character-blueprint",
-      "character-presence",
+      "character-blueprint/import",
+      "character-blueprint/presence",
       "living-world-rules",
     ]) {
       const spec = requireSpec(specs, id);

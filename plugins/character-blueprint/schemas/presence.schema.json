@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "plugin://character-presence/presence",
+  "$id": "plugin://character-blueprint/presence",
   "$ref": "#/$defs/presence",
   "$defs": {
     "presence": {

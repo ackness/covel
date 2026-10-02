@@ -604,7 +604,7 @@ sources:
 
 ## Character Presence Portraits
 
-给角色配头像 / 立绘并在 `character-presence` 面板与对话中显示，world 包用两条 source 交付：
+给角色配头像 / 立绘并在 `character-blueprint` 的立绘面板与对话中显示，world 包用两条 source 交付：
 
 ```yaml
 sources:
@@ -624,7 +624,7 @@ sources:
     after: portraits
 ```
 
-- `media` source 把 `media/portraits/` 下的图导入媒体库，按 **`sha256(内容)`** 寻址（与 `@covel/store` media-store 的 `sha256(bytes)` 一致），并把索引写进 `plugin_data[character-presence][assets]`。
+- `media` source 把 `media/portraits/` 下的图导入媒体库，按 **`sha256(内容)`** 寻址（与 `@covel/store` media-store 的 `sha256(bytes)` 一致），并把索引写进 `plugin_data[character-blueprint][assets]`。
 - `presence.json` 是 presence 记录数组，每条把 `characterId` 对应角色的 `avatar` / `sprite` 指向那张图。前端按实例化 `CharacterRecord.id` 的精确值或 `-<characterId>` 后缀匹配：使用 `characters/characters.json` 中的原始 `id`（如 `npc-kamishiro-mio`），它与导入后的会话前缀 ID 对应：
 
 ```json
@@ -668,7 +668,7 @@ sources:
 
 `mediaRef.id` 必须是该图内容的 **64 位小写 sha256**——media source 导入后媒体库以同一 sha256 寻址，二者相等才能解析到资产。手算易错，仓库提供 `scripts/emit-presence.mjs <world>`，从 `media/portraits/` 自动生成 `presence.json`（**重生成立绘后必须重跑刷新哈希**）。
 
-preflight 要求对应 contract 的 schema 和接收声明已注册。`character-presence` 的 `assets/presence` 分别接受 `character.portrait-assets@1` 与 `character.portraits@1`。将接收插件放入 `pluginPolicy.recommended` 可供玩家选择；未启用时跳过其数据和媒体索引写入并产生 warning。媒体单文件上限 20 MB、单 source 上限 100 MB，扩展名使用 allowlist（含 `.png/.webp`）。
+preflight 要求对应 contract 的 schema 和接收声明已注册。`character-blueprint` 的 `assets/presence` 分别接受 `character.portrait-assets@1` 与 `character.portraits@1`。将接收插件放入 `pluginPolicy.recommended` 可供玩家选择；未启用时跳过其数据和媒体索引写入并产生 warning。媒体单文件上限 20 MB、单 source 上限 100 MB，扩展名使用 allowlist（含 `.png/.webp`）。
 
 实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 [角色立绘生成指南](../guide/world-portraits.md)。
 
@@ -708,7 +708,7 @@ sources:
     after: dimensions
 ```
 
-与 portraits 的差别只在于**注册表另走一条 source**：portraits 把每张图的索引直接喂给 `character-presence/assets`，而场景图除了 `scene-stage/assets` 的字节索引外，还需要 `scenes.registry.json` 整份导入 `scene-stage/scenes` 供解析 runtime 一次读全。实际写法见 `worlds/haruka-academy/data/world.data.yaml`。
+与 portraits 的差别只在于**注册表另走一条 source**：portraits 把每张图的索引直接喂给 `character-blueprint/assets`，而场景图除了 `scene-stage/assets` 的字节索引外，还需要 `scenes.registry.json` 整份导入 `scene-stage/scenes` 供解析 runtime 一次读全。实际写法见 `worlds/haruka-academy/data/world.data.yaml`。
 
 `scenes.registry.json`（`scripts/emit-scenes.mjs` 自动生成，`{schemaVersion, registryId, scenes:[{sceneId,name,locationRef?,day,night}]}`，`day`/`night` 是 sha256 `MediaRef`）整份文档作为**一行** plugin_data 导入：`registryId: "scene-registry"` 是自描述常量字段，同时充当 `key`——scene-stage 的解析 runtime 读一行即得 `scenes[]` 全量，不需要按条目遍历。`scenes.registry.json` 是生成产物，不要手编，重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希。
 

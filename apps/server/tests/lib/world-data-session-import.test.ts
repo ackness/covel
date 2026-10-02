@@ -322,9 +322,9 @@ describe("world data session importer", () => {
 
     expect(compiled.sort()).toEqual([
       "affinity/affinity",
+      "character-blueprint/assets",
       "character-blueprint/blueprints",
-      "character-presence/assets",
-      "character-presence/presence",
+      "character-blueprint/presence",
       "core-quest/quests",
       "inventory/items",
       "living-world-rules/rules",
@@ -1811,7 +1811,6 @@ sources: {}
       "scene-stage",
       "scene-prompts",
       "character-blueprint",
-      "character-presence",
       "living-world-rules",
       "branch-reply",
       "char-creator",
@@ -1870,9 +1869,9 @@ sources: {}
     const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
     const pluginRegistry = await builtinPluginRegistry();
 
-    // mistport ships a living-world-rules rule set, a character-blueprint cast,
-    // and character-presence portraits (media + presence); activate the plugins
-    // all its sources target so the import is clean.
+    // mistport ships a living-world-rules rule set, a character-blueprint cast
+    // and portraits (media + presence); activate the plugins all its sources
+    // target so the import is clean.
     const worldId = "mistport";
     const ruleSourceId = "tideRules";
     const activePlugins = [
@@ -1880,7 +1879,6 @@ sources: {}
       "living-world-rules",
       "character-blueprint",
       "char-creator",
-      "character-presence",
     ];
     const sessionId = `sess-${worldId}`;
     const store = createMemoryStore();
@@ -1943,7 +1941,6 @@ sources: {}
         "living-world-rules",
         "character-blueprint",
         "char-creator",
-        "character-presence",
         "scene-stage",
       ];
       const sessionId = `sess-portraits-${worldId}-${locale}`;
@@ -2032,7 +2029,7 @@ sources: {}
       // stored asset — i.e. the portrait actually displays for that character.
       const presence = await store.listPluginData(
         sessionId,
-        "character-presence",
+        "character-blueprint",
         "presence",
       );
       expect(presence).toHaveLength(portraitCount);

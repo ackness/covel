@@ -23,8 +23,8 @@
     "component": "PortraitGallery",
     "props": {
       "replaceAction": {
-        "pluginId": "character-presence",
-        "runtimeId": "character-presence",
+        "pluginId": "character-blueprint",
+        "runtimeId": "character-blueprint/presence",
         "payload": {
           "action": "replacePortrait",
           "characterId": {

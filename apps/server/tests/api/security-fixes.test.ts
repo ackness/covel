@@ -400,7 +400,7 @@ function registerPresenceAssetsPlugin(pluginRegistry: PluginRegistry): void {
   pluginRegistry.register({
     packageManifest: parsePluginMd(
       `---
-id: character-presence
+id: character-blueprint
 kind: plugin
 description: Presence assets
 contracts:
@@ -416,13 +416,13 @@ contributes:
 `,
       "PLUGIN.md",
     ),
-    id: "character-presence",
+    id: "character-blueprint",
     rootPath: path.resolve(
       import.meta.dirname,
-      "../../../../plugins/character-presence",
+      "../../../../plugins/character-blueprint",
     ),
     summary: {
-      id: "character-presence",
+      id: "character-blueprint",
       name: "Presence",
       description: "",
       pluginType: "plugin",
@@ -684,7 +684,7 @@ sources:
       body: JSON.stringify({
         id: "sess-media-finalize",
         worldId: world.worldId,
-        plugins: ["character-presence"],
+        plugins: ["character-blueprint"],
       }),
     });
 
@@ -693,7 +693,7 @@ sources:
     expect(
       await store.listPluginData(
         "sess-media-finalize",
-        "character-presence",
+        "character-blueprint",
         "assets",
       ),
     ).toEqual([]);
@@ -764,7 +764,7 @@ sources:
       body: JSON.stringify({
         id: "delayed-create",
         worldId: world.worldId,
-        plugins: ["character-presence"],
+        plugins: ["character-blueprint"],
       }),
     });
     try {
