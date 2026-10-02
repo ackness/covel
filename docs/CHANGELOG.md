@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Rate limits no longer trip the first-token timeout.** While the transport waits out a 429 or 5xx `retry-after`, the first-token timer pauses and restarts once a later attempt is answered; the call timeout still bounds the wait. On a rate-limited provider the narrator was aborted and retried into the same limit every turn.
 - **Dimension settlement stops slipping into prose.** `world-init/dimension-tracker` now requires a tool call (`toolChoice: required`). Its conversation ends on the player's unanswered message, and without the requirement the model continued the story about half the time; once it only read a value and then wrote prose, leaving settlement pending and blocking the next turn. Over 10 DeepSeek turns it now settles on the first call every time.
 
+- **English quests keep their objectives.** Advancing a quest whose objectives are in English no longer merges them into one; objectives without Han characters are compared by significant words.
+- **A guard can skip a runtime with a strict output contract.** A guard's `skip` flag is no longer validated against the runtime's output contract or bound into consumers; the remaining fields are the output. Before, any guard skip of such a runtime failed with `contract-output-invalid`.
 - **Character tracking settles quiet turns.** `sync-characters` accepts an empty batch as "no change", and `char-creator/character-tracker` now requires a tool call. Without the requirement the tracker sometimes continued the story instead of recording changes.
 
 ### Added
@@ -50,6 +52,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **The runtime job worker claims from the woken session.** Enqueues, retries, resumes, settle waits and job completions wake the worker for their session; a full scan of every session runs at startup, on a wake without a session, and in the 30 s maintenance pass.
 - **`setupRuntimes` writers share one helper** that re-reads the session and replaces only the entries each writer owns.
 - **Fewer bundled plugins.** Plugins that only ever worked together are now one package: `scene-cast` is `scene-stage`'s `cast` runtime, `character-presence` is part of `character-blueprint` (shown as "Character Profiles"), `story-plotter` is `story-events`' `plot` runtime, and `scene-prompts` is `guide` (shown as "Action Suggestions"). `director`'s writing notes are part of the narrator prompt. Capabilities such as `scene-cast@1`, `character-presence@1`, `story-event.plan@1` and `scene-prompts@1` are unchanged, and world packages need no data changes. Worlds and packs list the merged plugins; `activeSpeakerCount` moved to `pluginSettings.scene-stage`.
+- **Bookkeeping without extra model calls.** `inventory` and `core-quest` now read fixed WorldIR fields in function runtimes instead of running an agent each, so a turn in Emberback or Lantern Barrow makes two fewer model calls. `world-ir` validates `inventory_change` and `quest_change` events, and reads the names the session already tracks through the new `world-ir.vocabulary@1` contract, published in pre-turn by `inventory/vocabulary` and `core-quest/vocabulary`. A quest is created only from an explicit `accepted` event. Affinity stays an agent: reading a fixed WorldIR field recorded far fewer changes than the agent's own judgment.
 - **One action-suggestion format.** `guide` gives every mode a short recap, the decision the player faces, and 3–6 ready-to-send phrases, which stage mode also shows as choices. The safe / aggressive / creative categories are gone.
 - **The e2e plugin harness matches the current pipeline.** It finds forms in runtime effects, reads back each request's executions by `turnId`, counts `runtime.deferred` as a run of a detached runtime, checks background jobs end `succeeded`, fails uncommitted turns, and gates expectations on `startTurn` and `interval`. By default every runtime now uses the configured models (`--slot` only overrides the story slot), and Phase 6 lists the model each runtime called.
 
@@ -60,6 +63,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Breaking contracts and upgrade notes
 
+- The `update-inventory` and `upsert-quests` model tools are gone. A third-party WorldIR provider must emit the fixed `inventory_change` and `quest_change` fields for those plugins to record anything.
 - Development sessions that list `scene-cast`, `character-presence`, `story-plotter`, `scene-prompts`, `director` or `story-guard` must drop them from their active plugins, or be recreated. Data those plugins wrote under their own ids is not carried over; world data re-imports into the merged plugins on a new session.
 
 ## [0.0.44] - 2026-10-01
