@@ -1,5 +1,6 @@
 import type { LLMAdapter, TurnExecutorDeps } from "@covel/runtime";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
+import type { GatewayOptions } from "@covel/ai-provider";
 
 /** Opaque request services retain keys and slot overlays without serializing them. */
 export interface RuntimeJobServices {
@@ -8,6 +9,11 @@ export interface RuntimeJobServices {
   readonly canRun?: (model: string | undefined) => boolean;
   readonly gateway?: PluginRuntimeGateway;
   readonly compactor?: TurnExecutorDeps["compactor"];
+  /**
+   * The request's LLM options (keys, slot overrides, role bindings), restored
+   * around the job so model resolution matches the request that queued it.
+   */
+  readonly llmOptions?: GatewayOptions;
 }
 
 export interface RuntimeJobCredentialKey {

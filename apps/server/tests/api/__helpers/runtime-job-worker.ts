@@ -5,6 +5,7 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import type { SessionLock } from "../../../src/lib/session-lock.js";
 import { createRuntimeJobExecutor } from "../../../src/routes/api/plugin-rpc/runtime-job-executor.js";
+import type { RuntimeJobServices } from "../../../src/routes/api/plugin-rpc/runtime-job-credentials.js";
 import {
   createRuntimeJobWorker,
   type RuntimeJobWorker,
@@ -29,6 +30,7 @@ export function createTestRuntimeJobWorker(args: {
   readonly sessionLock: SessionLock;
   readonly pluginRegistry: PluginRegistry;
   readonly deps: Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter">;
+  readonly services?: Partial<RuntimeJobServices>;
 }): RuntimeJobWorker {
   const execute = createRuntimeJobExecutor({
     store: args.store,
@@ -49,7 +51,7 @@ export function createTestRuntimeJobWorker(args: {
           ? { hookPipeline: args.deps.hookPipeline }
           : {}),
       }),
-  })({ llm: args.deps.llm });
+  })({ llm: args.deps.llm, ...args.services });
   const worker = createRuntimeJobWorker({
     store: args.store,
     eventBus: args.eventBus,

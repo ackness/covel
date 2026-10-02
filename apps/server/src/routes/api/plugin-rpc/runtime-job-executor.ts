@@ -3,6 +3,7 @@ import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
 import type { DataStore, StoreTransaction } from "@covel/store";
+import { withRequestLlmOptions } from "../../../request-llm-context.js";
 import { topLevelTurnResults } from "../actions/turn-history.js";
 import {
   sessionApprovalScope,
@@ -303,5 +304,12 @@ export function createRuntimeJobExecutor(deps: {
       }
     };
 
-  return executeRuntimeJob;
+  // Restore the queuing request's LLM context, as request-scoped work sees it.
+  return (requestServices, handoff) => {
+    const execute = executeRuntimeJob(requestServices, handoff);
+    return (job, control) =>
+      withRequestLlmOptions(requestServices.llmOptions, () =>
+        execute(job, control),
+      );
+  };
 }

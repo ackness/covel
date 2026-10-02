@@ -17,6 +17,8 @@ import type { RuntimeManifest } from "@covel/shared";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { enqueueActivatedRuntimeJob } from "../../src/routes/api/plugin-rpc/runtime-job-enqueue.js";
 import { createTestRuntimeJobWorker } from "./__helpers/runtime-job-worker.js";
+import type { GatewayOptions } from "@covel/ai-provider";
+import { getRequestLlmOptions } from "../../src/request-llm-context.js";
 
 const PLUGIN_ID = "test-activated";
 const ENTRY = `${PLUGIN_ID}/entry`;
@@ -40,6 +42,7 @@ function manifest(name: string, extra: Partial<RuntimeManifest> = {}) {
 async function setup(handlers: {
   readonly entry: FunctionHandler;
   readonly follower?: FunctionHandler;
+  readonly llmOptions?: GatewayOptions;
 }) {
   const store: DataStore = createMemoryStore();
   const eventBus = createEventBus(store);
@@ -112,6 +115,9 @@ async function setup(handlers: {
         },
       },
     },
+    ...(handlers.llmOptions
+      ? { services: { llmOptions: handlers.llmOptions } }
+      : {}),
   });
   const enqueue = async (expectFollower = false) => {
     const session = (await store.getSession(SESSION_ID))!;
@@ -250,5 +256,22 @@ describe("activated runtime jobs", () => {
     expect(
       await env.store.getPluginData(SESSION_ID, PLUGIN_ID, "state", "late"),
     ).toBeNull();
+  });
+
+  it("runs under the LLM options of the request that queued it", async () => {
+    const llmOptions = {
+      apiKeys: { openai: "request-key" },
+      slotOverrides: { slotBindings: { image: { presetId: "custom-image" } } },
+    } as unknown as GatewayOptions;
+    let seen: GatewayOptions | undefined;
+    const env = await setup({
+      llmOptions,
+      entry: async () => {
+        seen = getRequestLlmOptions();
+        return { outcome: "success", value: {} };
+      },
+    });
+    await env.settle(await env.enqueue(), ["succeeded"]);
+    expect(seen).toBe(llmOptions);
   });
 });

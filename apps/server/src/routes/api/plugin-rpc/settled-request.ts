@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import type { RuntimeJobServices } from "./runtime-job-credentials.js";
 import type { SettleWaitBudget } from "./settled-session-lock.js";
 import { hasResolvedRuntimeJobCredentials } from "../../../runtime-job-readiness.js";
+import { getRequestLlmOptions } from "../../../request-llm-context.js";
 import { listRuntimeJobs } from "./jobs.js";
 import {
   publishRuntimeJobStatusEvent,
@@ -31,6 +32,7 @@ export function requestJobServices(c: Context): RuntimeJobServices | undefined {
     llm: c.get("llmAdapter"),
     gateway: c.get("pluginGateway"),
     compactor: c.get("compactorRunner"),
+    llmOptions: getRequestLlmOptions(),
   };
 }
 
