@@ -12,6 +12,11 @@ import {
 } from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
+import {
+  readRuntimeTriggerLedger,
+  turnsSinceLastTrigger,
+  type RuntimeTriggerRecord,
+} from "../trigger/trigger-ledger.js";
 
 export interface TurnSessionCharacter {
   readonly id?: string;
@@ -34,7 +39,10 @@ export interface LoadedTurnSessionState {
   readonly messageHistory: readonly TurnMessageRecord[];
   /** Player message waiting for the execution's commit transaction. */
   readonly journalMessages: readonly TurnMessageRecord[];
+  /** Committed runs per runtime (`maxTriggerCount`). */
   readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
+  /** Player turns since each runtime last ran; absent when it never ran. */
+  readonly runtimeTurnsSinceLastTrigger: ReadonlyMap<string, number>;
   readonly sessionMeta: TurnSessionMeta;
   readonly sessionStatus: "active" | "paused" | "ended";
   readonly turnNumber: number;
@@ -53,22 +61,24 @@ export async function loadTurnSessionState(args: {
 }): Promise<LoadedTurnSessionState> {
   const { input, deps, shouldAppendPlayerMessage } = args;
 
-  // Bounded per-turn reads: counts come from a store-side aggregate over the
-  // FULL log, while the in-memory history is only the uncompacted suffix —
-  // the compacted prefix is represented by session summaries at prompt-build
-  // time, so a long session never re-loads its whole history every turn.
+  // Bounded per-turn reads: the player count is a store-side aggregate over
+  // the FULL log and trigger history comes from the trigger ledger, while the
+  // in-memory history is only the uncompacted suffix — the compacted prefix is
+  // represented by session summaries at prompt-build time, so a long session
+  // never re-loads its whole history every turn.
   let messageHistory: readonly TurnMessageRecord[] = [];
   let turnNumber = 0;
-  let runtimeTriggerCounts: ReadonlyMap<string, number> = new Map();
+  let triggerLedger: ReadonlyMap<string, RuntimeTriggerRecord> = new Map();
   const journalMessages: TurnMessageRecord[] = [];
   if (deps.store) {
-    const [uncompacted, stats] = await Promise.all([
+    const [uncompacted, stats, ledger] = await Promise.all([
       deps.store.listUncompactedTurnMessages(input.sessionId),
       deps.store.getTurnMessageStats(input.sessionId),
+      readRuntimeTriggerLedger(deps.store, input.sessionId),
     ]);
     messageHistory = uncompacted;
     turnNumber = stats.playerMessageCount;
-    runtimeTriggerCounts = new Map(Object.entries(stats.runtimeMessageCounts));
+    triggerLedger = ledger;
   }
 
   if (deps.store && shouldAppendPlayerMessage) {
@@ -85,8 +95,8 @@ export async function loadTurnSessionState(args: {
     journalMessages.push(playerMessage);
   }
 
-  // Trigger counts come only from committed history; this execution's journal
-  // is intentionally invisible until finalize succeeds.
+  // Trigger history comes only from committed executions; this execution's
+  // runs are counted when finalize succeeds.
   let sessionStatus: "active" | "paused" | "ended" = "active";
   let phase: "setup" | "playing" = "playing";
   let completedPlayerTurns = 0;
@@ -135,7 +145,17 @@ export async function loadTurnSessionState(args: {
   return {
     messageHistory,
     journalMessages,
-    runtimeTriggerCounts,
+    runtimeTriggerCounts: new Map(
+      [...triggerLedger].map(([runtimeId, record]) => [
+        runtimeId,
+        record.count,
+      ]),
+    ),
+    // This execution's own player message counts as the turn it observes.
+    runtimeTurnsSinceLastTrigger: turnsSinceLastTrigger(
+      triggerLedger,
+      completedPlayerTurns + (shouldAppendPlayerMessage ? 1 : 0),
+    ),
     sessionMeta: {
       turnNumber,
       logicalTurn: completedPlayerTurns + 1,

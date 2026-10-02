@@ -7,7 +7,10 @@ import type {
   NestedTurnResult,
   RecursiveCallDelta,
 } from "@covel/shared";
-import { attachExecutionJournal } from "../execution-journal.js";
+import {
+  attachExecutionJournal,
+  attachRuntimeTrigger,
+} from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import { getToolContent, getPendingProposals } from "@covel/tools";
@@ -387,6 +390,7 @@ export async function executeAgentGuard({
         typeof postOutput?.narrativeOutput === "string" &&
         postOutput.narrativeOutput
       ) {
+        attachRuntimeTrigger(postResult, manifest.name);
         attachExecutionJournal(postResult, [
           {
             id: crypto.randomUUID(),

@@ -84,7 +84,6 @@ import {
   type LoadedTurnSessionState,
 } from "./session-state.js";
 import {
-  countPlayerMessagesSinceRuntime,
   isScopedRuntimeRecovery,
   scheduleTriggeredRuntimes,
   selectTriggeredRuntimes,
@@ -275,6 +274,7 @@ async function executeTurnImpl(
     messageHistory,
     journalMessages,
     runtimeTriggerCounts,
+    runtimeTurnsSinceLastTrigger,
     sessionStatus,
     turnNumber,
   } = sessionState;
@@ -306,15 +306,6 @@ async function executeTurnImpl(
     (runtime) => runtime.outputContract === DIMENSION_CONTRACT,
   );
   deps = { ...deps, dimensionProviderPluginId: dimensionProvider?.pluginId };
-  // Scheduling observes the current player action even though its journal row
-  // is still uncommitted. This preserves cooldown semantics from the former
-  // append-before-schedule path without exposing the row to the store,
-  // compaction, or sibling requests before finalize succeeds.
-  const triggerMessageHistory =
-    journalMessages.length > 0
-      ? [...messageHistory, ...journalMessages]
-      : messageHistory;
-
   // Abort early if session is paused or ended — no runtimes should execute.
   if (sessionStatus !== "active") {
     return {
@@ -414,8 +405,8 @@ async function executeTurnImpl(
       activeRuntimes,
       manualRuntimeId: targetedRuntimeId,
       manualRuntimeIds: batchRuntimeIds,
-      messageHistory: triggerMessageHistory,
       runtimeTriggerCounts,
+      runtimeTurnsSinceLastTrigger,
       setupRuntimes: setupTracker.mirror,
       sessionId: input.sessionId,
       turnNumber,
@@ -914,12 +905,7 @@ async function executeTurnImpl(
               },
             ]),
           runtimeTriggerCounts,
-          runtimeTurnsSinceLastTrigger: new Map(
-            activeRuntimes.map((rt) => [
-              rt.name,
-              countPlayerMessagesSinceRuntime(triggerMessageHistory, rt.name),
-            ]),
-          ),
+          runtimeTurnsSinceLastTrigger,
         });
 
   // ── Pre-Game completion tracking ────────────────────────────────

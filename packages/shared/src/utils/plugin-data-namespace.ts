@@ -65,3 +65,14 @@ const CONTROL_PLANE_NAMESPACES: ReadonlySet<string> = new Set([
 export function isControlPlanePluginDataNamespace(namespace: string): boolean {
   return CONTROL_PLANE_NAMESPACES.has(namespace);
 }
+
+/**
+ * Owner prefix of kernel bookkeeping rows in plugin data (`__kernel:vector`,
+ * `__kernel:triggers`). It is an owner partition, never a plugin id: these rows
+ * travel with snapshots but stay off every public plugin-data surface.
+ */
+export const KERNEL_PLUGIN_DATA_OWNER_PREFIX = "__kernel:";
+
+export function isKernelPluginDataOwner(pluginId: string): boolean {
+  return pluginId.startsWith(KERNEL_PLUGIN_DATA_OWNER_PREFIX);
+}

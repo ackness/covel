@@ -24,11 +24,13 @@ interface PluginDataChange {
  * same public projection the REST reads return.
  */
 function publicChanges(
+  pluginId: string,
   changes: readonly PluginDataChange[],
 ): PluginDataChange[] {
   const visible: PluginDataChange[] = [];
   for (const change of changes) {
-    if (!isPublicPluginDataRecord(change)) continue;
+    if (!isPublicPluginDataRecord({ pluginId, namespace: change.namespace }))
+      continue;
     if (change.operation === "delete") {
       visible.push(change);
       continue;
@@ -48,7 +50,7 @@ function emitPluginDataChangedEvent(
   sessionId: string,
   rawChanges: readonly PluginDataChange[],
 ): void {
-  const changes = publicChanges(rawChanges);
+  const changes = publicChanges(pluginId, rawChanges);
   if (changes.length === 0) return;
   eventBus.emit({
     id: crypto.randomUUID(),

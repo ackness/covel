@@ -19,9 +19,11 @@ import {
 import type { TurnMessageRecord } from "@covel/store";
 
 const EXECUTION_JOURNAL = Symbol.for("@covel/runtime/execution-journal");
+const RUNTIME_TRIGGER = Symbol.for("@covel/runtime/runtime-trigger");
 
 type JournalCarrier = object & {
   readonly [EXECUTION_JOURNAL]?: readonly TurnMessageRecord[];
+  readonly [RUNTIME_TRIGGER]?: string;
 };
 
 export function attachExecutionJournal<T extends object>(
@@ -44,6 +46,29 @@ function journalOf(carrier: object): readonly TurnMessageRecord[] {
   return (carrier as JournalCarrier)[EXECUTION_JOURNAL] ?? [];
 }
 
+/** Mark a result as one run of its runtime for the trigger ledger. */
+export function attachRuntimeTrigger(result: object, runtimeId: string): void {
+  Object.defineProperty(result, RUNTIME_TRIGGER, {
+    value: runtimeId,
+    enumerable: false,
+    configurable: true,
+  });
+}
+
+/** Runtime ids of every counted run in one execution, one entry per run. */
+export function collectExecutionTriggers(
+  turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
+): readonly string[] {
+  const results = new Set<object>([
+    ...turnResult.runtimeResults,
+    ...(turnResult.nestedRuntimeResults ?? []),
+  ]);
+  return [...results].flatMap((result) => {
+    const runtimeId = (result as JournalCarrier)[RUNTIME_TRIGGER];
+    return runtimeId ? [runtimeId] : [];
+  });
+}
+
 /** Collect and de-duplicate every pending message produced by one execution. */
 export function collectExecutionJournal(
   turnResult: Pick<TurnResult, "runtimeResults" | "nestedRuntimeResults">,
@@ -64,12 +89,13 @@ export function collectExecutionJournal(
 }
 
 /**
- * Manual outputs stay out of history unless a committed interaction needs
+ * Count a successful run and journal what it shows the player. Manual outputs
+ * stay out of history (and uncounted) unless a committed interaction needs
  * validation. Only text (`narrativeOutput` / `content`) becomes message
- * content: structured outputs already live on the `turn_results` row, and copying
- * them here made every turn's JSON count toward compaction, feed the summary
- * model and enter recall. The row itself stays, empty, because trigger
- * counts, interaction validation and UI attachments key off it.
+ * content: structured outputs already live on the `turn_results` row, and
+ * copying them here made every turn's JSON count toward compaction, feed the
+ * summary model and enter recall. A run with no text, interaction or UI block
+ * writes no row; the trigger ledger counts it.
  */
 export function attachRuntimeJournal(
   result: RuntimeResult,
@@ -92,6 +118,9 @@ export function attachRuntimeJournal(
       : typeof output.content === "string"
         ? output.content
         : "";
+  attachRuntimeTrigger(result, manifest.name);
+  const ui = Array.isArray(result.effects?.ui) ? result.effects.ui : undefined;
+  if (!content && !interactions?.length && !ui?.length) return;
   attachExecutionJournal(result, [
     {
       id: crypto.randomUUID(),
@@ -105,7 +134,7 @@ export function attachRuntimeJournal(
       content,
       order: stageMessageOrder(getRuntimeSpec(manifest).stage),
       pendingInput: interactions,
-      ui: Array.isArray(result.effects?.ui) ? result.effects.ui : undefined,
+      ui,
       createdAt: new Date().toISOString(),
     },
   ]);

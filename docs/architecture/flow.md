@@ -352,8 +352,8 @@ stage 屏障保证 narrative 阶段结束后才运行 post-turn。stage 内独�
                               │
                     ┌─────────┴──────────┐
                     │ startTurn?         │ ← 逻辑回合数 < startTurn？
-                    │ maxTriggerCount?   │ ← 超过 session 最大次数？
-                    │ cooldownTurns?     │ ← 冷却中？
+                    │ maxTriggerCount?   │ ← 超过 session 最大次数？（trigger 台账）
+                    │ cooldownTurns?     │ ← 冷却中？（trigger 台账）
                     └─────────┬──────────┘
                               │ 通过
                     ┌─────────┴──────────┐
@@ -607,12 +607,16 @@ turn_messages (canonical 追加式执行日志):
   │ turn-2 │ player   │ user       │ 我决定跟师姐去探查灵脉       │
   │ turn-2 │ runtime  │ assistant  │ 清晨，你在老槐树下等到了...   │
   │ turn-2 │ tool     │ tool       │ {"entries":[...]}             │
-  │ turn-2 │ runtime  │ assistant  │ (空：codex 只有结构化输出)    │
   └────────┴──────────┴────────────┴──────────────────────────────┘
 
-  runtime 行只把 narrativeOutput / content 文本写入 content。结构化输出
-  保留在 turn_results，行本身留空，只用于 trigger 计数、表单校验与 UI
-  附件；空行不进入 prompt、压缩摘要和向量召回。
+  runtime 行只把 narrativeOutput / content 文本写入 content，并携带表单
+  （pendingInput）与 UI 附件。结构化输出保留在 turn_results；既无文本也
+  无附件的运行（如 codex 只写结构化条目）不写 runtime 行。
+
+  trigger 台账（kernel 所有的 plugin data，owner `__kernel:triggers`）
+  按 runtime 记录已提交的运行次数和最后一次运行时的
+  completedPlayerTurns，随 finalize 事务写入，回滚的执行不计数。
+  maxTriggerCount / cooldownTurns 读它，不再数 runtime 行，也不受压缩影响。
 
   canonical 未压缩后缀
     → prompt.history-transform@1 投影
@@ -620,7 +624,7 @@ turn_messages (canonical 追加式执行日志):
     → prompt.segment@1 + 世界书 + 当前玩家输入
     → token budget → LLM messages[]
 
-  调度统计读取 canonical 日志；prompt 投影不改写它。
+  玩家消息计数读取 canonical 日志，trigger 历史读取台账；prompt 投影不改写它们。
   history.compact@1 生成摘要，框架原子保存摘要与压缩标记。
 
   注意：玩家输入只以 `user` 角色追加一行（叙事模板填充结果），
