@@ -338,6 +338,18 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           404,
         );
       }
+      // A rolled-back turn's results were never committed: seeding them would
+      // let the retried runtime pass its upstream gate on writes that no longer
+      // exist.
+      if (row.commitStatus !== "committed") {
+        return c.json(
+          errorBody(
+            `turn "${body.retryFromTurnId}" has not committed; recover the original action first`,
+            { code: "retry_source_not_committed" },
+          ),
+          409,
+        );
+      }
       retrySeedResults = (
         Array.isArray(row.runtimeResults) ? row.runtimeResults : []
       ) as RuntimeResult[];
