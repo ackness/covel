@@ -44,6 +44,7 @@ import {
   insertDepthContributions,
   type RenderedDepthContribution,
 } from "./message-insertion.js";
+import type { InputSlot, InputSource } from "@covel/shared";
 import type {
   AssembledContext,
   ContextBuildParams,
@@ -138,25 +139,54 @@ function buildRuntimeActivationBlock(params: ContextBuildParams): string {
 }
 
 /**
+ * Slots as the model sees them: the producing plugin and runtime stay as
+ * provenance, but the result id, a UUID only tools and the kernel use (they
+ * read it from `ctx.inputSlots`), is left out of the prompt.
+ */
+function modelFacingSlots(
+  slots: Readonly<Record<string, InputSlot>>,
+): Record<string, unknown> {
+  const source = ({ pluginId, runtimeId }: InputSource) => ({
+    pluginId,
+    runtimeId,
+  });
+  return Object.fromEntries(
+    Object.entries(slots).map(([name, slot]) => [
+      name,
+      slot.cardinality === "one"
+        ? { ...slot, source: source(slot.source) }
+        : {
+            ...slot,
+            items: slot.items.map((item) => ({
+              ...item,
+              source: source(item.source),
+            })),
+          },
+    ]),
+  );
+}
+
+/**
  * Reserved `<runtime-inputs>` block (docs 02 §3.2): the provenance-wrapped
- * `inputs.<name>` slots as JSON, the same shape a function handler reads from
- * `ctx.inputs`. Absent when no bindings resolved.
+ * `inputs.<name>` slots as JSON, the shape a function handler reads from
+ * `ctx.inputs` minus result ids. Absent when no bindings resolved.
  */
 function buildInputsBindingBlock(params: ContextBuildParams): string {
   const slots = params.inputSlots;
   if (!slots || Object.keys(slots).length === 0) return "";
-  return `<runtime-inputs>\n${escapeXmlContent(JSON.stringify(slots))}\n</runtime-inputs>`;
+  return `<runtime-inputs>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots)))}\n</runtime-inputs>`;
 }
 
 /**
  * Reserved `<runtime-exports>` block (docs 02 §3.4.3): the provenance-wrapped
- * cross-execution `recordAs` export slots as JSON, the same shape a function
- * handler reads from `ctx.exports`. Absent when no export binding resolved.
+ * cross-execution `recordAs` export slots as JSON, the shape a function
+ * handler reads from `ctx.exports` minus result ids. Absent when no export
+ * binding resolved.
  */
 function buildExportsBindingBlock(params: ContextBuildParams): string {
   const slots = params.exportSlots;
   if (!slots || Object.keys(slots).length === 0) return "";
-  return `<runtime-exports>\n${escapeXmlContent(JSON.stringify(slots))}\n</runtime-exports>`;
+  return `<runtime-exports>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots)))}\n</runtime-exports>`;
 }
 
 /**

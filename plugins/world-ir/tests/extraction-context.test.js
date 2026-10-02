@@ -35,7 +35,11 @@ describe("world-ir extraction context", () => {
     expect(result.replace.systemPrompt).not.toContain("old background");
     expect(result.replace.messages).toHaveLength(1);
     expect(JSON.parse(result.replace.messages[0].content)).toEqual({
-      narrative,
+      narrative: {
+        cardinality: "one",
+        value: narrative.value,
+        source: { pluginId: "narrator", runtimeId: "narrator" },
+      },
       characters: [{ id: "mira", name: "Mira", type: "npc" }],
     });
     expect(JSON.stringify(result.replace)).not.toContain("Old memory");
