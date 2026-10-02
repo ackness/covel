@@ -114,7 +114,12 @@ export function PluginPanel({
     sourceKind === "session.characters"
       ? sessionCharacters
       : namespace === "_jobs"
-        ? Object.fromEntries(jobs.map((job) => [job.jobId, job]))
+        ? Object.fromEntries(
+            jobs.map((job) => [
+              job.jobId,
+              job.messageKey ? { ...job, message: t(job.messageKey) } : job,
+            ]),
+          )
         : liveData;
   const data = stateOverride ?? frameworkData;
 

@@ -317,6 +317,15 @@ export function backgroundJobRecord(
       ? (reportedError(result, runtimeId) ??
         (typeof row.error === "string" ? row.error : undefined))
       : undefined;
+  // A prompt-builder whose follower renders the result (`phase: "prompt"`).
+  const messageKey =
+    row.phase !== "prompt"
+      ? undefined
+      : status === "pending"
+        ? "pluginRpc.jobs.imagePromptGenerating"
+        : status === "done" && Array.isArray(result?.deferredJobs)
+          ? "pluginRpc.jobs.imagePromptQueued"
+          : undefined;
   return {
     jobId,
     status,
@@ -331,6 +340,7 @@ export function backgroundJobRecord(
     ...(typeof result?.durationMs === "number"
       ? { durationMs: result.durationMs }
       : {}),
+    ...(messageKey ? { messageKey } : {}),
     ...(error ? { error } : {}),
     ...(typeof row.reason === "string" ? { reason: row.reason } : {}),
     ...(Array.isArray(result?.runtimeResults)

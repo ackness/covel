@@ -67,12 +67,25 @@ export function publicRuntimeJobDiagnostics(
   };
 }
 
-/** Retain game results and identities, excluding frozen inputs and raw failures. */
+/**
+ * Retain game results and identities, excluding frozen inputs and raw failures.
+ * A prompt-builder queued with `expectsBackgroundFollower` is marked
+ * `phase: "prompt"` so panels can say what it is doing.
+ */
 export function publicRuntimeJob<T extends RuntimeJobValue>(
   job: T,
-): Omit<T, "payload" | "error" | "reason"> & PublicRuntimeJobDiagnostics {
-  const { payload: _payload, error: _error, reason: _reason, ...visible } = job;
-  return { ...visible, ...publicRuntimeJobDiagnostics(job) };
+): Omit<T, "payload" | "error" | "reason"> &
+  PublicRuntimeJobDiagnostics & { readonly phase?: "prompt" } {
+  const { payload, error: _error, reason: _reason, ...visible } = job;
+  const expectsFollower =
+    typeof payload === "object" &&
+    payload !== null &&
+    (payload as { expectFollower?: unknown }).expectFollower === true;
+  return {
+    ...visible,
+    ...(expectsFollower ? { phase: "prompt" as const } : {}),
+    ...publicRuntimeJobDiagnostics(job),
+  };
 }
 
 /**

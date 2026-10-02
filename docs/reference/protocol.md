@@ -175,7 +175,7 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 | --------------------- | ---- | ------------------ | -------------------------------------------------------------------------- |
 | `plugin-data.changed` | S→C  | 插件持久化数据变更 | `{ pluginId, runtimeId, changes: [{ namespace, key, value, operation }] }` |
 
-`plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件，包括成功的 compare-and-set 写入（runtime job 状态迁移、维度记录）。后台任务的终态以 `job-status.updated` 为准，`_runtime_jobs` 行的变更只用于数据同步。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。事件与 REST 读取使用同一公开投影：隐藏世界数据（`_hidden.*`）的变更不发出；`_runtime_jobs` 与维度记录只携带公开形状（不含任务 `payload`、原始错误或维度规则）。
+`plugin-data-set` / `plugin-data-set-batch` / DELETE `/plugin-data/...` 等所有写路径均会触发此事件，包括成功的 compare-and-set 写入（runtime job 状态迁移、维度记录）。后台任务的终态以 `job-status.updated` 为准，`_runtime_jobs` 行的变更只用于数据同步。`operation` 字段为 `'set'` 或 `'delete'`（删除时 `value` 为 `null`），由 `wrapStoreWithPluginDataEvents` 在 store 层统一拦截，前端可实时响应插件状态变更。事件与 REST 读取使用同一公开投影：隐藏世界数据（`_hidden.*`）的变更不发出；`_runtime_jobs` 与维度记录只携带公开形状（不含任务 `payload`、原始错误或维度规则）；以 `expectsBackgroundFollower` 排队的任务额外带 `phase: "prompt"`。
 
 ### 作业进度事件（job-status，实验性）
 
@@ -187,7 +187,7 @@ function runtime 挂起时，continuation 保存尚未提交的命令、输入�
 
 staged detached worker 也使用同一事件投影 durable 状态：`queued/claimed/running/committing/succeeded/cancelled` 分别映射为公开的 `queued/running/progress/succeeded/cancelled`；`failed/timed_out/stale/orphaned` 映射为公开 `failed`，具体终态保留在 `data.durableStatus`。`data.originTurnId` 让 Web 把后台任务挂回产生它的原始 turn，而不是后台执行自己的 `backgroundTurnId`。
 
-> 本通道与两个框架保留 namespace 并存：manual/event `execution: background` 使用 `_jobs`；staged `turnCompletion: detached` 使用 `_runtime_jobs`。`job-status.updated` 是它们的实时/恢复投影，不替代领域结果事务。
+> 本通道与框架保留 namespace `_runtime_jobs` 并存：manual/event `execution: background` 与 staged `turnCompletion: detached` 都记录在其中。`job-status.updated` 是它的实时/恢复投影，不替代领域结果事务。
 
 ### 媒体资产事件
 
