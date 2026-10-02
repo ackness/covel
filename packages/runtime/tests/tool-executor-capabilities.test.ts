@@ -11,7 +11,7 @@ import {
 } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
-import upsertQuests from "../../../plugins/core-quest/tools/upsert-quests.js";
+import upsertQuests from "../../../plugins/core-quest/lib/upsert-quests.js";
 import listNpcGraph from "../../../plugins/npc-graph/tools/list-npc-graph.js";
 import syncCodexEntries from "../../../plugins/codex/tools/sync-codex-entries.js";
 

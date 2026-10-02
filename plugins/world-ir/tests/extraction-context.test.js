@@ -41,6 +41,40 @@ describe("world-ir extraction context", () => {
     expect(JSON.stringify(result.replace)).not.toContain("Old memory");
     expect(payload.messages[0].content).toContain("old quest");
   });
+  it("adds the tracked vocabulary from every provider when present", async () => {
+    const result = await extractionContext(
+      {},
+      {
+        runtimeId: "world-ir",
+        promptTemplate: "Extract facts only.",
+        inputSlots: {
+          narrative,
+          vocabulary: {
+            cardinality: "all",
+            items: [
+              { value: { entries: [{ type: "item", name: "Brass Key" }] } },
+              {
+                value: {
+                  entries: [
+                    {
+                      type: "quest",
+                      name: "Find the keeper",
+                      details: ["Ask at the pier"],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    );
+    expect(JSON.parse(result.replace.messages[0].content).vocabulary).toEqual([
+      { type: "item", name: "Brass Key" },
+      { type: "quest", name: "Find the keeper", details: ["Ask at the pier"] },
+    ]);
+  });
+
   it("does not reshape other runtimes or guess inputs from rendered text", async () => {
     expect(
       await extractionContext(

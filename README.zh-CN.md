@@ -49,13 +49,13 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 
 插件不一定是一个自主 agent。它可以只有一个 runtime，也可以由多个 runtime 协作；可以完全不调用 LLM，也可以只声明 UI 或数据契约。
 
-| 形态                 | 职责                                       | 内置示例                                           |
-| -------------------- | ------------------------------------------ | -------------------------------------------------- |
-| **Agent runtime**    | 用模型完成叙事或结构化抽取                 | `narrator`、`codex`、`core-quest`                  |
-| **Function runtime** | 执行确定性、零 token 的游戏逻辑            | `pregame`、`dice-check/roller`、`scene-stage/cast` |
-| **混合插件包**       | 组合确定性检索与 agent 抽取                | `npc-graph`、`dice-check`                          |
-| **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `cost-gate`                                        |
-| **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`                    |
+| 形态                 | 职责                                       | 内置示例                                          |
+| -------------------- | ------------------------------------------ | ------------------------------------------------- |
+| **Agent runtime**    | 用模型完成叙事或结构化抽取                 | `narrator`、`codex`、`world-ir`                   |
+| **Function runtime** | 执行确定性、零 token 的游戏逻辑            | `pregame`、`inventory/ledger`、`scene-stage/cast` |
+| **混合插件包**       | 组合确定性检索与 agent 抽取                | `npc-graph`、`dice-check`                         |
+| **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `cost-gate`                                       |
+| **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`                   |
 
 根 `PLUGIN.md` 声明包身份、版本化的 `provides` / `requires` / `optional` 契约，以及工具、事件、UI、设置等共享 `contributes`。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
 

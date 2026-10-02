@@ -43,9 +43,6 @@
 | generate-guide                        | local   | guide               | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                        |
 | upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
 | list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                 |
-| upsert-quests                         | local   | core-quest          | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）       |
-| update-affinity                       | local   | affinity            | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
-| update-inventory                      | local   | inventory           | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
 | plan-story-events                     | local   | story-events        | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划）                             |
 | submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                       |
 | submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                     |
@@ -788,6 +785,13 @@ Attributes:
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
 工具原样返回校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
+
+两类事件另有固定字段，由工具一并校验（其余事件的 `attributes` 保持自由）。`inventory` 与 `core-quest` 的 function runtime 只读取这些字段，不再调用模型：
+
+| `event.type`       | 必需 `attributes`                                                                                                    | 可选 `attributes`                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `inventory_change` | `item`（本输出中 `type: item` 的实体 id）、`holder`（角色 id）、`operation`（`gain` / `lose` / `equip` / `unequip`） | `quantity`（正整数）                                                   |
+| `quest_change`     | `quest`（任务名）、`status`（`accepted` / `progressed` / `completed` / `failed`）                                    | `objectives`、`completedObjectives`（目标原文数组）、`giver`、`reward` |
 
 这里的 `events` 是 WorldIR **事实数组**，不是领域事件信封。只有形如 `{ topic, data? }` 且 `topic` 为字符串的条目才会被 output normalizer 转成 `event.emit`；普通 WorldIR event 不会再触发 `event.emit: topic must be a non-empty string`。
 

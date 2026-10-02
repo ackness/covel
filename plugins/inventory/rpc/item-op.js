@@ -5,8 +5,8 @@
  * Scope is deliberately loadout-only: `equip` / `unequip` / `drop`. Narrative
  * consumption ("I use the bandage") stays in the story loop — a silent
  * "use" button would bypass the narrator entirely. `drop` writes the same
- * tombstone shape as the tool's remove-to-zero (`quantity: 0, removed: true`)
- * so LLM-side and player-side removals share one model and same-name
+ * tombstone shape as the ledger's remove-to-zero (`quantity: 0, removed: true`)
+ * so story-side and player-side removals share one model and same-name
  * re-acquisition revives the same record id.
  */
 

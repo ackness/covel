@@ -1,4 +1,5 @@
 import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
+import { eventProfileIssues } from "./event-profiles.js";
 
 function validationPath(path) {
   if (path === "(root)") return [];
@@ -15,14 +16,18 @@ export default function ({ tool }) {
     })
     .superRefine((value, ctx) => {
       const validation = validateWorldIRV1(value);
-      if (validation.valid) return;
-      for (const error of validation.errors) {
-        ctx.addIssue({
-          code: "custom",
-          path: validationPath(error.path),
-          message: error.message,
-        });
+      if (!validation.valid) {
+        for (const error of validation.errors) {
+          ctx.addIssue({
+            code: "custom",
+            path: validationPath(error.path),
+            message: error.message,
+          });
+        }
+        return;
       }
+      for (const issue of eventProfileIssues(value))
+        ctx.addIssue({ code: "custom", ...issue });
     });
 
   return tool({

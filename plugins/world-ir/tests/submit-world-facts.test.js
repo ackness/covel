@@ -4,14 +4,21 @@ import makeSubmitWorldFacts from "../tools/submit-world-facts.js";
 const VALID_FACTS = {
   schemaVersion: 1,
   summary: "The player found a brass key.",
-  entities: [{ id: "brass-key", type: "item", name: "Brass Key" }],
+  entities: [
+    { id: "brass-key", type: "item", name: "Brass Key" },
+    { id: "player-ren", type: "character", name: "Ren" },
+  ],
   relations: [],
   events: [
     {
       id: "found-key",
       type: "inventory_change",
-      participantIds: ["brass-key"],
-      attributes: { operation: "acquire" },
+      participantIds: ["player-ren", "brass-key"],
+      attributes: {
+        item: "brass-key",
+        holder: "player-ren",
+        operation: "gain",
+      },
     },
   ],
   statements: [],
@@ -95,5 +102,65 @@ describe("submit-world-facts", () => {
         expect.objectContaining({ path: ["relations", 0, "to"] }),
       ]),
     );
+  });
+
+  it("requires the fixed attributes of profiled events", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      events: [
+        {
+          id: "found-key",
+          type: "inventory_change",
+          attributes: { item: "brass-key", operation: "acquire" },
+        },
+        {
+          id: "took-job",
+          type: "quest_change",
+          attributes: { quest: "Find the keeper", status: "started" },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    const paths = result.error?.issues.map((issue) => issue.path.join("."));
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        "events.0.attributes.holder",
+        "events.0.attributes.operation",
+        "events.1.attributes.status",
+      ]),
+    );
+  });
+
+  it("requires an inventory change to name an item entity of this output", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      events: [
+        {
+          id: "found-key",
+          type: "inventory_change",
+          attributes: {
+            item: "player-ren",
+            holder: "player-ren",
+            operation: "gain",
+          },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ path: ["events", 0, "attributes", "item"] }),
+    ]);
+  });
+
+  it("leaves other event types free-form", async () => {
+    const result = submitWorldFacts.parameters.safeParse({
+      ...VALID_FACTS,
+      events: [
+        { id: "talked", type: "interaction", attributes: { mood: "tense" } },
+      ],
+    });
+    expect(result.success).toBe(true);
   });
 });

@@ -923,6 +923,9 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*
@@ -990,6 +993,9 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
     devDependencies:
       '@covel/plugin-loader':
         specifier: workspace:*

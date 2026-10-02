@@ -199,8 +199,8 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(levels[1]).toEqual([
       "affinity",
       "codex",
-      "core-quest",
-      "inventory",
+      "core-quest/log",
+      "inventory/ledger",
       "npc-graph/extractor",
       "story-events/plot",
       "world-init/dimension-tracker",
@@ -274,8 +274,8 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const id of [
       "affinity",
       "codex",
-      "core-quest",
-      "inventory",
+      "core-quest/log",
+      "inventory/ledger",
       "npc-graph/extractor",
     ]) {
       const spec = requireSpec(specs, id);

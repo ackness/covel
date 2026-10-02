@@ -1,23 +1,19 @@
 /**
- * Plugin-local tool: update-inventory
+ * Inventory ledger: batch-apply explicit inventory changes for the current
+ * turn — gains, losses/consumption, field corrections, and equip state. The
+ * ledger runtime builds the changes from WorldIR inventory events
+ * (`lib/world-ir.js`) and calls `execute` once.
  *
- * Batch-apply explicit inventory changes extracted from the current turn's
- * narrative: gains, losses/consumption, field corrections, and equip state.
+ * Changes are keyed by item **name** (not ID). The ledger:
  *
- * ### LLM contract
- *
- * The LLM provides changes keyed by item **name** (not ID). The tool is
- * responsible for:
- *
- *  1. Loading existing items from `plugin_data[namespace="items"]` and
- *     overlaying same-turn pending writes (a second call in one turn sees
- *     the first call's not-yet-committed items).
- *  2. De-duplicating by name (case-insensitive) and assigning stable short
- *     IDs to newly-named items via `shortIdBatch`.
- *  3. Stacking quantities on `add`, decrementing on `remove`, and tolerating
+ *  1. Loads existing items from `plugin_data[namespace="items"]` and
+ *     overlays same-turn pending writes.
+ *  2. De-duplicates by name (case-insensitive) and assigns stable short IDs
+ *     to newly-named items via `shortIdBatch`.
+ *  3. Stacks quantities on `add`, decrements on `remove`, and tolerates
  *     removes of items that are not in the bag (skipped with a note instead
  *     of failing the whole batch).
- *  4. Writing a per-turn summary into the `message` namespace so the chat
+ *  4. Writes a per-turn summary into the `message` namespace so the chat
  *     feed shows a "+ Iron Sword ×1 / − Torch ×2" style toast.
  *
  * Removal to zero writes a tombstone (`quantity: 0, removed: true`) instead

@@ -120,9 +120,9 @@ describe("core plugin manifest contract", () => {
     const structuredDownstreamIds = [
       "codex",
       "npc-graph/extractor",
-      "core-quest",
+      "core-quest/log",
       "affinity",
-      "inventory",
+      "inventory/ledger",
     ];
     const rawDownstreams = rawDownstreamIds.map((id) =>
       requireRuntime(manifests, id),
@@ -261,14 +261,15 @@ describe("core plugin manifest contract", () => {
       ).toBe(false);
     }
 
+    // Ledgers that only reconcile typed WorldIR events run without a model.
+    for (const id of ["core-quest/log", "inventory/ledger"]) {
+      expect(requireRuntime(manifests, id)).toMatchObject({
+        runtimeType: "function",
+        handler: "./handler.js",
+      });
+    }
     expect(requireRuntime(manifests, "affinity").completeAfterTools).toEqual([
       "update-affinity",
-    ]);
-    expect(requireRuntime(manifests, "inventory").completeAfterTools).toEqual([
-      "update-inventory",
-    ]);
-    expect(requireRuntime(manifests, "core-quest").completeAfterTools).toEqual([
-      "upsert-quests",
     ]);
     expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
       "sync-codex-entries",
@@ -277,8 +278,6 @@ describe("core plugin manifest contract", () => {
       "npc-graph/extractor",
       "affinity",
       "codex",
-      "core-quest",
-      "inventory",
       "char-creator/character-tracker",
     ]) {
       const extractor = requireRuntime(manifests, id);
@@ -292,18 +291,10 @@ describe("core plugin manifest contract", () => {
     }
 
     expect(
-      [...rawDownstreams, worldIr, ...structuredDownstreams].map(
-        (manifest) => manifest.model,
-      ),
-    ).toEqual([
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-      "plugin",
-    ]);
+      [...rawDownstreams, worldIr, ...structuredDownstreams]
+        .filter((manifest) => manifest.runtimeType !== "function")
+        .map((manifest) => manifest.model),
+    ).toEqual(["plugin", "plugin", "plugin", "plugin", "plugin"]);
   });
 
   it("keeps manual Chat Mode utilities outside automatic scheduling", async () => {

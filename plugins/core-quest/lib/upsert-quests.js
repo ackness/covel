@@ -1,26 +1,23 @@
 /**
- * Plugin-local tool: upsert-quests
+ * Quest log ledger: batch create or advance quests for the current turn. The
+ * log runtime builds the updates from WorldIR quest events
+ * (`lib/world-ir.js`) and calls `execute` once.
  *
- * Batch create or advance quests for the current turn.
+ * Updates are keyed by canonical quest **name** (not ID). The ledger:
  *
- * ### LLM contract
- *
- * The LLM submits quests keyed by canonical **name** (not ID). The tool is
- * responsible for:
- *
- *  1. Loading existing quests from `plugin_data[namespace="quests"]` —
+ *  1. Loads existing quests from `plugin_data[namespace="quests"]` —
  *     including world-pack preseeded records imported via `dataSchemas`.
- *  2. De-duplicating by normalized name and assigning stable short IDs to
+ *  2. De-duplicates by normalized name and assigns stable short IDs to
  *     new quests via `shortIdBatch` (e.g. `quest-寻回断魂钩`).
- *  3. Merging updates into existing quests: provided fields override;
+ *  3. Merges updates into existing quests: provided fields override;
  *     objectives match by stable ID, normalized text, then a conservative
  *     semantic fallback. Omitted `status`/`done` keep their current state so
  *     a partial update can never regress a completed quest or uncheck a
  *     finished objective.
- *  4. Deriving `chips` (a checklist/giver/reward string array) on every
+ *  4. Derives `chips` (a checklist/giver/reward string array) on every
  *     write so the right-panel EntryCard can render objectives without a
  *     framework-side lookup.
- *  5. Writing this turn's change summary (new / progress / completed /
+ *  5. Writes this turn's change summary (new / progress / completed /
  *     failed) into the `message` namespace for the chat-feed block.
  */
 
@@ -112,7 +109,7 @@ export default function ({ tool, z, shortIdBatch }) {
       const now = new Date().toISOString();
       // Authoritative logical turn; `-1` marks "unknown" for callers outside
       // a turn rather than silently pretending turn 0 (npc-graph convention).
-      const currentTurn = context.turnNumber ?? -1;
+      const currentTurn = context.logicalTurn ?? -1;
       // zod already caps LLM calls at 5; the slice keeps direct callers
       // (tests, RPC drift) within the same contract instead of rejecting.
       const incoming = (params.quests ?? []).slice(0, MAX_QUESTS_PER_CALL);

@@ -540,7 +540,7 @@ handler 必须返回以声明的 output id 为 key 的对象；每个 output 值
 
 开发工具和 Agent 可通过 `GET /api/framework/capabilities` 发现 `projections` effect 和 contract URI 语法，再通过 `GET /api/plugins/:id` 读取每个插件聚合后的 `worldProjections`。公开 discovery 只返回声明元数据，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
 
-静态 world-data projection 与实时 story 管线使用同一 `contract:world-ir@1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine@1` 输出抽取一次，`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph/extractor` 再通过 typed input 并行消费。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。有自动维度维护义务的会话同时保留 `pending-settlement` 回执，不能将失败或跳过视为维度无变化；恢复完成前阻止下一次叙事。
+静态 world-data projection 与实时 story 管线使用同一 `contract:world-ir@1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine@1` 输出抽取一次，`codex`、`core-quest/log`、`affinity`、`inventory/ledger` 和 `npc-graph/extractor` 再通过 typed input 并行消费。其中任务和物品是只读取固定字段事件的 function runtime，不调用模型；好感仍由 agent 判断（字段见 [tools.md · submit-world-facts](./tools.md#submit-world-facts)）；`inventory/vocabulary` 与 `core-quest/vocabulary` 在 pre-turn 经 `world-ir.vocabulary@1` 公布已追踪的物品名、任务名和未完成目标，抽取时沿用同一名称。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。有自动维度维护义务的会话同时保留 `pending-settlement` 回执，不能将失败或跳过视为维度无变化；恢复完成前阻止下一次叙事。
 
 ## 世界角色 Schema
 

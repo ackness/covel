@@ -36,7 +36,10 @@ import {
 } from "@covel/plugin-loader";
 
 import { tool, z } from "@covel/tools";
-import createUpsertQuests from "../tools/upsert-quests.js";
+import createUpsertQuests from "../lib/upsert-quests.js";
+import { questUpdatesFromWorldIR, resolveQuestName } from "../lib/world-ir.js";
+import questLog from "../runtimes/log/handler.js";
+import vocabulary from "../runtimes/vocabulary/handler.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");
 
@@ -47,8 +50,8 @@ describe("upsert-quests", () => {
     sessionId: "sess-1",
     turnId: "turn-1",
     pluginId: "core-quest",
-    runtimeId: "core-quest",
-    turnNumber: 3,
+    runtimeId: "core-quest/log",
+    logicalTurn: 3,
   };
   let mockStore;
   let upsertQuestsTool;
@@ -655,6 +658,7 @@ describe("upsert-quests", () => {
 describe("core-quest plugin manifest", () => {
   /** @type {import('@covel/shared').RuntimeManifest} */
   let manifest;
+  let vocabularyManifest;
   let loaded;
   let declaration;
   let packageManifest;
@@ -667,7 +671,12 @@ describe("core-quest plugin manifest", () => {
     const manifests = definition.manifests;
     packageManifest = definition.packageManifest.manifest;
     loadedUi = await loadPluginUi(discovery, undefined, definition);
-    manifest = manifests[0].manifest;
+    manifest = manifests.find(
+      (entry) => entry.manifest.name === "core-quest/log",
+    ).manifest;
+    vocabularyManifest = manifests.find(
+      (entry) => entry.manifest.name === "core-quest/vocabulary",
+    ).manifest;
     declaration = definition.packageManifest.plugin;
     loaded = await loadRuntime(discovery, manifest.name, undefined, undefined, {
       "world-ir@1": JSON.parse(
@@ -682,13 +691,12 @@ describe("core-quest plugin manifest", () => {
     });
   });
 
-  it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
+  it("keeps the log in a post-turn function runtime gated on typed WorldIR", () => {
     expect(manifest.pluginType).toBe("plugin");
-    expect(manifest.name).toBe("core-quest");
     expect(manifest.stage).toBe("post-turn");
-    // Agent runtime — no `runtimeType` field means default 'agent'
-    expect(manifest.runtimeType).toBe("agent");
-    expect(manifest.handler).toBeUndefined();
+    expect(manifest.runtimeType).toBe("function");
+    expect(manifest.handler).toBe("./handler.js");
+    expect(manifest.tools).toBeUndefined();
     expect(manifest.trigger?.type).toBe("auto");
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
@@ -697,28 +705,17 @@ describe("core-quest plugin manifest", () => {
       required: true,
     });
     expect(declaration.requires).toContain("world-ir-provider@1");
+    expect(packageManifest.entry).toBeUndefined();
+    expect(loaded.handler).toBeTypeOf("function");
   });
 
-  it("injects existing quest data without duplicating raw narrative", () => {
-    const injects = manifest.input?.inject ?? [];
-    expect(injects).toHaveLength(1);
-    expect(injects).toContainEqual(
-      expect.objectContaining({
-        kind: "plugin-data",
-        namespace: "quests",
-        as: "<existing-quests>",
-        format: "summary",
-        maxEntries: 50,
-      }),
-    );
-  });
-
-  it("declares the upsert-quests plugin tool via the entry module", () => {
-    expect(packageManifest.entry).toBe("./server/index.js");
-    expect(manifest.tools?.plugin).toEqual(["upsert-quests"]);
-    expect(manifest.completeAfterTools).toEqual(["upsert-quests"]);
-    expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
-    expect(manifest.maxRetries).toBe(0);
+  it("publishes the quest vocabulary before the narrative", () => {
+    expect(vocabularyManifest).toMatchObject({
+      runtimeType: "function",
+      stage: "pre-turn",
+      outputContract: "world-ir.vocabulary@1",
+    });
+    expect(declaration.provides).toContain("world-ir.vocabulary@1");
   });
 
   it("accepts world-data imports into the quests namespace", () => {
@@ -743,9 +740,142 @@ describe("core-quest plugin manifest", () => {
     expect(loadedUi.uiSpecs?.message).toHaveLength(1);
     expect(loadedUi.uiSpecs?.message?.[0].id).toBe("core-quest-changes");
   });
+});
 
-  it("loads PLUGIN.md body as the LLM prompt template", () => {
-    expect(loaded.promptTemplate).toContain("任务日志");
-    expect(loaded.promptTemplate).toContain("<existing-quests>");
+// ── WorldIR mapping, log and vocabulary ──────────────────────────
+
+describe("quests from WorldIR", () => {
+  const worldIR = (events) => ({
+    schemaVersion: 1,
+    entities: [],
+    relations: [],
+    events,
+    statements: [],
+  });
+  const quest = (attributes, description) => ({
+    id: `quest-${attributes.status}-${attributes.quest}`,
+    type: "quest_change",
+    ...(description ? { description } : {}),
+    attributes,
+  });
+
+  it("resolves names exactly first, then by a unique containment", () => {
+    const known = ["The Call from Tomorrow", "Stop the Convoy"];
+    expect(resolveQuestName("the call from tomorrow", known)).toBe(
+      "The Call from Tomorrow",
+    );
+    expect(resolveQuestName("Convoy", known)).toBe("Stop the Convoy");
+    expect(resolveQuestName("the", ["The Call", "The Convoy"])).toBeUndefined();
+  });
+
+  it("creates only explicitly accepted quests and advances known ones", () => {
+    const updates = questUpdatesFromWorldIR(
+      worldIR([
+        quest(
+          {
+            quest: "Find the keeper",
+            status: "accepted",
+            objectives: ["Ask at the pier"],
+            giver: "Mira",
+          },
+          "Mira asks you to find the missing keeper.",
+        ),
+        quest({
+          quest: "Find the keeper",
+          status: "progressed",
+          completedObjectives: ["Ask at the pier"],
+        }),
+        quest({ quest: "stop the convoy", status: "completed" }),
+        quest({ quest: "A rumor about gold", status: "progressed" }),
+        quest({ quest: "Stop the Convoy", status: "toString" }),
+      ]),
+      ["Stop the Convoy"],
+    );
+    expect(updates).toEqual([
+      {
+        name: "Find the keeper",
+        description: "Mira asks you to find the missing keeper.",
+        objectives: [{ text: "Ask at the pier" }],
+        giver: "Mira",
+      },
+      {
+        name: "Find the keeper",
+        objectives: [{ text: "Ask at the pier", done: true }],
+      },
+      { name: "Stop the Convoy", status: "completed" },
+    ]);
+  });
+
+  it("writes the updates through the log without a model call", async () => {
+    const result = await questLog({
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      pluginId: "core-quest",
+      runtimeId: "core-quest/log",
+      logicalTurn: 2,
+      store: {
+        listPluginData: async () => [],
+        getPluginData: async () => null,
+      },
+      inputs: {
+        worldIR: {
+          value: worldIR([
+            quest({
+              quest: "Find the keeper",
+              status: "accepted",
+              objectives: ["Ask at the pier"],
+            }),
+          ]),
+        },
+      },
+    });
+
+    expect(getToolContent(result)).toMatchObject({
+      outcome: "success",
+      value: { created: 1 },
+    });
+    const [proposal] = getPendingProposals(result);
+    expect(proposal.payload.items).toContainEqual(
+      expect.objectContaining({
+        namespace: "quests",
+        value: expect.objectContaining({
+          name: "Find the keeper",
+          status: "active",
+        }),
+      }),
+    );
+  });
+
+  it("publishes active quests with their open objectives", async () => {
+    const result = await vocabulary({
+      store: {
+        listPluginData: async () => [
+          {
+            key: "q1",
+            value: {
+              name: "Find the keeper",
+              status: "active",
+              objectives: [
+                { id: "o1", text: "Ask at the pier", done: true },
+                { id: "o2", text: "Search the lighthouse", done: false },
+              ],
+            },
+          },
+          { key: "q2", value: { name: "Old errand", status: "completed" } },
+        ],
+      },
+    });
+    expect(result).toEqual({
+      outcome: "success",
+      value: {
+        entries: [
+          {
+            type: "quest",
+            name: "Find the keeper",
+            details: ["Search the lighthouse"],
+          },
+        ],
+      },
+    });
   });
 });

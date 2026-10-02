@@ -49,13 +49,13 @@ The boundary matters: a world can select a different narrator or omit quests wit
 
 A plugin is not necessarily one autonomous agent. It may contain one runtime, several cooperating runtimes, no LLM at all, or only a UI/data contract.
 
-| Form                      | What it does                                                               | Bundled examples                                   |
-| ------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Agent runtime**         | Uses a model for narration or structured extraction                        | `narrator`, `codex`, `core-quest`                  |
-| **Function runtime**      | Runs deterministic, zero-token game logic                                  | `pregame`, `dice-check/roller`, `scene-stage/cast` |
-| **Mixed package**         | Combines deterministic retrieval with agent extraction                     | `npc-graph`, `dice-check`                          |
-| **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `cost-gate`                                        |
-| **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`                    |
+| Form                      | What it does                                                               | Bundled examples                                  |
+| ------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Agent runtime**         | Uses a model for narration or structured extraction                        | `narrator`, `codex`, `world-ir`                   |
+| **Function runtime**      | Runs deterministic, zero-token game logic                                  | `pregame`, `inventory/ledger`, `scene-stage/cast` |
+| **Mixed package**         | Combines deterministic retrieval with agent extraction                     | `npc-graph`, `dice-check`                         |
+| **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `cost-gate`                                       |
+| **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`                   |
 
 Root `PLUGIN.md` declares package identity, versioned `provides` / `requires` / `optional` contracts, and shared `contributes` such as tools, events, UI, and settings. A single executable runtime goes under its explicit `runtime` field. A multi-runtime package instead places execution manifests under `runtimes/*/RUNTIME.md`:
 
