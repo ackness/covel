@@ -90,7 +90,7 @@ pnpm e2e                                   # Playwright 端到端
 
 `pnpm test:coverage` 顺序执行两个覆盖率入口：`test:coverage:vitest` 每次重新运行 Vitest 工作区，按各包配置在 `coverage/` 生成报告；`test:coverage:desktop` 运行全部桌面 Node 测试与自检，将各子进程的原始 V8 覆盖率写入 `apps/desktop/coverage/`，供单独分析，不混入 Vitest 百分比。覆盖率目标 ≥ 80% 当前为参考目标，CI（[`ci.yml`](../.github/workflows/ci.yml)）尚未设阈值强制拦截。
 
-PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试、PostgreSQL 与 Chromium smoke job。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物；保存缓存前会删除两天前写入的条目，避免缓存无限增长。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
+PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试、PostgreSQL 与 Chromium smoke job。浏览器 job 先收集完整 E2E 测试以发现失效的导入，再执行核心流程。PR 和 main 都会运行 `pnpm build`，但只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）自动淘汰，开发机上的 `.turbo/cache` 不会再无限增长；CI 用环境变量 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次都会整目录恢复再保存。发布前还会执行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
 
 ### 框架/插件隔离（重要）
 
