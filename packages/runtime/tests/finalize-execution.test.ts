@@ -562,7 +562,7 @@ describe("finalizeExecution", () => {
 
     expect(outcome).toMatchObject({
       status: "committed",
-      isolatedRuntimeIds: ["rt-b"],
+      isolatedRuntimes: [{ runtimeId: "rt-b", error: expect.any(String) }],
     });
     expect(outcome.failedProposals).toHaveLength(1);
     expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
@@ -770,5 +770,226 @@ describe("finalizeExecution", () => {
       // rollback erases domain writes but the terminal failed marker lands.
       expect(await latestJobState(store)).toBe("failed");
     });
+  });
+});
+
+describe("finalizeExecution — dependents of a dropped runtime", () => {
+  const storyResult = () => makeResult("story", { narrativeOutput: "line" });
+  const manifest = (name: string, extra: Record<string, unknown> = {}) => ({
+    ...makeRuntime(name),
+    ...extra,
+  });
+
+  async function finalize(
+    runtimes: readonly unknown[],
+    results: readonly ReturnType<typeof makeResult>[],
+    options: {
+      readonly extraInTx?: (
+        tx: unknown,
+        isolation: { droppedRuntimeIds: ReadonlySet<string> },
+      ) => Promise<void>;
+      readonly before?: (store: DataStore) => Promise<void>;
+    } = {},
+  ) {
+    const store = createMemoryStore();
+    await store.saveTurnResult({
+      id: crypto.randomUUID(),
+      sessionId: SESSION_ID,
+      turnId: TURN_ID,
+      runtimeResults: results,
+      origin: "player",
+      commitStatus: "pending",
+      durationMs: 1,
+      createdAt: new Date().toISOString(),
+    });
+    await options.before?.(store);
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: "exec-drop",
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("story", "story"), ...runtimes] as never,
+      results: [storyResult(), ...results] as never,
+      turnIds: [TURN_ID],
+      ...(options.extraInTx ? { extraInTx: options.extraInTx as never } : {}),
+    });
+    const persisted = (await store.listTurnResults(SESSION_ID))[0]!
+      .runtimeResults as { runtimeId: string; status: string }[];
+    return {
+      store,
+      outcome,
+      statuses: Object.fromEntries(
+        persisted.map((entry) => [entry.runtimeId, entry.status]),
+      ),
+    };
+  }
+
+  it("drops what needs a dropped upstream, keeps ordering-only edges, and settles both as failed", async () => {
+    const { store, outcome, statuses } = await finalize(
+      [
+        manifest("up"),
+        manifest("down", { needs: ["up"] }),
+        manifest("late", { after: ["up"] }),
+      ],
+      [
+        makeResult("up", {}, badStatePatch()),
+        makeResult("down", {}, statePatch("derived", 2)),
+        makeResult("late", {}, statePatch("late", 3)),
+      ],
+    );
+
+    expect(outcome).toMatchObject({
+      status: "committed",
+      isolatedRuntimes: [
+        { runtimeId: "up", error: expect.any(String) },
+        { runtimeId: "down", error: "upstream up did not commit" },
+      ],
+    });
+    expect(await store.getStateEntry(SESSION_ID, "stats", "derived")).toBe(
+      null,
+    );
+    expect(
+      (await store.getStateEntry(SESSION_ID, "stats", "late"))?.value,
+    ).toBe(3);
+    expect(statuses).toEqual({
+      up: "failed",
+      down: "failed",
+      late: "success",
+    });
+  });
+
+  it("drops a required input consumer and an event follower whose only emitter was dropped", async () => {
+    const { store, outcome } = await finalize(
+      [
+        manifest("up"),
+        manifest("reader", { inputs: { facts: { from: { runtime: "up" } } } }),
+        manifest("optional-reader", {
+          inputs: { facts: { from: { runtime: "up" }, required: false } },
+        }),
+        manifest("follower", { trigger: { type: "event", topic: "found" } }),
+      ],
+      [
+        makeResult(
+          "up",
+          {},
+          {
+            ...badStatePatch(),
+            events: [{ topic: "found", data: {} }],
+          },
+        ),
+        makeResult("reader", {}, statePatch("reader", 1)),
+        makeResult("optional-reader", {}, statePatch("optional", 1)),
+        makeResult("follower", {}, statePatch("follower", 1)),
+      ],
+    );
+
+    expect(outcome.isolatedRuntimes?.map((item) => item.runtimeId)).toEqual([
+      "up",
+      "reader",
+      "follower",
+    ]);
+    expect(
+      (await store.getStateEntry(SESSION_ID, "stats", "optional"))?.value,
+    ).toBe(1);
+    expect(await store.getStateEntry(SESSION_ID, "stats", "follower")).toBe(
+      null,
+    );
+  });
+
+  it.each([
+    ["one", "keeps"],
+    ["all", "drops"],
+  ] as const)(
+    "a capability consumer with cardinality %s %s itself when another provider committed",
+    async (cardinality, verdict) => {
+      const { store } = await finalize(
+        [
+          manifest("provider-a", { outputContract: "facts@1" }),
+          manifest("provider-b", { outputContract: "facts@1" }),
+          manifest("consumer", {
+            needs: [{ capability: "facts@1", cardinality }],
+          }),
+        ],
+        [
+          makeResult("provider-a", {}, badStatePatch()),
+          makeResult("provider-b", {}, statePatch("b", 1)),
+          makeResult("consumer", {}, statePatch("consumer", 1)),
+        ],
+      );
+
+      const consumer = await store.getStateEntry(
+        SESSION_ID,
+        "stats",
+        "consumer",
+      );
+      expect(consumer === null).toBe(verdict === "drops");
+    },
+  );
+
+  it("rolls the turn back when the story needs a dropped upstream", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: "exec-story-needs",
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [
+        manifest("context"),
+        { ...makeRuntime("story", "story"), needs: ["context"] },
+      ] as never,
+      results: [
+        makeResult("context", {}, badStatePatch()),
+        storyResult(),
+      ] as never,
+      turnIds: [TURN_ID],
+    });
+
+    expect(outcome.status).toBe("failed");
+    expect(await store.listMessages(SESSION_ID)).toHaveLength(0);
+    expect(await commitStatusOf(store)).toBe("failed");
+  });
+
+  it("tells extraInTx which runtimes were dropped and fails their reported jobs", async () => {
+    let dropped: readonly string[] = [];
+    const { store } = await finalize(
+      [manifest("up"), manifest("down", { needs: ["up"] })],
+      [
+        makeResult("up", {}, badStatePatch()),
+        makeResult("down", {}, statePatch("derived", 2)),
+      ],
+      {
+        extraInTx: async (_tx, isolation) => {
+          dropped = [...isolation.droppedRuntimeIds];
+        },
+        before: async (store) => {
+          for (const runtimeId of ["up", "down"])
+            await store.appendJobStatus({
+              sessionId: SESSION_ID,
+              progressScopeId: "exec-drop",
+              pluginId: runtimeId,
+              runtimeId,
+              jobId: `${runtimeId}-job`,
+              state: "running",
+              sequence: 1,
+              createdAt: new Date().toISOString(),
+            });
+        },
+      },
+    );
+
+    expect(dropped).toEqual(["up", "down"]);
+    for (const runtimeId of ["up", "down"]) {
+      const rows = await store.listJobStatus(SESSION_ID, {
+        jobId: `${runtimeId}-job`,
+      });
+      expect(rows.at(-1)?.state).toBe("failed");
+    }
   });
 });

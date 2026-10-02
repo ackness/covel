@@ -1,4 +1,8 @@
-import type { createGateway, ResolvedSlotConfig } from "@covel/ai-provider";
+import type {
+  createGateway,
+  GatewayOptions,
+  ResolvedSlotConfig,
+} from "@covel/ai-provider";
 import {
   resolveGatewayModelSelection,
   type PluginLlmModelTarget,
@@ -11,11 +15,29 @@ export function hasServerRuntimeJobCredentials(
   envApiKeys: Readonly<Record<string, string>>,
   modelTargets?: ReadonlyMap<string, PluginLlmModelTarget>,
 ): boolean {
+  return hasRuntimeJobCredentials(gateway, model, { envApiKeys }, modelTargets);
+}
+
+/**
+ * Resolve `model` exactly as a gateway adapter built from `options` would —
+ * plugin model targets and request slot bindings included — and report
+ * whether the target carries usable credentials.
+ */
+export function hasRuntimeJobCredentials(
+  gateway: Pick<ReturnType<typeof createGateway>, "resolveSlot">,
+  model: string | undefined,
+  options: GatewayOptions,
+  modelTargets?: ReadonlyMap<string, PluginLlmModelTarget>,
+): boolean {
   let slot: ResolvedSlotConfig | null;
   try {
-    const selection = resolveGatewayModelSelection(model, { modelTargets });
+    const selection = resolveGatewayModelSelection(model, {
+      modelTargets,
+      slotOverrides: options.slotOverrides,
+    });
+    const { slotOverrides: _requestOverrides, ...rest } = options;
     slot = gateway.resolveSlot(selection.presetId, {
-      envApiKeys,
+      ...rest,
       ...(selection.slotOverrides
         ? { slotOverrides: selection.slotOverrides }
         : {}),
@@ -27,7 +49,7 @@ export function hasServerRuntimeJobCredentials(
   return hasResolvedRuntimeJobCredentials(slot);
 }
 
-export function hasResolvedRuntimeJobCredentials(
+function hasResolvedRuntimeJobCredentials(
   slot: Pick<ResolvedSlotConfig, "apiKey" | "headers"> | null | undefined,
 ): boolean {
   if (!slot) return false;

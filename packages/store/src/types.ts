@@ -22,6 +22,7 @@ export type { SessionRecord } from "./records/session-records.js";
 export { mergeSessionPatch } from "./records/session-records.js";
 
 export type {
+  FailedRuntimeResult,
   TurnResultRecord,
   ToolCallRecordRow,
   RuntimeOutputRecord,
@@ -84,6 +85,7 @@ export type {
 import type { WorldRecord } from "./records/world-records.js";
 import type { SessionRecord } from "./records/session-records.js";
 import type {
+  FailedRuntimeResult,
   TurnResultRecord,
   ToolCallRecordRow,
   RuntimeOutputRecord,
@@ -188,11 +190,16 @@ export interface RuntimeRecordStore {
    * `pending`. The commit-owning caller marks it `committed` or `failed`;
    * a row still `pending` afterwards is a crash signature, which is otherwise
    * indistinguishable from a successful turn. No-op when the turn has no row.
+   *
+   * `failedRuntimes` settles those entries of `runtimeResults` as `failed`
+   * with their `error`: a committed execution may still drop an optional
+   * runtime's writes, and its recorded result must not read as success.
    */
   setTurnResultCommitStatus(
     sessionId: string,
     turnId: string,
     status: TurnResultRecord["commitStatus"],
+    failedRuntimes?: readonly FailedRuntimeResult[],
   ): Promise<void>;
 
   // ── Tool Calls ──

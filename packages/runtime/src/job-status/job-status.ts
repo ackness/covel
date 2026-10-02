@@ -150,7 +150,10 @@ const OUTCOME_TO_STATE: Readonly<Record<ExecutionJobOutcome, JobStatusState>> =
     suspended: "waiting-input",
   };
 
-/** States that already represent a settled job; the finalizer leaves them alone. */
+/**
+ * States that already represent a settled job. The finalizer leaves them alone,
+ * except a `succeeded` whose execution's writes did not commit.
+ */
 const TERMINAL_STATES: ReadonlySet<JobStatusState> = new Set([
   "succeeded",
   "failed",
@@ -163,10 +166,11 @@ const TERMINAL_STATES: ReadonlySet<JobStatusState> = new Set([
  * event's `sequence` is the highest already-committed sequence plus one, so it
  * appends cleanly onto the existing stream. Jobs already in a terminal state
  * (or already in the mapped target state) are skipped — a job the handler
- * itself completed is not overwritten.
+ * itself completed is not overwritten, unless it reported `succeeded` and the
+ * outcome is `failed`: its writes never landed, so it ends `failed`.
  *
  * Kernel-facing: called with the raw (un-revoked) store, unlike the plugin's
- * `ctx.progress`. Only export-only for now — the finalizer wiring lands later.
+ * `ctx.progress`. `finalizeExecution` calls it once the domain outcome is known.
  */
 export async function finalizeJobStatuses(
   deps: ProgressReporterDeps,
@@ -193,7 +197,15 @@ export async function finalizeJobStatuses(
     if (own.length === 0) continue;
     // Ordered by sequence ascending, so the tail is the latest.
     const latest = own[own.length - 1];
-    if (TERMINAL_STATES.has(latest.state) || latest.state === target) continue;
+    // A handler can report success before its writes reach commit. When they
+    // did not land, the final state follows the save result, not the claim.
+    const claimedSuccessLost =
+      latest.state === "succeeded" && target === "failed";
+    if (
+      (TERMINAL_STATES.has(latest.state) && !claimedSuccessLost) ||
+      latest.state === target
+    )
+      continue;
     await appendAndEmit(
       deps,
       buildRecord(deps, {

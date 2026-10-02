@@ -383,9 +383,17 @@ server transaction API in the browser.
 >   行有成功的 story 结果时，只回滚提出它的那个可选 runtime：每个非 story、非 setup
 >   的 runtime 在自己的 savepoint 内提交，被拒绝时只撤销它自己的写入，叙事与其他
 >   runtime 照常提交，`FinalizeExecutionOutcome` 以 `committed` 返回并在
->   `failedProposals` / `isolatedRuntimeIds` 中列出被丢弃的部分（主回合以
->   `proposal.failed` SSE 告知）。没有 story 的执行（manual、background、detached、
->   setup）仍是整体原子：任一 proposal 失败即整体回滚，作业不会为未落库的写入报告成功。
+>   `failedProposals` / `isolatedRuntimes`（`{ runtimeId, error }`）中列出被丢弃的部分
+>   （主回合以 `proposal.failed` 与该 runtime 的 `runtime.failed` SSE 告知）。没有 story
+>   的执行（manual、background、detached、setup）仍是整体原子：任一 proposal 失败即整体
+>   回滚，作业不会为未落库的写入报告成功。
+> - **只有上游真正提交，下游才提交**——结果按执行顺序提交，被丢弃 runtime 的硬依赖方
+>   一并丢弃（`commit/commit-dependencies.ts`）：turn 作用域的 `needs` 目标、必填
+>   `inputs` 来源，以及触发事件的全部发出者都被丢弃的事件订阅者。`after` 与
+>   `required: false` 的输入只表达顺序或尽力读取，不级联；`cardinality: one` 的能力依赖
+>   在另有提供者提交成功时仍满足。story 或 setup runtime 的硬上游被丢弃时整回合回滚。
+>   `extraInTx` 的第二个参数给出被丢弃的 runtime，主回合据此不排入依赖它们的 detached
+>   作业与后台事件 follower；仍排入的 detached 作业在冻结的 turn digest 与上游结果中把被丢弃的 runtime 记为 `failed`。
 > - **PreStateCommit 在事务外运行**：finalize 先完成规范化、守卫和 PreStateCommit
 >   Hook，再开启事务，事务内只做写入；`createCommitPipeline().commitAll` 同理。Hook
 >   不读取存储状态，提前运行不改变语义，但插件 Hook 的等待不再占用 SQLite / Memory
@@ -399,7 +407,9 @@ server transaction API in the browser.
 >   继续遵循各自不追加对话历史的合同。
 > - `turn_results.commit_status` 在同一事务内于成功时结算为 `committed`；回滚时在
 >   事务外幂等结算为 `failed`。嵌套 recursiveCall 复用顶层 `turnId`，因此顶层的
->   `[turnId]` 一次结算即覆盖所有嵌套行。
+>   `[turnId]` 一次结算即覆盖所有嵌套行。`committed` 结算同时把被丢弃 runtime 在
+>   `runtimeResults` 中的记录改为 `failed` 并写入原因，历史、重试与刷新看到的都是
+>   实际保存的结果；它们上报的 job 也收尾为 `failed`。
 > - **完成屏障仍被扣留**：任一失败时 `turn.completed`、回合后记忆摄入、auto-snapshot
 >   都不触发，每个失败 proposal 发出 `proposal.failed` 事件，回合对客户端呈现为可见
 >   的未完成态而非"成功但状态缺失"。
@@ -444,9 +454,14 @@ await store.withTransaction(async (tx) => {
     }
   }
   for (const message of journalMessages) await tx.appendTurnMessage(message);
-  await extraInTx?.(tx);
+  await extraInTx?.(tx, { droppedRuntimeIds });
   for (const turnId of turnIds) {
-    await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
+    await tx.setTurnResultCommitStatus(
+      sessionId,
+      turnId,
+      "committed",
+      droppedRuntimes,
+    );
   }
 });
 // Flush buffered notifications only after COMMIT; discard them on rollback.

@@ -44,6 +44,7 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import { decodeBase64Json } from "../lib/base64-json.js";
+import { hasRuntimeJobCredentials } from "../runtime-job-readiness.js";
 import { llmModelBindingSchema, readRuntimeEnv } from "@covel/shared";
 
 export interface PerRequestLlmOptions {
@@ -157,6 +158,16 @@ export function createPerRequestLlmMiddleware(
     c.set("llmAdapter", perRequestAdapter);
     c.set("pluginGateway", perRequestPluginGateway);
     c.set("requestLlmOverridden", true);
+    // Same gateway, options and plugin targets as the adapter above, so a
+    // queued job is judged by the model configuration it will execute with.
+    c.set("requestRuntimeJobReady", (model) =>
+      hasRuntimeJobCredentials(
+        opts.ai.gateway,
+        model,
+        requestOptions,
+        opts.modelTargets,
+      ),
+    );
     if (slotOverrides?.slotBindings?.memory) {
       c.set("requestMemorySlot", "memory");
     }

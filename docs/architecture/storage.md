@@ -459,6 +459,10 @@ seeds from its full runtime results, including effects and canonical values,
 and media reference scans read it directly. `runtime_outputs` is the narrower
 projection behind the runtime-output API. The former per-runtime
 `runtime_results` table duplicated those rows and is dropped at boot.
+Rows are written before commit; `setTurnResultCommitStatus` settles them, and
+on a committed turn it also rewrites the results of runtimes whose writes were
+dropped to `failed` with their error, so retries never seed a dropped result as
+a success.
 
 ## Plugin-data ownership and reserved names
 

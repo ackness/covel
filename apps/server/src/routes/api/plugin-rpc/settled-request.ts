@@ -1,7 +1,6 @@
 import type { Context } from "hono";
 import type { RuntimeJobServices } from "./runtime-job-credentials.js";
 import type { SettleWaitBudget } from "./settled-session-lock.js";
-import { hasResolvedRuntimeJobCredentials } from "../../../runtime-job-readiness.js";
 import { getRequestLlmOptions } from "../../../request-llm-context.js";
 import { listRuntimeJobs } from "./jobs.js";
 import {
@@ -17,22 +16,14 @@ import {
 export function requestJobServices(c: Context): RuntimeJobServices | undefined {
   // An ordinary HTTP request does not establish usable model credentials.
   // Default adapters are admitted separately by the server readiness callback.
-  if (!c.get("requestLlmOverridden")) return undefined;
-  const gateway = c.get("pluginGateway");
+  const canRun = c.get("requestRuntimeJobReady");
+  if (!c.get("requestLlmOverridden") || !canRun) return undefined;
   return {
-    canRun: (model) => {
-      try {
-        return hasResolvedRuntimeJobCredentials(
-          gateway?.resolveSlot({ presetId: model }),
-        );
-      } catch {
-        return false;
-      }
-    },
+    canRun,
+    llmOptions: getRequestLlmOptions(),
     llm: c.get("llmAdapter"),
     gateway: c.get("pluginGateway"),
     compactor: c.get("compactorRunner"),
-    llmOptions: getRequestLlmOptions(),
   };
 }
 
