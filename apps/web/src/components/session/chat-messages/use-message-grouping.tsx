@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ReasoningDisclosure } from "@/components/reasoning-disclosure.js";
 import { useMemo, type ReactNode } from "react";
 import { ExecutionTimeline } from "../execution-timeline.js";
+import { isTurnUpdateMessage, TurnUpdates } from "./turn-updates.js";
 import { AssetTurnSidebar } from "@/components/asset-render/index.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type { PluginSummary } from "@/services/api.js";
@@ -23,6 +24,12 @@ interface UseMessageGroupingArgs {
     sourceTurnId?: string,
   ) => void;
   readonly renderMessage: (msg: StreamMessage, index: number) => ReactNode;
+  /**
+   * Fold each turn's read-only plugin cards into one disclosure so the story
+   * keeps most of the screen. `expandUpdates` opens it by default.
+   */
+  readonly foldUpdates?: boolean;
+  readonly expandUpdates?: boolean;
 }
 
 /**
@@ -39,6 +46,8 @@ export function useMessageGrouping({
   plugins,
   onRetryRuntime,
   renderMessage,
+  foldUpdates = false,
+  expandUpdates = false,
 }: UseMessageGroupingArgs): ReactNode[] {
   const { i18n } = useTranslation();
   const projection = useMemo(
@@ -98,7 +107,7 @@ export function useMessageGrouping({
     key: string,
     node: ReactNode,
     group: ExecutionTurn,
-    kind: "message" | "execution" | "assets" | "reasoning",
+    kind: "message" | "updates" | "execution" | "assets" | "reasoning",
   ) => {
     if (!node) return;
     rendered.push(
@@ -115,9 +124,32 @@ export function useMessageGrouping({
   };
 
   for (const group of projection.turns) {
-    for (const { message, index } of group.messages) {
-      addRow(message.id, renderMessage(message, index), group, "message");
+    const updates = foldUpdates
+      ? group.messages.filter(({ message }) => isTurnUpdateMessage(message))
+      : [];
+    for (const entry of group.messages) {
+      if (updates.includes(entry)) continue;
+      addRow(
+        entry.message.id,
+        renderMessage(entry.message, entry.index),
+        group,
+        "message",
+      );
     }
+    if (updates.length)
+      addRow(
+        `updates-${group.key}`,
+        <TurnUpdates
+          messages={updates.map(({ message }) => message)}
+          defaultOpen={expandUpdates}
+        >
+          {updates.map(({ message, index }) => (
+            <div key={message.id}>{renderMessage(message, index)}</div>
+          ))}
+        </TurnUpdates>,
+        group,
+        "updates",
+      );
     const reasoning = reasoningByTurn.get(group.turnId);
     if (reasoning?.length)
       addRow(

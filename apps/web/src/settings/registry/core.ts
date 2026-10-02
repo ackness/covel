@@ -42,6 +42,15 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   });
 
   store.register({
+    key: "ui.expandTurnUpdates",
+    schema: z.boolean(),
+    default: false,
+    group: "general",
+    widget: "toggle",
+    label: "Expand turn updates",
+  });
+
+  store.register({
     key: "ui.onboardedVersion",
     schema: z.number().int(),
     default: 0,

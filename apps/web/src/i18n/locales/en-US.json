@@ -226,6 +226,7 @@
     "startingUp": "Starting up...",
     "retryFrom": "Retry from {{label}}",
     "executionSummary": "Execution · {{count}} runtimes",
+    "turnUpdates": "Turn updates · {{count}}",
     "backgroundTask": "background",
     "backgroundRunning": "running in background",
     "backgroundCount": "{{count}} in background",
@@ -731,6 +732,10 @@
       },
       "chatMessageWindow": {
         "label": "Chat window message limit"
+      },
+      "expandTurnUpdates": {
+        "label": "Expand turn updates",
+        "description": "Show codex discoveries, achievements, and status cards open under each turn instead of folded into one line."
       },
       "onboardedVersion": {
         "label": "Onboarding version"

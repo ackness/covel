@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Story-first chat layout.** Each turn's read-only plugin cards (codex discoveries, achievements, status changes) fold into one "Turn updates · N" line that previews the first titles, so narration keeps most of the screen. Forms, choices, suggestions, images, and warnings stay open. The new General setting "Expand turn updates" restores the open layout.
+
 ### Added
 
 - **Hidden world data.** worldData sources accept `visibility: hidden`. Hidden data imports into the receiving plugin's `_hidden.<namespace>` and stays out of prompts, LLM data tools, extension handlers, and every public API until a plugin reveals it (#101).
