@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import guard from "../runtimes/plot/guard.js";
 
 describe("plot guard", () => {
-  it("skips unless the planner setting is on", async () => {
-    expect(await guard({ recursionDepth: 0 })).toMatchObject({ skip: true });
-    expect(
-      await guard({ recursionDepth: 0, userSettings: { planner: false } }),
-    ).toMatchObject({ skip: true });
+  it("answers with an empty plan unless the planner setting is on", async () => {
+    for (const userSettings of [undefined, { planner: false }]) {
+      expect(await guard({ recursionDepth: 0, userSettings })).toMatchObject({
+        skip: true,
+        events: [],
+      });
+    }
     expect(
       await guard({ recursionDepth: 0, userSettings: { planner: true } }),
     ).toEqual({ skip: false });
@@ -15,6 +17,6 @@ describe("plot guard", () => {
   it("leaves planning to the outer narrative execution", async () => {
     expect(
       await guard({ recursionDepth: 1, userSettings: { planner: true } }),
-    ).toMatchObject({ skip: true });
+    ).toMatchObject({ skip: true, events: [] });
   });
 });
