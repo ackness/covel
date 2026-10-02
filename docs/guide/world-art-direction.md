@@ -54,7 +54,7 @@
 node scripts/emit-presence.mjs mistport
 node scripts/emit-scenes.mjs haruka-academy
 pnpm --filter @covel/server exec vitest run tests/lib/world-art-assets.test.ts
-pnpm exec tsx scripts/validate-release-worlds.ts worlds/emberback worlds/mistport worlds/haruka-academy
+pnpm validate:world worlds/emberback worlds/mistport worlds/haruka-academy
 ```
 
 `emit-presence` 写入默认语言文件；如果有本地化 `presence.*.json`，还需同步媒体引用并保留本地化名称。资源测试覆盖所有这些文件，避免只更新中文图而让英文会话继续引用旧哈希。

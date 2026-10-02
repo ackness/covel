@@ -361,7 +361,7 @@ mock 模式里，图像/音频插件通常会走到 provider URL、SSRF guard �
 只在准备发布或怀疑 HTTP/SSE/session store 路径有问题时跑。需要服务端和 `.env.llm`。
 
 ```bash
-npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts \
+pnpm e2e:verify \
   --slot e2e_local \
   --turns 3 \
   --plugins my-plugin

@@ -1,29 +1,104 @@
 ---
 name: create-plugin
-description: Create or update installable Covel plugins using the current grouped manifest, runtime, service, extension, and UI contracts.
+description: Create or update installable Covel plugins using the current grouped manifest, runtime, service, extension, and UI contracts. Use when the user wants a new plugin, gameplay mechanic, runtime, tool, or plugin UI panel, or asks to change an existing plugin's manifest or behavior.
 ---
 
 # Create a Covel plugin
 
-Implement the requested plugin in the user's chosen repository. In the main checkout use `plugins/<id>`; in the community checkout use `plugins/<id>` for optional features and `examples/<id>` for instructional packages. Do not edit an installed user copy unless the user requested that target.
+Contracts live in `docs/`, kept in sync with the code: manifest fields in
+`docs/reference/plugins.md`, authoring in `docs/guide/plugin-authoring.md`, UI
+components in `docs/reference/ui-components.md`, model slots in
+`docs/reference/slots.md`, testing in `docs/guide/plugin-testing.md`. The
+references in this skill are agent-oriented guides; when they disagree with the
+docs or the schemas, the docs and schemas win.
 
-Read [manifest fields](references/plugin-schema.md) before implementation. Use the current contract only, preserving existing plugin and runtime identities unless the requested change requires new ones. Root `PLUGIN.md` is required and contains `id`, `kind`, package contracts, and `contributes`. A single inline `runtime` or child `runtimes/<id>/RUNTIME.md` supplies executable behavior. Child `PLUGIN.md` and old flat authoring fields are rejected.
+## Workflow
 
-For same-execution inputs, bind public contracts under `io.inputs`. Reusable operations use declared services; kernel customization uses declared extensions. Do not read another plugin's store. All plugin contexts are scoped to their own session/plugin, including built-ins; trusted status does not grant a raw DataStore. Character/schema/lore state comes through `ctx.world`, and writes use proposals or handler effects.
+### 1. Pick the target
 
-Each entry registration needs a matching declaration in `contributes`. RPC actions and slash commands are separate. Use `covel.toolkit` for local tools and validators, `covel.registerService` for services, and `covel.provideExtension(point, id, {handler})` for extensions. Registration factories should perform registration only; defer I/O to invocation handlers.
+In the main checkout, plugins live in `plugins/<id>`. In the community checkout
+(`covel-plugins`), optional features go in `plugins/<id>` and instructional
+packages in `examples/<id>`. Do not edit an installed user copy unless the user
+asked for that target. Preserve existing plugin and runtime identities unless the
+change requires new ones.
 
-Use `ctx.images.generate` and `ctx.speech.generate`/`transcribe` for media. An image-flow entry declares `media.image-flow@1`, returning its own full `entryRuntimeId` and `assetRuntimeIds`; the host attributes provider ownership. This point admits one provider per session. UI uses generic `MediaGallery`, `JobList`, `CandidateList`, or `EntryList` with explicit data and field selectors; no component should infer or fetch another plugin's private namespace.
+### 2. Scaffold
 
-Standalone packages require `package.json` (`type: module`), root manifest, executable ESM JavaScript, README, and an authorized license. The installer does not install npm dependencies or run build scripts. Bundle helper libraries such as `@covel/plugin-handlers-utils` into the released plugin and preserve their licenses. Do not ship workspace dependencies or sibling-plugin imports. Agent runtime bodies hold prompts; function handlers return explicit success/skipped/failed/blocked results. Preserve cancellation, bounded work, and successful-commit-only domain writes.
+Start from a maintained template rather than a copied historic manifest:
 
-Read references relevant to the task:
+```bash
+node scripts/create-plugin.js <id> -t ./plugins                 # multi-runtime workbench
+node scripts/create-plugin.js <id> -t ./plugins -r foo:function,bar:agent
+node scripts/create-plugin.js <id> --with-tools                 # single runtime + tools/
+```
 
-- [Runtime context](references/runtime-context.md)
-- [Tools](references/tool-factory.md)
-- [UI](references/ui-components-quickref.md)
-- [Examples](references/example-plugins.md)
-- [Testing](references/plugin-testing.md)
-- [Model slots](references/llm-toml-slots.md) and [provider wires](references/provider-quirks.md)
+Without `-t` (or `--with-tools`) the scaffolder writes to the user plugin
+directory (`~/.covel/plugins`), not the repository. See
+[examples](references/example-plugins.md) for packages that show each pattern.
 
-Validate manifests with the main checkout's `pnpm validate:plugin <package-dir>`, run focused handler/registration tests, and verify copied release files import without workspace dependencies. The community repository also has `pnpm check:covel` for the real loader, registration declarations, and generic UI props. Update bilingual user documentation, settings instructions, network/data behavior, tests, and packaging together. Publishing or installing outside the authorized workspace requires the user's explicit task authorization.
+### 3. Declare the manifest
+
+Read [manifest fields](references/plugin-schema.md) first. Root `PLUGIN.md` is
+required and holds `id`, `kind`, package contracts, and `contributes`. A single
+inline `runtime` or child `runtimes/<id>/RUNTIME.md` files supply executable
+behavior; child `PLUGIN.md` files and old flat authoring fields are rejected.
+Declare scheduling with `stage` plus `needs` / `after` edges, `outputKind`, and
+`capabilities`.
+
+For same-execution inputs, bind public contracts under `io.inputs`. Reusable
+operations use declared services; kernel customization uses declared extensions.
+Never read another plugin's store: every plugin context, built-ins included, is
+scoped to its own session and plugin, and trusted status grants no raw DataStore.
+Character, schema, and lore state come through `ctx.world`; writes go through
+proposals or handler effects.
+
+### 4. Implement
+
+- Every entry registration needs a matching declaration in `contributes`. RPC
+  actions and slash commands are separate.
+- Use `covel.toolkit` for local tools and validators
+  ([tools](references/tool-factory.md)), `covel.registerService` for services, and
+  `covel.provideExtension(point, id, {handler})` for extensions. Registration
+  factories only register; defer I/O to invocation handlers.
+- Agent runtime bodies hold prompts. Function handlers return explicit
+  success / skipped / failed / blocked results
+  ([runtime context](references/runtime-context.md)). Preserve cancellation,
+  bounded work, and successful-commit-only domain writes.
+- Media goes through `ctx.images.generate` and `ctx.speech.generate` /
+  `transcribe`. An image-flow entry declares `media.image-flow@1`, returning its
+  own full `entryRuntimeId` and `assetRuntimeIds`; the host attributes provider
+  ownership, and this point admits one provider per session
+  ([model slots](references/llm-toml-slots.md),
+  [provider wires](references/provider-quirks.md)).
+- UI uses the generic `MediaGallery`, `JobList`, `CandidateList`, or `EntryList`
+  with explicit data and field selectors; no component infers or fetches another
+  plugin's private namespace.
+
+### 5. Package standalone plugins
+
+Standalone packages need `package.json` (`type: module`), the root manifest,
+executable ESM JavaScript, a README, and an authorized license. The installer does
+not install npm dependencies or run build scripts, so bundle helper libraries such
+as `@covel/plugin-handlers-utils` into the release and preserve their licenses. Do
+not ship workspace dependencies or sibling-plugin imports.
+
+### 6. Validate
+
+```bash
+pnpm validate:plugin plugins/<id>       # manifest + cross-runtime checks
+pnpm --filter <package-name> test       # focused handler/registration tests
+pnpm check:plugins                      # plugin i18n + README gates
+```
+
+Follow [testing](references/plugin-testing.md) for which layers to cover. Verify
+copied release files import without workspace dependencies. The community
+repository also has `pnpm check:covel` for the real loader, registration
+declarations, and generic UI props.
+
+### 7. Sync docs
+
+A bundled plugin added or changed in the main checkout updates
+`docs/reference/plugins.md` in the same change (see the documentation sync list
+in `AGENTS.md`). Update bilingual user documentation, settings instructions,
+network/data behavior, and tests together. Publishing or installing outside the
+authorized workspace requires the user's explicit authorization.

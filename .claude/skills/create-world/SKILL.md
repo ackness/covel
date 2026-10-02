@@ -48,6 +48,8 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 - **跑团世界**（开局配点 + 掷骰检定）：请求 `tabletop-rules` 与 `dice-check`；`characterSchema` 声明 `category: abilities` 的有界整数属性，再用 `contract:tabletop-rules.rules.initial@1` 提供 `{id: creation, budget, attributes:[{id,label,base,max}]}`（`label` 只能是字符串，双语世界用 `.en.json` 变体）。成品参考 `worlds/lantern-barrow`
 - **隐藏剧情**（满足条件才发生、提前不能剧透）：请求 `story-events`，在 worldData 里加一个 `visibility: hidden` 的 source 指向 `contract:story.events@1`，条件只引用已声明的维度路径、世界时间的数值字段（如 `phase`、`hour`）或其他事件（`revealed` + `turnsSinceGte`，用来写「某事发生几回合后接着发生」的后续事件）。payload 写给叙事的剧情简述，不写成稿，也不要夹带更远的剧透。格式见 `plugins/story-events/README.md`，成品参考 `worlds/mistport/data/hidden/`
 - **剧情中自动追加后续事件**：调查、地城、倒计时这类讲后果的世界可以同时推荐 `story-plotter`；作者逐条编排角色路线的恋爱世界不要加。它每 3 回合根据游玩中的线索埋下只触发一次的隐藏事件；条件只能引用世界声明的维度和世界时间，所以维度设计得越贴合主线，它埋下的事件越扎实。不需要额外的世界数据。
+- 角色类型和属性写在 `characterSchema: {types, attributes}`；角色导入 `characters` 领域并经 schema 校验，不要镜像到插件数据。插件通过 `pluginPolicy.requested` / `recommended` 选择，目录偏好用 `presetId`、`preferredTags`、`avoidedTags`
+- 题材记忆块写在 `data/memory-blocks.json`（`{id: "world", blocks: [...]}`），由一条 `to: contract:memory.blocks@1` 的 worldData source 导入；接收插件必须在根 `contracts` 和 `contributes.data.<namespace>.accepts` 里声明该契约。不要写已删除的顶层 `memoryBlocks` 字段，也不要用私有 `plugin:` 导入目标
 - **写任何插件 ID 之前先 `ls plugins/` 确认它存在**——schema 不校验插件 ID，拼错要拖到建会话时才暴露
 - 避免泛化的奇幻套路，追求独特的世界设定
 - 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文
@@ -55,34 +57,24 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 
 ### 3. 验证
 
-**L1 schema 校验（必做）**，在仓库根目录跑：
+**L1 校验（必做）**，在仓库根目录跑：
 
 ```bash
-npx tsx -e "
-import { parse } from 'yaml';
-import { readFileSync } from 'fs';
-import { worldManifestSchema } from './packages/shared/src/schemas/world.ts';
-const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
-const r = worldManifestSchema.safeParse(y);
-if(!r.success){ for(const i of r.error.issues) console.error(\`  \${i.path.join('.')||'(root)'}: \${i.message}\`); process.exit(1); }
-console.log('schema OK');
-"
+pnpm validate:world worlds/<id>
 ```
 
-> 必须用 `tsx`，并且按**相对路径**导入 schema。workspace 包直接导出 TS 源码（`\"import\": \"./src/index.ts\"`），裸 `node` 解析不了；`import '@covel/shared'` 在仓库根目录也解析不到包。
+它用生产 schema 校验 `world.yaml`，声明了 `worldData` 时还会按服务端加载路径解析 descriptor 和每个 source。
 
 按需追加：
 
-| 你写了什么                 | 至少要跑哪几层                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 最小 world.yaml + WORLD.md | **L1 schema**（必做）                                                                                  |
-| 声明了 `worldData`         | + **L1b descriptor 校验**                                                                              |
-| 预置了 `contract:*` 种子     | + **Ajv 逐条校验**：用目标插件的 `plugins/<id>/schemas/*.json` 校验每条种子记录（L1b 只验 descriptor 形状不验记录；不提前挡，建会话 preflight 才会炸） |
-| factions 含 `relations[]`  | + **L2 引用一致性**                                                                                    |
-| 世界写进仓库 `worlds/`     | + `node scripts/check-plugin-i18n.mjs`（world.yaml 展示字段 I18nText 门禁）                            |
-| 准备对外发布               | + **L3 lore 覆盖度** + **L4 真实跑一回合**                                                             |
+| 你写了什么                 | 还要跑什么                                                                                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 预置了 `contract:*` 种子   | 用目标插件 `plugins/<id>/schemas/*.json` 逐条 Ajv 校验种子记录（L1 不验记录内容，建会话 preflight 才会报错） |
+| factions 含 `relations[]`  | **L2 引用一致性**                                                                                              |
+| 世界写进仓库 `worlds/`     | `pnpm check:plugins`（world.yaml 展示字段 I18nText 门禁）                                                      |
+| 准备对外发布               | **L3 lore 覆盖度** + **L4 真实跑一回合**                                                                       |
 
-校验失败则修复后重新写入。L1b/L2/L3/L4 的现成脚本见 `references/world-validation.md`（必读）。
+校验失败则修复后重新写入。L2/L3/L4 的现成脚本见 `references/world-validation.md`（必读）。
 
 ### 4. 展示结果
 
@@ -95,10 +87,3 @@ console.log('schema OK');
 - 验证阶段读 `references/world-validation.md`——现成的校验脚本
 
 权威文档在 `docs/reference/world-data.md`（worldData / source import / override 的唯一真相源）；本目录的 references 是它的操作向导，冲突时以 docs 为准。
-
-
-## Current data and domain boundary
-
-World character types and attributes live in `characterSchema: {types, attributes}`. Characters import into the `characters` domain and pass schema validation; do not mirror them into plugin data. Select plugin IDs through `pluginPolicy.requested`/`recommended`, and use `presetId`, `preferredTags`, and `avoidedTags` for catalogue preferences.
-
-Genre memory definitions belong in `data/memory-blocks.json` as `{id: "world", blocks: [...]}` with a world-data source targeting and validating `contract:memory.blocks@1`. The receiving plugin must declare that contract in root `contracts` and `contributes.data.<namespace>.accepts`. Never author the removed top-level `memoryBlocks` field or private `plugin:` ingestion targets. See [current schema](references/world-yaml-schema.md) before generating files.
