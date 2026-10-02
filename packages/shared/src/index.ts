@@ -90,6 +90,7 @@ export {
 export {
   HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX,
   hiddenPluginDataNamespace,
+  isControlPlanePluginDataNamespace,
   isHiddenPluginDataNamespace,
   pluginCodeNamespaceWriteError,
   reservedPluginDataNamespaceError,

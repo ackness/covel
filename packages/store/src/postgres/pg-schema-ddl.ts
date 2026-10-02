@@ -18,6 +18,7 @@
 
 import { buildCreateTablesSql, tableNameOf } from "../common/ddl-codegen.js";
 import {
+  DELETE_RETIRED_PLUGIN_DATA_SQL,
   RETIRED_TABLE_NAMES,
   SESSIONS_TABLE,
   SESSION_SCOPED_TABLE_NAMES,
@@ -88,6 +89,7 @@ export const CREATE_TABLES_SQL = [
     (table) =>
       `DO $$ BEGIN IF to_regclass('${table}') IS NOT NULL THEN DROP TABLE ${table}; END IF; END $$;`,
   ),
+  DELETE_RETIRED_PLUGIN_DATA_SQL,
 ].join("\n\n");
 
 // ── Table names for cleanup ─────────────────────────────────────

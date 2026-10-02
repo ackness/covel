@@ -28,20 +28,7 @@ import type {
   LorebookEntryRecord,
   SuspensionRecord,
 } from "@covel/store";
-
-/**
- * Framework bookkeeping that never travels with a snapshot: job control rows
- * are incarnation-bound execution state (copying them into a fork would let a
- * second worker replay already-paid provider work), and `_logs` is a bounded
- * diagnostic ring, not game state. `_jobs` covers rows older databases kept
- * from the retired in-process background queue.
- */
-const CONTROL_PLANE_NAMESPACES: ReadonlySet<string> = new Set([
-  "_jobs",
-  "_runtime_jobs",
-  "_runtime_job_control",
-  "_logs",
-]);
+import { isControlPlanePluginDataNamespace } from "@covel/shared";
 
 /**
  * Build a full snapshot payload for a session at a given turn.
@@ -84,11 +71,11 @@ export async function buildSnapshotPayload(
   // One query returns every plugin_data row for the session, which is exactly
   // what the payload needs: a plugin with no rows contributes nothing here,
   // and a plugin that never produced a runtime result still travels.
-  // Control-plane namespaces stay behind (see CONTROL_PLANE_NAMESPACES).
+  // Control-plane namespaces (job rows, the log ring) stay behind.
   // Vector progress lives in its own table and does not enter plugin snapshots.
   const pluginData: readonly PluginDataRecord[] = (
     await store.listPluginDataSessionScope(sessionId)
-  ).filter((row) => !CONTROL_PLANE_NAMESPACES.has(row.namespace));
+  ).filter((row) => !isControlPlanePluginDataNamespace(row.namespace));
 
   const runtimeExports = await store.listRuntimeExports(sessionId, {
     latestOnly: true,
