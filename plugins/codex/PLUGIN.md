@@ -56,6 +56,10 @@ runtime:
     model: plugin
     history:
       maxTurns: 2
+    # The conversation ends on the player's message; without a required tool
+    # call the model sometimes continues the story first.
+    llm:
+      toolChoice: required
     tools:
       plugin:
         - sync-codex-entries
