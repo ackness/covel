@@ -90,11 +90,11 @@ runtime:
 通过 `submit-world-facts` 的参数提交以下内容：
 
 - `schemaVersion` 固定为 `1`，省略时由工具补齐协议常量
-- `summary` 用 1-3 句概括本轮发生了什么、当前状态和仍待回应的情境
-- `entities` 收录有规范名称且对后续状态插件有意义的人物、群体、势力、地点、物品、技能或概念
-- `relations` 收录本轮明确建立、改变或失效的人物/势力关系；`from` 和 `to` 必须引用本输出中的 entity id
-- `events` 收录已经发生的动作与状态变化，例如获得/失去/装备物品、受伤、移动、接受/推进/完成任务、明显的态度变化
-- `statements` 收录不适合表达为事件的明确知识，例如新发现、任务要求、规则、传闻或约束
+- `summary` 用 1-2 句概括本轮发生了什么和仍待回应的情境
+- `entities` 收录本轮新出现、有规范名称且对后续状态插件有意义的人物、群体、势力、地点、物品、技能或概念，以及本轮发生得失或装备变化的物品。`characters` 中的已知角色不要再列：直接引用其 `id`，工具会自动补登；只有本轮揭示了他们新的身份、头衔或归属时才列出并写 description。不在 `characters` 中的人物被引用时一律要列出
+- `relations` 只收录本轮明确建立、改变或失效的持续关系，例如信任、敌对、雇佣、亲属、债务或从属；一次性的请求、对话或借用是事件，不是关系。`from` 和 `to` 引用本输出中的 entity id 或 `characters` 中的 id
+- `events` 收录已经发生的动作与状态变化，例如获得/失去/装备物品、受伤、移动、接受/推进/完成任务、玩家与 NPC 的明确互动
+- `statements` 只收录事件之外的明确知识，例如新发现的线索、任务要求、规则或传闻；已经写成事件的内容不要再复述
 
 工具会严格校验每类对象的顶层字段；以下列表之外的细节一律放入 `attributes`：
 
@@ -111,8 +111,8 @@ runtime:
 - `relation.type` 使用稳定的 UPPER_SNAKE_CASE，例如 `TRUSTS`、`OPPOSES`、`WORKS_FOR`、`OWES_DEBT_TO`
 - `event.type` 优先使用 `interaction`、`state_change`、`inventory_change`、`quest_change`、`movement`
 - `statement.type` 优先使用 `discovery`、`quest`、`lore`、`rule`、`rumor`
-- 插件可能需要的细节放进 `attributes`，使用中立的事实字段，例如 `status`、`operation`、`quantity`、`giver`、`reward`、`objectives`、`strength`、`evidence`
-- id 在本输出内必须唯一、可读且稳定；同一实体只建一次，所有引用复用同一个 id
+- 插件可能需要的细节放进 `attributes`，使用中立的事实字段，例如 `status`、`operation`、`quantity`、`giver`、`reward`、`objectives`、`strength`
+- id 用 1-3 个小写单词加连字符，不加类型或会话前缀，例如 `field-radio`、`june-answers`；在本输出内唯一，同一实体只建一次，所有引用复用同一个 id。`characters` 中的角色直接用其给出的 `id`
 
 ## 固定字段的事件
 
@@ -127,10 +127,11 @@ runtime:
 
 - 不推测、不补全叙事没有给出的名称、数量、关系、任务状态或因果
 - 只保留会影响后续插件决策的事实；纯氛围、修辞和重复信息忽略
-- 描述保留足够证据，让下游插件无需重新读取原始长文本也能做保守判断
+- 每个事实只写一次：写成事件的内容不再写成关系或陈述，description 不复述 attributes
+- description 用一句短句写清谁对谁做了什么；attributes 只放下游插件要用的状态字段，不写外貌、服饰、随身物、情绪或原文引述
 - 没有某类事实时返回空数组，不能省略字段
 - 至多 32 个 entities、24 个 relations、32 个 events、32 个 statements
-- 简洁提取，通常 3-8 个实体、0-4 个关系、1-6 个事件、0-4 条知识即可；不是填满数组的任务。保留所有明确的物品、任务和属性变化，略去无状态影响的背景设定。每条 description 用一句短句，attributes 不重复 description 或全文证据；完整参数以约 1000 tokens 为目标，复杂回合可超过。
+- 简洁提取，通常 0-5 个新实体、0-2 个关系、1-5 个事件、0-3 条知识即可；不是填满数组的任务。保留所有明确的物品、任务、受伤和移动等状态变化，略去无状态影响的背景设定。完整参数以约 600 tokens 为目标，复杂回合可超过。
 - 如果工具返回参数校验错误，只修正错误字段并再次调用；工具成功后立即结束
 
 提交前再检查一遍：本轮是否有任务被接下或推进、主角物品得失或装备变化？有就必须写成上面两类事件之一。逐条对照原句核对施动者、对象和地点；不要把相邻段落中不同人物的动作或位置合并。角色出现在本轮叙事时复用 `characters` 中的规范 `id`；角色列表只用于消歧，不能作为新动作发生的证据。工具在省略版本时补齐 `schemaVersion: 1`，不要更改版本。

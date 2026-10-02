@@ -123,16 +123,67 @@ describe("submit-world-facts", () => {
     );
   });
 
-  it("declares referenced session characters the model left out of entities", async () => {
+  it("restores session ids from character handles and declares the characters", async () => {
     const facts = submitWorldFacts.parameters.parse({
       ...VALID_FACTS,
+      entities: [{ id: "brass-key", type: "item", name: "Brass Key" }],
+      relations: [{ id: "trusts", type: "TRUSTS", from: "mira", to: "ren" }],
       events: [
         {
           id: "mira-hands-key",
-          type: "interaction",
-          participantIds: ["session-mira", "player-ren"],
+          type: "inventory_change",
+          participantIds: ["mira", "ren"],
+          attributes: { item: "brass-key", holder: "ren", operation: "gain" },
         },
       ],
+      statements: [
+        {
+          id: "debt",
+          type: "rule",
+          content: "Ren owes Mira.",
+          subjectIds: ["ren"],
+        },
+      ],
+    });
+
+    const result = await submitWorldFacts.execute(facts, {
+      world: {
+        characters: [
+          { id: "session-mira", name: "Mira", type: "npc" },
+          { id: "char-0b9d-ren", name: "Ren", type: "player" },
+        ],
+      },
+    });
+
+    expect(result.entities).toEqual([
+      { id: "brass-key", type: "item", name: "Brass Key" },
+      { id: "session-mira", type: "character", name: "Mira" },
+      { id: "char-0b9d-ren", type: "character", name: "Ren" },
+    ]);
+    expect(result.relations[0]).toMatchObject({
+      from: "session-mira",
+      to: "char-0b9d-ren",
+    });
+    expect(result.events[0].participantIds).toEqual([
+      "session-mira",
+      "char-0b9d-ren",
+    ]);
+    expect(result.events[0].attributes.holder).toBe("char-0b9d-ren");
+    expect(result.statements[0].subjectIds).toEqual(["char-0b9d-ren"]);
+  });
+
+  it("keeps a character the model declared under its handle", async () => {
+    const facts = submitWorldFacts.parameters.parse({
+      ...VALID_FACTS,
+      entities: [
+        {
+          id: "mira",
+          type: "character",
+          name: "Mira",
+          description: "Revealed as the keeper.",
+        },
+      ],
+      events: [],
     });
 
     const result = await submitWorldFacts.execute(facts, {
@@ -141,11 +192,14 @@ describe("submit-world-facts", () => {
       },
     });
 
-    expect(result.entities).toContainEqual({
-      id: "session-mira",
-      type: "character",
-      name: "Mira",
-    });
+    expect(result.entities).toEqual([
+      {
+        id: "session-mira",
+        type: "character",
+        name: "Mira",
+        description: "Revealed as the keeper.",
+      },
+    ]);
   });
 
   it("rejects references to ids that are neither declared nor known characters", async () => {

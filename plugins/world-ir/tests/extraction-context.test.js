@@ -36,11 +36,41 @@ describe("world-ir extraction context", () => {
     expect(result.replace.messages).toHaveLength(1);
     expect(JSON.parse(result.replace.messages[0].content)).toEqual({
       narrative,
-      characters: [{ id: "character-mira", name: "Mira", type: "npc" }],
+      characters: [{ id: "mira", name: "Mira", type: "npc" }],
     });
     expect(JSON.stringify(result.replace)).not.toContain("Old memory");
     expect(payload.messages[0].content).toContain("old quest");
   });
+  it("names characters by word handles instead of their session ids", async () => {
+    const roster = [
+      { id: "char-9f2c-player", name: "Ren Ito", type: "player" },
+      { id: "emberback-1a2b-char-lin-b", name: "Lin", type: "npc" },
+      { id: "emberback-1a2b-char-lin-a", name: "Lin", type: "npc" },
+    ];
+    const handlesOf = async (characters) => {
+      const result = await extractionContext(
+        {},
+        {
+          runtimeId: "world-ir",
+          promptTemplate: "Extract facts only.",
+          inputSlots: { narrative },
+          characters,
+        },
+      );
+      return JSON.parse(result.replace.messages[0].content).characters;
+    };
+
+    expect(await handlesOf(roster)).toEqual([
+      { id: "ren-ito", name: "Ren Ito", type: "player" },
+      { id: "lin", name: "Lin", type: "npc" },
+      { id: "lin-2", name: "Lin", type: "npc" },
+    ]);
+    // A shared name gets the same suffix whatever the roster order.
+    expect(await handlesOf([...roster].reverse())).toEqual(
+      await handlesOf(roster),
+    );
+  });
+
   it("adds the tracked vocabulary from every provider when present", async () => {
     const result = await extractionContext(
       {},

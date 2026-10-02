@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { validateWorldIRV1, worldIRV1Schema } from "../schemas/world-ir.ts";
+import { characterHandles } from "./character-handles.js";
 import { eventProfileIssues } from "./event-profiles.js";
 
 const MAX_ENTITIES = 32;
@@ -79,16 +80,54 @@ function normalizeArguments(value) {
 }
 
 /**
- * The prompt gives the model the session's characters and asks it to reuse
- * their ids. Referencing one without also listing it under `entities` is the
- * common slip, and rejecting it costs a whole extra model call. Declare such
- * characters from the session roster instead; any other undeclared id still
- * fails.
+ * The model names session characters by their word handles; restore the real
+ * ids wherever an id is expected, including an inventory change's holder.
  */
-function withKnownCharacters(facts, characters) {
+function withCharacterIds(facts, handles) {
+  const real = (id) => handles.get(id)?.id ?? id;
+  const realAll = (ids) => ids && ids.map(real);
+  return {
+    ...facts,
+    entities: facts.entities.map((entity) => ({
+      ...entity,
+      id: real(entity.id),
+    })),
+    relations: facts.relations.map((relation) => ({
+      ...relation,
+      from: real(relation.from),
+      to: real(relation.to),
+    })),
+    events: facts.events.map((event) => {
+      const restored = { ...event };
+      if (event.participantIds)
+        restored.participantIds = realAll(event.participantIds);
+      if (
+        event.type === "inventory_change" &&
+        typeof event.attributes?.holder === "string"
+      )
+        restored.attributes = {
+          ...event.attributes,
+          holder: real(event.attributes.holder),
+        };
+      return restored;
+    }),
+    statements: facts.statements.map((statement) =>
+      statement.subjectIds
+        ? { ...statement, subjectIds: realAll(statement.subjectIds) }
+        : statement,
+    ),
+  };
+}
+
+/**
+ * The prompt asks the model to reference session characters without listing
+ * them under `entities`, which keeps the output short. Declare them from the
+ * session roster; any other undeclared id still fails.
+ */
+function withKnownCharacters(facts, handles) {
   const declared = new Set(facts.entities.map((entity) => entity.id));
   const known = new Map(
-    characters.map((character) => [character.id, character]),
+    [...handles.values()].map((character) => [character.id, character]),
   );
   const added = [];
   for (const id of referencedIds(facts)) {
@@ -138,9 +177,10 @@ export default function ({ tool }) {
       "Submit the people, relationships, events, and explicit knowledge extracted from this story turn. The arguments become the complete World IR output; put non-contract details inside attributes.",
     parameters,
     execute: async (facts, context) => {
+      const handles = characterHandles(context?.world?.characters ?? []);
       const completed = withKnownCharacters(
-        facts,
-        context?.world?.characters ?? [],
+        withCharacterIds(facts, handles),
+        handles,
       );
       const validation = validateWorldIRV1(completed);
       if (validation.valid) return completed;

@@ -77,11 +77,11 @@ The user message contains JSON with a provenance-wrapped `narrative` slot. Read 
 Submit these fields as the arguments to `submit-world-facts`:
 
 - Set `schemaVersion` to `1`.
-- Use `summary` for a 1-3 sentence account of what happened, the current state, and any situation awaiting a response.
-- Put canonically named people, groups, factions, places, items, skills, and concepts that matter to downstream state in `entities`.
-- Put relationships established, changed, or invalidated this turn in `relations`; every `from` and `to` must reference an entity id in this output.
-- Put completed actions and state changes in `events`, including inventory, equipment, injury, movement, quest, and clear attitude changes.
-- Put explicit knowledge that is not an event in `statements`, including discoveries, quest requirements, rules, rumors, and constraints.
+- Use `summary` for a 1-2 sentence account of what happened and any situation awaiting a response.
+- Put canonically named people, groups, factions, places, items, skills, and concepts that first appear this turn and matter to downstream state in `entities`, plus every item gained, lost, equipped, or unequipped this turn. Do not list known characters from `characters`: reference their `id` directly and the tool declares them. List one only when this turn reveals a new identity, title, or allegiance, with a description. Always list a referenced person who is not in `characters`.
+- Put lasting relationships established, changed, or invalidated this turn in `relations`, such as trust, hostility, employment, kinship, debt, or allegiance; a one-off request, conversation, or loan is an event, not a relation. Every `from` and `to` references an entity id in this output or an id from `characters`.
+- Put completed actions and state changes in `events`, including inventory, equipment, injury, movement, quest changes, and clear player-NPC interactions.
+- Put explicit knowledge that is not an event in `statements`, such as newly found clues, quest requirements, rules, or rumors; never restate an event.
 
 The tool strictly validates the top-level fields of every object. Put every detail not listed below inside `attributes`:
 
@@ -98,8 +98,8 @@ For example, write relation strength as `attributes.strength`, and put an event'
 - Use stable UPPER_SNAKE_CASE values for `relation.type`, such as `TRUSTS`, `OPPOSES`, `WORKS_FOR`, and `OWES_DEBT_TO`.
 - Prefer `interaction`, `state_change`, `inventory_change`, `quest_change`, and `movement` for `event.type`.
 - Prefer `discovery`, `quest`, `lore`, `rule`, and `rumor` for `statement.type`.
-- Keep plugin-useful details in neutral `attributes`, for example `status`, `operation`, `quantity`, `giver`, `reward`, `objectives`, `strength`, and `evidence`.
-- IDs must be unique, readable, and stable inside this output. Create an entity once and reuse its id everywhere.
+- Keep plugin-useful details in neutral `attributes`, for example `status`, `operation`, `quantity`, `giver`, `reward`, `objectives`, and `strength`.
+- Write each id as 1-3 lowercase words joined by hyphens, without a type or session prefix, such as `field-radio` or `june-answers`. IDs are unique inside this output; create an entity once and reuse its id everywhere. Use the given `id` for a character from `characters`.
 
 ## Events with fixed fields
 
@@ -114,10 +114,11 @@ State plugins read two event types directly, so their `attributes` must include 
 
 - Do not infer or complete names, quantities, relationships, quest states, or causes that the narrative does not state.
 - Keep only facts that can affect a downstream plugin decision; omit atmosphere, figurative language, and repetition.
-- Preserve enough evidence in descriptions for downstream plugins to make conservative decisions without rereading the long source text.
+- Write each fact once: content written as an event is not repeated as a relation or statement, and a description does not restate its attributes.
+- Use one short description sentence saying who did what to whom. Keep only state fields downstream plugins use in `attributes`; never appearance, clothing, carried props, mood, or quotations.
 - Return an empty array when a fact class has no entries; never omit a required field.
 - Emit at most 32 entities, 24 relations, 32 events, and 32 statements.
-- Keep extraction compact: a typical turn needs 3-8 entities, 0-4 relations, 1-6 events, and 0-4 statements; do not fill the arrays. Retain every explicit inventory, quest, and attribute change, but omit background lore with no state effect. Use one short sentence per description; do not duplicate it or full quotations in attributes. Aim for roughly 1000 tokens of total arguments, allowing more for complex turns.
+- Keep extraction compact: a typical turn needs 0-5 new entities, 0-2 relations, 1-5 events, and 0-3 statements; do not fill the arrays. Retain every explicit inventory, quest, injury, and movement change, but omit background lore with no state effect. Aim for roughly 600 tokens of total arguments, allowing more for complex turns.
 - If the tool returns a parameter-validation error, correct only those fields and call it again. End immediately after a successful call.
 
 Before submitting, check once more: was a quest taken on or advanced, or did the protagonist gain, lose, equip, or unequip an item? Each such change must be one of the two event types above. Check each event against the exact source sentence: who did it, to whom, and where. Never merge actions or locations from adjacent paragraphs about different people. Reuse a known character ID from `characters` when that person appears; the identity list is disambiguation data, never evidence of a new action. The tool supplies the protocol constant `schemaVersion: 1` when omitted; never change the version.
