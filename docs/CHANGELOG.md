@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Changed
 
+- **Story-first chat layout.** Each turn's read-only plugin cards (codex discoveries, achievements, status changes) fold into one "Turn updates · N" line that previews the first titles, so narration keeps most of the screen. Forms, choices, suggestions, images, and warnings stay open. The new General setting "Expand turn updates" restores the open layout.
 - **Faster dimension settlement.** The tracker's prompt now carries every rule, schema, and frozen value it needs (within a 24000-character budget), it runs without reasoning, and `update-dimensions` accepts `changes: [{path, value}]` so large dimensions are patched instead of rewritten. In a Mistport session settlement dropped from 20–100 s to about 5 s per turn.
 - **cost-gate keeps narrative inputs.** Past the soft cap it now trims only runtimes after the narrative; `pre-turn` runtimes (dice pools, tabletop checks, dimension and world-time context, hidden story cues) keep running so the story itself does not change.
 - A plugin's own code (function runtimes and its local tools) may now write its own `_hidden.*` namespaces. The REST API and the builtin `plugin-data-set` / `plugin-data-set-batch` tools reject every `_` namespace.
