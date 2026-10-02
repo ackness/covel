@@ -31,6 +31,11 @@ export const BUILTIN_PROVIDER_CONNECTIONS = {
     protocol: "typesafe-systemone-v1",
     evaluationProtocol: "typesafe-systemone-v1",
   },
+  openjev: {
+    baseUrl: "https://api.openjev.sh/v1",
+    protocol: "typesafe-systemone-v1",
+    evaluationProtocol: "typesafe-systemone-v1",
+  },
   deepseek: {
     baseUrl: "https://api.deepseek.com",
     protocol: "openai-chat-v1",

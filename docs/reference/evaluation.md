@@ -15,6 +15,7 @@ Covel 的 provider 层提供 `gateway.evaluate()`：针对同一份状态，批�
 | Provider 示例 | Base URL                          | 模型 ID 示例        | 评估模型的协议            |
 | ------------- | --------------------------------- | ------------------- | ------------------------- |
 | `typesafe`    | `https://api.typesafe.ai/v1`      | `jev-latest`        | `typesafe-systemone-v1`   |
+| `openjev`     | `https://api.openjev.sh/v1`       | `openjev`           | `typesafe-systemone-v1`   |
 | `openrouter`  | `https://openrouter.ai/api/v1`    | `typesafe/jev-1.13` | `openrouter-decisions-v1` |
 | `vercel`      | `https://ai-gateway.vercel.sh/v1` | `typesafe-ai/jev`   | `vercel-evaluation-v4`    |
 
@@ -32,7 +33,7 @@ baseUrl = "https://api.typesafe.ai/v1"
 protocol = "typesafe-systemone-v1"
 ```
 
-协议默认推导 `output = ["evaluation"]`、`supportedModes = ["evaluate"]` 和 `tag = "evaluation"`。内置 `typesafe` 连接也可直接通过服务商设置页添加。`TYPESAFE_API_KEY`、`OPENROUTER_API_KEY`、`VERCEL_API_KEY` 遵循现有 provider 密钥命名（Vercel AI Gateway 的 key 填到本项目的 `vercel` 连接）：开发环境放 `.env.llm`，桌面端放 `keys.env`，浏览器通过服务商设置保存。不要把 key 写进 TOML。
+协议默认推导 `output = ["evaluation"]`、`supportedModes = ["evaluate"]` 和 `tag = "evaluation"`。内置 `typesafe` 连接也可直接通过服务商设置页添加。`TYPESAFE_API_KEY`、`OPENJEV_API_KEY`、`OPENROUTER_API_KEY`、`VERCEL_API_KEY` 遵循现有 provider 密钥命名（Vercel AI Gateway 的 key 填到本项目的 `vercel` 连接）：开发环境放 `.env.llm`，桌面端放 `keys.env`，浏览器通过服务商设置保存。不要把 key 写进 TOML。
 
 服务端持有已配置的 gateway 时：
 
