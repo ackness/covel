@@ -193,6 +193,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "guide",
       "memory/extract",
       "scene-prompts",
+      "story-plotter/plot",
       "world-ir",
       "world-time/advance",
     ]);
@@ -202,6 +203,7 @@ describe("normalize golden (bundled plugin set)", () => {
       "core-quest",
       "inventory",
       "npc-graph/extractor",
+      "story-events/intake",
       "world-init/dimension-tracker",
     ]);
   });

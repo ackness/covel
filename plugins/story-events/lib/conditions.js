@@ -1,7 +1,7 @@
 // Deterministic condition evaluation for hidden story events. No model calls:
 // every leaf reads a frozen dimension value or the current world-time value.
 
-const OPERATORS = [
+export const OPERATORS = [
   "equals",
   "notEquals",
   "in",

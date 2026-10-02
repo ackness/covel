@@ -18,6 +18,7 @@ import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { closeTestApi } from "../helpers/close-api.js";
 
 const SECRET = "SECRET-PAYLOAD-7f3";
+const PLANNED_SECRET = "PLANNED-PAYLOAD-2c9";
 
 /** Records every prompt so the test can prove where the hidden payload went. */
 class RecordingLLM implements LLMAdapter {
@@ -53,6 +54,30 @@ class RecordingLLM implements LLMAdapter {
               amount: 0,
               unit: "phase",
               reason: "Brief.",
+            }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage,
+      };
+    if (tools.includes("plan-story-events"))
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `plan-${this.calls.length}`,
+            name: "plan-story-events",
+            arguments: JSON.stringify({
+              events: [
+                {
+                  id: "keeper-returns",
+                  title: "The Keeper Returns",
+                  all: [{ dimension: "location", equals: "lighthouse" }],
+                  payload: `${PLANNED_SECRET} The keeper's lamp is lit again.`,
+                  priority: 5,
+                },
+              ],
+              reason: "The keeper was mentioned and never found.",
             }),
           },
         ],
@@ -161,6 +186,7 @@ describe("hidden world data and story events", () => {
   let boot: Awaited<ReturnType<typeof bootstrapApi>>;
   const llm = new RecordingLLM();
   const sessionId = "hidden-demo-session";
+  let requestIndex = 0;
 
   beforeAll(async () => {
     const { worldsDir, worldDir } = await makeWorld();
@@ -194,74 +220,27 @@ describe("hidden world data and story events", () => {
     await closeTestApi(boot);
   });
 
-  async function sendTurn(content: string, index: number): Promise<void> {
-    const res = await boot.app.request("/api/actions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        requestId: `hidden-${index}`,
-        type: "send_message",
-        sessionId,
-        locale: "en-US",
-        payload: { content },
-      }),
-    });
-    expect(res.status).toBe(200);
-    await res.text();
-  }
-
-  async function publicSurfaces(
-    routes = [
-      `/api/sessions/${sessionId}/plugin-data/story-events`,
-      `/api/sessions/${sessionId}/state`,
-      `/api/sessions/${sessionId}/view`,
-    ],
-  ): Promise<string> {
-    const bodies: string[] = [];
-    for (const route of routes)
-      bodies.push(await (await boot.app.request(route)).text());
-    return bodies.join("\n");
-  }
-
-  it("keeps the payload out of prompts and public APIs until its turn, then gives it only to narration", async () => {
+  async function createPlayingSession(
+    id: string,
+    plugins: readonly string[],
+  ): Promise<readonly string[]> {
     const created = await boot.app.request("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        id: sessionId,
+        id,
         worldId: "hidden-demo",
         locale: "en-US",
-        plugins: ["narrator", "story-events"],
+        plugins,
       }),
     });
     expect(created.status, await created.clone().text()).toBe(201);
-    expect((await created.json()).activePlugins as readonly string[]).toEqual(
-      expect.arrayContaining(["story-events", "world-time"]),
-    );
-
-    // Imported into the hidden bucket, invisible to every public surface.
-    expect(
-      (
-        await boot.store.listPluginData(
-          sessionId,
-          "story-events",
-          "_hidden.events",
-        )
-      ).map((row) => row.key),
-    ).toEqual(["lighthouse-charge"]);
-    expect(await publicSurfaces()).not.toContain(SECRET);
-    expect(
-      (
-        await boot.app.request(
-          `/api/sessions/${sessionId}/plugin-data/story-events/_hidden.events/lighthouse-charge`,
-        )
-      ).status,
-    ).toBe(404);
+    const activePlugins = (await created.json()).activePlugins as string[];
 
     const now = new Date().toISOString();
     await boot.store.upsertCharacter({
-      id: "player-hidden-demo",
-      sessionId,
+      id: `player-${id}`,
+      sessionId: id,
       name: "Ren",
       type: "player",
       description: "A courier.",
@@ -270,12 +249,12 @@ describe("hidden world data and story events", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await boot.store.updateSession(sessionId, {
+    await boot.store.updateSession(id, {
       phase: "playing",
       completedPlayerTurns: 0,
       setupRuntimes: Object.fromEntries(
         boot.registry
-          .getActiveRuntimes(sessionId)
+          .getActiveRuntimes(id)
           .filter((runtime) => runtime.stage === "setup")
           .map((runtime) => [
             runtime.name,
@@ -291,17 +270,30 @@ describe("hidden world data and story events", () => {
       ),
       updatedAt: now,
     });
+    return activePlugins;
+  }
 
-    // Turn 1: still at the harbor, so nothing is revealed anywhere.
-    await sendTurn("I wait on the pier.", 1);
-    expect(llm.calls.some((call) => call.text.includes(SECRET))).toBe(false);
-    expect(
-      await boot.store.listPluginData(sessionId, "story-events", "revealed"),
-    ).toEqual([]);
+  async function sendTurn(id: string, content: string): Promise<void> {
+    requestIndex += 1;
+    const res = await boot.app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: `hidden-${requestIndex}`,
+        type: "send_message",
+        sessionId: id,
+        locale: "en-US",
+        payload: { content },
+      }),
+    });
+    expect(res.status).toBe(200);
+    await res.text();
+  }
 
-    // Move to the lighthouse as the dimension tracker would.
+  /** Move to the lighthouse as the dimension tracker would. */
+  async function moveToLighthouse(id: string): Promise<void> {
     const row = await boot.store.getPluginData(
-      sessionId,
+      id,
       "world-init",
       DIMENSION_DATA_NAMESPACE,
       "location",
@@ -312,10 +304,58 @@ describe("hidden world data and story events", () => {
       value: { ...record, value: "lighthouse", version: record.version + 1 },
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  async function publicSurfaces(
+    id: string,
+    routes = [
+      `/api/sessions/${id}/plugin-data/story-events`,
+      `/api/sessions/${id}/state`,
+      `/api/sessions/${id}/view`,
+    ],
+  ): Promise<string> {
+    const bodies: string[] = [];
+    for (const route of routes)
+      bodies.push(await (await boot.app.request(route)).text());
+    return bodies.join("\n");
+  }
+
+  it("keeps the payload out of prompts and public APIs until its turn, then gives it only to narration", async () => {
+    expect(
+      await createPlayingSession(sessionId, ["narrator", "story-events"]),
+    ).toEqual(expect.arrayContaining(["story-events", "world-time"]));
+
+    // Imported into the hidden bucket, invisible to every public surface.
+    expect(
+      (
+        await boot.store.listPluginData(
+          sessionId,
+          "story-events",
+          "_hidden.events",
+        )
+      ).map((row) => row.key),
+    ).toEqual(["lighthouse-charge"]);
+    expect(await publicSurfaces(sessionId)).not.toContain(SECRET);
+    expect(
+      (
+        await boot.app.request(
+          `/api/sessions/${sessionId}/plugin-data/story-events/_hidden.events/lighthouse-charge`,
+        )
+      ).status,
+    ).toBe(404);
+
+    // Turn 1: still at the harbor, so nothing is revealed anywhere.
+    await sendTurn(sessionId, "I wait on the pier.");
+    expect(llm.calls.some((call) => call.text.includes(SECRET))).toBe(false);
+    expect(
+      await boot.store.listPluginData(sessionId, "story-events", "revealed"),
+    ).toEqual([]);
+
+    await moveToLighthouse(sessionId);
 
     // Turn 2: the condition holds, so narration (and only narration) gets it.
     const before = llm.calls.length;
-    await sendTurn("I climb to the lighthouse.", 2);
+    await sendTurn(sessionId, "I climb to the lighthouse.");
     const turnCalls = llm.calls.slice(before);
     const withSecret = turnCalls.filter((call) => call.text.includes(SECRET));
     expect(withSecret).toHaveLength(1);
@@ -332,10 +372,67 @@ describe("hidden world data and story events", () => {
     // After the reveal the brief is part of this turn's narration input (and
     // so its execution detail), but stored plugin data stays payload-free.
     expect(
-      await publicSurfaces([
+      await publicSurfaces(sessionId, [
         `/api/sessions/${sessionId}/plugin-data/story-events`,
         `/api/sessions/${sessionId}/state`,
       ]),
     ).not.toContain(SECRET);
   }, 30_000);
+
+  it("stores events planned during play as hidden data and reveals them later", async () => {
+    const id = "hidden-demo-planned";
+    expect(
+      await createPlayingSession(id, [
+        "narrator",
+        "story-events",
+        "story-plotter",
+      ]),
+    ).toEqual(expect.arrayContaining(["story-events", "story-plotter"]));
+
+    const plannedRows = () =>
+      boot.store.listPluginData(id, "story-events", "_hidden.planned");
+    // The planner runs every few turns; stay at the harbor until it has.
+    for (let turn = 1; turn <= 4 && !(await plannedRows()).length; turn += 1)
+      await sendTurn(id, "I ask the dockhands about the missing keeper.");
+    const planned = await plannedRows();
+    expect(planned.map((row) => row.key)).toEqual(["keeper-returns"]);
+    expect(planned[0]!.value).toMatchObject({
+      once: true,
+      origin: { pluginId: "story-plotter", runtimeId: "story-plotter/plot" },
+    });
+
+    // Only the planner itself has handled the planned payload so far.
+    const narrationCalls = (calls: typeof llm.calls) =>
+      calls.filter((call) => !call.tools.includes("plan-story-events"));
+    expect(
+      narrationCalls(llm.calls).some((call) =>
+        call.text.includes(PLANNED_SECRET),
+      ),
+    ).toBe(false);
+    // The planner's own prompts, tool calls, and output are concealed from
+    // traces, the session view, and execution history.
+    expect(
+      await publicSurfaces(id, [
+        `/api/sessions/${id}/plugin-data/story-events`,
+        `/api/sessions/${id}/state`,
+        `/api/sessions/${id}/view`,
+        `/api/sessions/${id}/turns`,
+        `/api/traces/${id}`,
+      ]),
+    ).not.toContain(PLANNED_SECRET);
+
+    await moveToLighthouse(id);
+    const before = llm.calls.length;
+    await sendTurn(id, "I climb to the lighthouse.");
+    const withSecret = narrationCalls(llm.calls.slice(before)).filter((call) =>
+      call.text.includes(PLANNED_SECRET),
+    );
+    expect(withSecret).toHaveLength(1);
+    expect(withSecret[0]!.tools).not.toContain("advance-world-time");
+    expect(
+      (await boot.store.listPluginData(id, "story-events", "revealed")).map(
+        (row) => row.key,
+      ),
+    ).toEqual(["keeper-returns"]);
+  }, 60_000);
 });
