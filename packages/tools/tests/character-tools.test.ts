@@ -816,6 +816,39 @@ describe("builtin character tools", () => {
       expect(getToolContent(result)._text).toContain("player");
     });
 
+    it("resolves a partial name and lists candidates on a miss", async () => {
+      await loop.call("create-character", {
+        name: "Dr. Mina Park",
+        type: "npc",
+      });
+      await loop.call("create-character", { name: "Mina Okafor", type: "npc" });
+      loop.commit();
+      const found = getToolContent(
+        (await loop.call("get-character", { name: "mina park" })) as {
+          _text: string;
+        },
+      );
+      expect(found._text).toContain("Dr. Mina Park");
+
+      const ambiguous = getToolContent(
+        (await loop.call("get-character", { name: "Mina" })) as {
+          found: boolean;
+          candidates: string[];
+        },
+      );
+      expect(ambiguous.found).toBe(false);
+      expect(ambiguous.candidates).toEqual(["Dr. Mina Park", "Mina Okafor"]);
+
+      const missing = getToolContent(
+        (await loop.call("get-character", { name: "Eli" })) as {
+          _text: string;
+          candidates: string[];
+        },
+      );
+      expect(missing._text).toContain("Characters in session:");
+      expect(missing.candidates).toContain("柳无痕");
+    });
+
     it("returns text saying not found when id is missing", async () => {
       const result = (await loop.call("get-character", { id: "nope" })) as {
         _text: string;
