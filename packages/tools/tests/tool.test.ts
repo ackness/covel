@@ -61,6 +61,33 @@ describe("tool()", () => {
     });
   });
 
+  it("parses array and object arguments sent as JSON text", async () => {
+    const mod = tool({
+      name: "record",
+      description: "Record changes",
+      parameters: z.object({
+        changes: z.array(z.object({ name: z.string() })),
+        meta: z.object({ turn: z.number() }).optional(),
+      }),
+      execute: async (params) => params,
+    });
+    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+
+    expect(
+      await mod.execute(
+        { changes: '[{"name":"Mira"}]', meta: '{"turn":2}' },
+        ctx,
+      ),
+    ).toEqual({ changes: [{ name: "Mira" }], meta: { turn: 2 } });
+    // Parsed text is still validated, and other strings are not touched.
+    await expect(
+      mod.execute({ changes: '[{"name":7}]' }, ctx),
+    ).rejects.toMatchObject({ details: [{ path: "changes.0.name" }] });
+    await expect(mod.execute({ changes: "Mira" }, ctx)).rejects.toMatchObject({
+      details: [{ path: "changes" }],
+    });
+  });
+
   it("publishes the input schema and executes the parsed transform output", async () => {
     const mod = tool({
       name: "text-length",

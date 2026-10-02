@@ -55,26 +55,20 @@ function withDetailsInAttributes(fact, fields) {
 
 /**
  * Repair mechanical slips before validation instead of paying a model
- * round trip for them: copied extraction input is dropped, a fact array sent
- * as a JSON string is parsed, and details written beside a fact's fields
- * move into its `attributes`, as the prompt asks. Anything else still fails
- * validation with its path.
+ * round trip for them: copied extraction input is dropped, and details
+ * written beside a fact's fields move into its `attributes`, as the prompt
+ * asks. (`tool()` already parses a fact array sent as JSON text.) Anything
+ * else still fails validation with its path.
  */
 function normalizeArguments(value) {
   if (!isRecord(value)) return value;
   const facts = { ...value };
   for (const key of INPUT_KEYS) delete facts[key];
   for (const [kind, fields] of Object.entries(FACT_FIELDS)) {
-    let list = facts[kind];
-    if (typeof list === "string") {
-      try {
-        list = JSON.parse(list);
-      } catch {
-        continue;
-      }
-    }
-    if (Array.isArray(list))
-      facts[kind] = list.map((fact) => withDetailsInAttributes(fact, fields));
+    if (Array.isArray(facts[kind]))
+      facts[kind] = facts[kind].map((fact) =>
+        withDetailsInAttributes(fact, fields),
+      );
   }
   return facts;
 }

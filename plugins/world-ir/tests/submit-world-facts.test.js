@@ -98,18 +98,6 @@ describe("submit-world-facts", () => {
     });
   });
 
-  it("parses a fact array sent as a JSON string", async () => {
-    const parsed = submitWorldFacts.parameters.parse({
-      ...VALID_FACTS,
-      statements: JSON.stringify([
-        { id: "rule", type: "rule", content: "The tower closes at dusk." },
-      ]),
-    });
-    expect(parsed.statements).toEqual([
-      { id: "rule", type: "rule", content: "The tower closes at dusk." },
-    ]);
-  });
-
   it("still rejects a fact with a malformed field", async () => {
     const result = submitWorldFacts.parameters.safeParse({
       ...VALID_FACTS,

@@ -136,7 +136,9 @@ Entry 工具应使用框架注入的 `covel.toolkit.tool` 与 `covel.toolkit.z`�
 Agent 调用 `echo-value` 时，成功内容是 `{ "ok": true, "value": "..." }`。
 参数先由 `tool()` 生成 JSON Schema，再由同一 Zod schema 在执行时校验；缺少
 `value`、空字符串或超过 80 个字符会得到 `VALIDATION_ERROR`，而不是进入
-handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
+handler。模型有时把数组或对象参数写成一段 JSON 文本；schema 在该位置要求
+数组或对象时，`tool()` 先解析这段文本再校验一次，省掉一轮模型重交，解析后
+的内容仍须通过同一 schema。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
 `tools.builtin`）；它返回成功内容 `{ success, namespace, key }`，并把写入
 作为 `plugin.data` proposal 交给回合末 commit chain。
 
@@ -784,7 +786,7 @@ Attributes:
 | `summary`                                          | ✓    | 本轮事实摘要                                                      |
 | `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
 
-校验前先修正几类机械性失误，不再为此让模型重交：丢弃误抄进参数的抽取输入（`narrative` / `characters` / `vocabulary`），把以 JSON 字符串传入的事实数组解析成数组，把写在事实顶层的额外细节移入该项 `attributes`。输出 token 数决定这一步的耗时，所以抽取输入中的会话角色不给真实 id（UUID 或带会话前缀的长串），而是由姓名生成的单词短名（如 `tomas-reed`；同名角色按 id 顺序加 `-2`），工具返回前把短名还原为真实 id（包括 `inventory_change` 的 `holder`）；提示词要求模型直接引用这些角色、不在 `entities` 中重复登记；关系、事件参与者和陈述主体引用的已知角色由工具按会话角色名册补登记（`type: character` 与 `name`）；引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
+校验前先修正几类机械性失误，不再为此让模型重交：丢弃误抄进参数的抽取输入（`narrative` / `characters` / `vocabulary`），把写在事实顶层的额外细节移入该项 `attributes`。输出 token 数决定这一步的耗时，所以抽取输入中的会话角色不给真实 id（UUID 或带会话前缀的长串），而是由姓名生成的单词短名（如 `tomas-reed`；同名角色按 id 顺序加 `-2`），工具返回前把短名还原为真实 id（包括 `inventory_change` 的 `holder`）；提示词要求模型直接引用这些角色、不在 `entities` 中重复登记；关系、事件参与者和陈述主体引用的已知角色由工具按会话角色名册补登记（`type: character` 与 `name`）；引用其他未登记 id 仍报错。工具返回补全并校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `contract:world-ir@1` output schema gate。
 
 两类事件另有固定字段，由工具一并校验（其余事件的 `attributes` 保持自由）。`inventory` 与 `core-quest` 的 function runtime 只读取这些字段，不再调用模型：
 
