@@ -28,6 +28,7 @@ vi.mock("@/stores/plugin-data-store.js", () => ({
   replaceSessionPluginData: vi.fn(),
   applyChanges: vi.fn(),
   getPluginNamespaceSnapshot: () => ({}),
+  backgroundJobRecord: () => null,
 }));
 const { useSessionSubscription } = await import("../subscription.js");
 
@@ -428,21 +429,40 @@ it.each([false, true])(
     });
     expect(options.stateRef.current.hasGameStateSnapshot).toBe(true);
     const done = {
-      status: "done",
+      status: "succeeded",
       runtimeId: "current/background",
-      durationMs: 1,
+      origin: { activation: "manual", sourceTurnId: "rpc-turn" },
     };
     api.listPluginData.mockResolvedValue([
-      { namespace: "_jobs", key: "job", value: done },
+      { namespace: "_runtime_jobs", key: "job", value: done },
     ]);
+    // The job row change is applied as data; its status event alone marks
+    // the committed terminal result.
     streams[0]!.emit({
       ...event("plugin-data.changed"),
-      id: "terminal-job-event",
+      id: "terminal-job-row",
       payload: {
         pluginId: "current",
         changes: [
-          { namespace: "_jobs", key: "job", operation: "set", value: done },
+          {
+            namespace: "_runtime_jobs",
+            key: "job",
+            operation: "set",
+            value: done,
+          },
         ],
+      },
+    });
+    expect(options.workspace.checkpoint).not.toHaveBeenCalled();
+    streams[0]!.emit({
+      ...event("job-status.updated"),
+      id: "terminal-job-event",
+      payload: {
+        jobId: "job",
+        pluginId: "current",
+        runtimeId: "current/background",
+        state: "succeeded",
+        data: { durableStatus: "succeeded", originTurnId: "rpc-turn" },
       },
     });
     expect(options.workspace.checkpoint).toHaveBeenCalledExactlyOnceWith(
@@ -454,9 +474,9 @@ it.each([false, true])(
       pendingPlugins.resolve(plugins("current"));
     });
     expect(api.getSessionView).toHaveBeenCalledTimes(2);
-    expect(options.stateRef.current.pluginData.current?._jobs?.job).toEqual(
-      done,
-    );
+    expect(
+      options.stateRef.current.pluginData.current?._runtime_jobs?.job,
+    ).toEqual(done);
     expect(options.workspace.checkpoint).toHaveBeenCalledOnce();
   },
 );
@@ -516,18 +536,14 @@ it.each(["session switch", "revisit", "cross-session envelope", "unmount"])(
     } else if (leave === "unmount") unmount();
     await act(async () => {
       streams[0]!.emit({
-        ...event("plugin-data.changed"),
+        ...event("job-status.updated"),
         sessionId: leave === "cross-session envelope" ? "other" : session.id,
         payload: {
+          jobId: "job",
           pluginId: "current",
-          changes: [
-            {
-              namespace: "_jobs",
-              key: "job",
-              operation: "set",
-              value: { status: "done" },
-            },
-          ],
+          runtimeId: "current/background",
+          state: "succeeded",
+          data: { durableStatus: "succeeded", originTurnId: "rpc-turn" },
         },
       });
     });

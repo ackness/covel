@@ -10,7 +10,7 @@
  * the same uniform {@link SqlRunner} surface as the other record modules.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -82,6 +82,7 @@ export type SqlLifecycleRecords = Pick<
   | "listSetupAttempts"
   | "appendJobStatus"
   | "listJobStatus"
+  | "deleteJobStatus"
 >;
 
 /** `and(...conds)` over the defined predicates, or `undefined` when none. */
@@ -235,6 +236,20 @@ export function createSqlLifecycleRecords(
         orderBy: [asc(jobStatus.jobId), asc(jobStatus.sequence)],
       });
       return rows.map((row) => toJobStatusRecord(row, json));
+    },
+
+    async deleteJobStatus(
+      sessionId: string,
+      jobIds: readonly string[],
+    ): Promise<void> {
+      if (jobIds.length === 0) return;
+      await runner.delete(
+        jobStatus,
+        and(
+          eq(jobStatus.sessionId, sessionId),
+          inArray(jobStatus.jobId, [...jobIds]),
+        ),
+      );
     },
   };
 }

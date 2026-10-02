@@ -61,6 +61,16 @@ function buildPgData(
   };
   return {
     ...data,
+    async savepoint(fn) {
+      if (!transactionBound) {
+        throw new Error("PgStore savepoint requires an open transaction");
+      }
+      // Drizzle maps a transaction opened on a transaction to a SAVEPOINT on
+      // the same reserved connection.
+      return getDb().transaction(async (sp) =>
+        fn(buildPgData(() => sp as unknown as PgDb, true)),
+      );
+    },
     async compareAndSetPluginDataBatch(sessionId, pluginId, records) {
       if (!transactionBound) {
         return getDb().transaction(async (tx) =>

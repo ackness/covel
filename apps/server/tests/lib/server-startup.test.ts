@@ -86,7 +86,6 @@ describe("production composition root startup failure", () => {
         if (phase === "bootstrap") throw failure;
         return {
           runtimeJobWorker: { close: close("worker") },
-          pluginBackgroundQueue: { close: close("queue") },
           startupMaintenance: Promise.resolve(),
           closePluginEntries: close("entries"),
           closeTools: close("tools"),
@@ -115,7 +114,6 @@ describe("production composition root startup failure", () => {
         bootstrap: ["media", "store", "locks", "ingest-locks"],
         "world-seed": [
           "worker",
-          "queue",
           "tools",
           "entries",
           "bus",
@@ -128,7 +126,6 @@ describe("production composition root startup failure", () => {
           "watcher-1",
           "watcher-2",
           "worker",
-          "queue",
           "tools",
           "entries",
           "bus",

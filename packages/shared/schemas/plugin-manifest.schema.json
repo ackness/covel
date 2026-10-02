@@ -1015,6 +1015,18 @@
               },
               "additionalProperties": false
             },
+            "history": {
+              "type": "object",
+              "properties": {
+                "maxTurns": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000
+                }
+              },
+              "required": ["maxTurns"],
+              "additionalProperties": false
+            },
             "tools": {
               "type": "object",
               "properties": {

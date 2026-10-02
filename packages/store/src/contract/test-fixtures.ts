@@ -9,7 +9,6 @@ import type {
   PlayerInputRecord,
   RuntimeExportRecord,
   RuntimeOutputRecord,
-  RuntimeResultRecord,
   SessionRecord,
   SessionSummaryRecord,
   SetupAttemptRecord,
@@ -68,24 +67,6 @@ export function makeTurnResult(
     origin: "player",
     commitStatus: "pending",
     durationMs: 100,
-    createdAt: ts(),
-    ...overrides,
-  };
-}
-
-export function makeRuntimeResult(
-  overrides?: Partial<RuntimeResultRecord>,
-): RuntimeResultRecord {
-  return {
-    id: id(),
-    sessionId: "sess-1",
-    turnId: "turn-1",
-    pluginId: "plugin-1",
-    runtimeId: "runtime-1",
-    status: "success",
-    output: { text: "hello" },
-    toolCalls: [],
-    durationMs: 50,
     createdAt: ts(),
     ...overrides,
   };

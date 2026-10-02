@@ -12,6 +12,24 @@ import { createMemoryStore } from "@covel/store/memory";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
+import type { DataStore } from "@covel/store";
+
+/** Runtime results recorded on the turn's execution artifact(s). */
+async function turnRuntimeResults(
+  store: Pick<DataStore, "listTurnResults">,
+  sessionId: string,
+  turnId: string,
+): Promise<{ readonly runtimeId: string; readonly status: string }[]> {
+  return (await store.listTurnResults(sessionId))
+    .filter((row) => row.turnId === turnId)
+    .flatMap(
+      (row) =>
+        row.runtimeResults as {
+          readonly runtimeId: string;
+          readonly status: string;
+        }[],
+    );
+}
 
 interface ActionEnvelope {
   readonly type: string;
@@ -383,7 +401,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       expect(turnId).toBeDefined();
       observedTurnIds.push(turnId!);
 
-      const runtimeRows = await store.listRuntimeResults(sessionId, turnId!);
+      const runtimeRows = await turnRuntimeResults(store, sessionId, turnId!);
       const successfulRuntimeIds = runtimeRows
         .filter((row) => row.status === "success")
         .map((row) => row.runtimeId);

@@ -17,10 +17,6 @@ export interface ServerResources {
     memorySystem?: Pick<MemorySystem, "drain" | "pendingTaskCount">;
     applicationWork: Pick<ApplicationWork, "close">;
     runtimeJobWorker: Pick<ApiBootstrapResult["runtimeJobWorker"], "close">;
-    pluginBackgroundQueue: Pick<
-      ApiBootstrapResult["pluginBackgroundQueue"],
-      "close"
-    >;
     eventBus: Pick<ApiBootstrapResult["eventBus"], "close">;
   };
   readonly worldWatchers: WorldFileWatcher[];
@@ -68,7 +64,6 @@ export function createServerResourceDrain(
       ...(api
         ? [
             () => api.runtimeJobWorker.close(),
-            () => api.pluginBackgroundQueue.close(),
             () => api.closeTools(),
             () => api.startupMaintenance,
           ]

@@ -23,11 +23,10 @@ rg -n "ponytail:" apps packages plugins
 
 ## Server
 
-| Location                                        | Accepted limit                                                     | Revisit when                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
-| `apps/server/src/routes/api/plugin-rpc.ts`      | Scoped retry scans persisted turn artifacts                        | Long sessions show this scan in profiles          |
-| `apps/server/src/routes/api/plugin-rpc/jobs.ts` | Boot scans session plugin data to find orphaned jobs               | Startup cost justifies an indexed namespace query |
-| `apps/server/src/routes/api/turn-control.ts`    | An in-process map limits steer/abort to the pod executing the turn | Multi-pod deployments need cross-pod turn control |
+| Location                                     | Accepted limit                                                     | Revisit when                                      |
+| -------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
+| `apps/server/src/routes/api/plugin-rpc.ts`   | Scoped retry scans persisted turn artifacts                        | Long sessions show this scan in profiles          |
+| `apps/server/src/routes/api/turn-control.ts` | An in-process map limits steer/abort to the pod executing the turn | Multi-pod deployments need cross-pod turn control |
 
 ## Web UI
 
@@ -60,5 +59,5 @@ a defect. Re-measure with `wc -l` before acting; line counts drift.
 | `apps/web/src/services/data-service/local.ts`             |   878 |
 | `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` |   820 |
 
-The current source has 14 markers. This ledger follows current source comments;
+The current source has 13 markers. This ledger follows current source comments;
 historical counts and line numbers are not current contracts.

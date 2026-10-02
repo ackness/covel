@@ -22,7 +22,6 @@ export function createPgRuntimeRecords(getDb: () => PgDb): PgRuntimeRecords {
     runner: createPgSqlRunner(getDb),
     tables: {
       turnResults: schema.turnResults,
-      runtimeResults: schema.runtimeResults,
       toolCalls: schema.toolCalls,
       runtimeOutputs: schema.runtimeOutputs,
       interactionRecords: schema.interactionRecords,

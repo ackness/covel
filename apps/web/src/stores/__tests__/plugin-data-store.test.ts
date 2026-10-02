@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
   applyChanges,
+  backgroundJobRecord,
   dropPluginDataSession,
   getPluginNamespacesSnapshot,
   getPluginNamespaceSnapshot,
@@ -287,4 +288,64 @@ it("treats inherited plugin and namespace names as missing until explicitly load
     value: "owned",
   });
   expect(getPluginNamespaceSnapshot("constructor", "toString")).toEqual({});
+});
+
+describe("backgroundJobRecord", () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    runtimeId: "image/render",
+    origin: { activation: "manual", sourceTurnId: "rpc-turn" },
+    enqueuedAt: "2026-10-02T00:00:00.000Z",
+    ...overrides,
+  });
+
+  it("covers background activations only, not detached stages", () => {
+    expect(
+      backgroundJobRecord(
+        "stage-job",
+        row({ status: "running", origin: { activation: "stage" } }),
+      ),
+    ).toBeNull();
+    expect(backgroundJobRecord("job", row({ status: "claimed" }))).toEqual({
+      jobId: "job",
+      status: "pending",
+      runtimeId: "image/render",
+      startedAt: "2026-10-02T00:00:00.000Z",
+    });
+  });
+
+  it("reports the runtime's own error before the generic job error", () => {
+    expect(
+      backgroundJobRecord(
+        "job",
+        row({
+          status: "failed",
+          error: "Runtime job execution failed.",
+          finishedAt: "2026-10-02T00:01:00.000Z",
+          result: {
+            turnId: "background-turn",
+            durationMs: 42,
+            runtimeResults: [
+              {
+                runtimeId: "image/render",
+                status: "success",
+                output: { status: "failed", error: "quota exceeded" },
+              },
+            ],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      status: "failed",
+      error: "quota exceeded",
+      turnId: "background-turn",
+      completedAt: "2026-10-02T00:01:00.000Z",
+      durationMs: 42,
+    });
+    expect(
+      backgroundJobRecord("job", row({ status: "timed_out", error: "late" })),
+    ).toMatchObject({ status: "failed", error: "late" });
+    expect(
+      backgroundJobRecord("job", row({ status: "succeeded" }))?.status,
+    ).toBe("done");
+  });
 });

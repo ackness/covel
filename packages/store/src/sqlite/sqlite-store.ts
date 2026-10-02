@@ -32,7 +32,10 @@ import { createSqliteSessions } from "./sqlite-sessions.js";
 import { createSqliteSnapshotRecords } from "./sqlite-snapshot-records.js";
 import { createTables } from "./sqlite-store-mappers.js";
 import { createSqliteState } from "./sqlite-state.js";
-import { createSqliteTransactions } from "./sqlite-transactions.js";
+import {
+  createSqliteSavepoint,
+  createSqliteTransactions,
+} from "./sqlite-transactions.js";
 import { createSqliteVectorCapability } from "./sqlite-vector.js";
 import { createSqliteWorlds } from "./sqlite-worlds.js";
 
@@ -115,13 +118,16 @@ export function createSqliteStore(
     new Set([...Object.keys(data), ...STORE_WRITE_METHODS]),
   );
 
+  // The transaction scope is the ungated data plus nested savepoints; the
+  // root store never exposes `savepoint`.
+  const txScope: StoreTransaction = {
+    ...data,
+    savepoint: createSqliteSavepoint(sqlite, () => txScope),
+  };
+
   const baseStore: DataStore = {
     ...gatedData,
-    ...createSqliteTransactions(
-      sqlite,
-      () => data as unknown as StoreTransaction,
-      gate,
-    ),
+    ...createSqliteTransactions(sqlite, () => txScope, gate),
 
     async close(): Promise<void> {
       releaseSqliteConnection(sqlite);

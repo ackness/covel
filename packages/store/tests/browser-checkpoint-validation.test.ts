@@ -22,7 +22,6 @@ import {
   makePlayerInput,
   makeRuntimeExport,
   makeRuntimeOutput,
-  makeRuntimeResult,
   makeSession,
   makeSessionSummary,
   makeSetupAttempt,
@@ -66,7 +65,6 @@ const domainRecords = {
   messages: [makeMessage()],
   turnMessages: [makeTurnMessage()],
   turnResults: [makeTurnResult()],
-  runtimeResults: [makeRuntimeResult()],
   toolCalls: [makeToolCall()],
   runtimeOutputs: [makeRuntimeOutput()],
   interactions: [makeInteractionRecord()],
@@ -107,6 +105,14 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
 ) as BrowserCheckpoint;
 
 describe("checkpoint record validation", () => {
+  it("ignores the retired runtimeResults domain in older checkpoints", () => {
+    const validated = validateBrowserCheckpoint({
+      ...checkpoint,
+      runtimeResults: [{ id: "legacy", sessionId: "other" }],
+    });
+    expect(validated).not.toHaveProperty("runtimeResults");
+  });
+
   it("rejects foreign schema ownership in checkpoints and nested snapshots", () => {
     const schema = {
       sessionId: "other",

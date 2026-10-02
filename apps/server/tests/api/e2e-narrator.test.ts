@@ -23,6 +23,24 @@ import { createMemoryStore } from "@covel/store/memory";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
+import type { DataStore } from "@covel/store";
+
+/** Runtime results recorded on the turn's execution artifact(s). */
+async function turnRuntimeResults(
+  store: Pick<DataStore, "listTurnResults">,
+  sessionId: string,
+  turnId: string,
+): Promise<{ readonly runtimeId: string; readonly status: string }[]> {
+  return (await store.listTurnResults(sessionId))
+    .filter((row) => row.turnId === turnId)
+    .flatMap(
+      (row) =>
+        row.runtimeResults as {
+          readonly runtimeId: string;
+          readonly status: string;
+        }[],
+    );
+}
 
 // ── SSE drain helper ─────────────────────────────────────────────
 
@@ -221,7 +239,7 @@ describe("E2E: Narrator game flow", () => {
 
     // The committed rows are the source of truth (the route no longer returns a
     // turn-result body). Narrator runtime succeeded for this turn:
-    const runtimeRows = await store.listRuntimeResults(sessionId, turnId!);
+    const runtimeRows = await turnRuntimeResults(store, sessionId, turnId!);
     const narratorRow = runtimeRows.find((r) => r.runtimeId === "narrator");
     expect(narratorRow).toBeDefined();
     expect(narratorRow!.status).toBe("success");

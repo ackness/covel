@@ -126,7 +126,7 @@ entry 注册与清单双向校验，未声明的注册和未实现的声明都�
 | `type`        | `agent` 或 `function`                                                      |
 | `schedule`    | `stage`, `trigger`, `needs`, `after`, `completion`, `manual`               |
 | `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed` |
-| `agent`       | `model`, `llm`, `tools`, `advertiseEvents`, `loop`                         |
+| `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`              |
 | `function`    | `handler`、可选 `timeoutMs` 和 `tools`                                     |
 | `guard`       | runtime 相对的 guard 模块                                                  |
 | `effects`     | 读写资源与 `parallelSafe`                                                  |
@@ -146,7 +146,11 @@ runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 必须�
 
 包级 `requires` 保证契约提供者被激活，不要求每次执行都重新产生输出。需要在后续执行处理表单的 setup runtime 应用 `after` 排在一次性 setup 提供者之后，并读取已提交状态；不要使用默认 turn scope 的契约 `needs`，否则提供者完成 setup 后不再运行，消费者会被成功门控跳过。`after` 不证明初始化成功；消费者 guard 必须检查所需领域状态，例如新建主角前确认 `ctx.world.characterSchema` 已存在，缺失时明确失败，不生成表单或写入角色。
 
+setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新版本（`version` 变化）后，已有会话会在下一次玩家动作时重跑该 setup runtime：仍在 setup 阶段的会话在 setup 带重跑，已进入主循环的会话经 late-setup 通道在 pre-turn 之前补跑，并重新计算重试预算。因此 setup runtime 的 guard 必须对已完成的工作返回 `{ skip: true }`（例如主角已存在、schema 已写入），否则升级会让玩家重新看到欢迎信息或表单。不声明 `version` 的插件按 `0.0.0` 处理，永远不会因升级重跑。
+
 触发类型包括 `auto`、`scheduled`、`manual` 和 `event`。自动主循环运行时应声明 stage；manual/event 可按请求或事件独立触发。`schedule.manual.execution: background` 使用后台执行，`schedule.completion` 控制回合是否等待，具体限制由 manifest 校验和运行时准入执行。
+
+`agent.history: {maxTurns}` 把 agent 的提示词历史限定为最近 N 个回合（按 `turnId` 计数，`0` 为不带历史），同时去掉压缩摘要、不参与本轮压缩屏障；省略时沿用会话共享视图。只消费本轮输入的提取类 runtime 应声明它，避免提示词随会话增长。
 
 Agent 的超时、重试和步数在 `agent.loop` 中。`completion.afterTools` 可在指定工具成功后结束；`completion.require: tool-use` 要求有效工具调用。Function 工具白名单在 `function.tools`，控制 `ctx.tools.call`；Function 超时在 `function.timeoutMs`，不要把外部服务执行时限放到 agent 配置中。
 

@@ -1,9 +1,4 @@
-import type {
-  RuntimeManifest,
-  RuntimeResult,
-  TurnInput,
-  TurnResult,
-} from "@covel/shared";
+import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   commitExecution,
@@ -43,6 +38,56 @@ function makeJobId(): string {
   return `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Record a background job the way the host's runtime job worker does, as a
+ * `_runtime_jobs` row, so panels and reports read the same shape.
+ */
+async function writeHarnessJob(
+  store: DataStore,
+  args: {
+    readonly sessionId: string;
+    readonly pluginId: string;
+    readonly runtimeId: string;
+    readonly jobId: string;
+    readonly activation: "manual" | "event";
+    readonly sourceTurnId: string;
+    readonly status: "running" | "succeeded" | "failed";
+    readonly enqueuedAt: string;
+    readonly result?: Readonly<Record<string, unknown>>;
+    readonly error?: string;
+    readonly reason?: "runtime-reported-failure" | "follower-not-emitted";
+  },
+): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  const terminal = args.status !== "running";
+  await store.setPluginData({
+    id: `${args.sessionId}:${args.pluginId}:_runtime_jobs:${args.jobId}`,
+    sessionId: args.sessionId,
+    pluginId: args.pluginId,
+    namespace: "_runtime_jobs",
+    key: args.jobId,
+    value: {
+      schemaVersion: 1,
+      jobId: args.jobId,
+      pluginId: args.pluginId,
+      runtimeId: args.runtimeId,
+      status: args.status,
+      origin: { activation: args.activation, sourceTurnId: args.sourceTurnId },
+      payload: {},
+      enqueuedAt: args.enqueuedAt,
+      updatedAt,
+      attempt: 1,
+      sequence: 1,
+      ...(terminal ? { finishedAt: updatedAt } : {}),
+      ...(args.result ? { result: args.result } : {}),
+      ...(args.error ? { error: args.error } : {}),
+      ...(args.reason ? { reason: args.reason } : {}),
+    },
+    createdAt: args.enqueuedAt,
+    updatedAt,
+  });
+}
+
 export async function writeExpectedFollowerFailureJob(args: {
   readonly store: DataStore;
   readonly sessionId: string;
@@ -52,28 +97,21 @@ export async function writeExpectedFollowerFailureJob(args: {
   readonly runtimeResults: readonly RuntimeResult[];
 }): Promise<ExpectedFollowerFailureJob> {
   const jobId = makeJobId();
-  const timestamp = new Date().toISOString();
-  const error =
-    args.runtimeResults.find((item) => item.status === "failed")?.error ??
-    `runtime "${args.runtimeId}" completed without emitting a matching background follower event`;
-  await args.store.setPluginData({
-    id: `${args.sessionId}:${args.pluginId}:_jobs:${jobId}`,
+  const failed = args.runtimeResults.find((item) => item.status === "failed");
+  await writeHarnessJob(args.store, {
     sessionId: args.sessionId,
     pluginId: args.pluginId,
-    namespace: "_jobs",
-    key: jobId,
-    value: {
-      status: "failed",
-      runtimeId: args.runtimeId,
-      turnId: args.turnId,
-      startedAt: timestamp,
-      completedAt: timestamp,
-      error,
-      runtimeResults: args.runtimeResults,
-      reason: "expected-background-follower-missing",
-    },
-    createdAt: timestamp,
-    updatedAt: timestamp,
+    runtimeId: args.runtimeId,
+    jobId,
+    activation: "manual",
+    sourceTurnId: args.turnId,
+    status: "failed",
+    enqueuedAt: new Date().toISOString(),
+    result: { turnId: args.turnId, runtimeResults: args.runtimeResults },
+    reason: failed ? "runtime-reported-failure" : "follower-not-emitted",
+    error:
+      failed?.error ??
+      `runtime "${args.runtimeId}" completed without emitting a matching background follower event`,
   });
   return {
     jobId,
@@ -136,21 +174,16 @@ export async function runDeferredFollower(args: {
   const jobId = makeJobId();
   const turnId = `turn-${crypto.randomUUID()}`;
   const startedAt = new Date().toISOString();
-  await store.setPluginData({
-    id: `${args.sessionId}:${args.follower.pluginId}:_jobs:${jobId}`,
+  const job = {
     sessionId: args.sessionId,
     pluginId: args.follower.pluginId,
-    namespace: "_jobs",
-    key: jobId,
-    value: {
-      status: "pending",
-      runtimeId: args.follower.runtimeId,
-      turnId,
-      startedAt,
-    },
-    createdAt: startedAt,
-    updatedAt: startedAt,
-  });
+    runtimeId: args.follower.runtimeId,
+    jobId,
+    activation: "event",
+    sourceTurnId: turnId,
+    enqueuedAt: startedAt,
+  } as const;
+  await writeHarnessJob(store, { ...job, status: "running" });
 
   const startMs = Date.now();
   const userSettings = snapshotUserSettings(args.userSettings);
@@ -236,25 +269,16 @@ export async function runDeferredFollower(args: {
     output.status === "failed" ||
     (typeof output.error === "string" && output.error.length > 0);
   const status = failed ? "failed" : "done";
-  const completedAt = new Date().toISOString();
-  await store.setPluginData({
-    id: `${args.sessionId}:${args.follower.pluginId}:_jobs:${jobId}`,
-    sessionId: args.sessionId,
-    pluginId: args.follower.pluginId,
-    namespace: "_jobs",
-    key: jobId,
-    value: {
-      status,
-      runtimeId: args.follower.runtimeId,
-      turnId,
-      startedAt,
-      completedAt,
-      durationMs: runtimeResult.durationMs,
-      ...(runtimeResult.error ? { error: runtimeResult.error } : {}),
-      runtimeResults,
-    },
-    createdAt: startedAt,
-    updatedAt: completedAt,
+  await writeHarnessJob(store, {
+    ...job,
+    status: failed ? "failed" : "succeeded",
+    result: { turnId, durationMs: runtimeResult.durationMs, runtimeResults },
+    ...(failed
+      ? {
+          reason: "runtime-reported-failure",
+          error: runtimeResult.error ?? "runtime reported failure",
+        }
+      : {}),
   });
   return {
     jobId,

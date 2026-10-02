@@ -7,10 +7,7 @@ import {
   upsertGameStateCharacter,
   mergeCommittedDimensions,
 } from "./game-state.js";
-import {
-  buildDurableRuntimeJobExecutionStep,
-  buildLegacyJobExecutionStep,
-} from "./execution-steps.js";
+import { buildDurableRuntimeJobExecutionStep } from "./execution-steps.js";
 import {
   applyPluginMessageSurface,
   refreshPluginMessageSurfaces,
@@ -638,18 +635,6 @@ export function reducer(
               : { ...state.pluginData, ...replacements },
       };
       for (const [pluginId, namespaces] of Object.entries(replacements)) {
-        for (const [jobId, value] of Object.entries(namespaces._jobs ?? {})) {
-          const step = buildLegacyJobExecutionStep(pluginId, jobId, value);
-          if (step) {
-            nextState = {
-              ...nextState,
-              executionSteps: upsertExecutionStep(
-                nextState.executionSteps,
-                step,
-              ),
-            };
-          }
-        }
         for (const [jobId, value] of Object.entries(
           namespaces._runtime_jobs ?? {},
         )) {
@@ -699,20 +684,16 @@ export function reducer(
       };
       for (const change of changes) {
         if (
-          (change.namespace !== "_jobs" &&
-            change.namespace !== "_runtime_jobs") ||
+          change.namespace !== "_runtime_jobs" ||
           change.operation === "delete"
         ) {
           continue;
         }
-        const step =
-          change.namespace === "_runtime_jobs"
-            ? buildDurableRuntimeJobExecutionStep(
-                pluginId,
-                change.key,
-                change.value,
-              )
-            : buildLegacyJobExecutionStep(pluginId, change.key, change.value);
+        const step = buildDurableRuntimeJobExecutionStep(
+          pluginId,
+          change.key,
+          change.value,
+        );
         if (step) {
           nextState = {
             ...nextState,

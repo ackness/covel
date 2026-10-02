@@ -7,6 +7,11 @@ All notable changes to this project will be documented in this file. Follows [Ke
 ### Fixed
 
 - **Narration streams again.** The narrator's review hook no longer turns streaming off. A story step whose text will not be final (preparation before tool calls, or a draft the review rejects) now ends with a `narrative.delta` carrying `reset: true`, and the client clears it before the next step; the reviewed final text still replaces the stream on completion.
+- **One failing plugin no longer discards the story.** When a turn's narrative succeeds, each optional runtime commits in its own savepoint, so a rejected proposal drops only that runtime's writes. `PreStateCommit` hooks run before the commit transaction opens.
+- **Suspended turns keep their detached jobs.** Jobs a suspended execution would have queued are released when it resumes.
+- **Settlement events are recorded once.** A pending dimension settlement no longer fails to persist on the events table's primary key every narrative turn.
+- **Hidden data stays off the live stream.** `plugin-data.changed` events carry the same public projection as the REST reads: `_hidden.*` changes are not announced, and runtime job and dimension rows omit private fields.
+- **A targeted narrative uses the frozen dimension snapshot** when the dimension provider was not scheduled, instead of being skipped.
 
 ### Added
 
@@ -14,6 +19,9 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Hidden story events.** The new `story-events` plugin reveals world-authored events when their dimension, world-time, or `revealed` (chained) conditions hold, handing narration a one-turn cue. All bundled worlds ship hidden events (#101, #102).
 - **Story Plotter.** The new `story-plotter` plugin plants hidden follow-up events during play every few turns. Plans travel through the `story-event.plan@1` contract; `story-events/intake` validates them and stores accepted events in `_hidden.planned`, where they fire once. The planner sees the world summary, the hero, and this turn's WorldIR when available. Mistport, Emberback, and Lantern Barrow recommend it; Haruka Academy keeps its authored romance routes without it.
 - **Concealed runtimes.** `io.concealed: true` strips a runtime's prompts, tool arguments, tool results, and outputs from traces, the live stream, the session view, `/turns`, and manual RPC responses, keeping only names, status, timing, and usage.
+- **Bounded agent history.** `agent.history.maxTurns` limits the shared conversation an agent runtime sees; the bundled bookkeeping agents keep two turns.
+- **Plugin gateway limits and paged history.** `ctx.gateway.generateText` / `generateObject` accept `maxOutputTokens` and report the slot's token limits; `ctx.readTurnMessages({ after, limit })` pages the turn journal.
+- **Retention settings.** `COVEL_AUTO_SNAPSHOT_RETENTION` (default 20) bounds automatic snapshots, and `COVEL_TRACE_RETENTION_DAYS` optionally prunes trace events.
 
 ### Changed
 
@@ -22,6 +30,9 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Faster character tracking.** The character roster given to `char-creator/character-tracker` now carries each character's current fields (within a 12000-character budget), so most turns settle in one call without a `get-character` read. The tracker runs without reasoning, and a stalled call times out after 30 s and retries once instead of failing the runtime after 60 s.
 - **cost-gate keeps narrative inputs.** Past the soft cap it now trims only runtimes after the narrative; `pre-turn` runtimes (dice pools, tabletop checks, dimension and world-time context, hidden story cues) keep running so the story itself does not change.
 - A plugin's own code (function runtimes and its local tools) may now write its own `_hidden.*` namespaces. The REST API and the builtin `plugin-data-set` / `plugin-data-set-batch` tools reject every `_` namespace.
+- **Background jobs share one durable queue.** plugin-rpc `execution: background` runtimes, prompt builders invoked with `expectsBackgroundFollower`, and background event followers now run as `_runtime_jobs` on the runtime job worker, queued in the commit that produced them, with the same lease, cancel, and retry routes as detached stages. The in-process queue and the legacy `_jobs` rows are removed; panels keep the virtual `_jobs` data source. A runtime that reports its own failure settles its job as failed while its writes still commit.
+- **Leaner storage.** Structured runtime outputs no longer enter the conversation timeline; automatic snapshots keep one row per completed player turn and exclude control-plane namespaces; terminal runtime jobs keep the newest 20 per runtime with their status rows; the write-only `runtime_results` table is removed and dropped at boot.
+- **Fewer reads per turn.** Runtime job listings query one namespace and reconcile incrementally, detached job descriptors carry only declared upstream outputs, committed world-model reads are shared once per execution, and the plugin log ring trims every 20 writes.
 
 ## [0.0.44] - 2026-10-01
 

@@ -43,16 +43,8 @@ export default async function guard(ctx) {
   }
 
   try {
-    await logger?.debug("player-init guard inspected session", {
-      characterCount: Array.isArray(characters) ? characters.length : "N/A",
-      playerFound: Boolean(player),
-    });
-
     // ── Branch 1: player already created — skip
     if (player) {
-      await logger?.debug("player-init guard skipped existing player", {
-        playerId: player.id,
-      });
       return {
         skip: true,
         playerExists: true,
@@ -141,7 +133,6 @@ export default async function guard(ctx) {
     }
 
     // ── Branch 3: nothing submitted yet → let LLM generate the opening form
-    await logger?.debug("player-init guard proceeding to form generation");
     return { skip: false };
   } catch (err) {
     if (err instanceof CharacterFieldValidationError) throw err;
@@ -206,6 +197,12 @@ function pickDescription(values) {
  * @param {Record<string, unknown>} values
  */
 function stripNameKeys(values) {
-  const { characterName, name, 姓名, playerName, ...rest } = values;
+  const {
+    characterName: _characterName,
+    name: _name,
+    姓名: _zhName,
+    playerName: _playerName,
+    ...rest
+  } = values;
   return rest;
 }

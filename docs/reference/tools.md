@@ -457,7 +457,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 **一次一个 topic**：单次调用只发射一条事件；需要发多个领域事件时多次调用 `emit-event`。
 
-**去重的作用域是单个 tool loop**：`emittedEventTopics` 由 agent tool loop 逐次累积，因此同一 runtime 在同一回合内重复发同一 topic 会被 no-op。它**不跨 runtime**——同一 DAG 层级（并行组）里的两个 runtime 可以各自发同一 topic。这不是缺陷：事件 fan-out 收集阶段按 topic 汇聚（同一深度内 first-emission-wins，见 `collectEventsFrom`），所以下游订阅者仍只被触发一次。
+**去重的作用域是单个 tool loop**：`emittedEventTopics` 由 agent tool loop 逐次累积，因此同一 runtime 在同一回合内重复发同一 topic 会被 no-op。它**不跨 runtime**——同一 DAG 层级（并行组）里的两个 runtime 可以各自发同一 topic。这不是缺陷：事件 fan-out 收集阶段按 topic 汇聚（同一深度内 first-emission-wins，见 `collectEventsFrom`），所以下游订阅者仍只被触发一次。代价是同一深度里第二个 runtime 发出的同 topic payload 不会被投递：调度器为它发出 `scheduling.hazard`（`code: "event-payload-dropped"`，含 topic 与 runtimeId），不会静默丢失。需要传递多条信息时，在一个事件的 `data` 里批量携带（如 `check.resolved` 的批量契约），或为不同来源使用不同 topic。
 
 **使用者**：任何声明了 `advertiseEvents: true` 且在 `tools.builtin` 里包含 `emit-event` 的 agent runtime，例如 `narrator`、`chat-mode-narrator`。
 

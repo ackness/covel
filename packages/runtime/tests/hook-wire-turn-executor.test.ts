@@ -10,7 +10,7 @@
  * - Integration: a full turn runs with a global PreToolUse hook that rewrites arguments via replace
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { PluginExtensionHost } from "../src/plugin-extensions.js";
@@ -645,6 +645,50 @@ describe("Turn executor hook wire-in", () => {
       expect(JSON.stringify(providerMessages)).toContain(
         "The player already crossed the old bridge.",
       );
+    });
+
+    it("sends a bounded history window without summaries or compaction", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const store = await createMainLoopStore("sess-hook-wire");
+      await store.appendTurnMessage({
+        id: "latest-player-0",
+        sessionId: "sess-hook-wire",
+        turnId: "latest-turn",
+        sourceType: "player",
+        role: "user",
+        content: "latest turn",
+        order: 0,
+        createdAt: "2024-01-01T00:01:00Z",
+      });
+      await store.saveSessionSummary({
+        id: "summary-old",
+        sessionId: "sess-hook-wire",
+        turnRangeStart: "ancient-turn",
+        turnRangeEnd: "ancient-turn",
+        content: "An ancient summary.",
+        focusSections: ["history"],
+        createdAt: "2024-01-01T00:00:00Z",
+      });
+      const compactor = {
+        run: vi.fn().mockResolvedValue({ compacted: false }),
+      };
+      const deps: TurnExecutorDeps = {
+        ...(await makeDeps(llm, pipeline, store)),
+        compactor,
+      };
+
+      await executeTurn(
+        makeTurnInput(),
+        [makeManifest({ history: { maxTurns: 1 } })],
+        deps,
+      );
+
+      expect(compactor.run).not.toHaveBeenCalled();
+      const sent = JSON.stringify(llm.calls[0]?.messages);
+      expect(sent).toContain("latest turn");
+      expect(sent).not.toContain("prior turn");
+      expect(sent).not.toContain("An ancient summary.");
     });
   });
 

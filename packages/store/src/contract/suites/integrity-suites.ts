@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { registerSessionRecordScopeSuites } from "./session-record-scope-suites.js";
-import type {
-  CharacterRecord,
-  DataStore,
-  StateEntryRecord,
-} from "../../types.js";
+import type { DataStore } from "../../types.js";
 import {
   id,
   makeCharacter,
@@ -14,11 +10,9 @@ import {
   makeMessage,
   makePlayerInput,
   makeRuntimeOutput,
-  makeRuntimeResult,
   makeSession,
   makeSessionSummary,
   makeSnapshot,
-  makeSnapshotPayload,
   makeStateChange,
   makeStateEntry,
   makeStateSchema,
@@ -27,7 +21,6 @@ import {
   makeTraceEvent,
   makeTurnMessage,
   makeTurnResult,
-  makeWorld,
   makeWorldDataImportLedger,
   ts,
 } from "../test-fixtures.js";
@@ -50,7 +43,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       await store.createSession(makeSession({ id: otherId }));
 
       await store.saveTurnResult(makeTurnResult({ sessionId }));
-      await store.saveRuntimeResult(makeRuntimeResult({ sessionId }));
       await store.saveToolCall(makeToolCall({ sessionId }));
       await store.saveStateSchema(makeStateSchema({ sessionId }));
       await store.upsertStateEntry(makeStateEntry({ sessionId }));
@@ -94,9 +86,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       // Target session: every collection empty.
       expect(await store.getSession(sessionId)).toBeNull();
       expect(await store.listTurnResults(sessionId)).toHaveLength(0);
-      expect(await store.listRuntimeResults(sessionId, "turn-1")).toHaveLength(
-        0,
-      );
       expect(await store.listToolCalls(sessionId)).toHaveLength(0);
       expect(await store.listStateSchemas(sessionId)).toHaveLength(0);
       expect(await store.listStateEntries(sessionId, "stats")).toHaveLength(0);
@@ -168,6 +157,48 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       for (const keep of baselineIds) {
         expect(afterIds).toContain(keep);
       }
+    });
+
+    it("rolls back only a failed savepoint and keeps the enclosing transaction", async () => {
+      const kept = makeSession();
+      const dropped = makeSession();
+      const nested = makeSession();
+      const afterSavepoint = makeSession();
+
+      await store.withTransaction!(async (tx) => {
+        await tx.createSession(kept);
+        await expect(
+          tx.savepoint!(async (sp) => {
+            await sp.createSession(dropped);
+            await sp.savepoint!(async (inner) => {
+              await inner.createSession(nested);
+            });
+            throw new Error("savepoint boom");
+          }),
+        ).rejects.toThrow("savepoint boom");
+        await tx.savepoint!(async (sp) => {
+          await sp.createSession(afterSavepoint);
+        });
+      });
+
+      const ids = (await store.listSessions()).map((s) => s.id);
+      expect(ids).toContain(kept.id);
+      expect(ids).toContain(afterSavepoint.id);
+      expect(ids).not.toContain(dropped.id);
+      expect(ids).not.toContain(nested.id);
+    });
+
+    it("rolls back savepoint writes with the enclosing transaction", async () => {
+      const inner = makeSession();
+      await expect(
+        store.withTransaction!(async (tx) => {
+          await tx.savepoint!(async (sp) => {
+            await sp.createSession(inner);
+          });
+          throw new Error("outer boom");
+        }),
+      ).rejects.toThrow("outer boom");
+      expect(await store.getSession(inner.id)).toBeNull();
     });
 
     it("does not expose writes through the root store before the transaction settles", async () => {

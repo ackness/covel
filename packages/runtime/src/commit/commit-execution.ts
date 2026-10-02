@@ -1,4 +1,5 @@
 import type { ExecutionCommitPlan, PreparedExecution } from "../execution.js";
+import { readEnvInt } from "@covel/shared";
 import { deepFreeze } from "../hooks/hook-settings.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
@@ -122,6 +123,23 @@ export async function commitExecution(
       `[commit-execution] auto snapshot failed for ${sessionId}:`,
       error,
     );
+  }
+
+  // Optional trace retention; traces are diagnostics, so a failed cleanup
+  // never affects the committed outcome.
+  const traceRetentionDays = readEnvInt("COVEL_TRACE_RETENTION_DAYS", 0);
+  if (traceRetentionDays > 0) {
+    try {
+      await store.deleteTraceEventsBefore(
+        sessionId,
+        new Date(Date.now() - traceRetentionDays * 86_400_000).toISOString(),
+      );
+    } catch (error) {
+      console.warn(
+        `[commit-execution] trace retention failed for ${sessionId}:`,
+        error,
+      );
+    }
   }
 
   if (!suspended && completion.kind !== "detached") {

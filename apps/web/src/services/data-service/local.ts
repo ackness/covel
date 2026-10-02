@@ -194,7 +194,6 @@ function initialCheckpoint(
     messages: [],
     turnMessages: [],
     turnResults: [],
-    runtimeResults: [],
     toolCalls: [],
     runtimeOutputs: [],
     interactions: [],

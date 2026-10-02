@@ -56,11 +56,11 @@ export interface RuntimeOutputPromptMessage {
 // ── Metadata ─────────────────────────────────────────────────────
 
 export interface RuntimeOutputMetaData {
-  /** Global 0-based turnNumber (counts all player messages). */
+  /** Player messages recorded in the session (setup submissions included). */
   readonly turn: number;
   /**
-   * Set by Pre-Game band runtimes (priority 0-99) when they have finished
-   * their session-level work. Ignored on main-loop runtimes.
+   * Set by `setup`-stage runtimes when they have finished their
+   * session-level work. Ignored on main-loop runtimes.
    *
    * Derived from the function-handler `completion: "done"` signal for the
    * internal scheduling and persistence layers.
@@ -85,7 +85,7 @@ export interface RuntimeOutput {
   readonly id: string;
   readonly sessionId: string;
   readonly turnId: string;
-  /** Optional back-reference to the `runtime_results` row this output corresponds to. */
+  /** Run id of the matching entry in the turn result's `runtimeResults`. */
   readonly runtimeResultId?: string;
   readonly pluginId: string;
   /** Full runtime id in `{plugin}/{runtime}` form (or `{plugin}` for single-runtime plugins). */

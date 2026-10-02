@@ -39,16 +39,59 @@ export function collectUpstreamWorldProposals(
   );
 }
 
+export type WorldModelReadStore = Pick<
+  DataStore,
+  | "listCharacters"
+  | "getCharacterSchema"
+  | "getSession"
+  | "getWorld"
+  | "listPluginData"
+>;
+
+/**
+ * Committed world-model state cannot change inside one execution (writes stay
+ * buffered until finalize), so every runtime of that execution can share one
+ * read of it. Each caller still receives its own copy.
+ */
+export function memoizeWorldModelReads(
+  store: WorldModelReadStore,
+): WorldModelReadStore {
+  const cache = new Map<string, Promise<unknown>>();
+  const memo = <T>(key: string, load: () => Promise<T>): Promise<T> => {
+    let hit = cache.get(key) as Promise<T> | undefined;
+    if (!hit) {
+      hit = load();
+      cache.set(key, hit);
+      hit.catch(() => cache.delete(key));
+    }
+    return hit.then((value) => structuredClone(value));
+  };
+  return {
+    listCharacters: (sessionId) =>
+      memo(`characters\u0000${sessionId}`, () =>
+        store.listCharacters(sessionId),
+      ),
+    getCharacterSchema: (sessionId) =>
+      memo(`schema\u0000${sessionId}`, () =>
+        store.getCharacterSchema(sessionId),
+      ),
+    getSession: (sessionId) =>
+      memo(`session\u0000${sessionId}`, () => store.getSession(sessionId)),
+    getWorld: (worldId) =>
+      memo(`world\u0000${worldId}`, () => store.getWorld(worldId)),
+    listPluginData: (sessionId, pluginId, namespace, pagination) =>
+      pagination
+        ? store.listPluginData(sessionId, pluginId, namespace, pagination)
+        : memo(
+            `plugin-data\u0000${sessionId}\u0000${pluginId}\u0000${namespace ?? ""}`,
+            () => store.listPluginData(sessionId, pluginId, namespace),
+          ),
+  };
+}
+
 /** Snapshot the execution base, then provide fresh own-write overlays per read. */
 export async function createWorldModelView(
-  store: Pick<
-    DataStore,
-    | "listCharacters"
-    | "getCharacterSchema"
-    | "getSession"
-    | "getWorld"
-    | "listPluginData"
-  >,
+  store: WorldModelReadStore,
   sessionId: string,
   upstream: readonly Proposal[] = [],
   pending: readonly Proposal[] = [],

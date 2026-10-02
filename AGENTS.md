@@ -166,7 +166,9 @@ Input/Event → Trigger Router → Stage Scheduler → [per stage:]
   stage fully settles before the next).
 - **Session clock** (`SessionRecord`): `status` (`active` / `paused` / `ended`),
   `phase` (`setup` / `playing`), `completedPlayerTurns` (only committed player
-  executions count; manual, background, and recursive executions persist their own
+  executions count — setup and the opening continuation do not, so the opening
+  shares `logicalTurn = 1` with the first message; manual, background, and
+  recursive executions persist their own
   `turn_results` row with `origin` and are excluded), and `setupRuntimes` (per-runtime
   `pending` / `done{completed|waived}` / `blocked`). These are current-only: builds do
   not accept or reconstruct deprecated clock fields.

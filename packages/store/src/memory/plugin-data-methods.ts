@@ -1,5 +1,5 @@
 import { pluginDataKey } from "../common/keys.js";
-import { applyPagination } from "../common/pagination.js";
+import { applyPagination, sortByCursorAsc } from "../common/pagination.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 import {
   pluginDataVersion,
@@ -117,6 +117,14 @@ export function createPluginDataMethods(
         (r) => r.sessionId === sessionId,
       );
       return applyPagination(filtered, pagination);
+    },
+
+    async listPluginDataByNamespace(sessionId, namespace) {
+      return sortByCursorAsc(
+        [...state.pluginData.values()].filter(
+          (r) => r.sessionId === sessionId && r.namespace === namespace,
+        ),
+      );
     },
 
     async deletePluginData(sessionId, pluginId, namespace, key) {

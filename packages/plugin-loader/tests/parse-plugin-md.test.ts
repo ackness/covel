@@ -102,6 +102,7 @@ describe("current authoring manifests", () => {
           },
           agent: {
             model: "plugin",
+            history: { maxTurns: 2 },
             loop: {
               maxSteps: 4,
               completion: { require: "explicit", afterTools: ["save"] },
@@ -118,6 +119,7 @@ describe("current authoring manifests", () => {
       outputContract: "probe@1",
       defaultProvider: true,
       maxSteps: 4,
+      history: { maxTurns: 2 },
       requireExplicitCompletion: true,
       completeAfterTools: ["save"],
     });
@@ -256,6 +258,7 @@ describe("current authoring manifests", () => {
       { tags: ["role:narrator"] },
       { provides: ["probe"] },
       { runtime: { type: "agent", agent: { unknown: true } } },
+      { runtime: { type: "agent", agent: { history: { maxTurns: -1 } } } },
     ])
       expect(() =>
         parsePluginMd(md({ ...root, ...fields }), "probe/PLUGIN.md"),

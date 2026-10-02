@@ -461,6 +461,11 @@ export const stageSchema = z.enum(STAGE_ORDER);
  */
 export const MAX_SETTLE_WAIT_MS = 120_000;
 
+/** Agent prompt history window, counted in turns of visible history. */
+export const runtimeHistoryPolicySchema = z.strictObject({
+  maxTurns: z.number().int().min(0).max(1000),
+});
+
 /**
  * Scheduler-driven turn-barrier policy. Kept separate from `execution`, whose
  * existing meaning is manual/event activation mode.
@@ -869,6 +874,8 @@ const runtimeManifestCommonShape = {
         .optional(),
     })
     .optional(),
+  /** Bounded agent prompt history; omitted keeps the shared session view. */
+  history: runtimeHistoryPolicySchema.optional(),
   timeoutMs: z.number().int().positive().optional(),
   /**
    * Per-runtime cap on the agent tool-call loop. Overrides the framework
@@ -912,9 +919,9 @@ const runtimeManifestCommonShape = {
   /** Declared permission upper bounds (currently HTTP origins + methods). */
   permissions: permissionsDeclSchema.optional(),
   /**
-   * Execution mode when activated via manual plugin-rpc (`sync` awaits,
-   * `background` returns a jobId and streams progress via `_jobs`
-   * plugin-data). Ignored for scheduler-driven runtimes.
+   * Execution mode when activated via manual plugin-rpc or as an event
+   * follower (`sync` awaits, `background` queues a durable runtime job and
+   * returns its jobId). Ignored for scheduler-driven runtimes.
    */
   execution: z.enum(["sync", "background"]).optional(),
   /** Scheduler-driven foreground turn-barrier policy. */

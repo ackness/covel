@@ -21,7 +21,7 @@ import { runPostContextAssemblyHook } from "../hooks/wire-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { agentInputSlots } from "./runtime-input-slots.js";
-import { filterRuntimeHistory } from "./message-filter.js";
+import { applyHistoryWindow, filterRuntimeHistory } from "./message-filter.js";
 import { createAgentSchemaGate } from "./runtime-output-validator.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
@@ -61,9 +61,10 @@ export interface ExecuteAgentRuntimeOptions {
   readonly sessionSummaries:
     readonly import("@covel/store").SessionSummaryRecord[] | undefined;
   /**
-   * Turn-scoped compaction barrier. The first assembled agent prompt supplies
-   * the real system prompt used for threshold estimation. When compaction
-   * occurs, the caller returns refreshed durable history for one rebuild.
+   * Turn-scoped compaction barrier. The first assembled shared-history agent
+   * prompt supplies the real system prompt used for threshold estimation.
+   * When compaction occurs, the caller returns refreshed durable history for
+   * one rebuild.
    */
   readonly prepareCompactedContext?: (
     systemPromptPreview: string,
@@ -151,6 +152,11 @@ export async function executeAgentRuntime({
         )
       : undefined;
 
+  // A declared history window replaces the shared session view: only the
+  // newest turns are sent and compaction summaries are dropped, so this
+  // runtime's prompt stays bounded instead of growing with the session.
+  const historyPolicy = manifest.history;
+
   const assembleContext = async () => {
     const promptSegments =
       (
@@ -159,18 +165,21 @@ export async function executeAgentRuntime({
           playerMessage: input.playerMessage,
         })
       )?.flat() ?? [];
+    const visibleHistory = filterRuntimeHistory(
+      effectiveMessageHistory,
+      manifest.name,
+    );
     const buildParams = {
       promptSegments,
       promptTemplate: loaded.promptTemplate,
       manifest,
       turnInput: input,
       completedResults,
-      messageHistory: filterRuntimeHistory(
-        effectiveMessageHistory,
-        manifest.name,
-      ),
+      messageHistory: historyPolicy
+        ? applyHistoryWindow(visibleHistory, historyPolicy)
+        : visibleHistory,
       sessionMeta,
-      summaries: effectiveSessionSummaries,
+      summaries: historyPolicy ? [] : effectiveSessionSummaries,
       // Thread the unified snapshot into context building so templates can
       // read structured session data via `world`, `session`, and `player`.
       ...(sessionContext ? { sessionContext } : {}),
@@ -189,7 +198,9 @@ export async function executeAgentRuntime({
   };
 
   let assembled = await assembleContext();
-  if (prepareCompactedContext) {
+  // Compaction exists to fit the shared history view; a bounded runtime never
+  // reads summaries, so it neither waits on nor triggers the turn's barrier.
+  if (prepareCompactedContext && !historyPolicy) {
     const refreshed = await prepareCompactedContext(assembled.systemPrompt);
     if (refreshed.compacted) {
       effectiveMessageHistory = refreshed.messageHistory;
@@ -241,7 +252,7 @@ export async function executeAgentRuntime({
 
   const worldBase = deps.store
     ? await createWorldModelView(
-        deps.store,
+        deps.worldModelReads ?? deps.store,
         input.sessionId,
         upstreamProposals,
         [],

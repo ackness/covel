@@ -11,6 +11,7 @@ import {
   assertCommittedPlayerInput,
 } from "../common/player-input-message.js";
 import type { SessionSummaryRecord } from "../types.js";
+import { replaceArrayContents } from "./collection-helpers.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 
 export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
@@ -33,18 +34,6 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       return limit !== undefined ? filtered.slice(0, limit) : filtered;
-    },
-
-    async saveRuntimeResult(record) {
-      state.runtimeResults.push(record);
-    },
-
-    async listRuntimeResults(sessionId, turnId) {
-      return state.runtimeResults.filter(
-        (r) =>
-          r.sessionId === sessionId &&
-          (turnId === undefined || r.turnId === turnId),
-      );
     },
 
     async saveToolCall(record) {
@@ -265,6 +254,15 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         .filter((r) => r.sessionId === sessionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       return applyPagination(filtered, pagination);
+    },
+
+    async deleteTraceEventsBefore(sessionId, before) {
+      replaceArrayContents(
+        state.traceEvents,
+        state.traceEvents.filter(
+          (r) => r.sessionId !== sessionId || r.createdAt >= before,
+        ),
+      );
     },
 
     async listTraceEventsPage(sessionId, opts) {

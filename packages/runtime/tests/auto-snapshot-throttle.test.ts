@@ -54,6 +54,70 @@ describe("saveAutoSnapshot throttling", () => {
     }
   });
 
+  it("refreshes one checkpoint per completed-turn count", async () => {
+    const store = await makeStore(5);
+    const first = await saveAutoSnapshot({
+      store,
+      sessionId: "sess-throttle",
+      turnId: "player-turn",
+      intervalTurns: 5,
+    });
+    await store.setPluginData({
+      id: "memory-row",
+      sessionId: "sess-throttle",
+      pluginId: "memory",
+      namespace: "blocks",
+      key: "plot",
+      value: { content: "extracted after the turn" },
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    });
+    const second = await saveAutoSnapshot({
+      store,
+      sessionId: "sess-throttle",
+      turnId: "detached-turn",
+      intervalTurns: 5,
+    });
+
+    expect(second!.id).toBe(first!.id);
+    const snapshots = await store.listSnapshots("sess-throttle");
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]!.payload.pluginData.map((row) => row.key)).toEqual([
+      "plot",
+    ]);
+  });
+
+  it("keeps the newest auto snapshots and leaves logs out of the payload", async () => {
+    const store = await makeStore(1);
+    await store.setPluginData({
+      id: "log-row",
+      sessionId: "sess-throttle",
+      pluginId: "probe",
+      namespace: "_logs",
+      key: "k",
+      value: { level: "info" },
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    });
+    for (const count of [1, 2, 3]) {
+      await store.updateSession("sess-throttle", {
+        completedPlayerTurns: count,
+        updatedAt: new Date().toISOString(),
+      });
+      await saveAutoSnapshot({
+        store,
+        sessionId: "sess-throttle",
+        turnId: `turn-${count}`,
+        intervalTurns: 1,
+        retention: 2,
+      });
+    }
+
+    const snapshots = await store.listSnapshots("sess-throttle");
+    expect(snapshots.map((s) => s.turnId)).toEqual(["turn-2", "turn-3"]);
+    expect(snapshots[0]!.payload.pluginData).toEqual([]);
+  });
+
   it("skips non-checkpoint turns: no record, no event, returns null", async () => {
     const store = await makeStore(3);
     const { bus, emitted } = makeEventBus();

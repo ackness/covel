@@ -12,6 +12,7 @@ import { buildSnapshotPayload } from "./snapshot-payload-builder.js";
  * fork/restore working at a fraction of the cost (audit 2026-07-11 R-04).
  */
 export const DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS = 5;
+export const DEFAULT_AUTO_SNAPSHOT_RETENTION = 20;
 
 export interface SaveAutoSnapshotOptions {
   readonly store: DataStore;
@@ -32,6 +33,12 @@ export interface SaveAutoSnapshotOptions {
    * see the resumed runtime's writes).
    */
   readonly force?: boolean;
+  /**
+   * Auto snapshots kept per session after this one is saved. Defaults to
+   * `COVEL_AUTO_SNAPSHOT_RETENTION` (fallback
+   * {@link DEFAULT_AUTO_SNAPSHOT_RETENTION}); values < 1 keep all.
+   */
+  readonly retention?: number;
 }
 
 function resolveIntervalTurns(intervalTurns?: number): number {
@@ -79,7 +86,10 @@ export async function saveAutoSnapshot(
     options.turnId,
   );
   const snapshot: SnapshotRecord = {
-    id: crypto.randomUUID(),
+    // One auto checkpoint per completed-turn count: later commits at the same
+    // count (detached work, followers, resumes) refresh it in place instead
+    // of writing another full copy of the session.
+    id: `auto-${payload.session.completedPlayerTurns}-${options.sessionId}`,
     sessionId: options.sessionId,
     turnId: options.turnId,
     kind: "auto",
@@ -89,6 +99,15 @@ export async function saveAutoSnapshot(
     createdAt: new Date().toISOString(),
   };
   await options.store.saveSnapshot(snapshot);
+  const retention =
+    options.retention ??
+    readEnvInt(
+      "COVEL_AUTO_SNAPSHOT_RETENTION",
+      DEFAULT_AUTO_SNAPSHOT_RETENTION,
+    );
+  if (retention >= 1) {
+    await options.store.pruneAutoSnapshots(options.sessionId, retention);
+  }
   emitSubEvent(
     options.eventBus,
     "session",

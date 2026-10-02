@@ -173,9 +173,9 @@ function isParser(value: unknown): value is { parse(value: unknown): unknown } {
  * and auth-bearing `headers` are credential material, and the runtime
  * result also carries undeclared extras (`capability`,
  * `parameterOverrides`) that a lent context has no contract for.
- * `metadata` stays — it is declared plugin-facing configuration, not a
- * credential channel. Model calls still work through generateText /
- * evaluate, which never expose credentials.
+ * `metadata` and the projected `limits` stay — they are declared
+ * plugin-facing configuration, not a credential channel. Model calls still
+ * work through generateText / evaluate, which never expose credentials.
  */
 function lendGateway(
   gateway: PluginServiceContext["gateway"],
@@ -196,6 +196,7 @@ function lendGateway(
         model: resolved.model,
         tag: resolved.tag,
         metadata: resolved.metadata,
+        ...(resolved.limits ? { limits: resolved.limits } : {}),
       };
     },
   };

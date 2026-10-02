@@ -45,7 +45,6 @@ import type { MemoryState } from "./memory/memory-types.js";
 export type SessionScopedMemoryKey = Extract<
   keyof MemoryState,
   | "turnResults"
-  | "runtimeResults"
   | "toolCalls"
   | "stateSchemas"
   | "stateEntries"
@@ -98,11 +97,6 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
   {
     table: "turn_results",
     memoryKey: "turnResults",
-    memoryKind: "array",
-  },
-  {
-    table: "runtime_results",
-    memoryKey: "runtimeResults",
     memoryKind: "array",
   },
   {
@@ -228,3 +222,14 @@ export const SESSION_SCOPED_TABLE_NAMES: readonly string[] =
 
 /** Parent table — deleted last by the cascade, keyed by `id` not `session_id`. */
 export const SESSIONS_TABLE = "sessions";
+
+/**
+ * Tables no longer in the schema. Boot drops them so existing databases do not
+ * keep paying for data nothing reads. `runtime_results` duplicated the runtime
+ * results already stored on each `turn_results` row.
+ */
+export const RETIRED_TABLE_NAMES: readonly string[] = ["runtime_results"];
+
+export const DROP_RETIRED_TABLES_SQL = RETIRED_TABLE_NAMES.map(
+  (table) => `DROP TABLE IF EXISTS ${table};`,
+).join("\n");

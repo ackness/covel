@@ -177,11 +177,11 @@ describe.skipIf(!database)(
 
     it("does not orphan a lease renewed by another connection after the scan", async () => {
       const key = await seed(false);
-      const list = recoveryStore.listPluginDataSessionScope.bind(recoveryStore);
+      const list = recoveryStore.listPluginDataByNamespace.bind(recoveryStore);
       const intercepted = vi
-        .spyOn(recoveryStore, "listPluginDataSessionScope")
-        .mockImplementation(async (sessionId) => {
-          const rows = await list(sessionId);
+        .spyOn(recoveryStore, "listPluginDataByNamespace")
+        .mockImplementation(async (sessionId, namespace) => {
+          const rows = await list(sessionId, namespace);
           if (sessionId === key.sessionId) {
             await renewRuntimeJobLease(ownerStore, {
               ...key,

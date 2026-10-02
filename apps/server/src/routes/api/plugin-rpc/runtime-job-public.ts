@@ -21,6 +21,9 @@ const PUBLIC_REASON_MESSAGES = {
   "cancelled-by-user": "Runtime job was cancelled by the user.",
   "lease-expired":
     "Runtime job was interrupted because its worker lease expired.",
+  "runtime-reported-failure": "The runtime reported a failed result.",
+  "follower-not-emitted":
+    "The runtime finished without queuing its follow-up job.",
 } as const;
 
 export interface PublicRuntimeJobDiagnostics {

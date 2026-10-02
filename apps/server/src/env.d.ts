@@ -1,4 +1,3 @@
-import type { PluginBackgroundQueue } from "./routes/api/plugin-rpc/background-queue.js";
 import type { RequestWork } from "./application-work.js";
 import type { DataStore, MediaStore, StoreBackend } from "@covel/store";
 import type {
@@ -119,8 +118,6 @@ declare module "hono" {
       typeof import("./routes/api/plugin-rpc/runtime-job-credentials.js").createRuntimeJobCredentials
     >;
     settledSessionLock?: import("./routes/api/plugin-rpc/settled-session-lock.js").SettledSessionLock;
-    /** Bootstrap-owned legacy RPC/follower queue, including registration writes. */
-    pluginBackgroundQueue: PluginBackgroundQueue;
     /**
      * Content-addressable media store used by `/api/media/:id`,
      * `/api/sessions/:id/media-token`, and runtime `ctx.media`.

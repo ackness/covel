@@ -2,7 +2,7 @@
  * POST /api/sessions/:id/plugin-rpc integration tests.
  */
 
-import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
+import { createTestRuntimeJobWorker } from "./__helpers/runtime-job-worker.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { type DataStore, type MediaStore } from "@covel/store";
@@ -71,10 +71,8 @@ function setup(): {
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
-  const pluginBackgroundQueue = createTestBackgroundQueue();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
-    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("store", store);
     c.set("rpcExecutor", executor);
     c.set("rpcRegistry", registry);
@@ -441,7 +439,8 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       },
     ]);
     expect(commandEvents[0]?.traceId).toBe(
-      (commandEvents[0]?.payload as { invocationId?: string }).invocationId,
+      (commandEvents[0]?.payload as { invocationId?: string } | undefined)
+        ?.invocationId,
     );
     expect(commandEvents[0]?.traceId).not.toBe(commandEvents[2]?.traceId);
   });
@@ -957,10 +956,8 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const hasPendingEntry = (pluginId: string): boolean =>
       pluginId === PLUGIN_ID && !activated;
 
-    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
-      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("rpcExecutor", executor);
       c.set("rpcRegistry", registry);
@@ -1313,10 +1310,21 @@ function setupRuntimeTestEnv(args: {
     },
   };
 
-  const pluginBackgroundQueue = createTestBackgroundQueue();
+  const runtimeJobWorker = createTestRuntimeJobWorker({
+    store,
+    eventBus,
+    sessionLock,
+    pluginRegistry,
+    deps: {
+      loadRuntime: loadRuntimeFn,
+      llm,
+      compactor: compactorRunner,
+      ...(args.mediaStore ? { mediaStore: args.mediaStore } : {}),
+    },
+  });
   const app = new Hono();
   app.use("*", async (c, next) => {
-    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
+    c.set("runtimeJobWorker", runtimeJobWorker);
     c.set("store", store);
     c.set("pluginRegistry", pluginRegistry);
     c.set("rpcExecutor", rpcExecutor);
@@ -1366,9 +1374,9 @@ async function seedRuntimeSession(
 
 /**
  * Wait until `predicate()` returns true or the attempt budget is exhausted.
- * Background jobs flip `_jobs/{id}` from `pending` to `done` via a
- * setImmediate-scheduled async closure — we can't await it directly from the
- * test, so poll the store with microtask yields. No wall-clock sleeps.
+ * Background jobs settle on the runtime job worker, which the test cannot
+ * await directly, so poll the store with microtask yields. No wall-clock
+ * sleeps.
  */
 async function waitFor(
   predicate: () => Promise<boolean>,
@@ -1388,6 +1396,61 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   const SYNC_RUNTIME = "test-runtime-plug/sync-fn";
   const BG_RUNTIME = "test-runtime-plug/bg-fn";
   const SESSION_ID = "sess-rt-1";
+
+  interface RuntimeJobRow {
+    readonly status: string;
+    readonly runtimeId: string;
+    readonly reason?: string;
+    readonly error?: string;
+    readonly finishedAt?: string;
+    readonly origin: {
+      readonly activation: string;
+      readonly sourceTurnId: string;
+    };
+    readonly payload: {
+      readonly turnId?: string;
+      readonly triggerEvent?: unknown;
+    };
+    readonly result?: {
+      readonly turnId?: string;
+      readonly durationMs?: number;
+      readonly deferredJobs?: ReadonlyArray<{
+        jobId: string;
+        runtimeId: string;
+      }>;
+      readonly runtimeResults?: ReadonlyArray<{
+        runtimeId: string;
+        status: string;
+        error?: string;
+        output?: unknown;
+      }>;
+    };
+  }
+
+  /** Background runtimes run as durable runtime jobs. */
+  async function runtimeJobs(
+    store: DataStore,
+    pluginId = PLUGIN_ID,
+  ): Promise<Map<string, RuntimeJobRow>> {
+    return new Map(
+      (await store.listPluginData(SESSION_ID, pluginId, "_runtime_jobs")).map(
+        (row) => [row.key, row.value as RuntimeJobRow],
+      ),
+    );
+  }
+
+  async function waitForJob(
+    store: DataStore,
+    jobId: string,
+    statuses: readonly string[],
+  ): Promise<RuntimeJobRow> {
+    let job: RuntimeJobRow | undefined;
+    await waitFor(async () => {
+      job = (await runtimeJobs(store)).get(jobId);
+      return job !== undefined && statuses.includes(job.status);
+    }, 2_000);
+    return job!;
+  }
 
   async function expectPausedWhileQueued(
     execution: "sync" | "background",
@@ -1509,8 +1572,12 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     // manualPayload forwarded through TurnInput → ctx.manualPayload
     expect(handlerInvokedWith?.manualPayload).toEqual({ clicked: "button" });
 
-    // Sync path must NOT write anything into the reserved _jobs namespace.
-    const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+    // The sync path queues no background job.
+    const jobs = await store.listPluginData(
+      SESSION_ID,
+      PLUGIN_ID,
+      "_runtime_jobs",
+    );
     expect(jobs).toHaveLength(0);
 
     // runManualTurn funnels through processTurnResults → saveAutoSnapshot:
@@ -1567,10 +1634,16 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       if (manifest.name === "chat-mode-narrator") return narratorLoaded;
       return undefined;
     };
-    const pluginBackgroundQueue = createTestBackgroundQueue();
+    const runtimeJobWorker = createTestRuntimeJobWorker({
+      store,
+      eventBus,
+      sessionLock,
+      pluginRegistry,
+      deps: { loadRuntime: loadRuntimeFn, llm, extensions },
+    });
     const app = new Hono();
     app.use("*", async (c, next) => {
-      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
+      c.set("runtimeJobWorker", runtimeJobWorker);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("pluginExtensions", extensions);
@@ -1773,7 +1846,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
   });
 
-  it("writes a failed _jobs row when an expected background follower is missing", async () => {
+  it("fails the queued job when an expected background follower is missing", async () => {
     const { app, store } = setupRuntimeTestEnv({
       pluginId: PLUGIN_ID,
       runtimeId: SYNC_RUNTIME,
@@ -1796,10 +1869,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       }),
     });
 
-    // expectsBackgroundFollower switches the runtime to async-job mode:
-    // the route returns 202 immediately with a pending _jobs/<jobId>, then
-    // setImmediate runs the prompt-builder. When no follower is emitted, the
-    // job row settles to status:'failed' with a 'expected-background-follower-missing' reason.
+    // expectsBackgroundFollower queues the prompt-builder as a durable job and
+    // returns 202 at once. When the run emits no follower, the job settles as
+    // failed with reason 'follower-not-emitted'.
     expect(res.status).toBe(202);
     const body = (await res.json()) as {
       status: string;
@@ -1814,25 +1886,15 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(body.phase).toBe("prompt");
     expect(typeof body.jobId).toBe("string");
 
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      return (
-        rows.length === 1 &&
-        (rows[0]?.value as { status?: string } | undefined)?.status === "failed"
-      );
-    });
-    const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]?.key).toBe(body.jobId);
-    expect(jobs[0]?.value).toMatchObject({
+    const job = await waitForJob(store, body.jobId, ["failed"]);
+    expect([...(await runtimeJobs(store)).keys()]).toEqual([body.jobId]);
+    expect(job).toMatchObject({
       status: "failed",
-      progress: 100,
       runtimeId: SYNC_RUNTIME,
-      reason: "expected-background-follower-missing",
+      reason: "follower-not-emitted",
+      origin: { activation: "manual" },
     });
-    expect(
-      String((jobs[0]?.value as { error?: string } | undefined)?.error),
-    ).toContain("completed without emitting");
+    expect(job.error).toContain("completed without emitting");
   });
 
   // ── X-Plugin-User-Settings header → ctx.userSettings ──
@@ -2103,22 +2165,12 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(res.status).toBe(202);
     const { jobId } = (await res.json()) as { jobId: string };
 
-    await waitFor(async () => {
-      const rows = await env.store.listPluginData(
-        SESSION_ID,
-        PLUGIN_ID,
-        "_jobs",
-      );
-      return (
-        (rows.find((r) => r.key === jobId)?.value as { status?: string })
-          ?.status === "done"
-      );
-    });
+    await waitForJob(env.store, jobId, ["succeeded"]);
 
     expect(playerCouldAct).toBe(true);
   });
 
-  it("returns 202 + jobId for a background runtime and writes _jobs pending → done", async () => {
+  it("returns 202 + jobId for a background runtime and settles its queued job", async () => {
     let released: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
       released = resolve;
@@ -2160,62 +2212,27 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(body.pending).toBe(true);
     expect(body.runtimeId).toBe(BG_RUNTIME);
 
-    // Pending row must be visible immediately after the 202 response.
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      return rows.some((r) => r.key === body.jobId);
+    // The queued row exists as soon as the 202 response is returned, and
+    // carries the turn id the response announced.
+    const pending = (await runtimeJobs(store)).get(body.jobId);
+    expect(pending).toMatchObject({
+      runtimeId: BG_RUNTIME,
+      origin: { activation: "manual" },
+      payload: { turnId: body.turnId },
     });
-    const pendingRows = await store.listPluginData(
-      SESSION_ID,
-      PLUGIN_ID,
-      "_jobs",
-    );
-    const pending = pendingRows.find((r) => r.key === body.jobId);
-    expect(pending).toBeDefined();
-    const pendingValue = pending!.value as {
-      status: string;
-      runtimeId: string;
-      turnId: string;
-      startedAt: string;
-    };
-    expect(pendingValue.status).toBe("pending");
-    expect(pendingValue.runtimeId).toBe(BG_RUNTIME);
-    expect(pendingValue.turnId).toBe(body.turnId);
+    expect(["queued", "claimed", "running"]).toContain(pending!.status);
 
-    // Release the handler and wait for the writeback to flip to "done".
     released!();
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      const row = rows.find((r) => r.key === body.jobId);
-      const v = row?.value as { status?: string } | undefined;
-      return v?.status === "done";
-    });
-
-    const doneRows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-    const done = doneRows.find((r) => r.key === body.jobId);
-    const doneValue = done!.value as {
-      status: string;
-      runtimeId: string;
-      turnId: string;
-      completedAt: string;
-      durationMs: number;
-      runtimeResults: ReadonlyArray<{
-        runtimeId: string;
-        status: string;
-        output: { ok?: boolean; stage?: string };
-      }>;
-    };
-    expect(doneValue.status).toBe("done");
-    expect(doneValue.runtimeId).toBe(BG_RUNTIME);
-    expect(doneValue.turnId).toBe(body.turnId);
-    expect(typeof doneValue.completedAt).toBe("string");
-    expect(typeof doneValue.durationMs).toBe("number");
-    expect(doneValue.runtimeResults).toHaveLength(1);
-    expect(doneValue.runtimeResults[0]?.runtimeId).toBe(BG_RUNTIME);
-    expect(doneValue.runtimeResults[0]?.status).toBe("success");
-    expect(doneValue.runtimeResults[0]?.output).toMatchObject({
-      ok: true,
-      stage: "done",
+    const done = await waitForJob(store, body.jobId, ["succeeded"]);
+    expect(done.runtimeId).toBe(BG_RUNTIME);
+    expect(typeof done.finishedAt).toBe("string");
+    expect(done.result?.turnId).toBe(body.turnId);
+    expect(typeof done.result?.durationMs).toBe("number");
+    expect(done.result?.runtimeResults).toHaveLength(1);
+    expect(done.result?.runtimeResults?.[0]).toMatchObject({
+      runtimeId: BG_RUNTIME,
+      status: "success",
+      output: { ok: true, stage: "done" },
     });
   });
 
@@ -2258,13 +2275,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
   });
 
-  it("writes _jobs status: failed when a background runtime handler throws (regression)", async () => {
-    // Before this fix, executeTurn caught the handler exception
-    // and marked the runtime as `failed` inside `runtimeResults`, but the
-    // background writeback still wrote top-level `status: 'done'`. Frontend
-    // watching `_jobs.status` would render a failed image as success.
-    // After the fix, any failed runtime surfaces at the top-level AND
-    // `value.error` carries the first error message for UI display.
+  it("fails the job when a background runtime handler throws", async () => {
+    // executeTurn catches the handler exception and marks the runtime failed
+    // inside its results; the job must not report success for it.
     const { app, store } = setupRuntimeTestEnv({
       pluginId: PLUGIN_ID,
       runtimeId: BG_RUNTIME,
@@ -2287,35 +2300,18 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     });
 
     // The request itself still succeeds with 202 — failure surfaces
-    // asynchronously via the `_jobs` writeback, NOT via HTTP status.
+    // asynchronously on the job, NOT via HTTP status.
     expect(res.status).toBe(202);
     const body = (await res.json()) as { jobId: string };
 
-    // Wait for the writeback to complete — status must be 'failed'.
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      const row = rows.find((r) => r.key === body.jobId);
-      const v = row?.value as { status?: string } | undefined;
-      return v?.status === "failed";
-    });
-
-    const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-    const row = rows.find((r) => r.key === body.jobId);
-    const v = row!.value as {
-      status: string;
-      runtimeResults?: ReadonlyArray<{
-        status: string;
-        error?: string;
-      }>;
-      error?: string;
-    };
-
-    expect(v.status).toBe("failed");
-    expect(v.error).toContain("handler-exploded");
-    // runtimeResults preserved for debug/trace even on failure.
-    expect(v.runtimeResults).toBeDefined();
-    expect(v.runtimeResults![0]?.status).toBe("failed");
-    expect(v.runtimeResults![0]?.error).toContain("handler-exploded");
+    const job = await waitForJob(store, body.jobId, ["failed"]);
+    expect(job.reason).toBe("runtime-reported-failure");
+    expect(job.error).toContain("handler-exploded");
+    // Results stay on the job for debugging even on failure.
+    expect(job.result?.runtimeResults?.[0]?.status).toBe("failed");
+    expect(job.result?.runtimeResults?.[0]?.error).toContain(
+      "handler-exploded",
+    );
   });
 
   // ── Regression: trust comes from discovery source, not pluginType.
@@ -2464,10 +2460,16 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
-    const pluginBackgroundQueue = createTestBackgroundQueue();
+    const runtimeJobWorker = createTestRuntimeJobWorker({
+      store,
+      eventBus,
+      sessionLock,
+      pluginRegistry,
+      deps: { loadRuntime: loadRuntimeFn, llm, compactor: compactorRunner },
+    });
     const app = new Hono();
     app.use("*", async (c, next) => {
-      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
+      c.set("runtimeJobWorker", runtimeJobWorker);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2508,10 +2510,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   //
   // A P600 sync target emitting an event that matches a P610 follower
   // with `execution: 'background'` must NOT block the sync response on
-  // the follower. The route schedules `_jobs/<jobId>` pending BEFORE
-  // the 200 flushes, fires setImmediate for the follower, and returns
-  // `deferredJobs` so the frontend can subscribe.
-  it("sync target + background follower: fast sync response + _jobs per follower", async () => {
+  // the follower. The route queues one durable event job per follower in
+  // the target's commit and returns `deferredJobs` so the frontend can
+  // subscribe.
+  it("sync target + background follower: fast sync response + one job per follower", async () => {
     const TARGET = "test-f1/target";
     const FOLLOWER = "test-f1/follower";
     const store = createMemoryStore();
@@ -2624,10 +2626,16 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
-    const pluginBackgroundQueue = createTestBackgroundQueue();
+    const runtimeJobWorker = createTestRuntimeJobWorker({
+      store,
+      eventBus,
+      sessionLock,
+      pluginRegistry,
+      deps: { loadRuntime: loadRuntimeFn, llm, compactor: compactorRunner },
+    });
     const app = new Hono();
     app.use("*", async (c, next) => {
-      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
+      c.set("runtimeJobWorker", runtimeJobWorker);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2680,6 +2688,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       status: string;
+      turnId: string;
       runtimeResults: ReadonlyArray<{ runtimeId: string; status: string }>;
       deferredJobs?: ReadonlyArray<{ jobId: string; runtimeId: string }>;
     };
@@ -2689,16 +2698,16 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(body.deferredJobs).toHaveLength(1);
     expect(body.deferredJobs![0]?.runtimeId).toBe(FOLLOWER);
 
-    // Follower must have NOT finished yet (response flushed before the
-    // setImmediate task got to run its awaited body).
+    // Follower must have NOT finished yet: the response does not wait for
+    // the worker to run its job.
     expect(followerFinished).toBe(false);
 
-    // Wait for the follower to complete and write _jobs done.
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      const row = rows.find((r) => r.key === body.deferredJobs![0].jobId);
-      const v = row?.value as { status?: string } | undefined;
-      return v?.status === "done";
+    const followerJob = await waitForJob(store, body.deferredJobs![0].jobId, [
+      "succeeded",
+    ]);
+    expect(followerJob.origin).toMatchObject({
+      activation: "event",
+      sourceTurnId: body.turnId,
     });
 
     expect(followerStarted).toBe(true);
@@ -2742,27 +2751,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(res.status).toBe(202);
     const body = (await res.json()) as { jobId: string };
 
-    let followerJobId: string | undefined;
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      const parent = rows.find((row) => row.key === body.jobId)?.value as
-        | {
-            status?: string;
-            deferredJobs?: Array<{ jobId: string; runtimeId: string }>;
-          }
-        | undefined;
-      followerJobId = parent?.deferredJobs?.[0]?.jobId;
-      return parent?.status === "done" && followerJobId !== undefined;
-    });
-
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      const follower = rows.find((row) => row.key === followerJobId)?.value as
-        { status?: string; runtimeId?: string } | undefined;
-      return (
-        follower?.status === "done" && follower.runtimeId === followerRuntimeId
-      );
-    });
+    const parent = await waitForJob(store, body.jobId, ["succeeded"]);
+    const followerJobId = parent.result?.deferredJobs?.[0]?.jobId;
+    expect(followerJobId).toBeDefined();
+    const follower = await waitForJob(store, followerJobId!, ["succeeded"]);
+    expect(follower.runtimeId).toBe(followerRuntimeId);
     expect(
       await store.listPluginData(SESSION_ID, PLUGIN_ID, "images"),
     ).toHaveLength(1);
@@ -2881,10 +2874,16 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
-    const pluginBackgroundQueue = createTestBackgroundQueue();
+    const runtimeJobWorker = createTestRuntimeJobWorker({
+      store,
+      eventBus,
+      sessionLock,
+      pluginRegistry,
+      deps: { loadRuntime: loadRuntimeFn, llm, compactor: compactorRunner },
+    });
     const app = new Hono();
     app.use("*", async (c, next) => {
-      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
+      c.set("runtimeJobWorker", runtimeJobWorker);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2946,12 +2945,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(body.deferredJobs).toHaveLength(1);
     const jobId = body.deferredJobs![0]!.jobId;
 
-    await waitFor(async () => {
-      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-      const row = rows.find((r) => r.key === jobId);
-      const v = row?.value as { status?: string } | undefined;
-      return v?.status === "done" || v?.status === "failed";
-    });
+    await waitForJob(store, jobId, ["succeeded", "failed"]);
 
     return { jobId };
   }
@@ -3006,10 +3000,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(recursiveCallObserved).toBe("invoked");
     expect(observedDepth).toBe(0);
 
-    const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
-    const row = rows.find((r) => r.key === jobId);
-    const value = row?.value as { status?: string };
-    expect(value?.status).toBe("done");
+    expect((await runtimeJobs(store)).get(jobId)?.status).toBe("succeeded");
   });
 
   it("background follower emits asset.progress through the per-turn TurnEmitter", async () => {

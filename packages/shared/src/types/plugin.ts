@@ -17,6 +17,15 @@ export type PluginType = "core-plugin" | "plugin";
  */
 export type RuntimeType = "agent" | "function";
 
+/**
+ * Bounded prompt history for an agent runtime. `maxTurns` keeps the newest N
+ * turns of visible history (0 = none) and drops compaction summaries, so the
+ * prompt no longer grows with the session.
+ */
+export interface RuntimeHistoryPolicy {
+  readonly maxTurns: number;
+}
+
 // ── Trigger system ───────────────────────────────────────────────
 
 /**
@@ -46,7 +55,7 @@ export interface TriggerConfig {
   /**
    * First main-loop turn at which this runtime may trigger. Optional —
    * when unset the runtime triggers as soon as its stage opens.
-   * Compared against `turnNumber` directly.
+   * Compared against the logical turn (`completedPlayerTurns + 1`).
    */
   readonly startTurn?: number;
 }
@@ -82,6 +91,11 @@ export interface TurnCompletionConfig {
 
 /**
  * Inject a field from a completed upstream runtime's output.
+ *
+ * Not produced by the PLUGIN.md compiler — authored manifests express the same
+ * edge with typed `inputs` bindings. It remains for manifests built in code
+ * (tests and direct `executeTurn` embedders); the DAG still treats it as a
+ * hard same-pass edge.
  */
 export interface RuntimeInjectDecl {
   readonly kind: "runtime";
@@ -518,6 +532,11 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
   /** Per-call preferences; explicit slot/preset reasoning settings take priority. */
   readonly llm?: import("./llm-adapter.js").LLMRequestDefaults;
   /**
+   * Prior conversation an agent runtime sees. Omitted means the shared
+   * session view (uncompacted history plus compaction summaries).
+   */
+  readonly history?: RuntimeHistoryPolicy;
+  /**
    * Per-runtime hard timeout in ms.
    * Overrides the executor default for agent runtimes.
    */
@@ -658,13 +677,13 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
   readonly trigger?: TriggerConfig;
   /**
    * Execution mode when this runtime is activated via a manual plugin-rpc call
-   * (or later, through background-capable event chains).
+   * or as an event-chain follower.
    *
    * - `'sync'` (default): caller awaits runtime completion; proposals commit
    *   inside the request/response cycle.
-   * - `'background'`: server schedules the runtime, returns immediately with
-   *   a `jobId`, and pushes progress / result over the `_jobs` plugin-data
-   *   namespace (SSE `plugin-data.changed`).
+   * - `'background'`: server queues a durable runtime job and returns its
+   *   `jobId` at once; status streams as `job-status.updated` and
+   *   `_runtime_jobs` plugin-data changes.
    *
    * Ignored for runtimes triggered by the normal per-turn scheduler.
    */

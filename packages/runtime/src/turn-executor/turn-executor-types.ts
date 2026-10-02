@@ -5,7 +5,7 @@ import type {
   PluginRuntimeUtils,
   PluginSource,
 } from "@covel/shared/plugin-runtime";
-import type { DataStore, StoreTransaction } from "@covel/store";
+import type { DataStore } from "@covel/store";
 import type {
   BudgetOptions,
   CompactorRunner,
@@ -87,6 +87,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     import("@covel/shared").WorldModelView,
     "dimensions" | "dimensionProviderPluginId"
   >;
+  /** Execution-scoped shared reads of committed world-model state. */
+  readonly worldModelReads?: import("../function-runtime/world-model-view.js").WorldModelReadStore;
   /** Persisted session activation scope, including plugins without runtimes. */
   readonly hookScope?: HookScope;
   readonly services?: import("../plugin-services.js").PluginServiceRegistry;

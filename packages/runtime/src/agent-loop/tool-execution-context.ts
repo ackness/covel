@@ -57,6 +57,9 @@ export function createToolExecutionContext(
       listPlayerInputs: () => read(() => reads.listPlayerInputs()),
       listTurnMessages: (limit?: number) =>
         read(() => reads.listTurnMessages(limit)),
+      readTurnMessages: (
+        options?: Parameters<FunctionStoreView["readTurnMessages"]>[0],
+      ) => read(() => reads.readTurnMessages(options)),
     });
   }
   const context: ToolExecutionContext = Object.freeze({

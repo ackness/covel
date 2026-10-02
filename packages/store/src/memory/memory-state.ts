@@ -4,7 +4,6 @@ export function createMemoryState(): MemoryState {
   return {
     sessions: new Map(),
     turnResults: [],
-    runtimeResults: [],
     toolCalls: [],
     stateSchemas: [],
     stateEntries: new Map(),

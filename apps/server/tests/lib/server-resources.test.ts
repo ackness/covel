@@ -26,7 +26,6 @@ function fixture() {
       },
       applicationWork: { close: close("requests") },
       runtimeJobWorker: { close: close("worker") },
-      pluginBackgroundQueue: { close: close("queue") },
       startupMaintenance: Promise.resolve(),
       closePluginEntries: close("entries"),
       closeTools: close("tools"),
@@ -74,7 +73,7 @@ describe("server resource ownership", () => {
     expect((await running).success).toBe(false);
     const closing = createServerResourceDrain(resources)();
     try {
-      await vi.waitFor(() => expect(calls).toContain("queue"));
+      await vi.waitFor(() => expect(calls).toContain("worker"));
       expect(calls).not.toContain("entries");
       expect(calls).not.toContain("store");
     } finally {
@@ -92,7 +91,7 @@ describe("server resource ownership", () => {
     const stopped = Promise.withResolvers<void>();
     resources.api!.applicationWork.close = () => stopped.promise;
     resources.worldWatchers[0]!.stop = () => stopped.promise;
-    resources.api!.pluginBackgroundQueue.close = async () => {
+    resources.api!.runtimeJobWorker.close = async () => {
       stopped.resolve();
     };
     await createServerResourceDrain(resources)();
@@ -107,14 +106,8 @@ describe("server resource ownership", () => {
     const closing = drain();
     expect(drain()).toBe(closing);
     try {
-      await vi.waitFor(() => expect(calls).toContain("queue"));
-      expect(calls).toEqual([
-        "requests",
-        "watchers",
-        "worker",
-        "queue",
-        "tools",
-      ]);
+      await vi.waitFor(() => expect(calls).toContain("tools"));
+      expect(calls).toEqual(["requests", "watchers", "worker", "tools"]);
     } finally {
       scan.resolve();
       await closing;
@@ -123,7 +116,6 @@ describe("server resource ownership", () => {
       "requests",
       "watchers",
       "worker",
-      "queue",
       "tools",
       "entries",
       "bus",
@@ -161,7 +153,7 @@ describe("server resource ownership", () => {
     const closing = createServerResourceDrain(resources)();
     await vi.advanceTimersByTimeAsync(2_000);
     await closing;
-    expect(calls).toEqual(["requests", "watchers", "worker", "queue", "tools"]);
+    expect(calls).toEqual(["requests", "watchers", "worker", "tools"]);
     // A late settlement does not independently close dependencies after return.
     scan.resolve();
     await Promise.resolve();
@@ -181,7 +173,6 @@ describe("server resource ownership", () => {
       "requests",
       "watchers",
       "worker",
-      "queue",
       "tools",
       "entries",
       "bus",

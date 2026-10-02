@@ -38,7 +38,7 @@
 
 - **同场景的会话图缺失昼夜变体时，门控变化不会立即补图**：会话中已生成某一变体（例如白天）而另一变体缺失时，`stage/current.source` 保持 `"session"`。若首次请求缺失变体时自动生成未开启或图像模型不可用，之后开启门控但场景/昼夜不变，no-op 防抖仍会跳过；切换地点或昼夜后，resolver 会重新评估缺失变体。
 - ~~**生成期间会话锁被长时间持有**~~：**已解决**（2026-07-28）。deferred follower 的执行（含 60-300s 的图像生成）现在跑在会话锁**外**，只有提交阶段（`processTurnResults`：finalize 事务 + auto-snapshot）进锁，玩家因此只需等毫秒级的提交而不是整张图。`resolver` 对相同 scene/variant 的 `pending` 状态不再重复发生成事件，避免多 Pod 在首个任务提交前各自计费；同一进程内的 follower 仍由 `<sessionId>::<runtimeId>` 作业锁串行。提交前会在锁内重读一次会话状态，玩家中途暂停/结束会话时 follower 的写入会被丢弃而不是提交进去。
-- **`execution: background` 任务不跨进程重启恢复**：`background-gen` 由框架的 `_jobs` 挂起队列（`setImmediate` + `_jobs/<jobId>` pending 行）驱动，没有持久化的任务队列；服务进程在生成请求排队后、完成前重启，该请求就丢了。框架**不会**自动重跑——重跑要再计一次费，且请求级 `userSettings` 没有持久化在任务行上，重跑等于换参数重新扣费。现在服务重启后的开机扫描会按 owner 判定把这类孤儿任务立即标为 `failed`（`reason: "orphaned"`，并保留 `triggerEvent` 供显式重试），前端因此会弹出失败提示，不再是无声的永久转圈。但 `stage/current.source` 仍会停在 `"pending"`——那是插件自己的状态，框架不碰；直接重发相同 `scene.set` 会被幂等 no-op，玩家应从失败任务提示执行 retry，或先切换地点/昼夜再回来。
+- **`execution: background` 任务的重启语义**：`background-gen` 作为持久 runtime job（`_runtime_jobs`，`origin.activation: "event"`）随触发它的回合一起提交。服务重启时仍在排队的任务会在凭证可用后继续执行；已开始执行的任务在租约过期后标为 `orphaned`，框架**不会**自动重跑（重跑要再计一次费），前端会弹出失败提示。`stage/current.source` 仍会停在 `"pending"`——那是插件自己的状态，框架不碰；直接重发相同 `scene.set` 会被幂等 no-op，玩家应对失败任务执行 retry（`POST /api/sessions/:id/runtime-jobs/:jobId/retry`），或先切换地点/昼夜再回来。
 
 ## 开发
 

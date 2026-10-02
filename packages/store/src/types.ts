@@ -23,7 +23,6 @@ export { mergeSessionPatch } from "./records/session-records.js";
 
 export type {
   TurnResultRecord,
-  RuntimeResultRecord,
   ToolCallRecordRow,
   RuntimeOutputRecord,
   InteractionRecordRow,
@@ -86,7 +85,6 @@ import type { WorldRecord } from "./records/world-records.js";
 import type { SessionRecord } from "./records/session-records.js";
 import type {
   TurnResultRecord,
-  RuntimeResultRecord,
   ToolCallRecordRow,
   RuntimeOutputRecord,
   InteractionRecordRow,
@@ -196,13 +194,6 @@ export interface RuntimeRecordStore {
     turnId: string,
     status: TurnResultRecord["commitStatus"],
   ): Promise<void>;
-
-  // ── Runtime Results ──
-  saveRuntimeResult(record: RuntimeResultRecord): Promise<void>;
-  listRuntimeResults(
-    sessionId: string,
-    turnId?: string,
-  ): Promise<RuntimeResultRecord[]>;
 
   // ── Tool Calls ──
   saveToolCall(record: ToolCallRecordRow): Promise<void>;
@@ -373,6 +364,16 @@ export interface PluginDataStore {
     sessionId: string,
     pagination?: PaginationOpts,
   ): Promise<readonly PluginDataRecord[]>;
+  /**
+   * List one namespace's rows for a session across every pluginId, ordered by
+   * `(createdAt, id)`. Framework control planes (runtime jobs) keep one
+   * namespace per plugin and need the session-wide view without loading every
+   * other plugin's data.
+   */
+  listPluginDataByNamespace(
+    sessionId: string,
+    namespace: string,
+  ): Promise<readonly PluginDataRecord[]>;
   deletePluginData(
     sessionId: string,
     pluginId: string,
@@ -411,6 +412,8 @@ export interface TraceStore {
     sessionId: string,
     opts: CursorPageOpts,
   ): Promise<TraceEventRecord[]>;
+  /** Delete a session's trace events created strictly before `before` (ISO). */
+  deleteTraceEventsBefore(sessionId: string, before: string): Promise<void>;
 }
 
 /**
@@ -665,6 +668,8 @@ export interface LifecycleStore {
     sessionId: string,
     filter?: { readonly progressScopeId?: string; readonly jobId?: string },
   ): Promise<readonly JobStatusRecord[]>;
+  /** Delete every job-status event of the given jobs in a session. */
+  deleteJobStatus(sessionId: string, jobIds: readonly string[]): Promise<void>;
 }
 
 /**
@@ -739,6 +744,12 @@ export interface SnapshotStore {
     sessionId: string,
     opts: CursorPageOpts,
   ): Promise<readonly SnapshotMetadata[]>;
+  /**
+   * Delete a session's `auto` snapshots older than its newest `keep`, never
+   * one that a fork still names as `parentId`. Manual and fork snapshots are
+   * kept. Returns how many snapshots were deleted.
+   */
+  pruneAutoSnapshots(sessionId: string, keep: number): Promise<number>;
 }
 
 /**
@@ -821,7 +832,16 @@ export interface DataStore
  * lifecycle methods — a transaction body must not begin/commit/close from
  * inside the scope.
  */
-export type StoreTransaction = Omit<DataStore, "withTransaction" | "close">;
+export type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
+  /**
+   * Run `fn` in a savepoint nested in the open transaction. A throw rolls back
+   * only the writes made inside `fn` and rethrows; the enclosing transaction
+   * stays open and keeps everything written before the savepoint. Every
+   * bundled backend provides it on its transaction scope; it is optional so a
+   * root store still satisfies this type where a scope is accepted.
+   */
+  savepoint?<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T>;
+};
 
 // ── Store config ─────────────────────────────────────────────────
 
