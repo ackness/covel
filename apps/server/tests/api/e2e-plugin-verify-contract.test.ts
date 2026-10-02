@@ -44,6 +44,14 @@ describe("e2e plugin verification CLI HTTP contract", () => {
             return json({ plugins: [], steps: [], segments: [] });
           case "GET /api/worlds":
             return json({ items: [{ id: "contract-world" }] });
+          case "GET /api/worlds/contract-world/plugin-plan":
+            return json({
+              worldId: "contract-world",
+              selectedPackId: "contract-pack",
+              defaultPluginIds: ["narrator", "contract-plugin"],
+              policy: { requested: ["contract-plugin", "contract-rules"] },
+              packs: [],
+            });
           case "POST /api/sessions":
             return json(session, 201);
           case "PUT /api/sessions/contract-session/plugins/contract-plugin":
@@ -173,6 +181,16 @@ describe("e2e plugin verification CLI HTTP contract", () => {
 
       expect(fixtureErrors).toEqual([]);
       expect(actionCount).toBe(2);
+      // Sessions start from the world's preset pack plus its required plugins.
+      expect(requests).toContainEqual({
+        method: "POST",
+        path: "/api/sessions",
+        body: {
+          worldId: "contract-world",
+          locale: "zh-CN",
+          plugins: ["narrator", "contract-plugin", "contract-rules"],
+        },
+      });
       expect(requests).toContainEqual({
         method: "PUT",
         path: "/api/sessions/contract-session/plugins/contract-plugin",

@@ -77,6 +77,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 | `--runtime <id>`         | —                                  | 只聚焦某一个 runtime，其它依然会执行但不计入断言                                                                 |
 | `--plugin <id>`          | —                                  | 只聚焦某一个 plugin                                                                                              |
 | `--enable-plugins <ids>` | —                                  | 建会话后、首轮前启用逗号分隔的插件 id；用于把 memory 等可选核心插件纳入长测                                      |
+| `--core-only`            | —                                  | 只用核心插件建会话，不加载世界包的预设插件包                                                                     |
 | `--player-message <str>` | 内置话术循环                       | 每轮玩家输入文本                                                                                                 |
 | `--form-values <json>`   | 字段类型推断                       | 角色创建表单的默认填充值                                                                                         |
 | `--timeout <seconds>`    | `300`                              | 每轮 SSE 超时                                                                                                    |
@@ -97,15 +98,15 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 脚本把一次运行拆成 7 个阶段，每个 Phase 都会写出小节标题和带固定列宽的表格：
 
-| #   | Phase                     | 做了什么                                                                                                                                                                               |
-| --- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Health Check**          | `GET /api/health`，确认 store backend 在线                                                                                                                                             |
-| 2   | **Plugin Flow Discovery** | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                                                                               |
-| 3   | **World Selection**       | 挑选 `--world` 或第一个可用世界包                                                                                                                                                      |
-| 4   | **Session Creation**      | `POST /api/sessions` 建新会话，按需启用 `--enable-plugins`，并读取最终真实 `activePlugins`                                                                                             |
-| 5   | **Turn Execution**        | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                                                                    |
-| 6   | **Final Session View**    | `GET /api/sessions/:id/view`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时与后台作业终态；从 trace 列出各 runtime 实际调用的模型；保存完整 trace，并执行长运行严格断言 |
-| 7   | **Summary**               | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                                                                          |
+| #   | Phase                     | 做了什么                                                                                                                                                                                                         |
+| --- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Health Check**          | `GET /api/health`，确认 store backend 在线                                                                                                                                                                       |
+| 2   | **Plugin Flow Discovery** | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                                                                                                         |
+| 3   | **World Selection**       | 挑选 `--world` 或第一个可用世界包                                                                                                                                                                                |
+| 4   | **Session Creation**      | 读取 `GET /api/worlds/:id/plugin-plan`，与准备页一样按预设插件包的默认选择加上世界必需插件调用 `POST /api/sessions`（`--core-only` 时只用核心插件），按需启用 `--enable-plugins`，并读取最终真实 `activePlugins` |
+| 5   | **Turn Execution**        | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                                                                                              |
+| 6   | **Final Session View**    | `GET /api/sessions/:id/view`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时与后台作业终态；从 trace 列出各 runtime 实际调用的模型；保存完整 trace，并执行长运行严格断言                           |
+| 7   | **Summary**               | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                                                                                                    |
 
 ### Phase 5 每轮产出
 

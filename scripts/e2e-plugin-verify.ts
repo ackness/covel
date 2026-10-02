@@ -45,6 +45,8 @@
  *   --runtime <id>         Filter output + assertions to this runtime only
  *   --plugin <id>          Filter output + assertions to this plugin only
  *   --enable-plugins <ids> Enable comma-separated plugins before the first turn
+ *   --core-only            Create the session with core plugins only instead of
+ *                          the world's preset pack
  *   --player-message <str> Player text for each playing turn (default: cycles through built-ins)
  *   --form-values <json>   Default form field values (default: auto from field types)
  *   --timeout <seconds>    Per-turn SSE timeout (default: 300)
@@ -83,6 +85,7 @@ interface CliArgs {
   runtimeFilter?: string;
   pluginFilter?: string;
   enablePlugins: string[];
+  coreOnly: boolean;
   playerMessage?: string;
   formValues: Record<string, string>;
   timeoutSec: number;
@@ -103,6 +106,7 @@ function parseArgs(argv: string[]): CliArgs {
     slot: process.env.E2E_MODEL_SLOT?.trim() || undefined,
     turns: 3,
     enablePlugins: [],
+    coreOnly: false,
     formValues: {},
     timeoutSec: 300,
     verbose: false,
@@ -147,6 +151,9 @@ function parseArgs(argv: string[]): CliArgs {
           .split(",")
           .map((value) => value.trim())
           .filter(Boolean);
+        break;
+      case "--core-only":
+        args.coreOnly = true;
         break;
       case "--player-message":
         args.playerMessage = next();
@@ -228,6 +235,7 @@ Options:
   --runtime <id>          Filter output + assertions to this runtime only
   --plugin <id>           Filter output + assertions to this plugin only
   --enable-plugins <ids>  Enable comma-separated plugins before the first turn
+  --core-only             Core plugins only, not the world's preset pack
   --player-message <str>  Player text for each playing turn
   --form-values <json>    Default form field values
   --timeout <seconds>     Per-turn SSE timeout (default: 300)
@@ -1623,10 +1631,29 @@ async function runMain(
   kv("World", chosen.id);
 
   // ── Phase 4: Session creation ──────────────────────────────────
+  // Start the way the prep screen does: the world's preset pack plus the
+  // plugins the world requires. A session created from worldId alone holds
+  // only the core plugins and would not exercise what players play.
   section("Phase 4: Session Creation");
+  let plugins: string[] | undefined;
+  if (!args.coreOnly) {
+    const plan = await httpGet<{
+      selectedPackId?: string;
+      defaultPluginIds?: string[];
+      policy?: { requested?: string[] };
+    }>(args.server, `/worlds/${encodeURIComponent(chosen.id)}/plugin-plan`);
+    plugins = [
+      ...new Set([
+        ...(plan.defaultPluginIds ?? []),
+        ...(plan.policy?.requested ?? []),
+      ]),
+    ];
+    kv("Preset pack", plan.selectedPackId ?? "(none)");
+  }
   const session = await httpJson<SessionRecord>(args.server, "/sessions", {
     worldId: chosen.id,
     locale: "zh-CN",
+    ...(plugins ? { plugins } : {}),
   });
   state.sessionId = session.id;
   kv("Session ID", session.id);
