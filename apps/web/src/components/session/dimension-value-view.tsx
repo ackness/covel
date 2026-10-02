@@ -70,9 +70,9 @@ function Value({
         <table className="w-full text-left text-sm">
           <thead>
             <tr>
-              <th className="p-2">ID</th>
+              <th className="p-2 whitespace-nowrap">ID</th>
               {columns.map((key) => (
-                <th className="p-2" key={key}>
+                <th className="p-2 whitespace-nowrap" key={key}>
                   {resolveDisplayText(
                     rowSchema?.properties?.[key]?.title ?? key,
                     locale,
@@ -84,9 +84,12 @@ function Value({
           <tbody>
             {rows.map(([id, row]) => (
               <tr key={id} className="border-t">
-                <th className="p-2">{id}</th>
+                <th className="p-2 align-top whitespace-nowrap">{id}</th>
                 {columns.map((key) => (
-                  <td key={key} className="p-2">
+                  // CJK text has a one-character min-content width; without a
+                  // floor a narrow panel squeezes prose columns to one glyph
+                  // per line instead of scrolling.
+                  <td key={key} className="min-w-24 p-2 align-top">
                     <Value
                       schema={rowSchema?.properties?.[key] ?? {}}
                       value={(row as Record<string, JsonValue>)[key] ?? null}
