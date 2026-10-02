@@ -58,7 +58,7 @@ describe("sync-codex-entries", () => {
     (await mockStore.getPluginData("sess-1", "codex", "entries", key))?.value;
   const mountain = {
     category: "location",
-    title: "青萍山",
+    title: "Azure Peak",
     content: "青萍宗所在的灵脉山峰，外门在山腰，内门在山顶。",
     tags: ["宗门", "灵脉"],
   };
@@ -71,17 +71,17 @@ describe("sync-codex-entries", () => {
   it("creates an entry keyed by its title, with a discovery card", async () => {
     const result = await sync([mountain]);
 
-    expect(result.created).toEqual(["codex-青萍山"]);
+    expect(result.created).toEqual(["codex-azure-peak"]);
     expect(result.ui[0]).toMatchObject({
       type: "ui-spec",
-      entryId: "codex-青萍山",
+      entryId: "codex-azure-peak",
       spec: {
         type: "EntryCard",
-        props: { title: "青萍山", category: "location", isNew: true },
+        props: { title: "Azure Peak", category: "location", isNew: true },
       },
     });
-    expect(await stored("codex-青萍山")).toMatchObject({
-      title: "青萍山",
+    expect(await stored("codex-azure-peak")).toMatchObject({
+      title: "Azure Peak",
       category: "location",
       rarity: "common",
       isNew: true,
@@ -94,19 +94,22 @@ describe("sync-codex-entries", () => {
     const result = await sync([
       {
         category: "lore",
-        title: "  青萍山 ",
+        title: "  azure PEAK ",
         content: "山顶近来出现了新的古阵波动。",
         tags: ["古阵"],
         rarity: "rare",
       },
     ]);
 
-    expect(result).toMatchObject({ created: [], updated: ["codex-青萍山"] });
+    expect(result).toMatchObject({
+      created: [],
+      updated: ["codex-azure-peak"],
+    });
     expect(result.ui[0].spec.props).toMatchObject({
       content: "山顶近来出现了新的古阵波动。",
       tags: ["古阵"],
     });
-    const value = await stored("codex-青萍山");
+    const value = await stored("codex-azure-peak");
     expect(value.category).toBe("location");
     expect(value.content).toBe(
       `${mountain.content}\n\n山顶近来出现了新的古阵波动。`,
@@ -115,7 +118,7 @@ describe("sync-codex-entries", () => {
     expect(value.rarity).toBe("rare");
     // Adding with a lower rarity never downgrades the entry.
     await sync([{ ...mountain, content: "外门正在扩建。", rarity: "common" }]);
-    expect((await stored("codex-青萍山")).rarity).toBe("rare");
+    expect((await stored("codex-azure-peak")).rarity).toBe("rare");
   });
 
   it("matches titles case-insensitively and keys English titles as words", async () => {
@@ -160,11 +163,11 @@ describe("sync-codex-entries", () => {
       syncTool,
       {
         entries: [
-          entry("一号"),
-          entry("二号"),
-          entry("一号"),
-          entry("三号"),
-          entry("四号"),
+          entry("One"),
+          entry("Two"),
+          entry("One"),
+          entry("Three"),
+          entry("Four"),
         ],
       },
       ctx,
@@ -173,11 +176,11 @@ describe("sync-codex-entries", () => {
 
     expect(getPendingProposals(raw)).toHaveLength(1);
     expect(getToolContent(raw)).toMatchObject({
-      created: ["codex-一号", "codex-二号", "codex-三号"],
+      created: ["codex-one", "codex-two", "codex-three"],
       updated: [],
-      skipped: ["四号"],
+      skipped: ["Four"],
     });
-    expect((await stored("codex-一号")).content).toBe(
+    expect((await stored("codex-one")).content).toBe(
       `${mountain.content}\n\n${mountain.content}`,
     );
   });
@@ -188,12 +191,23 @@ describe("sync-codex-entries", () => {
       sessionId: "sess-1",
       pluginId: "codex",
       namespace: "entries",
-      key: "codex-青萍山",
+      key: "codex-azure-peak",
       value: { category: "lore", title: "另一条", content: "占用键名。" },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    expect((await sync([mountain])).created).toEqual(["codex-青萍山-2"]);
+    expect((await sync([mountain])).created).toEqual(["codex-azure-peak-2"]);
+  });
+
+  it("keys a title without ASCII words by a short random part", async () => {
+    const result = await sync([{ ...mountain, title: "青萍山" }]);
+    expect(result.created).toEqual([
+      expect.stringMatching(/^codex-[0-9a-f]{8}$/),
+    ]);
+    // Later additions still find it by title.
+    expect((await sync([{ ...mountain, title: "青萍山" }])).updated).toEqual(
+      result.created,
+    );
   });
 
   it("rejects an empty sync and reserves runtime-done for no-change turns", async () => {

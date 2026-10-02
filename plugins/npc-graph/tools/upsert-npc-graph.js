@@ -9,7 +9,8 @@
  * The tool is responsible for:
  *
  *  1. Loading existing nodes from `plugin_data[namespace="nodes"]`.
- *  2. Assigning short IDs to newly-named nodes via `shortIdBatch`.
+ *  2. Assigning word IDs to newly-named nodes via `wordId`
+ *     (`npc-lin-yao`), which the model reads in the injected graph.
  *  3. Merging updates into existing nodes (aliases, labels, summary,
  *     attributes) so one relationship turn cannot nuke prior context.
  *  4. Rewriting edge `sourceName` / `targetName` to node IDs.
@@ -27,6 +28,7 @@
 import {
   makeProposal,
   withPendingProposals,
+  wordId,
 } from "@covel/plugin-handlers-utils";
 
 export default function ({ tool, z, shortIdBatch }) {
@@ -147,26 +149,18 @@ export default function ({ tool, z, shortIdBatch }) {
         }
       }
 
-      // ── 2. Assign short IDs to nodes that don't already exist ──
-      const newNodeNames = incomingNodes
-        .map((n) => n.name)
-        .filter((name) => !nodeByName.has(name.toLowerCase()));
-      const assignedIds =
-        newNodeNames.length > 0
-          ? shortIdBatch("npc", newNodeNames, context.sessionId)
-          : [];
-      // Fail before staging writes if an allocator reuses a durable or buffered
-      // key. A new node must never replace an unrelated old node.
+      // ── 2. Assign word IDs to nodes that don't already exist ──
+      // `wordId` skips every durable or buffered key, so a new node never
+      // replaces an unrelated old node.
       const occupiedIds = new Set(existingNodeRows.map((row) => row.key));
-      for (const id of assignedIds) {
-        if (occupiedIds.has(id))
-          throw new Error(`NPC node ID collision: ${id}`);
-        occupiedIds.add(id);
-      }
       /** @type {Map<string, string>} */
       const newNameToId = new Map();
-      for (let i = 0; i < newNodeNames.length; i += 1) {
-        newNameToId.set(newNodeNames[i].toLowerCase(), assignedIds[i]);
+      for (const { name } of incomingNodes) {
+        const lookup = name.toLowerCase();
+        if (nodeByName.has(lookup) || newNameToId.has(lookup)) continue;
+        const id = wordId("npc", name, occupiedIds);
+        occupiedIds.add(id);
+        newNameToId.set(lookup, id);
       }
 
       // ── 3. Compute per-node merged records and stage writes ──
@@ -339,23 +333,16 @@ export default function ({ tool, z, shortIdBatch }) {
           });
           closedEdgeIds.add(openEdge.id);
         }
-        // `shortIdBatch` slugifies the label and truncates it to 24 chars, so a
-        // version suffix placed INSIDE the label is silently cut off for long
-        // endpoint names — two versions of the same relation would collapse to
-        // one id and the newer would overwrite the older's provenance. Keep the
-        // slugified part to the (endpoints + relation) base for readability and
-        // append a suffix outside the truncated slug. The suffix must be unique
-        // per version, and neither turn nor batch index guarantees that: tool
-        // calls within one turn don't commit between each other and each starts
-        // its batch index at 0, so a relation revised in three separate calls
-        // of the same turn would reuse one id. A random token needs no
-        // cross-call state and can't collide across turns, calls, or restarts.
-        const [edgeBase] = shortIdBatch(
+        // Every version needs its own id, and neither turn nor batch index
+        // guarantees that: tool calls within one turn don't commit between
+        // each other and each starts its batch index at 0. `shortId`'s random
+        // part needs no cross-call state; the slug keeps the endpoints and
+        // relation readable.
+        const [edgeId] = shortIdBatch(
           "edge",
           [`${src.name}-${incoming.relation}-${tgt.name}`],
           context.sessionId,
         );
-        const edgeId = `${edgeBase}-${crypto.randomUUID().slice(0, 8)}`;
         const edge = {
           id: edgeId,
           source: src.id,

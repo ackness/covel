@@ -95,7 +95,7 @@ describe("character-blueprint handler", () => {
       imported: true,
       blueprintId: "mentor-lin",
       instantiated: true,
-      characterId: "sess-blueprint-char-lin-yue",
+      characterId: "char-lin-yue",
     });
 
     const proposals = getPendingProposals(result);
@@ -121,7 +121,7 @@ describe("character-blueprint handler", () => {
         runtimeId: "character-blueprint/import",
       },
       payload: {
-        id: "sess-blueprint-char-lin-yue",
+        id: "char-lin-yue",
         name: "Lin Yue",
         type: "npc",
         description: "A cautious sword mentor.",
@@ -149,7 +149,7 @@ describe("character-blueprint handler", () => {
       imported: true,
       blueprintId: "json-mentor",
       instantiated: true,
-      characterId: "sess-blueprint-char-json-mentor",
+      characterId: "char-json-mentor",
     });
     const proposals = getPendingProposals(result);
     expect(proposals.map((proposal) => proposal.type)).toEqual([
@@ -185,7 +185,7 @@ describe("character-blueprint handler", () => {
       imported: true,
       blueprintId: "kamishiro-mio",
       instantiated: true,
-      characterId: "sess-blueprint-npc-kamishiro-mio",
+      characterId: "npc-kamishiro-mio",
     });
     const proposals = getPendingProposals(result);
     expect(proposals[0]).toMatchObject({
@@ -221,7 +221,7 @@ describe("character-blueprint handler", () => {
     expect(proposals[1]).toMatchObject({
       type: "character.upsert",
       payload: {
-        id: "sess-blueprint-npc-kamishiro-mio",
+        id: "npc-kamishiro-mio",
         name: "神代澪",
         type: "npc",
       },
@@ -287,7 +287,7 @@ describe("character-blueprint handler", () => {
     expect(proposals[0].payload.value).not.toHaveProperty("instantiate");
   });
 
-  it("does not double-prefix generated character ids when form ids are generated", async () => {
+  it("uses a generated form id as the character id without another prefix", async () => {
     const result = await handler(
       ctx({
         instantiate: true,
@@ -300,9 +300,9 @@ describe("character-blueprint handler", () => {
 
     expect(getToolContent(result).value).toMatchObject({
       imported: true,
-      blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
+      blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{8}$/),
       instantiated: true,
-      characterId: `sess-blueprint-${getToolContent(result).value.blueprintId}`,
+      characterId: getToolContent(result).value.blueprintId,
     });
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.value.instantiate.characterId).toBe(
@@ -323,7 +323,7 @@ describe("character-blueprint handler", () => {
 
     expect(getToolContent(result).value).toMatchObject({
       imported: true,
-      blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
+      blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{8}$/),
       instantiated: false,
     });
   });

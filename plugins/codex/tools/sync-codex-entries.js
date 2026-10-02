@@ -17,6 +17,7 @@
 import {
   makeProposal,
   withPendingProposals,
+  wordId,
 } from "@covel/plugin-handlers-utils";
 
 import { getCategoryMetadata } from "../category-metadata.js";
@@ -151,9 +152,7 @@ export default function ({ tool, z }) {
             skipped.push(entry.title);
             continue;
           }
-          const base = `codex-${lookup.replace(/ /g, "-")}`;
-          key = base;
-          for (let n = 2; keys.has(key); n++) key = `${base}-${n}`;
+          key = wordId("codex", entry.title, keys);
           keys.add(key);
           // Title first: the prompt's entry summaries cut values at 200
           // characters, and the model matches existing entries by title.

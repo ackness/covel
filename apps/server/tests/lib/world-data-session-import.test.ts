@@ -1203,7 +1203,7 @@ sources:
 
     expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
-      { id: "sess-1-mio", name: "Mio" },
+      { id: "mio", name: "Mio" },
     ]);
     expect(
       await store.listPluginData("sess-1", "third-party-cast", "characters"),
@@ -1260,7 +1260,7 @@ sources:
     expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
       {
-        id: "sess-1-mio",
+        id: "mio",
         name: "Mio",
         type: "npc",
         description: "Keeps the archive keys.",
@@ -1302,7 +1302,7 @@ sources:
     };
     expect((await importWorldDataForSession(options)).written).toBe(1);
     expect((await store.listWorldDataImportLedger("sess-1"))[0]?.key).toBe(
-      "sess-1-npc",
+      "npc",
     );
     expect((await importWorldDataForSession(options)).skipped).toBe(1);
     expect(await syncWorldDataForSession(options)).toMatchObject({
@@ -1318,7 +1318,7 @@ sources:
     expect((await importWorldDataForSession(options)).skipped).toBe(1);
     expect((await store.listCharacters("sess-1"))[0]?.name).toBe("Player edit");
     expect(await syncWorldDataForSession(options)).toMatchObject({
-      conflicts: [{ reason: "modified", key: "sess-1-npc" }],
+      conflicts: [{ reason: "modified", key: "npc" }],
     });
     await store.upsertCharacter(character);
     await writeFile(path.join(worldRoot, "data/cast.json"), "[]");
@@ -1467,7 +1467,7 @@ sources:
 
     expect(result.written).toBe(2);
     expect(await store.listCharacters("sess-1")).toMatchObject([
-      { id: "sess-1-mio", name: "Mio" },
+      { id: "mio", name: "Mio" },
     ]);
     expect(
       await store.getPluginData(

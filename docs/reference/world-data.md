@@ -598,7 +598,7 @@ sources:
 ]
 ```
 
-导入器为领域 ID 加上会话前缀，如 `<sessionId>-mio`，写入 `characters` 并校验会话 schema。角色读写不镜像到任何插件 namespace；面板和运行器通过 `ctx.world.characters` 或领域 API 获取同一份记录。关闭角色卡接收插件只跳过卡片数据，不影响独立的领域角色 source。
+导入器原样使用领域 ID（如 `mio`）写入 `characters` 并校验会话 schema；角色表按 `(sessionId, id)` 区分会话，ID 不再带会话前缀，提示词里的角色引用因此更短。角色读写不镜像到任何插件 namespace；面板和运行器通过 `ctx.world.characters` 或领域 API 获取同一份记录。关闭角色卡接收插件只跳过卡片数据，不影响独立的领域角色 source。
 
 `effects: [characters]` 仍可把同一 source 的通用 `{id,name,type,description,fields}` 值投影为领域角色，但不会解释插件角色卡中的 `persona/attributes/instantiate` 语义。世界作者应优先使用独立的 `to: characters` source，明确提供要进入领域模型的字段。
 
@@ -625,7 +625,7 @@ sources:
 ```
 
 - `media` source 把 `media/portraits/` 下的图导入媒体库，按 **`sha256(内容)`** 寻址（与 `@covel/store` media-store 的 `sha256(bytes)` 一致），并把索引写进 `plugin_data[character-blueprint][assets]`。
-- `presence.json` 是 presence 记录数组，每条把 `characterId` 对应角色的 `avatar` / `sprite` 指向那张图。前端按实例化 `CharacterRecord.id` 的精确值或 `-<characterId>` 后缀匹配：使用 `characters/characters.json` 中的原始 `id`（如 `npc-kamishiro-mio`），它与导入后的会话前缀 ID 对应：
+- `presence.json` 是 presence 记录数组，每条把 `characterId` 对应角色的 `avatar` / `sprite` 指向那张图。前端按实例化 `CharacterRecord.id` 的精确值或 `-<characterId>` 后缀匹配：使用 `characters/characters.json` 中的原始 `id`（如 `npc-kamishiro-mio`），导入后的角色 ID 与它相同：
 
 ```json
 [

@@ -185,7 +185,7 @@ describe("character-blueprint presence handler", () => {
 
     expect(getToolContent(result).value).toEqual({
       saved: true,
-      characterId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
+      characterId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{8}$/),
     });
   });
 

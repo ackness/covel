@@ -88,7 +88,7 @@ describe("update-inventory", () => {
     );
 
     const itemId = getToolContent(result).results[0].itemId;
-    expect(itemId).toMatch(/^item-iron-sword-[a-f0-9]{32}$/);
+    expect(itemId).toMatch(/^item-iron-sword-[a-f0-9]{8}$/);
 
     // Assert — result + persisted item
     expect(getToolContent(result).applied).toBe(1);

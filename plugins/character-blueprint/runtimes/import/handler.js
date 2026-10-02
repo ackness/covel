@@ -13,7 +13,6 @@ import { characterBlueprintToCharacterUpsert } from "../../types/blueprint.ts";
 
 const BLUEPRINT_NAMESPACE = "blueprints";
 const BLUEPRINT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-const MAX_SCOPED_CHARACTER_ID_LENGTH = 180;
 
 /**
  * @type {import("@covel/plugin-handlers-utils").PluginFunctionHandler}
@@ -46,7 +45,7 @@ export default async function handler(ctx) {
 
   let characterId;
   if (shouldInstantiate) {
-    characterId = scopedCharacterIdForBlueprint(ctx.sessionId, blueprint);
+    characterId = characterIdForBlueprint(blueprint);
     const upsert = characterBlueprintToCharacterUpsert(blueprint, {
       characterId,
       now,
@@ -153,12 +152,14 @@ function normalizeBlueprint(value) {
 }
 
 /**
- * @param {string} sessionId
+ * The instantiated character's id: `instantiate.characterId` when given,
+ * otherwise `char-<blueprint id>`. Character keys are per session already,
+ * so no session prefix.
+ *
  * @param {Record<string, unknown>} blueprint
  */
-function scopedCharacterIdForBlueprint(sessionId, blueprint) {
+function characterIdForBlueprint(blueprint) {
   const instantiate = blueprint.instantiate;
-  let baseId = `char-${blueprint.id}`;
   if (
     instantiate &&
     typeof instantiate === "object" &&
@@ -166,12 +167,8 @@ function scopedCharacterIdForBlueprint(sessionId, blueprint) {
   ) {
     const characterId = /** @type {Record<string, unknown>} */ (instantiate)
       .characterId;
-    if (typeof characterId === "string" && characterId.length > 0) {
-      baseId = characterId;
-    }
+    if (typeof characterId === "string" && characterId.length > 0)
+      return characterId;
   }
-  const scopedId = `${sessionId}-${baseId}`;
-  return scopedId.length <= MAX_SCOPED_CHARACTER_ID_LENGTH
-    ? scopedId
-    : `${sessionId}-${blueprint.id}`;
+  return `char-${blueprint.id}`;
 }

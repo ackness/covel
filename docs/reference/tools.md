@@ -841,7 +841,10 @@ Attributes:
 
 ## 短 ID（LLM 友好实体引用）
 
-`shortId()` 和 `shortIdBatch()` 为新实体分配不透明 ID。可读的 ASCII 标签会保留最多 24 个字符的 slug，所有 ID 都附带完整 UUID 的 32 位十六进制随机标识。中文、emoji、空标签也使用随机标识，不依赖进程计数器。
+模型会在注入数据里读到这些 ID，有时还要原样写回；每个字符都占 token，长随机串还容易抄错。所以 ID 尽量由单词组成，并保持在 `[a-z0-9-]` 字符集内（蓝图、规则和可移植 world data 的 ID 校验要求这一字符集）。
+
+- `wordId(prefix, label, taken)`（`@covel/plugin-handlers-utils`）：调用方能看到命名空间内全部已有 ID 时使用。返回前缀加标签单词（`npc-lin-yao`），已占用时加 `-2`、`-3`；标签没有 ASCII 字母或数字（中文、emoji）时用 8 位十六进制随机串（`char-3fa9c1d2`）。`codex`、`npc-graph` 节点和玩家角色使用它。
+- `shortId()` / `shortIdBatch()`：不读取命名空间时使用。标签单词（最多 32 个字符）加 8 位十六进制随机串，重复标签和截断后的 slug 也不会相撞，不依赖进程计数器。
 
 ```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
@@ -850,8 +853,8 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
     parameters: z.object({ name: z.string() }),
     execute: async (params, context) => {
       const id = shortId("item", params.name, context.sessionId);
-      // Dragon Sword -> item-dragon-sword-<32 hex characters>
-      // 龙息术 -> item-<32 hex characters>
+      // Dragon Sword -> item-dragon-sword-<8 hex characters>
+      // 龙息术 -> item-<8 hex characters>
       return { id };
     },
   });
