@@ -22,11 +22,13 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Rate limits no longer trip the first-token timeout.** While the transport waits out a 429 or 5xx `retry-after`, the first-token timer pauses and restarts once a later attempt is answered; the call timeout still bounds the wait. On a rate-limited provider the narrator was aborted and retried into the same limit every turn.
 - **Dimension settlement stops slipping into prose.** `world-init/dimension-tracker` now requires a tool call (`toolChoice: required`). Its conversation ends on the player's unanswered message, and without the requirement the model continued the story about half the time; once it only read a value and then wrote prose, leaving settlement pending and blocking the next turn. Over 10 DeepSeek turns it now settles on the first call every time.
 
+- **Character tracking settles quiet turns.** `sync-characters` accepts an empty batch as "no change", and `char-creator/character-tracker` now requires a tool call. Without the requirement the tracker sometimes continued the story instead of recording changes.
+
 ### Added
 
 - **Hidden world data.** worldData sources accept `visibility: hidden`. Hidden data imports into the receiving plugin's `_hidden.<namespace>` and stays out of prompts, LLM data tools, extension handlers, and every public API until a plugin reveals it (#101).
 - **Hidden story events.** The new `story-events` plugin reveals world-authored events when their dimension, world-time, or `revealed` (chained) conditions hold, handing narration a one-turn cue. All bundled worlds ship hidden events (#101, #102).
-- **Story Plotter.** The new `story-plotter` plugin plants hidden follow-up events during play every few turns. Plans travel through the `story-event.plan@1` contract; `story-events/intake` validates them and stores accepted events in `_hidden.planned`, where they fire once. The planner sees the world summary, the hero, and this turn's WorldIR when available. Mistport, Emberback, and Lantern Barrow recommend it; Haruka Academy keeps its authored romance routes without it.
+- **Story planner.** `story-events` can plant hidden follow-up events during play every few turns. Its `plot` runtime runs only when the `planner` setting is on. Plans travel through the `story-event.plan@1` contract; `story-events/intake` validates them and stores accepted events in `_hidden.planned`, where they fire once. The planner sees the world summary, the hero, and this turn's WorldIR when available. Mistport, Emberback, and Lantern Barrow turn it on through `pluginSettings`; Haruka Academy keeps its authored romance routes without it.
 - **Concealed runtimes.** `io.concealed: true` strips a runtime's prompts, tool arguments, tool results, and outputs from traces, the live stream, the session view, `/turns`, and manual RPC responses, keeping only names, status, timing, and usage.
 - **Bounded agent history.** `agent.history.maxTurns` limits the shared conversation an agent runtime sees; the bundled bookkeeping agents keep two turns.
 - **Plugin gateway limits and paged history.** `ctx.gateway.generateText` / `generateObject` accept `maxOutputTokens` and report the slot's token limits; `ctx.readTurnMessages({ after, limit })` pages the turn journal.
@@ -47,7 +49,18 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **Trigger history lives in a ledger.** `maxTriggerCount` and `cooldownTurns` read a kernel-owned per-runtime ledger written in the commit that ran the runtime, instead of counting runtime rows in the conversation journal. Rolled-back executions do not count, cooldowns survive compaction, and a run with no text, form, or UI block no longer writes an empty journal row. Existing sessions start with an empty ledger. `getTurnMessageStats` returns only the player-message count.
 - **The runtime job worker claims from the woken session.** Enqueues, retries, resumes, settle waits and job completions wake the worker for their session; a full scan of every session runs at startup, on a wake without a session, and in the 30 s maintenance pass.
 - **`setupRuntimes` writers share one helper** that re-reads the session and replaces only the entries each writer owns.
+- **Fewer bundled plugins.** Plugins that only ever worked together are now one package: `scene-cast` is `scene-stage`'s `cast` runtime, `character-presence` is part of `character-blueprint` (shown as "Character Profiles"), `story-plotter` is `story-events`' `plot` runtime, and `scene-prompts` is `guide` (shown as "Action Suggestions"). `director`'s writing notes are part of the narrator prompt. Capabilities such as `scene-cast@1`, `character-presence@1`, `story-event.plan@1` and `scene-prompts@1` are unchanged, and world packages need no data changes. Worlds and packs list the merged plugins; `activeSpeakerCount` moved to `pluginSettings.scene-stage`.
+- **One action-suggestion format.** `guide` gives every mode a short recap, the decision the player faces, and 3–6 ready-to-send phrases, which stage mode also shows as choices. The safe / aggressive / creative categories are gone.
 - **The e2e plugin harness matches the current pipeline.** It finds forms in runtime effects, reads back each request's executions by `turnId`, counts `runtime.deferred` as a run of a detached runtime, checks background jobs end `succeeded`, fails uncommitted turns, and gates expectations on `startTurn` and `interval`. By default every runtime now uses the configured models (`--slot` only overrides the story slot), and Phase 6 lists the model each runtime called.
+
+### Removed
+
+- **Scene background generation.** `scene-stage` no longer calls an image model; a location without world art shows the world image. Its `modelPresetId`, `autoGenerateScenes` and `maxGeneratedScenes` settings, the `visualHint` field of `scene.set`, and the `pending` flag of `stage.backdrop@1` are gone.
+- **`story-guard`**, which no world enabled and whose default block list matched no current tool.
+
+### Breaking contracts and upgrade notes
+
+- Development sessions that list `scene-cast`, `character-presence`, `story-plotter`, `scene-prompts`, `director` or `story-guard` must drop them from their active plugins, or be recreated. Data those plugins wrote under their own ids is not carried over; world data re-imports into the merged plugins on a new session.
 
 ## [0.0.44] - 2026-10-01
 
