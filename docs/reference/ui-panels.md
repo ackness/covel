@@ -31,6 +31,29 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+图中的导航位置和右侧「纵向图标条」是 `classic` 布局的样子。主题包可以通过 `layout` 改变这些结构（左侧图标导航、文字页签、场景图铺满会话区等），见 [theme-packages.md §3.1](./theme-packages.md#31-布局预设layout)。面板的发现、分组、排序和数据流不随布局变化：插件声明一次 `ui.right` / `ui.message`，在每种布局下都按同一份 spec 渲染。
+
+## 会话工具条、玩家状态与场景 HUD
+
+会话顶部工具条和状态显示只用内核数据，不读任何插件的 namespace，所以对每个世界都成立，没有数据时对应部分不显示：
+
+| 显示内容             | 数据来源                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 世界名、回合数       | `WorldRecord.name`、`SessionRecord.completedPlayerTurns`                                                                                         |
+| 当前场景名           | `stage.backdrop@1` 槽位的 `name`                                                                                                                 |
+| 玩家状态量表         | 会话 World Model：`type: "player"` 的角色记录，加角色 schema 里 `category: "stats"`、`type: "number"` 且同时声明 `min` / `max` 的属性；最多 4 项 |
+| 随身物品             | 同一条玩家角色记录里，角色 schema 中 `category: "equipment"`、`type: "array"` 的属性的字符串项，按 schema 顺序合并                               |
+| 在场角色（场景 HUD） | `stage.cast@1` 的未退场演员（最多 3 位）与按角色 ID 取的 `character.visual@1` 头像；没有图时只显示名字                                           |
+| 「正在说话」标记     | `stage.dialogue@1` 的 `paragraphSpeakers` 里最后一个有署名的段落；名字与在场演员的 `displayName` 相同才显示                                      |
+| 章节横幅             | `backdrop: "banner"` 的布局里，世界头图、世界名和前三个标签，放在第一条消息上方                                                                  |
+| 状态摘要             | `session.summary@1` 槽位：任何插件都可以提供的几行「一眼就该看到」的内容（当前目标、时间、行囊），见下方 [Session summary](#session-summary)     |
+
+- 玩家名、状态量表和随身物品在 `panelTabs: "bar"` 的布局里固定在右侧面板页签下方；在 `backdrop: "scene"` 的布局里与在场角色一起叠在场景图左下角。场景 HUD 需要会话区够宽（约 66rem）；不够宽时它让位给故事栏，状态改由右侧面板显示，两处不会同时出现。
+- 想让某个数值出现在量表里，世界作者把它声明为带范围的 `stats` 属性即可；没有声明范围的 `stats` 数值显示成一行数字（最多 4 项）。想让物品出现在随身物品里，把它声明为 `equipment` 类的字符串数组。都不需要写插件 UI。
+- 插件自己的数据（任务、行囊、时间）不进角色记录，通过 `session.summary@1` 槽位出现在同一个位置。
+- `backdrop: "scene"` 且有场景名时，工具条把场景名作为大标题，世界名和回合数缩成它上方的一行。
+- 工具条右侧是「文本 / 舞台」切换、设置、「更多」菜单和右侧面板开关。详情视图、原始视图、工作室配置、返回配置页和调试追踪收在「更多」里。
+
 ## 跨页面导航
 
 `/session?sid=<sessionId>&panel=plugins|images` 可携带一次性的面板打开请求。
@@ -195,6 +218,8 @@ UI 声明来自启动时 registry 快照，静态资源惰性加载并按快照�
 静态资源读取会校验符号链接解析后的真实路径：允许指向插件根目录内的链接，拒绝指向根目录外的文件或目录。资源加载失败时跳过对应 runtime 的 UI，不影响其他 runtime 的面板。
 
 ### activity-bar 短标签
+
+`panelTabs: "bar"` 的布局在页签上显示 `shortLabel`，没有声明时显示完整的 `groupLabel` / `label`，不做截断。下面的截断规则只用于 `panelTabs: "rail"`。
 
 activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。框架默认对 `groupLabel`（或 `label`）做机械截断：
 
@@ -388,7 +413,11 @@ type I18nText = string | Record<LocaleTag, string>;
 
 两条链路都使用同一套 json-render catalog。
 
-解析视图（`parsed`）下，每回合的只读插件卡片（`ui.render`、`ui-spec`，以及 level 为 info/success 的通知，例如图鉴发现、成就和状态变更）会合并成一条默认折叠的「本回合更新 · N 项」，摘要里预览前三个卡片标题，让叙事占据主要版面。表单、选项、确认、建议块（`plugin_message`）、图片和警告/错误通知不折叠。玩家可在设置「通用」中打开 `ui.expandTurnUpdates` 改为默认展开；`detailed` / `raw` 视图不折叠。实现见 `apps/web/src/components/session/chat-messages/turn-updates.tsx`。
+解析视图（`parsed`）下，每回合的只读插件卡片（`ui.render`、`ui-spec`，以及 level 为 info/success 的通知，例如图鉴发现、成就和状态变更）会合并成一条默认折叠的「本回合更新 · N 项」，摘要里预览前三个卡片标题，让叙事占据主要版面。表单、选项、确认、图片和警告/错误通知不折叠。建议块（`plugin_message`）在当前回合保持展开；出现更新的玩家消息后折叠为「历史建议」。玩家可在设置「通用」中打开 `ui.expandTurnUpdates` 改为默认展开；`detailed` / `raw` 视图不折叠。主题包的 `layout.turnNotes` 决定这条更新放在哪：`fold` 是上面的默认行为，`inline` 让最新一回合默认展开，`margin` 在会话区够宽时把它放到正文旁的页边栏。实现见 `apps/web/src/components/session/chat-messages/turn-updates.tsx`。
+
+**选项只有一种画法。** 给玩家选的东西最终都渲染成 `.ui-choice`：插件 spec 里的 `ChoiceList` / `Choice`、内核的选择题消息块（`choice` block，由框架转成 `ChoiceList`）、`CandidateList` 的回复变体（点击即采用该版本，「草稿 / 发送」是它下方的次要动作）、舞台视图的决策面板。所以选项在每套风格方案里长得一样，新插件只要走这几条路之一就自动跟随。
+
+当前回合里的选项可以用数字键选：按 1–9 相当于点击屏幕上第 n 个选项。同一回合里有多组选项时编号连续（先出现的在前），画出来的序号与按键一致；被禁用的选项保留编号但不响应。焦点在输入框里、按着修饰键、有对话框或菜单打开、回合还在执行时不响应。舞台视图的决策面板同样支持。实现见 `apps/web/src/hooks/use-choice-hotkeys.ts`，编号是 CSS 计数器（`apps/web/src/styles/ui-components.css` 的 `.ui-choice` 一节）。
 
 | 链路           | 当前承载内容                                                                                                                                   | 实现位置                                                                                              |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -438,13 +467,13 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 五层绝对定位、`z-index` 分档，DOM 顺序 Backdrop → Sprites → Hud → Dialog → Choices，全部套在一个 `relative` 有界容器里。舞台消费服务端 `ui.slot@1` 投影；提供者从各自数据、领域事件和 World Model 构造通用槽位，前端不按插件 namespace 拼接舞台：
 
-| 层           | 数据源                                                 | 前端用途                                         |
-| ------------ | ------------------------------------------------------ | ------------------------------------------------ |
-| **Backdrop** | `stage.backdrop@1`                                     | 展示背景、场景名称和状态；缺图时使用世界视觉回退 |
-| **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1` | 站位、高亮、立绘与无图时的占位                   |
-| **Hud**      | `stage.backdrop@1`                                     | 展示名称、变体和来源状态                         |
-| **Dialog**   | 最新 story 正文与 `stage.dialogue@1`                   | 打字、段落切分和逐段署名                         |
-| **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项与自由输入               |
+| 层           | 数据源                                                 | 前端用途                                           |
+| ------------ | ------------------------------------------------------ | -------------------------------------------------- |
+| **Backdrop** | `stage.backdrop@1`                                     | 展示背景、场景名称和状态；缺图时使用世界视觉回退   |
+| **Sprites**  | `stage.cast@1` 与按角色 ID 索引的 `character.visual@1` | 站位、高亮、立绘与无图时的占位                     |
+| **Hud**      | `stage.backdrop@1`                                     | 展示名称、变体和来源状态                           |
+| **Dialog**   | 最新 story 正文与 `stage.dialogue@1`                   | 打字、段落切分和逐段署名                           |
+| **Choices**  | `stage.choices@1` 与待提交 interaction choice block    | 情境回顾、决策问题、选项（`.ui-choice`）与自由输入 |
 
 “流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示，逐段暂停等待点击；最后一段读完同样停一次等收尾点击（自动播放按停顿计时自动推进，正文尾部空段落不产生空白暂停），不会在打字追上流结束时自动跳到决策面板。读完且回合执行结束后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后立即隐藏整个旧决策面板，包括插件扩展区域；等待新叙事时显示生成状态，不重播已读的旧叙事。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版行动建议行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
 
@@ -477,7 +506,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 ## 组件 Catalog
 
-组件目录已抽出到独立页面，见 [docs/reference/ui-components.md](./ui-components.md)（当前 48 个组件，权威来源为 `apps/web/src/lib/catalog.tsx` 导出的 `covelRegistry`）。
+组件目录已抽出到独立页面，见 [docs/reference/ui-components.md](./ui-components.md)（当前 50 个组件，权威来源为 `apps/web/src/lib/catalog.tsx` 导出的 `covelRegistry`）。
 
 ## 数据流
 
@@ -538,13 +567,14 @@ Responsive panel resize callbacks use the supplied dimensions, avoiding imperati
 
 ## 插件自带组件与舞台挂载
 
-JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用双层 opaque-origin sandbox iframe；可信外层的 CSP 禁止插件文档向网络地址自行导航，端口仅转交一次。内层保留内联脚本与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。
+JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。组件通过消息桥拿到当前风格方案（`theme` 与 `--covel-*` CSS 变量），并可调用 `emitEvent`、`draftMessage` 等动作。右侧面板里的每个插件面板都可以「放大」到大对话框显示。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用双层 opaque-origin sandbox iframe；可信外层的 CSP 禁止插件文档向网络地址自行导航，端口仅转交一次。内层保留内联脚本与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。
 
 ## Kernel UI slots
 
 Plugins declare `contributes.extensions` providers for `ui.slot@1` and register
 handlers from their server entry. `slot` selects `stage.backdrop@1`,
-`stage.cast@1`, `stage.dialogue@1`, `stage.choices@1`, or `character.visual@1`.
+`stage.cast@1`, `stage.dialogue@1`, `stage.choices@1`, `character.visual@1`, or
+`session.summary@1`.
 Providers compose in declared order, then plugin/provider ID order. Handlers
 receive `{ slot, previous, events }`, own scoped `ctx.pluginData`, and the kernel
 `ctx.world` view. The host validates each provider output against its slot model.
@@ -561,6 +591,64 @@ including imported art before characters are created. Providers normalize IDs;
 the host emits one keyed `character.visual@1` snapshot per `characterId`.
 Front-end consumers join exact keys and do not infer plugin namespaces or ID
 suffixes. The stage, avatar, portrait gallery, and cast list read these slots.
+
+### Session summary
+
+`session.summary@1` is what a plugin wants the player to see at a glance: the
+current objective, the time, what is carried. The client shows it wherever the
+active layout keeps status — under the labelled panel tabs, or on the scene HUD
+— so a plugin declares it once and never needs to know the layout.
+
+The value is `{ entries: SessionSummaryEntry[] }` (at most 16). Each entry has
+`id`, `label` (`I18nText`) and a `kind`:
+
+| `kind`  | Fields                                | Drawn as                                   |
+| ------- | ------------------------------------- | ------------------------------------------ |
+| `text`  | `value` (`I18nText`), `tone?`         | Label and a line of text                   |
+| `meter` | `value`, `max`, `min?` (0), `tone?`   | Label, gauge and `value / max`             |
+| `list`  | `items` (`I18nText[]`, ≤24), `total?` | Label and chips; `+N` when `total` is more |
+
+`tone` is `info`, `success`, `warning` or `danger`. Providers run as a chain, so
+each returns the earlier entries plus its own; `appendSummaryEntries(previous,
+entries)` from `@covel/plugin-handlers-utils` does that. Prefix entry IDs with
+the plugin's own name (`inventory.items`); a later entry with the same `id`
+replaces an earlier one. Keep it short — one to three entries per plugin — and
+leave detail to the plugin's panel.
+
+```yaml
+entry: ./server/index.js
+contributes:
+  extensions:
+    - point: ui.slot@1
+      id: summary
+      slot: session.summary@1
+      order: 20 # lower runs first and shows first
+      watch:
+        - quests # own namespaces whose commits refresh the summary
+```
+
+```js
+import { appendSummaryEntries } from "@covel/plugin-handlers-utils";
+
+export default function (covel) {
+  covel.provideExtension("ui.slot@1", "summary", {
+    async handler({ previous }, ctx) {
+      const quests = await ctx.pluginData.list("quests");
+      return appendSummaryEntries(previous, [
+        {
+          id: "quest.current",
+          kind: "text",
+          label: { zh: "当前目标", en: "Objective" },
+          value: quests[0]?.value?.name ?? "",
+        },
+      ]);
+    },
+  });
+}
+```
+
+The bundled `world-time` (current time), `core-quest` (next open objective and
+progress) and `inventory` (carried items) plugins provide entries this way.
 
 Panel data bindings and action `pluginId` fields may reference only the owning
 plugin. The loader rejects foreign or dynamic plugin targets. Use kernel slots

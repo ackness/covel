@@ -14,17 +14,29 @@
 - 导入解析：`apps/web/src/theme-system/validate.ts`
 - 持久化：`apps/web/src/theme-system/storage.ts`
 - 内置主题包：`apps/web/src/themes/builtins/*`
+- 布局预设（见 §3.1）：`layout.ts`（预设表、校验、发布到 `<html>`）· `use-theme-layout.ts`（组件读取当前布局）· 结构样式 `apps/web/src/styles/layout.css`
 - 外观工作室（见 §9）：token 覆盖 `overrides.ts` · 可编辑 token 清单 `token-schema.ts` · 另存为主题 `theme-export.ts` · 颜色工具 `color.ts`
 
 当前运行时主题切换入口是：
 
 ```html
-<html data-theme="paper" data-scheme="dark" class="dark"></html>
+<html
+  data-theme="panel"
+  data-scheme="dark"
+  class="dark"
+  data-layout="panel"
+  data-nav="rail"
+  data-panel-tabs="bar"
+  data-backdrop="none"
+  data-world-list="cards"
+  data-turn-notes="inline"
+></html>
 ```
 
 其中：
 
-- `ui.appearance` 持久化主题包 ID，并应用为 `data-theme`
+- `ui.appearance` 持久化主题包 ID，并应用为 `data-theme`；默认值是 `panel`
+- 主题包的 `layout` 解析后写入 `data-layout` 及各选项属性（见 §3.1）；没有单独的布局设置项，布局随主题包切换
 - `ui.scheme` 持久化颜色模式，并应用为 `data-scheme` 与 Tailwind 兼容的 `.dark`
 - 主题包的 `schemes` 决定可用颜色模式；只支持单一模式的主题会自动把 `ui.scheme` 对齐到可用值
 
@@ -67,9 +79,12 @@ JSON 结构：
     "zh-CN": "深色余烬主题",
     "en-US": "A dark ember theme"
   },
+  "layout": { "preset": "panel", "nav": "top" },
   "cssText": "html[data-theme=\"ember\"] { --color-background: #14171d; }"
 }
 ```
+
+CSS 文件没有地方声明 `layout`，按 CSS 导入的主题使用 `classic` 布局。需要其他布局时使用 JSON 格式。
 
 ## 3. JSON 字段契约
 
@@ -79,7 +94,68 @@ JSON 结构：
 | `label`       | `string \| Record<string, string>` | 显示名称                                       |
 | `schemes`     | `("light" \| "dark")[]`            | 支持的颜色模式                                 |
 | `description` | `string \| Record<string, string>` | 可选说明                                       |
+| `layout`      | `ThemeLayoutSpec`                  | 可选布局声明，见 §3.1；省略时为 `classic`      |
+| `group`       | `string`                           | 可选分组 ID，格式同 `id`，见 §3.2              |
+| `groupLabel`  | `string \| Record<string, string>` | 可选分组显示名，见 §3.2                        |
 | `cssText`     | `string`                           | 主题 CSS 内容，必须只声明与 `id` 相同的主题 ID |
+
+### 3.1 布局预设（`layout`）
+
+token 和语义 hook 只能改外观。导航放在哪、右侧面板页签长什么样、会话如何使用世界美术、世界列表怎么排、每回合的结果放在哪，这些是结构，由主题包的 `layout` 声明：先选一个预设，再按需覆盖单个选项。
+
+```ts
+interface ThemeLayoutSpec {
+  preset?: "classic" | "book" | "stage" | "panel"; // 省略为 classic
+  nav?: "top" | "rail";
+  panelTabs?: "rail" | "bar";
+  backdrop?: "ambient" | "scene" | "banner" | "none";
+  worldList?: "covers" | "cards" | "list" | "showcase";
+  turnNotes?: "fold" | "inline" | "margin";
+}
+```
+
+| 选项        | 取值       | 效果                                                                                |
+| ----------- | ---------- | ----------------------------------------------------------------------------------- |
+| `nav`       | `top`      | 顶部导航条                                                                          |
+|             | `rail`     | 桌面宽度下改为左侧图标导航栏；窄屏仍用顶部导航条和菜单弹层                          |
+| `panelTabs` | `rail`     | 右侧面板用纵向图标条切换                                                            |
+|             | `bar`      | 右侧面板顶部用带文字的横向页签，可横向滚动                                          |
+| `backdrop`  | `ambient`  | 会话顶部一层很淡的世界图                                                            |
+|             | `scene`    | 当前场景图铺满会话区（`stage.backdrop@1` 槽位，缺失时回退世界头图），正文收进右侧栏 |
+|             | `banner`   | 世界图作为章节横幅放在第一条消息上方，随历史一起滚动                                |
+|             | `none`     | 不显示世界图                                                                        |
+| `worldList` | `covers`   | 整卡封面的世界卡片（两列）                                                          |
+|             | `cards`    | 上图下文的卡片（三列），顶部有「继续上次的冒险」和搜索框                            |
+|             | `list`     | 一行一个世界的阅读列表                                                              |
+|             | `showcase` | 选中世界的封面铺满全屏，其他世界排成缩略图条；默认选中最近玩过的世界                |
+| `turnNotes` | `fold`     | 每回合的只读结果（检定、状态变化、新发现）折叠在正文下方                            |
+|             | `inline`   | 最新一回合的结果默认展开，更早的仍然折叠                                            |
+|             | `margin`   | 结果放在正文旁的页边栏；会话区不够宽时退回正文下方                                  |
+
+| 预设      | `nav`  | `panelTabs` | `backdrop` | `worldList` | `turnNotes` |
+| --------- | ------ | ----------- | ---------- | ----------- | ----------- |
+| `classic` | `top`  | `rail`      | `ambient`  | `covers`    | `fold`      |
+| `book`    | `top`  | `bar`       | `banner`   | `list`      | `margin`    |
+| `stage`   | `top`  | `bar`       | `scene`    | `showcase`  | `inline`    |
+| `panel`   | `rail` | `bar`       | `none`     | `cards`     | `inline`    |
+
+规则：
+
+- 取值是封闭枚举，对象不允许未知键。JSON 导入时 `layout` 不合法会整体拒绝该主题包；已存储的主题包里不合法的 `layout` 会被丢弃并回退到 `classic`。
+- 框架的结构样式按**选项**属性匹配（如 `html[data-backdrop="scene"]`），不按主题 ID 或预设名。覆盖了单个选项的自定义主题包同样得到对应结构。
+- 组件通过 `useThemeLayout()` 读取当前布局；新增一个结构选项需要同时改 `layout.ts` 的枚举与预设表、消费它的组件，以及本节表格。
+- 「另存为主题包」会带上来源主题的 `layout`。
+
+### 3.2 风格与配色分组（`group`）
+
+设置里的「风格方案」按 `group` 把主题包归成卡片：同一个 `group` 的主题包是一个风格，各成员是这个风格下的配色。没有声明 `group` 的主题包自成一个风格（分组 ID 就是它自己的 `id`）。
+
+- 每个成员仍是完整、可独立选择的主题包；`ui.appearance` 存的始终是主题包 ID，没有单独的「配色」设置项。
+- 卡片名称取第一个声明了 `groupLabel` 的成员；都没有声明时取 `id` 与分组 ID 相同的那个成员的 `label`，再没有则取第一个成员的 `label`。内置主题排在前面，导入的主题包无法改掉内置分组的名称。
+- 配色的名称是成员自己的 `label`；`id` 与分组 ID 相同的成员显示为「默认」。
+- 卡片的缩略图、说明和布局取当前选中的成员，未选中时取第一个成员。框架不要求同组成员布局一致，但同组混用不同布局会让玩家困惑。
+- 「另存为主题包」会把新主题包归入来源主题的分组，作为该风格下的一个新配色。
+- 给某个风格加配色：导入一个 `group` 指向该风格的主题包即可，例如 `"group": "panel"`。
 
 ## 4. 内置主题包结构
 
@@ -87,6 +163,15 @@ JSON 结构：
 
 ```text
 apps/web/src/themes/builtins/
+  panel/
+    manifest.json
+    theme.css
+  book/
+    manifest.json
+    theme.css
+  stage/
+    manifest.json
+    theme.css
   modern/
     manifest.json
     theme.css
@@ -100,6 +185,8 @@ apps/web/src/themes/builtins/
     manifest.json
     theme.css
 ```
+
+`panel`（面板）、`book`（书卷）、`stage`（舞台）是三套「风格方案」，各自声明一个同名布局预设，是写带布局主题包的参考实现。`paper` / `modern` / `abyss` / `aurora` 使用 `classic` 布局，并声明 `"group": "classic"`，在设置里合成一个「经典」风格的四种配色。
 
 `aurora` 是效果参考实现：玻璃拟态、通过 `transform` 旋转静态渐变图层实现的流光、消息入场动画、以及 §6.6 的状态驱动特效。渐变图层按视口对角线加模糊留白确定尺寸，旋转时覆盖横竖屏；避免逐帧修改渐变角度，从而减少滚动期间的重复栅格化。要写"花哨"主题时直接抄它。
 
@@ -120,6 +207,8 @@ apps/web/src/themes/builtins/
   }
 }
 ```
+
+带布局的内置主题在 manifest 里多一个 `layout` 字段，例如 `"layout": { "preset": "book" }`。
 
 ## 5. 共享 token 契约
 
@@ -199,6 +288,12 @@ apps/web/src/themes/builtins/
 
 ### 5.5 字体与排版 token
 
+中文字体默认用系统自带的（如 `"PingFang SC"`、`"Microsoft YaHei"`、`"Songti SC"`）。应用不从字体服务加载中文网络字体：它们体积大，会在加载过程中让整页文字反复重排，字体服务不可达时还会拖慢首屏。
+
+随应用打包了一款标题字体 `"ZCOOL XiaoWei"`（站酷小薇，OFL 1.1；文件在 `apps/web/public/fonts/zcool-xiaowei/`，字体声明在 `apps/web/src/styles/fonts.css`）。它只有 400 一个字重，只在有主题用到这个字体族时才会被读取，`stage` 用它做标题。主题包可以直接在字体栈里写这个名字，但不要给它设粗体。
+
+主题包不能 `@import`，所以字体栈里其余的中文字体都应是系统字体，并以通用族名（`sans-serif` / `serif`）收尾。
+
 - `--font-sans`
 - `--font-display`
 - `--font-serif`
@@ -241,6 +336,13 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 
 ### 6.1 结构层
 
+- `.ui-app-header`：顶部导航条
+- `.ui-nav-rail`：`nav: "rail"` 时的左侧导航栏
+- `.ui-nav-item`：导航项（两种导航共用，当前项带 `aria-current="page"`）
+- `.ui-session-header`：会话顶部工具条；其中 `.ui-session-title` 是标题（`backdrop: "scene"` 且有场景名时是场景名，否则是世界名），`.ui-view-switch` 是「文本 / 舞台」切换（选中项带 `data-state="on"`），`.ui-session-action` 是返回、设置、更多、面板开关这些按钮，`.ui-menu-item` 是「更多」菜单里的条目
+- `.ui-session-thumb`：工具条里世界名前的世界缩略图。默认隐藏，主题用 `display: block` 打开并给出尺寸
+- `.ui-panel-status`：`panelTabs: "bar"` 时右侧面板页签下方的玩家状态条；`.ui-panel-status-name` 是玩家名，`.ui-panel-status-title` 是状态条的标题（「手记」），默认隐藏，主题用 `display: block` 打开
+- `.ui-panel-tabbar` / `.ui-panel-tab` / `.ui-panel-tab-icon`：`panelTabs: "bar"` 时右侧面板的页签条、页签和页签图标（当前页签带 `data-state="active"`）
 - `.ui-panel-header`
 - `.ui-panel-section`
 - `.ui-panel-footer`
@@ -269,13 +371,27 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 
 - `.ui-session-column`
 - `.ui-session-backdrop`：中央面板顶部的世界装饰图和渐隐层；可加静态遮罩使其融入半透明底色。
-- `.ui-message-row`
+- `.ui-session-scene-scrim`：`backdrop: "scene"` 时盖在场景图上的暗化层
+- `.ui-scene-hud`：`backdrop: "scene"` 时叠在场景图左下的在场角色与玩家状态；`.ui-scene-card` 是其中每块半透明底板，`.ui-scene-cast[data-focused="true"]` 是当前焦点角色，`.ui-scene-speaking` 是「正在说话」标记
+- `.ui-chapter-banner`：`backdrop: "banner"` 时第一条消息上方的章节横幅；`.ui-chapter-banner-scrim` 是图上的暗化层
+- `.ui-status-meters`：玩家状态量表（面板状态条与场景 HUD 共用），量表本身沿用 `.ui-meter-track` / `.ui-meter-fill`
+- `.ui-status-items` / `.ui-status-item`：玩家随身物品的列表和单个物品标签（同样两处共用）
+- `.ui-panel-dialog`：插件面板「放大」后的大对话框
+- `.ui-summary`：状态摘要的「标签—内容」列表（无范围的数值属性和插件提供的 `session.summary@1` 条目）；`.ui-summary-label` 是标签，`.ui-summary-value` 是内容，带 `data-tone="info" | "success" | "warning" | "danger"`
+- `.ui-turn-updates`：每回合只读结果的折叠块（`<details>`，展开时带 `[open]`）；`turnNotes: "margin"` 时它就是页边批注
+- `.ui-choice-list` / `.ui-choice`：供玩家选择的选项（插件用 `ChoiceList` / `Choice` 组件声明）。`.ui-choice` 是一个按钮，选中带 `data-selected="true"`，里面依次是 `.ui-choice-index`（序号，默认隐藏；内容是 CSS 计数器 `ui-choice`，主题可以改成汉字数字或键帽）、`.ui-choice-content`（含 `.ui-choice-title` 和 `.ui-choice-body`）、`.ui-choice-eyebrow`（标签，`data-tone` 在 `.ui-choice` 上）。选项下方带次要动作时，外面多一层 `.ui-choice-row`，动作在 `.ui-choice-actions` 里。舞台视图决策面板里的选项另带 `.ui-stage-choice-item`（入场动画与焦点环）
+- `.ui-story-surface`：消息流、待发送区和输入框的共同容器；`backdrop: "scene"` 时就是右侧的故事栏，底色取 `--surface-story`
+- `.ui-message-row`：带 `data-role="user" | "assistant"`
+- `.ui-message-role`：消息上方的角色标签（「玩家」/「助手」），主题可隐藏或改成行内标记
 - `.ui-player-message-row`
 - `.ui-message-player`
 - `.ui-message-assistant`
+- `.ui-composer`：输入区外层
 - `.ui-composer-frame`
 - `.ui-composer-input`
 - `.ui-composer-submit`
+- `.ui-world-heading`、`.ui-world-enter`、`.ui-world-tag`、`.ui-world-tile`、`.ui-world-row`、`.ui-world-showcase`、`.ui-world-thumb`：世界选择页各排法的标题、主按钮（进入或继续）、标签和条目
+- `.ui-world-continue`、`.ui-world-search`：`worldList: "cards"` 时列表上方的「继续上次的冒险」横幅和搜索框
 
 ### 6.5 细节效果
 
@@ -294,6 +410,9 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 | `data-session` | `active` / `paused` / `ended`              | 会话生命周期         |
 | `data-theme`   | 主题 ID                                    | 当前主题（作用域用） |
 | `data-scheme`  | `light` / `dark`                           | 当前明暗模式         |
+| `data-layout`  | 布局预设名                                 | 当前主题的布局预设   |
+
+布局的各选项另有 `data-nav`、`data-panel-tabs`、`data-backdrop`、`data-world-list`、`data-turn-notes`（取值见 §3.1）。
 
 `waiting` 优先于 `executing`：回合还开着，但内核在等玩家操作（表单、选择），这才是值得高亮的状态。
 

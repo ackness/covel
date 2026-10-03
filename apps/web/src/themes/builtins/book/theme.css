@@ -1,0 +1,489 @@
+/* ─────────────────────────────────────────────────────────────────
+   Book — reading first
+   Cool rice-paper ground, ink text, one teal-ink accent. The story is
+   set like a printed page: serif body, indented paragraphs, hairline
+   rules instead of boxes.
+   ───────────────────────────────────────────────────────────────── */
+
+html[data-theme="book"] {
+  --color-background: #f0f1ec;
+  --color-foreground: #1b2126;
+  --color-card: #fafaf7;
+  --color-card-foreground: #1b2126;
+  --color-popover: #fafaf7;
+  --color-popover-foreground: #1b2126;
+  --color-primary: #2a5b60;
+  --color-primary-foreground: #f7f8f4;
+  --color-secondary: #e3e6de;
+  --color-secondary-foreground: #2b3339;
+  --color-muted: #e3e6de;
+  --color-muted-foreground: #5f696f;
+  --color-accent: #dde1d8;
+  --color-accent-foreground: #1b2126;
+  --color-destructive: #b23a2b;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #d5d8cf;
+  --color-input: #c6cbc0;
+  --color-ring: rgb(42 91 96 / 0.45);
+
+  --radius-sm: 0.125rem;
+  --radius-md: 0.125rem;
+  --radius-lg: 0.1875rem;
+  --radius-xl: 0.25rem;
+
+  /* System CJK faces only: nothing to download, so text never reflows. */
+  --font-sans:
+    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC",
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-display:
+    "Newsreader", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC",
+    "Source Han Serif SC", "SimSun", ui-serif, Georgia, serif;
+  --font-serif:
+    "Newsreader", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC",
+    "Source Han Serif SC", "SimSun", ui-serif, Georgia, serif;
+
+  --surface-page: var(--color-background);
+  --surface-rail: #e8eae3;
+  --surface-inset: #e6e9e1;
+  --surface-elevated: var(--color-card);
+  --surface-dialog: var(--color-card);
+  --surface-player: transparent;
+
+  --surface-app: var(--surface-page);
+  --surface-panel: var(--surface-rail);
+  --surface-panel-strong: var(--surface-elevated);
+  --surface-empty: color-mix(in oklab, var(--color-muted) 65%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 72%, transparent);
+
+  --rule-color: #d5d8cf;
+  --rule-strong-color: #1b2126;
+  --rule-style: solid;
+
+  --accent-primary: #2a5b60;
+  --accent-secondary: #2f4a7a;
+  --accent-warning: #8f6212;
+  --accent-danger: #b23a2b;
+  --accent-success: #2f6b4a;
+
+  --ambience-image: none;
+  --noise-opacity: 0.03;
+
+  --radius-card: 0.125rem;
+  --radius-control: 0.125rem;
+  --radius-dialog: 0.25rem;
+  --radius-chip: 999px;
+
+  --panel-header-height: 3.25rem;
+  --panel-section-padding-x: 1.375rem;
+  --panel-section-padding-y: 1rem;
+  --composer-max-width: 42.5rem;
+  --session-column-max-width: 45.5rem;
+
+  --type-display: var(--font-display);
+  --type-body: var(--font-sans);
+  --type-meta: var(--font-sans);
+
+  --eyebrow-font-family: var(--font-sans);
+  --eyebrow-font-size: 0.75rem;
+  --eyebrow-font-weight: 700;
+  --eyebrow-letter-spacing: 0.2em;
+  --eyebrow-text-transform: none;
+
+  --title-font-family: var(--font-display);
+  --title-font-style: normal;
+  --title-font-weight: 700;
+  --title-letter-spacing: 0.02em;
+  --title-text-transform: none;
+
+  --story-font-family: var(--font-serif);
+  --story-font-size: 1.0625rem;
+  --story-line-height: 1.85;
+  --story-font-weight: 400;
+  --story-letter-spacing: 0;
+  --story-max-width: 42.5rem;
+
+  --meta-font-family: var(--font-sans);
+  --meta-font-size: 0.75rem;
+  --meta-letter-spacing: 0;
+  --meta-text-transform: none;
+
+  --shadow-card: none;
+  --shadow-dialog: 0 24px 60px -34px rgb(27 33 38 / 0.4);
+  --shadow-pop: 0 10px 26px -18px rgb(27 33 38 / 0.3);
+}
+
+/* Night reading: the same page, lamp off. */
+html[data-theme="book"].dark {
+  --color-background: #14181c;
+  --color-foreground: #e4e7e1;
+  --color-card: #1a1f24;
+  --color-card-foreground: #e4e7e1;
+  --color-popover: #1c2227;
+  --color-popover-foreground: #e4e7e1;
+  --color-primary: #86bcc1;
+  --color-primary-foreground: #10161a;
+  --color-secondary: #1f252b;
+  --color-secondary-foreground: #d5d9d3;
+  --color-muted: #1f252b;
+  --color-muted-foreground: #9aa4a9;
+  --color-accent: #262d34;
+  --color-accent-foreground: #f1f3ee;
+  --color-destructive: #e08273;
+  --color-destructive-foreground: #14181c;
+  --color-border: #2c333a;
+  --color-input: #343c44;
+  --color-ring: rgb(134 188 193 / 0.5);
+
+  --surface-page: #14181c;
+  --surface-rail: #171b20;
+  --surface-inset: #1c2126;
+  --surface-elevated: #1a1f24;
+  --surface-dialog: #1c2227;
+
+  --rule-color: #2c333a;
+  --rule-strong-color: #c9cec8;
+
+  --accent-primary: #86bcc1;
+  --accent-secondary: #9bb3e0;
+  --accent-warning: #d9ae5e;
+  --accent-danger: #e08273;
+  --accent-success: #8cc7a3;
+
+  --noise-opacity: 0;
+  --shadow-dialog: 0 28px 80px -36px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 10px 28px -16px rgb(0 0 0 / 0.6);
+}
+
+/* ── Shell: quiet bar, text navigation ───────────────────────── */
+html[data-theme="book"] .ui-app-header {
+  background: var(--surface-page);
+}
+
+html[data-theme="book"] .ui-app-header .ui-nav-item {
+  padding-inline: 0.625rem;
+  background: transparent;
+  font-size: 0.875rem;
+}
+
+html[data-theme="book"] .ui-app-header .ui-nav-item[aria-current="page"] {
+  font-weight: 700;
+}
+
+html[data-theme="book"] .ui-session-header {
+  background: var(--surface-page);
+}
+
+/* ── Labels ──────────────────────────────────────────────────── */
+html[data-theme="book"] .ui-tag {
+  padding: 0;
+  border: 0;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html[data-theme="book"] .ui-tag-solid {
+  padding: 0.0625rem 0.4375rem;
+  background: var(--color-foreground);
+  color: var(--surface-page);
+}
+
+html[data-theme="book"] .ui-folio {
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+
+/* ── Callouts: ruled above and below, no side stripe ─────────── */
+html[data-theme="book"] .ui-band {
+  padding: 0.75rem 0;
+  border-left: 0;
+  border-top: 1px solid var(--rule-color);
+  border-bottom: 1px solid var(--rule-color);
+}
+
+html[data-theme="book"] .ui-band::before {
+  display: none;
+}
+
+html[data-theme="book"] .ui-band[data-tone="warning"] {
+  border-color: color-mix(in oklab, var(--accent-warning) 55%, transparent);
+}
+
+html[data-theme="book"] .ui-band[data-tone="danger"] {
+  border-color: color-mix(in oklab, var(--accent-danger) 55%, transparent);
+}
+
+html[data-theme="book"] .ui-band-quiet {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+/* ── Context panel: underlined text tabs ─────────────────────── */
+html[data-theme="book"] .ui-panel-tabbar {
+  padding-inline: 1.375rem;
+}
+
+html[data-theme="book"] .ui-panel-tabbar > [role="tablist"] {
+  gap: 1.125rem;
+  padding-block: 0.375rem 0;
+}
+
+html[data-theme="book"] .ui-panel-tab {
+  height: 2.25rem;
+  padding-inline: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.875rem;
+}
+
+html[data-theme="book"] .ui-panel-tab[data-state="active"] {
+  border-bottom-color: var(--accent-primary);
+  background: transparent;
+  font-weight: 700;
+}
+
+html[data-theme="book"] .ui-panel-tab-icon {
+  display: none;
+}
+
+/* ── The page ────────────────────────────────────────────────── */
+html[data-theme="book"] .ui-narrative.prose p,
+html[data-theme="book"] .ui-narrative .prose p {
+  text-align: justify;
+  text-indent: 2em;
+}
+
+html[data-theme="book"] .ui-narrative.prose p + p,
+html[data-theme="book"] .ui-narrative .prose p + p {
+  margin-top: 0.375rem;
+}
+
+html[data-theme="book"]
+  .ui-message-row[data-role="assistant"]
+  > .ui-message-role {
+  display: none;
+}
+
+/* The player's own line: set apart by rules, marked with a short label. */
+html[data-theme="book"] .ui-message-row[data-role="user"] {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.875rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--rule-color);
+  border-bottom: 1px solid var(--rule-color);
+}
+
+html[data-theme="book"] .ui-message-row[data-role="user"] > .ui-message-role {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  font-family: var(--font-serif);
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+}
+
+html[data-theme="book"] .ui-message-player {
+  max-width: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: color-mix(in oklab, var(--color-foreground) 78%, transparent);
+  font-size: 0.9375rem;
+}
+
+html[data-theme="book"] .ui-choice {
+  column-gap: 0.875rem;
+  padding: 0.875rem 0.375rem;
+  border-left: 0;
+  border-top: 1px solid var(--rule-color);
+  border-bottom: 0;
+}
+
+html[data-theme="book"] .ui-choice:last-child {
+  border-bottom: 1px solid var(--rule-color);
+}
+
+html[data-theme="book"] .ui-choice:hover,
+html[data-theme="book"] .ui-choice[aria-selected="true"],
+html[data-theme="book"] .ui-choice[data-selected="true"] {
+  border-left: 0;
+  background: color-mix(in oklab, var(--color-foreground) 5%, transparent);
+}
+
+/* Counted the way a Chinese book counts: 一、二、三. */
+html[data-theme="book"] .ui-choice-index {
+  display: block;
+  width: 1.75rem;
+  color: var(--accent-primary);
+  font-family: var(--font-serif);
+  font-size: 1.1875rem;
+  font-weight: 900;
+}
+
+html[data-theme="book"] .ui-choice-index::before {
+  content: counter(ui-choice, cjk-ideographic);
+}
+
+html[data-theme="book"] .ui-choice-title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+html[data-theme="book"] .ui-choice-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Composer: a ruled line to write on ──────────────────────── */
+html[data-theme="book"] .ui-composer {
+  border-top: 0;
+  background: transparent;
+}
+
+html[data-theme="book"] .ui-composer-input {
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.25rem;
+  border: 0;
+  border-bottom: 1.5px solid var(--color-foreground);
+  border-radius: 0;
+  background: transparent;
+}
+
+html[data-theme="book"] .ui-composer-input:focus-within {
+  border-bottom-color: var(--accent-primary);
+}
+
+html[data-theme="book"] .ui-composer-input input {
+  padding-inline: 0.125rem;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+}
+
+html[data-theme="book"] .ui-composer-submit {
+  align-self: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-left: 0;
+  border-radius: 999px;
+  background: var(--color-foreground);
+  color: var(--surface-page);
+}
+
+html[data-theme="book"] .ui-composer-submit:disabled {
+  opacity: 0.28;
+}
+
+html[data-theme="book"] .ui-composer-submit:not(:disabled):hover {
+  background: var(--accent-primary);
+  color: var(--color-primary-foreground);
+}
+
+/* ── World select ────────────────────────────────────────────── */
+html[data-theme="book"] .ui-world-heading {
+  font-size: clamp(2rem, 4vw, 2.875rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+html[data-theme="book"] .ui-world-enter {
+  background: var(--color-foreground);
+  color: var(--surface-page);
+}
+
+html[data-theme="book"] .ui-world-enter:hover {
+  background: var(--accent-primary);
+  color: var(--color-primary-foreground);
+}
+
+/* ── Session toolbar: text switches, like the panel tabs ─────── */
+html[data-theme="book"] .ui-view-switch {
+  gap: 0.25rem;
+  border: 0;
+}
+
+html[data-theme="book"] .ui-view-switch > button {
+  padding-inline: 0.5rem;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  font-size: 0.8125rem;
+}
+
+html[data-theme="book"] .ui-view-switch > button[data-state="on"] {
+  border-bottom-color: var(--accent-primary);
+  background: transparent;
+  color: var(--color-foreground);
+  font-weight: 700;
+}
+
+html[data-theme="book"] .ui-panel-status {
+  padding-inline: 1.375rem;
+}
+
+html[data-theme="book"] .ui-status-value {
+  font-family: var(--font-serif);
+}
+
+/* The context panel reads as the player's notebook. */
+html[data-theme="book"] .ui-panel-status-title {
+  display: block;
+  color: var(--color-muted-foreground);
+  font-family: var(--font-serif);
+  font-size: 0.8125rem;
+  letter-spacing: 0.3em;
+}
+
+html[data-theme="book"] .ui-panel-status-name {
+  font-size: 1.0625rem;
+}
+
+/* ── Margin notes ────────────────────────────────────────────── */
+html[data-theme="book"] .ui-turn-updates {
+  padding: 0.5rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--rule-color);
+  border-radius: 0;
+  font-size: 0.78125rem;
+  line-height: 1.7;
+}
+
+/* The label carries the open/closed mark; the default triangle would sit on
+   a line of its own above it. */
+html[data-theme="book"] .ui-turn-updates > summary {
+  list-style: none;
+}
+
+html[data-theme="book"] .ui-turn-updates > summary::-webkit-details-marker {
+  display: none;
+}
+
+html[data-theme="book"] .ui-turn-updates > summary > span:first-child::after {
+  content: " +";
+}
+
+html[data-theme="book"]
+  .ui-turn-updates[open]
+  > summary
+  > span:first-child::after {
+  content: " −";
+}
+
+html[data-theme="book"] .ui-turn-updates > summary > span:first-child {
+  display: block;
+  color: var(--accent-primary);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+html[data-theme="book"] .ui-turn-updates > summary > span + span {
+  display: block;
+  margin-left: 0;
+}

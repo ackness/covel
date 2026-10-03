@@ -307,6 +307,7 @@ export type {
   PluginRpcDeferredJob,
   PluginRpcResponse,
   PluginRpcRuntimeRequest,
+  PluginRpcEventRequest,
   PluginRpcRuntimeResultSummary,
   RpcCommandEnvironment,
   RpcCommandInvocation,

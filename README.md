@@ -36,6 +36,15 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
+## Three looks, one setting
+
+|                          Panel                           |                            Book                            |                               Stage                                |
+| :------------------------------------------------------: | :--------------------------------------------------------: | :----------------------------------------------------------------: |
+| ![Panel scheme](./.assets/images/readme/style-panel.png) |   ![Book scheme](./.assets/images/readme/style-book.png)   |      ![Stage scheme](./.assets/images/readme/style-stage.png)      |
+| App-like: icon rail, tagged option cards, a status strip | Reading-first: serif prose, numbered options, margin notes | Scene-first: full-bleed art, the cast on stage, key-capped options |
+
+A style scheme changes structure as well as colour — where navigation sits, how options are drawn, what the session does with world art. Pick one in **Settings → Appearance**; the earlier themes live on as colourways of a fourth, Classic. Schemes are theme packages, so you can save your own or import someone else's ([guide](./docs/guide/themes.md)). Plugin UI follows whichever scheme is active without knowing about it.
+
 ## How the pieces fit together
 
 | Layer              | Owns                                     | Typical contents                                                                              |
@@ -126,7 +135,7 @@ The built-in Trace Inspector groups execution by session and turn, then exposes 
 
 ## Every roll leaves a receipt
 
-![A dice check, quest progress, and a gear change posting into the turn, with the quest log open alongside](./.assets/images/readme/rpg-systems.png)
+![Relationship and gear changes posting into the turn; the status strip shows the current objective and pack, with the quest log open alongside](./.assets/images/readme/rpg-systems.png)
 
 A risky action resolves against dice rolled **before** the narrator writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, inventory, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
 

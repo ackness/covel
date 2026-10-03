@@ -1,0 +1,350 @@
+/* ─────────────────────────────────────────────────────────────────
+   Stage — scene first
+   The current scene fills the session and the story sits in a
+   translucent column over it. Near-black ground, a cold lamp-light
+   accent, display titles; dark only, because the art carries the
+   colour.
+   ───────────────────────────────────────────────────────────────── */
+
+html[data-theme="stage"],
+html[data-theme="stage"].dark {
+  --color-background: #070a0e;
+  --color-foreground: #e9eef0;
+  --color-card: #0f141a;
+  --color-card-foreground: #e9eef0;
+  --color-popover: #10161c;
+  --color-popover-foreground: #e9eef0;
+  --color-primary: #8fd3dc;
+  --color-primary-foreground: #071013;
+  --color-secondary: #171d24;
+  --color-secondary-foreground: #d5dce0;
+  --color-muted: #171d24;
+  --color-muted-foreground: #a9b4ba;
+  --color-accent: #1f2830;
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #f08a7a;
+  --color-destructive-foreground: #071013;
+  --color-border: #262f37;
+  --color-input: #323c45;
+  --color-ring: rgb(143 211 220 / 0.5);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+
+  /* System CJK faces only: nothing to download, so text never reflows. */
+  --font-sans:
+    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC",
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  /* The display face is bundled with the app (styles/fonts.css). */
+  --font-display:
+    "ZCOOL XiaoWei", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC",
+    "Source Han Serif SC", "SimSun", ui-serif, Georgia, serif;
+  --font-serif:
+    "Newsreader", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC",
+    "Source Han Serif SC", "SimSun", ui-serif, Georgia, serif;
+
+  --surface-page: #070a0e;
+  --surface-rail: #0a0e13;
+  --surface-inset: #121820;
+  --surface-elevated: #0f141a;
+  --surface-dialog: #10161c;
+  --surface-player: rgb(255 255 255 / 0.06);
+  /* The story column over the scene. */
+  --surface-story: rgb(9 12 17 / 0.78);
+
+  --surface-app: var(--surface-page);
+  --surface-panel: var(--surface-rail);
+  --surface-panel-strong: var(--surface-elevated);
+  --surface-empty: color-mix(in oklab, var(--color-muted) 65%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 72%, transparent);
+
+  --rule-color: #262f37;
+  --rule-strong-color: #56636d;
+  --rule-style: solid;
+
+  --accent-primary: #8fd3dc;
+  --accent-secondary: #c6a5f2;
+  --accent-warning: #e8b45e;
+  --accent-danger: #f08a7a;
+  --accent-success: #9ed8a6;
+
+  --ambience-image: none;
+  --noise-opacity: 0;
+
+  --radius-card: 0.5rem;
+  --radius-control: 0.5rem;
+  --radius-dialog: 0.625rem;
+  --radius-chip: 999px;
+
+  --panel-header-height: 3.5rem;
+  --panel-section-padding-x: 1rem;
+  --panel-section-padding-y: 0.875rem;
+  --composer-max-width: 38rem;
+  --session-column-max-width: 38rem;
+
+  --type-display: var(--font-display);
+  --type-body: var(--font-sans);
+  --type-meta: var(--font-sans);
+
+  --eyebrow-font-family: var(--font-sans);
+  --eyebrow-font-size: 0.75rem;
+  --eyebrow-font-weight: 500;
+  --eyebrow-letter-spacing: 0.14em;
+  --eyebrow-text-transform: none;
+
+  --title-font-family: var(--font-display);
+  --title-font-style: normal;
+  --title-font-weight: 400;
+  --title-letter-spacing: 0.01em;
+  --title-text-transform: none;
+
+  --story-font-family: var(--font-serif);
+  --story-font-size: 1rem;
+  --story-line-height: 1.9;
+  --story-font-weight: 400;
+  --story-letter-spacing: 0;
+  --story-max-width: 34rem;
+
+  --meta-font-family: var(--font-sans);
+  --meta-font-size: 0.75rem;
+  --meta-letter-spacing: 0;
+  --meta-text-transform: none;
+
+  --shadow-card: none;
+  --shadow-dialog: 0 28px 80px -36px rgb(0 0 0 / 0.8);
+  --shadow-pop: 0 10px 28px -16px rgb(0 0 0 / 0.7);
+}
+
+/* The display face ships one weight; a synthesised bold smears it. */
+html[data-theme="stage"] .ui-title,
+html[data-theme="stage"] .ui-section-title,
+html[data-theme="stage"] .ui-entry-title,
+html[data-theme="stage"] .ui-empty-title {
+  font-weight: 400;
+}
+
+/* ── Shell ───────────────────────────────────────────────────── */
+html[data-theme="stage"] .ui-app-header {
+  background: var(--surface-page);
+}
+
+html[data-theme="stage"] .ui-app-header .ui-nav-item {
+  background: transparent;
+  font-size: 0.875rem;
+}
+
+/* ── Labels ──────────────────────────────────────────────────── */
+html[data-theme="stage"] .ui-tag {
+  padding: 0.0625rem 0.5rem;
+  border-color: rgb(255 255 255 / 0.2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html[data-theme="stage"] .ui-tag-solid {
+  border-color: transparent;
+  background: var(--accent-primary);
+  color: var(--color-primary-foreground);
+}
+
+html[data-theme="stage"] .ui-folio {
+  letter-spacing: 0.08em;
+  text-transform: none;
+}
+
+/* ── Callouts: glass plates ──────────────────────────────────── */
+html[data-theme="stage"] .ui-band {
+  padding: 0.75rem 0.875rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: var(--radius-control);
+  background: rgb(255 255 255 / 0.05);
+}
+
+html[data-theme="stage"] .ui-band::before {
+  display: none;
+}
+
+html[data-theme="stage"] .ui-band[data-tone="warning"] {
+  border-color: color-mix(in oklab, var(--accent-warning) 50%, transparent);
+}
+
+html[data-theme="stage"] .ui-band[data-tone="danger"] {
+  border-color: color-mix(in oklab, var(--accent-danger) 50%, transparent);
+}
+
+html[data-theme="stage"] .ui-band-quiet {
+  border: 0;
+  background: transparent;
+}
+
+/* ── Context panel tabs ──────────────────────────────────────── */
+html[data-theme="stage"] .ui-panel-tab[data-state="active"] {
+  background: var(--accent-primary);
+  color: var(--color-primary-foreground);
+}
+
+/* ── Story column ────────────────────────────────────────────── */
+html[data-theme="stage"]
+  .ui-message-row[data-role="assistant"]
+  > .ui-message-role {
+  display: none;
+}
+
+html[data-theme="stage"] .ui-message-row[data-role="user"] {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.625rem;
+  width: fit-content;
+  max-width: 92%;
+  /* The message list is a block stack, so push right with a margin. */
+  margin-left: auto;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 0.375rem;
+  background: var(--surface-player);
+}
+
+html[data-theme="stage"] .ui-message-row[data-role="user"] > .ui-message-role {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+html[data-theme="stage"] .ui-message-player {
+  max-width: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d5dce0;
+  font-size: 0.84375rem;
+}
+
+html[data-theme="stage"] .ui-choice-list {
+  gap: 0.5rem;
+}
+
+html[data-theme="stage"] .ui-choice {
+  min-height: 3.5rem;
+  padding: 0.4375rem 0.875rem 0.4375rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: var(--radius-control);
+  background: rgb(255 255 255 / 0.05);
+}
+
+html[data-theme="stage"] .ui-choice:hover {
+  border-color: rgb(255 255 255 / 0.3);
+  background: rgb(255 255 255 / 0.11);
+}
+
+html[data-theme="stage"] .ui-choice[aria-selected="true"],
+html[data-theme="stage"] .ui-choice[data-selected="true"] {
+  border-color: var(--accent-primary);
+  border-width: 1px;
+  background: color-mix(in oklab, var(--accent-primary) 14%, transparent);
+}
+
+/* A key cap: the number is also the keyboard shortcut. */
+html[data-theme="stage"] .ui-choice-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border: 1px solid rgb(255 255 255 / 0.3);
+  border-radius: 0.3125rem;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+}
+
+html[data-theme="stage"] .ui-choice-title {
+  font-family: var(--font-sans);
+  font-weight: 500;
+}
+
+html[data-theme="stage"] .ui-choice-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Composer ────────────────────────────────────────────────── */
+html[data-theme="stage"] .ui-composer {
+  border-top: 0;
+  background: transparent;
+}
+
+html[data-theme="stage"] .ui-composer-input {
+  align-items: center;
+  min-height: 2.875rem;
+  padding-right: 0.375rem;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: var(--radius-control);
+  background: rgb(0 0 0 / 0.35);
+}
+
+html[data-theme="stage"] .ui-composer-input:focus-within {
+  border-color: var(--accent-primary);
+}
+
+html[data-theme="stage"] .ui-composer-submit {
+  align-self: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-left: 0;
+  border-radius: 0.375rem;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+html[data-theme="stage"] .ui-composer-submit:disabled {
+  background: rgb(255 255 255 / 0.1);
+  color: var(--color-muted-foreground);
+  opacity: 1;
+}
+
+html[data-theme="stage"] .ui-composer-submit:not(:disabled):hover {
+  background: #b4e4ea;
+  color: var(--color-primary-foreground);
+}
+
+/* ── World select ────────────────────────────────────────────── */
+html[data-theme="stage"] .ui-world-heading {
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+/* ── Session toolbar ─────────────────────────────────────────── */
+html[data-theme="stage"] .ui-view-switch {
+  border-color: rgb(255 255 255 / 0.2);
+  background: rgb(9 12 17 / 0.55);
+}
+
+html[data-theme="stage"] .ui-view-switch > button[data-state="on"] {
+  background: var(--accent-primary);
+  color: var(--color-primary-foreground);
+}
+
+/* Round glass buttons: they sit on the scene art, not on a bar. */
+html[data-theme="stage"] .ui-session-action {
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 999px;
+  background: rgb(9 12 17 / 0.5);
+  color: rgb(255 255 255 / 0.9);
+  backdrop-filter: blur(10px);
+}
+
+html[data-theme="stage"] .ui-session-action:hover {
+  background: rgb(9 12 17 / 0.72);
+  color: #fff;
+}
+
+html[data-theme="stage"] .ui-session-back {
+  padding-inline: 0.625rem 0.875rem;
+}

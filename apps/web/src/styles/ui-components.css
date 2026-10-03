@@ -372,6 +372,40 @@
     background: var(--color-primary);
   }
 
+  /* Carried items beside the gauges */
+  .ui-status-item {
+    padding: 0.0625rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-chip);
+    color: var(--color-muted-foreground);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  /* Summary lines under the gauges: label, then a value, gauge or list */
+  .ui-summary-value[data-tone="warning"] {
+    color: var(--accent-warning);
+  }
+
+  .ui-summary-value[data-tone="danger"] {
+    color: var(--accent-danger);
+  }
+
+  .ui-summary-value[data-tone="success"] {
+    color: var(--accent-success);
+  }
+
+  .ui-summary-value[data-tone="info"] {
+    color: var(--accent-secondary);
+  }
+
+  /* Optional chrome a theme may switch on: the status strip's heading and the
+     world thumbnail in the session toolbar. */
+  .ui-panel-status-title,
+  .ui-session-thumb {
+    display: none;
+  }
+
   /* Composer */
   .ui-composer-frame {
     max-width: var(--composer-max-width);
@@ -387,12 +421,48 @@
     border-radius: var(--radius-control);
   }
 
-  /* Choice — used for narrative branching options. NOT a card. */
-  .ui-choice {
-    position: relative;
+  /* Choice — options the player picks between (catalog `ChoiceList` /
+     `Choice`). NOT a card by default; themes restyle through these hooks and
+     may show the position marker, which is a CSS counter. */
+  .ui-choice-list {
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
+    counter-reset: ui-choice;
+  }
+
+  /* In the turn being played the numbers run on across every list, because
+     the number keys do: 1 is the first option on screen, whichever block it
+     is in. A counter also covers the siblings after the element that resets
+     it, so the last row of the previous turn (or the column itself) starts
+     the count and the current rows carry it on. */
+  .ui-session-column,
+  .chat-row[data-turn-current="false"] {
+    counter-reset: ui-choice;
+  }
+
+  .chat-row[data-turn-current="true"] .ui-choice-list {
+    counter-reset: none;
+  }
+
+  /* The same for any single container that holds several lists, such as the
+     stage decision panel. */
+  [data-choice-scope] {
+    counter-reset: ui-choice;
+  }
+
+  [data-choice-scope] .ui-choice-list {
+    counter-reset: none;
+  }
+
+  .ui-choice {
+    counter-increment: ui-choice;
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "index content tag";
+    align-items: center;
+    column-gap: 0.75rem;
+    width: 100%;
     padding: 0.875rem 1rem 0.875rem 1.125rem;
     background: transparent;
     border-left: 2px solid var(--color-border);
@@ -404,9 +474,26 @@
       background 150ms ease;
   }
 
+  /* An option with secondary actions under it, such as a reply variant that
+     can also be drafted or sent. */
+  .ui-choice-row {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  .ui-choice-actions {
+    padding: 0.25rem 0 0.5rem 1.125rem;
+  }
+
   .ui-choice:hover {
     border-left-color: var(--accent-primary);
     background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
+  }
+
+  .ui-choice:disabled {
+    cursor: progress;
+    opacity: 0.7;
   }
 
   .ui-choice[aria-selected="true"],
@@ -416,12 +503,59 @@
     background: color-mix(in oklab, var(--accent-primary) 6%, transparent);
   }
 
+  .ui-choice-index {
+    grid-area: index;
+    display: none;
+  }
+
+  .ui-choice-index::before {
+    content: counter(ui-choice);
+  }
+
+  .ui-choice-content {
+    grid-area: content;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
   .ui-choice-eyebrow {
+    grid-area: tag;
     font-family: var(--type-meta);
     font-size: 0.625rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--color-muted-foreground);
+  }
+
+  /* A tone is a meaning (`warning`) or, as on `Badge`, a colour name. */
+  .ui-choice[data-tone="warning"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="amber"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="yellow"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="orange"] .ui-choice-eyebrow {
+    color: var(--accent-warning);
+  }
+
+  .ui-choice[data-tone="danger"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="red"] .ui-choice-eyebrow {
+    color: var(--accent-danger);
+  }
+
+  .ui-choice[data-tone="success"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="green"] .ui-choice-eyebrow {
+    color: var(--accent-success);
+  }
+
+  .ui-choice[data-tone="info"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="blue"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="cyan"] .ui-choice-eyebrow {
+    color: var(--accent-secondary);
+  }
+
+  .ui-choice[data-tone="primary"] .ui-choice-eyebrow,
+  .ui-choice[data-tone="purple"] .ui-choice-eyebrow {
+    color: var(--accent-primary);
   }
 
   .ui-choice-title {

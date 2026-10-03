@@ -30,6 +30,8 @@ interface UseMessageGroupingArgs {
    */
   readonly foldUpdates?: boolean;
   readonly expandUpdates?: boolean;
+  /** Open the latest turn's results even when older ones stay folded. */
+  readonly expandLatestUpdates?: boolean;
 }
 
 /**
@@ -48,6 +50,7 @@ export function useMessageGrouping({
   renderMessage,
   foldUpdates = false,
   expandUpdates = false,
+  expandLatestUpdates = false,
 }: UseMessageGroupingArgs): ReactNode[] {
   const { i18n } = useTranslation();
   const projection = useMemo(
@@ -141,7 +144,12 @@ export function useMessageGrouping({
         `updates-${group.key}`,
         <TurnUpdates
           messages={updates.map(({ message }) => message)}
-          defaultOpen={expandUpdates}
+          // Keyed on whether this is the latest turn, so results that were
+          // opened as "latest" fold again once a newer turn arrives.
+          key={group === latestTurn ? "latest" : "past"}
+          defaultOpen={
+            expandUpdates || (expandLatestUpdates && group === latestTurn)
+          }
         >
           {updates.map(({ message, index }) => (
             <div key={message.id}>{renderMessage(message, index)}</div>

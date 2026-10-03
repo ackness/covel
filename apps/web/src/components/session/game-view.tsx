@@ -42,6 +42,9 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { emitNavEvent, type SessionPanel } from "@/lib/nav-events.js";
 import { latestExecutionPresentation } from "./execution-presentation.js";
+import { SessionBackdrop } from "./session-backdrop.js";
+import { SceneHud } from "./scene-hud.js";
+import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -283,6 +286,8 @@ export function GameView({
 
   const direction = "horizontal";
   const visual = worldVisual(world);
+  const layout = useThemeLayout();
+  const stageActive = viewMode === "stage" && stageReady;
   const leftCollapsed = isMobile ? !mobileLeftOpen : isLeftCollapsed;
   const rightCollapsed = isMobile ? !mobileRightOpen : isRightCollapsed;
   const handleToggleLeft = isMobile
@@ -438,7 +443,7 @@ export function GameView({
           id="center-panel"
           defaultSize={isMobile ? "100%" : "74%"}
           minSize={isMobile ? "100%" : "30%"}
-          className="relative flex flex-col min-w-0 min-h-0 overflow-hidden"
+          className="ui-session-center relative flex flex-col min-w-0 min-h-0 overflow-hidden"
           style={
             {
               "--world-accent": visual.accent,
@@ -446,26 +451,18 @@ export function GameView({
             } as React.CSSProperties
           }
         >
-          <div className="ui-session-backdrop pointer-events-none absolute inset-0 overflow-hidden">
-            <img
-              src={visual.image}
-              alt=""
-              aria-hidden="true"
-              width={1536}
-              height={1024}
-              loading="lazy"
-              className="absolute inset-x-0 top-0 h-56 w-full object-cover opacity-[0.08] saturate-75"
-              draggable={false}
+          {/* The stage view paints its own backdrop layer. */}
+          {!stageActive && (
+            <SessionBackdrop
+              mode={layout.backdrop}
+              sessionId={session.id}
+              world={world}
+              visual={visual}
             />
-            <div
-              aria-hidden="true"
-              className="absolute inset-x-0 top-0 h-72"
-              style={{
-                background:
-                  "linear-gradient(180deg, color-mix(in oklab, var(--world-accent) 12%, transparent) 0%, var(--surface-page) 92%)",
-              }}
-            />
-          </div>
+          )}
+          {!stageActive && layout.backdrop === "scene" && (
+            <SceneHud sessionId={session.id} />
+          )}
           {/* Header — hidden while the stage is immersive so it fills the
               viewport. Fades back in on exit (rails snap; chrome fades). */}
           {!(immersive && viewMode === "stage") && (
@@ -475,6 +472,7 @@ export function GameView({
                 t={t}
                 sessionId={session.id}
                 sessionPhase={session.phase}
+                turnCount={session.completedPlayerTurns}
                 world={world}
                 executing={executing}
                 viewMode={viewMode}
@@ -521,7 +519,7 @@ export function GameView({
             onRefresh={refreshExecutionRecovery}
             onStop={abortActiveTurn}
           />
-          {viewMode === "stage" && stageReady ? (
+          {stageActive ? (
             <StageView
               key={session.id}
               session={session}
@@ -545,7 +543,7 @@ export function GameView({
               messagesEndRef={messagesEndRef}
             />
           ) : (
-            <>
+            <div className="ui-story-surface relative z-1 flex min-h-0 flex-1 flex-col">
               <ChatMessages
                 messages={messages}
                 executionSteps={executionSteps}
@@ -596,7 +594,7 @@ export function GameView({
                 commandFeedback={commandFeedback}
                 onCommandSelect={applyCommandCompletion}
               />
-            </>
+            </div>
           )}
         </ResizablePanel>
 

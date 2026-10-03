@@ -82,11 +82,11 @@ export function ChatBlockRenderer({
       ((block.data as Record<string, unknown> | undefined)?.pluginId as
         string | undefined) ?? msg.runtimeId;
     return (
+      // The current turn's suggestions are the player's next move, so they
+      // stay open; once a later message exists they fold into history.
       <HistoryBlock
-        collapsed={viewMode === "parsed"}
-        label={t(
-          locked ? "session.previousSuggestions" : "session.currentSuggestions",
-        )}
+        collapsed={viewMode === "parsed" && locked}
+        label={t("session.previousSuggestions")}
       >
         <div className="flex flex-col gap-1.5">
           {viewMode === "detailed" && pluginId && (

@@ -1,0 +1,9 @@
+{
+  "id": "clickable-map",
+  "label": { "zh": "地图", "en": "Map" },
+  "shortLabel": { "zh": "地图", "en": "Map" },
+  "icon": "map",
+  "alwaysRender": true,
+  "dataSource": { "namespace": "map" },
+  "webview": { "entry": "./map.html", "height": 340 }
+}

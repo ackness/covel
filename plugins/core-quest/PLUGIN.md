@@ -18,6 +18,7 @@ provides:
   - world-ir.vocabulary@1
 requires:
   - world-ir-provider@1
+entry: ./server/index.js
 contracts:
   quests@1:
     schema: ./schemas/quests.schema.json
@@ -36,6 +37,13 @@ contributes:
       - ./ui/quest-log-panel.json
     message:
       - ./ui/quest-changes-block.json
+  extensions:
+    - point: ui.slot@1
+      id: summary
+      slot: session.summary@1
+      order: 20
+      watch:
+        - quests
 ---
 
 # Quest Log

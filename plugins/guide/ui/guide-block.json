@@ -1,18 +1,28 @@
 {
   "id": "guide",
-  "dataSource": { "namespace": "message" },
+  "dataSource": {
+    "namespace": "message"
+  },
   "view": {
     "component": "Stack",
-    "props": { "gap": "md" },
+    "props": {
+      "gap": "md"
+    },
     "children": [
       {
         "component": "Row",
-        "props": { "gap": "sm", "align": "baseline" },
+        "props": {
+          "gap": "sm",
+          "align": "baseline"
+        },
         "children": [
           {
             "component": "Text",
             "props": {
-              "content": { "zh": "场景提示", "en": "SCENE PROMPTS" },
+              "content": {
+                "zh": "场景提示",
+                "en": "SCENE PROMPTS"
+              },
               "variant": "muted",
               "size": "xs",
               "className": "ui-meta"
@@ -21,7 +31,9 @@
           {
             "component": "Text",
             "props": {
-              "content": { "$state": "/scene" },
+              "content": {
+                "$state": "/scene"
+              },
               "weight": "bold",
               "size": "sm"
             }
@@ -31,20 +43,28 @@
       {
         "component": "Text",
         "props": {
-          "content": { "$state": "/recap" },
+          "content": {
+            "$state": "/recap"
+          },
           "variant": "muted",
           "size": "sm"
         },
-        "visible": { "$state": "/recap" }
+        "visible": {
+          "$state": "/recap"
+        }
       },
       {
         "component": "Text",
         "props": {
-          "content": { "$state": "/decision" },
+          "content": {
+            "$state": "/decision"
+          },
           "weight": "bold",
           "size": "sm"
         },
-        "visible": { "$state": "/decision" }
+        "visible": {
+          "$state": "/decision"
+        }
       },
       {
         "component": "Text",
@@ -58,286 +78,197 @@
         }
       },
       {
-        "component": "Grid",
-        "props": { "cols": 2 },
+        "component": "ChoiceList",
         "children": [
           {
-            "component": "Card",
-            "props": { "variant": "subtle" },
-            "visible": { "$state": "/prompt1Text" },
-            "children": [
-              {
-                "component": "Row",
-                "props": { "gap": "xs", "align": "center" },
-                "children": [
-                  {
-                    "component": "Icon",
-                    "props": {
-                      "name": { "$state": "/prompt1Icon" },
-                      "size": "xs"
-                    }
-                  },
-                  {
-                    "component": "Badge",
-                    "props": {
-                      "label": { "$state": "/prompt1Label" },
-                      "color": { "$state": "/prompt1Color" }
-                    }
-                  }
-                ]
+            "component": "Choice",
+            "props": {
+              "title": {
+                "$state": "/prompt1Text"
               },
-              {
-                "component": "Button",
-                "props": {
-                  "label": { "$state": "/prompt1Text" },
-                  "variant": "ghost",
-                  "size": "compact"
-                },
-                "on": {
-                  "click": {
-                    "action": "draftMessage",
-                    "params": {
-                      "text": { "$state": "/prompt1Text" },
-                      "selectionGroup": "guide:1"
-                    }
-                  }
+              "tag": {
+                "$state": "/prompt1Label"
+              },
+              "tone": {
+                "$state": "/prompt1Color"
+              }
+            },
+            "visible": {
+              "$state": "/prompt1Text"
+            },
+            "on": {
+              "click": {
+                "action": "draftMessage",
+                "params": {
+                  "text": {
+                    "$state": "/prompt1Text"
+                  },
+                  "selectionGroup": "guide:1"
                 }
               }
-            ]
+            }
           },
           {
-            "component": "Card",
-            "props": { "variant": "subtle" },
-            "visible": { "$state": "/prompt2Text" },
-            "children": [
-              {
-                "component": "Row",
-                "props": { "gap": "xs", "align": "center" },
-                "children": [
-                  {
-                    "component": "Icon",
-                    "props": {
-                      "name": { "$state": "/prompt2Icon" },
-                      "size": "xs"
-                    }
-                  },
-                  {
-                    "component": "Badge",
-                    "props": {
-                      "label": { "$state": "/prompt2Label" },
-                      "color": { "$state": "/prompt2Color" }
-                    }
-                  }
-                ]
+            "component": "Choice",
+            "props": {
+              "title": {
+                "$state": "/prompt2Text"
               },
-              {
-                "component": "Button",
-                "props": {
-                  "label": { "$state": "/prompt2Text" },
-                  "variant": "ghost",
-                  "size": "compact"
-                },
-                "on": {
-                  "click": {
-                    "action": "draftMessage",
-                    "params": {
-                      "text": { "$state": "/prompt2Text" },
-                      "selectionGroup": "guide:2"
-                    }
-                  }
+              "tag": {
+                "$state": "/prompt2Label"
+              },
+              "tone": {
+                "$state": "/prompt2Color"
+              }
+            },
+            "visible": {
+              "$state": "/prompt2Text"
+            },
+            "on": {
+              "click": {
+                "action": "draftMessage",
+                "params": {
+                  "text": {
+                    "$state": "/prompt2Text"
+                  },
+                  "selectionGroup": "guide:2"
                 }
               }
-            ]
+            }
           },
           {
-            "component": "Card",
-            "props": { "variant": "subtle" },
-            "visible": { "$state": "/prompt3Text" },
-            "children": [
-              {
-                "component": "Row",
-                "props": { "gap": "xs", "align": "center" },
-                "children": [
-                  {
-                    "component": "Icon",
-                    "props": {
-                      "name": { "$state": "/prompt3Icon" },
-                      "size": "xs"
-                    }
-                  },
-                  {
-                    "component": "Badge",
-                    "props": {
-                      "label": { "$state": "/prompt3Label" },
-                      "color": { "$state": "/prompt3Color" }
-                    }
-                  }
-                ]
+            "component": "Choice",
+            "props": {
+              "title": {
+                "$state": "/prompt3Text"
               },
-              {
-                "component": "Button",
-                "props": {
-                  "label": { "$state": "/prompt3Text" },
-                  "variant": "ghost",
-                  "size": "compact"
-                },
-                "on": {
-                  "click": {
-                    "action": "draftMessage",
-                    "params": {
-                      "text": { "$state": "/prompt3Text" },
-                      "selectionGroup": "guide:3"
-                    }
-                  }
+              "tag": {
+                "$state": "/prompt3Label"
+              },
+              "tone": {
+                "$state": "/prompt3Color"
+              }
+            },
+            "visible": {
+              "$state": "/prompt3Text"
+            },
+            "on": {
+              "click": {
+                "action": "draftMessage",
+                "params": {
+                  "text": {
+                    "$state": "/prompt3Text"
+                  },
+                  "selectionGroup": "guide:3"
                 }
               }
-            ]
+            }
           },
           {
-            "component": "Card",
-            "props": { "variant": "subtle" },
-            "visible": { "$state": "/prompt4Text" },
-            "children": [
-              {
-                "component": "Row",
-                "props": { "gap": "xs", "align": "center" },
-                "children": [
-                  {
-                    "component": "Icon",
-                    "props": {
-                      "name": { "$state": "/prompt4Icon" },
-                      "size": "xs"
-                    }
-                  },
-                  {
-                    "component": "Badge",
-                    "props": {
-                      "label": { "$state": "/prompt4Label" },
-                      "color": { "$state": "/prompt4Color" }
-                    }
-                  }
-                ]
+            "component": "Choice",
+            "props": {
+              "title": {
+                "$state": "/prompt4Text"
               },
-              {
-                "component": "Button",
-                "props": {
-                  "label": { "$state": "/prompt4Text" },
-                  "variant": "ghost",
-                  "size": "compact"
-                },
-                "on": {
-                  "click": {
-                    "action": "draftMessage",
-                    "params": {
-                      "text": { "$state": "/prompt4Text" },
-                      "selectionGroup": "guide:4"
-                    }
-                  }
+              "tag": {
+                "$state": "/prompt4Label"
+              },
+              "tone": {
+                "$state": "/prompt4Color"
+              }
+            },
+            "visible": {
+              "$state": "/prompt4Text"
+            },
+            "on": {
+              "click": {
+                "action": "draftMessage",
+                "params": {
+                  "text": {
+                    "$state": "/prompt4Text"
+                  },
+                  "selectionGroup": "guide:4"
                 }
               }
-            ]
+            }
           },
           {
-            "component": "Card",
-            "props": { "variant": "subtle" },
-            "visible": { "$state": "/prompt5Text" },
-            "children": [
-              {
-                "component": "Row",
-                "props": { "gap": "xs", "align": "center" },
-                "children": [
-                  {
-                    "component": "Icon",
-                    "props": {
-                      "name": { "$state": "/prompt5Icon" },
-                      "size": "xs"
-                    }
-                  },
-                  {
-                    "component": "Badge",
-                    "props": {
-                      "label": { "$state": "/prompt5Label" },
-                      "color": { "$state": "/prompt5Color" }
-                    }
-                  }
-                ]
+            "component": "Choice",
+            "props": {
+              "title": {
+                "$state": "/prompt5Text"
               },
-              {
-                "component": "Button",
-                "props": {
-                  "label": { "$state": "/prompt5Text" },
-                  "variant": "ghost",
-                  "size": "compact"
-                },
-                "on": {
-                  "click": {
-                    "action": "draftMessage",
-                    "params": {
-                      "text": { "$state": "/prompt5Text" },
-                      "selectionGroup": "guide:5"
-                    }
-                  }
+              "tag": {
+                "$state": "/prompt5Label"
+              },
+              "tone": {
+                "$state": "/prompt5Color"
+              }
+            },
+            "visible": {
+              "$state": "/prompt5Text"
+            },
+            "on": {
+              "click": {
+                "action": "draftMessage",
+                "params": {
+                  "text": {
+                    "$state": "/prompt5Text"
+                  },
+                  "selectionGroup": "guide:5"
                 }
               }
-            ]
+            }
           },
           {
-            "component": "Card",
-            "props": { "variant": "subtle" },
-            "visible": { "$state": "/prompt6Text" },
-            "children": [
-              {
-                "component": "Row",
-                "props": { "gap": "xs", "align": "center" },
-                "children": [
-                  {
-                    "component": "Icon",
-                    "props": {
-                      "name": { "$state": "/prompt6Icon" },
-                      "size": "xs"
-                    }
-                  },
-                  {
-                    "component": "Badge",
-                    "props": {
-                      "label": { "$state": "/prompt6Label" },
-                      "color": { "$state": "/prompt6Color" }
-                    }
-                  }
-                ]
+            "component": "Choice",
+            "props": {
+              "title": {
+                "$state": "/prompt6Text"
               },
-              {
-                "component": "Button",
-                "props": {
-                  "label": { "$state": "/prompt6Text" },
-                  "variant": "ghost",
-                  "size": "compact"
-                },
-                "on": {
-                  "click": {
-                    "action": "draftMessage",
-                    "params": {
-                      "text": { "$state": "/prompt6Text" },
-                      "selectionGroup": "guide:6"
-                    }
-                  }
+              "tag": {
+                "$state": "/prompt6Label"
+              },
+              "tone": {
+                "$state": "/prompt6Color"
+              }
+            },
+            "visible": {
+              "$state": "/prompt6Text"
+            },
+            "on": {
+              "click": {
+                "action": "draftMessage",
+                "params": {
+                  "text": {
+                    "$state": "/prompt6Text"
+                  },
+                  "selectionGroup": "guide:6"
                 }
               }
-            ]
+            }
           }
         ]
       },
       {
         "component": "Card",
-        "props": { "variant": "subtle" },
+        "props": {
+          "variant": "subtle"
+        },
         "children": [
           {
             "component": "Row",
-            "props": { "gap": "sm", "align": "center" },
+            "props": {
+              "gap": "sm",
+              "align": "center"
+            },
             "children": [
               {
                 "component": "Icon",
-                "props": { "name": "pen-line", "size": "xs" }
+                "props": {
+                  "name": "pen-line",
+                  "size": "xs"
+                }
               },
               {
                 "component": "Text",
@@ -359,13 +290,18 @@
                 "zh": "例如：我放低声音，问她刚才看见了什么",
                 "en": "e.g. I lower my voice and ask what she just saw."
               },
-              "value": { "$bindState": "/customText" }
+              "value": {
+                "$bindState": "/customText"
+              }
             }
           },
           {
             "component": "Button",
             "props": {
-              "label": { "zh": "加入待发送区", "en": "Queue" },
+              "label": {
+                "zh": "加入待发送区",
+                "en": "Queue"
+              },
               "variant": "ghost",
               "size": "compact"
             },
@@ -373,7 +309,9 @@
               "click": {
                 "action": "draftMessage",
                 "params": {
-                  "text": { "$bindState": "/customText" },
+                  "text": {
+                    "$bindState": "/customText"
+                  },
                   "selectionGroup": "guide:custom"
                 }
               }

@@ -170,7 +170,7 @@ export class RemoteDataService implements DataService {
     // No-op: the remote store is already the server's authority.
   }
 
-  async listSessions(worldId: string) {
+  async listSessions(worldId?: string) {
     return api.listSessions(worldId);
   }
   async getSession(sessionId: string) {

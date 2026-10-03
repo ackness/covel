@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { useState } from "react";
 import {
   Sparkles,
   KeyRound,
@@ -7,10 +8,22 @@ import {
   FolderOpen,
   ArrowRight,
   BookOpen,
+  Play,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import type { WorldRecord } from "@/services/api.js";
+import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { WorldCard } from "@/components/world/world-card.js";
+import {
+  WorldRowItem,
+  WorldShowcase,
+  WorldTileCard,
+} from "@/components/world/world-list-variants.js";
+import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
+import { text } from "@/components/world/editor-helpers.js";
+import { worldVisual } from "@/lib/world-visuals.js";
+import { sessionContinueLabel } from "@/lib/session-display.js";
+import { mostRecentSession } from "@/components/world/use-recent-sessions.js";
 
 export interface WorldListViewProps {
   worlds: WorldRecord[];
@@ -28,6 +41,9 @@ export interface WorldListViewProps {
   onOpenSettings: () => void;
   onOpenOnboarding?: () => void;
   onEnterWorld: (worldId: string) => void;
+  /** Latest playable session per world id; empty when "continue" is off. */
+  recentSessions?: ReadonlyMap<string, SessionRecord>;
+  onResumeSession?: (session: SessionRecord) => void;
   onViewDetails: (e: React.MouseEvent, worldId: string) => void;
   onDeleteWorld: (e: React.MouseEvent, worldId: string) => void;
 }
@@ -37,26 +53,65 @@ export interface WorldListViewProps {
  * AI-generate / API-keys action rail, the cover-led world grid, the empty
  * state, and the footer info chips.
  */
-export function WorldListView({
-  worlds,
-  t,
-  primarySlotLabel,
-  enabledPluginCount,
-  enteringWorldId,
-  storageLabel,
-  interfaceLocale,
-  onOpenGenerator,
-  onOpenSettings,
-  onOpenOnboarding,
-  onEnterWorld,
-  onViewDetails,
-  onDeleteWorld,
-}: WorldListViewProps) {
+export function WorldListView(props: WorldListViewProps) {
+  const {
+    worlds,
+    t,
+    primarySlotLabel,
+    enabledPluginCount,
+    enteringWorldId,
+    storageLabel,
+    interfaceLocale,
+    onOpenGenerator,
+    onOpenSettings,
+    onOpenOnboarding,
+    onEnterWorld,
+    recentSessions,
+    onResumeSession,
+    onViewDetails,
+    onDeleteWorld,
+  } = props;
+  const { worldList } = useThemeLayout();
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const visibleWorlds = needle
+    ? worlds.filter((world) =>
+        [text(world.name), text(world.description), ...(world.tags ?? [])]
+          .join("\n")
+          .toLowerCase()
+          .includes(needle),
+      )
+    : worlds;
+  const continueSession =
+    worldList === "cards" && recentSessions && onResumeSession
+      ? mostRecentSession(recentSessions)
+      : undefined;
+  const continueWorld = continueSession
+    ? worlds.find((world) => world.id === continueSession.worldId)
+    : undefined;
+  // The showcase needs a world to feature; with none, the plain list carries
+  // the empty state and the create actions.
+  if (worldList === "showcase" && worlds.length > 0) {
+    return <WorldShowcase {...props} />;
+  }
+  const WorldItem =
+    worldList === "list"
+      ? WorldRowItem
+      : worldList === "cards"
+        ? WorldTileCard
+        : WorldCard;
+  const listClassName =
+    worldList === "list"
+      ? "flex flex-col border-b border-(--rule-color)"
+      : worldList === "cards"
+        ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        : "grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5";
+
   return (
-    <div className="h-full w-full overflow-y-auto overscroll-contain">
+    <div className="ui-world-select h-full w-full overflow-y-auto overscroll-contain">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-10 py-5 md:py-8">
         {/* Editorial header */}
-        <header className="grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-8 items-end mb-7 md:mb-9">
+        <header className="ui-drag-region grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-8 items-end mb-7 md:mb-9">
           <div className="md:col-span-7">
             <p className="ui-eyebrow text-muted-foreground mb-2.5">
               {t(
@@ -67,7 +122,7 @@ export function WorldListView({
                 },
               )}
             </p>
-            <h1 className="font-display font-bold tracking-tight leading-[0.95] text-[clamp(2.25rem,5.4vw,4.25rem)]">
+            <h1 className="ui-world-heading font-display font-bold tracking-tight leading-[0.95] text-[clamp(2.25rem,5.4vw,4.25rem)]">
               {t("session.selectWorld", "Choose a world")}
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground font-light leading-relaxed max-w-xl">
@@ -146,13 +201,66 @@ export function WorldListView({
         </header>
 
         {/* World list — cover-led plates with the same action surface. */}
+        {continueSession && continueWorld && (
+          <section
+            aria-label={t("session.continueLatest")}
+            className="ui-world-continue mb-6 flex flex-wrap overflow-hidden rounded-(--radius-card) border border-border bg-card"
+          >
+            <img
+              src={worldVisual(continueWorld).image}
+              alt=""
+              aria-hidden="true"
+              width={1536}
+              height={1024}
+              className="h-44 min-w-0 flex-[1_1_22rem] object-cover"
+              draggable={false}
+            />
+            <div className="flex min-w-0 flex-[1_1_22rem] flex-col justify-center gap-2.5 px-6 py-5">
+              <span className="text-xs font-semibold text-(--accent-primary)">
+                {t("session.continueLatest")}
+              </span>
+              <h2 className="ui-title text-2xl leading-snug">
+                {text(continueWorld.name)}
+              </h2>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => onResumeSession?.(continueSession)}
+                  disabled={enteringWorldId !== null}
+                  className="ui-btn ui-world-enter h-10 px-4"
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  {sessionContinueLabel(
+                    t,
+                    continueSession.completedPlayerTurns,
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {worldList === "cards" && worlds.length > 0 && (
+          <label className="ui-world-search mb-4 flex h-10 w-full max-w-xs items-center gap-2 rounded-(--radius-control) border border-border bg-card px-3 text-muted-foreground">
+            <Search className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="sr-only">{t("session.searchWorlds")}</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("session.searchWorlds")}
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+        )}
+
         {worlds.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-            {worlds.map((world, index) => {
+          <div className={listClassName}>
+            {visibleWorlds.map((world, index) => {
               const isEntering = enteringWorldId === world.id;
               const dimmed = enteringWorldId !== null && !isEntering;
               return (
-                <WorldCard
+                <WorldItem
                   key={world.id}
                   world={world}
                   index={index}
@@ -164,10 +272,18 @@ export function WorldListView({
                   onEnter={onEnterWorld}
                   onViewDetails={onViewDetails}
                   onDelete={onDeleteWorld}
+                  recentSession={recentSessions?.get(world.id)}
+                  onResume={onResumeSession}
                 />
               );
             })}
           </div>
+        )}
+
+        {worlds.length > 0 && visibleWorlds.length === 0 && (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            {t("session.searchWorldsEmpty")}
+          </p>
         )}
 
         {worlds.length === 0 && (

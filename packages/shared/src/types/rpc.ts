@@ -1,7 +1,7 @@
 /**
  * Plugin RPC channel types.
  *
- * Three invocation kinds flow through the same channel:
+ * Four invocation kinds flow through the same channel:
  *
  *   - **Action level** (`{ kind: "action", pluginId, action, payload }`):
  *     Looks up the action registered by the plugin entry module and runs its
@@ -16,6 +16,10 @@
  *   - **Command level** (`{ kind: "command", commandId, input | args }`):
  *     Resolves a server-discovered slash command for the active session and
  *     dispatches its server-owned plugin action after validation.
+ *
+ *   - **Event level** (`{ kind: "event", pluginId, topic, payload }`):
+ *     Emits a domain event the plugin itself declares, from its own UI. The
+ *     runtimes that subscribe to the topic run as background jobs.
  *
  * Trust levels mirror the plugin source taxonomy:
  *   - `builtin`: shipped with the framework, auto-allowed
@@ -131,8 +135,21 @@ export interface PluginRpcStructuredCommandRequest {
 export type PluginRpcCommandRequest =
   PluginRpcTextCommandRequest | PluginRpcStructuredCommandRequest;
 
+/** Emit one of the plugin's own declared domain events from its UI. */
+export interface PluginRpcEventRequest {
+  readonly kind: "event";
+  readonly pluginId: string;
+  /** A topic in this plugin's `contributes.events`. */
+  readonly topic: string;
+  /** Event data; validated against the topic's schema. Defaults to `{}`. */
+  readonly payload?: Readonly<Record<string, unknown>>;
+}
+
 export type PluginRpcRequest =
-  PluginRpcActionRequest | PluginRpcRuntimeRequest | PluginRpcCommandRequest;
+  | PluginRpcActionRequest
+  | PluginRpcRuntimeRequest
+  | PluginRpcCommandRequest
+  | PluginRpcEventRequest;
 
 export type RpcCommandSource = "composer" | "plugin-ui";
 
@@ -202,6 +219,9 @@ export type PluginRpcResponse =
       readonly durationMs?: number;
       readonly abortReason?: string;
       readonly deferredJobs?: readonly PluginRpcDeferredJob[];
+      /** Event-level calls: the emission's id and topic. */
+      readonly eventId?: string;
+      readonly topic?: string;
     }
   | {
       readonly status: "accepted";

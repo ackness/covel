@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   abortSignalWithTimeout,
+  appendSummaryEntries,
   assertEntityEnvelope,
   pickLocaleText,
   readManualEntity,
@@ -138,5 +139,24 @@ describe("assertEntityEnvelope", () => {
     expect(() =>
       assertEntityEnvelope({ id: "r1", blob: "x".repeat(70_000) }, opts),
     ).toThrow("rule is too large");
+  });
+});
+
+describe("appendSummaryEntries", () => {
+  const entry = (id: string) =>
+    ({ id, kind: "text", label: id, value: id }) as const;
+
+  it("keeps the entries of earlier providers and adds the new ones", () => {
+    expect(
+      appendSummaryEntries({ entries: [entry("time")] }, [entry("quest")]),
+    ).toEqual({ entries: [entry("time"), entry("quest")] });
+    expect(appendSummaryEntries(null, [entry("quest")])).toEqual({
+      entries: [entry("quest")],
+    });
+  });
+
+  it("stays within the contract's cap", () => {
+    const many = Array.from({ length: 20 }, (_, index) => entry(`e${index}`));
+    expect(appendSummaryEntries(null, many).entries).toHaveLength(16);
   });
 });

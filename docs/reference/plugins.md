@@ -304,6 +304,7 @@ pnpm lint
 | 角色创建与跟踪       | [char-creator](../../plugins/char-creator/PLUGIN.md)             |
 | 函数运行时与公开输出 | [world-time](../../plugins/world-time/PLUGIN.md)                 |
 | 历史变换扩展         | [branch-reply](../../plugins/branch-reply/PLUGIN.md)             |
+| 状态摘要槽位         | [core-quest](../../plugins/core-quest/PLUGIN.md)                 |
 | 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                         |
 | 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
 | 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)               |

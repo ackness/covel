@@ -32,13 +32,47 @@ export function validatePluginRpcBody(raw: unknown): PluginRpcBodyValidation {
   if (
     body.kind !== "action" &&
     body.kind !== "runtime" &&
-    body.kind !== "command"
+    body.kind !== "command" &&
+    body.kind !== "event"
   ) {
     return {
       ok: false,
-      error: "kind must be one of action, runtime, or command",
+      error: "kind must be one of action, runtime, command, or event",
       status: 400,
     };
+  }
+
+  if (body.kind === "event") {
+    if (!body.pluginId || typeof body.pluginId !== "string") {
+      return { ok: false, error: "pluginId (string) is required", status: 400 };
+    }
+    if (
+      typeof body.topic !== "string" ||
+      body.topic.length === 0 ||
+      body.topic.length > 128
+    ) {
+      return {
+        ok: false,
+        error: "topic must be a non-empty string of at most 128 characters",
+        status: 400,
+      };
+    }
+    if (
+      body.payload !== undefined &&
+      (!body.payload ||
+        typeof body.payload !== "object" ||
+        Array.isArray(body.payload))
+    ) {
+      return { ok: false, error: "payload must be a JSON object", status: 400 };
+    }
+    const unknown = rejectUnknownFields(body, body.kind, [
+      "kind",
+      "pluginId",
+      "topic",
+      "payload",
+    ]);
+    if (unknown) return unknown;
+    return { ok: true, body: body as unknown as PluginRpcRequest };
   }
 
   if (body.kind === "command") {

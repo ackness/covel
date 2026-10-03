@@ -332,6 +332,7 @@ function SessionPage() {
         onSettingsOpenChange={settings.onOpenChange}
         settingsInitialKey={settings.initialKey}
         onSelectWorld={selectWorld}
+        onResumeSession={(session) => void resumeSession(session)}
         onWorldUpdated={updateWorldLocal}
         onWorldCreated={addWorldLocal}
         onWorldDeleted={removeWorldLocal}
