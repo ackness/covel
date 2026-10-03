@@ -102,6 +102,7 @@ describe("update-affinity", () => {
     turnId: "turn-1",
     pluginId: "affinity",
     runtimeId: "affinity",
+    locale: "zh-CN",
     turnNumber: 3,
   };
   let mockStore;
@@ -117,6 +118,23 @@ describe("update-affinity", () => {
       }),
       mockStore,
     );
+  });
+
+  it("stores the tier label in the session's language", async () => {
+    const result = await executeAndCommit(
+      updateAffinityTool,
+      { changes: [{ name: "Lian", delta: 5, reason: "You paid her debt" }] },
+      { ...ctx, locale: "en-US" },
+      mockStore,
+    );
+    const stored = await mockStore.getPluginData(
+      "sess-1",
+      "affinity",
+      "affinity",
+      getToolContent(result).results[0].id,
+    );
+    // The record goes into the prompt: one language, not a pair of both.
+    expect(stored.value.tierLabel).toBe("Neutral");
   });
 
   it("creates an unknown NPC at score 0 and applies the delta with derived fields", async () => {
@@ -142,7 +160,7 @@ describe("update-affinity", () => {
     expect(stored.value.score).toBe(5);
     expect(stored.value.scoreBar).toBe(105);
     expect(stored.value.tier).toBe("neutral");
-    expect(stored.value.tierLabel).toEqual({ zh: "中立", en: "Neutral" });
+    expect(stored.value.tierLabel).toBe("中立");
     expect(stored.value.history).toEqual([
       { turn: 3, delta: 5, reason: "你替她挡了债主" },
     ]);
@@ -172,7 +190,7 @@ describe("update-affinity", () => {
     );
     expect(stored.value.score).toBe(100);
     expect(stored.value.tier).toBe("devoted");
-    expect(stored.value.tierLabel).toEqual({ zh: "挚爱", en: "Devoted" });
+    expect(stored.value.tierLabel).toBe("挚爱");
   });
 
   it("clamps at the -100 lower bound and lands in the hostile tier", async () => {
@@ -198,7 +216,7 @@ describe("update-affinity", () => {
     );
     expect(stored.value.score).toBe(-100);
     expect(stored.value.tier).toBe("hostile");
-    expect(stored.value.tierLabel).toEqual({ zh: "敌视", en: "Hostile" });
+    expect(stored.value.tierLabel).toBe("敌视");
     expect(stored.value.lastDelta).toBe("-20");
     expect(stored.value.lastDeltaColor).toBe("red");
   });
@@ -294,7 +312,7 @@ describe("update-affinity", () => {
     );
     expect(stored.value.score).toBe(35);
     expect(stored.value.tier).toBe("friendly");
-    expect(stored.value.tierLabel).toEqual({ zh: "友好", en: "Friendly" });
+    expect(stored.value.tierLabel).toBe("友好");
     expect(stored.value.scoreBar).toBe(135);
     expect(stored.value.history).toEqual([
       { turn: 3, delta: 5, reason: "你记得她的生日" },

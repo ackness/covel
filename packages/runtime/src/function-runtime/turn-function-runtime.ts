@@ -336,6 +336,7 @@ export async function executeFunctionRuntime({
   const runtimeTools = createRuntimeTools({
     manifest,
     context: helperCtx,
+    locale: input.locale,
     deps: { ...deps, hookPipeline },
     buffer: writeBuffer,
     world,

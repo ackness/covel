@@ -24,6 +24,7 @@
 
 import {
   makeProposal,
+  pickLocaleText,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
 
@@ -127,6 +128,13 @@ export default function ({ tool, z, shortIdBatch }) {
             : 0;
         const score = clampScore(priorScore + change.delta);
         const tier = getTier(score);
+        // The record is injected into this plugin's prompt, so the label is
+        // stored in the session's language, not as a pair of both.
+        const tierLabel = pickLocaleText(
+          context.locale,
+          tier.label.zh,
+          tier.label.en,
+        );
         // World-preseeded records carry no history — treat missing as empty.
         const history = Array.isArray(prior.history) ? prior.history : [];
         const deltaText = formatDelta(change.delta);
@@ -142,7 +150,7 @@ export default function ({ tool, z, shortIdBatch }) {
           // [0, 200] bar value (center = neutral).
           scoreBar: score - AFFINITY_MIN,
           tier: tier.id,
-          tierLabel: tier.label,
+          tierLabel,
           tierColor: tier.color,
           lastDelta: deltaText,
           lastDeltaColor: deltaColor,
@@ -169,7 +177,7 @@ export default function ({ tool, z, shortIdBatch }) {
           deltaText,
           deltaColor,
           score,
-          tierLabel: tier.label,
+          tierLabel,
           tierColor: tier.color,
           reason: change.reason,
         });

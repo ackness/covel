@@ -21,6 +21,8 @@ export function createRuntimeTools(options: {
   upstreamProposals?: readonly import("@covel/shared").Proposal[];
   manifest: RuntimeManifest;
   context: HandlerHelperContext;
+  /** The session's content language, forwarded to each tool call. */
+  locale?: string;
   deps: TurnExecutorDeps;
   buffer: ExecutionWriteBuffer;
   inputs?: Readonly<Record<string, InputSlot>>;
@@ -74,6 +76,7 @@ export function createRuntimeTools(options: {
           { toolCallId: call.id, name: call.name, arguments: call.arguments },
           {
             ...context,
+            locale: options.locale,
             signal,
             authorizedToolNames,
             pendingProposals: buffer,

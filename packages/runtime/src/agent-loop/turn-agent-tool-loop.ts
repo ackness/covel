@@ -479,6 +479,7 @@ async function runAgentToolLoopWithinBudget(
               turnId: input.turnId,
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
+              locale: input.locale,
               pendingProposals: pendingProposals,
               upstreamProposals,
               world,

@@ -16,6 +16,33 @@ const identity = {
 };
 const call = { toolCallId: "call", name: "probe", arguments: "{}" };
 
+describe("tool execution context", () => {
+  it("gives the tool the session's language", async () => {
+    // A tool that stores text needs the language to store it in. Without it,
+    // tools stored a pair of both languages, and the pair went into prompts.
+    let seen: ToolExecutionContext | undefined;
+    const module = tool({
+      name: call.name,
+      description: "Synthetic builtin",
+      parameters: z.object({}),
+      async execute(_args, context) {
+        seen = context;
+        return { ok: true };
+      },
+    });
+    const executor = createToolExecutor({
+      store: createMemoryStore(),
+      findTool: () => module,
+    });
+
+    await executor.execute(call, { ...identity, locale: "en-US" });
+    expect(seen?.locale).toBe("en-US");
+
+    await executor.execute(call, identity);
+    expect(seen).not.toHaveProperty("locale");
+  });
+});
+
 describe("tool executor ownership", () => {
   it.each([false, true])(
     "returns cancellation and retains late callback ownership (reject: %s)",

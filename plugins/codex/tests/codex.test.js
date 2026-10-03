@@ -86,7 +86,7 @@ describe("sync-codex-entries", () => {
       category: "location",
       rarity: "common",
       isNew: true,
-      categoryMeta: { displayName: { zh: "地点", en: "Locations" } },
+      categoryMeta: { icon: "MapPin", color: "blue" },
     });
   });
 
@@ -232,11 +232,8 @@ describe("getCategoryMetadata", () => {
     const meta = getCategoryMetadata("mystery-future-category");
     expect(meta.icon).toBe("BookOpen");
     expect(meta.color).toBe("gray");
-    // displayName echoes the raw category so the UI still has *something*.
-    expect(meta.displayName).toEqual({
-      zh: "mystery-future-category",
-      en: "mystery-future-category",
-    });
+    // The name is not stored: entries go into the prompt in one language.
+    expect(meta).not.toHaveProperty("displayName");
   });
 });
 

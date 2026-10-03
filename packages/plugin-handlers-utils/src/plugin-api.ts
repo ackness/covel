@@ -161,6 +161,11 @@ export interface PluginToolContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /**
+   * The session's content language. Text a tool stores or returns is written
+   * in this language; use `pickLocaleText(context.locale, …)`.
+   */
+  readonly locale?: string;
   /** Scoped, owned reads including earlier writes; absent in stateless hosts. */
   readonly store?: PluginToolStore;
   readonly world?: ExtensionWorldModel;

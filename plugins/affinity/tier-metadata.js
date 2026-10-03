@@ -2,9 +2,9 @@
  * Affinity tier metadata (plugin-local).
  *
  * Single source of truth for the score range, the six tier bands, and the
- * per-tier display metadata (I18nText label + Badge color). The tool derives
- * `tier` / `tierLabel` / `tierColor` from the cumulative score on every
- * write, so the UI (json-render spec) renders tier badges without any
+ * per-tier display metadata (label in each language + Badge color). The tool
+ * derives `tier` / `tierLabel` / `tierColor` from the cumulative score on every
+ * write, with the label in the session's language, so the UI (json-render spec) renders tier badges without any
  * framework-side lookup table — same pattern as codex's category-metadata.js.
  */
 

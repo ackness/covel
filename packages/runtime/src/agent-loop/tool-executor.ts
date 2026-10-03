@@ -69,6 +69,8 @@ export interface ToolCallContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /** The session's content language, forwarded to the tool context. */
+  readonly locale?: string;
   readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly pendingProposals?: readonly Proposal[];
   /** Player messages recorded in the session, forwarded to the tool context. */

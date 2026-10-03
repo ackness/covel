@@ -64,6 +64,7 @@ export function createToolExecutionContext(
   }
   const context: ToolExecutionContext = Object.freeze({
     ...identity,
+    ...(caller.locale !== undefined ? { locale: caller.locale } : {}),
     inputSlots: structuredClone(caller.inputSlots),
     pendingProposals: structuredClone(pending),
     upstreamProposals: structuredClone(caller.upstreamProposals),
