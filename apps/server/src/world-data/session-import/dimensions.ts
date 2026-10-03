@@ -115,7 +115,7 @@ export async function readEffectiveDimensions(args: {
     args.worldRoot,
     paths,
     args.manifest.id ?? "world",
-    args.locale ?? args.manifest.defaultLocale,
+    args.manifest.defaultLocale,
     (message) => {
       externalDiagnostic = message;
     },
@@ -132,10 +132,11 @@ export async function readEffectiveDimensions(args: {
       target.path.join(".") !== "dimensions"
     )
       continue;
-    const read = await readWorldDataSource(
-      source,
-      args.locale ?? args.manifest.defaultLocale,
-    );
+    // Every overlay is compiled in: labels keep all languages. The values
+    // are resolved for the session's locale at the end of this function.
+    const read = await readWorldDataSource(source, undefined, {
+      overlays: { mode: "compile", baseLocale: args.manifest.defaultLocale },
+    });
     if (read.diagnostics.some((diagnostic) => diagnostic.level === "error"))
       throw new Error(
         read.diagnostics.map((diagnostic) => diagnostic.message).join("; "),

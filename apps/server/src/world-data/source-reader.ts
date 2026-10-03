@@ -1,7 +1,16 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { localeLookupCandidates } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  applyLocaleOverlay,
+  localeLookupCandidates,
+} from "@covel/shared";
 import { parse as parseYaml } from "yaml";
+import {
+  findLocaleOverlays,
+  pickLocaleOverlay,
+  type LocaleOverlayFile,
+} from "./locale-overlays.js";
 import { resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
@@ -9,11 +18,11 @@ const MAX_STRUCTURED_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_BYTES = 1 * 1024 * 1024;
 
 /**
- * Resolve a source file with locale awareness, mirroring the WORLD.md /
- * dimension convention: try the exact canonical locale, then a compatible
- * primary-language short key, before the declared `<name>.<ext>`. Lets a world
- * ship a per-locale variant of any worldData source while preventing locale
- * strings from becoming unchecked path fragments.
+ * Resolve a prose or media source with locale awareness, mirroring WORLD.md:
+ * try the exact canonical locale, then a compatible primary-language short
+ * key, before the declared `<name>.<ext>`. Prose has no ids to merge on, so a
+ * locale variant replaces the whole file. Structured sources use overlays
+ * instead (see `readWorldDataSource`).
  */
 async function resolveSourcePath(
   source: OrderedWorldDataSource,
@@ -57,16 +66,49 @@ function isJsonValue(value: unknown): boolean {
   return false;
 }
 
+export interface ReadWorldDataSourceOptions {
+  /**
+   * How `<name>.<locale>.<ext>` files beside a structured source are used.
+   * Default: the overlay of `locale` replaces the main text, giving one
+   * language (what a session imports). `compile`: every overlay becomes
+   * locale maps, with `baseLocale` naming the main file's language (what the
+   * world catalog shows).
+   */
+  readonly overlays?: {
+    readonly mode: "compile";
+    readonly baseLocale?: string;
+  };
+}
+
+function isStructured(source: OrderedWorldDataSource): boolean {
+  return source.descriptor.kind === "json" || source.descriptor.kind === "yaml";
+}
+
+function parseSource(source: OrderedWorldDataSource, text: string): unknown {
+  return source.descriptor.kind === "json" ? JSON.parse(text) : parseYaml(text);
+}
+
 export async function readWorldDataSource(
   source: OrderedWorldDataSource,
   locale?: string,
+  options: ReadWorldDataSourceOptions = {},
 ): Promise<{
   value?: unknown;
   path?: string;
+  /** Overlay files that were merged into `value`. */
+  overlayPaths?: readonly string[];
   diagnostics: readonly WorldDataDiagnostic[];
 }> {
   const diagnostics: WorldDataDiagnostic[] = [];
-  const resolved = await resolveSourcePath(source, locale);
+  const root = source.pathOrigin.descriptorRoot;
+  // A structured source is read from its main file and merged with overlays.
+  // Without a main file, a locale file still stands in for it.
+  const mainPath = isStructured(source)
+    ? await resolveContainedPath(root, source.descriptor.path, {
+        rejectSymlinks: true,
+      })
+    : null;
+  const resolved = mainPath ?? (await resolveSourcePath(source, locale));
   if (!resolved) {
     return {
       diagnostics: [
@@ -125,8 +167,51 @@ export async function readWorldDataSource(
     ) {
       return { value: text, path: resolved, diagnostics };
     }
-    const value =
-      source.descriptor.kind === "json" ? JSON.parse(text) : parseYaml(text);
+    let value = parseSource(source, text);
+    const overlayPaths: string[] = [];
+    if (mainPath) {
+      const found = await findLocaleOverlays(root, source.descriptor.path);
+      const picked: readonly LocaleOverlayFile[] = options.overlays
+        ? found
+        : [pickLocaleOverlay(found, locale)].filter(
+            (overlay): overlay is LocaleOverlayFile => overlay !== undefined,
+          );
+      for (const overlay of picked) {
+        const overlayStat = await stat(overlay.path);
+        if (!overlayStat.isFile() || overlayStat.size > limit) {
+          diagnostics.push({
+            level: "error",
+            sourceId: source.id,
+            path: overlay.file,
+            message: `locale file must be a regular file of at most ${limit} bytes`,
+          });
+          continue;
+        }
+        const merged = applyLocaleOverlay(
+          value,
+          parseSource(source, await readFile(overlay.path, "utf-8")),
+          {
+            mode: options.overlays ? "compile" : "resolve",
+            locale: overlay.locale,
+            baseLocale: options.overlays?.baseLocale ?? DEFAULT_LOCALE,
+            arrayKey: source.descriptor.key,
+          },
+        );
+        value = merged.value;
+        overlayPaths.push(overlay.path);
+        // An ignored entry leaves the main text in place: a warning, so one
+        // stale translation does not block a session.
+        for (const issue of merged.issues)
+          diagnostics.push({
+            level: "warning",
+            sourceId: source.id,
+            path: overlay.file,
+            pointer: issue.path,
+            localeOverlay: true,
+            message: `${overlay.file}: ${issue.path} ${issue.message}`,
+          });
+      }
+    }
     if (!isJsonValue(value)) {
       diagnostics.push({
         level: "error",
@@ -135,7 +220,12 @@ export async function readWorldDataSource(
         message: "source did not parse to a JSON value",
       });
     }
-    return { value, path: resolved, diagnostics };
+    return {
+      value,
+      path: resolved,
+      ...(overlayPaths.length > 0 ? { overlayPaths } : {}),
+      diagnostics,
+    };
   } catch (err) {
     return {
       path: resolved,

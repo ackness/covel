@@ -1,0 +1,267 @@
+# en-US text for dimensions.yaml. Only translated text; structure and ids come from dimensions.yaml.
+delveMap:
+  name: Delve Map
+  description: The rooms known inside the Lantern Barrow and their current state.
+  schema:
+    additionalProperties:
+      properties:
+        room:
+          title: Room
+        status:
+          title: Status
+          x-enumLabels:
+            rumored: Rumored
+            explored: Explored
+            cleared: Cleared
+            sealed: Sealed
+            collapsed: Collapsed
+        note:
+          title: Notes
+  initialValue:
+    bronze-doors:
+      room: The Bronze Doors
+      note:
+        Standing open since the night the lantern died. The seal was pushed open
+        from the inside.
+    hall-of-lamps:
+      room: Hall of Lamps
+      note: The keeper once said the first passage inside is lined with wall-lamps.
+  updateRule: Add a room (short English kebab-case ID) the first time the
+    narrative enters, sees, or reliably learns of a named room; use rumored if
+    only heard of. Set explored once the player has been inside and looked
+    around, cleared when its danger is dealt with, sealed when its way is shut,
+    collapsed if it falls in. Keep note to one sentence about the most important
+    find — an exit, a trap, a relic, or a threat. Never delete rooms or explore
+    rooms the player has not visited.
+barrowAlarm:
+  name: Barrow Alarm
+  description: How awake the barrow is. At 6, the Barrow King opens his eyes.
+  schema:
+    properties:
+      level:
+        title: Alarm
+      stage:
+        title: Signs
+        x-enumLabels:
+          sleeping: Sleeping
+          murmuring: Murmuring
+          restless: Restless
+          singing: The choir sings
+          stirring: The throne stirs
+          awake: The Barrow King wakes
+  updateRule: Settle only once the party is inside the barrow. Raise level by 1
+    when this turn's narrative has fighting, a forced door, loud shouting, light
+    raised in the Choir Gallery, a critical failure, or a long rest inside (at
+    most +2 per turn); lower it by 1 for relighting a wall-lamp, slipping
+    quietly past danger, or calming the dead. Match stage to level — 0 sleeping,
+    1 murmuring, 2 restless, 3–4 singing, 5 stirring, 6 awake. Reset to 0 once
+    the Lantern Heart is returned and the lantern relit.
+lantern:
+  name: The Barrow Lantern
+  description: Where the Lantern Heart is, and whether the lamp burns again.
+  schema:
+    properties:
+      heart:
+        title: Lantern Heart
+        x-enumLabels:
+          missing: Missing
+          traced: Traced
+          recovered: Recovered
+          returned: Returned
+          shattered: Shattered
+          bargained-away: Bargained away
+      lamp:
+        title: Lamp
+        x-enumLabels:
+          dark: Dark
+          flickering: Flickering
+          burning: Burning
+      keeper:
+        title: Keeper
+        x-enumLabels:
+          missing: Missing
+          found: Found
+          rescued: Rescued
+          lost: Lost
+  updateRule: Advance only on events the narrative makes explicit. Set heart to
+    traced when its whereabouts are learned, recovered when the party holds it,
+    returned when it is set back in the lamp, shattered if destroyed,
+    bargained-away if handed to the Barrow King or anyone else. The lamp is
+    burning once the Heart is returned and lit, flickering if it is lit only
+    with a makeshift flame. Keeper is found when the party meets Ysolde, rescued
+    once she is out of the barrow, lost if she dies.
+renown:
+  name: Renown
+  description: What Greyreed and the country around it say about you.
+  schema:
+    properties:
+      score:
+        title: Renown
+      title:
+        title: Known as
+        x-enumLabels:
+          stranger: Stranger
+          sellsword: Hired hand
+          trusted: Trusted
+          hero-of-greyreed: Hero of Greyreed
+          legend: Legend
+      deeds:
+        title: Deeds
+  updateRule: Adjust only when villagers witness or credibly hear of what the
+    player did — +1 for solving a concrete problem for someone, +2 for bringing
+    the keeper home or relighting the lantern, -1 for lying to, extorting, or
+    endangering villagers. Add one sentence to deeds for each change. Title
+    follows score — 0–1 stranger, 2–3 hired hand, 4–6 trusted, 7–8 hero of
+    Greyreed, 9–10 legend. Deeds no one knows about do not count.
+geography:
+  name: Geography
+  schema:
+    properties:
+      overview:
+        title: Overview
+      regions:
+        title: Regions
+        items:
+          properties:
+            name:
+              title: Name
+            description:
+              title: Description
+            climate:
+              title: Climate
+  initialValue:
+    overview:
+      Greyreed sits at the edge of the Greyreed Marsh. The hill north of the
+      village is the Lantern Barrow, and for a hundred years the lamp on its
+      crown has burned every night.
+    regions:
+      - name: Greyreed Village
+        description:
+          Thirty-odd households, a mill, the Crooked Antler tavern, and a
+          small chapel. The villagers are practical, superstitious, and know
+          each other's business.
+        climate: Damp and foggy, already cold in late autumn.
+      - name: The Keeper's Cottage
+        description:
+          A stone cottage at the foot of the barrow hill, Ysolde's home for
+          forty years — lamp oil, old logbooks, and a door that was never
+          locked.
+      - name: The Lantern Barrow
+        description:
+          A grassy mound with the dark lantern on its crown and the open
+          bronze doors in its side. It is bigger inside than the hill.
+        climate: Cold inside, smelling of lamp oil and wet earth.
+      - name: Greyreed Marsh
+        description:
+          Endless reeds and black water. The marsh-king's old village is said
+          to lie drowned somewhere inside.
+factions:
+  name: Factions
+  schema:
+    items:
+      properties:
+        name:
+          title: Name
+        description:
+          title: Description
+  initialValue:
+    - id: greyreed-village
+      name: Greyreed Village
+      description:
+        Led by Reeve Penn, with Mirelle at the tavern hearing everything
+        first. They want the lamp lit and life back the way it was.
+    - id: dawn-lantern-order
+      name: Order of the Dawn Lantern
+      description:
+        An order that tends ancient lamps across the realm, believing light
+        lets the dead rest. Sister Wren is their acolyte here.
+    - id: hollow-choir
+      name: The Hollow Choir
+      description:
+        The dead of the barrow. They do not attack those who sing along;
+        they only keep singing — the marsh-king's name, and the names of the
+        living.
+tone:
+  name: Tone
+  schema:
+    properties:
+      genres:
+        title: Genres
+      contentRating:
+        title: Rating
+        x-enumLabels:
+          all-ages: All ages
+          teen: Teen
+          mature: Mature
+      narrativeStyle:
+        title: Narrative style
+  initialValue:
+    genres:
+      - classic fantasy
+      - dungeon crawl
+      - folk horror
+    narrativeStyle:
+      Tell it like a good game master — concrete scenes, brisk pacing,
+      danger that feels real without gore, laughter in the tavern and singing in
+      the tomb.
+mechanics:
+  name: Mechanics
+  schema:
+    properties:
+      combatStyle:
+        title: Combat
+        x-enumLabels:
+          turn-based: Turn-based
+          real-time: Real-time
+          narrative: Narrative
+          none: None
+      difficulty:
+        title: Difficulty
+        x-enumLabels:
+          easy: Easy
+          normal: Normal
+          hard: Hard
+          adaptive: Adaptive
+      skillSystem:
+        title: Checks
+      customRules:
+        title: House rules
+  initialValue:
+    skillSystem:
+      Six attributes (Might, Agility, Endurance, Wits, Insight, Presence)
+      start at 1, then you spend 6 more points, up to 4 in any one. Checks are
+      d20 + attribute against difficulty 8/12/16/20; a natural 20 is a critical
+      success and a natural 1 a critical failure.
+    customRules:
+      - At 0 hit points you fall unconscious rather than dying outright; a
+        companion can drag you back.
+      - A torch burns about an hour. Without light in the barrow you cannot see
+        the way or the traps.
+      - Noise, light, and resting inside all raise the Barrow Alarm.
+startingConditions:
+  name: Opening
+  schema:
+    properties:
+      openingScenario:
+        title: Opening scene
+      openingHook:
+        title: Hook
+      openingChips:
+        title: Opening moves
+      startingLocation:
+        title: Starting point
+  initialValue:
+    openingScenario: On a rainy late-autumn night you push open the door of the
+      Crooked Antler. Above the bar the reeve's bounty notice is nailed up — the
+      keeper is missing, the barrow lantern is dark, the bronze doors stand
+      open, thirty silver to whoever goes down. In the corner an old soldier is
+      cleaning his sword; by the window a young sister turns the pages of a book
+      of lantern script. The innkeeper slides a hot mug of ale toward you. "Here
+      for the notice too?"
+    openingHook: The lantern has been dark for three days. Who goes down with you tonight?
+    openingChips:
+      - Ask the innkeeper about the keeper
+      - Sit down across from the old soldier
+      - Ask the sister to read the lantern script
+      - Find the reeve and talk money
+    startingLocation: Greyreed, the Crooked Antler

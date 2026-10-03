@@ -20,7 +20,12 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
-import { canonicalizeLocale, localeLanguage } from "@covel/shared";
+import {
+  applyLocaleOverlay,
+  canonicalizeLocale,
+  isKnownLocale,
+  localeLanguage,
+} from "@covel/shared";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -297,6 +302,12 @@ function normalizeTemplatePlaceholders(frontmatter) {
 function printViolation(rel, violation) {
   const pathStr = pathToString(violation.path);
   const sample = violation.value.slice(0, 120);
+  if (violation.kind === "bare-cjk" && violation.context === "world.yaml") {
+    console.error(
+      `${rel}: "${pathStr}" has no English text ("${sample}") - add it under the same path in world.en.yaml beside world.yaml`,
+    );
+    return;
+  }
   if (violation.kind === "bare-cjk") {
     console.error(
       `${rel}: "${pathStr}" contains bare CJK string "${sample}" in ${violation.context} - wrap it in an I18nText object with the target locale and an English fallback`,
@@ -364,9 +375,12 @@ function checkPluginMarkdownFiles() {
 }
 
 // World manifests: world.yaml display fields (name/summary + memoryBlocks /
-// characterAttributes labels) must be I18nText, same contract as plugins. The
-// `data/` content (character cards, rule prose) is authored narrative and is
-// intentionally out of scope here.
+// characterAttributes labels) must have an English text, same contract as
+// plugins. world.yaml itself holds one language; the English text comes from
+// the `world.<locale>.yaml` overlay, so the check runs on the manifest with its
+// overlays compiled in, as the loader reads it. The `data/` content (character
+// cards, rule prose) is authored narrative and is intentionally out of scope
+// here.
 const WORLD_VISIBLE_KEYS = new Set([
   ...USER_VISIBLE_KEYS,
   "name", // world title + characterAttributes[].name
@@ -395,8 +409,30 @@ function checkWorldFiles() {
       totalViolations += 1;
       continue;
     }
+    const worldDir = resolve(REPO_ROOT, rel, "..");
+    const baseLocale =
+      typeof parsed?.defaultLocale === "string"
+        ? parsed.defaultLocale
+        : "zh-CN";
+    let compiled = parsed;
+    try {
+      for (const name of readdirSync(worldDir).sort()) {
+        const tag = /^world\.([A-Za-z0-9-]+)\.yaml$/.exec(name)?.[1];
+        const locale = tag ? canonicalizeLocale(tag) : undefined;
+        if (!locale || !isKnownLocale(locale)) continue;
+        compiled = applyLocaleOverlay(
+          compiled,
+          YAML.parse(readFileSync(join(worldDir, name), "utf8")),
+          { mode: "compile", locale, baseLocale },
+        ).value;
+      }
+    } catch (err) {
+      console.error(`${rel}: failed to read a locale file - ${err.message}`);
+      totalViolations += 1;
+      continue;
+    }
     const violations = [];
-    walkPluginField(parsed, [], violations, "world.yaml", WORLD_VISIBLE_KEYS);
+    walkPluginField(compiled, [], violations, "world.yaml", WORLD_VISIBLE_KEYS);
     for (const violation of violations) {
       totalViolations += 1;
       printViolation(rel, violation);

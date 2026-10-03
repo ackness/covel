@@ -184,28 +184,75 @@ sources:
     ]);
   });
 
-  it("warns when a locale variant drops a record", async () => {
+  it("reports a translation that the main file has no place for", async () => {
     const worldDir = path.join(
-      await mkdtemp(path.join(tmpdir(), "covel-validate-variant-")),
+      await mkdtemp(path.join(tmpdir(), "covel-validate-overlay-")),
       "mistport",
     );
     await cp(path.join(repoRoot, "worlds/mistport"), worldDir, {
       recursive: true,
     });
-    const variantPath = path.join(worldDir, "characters/main-cast.en.json");
-    const cast = JSON.parse(await readFile(variantPath, "utf-8")) as unknown[];
-    await writeFile(variantPath, JSON.stringify(cast.slice(1)));
+    // An id that the main cast file does not have, and a key that
+    // `world.yaml` does not have.
+    const castPath = path.join(worldDir, "characters/main-cast.en.json");
+    const cast = JSON.parse(await readFile(castPath, "utf-8")) as Record<
+      string,
+      unknown
+    >[];
+    await writeFile(
+      castPath,
+      JSON.stringify([...cast, { id: "npc-nobody", name: "Nobody" }]),
+    );
+    await writeFile(
+      path.join(worldDir, "world.en-US.yaml"),
+      "name: Mistport Chronicles\nsubtitle: A tale\n",
+    );
 
-    const diagnostics = await validate(worldDir, true);
-    expect(
-      diagnostics.filter((item) => item.code === "locale-keys-differ"),
-    ).toEqual([
+    const overlays = (await validate(worldDir, true)).filter(
+      (item) => item.code === "locale-overlay",
+    );
+    expect(overlays).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        file: "world.en-US.yaml",
+        pointer: "subtitle",
+      }),
       expect.objectContaining({
         level: "warning",
         file: "characters/main-cast.en.json",
         sourceId: "cast",
-        locales: ["en-US"],
+        pointer: "[id=npc-nobody]",
       }),
     ]);
-  });
+  }, 30_000);
+
+  it("rejects a main file that still writes translations inline", async () => {
+    const worldDir = path.join(
+      await mkdtemp(path.join(tmpdir(), "covel-validate-inline-")),
+      "mistport",
+    );
+    await cp(path.join(repoRoot, "worlds/mistport"), worldDir, {
+      recursive: true,
+    });
+    const manifestPath = path.join(worldDir, "world.yaml");
+    await writeFile(
+      manifestPath,
+      (await readFile(manifestPath, "utf-8")).replace(
+        /^name: .*$/m,
+        "name:\n  zh-CN: 雾港・裂潮纪\n  en-US: Mistport Chronicles",
+      ),
+    );
+
+    expect(
+      (await validate(worldDir, true)).filter(
+        (item) => item.code === "inline-locale-map",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        level: "error",
+        file: "world.yaml",
+        pointer: "name",
+      }),
+    ]);
+  }, 30_000);
 });

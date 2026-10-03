@@ -16,7 +16,7 @@
 - `type: array` + object `items`：一组同构的行。
 - `additionalProperties: <schema>`：动态命名的记录，例如按线索 ID 存放的线索板。
 - 枚举用稳定的英文值，显示名写在 `x-enumLabels`。
-- 需要多语言的文本节点标 `x-i18n: true`，值写成 `{zh-CN: …, en-US: …}`；没有标的节点不会被当作翻译。导入会话时只取会话语言的那一份，游玩中的值是普通字符串。
+- 需要翻译的文本节点标 `x-i18n: true`。主文件只写默认语言的文本，译文写在 `dimensions.<locale>.yaml` 里（同样的 key，只有文本）；没有标的节点不能翻译。导入会话时只取会话语言的那一份，游玩中的值是普通字符串。
 
 schema 只支持 `docs/reference/world-data.md` 列出的 JSON Schema 子集，写了不支持的关键字会直接报错。
 

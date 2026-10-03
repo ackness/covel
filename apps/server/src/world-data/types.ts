@@ -11,6 +11,8 @@ export interface WorldDataDiagnostic {
   readonly schema?: string;
   readonly pointer?: string;
   readonly message: string;
+  /** Set when a locale file's entry was ignored; `path` is that file. */
+  readonly localeOverlay?: true;
 }
 
 export interface SourceFieldOrigin {

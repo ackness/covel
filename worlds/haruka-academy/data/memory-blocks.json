@@ -3,27 +3,15 @@
   "blocks": [
     {
       "label": "relationships",
-      "displayName": {
-        "zh-CN": "人物关系",
-        "en-US": "Relationships"
-      },
-      "extractionHint": {
-        "zh-CN": "每位角色与玩家之间具体发生过的事：哪句话、哪个瞬间让距离改变，角色说出口和没说出口的心事。心动值由好感面板记录，阶段/信任/压力由「心之路线」维度记录，这里只写可回忆的细节，不重复数值。",
-        "en-US": "What actually happened between each character and the player: which line or moment changed the distance, and what they said or held back. Affection lives in the affinity panel and stage/trust/pressure in the Heart Routes dimension; record memorable details here, not numbers."
-      },
+      "displayName": "人物关系",
+      "extractionHint": "每位角色与玩家之间具体发生过的事：哪句话、哪个瞬间让距离改变，角色说出口和没说出口的心事。心动值由好感面板记录，阶段/信任/压力由「心之路线」维度记录，这里只写可回忆的细节，不重复数值。",
       "icon": "Heart",
       "maxChars": 1800
     },
     {
       "label": "campus_schedule",
-      "displayName": {
-        "zh-CN": "校园日程",
-        "en-US": "Campus Schedule"
-      },
-      "extractionHint": {
-        "zh-CN": "当前地点、天气、下一次铃声或闭校约定、可自然登场的角色和已经约好的去处。当前日期与时段以世界时间插件为准，不在记忆中维护另一份时钟。",
-        "en-US": "Current location, weather, next bell or campus closing appointment, likely characters and scheduled destinations. The world-time plugin owns the current date and phase; do not maintain a second clock in memory."
-      },
+      "displayName": "校园日程",
+      "extractionHint": "当前地点、天气、下一次铃声或闭校约定、可自然登场的角色和已经约好的去处。当前日期与时段以世界时间插件为准，不在记忆中维护另一份时钟。",
       "icon": "Clock",
       "maxChars": 1000
     }

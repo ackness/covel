@@ -13,12 +13,22 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { createEventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import { validateWorldManifest } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  applyLocaleOverlay,
+  findInlineLocaleMaps,
+  validateWorldManifest,
+} from "@covel/shared";
 import { discoverAndRegisterPlugins } from "../routes/api/bootstrap/plugin-discovery.js";
 import { resolveLocaleFilePath } from "../world-seed-loader.js";
 import { loadWorldDataDescriptor } from "./descriptor.js";
+import {
+  findLocaleOverlays,
+  readWorldManifestSource,
+  type LocaleOverlayFileIssue,
+} from "./locale-overlays.js";
 import { preflightWorldDataForSession } from "./session-import.js";
-import { fileExists, sourceItems } from "./session-import/utils.js";
+import { fileExists } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
 import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
@@ -36,7 +46,8 @@ export interface WorldPackageDiagnostic {
     | "unprovided-contract"
     | "unresolved-contract"
     | "world-data"
-    | "locale-keys-differ";
+    | "locale-overlay"
+    | "inline-locale-map";
   /** Path relative to the world directory. */
   readonly file?: string;
   /** Location inside `file`, such as `pluginPolicy.requested[1]`. */
@@ -280,59 +291,103 @@ function sourceContracts(source: OrderedWorldDataSource): string[] {
   return [...new Set(contracts)];
 }
 
-function recordKeys(value: unknown, keyField: string): Set<string> {
-  const keys = new Set<string>();
-  for (const item of sourceItems(value)) {
-    const key =
-      item !== null && typeof item === "object"
-        ? (item as Record<string, unknown>)[keyField]
-        : undefined;
-    if (typeof key === "string" || typeof key === "number")
-      keys.add(String(key));
-  }
-  return keys;
-}
-
 function listSome(values: readonly string[]): string {
   const shown = values.slice(0, 5).join(", ");
   return values.length > 5 ? `${shown} and ${values.length - 5} more` : shown;
 }
 
-/** A translated variant that lost or gained records is a silent content gap. */
-async function checkLocaleVariantKeys(
+/** An authored file holds one language; its translations are overlay files. */
+function inlineLocaleMapDiagnostics(
+  file: string,
+  value: unknown,
+  defaultLocale: string | undefined,
+  sourceId?: string,
+): WorldPackageDiagnostic[] {
+  const found = findInlineLocaleMaps(value, defaultLocale ?? DEFAULT_LOCALE);
+  if (found.length === 0) return [];
+  const parsed = path.parse(file);
+  return [
+    {
+      level: "error",
+      code: "inline-locale-map",
+      file,
+      ...(sourceId ? { sourceId } : {}),
+      pointer: found[0]!.path,
+      message: `${found.length} text${found.length === 1 ? " is" : "s are"} written as a locale map, at ${listSome(found.map((item) => item.path))}`,
+      hint: `Write one language here and put each translation in \`${parsed.name}.<locale>${parsed.ext}\`, with the same keys and ids.`,
+    },
+  ];
+}
+
+function overlayDiagnostics(
+  issues: readonly LocaleOverlayFileIssue[],
+  sourceId?: string,
+): WorldPackageDiagnostic[] {
+  return issues.map((issue) => ({
+    level: "warning" as const,
+    code: "locale-overlay" as const,
+    file: issue.file,
+    ...(sourceId ? { sourceId } : {}),
+    pointer: issue.path,
+    message: `${issue.path} ${issue.message}; this translation is ignored`,
+    hint: "A locale file may only translate text that the main file has, under the same keys and ids.",
+  }));
+}
+
+/**
+ * Locale files of structured sources: every overlay must apply cleanly, and
+ * the main file must hold one language. Every overlay beside a source is
+ * checked, not only those of the declared locales.
+ */
+async function checkLocaleFiles(
   worldDir: string,
+  manifest: WorldManifestView,
   sources: readonly OrderedWorldDataSource[],
-  locales: readonly string[],
 ): Promise<WorldPackageDiagnostic[]> {
   const diagnostics: WorldPackageDiagnostic[] = [];
   for (const source of sources) {
-    const keyField = source.descriptor.key;
-    if (!keyField || source.descriptor.kind === "media") continue;
-    const canonical = await readWorldDataSource(source);
-    if (!canonical.path) continue;
-    const canonicalKeys = recordKeys(canonical.value, keyField);
-    for (const locale of locales) {
-      const variant = await readWorldDataSource(source, locale);
-      if (!variant.path || variant.path === canonical.path) continue;
-      const variantKeys = recordKeys(variant.value, keyField);
-      const missing = [...canonicalKeys].filter((key) => !variantKeys.has(key));
-      const extra = [...variantKeys].filter((key) => !canonicalKeys.has(key));
-      if (missing.length === 0 && extra.length === 0) continue;
-      diagnostics.push({
-        level: "warning",
-        code: "locale-keys-differ",
-        file: path.relative(worldDir, variant.path),
-        sourceId: source.id,
-        locales: [locale],
-        message: [
-          `records differ from ${path.relative(worldDir, canonical.path)}`,
-          missing.length > 0 ? `missing ${listSome(missing)}` : "",
-          extra.length > 0 ? `extra ${listSome(extra)}` : "",
-        ]
-          .filter(Boolean)
-          .join("; "),
-        hint: `A locale variant must carry the same \`${keyField}\` values as the canonical file.`,
-      });
+    const { kind } = source.descriptor;
+    if (
+      source.inlineValue !== undefined ||
+      (kind !== "json" && kind !== "yaml")
+    )
+      continue;
+    const main = await readWorldDataSource(source);
+    if (!main.path || main.value === undefined) continue;
+    const file = path.relative(worldDir, main.path);
+    diagnostics.push(
+      ...inlineLocaleMapDiagnostics(
+        file,
+        main.value,
+        manifest.defaultLocale,
+        source.id,
+      ),
+    );
+    for (const overlay of await findLocaleOverlays(
+      source.pathOrigin.descriptorRoot,
+      source.descriptor.path,
+    )) {
+      let parsed: unknown;
+      try {
+        const text = await readFile(overlay.path, "utf-8");
+        parsed = kind === "json" ? JSON.parse(text) : parseYaml(text);
+      } catch {
+        continue; // The import preflight reports a file that does not parse.
+      }
+      diagnostics.push(
+        ...overlayDiagnostics(
+          applyLocaleOverlay(main.value, parsed, {
+            mode: "resolve",
+            locale: overlay.locale,
+            baseLocale: manifest.defaultLocale ?? DEFAULT_LOCALE,
+            arrayKey: source.descriptor.key,
+          }).issues.map((issue) => ({
+            ...issue,
+            file: path.relative(worldDir, overlay.path),
+          })),
+          source.id,
+        ),
+      );
     }
   }
   return diagnostics;
@@ -425,6 +480,8 @@ async function checkWorldData(
     }));
     for (const diagnostic of preflight.diagnostics) {
       if (diagnostic.level === "info") continue;
+      // Every locale file is checked once below, whatever locale reads it.
+      if ("localeOverlay" in diagnostic && diagnostic.localeOverlay) continue;
       if (diagnostic.sourceId && unresolvedSources.has(diagnostic.sourceId))
         continue;
       const identity = `${diagnostic.level}\u0000${diagnostic.sourceId ?? ""}\u0000${diagnostic.message}`;
@@ -454,7 +511,7 @@ async function checkWorldData(
     );
 
   diagnostics.push(
-    ...(await checkLocaleVariantKeys(worldDir, descriptor.sources, locales)),
+    ...(await checkLocaleFiles(worldDir, manifest, descriptor.sources)),
   );
   return diagnostics;
 }
@@ -468,8 +525,10 @@ export async function validateWorldPackage(
     path.resolve(options.worldDir),
   );
   let raw: unknown;
+  let source: Awaited<ReturnType<typeof readWorldManifestSource>>;
   try {
-    raw = parseYaml(await readFile(path.join(worldDir, "world.yaml"), "utf-8"));
+    source = await readWorldManifestSource(worldDir);
+    raw = source.raw;
   } catch (error) {
     return {
       diagnostics: [
@@ -500,6 +559,12 @@ export async function validateWorldPackage(
   return {
     worldId: manifest.id,
     diagnostics: [
+      ...inlineLocaleMapDiagnostics(
+        "world.yaml",
+        source.base,
+        manifest.defaultLocale,
+      ),
+      ...overlayDiagnostics(source.issues),
       ...(await checkLore(worldDir, manifest)),
       ...checkPluginReferences(manifest, catalogue, strict),
       ...(await checkWorldData(worldDir, manifest, catalogue, strict)),

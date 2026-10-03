@@ -63,7 +63,7 @@ defaultViewMode: stage
 # world.yaml
 dimensions:
   reputation:
-    name: { zh-CN: 声望, en-US: Reputation }
+    name: 声望 # 译文写在 world.en-US.yaml 的同一路径下
     description: 主角在当地的公开声望。
     schema:
       type: integer
@@ -112,25 +112,39 @@ ID 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`，且不能是 `__proto__`、`proto
 
 不支持的关键字（包括 `$ref`、远程 schema、表达式与代码）直接拒绝，不会忽略。初值、玩家修改和自动提交共用校验，不做类型强转或默认值填充。共享 JSON 边界限制深度 32、节点数 10,000、UTF-8 序列化体积 256 KiB；维度 map 与 schema 同样接受边界校验，不仅检查单个字段。
 
-名称和说明是面板标签，按界面语言从 `I18nText` 解析；普通值不经过猜测式深度翻译。只有 schema 明确标记 `x-i18n: true` 的节点可以在世界包里写成 `I18nText`。这些节点和 `updateRule` 在导入会话时按会话的内容语言解析成普通字符串，会话里不再保存 locale map（见 [Dynamic Dimensions](./dynamic-dimensions.md)）。例如：
+名称和说明是面板标签，按界面语言从 `I18nText` 解析；普通值不经过猜测式深度翻译。只有 schema 明确标记 `x-i18n: true` 的节点可以翻译。主文件写默认语言的文本，译文写在[语言文件](#语言文件namelocaleext)里；这些节点和 `updateRule` 在导入会话时按会话的内容语言解析成普通字符串，会话里不保存 locale map（见 [Dynamic Dimensions](./dynamic-dimensions.md)）。例如：
 
 ```yaml
-name: 港口传闻
-schema: { type: string, x-i18n: true }
-initialValue:
-  { zh-CN: 灯塔有人守夜。, en-US: Someone keeps watch at the lighthouse. }
+# data/dimensions.yaml
+harborRumor:
+  name: 港口传闻
+  schema: { type: string, x-i18n: true }
+  initialValue: 灯塔有人守夜。
+
+# data/dimensions.en-US.yaml
+harborRumor:
+  name: Harbor Rumor
+  initialValue: Someone keeps watch at the lighthouse.
 ```
 
 `title` 与 `x-enumLabels` 只影响面板显示：值仍是稳定的枚举 ID（模型、规则和校验都使用 ID），`x-enumLabels` 的键必须是该节点 `enum` 中的标量成员：
 
 ```yaml
+# 主文件
 schema:
   type: string
-  title: { zh-CN: 状态, en-US: Status }
+  title: 状态
   enum: [unverified, corroborated]
   x-enumLabels:
-    unverified: { zh-CN: 未核实, en-US: Unverified }
-    corroborated: { zh-CN: 已佐证, en-US: Corroborated }
+    unverified: 未核实
+    corroborated: 已佐证
+
+# 语言文件：同样的路径，只有文本
+schema:
+  title: Status
+  x-enumLabels:
+    unverified: Unverified
+    corroborated: Corroborated
 ```
 
 公共快照保留原始值；展示投影或查询可按注解本地化。正常 JSON `{zh: 1, en: 2}` 不会被当成翻译，ID、属性名和枚举成员不翻译。
@@ -383,21 +397,58 @@ sources:
 
 隐藏的意义是「不剧透」，不是加密：世界包文件就在玩家本地，浏览器本地模式的工作区 checkpoint 也包含这些数据以便执行。不要把真正需要保密的信息写进世界包。
 
-### Locale 变体解析（`<name>.<locale>.<ext>`）
+### 语言文件（`<name>.<locale>.<ext>`）
 
-导入器按**会话 locale** 解析 source 文件，沿用 `WORLD.md` / 外部 dimension 约定：对每个 source 的 `path`，依次尝试 `<name>.<exact-locale>.<ext>`、script 兼容的 `<name>.<primary-language>.<ext>`，命中则用之，否则回退到声明的 `path`。例如 `ru-RU` 依次尝试 `main-cast.ru-RU.json`、`main-cast.ru.json`、`main-cast.json`；`zh-Hant-TW` 不会尝试默认推断为 Hans 的 `main-cast.zh.json`。
+**主文件只写一种语言**，即 `world.yaml` 的 `defaultLocale`。其他语言放在主文件旁边的 `<name>.<locale>.<ext>` 里，只写译文，不重复结构：
 
+```text
+world.yaml                     # 主文件，defaultLocale 的文本
+world.en-US.yaml               # 只有英文译文
+data/dimensions.yaml
+data/dimensions.en-US.yaml
+characters/main-cast.json
+characters/main-cast.en.json
+WORLD.md
+WORLD.en.md                    # 正文类文件没有可对齐的 id，整份替换
 ```
-characters/main-cast.json      # 默认（作者语言）
-characters/main-cast.en.json   # en 会话自动选用
-data/rules/tide-mystery.yaml
-data/rules/tide-mystery.en.yaml
+
+```yaml
+# world.yaml
+name: 雾港・裂潮纪
+characterSchema:
+  attributes:
+    - id: fogRot
+      name: 雾蚀
+      type: number
+
+# world.en-US.yaml —— 只有文本
+name: Mistport Chronicles
+characterSchema:
+  attributes:
+    - id: fogRot
+      name: Fog Rot
 ```
 
-- locale 来自 session（创建时确定）；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时回退到 `session.locale`。
-- 对**任意** source kind 生效（`json` / `yaml` / `text` / `markdown` / `media` 目录）——变体不存在即回退，是纯 opt-in、非破坏。
-- import ledger / `sync-data` 记录并比对被选中的变体文件摘要，故不同 locale 的会话各自独立、互不污染。
-- 与 source 的 `locale` 字段无关：那是 source 内容语言的元数据；本机制是「按会话 locale 选文件」。
+合并规则（`@covel/shared` 的 `applyLocaleOverlay`）：
+
+- 对象按 key 合并；对象列表按 `id` 合并（worldData source 用它声明的 `key`），元素没有 `id` 时按位置合并。
+- 语言文件只能翻译主文件里已有的文本。出现主文件没有的 key 或 id、在结构位置写文本、改动数字或布尔值，这一条都会被忽略并报告，主文件的值保留。
+- 没翻译的文本回退到主文件，所以可以逐步翻译。把主文件整份复制再改文字也是合法的语言文件。
+- 纯文本列表（例如别名）作为一个整体翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。
+- 文件名里的 `<locale>` 必须是真实语言的标签（`en`、`en-US`、`zh-Hant`）；`items.backup.yaml` 不会被当成语言文件。
+
+两种读取方式：
+
+| 文件                                                                                           | 读取方式                                                          | 结果                                                  |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
+| `world.yaml`、维度定义（`dimensionSources` 的文件、`to: world:metadata.dimensions` 的 source） | 所有语言文件一起编译                                              | 文本成为 locale map，世界目录和面板标签按界面语言显示 |
+| 其他结构化 worldData source（JSON / YAML）                                                     | 只合并会话语言的那一份：先精确 locale，再 script 兼容的主语言短键 | 单一语言的数据；会话里不保存 locale map               |
+| `markdown` / `text` / `media`                                                                  | 语言文件整份替换主文件                                            | 同上                                                  |
+
+- 会话语言在创建时确定；`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项透传，缺省时取 `session.locale`。`zh-Hant-TW` 不会读取 `zh` 的文件。
+- 语言文件是 source 的一部分：改动任何一份都会改变该 source 的摘要，`sync-data` 能看到。
+- **主文件不再写内联 locale map**（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。此前用内联写法的世界包需要拆成主文件加语言文件；内置的三个双语世界已经这样迁移。
+- 维度值里只有 schema 标了 `x-i18n: true` 的文本节点可以翻译；翻译其他节点会让该维度校验失败。
 
 `source id` 必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。descriptor 顶层目前只接受 `schemaVersion: 1` 和 `sources`。
 
@@ -552,7 +603,7 @@ characterSchema:
   types: [npc, companion]
   attributes:
     - id: affection
-      name: { zh-CN: 好感度, en-US: Affection }
+      name: 好感度 # world.en-US.yaml 里按 id 写 `name: Affection`
       type: number
       min: 0
       max: 100
@@ -939,11 +990,12 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `unprovided-contract`   | error 或 warning | `pluginPolicy.requires` 的契约没有提供者                                                  |
 | `unresolved-contract`   | error 或 warning | source 使用的数据契约没有任何已扫描插件接收                                               |
 | `world-data`            | 与预检一致       | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
-| `locale-keys-differ`    | warning          | 语言变体文件的 `key` 集合与默认文件不一致                                                 |
+| `locale-overlay`        | warning          | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略  |
+| `inline-locale-map`     | error            | 主文件里把文本写成了 locale map；主文件只写一种语言，译文放进语言文件                     |
 
 标为“error 或 warning”的三项：拼写接近某个已知 ID 时判为 error 并提示 “Did you mean”；否则默认是 warning（提供者可能是未扫描的社区插件），加 `--strict` 后一律为 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
 
-每个声明的语言各跑一遍预检，因为[语言变体](#locale-变体解析namelocaleext)会让不同语言读到不同文件。校验逻辑在 `apps/server/src/world-data/validate-world-package.ts`，返回结构化诊断，可被其他工具复用。
+每个声明的语言各跑一遍预检，因为[语言文件](#语言文件namelocaleext)会让不同语言读到不同文本；主文件旁的每个语言文件都会检查，不限于声明的语言。校验逻辑在 `apps/server/src/world-data/validate-world-package.ts`，返回结构化诊断，可被其他工具复用。
 
 ### 开发检查清单
 

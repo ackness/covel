@@ -1,0 +1,488 @@
+# en-US text for dimensions.yaml. Only translated text; structure and ids come from dimensions.yaml.
+routes:
+  name: Heart Routes
+  description: Relationship stage, trust, and pressure with each romanceable
+    character. Affection itself lives in the affinity panel.
+  schema:
+    properties:
+      mio:
+        title: Mio Kamishiro
+        properties:
+          stage:
+            title: Stage
+            x-enumLabels:
+              acquaintance: Acquaintance
+              familiar: Familiar
+              heartbeat: Heartbeat
+              confession-eve: Confession eve
+              together: Together
+          trust:
+            title: Trust
+          pressure:
+            title: Pressure
+      rin:
+        title: Rin Asakura
+        properties:
+          stage:
+            title: Stage
+            x-enumLabels:
+              acquaintance: Acquaintance
+              familiar: Familiar
+              heartbeat: Heartbeat
+              confession-eve: Confession eve
+              together: Together
+          trust:
+            title: Trust
+          pressure:
+            title: Pressure
+      kaho:
+        title: Kaho Shiina
+        properties:
+          stage:
+            title: Stage
+            x-enumLabels:
+              acquaintance: Acquaintance
+              familiar: Familiar
+              heartbeat: Heartbeat
+              confession-eve: Confession eve
+              together: Together
+          trust:
+            title: Trust
+          pressure:
+            title: Pressure
+      yuma:
+        title: Yuma Shiraishi
+        properties:
+          stage:
+            title: Stage
+            x-enumLabels:
+              acquaintance: Acquaintance
+              familiar: Familiar
+              heartbeat: Heartbeat
+              confession-eve: Confession eve
+              together: Together
+          trust:
+            title: Trust
+          pressure:
+            title: Pressure
+      akane:
+        title: Akane Toujou
+        properties:
+          stage:
+            title: Stage
+            x-enumLabels:
+              acquaintance: Acquaintance
+              familiar: Familiar
+              heartbeat: Heartbeat
+              confession-eve: Confession eve
+              together: Together
+          trust:
+            title: Trust
+          pressure:
+            title: Pressure
+  updateRule: Settle only interactions this turn's narrative explicitly shows
+    between the player and that character. Trust +1 for keeping a promise,
+    remembering a detail, respecting a silence, or being trusted with a secret.
+    Pressure +1 for public favoritism, a joke that crosses a line, pushing for
+    feelings, or leaving them to carry something alone; pressure -1 for sharing
+    the load or clearing up a misunderstanding. Stage advances one step only
+    after a memorable event — finishing something together, a shared secret, a
+    resolved misunderstanding, or an explicit promise — and only with trust of
+    at least 1 (to familiar), 2 (to heartbeat), or 4 (to confession eve).
+    Together is reached only on or after festival day, when both explicitly
+    confirm their feelings. Never skip stages or advance on numbers alone; real
+    hurt can drop one stage. Affection is not tracked here.
+festival:
+  name: Festival Prep
+  description: Progress on the four festival projects and the countdown
+    milestones. The days remaining come from world time.
+  schema:
+    properties:
+      projects:
+        title: Projects
+        properties:
+          seaBreezePost:
+            title: Class 2-B Sea Breeze Post
+            properties:
+              progress:
+                title: Progress
+              status:
+                title: Status
+                x-enumLabels:
+                  on-track: On track
+                  struggling: Struggling
+                  blocked: Blocked
+                  done: Done
+              note:
+                title: Latest
+          springMint:
+            title: "Literature Club: Spring Mint"
+            properties:
+              progress:
+                title: Progress
+              status:
+                title: Status
+                x-enumLabels:
+                  on-track: On track
+                  struggling: Struggling
+                  blocked: Blocked
+                  done: Done
+              note:
+                title: Latest
+          rumorWall:
+            title: News Club Rumor Wall
+            properties:
+              progress:
+                title: Progress
+              status:
+                title: Status
+                x-enumLabels:
+                  on-track: On track
+                  struggling: Struggling
+                  blocked: Blocked
+                  done: Done
+              note:
+                title: Latest
+          closingSong:
+            title: Light Music Club's new song
+            properties:
+              progress:
+                title: Progress
+              status:
+                title: Status
+                x-enumLabels:
+                  on-track: On track
+                  struggling: Struggling
+                  blocked: Blocked
+                  done: Done
+              note:
+                title: Latest
+      milestones:
+        title: Milestones
+        properties:
+          budgetReview:
+            title: D-14 Budget review
+            x-enumLabels:
+              upcoming: Upcoming
+              passed: Passed
+              rough: Scraped by
+              missed: Missed
+          midCheck:
+            title: D-10 Exams & draft check
+            x-enumLabels:
+              upcoming: Upcoming
+              passed: Passed
+              rough: Scraped by
+              missed: Missed
+          stagePreview:
+            title: D-7 Stage preview
+            x-enumLabels:
+              upcoming: Upcoming
+              passed: Passed
+              rough: Scraped by
+              missed: Missed
+          finalDeadline:
+            title: D-3 Deadline & dress rehearsal
+            x-enumLabels:
+              upcoming: Upcoming
+              passed: Passed
+              rough: Scraped by
+              missed: Missed
+          festivalEve:
+            title: D-1 Festival eve setup
+            x-enumLabels:
+              upcoming: Upcoming
+              passed: Passed
+              rough: Scraped by
+              missed: Missed
+          festivalDay:
+            title: Festival day & Lantern Lighting
+            x-enumLabels:
+              upcoming: Upcoming
+              passed: Passed
+              rough: Scraped by
+              missed: Missed
+  initialValue:
+    projects:
+      seaBreezePost:
+        note: The class approved the booth idea; nobody has sourced postcards yet.
+      springMint:
+        note:
+          Mio is carrying the contents and drafts alone; the club is short of
+          members.
+      rumorWall:
+        note: Rin is collecting the first anonymous submissions.
+      closingSong:
+        note: Kaho's new song is still missing its last verse.
+  updateRule:
+    Raise progress only when this turn's narrative shows the player or a
+    character actually doing prep work — +5 to +10 for a concrete task, +15 for
+    a whole collaborative session, +20 at most per turn; accidents, fights, or a
+    rejected draft can lower it. Use blocked when stuck, struggling when clearly
+    behind, and done with progress 100 when finished. Mark a milestone only
+    after it happens on the page — passed, rough when it barely holds, missed
+    when it slips. Days are tracked by world time, not here. Keep note to one
+    sentence.
+clubReview:
+  name: Literature Club Review
+  description: The Literature Club is on the merger list for lack of members.
+    Spring Mint and the response to it are its last chance.
+  schema:
+    properties:
+      status:
+        title: Status
+        x-enumLabels:
+          under-review: Under review
+          building-case: Building a case
+          hearing-passed: Passed the hearing
+          saved: Saved
+          merged: Merged
+      support:
+        title: Support
+      evidence:
+        title: Case points
+  updateRule:
+    When the narrative shows concrete, public support — a new member, an
+    old-issue story found, a good reaction to a Spring Mint preview, someone on
+    the student council softening, signatures or letters — add 1–2 support and
+    one sentence to evidence; a scandal, a missed deadline, or a fight going
+    public can cost 1. Switch to building-case the first time someone actively
+    prepares a defense. After the budget review happens on the page, set
+    hearing-passed if support is 4 or more, otherwise stay under-review; after
+    the festival set saved or merged by the final outcome. If Mio's secret about
+    the renovation becomes public, record it in evidence.
+promises:
+  name: Promises
+  description: What you promised, to whom, and whether you kept it.
+  schema:
+    additionalProperties:
+      properties:
+        to:
+          title: To
+        promise:
+          title: Promise
+        status:
+          title: Status
+          x-enumLabels:
+            pending: Pending
+            kept: Kept
+            broken: Broken
+            released: Released
+  updateRule:
+    Add an entry (short English kebab-case ID, status pending) when the
+    player explicitly agrees to something specific for a character this turn —
+    walking home together, helping out, keeping a secret, showing up somewhere.
+    Pleasantries and vague "maybe next time" do not count. Set kept when
+    fulfilled on the page, broken when missed or betrayed, released when the
+    other person clearly lets it go. Never delete entries.
+rumors:
+  name: Campus Rumors
+  description:
+    It is a small seaside town and rumors travel fast — who started it,
+    who believes it, who moves closer or away because of it.
+  schema:
+    additionalProperties:
+      properties:
+        rumor:
+          title: Rumor
+        stage:
+          title: Stage
+          x-enumLabels:
+            seed: Seed
+            spreading: Spreading
+            heating: Heating up
+            cleared: Cleared
+            confirmed: Confirmed
+            redirected: Redirected
+        heat:
+          title: Heat
+  initialValue:
+    vending-machine:
+      rumor:
+        Whatever drink the vending machine drops at sunset reveals who you are
+        thinking about.
+    lit-window:
+      rumor: A clubhouse window still lit after six keeps someone's wish secret.
+    window-seat:
+      rumor: Akane only saves the window seat for someone special.
+  updateRule: Rumors move seed → spreading → heating → cleared, confirmed, or
+    redirected, advancing only when the narrative shows them spread, cleared, or
+    proven. Add a new rumor (short English kebab-case ID, stage seed, heat 1)
+    the first time someone says it on the page — for example, one about the
+    transfer student. Heat +1 for being seen alone together, obvious favoritism,
+    or the News Club writing it down; heat -1 when Rin holds the story, someone
+    disproves it through action, or a newer event buries it. Never make a rumor
+    school-wide out of nowhere.
+geography:
+  name: Geography
+  schema:
+    properties:
+      overview:
+        title: Overview
+      regions:
+        items:
+          properties:
+            name:
+              title: Name
+            description:
+              title: Description
+            climate:
+              title: Climate
+            landmarks:
+              items:
+                properties:
+                  name:
+                    title: Name
+                  description:
+                    title: Description
+              title: Landmarks
+        title: Regions
+factions:
+  name: Factions
+  schema:
+    items:
+      properties:
+        name:
+          title: Name
+        description:
+          title: Description
+        type:
+          title: Type
+        influence:
+          title: Influence
+        leader:
+          title: Leader
+        headquarters:
+          title: Headquarters
+        relations:
+          items:
+            properties:
+              targetId:
+                title: Target
+              type:
+                title: Type
+              description:
+                title: Description
+          title: Relations
+powerSystem:
+  name: Relationship Progression
+  schema:
+    properties:
+      name:
+        title: Name
+      type:
+        title: Type
+      description:
+        title: Description
+      rules:
+        title: Rules
+      tiers:
+        items:
+          properties:
+            name:
+              title: Name
+            rank:
+              title: Rank
+            description:
+              title: Description
+        title: Tiers
+history:
+  name: History
+  schema:
+    items:
+      properties:
+        era:
+          title: Era
+        name:
+          title: Name
+        description:
+          title: Description
+        significance:
+          title: Significance
+economy:
+  name: Economy
+  schema:
+    properties:
+      currencies:
+        items:
+          properties:
+            name:
+              title: Name
+            symbol:
+              title: Symbol
+            description:
+              title: Description
+        title: Currencies
+      resources:
+        title: Resources
+      tradeNotes:
+        title: Trade
+socialStructure:
+  name: Society
+  schema:
+    properties:
+      classes:
+        items:
+          properties:
+            name:
+              title: Name
+            rank:
+              title: Rank
+            description:
+              title: Description
+        title: Classes
+      races:
+        items:
+          properties:
+            name:
+              title: Name
+            description:
+              title: Description
+            traits:
+              title: Traits
+        title: Peoples
+      notes:
+        title: Notes
+tone:
+  name: Tone
+  schema:
+    properties:
+      genres:
+        title: Genres
+      contentRating:
+        title: Rating
+      narrativeStyle:
+        title: Narrative style
+      themes:
+        title: Themes
+mechanics:
+  name: Play Style
+  schema:
+    properties:
+      combatStyle:
+        title: Combat
+      difficulty:
+        title: Difficulty
+      skillSystem:
+        title: Checks
+      customRules:
+        title: House rules
+startingConditions:
+  name: Opening
+  schema:
+    properties:
+      openingScenario:
+        title: Opening scene
+      startingLocation:
+        title: Starting point
+      playerConstraints:
+        title: Constraints
+      startingResources:
+        properties:
+          allowance:
+            title: Allowance (yen)
+        title: Starting resources
+      openingHook:
+        title: Hook
+      openingChips:
+        title: Opening moves

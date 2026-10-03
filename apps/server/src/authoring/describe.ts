@@ -93,13 +93,19 @@ const WORLD_FILES: AuthoringSurface["files"] = [
   {
     path: "world.yaml",
     purpose:
-      "World manifest: identity, locales, plugin selection, character schema.",
+      "World manifest: identity, locales, plugin selection, character schema. Written in one language, the `defaultLocale`.",
     reference: "docs/reference/schema/world-manifest.md",
+  },
+  {
+    path: "<file>.<locale>.<ext>",
+    purpose:
+      "Translation of the YAML or JSON file beside it, for example `world.en.yaml` or `data/dimensions.en.yaml`. It holds only translated text under the same keys and ids; it does not repeat structure. Never write a locale map inside a main file.",
+    reference: "docs/reference/world-data.md",
   },
   {
     path: "WORLD.md",
     purpose:
-      "Lore given to the narrative. It is the fallback for every locale; add `WORLD.<locale>.md` for other languages.",
+      "Lore given to the narrative. It is the fallback for every locale; add `WORLD.<locale>.md`, a whole document, for other languages.",
   },
   {
     path: "data/world.data.yaml",

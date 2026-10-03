@@ -1,3 +1,7 @@
+import {
+  resolveWorldDimensionsLocale,
+  worldDimensionsSchema,
+} from "@covel/shared";
 import { mkdtemp, mkdir, writeFile, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,7 +15,7 @@ async function makeTempWorld(): Promise<string> {
 }
 
 describe("world data loader", () => {
-  it("loads exact locale lore and dimension variants before short keys", async () => {
+  it("loads exact-locale lore before short keys and compiles dimension overlays", async () => {
     const root = await makeTempWorld();
     await mkdir(path.join(root, "dimensions"), { recursive: true });
     await writeFile(
@@ -19,9 +23,9 @@ describe("world data loader", () => {
       `schemaVersion: "1"
 id: russian-world
 name: Russian World
-summary: Locale variants
+summary: Locale files
 defaultLocale: ru_ru
-supportedLocales: [ru_ru]
+supportedLocales: [ru_ru, en-US]
 dimensionSources:
   tone: dimensions/tone.yaml
 `,
@@ -29,29 +33,31 @@ dimensionSources:
     await writeFile(path.join(root, "WORLD.md"), "canonical lore");
     await writeFile(path.join(root, "WORLD.ru.md"), "short Russian lore");
     await writeFile(path.join(root, "WORLD.ru-RU.md"), "exact Russian lore");
+    // The main file is the default locale. A locale file beside it holds
+    // only the translated text.
     await writeFile(
       path.join(root, "dimensions/tone.yaml"),
-      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - canonical\n  contentRating: teen\n",
+      "name: тон\nschema: { type: string, x-i18n: true }\ninitialValue: спокойный\n",
     );
     await writeFile(
-      path.join(root, "dimensions/tone.ru.yaml"),
-      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - short\n  contentRating: teen\n",
-    );
-    await writeFile(
-      path.join(root, "dimensions/tone.ru-RU.yaml"),
-      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - exact\n  contentRating: teen\n",
+      path.join(root, "dimensions/tone.en-US.yaml"),
+      "name: tone\ninitialValue: calm\n",
     );
 
     const record = await loadSingleWorld(root);
 
     expect(record?.locale).toBe("ru-RU");
     expect(record?.lore).toBe("exact Russian lore");
-    expect(record?.metadata?.dimensions).toMatchObject({
-      tone: { name: "tone", schema: {}, initialValue: { genres: ["exact"] } },
+    expect(record?.metadata?.dimensions).toEqual({
+      tone: {
+        name: { "ru-RU": "тон", "en-US": "tone" },
+        schema: { type: "string", "x-i18n": true },
+        initialValue: { "ru-RU": "спокойный", "en-US": "calm" },
+      },
     });
   });
 
-  it("does not load Simplified Chinese short-key files for zh-Hant", async () => {
+  it("keeps Simplified Chinese text apart from a Traditional Chinese world", async () => {
     const root = await makeTempWorld();
     await mkdir(path.join(root, "dimensions"), { recursive: true });
     await writeFile(
@@ -59,7 +65,7 @@ dimensionSources:
       `schemaVersion: "1"
 id: traditional-world
 name: Traditional World
-summary: Script-safe variants
+summary: Script-safe locale files
 defaultLocale: zh-Hant-TW
 dimensionSources:
   tone: dimensions/tone.yaml
@@ -69,23 +75,30 @@ dimensionSources:
     await writeFile(path.join(root, "WORLD.zh.md"), "simplified lore");
     await writeFile(
       path.join(root, "dimensions/tone.yaml"),
-      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - canonical\n  contentRating: teen\n",
+      "name: tone\nschema: { type: string, x-i18n: true }\ninitialValue: 繁體\n",
     );
     await writeFile(
       path.join(root, "dimensions/tone.zh.yaml"),
-      "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - simplified\n  contentRating: teen\n",
+      "initialValue: 简体\n",
     );
 
     const record = await loadSingleWorld(root);
 
     expect(record?.lore).toBe("canonical lore");
-    expect(record?.metadata?.dimensions).toMatchObject({
-      tone: {
-        name: "tone",
-        schema: {},
-        initialValue: { genres: ["canonical"] },
-      },
+    const dimensions = worldDimensionsSchema.parse(
+      record?.metadata?.dimensions,
+    );
+    // The overlay is a separate language entry, never a replacement.
+    expect(dimensions.tone!.initialValue).toEqual({
+      "zh-Hant-TW": "繁體",
+      zh: "简体",
     });
+    expect(
+      resolveWorldDimensionsLocale(dimensions, "zh-Hant-TW").tone!.initialValue,
+    ).toBe("繁體");
+    expect(
+      resolveWorldDimensionsLocale(dimensions, "zh-CN").tone!.initialValue,
+    ).toBe("简体");
   });
 
   it("rejects a path-like defaultLocale before reading locale files", async () => {

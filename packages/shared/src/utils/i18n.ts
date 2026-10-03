@@ -82,7 +82,11 @@ const LANGUAGE_NAMES = new Intl.DisplayNames(["en"], {
   fallback: "none",
 });
 
-function isLocaleKey(key: string): boolean {
+/**
+ * Whether a tag names a real language. `backup` and `draft` are well-formed
+ * language subtags, so syntax alone does not tell a locale from a word.
+ */
+export function isKnownLocale(key: string): boolean {
   const canonical = canonicalizeLocale(key);
   return (
     canonical !== undefined &&
@@ -95,12 +99,14 @@ function isLocaleKey(key: string): boolean {
  * a string — i.e. an inline {@link I18nText} record like `{ "zh-CN": "…", en: "…" }`.
  * A structured object (e.g. `{ name, description, type }`) is not a locale map.
  */
-function isLocaleMap(value: unknown): value is Record<string, string> {
+export function isLocaleMap(value: unknown): value is Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const entries = Object.entries(value);
   return (
     entries.length > 0 &&
-    entries.every(([key, item]) => isLocaleKey(key) && typeof item === "string")
+    entries.every(
+      ([key, item]) => isKnownLocale(key) && typeof item === "string",
+    )
   );
 }
 

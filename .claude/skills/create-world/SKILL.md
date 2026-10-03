@@ -71,7 +71,8 @@ worlds/<id>/
 - 角色类型和属性写在 `characterSchema: {types, attributes}`。
 - 所有 ID（world id、source id、记录 id）用 kebab-case 英文。
 - 避免泛化的奇幻套路，追求独特的设定。
-- 写进本仓库 `worlds/` 的世界，`world.yaml` 的展示字段（`name`、`summary`、属性的 `name` / `description` 等）要写成 `{ zh: …, en: … }`；仓库门禁会拒绝裸中文。`WORLD.md` 和 `data/` 里的内容用用户的语言即可。
+- 每个文件只写一种语言（`world.yaml` 的 `defaultLocale`）。要加别的语言时，在文件旁边放 `<名字>.<locale>.<扩展名>`，只写译文、不重复结构：`world.en.yaml`、`data/dimensions.en.yaml`、`characters/main-cast.en.json`；`WORLD.en.md` 是整份正文。主文件里不要写 `{ zh: …, en: … }` 这样的内联映射，校验会报错。
+- 写进本仓库 `worlds/` 的中文世界，`world.yaml` 的展示字段（`name`、`summary`、属性的 `name` / `description` 等）必须在 `world.en.yaml` 里有英文译文，仓库门禁会检查。`WORLD.md` 和 `data/` 里的内容用用户的语言即可。
 
 ### 5. 验证
 

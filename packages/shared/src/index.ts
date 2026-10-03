@@ -86,9 +86,22 @@ export type {
 export {
   resolveI18nText,
   resolveI18nDeep,
+  isKnownLocale,
+  isLocaleMap,
   localizedWorldText,
   WORLD_LOCALIZED_TEXT_KEY,
 } from "./utils/i18n.js";
+export {
+  applyLocaleOverlay,
+  findInlineLocaleMaps,
+  isLocaleMapFor,
+  splitLocaleMaps,
+} from "./utils/locale-overlay.js";
+export type {
+  ApplyLocaleOverlayOptions,
+  LocaleOverlayIssue,
+  LocaleOverlayMode,
+} from "./utils/locale-overlay.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export {
   assertJsonValue,

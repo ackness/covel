@@ -1,6 +1,6 @@
-import { access, readFile, readdir } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import path from "node:path";
-import { parse as parseYaml } from "yaml";
+import { readWorldManifestSource } from "../locale-overlays.js";
 import { resolveContainedPath } from "../safe-path.js";
 
 export async function fileExists(filePath: string): Promise<boolean> {
@@ -27,9 +27,8 @@ export async function readWorldManifest(worldRoot: string): Promise<{
   dimensionSources?: unknown;
   defaultLocale?: string;
 }> {
-  const raw = parseYaml(
-    await readFile(path.join(worldRoot, "world.yaml"), "utf-8"),
-  );
+  // `world.<locale>.yaml` overlays are compiled in, as the world loader does.
+  const { raw } = await readWorldManifestSource(worldRoot);
   return isRecord(raw)
     ? {
         id: typeof raw.id === "string" ? raw.id : undefined,

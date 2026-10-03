@@ -1,139 +1,135 @@
 routes:
-  name:
-    zh-CN: 心之路线
-    en-US: Heart Routes
-  description:
-    zh-CN: 与五位可攻略角色的关系阶段、信任与压力。心动值（好感）由好感面板记录。
-    en-US: Relationship stage, trust, and pressure with each romanceable character. Affection itself lives in the affinity panel.
+  name: 心之路线
+  description: 与五位可攻略角色的关系阶段、信任与压力。心动值（好感）由好感面板记录。
   schema:
     type: object
     properties:
       mio:
         type: object
-        title: { zh-CN: 神代澪, en-US: Mio Kamishiro }
+        title: 神代澪
         properties:
           stage:
             type: string
-            title: { zh-CN: 阶段, en-US: Stage }
+            title: 阶段
             enum: [acquaintance, familiar, heartbeat, confession-eve, together]
             x-enumLabels:
-              acquaintance: { zh-CN: 初识, en-US: Acquaintance }
-              familiar: { zh-CN: 熟悉, en-US: Familiar }
-              heartbeat: { zh-CN: 心动, en-US: Heartbeat }
-              confession-eve: { zh-CN: 告白前夜, en-US: Confession eve }
-              together: { zh-CN: 共同未来, en-US: Together }
+              acquaintance: 初识
+              familiar: 熟悉
+              heartbeat: 心动
+              confession-eve: 告白前夜
+              together: 共同未来
           trust:
             type: integer
-            title: { zh-CN: 信任, en-US: Trust }
+            title: 信任
             minimum: 0
             maximum: 5
           pressure:
             type: integer
-            title: { zh-CN: 压力, en-US: Pressure }
+            title: 压力
             minimum: 0
             maximum: 5
         required: [stage, trust, pressure]
         additionalProperties: false
       rin:
         type: object
-        title: { zh-CN: 朝仓凛, en-US: Rin Asakura }
+        title: 朝仓凛
         properties:
           stage:
             type: string
-            title: { zh-CN: 阶段, en-US: Stage }
+            title: 阶段
             enum: [acquaintance, familiar, heartbeat, confession-eve, together]
             x-enumLabels:
-              acquaintance: { zh-CN: 初识, en-US: Acquaintance }
-              familiar: { zh-CN: 熟悉, en-US: Familiar }
-              heartbeat: { zh-CN: 心动, en-US: Heartbeat }
-              confession-eve: { zh-CN: 告白前夜, en-US: Confession eve }
-              together: { zh-CN: 共同未来, en-US: Together }
+              acquaintance: 初识
+              familiar: 熟悉
+              heartbeat: 心动
+              confession-eve: 告白前夜
+              together: 共同未来
           trust:
             type: integer
-            title: { zh-CN: 信任, en-US: Trust }
+            title: 信任
             minimum: 0
             maximum: 5
           pressure:
             type: integer
-            title: { zh-CN: 压力, en-US: Pressure }
+            title: 压力
             minimum: 0
             maximum: 5
         required: [stage, trust, pressure]
         additionalProperties: false
       kaho:
         type: object
-        title: { zh-CN: 椎名夏帆, en-US: Kaho Shiina }
+        title: 椎名夏帆
         properties:
           stage:
             type: string
-            title: { zh-CN: 阶段, en-US: Stage }
+            title: 阶段
             enum: [acquaintance, familiar, heartbeat, confession-eve, together]
             x-enumLabels:
-              acquaintance: { zh-CN: 初识, en-US: Acquaintance }
-              familiar: { zh-CN: 熟悉, en-US: Familiar }
-              heartbeat: { zh-CN: 心动, en-US: Heartbeat }
-              confession-eve: { zh-CN: 告白前夜, en-US: Confession eve }
-              together: { zh-CN: 共同未来, en-US: Together }
+              acquaintance: 初识
+              familiar: 熟悉
+              heartbeat: 心动
+              confession-eve: 告白前夜
+              together: 共同未来
           trust:
             type: integer
-            title: { zh-CN: 信任, en-US: Trust }
+            title: 信任
             minimum: 0
             maximum: 5
           pressure:
             type: integer
-            title: { zh-CN: 压力, en-US: Pressure }
+            title: 压力
             minimum: 0
             maximum: 5
         required: [stage, trust, pressure]
         additionalProperties: false
       yuma:
         type: object
-        title: { zh-CN: 白石悠真, en-US: Yuma Shiraishi }
+        title: 白石悠真
         properties:
           stage:
             type: string
-            title: { zh-CN: 阶段, en-US: Stage }
+            title: 阶段
             enum: [acquaintance, familiar, heartbeat, confession-eve, together]
             x-enumLabels:
-              acquaintance: { zh-CN: 初识, en-US: Acquaintance }
-              familiar: { zh-CN: 熟悉, en-US: Familiar }
-              heartbeat: { zh-CN: 心动, en-US: Heartbeat }
-              confession-eve: { zh-CN: 告白前夜, en-US: Confession eve }
-              together: { zh-CN: 共同未来, en-US: Together }
+              acquaintance: 初识
+              familiar: 熟悉
+              heartbeat: 心动
+              confession-eve: 告白前夜
+              together: 共同未来
           trust:
             type: integer
-            title: { zh-CN: 信任, en-US: Trust }
+            title: 信任
             minimum: 0
             maximum: 5
           pressure:
             type: integer
-            title: { zh-CN: 压力, en-US: Pressure }
+            title: 压力
             minimum: 0
             maximum: 5
         required: [stage, trust, pressure]
         additionalProperties: false
       akane:
         type: object
-        title: { zh-CN: 东条茜, en-US: Akane Toujou }
+        title: 东条茜
         properties:
           stage:
             type: string
-            title: { zh-CN: 阶段, en-US: Stage }
+            title: 阶段
             enum: [acquaintance, familiar, heartbeat, confession-eve, together]
             x-enumLabels:
-              acquaintance: { zh-CN: 初识, en-US: Acquaintance }
-              familiar: { zh-CN: 熟悉, en-US: Familiar }
-              heartbeat: { zh-CN: 心动, en-US: Heartbeat }
-              confession-eve: { zh-CN: 告白前夜, en-US: Confession eve }
-              together: { zh-CN: 共同未来, en-US: Together }
+              acquaintance: 初识
+              familiar: 熟悉
+              heartbeat: 心动
+              confession-eve: 告白前夜
+              together: 共同未来
           trust:
             type: integer
-            title: { zh-CN: 信任, en-US: Trust }
+            title: 信任
             minimum: 0
             maximum: 5
           pressure:
             type: integer
-            title: { zh-CN: 压力, en-US: Pressure }
+            title: 压力
             minimum: 0
             maximum: 5
         required: [stage, trust, pressure]
@@ -147,124 +143,117 @@ routes:
     yuma: { stage: acquaintance, trust: 0, pressure: 2 }
     akane: { stage: acquaintance, trust: 0, pressure: 1 }
   updateRule:
-    zh-CN: 只结算本轮叙事中玩家与该角色明确发生的互动。兑现承诺、记住细节、尊重沉默、托付秘密时 trust +1；公开偏袒、玩笑越界、逼问心意或让角色独自扛事时 pressure +1，替其分担、化解误会时 pressure -1。stage 只能在共同完成任务、托付秘密、化解误会或明确约定等可回忆事件之后前进一级，且 trust 至少达到 初识→熟悉 1、熟悉→心动 2、心动→告白前夜 4；共同未来只在学园祭当天或之后、双方明确确认心意时到达。不跳级、不因数值自动升级；明显伤害可退回一级。心动值不在这里记录。
-    en-US: Settle only interactions this turn's narrative explicitly shows between the player and that character. Trust +1 for keeping a promise, remembering a detail, respecting a silence, or being trusted with a secret. Pressure +1 for public favoritism, a joke that crosses a line, pushing for feelings, or leaving them to carry something alone; pressure -1 for sharing the load or clearing up a misunderstanding. Stage advances one step only after a memorable event — finishing something together, a shared secret, a resolved misunderstanding, or an explicit promise — and only with trust of at least 1 (to familiar), 2 (to heartbeat), or 4 (to confession eve). Together is reached only on or after festival day, when both explicitly confirm their feelings. Never skip stages or advance on numbers alone; real hurt can drop one stage. Affection is not tracked here.
+    只结算本轮叙事中玩家与该角色明确发生的互动。兑现承诺、记住细节、尊重沉默、托付秘密时 trust
+    +1；公开偏袒、玩笑越界、逼问心意或让角色独自扛事时 pressure +1，替其分担、化解误会时 pressure -1。stage
+    只能在共同完成任务、托付秘密、化解误会或明确约定等可回忆事件之后前进一级，且 trust 至少达到 初识→熟悉 1、熟悉→心动 2、心动→告白前夜
+    4；共同未来只在学园祭当天或之后、双方明确确认心意时到达。不跳级、不因数值自动升级；明显伤害可退回一级。心动值不在这里记录。
 
 festival:
-  name:
-    zh-CN: 学园祭筹备
-    en-US: Festival Prep
-  description:
-    zh-CN: 四条筹备线的进度与倒计时节点。剩余天数由世界时间负责。
-    en-US: Progress on the four festival projects and the countdown milestones. The days remaining come from world time.
+  name: 学园祭筹备
+  description: 四条筹备线的进度与倒计时节点。剩余天数由世界时间负责。
   schema:
     type: object
     properties:
       projects:
         type: object
-        title: { zh-CN: 筹备线, en-US: Projects }
+        title: 筹备线
         properties:
           seaBreezePost:
             type: object
-            title:
-              { zh-CN: 二年B组「海风邮局」, en-US: Class 2-B Sea Breeze Post }
+            title: 二年B组「海风邮局」
             properties:
               progress:
                 type: integer
-                title: { zh-CN: 进度, en-US: Progress }
+                title: 进度
                 minimum: 0
                 maximum: 100
               status:
                 type: string
-                title: { zh-CN: 状态, en-US: Status }
+                title: 状态
                 enum: [on-track, struggling, blocked, done]
                 x-enumLabels:
-                  on-track: { zh-CN: 顺利, en-US: On track }
-                  struggling: { zh-CN: 吃力, en-US: Struggling }
-                  blocked: { zh-CN: 卡住了, en-US: Blocked }
-                  done: { zh-CN: 完成, en-US: Done }
+                  on-track: 顺利
+                  struggling: 吃力
+                  blocked: 卡住了
+                  done: 完成
               note:
                 type: string
-                title: { zh-CN: 近况, en-US: Latest }
+                title: 近况
                 maxLength: 160
                 x-i18n: true
             required: [progress, status]
             additionalProperties: false
           springMint:
             type: object
-            title:
-              {
-                zh-CN: 文艺部《春日薄荷》,
-                en-US: "Literature Club: Spring Mint",
-              }
+            title: 文艺部《春日薄荷》
             properties:
               progress:
                 type: integer
-                title: { zh-CN: 进度, en-US: Progress }
+                title: 进度
                 minimum: 0
                 maximum: 100
               status:
                 type: string
-                title: { zh-CN: 状态, en-US: Status }
+                title: 状态
                 enum: [on-track, struggling, blocked, done]
                 x-enumLabels:
-                  on-track: { zh-CN: 顺利, en-US: On track }
-                  struggling: { zh-CN: 吃力, en-US: Struggling }
-                  blocked: { zh-CN: 卡住了, en-US: Blocked }
-                  done: { zh-CN: 完成, en-US: Done }
+                  on-track: 顺利
+                  struggling: 吃力
+                  blocked: 卡住了
+                  done: 完成
               note:
                 type: string
-                title: { zh-CN: 近况, en-US: Latest }
+                title: 近况
                 maxLength: 160
                 x-i18n: true
             required: [progress, status]
             additionalProperties: false
           rumorWall:
             type: object
-            title: { zh-CN: 新闻部「传闻真伪墙」, en-US: News Club Rumor Wall }
+            title: 新闻部「传闻真伪墙」
             properties:
               progress:
                 type: integer
-                title: { zh-CN: 进度, en-US: Progress }
+                title: 进度
                 minimum: 0
                 maximum: 100
               status:
                 type: string
-                title: { zh-CN: 状态, en-US: Status }
+                title: 状态
                 enum: [on-track, struggling, blocked, done]
                 x-enumLabels:
-                  on-track: { zh-CN: 顺利, en-US: On track }
-                  struggling: { zh-CN: 吃力, en-US: Struggling }
-                  blocked: { zh-CN: 卡住了, en-US: Blocked }
-                  done: { zh-CN: 完成, en-US: Done }
+                  on-track: 顺利
+                  struggling: 吃力
+                  blocked: 卡住了
+                  done: 完成
               note:
                 type: string
-                title: { zh-CN: 近况, en-US: Latest }
+                title: 近况
                 maxLength: 160
                 x-i18n: true
             required: [progress, status]
             additionalProperties: false
           closingSong:
             type: object
-            title: { zh-CN: 轻音部新歌, en-US: Light Music Club's new song }
+            title: 轻音部新歌
             properties:
               progress:
                 type: integer
-                title: { zh-CN: 进度, en-US: Progress }
+                title: 进度
                 minimum: 0
                 maximum: 100
               status:
                 type: string
-                title: { zh-CN: 状态, en-US: Status }
+                title: 状态
                 enum: [on-track, struggling, blocked, done]
                 x-enumLabels:
-                  on-track: { zh-CN: 顺利, en-US: On track }
-                  struggling: { zh-CN: 吃力, en-US: Struggling }
-                  blocked: { zh-CN: 卡住了, en-US: Blocked }
-                  done: { zh-CN: 完成, en-US: Done }
+                  on-track: 顺利
+                  struggling: 吃力
+                  blocked: 卡住了
+                  done: 完成
               note:
                 type: string
-                title: { zh-CN: 近况, en-US: Latest }
+                title: 近况
                 maxLength: 160
                 x-i18n: true
             required: [progress, status]
@@ -273,70 +262,62 @@ festival:
         additionalProperties: false
       milestones:
         type: object
-        title: { zh-CN: 节点, en-US: Milestones }
+        title: 节点
         properties:
           budgetReview:
             type: string
-            title: { zh-CN: 十四天·预算初审, en-US: D-14 Budget review }
+            title: 十四天·预算初审
             enum: [upcoming, passed, rough, missed]
             x-enumLabels:
-              upcoming: { zh-CN: 未到, en-US: Upcoming }
-              passed: { zh-CN: 顺利通过, en-US: Passed }
-              rough: { zh-CN: 勉强过关, en-US: Scraped by }
-              missed: { zh-CN: 错过, en-US: Missed }
+              upcoming: 未到
+              passed: 顺利通过
+              rough: 勉强过关
+              missed: 错过
           midCheck:
             type: string
-            title: { zh-CN: 十天·考试与中检, en-US: D-10 Exams & draft check }
+            title: 十天·考试与中检
             enum: [upcoming, passed, rough, missed]
             x-enumLabels:
-              upcoming: { zh-CN: 未到, en-US: Upcoming }
-              passed: { zh-CN: 顺利通过, en-US: Passed }
-              rough: { zh-CN: 勉强过关, en-US: Scraped by }
-              missed: { zh-CN: 错过, en-US: Missed }
+              upcoming: 未到
+              passed: 顺利通过
+              rough: 勉强过关
+              missed: 错过
           stagePreview:
             type: string
-            title: { zh-CN: 七天·主舞台预演, en-US: D-7 Stage preview }
+            title: 七天·主舞台预演
             enum: [upcoming, passed, rough, missed]
             x-enumLabels:
-              upcoming: { zh-CN: 未到, en-US: Upcoming }
-              passed: { zh-CN: 顺利通过, en-US: Passed }
-              rough: { zh-CN: 勉强过关, en-US: Scraped by }
-              missed: { zh-CN: 错过, en-US: Missed }
+              upcoming: 未到
+              passed: 顺利通过
+              rough: 勉强过关
+              missed: 错过
           finalDeadline:
             type: string
-            title:
-              {
-                zh-CN: 三天·截稿与总彩排,
-                en-US: D-3 Deadline & dress rehearsal,
-              }
+            title: 三天·截稿与总彩排
             enum: [upcoming, passed, rough, missed]
             x-enumLabels:
-              upcoming: { zh-CN: 未到, en-US: Upcoming }
-              passed: { zh-CN: 顺利通过, en-US: Passed }
-              rough: { zh-CN: 勉强过关, en-US: Scraped by }
-              missed: { zh-CN: 错过, en-US: Missed }
+              upcoming: 未到
+              passed: 顺利通过
+              rough: 勉强过关
+              missed: 错过
           festivalEve:
             type: string
-            title: { zh-CN: 一天·前夜布置, en-US: D-1 Festival eve setup }
+            title: 一天·前夜布置
             enum: [upcoming, passed, rough, missed]
             x-enumLabels:
-              upcoming: { zh-CN: 未到, en-US: Upcoming }
-              passed: { zh-CN: 顺利通过, en-US: Passed }
-              rough: { zh-CN: 勉强过关, en-US: Scraped by }
-              missed: { zh-CN: 错过, en-US: Missed }
+              upcoming: 未到
+              passed: 顺利通过
+              rough: 勉强过关
+              missed: 错过
           festivalDay:
             type: string
-            title:
-              {
-                zh-CN: 零天·开祭与夕风点灯,
-                en-US: Festival day & Lantern Lighting,
-              }
+            title: 零天·开祭与夕风点灯
             enum: [upcoming, passed, rough, missed]
             x-enumLabels:
-              upcoming: { zh-CN: 未到, en-US: Upcoming }
-              passed: { zh-CN: 顺利通过, en-US: Passed }
-              rough: { zh-CN: 勉强过关, en-US: Scraped by }
-              missed: { zh-CN: 错过, en-US: Missed }
+              upcoming: 未到
+              passed: 顺利通过
+              rough: 勉强过关
+              missed: 错过
         required:
           [
             budgetReview,
@@ -354,35 +335,19 @@ festival:
       seaBreezePost:
         progress: 10
         status: on-track
-        note:
-          {
-            zh-CN: 摊位方案刚通过班会，明信片还没着落。,
-            en-US: The class approved the booth idea; nobody has sourced postcards yet.,
-          }
+        note: 摊位方案刚通过班会，明信片还没着落。
       springMint:
         progress: 20
         status: struggling
-        note:
-          {
-            zh-CN: 澪一个人在扛目录和稿件，部员不够。,
-            en-US: Mio is carrying the contents and drafts alone; the club is short of members.,
-          }
+        note: 澪一个人在扛目录和稿件，部员不够。
       rumorWall:
         progress: 15
         status: on-track
-        note:
-          {
-            zh-CN: 凛在收集第一批匿名投稿。,
-            en-US: Rin is collecting the first anonymous submissions.,
-          }
+        note: 凛在收集第一批匿名投稿。
       closingSong:
         progress: 30
         status: struggling
-        note:
-          {
-            zh-CN: 夏帆的新歌还缺最后一段歌词。,
-            en-US: Kaho's new song is still missing its last verse.,
-          }
+        note: 夏帆的新歌还缺最后一段歌词。
     milestones:
       budgetReview: upcoming
       midCheck: upcoming
@@ -391,37 +356,35 @@ festival:
       festivalEve: upcoming
       festivalDay: upcoming
   updateRule:
-    zh-CN: 进度只在本轮叙事中玩家或角色确实完成筹备工作时增加：一次具体工作 +5~+10，一整段合作 +15，单回合最多 +20；事故、争执、被拒稿可减少。卡住时设为 blocked，明显吃力为 struggling，完成时 progress 100 且 done。节点在叙事中真正发生后再标记：顺利为 passed，勉强过关为 rough，错过为 missed。天数由世界时间负责，这里不记录。note 写一句近况。
-    en-US: Raise progress only when this turn's narrative shows the player or a character actually doing prep work — +5 to +10 for a concrete task, +15 for a whole collaborative session, +20 at most per turn; accidents, fights, or a rejected draft can lower it. Use blocked when stuck, struggling when clearly behind, and done with progress 100 when finished. Mark a milestone only after it happens on the page — passed, rough when it barely holds, missed when it slips. Days are tracked by world time, not here. Keep note to one sentence.
+    进度只在本轮叙事中玩家或角色确实完成筹备工作时增加：一次具体工作 +5~+10，一整段合作 +15，单回合最多
+    +20；事故、争执、被拒稿可减少。卡住时设为 blocked，明显吃力为 struggling，完成时 progress 100 且
+    done。节点在叙事中真正发生后再标记：顺利为 passed，勉强过关为 rough，错过为 missed。天数由世界时间负责，这里不记录。note
+    写一句近况。
 
 clubReview:
-  name:
-    zh-CN: 文艺部存续审查
-    en-US: Literature Club Review
-  description:
-    zh-CN: 文艺部因人数不足被列入合并审查名单。《春日薄荷》和公开反响是它最后的机会。
-    en-US: The Literature Club is on the merger list for lack of members. Spring Mint and the response to it are its last chance.
+  name: 文艺部存续审查
+  description: 文艺部因人数不足被列入合并审查名单。《春日薄荷》和公开反响是它最后的机会。
   schema:
     type: object
     properties:
       status:
         type: string
-        title: { zh-CN: 状态, en-US: Status }
+        title: 状态
         enum: [under-review, building-case, hearing-passed, saved, merged]
         x-enumLabels:
-          under-review: { zh-CN: 审查中, en-US: Under review }
-          building-case: { zh-CN: 收集理由中, en-US: Building a case }
-          hearing-passed: { zh-CN: 初审通过, en-US: Passed the hearing }
-          saved: { zh-CN: 保住了, en-US: Saved }
-          merged: { zh-CN: 被合并, en-US: Merged }
+          under-review: 审查中
+          building-case: 收集理由中
+          hearing-passed: 初审通过
+          saved: 保住了
+          merged: 被合并
       support:
         type: integer
-        title: { zh-CN: 支持度, en-US: Support }
+        title: 支持度
         minimum: 0
         maximum: 10
       evidence:
         type: array
-        title: { zh-CN: 有力理由, en-US: Case points }
+        title: 有力理由
         maxItems: 8
         items:
           type: string
@@ -433,16 +396,14 @@ clubReview:
     support: 1
     evidence: []
   updateRule:
-    zh-CN: 玩家或角色在叙事中拿到具体、可公开的支持（新部员加入、旧刊故事被找到、特刊试读得到反响、学生会有人松口、签名或来信）时 support +1~+2，并在 evidence 加一句话；丑闻、截稿失败或冲突公开化可 -1。第一次有人主动为存续做准备时改为 building-case。预算初审在叙事中发生后：support ≥ 4 为 hearing-passed，否则仍为 under-review；学园祭之后按最终结果设为 saved 或 merged。澪隐瞒的翻修真相被公开时要在 evidence 中记录。
-    en-US: When the narrative shows concrete, public support — a new member, an old-issue story found, a good reaction to a Spring Mint preview, someone on the student council softening, signatures or letters — add 1–2 support and one sentence to evidence; a scandal, a missed deadline, or a fight going public can cost 1. Switch to building-case the first time someone actively prepares a defense. After the budget review happens on the page, set hearing-passed if support is 4 or more, otherwise stay under-review; after the festival set saved or merged by the final outcome. If Mio's secret about the renovation becomes public, record it in evidence.
+    玩家或角色在叙事中拿到具体、可公开的支持（新部员加入、旧刊故事被找到、特刊试读得到反响、学生会有人松口、签名或来信）时 support
+    +1~+2，并在 evidence 加一句话；丑闻、截稿失败或冲突公开化可 -1。第一次有人主动为存续做准备时改为
+    building-case。预算初审在叙事中发生后：support ≥ 4 为 hearing-passed，否则仍为
+    under-review；学园祭之后按最终结果设为 saved 或 merged。澪隐瞒的翻修真相被公开时要在 evidence 中记录。
 
 promises:
-  name:
-    zh-CN: 约定
-    en-US: Promises
-  description:
-    zh-CN: 你对谁许下了什么约定，以及它有没有被守住。
-    en-US: What you promised, to whom, and whether you kept it.
+  name: 约定
+  description: 你对谁许下了什么约定，以及它有没有被守住。
   schema:
     type: object
     additionalProperties:
@@ -450,34 +411,30 @@ promises:
       properties:
         to:
           type: string
-          title: { zh-CN: 对象, en-US: To }
+          title: 对象
         promise:
           type: string
-          title: { zh-CN: 约定内容, en-US: Promise }
+          title: 约定内容
           maxLength: 160
         status:
           type: string
-          title: { zh-CN: 状态, en-US: Status }
+          title: 状态
           enum: [pending, kept, broken, released]
           x-enumLabels:
-            pending: { zh-CN: 待兑现, en-US: Pending }
-            kept: { zh-CN: 已守住, en-US: Kept }
-            broken: { zh-CN: 已失约, en-US: Broken }
-            released: { zh-CN: 已解除, en-US: Released }
+            pending: 待兑现
+            kept: 已守住
+            broken: 已失约
+            released: 已解除
       required: [to, promise, status]
       additionalProperties: false
   initialValue: {}
   updateRule:
-    zh-CN: 玩家在本轮叙事中明确答应某个角色的具体事情（一起回家、帮忙、保密、赴约）时新增一条，ID 用简短英文 kebab-case，状态 pending；客套和模糊的“下次吧”不算。叙事中兑现为 kept，错过或违背为 broken，对方明确说不用了为 released。不删除条目。
-    en-US: Add an entry (short English kebab-case ID, status pending) when the player explicitly agrees to something specific for a character this turn — walking home together, helping out, keeping a secret, showing up somewhere. Pleasantries and vague "maybe next time" do not count. Set kept when fulfilled on the page, broken when missed or betrayed, released when the other person clearly lets it go. Never delete entries.
+    玩家在本轮叙事中明确答应某个角色的具体事情（一起回家、帮忙、保密、赴约）时新增一条，ID 用简短英文 kebab-case，状态
+    pending；客套和模糊的“下次吧”不算。叙事中兑现为 kept，错过或违背为 broken，对方明确说不用了为 released。不删除条目。
 
 rumors:
-  name:
-    zh-CN: 校园传闻
-    en-US: Campus Rumors
-  description:
-    zh-CN: 青砾町很小，传闻传得很快。谁先说、谁相信、谁因此靠近或退后。
-    en-US: It is a small seaside town and rumors travel fast — who started it, who believes it, who moves closer or away because of it.
+  name: 校园传闻
+  description: 青砾町很小，传闻传得很快。谁先说、谁相信、谁因此靠近或退后。
   schema:
     type: object
     additionalProperties:
@@ -485,66 +442,53 @@ rumors:
       properties:
         rumor:
           type: string
-          title: { zh-CN: 传闻, en-US: Rumor }
+          title: 传闻
           maxLength: 160
           x-i18n: true
         stage:
           type: string
-          title: { zh-CN: 阶段, en-US: Stage }
+          title: 阶段
           enum: [seed, spreading, heating, cleared, confirmed, redirected]
           x-enumLabels:
-            seed: { zh-CN: 萌芽, en-US: Seed }
-            spreading: { zh-CN: 扩散, en-US: Spreading }
-            heating: { zh-CN: 升温, en-US: Heating up }
-            cleared: { zh-CN: 已澄清, en-US: Cleared }
-            confirmed: { zh-CN: 被坐实, en-US: Confirmed }
-            redirected: { zh-CN: 转向, en-US: Redirected }
+            seed: 萌芽
+            spreading: 扩散
+            heating: 升温
+            cleared: 已澄清
+            confirmed: 被坐实
+            redirected: 转向
         heat:
           type: integer
-          title: { zh-CN: 热度, en-US: Heat }
+          title: 热度
           minimum: 0
           maximum: 5
       required: [rumor, stage, heat]
       additionalProperties: false
   initialValue:
     vending-machine:
-      rumor:
-        {
-          zh-CN: 日落时自动贩卖机掉出的饮料，会暴露你心里在想谁。,
-          en-US: Whatever drink the vending machine drops at sunset reveals who you are thinking about.,
-        }
+      rumor: 日落时自动贩卖机掉出的饮料，会暴露你心里在想谁。
       stage: spreading
       heat: 2
     lit-window:
-      rumor:
-        {
-          zh-CN: 社团楼十八点后仍亮着的窗口，会替某个愿望保密。,
-          en-US: A clubhouse window still lit after six keeps someone's wish secret.,
-        }
+      rumor: 社团楼十八点后仍亮着的窗口，会替某个愿望保密。
       stage: spreading
       heat: 1
     window-seat:
-      rumor:
-        {
-          zh-CN: 东条学姐只给特别的人留窗边座位。,
-          en-US: Akane only saves the window seat for someone special.,
-        }
+      rumor: 东条学姐只给特别的人留窗边座位。
       stage: spreading
       heat: 1
   updateRule:
-    zh-CN: 传闻按 seed → spreading → heating → cleared / confirmed / redirected 演化，只在叙事明确出现传播、澄清或证实时推进。新传闻（例如关于转学生的）在叙事中第一次被人说出时新增，ID 用简短英文 kebab-case，阶段 seed、热度 1。公开独处、明显偏袒或被新闻部记录 heat +1；凛压稿、当事人用行动澄清或话题被新事件盖过 heat -1。不凭空让传闻全校皆知。
-    en-US: Rumors move seed → spreading → heating → cleared, confirmed, or redirected, advancing only when the narrative shows them spread, cleared, or proven. Add a new rumor (short English kebab-case ID, stage seed, heat 1) the first time someone says it on the page — for example, one about the transfer student. Heat +1 for being seen alone together, obvious favoritism, or the News Club writing it down; heat -1 when Rin holds the story, someone disproves it through action, or a newer event buries it. Never make a rumor school-wide out of nowhere.
+    传闻按 seed → spreading → heating → cleared / confirmed / redirected
+    演化，只在叙事明确出现传播、澄清或证实时推进。新传闻（例如关于转学生的）在叙事中第一次被人说出时新增，ID 用简短英文 kebab-case，阶段
+    seed、热度 1。公开独处、明显偏袒或被新闻部记录 heat +1；凛压稿、当事人用行动澄清或话题被新事件盖过 heat -1。不凭空让传闻全校皆知。
 
 geography:
-  name:
-    zh-CN: 地理
-    en-US: Geography
+  name: 地理
   schema:
     type: object
     properties:
       overview:
         type: string
-        title: { zh-CN: 概况, en-US: Overview }
+        title: 概况
       regions:
         type: array
         items:
@@ -552,13 +496,13 @@ geography:
           properties:
             name:
               type: string
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             description:
               type: string
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
             climate:
               type: string
-              title: { zh-CN: 气候, en-US: Climate }
+              title: 气候
             landmarks:
               type: array
               items:
@@ -566,14 +510,14 @@ geography:
                 properties:
                   name:
                     type: string
-                    title: { zh-CN: 名称, en-US: Name }
+                    title: 名称
                   description:
                     type: string
-                    title: { zh-CN: 描述, en-US: Description }
+                    title: 描述
                 additionalProperties: false
-              title: { zh-CN: 地标, en-US: Landmarks }
+              title: 地标
           additionalProperties: false
-        title: { zh-CN: 地区, en-US: Regions }
+        title: 地区
     additionalProperties: false
   initialValue:
     overview: 位于青砾町海边坡地的私立高中，教学楼、社团楼、图书馆、车站商店街和通往海堤的樱坂构成主要活动范围。地点距离很近，从午休铃到十八点闭校广播之间的路线选择会决定玩家遇见谁，也让偶遇和传闻自然发生。
@@ -637,9 +581,7 @@ geography:
           - name: 中庭告示台
             description: 新闻部发布学园祭号外与辟谣、轻音部进行公开试听、二年 B 组招募「海风邮局」志愿者的共同地点。
 factions:
-  name:
-    zh-CN: 势力
-    en-US: Factions
+  name: 势力
   schema:
     type: array
     items:
@@ -647,25 +589,25 @@ factions:
       properties:
         id:
           type: string
-          title: { zh-CN: ID, en-US: ID }
+          title: ID
         name:
           type: string
-          title: { zh-CN: 名称, en-US: Name }
+          title: 名称
         description:
           type: string
-          title: { zh-CN: 描述, en-US: Description }
+          title: 描述
         type:
           type: string
-          title: { zh-CN: 类型, en-US: Type }
+          title: 类型
         influence:
           type: string
-          title: { zh-CN: 影响力, en-US: Influence }
+          title: 影响力
         leader:
           type: string
-          title: { zh-CN: 领袖, en-US: Leader }
+          title: 领袖
         headquarters:
           type: string
-          title: { zh-CN: 据点, en-US: Headquarters }
+          title: 据点
         relations:
           type: array
           items:
@@ -673,15 +615,15 @@ factions:
             properties:
               targetId:
                 type: string
-                title: { zh-CN: 对象, en-US: Target }
+                title: 对象
               type:
                 type: string
-                title: { zh-CN: 类型, en-US: Type }
+                title: 类型
               description:
                 type: string
-                title: { zh-CN: 描述, en-US: Description }
+                title: 描述
             additionalProperties: false
-          title: { zh-CN: 关系, en-US: Relations }
+          title: 关系
       additionalProperties: false
   initialValue:
     - id: student-council
@@ -756,26 +698,24 @@ factions:
       leader: 商店街会长・海猫书房老板
       headquarters: 青砾町车站前
 powerSystem:
-  name:
-    zh-CN: 关系推进
-    en-US: Relationship Progression
+  name: 关系推进
   schema:
     type: object
     properties:
       name:
         type: string
-        title: { zh-CN: 名称, en-US: Name }
+        title: 名称
       type:
         type: string
-        title: { zh-CN: 类型, en-US: Type }
+        title: 类型
       description:
         type: string
-        title: { zh-CN: 描述, en-US: Description }
+        title: 描述
       rules:
         type: array
         items:
           type: string
-        title: { zh-CN: 规则, en-US: Rules }
+        title: 规则
       tiers:
         type: array
         items:
@@ -783,15 +723,15 @@ powerSystem:
           properties:
             name:
               type: string
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             rank:
               type: integer
-              title: { zh-CN: 等级, en-US: Rank }
+              title: 等级
             description:
               type: string
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
           additionalProperties: false
-        title: { zh-CN: 层级, en-US: Tiers }
+        title: 层级
     additionalProperties: false
   initialValue:
     name: 好感与距离感
@@ -822,9 +762,7 @@ powerSystem:
         rank: 5
         description: 角色与玩家确认彼此位置，并一起面对学园祭后的选择；这是长期事件的结果，不应在祭典前期提前抵达。
 history:
-  name:
-    zh-CN: 历史
-    en-US: History
+  name: 历史
   schema:
     type: array
     items:
@@ -832,16 +770,16 @@ history:
       properties:
         era:
           type: string
-          title: { zh-CN: 时代, en-US: Era }
+          title: 时代
         name:
           type: string
-          title: { zh-CN: 名称, en-US: Name }
+          title: 名称
         description:
           type: string
-          title: { zh-CN: 描述, en-US: Description }
+          title: 描述
         significance:
           type: string
-          title: { zh-CN: 重要性, en-US: Significance }
+          title: 重要性
       additionalProperties: false
   initialValue:
     - era: 十年前
@@ -873,9 +811,7 @@ history:
       description: 玩家转入二年 B 组，成为班级、文艺部、新闻部、轻音部和学生会共同注意到的新变量。
       significance: major
 economy:
-  name:
-    zh-CN: 经济
-    en-US: Economy
+  name: 经济
   schema:
     type: object
     properties:
@@ -886,23 +822,23 @@ economy:
           properties:
             name:
               type: string
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             symbol:
               type: string
-              title: { zh-CN: 符号, en-US: Symbol }
+              title: 符号
             description:
               type: string
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
           additionalProperties: false
-        title: { zh-CN: 货币, en-US: Currencies }
+        title: 货币
       resources:
         type: array
         items:
           type: string
-        title: { zh-CN: 资源, en-US: Resources }
+        title: 资源
       tradeNotes:
         type: string
-        title: { zh-CN: 贸易, en-US: Trade }
+        title: 贸易
     additionalProperties: false
   initialValue:
     currencies:
@@ -926,9 +862,7 @@ economy:
       - 新闻部传闻真伪墙版面
     tradeNotes: 资源交换常通过人情完成。一次帮忙搬器材、替人值日、保守秘密或陪某人练习，往往比金钱更重要。花钱适合购买饮料、便当、花束、琴弦和刊物材料；关系推进依赖承诺兑现。
 socialStructure:
-  name:
-    zh-CN: 社会结构
-    en-US: Society
+  name: 社会结构
   schema:
     type: object
     properties:
@@ -939,15 +873,15 @@ socialStructure:
           properties:
             name:
               type: string
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             rank:
               type: integer
-              title: { zh-CN: 等级, en-US: Rank }
+              title: 等级
             description:
               type: string
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
           additionalProperties: false
-        title: { zh-CN: 阶层, en-US: Classes }
+        title: 阶层
       races:
         type: array
         items:
@@ -955,20 +889,20 @@ socialStructure:
           properties:
             name:
               type: string
-              title: { zh-CN: 名称, en-US: Name }
+              title: 名称
             description:
               type: string
-              title: { zh-CN: 描述, en-US: Description }
+              title: 描述
             traits:
               type: array
               items:
                 type: string
-              title: { zh-CN: 特征, en-US: Traits }
+              title: 特征
           additionalProperties: false
-        title: { zh-CN: 族群, en-US: Peoples }
+        title: 族群
       notes:
         type: string
-        title: { zh-CN: 备注, en-US: Notes }
+        title: 备注
     additionalProperties: false
   initialValue:
     classes:
@@ -996,9 +930,7 @@ socialStructure:
           - 用社团、成绩和玩笑包装自己的不安
     notes: 角色关系以班级、社团、学生会和放学后路线交织。谁在午休留座、谁交换值日、谁在闭校广播前一起离开，都会成为软性的公开信号；私下承诺、共同任务和称呼变化则推动信任与亲密感。
 tone:
-  name:
-    zh-CN: 基调
-    en-US: Tone
+  name: 基调
   schema:
     type: object
     properties:
@@ -1006,18 +938,18 @@ tone:
         type: array
         items:
           type: string
-        title: { zh-CN: 类型, en-US: Genres }
+        title: 类型
       contentRating:
         type: string
-        title: { zh-CN: 分级, en-US: Rating }
+        title: 分级
       narrativeStyle:
         type: string
-        title: { zh-CN: 叙事风格, en-US: Narrative style }
+        title: 叙事风格
       themes:
         type: array
         items:
           type: string
-        title: { zh-CN: 主题, en-US: Themes }
+        title: 主题
     additionalProperties: false
   initialValue:
     genres:
@@ -1041,26 +973,24 @@ tone:
       - 公开传闻与私人真心
       - 祭典结束前的告别
 mechanics:
-  name:
-    zh-CN: 玩法
-    en-US: Play Style
+  name: 玩法
   schema:
     type: object
     properties:
       combatStyle:
         type: string
-        title: { zh-CN: 战斗, en-US: Combat }
+        title: 战斗
       difficulty:
         type: string
-        title: { zh-CN: 难度, en-US: Difficulty }
+        title: 难度
       skillSystem:
         type: string
-        title: { zh-CN: 检定规则, en-US: Checks }
+        title: 检定规则
       customRules:
         type: array
         items:
           type: string
-        title: { zh-CN: 附加规则, en-US: House rules }
+        title: 附加规则
     additionalProperties: false
   initialValue:
     combatStyle: none
@@ -1079,47 +1009,48 @@ mechanics:
       - 早读前和课间以二年 B 组为锚点，午休可前往教室、图书馆或中庭，放学后进入社团楼与商店街，黄昏适合樱坂海堤和社团楼屋顶。
       - 场景首次确立、切换地点或日夜变化时，使用规范地点名发射 scene.set；教室、社团楼、图书馆、樱坂海堤与青砾町商店街优先命中世界自带昼夜背景。
       - 日落前使用 day，日落后、闭校广播后或明确的夜间段落使用 night；切换变体时要让灯光、窗外海色和角色是否该离校共同变化。
-      - 角色登场、退场、说话焦点、站位或服装/表情/姿势变化时发射 stage.direction；同一轮全部变化合并到一个 cues 数组，没有对应视觉变体时省略视觉字段并使用默认立绘。
+      - 角色登场、退场、说话焦点、站位或服装/表情/姿势变化时发射 stage.direction；同一轮全部变化合并到一个 cues
+        数组，没有对应视觉变体时省略视觉字段并使用默认立绘。
       - 新角色登场要符合常见行程或由临时任务解释；一轮聚焦一到两名发声角色，其他人物通过路过、便签、传闻或下一次约定进入，不把八人同时塞进一个场景。
       - 学园祭关键节点为倒计时十四天预算初审、十天考试与稿件中检、七天主舞台预演、三天特刊截稿和总彩排、一天前夜祭布置、零天正式祭典与夕风点灯。
       - 传闻按「种子—扩散—升温—澄清/坐实/转向」演化；同一条传闻必须有来源、传播地点和受影响角色，不能凭空全校皆知。
 startingConditions:
-  name:
-    zh-CN: 开局
-    en-US: Opening
+  name: 开局
   schema:
     type: object
     properties:
       openingScenario:
         type: string
-        title: { zh-CN: 开场, en-US: Opening scene }
+        title: 开场
       startingLocation:
         type: string
-        title: { zh-CN: 起点, en-US: Starting point }
+        title: 起点
       playerConstraints:
         type: array
         items:
           type: string
-        title: { zh-CN: 开局限制, en-US: Constraints }
+        title: 开局限制
       startingResources:
         type: object
         properties:
           allowance:
             type: integer
-            title: { zh-CN: 零用钱（円）, en-US: Allowance (yen) }
+            title: 零用钱（円）
         additionalProperties: false
-        title: { zh-CN: 初始资源, en-US: Starting resources }
+        title: 初始资源
       openingHook:
         type: string
-        title: { zh-CN: 引子, en-US: Hook }
+        title: 引子
       openingChips:
         type: array
         items:
           type: string
-        title: { zh-CN: 开局行动, en-US: Opening moves }
+        title: 开局行动
     additionalProperties: false
   initialValue:
-    openingScenario: 四月的第二个周一，八点二十分，离早读铃还有十分钟。你作为转学生来到遥风学园二年 B 组，教室里还残留着粉笔灰和海风的味道。靠窗最后一排空着，班长神代澪把课程表放到桌角，新闻部的朝仓凛在后排举起采访本，窗外传来轻音部试音的吉他声。门口经过的学生会副会长白石悠真把社团登记表交给老师，黑板旁公告栏写着春日学园祭还有二十一天。眼下最先能回应的是澪的校园带路邀请或凛的午休采访；吉他声和社团登记会成为放学后的去处。
+    openingScenario:
+      四月的第二个周一，八点二十分，离早读铃还有十分钟。你作为转学生来到遥风学园二年 B
+      组，教室里还残留着粉笔灰和海风的味道。靠窗最后一排空着，班长神代澪把课程表放到桌角，新闻部的朝仓凛在后排举起采访本，窗外传来轻音部试音的吉他声。门口经过的学生会副会长白石悠真把社团登记表交给老师，黑板旁公告栏写着春日学园祭还有二十一天。眼下最先能回应的是澪的校园带路邀请或凛的午休采访；吉他声和社团登记会成为放学后的去处。
     startingLocation: 二年 B 组・靠窗座位
     playerConstraints:
       - 玩家是二年级转学生。
