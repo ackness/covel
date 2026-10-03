@@ -114,7 +114,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 世界包通过 `defaultLocale` 与 `supportedLocales` 声明语言。加载器会优先读取当前语言的变体，缺失时回退到权威 source，因此只完成部分翻译也不会影响游玩。雾港展示了包含世界观、角色、规则和媒体 metadata 变体的中英双语世界包。**Emberback Relay** 则是内置的英文默认世界包（`defaultLocale: en-US`），manifest、设定、角色、规则、任务和其他开局内容均以英文提供。
 
-玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`PLUGIN.<lang>.md`、`WORLD.<lang>.md` 与 WorldData source 变体。只翻译自然语言内容，稳定 ID、capability、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
+玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`WORLD.<lang>.md` 与 WorldData source 变体。插件提示词保持英文，可附带一份中文变体；模型按会话语言输出。只翻译自然语言内容，稳定 ID、capability、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
 
 ## 端到端调试每个回合
 

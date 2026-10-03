@@ -11,9 +11,10 @@ import { reconcileLocalizedManifest } from "../src/localized-manifest.js";
 import type { PluginDiscoveryResult } from "../src/types.js";
 
 /**
- * A `PLUGIN.<locale>.md` is a translation, not a second manifest. If it can
- * change contract fields, the same runtime schedules at a different priority
- * or reaches different tools depending on the player's UI language.
+ * The canonical `PLUGIN.md` is English and holds the contract. `PLUGIN.zh.md`
+ * is its Chinese variant: a translation, not a second manifest. If it could
+ * change contract fields, the same runtime would schedule differently or reach
+ * different tools depending on the session language.
  */
 describe("localized manifest / canonical manifest consistency", () => {
   let dir: string;
@@ -21,7 +22,7 @@ describe("localized manifest / canonical manifest consistency", () => {
   const CANONICAL = `---
 id: demo
 kind: plugin
-description: 中文描述
+description: English description
 provides: [narrative-engine@1]
 runtime:
   type: agent
@@ -29,12 +30,12 @@ runtime:
   io: {output: {contract: narrative-engine@1}}
   agent: {tools: {builtin: [plugin-data-set]}}
 ---
-中文提示词。
+English prompt body.
 `;
-  const LOCALIZED = `---
+  const CHINESE = `---
 id: demo
 kind: plugin
-description: English description
+description: 中文描述
 provides: [narrative-engine@1, image-generation@1]
 runtime:
   type: agent
@@ -42,47 +43,51 @@ runtime:
   io: {output: {contract: narrative-engine@1}}
   agent: {tools: {builtin: [plugin-data-set, emit-event]}}
 ---
-English prompt body.
+中文提示词。
 `;
 
-  beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), "covel-locale-"));
-    await fs.writeFile(path.join(dir, "PLUGIN.md"), CANONICAL);
-    await fs.writeFile(path.join(dir, "PLUGIN.en.md"), LOCALIZED);
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
-  });
-
-  it("selects localized prose from the captured definition without reopening edited files", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const discovery: PluginDiscoveryResult = {
+  function discoveryOf(): PluginDiscoveryResult {
+    return {
       id: "demo",
       rootPath: dir,
       pluginMdPaths: [path.join(dir, "PLUGIN.md")],
       isMultiRuntime: false,
-    };
+    } as PluginDiscoveryResult;
+  }
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "covel-locale-"));
+    await fs.writeFile(path.join(dir, "PLUGIN.md"), CANONICAL);
+    await fs.writeFile(path.join(dir, "PLUGIN.zh.md"), CHINESE);
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it("selects prose from the captured definition without reopening edited files", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const discovery = discoveryOf();
     const captured = await loadPluginDefinition(discovery);
     await fs.writeFile(
-      path.join(dir, "PLUGIN.en.md"),
-      LOCALIZED.replace("English prompt body.", "New English generation."),
+      path.join(dir, "PLUGIN.zh.md"),
+      CHINESE.replace("中文提示词。", "新的中文版本。"),
     );
-    const oldEnglish = await loadRuntime(discovery, "demo", "en-US", captured);
-    expect(oldEnglish.promptTemplate).toContain("English prompt body.");
-    expect(oldEnglish.manifest.stage).toBe("narrative");
-    expect(oldEnglish.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
-    expect(
-      (await loadRuntime(discovery, "demo", "ru-RU", captured)).promptTemplate,
-    ).toBe(oldEnglish.promptTemplate);
-    expect(
-      (await loadRuntime(discovery, "demo", "zh-CN", captured)).promptTemplate,
-    ).toContain("中文提示词");
+    const oldChinese = await loadRuntime(discovery, "demo", "zh-CN", captured);
+    expect(oldChinese.promptTemplate).toContain("中文提示词。");
+    expect(oldChinese.manifest.stage).toBe("narrative");
+    expect(oldChinese.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    for (const locale of ["en-US", "ru-RU"]) {
+      expect(
+        (await loadRuntime(discovery, "demo", locale, captured)).promptTemplate,
+      ).toContain("English prompt body.");
+    }
     const next = await loadPluginDefinition(discovery);
     expect(
-      (await loadRuntime(discovery, "demo", "en-US", next)).promptTemplate,
-    ).toContain("New English generation.");
-    vi.restoreAllMocks();
+      (await loadRuntime(discovery, "demo", "zh-CN", next)).promptTemplate,
+    ).toContain("新的中文版本。");
   });
 
   it("captures multi-runtime translations without changing the canonical tool contract", async () => {
@@ -90,15 +95,15 @@ English prompt body.
       path.join(dir, "PLUGIN.md"),
       "---\nid: demo\nkind: plugin\ndescription: Demo\n---\n",
     );
-    await fs.rm(path.join(dir, "PLUGIN.en.md"));
+    await fs.rm(path.join(dir, "PLUGIN.zh.md"));
     const runtimeDir = path.join(dir, "runtimes", "story");
     await fs.mkdir(runtimeDir, { recursive: true });
     const runtime =
       "---\ntype: agent\nschedule: {stage: narrative}\nagent: {tools: {builtin: [plugin-data-set]}}\n---\nCanonical body.\n";
     await fs.writeFile(path.join(runtimeDir, "RUNTIME.md"), runtime);
     await fs.writeFile(
-      path.join(runtimeDir, "RUNTIME.en.md"),
-      runtime.replace("Canonical body.", "English runtime body."),
+      path.join(runtimeDir, "RUNTIME.zh.md"),
+      runtime.replace("Canonical body.", "中文正文。"),
     );
     const discovery: PluginDiscoveryResult = {
       id: "demo",
@@ -108,128 +113,125 @@ English prompt body.
     };
     const captured = await loadPluginDefinition(discovery);
     await fs.writeFile(
-      path.join(runtimeDir, "RUNTIME.en.md"),
-      runtime.replace("Canonical body.", "Changed on disk."),
+      path.join(runtimeDir, "RUNTIME.zh.md"),
+      runtime.replace("Canonical body.", "磁盘上已修改。"),
     );
     const loaded = await loadRuntime(
       discovery,
       "demo/story",
-      "en-US",
+      "zh-CN",
       captured,
     );
-    expect(loaded.promptTemplate).toContain("English runtime body.");
+    expect(loaded.promptTemplate).toContain("中文正文。");
     expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    expect(
+      (await loadRuntime(discovery, "demo/story", "en-US", captured))
+        .promptTemplate,
+    ).toContain("Canonical body.");
   });
 
-  it("takes contract fields from PLUGIN.md and prose from the locale variant", async () => {
+  it("takes contract fields from PLUGIN.md and prose from the Chinese variant", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const discovery: PluginDiscoveryResult = {
-      id: "demo",
-      rootPath: dir,
-      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
-      isMultiRuntime: false,
-    } as PluginDiscoveryResult;
 
-    const loaded = await loadRuntime(discovery, "demo", "en-US");
+    const loaded = await loadRuntime(discoveryOf(), "demo", "zh-CN");
 
     expect(loaded.manifest.stage).toBe("narrative");
     expect(loaded.manifest.outputContract).toEqual("narrative-engine@1");
     expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
     // Prose and prompt body still come from the translation.
-    expect(loaded.manifest.description).toBe("English description");
-    expect(loaded.promptTemplate).toContain("English prompt body.");
+    expect(loaded.manifest.description).toBe("中文描述");
+    expect(loaded.promptTemplate).toContain("中文提示词。");
     // The drift is reported rather than swallowed.
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("PLUGIN.en.md"));
-    warn.mockRestore();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("PLUGIN.zh.md"));
   });
 
-  it("uses the English prompt fallback when the requested locale is missing", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const discovery: PluginDiscoveryResult = {
-      id: "demo",
-      rootPath: dir,
-      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
-      isMultiRuntime: false,
-    } as PluginDiscoveryResult;
-
-    const loaded = await loadRuntime(discovery, "demo", "ru-RU");
-
-    expect(loaded.promptTemplate).toContain("English prompt body.");
-    expect(loaded.promptTemplate).not.toContain("中文提示词");
-    warn.mockRestore();
-  });
-
-  it("does not cross from Traditional Chinese to a Simplified short-key prompt", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    await fs.writeFile(
-      path.join(dir, "PLUGIN.zh.md"),
-      CANONICAL.replace("中文提示词。", "简体短键提示词。"),
-    );
-    const discovery: PluginDiscoveryResult = {
-      id: "demo",
-      rootPath: dir,
-      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
-      isMultiRuntime: false,
-    } as PluginDiscoveryResult;
-
-    const loaded = await loadRuntime(discovery, "demo", "zh-Hant-TW");
-
-    expect(loaded.promptTemplate).toContain("English prompt body.");
-    expect(loaded.promptTemplate).not.toContain("简体短键提示词。");
-    warn.mockRestore();
-  });
-
-  it("keeps the canonical prompt for the default locale and its aliases", async () => {
-    const discovery: PluginDiscoveryResult = {
-      id: "demo",
-      rootPath: dir,
-      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
-      isMultiRuntime: false,
-    } as PluginDiscoveryResult;
-
-    for (const locale of ["zh-CN", "zh", "zh-Hans"]) {
-      const loaded = await loadRuntime(discovery, "demo", locale);
-      expect(loaded.promptTemplate).toContain("中文提示词。");
+  it("reads the canonical English prompt for every non-Chinese locale", async () => {
+    for (const locale of ["en-US", "ru-RU", "ja-JP", undefined]) {
+      const loaded = await loadRuntime(discoveryOf(), "demo", locale);
+      expect(loaded.promptTemplate).toContain("English prompt body.");
+      expect(loaded.promptTemplate).not.toContain("中文提示词");
+      expect(loaded.manifest.description).toBe("English description");
     }
   });
 
-  it.each(["en-US", "ru-RU"])(
-    "loads a minimal translation with canonical required fields and defaults (%s)",
-    async (locale) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      await fs.writeFile(
-        path.join(dir, "PLUGIN.en.md"),
-        "---\nid: demo\n---\n\nEnglish prompt body.\n",
-      );
-      const loaded = await loadRuntime(
-        {
-          id: "demo",
-          rootPath: dir,
-          pluginMdPaths: [path.join(dir, "PLUGIN.md")],
-          isMultiRuntime: false,
-        } as PluginDiscoveryResult,
-        "demo",
-        locale,
-      );
-
-      expect(loaded.manifest.description).toBe("中文描述");
-      expect(loaded.manifest.stage).toBe("narrative");
-      expect(loaded.manifest.outputContract).toEqual("narrative-engine@1");
-      expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+  it("reads the Chinese variant for Simplified Chinese locales, most specific file first", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const locale of ["zh-CN", "zh", "zh-Hans", "zh-SG"]) {
+      const loaded = await loadRuntime(discoveryOf(), "demo", locale);
+      expect(loaded.promptTemplate).toContain("中文提示词。");
+    }
+    // Scripts never substitute for each other: Simplified instructions pull
+    // a Traditional Chinese session's output toward Simplified characters.
+    for (const locale of ["zh-Hant-TW", "zh-TW", "zh-HK"]) {
+      const loaded = await loadRuntime(discoveryOf(), "demo", locale);
       expect(loaded.promptTemplate).toContain("English prompt body.");
-      expect(warn).not.toHaveBeenCalled();
-      warn.mockRestore();
-    },
-  );
+    }
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.zh-CN.md"),
+      CHINESE.replace("中文提示词。", "大陆简体版本。"),
+    );
+    expect(
+      (await loadRuntime(discoveryOf(), "demo", "zh-CN")).promptTemplate,
+    ).toContain("大陆简体版本。");
+  });
 
-  it("captures localized root prompt contributions before execution", async () => {
+  it("falls back to the canonical English prompt when a plugin has no Chinese variant", async () => {
+    await fs.rm(path.join(dir, "PLUGIN.zh.md"));
+    const loaded = await loadRuntime(discoveryOf(), "demo", "zh-CN");
+    expect(loaded.promptTemplate).toContain("English prompt body.");
+  });
+
+  it("lets COVEL_INSTRUCTION_LOCALE force one instruction language for all sessions", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
+    expect(
+      (await loadRuntime(discoveryOf(), "demo", "zh-CN")).promptTemplate,
+    ).toContain("English prompt body.");
+    vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "zh");
+    expect(
+      (await loadRuntime(discoveryOf(), "demo", "ru-RU")).promptTemplate,
+    ).toContain("中文提示词。");
+  });
+
+  it("does not read a variant file in a language that has no instruction set", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await fs.rm(path.join(dir, "PLUGIN.zh.md"));
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.ru.md"),
+      CANONICAL.replace("English prompt body.", "Русский текст."),
+    );
+
+    const loaded = await loadRuntime(discoveryOf(), "demo", "ru-RU");
+
+    expect(loaded.promptTemplate).toContain("English prompt body.");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("PLUGIN.ru.md"));
+  });
+
+  it("loads a body-only variant with an empty frontmatter block", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.zh.md"),
+      "---\n---\n\n只翻译正文。\n",
+    );
+
+    const loaded = await loadRuntime(discoveryOf(), "demo", "zh-CN");
+
+    expect(loaded.manifest.description).toBe("English description");
+    expect(loaded.manifest.stage).toBe("narrative");
+    expect(loaded.manifest.outputContract).toEqual("narrative-engine@1");
+    expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
+    expect(loaded.promptTemplate).toContain("只翻译正文。");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("captures the Chinese variant of root prompt contributions before execution", async () => {
     await fs.writeFile(
       path.join(dir, "PLUGIN.md"),
-      "---\nid: demo\nkind: plugin\ndescription: Demo\ncontributes: {prompt: [{id: guide, content: 中文, position: pre-history}]}\n---\n",
+      "---\nid: demo\nkind: plugin\ndescription: Demo\ncontributes: {prompt: [{id: guide, content: English, position: pre-history}]}\n---\n",
     );
     await fs.writeFile(
-      path.join(dir, "PLUGIN.en.md"),
-      "---\ncontributes: {prompt: [{id: guide, content: English, position: pre-history}]}\n---\n",
+      path.join(dir, "PLUGIN.zh.md"),
+      "---\ncontributes: {prompt: [{id: guide, content: 中文, position: pre-history}]}\n---\n",
     );
     const discovery = {
       id: "demo",
@@ -241,36 +243,24 @@ English prompt body.
     const entry = await loadPluginEntryDefinition(discovery, [
       definition.packageManifest,
     ]);
-    expect(entry.staticPromptSegments[0].content).toBe("中文");
-    expect(
-      entry.staticPromptVariants?.["en"]?.[0].content ??
-        entry.staticPromptVariants?.["en-US"]?.[0].content,
-    ).toBe("English");
-    await fs.writeFile(path.join(dir, "PLUGIN.en.md"), "broken after capture");
+    expect(entry.staticPromptSegments[0].content).toBe("English");
+    expect(entry.staticPromptVariants?.["zh"]?.[0].content).toBe("中文");
+    await fs.writeFile(path.join(dir, "PLUGIN.zh.md"), "broken after capture");
     expect(
       Object.values(entry.staticPromptVariants ?? {})
         .flat()
         .map((segment) => segment.content),
-    ).toEqual(["English"]);
+    ).toEqual(["中文"]);
   });
 
   it("validates translated prose after inheriting the canonical contract", async () => {
     await fs.writeFile(
-      path.join(dir, "PLUGIN.en.md"),
-      "---\nid: demo\ndescription: 42\n---\nEnglish prompt.\n",
+      path.join(dir, "PLUGIN.zh.md"),
+      "---\nid: demo\ndescription: 42\n---\n中文提示词。\n",
     );
-    await expect(
-      loadRuntime(
-        {
-          id: "demo",
-          rootPath: dir,
-          pluginMdPaths: [path.join(dir, "PLUGIN.md")],
-          isMultiRuntime: false,
-        } as PluginDiscoveryResult,
-        "demo",
-        "en-US",
-      ),
-    ).rejects.toThrow("description");
+    await expect(loadRuntime(discoveryOf(), "demo", "zh-CN")).rejects.toThrow(
+      "description",
+    );
   });
 });
 

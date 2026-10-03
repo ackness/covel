@@ -10,7 +10,7 @@ import type {
   InputSlot,
   LLMTargetIdentity,
 } from "@covel/shared";
-import { isDefaultLocale, toJsonValueOrDiagnostic } from "@covel/shared";
+import { instructionLocaleFor, toJsonValueOrDiagnostic } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   isSuspendSentinel,
@@ -866,8 +866,9 @@ async function runAgentToolLoopWithinBudget(
 function writeStoryWithoutTools(locale: string | undefined): LLMMessage {
   return {
     role: "system",
-    content: isDefaultLocale(locale)
-      ? "你只完成了工具调用，还没有输出故事正文。现在根据已读取的信息直接写出本回合正文；不要再调用工具或解释处理过程。"
-      : "You completed tool calls but have not written the story. Write this turn's narrative now using the information already retrieved. Do not call more tools or describe the processing steps.",
+    content:
+      instructionLocaleFor(locale) === "zh"
+        ? "你只完成了工具调用，还没有输出故事正文。现在根据已读取的信息直接写出本回合正文；不要再调用工具或解释处理过程。"
+        : "You completed tool calls but have not written the story. Write this turn's narrative now using the information already retrieved. Do not call more tools or describe the processing steps.",
   };
 }

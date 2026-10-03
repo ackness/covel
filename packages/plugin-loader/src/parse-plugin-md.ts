@@ -21,7 +21,9 @@ function frontmatter(
   canonical?: Readonly<Record<string, unknown>>,
 ) {
   // Reject engine directives before gray-matter can select an executable parser.
-  if (!/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.test(content)) {
+  // The block may be empty: a language variant that translates only the body
+  // has nothing to declare.
+  if (!/^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---(?:\r?\n|$)/.test(content)) {
     throw new Error("Manifest requires plain YAML frontmatter");
   }
   const parsed = matter(content, { language: "yaml" });

@@ -287,10 +287,10 @@ LLM: "调用 sync-           ToolExecutor:
 ```text
 plugins/my-plugin/
   PLUGIN.md                  包身份、contracts、contributes；可内联一个 runtime
-  PLUGIN.en.md               根自然语言字段与固定提示段的 locale 变体
+  PLUGIN.zh.md               正文与固定提示段的中文变体（canonical 为 English）
   runtimes/extract/
     RUNTIME.md               独立 runtime 配置与正文
-    RUNTIME.en.md            runtime 正文的 locale 变体
+    RUNTIME.zh.md            runtime 正文的中文变体
   server/index.js            声明过的 tools/actions/services/extensions 等注册
   server/extract.js          function handler
   schemas/                   输入、输出和 namespace JSON Schema

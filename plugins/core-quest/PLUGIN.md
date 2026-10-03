@@ -38,9 +38,9 @@ contributes:
         hint: >-
           Seed the main quest and, at most, a few side quests. `status` is
           `active`, `completed` or `failed`. Each objective has `text` and
-          `done`; give it an `id` so later updates can address it. The quest
-          log advances quests by name, so use the quest and giver names that
-          the lore uses.
+          `done`; give it an `id` so later updates can address it. The quest log
+          advances quests by name, so use the quest and giver names that the
+          lore uses.
         example: ./examples/quests.json
         source:
           kind: yaml

@@ -9,7 +9,7 @@ observation/
 ├── package.json
 ├── README.md
 ├── PLUGIN.md
-└── PLUGIN.en.md
+└── PLUGIN.zh.md
 ```
 
 `PLUGIN.md`：
@@ -112,7 +112,7 @@ contributes:
 
 ## 本地化
 
-在 `PLUGIN.en.md` 中只保留需要翻译的自然语言字段和正文。若插件使用多 runtime，则正文翻译放在对应的 `RUNTIME.en.md`。翻译不能改变工具、输出契约、调度和提示词段位置。
+`PLUGIN.md` 的正文用 English 写。中文版本放在 `PLUGIN.zh.md`，只保留正文和固定段的 `content`；若插件使用多 runtime，则放在对应的 `RUNTIME.zh.md`。简体中文会话读取中文版本，其他语言的会话读取 English 正文并按会话语言输出，不需要为每种语言再写一份。变体不能改变工具、输出契约、调度和提示词段位置。
 
 清单 `displayName/description/label` 可使用 locale map。玩家设置通过 `ctx.userSettings` 或提示词变量读取，不通过旧根 `userSettings` 声明。
 

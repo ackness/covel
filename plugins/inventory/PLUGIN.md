@@ -46,9 +46,9 @@ contributes:
           en: Opening inventory
         hint: >-
           List what the player carries when the story opens. `quantity` is a
-          number. Tag money with `currency`. Set `equipped` to true for gear
-          the player is wearing or holding. Keep the list short; items gained
-          in play are tracked automatically.
+          number. Tag money with `currency`. Set `equipped` to true for gear the
+          player is wearing or holding. Keep the list short; items gained in
+          play are tracked automatically.
         example: ./examples/items.json
         source:
           kind: yaml

@@ -71,6 +71,14 @@ export {
   localesShareLanguageAndScript,
   normalizeLocale,
 } from "./utils/locale-registry.js";
+export {
+  INSTRUCTION_LOCALES,
+  instructionLocaleFor,
+  instructionLocaleOverride,
+  instructionVariantCandidates,
+  isInstructionVariantLocale,
+} from "./utils/instruction-locale.js";
+export type { InstructionLocale } from "./utils/instruction-locale.js";
 export type {
   LocaleDefinition,
   SupportedLocale,

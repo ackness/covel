@@ -1,8 +1,6 @@
 import {
   canonicalizeLocale,
-  isDefaultLocale,
-  DEFAULT_FALLBACK_LOCALE,
-  localeLookupCandidates,
+  instructionVariantCandidates,
 } from "@covel/shared";
 import type {
   ExtensionDeclaration,
@@ -50,20 +48,17 @@ export function createExtensionRegistration(
           { point: "prompt.segment@1", id: "static-prompt" },
           {
             handler: (_input, ctx) => {
-              const locale = canonicalizeLocale(ctx.locale);
-              const candidates = locale ? localeLookupCandidates(locale) : [];
-              const match = candidates
-                .map(
-                  (candidate) =>
-                    staticVariants[canonicalizeLocale(candidate) ?? candidate],
-                )
-                .find(Boolean);
+              // Same rule as prompt bodies: the canonical segments are
+              // English, and a Chinese session reads the zh variant if any.
               const segments =
-                match ??
-                (locale && !isDefaultLocale(locale)
-                  ? staticVariants[DEFAULT_FALLBACK_LOCALE]
-                  : undefined) ??
-                staticSegments;
+                instructionVariantCandidates(ctx.locale)
+                  .map(
+                    (candidate) =>
+                      staticVariants[
+                        canonicalizeLocale(candidate) ?? candidate
+                      ],
+                  )
+                  .find(Boolean) ?? staticSegments;
               return segments.map((segment) => ({
                 ...segment,
                 audience: "self",

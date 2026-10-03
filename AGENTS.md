@@ -57,7 +57,7 @@ pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
 pnpm stop             # kill stray dev/turbo processes
 pnpm check            # the CI static gate: peers, lint, package boundaries, deps:check,
-                      # plugin manifests, schema reference, i18n, script regressions, actionlint
+                      # plugin manifests, schema reference, prompt variants, i18n, script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package)
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
@@ -75,6 +75,8 @@ pnpm validate:collection  # static check of a covel-collection.yaml directory (d
 pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [dir]
 pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs
+pnpm check:prompts    # plugin prompts are English; each *.zh.md variant matches its English prompt
+                      # (pnpm prompts:lock records a pair after both languages changed)
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity
 pnpm format           # Prettier
@@ -266,6 +268,14 @@ those are not version compatibility.
 Locale enters through `KernelInput.locale` → `RuntimeContextView.locale`, resolved
 request → run → world default → app default (`zh-CN`). Manifest display fields use
 `I18nText = string | Record<string, string>`.
+
+Prompt bodies are instructions, not content. The canonical `PLUGIN.md` /
+`RUNTIME.md` body is English; `*.zh.md` is the only variant and is read when the
+session locale is Simplified Chinese. Every other locale reads the English body.
+The framework's own instruction lines follow the same rule
+(`instructionLocaleFor` in `@covel/shared`).
+`COVEL_INSTRUCTION_LOCALE` (`en` / `zh`) fixes the instruction language for all
+sessions. Rules: `docs/reference/i18n.md`.
 
 ### Documentation sync
 

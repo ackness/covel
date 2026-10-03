@@ -38,10 +38,10 @@ contributes:
           en: Tracks genre state such as clues, promises and countdowns.
         hint: >-
           Write one object with `id: world` and a `blocks` list. Each block has
-          a `label` (a snake_case key), a `displayName` and an
-          `extractionHint` that says what to remember; `icon` and `maxChars`
-          are optional. Choose blocks that fit the genre. Do not make a block
-          for data that a dimension or another plugin already tracks.
+          a `label` (a snake_case key), a `displayName` and an `extractionHint`
+          that says what to remember; `icon` and `maxChars` are optional. Choose
+          blocks that fit the genre. Do not make a block for data that a
+          dimension or another plugin already tracks.
         example: ./examples/blocks.json
         generate: default
         source:

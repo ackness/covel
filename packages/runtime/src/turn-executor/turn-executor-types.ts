@@ -98,7 +98,7 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   >;
   /** Optional store used by the orchestration harness and function runtimes. */
   readonly store?: DataStore;
-  /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */
+  /** Resolve a runtime manifest to its fully loaded data. A Chinese locale reads the PLUGIN.zh.md variant. */
   readonly loadRuntime: (
     manifest: RuntimeManifest,
     locale?: string,

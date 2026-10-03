@@ -564,8 +564,8 @@ describe("plugin generation reload", () => {
       "utf-8",
     );
     await fs.writeFile(
-      path.join(f.root, "PLUGIN.en.md"),
-      canonical.replace("\nFixture\n", "\nEnglish generation one.\n"),
+      path.join(f.root, "PLUGIN.zh.md"),
+      canonical.replace("\nFixture\n", "\n中文第一版。\n"),
     );
     await f.manager.reload(f.id, "session");
     const started = Promise.withResolvers<void>();
@@ -575,19 +575,19 @@ describe("plugin generation reload", () => {
       await finish.promise;
       const manifest = f.registry.getActiveRuntimes("session")[0]!;
       expect(
-        (await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session"))
+        (await f.runtimeLoader!.loadRuntimeFn(manifest, "zh-CN", "session"))
           ?.promptTemplate,
-      ).toContain("English generation one.");
+      ).toContain("中文第一版。");
       expect(
         (
-          await f.runtimeLoader!.loadRuntimeFn(manifest, "zh-CN", "session")
+          await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session")
         )?.promptTemplate.trim(),
       ).toBe("Fixture");
     });
     await started.promise;
     await fs.writeFile(
-      path.join(f.root, "PLUGIN.en.md"),
-      canonical.replace("\nFixture\n", "\nEnglish generation two.\n"),
+      path.join(f.root, "PLUGIN.zh.md"),
+      canonical.replace("\nFixture\n", "\n中文第二版。\n"),
     );
     await f.manager.reload(f.id, "session");
     finish.resolve();
@@ -595,9 +595,9 @@ describe("plugin generation reload", () => {
     await f.manager.withSnapshot("session", async () => {
       const manifest = f.registry.getActiveRuntimes("session")[0]!;
       expect(
-        (await f.runtimeLoader!.loadRuntimeFn(manifest, "en-US", "session"))
+        (await f.runtimeLoader!.loadRuntimeFn(manifest, "zh-CN", "session"))
           ?.promptTemplate,
-      ).toContain("English generation two.");
+      ).toContain("中文第二版。");
     });
   });
 

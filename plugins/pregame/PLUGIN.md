@@ -31,27 +31,27 @@ runtime:
     handler: ./handler.js
 ---
 
-# Pre-Game 初始化插件
+# Pre-Game Initialization Plugin
 
-此插件是 `runtimeType: function` 类型，不调用 LLM，而是直接执行 `handler.js` 中的纯函数。
+This is a `runtimeType: function` plugin. It does NOT call the LLM — it runs the pure function in `handler.js` directly.
 
-## 执行时机
+## When it runs
 
-`stage: setup`——仅在 `session.phase === "setup"` 时调度，报告完成后不再运行（maxTriggerCount: 1 是重试预算）。完成状态记录在 `session.setupRuntimes` 镜像。
+`stage: setup` — scheduled only while `session.phase === "setup"`, and never again once it reports done (`maxTriggerCount: 1` is the retry budget). Completion is recorded in the `session.setupRuntimes` mirror.
 
-## 职责
+## Responsibilities
 
-1. 读取世界信息构建欢迎通知
-2. 返回 narrativeOutput 给后续插件作为上下文
-3. 报告 `completion: "done"`，全部 setup 完成后内核把 `phase` 翻到 playing
+1. Read world metadata and build a welcome notification
+2. Return `narrativeOutput` so later plugins have context
+3. Report `completion: "done"`; once every setup runtime is done the kernel flips `phase` to playing
 
-## Handler 返回值
+## Handler result
 
 ```json
 {
   "outcome": "success",
   "value": {
-    "narrativeOutput": "世界观摘要文本...",
+    "narrativeOutput": "World overview text ...",
     "initialized": true
   },
   "effects": {
@@ -61,4 +61,4 @@ runtime:
 }
 ```
 
-RuntimeResult 的 `output` 保存 `value` 的业务内容，`effects` 保存通知，`completion` 保存准备阶段的完成信号。
+`RuntimeResult.output` stores the business value, `effects` stores the notification, and `completion` stores the setup completion signal.

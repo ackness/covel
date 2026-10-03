@@ -22,7 +22,7 @@ import type {
 } from "@covel/shared";
 import {
   canonicalizeLocale,
-  isDefaultLocale,
+  instructionLocaleFor,
   localeDisplayName,
   localeRegistry,
   resolveI18nText,
@@ -472,14 +472,14 @@ export function buildCurrentTurnUserMessage(
   const locale = turnInput.locale ?? "";
   if (turnInput.manualTrigger) {
     const runtimeId = turnInput.manualTrigger.runtimeId;
-    if (isDefaultLocale(locale)) {
+    if (instructionLocaleFor(locale) === "zh") {
       return `执行当前手动触发的 runtime：${runtimeId}。严格遵循系统提示中的输出格式，产出该 runtime 的结果。`;
     }
 
     return `Execute the current manually triggered runtime: ${runtimeId}. Follow the output format in the system prompt exactly and produce this runtime's result.`;
   }
 
-  if (isDefaultLocale(locale)) {
+  if (instructionLocaleFor(locale) === "zh") {
     return "开始当前游戏回合，并按照系统设定直接给出游戏内结果。";
   }
 
@@ -517,9 +517,9 @@ export function buildFrameworkPreamble(
   // Framework completion contract — see packages/tools/src/builtin/runtime-done.ts
   // and the tool_calls early-exit branch in turn-executor.ts. Without this
   // preamble, agent runtimes waste a round-trip on a terminator message after
-  // every successful tool call. Emitted in the session locale (matching the
-  // [LANGUAGE] constraint above) rather than every locale at once.
-  const isZh = isDefaultLocale(locale);
+  // every successful tool call. Emitted in the session's instruction language
+  // (English, or Chinese for a Chinese session) rather than every locale at once.
+  const isZh = instructionLocaleFor(locale) === "zh";
   const usesRuntimeDone = options?.terminatesWithRuntimeDone ?? true;
   const completion = usesRuntimeDone
     ? isZh

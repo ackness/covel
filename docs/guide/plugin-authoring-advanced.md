@@ -142,7 +142,7 @@ Function 通过 `function.tools` 声明 `ctx.tools.call` 的白名单，不能�
 
 ## 本地化与加载快照
 
-根变体为 `PLUGIN.<locale>.md`，子变体为 `RUNTIME.<locale>.md`。变体可以省略不翻译的结构，loader 会从 canonical 继承；结构漂移被报告并保持 canonical 值。提示词段 ID、position、runtime 输入、工具和超时均属于结构。
+canonical 正文是 English；中文变体为根 `PLUGIN.zh.md` 和子 runtime 的 `RUNTIME.zh.md`，其他语言的变体文件不被读取。变体可以省略不翻译的结构，loader 会从 canonical 继承；结构漂移被报告并保持 canonical 值。提示词段 ID、position、runtime 输入、工具和超时均属于结构。
 
 静态提示词语言版本在插件加载时捕获，执行期间不读磁盘。热重载替换后，新执行看到新定义，已开始的执行继续使用其捕获版本。不要在扩展 handler 内重新解析 manifest。
 

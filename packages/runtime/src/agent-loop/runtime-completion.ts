@@ -3,7 +3,7 @@ import type {
   RuntimeManifest,
   RuntimeResult,
 } from "@covel/shared";
-import { isDefaultLocale } from "@covel/shared";
+import { instructionLocaleFor } from "@covel/shared";
 import { isRuntimeDoneSentinel } from "@covel/tools";
 import type { SuspensionRecord } from "@covel/store";
 import type { ExecutedToolCallState } from "../turn-executor/turn-output-helpers.js";
@@ -87,11 +87,11 @@ function completionCorrection(
 ): string {
   if (manifest.requireExplicitCompletion && !manifest.requireToolUse) {
     const tools = (manifest.completeAfterTools ?? []).join(", ");
-    return isDefaultLocale(locale)
+    return instructionLocaleFor(locale) === "zh"
       ? `你尚未提交结果。有明确变化时调用完成工具（${tools}）；确实无变化时调用 runtime-done。纯文本、JSON 声明和查询工具不能代替提交；不要编造变化。`
       : `You have not submitted a result. For confirmed changes call a completing tool (${tools}); if nothing changed call runtime-done. Prose, JSON claims, and read tools do not complete the task. Do not invent changes.`;
   }
-  return isDefaultLocale(locale)
+  return instructionLocaleFor(locale) === "zh"
     ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
     : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.";
 }
@@ -102,7 +102,7 @@ function completionCorrection(
  * change".
  */
 export function runtimeDoneCorrection(locale?: string): string {
-  return isDefaultLocale(locale)
+  return instructionLocaleFor(locale) === "zh"
     ? "runtime-done 只结束运行，不会记录任何结果。请调用声明的业务工具提交本轮结果；确实无变化时也要按工具说明提交空结果，然后再结束。"
     : "runtime-done only ends the run; it records nothing. Call the declared business tool to submit this turn's result; if nothing changed, submit the empty result its description allows, then finish.";
 }

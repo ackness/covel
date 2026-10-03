@@ -35,6 +35,7 @@ import {
   loadPluginDefinition,
   loadPluginUi,
   loadRuntime,
+  resolveRuntimePrompt,
 } from "@covel/plugin-loader";
 
 import { tool, z } from "@covel/tools";
@@ -495,8 +496,18 @@ describe("affinity plugin manifest", () => {
     expect(loadedUi.uiSpecs?.message?.[0].id).toBe("affinity-toast");
   });
 
-  it("loads PLUGIN.md body as the LLM prompt template", () => {
-    expect(loaded.promptTemplate).toContain("好感度系统");
+  it("loads PLUGIN.md body as the LLM prompt template", async () => {
+    expect(loaded.promptTemplate).toContain("Affinity Tracker");
     expect(loaded.promptTemplate).toContain("<existing-affinity>");
+    // A Chinese session reads the PLUGIN.zh.md variant of the same prompt.
+    const discovery = (await discoverPlugins(PLUGINS_DIR)).find(
+      (d) => d.id === "affinity",
+    );
+    const chinese = resolveRuntimePrompt(
+      (await loadPluginDefinition(discovery, "zh-CN")).manifests[0],
+      "zh-CN",
+    );
+    expect(chinese).toContain("好感度系统");
+    expect(chinese).toContain("<existing-affinity>");
   });
 });

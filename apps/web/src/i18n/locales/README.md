@@ -13,6 +13,6 @@
 
 No TypeScript registration is required. The filename automatically supplies the locale code; Covel derives its display names with `Intl.DisplayNames`, adds it to settings and language selectors, and falls back to `en-US` for missing framework or native Desktop text.
 
-The JSON catalog translates the Web UI only. Framework prompts can add `prompts/server/<name>.<locale>.md`; agent plugins can add `PLUGIN.<locale>.md`; worlds can add `WORLD.<locale>.md`. Exact locale files win, then primary-language files, then the documented English/canonical fallback.
+The JSON catalog translates the Web UI only. Framework prompts can add `prompts/server/<name>.<locale>.md`; worlds can add `WORLD.<locale>.md`. Exact locale files win, then primary-language files, then the documented English/canonical fallback. Plugin prompts are instructions, not content: they are English, with one optional Chinese variant (`PLUGIN.zh.md`), and a session in any other language reads the English prompt.
 
-Catalogs are loaded on demand. Runtime-installed plugins cannot replace the already-built core UI catalog, but plugin and world content may use the same locale through `I18nText`, `PLUGIN.<lang>.md`, `WORLD.<lang>.md`, and WorldData locale variants.
+Catalogs are loaded on demand. Runtime-installed plugins cannot replace the already-built core UI catalog, but plugin and world content may use the same locale through `I18nText`, `WORLD.<lang>.md`, and WorldData locale variants.
