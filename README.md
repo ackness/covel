@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.44-8b5cf6)](./docs/CHANGELOG.md#0044---2026-10-01)
+[![Version](https://img.shields.io/badge/version-v0.0.45-8b5cf6)](./docs/CHANGELOG.md#0045---2026-10-03)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,17 +13,18 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Source version: v0.0.44**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Read the [v0.0.44 upgrade notes](./docs/CHANGELOG.md#breaking-contracts-and-upgrade-notes) before upgrading; versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/guide/upgrade-0.0.42.en.md). Existing development data is not automatically migrated; back up affected storage before recreating it.
+> **Source version: v0.0.45**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Read the [v0.0.45 upgrade notes](./docs/CHANGELOG.md#breaking-contracts-and-upgrade-notes) before upgrading; versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/guide/upgrade-0.0.42.en.md). Existing development data is not automatically migrated; back up affected storage before recreating it.
 
 ## Highlights
 
-- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Configure an image model for Scene Stage to generate missing backdrops during play. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](docs/reference/image-generation.md).
+- 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops come from the world pack's scene art; a location without one shows the world image. Community illustration plugins add separate prompt-and-gallery workflows; see [image generation](docs/reference/image-generation.md).
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
 - 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
 - 🧩 **Plugins stay replaceable** — the kernel resolves versioned contracts and declared output visibility; framework code does not branch on concrete plugin IDs.
-- 🎲 **Optional point-buy rules** — `tabletop-rules` uses the same typed forms, validators and deterministic tools available to third-party ZIP packages. Narration perspective is configurable in both narrative plugins; checked prose appears after review.
+- 🎲 **Optional point-buy rules** — `tabletop-rules` uses the same typed forms, validators and deterministic tools available to third-party ZIP packages. Narration perspective is configurable in both narrative plugins; prose streams as it is written, and the reviewed text replaces it on completion.
 - 🌍 **Portable world packs** — bundle lore, character schemas, cast, rules, memory blocks, quests, items, portraits, scenes, and plugin defaults behind one `WorldData` import protocol.
 - 🔄 **One shared WorldIR** — a post-turn fact projection lets quests, inventory, affinity, the codex, and relationship plugins reuse the same evidence instead of independently re-reading the story.
+- 🕯️ **Hidden story events** — worlds ship events that stay out of prompts, tools, and public APIs until their dimension, world-time, or chained conditions hold; an optional planner plants follow-up events during play.
 - 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk; Web mode stores API keys in browser localStorage, while desktop mode saves them as plaintext in `~/.covel/keys.env`.
 
 ## Two ways to play
@@ -97,7 +98,7 @@ worlds/my-world/
     └── presence and scene indexes
 ```
 
-`pluginPolicy` chooses a preset and declares `requested` and `recommended` plugins; versioned contracts resolve their dependencies, and recommendations remain player-configurable. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
+`pluginPolicy` chooses a preset and declares `requested` and `recommended` plugins; versioned contracts resolve their dependencies, and recommendations remain player-configurable. `requires` lists contracts the world cannot run without, such as `action-check@1`: any installed plugin that provides the contract satisfies it, and the game cannot start while none does. `pluginSettings` supplies world defaults below player overrides. WorldData imports to `memory.blocks@1` add genre-specific memory definitions such as clues, suspects, signal logs, or countdowns without modifying the memory plugin.
 
 `WorldData` is the shared import protocol, not a second world format. Its sources can be YAML, JSON, Markdown, text, or media and can target canonical characters/lorebook data or a plugin namespace that explicitly accepts world data. The in-app AI builder produces the same standard package: it can generate the manifest, lore, dimensions, main cast, lorebook, and rules from a structured creative brief. File-backed packs can include full media; browser/store-backed generated worlds retain a portable text fallback while media remains file- or asset-backed.
 
@@ -150,7 +151,7 @@ Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs). If `
 - **[Plugin directory](https://github.com/covel-ai/covel-plugins)** — official image-generation and TTS plugins, the Jev demo, authoring examples, and a separate community list.
 - **[World directory](https://github.com/covel-ai/covel-worlds)** — official world examples and a separate community list of playable settings.
 
-Both directories open in English and link to Chinese and other available translations. In **Settings → Install & manage**, paste a repository or package-directory GitHub URL, preview the contents, select a package, and confirm the risks. Repositories with multiple packages let you install each separately; downloads use your configured proxy. Plugins require a backend restart and session authorization; newly installed worlds are available immediately.
+Both directories open in English and link to Chinese and other available translations. In **Settings → Install & manage**, paste a repository or package-directory GitHub URL, preview the plugins and worlds found there, tick what to install, and confirm the risks once. The selection installs as a unit, plugins first, so a world arrives together with the plugins it needs; a [collection](./docs/guide/collections.md) manifest lets an author list such a set, including packages in other repositories. Downloads use your configured proxy. Plugins require a backend restart and session authorization; newly installed worlds are available immediately.
 
 Use **Check for updates** beside an installed package to review changes. Confirmed updates take effect after backend restart; local edits block replacement. See the [plugin installation guide](./docs/reference/plugin-installation.md) and [world installation guide](./docs/reference/world-installation.md).
 
@@ -173,6 +174,7 @@ Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal u
 - **Mistport Chronicles** (雾港·裂潮纪) — dark-fantasy investigation in traditional-story mode. Its custom plugin pack, bilingual lore, investigation memory, cast blueprints, rules, and portraits show how a world can specialize the framework without forking it.
 - **Haruka Academy** (遥风学园) — school ensemble romance in stage mode. Dialogue policy, character relationships, memory blocks, transparent sprites, and day/night scene registries turn the same kernel into a visual novel.
 - **Emberback Relay** — an English-default (`en-US`) science-fiction frontier mystery in traditional-story mode. A lonely relay on a tidally locked world receives a distress call in your own voice from seventy-two hours ahead. Seeded quests, inventory, affinity, rules, character blueprints, portraits, and five check attributes make it the RPG-suite reference pack.
+- **Lantern Barrow: First Expedition** (提灯古冢・初次远征) — a bilingual classic tabletop dungeon crawl. Point-buy character creation, d20 attribute checks, quests, inventory, companion affinity, and live delve-map, alarm, lantern, and renown panels; it requires the `action-check@1` contract instead of naming a dice plugin.
 
 ## Create your own
 
