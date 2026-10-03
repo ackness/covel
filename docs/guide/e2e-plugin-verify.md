@@ -117,7 +117,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 1. **Runtime Timeline** — 按 `(stage, name)` 排序的 runtime 列表，含 `stage`、`runtime`、`status`、`dur`、`output` 摘要
 2. **Tool Calls** — 所有工具调用（runtime、tool、status、dur、approval、output 前 40 字符）
 3. **Trigger Verification** — 对每个已声明的 runtime 按 stage 调度语义比对「期望 vs 实际」，结果列见下表
-4. **Detected interaction form**（仅首次）— 从 runtime 结果的 `effects.interactions`（或 `create-form` / `create-character-form` 工具调用）识别角色创建表单，填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交
+4. **Detected interaction form**（setup 阶段，最多 3 个）— 从 runtime 结果的 `effects.interactions`（或 `create-form` / `create-character-form` 工具调用）识别 setup 表单（如角色创建，以及之后 `tabletop-rules` 的开局配点），填入默认值或 `--form-values` 提供的值，然后通过 `POST /api/sessions/:id/plugin-rpc` 的 `framework.submit-form` action 提交并发送一条消息推进；只要会话仍在 setup 且又出现新表单就继续处理。数字字段取 `defaultValue`（否则取 `min`），声明 `validation: { name: "point-buy" }` 的表单按 `data.budget` 把点数逐一分配到未覆盖的数字字段
 
 Trigger Verification 的裁决列：
 

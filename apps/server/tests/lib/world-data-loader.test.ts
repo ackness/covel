@@ -650,8 +650,17 @@ sources:
 
   it("loads bundled worlds through worldData descriptors", async () => {
     const worldsRoot = path.resolve(import.meta.dirname, "../../../../worlds");
+    // Load each world once: the checks below revisit the same worlds, and
+    // repeated loads pushed this test past its timeout on a busy machine.
+    const loaded = new Map<string, ReturnType<typeof loadSingleWorld>>();
+    const load = (worldId: string) => {
+      if (!loaded.has(worldId)) {
+        loaded.set(worldId, loadSingleWorld(path.join(worldsRoot, worldId)));
+      }
+      return loaded.get(worldId)!;
+    };
     for (const worldId of ["haruka-academy", "mistport"]) {
-      const record = await loadSingleWorld(path.join(worldsRoot, worldId));
+      const record = await load(worldId);
       expect(record?.metadata?.dimensions).toBeTruthy();
       expect(record?.metadata?.worldData).toMatchObject({
         schemaVersion: 1,
@@ -668,7 +677,7 @@ sources:
       ["mistport", "tideRules"],
       ["haruka-academy", "campusRules"],
     ] as const) {
-      const record = await loadSingleWorld(path.join(worldsRoot, worldId));
+      const record = await load(worldId);
       expect(record?.metadata?.worldData).toMatchObject({
         sources: expect.arrayContaining([
           expect.objectContaining({
@@ -679,9 +688,7 @@ sources:
       });
     }
 
-    const haruka = await loadSingleWorld(
-      path.join(worldsRoot, "haruka-academy"),
-    );
+    const haruka = await load("haruka-academy");
     expect(haruka?.metadata?.characterBlueprints).toBeUndefined();
     expect(haruka?.metadata?.worldData).toMatchObject({
       sources: expect.arrayContaining([
@@ -701,7 +708,7 @@ sources:
       "lantern-barrow": ["clues", "party"],
     } as const;
     for (const [worldId, labels] of Object.entries(memoryBlocksByWorld)) {
-      const record = await loadSingleWorld(path.join(worldsRoot, worldId));
+      const record = await load(worldId);
       expect(record?.metadata?.worldData).toMatchObject({
         sources: expect.arrayContaining([
           expect.objectContaining({ target: "contract:memory.blocks@1" }),
