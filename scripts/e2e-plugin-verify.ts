@@ -2196,9 +2196,20 @@ async function runMain(
         row.error,
       ]),
     );
-    assertions.warn(
-      `${rejectedTotal} tool call(s) were rejected and sent again`,
-    );
+    // A real model has a few rejected calls in every run, so this is a
+    // warning. It fails only when rejections outnumber accepted calls: that
+    // is no longer a model slip but a tool or prompt that cannot be satisfied.
+    const acceptedTotal = tracesBody.events.filter(
+      (event) => event.type === "tool.completed",
+    ).length;
+    if (rejectedTotal > acceptedTotal)
+      assertions.fail(
+        `${rejectedTotal} tool calls were rejected and only ${acceptedTotal} accepted`,
+      );
+    else
+      assertions.warn(
+        `${rejectedTotal} tool call(s) were rejected and sent again`,
+      );
   }
 
   // What the models wrote must be in the session's language.
