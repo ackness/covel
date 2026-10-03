@@ -59,6 +59,7 @@
  *   --require-summary-use  Fail unless a later LLM prompt contains <compacted_history>
  *   --require-tools <ids>  Require comma-separated tool.completed names
  *   --strict-traces        Fail on any *.failed/error LLM trace
+ *   --no-language-check    Do not check that model output is in the session's language
  *   --max-input-tokens <n> Fail when provider-reported input usage exceeds n
  *   --help                 Show this help
  *
@@ -72,6 +73,11 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, createWriteStream, type WriteStream } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { writeFileSync } from "node:fs";
+import {
+  languageVerdict,
+  outputLanguageReport,
+  rejectedToolCalls,
+} from "./lib/e2e-output-checks.mjs";
 
 // ──────────────────────────────────────────────────────────────────
 // CLI argument parsing
@@ -100,6 +106,7 @@ interface CliArgs {
   requireSummaryUse: boolean;
   requireTools: string[];
   strictTraces: boolean;
+  languageCheck: boolean;
   maxInputTokens?: number;
 }
 
@@ -121,6 +128,7 @@ function parseArgs(argv: string[]): CliArgs {
     requireSummaryUse: false,
     requireTools: [],
     strictTraces: false,
+    languageCheck: true,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -202,6 +210,9 @@ function parseArgs(argv: string[]): CliArgs {
       case "--strict-traces":
         args.strictTraces = true;
         break;
+      case "--no-language-check":
+        args.languageCheck = false;
+        break;
       case "--max-input-tokens":
         args.maxInputTokens = Number.parseInt(next(), 10);
         break;
@@ -255,6 +266,7 @@ Options:
   --require-summary-use   Require <compacted_history> in a later LLM prompt
   --require-tools <ids>   Require comma-separated tool.completed names
   --strict-traces         Fail on any *.failed trace or error LLM response
+  --no-language-check     Skip the check that model output is in the session's language
   --max-input-tokens <n>  Enforce provider-reported input usage ceiling
   --help                  Show this help
 `;
@@ -2168,6 +2180,51 @@ async function runMain(
     else assertions.fail(`required tool did not complete: ${toolName}`);
   }
 
+  // A rejected tool call is sent again and leaves no stored record, so the
+  // turn results show nothing. Each one costs a model round trip.
+  const rejected = rejectedToolCalls(tracesBody.events);
+  const rejectedTotal = rejected.reduce((sum, row) => sum + row.count, 0);
+  console.log("");
+  console.log(`  Rejected tool calls (from traces): ${rejectedTotal}`);
+  if (rejected.length > 0) {
+    printTable(
+      ["count", "runtime", "tool", "error"],
+      rejected.map((row) => [
+        String(row.count),
+        row.runtimeId,
+        row.toolName,
+        row.error,
+      ]),
+    );
+    assertions.warn(
+      `${rejectedTotal} tool call(s) were rejected and sent again`,
+    );
+  }
+
+  // What the models wrote must be in the session's language.
+  if (args.languageCheck) {
+    const language = outputLanguageReport(tracesBody.events, args.locale);
+    console.log("");
+    console.log(`  Output language (session locale ${args.locale}):`);
+    printTable(
+      ["result", "runtime", "prose values", "wrong language", "example"],
+      language.map((row) => [
+        languageVerdict(row).toUpperCase(),
+        row.runtimeId,
+        String(row.prose),
+        String(row.wrong),
+        row.examples[0] ?? "",
+      ]),
+    );
+    for (const row of language) {
+      const verdict = languageVerdict(row);
+      const message = `${row.runtimeId} wrote ${row.wrong} of ${row.prose} prose values in the wrong language`;
+      if (verdict === "fail") assertions.fail(message);
+      else if (verdict === "warn") assertions.warn(message);
+      else assertions.pass(`${row.runtimeId} output language`);
+    }
+  }
+
   if (args.strictTraces) {
     const failures = tracesBody.events.filter(
       (event) =>
@@ -2272,7 +2329,8 @@ async function runMain(
   );
   kv(
     "Tool calls",
-    `${totalToolCalls} (ok=${successToolCalls} fail=${failToolCalls})`,
+    // `fail` counts stored failures; a rejected call was retried and is not stored.
+    `${totalToolCalls} (ok=${successToolCalls} fail=${failToolCalls} rejected-and-retried=${rejectedTotal})`,
   );
   kv(
     "Assertions",

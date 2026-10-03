@@ -90,6 +90,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 | `--require-summary-use`  | —                                  | 若压缩后没有任何 `llm.calling` prompt 包含 `<compacted_history>`，则失败                                         |
 | `--require-tools <ids>`  | —                                  | 要求逗号分隔的每个工具至少出现一次成功的 `tool.completed` trace                                                  |
 | `--strict-traces`        | —                                  | 遇到任意 `*.failed`、`error.occurred` 或错误 `llm.responded` trace 时失败                                        |
+| `--no-language-check`    | —                                  | 跳过“模型输出是否使用会话语言”的检查                                                                             |
 | `--max-input-tokens <n>` | —                                  | 按 `llm.responded.payload.usage.inputTokens` 校验 provider 实际输入上限；完全缺失 usage 会失败                   |
 | `--help` / `-h`          | —                                  | 打印内置帮助                                                                                                     |
 
@@ -193,6 +194,13 @@ Trigger Verification 的裁决列：
 失败断言显示 `FAIL`（退出码 `1`），无法连接 API、SSE 超时或响应格式错误显示基础设施
 错误（退出码 `2`）。默认还会在 `debugs/e2e-logs/` 生成 `.log`、turn JSON、最终 snapshot
 及失败详情 JSON；传 `--no-log` 可关闭。
+
+## 脚本判断“通过”的依据
+
+除了每个 runtime 的状态和触发断言，Phase 6 还从 trace 里检查两件已提交结果看不到的事：
+
+- **被拒后重试的工具调用。** 参数校验失败的调用会被模型重发，回合结果里不留记录，所以汇总里的 `fail` 一直是 0。脚本从 `tool.failed` trace 统计它们，按 runtime、工具、错误分组列出，并在汇总行显示 `rejected-and-retried=N`。每一次都多花一轮模型调用；数量多说明工具 schema 或提示词有问题。只记为 warning，`--strict-traces` 才会因此失败。
+- **输出语言。** 脚本读取每个 runtime 的回复正文和工具参数里的自由文本（跳过 id、路径、枚举值、locale map 的各语言槽和 `runtime-done` 的备注），判断它是否使用会话语言的文字：中日韩会话里不应出现整句英文，其他语言的会话里不应出现中日韩文字。某个 runtime 写错语言的文本达到 5 条且占其文本的一成以上时判 FAIL，零星出现记为 warning。脚本自带的角色名和玩家发言会跟随 `--locale`，避免测试输入本身把另一种语言带进上下文。
 
 ## 常见问题
 
