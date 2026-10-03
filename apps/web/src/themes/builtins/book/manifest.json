@@ -1,0 +1,14 @@
+{
+  "id": "book",
+  "label": {
+    "zh-CN": "书卷",
+    "en-US": "Book"
+  },
+  "source": "builtin",
+  "schemes": ["light", "dark"],
+  "description": {
+    "zh-CN": "阅读优先：纸面底色、宋体正文、首行缩进，像一本会回应你的小说。",
+    "en-US": "Reading first: paper ground, serif story text and indented paragraphs, like a novel that answers back."
+  },
+  "layout": { "preset": "book" }
+}

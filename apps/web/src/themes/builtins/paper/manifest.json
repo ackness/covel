@@ -9,5 +9,10 @@
   "description": {
     "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
     "en-US": "A warm editorial reading style."
+  },
+  "group": "classic",
+  "groupLabel": {
+    "zh-CN": "经典",
+    "en-US": "Classic"
   }
 }

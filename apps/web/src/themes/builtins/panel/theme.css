@@ -1,0 +1,384 @@
+/* ─────────────────────────────────────────────────────────────────
+   Panel — a modern app shell
+   Icon rail, conversational story stream, card surfaces. Neutral
+   greys with the brand violet as the single accent; rounded corners
+   and filled surfaces instead of hairline frames.
+   ───────────────────────────────────────────────────────────────── */
+
+html[data-theme="panel"] {
+  --color-background: #f5f6f8;
+  --color-foreground: #16181d;
+  --color-card: #ffffff;
+  --color-card-foreground: #16181d;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #16181d;
+  --color-primary: #6a55d8;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #eceef2;
+  --color-secondary-foreground: #23262e;
+  --color-muted: #eceef2;
+  --color-muted-foreground: #5d6472;
+  --color-accent: #e4e6ec;
+  --color-accent-foreground: #16181d;
+  --color-destructive: #c8433c;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #dfe2e8;
+  --color-input: #d3d7df;
+  --color-ring: rgb(106 85 216 / 0.45);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+
+  /* Geist for Latin; CJK falls to the system face, so nothing reflows. */
+  --font-sans:
+    "Geist", "PingFang SC", "Microsoft YaHei", "Noto Sans SC",
+    "Noto Sans CJK SC", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-display:
+    "Geist", "PingFang SC", "Microsoft YaHei", "Noto Sans SC",
+    "Noto Sans CJK SC", ui-sans-serif, system-ui, sans-serif;
+  --font-serif:
+    "Newsreader", "Songti SC", "Noto Serif SC", "Noto Serif CJK SC",
+    "Source Han Serif SC", "SimSun", ui-serif, Georgia, serif;
+
+  --surface-page: var(--color-background);
+  --surface-rail: #f0f1f4;
+  --surface-inset: #eceef2;
+  --surface-elevated: var(--color-card);
+  --surface-dialog: var(--color-card);
+  --surface-player: #ece9fb;
+
+  --surface-app: var(--surface-page);
+  --surface-panel: var(--surface-rail);
+  --surface-panel-strong: var(--surface-elevated);
+  --surface-empty: color-mix(in oklab, var(--color-muted) 65%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 72%, transparent);
+
+  --rule-color: #dfe2e8;
+  --rule-strong-color: #b4bac6;
+  --rule-style: solid;
+
+  --accent-primary: #6a55d8;
+  --accent-secondary: #2f6fc0;
+  --accent-warning: #a8650e;
+  --accent-danger: #c8433c;
+  --accent-success: #2c7d57;
+
+  --ambience-image: none;
+  --noise-opacity: 0;
+
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+  --radius-dialog: 1rem;
+  --radius-chip: 999px;
+
+  --panel-header-height: 3.5rem;
+  --panel-section-padding-x: 1rem;
+  --panel-section-padding-y: 0.875rem;
+  --composer-max-width: 47.5rem;
+  --session-column-max-width: 50.5rem;
+
+  --type-display: var(--font-display);
+  --type-body: var(--font-sans);
+  --type-meta: var(--font-sans);
+
+  --eyebrow-font-family: var(--font-sans);
+  --eyebrow-font-size: 0.75rem;
+  --eyebrow-font-weight: 600;
+  --eyebrow-letter-spacing: 0;
+  --eyebrow-text-transform: none;
+
+  --title-font-family: var(--font-sans);
+  --title-font-style: normal;
+  --title-font-weight: 600;
+  --title-letter-spacing: -0.005em;
+  --title-text-transform: none;
+
+  --story-font-family: var(--font-sans);
+  --story-font-size: 1rem;
+  --story-line-height: 1.9;
+  --story-font-weight: 400;
+  --story-letter-spacing: 0;
+  --story-max-width: 47.5rem;
+
+  --meta-font-family: var(--font-sans);
+  --meta-font-size: 0.75rem;
+  --meta-letter-spacing: 0;
+  --meta-text-transform: none;
+
+  --shadow-card: 0 1px 2px rgb(22 24 29 / 0.06);
+  --shadow-dialog: 0 24px 70px -30px rgb(22 24 29 / 0.35);
+  --shadow-pop: 0 10px 28px -16px rgb(22 24 29 / 0.28);
+}
+
+html[data-theme="panel"].dark {
+  --color-background: #0d0e12;
+  --color-foreground: #eceef2;
+  --color-card: #15171c;
+  --color-card-foreground: #eceef2;
+  --color-popover: #181b21;
+  --color-popover-foreground: #eceef2;
+  --color-primary: #9b87f5;
+  --color-primary-foreground: #0d0e12;
+  --color-secondary: #1b1e25;
+  --color-secondary-foreground: #d9dce3;
+  --color-muted: #1b1e25;
+  --color-muted-foreground: #9198a5;
+  --color-accent: #262a33;
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #f0706a;
+  --color-destructive-foreground: #0d0e12;
+  --color-border: #23262e;
+  --color-input: #2a2e37;
+  --color-ring: rgb(155 135 245 / 0.5);
+
+  --surface-page: #0d0e12;
+  --surface-rail: #0f1115;
+  --surface-inset: #16181d;
+  --surface-elevated: #15171c;
+  --surface-dialog: #181b21;
+  --surface-player: #221f3a;
+
+  --rule-color: #23262e;
+  --rule-strong-color: #3a3f4b;
+
+  --accent-primary: #9b87f5;
+  --accent-secondary: #6fb2f2;
+  --accent-warning: #f0b866;
+  --accent-danger: #f0706a;
+  --accent-success: #7ad6a6;
+
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.3);
+  --shadow-dialog: 0 28px 80px -36px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 10px 28px -16px rgb(0 0 0 / 0.6);
+}
+
+/* ── Shell ───────────────────────────────────────────────────── */
+html[data-theme="panel"] .ui-nav-rail {
+  background: var(--surface-page);
+}
+
+html[data-theme="panel"] .ui-session-header {
+  background: var(--surface-page);
+}
+
+html[data-theme="panel"] .ui-session-thumb {
+  display: block;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+html[data-theme="panel"] .ui-rail {
+  background: var(--surface-rail);
+}
+
+/* ── Labels: plain words, not small caps ─────────────────────── */
+html[data-theme="panel"] .ui-tag {
+  padding: 0.0625rem 0.5rem;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html[data-theme="panel"] .ui-tag-solid {
+  background: var(--color-foreground);
+  color: var(--surface-page);
+}
+
+html[data-theme="panel"] .ui-folio {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── Callouts: a tinted surface instead of a side stripe ─────── */
+html[data-theme="panel"] .ui-band {
+  padding: 0.75rem 0.875rem;
+  border-left: 0;
+  border-radius: var(--radius-control);
+  background: color-mix(in oklab, var(--accent-primary) 9%, transparent);
+}
+
+html[data-theme="panel"] .ui-band::before {
+  display: none;
+}
+
+html[data-theme="panel"] .ui-band[data-tone="muted"] {
+  background: var(--surface-inset);
+}
+
+html[data-theme="panel"] .ui-band[data-tone="warning"] {
+  background: color-mix(in oklab, var(--accent-warning) 12%, transparent);
+}
+
+html[data-theme="panel"] .ui-band[data-tone="danger"] {
+  background: color-mix(in oklab, var(--accent-danger) 11%, transparent);
+}
+
+html[data-theme="panel"] .ui-band[data-tone="success"] {
+  background: color-mix(in oklab, var(--accent-success) 11%, transparent);
+}
+
+html[data-theme="panel"] .ui-band[data-tone="info"] {
+  background: color-mix(in oklab, var(--accent-secondary) 11%, transparent);
+}
+
+html[data-theme="panel"] .ui-band-quiet {
+  background: transparent;
+}
+
+/* ── Context panel tabs ──────────────────────────────────────── */
+html[data-theme="panel"] .ui-panel-tabbar {
+  background: var(--surface-rail);
+}
+
+/* ── Story stream ────────────────────────────────────────────── */
+html[data-theme="panel"] .ui-message-role {
+  display: none;
+}
+
+html[data-theme="panel"] .ui-message-player {
+  width: fit-content;
+  max-width: min(80%, 36rem);
+  padding: 0.625rem 0.875rem;
+  border: 1px solid color-mix(in oklab, var(--accent-primary) 30%, transparent);
+  border-radius: 0.875rem 0.875rem 0.25rem 0.875rem;
+  background: var(--surface-player);
+  font-size: 0.90625rem;
+}
+
+html[data-theme="panel"] .ui-choice-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(13.75rem, 100%), 1fr));
+  gap: 0.625rem;
+}
+
+/* A card: tag and key cap on top, the option below. */
+html[data-theme="panel"] .ui-choice {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "tag index"
+    "content content";
+  align-items: start;
+  row-gap: 0.4375rem;
+  padding: 0.75rem 0.875rem 0.875rem;
+  border: 1px solid var(--rule-color);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+}
+
+html[data-theme="panel"] .ui-choice:hover {
+  border-color: var(--rule-strong-color);
+  background: var(--surface-inset);
+}
+
+html[data-theme="panel"] .ui-choice[aria-selected="true"],
+html[data-theme="panel"] .ui-choice[data-selected="true"] {
+  border-color: var(--accent-primary);
+  border-width: 1px;
+  background: color-mix(in oklab, var(--accent-primary) 10%, transparent);
+}
+
+html[data-theme="panel"] .ui-choice-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  width: 1.375rem;
+  height: 1.375rem;
+  border: 1px solid var(--color-input);
+  border-radius: 0.375rem;
+  color: var(--color-muted-foreground);
+  font-size: 0.75rem;
+}
+
+html[data-theme="panel"] .ui-choice-eyebrow {
+  justify-self: start;
+  padding: 0.0625rem 0.5rem;
+  border-radius: 0.375rem;
+  background: var(--color-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html[data-theme="panel"] .ui-choice-title {
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* ── Composer ────────────────────────────────────────────────── */
+html[data-theme="panel"] .ui-composer {
+  border-top: 0;
+  background: transparent;
+}
+
+html[data-theme="panel"] .ui-composer-input {
+  align-items: center;
+  min-height: 3.25rem;
+  padding: 0 0.375rem 0 0.375rem;
+  border-color: var(--color-input);
+  border-radius: 0.875rem;
+  background: var(--surface-inset);
+}
+
+html[data-theme="panel"] .ui-composer-submit {
+  align-self: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-left: 0;
+  border-radius: 0.625rem;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+html[data-theme="panel"] .ui-composer-submit:disabled {
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+  opacity: 1;
+}
+
+html[data-theme="panel"] .ui-composer-submit:not(:disabled):hover {
+  background: color-mix(
+    in oklab,
+    var(--color-primary) 86%,
+    var(--color-foreground)
+  );
+  color: var(--color-primary-foreground);
+}
+
+/* ── World select ────────────────────────────────────────────── */
+html[data-theme="panel"] .ui-world-heading {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+/* ── Session toolbar ─────────────────────────────────────────── */
+html[data-theme="panel"] .ui-view-switch {
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: 0.625rem;
+  background: var(--surface-inset);
+}
+
+html[data-theme="panel"] .ui-view-switch > button {
+  height: 1.75rem;
+  border-radius: 0.5rem;
+}
+
+html[data-theme="panel"] .ui-view-switch > button[data-state="on"] {
+  background: var(--color-accent);
+  color: var(--color-accent-foreground);
+}

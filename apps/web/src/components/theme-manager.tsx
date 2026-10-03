@@ -8,14 +8,13 @@ import {
   getRegisteredThemes,
   deleteCustomTheme,
   saveCustomTheme,
-  THEME_SCHEME_KEY,
 } from "@/theme-system/registry.js";
 import {
   CUSTOM_THEMES_KEY,
   loadStoredCustomThemes,
 } from "@/theme-system/storage.js";
 import { parseImportedThemeFile } from "@/theme-system/validate.js";
-import type { StoredCustomTheme, ThemeScheme } from "@/theme-system/types.js";
+import type { StoredCustomTheme } from "@/theme-system/types.js";
 
 function isCustomTheme(
   themeId: string,
@@ -35,7 +34,6 @@ export function ThemeManagerWidget() {
   const { t, i18n } = useTranslation();
   const store = useSettingsStore();
   const [appearance, setAppearance] = useSetting<string>("ui.appearance");
-  const [scheme, setScheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
   const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -219,33 +217,6 @@ html[data-theme="my-theme"].dark {
               </div>
 
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                {selected && (
-                  <div
-                    className="flex items-center overflow-hidden rounded-(--radius-control) border border-(--rule-color)"
-                    aria-label={t("settings.themeSchemeLabel")}
-                  >
-                    {(["light", "dark"] as const).map((nextScheme) => {
-                      const supported = theme.schemes.includes(nextScheme);
-                      return (
-                        <Button
-                          key={nextScheme}
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy || !supported}
-                          className={
-                            "h-7 rounded-none border-0 px-2 text-[11px] " +
-                            (scheme === nextScheme
-                              ? "bg-foreground text-(--surface-page)"
-                              : "text-muted-foreground")
-                          }
-                          onClick={() => void setScheme(nextScheme)}
-                        >
-                          {t(`settings.themeScheme.${nextScheme}`)}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                )}
                 {!selected && (
                   <Button
                     size="sm"

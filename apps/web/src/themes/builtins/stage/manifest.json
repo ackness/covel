@@ -1,0 +1,14 @@
+{
+  "id": "stage",
+  "label": {
+    "zh-CN": "舞台",
+    "en-US": "Stage"
+  },
+  "source": "builtin",
+  "schemes": ["dark"],
+  "description": {
+    "zh-CN": "场景沉浸：世界美术铺满全屏，故事在半透明侧栏里展开。",
+    "en-US": "Scene first: world art fills the screen and the story unfolds in a translucent side column."
+  },
+  "layout": { "preset": "stage" }
+}

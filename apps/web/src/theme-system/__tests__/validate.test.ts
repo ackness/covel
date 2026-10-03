@@ -41,6 +41,39 @@ describe("parseImportedThemeFile", () => {
     expect(payload.theme.cssText).toContain('data-theme="sunfall"');
   });
 
+  it("carries a json package's layout and group, rejecting invalid ones", () => {
+    const base = {
+      id: "sunfall",
+      label: "Sunfall",
+      cssText: 'html[data-theme="sunfall"] { --color-background: #f7e8d5; }',
+    };
+    const payload = parseImportedThemeFile(
+      JSON.stringify({ ...base, layout: { preset: "panel", nav: "top" } }),
+      "sunfall.theme.json",
+    );
+    expect(payload.theme.layout).toEqual({ preset: "panel", nav: "top" });
+
+    const grouped = parseImportedThemeFile(
+      JSON.stringify({ ...base, group: "panel", groupLabel: "Panel" }),
+      "sunfall.theme.json",
+    );
+    expect(grouped.theme.group).toBe("panel");
+    expect(grouped.theme.groupLabel).toBe("Panel");
+    expect(() =>
+      parseImportedThemeFile(
+        JSON.stringify({ ...base, group: "Not An Id" }),
+        "sunfall.theme.json",
+      ),
+    ).toThrow();
+
+    expect(() =>
+      parseImportedThemeFile(
+        JSON.stringify({ ...base, layout: { preset: "carousel" } }),
+        "sunfall.theme.json",
+      ),
+    ).toThrow();
+  });
+
   it("rejects css without a theme selector", () => {
     expect(() =>
       parseImportedThemeFile(".panel { color: red; }", "broken.css"),

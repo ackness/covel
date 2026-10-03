@@ -9,6 +9,11 @@ import {
   DEFAULT_COLOR_SCHEME,
   THEME_SCHEME_KEY,
 } from "@/lib/appearance.js";
+import {
+  applyThemeLayout,
+  resolveThemeLayout,
+  type ResolvedThemeLayout,
+} from "./layout.js";
 import { applyTokenOverrides } from "./overrides.js";
 import { syncThemeStyles } from "./runtime.js";
 import {
@@ -25,8 +30,17 @@ import type {
 } from "./types.js";
 
 const builtinThemes = getBuiltinThemes();
+const BUILTIN_THEME_IDS = new Set(builtinThemes.map((theme) => theme.id));
 let themeRegistry = new Map<string, ThemeDefinition>();
-const BUILTIN_THEME_ORDER = ["paper", "modern", "abyss", "aurora"];
+const BUILTIN_THEME_ORDER = [
+  "panel",
+  "book",
+  "stage",
+  "paper",
+  "modern",
+  "abyss",
+  "aurora",
+];
 export { THEME_SCHEME_KEY };
 
 function toThemeOption(theme: ThemeManifest): SettingOption {
@@ -119,6 +133,9 @@ function toStoredTheme(
     cssText: theme.cssText,
     schemes: theme.schemes,
     description: theme.description,
+    layout: theme.layout,
+    group: theme.group,
+    groupLabel: theme.groupLabel,
     importedAt: new Date().toISOString(),
     fileName,
   };
@@ -150,6 +167,8 @@ function applyThemeSelection(store: SettingsStoreApi): void {
   const selectedScheme = store.get<ThemeScheme>(THEME_SCHEME_KEY);
   const resolvedScheme = resolveThemeScheme(theme, selectedScheme);
 
+  applyThemeLayout(resolveThemeLayout(theme?.layout));
+
   if (selected !== resolvedTheme) {
     applyAppearance(resolvedTheme);
     void store.set("ui.appearance", resolvedTheme);
@@ -177,6 +196,27 @@ export function getThemeDefinition(id: string): ThemeDefinition | null {
   return themeRegistry.get(id) ?? null;
 }
 
+/**
+ * Layout of the theme with this id. Reads stored custom themes directly when
+ * the registry has not caught up yet: a component re-rendering on the same
+ * settings change that triggers the registry sync must not see a stale miss.
+ */
+export function getThemeLayout(
+  store: SettingsStoreApi,
+  id: string,
+): ResolvedThemeLayout {
+  const registered = themeRegistry.get(id);
+  if (registered) return resolveThemeLayout(registered.layout);
+  if (BUILTIN_THEME_IDS.has(id)) {
+    return resolveThemeLayout(
+      builtinThemes.find((theme) => theme.id === id)?.layout,
+    );
+  }
+  const stored = loadStoredCustomThemes(store).find((theme) => theme.id === id);
+  if (stored) return resolveThemeLayout(stored.layout);
+  return resolveThemeLayout(themeRegistry.get(DEFAULT_APPEARANCE)?.layout);
+}
+
 export function primeThemeRegistry(store: SettingsStoreApi): ThemeDefinition[] {
   themeRegistry = buildRegistry(sortThemes([...builtinThemes]));
   registerAppearanceEntry(store);
@@ -184,8 +224,6 @@ export function primeThemeRegistry(store: SettingsStoreApi): ThemeDefinition[] {
   registerThemeManagerEntry(store);
   return getRegisteredThemes();
 }
-
-const BUILTIN_THEME_IDS = new Set(builtinThemes.map((theme) => theme.id));
 
 export function syncThemeRegistry(store: SettingsStoreApi): ThemeDefinition[] {
   const customThemes = loadStoredCustomThemes(store)

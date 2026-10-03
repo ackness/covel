@@ -1,7 +1,9 @@
 @import "tailwindcss";
+@import "./styles/fonts.css";
 @import "./styles/narrative.css";
 @import "./styles/ui-components.css";
 @import "./styles/stage.css";
+@import "./styles/layout.css";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));

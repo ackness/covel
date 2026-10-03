@@ -153,7 +153,49 @@ html[data-theme="jade-paper"] {
 - `label`：显示名称
 - `schemes`：支持的模式，常见值是 `["light"]` 或 `["light", "dark"]`
 - `description`：可选说明
+- `layout`：可选的布局声明，见 4.3
+- `group` / `groupLabel`：可选，把这个主题包归到某个风格下作为一种配色，见 4.3
 - `cssText`：真正生效的 CSS 内容，里面只能声明与 `id` 相同的主题 ID
+
+### 4.3 风格方案与布局预设
+
+设置 → 外观 → 「风格方案」里的每一张卡片是一个风格，卡片下的「配色」是属于这个风格的各个主题包。内置的「经典」风格有纸本、现代、深渊、极光四种配色；内置的「面板」「书卷」「舞台」除了颜色和字体不同，界面结构也不同：导航在顶部还是左侧、右侧面板的页签样式、会话里世界美术怎么用、世界列表怎么排。这部分结构由主题包的 `layout` 字段声明。
+
+你自己的主题包也可以选结构：在 JSON 里写一个预设名，需要的话再改其中一项。
+
+```json
+{
+  "id": "jade-paper",
+  "label": "Jade Paper",
+  "layout": { "preset": "book", "nav": "rail" },
+  "cssText": "html[data-theme=\"jade-paper\"] { --color-background: #f7fbf5; }"
+}
+```
+
+| 预设      | 导航     | 右侧面板页签 | 会话里的世界图   | 世界列表       | 每回合的结果       |
+| --------- | -------- | ------------ | ---------------- | -------------- | ------------------ |
+| `classic` | 顶部     | 纵向图标条   | 顶部淡淡的世界图 | 整卡封面       | 折叠在正文下方     |
+| `book`    | 顶部     | 文字页签     | 开头的章节横幅   | 阅读列表       | 放在正文旁的页边   |
+| `stage`   | 顶部     | 文字页签     | 场景图铺满       | 封面展示       | 最新一回合默认展开 |
+| `panel`   | 左侧图标 | 文字页签     | 无               | 上图下文的卡片 | 最新一回合默认展开 |
+
+可覆盖的选项是 `nav`、`panelTabs`、`backdrop`、`worldList`、`turnNotes`，取值见 [Theme Package Reference §3.1](../reference/theme-packages.md#31-布局预设layout)。不写 `layout` 或用 CSS 文件导入时是 `classic`。
+
+「另存为主题包」会沿用当前主题的布局，并把新主题包作为一种新配色放在同一个风格卡片下。所以最省事的做法是：先选一套接近的风格方案，在「精细调整」里改到满意，再另存为自己的配色。
+
+手写主题包时，用 `group` 指定它属于哪个风格：
+
+```json
+{
+  "id": "panel-ocean",
+  "label": { "zh-CN": "海蓝", "en-US": "Ocean" },
+  "group": "panel",
+  "layout": { "preset": "panel" },
+  "cssText": "html[data-theme=\"panel-ocean\"] { /* 完整的 token 与 hook */ }"
+}
+```
+
+每种配色都是完整的主题包，不会继承同组其他成员的样式：没写的 token 会落回框架的基础值，而不是该风格的值。想在某个风格的基础上只改几个颜色，先用「另存为」生成完整的主题包，在主题库里导出后再改。不写 `group` 的主题包自成一个风格。
 
 ---
 
@@ -279,6 +321,12 @@ html[data-theme="jade-paper"] {
 
 ### 6.5 字体与排版 token
 
+中文字体默认用系统自带的（如 `"PingFang SC"`、`"Microsoft YaHei"`、`"Songti SC"`）。应用不从字体服务加载中文网络字体：它们体积大，会在加载过程中让整页文字反复重排，字体服务不可达时还会拖慢首屏。
+
+随应用打包了一款标题字体 `"ZCOOL XiaoWei"`（站酷小薇，OFL 1.1；文件在 `apps/web/public/fonts/zcool-xiaowei/`，字体声明在 `apps/web/src/styles/fonts.css`）。它只有 400 一个字重，只在有主题用到这个字体族时才会被读取，`stage` 用它做标题。主题包可以直接在字体栈里写这个名字，但不要给它设粗体。
+
+主题包不能 `@import`，所以字体栈里其余的中文字体都应是系统字体，并以通用族名（`sans-serif` / `serif`）收尾。
+
 - `--font-display`
 - `--font-serif`
 - `--font-mono`
@@ -314,6 +362,12 @@ Covel 为主题包暴露了一组稳定的语义 hook。玩家可以通过这些
 
 ### 7.1 面板与结构
 
+- `.ui-app-header`：顶部导航条
+- `.ui-nav-rail`：左侧导航栏（`nav: "rail"`）
+- `.ui-nav-item`：导航项
+- `.ui-session-header`：会话顶部工具条；`.ui-session-action` 是其中的返回、设置、更多、面板开关按钮
+- `.ui-panel-tabbar` / `.ui-panel-tab`：右侧面板的文字页签（`panelTabs: "bar"`）
+- `.ui-panel-status`：文字页签下方的玩家状态条（名字、量表、随身物品）
 - `.ui-panel-header`
 - `.ui-panel-section`
 - `.ui-panel-footer`
@@ -342,13 +396,32 @@ Covel 为主题包暴露了一组稳定的语义 hook。玩家可以通过这些
 
 - `.ui-session-column`
 - `.ui-session-backdrop`：中央面板顶部的世界装饰图和渐隐层，可用静态遮罩融入半透明底色。
-- `.ui-message-row`
+- `.ui-story-surface`：消息流和输入框的共同容器；`backdrop: "scene"` 时是盖在场景图上的故事栏
+- `.ui-message-row`：带 `data-role="user" | "assistant"`
+- `.ui-message-role`：消息上方的「玩家」/「助手」标签
 - `.ui-player-message-row`
 - `.ui-message-player`
 - `.ui-message-assistant`
+- `.ui-composer`
 - `.ui-composer-frame`
 - `.ui-composer-input`
 - `.ui-composer-submit`
+- `.ui-choice-list` / `.ui-choice`：供玩家选择的选项。序号 `.ui-choice-index` 默认隐藏，内容是 CSS 计数器，主题可以把它显示成数字、汉字或键帽：
+
+  ```css
+  html[data-theme="my-theme"] .ui-choice-index {
+    display: block;
+  }
+  html[data-theme="my-theme"] .ui-choice-index::before {
+    content: counter(ui-choice, cjk-ideographic);
+  }
+  ```
+
+  玩家按数字键 1–9 就能选中对应的选项，所以显示出来的序号最好和这个顺序一致。
+
+- `.ui-turn-updates`：每回合只读结果的折叠块；`turnNotes: "margin"` 时是页边批注
+
+完整清单（含世界选择页、场景 HUD、章节横幅的 hook）见 [Theme Package Reference §6](../reference/theme-packages.md)。
 
 ### 7.5 细节效果
 
