@@ -250,11 +250,12 @@ export function validateDimensionValue(
         return;
       }
       const plain = { ...node, "x-i18n": false };
-      for (const translation of typeof text.data === "string"
-        ? [text.data]
-        : Object.values(text.data)) {
-        visit(plain, translation, path);
-      }
+      // Name the locale in the path so a model fixing its write knows which
+      // translation broke the rule.
+      if (typeof text.data === "string") visit(plain, text.data, path);
+      else
+        for (const [locale, translation] of Object.entries(text.data))
+          visit(plain, translation, [...path, locale]);
       return;
     }
     const types =
@@ -284,9 +285,9 @@ export function validateDimensionValue(
     if (typeof input === "string") {
       const length = Array.from(input).length;
       if (node.minLength !== undefined && length < node.minLength)
-        add(`Minimum length is ${node.minLength}`);
+        add(`Minimum length is ${node.minLength} (got ${length})`);
       if (node.maxLength !== undefined && length > node.maxLength)
-        add(`Maximum length is ${node.maxLength}`);
+        add(`Maximum length is ${node.maxLength} (got ${length})`);
     }
     if (Array.isArray(input)) {
       if (node.minItems !== undefined && input.length < node.minItems)
