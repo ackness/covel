@@ -668,7 +668,11 @@ export async function finalizeExecution(
             );
           }
         }
+        // A dropped runtime settles as failed: like any failed run, it adds
+        // nothing to the conversation and does not count as a trigger.
         for (const message of args.journalMessages ?? []) {
+          if (message.sourceRuntimeId && isolated.has(message.sourceRuntimeId))
+            continue;
           await tx.appendTurnMessage(message);
         }
         await extraInTx?.(tx, {
@@ -685,7 +689,9 @@ export async function finalizeExecution(
         }
         await recordRuntimeTriggersTx(tx, {
           sessionId,
-          runtimeIds: args.runtimeTriggers ?? [],
+          runtimeIds: (args.runtimeTriggers ?? []).filter(
+            (runtimeId) => !isolated.has(runtimeId),
+          ),
           now: new Date().toISOString(),
         });
         await publishExports(
