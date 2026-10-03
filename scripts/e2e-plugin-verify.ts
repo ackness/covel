@@ -41,6 +41,7 @@
  *   --server <url>         API base (default: http://localhost:3001/api)
  *   --slot <name>          Override the story runtimes' model slot (default: configured routing)
  *   --world <id>           World to use (default: first world returned by /api/worlds)
+ *   --locale <tag>         Session content locale (default: zh-CN)
  *   --turns <n>            Number of playing-phase turns to run after char-creation (default: 3)
  *   --runtime <id>         Filter output + assertions to this runtime only
  *   --plugin <id>          Filter output + assertions to this plugin only
@@ -81,6 +82,8 @@ interface CliArgs {
   /** Story-runtime slot override; absent means the configured routing. */
   slot?: string;
   world?: string;
+  /** Content locale of the session; also selects the prompt language. */
+  locale: string;
   turns: number;
   runtimeFilter?: string;
   pluginFilter?: string;
@@ -104,6 +107,7 @@ function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     server: "http://localhost:3001/api",
     slot: process.env.E2E_MODEL_SLOT?.trim() || undefined,
+    locale: "zh-CN",
     turns: 3,
     enablePlugins: [],
     coreOnly: false,
@@ -136,6 +140,9 @@ function parseArgs(argv: string[]): CliArgs {
         break;
       case "--world":
         args.world = next();
+        break;
+      case "--locale":
+        args.locale = next();
         break;
       case "--turns":
         args.turns = Number.parseInt(next(), 10);
@@ -231,6 +238,7 @@ Options:
                           Slot names come from [covel.xxx] in llm.toml,
                           pass only the xxx part (e.g. e2e, e2e_local)
   --world <id>            World to use (default: first available)
+  --locale <tag>          Session content locale (default: zh-CN)
   --turns <n>             Playing-phase turns after char creation (default: 3)
   --runtime <id>          Filter output + assertions to this runtime only
   --plugin <id>           Filter output + assertions to this plugin only
@@ -1116,7 +1124,7 @@ async function runTurn(
     type: action.type,
     payload: action.payload,
     requestId: randomUUID(),
-    locale: "zh-CN",
+    locale: args.locale,
   };
   if (args.slot) body.model = args.slot;
 
@@ -1691,6 +1699,7 @@ async function runMain(
     process.exit(2);
   }
   kv("World", chosen.id);
+  kv("Locale", args.locale);
 
   // ── Phase 4: Session creation ──────────────────────────────────
   // Start the way the prep screen does: the world's preset pack plus the
@@ -1714,7 +1723,7 @@ async function runMain(
   }
   const session = await httpJson<SessionRecord>(args.server, "/sessions", {
     worldId: chosen.id,
-    locale: "zh-CN",
+    locale: args.locale,
     ...(plugins ? { plugins } : {}),
   });
   state.sessionId = session.id;

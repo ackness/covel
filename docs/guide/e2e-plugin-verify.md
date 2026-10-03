@@ -73,6 +73,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 | `--server <url>`         | `http://localhost:3001/api`        | API base URL                                                                                                     |
 | `--slot <name>`          | 按配置路由（或 `$E2E_MODEL_SLOT`） | 覆盖故事 runtime 的模型 slot；其余 runtime 仍按配置。**只写 `[covel.xxx]` 中的 xxx 部分**，不是 `covel.xxx` 全名 |
 | `--world <id>`           | `/api/worlds` 返回的第一个         | 使用的世界包 id                                                                                                  |
+| `--locale <tag>`         | `zh-CN`                            | 会话的内容语言，同时决定读取哪种语言的插件提示词；配合服务端的 `COVEL_INSTRUCTION_LOCALE` 可对比中英文指令       |
 | `--turns <n>`            | `3`                                | 角色创建之后的 playing 轮数                                                                                      |
 | `--runtime <id>`         | —                                  | 只聚焦某一个 runtime，其它依然会执行但不计入断言                                                                 |
 | `--plugin <id>`          | —                                  | 只聚焦某一个 plugin                                                                                              |
