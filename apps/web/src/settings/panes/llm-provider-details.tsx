@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { Copy, Plus, Trash2 } from "lucide-react";
+import { Copy, FileCode, Plus, Trash2 } from "lucide-react";
 import {
+  type LlmConfigResponse,
   type ModelCapabilityInfo,
   type ProviderModelProfile,
   type ProviderModelEntry,
@@ -9,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { PingButton } from "@/components/shared/ping-button.js";
+import { isDesktopApp } from "@/lib/desktop-bridge.js";
 import { LlmKeysPane } from "./LlmKeysPane.js";
 import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 import { ProtocolSelect } from "./llm-provider-dialogs.js";
@@ -19,9 +21,13 @@ import {
   SettingsDraftConflict,
   useSettingDraft,
 } from "../use-setting-draft.js";
+import { useOpenLlmToml } from "../use-open-llm-toml.js";
+
+type ServerConfigSource = LlmConfigResponse["source"];
 
 export function ProviderDetails({
   provider,
+  serverConfig,
   onAddModel,
   onPatchLocalProfile,
   onDeleteLocalModel,
@@ -29,6 +35,8 @@ export function ProviderDetails({
   onDeleteLocalProvider,
 }: {
   provider: ProviderCatalogEntry;
+  /** Where the server models come from: an llm.toml file or the built-in default. */
+  serverConfig?: ServerConfigSource;
   onAddModel: () => void;
   onPatchLocalProfile: (patch: Partial<ProviderModelProfile>) => void;
   onDeleteLocalModel: (modelRef: string) => void;
@@ -37,6 +45,10 @@ export function ProviderDetails({
 }) {
   const { t } = useTranslation();
   const isServerProvider = provider.serverModels.length > 0;
+  const isBuiltinDefault = serverConfig?.kind === "builtin";
+  const serverLabel = isBuiltinDefault
+    ? t("settings.builtinDefault")
+    : t("settings.fromLlmToml", "llm.toml");
   const localProfile = provider.localProfile;
   const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
   const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
@@ -58,7 +70,7 @@ export function ProviderDetails({
             </h4>
             {isServerProvider && (
               <Badge variant="outline" className="text-[9px]">
-                {t("settings.fromLlmToml", "llm.toml")}
+                {serverLabel}
               </Badge>
             )}
             {localProfile && (
@@ -83,6 +95,8 @@ export function ProviderDetails({
         )}
       </div>
 
+      {isServerProvider && <ServerProviderNotice serverConfig={serverConfig} />}
+
       <LlmKeysPane
         key={provider.id}
         providerId={provider.id}
@@ -91,7 +105,11 @@ export function ProviderDetails({
       />
 
       <p className="text-[11px] text-muted-foreground">
-        {t("settings.providerConnectionScope")}
+        {t(
+          isBuiltinDefault
+            ? "settings.providerConnectionScopeBuiltin"
+            : "settings.providerConnectionScope",
+        )}
       </p>
       <div className="grid grid-cols-1 gap-2">
         <label className="space-y-1">
@@ -150,6 +168,7 @@ export function ProviderDetails({
               baseUrl={model.baseUrl}
               capability={model.capability}
               source="server"
+              sourceLabel={serverLabel}
             />
           ))}
           {localProfile?.models.map((model) => (
@@ -173,6 +192,7 @@ export function ProviderDetails({
               presetId={model.ref}
               baseUrl={localProfile.baseUrl}
               source="local"
+              sourceLabel={t("settings.localModel", "Local model")}
               reasoningEffort={model.reasoningEffort}
               onNameChange={(name) =>
                 onPatchLocalProfile({
@@ -206,6 +226,40 @@ export function ProviderDetails({
   );
 }
 
+/** Explains why a provider defined outside Settings has no delete action. */
+function ServerProviderNotice({
+  serverConfig,
+}: {
+  serverConfig?: ServerConfigSource;
+}) {
+  const { t } = useTranslation();
+  const openLlmTomlFile = useOpenLlmToml();
+  const isBuiltinDefault = serverConfig?.kind === "builtin";
+  const path = serverConfig?.path ?? "llm.toml";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border border-border/60 bg-muted/20 px-3 py-2">
+      <p className="min-w-0 flex-1 wrap-break-word text-[11px] leading-relaxed text-muted-foreground">
+        {isBuiltinDefault
+          ? t("settings.providerBuiltinNotice", { path })
+          : t("settings.providerFileNotice", { path })}
+      </p>
+      {isDesktopApp() && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 text-[11px]"
+          onClick={() => void openLlmTomlFile()}
+        >
+          <FileCode className="h-3 w-3" />
+          {isBuiltinDefault
+            ? t("settings.createLlmToml")
+            : t("settings.openLlmToml", "Open llm.toml")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function ProviderModelRow({
   provider,
   protocol,
@@ -217,6 +271,7 @@ function ProviderModelRow({
   name,
   presetId,
   source,
+  sourceLabel,
   capability,
   onDelete,
   reasoningEffort,
@@ -234,6 +289,7 @@ function ProviderModelRow({
   name?: string;
   presetId: string;
   source: "server" | "local";
+  sourceLabel: string;
   capability?: ModelCapabilityInfo;
   onDelete?: () => void;
   reasoningEffort?: ReasoningEffort;
@@ -274,9 +330,7 @@ function ProviderModelRow({
           />
         </div>
         <Badge variant="outline" className="shrink-0 text-[9px]">
-          {source === "server"
-            ? t("settings.fromLlmToml", "llm.toml")
-            : t("settings.localModel", "Local model")}
+          {sourceLabel}
         </Badge>
         {onDuplicate && (
           <Button

@@ -23,7 +23,7 @@
 
 ## 3. 做出最小可运行包
 
-插件从[目录、校验、加载闭环](../guide/plugin-authoring.md#最小闭环目录--验证--加载)开始。
+插件从[目录、校验、加载闭环](../guide/plugin-authoring.md#最小闭环)开始。
 命令默认在 Covel 仓库根目录执行：
 
 ```bash

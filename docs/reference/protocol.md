@@ -534,7 +534,7 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 }
 ```
 
-详细流程图见 [api.md](api.md#rpc-approval-流程pr-7)。
+详细流程图见 [api.md](api.md#rpc-approval-流程)。
 
 每个 pending/grant 都绑定服务端持久化的 session incarnation 与 plugin revocation generation。撤销、禁用、删除或同 ID 重建后，旧 decision 返回 `409 approval_scope_changed`；旧 Pod 的内存 grant 也不能命中新代次。
 

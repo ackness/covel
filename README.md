@@ -63,7 +63,7 @@ A plugin is not necessarily one autonomous agent. It may contain one runtime, se
 | ------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | **Agent runtime**         | Uses a model for narration or structured extraction                        | `narrator`, `codex`, `world-ir`                           |
 | **Function runtime**      | Runs deterministic, zero-token game logic                                  | `pregame`, `inventory/ledger`, `scene-stage/cast`         |
-| **Mixed package**         | Combines deterministic retrieval with agent extraction                     | `npc-graph`, `dice-check`                                 |
+| **Mixed package**         | Pairs deterministic functions with an agent in one package                 | `npc-graph`, `world-time`                                 |
 | **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `narrator` (draft review), `char-creator` (profile guard) |
 | **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`                           |
 
@@ -125,7 +125,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 World packs declare `defaultLocale` and `supportedLocales`. The loader first tries the current language variant and then falls back to the canonical source, so a partial translation remains playable. Mistport demonstrates a bilingual pack with localized lore, characters, rules, and media metadata. **Emberback Relay** is the built-in English-default world pack (`defaultLocale: en-US`), with its manifest, setting, cast, rules, quests, and other starting content authored in English.
 
-Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds translated `I18nText` values plus `PLUGIN.<lang>.md`, `WORLD.<lang>.md`, and WorldData source variants as needed. Only natural-language content is translated—stable IDs, capabilities, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
+Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds translated `I18nText` values plus `PLUGIN.<lang>.md`, `WORLD.<lang>.md`, and WorldData source variants as needed. Only natural-language content is translated—stable IDs, contracts, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
 
 ## Debug every turn end to end
 
@@ -199,8 +199,10 @@ Share your work by submitting a directory-entry PR to [covel-plugins](https://gi
 ## Develop
 
 - [Plugin authoring guide](./docs/guide/plugin-authoring.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
-- [Architecture & turn pipeline](./docs/architecture/flow.md) — how a turn flows through trigger → schedule → agents → commit
-- Reference: [plugin registry](./docs/reference/plugins.md) · [tool registry](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
+- [Design principles](./docs/architecture/design-principles.md) — what belongs in the kernel and what belongs in a plugin
+- [Architecture & turn pipeline](./docs/architecture/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
+- [World data](./docs/reference/world-data.md) and [collections](./docs/guide/collections.md) — author a world pack and ship it with its plugins
+- Reference: [plugin contract](./docs/reference/plugins.md) · [extension points](./docs/reference/extension-points.md) · [tools](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle. Repo layout and package list → [`AGENTS.md`](./AGENTS.md#monorepo-structure).
 
