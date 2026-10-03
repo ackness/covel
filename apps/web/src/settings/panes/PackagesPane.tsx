@@ -13,7 +13,7 @@ import {
   type InstallResult,
 } from "@/services/api.js";
 import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
-import { GithubPackageInstaller } from "./GithubPackageInstaller.js";
+import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 
 interface ToastState {
@@ -201,11 +201,20 @@ export function PackagesPane() {
         </div>
       )}
 
-      <GithubPackageInstaller
+      <GithubCollectionInstaller
         disabled={!!busy || !!removing || updateBusy || githubBusy}
         onBusyChange={setGithubBusy}
         onInstalled={(result) => {
-          setLastResult(result);
+          // The status line shows one package; prefer one that needs the restart.
+          const shown =
+            result.installed.find((item) => item.kind === "plugin") ??
+            result.installed.at(-1);
+          if (shown)
+            setLastResult({
+              ok: true,
+              ...shown,
+              restartRequired: shown.kind === "plugin",
+            });
           void refreshInstalled();
         }}
       />
@@ -229,16 +238,6 @@ export function PackagesPane() {
           !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
         }
         onFile={(f) => uploadZip("plugin", f)}
-      />
-
-      <GithubPackageInstaller
-        kind="world"
-        disabled={!!busy || !!removing || updateBusy || githubBusy}
-        onBusyChange={setGithubBusy}
-        onInstalled={(result) => {
-          setLastResult(result);
-          void refreshInstalled();
-        }}
       />
 
       <DropZone

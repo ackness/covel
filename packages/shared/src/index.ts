@@ -358,7 +358,13 @@ export type {
 export {
   resolveSessionPlugins,
   isBlockingWorldRequirement,
+  providedContracts,
 } from "./plugin-selection.js";
+export {
+  checkCollection,
+  type CollectionPluginFacts,
+  type CollectionWorldFacts,
+} from "./collection-check.js";
 export type {
   SessionPluginCandidate,
   SessionPluginResolution,
@@ -392,6 +398,22 @@ export {
   type PluginInstallation,
   type GithubPluginPreview,
 } from "./schemas/plugin-install.js";
+export {
+  COLLECTION_MANIFEST_FILE,
+  COLLECTION_MEMBER_LIMIT,
+  collectionManifestSchema,
+  collectionProblemSchema,
+  githubBatchInstallRequestSchema,
+  githubBatchInstallResultSchema,
+  githubCollectionPreviewSchema,
+  githubPackagePreviewSchema,
+  type CollectionManifest,
+  type CollectionMember,
+  type CollectionProblem,
+  type GithubBatchInstallResult,
+  type GithubCollectionPreview,
+  type GithubPackagePreview,
+} from "./schemas/collection.js";
 export {
   hostVersionRangeSchema,
   isHostVersionRange,

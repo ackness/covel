@@ -19,6 +19,7 @@ import { makeInstallApiGuard } from "../privileged-auth.js";
 import { pluginInstallRoutes } from "./install/plugin.js";
 import { worldInstallRoutes } from "./install/worlds.js";
 import { createGithubInstallRoutes } from "./install/github-install.js";
+import { githubCollectionRoutes } from "./install/github-collection.js";
 
 import { createGithubUpdateRoutes } from "./install/github-updates.js";
 import { createInstalledPackageRoutes } from "./install/installed-packages.js";
@@ -33,3 +34,6 @@ for (const kind of ["plugin", "world"] as const) {
   installRoutes.route("/", createGithubUpdateRoutes(kind));
 }
 installRoutes.route("/", worldInstallRoutes);
+// Mixed plugin + world previews and collection installs: POST /github/preview
+// and POST /github/batch.
+installRoutes.route("/", githubCollectionRoutes);

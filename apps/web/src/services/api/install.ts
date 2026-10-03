@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
-  githubPluginPreviewsSchema,
+  githubBatchInstallResultSchema,
+  githubCollectionPreviewSchema,
   githubPluginUpdateCheckSchema,
   pluginInstallationsSchema,
+  type GithubBatchInstallResult,
 } from "@covel/shared";
 import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge.js";
 import { request } from "./request.js";
@@ -36,32 +38,32 @@ export function installPackage(
   });
 }
 
-export async function previewGithubPackages(
+/** Preview every plugin, world or collection member under one GitHub URL. */
+export async function previewGithubCollection(
   url: string,
   signal?: AbortSignal,
-  kind: InstallKind = "plugin",
 ) {
-  return request(`/api/install/${kind}/github/preview`, {
+  return request("/api/install/github/preview", {
     method: "POST",
     headers: getDesktopRestAuthHeaders(),
     body: JSON.stringify({ url }),
     operatorAuth: true,
     signal,
     silentErrors: true,
-    schema: githubPluginPreviewsSchema,
+    schema: githubCollectionPreviewSchema,
   });
 }
 
-export function installGithubPackage(
-  token: string,
-  kind: InstallKind = "plugin",
-): Promise<InstallResult> {
-  return request(`/api/install/${kind}/github`, {
+/** Install the previewed packages as a unit: all of them or none. */
+export function installGithubPackages(
+  tokens: readonly string[],
+): Promise<GithubBatchInstallResult> {
+  return request("/api/install/github/batch", {
     method: "POST",
     headers: getDesktopRestAuthHeaders(),
-    body: JSON.stringify({ token, acceptRisk: true }),
+    body: JSON.stringify({ tokens, acceptRisk: true }),
     operatorAuth: true,
-    schema: installResultSchema,
+    schema: githubBatchInstallResultSchema,
   });
 }
 

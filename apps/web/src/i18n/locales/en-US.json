@@ -1071,13 +1071,12 @@
     "github": {
       "title": "Install from GitHub",
       "browse": "Browse community plugins",
-      "description": "Paste a public repository or plugin subdirectory URL. Files must be ready to run; no dependency installation or build scripts are executed. Downloads follow the configured network proxy.",
+      "description": "Paste a public repository or directory URL. Plugins, worlds, and the members of a collection found there are listed together. Files must be ready to run; no dependency installation or build scripts are executed. Downloads follow the configured network proxy.",
       "url": "GitHub URL",
-      "inspect": "Preview plugin",
+      "inspect": "Preview",
       "inspecting": "Inspecting…",
       "cancel": "Cancel",
-      "choose": "Choose a plugin",
-      "multiple": "Repository links discover packages in plugins/, examples/, and other subdirectories. Select and install each package separately; remaining packages stay available after installation.",
+      "multiple": "Tick what you want to install. The selection is installed as a unit: all of it, or none of it if any package fails.",
       "riskTitle": "Review before installing",
       "codeRisk": "This package contains code. When execution is approved, third-party code runs in the Covel backend without a process sandbox and may access its files, environment variables, and network. Declared permissions do not fully isolate arbitrary JavaScript.",
       "contentRisk": "Plugin content can change model behavior, data sent to providers, and API costs. File inspection is not a security audit.",
@@ -1086,22 +1085,22 @@
       "accept": "I understand the risks and trust this source.",
       "install": "Confirm installation",
       "installing": "Installing…",
-      "failed": "Unable to install this plugin.",
+      "failed": "Unable to install.",
       "pending": "Installed; restart the backend to load this plugin.",
-      "zipRisk": "I trust the ZIP plugin I am about to import. Its code may access backend files, environment variables and network after execution approval. Installation targets the connected backend, and is not a security audit."
+      "zipRisk": "I trust the ZIP plugin I am about to import. Its code may access backend files, environment variables and network after execution approval. Installation targets the connected backend, and is not a security audit.",
+      "browseWorlds": "Browse community worlds",
+      "collection": "Collection: {{name}}",
+      "kindPlugin": "Plugin",
+      "kindWorld": "World",
+      "hasCode": "contains code",
+      "installSelected": "Install {{count}} selected",
+      "blocked": "Resolve the errors above, or untick the affected packages, before installing.",
+      "mixedWorldRisk": "Worlds contain third-party prompts, settings and media. Review their content before playing. Installing does not authorize plugins; each one still asks for approval in a session."
     },
     "worldGithub": {
-      "title": "Install a world from GitHub",
-      "browse": "Browse community worlds",
-      "description": "Paste a public GitHub repository or world directory URL. Downloads use your configured proxy.",
-      "choose": "Choose a world",
-      "multiple": "A repository can contain several worlds. Select and install each separately.",
       "risk": "Worlds contain third-party prompts, settings and media. Review their content and plugin requirements before playing. World installation does not install or authorize plugins, or run repository scripts.",
       "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Existing saves are not automatically synchronized; use world-data sync separately.",
-      "installed": "Installed world packages",
-      "inspect": "Preview world",
-      "inspecting": "Previewing world…",
-      "url": "World GitHub URL"
+      "installed": "Installed world packages"
     }
   },
   "appearance": {

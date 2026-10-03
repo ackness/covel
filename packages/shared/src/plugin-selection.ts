@@ -59,6 +59,9 @@ const singlePoints = new Set<string>(
     .map((point) => point.id),
 );
 /** Kernel dependencies require implementations, not a root capability claim. */
+export const providedContracts = (
+  plugin: Pick<SessionPluginCandidate, "provides" | "extensions">,
+): string[] => contracts(plugin as SessionPluginCandidate);
 const contracts = (plugin: SessionPluginCandidate): string[] => [
   ...(plugin.provides ?? [])
     .map((p) => (typeof p === "string" ? p : p.contract))
