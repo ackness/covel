@@ -139,7 +139,7 @@ export function MaxOutputTokensCard({
       <p className="text-[10px] leading-relaxed text-muted-foreground">
         {t(
           "settings.tokenBudgetPreviewHint",
-          "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 32,768; server limits may reduce the budget.",
+          "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 262,144; server limits may reduce the budget.",
         )}
       </p>
       {budgetInvalid && (

@@ -1028,7 +1028,7 @@
     "effectiveOutputBudget": "有效输出预算",
     "remainingInputBudget": "剩余输入预算",
     "outputBudgetConflict": "输出预算需要在上下文窗口中为输入留出空间。请降低输出上限，或修正模型的上下文窗口。",
-    "tokenBudgetPreviewHint": "预算按当前配置计算。输入包含系统指令、历史和工具；未知上下文窗口按 32,768 计算，服务端限制可能进一步缩小预算。",
+    "tokenBudgetPreviewHint": "预算按当前配置计算。输入包含系统指令、历史和工具；未知上下文窗口按 262,144 计算，服务端限制可能进一步缩小预算。",
     "modelConfiguration": "模型配置",
     "modelConfigurations": "模型配置",
     "modelConfigurationName": "配置名称",

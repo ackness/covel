@@ -1028,7 +1028,7 @@
     "effectiveOutputBudget": "Effective output budget",
     "remainingInputBudget": "Remaining input budget",
     "outputBudgetConflict": "The output budget must leave room for input in the context window. Lower the output limit or correct the model's context window.",
-    "tokenBudgetPreviewHint": "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 32,768; server limits may reduce the budget.",
+    "tokenBudgetPreviewHint": "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 262,144; server limits may reduce the budget.",
     "modelConfiguration": "Model configuration",
     "modelConfigurations": "Model configurations",
     "modelConfigurationName": "Configuration name",

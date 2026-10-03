@@ -1,4 +1,6 @@
-export const DEFAULT_LLM_CONTEXT_WINDOW = 32_768;
+// Context window assumed for a model with no known limits: large enough for
+// the story and tool-calling plugin prompts of current models.
+export const DEFAULT_LLM_CONTEXT_WINDOW = 262_144;
 export const DEFAULT_LLM_OUTPUT_TOKENS = 16_384;
 
 /** Model capacity is a ceiling, never the default size of a response. */
