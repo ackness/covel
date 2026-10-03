@@ -50,21 +50,29 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
     expect(upsert).not.toHaveBeenCalled();
     expect(await store.getWorld("shared-world")).toEqual(before);
     await update(packages[1]!, "horror");
+    // A write made before the system's watch is ready is not reported, and
+    // a loaded machine starts the watch late. Write again until the reload
+    // is seen; the pause between writes is longer than the reload debounce.
     await vi.waitFor(
       async () => {
-        expect(await store.getWorld("shared-world")).toMatchObject({
-          metadata: {
-            dimensions: {
-              tone: {
-                name: "tone",
-                schema: {},
-                initialValue: { genres: ["horror"] },
+        try {
+          expect(await store.getWorld("shared-world")).toMatchObject({
+            metadata: {
+              dimensions: {
+                tone: {
+                  name: "tone",
+                  schema: {},
+                  initialValue: { genres: ["horror"] },
+                },
               },
             },
-          },
-        });
+          });
+        } catch (error) {
+          await update(packages[1]!, "horror");
+          throw error;
+        }
       },
-      { timeout: 5000 },
+      { timeout: 45_000, interval: 1_000 },
     );
     upsert.mockRestore();
   } finally {
@@ -72,4 +80,4 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
     await store.close();
     await rm(root, { recursive: true, force: true });
   }
-}, 10_000);
+}, 60_000);

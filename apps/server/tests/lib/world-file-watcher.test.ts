@@ -81,42 +81,48 @@ dimensionSources:
         updatedAt: now,
       });
 
+      const changed =
+        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - adventure\n  contentRating: teen\n";
       watcher.start();
-      await writeFile(
-        dimensionFile,
-        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - adventure\n  contentRating: teen\n",
-        "utf8",
-      );
+      await writeFile(dimensionFile, changed, "utf8");
 
+      // The system starts a watch in the background and reports nothing for a
+      // write made before it is ready, so one write right after `start()` can
+      // be lost. Write again until the reload is seen. The pause between
+      // writes is longer than the reload debounce.
       await vi.waitFor(
         async () => {
-          expect(await store.getWorld("fixture-world")).toMatchObject({
-            createdAt: record!.createdAt,
-            metadata: {
-              source: "generated-file",
-              storage,
-              dimensions: {
-                tone: {
-                  name: "tone",
-                  schema: {},
-                  initialValue: { genres: ["adventure"] },
+          try {
+            expect(await store.getWorld("fixture-world")).toMatchObject({
+              createdAt: record!.createdAt,
+              metadata: {
+                source: "generated-file",
+                storage,
+                dimensions: {
+                  tone: {
+                    name: "tone",
+                    schema: {},
+                    initialValue: { genres: ["adventure"] },
+                  },
                 },
               },
-            },
-          });
-          expect(emit).toHaveBeenCalledWith(
-            expect.objectContaining({
-              sessionId: "watch-session",
-              payload: expect.objectContaining({
-                _subType: "world.dimensions.changed",
-                worldId: "fixture-world",
-                changedKeys: ["tone"],
+            });
+            expect(emit).toHaveBeenCalledWith(
+              expect.objectContaining({
+                sessionId: "watch-session",
+                payload: expect.objectContaining({
+                  _subType: "world.dimensions.changed",
+                  worldId: "fixture-world",
+                  changedKeys: ["tone"],
+                }),
               }),
-            }),
-          );
+            );
+          } catch (error) {
+            await writeFile(dimensionFile, changed, "utf8");
+            throw error;
+          }
         },
-        // A real file event and a debounced reload: allow for a loaded machine.
-        { timeout: 15_000 },
+        { timeout: 45_000, interval: 1_000 },
       );
       if (decoy)
         expect(await store.getWorld(directoryName)).toEqual(decoyBefore);
@@ -153,5 +159,5 @@ dimensionSources:
       await rm(root, { recursive: true, force: true });
     }
   },
-  30_000,
+  60_000,
 );
