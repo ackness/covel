@@ -1,27 +1,39 @@
+import { translate } from "@covel/plugin-handlers-utils";
 import { resolveI18nText } from "@covel/shared";
 import { worldTimeSchema, timeDefinitionRecordSchema } from "./schema.js";
 
-export const DEFAULT_TIME = worldTimeSchema.parse({
-  kind: "calendar",
-  name: { zh: "世界时间", en: "World time" },
-  calendar: {
-    era: { zh: "世界历", en: "World era" },
-    months: Array.from({ length: 12 }, (_, index) => ({
-      name: { zh: `${index + 1}月`, en: `Month ${index + 1}` },
-      days: 30,
-    })),
-    hoursPerDay: 24,
-    minutesPerHour: 60,
-    periods: [
-      { startHour: 0, name: { zh: "深夜", en: "Night" } },
-      { startHour: 6, name: { zh: "早晨", en: "Morning" } },
-      { startHour: 12, name: { zh: "下午", en: "Afternoon" } },
-      { startHour: 18, name: { zh: "夜晚", en: "Evening" } },
-    ],
-  },
-  initial: { year: 1, month: 1, day: 1, hour: 8, minute: 0 },
-  evolution: { mode: "forward", defaultStep: 10, maxStep: 525600 },
-});
+/**
+ * The time definition of a world that supplies none, in the language of the
+ * session. The definition is stored with the session and given to the
+ * narrative, so it holds one language: a table of every language here would
+ * put all of them into each prompt.
+ */
+export function defaultTime(ctx) {
+  return worldTimeSchema.parse({
+    kind: "calendar",
+    name: translate(ctx, "World time"),
+    calendar: {
+      era: translate(ctx, "World era"),
+      months: Array.from({ length: 12 }, (_, index) => ({
+        name: translate(ctx, "Month {n}", { n: index + 1 }),
+        days: 30,
+      })),
+      hoursPerDay: 24,
+      minutesPerHour: 60,
+      periods: [
+        { startHour: 0, name: translate(ctx, "Night") },
+        { startHour: 6, name: translate(ctx, "Morning") },
+        { startHour: 12, name: translate(ctx, "Afternoon") },
+        { startHour: 18, name: translate(ctx, "Evening") },
+      ],
+    },
+    initial: { year: 1, month: 1, day: 1, hour: 8, minute: 0 },
+    evolution: { mode: "forward", defaultStep: 10, maxStep: 525600 },
+  });
+}
+
+/** The default definition in English. */
+export const DEFAULT_TIME = defaultTime(undefined);
 
 function safe(value) {
   if (!Number.isSafeInteger(value))
@@ -169,7 +181,11 @@ export function advanceTime(definition, tick, request, turnId) {
   return { tick: safe(tick + delta), delta };
 }
 
-export async function loadTime(store, locale) {
+/**
+ * The recorded time of the session, or its starting time. `ctx` is the
+ * handler context: it gives the messages that name the default calendar.
+ */
+export async function loadTime(store, locale, ctx) {
   const stored = await store.getPluginData("clock", "current");
   if (stored) {
     const state = stored.value;
@@ -190,7 +206,7 @@ export async function loadTime(store, locale) {
   const imported = await store.getPluginData("definitions", "world");
   const definition = imported
     ? timeDefinitionRecordSchema.parse(imported.value).definition
-    : DEFAULT_TIME;
+    : defaultTime(ctx);
   const tick = initialTick(definition);
   return {
     schemaVersion: 1,
