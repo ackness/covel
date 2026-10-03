@@ -54,7 +54,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | -------------------- | ------------------------------------------ | ------------------------------------------------------ |
 | **Agent runtime**    | 用模型完成叙事或结构化抽取                 | `narrator`、`codex`、`world-ir`                        |
 | **Function runtime** | 执行确定性、零 token 的游戏逻辑            | `pregame`、`inventory/ledger`、`scene-stage/cast`      |
-| **混合插件包**       | 组合确定性检索与 agent 抽取                | `npc-graph`、`dice-check`                              |
+| **混合插件包**       | 在同一个包里组合确定性函数与 agent         | `npc-graph`、`world-time`                              |
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `narrator`（草稿审查）、`char-creator`（角色资料保护） |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`                        |
 
@@ -114,7 +114,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 世界包通过 `defaultLocale` 与 `supportedLocales` 声明语言。加载器会优先读取当前语言的变体，缺失时回退到权威 source，因此只完成部分翻译也不会影响游玩。雾港展示了包含世界观、角色、规则和媒体 metadata 变体的中英双语世界包。**Emberback Relay** 则是内置的英文默认世界包（`defaultLocale: en-US`），manifest、设定、角色、规则、任务和其他开局内容均以英文提供。
 
-玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`PLUGIN.<lang>.md`、`WORLD.<lang>.md` 与 WorldData source 变体。只翻译自然语言内容，稳定 ID、capability、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
+玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`PLUGIN.<lang>.md`、`WORLD.<lang>.md` 与 WorldData source 变体。只翻译自然语言内容，稳定 ID、契约、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
 
 ## 端到端调试每个回合
 
@@ -188,8 +188,10 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 ## 开发
 
 - [插件编写指南](./docs/guide/plugin-authoring.md) —— 从这里开始；[`plugins/`](./plugins/) 下的内置插件都是可运行的参考
-- [架构与回合管线](./docs/architecture/flow.md) —— 一个回合如何流经触发 → 调度 → agents → 提交
-- 参考：[插件注册表](./docs/reference/plugins.md) · [工具注册表](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [完整文档索引](./docs/README.md)
+- [设计原则](./docs/architecture/design-principles.md) —— 什么该进内核，什么该交给插件
+- [架构与回合管线](./docs/architecture/flow.md) —— 一个回合如何流经触发 → 调度 → runtime → 提交
+- [世界数据](./docs/reference/world-data.md)与[合集](./docs/guide/collections.md) —— 编写世界包，并连同配套插件一起发布
+- 参考：[插件契约](./docs/reference/plugins.md) · [扩展点](./docs/reference/extension-points.md) · [工具](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [完整文档索引](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle。仓库布局与包清单 → [`AGENTS.md`](./AGENTS.md#monorepo-structure)。
 

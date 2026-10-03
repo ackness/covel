@@ -16,7 +16,7 @@
 
 `ctx.services` 当前向 function runtime 开放。Agent 可通过插件自己的 function runtime 取得服务结果，再通过 `inputs` 接收，或继续使用已注册本地工具。它不会自动把全部公共服务暴露给每个 Agent。
 
-UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，handler 后续失败不会自动回滚。多条记录必须一起成功或失败时，用 `invokeRuntime` 触发 `trigger.type: manual` 的 function runtime：`ctx.pluginData` 写入和领域 effects 进入同一次 proposal 提交。该 function handler 不需要 LLM，手动触发本身也不会运行叙事 runtime；声明的事件下游仍按调度契约执行。`invokeCommand` 适用于 manifest 声明的玩家命令，不能用 `invokePluginAction` 绕过命令校验与审计。参见 [RPC 通道](api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](plugins.md#handler-store-and-commit-ownership)。
+UI 的 `invokePluginAction` 调用插件 RPC action，其写入即时生效，handler 后续失败不会自动回滚。多条记录必须一起成功或失败时，用 `invokeRuntime` 触发 `trigger.type: manual` 的 function runtime：`ctx.pluginData` 写入和领域 effects 进入同一次 proposal 提交。该 function handler 不需要 LLM，手动触发本身也不会运行叙事 runtime；声明的事件下游仍按调度契约执行。`invokeCommand` 适用于 manifest 声明的玩家命令，不能用 `invokePluginAction` 绕过命令校验与审计。参见 [RPC 通道](api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](plugins.md#输入和输出)。
 
 插件工具在 `entry` 工厂中通过 `covel.registerTool()` 注册，名字在插件内唯一；不同插件同名不会互相覆盖。工具调用只解析调用方插件的实现和框架内置工具，跨插件公共调用使用下文的 services。
 

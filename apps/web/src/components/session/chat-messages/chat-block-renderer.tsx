@@ -124,7 +124,7 @@ export function ChatBlockRenderer({
   // NOTE: branch-reply blocks are NOT special-cased here. The branch-reply
   // plugin renders through the standard plugin-message surface (its
   // `ui.message` spec → `BranchReplyCandidates` catalog component), so the
-  // framework never hardcodes the plugin's block type (CLAUDE.md isolation).
+  // framework never hardcodes the plugin's block type (AGENTS.md isolation).
 
   const assetView = isAssetGenerateView(block.data) ? block.data : null;
   if (blockType === "asset.generate" && sessionId && assetView) {

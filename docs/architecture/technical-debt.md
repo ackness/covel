@@ -43,15 +43,24 @@ Non-test files past the 800-line review guideline (AGENTS.md). Split only when
 responsibilities or maintenance cost justify the change — length alone is not
 a defect. Re-measure with `wc -l` before acting; line counts drift.
 
-| File                                                      | Lines |
-| --------------------------------------------------------- | ----: |
-| `apps/server/src/routes/api/actions.ts`                   |  1078 |
-| `packages/shared/src/schemas/plugin-schemas.ts`           |  1034 |
-| `packages/shared/src/types/plugin.ts`                     |  1029 |
-| `packages/runtime/src/turn-executor/turn-executor.ts`     |   972 |
-| `apps/server/src/routes/api/bootstrap.ts`                 |   880 |
-| `apps/web/src/services/data-service/local.ts`             |   878 |
-| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` |   820 |
+| File                                                          | Lines |
+| ------------------------------------------------------------- | ----: |
+| `apps/server/src/routes/api/actions.ts`                       |  1055 |
+| `packages/runtime/src/turn-executor/turn-executor.ts`         |  1023 |
+| `packages/ai-provider/src/gateway.ts`                         |  1020 |
+| `packages/shared/src/schemas/plugin-schemas.ts`               |   992 |
+| `apps/web/src/stores/session-store/actions.ts`                |   932 |
+| `apps/web/src/services/data-service/local.ts`                 |   895 |
+| `apps/server/src/routes/api/bootstrap.ts`                     |   891 |
+| `apps/server/src/world-data/session-import.ts`                |   876 |
+| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`     |   873 |
+| `packages/store/src/types.ts`                                 |   859 |
+| `apps/web/src/stores/session-store/sse-handler.ts`            |   847 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` |   842 |
+| `packages/plugin-loader/src/load.ts`                          |   839 |
+| `apps/server/src/routes/api/bootstrap/plugin-entry.ts`        |   826 |
+| `packages/events/src/event-bus.ts`                            |   801 |
 
-The current source has 13 markers. This ledger follows current source comments;
-historical counts and line numbers are not current contracts.
+The current source has 12 markers, one per row above. This ledger follows
+current source comments; historical counts and line numbers are not current
+contracts.

@@ -59,7 +59,7 @@ The default source search is `.assets/demo.dev1.mp4`, `.assets/demo.dev0.mp4`, t
 
 - TypeScript strict mode, ESM-only
 - All TS imports use the `.js` extension (NodeNext module resolution)
-- Aim for ≤ 400 lines per file; hard cap at 800
+- 400 and 800 lines per file are review guidelines, not hard limits; split a file only when its responsibilities or maintenance cost justify it
 - Immutable patterns; avoid bare `any`
 - Use Zod for external input validation
 - See domain-specific rules in [`reference/`](./reference/)
@@ -94,7 +94,7 @@ PRs, main, and releases reuse the same CI gates, including independent Web unit 
 
 ### Framework / plugin isolation (important)
 
-Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) **must not** reference any specific plugin ID or plugin name. Plugin capabilities are discovered via `RuntimeManifest.capabilities` and `outputKind`. See the [Framework–Plugin Isolation Rule in AGENTS.md](../AGENTS.md#framework--plugin-isolation-rule).
+Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) **must not** reference any specific plugin ID or plugin name. Plugins are discovered through versioned contracts (`provides` / `requires`), extension points, and registered services, and output is dispatched on `outputKind`. See the [Framework–Plugin Isolation Rule in AGENTS.md](../AGENTS.md#framework--plugin-isolation-rule).
 
 ### Documentation sync
 

@@ -471,8 +471,8 @@ export interface PluginScopedManifestFields {
   readonly entry?: string;
   /**
    * User-facing catalogue tags for filtering and scenario matching.
-   * These complement `capabilities`: capabilities are machine-discovery
-   * contracts, tags are faceted metadata for players and pack resolution.
+   * These complement versioned contracts: contracts drive machine discovery,
+   * tags are faceted metadata for players and pack resolution.
    * Unioned across the plugin's runtimes.
    */
   readonly tags?: readonly PluginTag[];

@@ -4,30 +4,35 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 
 > 🇬🇧 English overview: [`../README.md`](../README.md)
 
-当前文档按框架 **0.0.42** 的实现同步。框架版本以根 [`package.json`](../package.json) 为准，
-插件与世界包可独立维护版本；协议/schema 版本和历史变更记录不随应用版本统一替换。
+文档随 `main` 分支的实现同步，不单独标注版本。框架版本以根 [`package.json`](../package.json) 为准，
+插件与世界包可独立维护版本；协议/schema 版本和历史变更记录不随应用版本统一替换。文档与代码或测试不一致时，
+以代码和测试为准，并在同一次改动中修正文档。
 
 正在逐步建设[文档 v2](./v2/README.md)：按游玩、创建世界、开发插件、验证与分发组织阅读路径，
 并提供[开发 Agent 工作指南](./v2/agent-workflow.md)。目前完整教程与权威契约仍使用下列现有文档。
 
 ## Start Here
 
-| 你要做什么               | 入口                                                                               | 接着看                                                                                                               |
-| ------------------------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 第一次跑项目             | [`../README.md`](../README.md)                                                     | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                                               |
-| 升级到 v0.0.42           | [`guide/upgrade-0.0.42.md`](./guide/upgrade-0.0.42.md)                             | [English](./guide/upgrade-0.0.42.en.md), [`CHANGELOG.md`](./CHANGELOG.md)                                            |
-| 写插件                   | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md)                         | [`reference/plugins.md`](./reference/plugins.md), [`reference/tools.md`](./reference/tools.md)                       |
-| 写零代码插件             | [`guide/plugin-authoring-zero-code.md`](./guide/plugin-authoring-zero-code.md)     | [`guide/plugin-authoring-agent.md`](./guide/plugin-authoring-agent.md)                                               |
-| 给插件加 UI              | [`guide/plugin-ui-runtime-guidelines.md`](./guide/plugin-ui-runtime-guidelines.md) | [`reference/ui-panels.md`](./reference/ui-panels.md), [`reference/ui-components.md`](./reference/ui-components.md)   |
-| 做世界包、角色卡、媒体包 | [`reference/world-data.md`](./reference/world-data.md)                             | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md), [`reference/media-store.md`](./reference/media-store.md) |
-| 调 HTTP API 或自动化测试 | [`reference/api.md`](./reference/api.md)                                           | [`reference/protocol.md`](./reference/protocol.md), [`guide/e2e-plugin-verify.md`](./guide/e2e-plugin-verify.md)     |
-| 理解设计理念             | [`architecture/design-principles.md`](./architecture/design-principles.md)         | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md), [`glossary.md`](./glossary.md)                           |
-| 理解回合执行管线         | [`architecture/flow.md`](./architecture/flow.md)                                   | [`reference/prompt-structure.md`](./reference/prompt-structure.md)                                                   |
-| 理解安全边界             | [`architecture/security.md`](./architecture/security.md)                           | [`reference/api.md`](./reference/api.md), [`guide/env-registry.md`](./guide/env-registry.md)                         |
-| 验收玩家流程与发布       | [`guide/e2e-testing.md`](./guide/e2e-testing.md)                                   | [`guide/plugin-testing.md`](./guide/plugin-testing.md), [`guide/desktop-packaging.md`](./guide/desktop-packaging.md) |
-| 做主题包                 | [`guide/themes.md`](./guide/themes.md)                                             | [`reference/theme-packages.md`](./reference/theme-packages.md)                                                       |
-| 查一个术语               | [`glossary.md`](./glossary.md)                                                     | 对应 `reference/` 页面                                                                                               |
-| 维护文档体系             | [`DOCS_STRATEGY.md`](./DOCS_STRATEGY.md)                                           | [`CONTRIBUTING.md#文档同步`](./CONTRIBUTING.md#文档同步)                                                             |
+| 你要做什么               | 入口                                                                               | 接着看                                                                                                                                           |
+| ------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 第一次跑项目             | [`../README.md`](../README.md)                                                     | [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                                                                                           |
+| 升级版本                 | [`CHANGELOG.md`](./CHANGELOG.md)                                                   | 从 v0.0.42 之前升级另见 [`guide/upgrade-0.0.42.md`](./guide/upgrade-0.0.42.md)（[English](./guide/upgrade-0.0.42.en.md)）                        |
+| 写插件                   | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md)                         | [`reference/plugins.md`](./reference/plugins.md), [`reference/tools.md`](./reference/tools.md)                                                   |
+| 写零代码插件             | [`guide/plugin-authoring-zero-code.md`](./guide/plugin-authoring-zero-code.md)     | [`guide/plugin-authoring-agent.md`](./guide/plugin-authoring-agent.md)                                                                           |
+| 让插件之间协作           | [`reference/plugin-extensions.md`](./reference/plugin-extensions.md)               | [`reference/extension-points.md`](./reference/extension-points.md), [`reference/plugins.md`](./reference/plugins.md)                             |
+| 给插件加 UI              | [`guide/plugin-ui-runtime-guidelines.md`](./guide/plugin-ui-runtime-guidelines.md) | [`reference/ui-panels.md`](./reference/ui-panels.md), [`reference/ui-components.md`](./reference/ui-components.md)                               |
+| 做世界包、角色卡、媒体包 | [`reference/world-data.md`](./reference/world-data.md)                             | [`reference/world-model.md`](./reference/world-model.md), [`reference/media-store.md`](./reference/media-store.md)                               |
+| 发布、安装世界与插件     | [`guide/collections.md`](./guide/collections.md)                                   | [`reference/plugin-installation.md`](./reference/plugin-installation.md), [`reference/world-installation.md`](./reference/world-installation.md) |
+| 配置模型与环境变量       | [`reference/slots.md`](./reference/slots.md)                                       | [`guide/env-registry.md`](./guide/env-registry.md), [`guide/desktop-config.md`](./guide/desktop-config.md)                                       |
+| 调 HTTP API 或自动化测试 | [`reference/api.md`](./reference/api.md)                                           | [`reference/protocol.md`](./reference/protocol.md), [`guide/e2e-plugin-verify.md`](./guide/e2e-plugin-verify.md)                                 |
+| 理解设计理念             | [`architecture/design-principles.md`](./architecture/design-principles.md)         | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md), [`glossary.md`](./glossary.md)                                                       |
+| 理解回合执行管线         | [`architecture/flow.md`](./architecture/flow.md)                                   | [`reference/prompt-structure.md`](./reference/prompt-structure.md)                                                                               |
+| 理解包边界与存储         | [`architecture/packages.md`](./architecture/packages.md)                           | [`architecture/storage.md`](./architecture/storage.md), [`reference/transactions.md`](./reference/transactions.md)                               |
+| 理解安全边界             | [`architecture/security.md`](./architecture/security.md)                           | [`reference/api.md`](./reference/api.md), [`guide/env-registry.md`](./guide/env-registry.md)                                                     |
+| 验收玩家流程与发布       | [`guide/e2e-testing.md`](./guide/e2e-testing.md)                                   | [`guide/plugin-testing.md`](./guide/plugin-testing.md), [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)                             |
+| 做主题包                 | [`guide/themes.md`](./guide/themes.md)                                             | [`reference/theme-packages.md`](./reference/theme-packages.md)                                                                                   |
+| 查一个术语               | [`glossary.md`](./glossary.md)                                                     | 对应 `reference/` 页面                                                                                                                           |
+| 维护文档体系             | [`DOCS_STRATEGY.md`](./DOCS_STRATEGY.md)                                           | [`CONTRIBUTING.md#文档同步`](./CONTRIBUTING.md#文档同步)                                                                                         |
 
 ## Docs Map
 
@@ -54,6 +59,11 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | prompt 注入和 cache_control 怎么工作 | `packages/context/src/`, `packages/runtime/src/turn-executor/turn-executor.ts`, `packages/runtime/src/turn-executor/turn-runtime-execution.ts`, `docs/reference/prompt-structure.md`   |
 | 插件 UI 组件可用 props               | `apps/web/src/lib/catalog/`, `apps/web/src/components/session/plugin-panel.tsx`, `apps/web/src/components/session/chat-messages/message-blocks.tsx`, `docs/reference/ui-components.md` |
 | 存储事务、media、ledger 行为         | `packages/store/src/`, `packages/store/src/media-store/`, `apps/server/src/world-data/session-import/`, `docs/reference/transactions.md`, `docs/reference/media-store.md`              |
+| 会话启用哪些插件、契约如何解析       | `packages/shared/src/plugin-selection.ts`, `packs/builtin.yaml`, `apps/server/src/config/plugin-packs.ts`, `docs/reference/plugins.md`                                                 |
+| 扩展点、插件服务怎么声明和调用       | `packages/shared/src/extension-points/`, `packages/plugin-handlers-utils/src/plugin-api.ts`, `docs/reference/extension-points.md`, `docs/reference/plugin-extensions.md`               |
+| 回合调度、stage、触发判定            | `packages/runtime/src/turn-executor/`, `packages/runtime/src/schedule/`, `packages/runtime/src/trigger/trigger.ts`, `docs/architecture/flow.md`                                        |
+| 模型用途（slot）如何路由             | `packages/ai-provider/src/config/llm-schema.ts`, `llm.toml.example`, `docs/reference/slots.md`                                                                                         |
+| 环境变量有哪些、默认值是什么         | `packages/shared/src/env/registry.ts`, `docs/guide/env-registry.md`                                                                                                                    |
 
 ## Current Structure
 

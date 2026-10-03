@@ -12,7 +12,6 @@
 | [`npc-graph.md`](./npc-graph.md)                 | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。                      |
 | [`storage.md`](./storage.md)                     | DataStore 后端、事务与持久化边界。                                              |
 | [`security.md`](./security.md)                   | 出站请求 SSRF/DNS 防护、provider key 绑定、托管鉴权与服务端防护。               |
-| [`refactoring-plan.md`](./refactoring-plan.md)   | current-only 架构收敛的范围、阶段、验收与回滚计划（实施中）。                   |
 | [`technical-debt.md`](./technical-debt.md)       | 当前有意保留的实现上限，以及触发升级的可观测条件。                              |
 
 ## Search Anchors
@@ -30,4 +29,4 @@
 
 - 架构页需要说明模块边界、数据流、失败模式和对应 reference 页面。
 - 历史设计可以保留，但当前契约要明确指向 `reference/` 或代码。
-- 草案、审查和迁移计划通常放在 `devs/docs/`；`refactoring-plan.md` 是本轮 current-only 收敛的维护者执行计划，实施完成后应归档或转写为稳定设计。
+- 草案、审查、迁移计划和执行计划放在 `devs/docs/`；实施完成后只把稳定结论转写进本目录，计划本身不留在正式文档里。
