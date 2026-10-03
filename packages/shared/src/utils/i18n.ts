@@ -129,3 +129,40 @@ export function resolveI18nDeep(value: unknown, locale?: string): unknown {
   }
   return value;
 }
+
+/** Key under a world record's `metadata` that keeps its translated texts. */
+export const WORLD_LOCALIZED_TEXT_KEY = "localizedText";
+
+/**
+ * A world record's name and description in one locale.
+ *
+ * The record's own `name` / `description` are plain strings in the world's
+ * default locale, for stores and lists. A world that ships translations also
+ * keeps them under `metadata.localizedText`, so a session in another language
+ * is told the world's name in that language.
+ */
+export function localizedWorldText(
+  world:
+    | {
+        readonly name?: string;
+        readonly description?: string;
+        readonly metadata?: Readonly<Record<string, unknown>> | null;
+      }
+    | null
+    | undefined,
+  locale?: string,
+): { name?: string; description?: string } {
+  const localized = world?.metadata?.[WORLD_LOCALIZED_TEXT_KEY];
+  const pick = (key: "name" | "description"): string | undefined => {
+    const text =
+      localized && typeof localized === "object"
+        ? (localized as Record<string, unknown>)[key]
+        : undefined;
+    const resolved =
+      typeof text === "string" || isLocaleMap(text)
+        ? resolveI18nText(text, locale)
+        : undefined;
+    return resolved?.trim() ? resolved : world?.[key];
+  };
+  return { name: pick("name"), description: pick("description") };
+}

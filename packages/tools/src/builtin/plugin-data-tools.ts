@@ -105,14 +105,14 @@ function createPluginDataSetTool(): ToolModule {
   return tool({
     name: "plugin-data-set",
     description:
-      "将数据写入插件的持久化存储。数据按 namespace + key 组织，value 为任意 JSON。相同 (namespace, key) 会覆盖旧值。",
+      "Write data to this plugin's persistent store. Data is organized by namespace and key; value is any JSON. The same (namespace, key) replaces the old value.",
     parameters: z.object({
       namespace: z
         .string()
         .min(1)
-        .describe('数据命名空间（如 "schema", "entries", "config"）'),
-      key: z.string().min(1).describe("数据键名"),
-      value: z.unknown().describe("要存储的 JSON 数据"),
+        .describe('Data namespace, for example "schema", "entries", "config"'),
+      key: z.string().min(1).describe("Data key"),
+      value: z.unknown().describe("JSON data to store"),
     }),
     execute: async (params, context) => {
       assertModelWritableNamespace(params.namespace);
@@ -145,18 +145,18 @@ function createPluginDataSetBatchTool(): ToolModule {
   return tool({
     name: "plugin-data-set-batch",
     description:
-      "批量写入多条数据到插件持久化存储。一次调用写入整个数组，避免逐条调用的开销。相同 (namespace, key) 会覆盖旧值。",
+      "Write several entries to this plugin's persistent store in one call, instead of one call per entry. The same (namespace, key) replaces the old value.",
     parameters: z.object({
       items: z
         .array(
           z.object({
-            namespace: z.string().min(1).describe("数据命名空间"),
-            key: z.string().min(1).describe("数据键名"),
-            value: z.unknown().describe("要存储的 JSON 数据"),
+            namespace: z.string().min(1).describe("Data namespace"),
+            key: z.string().min(1).describe("Data key"),
+            value: z.unknown().describe("JSON data to store"),
           }),
         )
         .min(1)
-        .describe("要批量写入的数据条目数组"),
+        .describe("Entries to write"),
     }),
     execute: async (params, context) => {
       for (const item of params.items)
@@ -194,10 +194,10 @@ function createPluginDataSetBatchTool(): ToolModule {
 function createPluginDataGetTool(store: PluginDataStore): ToolModule {
   return tool({
     name: "plugin-data-get",
-    description: "从当前插件的持久化存储中读取单条数据。",
+    description: "Read one entry from this plugin's persistent store.",
     parameters: z.object({
-      namespace: z.string().min(1).describe("数据命名空间"),
-      key: z.string().min(1).describe("数据键名"),
+      namespace: z.string().min(1).describe("Data namespace"),
+      key: z.string().min(1).describe("Data key"),
     }),
     execute: async (params, context) => {
       // Tool results enter the model's context; hidden world data stays out.
@@ -249,12 +249,13 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
 function createPluginDataListTool(store: PluginDataStore): ToolModule {
   return tool({
     name: "plugin-data-list",
-    description: "列出当前插件持久化存储中某个 namespace 下的所有数据条目。",
+    description:
+      "List every entry of one namespace in this plugin's persistent store.",
     parameters: z.object({
       namespace: z
         .string()
         .optional()
-        .describe("数据命名空间（不传则列出所有 namespace）"),
+        .describe("Data namespace; omit to list every namespace"),
     }),
     execute: async (params, context) => {
       const targetPlugin = context.pluginId;

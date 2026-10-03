@@ -244,7 +244,7 @@ async function resolvePluginDataInject(
   const tagName = validateTagName(parseTagName(inject.as));
 
   if (entries.length === 0) {
-    return `<${tagName}>暂无</${tagName}>`;
+    return `<${tagName}>(none)</${tagName}>`;
   }
 
   const format = inject.format ?? "summary";
@@ -253,7 +253,7 @@ async function resolvePluginDataInject(
   const serialized = escapeXmlContent(serializeEntries(truncated, format));
   const countLine =
     entries.length > truncated.length
-      ? `\n[总计 ${entries.length} 条，展示 ${truncated.length} 条]`
+      ? `\n[${entries.length} entries in total, ${truncated.length} shown]`
       : "";
 
   return `<${tagName}>\n${serialized}${countLine}\n</${tagName}>`;

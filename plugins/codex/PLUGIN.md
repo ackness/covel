@@ -120,10 +120,10 @@ A candidate must satisfy **all three** rules:
 
 ### Rule C: title must be a standalone noun phrase
 
-- Length: 2–12 Chinese characters (or the English equivalent, roughly 2–6 words)
-- Structure: must read as a self-contained noun phrase, no conditional / interrogative / exclamatory particles
-- Do NOT start with: `若` (if), `如果` (if), `这` (this), `那` (that), `他/她/它` (he/she/it), `你/我` (you/I), `最近` (recently), `也/就/于是/然后/接着/以及/并/与` (also/then/so/…/and), `的/一` (的/one), `从/到/向` (from/to/toward)
-- Do NOT end with particles: `吗/呢/吧/了/啊/呀/着/过/起/下/来/去/上`
+- Length: 2–6 words, or 2–12 characters in a language written without spaces
+- Structure: must read as a self-contained noun phrase, no conditional / interrogative / exclamatory wording
+- Do NOT start with a conjunction, pronoun, demonstrative, preposition, or time adverb (for example "if", "this", "that", "he", "you", "recently", "then", "and", "from")
+- Do NOT end with a sentence-final particle or with question or exclamation punctuation
 
 ### Category guide
 

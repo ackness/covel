@@ -83,7 +83,12 @@ export type {
   LocaleDefinition,
   SupportedLocale,
 } from "./utils/locale-registry.js";
-export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
+export {
+  resolveI18nText,
+  resolveI18nDeep,
+  localizedWorldText,
+  WORLD_LOCALIZED_TEXT_KEY,
+} from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export {
   assertJsonValue,

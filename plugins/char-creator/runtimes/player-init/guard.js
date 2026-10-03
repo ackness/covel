@@ -195,7 +195,7 @@ function pickDescription(values) {
     }
     if (parts.length >= 3) break;
   }
-  return parts.length > 0 ? parts.join("；") : undefined;
+  return parts.length > 0 ? parts.join("; ") : undefined;
 }
 
 /**

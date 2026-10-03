@@ -6,7 +6,7 @@
  *   - sync path ignores plugin-data injects but still returns valid output
  *   - async path resolves runtime injects the same way the sync path does
  *   - async path materialises plugin-data injects via `store.listPluginData`
- *   - empty namespaces render as `<tag>暂无</tag>`
+ *   - empty namespaces render as `<tag>(none)</tag>`
  *   - two-pass truncation is stable and deterministic (anchors + recent)
  *   - summary / full / ids-only formats each serialise as specified
  *   - store errors propagate out of `buildContext`
@@ -260,11 +260,11 @@ describe("buildContext — plugin-data inject", () => {
     );
   });
 
-  it("injects <existing-entries>暂无</existing-entries> when namespace is empty", async () => {
+  it("injects <existing-entries>(none)</existing-entries> when namespace is empty", async () => {
     const store = makeStoreStub([]);
     const result = await buildContext(makeParams(store));
     expect(result.systemPrompt).toContain(
-      "<existing-entries>暂无</existing-entries>",
+      "<existing-entries>(none)</existing-entries>",
     );
   });
 
@@ -369,7 +369,7 @@ describe("buildContext — two-pass truncation", () => {
     // middle entries excluded
     expect(result.systemPrompt).not.toContain("- codex-05");
     // count note shows we truncated
-    expect(result.systemPrompt).toContain("总计 10 条，展示 4 条");
+    expect(result.systemPrompt).toContain("10 entries in total, 4 shown");
   });
 
   it("returns all entries when count <= maxEntries (no truncation)", async () => {
@@ -410,7 +410,7 @@ describe("buildContext — two-pass truncation", () => {
     });
     expect(result.systemPrompt).toContain("- codex-a");
     expect(result.systemPrompt).toContain("- codex-b");
-    expect(result.systemPrompt).not.toContain("总计");
+    expect(result.systemPrompt).not.toContain("entries in total");
   });
 });
 

@@ -7,6 +7,7 @@
  * cannot use them to reach another plugin's data.
  */
 
+import { worldForSession } from "./world-model-view.js";
 import type { DataStore, TurnMessageRecord } from "@covel/store";
 import type {
   PluginDataWriter,
@@ -213,7 +214,12 @@ export function createTrustedHandlerStore(
       if (world) return structuredClone(world.worldRecord ?? null);
       const session = await store.getSession(sessionId);
       return session?.worldId
-        ? structuredClone(await store.getWorld(session.worldId))
+        ? structuredClone(
+            worldForSession(
+              await store.getWorld(session.worldId),
+              session.locale,
+            ),
+          )
         : null;
     },
     listPlayerInputs: async () =>

@@ -3,6 +3,7 @@ import {
   DIMENSION_DATA_NAMESPACE,
   dimensionRecordSchema,
   dimensionSnapshotFromRecords,
+  localizedWorldText,
   type Proposal,
   type RuntimeResult,
   type WorldModelView,
@@ -89,6 +90,28 @@ export function memoizeWorldModelReads(
   };
 }
 
+/**
+ * The world record as one session reads it: `name` and `description` in the
+ * session's content locale when the world ships that translation. Plugins then
+ * get the session's language from `ctx.world` and from their store facade
+ * without resolving anything themselves.
+ */
+export function worldForSession<
+  T extends {
+    readonly name?: string;
+    readonly description?: string;
+    readonly metadata?: Readonly<Record<string, unknown>> | null;
+  },
+>(world: T | null | undefined, locale: string | undefined): T | null {
+  if (!world) return null;
+  const { name, description } = localizedWorldText(world, locale);
+  return {
+    ...world,
+    ...(name === undefined ? {} : { name }),
+    ...(description === undefined ? {} : { description }),
+  };
+}
+
 /** Snapshot the execution base, then provide fresh own-write overlays per read. */
 export async function createWorldModelView(
   store: WorldModelReadStore,
@@ -107,9 +130,10 @@ export async function createWorldModelView(
     store.getCharacterSchema(sessionId),
     store.getSession(sessionId),
   ]);
-  const worldRecord = session?.worldId
+  const storedWorld = session?.worldId
     ? await store.getWorld(session.worldId)
     : null;
+  const worldRecord = worldForSession(storedWorld, session?.locale);
   assertLive();
   const providerId =
     frozenDimensions?.dimensionProviderPluginId ??
