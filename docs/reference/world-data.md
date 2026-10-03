@@ -991,6 +991,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `unresolved-contract`   | error 或 warning | source 使用的数据契约没有任何已扫描插件接收                                               |
 | `world-data`            | 与预检一致       | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
 | `locale-overlay`        | warning          | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略  |
+| `locale-script`         | warning          | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词              |
 | `inline-locale-map`     | error            | 主文件里把文本写成了 locale map；主文件只写一种语言，译文放进语言文件                     |
 
 标为“error 或 warning”的三项：拼写接近某个已知 ID 时判为 error 并提示 “Did you mean”；否则默认是 warning（提供者可能是未扫描的社区插件），加 `--strict` 后一律为 error。`pnpm release:preflight` 对内置世界使用 `--strict`。

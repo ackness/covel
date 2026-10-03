@@ -226,6 +226,44 @@ sources:
     ]);
   }, 30_000);
 
+  it("warns about text of another script left in a locale file", async () => {
+    const worldDir = path.join(
+      await mkdtemp(path.join(tmpdir(), "covel-validate-script-")),
+      "lantern-barrow",
+    );
+    await cp(path.join(repoRoot, "worlds/lantern-barrow"), worldDir, {
+      recursive: true,
+    });
+    // A trigger word copied from the Chinese main file: an English session
+    // never matches it, and the model is shown it as the rule's key.
+    const rulesPath = path.join(worldDir, "data/rules/barrow-rules.en.yaml");
+    await writeFile(
+      rulesPath,
+      (await readFile(rulesPath, "utf-8")).replace(
+        "    - Lantern Heart\n",
+        "    - 灯心\n    - Lantern Heart\n",
+      ),
+    );
+
+    expect(
+      (await validate(worldDir, true)).filter(
+        (item) => item.code === "locale-script",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        file: "data/rules/barrow-rules.en.yaml",
+        pointer: "[3].keys[0]",
+      }),
+    ]);
+    // The shipped worlds have none.
+    expect(
+      (
+        await validate(path.join(repoRoot, "worlds/lantern-barrow"), true)
+      ).filter((item) => item.code === "locale-script"),
+    ).toEqual([]);
+  }, 30_000);
+
   it("rejects a main file that still writes translations inline", async () => {
     const worldDir = path.join(
       await mkdtemp(path.join(tmpdir(), "covel-validate-inline-")),

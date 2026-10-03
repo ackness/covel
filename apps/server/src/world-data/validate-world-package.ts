@@ -47,6 +47,7 @@ export interface WorldPackageDiagnostic {
     | "unresolved-contract"
     | "world-data"
     | "locale-overlay"
+    | "locale-script"
     | "inline-locale-map";
   /** Path relative to the world directory. */
   readonly file?: string;
@@ -334,6 +335,48 @@ function overlayDiagnostics(
   }));
 }
 
+const CJK_TEXT = /[\u3400-\u4dbf\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/;
+
+/** Paths of the text values that hold Chinese, Japanese or Korean characters. */
+function cjkTextPaths(value: unknown, at = ""): string[] {
+  if (typeof value === "string") return CJK_TEXT.test(value) ? [at] : [];
+  if (Array.isArray(value))
+    return value.flatMap((item, index) =>
+      cjkTextPaths(item, `${at}[${index}]`),
+    );
+  if (value === null || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([key, child]) =>
+    cjkTextPaths(child, at ? `${at}.${key}` : key),
+  );
+}
+
+/**
+ * A locale file for a language written in another script should hold no
+ * Chinese text. What is left is untranslated, or a trigger word copied from
+ * the main file: a session in that language then shows it to the model.
+ */
+function localeScriptDiagnostics(
+  file: string,
+  locale: string,
+  value: unknown,
+  sourceId: string,
+): WorldPackageDiagnostic[] {
+  if (/^(zh|ja|ko)([-_]|$)/i.test(locale)) return [];
+  const paths = cjkTextPaths(value);
+  if (paths.length === 0) return [];
+  return [
+    {
+      level: "warning",
+      code: "locale-script",
+      file,
+      sourceId,
+      pointer: paths[0],
+      message: `${paths.length} text(s) in this ${locale} file hold Chinese, Japanese or Korean characters (${paths.slice(0, 3).join(", ")})`,
+      hint: "A locale file holds text in its own language. Translate the text, or remove words that belong to another language.",
+    },
+  ];
+}
+
 /**
  * Locale files of structured sources: every overlay must apply cleanly, and
  * the main file must hold one language. Every overlay beside a source is
@@ -374,6 +417,14 @@ async function checkLocaleFiles(
       } catch {
         continue; // The import preflight reports a file that does not parse.
       }
+      diagnostics.push(
+        ...localeScriptDiagnostics(
+          path.relative(worldDir, overlay.path),
+          overlay.locale,
+          parsed,
+          source.id,
+        ),
+      );
       diagnostics.push(
         ...overlayDiagnostics(
           applyLocaleOverlay(main.value, parsed, {
