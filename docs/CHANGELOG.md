@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Local builds ship a production web client.** With `NODE_ENV=development` in the repo-root `.env` (the value in `.env.example`), `pnpm build` and `pnpm build:electron` bundled a development-mode web client: the router devtools were visible and React ran its development build. The web build now defaults to production; a `NODE_ENV` exported in the shell still takes precedence. CI and released installers were not affected.
+
 ## [0.0.45] - 2026-10-03
 
 This release adds hidden story content that unfolds during play, lets a world require capabilities and install together with its plugins, merges the bundled plugins while cutting model calls per turn, and makes turn commits and background jobs follow what was actually saved (#101–#108, #110–#115).

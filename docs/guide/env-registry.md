@@ -43,7 +43,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 ## 加载路径与环境差异
 
 - 源码开发的 server 读取仓库根 `.env` 和 `.env.llm`，显式进程环境优先。模型文件为 `COVEL_LLM_TOML`，未设置时固定选择仓库根 `llm.toml`，不再隐式切换到个人目录的另一份文件。文件不存在时使用内置默认；首次加载失败报告错误并使用内置默认，手动重载失败保留当前有效配置。Electron 固定选择 `$COVEL_HOME/llm.toml`（默认 `~/.covel/llm.toml`）。密钥启动优先级统一为显式进程环境 > `.env.llm` > `.env` > `$COVEL_HOME/keys.env`。UI 的请求密钥优先于允许使用的服务端默认密钥。
-- Vite 从仓库根读取 `.env`、`.env.local` 和对应 mode 文件；只有 `VITE_*` 会暴露到浏览器。开发代理使用 `RUNTIME_HOST`（默认 `127.0.0.1`）以及 `RUNTIME_PORT` > `SERVER_PORT` > `3001`。Shell 值优先。构建缓存包含这些根环境文件和 `VITE_*`，修改公开配置后不会复用旧产物。
+- Vite 从仓库根读取 `.env`、`.env.local` 和对应 mode 文件；只有 `VITE_*` 会暴露到浏览器。开发代理使用 `RUNTIME_HOST`（默认 `127.0.0.1`）以及 `RUNTIME_PORT` > `SERVER_PORT` > `3001`。Shell 值优先。构建缓存包含这些根环境文件和 `VITE_*`，修改公开配置后不会复用旧产物。根 `.env` 里的 `NODE_ENV` 只作用于 server：`pnpm --filter @covel/web build`（以及经它构建的 `pnpm build`、`pnpm build:electron`）始终产出生产包，只有在 shell 中显式导出 `NODE_ENV=development` 才会得到开发模式的前端产物。
 - `pnpm dev:pg` 预检读取根 `.env`，默认跟随 `DATABASE_URL`。没有 URL 时检查 `127.0.0.1:POSTGRES_PORT`（默认 `5432`）；`COVEL_PG_PREFLIGHT_HOST/PORT` 可显式覆盖。设置了不带端口的 URL 时使用 PostgreSQL 默认端口 `5432`。
 - Docker 的进程环境由 Compose 注入，模型配置从宿主机只读挂载；路径与持久化规则见下节。
 - 用户包安装和启动发现统一使用 `COVEL_USER_WORLDS_DIR` / `COVEL_USER_PLUGINS_DIR`，未设置时使用 `$COVEL_HOME/worlds` / `plugins`（默认 `~/.covel`）。桌面继续使用 shell 注入的目录。世界安装成功即可查询和使用；插件安装后仍需重启服务。插件目录下指向目录的软链接（例如在另一个仓库开发的插件）按普通插件发现，读取范围限定在链接解析后的插件目录内；失效的软链接会被跳过并记录警告。
