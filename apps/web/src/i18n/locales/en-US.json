@@ -606,7 +606,21 @@
       "skipped": "Skip this settlement"
     },
     "dimensionDefinitions": "Dimension definitions (JSON)",
-    "applyDimensions": "Apply definitions"
+    "applyDimensions": "Apply definitions",
+    "reviseTitle": "Revise this world",
+    "reviseHint": "Say what to change in your own words. Only that part is rewritten; sessions you already started keep the world they began with.",
+    "revisePlaceholder": "For example: make it three factions, or add a rival who wants the same thing.",
+    "reviseRequest": "What to change",
+    "revising": "Revising…",
+    "reviseAction": "Apply the change",
+    "translateTitle": "Translate this world",
+    "translateHint": "This world is written in {{worldLanguage}}, and a session plays in a language the world has. You can add a {{language}} edition.",
+    "translateConfirm": "Your model translates every text of the world: names, lore, rules and characters. This uses model calls, and a machine translation of names and tone needs a look afterwards.",
+    "translating": "Translating…",
+    "translateStart": "Start the translation",
+    "translateAction": "Translate to {{language}}",
+    "reviseDone": "The change is applied.",
+    "reviseDropsEditions": "This world has editions in other languages. A revision removes them, because their text would no longer match. Translate the world again afterwards."
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",

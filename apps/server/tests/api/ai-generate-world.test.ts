@@ -13,7 +13,7 @@ import {
 } from "../../src/world-data/session-import.js";
 import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
@@ -23,6 +23,7 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import * as worldCreation from "@covel/create";
 import { aiRoutes } from "../../src/routes/api/ai.js";
+import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { createApplicationWork } from "../../src/application-work.js";
 
 const WORLD_YAML = `schemaVersion: "1.0"
@@ -891,6 +892,214 @@ describe("ai world generation route", () => {
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({
       error: expect.stringContaining("brief.content"),
+    });
+  });
+
+  /**
+   * A player changes a world made in the app with one request. The model
+   * gets the world as it is and writes back only what the request touches.
+   */
+  describe("revision", () => {
+    const FULL = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`;
+    const REVISED_MD = `${WORLD_MD}\n4. 抢在对手校时官之前找到备用钟芯。`;
+    const REVISED = `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\n${REVISED_MD}\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===`;
+
+    /** Answers in order, and keeps what it was asked. */
+    class SequenceLlm implements LLMAdapter {
+      readonly requests: string[] = [];
+      constructor(private readonly answers: readonly string[]) {}
+      async generate(request: {
+        messages: readonly { role: string; content: unknown }[];
+      }): Promise<LLMResponse> {
+        this.requests.push(
+          request.messages.map((message) => String(message.content)).join("\n"),
+        );
+        return {
+          content: this.answers[this.requests.length - 1] ?? "",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      }
+    }
+
+    const post = (route: string, body: object) =>
+      app.request(`/api/ai/${route}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const worldOf = async (response: Response) => {
+      const events = await readSseJson(response);
+      expect(events.filter((event) => event.type === "error")).toEqual([]);
+      return events.find((event) => event.type === "done")?.world as {
+        id: string;
+        lore: string;
+        createdAt: string;
+        metadata: Record<string, unknown>;
+      };
+    };
+    const generate = async (saveTarget: string, llm: LLMAdapter) => {
+      app = createTestApp(store, llm);
+      return worldOf(
+        await post("generate-world", {
+          concept: "Clockwork city",
+          saveTarget,
+          brief: { content: ["characters", "lorebook", "rules"] },
+        }),
+      );
+    };
+
+    it("rewrites the package of a world that has files, and keeps what the request did not touch", async () => {
+      const llm = new SequenceLlm([FULL, REVISED]);
+      const created = await generate("server-file", llm);
+
+      const revised = await worldOf(
+        await post("revise-world", {
+          worldId: created.id,
+          instruction: "加一个与对手校时官有关的冒险钩子",
+        }),
+      );
+
+      expect(revised.id).toBe("generated-world");
+      expect(revised.lore).toBe(REVISED_MD);
+      expect(revised.createdAt).toBe(created.createdAt);
+      // The model was given the world as it is, read from its files.
+      expect(llm.requests[1]).toContain("加一个与对手校时官有关的冒险钩子");
+      expect(llm.requests[1]).toContain("守钟人");
+      expect(llm.requests[1]).toContain("改写时间必须失去记忆");
+      // On disk: the new lore, the same cast, and nothing beside the package.
+      const dir = path.join(worldsDir, "generated-world");
+      expect(await readFile(path.join(dir, "WORLD.md"), "utf8")).toBe(
+        REVISED_MD,
+      );
+      expect(
+        JSON.parse(
+          await readFile(path.join(dir, "characters/main-cast.json"), "utf8"),
+        ).map((item: { id: string }) => item.id),
+      ).toEqual(["keeper", "courier", "thief"]);
+      expect(await readdir(worldsDir)).toEqual(["generated-world"]);
+      expect((await store.getWorld("generated-world"))?.lore).toBe(REVISED_MD);
+    });
+
+    it("keeps the lists and manifest fields that the model did not write again", async () => {
+      // The model answers "add a character" with the new character alone.
+      const cast = `characters:
+  - { schemaVersion: 1, id: rival, name: 对手校时官, role: npc }`;
+      const created = await generate(
+        "server-file",
+        new SequenceLlm([
+          FULL,
+          `===WORLD_YAML===\nUNCHANGED\n===WORLD_MD===\nUNCHANGED\n===WORLD_PACKAGE_YAML===\n${cast}\n===END===`,
+        ]),
+      );
+
+      const revised = await worldOf(
+        await post("revise-world", {
+          worldId: created.id,
+          instruction: "加一个对手角色",
+        }),
+      );
+
+      const dir = path.join(worldsDir, "generated-world");
+      expect(revised.metadata.generatedPackageSummary).toEqual({
+        characters: 4,
+        lorebook: 4,
+        rules: 3,
+      });
+      // The lore entries and rules are still in the package.
+      expect(
+        await readFile(path.join(dir, "data/lorebook.yaml"), "utf8"),
+      ).toContain("改写时间必须失去记忆");
+      // So is a field of world.yaml that the world record does not hold.
+      expect(await readFile(path.join(dir, "world.yaml"), "utf8")).toContain(
+        "version: 0.1.0",
+      );
+    });
+
+    it("revises a world that lives in the store without writing files", async () => {
+      await generate("server-store", new SequenceLlm([FULL, REVISED]));
+
+      const revised = await worldOf(
+        await post("revise-world", {
+          worldId: "generated-world",
+          instruction: "加一个钩子",
+        }),
+      );
+
+      expect(revised.lore).toBe(REVISED_MD);
+      expect(revised.metadata.characterBlueprints).toHaveLength(3);
+      expect((await store.getWorld("generated-world"))?.lore).toBe(REVISED_MD);
+      expect(await readdir(worldsDir)).toEqual([]);
+    });
+
+    it("revises a world that only the browser holds and stores nothing", async () => {
+      const local = await generate(
+        "return-only",
+        new SequenceLlm([FULL, REVISED]),
+      );
+      expect(await store.getWorld("generated-world")).toBeNull();
+
+      const revised = await worldOf(
+        await post("revise-world", {
+          worldId: local.id,
+          instruction: "加一个钩子",
+          world: local,
+        }),
+      );
+
+      expect(revised.lore).toBe(REVISED_MD);
+      expect(revised.metadata.characterBlueprints).toHaveLength(3);
+      expect(await store.getWorld("generated-world")).toBeNull();
+      expect(await readdir(worldsDir)).toEqual([]);
+    });
+
+    it("does not rewrite a world package that the generator did not write", async () => {
+      // An installed package is `generated-file` too, and holds media and
+      // sources that a rewrite would lose. Only the generator's mark counts.
+      for (const [id, source] of [
+        ["bundled-world", "file"],
+        ["installed-world", "generated-file"],
+      ] as const) {
+        await store.createWorld({
+          id,
+          name: "A package",
+          description: "A world package.",
+          metadata: { source },
+          createdAt: new Date().toISOString(),
+        });
+        const response = await post("revise-world", {
+          worldId: id,
+          instruction: "加一个派系",
+        });
+        expect(response.status).toBe(409);
+        await expect(response.json()).resolves.toMatchObject({
+          code: "world_not_revisable",
+        });
+      }
+    });
+
+    it("knows a generated package again after the world is loaded from disk", async () => {
+      await generate("server-file", new SequenceLlm([FULL]));
+      // What a restart does: the record comes from the files alone.
+      const reloaded = await loadSingleWorld(
+        path.join(worldsDir, "generated-world"),
+      );
+      expect(reloaded?.metadata).toMatchObject({
+        source: "file",
+        generated: true,
+      });
+    });
+
+    it("asks for a world and a request", async () => {
+      expect((await post("revise-world", { worldId: "x" })).status).toBe(400);
+      expect(
+        (await post("revise-world", { instruction: "加一个派系" })).status,
+      ).toBe(400);
+      expect(
+        (await post("revise-world", { worldId: "missing", instruction: "x" }))
+          .status,
+      ).toBe(404);
     });
   });
 });

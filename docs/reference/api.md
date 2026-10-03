@@ -289,6 +289,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                                        |
 | POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                              |
 | POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                                        |
+| POST   | `/api/worlds/:id/translate`            | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）                                                                                                                             |
 
 服务端删除世界先在短世界锁内记录删除状态，释放世界锁后逐个执行完整的会话删除流程，包括等待执行写入、生命周期钩子、媒体引用与进程内状态清理，最后删除世界记录和对应文件包。底层 `DataStore.deleteWorld` 仍只删除世界记录；需要级联清理的调用必须经过 API 生命周期流程。
 
@@ -656,10 +657,11 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### AI 生成
 
-| 方法 | 路径                     | 描述                                    |
-| ---- | ------------------------ | --------------------------------------- |
-| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                   |
-| POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token |
+| 方法 | 路径                     | 描述                                                   |
+| ---- | ------------------------ | ------------------------------------------------------ |
+| POST | `/api/ai/ping`           | 测试 LLM 提供商连通性                                  |
+| POST | `/api/ai/generate-world` | AI 生成世界包；hosted 需 operator token                |
+| POST | `/api/ai/revise-world`   | 按一句话修改应用内创建的世界；hosted 需 operator token |
 
 ### 模型数据库（Model DB）
 
@@ -1147,6 +1149,32 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 ```
 
 ---
+
+#### `POST /api/worlds/:id/translate`
+
+为一个世界包增加一种语言版本。服务端找出该语言还缺的文字，请配置的模型翻译（先列出世界的名字和术语，再译名字字段，最后译正文，同一个名字只有一种译法），把译文写成世界包里主文件旁的语言文件（`world.<locale>.yaml`、`WORLD.<locale>.md`、`data/*.<locale>.yaml`），并把该语言加入 `world.yaml` 的 `supportedLocales`。之后用这种语言创建的会话就使用这个版本。
+
+```json
+{ "locale": "ja-JP" }
+```
+
+只写**用户世界目录**（`COVEL_USER_WORLDS_DIR`）里的世界包：应用内生成的和安装的世界。内置世界自带语言版本，存储在数据库或浏览器里的世界没有文件可写，这两种返回 409。译文是模型草稿，人名地名和语气需要人看一遍。hosted 部署需要 operator token。
+
+SSE 事件：
+
+| `type`     | 字段                                     | 含义                                                               |
+| ---------- | ---------------------------------------- | ------------------------------------------------------------------ |
+| `progress` | `step`, `done`, `total`                  | `step` 为 `glossary`、`names`、`texts` 或 `long texts`             |
+| `done`     | `world`, `total`, `translated`, `failed` | 重新加载后的 `WorldRecord`；原本缺多少条、译出多少条、多少条没译成 |
+| `error`    | `message`                                | 失败原因；模型一条也没译出时也走这里，世界包不变                   |
+
+| 状态码 | `code`                     | 含义                     |
+| ------ | -------------------------- | ------------------------ |
+| 400    | —                          | `locale` 不是语言标签    |
+| 404    | `world_not_found`          | 没有这个世界             |
+| 409    | `world_not_translatable`   | 世界包不在用户世界目录里 |
+| 409    | `world_already_translated` | 这种语言已经没有缺的文字 |
+| 409    | `world_deleting`           | 世界正在删除             |
 
 ### 会话管理
 
@@ -3093,6 +3121,43 @@ data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; th
 **响应 400:** `{ "error": "concept (string) is required" }` 或 `{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }`
 
 ---
+
+#### `POST /api/ai/revise-world`
+
+按玩家的一句话修改一个**由生成器创建**的世界（“改成三个派系”“加一个对手”）。模型拿到世界当前的完整内容和这条要求，按 `generate-world` 的三段格式返回，但只写它改动的部分；服务端把它写的内容合并到当前世界上：
+
+- 没改的段写 `UNCHANGED`，整段沿用；
+- `WORLD_YAML` 里只写改动的字段，`dimensions` 按维度 ID 合并（写 `null` 表示删除这个维度）；
+- `WORLD_PACKAGE_YAML` 里只写新增或改动的条目，按 `id` 合并进所在列表（`contractData` 按 `contract` + `key`）；删除一条写 `{ id, remove: true }`。
+
+因此“加一个角色”不会改动其他角色，也不会丢掉模型没有重复写出的设定条目。合并后的结果与新生成的世界走同一套校验，世界的 `id` 不变。
+
+```json
+{
+  "worldId": "frozen-continent",
+  "instruction": "加一个与主角争夺同一目标的对手"
+}
+```
+
+| 字段          | 类型   | 必填 | 说明                                                                             |
+| ------------- | ------ | ---- | -------------------------------------------------------------------------------- |
+| `worldId`     | string | 是   | 要修改的世界                                                                     |
+| `instruction` | string | 是   | 修改要求（最多 2000 字符）                                                       |
+| `world`       | object | 否   | 只存在于浏览器的世界（`return-only` 生成的）由客户端随请求带上它的 `WorldRecord` |
+| `model`       | string | 否   | 覆盖 LLM 模型                                                                    |
+
+只有带生成标记的世界可以修改：`metadata.generated === true`。生成器写出的世界包里有一个 `.covel-generated.json` 文件，世界记录据此带上这个标记；手写的或安装的世界包没有它，因为这类包里可能有立绘、额外的数据源和语言文件，整包重写会丢掉它们。
+
+世界在哪里，结果就写回哪里：磁盘上的世界包整包替换（新包就位之前旧包一直保留，失败时旧包不变）；`server-store` 的世界更新记录；浏览器里的世界只返回结果，由客户端保存，服务端不写任何东西。修改会移除该世界已有的其他语言版本，因为译文不再与内容对应，需要的话重新翻译。已经开始的会话不受影响，它们在创建时已经导入了世界内容。
+
+SSE 事件与 `generate-world` 相同（`progress` → `done` / `error`）。
+
+| 状态码 | `code`                | 含义                                                             |
+| ------ | --------------------- | ---------------------------------------------------------------- |
+| 400    | —                     | 缺少 `worldId` 或 `instruction`，或 `instruction` 过长           |
+| 404    | `world_not_found`     | 服务端没有这个世界，请求里也没有带 `world`                       |
+| 409    | `world_not_revisable` | 世界没有生成标记（内置、手写或安装的世界包改文件，不走这个接口） |
+| 409    | `world_deleting`      | 世界正在删除                                                     |
 
 ### Trace 调试
 

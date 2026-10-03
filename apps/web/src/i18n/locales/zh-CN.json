@@ -606,7 +606,21 @@
       "skipped": "明确跳过本次结算"
     },
     "dimensionDefinitions": "维度定义（JSON）",
-    "applyDimensions": "应用定义"
+    "applyDimensions": "应用定义",
+    "reviseTitle": "修改这个世界",
+    "reviseHint": "用你自己的话说要改什么。只重写相关的部分；已经开始的会话仍然使用它们开始时的世界。",
+    "revisePlaceholder": "例如：改成三个派系；或者加一个和主角争夺同一目标的对手。",
+    "reviseRequest": "要改什么",
+    "revising": "正在修改…",
+    "reviseAction": "应用修改",
+    "translateTitle": "翻译这个世界",
+    "translateHint": "这个世界是用{{worldLanguage}}写的，而会话只能使用世界已有的语言。你可以给它加一个{{language}}版本。",
+    "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；机器翻译的人名地名和语气，事后需要看一遍。",
+    "translating": "正在翻译…",
+    "translateStart": "开始翻译",
+    "translateAction": "翻译成{{language}}",
+    "reviseDone": "修改已应用。",
+    "reviseDropsEditions": "这个世界有其他语言的版本。修改会移除它们，因为译文将不再与内容对应。修改之后请重新翻译。"
   },
   "settings": {
     "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",

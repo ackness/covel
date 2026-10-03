@@ -1,5 +1,5 @@
 export { createWorld } from "./create-world.js";
-export { writeWorldPackage } from "./world-writer.js";
+export { GENERATED_WORLD_MARKER, writeWorldPackage } from "./world-writer.js";
 export { extractGlossary, translateTexts } from "./translate.js";
 export type {
   TranslateTextsOptions,
@@ -15,4 +15,6 @@ export type {
   GeneratedWorldCharacter,
   GeneratedWorldLorebookEntry,
   GeneratedWorldPackageContent,
+  WorldRevision,
+  WorldSections,
 } from "./types.js";

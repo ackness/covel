@@ -1,3 +1,4 @@
+import { localizedWorldText } from "@covel/shared";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
@@ -13,11 +14,18 @@ import {
 } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { DimensionValueView } from "@/components/session/dimension-value-view.js";
+import { WorldRevisePanel, isWorldRevisable } from "./world-revise-panel.js";
+import {
+  WorldTranslatePanel,
+  isWorldTranslatable,
+} from "./world-translate-panel.js";
 export interface WorldDetailViewProps {
   world: WorldRecord;
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** The world was changed here; the caller keeps the new record. */
+  onRevised?: (world: WorldRecord) => void;
 }
 
 export function WorldDetailView({
@@ -25,6 +33,7 @@ export function WorldDetailView({
   onClose,
   onEdit,
   onDelete,
+  onRevised,
 }: WorldDetailViewProps) {
   const { t, i18n } = useTranslation();
   const dims = world.dimensions;
@@ -33,6 +42,15 @@ export function WorldDetailView({
   const playLocale = worldPlayLocale(world, interfaceLocale);
   const languageBadge = worldLanguageBadge(playLocale);
   const languageName = worldLanguageName(playLocale, interfaceLocale);
+  // The name and summary of that edition, not always the world's own language.
+  const shown = localizedWorldText(
+    {
+      name: text(world.name),
+      description: text(world.description),
+      metadata: world.metadata,
+    },
+    playLocale,
+  );
   const visual = worldVisual(world);
 
   const hasDimensions =
@@ -108,7 +126,7 @@ export function WorldDetailView({
             </div>
             <div className="max-w-3xl space-y-4">
               <h1 className="ui-title text-3xl leading-none text-white sm:text-5xl">
-                {text(world.name)}
+                {shown.name}
               </h1>
               {world.tags && world.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -130,8 +148,19 @@ export function WorldDetailView({
         {/* Description */}
         {world.description && (
           <p className="max-w-3xl text-base leading-relaxed text-muted-foreground wrap-break-word">
-            {text(world.description)}
+            {shown.description}
           </p>
+        )}
+
+        {onRevised && isWorldTranslatable(world, interfaceLocale) && (
+          <WorldTranslatePanel
+            world={world}
+            locale={interfaceLocale}
+            onTranslated={onRevised}
+          />
+        )}
+        {onRevised && isWorldRevisable(world) && (
+          <WorldRevisePanel world={world} onRevised={onRevised} />
         )}
 
         <Separator />

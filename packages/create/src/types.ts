@@ -33,6 +33,28 @@ export interface CreateWorldOptions {
   readonly logger?: CreateWorldLogger;
   /** Template source shared by generation and repair for this invocation. */
   readonly loadPrompt?: PromptLoader;
+  /**
+   * Revise an existing world instead of creating one. The model gets the
+   * current package and the request, and returns the same three sections;
+   * a section it does not change comes back as the word `UNCHANGED` and is
+   * taken from `current` as it is. The result goes through the same checks
+   * as a new world and keeps the world's `id`.
+   */
+  readonly revision?: WorldRevision;
+}
+
+/** The current package of a world, in the sections the model writes. */
+export interface WorldSections {
+  /** `world.yaml` with inline data: no `worldData`, no `dimensionSources`. */
+  readonly yaml: string;
+  readonly lore: string;
+  readonly packageYaml?: string;
+}
+
+export interface WorldRevision {
+  readonly current: WorldSections;
+  /** What the player asked for, in the player's words. */
+  readonly instruction: string;
 }
 
 /** Validated, portable generation result. File export never mutates it. */

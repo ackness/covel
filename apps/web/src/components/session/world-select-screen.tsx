@@ -358,6 +358,7 @@ export function WorldSelectScreen({
           world={selectedWorld}
           onClose={handleBack}
           onEdit={handleEditFromDetail}
+          onRevised={onWorldUpdated}
           onDelete={
             isWorldDeletable(selectedWorld)
               ? () => handleDeleteFromDetail(selectedWorld.id)

@@ -168,6 +168,8 @@ export function normalizeGeneratedPackage(
   value: unknown,
   brief: WorldCreationBrief | undefined,
   dataContracts: readonly WorldGenerationDataContract[] = [],
+  /** `amounts: false` skips the brief's target amounts; a revision has none. */
+  options: { readonly amounts?: boolean } = {},
 ): {
   content: GeneratedWorldPackageContent;
   errors: string[];
@@ -186,7 +188,7 @@ export function normalizeGeneratedPackage(
     amount: number,
     target: number,
   ) => {
-    if (!requested.has(kind)) return;
+    if (!requested.has(kind) || options.amounts === false) return;
     if (amount === 0) errors.push(`WORLD_PACKAGE_YAML must include ${label}`);
     else if (amount < target)
       warnings.push(
@@ -251,20 +253,24 @@ export function normalizeGeneratedPackage(
       );
   }
 
+  // The caps bound what one generation call writes. A revision returns a
+  // world that exists: cutting it down would lose the player's content.
+  const most = (count: number) =>
+    options.amounts === false ? Infinity : count;
   const characters = requested.has("characters")
-    ? (Array.isArray(root.characters) ? root.characters.slice(0, 5) : [])
+    ? (Array.isArray(root.characters) ? root.characters.slice(0, most(5)) : [])
         .map((item, index) => normalizeCharacter(item, index, errors))
         .filter((item): item is GeneratedWorldCharacter => item !== null)
     : [];
   const lorebook = requested.has("lorebook")
-    ? (Array.isArray(root.lorebook) ? root.lorebook.slice(0, 8) : [])
+    ? (Array.isArray(root.lorebook) ? root.lorebook.slice(0, most(8)) : [])
         .map((item, index) =>
           normalizeLorebookEntry(item, index, "lorebook", errors),
         )
         .filter((item): item is GeneratedWorldLorebookEntry => item !== null)
     : [];
   const rules = requested.has("rules")
-    ? (Array.isArray(root.rules) ? root.rules.slice(0, 5) : [])
+    ? (Array.isArray(root.rules) ? root.rules.slice(0, most(5)) : [])
         .map((item, index) =>
           normalizeLorebookEntry(item, index, "rule", errors),
         )
@@ -289,6 +295,29 @@ export function normalizeGeneratedPackage(
     errors,
     warnings,
   };
+}
+
+/**
+ * The brief of a revision: what the revised package holds. A new world keeps
+ * the kinds of content its brief asked for; a revised one keeps what it has
+ * and what the request added.
+ */
+export function briefOfPackage(value: unknown): WorldCreationBrief {
+  const root = isRecord(value) ? value : {};
+  const content = (["characters", "lorebook", "rules"] as const).filter(
+    (kind) => Array.isArray(root[kind]) && root[kind].length > 0,
+  );
+  const contracts = [
+    ...new Set(
+      (Array.isArray(root.contractData) ? root.contractData : []).flatMap(
+        (record) =>
+          isRecord(record) && typeof record.contract === "string"
+            ? [record.contract]
+            : [],
+      ),
+    ),
+  ];
+  return { content, contracts };
 }
 
 export function applyCreationBriefToManifest(

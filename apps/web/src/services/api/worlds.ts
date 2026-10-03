@@ -255,3 +255,102 @@ export function generateWorld(
 
   return controller;
 }
+
+/**
+ * Change a world that was created in the app, by a request in the player's
+ * words. The server streams the same events as `generateWorld`.
+ *
+ * `world` is the record of a world that only this browser holds: the server
+ * revises it and stores nothing.
+ */
+export function reviseWorld(
+  worldId: string,
+  instruction: string,
+  onEvent: (event: GenerateWorldEvent) => void,
+  onError?: (err: Error) => void,
+  options?: { world?: WorldRecord },
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await requestResponse("/api/ai/revise-world", {
+        method: "POST",
+        body: JSON.stringify({
+          worldId,
+          instruction,
+          ...(options?.world ? { world: options.world } : {}),
+        }),
+        signal: controller.signal,
+        operatorAuth: true,
+      });
+      await readSseStream({
+        response: res,
+        signal: controller.signal,
+        parse: parseJsonSseData<GenerateWorldEvent>,
+        onMessage: onEvent,
+      });
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+  })();
+
+  return controller;
+}
+
+export type TranslateWorldEvent =
+  | {
+      type: "progress";
+      step: "glossary" | "names" | "texts" | "long texts";
+      done: number;
+      total: number;
+    }
+  | {
+      type: "done";
+      world: WorldRecord;
+      total: number;
+      translated: number;
+      failed: number;
+    }
+  | { type: "error"; message: string };
+
+/**
+ * Add an edition of a world in `locale`, written by the configured model.
+ * The server writes locale files beside the world's own and streams progress.
+ */
+export function translateWorld(
+  worldId: string,
+  locale: string,
+  onEvent: (event: TranslateWorldEvent) => void,
+  onError?: (err: Error) => void,
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await requestResponse(
+        `/api/worlds/${encodeURIComponent(worldId)}/translate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ locale }),
+          signal: controller.signal,
+          operatorAuth: true,
+        },
+      );
+      await readSseStream({
+        response: res,
+        signal: controller.signal,
+        parse: parseJsonSseData<TranslateWorldEvent>,
+        onMessage: onEvent,
+      });
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+  })();
+
+  return controller;
+}

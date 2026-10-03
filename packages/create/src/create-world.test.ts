@@ -672,3 +672,244 @@ describe("buildWorldPrompt", () => {
     expect(prompt).toContain("===WORLD_PACKAGE_YAML===");
   });
 });
+
+/**
+ * A player revises a generated world in one sentence. The model gets the
+ * current package and returns the same sections; what it leaves alone comes
+ * back as `UNCHANGED` and is kept as it is.
+ */
+describe("createWorld revision", () => {
+  const current = {
+    yaml: WORLD_YAML,
+    lore: WORLD_LORE,
+    packageYaml: WORLD_PACKAGE_YAML,
+  };
+  const sections = (yaml: string, lore: string, pack?: string) =>
+    `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${lore}\n${pack === undefined ? "" : `===WORLD_PACKAGE_YAML===\n${pack}\n`}===END===`;
+
+  /** Records what the model was asked. */
+  class RecordingLlm implements LLMAdapter {
+    readonly requests: string[] = [];
+    constructor(private readonly answers: string[]) {}
+    async generate(request: {
+      messages: readonly { role: string; content: unknown }[];
+    }): Promise<LLMResponse> {
+      this.requests.push(
+        request.messages
+          .filter((message) => message.role === "user")
+          .map((message) => String(message.content))
+          .join("\n---\n"),
+      );
+      return {
+        content: this.answers[this.requests.length - 1] ?? this.answers.at(-1)!,
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      };
+    }
+  }
+
+  it("keeps each section the model marks UNCHANGED and takes the one it rewrote", async () => {
+    const lore = `${WORLD_LORE}\n4. 一名自称对手的校时官开始抢先一步行动。`;
+    const llm = new RecordingLlm([sections("UNCHANGED", lore, "UNCHANGED")]);
+    const result = await createWorld({
+      llm,
+      concept: "测试世界",
+      revision: { current, instruction: "加一个对手的冒险钩子" },
+    });
+
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.id).toBe("test-world");
+    expect(result.lore).toContain("自称对手的校时官");
+    expect(result.manifest.dimensions).toHaveProperty("factions");
+    expect(result.packageContent.characters.map((item) => item.id)).toEqual([
+      "bell-keeper",
+      "rain-courier",
+      "minute-thief",
+    ]);
+    // The model saw the request and the whole current package.
+    expect(llm.requests[0]).toContain("加一个对手的冒险钩子");
+    expect(llm.requests[0]).toContain("id: test-world");
+    expect(llm.requests[0]).toContain("id: bell-keeper");
+  });
+
+  it("keeps the package when the model does not write that section", async () => {
+    const result = await createWorld({
+      llm: new RecordingLlm([sections(WORLD_YAML, WORLD_LORE)]),
+      concept: "测试世界",
+      revision: { current, instruction: "不改任何内容" },
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.packageContent.characters).toHaveLength(3);
+  });
+
+  it("keeps the lists and fields that a rewritten section does not repeat", async () => {
+    // "Add a character": the model writes the new character and nothing
+    // else of the package, and one field of the manifest.
+    const cast = `characters:
+  - { schemaVersion: 1, id: rival-keeper, name: 对手校时官, role: npc }`;
+    const result = await createWorld({
+      llm: new RecordingLlm([sections("name: 倒转之城", "UNCHANGED", cast)]),
+      concept: "测试世界",
+      revision: { current, instruction: "加一个对手角色，并把世界改名" },
+    });
+
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.manifest.name).toBe("倒转之城");
+    // The rest of the manifest, with its dimensions, is still there.
+    expect(result.manifest.summary).toBe("一个用于生成器测试的世界。");
+    expect(Object.keys(result.manifest.dimensions as object)).toHaveLength(9);
+    // The cast keeps its three characters, as they were, and gains one.
+    expect(result.packageContent.characters.map((item) => item.id)).toEqual([
+      "bell-keeper",
+      "rain-courier",
+      "minute-thief",
+      "rival-keeper",
+    ]);
+    expect(result.packageContent.characters[0]!.description).toBe(
+      "唯一记得真实时间的人。",
+    );
+    // The lore entries were not lost.
+    expect(result.packageContent.lorebook).toHaveLength(4);
+    expect(result.packageContent.rules).toHaveLength(3);
+  });
+
+  it("changes one item of a list and removes another by its id", async () => {
+    const pack = `characters:
+  - { schemaVersion: 1, id: minute-thief, name: 窃分者, role: npc, description: 已经悔改，正在归还偷走的时间。 }
+  - { id: rain-courier, remove: true }
+rules:
+  - { id: time-cost, remove: true }`;
+    const result = await createWorld({
+      llm: new RecordingLlm([sections("UNCHANGED", "UNCHANGED", pack)]),
+      concept: "测试世界",
+      revision: {
+        current,
+        instruction: "让窃分者悔改，去掉雨信使和时间代价规则",
+      },
+    });
+
+    if (!result.success) throw new Error(result.errors.join("; "));
+    const { characters, rules, lorebook } = result.packageContent;
+    expect(characters.map((item) => item.id)).toEqual([
+      "bell-keeper",
+      "minute-thief",
+    ]);
+    expect(characters[1]!.description).toBe("已经悔改，正在归还偷走的时间。");
+    expect(rules.map((item) => item.id)).toEqual([
+      "rain-reveals",
+      "clocks-disagree",
+    ]);
+    expect(lorebook).toHaveLength(4);
+  });
+
+  it("changes one dimension and keeps the others", async () => {
+    const yaml = `dimensions:
+  factions:
+    name: factions
+    schema: {}
+    initialValue:
+      - { id: clock-guild, name: 钟表公会, description: 维护城镇时间秩序。, type: guild, influence: major }
+      - { id: reverse-hand, name: 逆针会, description: 想让全城的钟倒着走。, type: cult, influence: minor }
+  history: null`;
+    const result = await createWorld({
+      llm: new RecordingLlm([sections(yaml, "UNCHANGED", "UNCHANGED")]),
+      concept: "测试世界",
+      revision: { current, instruction: "改成两个派系，去掉历史" },
+    });
+
+    if (!result.success) throw new Error(result.errors.join("; "));
+    const dimensions = result.manifest.dimensions as Record<
+      string,
+      { initialValue: unknown[] }
+    >;
+    expect(dimensions.factions!.initialValue).toHaveLength(2);
+    expect(dimensions).toHaveProperty("geography");
+    expect(dimensions).not.toHaveProperty("history");
+  });
+
+  it("keeps the id of the world whatever the model writes", async () => {
+    const result = await createWorld({
+      llm: new RecordingLlm([
+        sections(
+          WORLD_YAML.replace("id: test-world", "id: renamed-world").replace(
+            "name: 测试世界",
+            "name: 倒转之城",
+          ),
+          "UNCHANGED",
+          "UNCHANGED",
+        ),
+      ]),
+      concept: "测试世界",
+      revision: { current, instruction: "把世界改名为倒转之城" },
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.id).toBe("test-world");
+    expect(result.manifest.name).toBe("倒转之城");
+  });
+
+  it("asks again with the request when the revised package cannot be imported", async () => {
+    const llm = new RecordingLlm([
+      sections("id: [broken", "UNCHANGED", "UNCHANGED"),
+      sections("UNCHANGED", "UNCHANGED", "UNCHANGED"),
+    ]);
+    const result = await createWorld({
+      llm,
+      concept: "测试世界",
+      revision: { current, instruction: "加一个派系" },
+    });
+    expect(result.success).toBe(true);
+    expect(llm.requests).toHaveLength(2);
+    // The second request still carries what to revise, then the error.
+    expect(llm.requests[1]).toContain("加一个派系");
+    expect(llm.requests[1]).toContain("could not be imported");
+  });
+});
+
+describe("writeWorldPackage replace", () => {
+  let tmp = "";
+  beforeEach(async () => {
+    tmp = await mkdtemp(path.join(tmpdir(), "covel-replace-world-"));
+  });
+  afterEach(async () => {
+    if (tmp) await rm(tmp, { recursive: true, force: true });
+  });
+  const generate = async (lore: string) => {
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${lore}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`,
+      ),
+      concept: "Clockwork city",
+    });
+    if (!result.success) throw new Error(result.errors.join("; "));
+    return result;
+  };
+
+  it("writes a revised world over the package of the same id", async () => {
+    await writeWorldPackage(tmp, await generate(WORLD_LORE));
+    // A file the first package had and the revised one does not write.
+    await writeFile(path.join(tmp, "test-world", "WORLD.en.md"), "old");
+
+    const revised = await generate(`${WORLD_LORE}\n4. 新的钩子。`);
+    await expect(writeWorldPackage(tmp, revised)).rejects.toThrow(
+      "already exists",
+    );
+    await writeWorldPackage(tmp, revised, { replace: true });
+
+    expect(
+      await readFile(path.join(tmp, "test-world", "WORLD.md"), "utf8"),
+    ).toContain("新的钩子");
+    await expect(
+      access(path.join(tmp, "test-world", "WORLD.en.md")),
+    ).rejects.toThrow();
+    // Nothing is left beside the package.
+    expect(await readdir(tmp)).toEqual(["test-world"]);
+  });
+
+  it("does not create a package that was not there", async () => {
+    await expect(
+      writeWorldPackage(tmp, await generate(WORLD_LORE), { replace: true }),
+    ).rejects.toThrow("does not exist");
+    expect(await readdir(tmp)).toEqual([]);
+  });
+});

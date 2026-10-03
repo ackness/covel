@@ -22,12 +22,10 @@
  */
 
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 // By path: a package-name import can resolve to a stale copy in a worktree.
 import {
-  extractGlossary,
   translateTexts,
   type TranslationUnit,
 } from "../packages/create/src/index.js";
@@ -39,10 +37,11 @@ import {
   writePluginTranslations,
   type LabelUnit,
 } from "../packages/plugin-loader/src/index.js";
+import { worldTranslationStatus } from "../apps/server/src/world-data/locale-tooling.js";
 import {
-  worldTranslationStatus,
-  writeWorldTranslations,
-} from "../apps/server/src/world-data/locale-tooling.js";
+  translateWorldPackage,
+  untranslatedWorldTexts,
+} from "../apps/server/src/world-data/translate-world.js";
 import {
   conventionsOfPlugins,
   setWorldDataConventions,
@@ -94,19 +93,6 @@ if (dirs.some((dir) => existsSync(path.join(dir, "world.yaml"))))
       ]),
     ),
   );
-
-/** Fields of world data that hold a name: translated first, then reused. */
-const NAME_FIELDS: ReadonlySet<string> = new Set([
-  "name",
-  "displayName",
-  "title",
-  "aliases",
-  "label",
-  "leader",
-  "headquarters",
-  "era",
-  "giver",
-]);
 
 type Kind = "plugin" | "world";
 function kindOf(dir: string): Kind {
@@ -256,49 +242,18 @@ async function modelAdapter() {
 
 async function translate(dir: string): Promise<void> {
   if (!locale) fail("translate needs --locale <tag>");
-  const kind = kindOf(dir);
+  if (kindOf(dir) === "world") return translateWorld(dir, locale);
+
   const units: TranslationUnit[] = [];
   const labelUnits = new Map<string, LabelUnit>();
-  let from = "en";
-  // Names and terms with a fixed translation: source text to target text.
-  const glossary: Record<string, string> = {};
-  // Units that are names, translated first so that the rest can use them.
-  const names = new Set<string>();
-
-  if (kind === "plugin") {
-    const state = await pluginTranslationStatus(dir, locale);
-    for (const unit of [...state.labels.missing, ...state.labels.stale]) {
-      const id = `label:${unit.file}#${unit.pointer}`;
-      labelUnits.set(id, unit);
-      units.push({ id, text: unit.text, note: `label (${unit.steps.at(-1)})` });
-    }
-    for (const text of new Set(state.messages.missing.map((item) => item.text)))
-      units.push({ id: `message:${text}`, text });
-  } else {
-    const state = await worldTranslationStatus(dir, locale);
-    from = state.baseLocale;
-    for (const file of state.files) {
-      // What the language already translates is kept as it is.
-      for (const term of file.terms) glossary[term.source] ??= term.target;
-      for (const unit of file.missing) {
-        const field = unit.pointer
-          .replace(/(\[[^\]]*\])+$/, "")
-          .split(".")
-          .at(-1);
-        units.push({
-          id: unit.id,
-          text: unit.text,
-          ...(unit.prose ? {} : { note: field }),
-        });
-        if (
-          !unit.prose &&
-          NAME_FIELDS.has(field ?? "") &&
-          unit.text.length <= 40
-        )
-          names.add(unit.id);
-      }
-    }
+  const state = await pluginTranslationStatus(dir, locale);
+  for (const unit of [...state.labels.missing, ...state.labels.stale]) {
+    const id = `label:${unit.file}#${unit.pointer}`;
+    labelUnits.set(id, unit);
+    units.push({ id, text: unit.text, note: `label (${unit.steps.at(-1)})` });
   }
+  for (const text of new Set(state.messages.missing.map((item) => item.text)))
+    units.push({ id: `message:${text}`, text });
 
   if (units.length === 0) {
     console.log(`${dir} [${locale}]: nothing to translate`);
@@ -310,111 +265,83 @@ async function translate(dir: string): Promise<void> {
     return;
   }
 
-  const controller = new AbortController();
-  const llm = await modelAdapter();
-  // Long texts (lore, a rule) go alone; short ones share a call.
-  const long = units.filter((unit) => unit.text.length > 1500);
-  const shortUnits = units.filter((unit) => unit.text.length <= 1500);
-  const context =
-    kind === "plugin"
-      ? "labels and interface text of a plugin for a text role-playing game"
-      : "content of a world for a text role-playing game: names, descriptions, rules and story text. Translate names of people and places in the way a published translation would";
-  const translations: Record<string, string> = {};
-  const failed: { id: string; reason: string }[] = [];
-  if (kind === "world") {
-    // One list of the world's names and terms, made from its lore and its
-    // name fields, before any text is translated.
-    const lore = await readFile(path.join(dir, "WORLD.md"), "utf-8").catch(
-      () => "",
-    );
-    const nameTexts = [
-      ...new Set(
-        shortUnits
-          .filter((unit) => names.has(unit.id))
-          .map((unit) => unit.text),
-      ),
-    ];
-    const terms = await extractGlossary({
-      llm,
-      ...(slot ? { model: slot } : {}),
-      signal: controller.signal,
-      text: `${nameTexts.join("\n")}\n\n${lore}`,
-      from,
-      to: locale,
-      known: glossary,
-    });
-    Object.assign(glossary, terms);
-    console.log(`  glossary: ${Object.keys(glossary).length} term(s)`);
-  }
-  // Names first: a person or a place must have one translation in every
-  // file, so each later call is given the names its texts use.
-  for (const [label, batch, batchSize] of [
-    ["names", shortUnits.filter((unit) => names.has(unit.id)), 40],
-    ["texts", shortUnits.filter((unit) => !names.has(unit.id)), 30],
-    ["long texts", long, 1],
-  ] as const) {
-    if (batch.length === 0) continue;
-    const result = await translateTexts({
-      llm,
-      ...(slot ? { model: slot } : {}),
-      signal: controller.signal,
-      units: batch,
-      from,
-      to: locale,
-      context,
-      glossary,
-      batchSize,
-      onProgress: (done, total) =>
-        process.stdout.write(`\r  ${label}: ${done}/${total}   `),
-    });
-    process.stdout.write("\n");
-    Object.assign(translations, result.translations);
-    failed.push(...result.failed);
-    if (label === "names")
-      for (const unit of batch) {
-        const target = result.translations[unit.id];
-        if (target && target !== unit.text) glossary[unit.text] ??= target;
-      }
-  }
+  const result = await translateTexts({
+    llm: await modelAdapter(),
+    ...(slot ? { model: slot } : {}),
+    signal: new AbortController().signal,
+    units,
+    from: "en",
+    to: locale,
+    context:
+      "labels and interface text of a plugin for a text role-playing game",
+    glossary: {},
+    batchSize: 30,
+    onProgress: (done, total) =>
+      process.stdout.write(`\r  texts: ${done}/${total}   `),
+  });
+  process.stdout.write("\n");
+  const { translations, failed } = result;
 
-  if (kind === "plugin") {
-    const labels = Object.entries(translations).flatMap(([id, text]) => {
-      const unit = labelUnits.get(id);
-      return unit ? [{ unit, text }] : [];
-    });
-    const messages = Object.fromEntries(
-      Object.entries(translations)
-        .filter(([id]) => id.startsWith("message:"))
-        .map(([id, text]) => [id.slice("message:".length), text]),
-    );
-    if (translationsDir) {
-      // Not the author's translation: it stays outside the package.
-      const file = await writePluginTranslations(
-        dir,
-        locale,
-        { labels, messages },
-        path.join(translationsDir, "plugins", path.basename(path.resolve(dir))),
-      );
-      console.log(`  wrote ${file}`);
-    } else {
-      const file = await writePluginTranslations(dir, locale, {
-        labels,
-        messages,
-      });
-      await lockPluginLabels(dir);
-      console.log(`  wrote ${file} and locales/lock.json`);
-    }
-  } else {
-    const written = await writeWorldTranslations(
+  const labels = Object.entries(translations).flatMap(([id, text]) => {
+    const unit = labelUnits.get(id);
+    return unit ? [{ unit, text }] : [];
+  });
+  const messages = Object.fromEntries(
+    Object.entries(translations)
+      .filter(([id]) => id.startsWith("message:"))
+      .map(([id, text]) => [id.slice("message:".length), text]),
+  );
+  if (translationsDir) {
+    // Not the author's translation: it stays outside the package.
+    const file = await writePluginTranslations(
       dir,
       locale,
-      new Map(Object.entries(translations)),
+      { labels, messages },
+      path.join(translationsDir, "plugins", path.basename(path.resolve(dir))),
     );
-    for (const file of written) console.log(`  wrote ${path.join(dir, file)}`);
+    console.log(`  wrote ${file}`);
+  } else {
+    const file = await writePluginTranslations(dir, locale, {
+      labels,
+      messages,
+    });
+    await lockPluginLabels(dir);
+    console.log(`  wrote ${file} and locales/lock.json`);
   }
   for (const item of failed)
     console.error(`  not translated: ${item.id} (${item.reason})`);
   if (failed.length > 0) process.exitCode = 1;
+}
+
+async function translateWorld(dir: string, target: string): Promise<void> {
+  const { units } = await untranslatedWorldTexts(dir, target);
+  if (units.length === 0) {
+    console.log(`${dir} [${target}]: nothing to translate`);
+    return;
+  }
+  console.log(`${dir} [${target}]: ${units.length} text(s) to translate`);
+  if (dryRun) {
+    for (const unit of units) console.log(`  ${unit.id} = ${short(unit.text)}`);
+    return;
+  }
+  let step = "";
+  const result = await translateWorldPackage({
+    worldDir: dir,
+    locale: target,
+    llm: await modelAdapter(),
+    ...(slot ? { model: slot } : {}),
+    onProgress: (current, done, total) => {
+      if (step && step !== current) process.stdout.write("\n");
+      step = current;
+      process.stdout.write(`\r  ${current}: ${done}/${total}   `);
+    },
+  });
+  process.stdout.write("\n");
+  for (const file of result.written)
+    console.log(`  wrote ${path.join(dir, file)}`);
+  for (const item of result.failed)
+    console.error(`  not translated: ${item.id} (${item.reason})`);
+  if (result.failed.length > 0) process.exitCode = 1;
 }
 
 switch (command) {

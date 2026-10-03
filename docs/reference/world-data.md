@@ -204,6 +204,8 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 
 `server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口直接使用经过校验的生成结果，把通用领域角色放入 `WorldRecord.metadata.embeddedCharacters`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
 
+生成器写出的世界包根目录里有一个 `.covel-generated.json`。它说明这个包只含生成器写的内容，所以应用可以按玩家的要求把它整包重写（`POST /api/ai/revise-world`）。世界记录据此带上 `metadata.generated: true`。把生成的世界当作起点手工加入立绘或其他文件之后，请删掉这个文件：否则下一次“修改这个世界”会重写整个包，手工加入的文件会丢失。
+
 ### 三个完整内置示例
 
 世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内三个世界展示了不同的数据组合：
