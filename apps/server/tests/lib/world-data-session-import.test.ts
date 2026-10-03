@@ -1386,7 +1386,7 @@ sources:
 `,
       files: {
         "data/rules.yaml":
-          "id: rain-market\ncontent: Never reveal true names.\nkind: triggered\nkeys: [rain, market]\ncoordinate:\n  position: before_plugin\n",
+          "id: rain-market\ntitle: The Rain Market\ncontent: Never reveal true names.\nkind: triggered\nkeys: [rain, market]\ncoordinate:\n  position: before_plugin\n",
       },
     });
     const store = await makeStore(["world-rules"]);
@@ -1420,6 +1420,9 @@ sources:
         keys: ["rain", "market"],
         strategy: "selective",
         position: "before_plugin",
+        // The prompt names the rule by this; without it the model reads
+        // "rules:rain-market" or the first keyword as the rule's title.
+        extra: { title: "The Rain Market" },
       },
     ]);
   });
