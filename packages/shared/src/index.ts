@@ -392,6 +392,11 @@ export {
   type PluginInstallation,
   type GithubPluginPreview,
 } from "./schemas/plugin-install.js";
+export {
+  hostVersionRangeSchema,
+  isHostVersionRange,
+  satisfiesHostVersionRange,
+} from "./utils/host-version-range.js";
 
 export { pluginManifestSchema } from "./schemas/plugin-manifest.js";
 export {

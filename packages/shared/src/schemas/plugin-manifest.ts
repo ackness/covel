@@ -4,6 +4,7 @@ import {
   kernelConflictMessage,
 } from "../extension-points/contracts.js";
 import { z } from "zod";
+import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import {
   contractIdSchema,
   runtimeAuthoringManifestSchema,
@@ -20,6 +21,8 @@ export const pluginManifestSchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/),
   kind: z.enum(["core", "plugin"]),
   version: z.string().optional(),
+  // Host versions this package was written for; the installer enforces it.
+  covel: hostVersionRangeSchema.optional(),
   displayName: shape.displayName,
   description: shape.description,
   tags: z
