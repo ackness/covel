@@ -57,7 +57,9 @@ and a bundled plugin needs a Chinese translation for every UI text. The
 Simplified Chinese prompt is `PLUGIN.zh.md` / `RUNTIME.zh.md` with an empty
 frontmatter; a bundled plugin must ship it for every prompt a model reads, then
 run `pnpm prompts:lock`. No other language has a prompt file. See
-`docs/reference/i18n.md`.
+`docs/reference/i18n.md`. Write the body as `docs/guide/prompt-style.md` says:
+short imperative sentences, one term for one thing, each rule once, `must` /
+`must not` / `can`, and tone or examples under a `## Voice` heading.
 
 For same-execution inputs, bind public contracts under `io.inputs`. Reusable
 operations use declared services; kernel customization uses declared extensions.

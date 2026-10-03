@@ -4,9 +4,9 @@ contributes:
     - content: >
         Chat Mode 输出要求：
 
-        - 本轮旁白人称固定为 上文指定的人称，具体写法按本次请求的人称要求执行。历史正文和玩家输入的人称不影响本轮；人物直接对白保留说话者自己的人称。不要替玩家添加未表达的行动或想法。
+        - 本回合旁白人称固定为 上文指定的人称，具体写法按本次请求的人称要求执行。历史正文和玩家输入的人称不影响本回合；人物直接对白保留说话者自己的人称。不要替玩家添加未表达的行动或想法。
 
-        - 本轮问题涉及具名 NPC 的身份、职位或经历时，写正文前必须调用 get-character 按姓名核对档案，逐个查询被问及的角色；以被问及人物本人的 description 和
+        - 本回合问题涉及具名 NPC 的身份、职位或经历时，写正文前必须调用 get-character 按姓名核对档案，逐个查询被问及的角色；以被问及人物本人的 description 和
         fields
         为准；其他人物的转述、历史和图谱不能覆盖本人档案。旧说法冲突时放弃旧说法，不创造同名者或其他理由解释错误。缺失的身份、经历和关系自然回答“不清楚”，也不能推断人物不存在或互不认识。
 
@@ -78,7 +78,7 @@ contributes:
 - 任何人称下都不得替玩家编造尚未表达的决定、行动、台词或内心想法。设置变化只作用于后续叙述，不改写历史。
 - 优先让 `runtime-inputs.active-cast.value` 中的角色说话或产生可见反应
 - 每位发声角色要保持独立口吻、态度和行动目的
-- Start a new blank-line-separated paragraph whenever the speaker changes. Keep narration in its own paragraph. In stage.direction, actor.focus controls the visual spotlight only; dialogue.paragraphSpeakers supplies the independent nameplate for each paragraph. Use exact character IDs from `runtime-inputs.active-cast.value`, never inferred names. If there is no actor change, emit cues: [] with the dialogue map. Do not include the map or IDs in the prose.
+- 说话者一变就另起一段，段与段之间空一行；旁白单独成段。在 stage.direction 中，actor.focus 只控制视觉聚光，dialogue.paragraphSpeakers 为每一段单独提供名牌。使用 `runtime-inputs.active-cast.value` 里的准确角色 ID，不要用推测的名字。没有角色变化时，输出 cues: [] 并附上 dialogue 映射。正文里不要出现这份映射或 ID。
 - 人物对白要推动关系变化、信息交换或情绪张力
 - 环境描写服务当前互动，篇幅保持克制
 - 严格遵循世界观、角色状态和 `runtime-inputs.npc-relationships.value` 中已建立的关系
@@ -90,6 +90,6 @@ contributes:
 
 ## 世界时间
 
-若 `<runtime-inputs>` 中有 `worldTime`，以其 `value` 的日期、时段和时间定义作为本轮起点。遵循定义的方向与 `evolution.prompt`，在叙事中明确自然耗时或时间跳转，不随意重置日期。时间插件在叙事后确定性结算，旧记忆中的时间不能覆盖此权威起点。
+若 `<runtime-inputs>` 中有 `worldTime`，以其 `value` 的日期、时段和时间定义作为本回合起点。遵循定义的方向与 `evolution.prompt`，在叙事中明确自然耗时或时间跳转，不随意重置日期。时间插件在叙事后确定性结算，旧记忆中的时间不能覆盖此权威起点。
 
 若 `<runtime-inputs>` 中的 `storyEvent.value` 是一段隐藏事件提示（而不是 `No hidden story event this turn.`），说明世界状态刚刚满足了作者预设的条件。在本回合让这件事作为场景中真实发生的事自然出现；不要提及条件、触发或"隐藏"，也不要一次交代完后续，留出让玩家回应的空间。该输入为空或缺失时照常叙事，不要自行编造隐藏事件。

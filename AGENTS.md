@@ -32,6 +32,7 @@ page before any non-trivial change.
 - DataStore transactions: `docs/reference/transactions.md`
 - Model slots: `docs/reference/slots.md`; media store: `docs/reference/media-store.md`
 - Plugin authoring, UI/runtime guidelines, testing: `docs/guide/plugin-authoring.md`, `docs/guide/plugin-ui-runtime-guidelines.md`, `docs/guide/plugin-testing.md`
+- How to write a prompt body (contract zone, voice zone, vocabulary): `docs/guide/prompt-style.md`
 - Theme packages: `docs/guide/themes.md`, `docs/reference/theme-packages.md`
 - Terminology: `docs/glossary.md`
 - E2E plugin harness: `docs/guide/e2e-plugin-verify.md`
@@ -80,7 +81,8 @@ pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool defini
 pnpm i18n             # translation tooling for a plugin or world directory: status, extract,
                       # translate (configured model), lock (docs/reference/i18n.md)
 pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt
-                      # (pnpm prompts:lock records a pair after both languages changed)
+                      # (pnpm prompts:lock records a pair after both languages changed); it also prints
+                      # style and structure warnings, which do not fail it (docs/guide/prompt-style.md)
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity
 pnpm format           # Prettier

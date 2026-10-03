@@ -4,7 +4,56 @@ A canonical definition for the vocabulary used across Covel docs, code, and UI c
 
 Terms are ordered alphabetically. Each entry includes a 1–2 sentence definition and a link to the authoritative doc.
 
-> Chinese translations welcome — PRs that add a `docs/glossary.zh.md` or add a `| zh | ...` column are appreciated.
+## Terms in Chinese
+
+One English term has one Chinese term. Chinese docs, UI copy and the Chinese prompt variants (`*.zh.md`) use the term in this table.
+
+| Term             | 中文         | Note                                                                |
+| ---------------- | ------------ | ------------------------------------------------------------------- |
+| Binding          | 绑定         |                                                                     |
+| Capability       | 能力标签     |                                                                     |
+| Collection       | 合集         |                                                                     |
+| Kernel           | 内核         |                                                                     |
+| Pack             | 玩法包       |                                                                     |
+| PluginType       | 插件类型     |                                                                     |
+| Preset           | 预设         |                                                                     |
+| Proposal         | 提案         |                                                                     |
+| Provider         | 提供商       |                                                                     |
+| Runtime          | runtime      | Kept in English: it names a manifest unit, not "运行时" in general. |
+| Runtime manifest | runtime 清单 |                                                                     |
+| Segment          | 提示词段     |                                                                     |
+| Session          | 会话         |                                                                     |
+| Slot             | 槽位         |                                                                     |
+| Trigger mode     | 触发模式     |                                                                     |
+| Turn             | 回合         | "This turn" is 本回合.                                              |
+| World            | 世界         | A world package is 世界包.                                          |
+
+## Prompt vocabulary
+
+The words a prompt body uses for what a runtime reads and writes. A body uses one word for one thing: after `turn`, never `round`; after `record`, never `row`. See [prompt style](./guide/prompt-style.md).
+
+| Term             | 中文     | Means                                                                   | Do not use for it                      |
+| ---------------- | -------- | ----------------------------------------------------------------------- | -------------------------------------- |
+| turn             | 回合     | One player message and everything the runtimes do for it.               | round                                  |
+| narrative        | 叙事     | The story text that the narrative runtime wrote this turn.              | story text, prose, the output          |
+| player           | 玩家     | The person who plays.                                                   | user                                   |
+| player character | 玩家角色 | The character the player controls.                                      | protagonist, hero, PC                  |
+| NPC              | NPC      | A character the player does not control.                                |                                        |
+| character        | 角色     | The player character or an NPC.                                         |                                        |
+| tool             | 工具     | A function the runtime can call.                                        | function, API                          |
+| call             | 调用     | To use a tool one time.                                                 | invoke, run, trigger                   |
+| record           | 记录     | One stored item of plugin data.                                         | row, object                            |
+| entry            | 条目     | One item of a list the player reads: a codex entry.                     | item (an item is an inventory object)  |
+| item             | 物品     | An object a character carries.                                          |                                        |
+| dimension        | 维度     | A piece of world state that the world defines and the story changes.    | attribute (a character has attributes) |
+| attribute        | 属性     | A numeric or text field of a character.                                 | stat                                   |
+| world rule       | 世界规则 | A rule of the world that the prompt carries.                            | lore entry                             |
+| quest            | 任务     | A goal the story gave the player.                                       | mission, task                          |
+| event            | 事件     | Something that happened in the narrative, or a signal between runtimes. |                                        |
+| check            | 判定     | A roll of dice against a difficulty.                                    | test, roll (a roll is one die)         |
+| scene            | 场景     | The place and time the narrative is in.                                 |                                        |
+| inject           | 注入     | The framework puts a block of data into the prompt.                     | insert, provide                        |
+| block            | 区块     | A tagged part of the prompt: `<existing-quests>`.                       | section (a section is a heading)       |
 
 ## Binding
 

@@ -92,14 +92,15 @@ describe("guide manifest and UI loading", () => {
     // hardcoding a particular narrative runtime id.
     expect(loaded.promptTemplate).toContain("<runtime-inputs>");
     expect(loaded.promptTemplate).toContain("`narrative.value`");
+    // The limits the tool enforces are stated in the prompt, per language.
     expect(loaded.promptTemplate).toContain(
-      "`recap`: use 1-3 sentences, at most 60 words,",
+      "`recap`: 1-3 sentences, at most 60 words.",
     );
     expect(loaded.promptTemplate).toContain(
       "include only confirmed narrative/dialogue facts",
     );
     expect(loaded.promptTemplate).toContain(
-      "`decision`: use one sentence, at most 25 words, to state the single question or decision",
+      "`decision`: one sentence, at most 25 words.",
     );
     // A Chinese session reads the PLUGIN.zh.md variant with the same limits.
     const chinese = await loadRuntime(discovery!, "guide", "zh-CN");

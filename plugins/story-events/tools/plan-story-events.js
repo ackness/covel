@@ -77,7 +77,12 @@ export default function ({ tool, z }) {
       lt: z.number().optional(),
       exists: z.boolean().optional(),
     })
-    .strict();
+    .strict()
+    // The model wrote ranges as one condition (`gte` with `lte`) and the
+    // tool rejected them: nothing told it that the rule exists.
+    .describe(
+      "One condition. It names one of `dimension` (with `path`), `time`, or `revealed`. A `dimension` or `time` condition has exactly one operator: `equals`, `notEquals`, `in`, `gte`, `gt`, `lte`, `lt`, or `exists`. For a range, write two conditions.",
+    );
   const event = z
     .object({
       id,

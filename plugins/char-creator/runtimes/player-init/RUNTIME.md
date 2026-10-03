@@ -76,4 +76,4 @@ Runtime workflow:
 
 - Call `create-character-form` ONCE to emit the opening character form; the framework finishes the runtime after the tool succeeds.
 - Emit `preGameDone: false` — Pre-Game is not yet done because the player hasn't submitted.
-- The player's submission is turned into a real character by guard.js on the NEXT turn (deterministic, no LLM). DO NOT try to create the character yourself.
+- The player's submission is turned into a real character by guard.js on the NEXT turn (deterministic, no LLM). DO NOT create the character yourself.

@@ -23,7 +23,7 @@ Protects recent turns and merges older dialogue with the previous rolling summar
 
 **Not a Retrieval System**: Compacted history is a continuous summary, not a searchable index. For fact retrieval or precise recall, pair it with a dedicated memory plugin (e.g., `memory`).
 
-**Truncation Under Budget**: When the compaction result exceeds the allocated token budget, it is truncated from the end. This may drop recent sections of the summary. The kernel's budget allocation should account for this behavior.
+**Truncation Under Budget**: When the compaction result exceeds the allocated token budget, it is truncated from the end. This may drop recent sections of the summary. The kernel's budget allocation must account for this behavior.
 
 **Best Practices**:
 

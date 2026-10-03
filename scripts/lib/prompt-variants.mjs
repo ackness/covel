@@ -30,6 +30,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
+import { promptStyleFindings, structureDifferences } from "./prompt-style.mjs";
 
 /** `zh`, `zh-CN`, `zh-Hans`; not `zh-Hant` or `zh-TW`, which read English. */
 function isSimplifiedChinese(tag) {
@@ -140,7 +141,7 @@ function identifiers(text, tags, knownTools) {
 
 /**
  * @param {{ pluginsDir: string, lockPath?: string, write?: boolean, requireChinese?: boolean, labelRoot?: string }} options
- * @returns {{ problems: string[], pairs: Record<string, { en: string, zh: string }> }}
+ * @returns {{ problems: string[], warnings: string[], pairs: Record<string, { en: string, zh: string }> }}
  */
 export function checkPromptVariants({
   pluginsDir,
@@ -165,6 +166,9 @@ export function checkPromptVariants({
         knownTools.add(name);
 
   const problems = [];
+  // Style of the English contract zone, and structure the two languages do
+  // not share. They do not fail the check: see docs/guide/prompt-style.md.
+  const warnings = [];
   const pairs = {};
 
   for (const plugin of plugins) {
@@ -192,6 +196,12 @@ export function checkPromptVariants({
           );
       }
 
+      if (isModelPrompt(canonical.data, stem))
+        for (const finding of promptStyleFindings(canonical.body))
+          warnings.push(
+            `${label}:${finding.line}: [${finding.rule}] ${finding.message}`,
+          );
+
       const chinesePath = path.join(dir, `${stem}.zh.md`);
       if (!existsSync(chinesePath)) {
         if (requireChinese && isModelPrompt(canonical.data, stem))
@@ -218,11 +228,17 @@ export function checkPromptVariants({
           `${label}: named in ${stem}.zh.md but not in English: ${onlyChinese.join(", ")}`,
         );
 
+      for (const difference of structureDifferences(
+        canonical.body,
+        chinese.body,
+      ))
+        warnings.push(`${label}: [structure] ${difference}`);
+
       pairs[label] = { en: digest(english), zh: digest(translated) };
     }
   }
 
-  if (!lockPath) return { problems, pairs };
+  if (!lockPath) return { problems, warnings, pairs };
   if (write) {
     writeFileSync(lockPath, `${JSON.stringify(pairs, null, 2)}\n`);
   } else {
@@ -252,5 +268,5 @@ export function checkPromptVariants({
         );
   }
 
-  return { problems, pairs };
+  return { problems, warnings, pairs };
 }
