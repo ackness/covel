@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Plugin scaffolds outside the repo have no install step.** `pnpm create-plugin <name>` no longer writes `tsconfig.json`, `pnpm-workspace.yaml`, a `preinstall` script, or a dev dependency on `@covel/plugin-handlers-utils`, which is a workspace package and is not on npm. Check a scaffolded plugin with `pnpm validate:plugin <dir>` and `pnpm test:runtime`. `--with-tools` plugins, which live in the repo workspace, keep `pnpm lint` and are now named `@covel/plugin-<name>` like the bundled plugins.
+- **Issue and pull request templates follow the current workflow.** The PR template lists `pnpm check`, the database, UI, package and real-model checks, a "not verified" note, and the changelog; the bug report asks for the run mode, storage, world, community plugins and where to find logs.
+
+### Removed
+
+- **`docs/architecture/refactoring-plan.md`.** The current-only convergence it planned is finished; the resulting contract is described in `AGENTS.md`, `docs/architecture/flow.md` and `docs/architecture/storage.md`.
+
 ### Fixed
 
 - **"Edit llm.toml" works on a fresh desktop install.** The button failed with `"llm.toml" is not available` until the file had been created by hand, and the error appeared where it was easy to miss. The first click now creates `llm.toml` from the built-in default and opens it; failures show as a toast.

@@ -92,7 +92,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 | `--max-input-tokens <n>` | —                                  | 按 `llm.responded.payload.usage.inputTokens` 校验 provider 实际输入上限；完全缺失 usage 会失败                   |
 | `--help` / `-h`          | —                                  | 打印内置帮助                                                                                                     |
 
-> `--plugin` / `--runtime` 是**观测+断言过滤器**，不是禁用开关：其它 runtime 仍会运行，保证 `input.inject` 依赖链完整。`--enable-plugins` 会真实修改测试会话的激活集。
+> `--plugin` / `--runtime` 是**观测+断言过滤器**，不是禁用开关：其它 runtime 仍会运行，保证 `io.inputs` / `schedule.needs` 依赖链完整。`--enable-plugins` 会真实修改测试会话的激活集。
 
 ## 执行流程（7 Phase）
 

@@ -29,7 +29,6 @@ import {
   mkdirSync,
   readdirSync,
   statSync,
-  rmSync,
   existsSync,
 } from "node:fs";
 import { resolve, join, dirname, relative } from "node:path";
@@ -135,25 +134,7 @@ const placeholders = {
   "{{pluginDescription}}": `${pluginName} 插件 - 请在此填写插件描述。`,
   "{{pluginDescriptionZh}}": `${pluginName} 插件 - 请在此填写插件描述。`,
   "{{pluginDescriptionEn}}": `${pluginName} plugin - replace with a short plugin description.`,
-  "{{packageManager}}": resolveRepoPackageManager(),
 };
-
-function resolveRepoPackageManager() {
-  try {
-    const repoPkg = JSON.parse(
-      readFileSync(resolve(ROOT, "package.json"), "utf-8"),
-    );
-    if (
-      typeof repoPkg.packageManager === "string" &&
-      repoPkg.packageManager.length > 0
-    ) {
-      return repoPkg.packageManager;
-    }
-  } catch {
-    // ignore — fall through to default
-  }
-  return "pnpm@11.22.0";
-}
 
 function replacePlaceholders(content) {
   let result = content;
@@ -223,7 +204,7 @@ if (mode === "with-tools") {
   console.log(`  3. 修改 tools/record-note.js，实现工具逻辑`);
   console.log("  4. 在 Covel 仓库根目录运行 pnpm install");
   console.log(
-    `  5. 在 Covel 仓库根目录运行 pnpm --filter covel-plugin-${pluginName} test`,
+    `  5. 在 Covel 仓库根目录运行 pnpm --filter @covel/plugin-${pluginName} test`,
   );
   console.log(
     `  6. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
@@ -257,9 +238,6 @@ if (mode === "with-tools") {
   }
 }
 
-if (existsSync(join(targetDir, "tsconfig.json"))) {
-  console.log("  类型检查：进入插件目录执行 pnpm install && pnpm lint");
-}
 console.log(`\n插件创建完成！路径：${targetDir}\n`);
 
 // ── 实现 ──────────────────────────────────────────────────────────
@@ -341,20 +319,6 @@ function runCustomMultiRuntime(runtimes) {
         "utf-8",
       );
     }
-  }
-
-  // An agent-only package has no JavaScript author code to type-check.
-  if (!runtimes.some((runtime) => runtime.type === "function")) {
-    rmSync(join(targetDir, "tsconfig.json"));
-    const packagePath = join(targetDir, "package.json");
-    const packageJson = JSON.parse(readFileSync(packagePath, "utf-8"));
-    delete packageJson.scripts.lint;
-    delete packageJson.devDependencies;
-    writeFileSync(
-      packagePath,
-      `${JSON.stringify(packageJson, null, 2)}\n`,
-      "utf-8",
-    );
   }
 
   // Custom runtimes do not include the demo's note panel.
@@ -539,7 +503,7 @@ ${lines}
 1. 修改 \`README.md\`，维护给人类和开发者看的说明。
 2. 修改 \`runtimes/<name>/RUNTIME.md\`，维护 runtime 元信息和模型指令。
 3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
-4. ${runtimes.some((runtime) => runtime.type === "function") ? "Run `pnpm install && pnpm lint` in this plugin directory to check JavaScript against the public SDK. Then run" : "Run"} \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
+4. 在 Covel 仓库根目录运行 \`pnpm validate:plugin <插件目录>\` 做静态校验，再运行 \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\`（\`<plugins-dir>\` 为本插件的上级目录）。
 `;
 }
 

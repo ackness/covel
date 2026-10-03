@@ -8,21 +8,27 @@ Terms are ordered alphabetically. Each entry includes a 1–2 sentence definitio
 
 ## Binding
 
-A typed data-flow edge declared in `inputs.<name>` between a producer runtime and a consumer runtime in the same execution. The kernel resolves the producer by runtime ID or capability, optionally selects a value with an RFC 6901 JSON Pointer, validates it against `accepts`, and exposes a provenance-wrapped value through `ctx.inputs` or the agent prompt.
+A typed data-flow edge declared in `io.inputs.<name>` between a producer runtime and a consumer runtime. The kernel resolves the producer by runtime ID (inside one package) or by versioned contract (across packages), optionally selects a value with an RFC 6901 JSON Pointer, validates it against `accepts`, and exposes a provenance-wrapped value through `ctx.inputs` or the agent prompt. `scope: committed` reads a result recorded by an earlier execution instead of the current one.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), [docs/architecture/flow.md](./architecture/flow.md), `packages/shared/src/types/runtime-scheduling.ts`.
-
-## Capability
-
-A string tag on a runtime manifest that advertises what the runtime _does_ (e.g. `narrative`, `world-data-provider`, `image-generation`). Framework code discovers plugins by capability, never by hardcoded plugin ID.
-
-See: [docs/reference/plugins.md](./reference/plugins.md), AGENTS.md "Framework ↔ Plugin Isolation Rule".
 
 ## Collection
 
 A manifest (`covel-collection.yaml`) that lists worlds and plugins to install together, including packages pinned by commit in other repositories. It is a pointer list used at install time: what it installs are ordinary plugins and ordinary worlds, each updated and removed on its own. Distinct from **Pack**, which selects among plugins that are already installed.
 
 See: [docs/guide/collections.md](./guide/collections.md), [docs/reference/plugin-installation.md](./reference/plugin-installation.md).
+
+## Contract
+
+A versioned ID such as `narrative-engine@1` that names what a plugin provides or needs. The root `PLUGIN.md` lists contracts under `provides`, `requires`, `optional`, and `conflicts`; a runtime publishes one through `io.output.contract` and consumes one through `from: { contract }`. The kernel resolves providers by contract, never by a hardcoded plugin ID, so any plugin providing the same contract can replace another. Only the current version is supported: a breaking change takes a new ID (`@2`).
+
+See: [docs/reference/plugins.md](./reference/plugins.md), AGENTS.md "Framework ↔ Plugin Isolation Rule".
+
+## Extension point
+
+A kernel-defined versioned contract that plugins implement, such as `prompt.segment@1` or `ui.slot@1`. A plugin declares a provider in `contributes.extensions` and registers it with `covel.provideExtension()`; the point's mode (`single`, `collect`, or `pipeline`) decides how several providers combine. Distinct from a plugin **Contract**, which one plugin defines for others to consume.
+
+See: [docs/reference/extension-points.md](./reference/extension-points.md), [docs/reference/plugin-extensions.md](./reference/plugin-extensions.md).
 
 ## Kernel
 
@@ -34,13 +40,13 @@ See: [docs/architecture/flow.md](./architecture/flow.md).
 
 A named bundle of plugins (`requested` and `recommended` sets, plus tags) that assembles one coherent gameplay style — e.g. `traditional-story`, `dialogue-mode`. Players pick a pack on the session-prep screen to swap the whole plugin set at once; a world can default to one via `pluginPolicy.presetId`. Distinct from **Preset**, which bundles model/slot routing, not plugins.
 
-See: `apps/web/src/lib/session-plugin-selection.ts`, [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/world-data.md](./reference/world-data.md).
+See: `packs/builtin.yaml`, `apps/server/src/config/plugin-packs.ts`, [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/world-data.md](./reference/world-data.md).
 
-## PluginType
+## Plugin kind and source
 
-Two separate axes describe a plugin's provenance. `pluginType` is a manifest field with two values — `core-plugin` (bundled, non-disableable) or `plugin` (optional, disableable) — and only gates core-vs-third-party dispatch. Plugin source (`builtin` or `community`, derived from load path, not the name) governs auto-load and tool-approval policy.
+Two separate axes describe a plugin. `kind` is the root `PLUGIN.md` field with two values: `core` plugins join every session unless the player explicitly excludes them, `plugin` packages are opt-in (the loader compiles it to the internal `pluginType`: `core-plugin` or `plugin`). Source (`builtin` or `community`) is derived from the discovery directory, not from the manifest or the name: it governs auto-load, tool approval, and whether server code needs the player's authorization. An officially maintained plugin installed from outside the repo is still `community`.
 
-See: [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/tools.md](./reference/tools.md).
+See: [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/plugin-installation.md](./reference/plugin-installation.md), [docs/reference/tools.md](./reference/tools.md).
 
 ## Preset
 
@@ -50,7 +56,7 @@ See: `packages/settings/src/`.
 
 ## Proposal
 
-A kernel-validated write envelope emitted by a plugin (never a direct DB write). Types are derived from the single source of truth `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `character.schema.set`, `lorebook.upsert`.
+A kernel-validated write envelope emitted by a plugin (never a direct DB write). Types are derived from the single source of truth `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `character.schema.set`, `dimension.initialize`, `dimension.update`, `lorebook.upsert`.
 
 See: [docs/reference/transactions.md](./reference/transactions.md), [docs/architecture/flow.md](./architecture/flow.md).
 
@@ -68,7 +74,7 @@ See: [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md), [docs/refere
 
 ## Runtime manifest
 
-The parsed YAML frontmatter of a `PLUGIN.md`, plus derived fields. Carries the `pluginId`, `name` (runtimeId), `trigger`, the scheduling surface (`stage`, `needs`, `after`, `inputs`), `outputKind`, `capabilities`, `model`, `permissions`, and UI spec references.
+The internal execution structure the loader compiles from an authored runtime — the inline `runtime` of a root `PLUGIN.md` or a `runtimes/<id>/RUNTIME.md`. Authors write grouped fields (`type`, `schedule`, `io`, `agent`, `function`, `guard`, `effects`, `permissions`); the compiled `RuntimeManifest` carries the `pluginId`, `name` (runtimeId), `trigger`, the scheduling surface (`stage`, `needs`, `after`, `inputs`), `outputKind`, `outputContract`, `model`, and `permissions`. The internal fields are not author format and cannot be copied into `PLUGIN.md`.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md).
 
@@ -111,5 +117,5 @@ See: [docs/reference/world-data.md](./reference/world-data.md).
 ## Related
 
 - **pluginId vs runtimeId** — see AGENTS.md "Identity model".
-- **Plugin sources** — see `pluginType` above and [docs/reference/tools.md](./reference/tools.md).
+- **Plugin sources** — see "Plugin kind and source" above and [docs/reference/tools.md](./reference/tools.md).
 - **Outside scope here**: `Branch`, `Snapshot`, `PluginData`, `CharacterRecord`, `Lorebook` — see [docs/reference/transactions.md](./reference/transactions.md).

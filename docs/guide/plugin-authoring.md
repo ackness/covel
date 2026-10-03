@@ -19,12 +19,19 @@
 ## 最小闭环
 
 ```sh
-pnpm create-plugin
+# 独立插件：生成到用户插件目录（默认 ~/.covel/plugins），不需要安装依赖
+pnpm create-plugin my-plugin
+pnpm validate:plugin ~/.covel/plugins/my-plugin
+pnpm test:runtime -- my-plugin --pretty
+
+# 仓库内置插件：生成到 plugins/my-plugin，带本地工具和单元测试
+pnpm create-plugin my-plugin --with-tools
+pnpm install
 pnpm validate:plugin plugins/my-plugin
 pnpm --filter @covel/plugin-my-plugin test
 ```
 
-按生成器提示选择模板。包至少包含 `package.json`、`PLUGIN.md`，并为维护者提供 `README.md`。根清单的 `id` 必须与目录一致，单 runtime 使用根 `runtime`，多 runtime 使用 `runtimes/<id>/RUNTIME.md`，不要同时声明两种布局。
+生成器没有交互提示：默认生成一个 function runtime 加一个 agent runtime 的示例，`-r name:type,...` 自定义 runtime 列表，`-t <dir>` 指定目标目录，`--with-tools` 生成仓库内的单 runtime 插件。包至少包含 `package.json`、`PLUGIN.md`，并为维护者提供 `README.md`。根清单的 `id` 必须与目录一致，单 runtime 使用根 `runtime`，多 runtime 使用 `runtimes/<id>/RUNTIME.md`，不要同时声明两种布局。
 
 ```yaml
 ---
