@@ -151,6 +151,20 @@ describe("memory plugin extraction", () => {
     },
   );
 
+  it("asks one more time when the reply cannot be read", async () => {
+    const { ctx, writes, gateway } = fixture();
+    // A quotation mark inside the text: not valid JSON.
+    gateway.generateText.mockImplementationOnce(async () => ({
+      text: '{"scene":"She said "wait" at the harbour"}',
+    }));
+    expect(await extract(ctx)).toMatchObject({
+      outcome: "success",
+      value: { blocksChanged: ["scene"] },
+    });
+    expect(gateway.generateText).toHaveBeenCalledTimes(2);
+    expect(writes.map((write) => write.key)).toEqual(["scene"]);
+  });
+
   it("does not write after cancellation, including a provider that ignores its signal", async () => {
     const { ctx, controller, writes, gateway } = fixture();
     gateway.generateText.mockImplementationOnce(async () => {
