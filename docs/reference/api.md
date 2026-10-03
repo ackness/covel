@@ -3074,6 +3074,16 @@ data: {"type":"progress","phase":"saving"}
 data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","metadata":{"storage":{"scope":"server","backend":"file","durable":true}}}}
 ```
 
+`done` 帧可以带 `warnings`（字符串数组），说明结果与创作简报的差距，世界本身合法且可玩：
+
+```text
+data: {"type":"done","world":{...},"warnings":["generated 3 lorebook entries; the brief asks for 4","dropped dimension \"discoveries\": schema.properties.visited: Unrecognized key: \"boolean\""]}
+```
+
+- 某类内容数量低于目标（角色 3、资料库 4、规则 3、开局资源 2）时接受结果并给出 warning；被请求的内容一条都没有时才判为失败并重试。
+- 无法通过校验的维度被单独丢弃并给出 warning，其余维度保留。
+- 没有 warning 时不带这个字段。
+
 生成开始后的模型、校验或写入失败通过 HTTP 200 SSE 帧返回：`data: {"type":"error","message":"..."}`。请求体不合法则在开始流式响应前返回 HTTP 400 标准错误 envelope。
 
 **响应 400:** `{ "error": "concept (string) is required" }` 或 `{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }`

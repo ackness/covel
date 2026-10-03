@@ -22,6 +22,7 @@ import {
   findLoreMetaErrors,
   findLoreQualityErrors,
   findLoreStructureErrors,
+  dropInvalidDimensions,
   isRecord,
   normalizeGeneratedManifest,
   normalizeLoreDocument,
@@ -190,12 +191,18 @@ export async function createWorld(
     if (repairs.length > 0) {
       log(options, "info", "applied YAML repair:", repairs.join("; "));
     }
+    const warnings = dropInvalidDimensions(yamlData);
+    if (warnings.length > 0) {
+      log(options, "warn", warnings.join("; "));
+    }
 
-    const briefErrors = applyCreationBriefToManifest(
+    const briefResult = applyCreationBriefToManifest(
       yamlData,
       options.brief,
       options.dataContracts,
     );
+    const briefErrors = briefResult.errors;
+    warnings.push(...briefResult.warnings);
     if (
       yamlData.worldData !== undefined ||
       yamlData.dimensionSources !== undefined
@@ -235,6 +242,7 @@ export async function createWorld(
       options.brief,
       options.dataContracts,
     );
+    warnings.push(...generatedPackage.warnings);
     if (generatedPackage.errors.length > 0) {
       lastErrors = generatedPackage.errors;
       log(
@@ -354,6 +362,7 @@ export async function createWorld(
       lore: normalizedLore,
       locale,
       packageContent: generatedPackage.content,
+      warnings,
     };
   }
 

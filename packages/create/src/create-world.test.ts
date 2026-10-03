@@ -501,6 +501,42 @@ dimensions:
     expect(dimensions).toContain('铜分: "3"');
   });
 
+  it("keeps a usable world when one dimension is invalid and content falls short", async () => {
+    const flawedYaml = WORLD_YAML.replace(
+      "dimensions:",
+      `dimensions:
+  discoveries:
+    name: 已知地点
+    schema:
+      type: object
+      properties:
+        visited: { boolean: true }
+    initialValue: {}`,
+    );
+    const shortPackage = WORLD_PACKAGE_YAML.replace(
+      /\n {2}- \{ id: reverse-hour[^\n]*\n/,
+      "\n",
+    );
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${flawedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${shortPackage}\n===END===`,
+      ),
+      concept: "雨中的倒转钟城",
+      attemptTimeoutMs: 5_000,
+      brief: { content: ["characters", "lorebook", "rules"] },
+    });
+
+    expect(result.success, JSON.stringify(result.errors)).toBe(true);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.manifest.dimensions).not.toHaveProperty("discoveries");
+    expect(result.manifest.dimensions).toHaveProperty("geography");
+    expect(result.packageContent.lorebook).toHaveLength(3);
+    expect(result.warnings).toEqual([
+      expect.stringContaining('dropped dimension "discoveries"'),
+      "generated 3 lorebook entries; the brief asks for 4",
+    ]);
+  });
+
   it("writes requested portable world-package supplements", async () => {
     const enrichedYaml = WORLD_YAML.replace(
       "  startingConditions:",

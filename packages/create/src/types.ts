@@ -42,6 +42,12 @@ export interface GeneratedWorld {
   readonly lore: string;
   readonly locale: string;
   readonly packageContent: GeneratedWorldPackageContent;
+  /**
+   * What the result falls short of: content below the requested amount, or
+   * parts that were dropped because they were invalid. The world is valid and
+   * playable; these explain how it differs from the brief.
+   */
+  readonly warnings: readonly string[];
 }
 
 export type CreateResult =

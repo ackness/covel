@@ -832,6 +832,33 @@ describe("ai world generation route", () => {
     expect(done?.world.metadata.characterBlueprintSources).toBeUndefined();
   });
 
+  it("returns a world that falls short of the brief, with warnings", async () => {
+    const lorebook = [
+      { id: "tide-calendar", content: "The tide follows the calendar." },
+      { id: "clock-tower", content: "The tower keeps the tide log." },
+    ];
+    app = createTestApp(
+      store,
+      new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${JSON.stringify({ lorebook })}\n===END===`,
+      ),
+    );
+    const response = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "A tidal city",
+        saveTarget: "return-only",
+        brief: { content: ["lorebook"] },
+      }),
+    });
+    const events = await readSseJson(response);
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+    expect(events.find((event) => event.type === "done")).toMatchObject({
+      warnings: ["generated 2 lorebook entries; the brief asks for 4"],
+    });
+  });
+
   it("rejects a plugin contract that no loaded plugin offers for generation", async () => {
     const res = await app.request("/api/ai/generate-world", {
       method: "POST",

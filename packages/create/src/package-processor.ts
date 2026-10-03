@@ -168,10 +168,31 @@ export function normalizeGeneratedPackage(
   value: unknown,
   brief: WorldCreationBrief | undefined,
   dataContracts: readonly WorldGenerationDataContract[] = [],
-): { content: GeneratedWorldPackageContent; errors: string[] } {
+): {
+  content: GeneratedWorldPackageContent;
+  errors: string[];
+  warnings: string[];
+} {
   const requested = requestedKinds(brief);
   const selected = selectedDataContracts(brief, dataContracts);
   const errors: string[] = [];
+  const warnings: string[] = [];
+  // A requested kind that is absent is a failed answer. One that is present
+  // but below the target is a usable world: retrying it costs a full model
+  // call and often trades this shortfall for a different one.
+  const checkAmount = (
+    kind: WorldPackageContentKind,
+    label: string,
+    amount: number,
+    target: number,
+  ) => {
+    if (!requested.has(kind)) return;
+    if (amount === 0) errors.push(`WORLD_PACKAGE_YAML must include ${label}`);
+    else if (amount < target)
+      warnings.push(
+        `generated ${amount} ${label}; the brief asks for ${target}`,
+      );
+  };
   const root = isRecord(value) ? value : {};
 
   const contractData: GeneratedContractData[] = [];
@@ -250,15 +271,9 @@ export function normalizeGeneratedPackage(
         .filter((item): item is GeneratedWorldLorebookEntry => item !== null)
     : [];
 
-  if (requested.has("characters") && characters.length < 3) {
-    errors.push("WORLD_PACKAGE_YAML must include at least 3 characters");
-  }
-  if (requested.has("lorebook") && lorebook.length < 4) {
-    errors.push("WORLD_PACKAGE_YAML must include at least 4 lorebook entries");
-  }
-  if (requested.has("rules") && rules.length < 3) {
-    errors.push("WORLD_PACKAGE_YAML must include at least 3 rules");
-  }
+  checkAmount("characters", "characters", characters.length, 3);
+  checkAmount("lorebook", "lorebook entries", lorebook.length, 4);
+  checkAmount("rules", "rules", rules.length, 3);
 
   const duplicateCharacterIds = duplicateIds(characters);
   if (duplicateCharacterIds.length > 0) {
@@ -272,6 +287,7 @@ export function normalizeGeneratedPackage(
   return {
     content: { characters, lorebook, rules, contractData },
     errors,
+    warnings,
   };
 }
 
@@ -279,9 +295,10 @@ export function applyCreationBriefToManifest(
   manifest: Record<string, unknown>,
   brief: WorldCreationBrief | undefined,
   dataContracts: readonly WorldGenerationDataContract[] = [],
-): string[] {
-  if (!brief) return [];
+): { errors: string[]; warnings: string[] } {
+  if (!brief) return { errors: [], warnings: [] };
   const errors: string[] = [];
+  const warnings: string[] = [];
   const policy = isRecord(manifest.pluginPolicy)
     ? manifest.pluginPolicy
     : (manifest.pluginPolicy = {});
@@ -312,11 +329,11 @@ export function applyCreationBriefToManifest(
         Number.isFinite(definition.initialValue),
     );
     if (numericResources.length < 2) {
-      errors.push(
-        "opening-kit must include at least 2 numeric dimension initial values",
+      warnings.push(
+        `opening kit has ${numericResources.length} numeric resource dimensions; the brief asks for 2`,
       );
     }
   }
 
-  return errors;
+  return { errors, warnings };
 }

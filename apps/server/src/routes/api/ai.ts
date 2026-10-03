@@ -51,6 +51,8 @@ interface ProgressEvent {
 interface DoneEvent {
   type: "done";
   world: unknown;
+  /** How the world falls short of the brief; absent when it does not. */
+  warnings?: readonly string[];
 }
 interface ErrorEvent {
   type: "error";
@@ -381,7 +383,16 @@ aiRoutes.post(
         console.log(
           `[ai/generate-world] world generated: id=${record.id} saveTarget=${saveTarget}`,
         );
-        await send({ type: "done", world: record });
+        if (result.warnings.length > 0)
+          console.warn(
+            `[ai/generate-world] world ${record.id} generated with warnings:`,
+            result.warnings,
+          );
+        await send({
+          type: "done",
+          world: record,
+          ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[ai/generate-world] unexpected error:", msg);

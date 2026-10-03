@@ -62,7 +62,7 @@ it("requests the receiving plugin of every selected contract", () => {
     applyCreationBriefToManifest(manifest, brief, [
       { ...contract, pluginId: "custom-plugin" },
     ]),
-  ).toEqual([]);
+  ).toEqual({ errors: [], warnings: [] });
   expect(manifest.pluginPolicy).toMatchObject({
     presetId: "traditional-story",
     requested: ["narrator", "custom-plugin"],
@@ -121,4 +121,52 @@ it("targets the lorebook projection when the receiver declares it", async () => 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("accepts a requested kind that falls short of its target, with a warning", () => {
+  const lorebook = [
+    { id: "tide-calendar", content: "The tide follows the calendar." },
+    { id: "clock-tower", content: "The tower keeps the tide log." },
+  ];
+  const result = normalizeGeneratedPackage(
+    { lorebook },
+    { content: ["lorebook"] },
+  );
+  expect(result.errors).toEqual([]);
+  expect(result.warnings).toEqual([
+    "generated 2 lorebook entries; the brief asks for 4",
+  ]);
+  expect(result.content.lorebook).toHaveLength(2);
+});
+
+it("still rejects a requested kind that is missing entirely", () => {
+  const result = normalizeGeneratedPackage(
+    { lorebook: [] },
+    { content: ["lorebook", "rules"] },
+  );
+  expect(result.errors).toEqual([
+    "WORLD_PACKAGE_YAML must include lorebook entries",
+    "WORLD_PACKAGE_YAML must include rules",
+  ]);
+});
+
+it("reports an opening kit with too few numeric resources as a warning", () => {
+  const manifest: Record<string, unknown> = {
+    dimensions: {
+      coins: { name: "Coins", schema: { type: "integer" }, initialValue: 8 },
+      opening: {
+        name: "Opening",
+        schema: { type: "string" },
+        initialValue: "",
+      },
+    },
+  };
+  expect(
+    applyCreationBriefToManifest(manifest, { content: ["opening-kit"] }),
+  ).toEqual({
+    errors: [],
+    warnings: [
+      "opening kit has 1 numeric resource dimensions; the brief asks for 2",
+    ],
+  });
 });

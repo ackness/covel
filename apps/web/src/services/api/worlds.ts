@@ -150,6 +150,8 @@ export interface GenerateWorldProgress {
 export interface GenerateWorldDone {
   type: "done";
   world: WorldRecord;
+  /** How the world falls short of the brief; absent when it does not. */
+  warnings?: readonly string[];
 }
 
 export interface GenerateWorldError {
