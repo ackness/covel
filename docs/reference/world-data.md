@@ -246,9 +246,8 @@ server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，�
 
 ```yaml
 pluginSettings:
-  cost-gate:
-    softTokens: 120000
-    hardTokens: 160000
+  story-events:
+    planner: true
   chat-mode-narrator:
     dialogueRatio: 70
 ```

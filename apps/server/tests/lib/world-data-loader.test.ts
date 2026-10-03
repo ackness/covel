@@ -145,9 +145,8 @@ summary: World with plugin settings
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
 pluginSettings:
-  cost-gate:
-    softTokens: 120000
-    hardTokens: 160000
+  story-events:
+    planner: true
   chat-mode-narrator:
     dialogueRatio: 70
 `,
@@ -157,7 +156,7 @@ pluginSettings:
     const record = await loadSingleWorld(root);
 
     expect(record?.metadata?.pluginSettings).toEqual({
-      "cost-gate": { softTokens: 120000, hardTokens: 160000 },
+      "story-events": { planner: true },
       "chat-mode-narrator": { dialogueRatio: 70 },
     });
   });

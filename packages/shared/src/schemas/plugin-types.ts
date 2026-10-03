@@ -41,7 +41,7 @@ export function validateRuntimeManifestSemantics(
   // stage-less "UI-only" idiom: it is
   // NEVER selected by the scheduler and produces no diagnostic at run time.
   // That is correct for pure registration-surface declarations (UI panels,
-  // hook carriers, `entry` server modules, `wires` modules — cost-gate,
+  // hook carriers, `entry` server modules, `wires` modules — history-compaction,
   // memory), but for a runtime that clearly wants to execute (a function
   // handler, or an agent with a model) it means "installed but silently
   // never runs" — warn at load so the author finds out here.

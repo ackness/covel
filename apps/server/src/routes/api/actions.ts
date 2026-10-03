@@ -972,8 +972,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         durationMs: finalRun.result.durationMs,
         committed: finalRun.committed,
         ...(finalRun.commitError ? { error: finalRun.commitError } : {}),
-        // Surface a turn that was aborted before producing output (e.g.
-        // cost-gate's hard budget cap) so the player gets a visible reason
+        // Surface a turn that was aborted before producing output (e.g. a
+        // TurnStart hook that refuses the turn) so the player gets a visible reason
         // instead of a silent empty turn.
         ...(finalRun.result.abortReason
           ? { abortReason: finalRun.result.abortReason }

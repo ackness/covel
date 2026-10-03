@@ -813,7 +813,7 @@ interface StepExpectation {
  * bands and NOT a re-simulation of interval/cooldown. Three gates in order:
  *   1. active set — mutually-exclusive providers (narrator vs
  *      chat-mode-narrator) resolve here: only the active one is expected.
- *   2. stage — a stage-less runtime (memory / director / cost-gate: `auto`
+ *   2. stage — a stage-less runtime (memory / history-compaction: `auto`
  *      but no stage) is never stage-scheduled.
  *   3. band — setup-stage runs only in the setup phase; all other stages run
  *      only in playing turns.

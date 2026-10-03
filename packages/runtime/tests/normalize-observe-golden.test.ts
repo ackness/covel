@@ -340,7 +340,7 @@ describe("normalize golden (bundled plugin set)", () => {
     const specs = specById(manifests.map(normalizeRuntimeManifest));
 
     const discoveries = await discoverPlugins(PLUGINS_DIR);
-    for (const id of ["cost-gate", "history-compaction"]) {
+    for (const id of ["history-compaction"]) {
       expect(specs.has(id), `${id}: no synthetic runtime`).toBe(false);
       const discovery = discoveries.find((entry) => entry.id === id)!;
       const definition = await loadPluginDefinition(discovery);

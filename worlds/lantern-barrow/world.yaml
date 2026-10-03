@@ -59,7 +59,6 @@ pluginPolicy:
         - story-events
       recommended:
         - branch-reply
-        - cost-gate
   presetId: classic-tabletop
   preferredTags:
     - mode:traditional-story
@@ -85,7 +84,6 @@ pluginPolicy:
     - character-blueprint
     - story-events
     - branch-reply
-    - cost-gate
 pluginSettings:
   story-events:
     planner: true

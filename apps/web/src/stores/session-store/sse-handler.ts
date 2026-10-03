@@ -515,8 +515,8 @@ export function createSseEventHandler(
         if (currentSessionId) {
           clearDomainEventPreviewsForTurn(currentSessionId, turnId);
         }
-        // A turn aborted before producing output (e.g. cost-gate's hard budget
-        // cap) carries an abortReason — surface it so the player isn't left with
+        // A turn aborted before producing output (e.g. by a TurnStart hook)
+        // carries an abortReason — surface it so the player isn't left with
         // a silent empty turn. A player-initiated abort is NOT an error: the
         // server never commits the partial narrative, so discard the streaming
         // placeholder instead of showing ghost text + a red retry affordance.
