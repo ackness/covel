@@ -214,7 +214,7 @@ export function createDimensionCommitHandlers(
             "Adopted dimension definitions changed",
           );
       }
-      const next = materializeDimensionRecords(base, proposal);
+      const next = materializeDimensionRecords(base, proposal, session?.locale);
       const changed = Object.entries(next).filter(
         ([id, record]) => !dimensionsJsonEqual(base[id], record),
       );

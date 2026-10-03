@@ -60,7 +60,9 @@ export function WorldDimensionsPanel({
     if (!entry || editing?.id !== id) return;
     try {
       const value: unknown = JSON.parse(draft);
-      const issues = validateDimensionValue(entry.schema, value);
+      const issues = validateDimensionValue(entry.schema, value, {
+        localized: "resolved",
+      });
       if (issues.length)
         throw new Error(
           issues

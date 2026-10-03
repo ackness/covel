@@ -50,6 +50,56 @@ async function fixture() {
 }
 
 describe("dynamic dimension author import and sync", () => {
+  it("stores a localized dimension in the session's language only", async () => {
+    const args = await fixture();
+    const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-locale-"));
+    roots.push(root);
+    const world = path.join(root, "world");
+    await mkdir(world, { recursive: true });
+    await writeFile(
+      path.join(world, "world.yaml"),
+      JSON.stringify({
+        id: "world",
+        dimensions: {
+          mood: {
+            name: { "zh-CN": "气氛", "en-US": "Mood" },
+            schema: {
+              type: "object",
+              properties: { note: { type: "string", "x-i18n": true } },
+            },
+            initialValue: { note: { "zh-CN": "平静", "en-US": "Calm" } },
+            updateRule: {
+              "zh-CN": "气氛变化时更新。",
+              "en-US": "Update when the mood changes.",
+            },
+          },
+        },
+      }),
+    );
+    const options = { ...args, worldsDirs: [root] };
+    await importWorldDataForSession(options);
+    const record = (await args.store.getPluginData(
+      "session",
+      "world-init",
+      "_dimensions",
+      "mood",
+    ))!.value;
+    // The fixture session is en-US. No locale map survives the import.
+    expect(record).toMatchObject({
+      value: { note: "Calm" },
+      definition: {
+        initialValue: { note: "Calm" },
+        updateRule: "Update when the mood changes.",
+        // The name is a label and stays localizable for the UI language.
+        name: { "zh-CN": "气氛", "en-US": "Mood" },
+      },
+    });
+    // The same package compares equal on the next sync.
+    expect(
+      (await syncWorldDataForSession({ ...options, dryRun: false })).conflicts,
+    ).toEqual([]);
+  });
+
   it("resolves external over inline and descriptor replacement, then protects progress even with force", async () => {
     const args = await fixture();
     const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-import-"));

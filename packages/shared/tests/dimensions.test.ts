@@ -5,7 +5,9 @@ import {
   dimensionJsonError,
   dimensionSnapshotFromRecords,
   dimensionValueSchema,
-  localizeDimensionValue,
+  dimensionRecordSchema,
+  materializeDimensionRecords,
+  resolveDimensionDefinitionLocale,
   projectDimensionSnapshot,
   validateDimensionData,
   validateDimensionValue,
@@ -229,10 +231,7 @@ describe("public dimension snapshots and explicit localization", () => {
     expect(snapshot.wall).not.toHaveProperty("lastTrackedSource");
   });
 
-  it("preserves ordinary language-keyed data and localizes only annotated text", () => {
-    expect(
-      localizeDimensionValue({ type: "object" }, { zh: 1, en: 2 }, "zh-CN"),
-    ).toEqual({ zh: 1, en: 2 });
+  it("resolves an authored definition for one content locale", () => {
     const schema: DimensionValueSchema = {
       type: "object",
       properties: {
@@ -240,16 +239,86 @@ describe("public dimension snapshots and explicit localization", () => {
         data: { type: "object" },
       },
     };
-    const value = {
-      text: { "zh-CN": "城墙", "en-US": "Wall" },
-      data: { zh: 1, en: 2 },
+    const authored = {
+      name: { "zh-CN": "城防", "en-US": "Defences" },
+      schema,
+      initialValue: {
+        text: { "zh-CN": "城墙", "en-US": "Wall" },
+        // Ordinary data keyed by language codes is not translatable text.
+        data: { zh: 1, en: 2 },
+      },
+      updateRule: { "zh-CN": "受损时更新。", "en-US": "Update on damage." },
     };
-    expect(validateDimensionValue(schema, value)).toEqual([]);
-    expect(localizeDimensionValue(schema, value, "en-US")).toEqual({
+    expect(validateDimensionValue(schema, authored.initialValue)).toEqual([]);
+
+    const resolved = resolveDimensionDefinitionLocale(authored, "en-US");
+    expect(resolved.initialValue).toEqual({
       text: "Wall",
       data: { zh: 1, en: 2 },
     });
-    expect(value.text).toEqual({ "zh-CN": "城墙", "en-US": "Wall" });
+    expect(resolved.updateRule).toBe("Update on damage.");
+    // Labels stay localizable: the panel shows them in the UI language.
+    expect(resolved.name).toEqual(authored.name);
+    expect(authored.initialValue.text).toEqual({
+      "zh-CN": "城墙",
+      "en-US": "Wall",
+    });
+  });
+
+  it("adopts a re-declared authored definition without a conflict", () => {
+    const schema: DimensionValueSchema = { type: "string", "x-i18n": true };
+    const authored = {
+      name: "Wall",
+      schema,
+      initialValue: { "zh-CN": "城墙", "en-US": "Wall" },
+    };
+    const proposal = {
+      id: "p1",
+      type: "dimension.initialize" as const,
+      sessionId: "s",
+      turnId: "t",
+      source: { pluginId: "world-init", runtimeId: "world-init/schema-gen" },
+      payload: { definitions: { wall: authored } },
+      timestamp: "2026-10-03T00:00:00Z",
+    };
+    // The import stored the en-US text. A plugin then declares the package's
+    // definition again, locale maps included.
+    const imported = materializeDimensionRecords({}, proposal, "en-US");
+    expect(imported.wall).toMatchObject({
+      value: "Wall",
+      definition: { initialValue: "Wall" },
+    });
+    expect(materializeDimensionRecords(imported, proposal, "en-US")).toEqual(
+      imported,
+    );
+  });
+
+  it("accepts a locale map in a package and only a string in session state", () => {
+    const schema: DimensionValueSchema = { type: "string", "x-i18n": true };
+    const map = { "zh-CN": "城墙", "en-US": "Wall" };
+    expect(validateDimensionValue(schema, map)).toEqual([]);
+    expect(
+      validateDimensionValue(schema, map, { localized: "resolved" }),
+    ).toEqual([
+      {
+        path: [],
+        message:
+          "Expected a string. Write this text once, in the session language; do not supply a locale map",
+      },
+    ]);
+    expect(
+      validateDimensionValue(schema, "城墙", { localized: "resolved" }),
+    ).toEqual([]);
+
+    const record = (value: unknown, initialValue: unknown) =>
+      dimensionRecordSchema.safeParse({
+        definition: { name: "Wall", schema, initialValue },
+        value,
+        version: 1,
+      }).success;
+    expect(record("城墙", "城墙")).toBe(true);
+    expect(record(map, "城墙")).toBe(false);
+    expect(record("城墙", map)).toBe(false);
   });
 
   it("names the translation and its length when a localized text is too long", () => {

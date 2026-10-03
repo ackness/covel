@@ -268,10 +268,21 @@ export interface DimensionValueIssue {
   readonly message: string;
 }
 
+export interface DimensionValueValidationOptions {
+  /**
+   * What an `x-i18n` node may hold. `authored` (the default) is a world
+   * package before import: a plain string or a locale map. `resolved` is
+   * session state, where the content locale is already fixed: a plain string
+   * only.
+   */
+  readonly localized?: "authored" | "resolved";
+}
+
 /** No coercion, defaults, code execution or ignored schema keywords. */
 export function validateDimensionValue(
   schema: DimensionValueSchema,
   value: unknown,
+  options: DimensionValueValidationOptions = {},
 ): readonly DimensionValueIssue[] {
   const jsonError = dimensionJsonError(value);
   if (jsonError) return [{ path: [], message: jsonError }];
@@ -288,6 +299,12 @@ export function validateDimensionValue(
       issues.push({ path, message });
     };
     if (node["x-i18n"]) {
+      if (options.localized === "resolved" && typeof input !== "string") {
+        add(
+          "Expected a string. Write this text once, in the session language; do not supply a locale map",
+        );
+        return;
+      }
       const text = textSchema.safeParse(input);
       if (!text.success) {
         add("Expected I18nText at an x-i18n node");
@@ -441,16 +458,32 @@ export const dimensionRecordSchema: z.ZodType<DimensionRecord> = z
     lastTrackedSource: dimensionSourceSchema.optional(),
   })
   .superRefine((record, ctx) => {
-    for (const issue of validateDimensionValue(
-      record.definition.schema,
-      record.value,
-    )) {
+    // A session holds one language. Locale maps are resolved when the world
+    // is imported, so neither the value nor the stored definition has any.
+    for (const [field, value] of [
+      ["value", record.value],
+      ["definition.initialValue", record.definition.initialValue],
+    ] as const)
+      for (const issue of validateDimensionValue(
+        record.definition.schema,
+        value,
+        { localized: "resolved" },
+      )) {
+        ctx.addIssue({
+          code: "custom",
+          path: [...field.split("."), ...issue.path],
+          message: issue.message,
+        });
+      }
+    if (
+      record.definition.updateRule !== undefined &&
+      typeof record.definition.updateRule !== "string"
+    )
       ctx.addIssue({
         code: "custom",
-        path: ["value", ...issue.path],
-        message: issue.message,
+        path: ["definition", "updateRule"],
+        message: "Expected a string in the session language",
       });
-    }
   });
 
 const snapshotEntrySchema = z
@@ -462,7 +495,9 @@ const snapshotEntrySchema = z
     version: z.number().int().positive(),
   })
   .superRefine((entry, ctx) => {
-    for (const issue of validateDimensionValue(entry.schema, entry.value)) {
+    for (const issue of validateDimensionValue(entry.schema, entry.value, {
+      localized: "resolved",
+    })) {
       ctx.addIssue({
         code: "custom",
         path: ["value", ...issue.path],
@@ -511,7 +546,7 @@ export function dimensionSnapshotFromRecords(
   );
 }
 
-export function localizeDimensionValue(
+function localizeDimensionValue(
   schema: DimensionValueSchema,
   value: JsonValue,
   locale?: string,
@@ -541,6 +576,44 @@ export function localizeDimensionValue(
     );
   }
   return value;
+}
+
+/**
+ * Resolve an authored definition for one content locale: the initial value
+ * and the update rule become plain strings. `name` and `description` are
+ * labels, shown in the UI language, so they keep their locale maps.
+ */
+export function resolveDimensionDefinitionLocale(
+  definition: WorldDimensionDefinition,
+  locale?: string,
+): WorldDimensionDefinition {
+  const { updateRule, ...rest } = definition;
+  const rule =
+    updateRule === undefined
+      ? undefined
+      : (resolveI18nText(updateRule, locale) ?? "");
+  return {
+    ...rest,
+    initialValue: localizeDimensionValue(
+      definition.schema,
+      definition.initialValue,
+      locale,
+    ),
+    ...(rule === undefined ? {} : { updateRule: rule }),
+  };
+}
+
+/** World dimensions as a session of this content locale stores them. */
+export function resolveWorldDimensionsLocale(
+  definitions: WorldDimensions,
+  locale?: string,
+): WorldDimensions {
+  return Object.fromEntries(
+    Object.entries(definitions).map(([id, definition]) => [
+      id,
+      resolveDimensionDefinitionLocale(definition, locale),
+    ]),
+  );
 }
 
 /** Public recovery notice: no rules, initial values, baseline or narrative body. */

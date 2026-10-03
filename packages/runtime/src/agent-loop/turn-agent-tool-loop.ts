@@ -187,8 +187,12 @@ async function runAgentToolLoopWithinBudget(
     ...(initialState?.pendingProposals ?? []),
   ];
   const world = worldBase
-    ? overlayWorldModelView(worldBase, input.sessionId, pendingProposals, () =>
-        budget.assertLive(),
+    ? overlayWorldModelView(
+        worldBase,
+        input.sessionId,
+        pendingProposals,
+        () => budget.assertLive(),
+        input.locale,
       )
     : undefined;
   const emittedEvents: EmittedEvent[] = [

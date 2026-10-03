@@ -398,10 +398,9 @@ interface UIRenderPart {
 
 框架 builtin，定义于 `packages/tools/src/builtin/world-dimension-tools.ts`。所有插件使用同一公开 `ctx.world.dimensions` 冻结快照，不读取提供者私有 namespace、不叠加自身未提交写入，也不回退世界初值。`dimension` 接受任意[合法作者 ID](world-data.md#声明格式)，不以旧九类名称作为白名单。
 
-| 参数          | 类型                                       | 必需 | 描述                                            |
-| ------------- | ------------------------------------------ | ---- | ----------------------------------------------- |
-| `queries`     | Array<{dimension, path?, offset?, limit?}> | ✓    | 至少 1 项，最多 20 项                           |
-| `resolveI18n` | boolean                                    |      | 默认 `true`，只解析 schema 中显式 `x-i18n` 节点 |
+| 参数      | 类型                                       | 必需 | 描述                  |
+| --------- | ------------------------------------------ | ---- | --------------------- |
+| `queries` | Array<{dimension, path?, offset?, limit?}> | ✓    | 至少 1 项，最多 20 项 |
 
 `path` 相对于该项的 **`value`**，不是 definition 或公共 entry。支持点路径（`durability`）、数组下标（`regions[0].name`）、根数组（`[0].name`）及 JSON Pointer（`/regions/0/name`，支持 `~0` / `~1`）。只读自有属性，不读取原型链；路径不存在返回 `found:false`，语法错误另带 `error`。
 

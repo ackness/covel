@@ -96,6 +96,7 @@ export async function prepareWorldDataImportForSession(
       basePlan,
       effectiveDimensions,
       options.preflight,
+      options.locale,
     );
     return {
       imported: true,
@@ -141,6 +142,7 @@ export async function prepareWorldDataImportForSession(
     basePlan,
     resolvedDimensions,
     options.preflight,
+    options.locale,
   );
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   let materializedWrites = plan.writes;
@@ -221,7 +223,8 @@ export async function importWorldDataForSession(
   options: ImportWorldDataForSessionOptions,
 ): Promise<ImportWorldDataForSessionResult> {
   const session =
-    !options.preflight?.activePlugins && options.store.getSession
+    (!options.preflight?.activePlugins || options.locale === undefined) &&
+    options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
   const prepared = await prepareWorldDataImportForSession({
@@ -350,6 +353,7 @@ export async function preflightWorldDataForSession(
           locale: options.locale,
         }),
         options.preflight,
+        options.locale,
       );
   return preflightPlanResult(plan, [
     ...descriptor.diagnostics,
@@ -426,10 +430,16 @@ export async function prepareWorldDataSyncForSession(
       manifest,
       locale: options.locale ?? session?.locale,
     });
-    const plan = appendDimensionPlan(emptyImportPlan(), definitions, {
-      ...options.preflight,
-      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
-    });
+    const plan = appendDimensionPlan(
+      emptyImportPlan(),
+      definitions,
+      {
+        ...options.preflight,
+        activePlugins:
+          options.preflight?.activePlugins ?? session?.activePlugins,
+      },
+      options.locale ?? session?.locale,
+    );
     // There is no descriptor for other domains: do not treat their old ledger
     // rows as removed merely because inline dimensions are now synchronizable.
     return {
@@ -464,10 +474,16 @@ export async function prepareWorldDataSyncForSession(
       sources: descriptor.sources,
       locale: options.locale ?? session?.locale,
     });
-    const plan = appendDimensionPlan(emptyImportPlan(), definitions, {
-      ...options.preflight,
-      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
-    });
+    const plan = appendDimensionPlan(
+      emptyImportPlan(),
+      definitions,
+      {
+        ...options.preflight,
+        activePlugins:
+          options.preflight?.activePlugins ?? session?.activePlugins,
+      },
+      options.locale ?? session?.locale,
+    );
     return {
       imported: true,
       dimensionOnly: true,
@@ -481,7 +497,8 @@ export async function prepareWorldDataSyncForSession(
   }
 
   const session =
-    !options.preflight?.activePlugins && options.store.getSession
+    (!options.preflight?.activePlugins || options.locale === undefined) &&
+    options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
   const basePlan = await buildImportPlan({
@@ -499,12 +516,17 @@ export async function prepareWorldDataSyncForSession(
     worldRoot,
     manifest,
     sources: descriptor.sources,
-    locale: options.locale,
+    locale: options.locale ?? session?.locale,
   });
-  const plan = appendDimensionPlan(basePlan, effectiveDimensions, {
-    ...options.preflight,
-    activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
-  });
+  const plan = appendDimensionPlan(
+    basePlan,
+    effectiveDimensions,
+    {
+      ...options.preflight,
+      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
+    },
+    options.locale ?? session?.locale,
+  );
   return {
     imported: true,
     diagnostics: [
@@ -519,9 +541,10 @@ export async function prepareWorldDataSyncForSession(
 async function preparePortableWorldDataSync(
   options: SyncWorldDataForSessionOptions,
 ): Promise<PreparedWorldDataSync> {
-  const session = !options.preflight?.activePlugins
-    ? await options.store.getSession(options.sessionId)
-    : null;
+  const session =
+    !options.preflight?.activePlugins || options.locale === undefined
+      ? await options.store.getSession(options.sessionId)
+      : null;
   const prepared = await prepareWorldDataImportForSession({
     sessionId: options.sessionId,
     worldId: options.worldId,

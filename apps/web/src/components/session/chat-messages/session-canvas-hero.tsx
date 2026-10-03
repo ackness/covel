@@ -1,4 +1,4 @@
-import { dimensionSnapshotSchema, localizeDimensionValue } from "@covel/shared";
+import { dimensionSnapshotSchema } from "@covel/shared";
 import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import { Flame } from "lucide-react";
@@ -34,11 +34,7 @@ export function SessionCanvasHero({
       openingHook: z.string().optional(),
       openingChips: z.array(z.string()).optional(),
     })
-    .safeParse(
-      entry
-        ? localizeDimensionValue(entry.schema, entry.value, locale)
-        : undefined,
-    );
+    .safeParse(entry?.value);
   const start = parsed.success ? parsed.data : undefined;
   const hook = start?.openingHook
     ? resolveI18n(start.openingHook, locale)

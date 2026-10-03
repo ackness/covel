@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   dimensionIdSchema,
   dimensionSnapshotSchema,
-  localizeDimensionValue,
 } from "../schemas/dimensions.js";
 import { resolveI18nText } from "../utils/i18n.js";
 import type { DimensionSnapshot } from "../types/dimensions.js";
@@ -19,7 +18,6 @@ export const dimensionQuerySchema = z.strictObject({
     )
     .min(1)
     .max(20),
-  resolveI18n: z.boolean().default(true),
 });
 
 function readPath(
@@ -86,9 +84,7 @@ export function queryDimensionSnapshot(
         value: null,
         error: "Unknown dimension",
       };
-    const value = parsed.resolveI18n
-      ? localizeDimensionValue(entry.schema, entry.value, locale)
-      : entry.value;
+    const value = entry.value;
     const picked = query.path
       ? readPath(value, query.path)
       : { found: true, value };
@@ -167,9 +163,7 @@ export function projectDimensionSnapshot(
 ): string {
   const entries = Object.entries(snapshot).map(([id, entry]) => ({
     head: `${id} (${resolveI18nText(entry.name, locale)}, v${entry.version}): `,
-    value: JSON.stringify(
-      localizeDimensionValue(entry.schema, entry.value, locale),
-    ),
+    value: JSON.stringify(entry.value),
     cut: false,
   }));
   const shown = (entry: (typeof entries)[number]) =>

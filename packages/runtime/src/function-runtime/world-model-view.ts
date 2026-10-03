@@ -145,8 +145,15 @@ export async function createWorldModelView(
     },
     upstream,
     sessionId,
+    session?.locale,
   );
-  return overlayWorldModelView(base, sessionId, pending, assertLive);
+  return overlayWorldModelView(
+    base,
+    sessionId,
+    pending,
+    assertLive,
+    session?.locale,
+  );
 }
 
 export function overlayWorldModelView(
@@ -154,11 +161,13 @@ export function overlayWorldModelView(
   sessionId: string,
   pending: readonly Proposal[] = [],
   assertLive: () => void = () => {},
+  /** The session's content locale. */
+  locale?: string,
 ): WorldModelView {
   const snapshot = structuredClone(base);
   const current = () => {
     assertLive();
-    return materializeWorldModel(snapshot, pending, sessionId);
+    return materializeWorldModel(snapshot, pending, sessionId, locale);
   };
   return Object.freeze({
     get characters() {

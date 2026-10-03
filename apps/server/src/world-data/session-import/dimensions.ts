@@ -6,6 +6,7 @@ import {
   dimensionIdSchema,
   DIMENSION_CONTRACT,
   DIMENSION_DATA_NAMESPACE,
+  resolveWorldDimensionsLocale,
   worldDimensionsSchema,
 } from "@covel/shared";
 import { canonicalJson, sha256Hex } from "../digest.js";
@@ -21,13 +22,21 @@ function parseDimensions(value: unknown) {
   return parsed.data;
 }
 
-/** All author entry points resolve to one effective declaration before session import. */
+/**
+ * All author entry points resolve to one effective declaration before session
+ * import. `locale` is the session's content locale: the records written here
+ * hold that one language, never the package's locale maps.
+ */
 export function appendDimensionPlan(
   plan: ImportPlan,
   dimensions: unknown,
-  deps?: WorldDataImportPreflightDeps,
+  deps: WorldDataImportPreflightDeps | undefined,
+  locale: string | undefined,
 ): ImportPlan {
-  const definitions = parseDimensions(dimensions);
+  const definitions = resolveWorldDimensionsLocale(
+    parseDimensions(dimensions),
+    locale,
+  );
   const providers = [...(deps?.registry?.getAll() ?? [])].filter(
     ([id, entry]) =>
       entry.status !== "error" &&
@@ -77,7 +86,11 @@ export function appendDimensionPlan(
   };
 }
 
-/** Match world loading precedence, but validate only dimension declarations here. */
+/**
+ * Match world loading precedence, but validate only dimension declarations
+ * here. The result is resolved for the session's content locale: a session
+ * stores one language, never the package's locale maps.
+ */
 export async function readEffectiveDimensions(args: {
   worldRoot: string;
   manifest: {
@@ -129,5 +142,8 @@ export async function readEffectiveDimensions(args: {
       );
     definitions = parseDimensions(read.value);
   }
-  return definitions;
+  return resolveWorldDimensionsLocale(
+    definitions,
+    args.locale ?? args.manifest.defaultLocale,
+  );
 }

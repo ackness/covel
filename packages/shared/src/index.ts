@@ -269,7 +269,8 @@ export {
   dimensionSettlementSummarySchema,
   validateDimensionValue,
   dimensionSnapshotFromRecords,
-  localizeDimensionValue,
+  resolveDimensionDefinitionLocale,
+  resolveWorldDimensionsLocale,
 } from "./schemas/dimensions.js";
 
 // ── API Transport Contracts ────────────────────────────────────
