@@ -1,0 +1,3 @@
+# Chinese labels. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  description: "{{pluginDescriptionZh}}"

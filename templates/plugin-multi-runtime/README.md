@@ -1,6 +1,6 @@
 # {{pluginName}}
 
-{{pluginDescription}}
+{{pluginDescriptionZh}}
 
 这是一个可直接改造成真实插件的多 runtime 起点：函数 runtime 负责确定性写入，agent runtime 负责阅读叙事上下文并产出结构化观察。
 
@@ -38,6 +38,8 @@ pnpm test:runtime -- {{pluginName}} --pretty
 
 - `README.md` 面向人类和开发者，说明插件用途、实现方式、运行时划分和维护信息。
 - 根 `PLUGIN.md` 声明包身份、契约与 `contributes`；子 `RUNTIME.md` 使用 `type`、`schedule`、`io`、`agent`/`function` 分组，其正文保存 agent 提示词。
+- `PLUGIN.md` 和 `RUNTIME.md` 只写 English：名称、说明和提示词。中文（或其他语言）的名称与说明写在 `locales/<locale>.yaml`，按清单文件分节。
+- 提示词的简体中文版本是可选的 `RUNTIME.zh.md`：frontmatter 留空，正文写译文。有了它，中文会话读它而不是 English 正文，所以两份必须同步修改；没有它，所有会话都读 English 正文。
 
 ## 下一步
 

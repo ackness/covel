@@ -3,6 +3,7 @@ import {
   cp,
   mkdir,
   mkdtemp,
+  readdir,
   rm,
   symlink,
   readFile,
@@ -10,6 +11,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { validatePluginLabels } from "@covel/plugin-loader";
 import { describe, expect, it } from "vitest";
 import { runRuntimeCases } from "./runner.js";
 
@@ -61,6 +63,25 @@ describe("plugin scaffolding", () => {
           },
         );
         const pluginRoot = path.join(root, directory, pluginId);
+        // A new plugin starts on the current contract: manifests and prompts
+        // in English, translated labels in locales/.
+        const manifests = (await readdir(pluginRoot, { recursive: true }))
+          .filter((file) =>
+            /^(PLUGIN|RUNTIME)(\..+)?\.md$/.test(path.basename(file)),
+          )
+          .sort();
+        expect(manifests).toContain("PLUGIN.md");
+        for (const file of manifests) {
+          expect(path.basename(file), file).toMatch(/^(PLUGIN|RUNTIME)\.md$/);
+          expect(
+            await readFile(path.join(pluginRoot, file), "utf8"),
+            file,
+          ).not.toMatch(/[\u4e00-\u9fff]/);
+        }
+        expect(await validatePluginLabels(pluginRoot)).toEqual([]);
+        expect(
+          await readFile(path.join(pluginRoot, "locales/zh.yaml"), "utf8"),
+        ).toMatch(/^PLUGIN\.md:\n {2}description: .*[\u4e00-\u9fff]/m);
         if (mode === "agent-only") {
           const manifest = JSON.parse(
             await readFile(path.join(pluginRoot, "package.json"), "utf8"),

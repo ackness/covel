@@ -39,9 +39,9 @@ const trimmed = baseUrl.replace(/\/$/, '').replace(/\/v1$/, '');
 const url = `${trimmed}/v1/chat/completions`;
 ```
 
-### 4. `description` / `i18n` 字段是 string，**不是** I18nText 对象
+### 4. 清单里的标签只写 English，译文放 `locales/`
 
-`PLUGIN.md` 的 `description:` 是 string。如果你按 i18n 习惯写：
+`PLUGIN.md` 的 `displayName`、`description`、`label` 写一行 English。不要按 i18n 习惯写成内联 map：
 
 ```yaml
 description:
@@ -49,7 +49,14 @@ description:
   en: English
 ```
 
-会直接 ZodError 拒载。统一写一行 string，必要时混合中英文。完整字段定义见 [`plugin-schema.md`](./plugin-schema.md)。
+`pnpm validate:plugin` 会把它报为错误。中文写在 `locales/zh.yaml`，按清单文件分节：
+
+```yaml
+PLUGIN.md:
+  description: 中文
+```
+
+完整字段定义见 [`plugin-schema.md`](./plugin-schema.md)。
 
 ## API key 解析规则
 

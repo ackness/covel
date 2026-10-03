@@ -15,6 +15,9 @@
  * Bundled plugins ship both languages, so with `requireChinese` every prompt a
  * model reads must have a Chinese variant. A function runtime's body is
  * documentation and stays English only.
+ *
+ * The plugin templates are checked without a lock: they ship no Chinese
+ * variant, and a plugin made from them must start out English.
  */
 
 import { createHash } from "node:crypto";
@@ -136,7 +139,7 @@ function identifiers(text, tags, knownTools) {
 }
 
 /**
- * @param {{ pluginsDir: string, lockPath: string, write?: boolean, requireChinese?: boolean, labelRoot?: string }} options
+ * @param {{ pluginsDir: string, lockPath?: string, write?: boolean, requireChinese?: boolean, labelRoot?: string }} options
  * @returns {{ problems: string[], pairs: Record<string, { en: string, zh: string }> }}
  */
 export function checkPromptVariants({
@@ -219,6 +222,7 @@ export function checkPromptVariants({
     }
   }
 
+  if (!lockPath) return { problems, pairs };
   if (write) {
     writeFileSync(lockPath, `${JSON.stringify(pairs, null, 2)}\n`);
   } else {

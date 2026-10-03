@@ -9,7 +9,9 @@ observation/
 ├── package.json
 ├── README.md
 ├── PLUGIN.md
-└── PLUGIN.zh.md
+├── PLUGIN.zh.md
+└── locales/
+    └── zh.yaml
 ```
 
 `PLUGIN.md`：
@@ -18,9 +20,7 @@ observation/
 ---
 id: observation
 kind: plugin
-displayName:
-  zh: 环境观察
-  en: Observation
+displayName: Observation
 description: Adds a short observation grounded in the latest narrative.
 requires: [narrative-engine@1]
 contributes:
@@ -51,6 +51,18 @@ runtime:
 Read runtime-inputs.narrative.value and describe one detail the player can observe.
 Use at most {{ userSettings.length }} sentences.
 Do not invent an event, character, item, or decision that the narrative did not establish.
+```
+
+`locales/zh.yaml` 只写标签的译文，key 与 `PLUGIN.md` 相同：
+
+```yaml
+PLUGIN.md:
+  displayName: 环境观察
+  description: 根据最新叙事补充一小段环境观察。
+  contributes:
+    settings:
+      - key: length
+        label: 最多句数
 ```
 
 根 `requires` 让启用时找到叙事提供者；输入绑定让本 runtime 等待并读取该提供者结果。`required: true` 表示上游失败或不存在时本 runtime 不能继续。`visibility: plugin` 表示结果属于插件输出；主故事提供者使用 `story`。

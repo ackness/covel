@@ -1,0 +1,7 @@
+# Chinese labels. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  description: "{{pluginDescriptionZh}}"
+runtimes/analyst/RUNTIME.md:
+  description: 读取当前 narrator 输出和本插件 notes，判断是否需要写入一条可执行观察。Agent runtime 起点。
+runtimes/note/RUNTIME.md:
+  description: 玩家点击侧栏按钮时，向本插件 notes namespace 写入一条结构化记录。函数 runtime 起点。

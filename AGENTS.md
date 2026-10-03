@@ -76,7 +76,7 @@ pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [
 pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool definitions are English;
                       # Chinese text in framework source only in recorded files
-pnpm check:prompts    # plugin prompts are English; each *.zh.md variant matches its English prompt
+pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt
                       # (pnpm prompts:lock records a pair after both languages changed)
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity

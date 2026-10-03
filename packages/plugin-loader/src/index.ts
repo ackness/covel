@@ -19,6 +19,7 @@ export {
   loadPluginUi,
 } from "./load.js";
 export type { PluginDefinition } from "./load.js";
+export { validatePluginLabels } from "./locale-labels.js";
 export {
   pluginDeclarations,
   pluginRuntimeManifests,

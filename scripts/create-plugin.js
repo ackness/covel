@@ -132,9 +132,9 @@ if (existsSync(targetDir)) {
 
 const placeholders = {
   "{{pluginName}}": pluginName,
-  "{{pluginDescription}}": `${pluginName} 插件 - 请在此填写插件描述。`,
+  // Manifests are English; the Chinese text goes to locales/zh.yaml and README.
+  "{{pluginDescription}}": `${pluginName} plugin - replace with a short plugin description.`,
   "{{pluginDescriptionZh}}": `${pluginName} 插件 - 请在此填写插件描述。`,
-  "{{pluginDescriptionEn}}": `${pluginName} plugin - replace with a short plugin description.`,
   "{{packageManager}}": resolveRepoPackageManager(),
 };
 
@@ -221,12 +221,15 @@ if (mode === "with-tools") {
     `  2. 编辑 ${relative(process.cwd(), targetDir)}/PLUGIN.md，填写 runtime 元信息和提示词`,
   );
   console.log(`  3. 修改 tools/record-note.js，实现工具逻辑`);
-  console.log("  4. 在 Covel 仓库根目录运行 pnpm install");
   console.log(
-    `  5. 在 Covel 仓库根目录运行 pnpm --filter covel-plugin-${pluginName} test`,
+    "  4. 提示词定稿后新增 PLUGIN.zh.md（内置插件必须有简体中文提示词），再运行 pnpm prompts:lock",
+  );
+  console.log("  5. 在 Covel 仓库根目录运行 pnpm install");
+  console.log(
+    `  6. 在 Covel 仓库根目录运行 pnpm --filter covel-plugin-${pluginName} test`,
   );
   console.log(
-    `  6. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
+    `  7. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
   );
 } else {
   console.log(
@@ -243,6 +246,9 @@ if (mode === "with-tools") {
       "  3. 函数 runtime 编辑 handler.js，agent runtime 编辑 RUNTIME.md 提示词",
     );
   }
+  console.log(
+    "  注意：清单和提示词写 English；中文的名称与说明写在 locales/zh.yaml",
+  );
   if (targetBaseDir !== DEFAULT_TARGET) {
     console.log(
       `  5. Set COVEL_USER_PLUGINS_DIR to ${targetBaseDir} so the server discovers this plugin.`,
@@ -323,6 +329,7 @@ function runCustomMultiRuntime(runtimes) {
     if (
       entry === "runtimes" ||
       entry === "tests" ||
+      entry === "locales" ||
       entry === "PLUGIN.md" ||
       entry === "README.md" ||
       entry === "node_modules"
@@ -358,9 +365,19 @@ function runCustomMultiRuntime(runtimes) {
   }
 
   // Custom runtimes do not include the demo's note panel.
+  // The agent stub reads the narrator's output, so the package names the contract.
+  const optional = runtimes.some((runtime) => runtime.type === "agent")
+    ? "optional: [narrative-engine@1]\n"
+    : "";
   writeFileSync(
     join(targetDir, "PLUGIN.md"),
-    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\n---\n`,
+    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\n${optional}---\n`,
+    "utf-8",
+  );
+  mkdirSync(join(targetDir, "locales"), { recursive: true });
+  writeFileSync(
+    join(targetDir, "locales", "zh.yaml"),
+    renderChineseLabels(runtimes),
     "utf-8",
   );
 
@@ -400,12 +417,23 @@ function runCustomMultiRuntime(runtimes) {
   }
 }
 
+function renderChineseLabels(runtimes) {
+  const sections = runtimes
+    .map(
+      (rt) =>
+        `runtimes/${rt.name}/RUNTIME.md:\n  description: ${rt.name} ${rt.type === "function" ? "函数" : "agent"} runtime，请填写它的职责。\n`,
+    )
+    .join("");
+  return `# Chinese labels. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  description: ${placeholders["{{pluginDescriptionZh}}"]}
+${sections}`;
+}
+
 function renderFunctionStubManifest(runtimeName) {
   return `---
 type: function
-description:
-  zh: ${runtimeName} 函数 runtime，请填写它的职责。
-  en: ${runtimeName} function runtime, replace with the real responsibility.
+description: ${runtimeName} function runtime, replace with the real responsibility.
 schedule:
   trigger: { type: manual }
   manual: { execution: sync }
@@ -463,17 +491,21 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
 function renderAgentStubManifest(runtimeName) {
   return `---
 type: agent
-description:
-  zh: ${runtimeName} agent runtime，请填写它的职责。
-  en: ${runtimeName} agent runtime, replace with the real responsibility.
+description: ${runtimeName} agent runtime, replace with the real responsibility.
 schedule:
   trigger: { type: manual }
   manual: { execution: sync }
 io:
+  inputs:
+    narrator-output:
+      from:
+        contract: narrative-engine@1
+      select: /narrativeOutput
+      required: false
   visibility: plugin
   selfData:
     - namespace: notes
-      as: existing-notes
+      as: <existing-notes>
       format: summary
       maxEntries: 50
 agent:
@@ -487,35 +519,36 @@ agent:
     maxRetries: 1
 ---
 
-你是 ${pluginName} 插件的 ${runtimeName} runtime。你的职责是把本轮剧情里和插件目标相关的信息整理成一条可维护的插件记录。
+You are the ${runtimeName} runtime in the ${pluginName} plugin. Your job is to turn narrative information relevant to this plugin into one maintainable plugin note.
 
-## 插件目标
+## Plugin Goal
 
-将这一段替换为你的真实目标。例如：追踪玩家承诺、记录世界规则变化、维护任务线索、整理可复用的战斗状态。
+Replace this section with the real goal. Examples: track player promises, record world-rule changes, maintain quest clues, or preserve reusable combat state.
 
-## 输入
+## Inputs
 
-\`<narrator-output>\` 区块里是本轮 narrator 生成的剧情文本（可能为空）。
+\`runtime-inputs.narrator-output.value\` is the latest narrative text produced by the narrator this turn. It may be empty.
 
-\`<existing-notes>\` 区块里是本插件已经写入 notes namespace 的记录摘要。
+\`<existing-notes>\` is a compact summary of records already stored in this plugin's \`notes\` namespace. Use it to avoid duplicate writes.
 
-## 决策规则
+## Decision Rules
 
-- 如果没有和插件目标相关的新信息，调用 \`runtime-done\` 结束。
-- 如果已有 notes 已覆盖同一事实，调用 \`runtime-done\` 结束。
-- 如果发现值得保留的新信息，调用一次 \`plugin-data-set\` 写入 \`notes\`，然后立即调用 \`runtime-done\`。
+- If \`runtime-inputs.narrator-output.value\` is empty, call \`runtime-done\` and stop.
+- If there is no new information relevant to the plugin goal, call \`runtime-done\` and stop.
+- If existing notes already cover the same fact, call \`runtime-done\` and stop.
+- If there is useful new information, call \`plugin-data-set\` once to write into \`notes\`, then immediately call \`runtime-done\`.
 
-## 写入格式
+## Write Shape
 
-调用 \`plugin-data-set\` 时使用：
+Call \`plugin-data-set\` with:
 
-| 参数        | 值                                                                                                                                                  |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| \`namespace\` | \`notes\`                                                                                                                                           |
-| \`key\`       | \`${runtimeName}-\` 加短时间戳或稳定短 ID                                                                                                           |
-| \`value\`     | \`{ "kind": "analysis", "title": "<短标题>", "text": "<一到两句可执行观察>", "tags": ["<1-3 个标签>"], "createdAt": "<ISO 8601 时间戳>" }\` |
+| Param       | Value |
+| ----------- | ----- |
+| \`namespace\` | \`notes\` |
+| \`key\`       | \`${runtimeName}-\` plus a short timestamp or stable short ID |
+| \`value\`     | \`{ "kind": "analysis", "title": "<short title>", "text": "<one or two actionable sentences>", "tags": ["<1-3 tags>"], "createdAt": "<ISO 8601 timestamp>" }\` |
 
-不要输出解释性文字。
+Keep the note short and concrete. Do not emit explanatory prose.
 `;
 }
 
@@ -528,7 +561,7 @@ function renderCustomReadme(runtimes) {
     .join("\n");
   return `# ${pluginName}
 
-${placeholders["{{pluginDescription}}"]}
+${placeholders["{{pluginDescriptionZh}}"]}
 
 ## Runtime
 
@@ -539,7 +572,8 @@ ${lines}
 1. 修改 \`README.md\`，维护给人类和开发者看的说明。
 2. 修改 \`runtimes/<name>/RUNTIME.md\`，维护 runtime 元信息和模型指令。
 3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
-4. ${runtimes.some((runtime) => runtime.type === "function") ? "Run `pnpm install && pnpm lint` in this plugin directory to check JavaScript against the public SDK. Then run" : "Run"} \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
+4. \`PLUGIN.md\` 和 \`RUNTIME.md\` 只写 English；中文的名称与说明写在 \`locales/zh.yaml\`。提示词的简体中文版本是可选的 \`RUNTIME.zh.md\`，有了它就必须和 English 正文同步修改。
+5. ${runtimes.some((runtime) => runtime.type === "function") ? "Run `pnpm install && pnpm lint` in this plugin directory to check JavaScript against the public SDK. Then run" : "Run"} \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
 `;
 }
 

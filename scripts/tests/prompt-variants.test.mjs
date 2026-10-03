@@ -154,3 +154,23 @@ test("reports a Chinese variant that was never recorded", async (t) => {
   });
   assert.match(plugin.check().join("\n"), /new Chinese variant/);
 });
+
+test("checks a directory that has no lock, such as the templates", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "covel-prompts-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const pluginsDir = path.join(root, "templates");
+  await fs.mkdir(path.join(pluginsDir, "demo"), { recursive: true });
+  const file = path.join(pluginsDir, "demo", "PLUGIN.md");
+
+  await fs.writeFile(file, ENGLISH);
+  assert.deepEqual(checkPromptVariants({ pluginsDir }).problems, []);
+
+  await fs.writeFile(
+    file,
+    `${FRONTMATTER}\n你是示例插件的 runtime。读取本轮叙事，然后调用一次工具写入记录。\n`,
+  );
+  const problems = checkPromptVariants({ pluginsDir }).problems;
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /canonical prompt must be English/);
+  assert.deepEqual(await fs.readdir(pluginsDir), ["demo"]);
+});

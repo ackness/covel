@@ -19,6 +19,12 @@ const { problems, pairs } = checkPromptVariants({
   write,
   requireChinese: true,
 });
+// A plugin made by `pnpm create-plugin` is a copy of a template, so the
+// templates follow the same rules. They have no lock: nothing is paired.
+problems.push(
+  ...checkPromptVariants({ pluginsDir: path.join(repoRoot, "templates") })
+    .problems,
+);
 
 if (problems.length > 0) {
   console.error(
