@@ -1194,7 +1194,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 | 字段           | 类型     | 必填 | 说明                                                                                                  |
 | -------------- | -------- | ---- | ----------------------------------------------------------------------------------------------------- |
 | `worldId`      | string   | 否   | 已存在且未进入删除流程的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                                      |
-| `locale`       | string   | 否   | 语言区域，默认 `zh-CN`                                                                                |
+| `locale`       | string   | 否   | 会话的内容语言，默认 `zh-CN`。创建后锁定：之后的回合、手动 runtime 与后台任务都用它，请求无法修改     |
 | `plugins`      | string[] | 否   | 要激活的插件 ID 列表                                                                                  |
 | `id`           | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`）                                         |
 | `loreOverride` | string   | 否   | 本次会话的世界背景快照，沿用世界文档的字符串契约；空字符串表示显式清空，与会话同次创建保存到 metadata |
@@ -2884,7 +2884,7 @@ id: evt-002
 
 前端主要使用此端点进行游戏交互。将动作请求（发送消息、执行命令等）翻译为 Turn 执行，并通过 SSE 流式返回结果。
 
-请求体按 `type` 作判别联合校验：顶层只接受 `requestId`、`type`、`sessionId`、`locale`、`model`、`payload`；每种 action 的 payload 也拒绝未声明字段。`requestId` / `sessionId` / runtime/turn ID 必须是有界安全标识符，locale 必须符合 BCP-47 风格格式；非法请求在创建 turn 或写入消息前返回 400。
+请求体按 `type` 作判别联合校验：顶层只接受 `requestId`、`type`、`sessionId`、`model`、`payload`；每种 action 的 payload 也拒绝未声明字段。请求不带 `locale`：回合一律使用会话创建时锁定的内容语言（`session.locale`），带 `locale` 的请求会被拒绝。`requestId` / `sessionId` / runtime/turn ID 必须是有界安全标识符；非法请求在创建 turn 或写入消息前返回 400。
 
 **请求体:**
 
@@ -2893,7 +2893,6 @@ id: evt-002
   "requestId": "req-001",
   "type": "send_message",
   "sessionId": "mistport-a1b2c3d4",
-  "locale": "zh-CN",
   "payload": {
     "content": "我拔出剑，准备迎战"
   }

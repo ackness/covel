@@ -19,14 +19,14 @@ describe("committed runtime recovery projection", () => {
       error: "no longer available for recovery",
     },
   ])(
-    "does not persist a new locale for rejected $type",
+    "leaves the session unchanged for rejected $type",
     async ({ type, payload, error }) => {
       const f = await batchRetryFixture();
       await f.store.updateSession(f.sessionId, {
         locale: "zh-CN",
         updatedAt: "2026-01-01T00:00:00Z",
       });
-      const result = await f.post(payload, type, "en-US");
+      const result = await f.post(payload, type);
       expect(result.text).toContain(error);
       expect(await f.store.getSession(f.sessionId)).toMatchObject({
         locale: "zh-CN",

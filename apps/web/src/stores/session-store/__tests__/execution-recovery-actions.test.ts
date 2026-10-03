@@ -29,17 +29,14 @@ describe("explicit recovery retries", () => {
         requestId: "old-request",
         retry,
       };
-      expect(createRecoveryActionRequest(status, "session-1", "en-US")).toEqual(
-        {
-          requestId: expect.any(String),
-          sessionId: "session-1",
-          locale: "en-US",
-          type: retry.type,
-          payload: { ...retry.payload, recoverFromTurnId: "original" },
-        },
-      );
+      expect(createRecoveryActionRequest(status, "session-1")).toEqual({
+        requestId: expect.any(String),
+        sessionId: "session-1",
+        type: retry.type,
+        payload: { ...retry.payload, recoverFromTurnId: "original" },
+      });
       expect(
-        createRecoveryActionRequest(status, "session-1", "en-US")?.requestId,
+        createRecoveryActionRequest(status, "session-1")?.requestId,
       ).not.toBe("old-request");
     },
   );
@@ -54,7 +51,6 @@ describe("explicit recovery retries", () => {
             retry: { type: "retry_turn", payload: {} },
           },
           "s",
-          "en-US",
         ),
       ).toBeUndefined();
     },
@@ -64,7 +60,6 @@ describe("explicit recovery retries", () => {
       createRecoveryActionRequest(
         { state: "interrupted", turnId: "original" },
         "s",
-        "en-US",
       ),
     ).toBeUndefined();
   });

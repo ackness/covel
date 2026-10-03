@@ -39,7 +39,7 @@ export interface RuntimeLoader {
     fn: (pluginId: string, sessionId?: string) => Promise<void>,
   ): void;
   /** The entry manager checks publication consistency after asynchronous loading. */
-  capture(sessionId: string, locale?: string): Promise<RuntimeArtifactSnapshot>;
+  capture(sessionId: string): Promise<RuntimeArtifactSnapshot>;
   prepareGeneration(args: {
     discovery: PluginDiscoveryResult;
     definition: PluginDefinition;
@@ -209,7 +209,7 @@ export function createRuntimeLoader(
         for (const [key, value] of staged) artifacts.set(key, value);
       };
     },
-    async capture(sessionId, locale) {
+    async capture(sessionId) {
       const existing = snapshots.getStore();
       if (existing) {
         if (existing.sessionId !== sessionId)
@@ -219,7 +219,7 @@ export function createRuntimeLoader(
       const session = await store.getSession(sessionId);
       if (!session)
         throw new Error("Session not found while capturing runtimes");
-      const effectiveLocale = locale ?? session.locale;
+      const effectiveLocale = session.locale;
       const loaded = new Map<string, LoadedRuntime>();
       const prompts = new Map<string, ParsedRuntimeMd>();
       for (const pluginId of session.activePlugins) {

@@ -166,7 +166,6 @@ export function useBuildSessionActions({
             requestId,
             type: "start_session",
             sessionId,
-            locale: state.session?.locale ?? i18n.language,
             payload: {},
           },
           handleSseEvent,
@@ -446,7 +445,6 @@ export function useBuildSessionActions({
         requestId: crypto.randomUUID(),
         type: "execute_command",
         sessionId,
-        locale: state.session?.locale ?? i18n.language,
         payload: { command },
       });
     },
@@ -480,7 +478,6 @@ export function useBuildSessionActions({
           requestId: crypto.randomUUID(),
           type: "retry_failed_runtimes",
           sessionId,
-          locale: state.session?.locale ?? i18n.language,
           payload: {
             runtimeIds: [...new Set(runtimeId)],
             retryFromTurnId: sourceTurnId,
@@ -493,7 +490,6 @@ export function useBuildSessionActions({
         requestId: crypto.randomUUID(),
         type: "retry_runtime",
         sessionId,
-        locale: state.session?.locale ?? i18n.language,
         payload: {
           runtimeId,
           ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),

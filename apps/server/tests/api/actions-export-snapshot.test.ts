@@ -87,7 +87,7 @@ runtime:
         approvalScopeNonce: "approval-fixture",
         sessionIncarnationNonce: "session-fixture",
       },
-      locale: "en-US",
+      locale: "zh-CN",
       createdAt: now,
       updatedAt: now,
     });
@@ -110,22 +110,18 @@ runtime:
         expect(loaded?.promptTemplate).toContain("中文捕获正文。");
         return loaded;
       });
-      c.set(
-        "withPluginSnapshot",
-        async (sessionId, fn, _beforeCapture, locale) => {
-          expect((await store.getSession(sessionId))?.locale).toBe("en-US");
-          expect(locale).toBe("zh-CN");
-          return (await loader.capture(sessionId, locale)).run(async () => {
-            const loaded = await loader.loadRuntimeFn(
-              definition.manifests[0]!.manifest,
-              undefined,
-              sessionId,
-            );
-            expect(loaded?.promptTemplate).toContain("中文捕获正文。");
-            return fn();
-          });
-        },
-      );
+      c.set("withPluginSnapshot", async (sessionId, fn) => {
+        // The snapshot reads prompts in the session's own locale.
+        return (await loader.capture(sessionId)).run(async () => {
+          const loaded = await loader.loadRuntimeFn(
+            definition.manifests[0]!.manifest,
+            undefined,
+            sessionId,
+          );
+          expect(loaded?.promptTemplate).toContain("中文捕获正文。");
+          return fn();
+        });
+      });
       c.set("resolveModel", () => undefined);
       c.set("llmAdapter", {
         generate: async () => {
@@ -142,7 +138,6 @@ runtime:
         requestId: "export-action",
         type: "send_message",
         sessionId: "session",
-        locale: "zh-CN",
         payload: { content: "Continue" },
       }),
     });

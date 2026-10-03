@@ -265,8 +265,11 @@ those are not version compatibility.
 
 ### Locale
 
-Locale enters through `KernelInput.locale` → `RuntimeContextView.locale`, resolved
-request → run → world default → app default (`zh-CN`). Manifest display fields use
+A session's content locale is fixed when the session is created
+(`SessionRecord.locale`, default `zh-CN`). Every turn, manual runtime, and
+background job passes it as `KernelInput.locale` → `RuntimeContextView.locale`; an
+action request carries no locale and cannot change it. The UI language only
+selects labels. Manifest display fields use
 `I18nText = string | Record<string, string>`.
 
 Prompt bodies are instructions, not content. The canonical `PLUGIN.md` /

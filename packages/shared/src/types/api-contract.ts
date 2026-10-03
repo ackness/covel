@@ -22,7 +22,6 @@ export type ApiOkResponse<
 interface ActionRequestBase {
   readonly requestId: string;
   readonly sessionId: string;
-  readonly locale?: string;
   readonly model?: string;
 }
 

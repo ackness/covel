@@ -49,13 +49,6 @@ function requiredActionString(
   return schema;
 }
 
-const actionLocaleSchema = z
-  .string()
-  .refine((value) => canonicalizeLocale(value) !== undefined, {
-    message: "locale has an invalid format",
-  })
-  .transform((value) => canonicalizeLocale(value)!);
-
 const actionModelSchema = requiredActionString("model", 256).refine(
   (value) =>
     [...value].every((character) => {
@@ -68,7 +61,6 @@ const actionModelSchema = requiredActionString("model", 256).refine(
 const actionBase = {
   requestId: requiredActionString("requestId", 128, ACTION_ID_PATTERN),
   sessionId: requiredActionString("sessionId", 256, ACTION_ID_PATTERN),
-  locale: actionLocaleSchema.optional(),
   model: actionModelSchema.optional(),
 };
 

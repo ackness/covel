@@ -295,7 +295,6 @@ describe("hidden world data and story events", () => {
         requestId: `hidden-${requestIndex}`,
         type: "send_message",
         sessionId: id,
-        locale: "en-US",
         payload: { content },
       }),
     });

@@ -1124,7 +1124,6 @@ async function runTurn(
     type: action.type,
     payload: action.payload,
     requestId: randomUUID(),
-    locale: args.locale,
   };
   if (args.slot) body.model = args.slot;
 
