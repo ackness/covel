@@ -16,7 +16,7 @@ import {
  *     "payload": { ... }
  *   }
  *
- * Three dispatch kinds:
+ * Four dispatch kinds:
  *
  *   1. Action-level (`kind: "action"`) — delegates to an inline handler registered
  *      by the plugin entry or a framework default. Returns a
@@ -37,6 +37,9 @@ import {
  *   3. Command-level (`kind: "command"`) — resolves `commandId` against the
  *      active session command directory, validates text or structured args,
  *      then dispatches the server-owned plugin action.
+ *
+ *   4. Event-level (`kind: "event"`) — a plugin's UI emits a domain event that
+ *      plugin declares; the subscribing runtimes are queued as event jobs.
  *
  * Resolution order for action dispatch:
  *   1. Plugin entry-registered action
@@ -88,6 +91,7 @@ import {
 } from "./concealed-runtimes.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
+import { dispatchPluginEvent } from "./plugin-rpc/event-dispatch.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -178,6 +182,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       );
     }
     commandInvocation = parsed.invocation;
+  }
+
+  if (body.kind === "event") {
+    return dispatchPluginEvent(c, session, body, decodedUserSettings.settings);
   }
 
   // ── Runtime-level manual trigger ─────────────────────────────────

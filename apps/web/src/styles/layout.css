@@ -1,0 +1,263 @@
+/* ─────────────────────────────────────────────────────────────────
+   Layout options
+   A theme package picks structural options through `layout`; the app
+   publishes them on <html> (data-nav / data-panel-tabs / data-backdrop /
+   data-world-list). Rules here key on the option, never on a theme id,
+   so an imported package that overrides one option still gets the
+   matching structure. Look (colour, type, radius) stays in the theme.
+   ───────────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* ── nav: rail ──────────────────────────────────────────────── */
+  .ui-nav-rail {
+    background: var(--surface-rail);
+  }
+
+  /* With the rail the top bar is gone at desktop widths, so the page's own
+     header rows become the window drag handle on the Electron shell.
+     Browsers ignore the property. */
+  @media (min-width: 64rem) {
+    html[data-nav="rail"] .ui-drag-region {
+      -webkit-app-region: drag;
+    }
+
+    html[data-nav="rail"]
+      .ui-drag-region
+      :is(a, button, input, select, textarea, [role="tab"], [role="button"]) {
+      -webkit-app-region: no-drag;
+    }
+  }
+
+  /* ── backdrop: scene ────────────────────────────────────────── */
+  .ui-session-scene-scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      rgb(0 0 0 / 0.5) 0%,
+      rgb(0 0 0 / 0.1) 30%,
+      rgb(0 0 0 / 0.5) 56%,
+      rgb(0 0 0 / 0.86) 100%
+    );
+  }
+
+  html[data-backdrop="scene"] .ui-session-header {
+    /* no-repeat: a repeating gradient would paint its dark start into the
+       transparent bottom border as a stray line. */
+    background: linear-gradient(180deg, rgb(0 0 0 / 0.6), rgb(0 0 0 / 0))
+      no-repeat;
+    border-bottom-color: transparent;
+  }
+
+  html[data-backdrop="scene"] .ui-story-surface {
+    background: var(
+      --surface-story,
+      color-mix(in oklab, var(--surface-page) 82%, transparent)
+    );
+    backdrop-filter: blur(18px);
+  }
+
+  html[data-backdrop="scene"] .ui-story-surface .ui-composer {
+    background: transparent;
+  }
+
+  /* The story becomes a column on the right; the scene stays visible beside
+     it. Narrow screens keep the full-width column over the scrim. */
+  @media (min-width: 64rem) {
+    html[data-backdrop="scene"] .ui-story-surface {
+      align-self: flex-end;
+      width: min(38rem, calc(100% - 3rem));
+      margin: 0.25rem 1.5rem 1.5rem 0;
+      border: 1px solid var(--rule-color);
+      border-radius: var(--radius-card);
+      overflow: hidden;
+    }
+  }
+
+  /* Scene HUD: cast and player gauges over the art, beside the story column.
+     It needs the width, so the component measures the session area and steps
+     aside when a side panel squeezes the scene. */
+  .ui-scene-hud {
+    display: none;
+  }
+
+  .ui-scene-hud[data-shown="true"] {
+    display: flex;
+    max-width: calc(100% - 38rem - 4.5rem);
+  }
+
+  .ui-scene-card {
+    border: 1px solid rgb(255 255 255 / 0.14);
+    border-radius: var(--radius-card);
+    background: var(--surface-story, rgb(9 12 17 / 0.72));
+    color: #fff;
+    backdrop-filter: blur(14px);
+  }
+
+  .ui-scene-card .ui-meter-track {
+    background: rgb(255 255 255 / 0.2);
+  }
+
+  .ui-scene-card .text-muted-foreground {
+    color: rgb(255 255 255 / 0.72);
+  }
+
+  .ui-scene-cast[data-focused="true"] {
+    border-color: var(--accent-primary);
+  }
+
+  .ui-scene-card .ui-status-item {
+    border-color: rgb(255 255 255 / 0.22);
+    color: rgb(255 255 255 / 0.85);
+  }
+
+  .ui-scene-speaking {
+    padding: 0.0625rem 0.4375rem;
+    border-radius: 999px;
+    background: var(--accent-primary);
+    color: var(--color-primary-foreground);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  /* While the gauges sit on the scene, the panel does not repeat them. */
+  html:has(.ui-scene-hud[data-shown="true"] .ui-scene-status) .ui-panel-status {
+    display: none;
+  }
+
+  /* ── backdrop: banner ───────────────────────────────────────── */
+  .ui-chapter-banner {
+    border-radius: var(--radius-card);
+  }
+
+  .ui-chapter-banner-scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.72));
+  }
+
+  /* ── turn notes: margin ─────────────────────────────────────── */
+  /* A turn's results sit beside the story like annotations in a book margin.
+     Grid auto-placement puts the notes row next to the row before it; below
+     the breakpoint they fall back under the story. */
+  html[data-turn-notes="margin"] .ui-story-surface {
+    container-type: inline-size;
+    --turn-notes-width: 13rem;
+    --turn-notes-gap: 2.5rem;
+  }
+
+  @container (min-width: 64rem) {
+    html[data-turn-notes="margin"] .ui-session-column {
+      display: grid;
+      grid-template-columns:
+        minmax(0, var(--story-max-width))
+        var(--turn-notes-width);
+      column-gap: var(--turn-notes-gap);
+      justify-content: center;
+      max-width: none;
+    }
+
+    /* The composer lines up under the story column, not under the pair. */
+    html[data-turn-notes="margin"] .ui-composer-frame {
+      max-width: calc(
+        var(--story-max-width) + var(--turn-notes-gap) + var(--turn-notes-width)
+      );
+      padding-right: calc(var(--turn-notes-gap) + var(--turn-notes-width));
+    }
+
+    html[data-turn-notes="margin"] .ui-session-column > * {
+      grid-column: 1;
+    }
+
+    html[data-turn-notes="margin"]
+      .ui-session-column
+      > [data-row-kind="updates"] {
+      grid-column: 2;
+      align-self: start;
+    }
+  }
+
+  /* ── world list ─────────────────────────────────────────────── */
+  .ui-world-enter {
+    background: var(--color-primary);
+    border-color: transparent;
+    color: var(--color-primary-foreground);
+  }
+
+  .ui-world-enter:hover {
+    background: color-mix(
+      in oklab,
+      var(--color-primary) 86%,
+      var(--color-foreground)
+    );
+  }
+
+  .ui-world-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.0625rem 0.5rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-secondary);
+    color: var(--color-muted-foreground);
+    font-size: 0.75rem;
+  }
+
+  /* Showcase: always light text over a darkened cover, like the cover cards. */
+  .ui-world-showcase-scrim {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(0deg, rgb(0 0 0 / 0.82) 0%, rgb(0 0 0 / 0) 46%),
+      linear-gradient(
+        90deg,
+        rgb(0 0 0 / 0.86) 0%,
+        rgb(0 0 0 / 0.5) 40%,
+        rgb(0 0 0 / 0.12) 72%,
+        rgb(0 0 0 / 0.3) 100%
+      );
+  }
+
+  /* Stacked on a phone, the copy runs the full width: darken evenly. */
+  @media (max-width: 63.99rem) {
+    .ui-world-showcase-scrim {
+      background: linear-gradient(
+        0deg,
+        rgb(0 0 0 / 0.88) 0%,
+        rgb(0 0 0 / 0.5) 100%
+      );
+    }
+  }
+
+  .ui-world-glass {
+    border-color: rgb(255 255 255 / 0.28);
+    background: rgb(0 0 0 / 0.42);
+    color: #fff;
+    backdrop-filter: blur(8px);
+  }
+
+  .ui-world-glass:hover {
+    background: rgb(255 255 255 / 0.16);
+  }
+
+  .ui-world-chip {
+    padding: 0.1875rem 0.625rem;
+    border: 1px solid rgb(255 255 255 / 0.26);
+    border-radius: var(--radius-sm);
+    color: rgb(255 255 255 / 0.9);
+    font-size: 0.78125rem;
+  }
+
+  .ui-world-thumb {
+    border: 1px solid rgb(255 255 255 / 0.2);
+  }
+
+  .ui-world-thumb:hover {
+    border-color: rgb(255 255 255 / 0.5);
+  }
+
+  .ui-world-thumb[aria-pressed="true"] {
+    border: 2px solid var(--accent-primary);
+  }
+}

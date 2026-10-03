@@ -773,7 +773,10 @@ describe("core-quest plugin manifest", () => {
       required: true,
     });
     expect(declaration.requires).toContain("world-ir-provider@1");
-    expect(packageManifest.entry).toBeUndefined();
+    // The entry only feeds the session summary; it registers no tool, so the
+    // log stays a function runtime.
+    expect(packageManifest.entry).toBe("./server/index.js");
+    expect(declaration.contributes.tools).toBeUndefined();
     expect(loaded.handler).toBeTypeOf("function");
   });
 

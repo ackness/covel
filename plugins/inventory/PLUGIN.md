@@ -51,6 +51,13 @@ contributes:
   actions:
     - item-op
     - open-bag
+  extensions:
+    - point: ui.slot@1
+      id: summary
+      slot: session.summary@1
+      order: 30
+      watch:
+        - items
 ---
 
 # Inventory

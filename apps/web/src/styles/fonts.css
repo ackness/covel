@@ -1,0 +1,19 @@
+/* ─────────────────────────────────────────────────────────────────
+   Bundled faces
+   Served from this app (public/fonts), never from a font host: the
+   file is fetched only when a theme actually sets text in the family,
+   and it works offline and in the desktop shell.
+
+   ZCOOL XiaoWei — SIL Open Font License 1.1, see
+   public/fonts/zcool-xiaowei/OFL.txt. One weight (400); a theme using
+   it for titles must not ask for bold, or the browser synthesises one.
+   ───────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "ZCOOL XiaoWei";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/zcool-xiaowei/zcool-xiaowei-chinese-simplified-400-normal.woff2")
+    format("woff2");
+}

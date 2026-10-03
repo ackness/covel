@@ -9,5 +9,10 @@
   "description": {
     "zh-CN": "利落、偏工具化的工作台风格。",
     "en-US": "A sharp, tool-first workbench style."
+  },
+  "group": "classic",
+  "groupLabel": {
+    "zh-CN": "经典",
+    "en-US": "Classic"
   }
 }

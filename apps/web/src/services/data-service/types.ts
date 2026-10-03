@@ -44,7 +44,8 @@ export interface DataService {
   prepareWorldForServer(worldId: string): Promise<void>;
 
   // Sessions
-  listSessions(worldId: string): Promise<SessionRecord[]>;
+  /** Sessions of one world, or of every world when `worldId` is omitted. */
+  listSessions(worldId?: string): Promise<SessionRecord[]>;
   getSession(sessionId: string): Promise<SessionRecord | null>;
   createSession(
     worldId: string,

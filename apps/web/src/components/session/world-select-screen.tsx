@@ -17,7 +17,12 @@ import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import { WorldListView } from "@/components/world/world-list-view.js";
 import { getDataService } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import type { PluginSummary, WorldRecord } from "@/services/api.js";
+import type {
+  PluginSummary,
+  SessionRecord,
+  WorldRecord,
+} from "@/services/api.js";
+import { useRecentSessions } from "@/components/world/use-recent-sessions.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import {
@@ -39,6 +44,8 @@ interface WorldSelectScreenProps {
   onSettingsOpenChange: (v: boolean) => void;
   settingsInitialKey?: string;
   onSelectWorld: (worldId: string) => void;
+  /** Offers "continue" entries for worlds that already have a session. */
+  onResumeSession?: (session: SessionRecord) => void;
   onOpenOnboarding?: () => void;
   onWorldUpdated?: (world: WorldRecord) => void;
   onWorldCreated?: (world: WorldRecord) => void;
@@ -82,6 +89,7 @@ export function WorldSelectScreen({
   onSettingsOpenChange,
   settingsInitialKey,
   onSelectWorld,
+  onResumeSession,
   onOpenOnboarding,
   onWorldUpdated,
   onWorldCreated,
@@ -99,6 +107,7 @@ export function WorldSelectScreen({
     [worlds, translation.language, translation.resolvedLanguage],
   );
 
+  const recentSessions = useRecentSessions(worlds, Boolean(onResumeSession));
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -412,6 +421,8 @@ export function WorldSelectScreen({
           onSettingsOpenChange(true);
         }}
         onEnterWorld={handleEnterWorld}
+        recentSessions={recentSessions}
+        onResumeSession={onResumeSession}
         onViewDetails={handleViewDetails}
         onDeleteWorld={handleDeleteClick}
       />

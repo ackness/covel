@@ -82,11 +82,11 @@ export function ChatBlockRenderer({
       ((block.data as Record<string, unknown> | undefined)?.pluginId as
         string | undefined) ?? msg.runtimeId;
     return (
+      // The current turn's suggestions are the player's next move, so they
+      // stay open; once a later message exists they fold into history.
       <HistoryBlock
-        collapsed={viewMode === "parsed"}
-        label={t(
-          locked ? "session.previousSuggestions" : "session.currentSuggestions",
-        )}
+        collapsed={viewMode === "parsed" && locked}
+        label={t("session.previousSuggestions")}
       >
         <div className="flex flex-col gap-1.5">
           {viewMode === "detailed" && pluginId && (
@@ -124,7 +124,7 @@ export function ChatBlockRenderer({
   // NOTE: branch-reply blocks are NOT special-cased here. The branch-reply
   // plugin renders through the standard plugin-message surface (its
   // `ui.message` spec → `BranchReplyCandidates` catalog component), so the
-  // framework never hardcodes the plugin's block type (CLAUDE.md isolation).
+  // framework never hardcodes the plugin's block type (AGENTS.md isolation).
 
   const assetView = isAssetGenerateView(block.data) ? block.data : null;
   if (blockType === "asset.generate" && sessionId && assetView) {

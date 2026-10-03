@@ -9,5 +9,10 @@
   "description": {
     "zh-CN": "玻璃拟态 + 流动极光 — 演示动画、模糊、发光与状态驱动特效，可直接当模板抄。",
     "en-US": "Glassmorphism with drifting aurora — a template showing animation, blur, glow and turn-state effects."
+  },
+  "group": "classic",
+  "groupLabel": {
+    "zh-CN": "经典",
+    "en-US": "Classic"
   }
 }

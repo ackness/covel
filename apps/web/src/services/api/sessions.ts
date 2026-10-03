@@ -165,9 +165,11 @@ export async function getSessionView(
 
 // -- Session API -------------------------------------------------
 
-export async function listSessions(worldId: string): Promise<SessionRecord[]> {
+/** Sessions of one world, or of every world when `worldId` is omitted. */
+export async function listSessions(worldId?: string): Promise<SessionRecord[]> {
+  const query = worldId ? `?worldId=${encodeURIComponent(worldId)}` : "";
   const res = await request<{ items: SessionRecord[] }>(
-    `/api/sessions?worldId=${encodeURIComponent(worldId)}`,
+    `/api/sessions${query}`,
     { operatorAuth: true },
   );
   return res.items;

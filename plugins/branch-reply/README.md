@@ -13,6 +13,7 @@
 - 候选集合写入 `plugin_data[branch-reply][turns]`。
 - 消息块状态写入 `plugin_data[branch-reply][message]`。
 - 接受候选时走 proposal 写入路径，保持和正常状态提交一致。
+- 聊天区里每条候选是一个选项：点击即采用该版本（当前回合里也可以按数字键），「草稿」「发送」是它下方的次要动作。
 
 ## 开发
 

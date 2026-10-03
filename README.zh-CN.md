@@ -36,6 +36,15 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 
 世界声明自己的默认档（`defaultViewMode: stage`），游戏中可随时切换。
 
+## 三套风格，一处切换
+
+|                         面板                         |                        书卷                         |                         舞台                         |
+| :--------------------------------------------------: | :-------------------------------------------------: | :--------------------------------------------------: |
+| ![面板方案](./.assets/images/readme/style-panel.png) | ![书卷方案](./.assets/images/readme/style-book.png) | ![舞台方案](./.assets/images/readme/style-stage.png) |
+|      应用式：图标导航、带标签的选项卡片、状态条      |       阅读优先：宋体正文、编号选项、页边批注        |       场景优先：场景图铺满、在场角色、键帽选项       |
+
+风格方案改的不只是配色，还有结构：导航放在哪、选项怎么画、会话怎样使用世界美术。在**设置 → 外观**里选一套；原来的几套主题成了第四种风格「经典」下的配色。方案就是主题包，可以另存为自己的，也可以导入别人的（[指南](./docs/guide/themes.md)）。插件界面不需要知道当前是哪套方案，会自动跟随。
+
 ## 三层怎样配合
 
 | 层级       | 负责什么             | 常见内容                                                            |
@@ -54,7 +63,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | -------------------- | ------------------------------------------ | ------------------------------------------------------ |
 | **Agent runtime**    | 用模型完成叙事或结构化抽取                 | `narrator`、`codex`、`world-ir`                        |
 | **Function runtime** | 执行确定性、零 token 的游戏逻辑            | `pregame`、`inventory/ledger`、`scene-stage/cast`      |
-| **混合插件包**       | 组合确定性检索与 agent 抽取                | `npc-graph`、`dice-check`                              |
+| **混合插件包**       | 在同一个包里组合确定性函数与 agent         | `npc-graph`、`world-time`                              |
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `narrator`（草稿审查）、`char-creator`（角色资料保护） |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`                        |
 
@@ -114,7 +123,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 世界包通过 `defaultLocale` 与 `supportedLocales` 声明语言。加载器会优先读取当前语言的变体，缺失时回退到权威 source，因此只完成部分翻译也不会影响游玩。雾港展示了包含世界观、角色、规则和媒体 metadata 变体的中英双语世界包。**Emberback Relay** 则是内置的英文默认世界包（`defaultLocale: en-US`），manifest、设定、角色、规则、任务和其他开局内容均以英文提供。
 
-玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`WORLD.<lang>.md` 与 WorldData source 变体。插件提示词保持英文，可附带一份中文变体；模型按会话语言输出。只翻译自然语言内容，稳定 ID、capability、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
+玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`WORLD.<lang>.md` 与 WorldData source 变体。插件提示词保持英文，可附带一份中文变体；模型按会话语言输出。只翻译自然语言内容，稳定 ID、契约、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
 
 ## 端到端调试每个回合
 
@@ -124,7 +133,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 ## 每一次判定都有回执
 
-![判定回执、任务推进与装备变动落在这一回合里，右侧是任务日志](./.assets/images/readme/rpg-systems.png)
+![好感与装备变动落在这一回合里；状态条显示当前目标和行囊，右侧是任务日志](./.assets/images/readme/rpg-systems.png)
 
 有风险的行动，判定用的骰子在叙事**动笔之前**就已经掷好，结果不会被行文倒推改写 —— 算式直接落在正文里：`19 + 2 = 21 vs DC 16`。任务推进、装备变动、好感升降也以同样方式回执在这一回合里，再沉淀进各自的面板。骰子、任务、行囊、好感是四个独立插件；世界包预置开局任务、初始装备与初始好感，也可以一个都不装。
 
@@ -188,8 +197,10 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 ## 开发
 
 - [插件编写指南](./docs/guide/plugin-authoring.md) —— 从这里开始；[`plugins/`](./plugins/) 下的内置插件都是可运行的参考
-- [架构与回合管线](./docs/architecture/flow.md) —— 一个回合如何流经触发 → 调度 → agents → 提交
-- 参考：[插件注册表](./docs/reference/plugins.md) · [工具注册表](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [完整文档索引](./docs/README.md)
+- [设计原则](./docs/architecture/design-principles.md) —— 什么该进内核，什么该交给插件
+- [架构与回合管线](./docs/architecture/flow.md) —— 一个回合如何流经触发 → 调度 → runtime → 提交
+- [世界数据](./docs/reference/world-data.md)与[合集](./docs/guide/collections.md) —— 编写世界包，并连同配套插件一起发布
+- 参考：[插件契约](./docs/reference/plugins.md) · [扩展点](./docs/reference/extension-points.md) · [工具](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [完整文档索引](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle。仓库布局与包清单 → [`AGENTS.md`](./AGENTS.md#monorepo-structure)。
 

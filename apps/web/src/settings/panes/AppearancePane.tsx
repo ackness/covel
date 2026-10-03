@@ -5,6 +5,7 @@ import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Markdown } from "@/components/ui/markdown.js";
 import { ThemeManagerWidget } from "@/components/theme-manager.js";
+import { StylePicker } from "@/components/appearance/StylePicker.js";
 import { TokenControl } from "@/components/appearance/TokenControl.js";
 import { useSetting, useSettingsStore } from "@/settings/use-settings.js";
 import { THEME_SCHEME_KEY } from "@/lib/appearance.js";
@@ -18,6 +19,7 @@ import {
   slugifyThemeId,
 } from "@/theme-system/theme-export.js";
 import { TOKEN_GROUPS, type TokenGroup } from "@/theme-system/token-schema.js";
+import { themeGroupId } from "@/theme-system/groups.js";
 import { localizeTokenGroups } from "@/theme-system/i18n.js";
 import {
   APPEARANCE_TOKENS_KEY,
@@ -97,6 +99,11 @@ export function AppearancePane() {
         label,
         source: "custom",
         schemes: snapshot.schemes,
+        // A snapshot keeps the structure it was tuned on, not just the tokens,
+        // and joins that style in the picker as one more colourway.
+        layout: sourceTheme?.layout,
+        group: sourceTheme ? themeGroupId(sourceTheme) : undefined,
+        groupLabel: sourceTheme?.groupLabel ?? sourceTheme?.label,
         cssText: snapshot.cssText,
       });
       await setAppearance(id);
@@ -154,6 +161,8 @@ export function AppearancePane() {
 
   return (
     <div className="space-y-5">
+      <StylePicker />
+
       <details className="ui-frame group/library [&_summary::-webkit-details-marker]:hidden">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 hover:bg-(--surface-inset)">
           <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open/library:rotate-90" />

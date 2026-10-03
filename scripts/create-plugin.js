@@ -29,7 +29,6 @@ import {
   mkdirSync,
   readdirSync,
   statSync,
-  rmSync,
   existsSync,
 } from "node:fs";
 import { resolve, join, dirname, relative } from "node:path";
@@ -135,25 +134,7 @@ const placeholders = {
   // Manifests are English; the Chinese text goes to locales/zh.yaml and README.
   "{{pluginDescription}}": `${pluginName} plugin - replace with a short plugin description.`,
   "{{pluginDescriptionZh}}": `${pluginName} 插件 - 请在此填写插件描述。`,
-  "{{packageManager}}": resolveRepoPackageManager(),
 };
-
-function resolveRepoPackageManager() {
-  try {
-    const repoPkg = JSON.parse(
-      readFileSync(resolve(ROOT, "package.json"), "utf-8"),
-    );
-    if (
-      typeof repoPkg.packageManager === "string" &&
-      repoPkg.packageManager.length > 0
-    ) {
-      return repoPkg.packageManager;
-    }
-  } catch {
-    // ignore — fall through to default
-  }
-  return "pnpm@11.22.0";
-}
 
 function replacePlaceholders(content) {
   let result = content;
@@ -224,12 +205,11 @@ if (mode === "with-tools") {
   console.log(
     "  4. 提示词定稿后新增 PLUGIN.zh.md（内置插件必须有简体中文提示词），再运行 pnpm prompts:lock",
   );
-  console.log("  5. 在 Covel 仓库根目录运行 pnpm install");
   console.log(
-    `  6. 在 Covel 仓库根目录运行 pnpm --filter covel-plugin-${pluginName} test`,
+    `  5. 在 Covel 仓库根目录运行 pnpm --filter @covel/plugin-${pluginName} test`,
   );
   console.log(
-    `  7. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
+    `  6. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
   );
 } else {
   console.log(
@@ -263,9 +243,6 @@ if (mode === "with-tools") {
   }
 }
 
-if (existsSync(join(targetDir, "tsconfig.json"))) {
-  console.log("  类型检查：进入插件目录执行 pnpm install && pnpm lint");
-}
 console.log(`\n插件创建完成！路径：${targetDir}\n`);
 
 // ── 实现 ──────────────────────────────────────────────────────────
@@ -348,20 +325,6 @@ function runCustomMultiRuntime(runtimes) {
         "utf-8",
       );
     }
-  }
-
-  // An agent-only package has no JavaScript author code to type-check.
-  if (!runtimes.some((runtime) => runtime.type === "function")) {
-    rmSync(join(targetDir, "tsconfig.json"));
-    const packagePath = join(targetDir, "package.json");
-    const packageJson = JSON.parse(readFileSync(packagePath, "utf-8"));
-    delete packageJson.scripts.lint;
-    delete packageJson.devDependencies;
-    writeFileSync(
-      packagePath,
-      `${JSON.stringify(packageJson, null, 2)}\n`,
-      "utf-8",
-    );
   }
 
   // Custom runtimes do not include the demo's note panel.
@@ -575,7 +538,7 @@ ${lines}
 2. 修改 \`runtimes/<name>/RUNTIME.md\`，维护 runtime 元信息和模型指令。
 3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
 4. \`PLUGIN.md\` 和 \`RUNTIME.md\` 只写 English；中文的名称与说明写在 \`locales/zh.yaml\`。提示词的简体中文版本是可选的 \`RUNTIME.zh.md\`，有了它就必须和 English 正文同步修改。
-5. ${runtimes.some((runtime) => runtime.type === "function") ? "Run `pnpm install && pnpm lint` in this plugin directory to check JavaScript against the public SDK. Then run" : "Run"} \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
+5. 在 Covel 仓库根目录运行 \`pnpm validate:plugin <插件目录>\` 做静态校验，再运行 \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\`（\`<plugins-dir>\` 为本插件的上级目录）。
 `;
 }
 

@@ -204,10 +204,10 @@ export function initDesktopBridge(handlers: DesktopBridgeHandlers): CleanupFn {
   };
 }
 
-async function desktopConfigRequest(
+async function desktopConfigFetch(
   path: string,
   init: { method: "POST" | "PUT"; body: Record<string, unknown> },
-): Promise<void> {
+): Promise<Response> {
   const res = await fetch(path, {
     method: init.method,
     headers: desktopJsonHeaders(),
@@ -216,6 +216,14 @@ async function desktopConfigRequest(
   if (!res.ok) {
     throw new Error(await desktopRestErrorMessage(res));
   }
+  return res;
+}
+
+async function desktopConfigRequest(
+  path: string,
+  init: { method: "POST" | "PUT"; body: Record<string, unknown> },
+): Promise<void> {
+  await desktopConfigFetch(path, init);
 }
 
 function desktopJsonHeaders(): Record<string, string> {
@@ -261,9 +269,20 @@ export async function openDataDir(): Promise<void> {
   return postOpenFolder("data");
 }
 
-/** Open `~/.covel/llm.toml` in the platform default editor. */
-export async function openLlmToml(): Promise<void> {
-  return postOpenFolder("llm.toml");
+/**
+ * Open the active `llm.toml` in the platform default editor. The desktop
+ * server creates the file from the built-in default when it does not exist
+ * yet and reports that through `created`.
+ */
+export async function openLlmToml(): Promise<{ created: boolean }> {
+  const res = await desktopConfigFetch("/api/config/open-folder", {
+    method: "POST",
+    body: { target: "llm.toml" },
+  });
+  const body = (await res.json().catch(() => null)) as {
+    created?: unknown;
+  } | null;
+  return { created: body?.created === true };
 }
 
 /** Open `~/.covel/keys.env` in the platform default editor. */

@@ -413,6 +413,33 @@ test.describe("Stage view mode", () => {
           }
         }),
       ).toBe(true);
+      // The widget cannot read the host stylesheet; the active style scheme
+      // arrives with its state and as --covel-* properties on its document.
+      expect(
+        await child!.evaluate(() => {
+          const { theme } = (
+            window as unknown as {
+              covel: {
+                getState(): { theme?: { id: string; scheme: string } };
+              };
+            }
+          ).covel.getState();
+          const style = getComputedStyle(document.documentElement);
+          return {
+            id: theme?.id,
+            scheme: theme?.scheme,
+            accent: style.getPropertyValue("--covel-accent").trim() !== "",
+            font: style.getPropertyValue("--covel-font-sans").trim() !== "",
+            marked: document.documentElement.dataset.covelScheme,
+          };
+        }),
+      ).toEqual({
+        id: "panel",
+        scheme: "dark",
+        accent: true,
+        font: true,
+        marked: "dark",
+      });
       expect(
         await child!.evaluate(async () => {
           const bridge = (

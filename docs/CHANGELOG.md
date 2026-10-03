@@ -4,7 +4,34 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Style schemes.** A theme package can now change structure as well as colour: it names a `layout` preset (`classic`, `book`, `stage`, `panel`) and may override where navigation sits, how the context panel shows its tabs, what the session does with world art, how the world list is arranged, and where a turn's results go. Three built-in schemes use it — Panel, Book and Stage — and Settings → Appearance has a style picker. The earlier themes are colourways of a fourth style, Classic, through the new `group` field. See `docs/reference/theme-packages.md`.
+- **One rendering for options.** The catalog gains `ChoiceList` and `Choice`. Kernel `choice` blocks, the reply variants of `CandidateList`, and the stage decision panel draw options the same way, so each scheme shows them one way: tagged cards, a numbered list, or key-capped rows. Number keys 1–9 pick the n-th option of the turn being played.
+- **Session summary.** The kernel UI slot `session.summary@1` lets a plugin put one to three lines — text, a gauge, or a short list — where the active layout keeps status. The bundled world-time, core-quest and inventory plugins provide the time, the next open objective with its progress, and the carried items. `appendSummaryEntries` in `@covel/plugin-handlers-utils` builds the result.
+- **Status at a glance.** The player's bounded `stats` show as gauges, unbounded ones as numbers, and `equipment` string lists as carried items: under the panel tabs, or on a scene HUD beside the cast when the layout shows the scene. The world list offers "continue" for each world's latest session.
+- **Events from plugin UI.** `POST /api/sessions/:id/plugin-rpc` accepts `kind: "event"`, and catalog specs and widgets get an `emitEvent` action. A plugin's UI can emit the topics that plugin declares; the runtimes that subscribe run as background jobs. Community plugins are asked for the event grant and for each subscriber's runtime grant.
+- **Plugin widgets in the new layouts.** A sandboxed `webview` receives the active scheme as `theme` and as `--covel-*` custom properties; a side panel can queue a line for the composer with `draftMessage`; and every plugin panel can be opened in a large dialog.
+- **Clickable map example.** `tests/third-party/clickable-map` is an installable example of a self-drawn panel that travels on a click. `pnpm e2e:extensions` plays it in a real browser.
+
+### Changed
+
+- **Plugin scaffolds outside the repo have no install step.** `pnpm create-plugin <name>` no longer writes `tsconfig.json`, `pnpm-workspace.yaml`, a `preinstall` script, or a dev dependency on `@covel/plugin-handlers-utils`, which is a workspace package and is not on npm. Check a scaffolded plugin with `pnpm validate:plugin <dir>` and `pnpm test:runtime`. `--with-tools` plugins, which live in the repo workspace, keep `pnpm lint` and are now named `@covel/plugin-<name>` like the bundled plugins.
+- **Issue and pull request templates follow the current workflow.** The PR template lists `pnpm check`, the database, UI, package and real-model checks, a "not verified" note, and the changelog; the bug report asks for the run mode, storage, world, community plugins and where to find logs.
+- **Panel is the default look.** A browser with no saved appearance opens in the Panel scheme; a saved choice is kept.
+- **Session toolbar.** The world, turn and current scene sit on the left; the text/stage switch, settings and the panel toggle on the right. Detailed and raw views, studio configuration, "back to setup" and traces moved into an overflow menu.
+- **Turn results open for the latest turn** in the Panel and Stage schemes, and sit in the page margin in Book. Classic keeps them folded.
+
+### Removed
+
+- **`docs/architecture/refactoring-plan.md`.** The current-only convergence it planned is finished; the resulting contract is described in `AGENTS.md`, `docs/architecture/flow.md` and `docs/architecture/storage.md`.
+- **`.ui-stage-cat` theme hooks.** Stage options use the shared `.ui-choice` hooks; a theme that styled `.ui-stage-cat` or the earlier card-shaped `.ui-choice` should restyle `.ui-choice-index`, `.ui-choice-content` and `.ui-choice-eyebrow`.
+- **`apiCall` UI action name.** It was never handled by any mount point.
+
 ### Fixed
+
+- **"Edit llm.toml" works on a fresh desktop install.** The button failed with `"llm.toml" is not available` until the file had been created by hand, and the error appeared where it was easy to miss. The first click now creates `llm.toml` from the built-in default and opens it; failures show as a toast.
+- **Settings no longer attributes the built-in default model to a file that does not exist.** Providers & models tagged the built-in DeepSeek default "From llm.toml" even with no `llm.toml` on disk. It is now tagged "Built-in default", and providers that come from the file or the built-in default explain why they have no delete button and how to remove them.
 
 - **Local builds ship a production web client.** With `NODE_ENV=development` in the repo-root `.env` (the value in `.env.example`), `pnpm build` and `pnpm build:electron` bundled a development-mode web client: the router devtools were visible and React ran its development build. The web build now defaults to production; a `NODE_ENV` exported in the shell still takes precedence. CI and released installers were not affected.
 

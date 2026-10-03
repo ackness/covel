@@ -52,10 +52,10 @@ export interface Session {
    *
    * `key` is a runtime ID (`pluginId` for single-runtime plugins, or
    * `pluginId/runtimeName` for multi-runtime plugins). `value` is a slot
-   * name from `llm.toml` (e.g. `"default"`, `"fast"`, `"balance"`).
+   * name from `llm.toml` (e.g. `"story"`, `"utility"`, `"fast"`).
    *
-   * The model-slot resolver consults this map first; if absent, falls back
-   * to `manifest.model`, then to `"default"`. Provider/key configuration
+   * The model-slot resolver consults this map first; if absent, it follows
+   * the priority chain in docs/reference/slots.md. Provider/key configuration
    * stays in localStorage + `X-Provider-Keys` header — only slot names are
    * persisted server-side.
    */

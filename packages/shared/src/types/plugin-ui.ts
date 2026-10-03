@@ -35,6 +35,8 @@ export const PLUGIN_UI_COMPONENT_NAMES = [
   "CharacterFieldsView",
   "CharacterAvatar",
   "Button",
+  "ChoiceList",
+  "Choice",
   "Input",
   "Textarea",
   "SearchInput",

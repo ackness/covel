@@ -112,6 +112,7 @@ export function ChatMessageRenderer({
 
   return (
     <div
+      data-role={isUser ? "user" : "assistant"}
       className={`ui-message-row flex flex-col gap-1.5 w-full ${isUser ? "items-end" : "items-start"}`}
     >
       {showSourceBadge && (
@@ -123,7 +124,7 @@ export function ChatMessageRenderer({
         </span>
       )}
       <span
-        className={`ui-eyebrow text-xs ${isUser ? "text-primary" : "text-muted-foreground"}`}
+        className={`ui-message-role ui-eyebrow text-xs ${isUser ? "text-primary" : "text-muted-foreground"}`}
       >
         {isUser
           ? t("session.player", "Player")

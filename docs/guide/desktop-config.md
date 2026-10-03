@@ -124,7 +124,7 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 **Settings → Desktop** tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。
 
-“打开 `llm.toml`”使用当前生效的 `COVEL_LLM_TOML` 路径，未设置时才回退到配置根的 `llm.toml`；`keys.env` 始终位于配置根。打开操作要求目标已存在，缺失时返回 `open_target_unavailable`。源码开发中的根 `llm.toml` 优先级、用户资源目录和 Docker 挂载与桌面不同，见[环境变量说明](./env-registry.md#加载路径与环境差异)。
+“打开 `llm.toml`”使用当前生效的 `COVEL_LLM_TOML` 路径，未设置时才回退到配置根的 `llm.toml`；`keys.env` 始终位于配置根。`llm.toml` 不存在时，应用用内置默认配置（DeepSeek `story` 用途）运行；首次点击“编辑 `llm.toml`”会按这份内置默认生成文件再打开，生效的模型不变。其他目标缺失时返回 `open_target_unavailable`。**设置 → 模型 → 服务商与模型** 中，来自文件的模型标记为“来自 llm.toml”，文件不存在时标记为“内置默认”；这两类都只能通过编辑文件移除，界面里添加的服务商存放在 `settings.json`，可直接删除。源码开发中的根 `llm.toml` 优先级、用户资源目录和 Docker 挂载与桌面不同，见[环境变量说明](./env-registry.md#加载路径与环境差异)。
 
 ## 桌面 REST 写接口的 token 门
 

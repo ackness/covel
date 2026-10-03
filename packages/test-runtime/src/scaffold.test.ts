@@ -82,11 +82,14 @@ describe("plugin scaffolding", () => {
         expect(
           await readFile(path.join(pluginRoot, "locales/zh.yaml"), "utf8"),
         ).toMatch(/^PLUGIN\.md:\n {2}description: .*[\u4e00-\u9fff]/m);
-        if (mode === "agent-only") {
+        if (mode !== "with-tools") {
+          // Plugins scaffolded outside the repo carry no install step: the
+          // author SDK is a workspace package, not an npm dependency.
           const manifest = JSON.parse(
             await readFile(path.join(pluginRoot, "package.json"), "utf8"),
           );
-          expect(manifest.scripts.lint).toBeUndefined();
+          expect(manifest.scripts).toBeUndefined();
+          expect(manifest.dependencies).toBeUndefined();
           expect(manifest.devDependencies).toBeUndefined();
         } else {
           await mkdir(path.join(pluginRoot, "node_modules/@covel"), {
@@ -109,29 +112,17 @@ describe("plugin scaffolding", () => {
             );
           const checked = check();
           expect(checked.status, checked.stdout + checked.stderr).toBe(0);
-          const handlerPath = path.join(
-            pluginRoot,
-            mode === "with-tools"
-              ? "tools/record-note.js"
-              : mode === "custom"
-                ? "runtimes/recorder/handler.js"
-                : "runtimes/note/handler.js",
-          );
+          const handlerPath = path.join(pluginRoot, "tools/record-note.js");
           const handlerSource = await readFile(handlerPath, "utf8");
-          const invalidSource =
-            mode === "with-tools"
-              ? handlerSource.replace("params.title", "params.missingTitle")
-              : handlerSource.replace(
-                  "pluginData.set(",
-                  "pluginData.missingSet(",
-                );
+          const invalidSource = handlerSource.replace(
+            "params.title",
+            "params.missingTitle",
+          );
           expect(invalidSource).not.toBe(handlerSource);
           await writeFile(handlerPath, invalidSource, "utf8");
           const rejected = check();
           expect(rejected.status).not.toBe(0);
-          expect(rejected.stdout).toContain(
-            mode === "with-tools" ? "missingTitle" : "missingSet",
-          );
+          expect(rejected.stdout).toContain("missingTitle");
           await writeFile(handlerPath, handlerSource, "utf8");
         }
         const report = await runRuntimeCases({

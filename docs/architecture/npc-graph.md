@@ -52,7 +52,9 @@ the graph is supplementary context, not the canonical character record.
 
 ## Data Model
 
-Defined in `packages/shared/src/types/npc-graph.ts`.
+The graph is plugin-owned data: the framework has no graph types. The stored
+shapes below are produced and validated by
+`plugins/npc-graph/tools/upsert-npc-graph.js`.
 
 ```ts
 type NpcNodeType = "individual" | "group" | "faction";
@@ -192,7 +194,7 @@ The plugin's right-panel spec lives at
 - `docs/reference/plugins.md` — full plugin registry with both runtimes
 - `docs/reference/ui-panels.md` — GraphCanvas catalog entry
 - `docs/reference/tools.md` — current upsert workflow and compatibility reader
-- `packages/shared/src/types/npc-graph.ts` — type source of truth
+- `plugins/npc-graph/tools/upsert-npc-graph.js` — input schemas and the stored node/edge shapes
 - `plugins/npc-graph/` — the plugin itself
 - `apps/web/src/lib/graph-canvas.tsx` — visualization component
 - `plugins/npc-graph/tests/` — plugin contract and integration tests

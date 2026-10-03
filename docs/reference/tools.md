@@ -204,7 +204,7 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
 
-`ctx.gateway`、`ctx.media`、`ctx.images`、`ctx.utils` 是 function runtime handler 直接调用的 JS API，**不经过** Tool 注册表 / 审批管线——它们不是 LLM 通过 function calling 触发的工具，而是框架注入给 handler 代码本身的能力。图像生成尤其如此：插件不应该声明一个 `generate-image` 工具让 LLM 调用，而应在 `handler.js` 里直接 `await ctx.images.generate({...})`。完整的 ctx 能力表和图像生成契约见 [plugin-authoring-advanced.md §6](../guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)。
+`ctx.gateway`、`ctx.media`、`ctx.images`、`ctx.utils` 是 function runtime handler 直接调用的 JS API，**不经过** Tool 注册表 / 审批管线——它们不是 LLM 通过 function calling 触发的工具，而是框架注入给 handler 代码本身的能力。图像生成尤其如此：插件不应该声明一个 `generate-image` 工具让 LLM 调用，而应在 `handler.js` 里直接 `await ctx.images.generate({...})`。完整的 ctx 能力表和图像生成契约见 [plugin-authoring-advanced.md § 后台工作与失败](../guide/plugin-authoring-advanced.md#后台工作与失败)。
 
 ### Function runtime 调用工具
 
@@ -437,7 +437,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 ### emit-event
 
-声明在 `packages/tools/src/builtin/emit-event.ts`。发射一个由某个激活插件在 `events`（见 [plugins.md #events-声明与-advertiseevents统一事件发射层](plugins.md#events-声明与-advertiseevents统一事件发射层)）声明的领域事件。校验和 topic 列举委托给注入的 `EventDirectoryLike`（server 侧实现见 `apps/server/src/routes/api/bootstrap/event-directory.ts`），聚合当前 session 激活插件集的声明。
+声明在 `packages/tools/src/builtin/emit-event.ts`。发射一个由某个激活插件在 `events`（见 [plugins.md § Runtime 分组字段](plugins.md#runtime-分组字段)）声明的领域事件。校验和 topic 列举委托给注入的 `EventDirectoryLike`（server 侧实现见 `apps/server/src/routes/api/bootstrap/event-directory.ts`），聚合当前 session 激活插件集的声明。
 
 | 参数  | 类型                    | 必需 | 描述                                                    |
 | ----- | ----------------------- | ---- | ------------------------------------------------------- |

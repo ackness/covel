@@ -157,7 +157,6 @@ test("reading preferences preview, persist, switch schemes and reset", async ({
   await expect(preview.locator("p").first()).toHaveCSS("font-size", "20px");
   await expect(preview.locator("p").first()).toHaveCSS("line-height", "40px");
 
-  await dialog.locator("summary").filter({ hasText: "Theme Library" }).click();
   await dialog.getByRole("button", { name: "Light", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-scheme", "light");
   await expect(preview.locator("p").first()).not.toHaveCSS(
@@ -234,7 +233,6 @@ test("saving a theme preserves story colour inherited from primary text", async 
     "color",
     "rgb(244, 234, 216)",
   );
-  await dialog.locator("summary").filter({ hasText: "Theme Library" }).click();
   await dialog.getByRole("button", { name: "Light", exact: true }).click();
   await expect(preview.locator("p").first()).toHaveCSS(
     "color",
@@ -265,7 +263,6 @@ test("a pending story colour stays in the edited scheme during a quick switch", 
   await page.goto("/session");
   const preview = await openAppearance(page);
   const dialog = page.getByRole("dialog");
-  await dialog.locator("summary").filter({ hasText: "Theme Library" }).click();
   const field = dialog
     .getByRole("textbox", { name: "Body color", exact: true })
     .and(dialog.locator('input[type="text"]'));

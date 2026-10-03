@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Map</title>
+    <style>
+      /* The host hands over the active style scheme as --covel-* properties.
+         The fallbacks only matter before the first state arrives. */
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        padding: 4px 2px 8px;
+        background: transparent;
+        color: var(--covel-foreground, CanvasText);
+        font-family: var(--covel-font-sans, system-ui), system-ui, sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        /* In the large view the frame is wide: keep the whole map, and the
+           lines under it, inside the frame instead of scrolling. */
+        max-height: calc(100vh - 7.5rem);
+        border: 1px solid var(--covel-border, GrayText);
+        border-radius: var(--covel-radius-card, 8px);
+        background: var(--covel-surface, Canvas);
+      }
+      .link {
+        stroke: var(--covel-border, GrayText);
+        stroke-width: 2;
+      }
+      .link[data-open="true"] {
+        stroke: var(--covel-accent, Highlight);
+        stroke-dasharray: 5 5;
+      }
+      .place circle {
+        fill: var(--covel-background, Canvas);
+        stroke: var(--covel-muted-foreground, GrayText);
+        stroke-width: 2;
+      }
+      .place text {
+        fill: var(--covel-muted-foreground, GrayText);
+        font-size: 13px;
+        text-anchor: middle;
+      }
+      .place[data-visited="true"] circle {
+        fill: var(--covel-border, GrayText);
+      }
+      .place[data-reachable="true"] {
+        cursor: pointer;
+      }
+      .place[data-reachable="true"] circle {
+        stroke: var(--covel-accent, Highlight);
+      }
+      .place[data-reachable="true"] text {
+        fill: var(--covel-foreground, CanvasText);
+      }
+      .place[data-reachable="true"]:hover circle,
+      .place[data-reachable="true"]:focus-visible circle {
+        stroke-width: 4;
+      }
+      .place:focus-visible {
+        outline: none;
+      }
+      .place[data-current="true"] circle {
+        fill: var(--covel-accent, Highlight);
+        stroke: var(--covel-accent, Highlight);
+      }
+      .place[data-current="true"] text {
+        fill: var(--covel-foreground, CanvasText);
+        font-weight: 600;
+      }
+      #status {
+        min-height: 1.5em;
+        margin: 8px 2px 6px;
+        color: var(--covel-muted-foreground, GrayText);
+      }
+      #routes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      #routes button {
+        padding: 4px 10px;
+        border: 1px solid var(--covel-border, GrayText);
+        border-radius: var(--covel-radius-control, 6px);
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      #routes button:hover {
+        border-color: var(--covel-accent, Highlight);
+      }
+      body[data-locked="true"] .place,
+      body[data-locked="true"] #routes button {
+        pointer-events: none;
+        opacity: 0.55;
+      }
+    </style>
+  </head>
+  <body>
+    <svg id="map" viewBox="0 0 420 280" role="group"></svg>
+    <p id="status" aria-live="polite"></p>
+    <ul id="routes"></ul>
+    <script>
+      const SVG = "http://www.w3.org/2000/svg";
+      const map = document.getElementById("map");
+      const status = document.getElementById("status");
+      const routes = document.getElementById("routes");
+      const TEXT = {
+        zh: {
+          charting: "正在绘制地图…",
+          here: (name) => `你在${name}。点一个相连的地点走过去。`,
+          going: (name) => `正在前往${name}…`,
+          failed: "没能出发，请再试一次。",
+          draft: (name) => `写进行动：去${name}`,
+          line: (name) => `我动身前往${name}。`,
+          map: "地图",
+        },
+        en: {
+          charting: "Drawing the map…",
+          here: (name) =>
+            `You are at the ${name}. Select a linked place to go there.`,
+          going: (name) => `Travelling to the ${name}…`,
+          failed: "Could not set out. Try again.",
+          draft: (name) => `Write it as an action: go to the ${name}`,
+          line: (name) => `I set out for the ${name}.`,
+          map: "Map",
+        },
+      };
+
+      let asked = false; // `map.opened` goes out once per load
+      let pending; // place id of a move that has not come back yet
+
+      const el = (name, attrs = {}) => {
+        const node = document.createElementNS(SVG, name);
+        for (const [key, value] of Object.entries(attrs))
+          node.setAttribute(key, String(value));
+        return node;
+      };
+
+      async function goTo(place, name, text) {
+        pending = place.id;
+        status.textContent = text.going(name);
+        try {
+          // The widget only says where the player wants to go. The plugin's
+          // `travel` runtime decides whether that is allowed and stores the
+          // result, which comes back here through `subscribe`.
+          await window.covel.invoke("emitEvent", {
+            topic: "map.location-selected",
+            data: { locationId: place.id },
+          });
+        } catch {
+          pending = undefined;
+          status.textContent = text.failed;
+        }
+      }
+
+      window.covel.subscribe(({ data = {}, locale = "en", locked = false }) => {
+        const lang = String(locale).startsWith("zh") ? "zh" : "en";
+        const text = TEXT[lang];
+        const label = (place) =>
+          place.name?.[lang] ?? place.name?.en ?? place.id;
+        document.documentElement.lang = lang;
+        document.body.dataset.locked = String(locked);
+        map.setAttribute("aria-label", text.map);
+        map.replaceChildren();
+        routes.replaceChildren();
+
+        const state = data.state;
+        if (!state || !Array.isArray(state.places)) {
+          status.textContent = text.charting;
+          if (!asked && !locked) {
+            asked = true;
+            // No map yet: ask the plugin to draw one. Errors are left for the
+            // next state push; there is nothing to show either way.
+            window.covel
+              .invoke("emitEvent", { topic: "map.opened", data: {} })
+              .catch(() => {
+                asked = false;
+              });
+          }
+          return;
+        }
+
+        const byId = new Map(state.places.map((place) => [place.id, place]));
+        const here = byId.get(state.current);
+        if (pending === state.current) pending = undefined;
+        const reachable = new Set(here?.links ?? []);
+        const visited = new Set(state.visited ?? []);
+
+        const drawn = new Set();
+        for (const place of state.places) {
+          for (const linkId of place.links ?? []) {
+            const other = byId.get(linkId);
+            const key = [place.id, linkId].sort().join("|");
+            if (!other || drawn.has(key)) continue;
+            drawn.add(key);
+            map.append(
+              el("line", {
+                class: "link",
+                x1: place.x,
+                y1: place.y,
+                x2: other.x,
+                y2: other.y,
+                "data-open": String(
+                  place.id === state.current || linkId === state.current,
+                ),
+              }),
+            );
+          }
+        }
+
+        for (const place of state.places) {
+          const name = label(place);
+          const canGo = reachable.has(place.id);
+          const group = el("g", {
+            class: "place",
+            "data-place": place.id,
+            "data-current": String(place.id === state.current),
+            "data-reachable": String(canGo),
+            "data-visited": String(visited.has(place.id)),
+          });
+          group.append(el("circle", { cx: place.x, cy: place.y, r: 14 }));
+          const caption = el("text", { x: place.x, y: place.y + 32 });
+          caption.textContent = name;
+          group.append(caption);
+          if (canGo) {
+            group.setAttribute("role", "button");
+            group.setAttribute("tabindex", "0");
+            group.setAttribute("aria-label", name);
+            group.addEventListener("click", () => goTo(place, name, text));
+            group.addEventListener("keydown", (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              goTo(place, name, text);
+            });
+
+            // The other way to use a click: hand the move to the story. This
+            // puts a line in the composer for the player to send, so the
+            // narrator plays out the journey instead of the map moving.
+            const item = document.createElement("li");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = text.draft(name);
+            button.addEventListener("click", () => {
+              window.covel
+                .invoke("draftMessage", {
+                  text: text.line(name),
+                  selectionGroup: "clickable-map:move",
+                })
+                .catch(() => {});
+            });
+            item.append(button);
+            routes.append(item);
+          }
+          map.append(group);
+        }
+
+        const target = pending ? byId.get(pending) : undefined;
+        status.textContent = target
+          ? text.going(label(target))
+          : here
+            ? text.here(label(here))
+            : "";
+      });
+    </script>
+  </body>
+</html>

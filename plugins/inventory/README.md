@@ -21,6 +21,7 @@
 - 减到 0 的物品写 tombstone（`quantity: 0, removed: true`）而非删除行：proposal 管道没有删除类型，UI 会隐藏 tombstone，同名物品再次获得时复用同一条记录。
 - 货币也是物品；item 实体 `attributes.tags` 中的标签会随获得写入。
 - 每回合的得失摘要写入 `plugin_data[inventory][message]`（key 为 turnId），驱动聊天区 toast。
+- 携带的物品会出现在状态摘要里（`session.summary@1` 槽位）：已装备的在前，最多 8 件，其余显示为数量。面板显示整个背包。
 - 没有明确变化的回合跳过写入。
 
 ## 玩家侧操作

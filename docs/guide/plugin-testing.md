@@ -127,7 +127,7 @@ const result = await executeToolAndCommit(tool, params, ctx, store);
 
 该入口使用 memory store、真实 tool executor、`executeTurn` 和 `commitExecution`；保留 namespace 校验与事务回滚，返回原始工具结果便于断言。需要测试同一执行的多次待提交写入时，先执行工具，再 `await commitToolResults([first, second], ctx, store)` 一次提交。它不提供完整 HTTP、审批或事件目录宿主；这些边界仍由 server 测试覆盖。纯转换单测可以直接调用工具，不必启动执行宿主。
 
-生成的插件模板提供 `pnpm lint`（`checkJs` / `noEmit`），使用公开 SDK 的 JSDoc 类型检查 handler 和工具；无需改写成 TypeScript。修改 SDK 调用时同时运行类型检查与行为测试。
+`pnpm create-plugin <name> --with-tools` 在仓库的 `plugins/` 下生成的插件提供 `pnpm lint`（`checkJs` / `noEmit`），通过 workspace 内的 SDK 用 JSDoc 类型检查 handler 和工具；无需改写成 TypeScript。修改 SDK 调用时同时运行类型检查与行为测试。生成到用户插件目录的模板不带依赖和类型检查配置，用 `pnpm validate:plugin` 和 `pnpm test:runtime` 验证。
 
 需要跑完整 turn（agent tool loop、event 链、proposal commit）时，直接用 `@covel/runtime` 的公开导出手工组装：`discoverPlugins` / `loadPluginDefinition` / `loadRuntime`（`@covel/plugin-loader`）发现并加载真实 runtime，从定义的 `manifests` 选择执行项，从 `packageManifest` 读取包级 entry 与贡献。`@covel/store/memory` 的 `createMemoryStore` 做后端，`createToolExecutor` + `executeTurn` 执行，LLM 用 `MockLLM` 或按步骤出 tool-call 的自定义 `LLMAdapter`。`executeTurn` 返回 `{ result, commit }`，将整个对象作为 `execution` 传给 `commitExecution`；内核负责完整收集嵌套结果、journal、suspension 和输出 schema。不要自己拼提交计划或逐个落库。调用方式见[宿主执行与提交边界](../reference/protocol.md#宿主执行与提交边界)。当前作者工具的组装见 [`packages/test-runtime/src/execution.ts`](../../packages/test-runtime/src/execution.ts)。下面的低层测试范例用于理解 event 链和 proposal：
 

@@ -67,6 +67,7 @@ import {
   Source,
 } from "./catalog/media-renderers.js";
 import { CandidateList } from "./catalog/branch-reply-renderer.js";
+import { Choice, ChoiceList } from "./catalog/choice-renderers.js";
 import {
   AssetRenderCatalog,
   AssetTurnSidebarCatalog,
@@ -128,6 +129,8 @@ const covelComponents = {
   CharacterAvatar,
   // Interactive
   Button,
+  ChoiceList,
+  Choice,
   Input,
   Textarea,
   SearchInput,

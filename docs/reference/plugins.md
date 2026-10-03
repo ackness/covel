@@ -255,7 +255,7 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样，�
 
 World Data 的 source 使用 `to: contract:example.facts@1`（`schema` 省略时就是目标契约的 schema）。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
 
-世界包把 source 声明为 `visibility: hidden` 时，同一份数据会导入到接收插件的 `_hidden.<namespace>`（例如 `_hidden.facts`）。插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取；扩展点、模型工具、`input.inject` 和公共 API 都读不到它。揭示应通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](world-data.md#隐藏数据visibility-hidden)。
+世界包把 source 声明为 `visibility: hidden` 时，同一份数据会导入到接收插件的 `_hidden.<namespace>`（例如 `_hidden.facts`）。插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取；扩展点、模型工具、`io.selfData` 和公共 API 都读不到它。揭示应通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](world-data.md#隐藏数据visibility-hidden)。
 
 插件自己的代码（function runtime 的 `ctx.pluginData.set`、插件本地工具产生的 `plugin.data` 提案）也可以写入自己的 `_hidden.<namespace>`，用于在剧情中追加隐藏内容；写入总是归属提案来源插件，碰不到其他插件的隐藏数据。REST 接口和内置 `plugin-data-set` / `plugin-data-set-batch` 工具仍然不能写任何 `_` 命名空间。
 
@@ -312,6 +312,7 @@ pnpm lint
 | 角色创建与跟踪       | [char-creator](../../plugins/char-creator/PLUGIN.md)             |
 | 函数运行时与公开输出 | [world-time](../../plugins/world-time/PLUGIN.md)                 |
 | 历史变换扩展         | [branch-reply](../../plugins/branch-reply/PLUGIN.md)             |
+| 状态摘要槽位         | [core-quest](../../plugins/core-quest/PLUGIN.md)                 |
 | 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                         |
 | 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
 | 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)               |

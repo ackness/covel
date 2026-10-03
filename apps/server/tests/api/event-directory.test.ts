@@ -188,6 +188,28 @@ describe("event directory", () => {
     });
   });
 
+  it("lets a plugin validate its own topics, advertised or not, and no one else's", async () => {
+    const { directory } = await setupBasicSession();
+    // plugin-b owns the internal topic: emitting it itself is allowed.
+    expect(
+      await directory.validateOwn("sess-1", "plugin-b", "quest.done", {
+        questId: "q1",
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      await directory.validateOwn("sess-1", "plugin-b", "quest.done", {}),
+    ).toMatchObject({ ok: false, code: "invalid" });
+    // Another plugin cannot speak for plugin-b, nor an inactive one at all.
+    expect(
+      await directory.validateOwn("sess-1", "plugin-a", "quest.done", {
+        questId: "q1",
+      }),
+    ).toMatchObject({ ok: false, code: "not-declared" });
+    expect(
+      await directory.validateOwn("sess-1", "plugin-c", "npc.spawn", {}),
+    ).toMatchObject({ ok: false, code: "not-declared" });
+  });
+
   it("renders topic, localized description, and required fields in catalogText", async () => {
     const { directory } = await setupBasicSession();
     const catalog = await directory.catalogText("sess-1", "zh-CN");

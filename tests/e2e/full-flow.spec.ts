@@ -81,8 +81,9 @@ test.describe("Covel Full Flow", () => {
     await sessionLink.click();
     await expect(page).toHaveURL(/\/session/);
 
-    // Back to home
-    await page.locator("header a", { hasText: "COVEL" }).click();
+    // Back to home — the brand link sits in the top bar or, in rail layouts,
+    // in the nav rail.
+    await page.getByRole("link", { name: "Covel", exact: true }).click();
     await expect(page).toHaveURL("/");
 
     // Debug link → /debug

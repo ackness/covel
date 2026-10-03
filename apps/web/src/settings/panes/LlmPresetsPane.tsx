@@ -377,6 +377,7 @@ export function LlmPresetsPane() {
           {selectedProvider ? (
             <ProviderDetails
               provider={selectedProvider}
+              serverConfig={state.llmConfig?.source}
               onAddModel={() => setModelDialogOpen(true)}
               onPatchLocalProfile={patchLocalProfile}
               onDuplicateLocalModel={duplicateModel}

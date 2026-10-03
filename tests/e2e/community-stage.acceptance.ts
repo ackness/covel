@@ -48,7 +48,9 @@ test("isolated community package projects stage and portrait through GET/SSE, th
       worldId: "haruka-academy",
       locale: "zh-CN",
       plugins: [pluginId],
-      excludedPlugins: ["pregame", "world-init", "char-creator"],
+      // Every bundled world declares dimensions, and a session refuses to
+      // start without their provider, so `world-init` stays.
+      excludedPlugins: ["pregame", "char-creator"],
     },
   });
   expect(created.ok(), await created.text()).toBeTruthy();
@@ -134,6 +136,27 @@ test("isolated community package projects stage and portrait through GET/SSE, th
           value: expect.objectContaining({ sprite: mediaRef }),
         }),
       ]),
+    );
+
+    // With `world-init` active the session is still in setup, and no model is
+    // configured here to finish it; the stage opens only once play has
+    // started. Present the session to the page as playing. What the test
+    // checks — the projections, the SSE updates, the preview — still comes
+    // from the server untouched.
+    const sessionPath = `/api/sessions/${sessionId}`;
+    const [session, view] = await Promise.all([
+      request.get(sessionPath).then((response) => response.json()),
+      request.get(`${sessionPath}/view`).then((response) => response.json()),
+    ]);
+    await page.route(`**${sessionPath}`, (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({ json: { ...session, phase: "playing" } })
+        : route.fallback(),
+    );
+    await page.route(`**${sessionPath}/view`, (route) =>
+      route.fulfill({
+        json: { ...view, session: { ...view.session, phase: "playing" } },
+      }),
     );
 
     await page.goto(`/session?sid=${sessionId}`);

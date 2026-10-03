@@ -4,6 +4,7 @@ import { applyAppearance } from "@/lib/appearance.js";
 import {
   deleteCustomTheme,
   getRegisteredThemes,
+  getThemeLayout,
   primeThemeRegistry,
   saveCustomTheme,
   syncThemeRegistry,
@@ -58,6 +59,9 @@ describe("theme registry", () => {
     const themes = syncThemeRegistry(store);
 
     expect(themes.map((theme) => theme.id)).toEqual([
+      "panel",
+      "book",
+      "stage",
       "paper",
       "modern",
       "abyss",
@@ -113,6 +117,39 @@ describe("theme registry", () => {
     expect(
       document.head.querySelector('style[data-theme-style="ember"]'),
     ).toBeNull();
+  });
+
+  it("applies the selected package's layout and keeps it through import", async () => {
+    const store = await createStore();
+    syncThemeRegistry(store);
+    const root = document.documentElement;
+    // The default package is the panel style.
+    expect(root.getAttribute("data-layout")).toBe("panel");
+    expect(root.getAttribute("data-nav")).toBe("rail");
+
+    await store.set("ui.appearance", "paper");
+    syncThemeRegistry(store);
+    expect(root.getAttribute("data-layout")).toBe("classic");
+    expect(root.getAttribute("data-panel-tabs")).toBe("rail");
+
+    await saveCustomTheme(store, {
+      id: "ember",
+      label: "Ember",
+      source: "custom",
+      schemes: ["dark"],
+      layout: { preset: "book", nav: "rail" },
+      cssText: 'html[data-theme="ember"] { --color-background: #1f1512; }',
+    });
+    expect(getThemeLayout(store, "ember")).toMatchObject({
+      preset: "book",
+      nav: "rail",
+      panelTabs: "bar",
+    });
+
+    await store.set("ui.appearance", "ember");
+    syncThemeRegistry(store);
+    expect(root.getAttribute("data-layout")).toBe("book");
+    expect(root.getAttribute("data-nav")).toBe("rail");
   });
 
   it("isolates malformed theme labels in settings backups", async () => {

@@ -50,6 +50,7 @@ import {
 } from "@covel/shared/settings-persistence";
 import { errorBody, listBody, readJsonBody } from "../api-error.js";
 import { parseEnvLines } from "../lib/env-file.js";
+import { LLM_TOML_STARTER } from "../ai-setup.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
 import {
   configureOutboundProxy,
@@ -458,6 +459,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // POST /api/config/open-folder — body: { target: "config" | "data" | "logs" | "llm.toml" | "keys.env" }
   // Opens the requested folder or file in the platform default application.
   // The whitelist keeps callers from reaching arbitrary filesystem paths.
+  // A missing desktop llm.toml is created first; `created` reports that.
   app.post("/api/config/open-folder", requireToken, async (c) => {
     const parsed = await readJsonBody(c);
     if (parsed instanceof Response) return parsed;
@@ -491,6 +493,24 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       );
     }
     const path = targetMap[target];
+    // The desktop app runs on a built-in default until llm.toml exists, so
+    // opening it for the first time seeds the file with that same default.
+    let created = false;
+    if (target === "llm.toml" && covelHome && path && !existsSync(path)) {
+      try {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, LLM_TOML_STARTER, { flag: "wx" });
+        created = true;
+      } catch (err) {
+        return c.json(
+          errorBody(
+            `Could not create llm.toml: ${err instanceof Error ? err.message : err}`,
+            { code: "config_write_failed" },
+          ),
+          500,
+        );
+      }
+    }
     if (!path || !existsSync(path)) {
       return c.json(
         errorBody(`"${target}" is not available at ${path}`, {
@@ -502,7 +522,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
 
     try {
       await openInFileManager(path);
-      return c.json({ ok: true });
+      return c.json({ ok: true, created });
     } catch (err) {
       return c.json(
         errorBody(err instanceof Error ? err.message : String(err), {

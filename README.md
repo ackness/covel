@@ -36,6 +36,15 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
+## Three looks, one setting
+
+|                          Panel                           |                            Book                            |                               Stage                                |
+| :------------------------------------------------------: | :--------------------------------------------------------: | :----------------------------------------------------------------: |
+| ![Panel scheme](./.assets/images/readme/style-panel.png) |   ![Book scheme](./.assets/images/readme/style-book.png)   |      ![Stage scheme](./.assets/images/readme/style-stage.png)      |
+| App-like: icon rail, tagged option cards, a status strip | Reading-first: serif prose, numbered options, margin notes | Scene-first: full-bleed art, the cast on stage, key-capped options |
+
+A style scheme changes structure as well as colour — where navigation sits, how options are drawn, what the session does with world art. Pick one in **Settings → Appearance**; the earlier themes live on as colourways of a fourth, Classic. Schemes are theme packages, so you can save your own or import someone else's ([guide](./docs/guide/themes.md)). Plugin UI follows whichever scheme is active without knowing about it.
+
 ## How the pieces fit together
 
 | Layer              | Owns                                     | Typical contents                                                                              |
@@ -54,7 +63,7 @@ A plugin is not necessarily one autonomous agent. It may contain one runtime, se
 | ------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------- |
 | **Agent runtime**         | Uses a model for narration or structured extraction                        | `narrator`, `codex`, `world-ir`                           |
 | **Function runtime**      | Runs deterministic, zero-token game logic                                  | `pregame`, `inventory/ledger`, `scene-stage/cast`         |
-| **Mixed package**         | Combines deterministic retrieval with agent extraction                     | `npc-graph`, `dice-check`                                 |
+| **Mixed package**         | Pairs deterministic functions with an agent in one package                 | `npc-graph`, `world-time`                                 |
 | **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `narrator` (draft review), `char-creator` (profile guard) |
 | **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`                           |
 
@@ -116,7 +125,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 World packs declare `defaultLocale` and `supportedLocales`. The loader first tries the current language variant and then falls back to the canonical source, so a partial translation remains playable. Mistport demonstrates a bilingual pack with localized lore, characters, rules, and media metadata. **Emberback Relay** is the built-in English-default world pack (`defaultLocale: en-US`), with its manifest, setting, cast, rules, quests, and other starting content authored in English.
 
-Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds translated `I18nText` values plus `WORLD.<lang>.md` and WorldData source variants as needed. Plugin prompts stay English, with an optional Chinese variant; the model writes in the session language. Only natural-language content is translated—stable IDs, capabilities, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
+Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds translated `I18nText` values plus `WORLD.<lang>.md` and WorldData source variants as needed. Plugin prompts stay English, with an optional Chinese variant; the model writes in the session language. Only natural-language content is translated—stable IDs, contracts, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
 
 ## Debug every turn end to end
 
@@ -126,7 +135,7 @@ The built-in Trace Inspector groups execution by session and turn, then exposes 
 
 ## Every roll leaves a receipt
 
-![A dice check, quest progress, and a gear change posting into the turn, with the quest log open alongside](./.assets/images/readme/rpg-systems.png)
+![Relationship and gear changes posting into the turn; the status strip shows the current objective and pack, with the quest log open alongside](./.assets/images/readme/rpg-systems.png)
 
 A risky action resolves against dice rolled **before** the narrator writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, inventory, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
 
@@ -190,8 +199,10 @@ Share your work by submitting a directory-entry PR to [covel-plugins](https://gi
 ## Develop
 
 - [Plugin authoring guide](./docs/guide/plugin-authoring.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
-- [Architecture & turn pipeline](./docs/architecture/flow.md) — how a turn flows through trigger → schedule → agents → commit
-- Reference: [plugin registry](./docs/reference/plugins.md) · [tool registry](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
+- [Design principles](./docs/architecture/design-principles.md) — what belongs in the kernel and what belongs in a plugin
+- [Architecture & turn pipeline](./docs/architecture/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
+- [World data](./docs/reference/world-data.md) and [collections](./docs/guide/collections.md) — author a world pack and ship it with its plugins
+- Reference: [plugin contract](./docs/reference/plugins.md) · [extension points](./docs/reference/extension-points.md) · [tools](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle. Repo layout and package list → [`AGENTS.md`](./AGENTS.md#monorepo-structure).
 

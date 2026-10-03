@@ -90,12 +90,50 @@ export const stageChoicesSchema = z.strictObject({
     )
     .max(64),
 });
+const summaryEntryBase = {
+  id: z.string().min(1).max(64),
+  label: i18nTextSchema,
+};
+const summaryToneSchema = z.enum(["info", "success", "warning", "danger"]);
+/**
+ * What a plugin wants the player to see at a glance, wherever the active
+ * layout keeps status: a line of text (the current objective, the time), a
+ * gauge, or a short list (what is carried). Each provider appends its entries
+ * to the ones before it; `id` is unique per provider.
+ */
+export const sessionSummaryEntrySchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    ...summaryEntryBase,
+    kind: z.literal("text"),
+    value: i18nTextSchema,
+    tone: summaryToneSchema.optional(),
+  }),
+  z.strictObject({
+    ...summaryEntryBase,
+    kind: z.literal("meter"),
+    value: z.number(),
+    max: z.number(),
+    min: z.number().optional(),
+    tone: summaryToneSchema.optional(),
+  }),
+  z.strictObject({
+    ...summaryEntryBase,
+    kind: z.literal("list"),
+    items: z.array(i18nTextSchema).max(24),
+    /** Count of all items when `items` is only the first few. */
+    total: z.number().int().nonnegative().optional(),
+  }),
+]);
+export const sessionSummarySchema = z.strictObject({
+  entries: z.array(sessionSummaryEntrySchema).max(16),
+});
 export const uiSlotValueSchemas = {
   [kernelUiSlots.backdrop]: stageBackdropSchema,
   [kernelUiSlots.cast]: stageCastSchema,
   [kernelUiSlots.dialogue]: stageDialogueSchema,
   [kernelUiSlots.choices]: stageChoicesSchema,
   [kernelUiSlots.characterVisual]: characterVisualSchema,
+  [kernelUiSlots.summary]: sessionSummarySchema,
 } as const;
 export const uiSlotNameSchema = z.enum(Object.values(kernelUiSlots));
 export type UiSlotName = z.infer<typeof uiSlotNameSchema>;
@@ -104,6 +142,8 @@ export type StageCastModel = z.infer<typeof stageCastSchema>;
 export type StageDialogueModel = z.infer<typeof stageDialogueSchema>;
 export type StageChoicesModel = z.infer<typeof stageChoicesSchema>;
 export type CharacterVisualModel = z.infer<typeof characterVisualSchema>;
+export type SessionSummaryEntry = z.infer<typeof sessionSummaryEntrySchema>;
+export type SessionSummaryModel = z.infer<typeof sessionSummarySchema>;
 const valueSchema = z.union([
   stageBackdropSchema,
   stageCastSchema,
@@ -111,6 +151,7 @@ const valueSchema = z.union([
   stageChoicesSchema,
   characterVisualSchema,
   characterVisualCollectionSchema,
+  sessionSummarySchema,
   z.null(),
 ]);
 export type UiSlotValue = z.infer<typeof valueSchema>;

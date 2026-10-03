@@ -72,7 +72,7 @@ export function MessageComposer({
       data-testid="game-composer"
       data-executing={executing}
       data-blocked={composerBlocked}
-      className="border-t border-(--rule-color) shrink-0 px-3 md:px-4 py-4 md:py-5 bg-(--surface-page)"
+      className="ui-composer border-t border-(--rule-color) shrink-0 px-3 md:px-4 py-4 md:py-5 bg-(--surface-page)"
     >
       {isEnded ? (
         <p className="ui-empty-copy mx-auto text-center text-sm">
@@ -212,7 +212,7 @@ export function MessageComposer({
                   ? t("session.steerSend", "interject")
                   : t("session.inputKbdHint", "send")
               }
-              className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-(--rule-color) text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              className="ui-composer-submit shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-(--rule-color) text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
             >
               {commandExecuting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

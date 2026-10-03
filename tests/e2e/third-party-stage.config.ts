@@ -14,6 +14,13 @@ cpSync(
   join(plugins, "community-stage-proof"),
   { recursive: true },
 );
+// The installable example under tests/third-party/, exercised as a player
+// would meet it: a community package the session has to approve.
+cpSync(
+  resolve(import.meta.dirname, "../third-party/clickable-map"),
+  join(plugins, "clickable-map"),
+  { recursive: true },
+);
 // `home` is always a new mkdtemp-owned directory, never a user profile.
 process.once("exit", () => rmSync(home, { recursive: true, force: true }));
 
@@ -40,6 +47,10 @@ export default defineConfig({
         COVEL_HOME: home,
         COVEL_USER_PLUGINS_DIR: plugins,
         COVEL_SERVER_LOG_FILE: "",
+        // The job worker runs a queued job only when its model has
+        // credentials. Nothing here calls a model, so a placeholder is enough
+        // for the function runtimes that event jobs execute.
+        DEEPSEEK_API_KEY: "acceptance-placeholder",
         SQLITE_PATH: join(home, "data", "covel.db"),
       },
       url: `${serverOrigin}/api/health`,

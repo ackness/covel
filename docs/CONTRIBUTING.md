@@ -59,7 +59,7 @@ node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
 
 - TypeScript strict 模式，ESM-only
 - 所有 TS import 使用 `.js` 扩展（NodeNext module resolution）
-- 单文件建议 < 400 行、硬上限 800 行
+- 单文件 400 行与 800 行是评审时的参考线，不是硬上限；只有职责或维护成本确实需要时才拆分
 - 不可变写法，禁用裸 `any`
 - 使用 Zod 做外部输入校验
 - 参考 [`reference/`](./reference/) 下的领域规范
@@ -94,7 +94,7 @@ PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试�
 
 ### 框架/插件隔离（重要）
 
-框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中**禁止**出现任何具体插件 ID 或插件名称。插件能力通过 `RuntimeManifest.capabilities` 与 `outputKind` 发现，详见 [`AGENTS.md` Framework–Plugin Isolation Rule](../AGENTS.md#framework--plugin-isolation-rule)。
+框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中**禁止**出现任何具体插件 ID 或插件名称。插件通过版本化契约（`provides` / `requires`）、扩展点和已注册服务被发现，输出按 `outputKind` 分派，详见 [`AGENTS.md` Framework–Plugin Isolation Rule](../AGENTS.md#framework--plugin-isolation-rule)。
 
 ### 文档同步
 

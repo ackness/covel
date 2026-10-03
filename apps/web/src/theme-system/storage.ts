@@ -1,5 +1,6 @@
 import type { SettingsStoreApi } from "@covel/settings";
 import { i18nTextSchema } from "@covel/shared";
+import { parseThemeLayoutSpec } from "./layout.js";
 import type { StoredCustomTheme } from "./types.js";
 
 export const CUSTOM_THEMES_KEY = "ui.customThemes";
@@ -13,6 +14,9 @@ export const THEME_MANAGER_WIDGET_KEY = "ui.themeManager";
  * edits and legacy rows alike. (Full scope enforcement runs at import time;
  * applying it here too would silently delete themes players already have.)
  */
+/** Same shape as a theme id: the group may name the package it derives from. */
+const THEME_GROUP_PATTERN = /^[a-z0-9][a-z0-9-]{1,47}$/;
+
 function stripAtImports(cssText: string): string {
   return cssText.replace(/@import\b[^;]*;?/gi, "");
 }
@@ -25,6 +29,7 @@ function normalizeStoredTheme(value: unknown): StoredCustomTheme | null {
   const label = i18nTextSchema.safeParse(raw.label);
   if (!label.success) return null;
   const description = i18nTextSchema.safeParse(raw.description);
+  const groupLabel = i18nTextSchema.safeParse(raw.groupLabel);
 
   return {
     id: raw.id,
@@ -38,6 +43,12 @@ function normalizeStoredTheme(value: unknown): StoredCustomTheme | null {
           )
         : ["light", "dark"],
     description: description.success ? description.data : undefined,
+    layout: parseThemeLayoutSpec(raw.layout),
+    group:
+      typeof raw.group === "string" && THEME_GROUP_PATTERN.test(raw.group)
+        ? raw.group
+        : undefined,
+    groupLabel: groupLabel.success ? groupLabel.data : undefined,
     importedAt:
       typeof raw.importedAt === "string" && raw.importedAt.length > 0
         ? raw.importedAt

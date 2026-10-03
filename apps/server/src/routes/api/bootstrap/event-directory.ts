@@ -29,6 +29,20 @@ export interface EventDirectory {
     topic: string,
     data: Record<string, unknown>,
   ): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Validate an event a plugin emits itself, for example from its own UI. The
+   * topic must be one that plugin declares; `advertise: false` topics are
+   * allowed, because the emitter is their owner.
+   */
+  validateOwn(
+    sessionId: string,
+    pluginId: string,
+    topic: string,
+    data: Record<string, unknown>,
+  ): Promise<
+    | { ok: true }
+    | { ok: false; code: "not-declared" | "invalid"; reason: string }
+  >;
   /** Renders the advertised (non-internal) contracts for prompt injection. Empty directory → `""`. */
   catalogText(sessionId: string, locale: string): Promise<string>;
 }
@@ -170,6 +184,44 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
       }
       if (loaded.validate(data)) return { ok: true };
       return { ok: false, reason: ajv.errorsText(loaded.validate.errors) };
+    },
+
+    async validateOwn(sessionId, pluginId, topic, data) {
+      const manifest = deps.registry
+        .getActivePluginDeclarations(sessionId)
+        .find((candidate) => candidate.pluginId === pluginId);
+      const decl = manifest?.events?.find((event) => event.topic === topic);
+      if (!decl)
+        return {
+          ok: false,
+          code: "not-declared",
+          reason: `plugin "${pluginId}" does not declare topic "${topic}"`,
+        };
+      const pluginDir = deps.resolvePluginDir(pluginId);
+      let loaded: LoadedSchema;
+      try {
+        loaded = await loadSchema({
+          pluginId,
+          decl,
+          pluginDir,
+          schemaKey: pluginDir
+            ? path.resolve(pluginDir, decl.schema)
+            : `${pluginId}:${decl.schema}`,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          ok: false,
+          code: "invalid",
+          reason: `schema unreadable: ${message}`,
+        };
+      }
+      if (loaded.validate(data)) return { ok: true };
+      return {
+        ok: false,
+        code: "invalid",
+        reason: ajv.errorsText(loaded.validate.errors),
+      };
     },
 
     async catalogText(sessionId, locale) {

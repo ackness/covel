@@ -33,13 +33,23 @@ export function createWorldAttributeSchema(z) {
       type: z
         .enum(["string", "number", "array", "enum", "boolean", "object", "map"])
         .describe("Attribute data type"),
-      min: z.number().optional().describe("Minimum value for number types"),
-      max: z.number().optional().describe("Maximum value for number types"),
+      min: z
+        .number()
+        .optional()
+        .describe(
+          "Lowest value of a number attribute. Set both `min` and `max` on every stat that rises and falls within a range (health, stamina, stress); the interface shows a gauge only when both are set",
+        ),
+      max: z
+        .number()
+        .optional()
+        .describe("Highest value of a number attribute; set it with `min`"),
       defaultValue: z.unknown().optional().describe("Default value"),
       itemType: z
         .enum(["string", "number"])
         .optional()
-        .describe("Array element type (required when type=array)"),
+        .describe(
+          "Array element type (required when type=array). Use an array of strings in the `equipment` category for what the character carries",
+        ),
       options: z
         .array(z.string())
         .optional()

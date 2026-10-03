@@ -68,3 +68,50 @@ describe("formToSpec narrativeTemplate preview", () => {
     expect(field?.props?.defaultValue).toBe("Aria");
   });
 });
+
+describe("choice block", () => {
+  it("renders its options as a choice list that keeps each description", () => {
+    const spec = messageToSpec({
+      id: "m2",
+      role: "assistant",
+      content: "",
+      block: {
+        type: "interactive_choice",
+        prompt: "Which way?",
+        choices: [
+          { id: "a", label: "Take the stairs", description: "Slow but quiet" },
+          { id: "b", label: "Force the door" },
+        ],
+      },
+    } as unknown as StreamMessage) as Spec | null;
+    expect(spec?.children?.[0]).toMatchObject({
+      type: "Text",
+      props: { content: "Which way?" },
+    });
+    expect(spec?.children?.[1]).toEqual({
+      type: "ChoiceList",
+      children: [
+        {
+          type: "Choice",
+          props: { title: "Take the stairs", description: "Slow but quiet" },
+          on: {
+            click: {
+              action: "selectChoice",
+              params: { choiceId: "a", label: "Take the stairs" },
+            },
+          },
+        },
+        {
+          type: "Choice",
+          props: { title: "Force the door" },
+          on: {
+            click: {
+              action: "selectChoice",
+              params: { choiceId: "b", label: "Force the door" },
+            },
+          },
+        },
+      ],
+    });
+  });
+});

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { themeLayoutSpecSchema } from "./layout.js";
 import type {
   ImportedThemePayload,
   ThemeDefinition,
@@ -21,6 +22,11 @@ const jsonThemeSchema = z.object({
   cssText: z.string().min(1),
   schemes: z.array(z.enum(["light", "dark"])).optional(),
   description: z
+    .union([z.string(), z.record(z.string(), z.string())])
+    .optional(),
+  layout: themeLayoutSpecSchema.optional(),
+  group: themeIdSchema.optional(),
+  groupLabel: z
     .union([z.string(), z.record(z.string(), z.string())])
     .optional(),
 });
@@ -266,6 +272,9 @@ function parseJsonTheme(text: string, fileName: string): ImportedThemePayload {
     source: "custom",
     schemes: parsed.schemes?.length ? parsed.schemes : ["light", "dark"],
     description: parsed.description,
+    layout: parsed.layout,
+    group: parsed.group,
+    groupLabel: parsed.groupLabel,
     cssText: parsed.cssText,
   };
   return { theme, fileName };

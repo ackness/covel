@@ -31,7 +31,6 @@ import {
   openLogsDir,
   openConfigDir,
   openDataDir,
-  openLlmToml,
   openKeysEnv,
   pickDataDir,
   reloadServerAndWait,
@@ -41,6 +40,7 @@ import {
 } from "@/lib/desktop-bridge.js";
 import { resetOnboarding } from "@/components/onboarding-wizard.js";
 import { useSession } from "@/stores/session-store.js";
+import { useOpenLlmToml } from "./use-open-llm-toml.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 
 interface DesktopInfo {
@@ -60,6 +60,7 @@ interface DesktopInfo {
 export function DesktopPane() {
   const { t } = useTranslation();
   const { state } = useSession();
+  const openLlmTomlFile = useOpenLlmToml();
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -251,7 +252,7 @@ export function DesktopPane() {
             size="sm"
             variant="outline"
             className="h-7 text-xs"
-            onClick={() => openLlmToml().catch((err) => setToast(String(err)))}
+            onClick={() => void openLlmTomlFile()}
           >
             <FileCode className="w-3 h-3 mr-1.5" />
             {t("settings.desktopEditLlm")}
@@ -321,7 +322,7 @@ export function DesktopPane() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => openLlmToml().catch((err) => setToast(String(err)))}
+            onClick={() => void openLlmTomlFile()}
           >
             <FileCode className="w-3 h-3 mr-1.5" />
             {t("settings.desktopEditLlm")}

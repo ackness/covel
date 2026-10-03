@@ -1,0 +1,14 @@
+{
+  "id": "panel",
+  "label": {
+    "zh-CN": "面板",
+    "en-US": "Panel"
+  },
+  "source": "builtin",
+  "schemes": ["light", "dark"],
+  "description": {
+    "zh-CN": "现代应用风格：左侧图标导航、对话流正文、卡片式信息栏。",
+    "en-US": "A modern app shell: icon rail, conversational story stream, card-based side panel."
+  },
+  "layout": { "preset": "panel" }
+}

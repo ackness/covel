@@ -190,10 +190,11 @@ for (const width of [1512, 390]) {
     let releaseHealth = () => {};
     try {
       await page.goto(`/session?sid=${fixture.id}`);
-      await expect(
-        page.getByRole("button", { name: "切换故事侧栏" }),
-      ).toBeVisible();
-      await page.getByRole("button", { name: "切换故事侧栏" }).click();
+      // Studio configuration lives in the toolbar's overflow menu.
+      await page.getByRole("button", { name: "更多", exact: true }).click();
+      await page
+        .getByRole("menuitemcheckbox", { name: "工作室配置", exact: true })
+        .click();
       await page
         .getByRole("checkbox", { name: "自定义插件与高级设置" })
         .check();
@@ -261,7 +262,10 @@ for (const width of [1512, 390]) {
           .getByRole("dialog")
           .getByRole("button", { name: "关闭", exact: true })
           .click();
-        await page.getByRole("button", { name: "切换故事侧栏" }).click();
+        await page.getByRole("button", { name: "更多", exact: true }).click();
+        await page
+          .getByRole("menuitemcheckbox", { name: "工作室配置", exact: true })
+          .click();
       }
       await page
         .getByRole("switch", { name: /Current plugin fixture/ })

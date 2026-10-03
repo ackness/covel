@@ -33,7 +33,7 @@ import { errorBody } from "../../../api-error.js";
 export async function dispatchPluginAction(
   c: Context,
   session: SessionRecord,
-  body: Exclude<PluginRpcRequest, { kind: "runtime" }>,
+  body: Exclude<PluginRpcRequest, { kind: "runtime" | "event" }>,
   resolvedCommand?: SessionSlashCommand,
   commandInvocation?: RpcCommandInvocation,
   commandInvocationId?: string,

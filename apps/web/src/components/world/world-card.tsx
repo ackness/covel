@@ -2,7 +2,7 @@ import { localizedWorldText } from "@covel/shared";
 import { type CSSProperties } from "react";
 import type { TFunction } from "i18next";
 import { Eye, Trash2, ArrowRight } from "lucide-react";
-import type { WorldRecord } from "@/services/api.js";
+import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import {
@@ -27,6 +27,9 @@ export interface WorldCardProps {
   onEnter: (worldId: string) => void;
   onViewDetails: (e: React.MouseEvent, worldId: string) => void;
   onDelete: (e: React.MouseEvent, worldId: string) => void;
+  /** This world's latest playable session, when the list offers "continue". */
+  recentSession?: SessionRecord;
+  onResume?: (session: SessionRecord) => void;
 }
 
 /**

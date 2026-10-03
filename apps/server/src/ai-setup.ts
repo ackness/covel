@@ -43,6 +43,19 @@ protocol = "openai-chat-v1"
 `;
 
 /**
+ * File seeded when the desktop user opens an llm.toml that does not exist yet.
+ * It carries the built-in default verbatim, so creating the file changes where
+ * the configuration lives and leaves the active slots as they were.
+ */
+export const LLM_TOML_STARTER = `# Covel LLM configuration.
+#
+# Each [covel.<slot>] section routes one model slot to a provider and model.
+# API keys never go in this file: set them in Settings or keys.env.
+# After editing, use Settings -> Models -> Reload config to apply.
+# Field reference: llm.toml.example in the Covel repository.
+${DEFAULT_LLM_TOML}`;
+
+/**
  * Initialize AI provider stack.
  *
  * Resolution order:

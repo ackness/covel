@@ -417,6 +417,57 @@ describe("LLM settings regressions", () => {
     ).toBe(JSON.stringify({ kind: "preset", presetId: "same" }));
   });
 
+  it("labels built-in default models by their real source and explains why they cannot be deleted", () => {
+    const provider = {
+      id: "deepseek",
+      provider: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      protocol: "openai-chat-v1",
+      serverModels: [
+        {
+          id: "slot-story",
+          name: "Story",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          enabled: true,
+          isDefault: true,
+          scope: "server" as const,
+        },
+      ],
+    };
+    const handlers = {
+      onAddModel: () => undefined,
+      onPatchLocalProfile: () => undefined,
+      onDeleteLocalModel: () => undefined,
+      onDuplicateLocalModel: () => undefined,
+      onDeleteLocalProvider: () => undefined,
+    };
+    const { rerender } = render(
+      <ProviderDetails
+        provider={provider}
+        serverConfig={{ kind: "builtin", path: "/home/player/.covel/llm.toml" }}
+        {...handlers}
+      />,
+    );
+    expect(screen.getAllByText("Built-in default")).toHaveLength(2);
+    expect(screen.queryByText("From llm.toml")).toBeNull();
+    expect(
+      screen.getByText(/create \/home\/player\/\.covel\/llm\.toml/),
+    ).toBeTruthy();
+
+    rerender(
+      <ProviderDetails
+        provider={provider}
+        serverConfig={{ kind: "file", path: "/home/player/.covel/llm.toml" }}
+        {...handlers}
+      />,
+    );
+    expect(screen.getAllByText("From llm.toml")).toHaveLength(2);
+    expect(
+      screen.getByText(/defined in \/home\/player\/\.covel\/llm\.toml/),
+    ).toBeTruthy();
+  });
+
   it("removes a reasoning override that the newly bound model cannot use", () => {
     const overrides: Record<string, ModelParameterOverrides> = {
       story: { temperature: 0.7, reasoningEffort: "xhigh" },

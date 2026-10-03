@@ -452,7 +452,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 | 方法   | 路径                                  | 描述                                                                                               |
 | ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action / runtime / command 级，含 `submit-form`)                                 |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action / runtime / command / event 级，含 `submit-form`)                         |
 | GET    | `/api/sessions/:id/approvals`         | 列出该 session 的待批准 RPC 请求                                                                   |
 | DELETE | `/api/sessions/:id/approvals`         | 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
 | POST   | `/api/approvals/:approvalId/decision` | 提交玩家批准决定(allow/deny + once/session)                                                        |
@@ -1352,8 +1352,8 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 {
   "status": "paused",
   "runtimeModelOverrides": {
-    "narrator": "balance",
-    "codex/unlocker": "fast"
+    "narrator": "story",
+    "npc-graph/extractor": "fast"
   }
 }
 ```
@@ -1361,7 +1361,7 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 **字段说明:**
 
 - `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400；`ended` 是终态，不能再 PATCH 回 `active` / `paused`（返回 `409 session_ended`）。`phase`、`completedPlayerTurns` 与 `setupRuntimes` 是会话时钟，PATCH 不可修改：`phase` 与 `completedPlayerTurns` 只由 finalize 事务写入；`setupRuntimes` 另由事务后的 attempt 账本结算（回滚的尝试仍消耗预算）、执行器对 `needs(scope: session)` 环的预先阻断以及 `retry` / `waive` 端点更新。
-- `runtimeModelOverrides`(可选,object) — Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
+- `runtimeModelOverrides`(可选,object) — Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `story` / `utility` / `fast`)。框架在每次 turn 执行前快照该字段,resolver 先采用这里的显式选择,未设置时再按[实际选择优先级](slots.md#实际选择优先级)回退。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
 
@@ -1611,8 +1611,9 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 在会话锁内排入一条持久 runtime job（`_runtime_jobs`，`origin.activation: "manual"`）后立即返回 202 + `jobId`；runtime job worker 认领、执行并在同一事务内提交领域写入与任务终态。状态经 `job-status.updated` 与 `_runtime_jobs` 的 `plugin-data.changed` 推送。入口 runtime 发出的 background follower 在同一提交事务内排为事件任务（`origin.activation: "event"`），记录在父任务 `result.deferredJobs`。
 3. **Command 级**: `{ kind: "command", commandId, input }` 或 `{ kind: "command", commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
+4. **Event 级**: `{ kind: "event", pluginId, topic, payload }` — 插件自己的界面发出一个该插件声明的领域事件（JSON-RENDER 或 `webview` 的 `emitEvent`）。`topic` 必须在这个插件的 `contributes.events` 里，`advertise: false` 的内部 topic 也可以；别的插件声明的 topic 一律返回 `404 event_not_declared`。`payload` 按该 topic 的 schema 校验，不合格返回 `400 event_payload_invalid`。校验和审批通过后，会话里所有订阅该 topic 的 runtime（`trigger: { type: event, topic }`，可以属于任何已启用的插件）在同一事务内排成事件任务（`_runtime_jobs`，`origin.activation: "event"`，`origin.sourceTurnId` 为本次发射的 `eventId`），由 runtime job worker 带着 `ctx.triggerEvent` 执行并各自提交。请求本身不执行 runtime：返回 `200 { status: "ok", eventId, topic, deferredJobs: [{ jobId, runtimeId }] }`，没有订阅者时 `deferredJobs` 为空。与手动触发 runtime 一样，点击就是触发决定，订阅者的 `startTurn` / `maxTriggerCount` / `cooldownTurns` 不参与判断。社区插件按 `event:<topic>` 走审批；订阅者里的社区 runtime 还各需要与手动触发相同的两项授权（服务端代码、`runtime:<name>`），否则 runtime 加载器会拒绝执行。请求每次返回缺少的第一项（`202 approval-required`），客户端批准后重试，直到全部具备才排入任务。后台任务只在会话有可用模型凭据时执行（与其他后台任务相同），否则保持 `queued`。
 
-**写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行，例如 `submit-form` 的表单批次原子提交。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#handler-store-and-commit-ownership)。
+**写入边界**：插件注册的 RPC action（包括内置插件、通过 `invokePluginAction` 调用）在会话锁内即时写入；handler 后续失败不会回滚已成功的写入。框架默认 action 按各自事务契约执行，例如 `submit-form` 的表单批次原子提交。Runtime 级（`invokeRuntime`）把 function handler 的 `ctx.pluginData` 写入和领域 effects 作为 proposal，在执行成功后统一提交；提交失败会回滚本次领域写入。需要多条记录一致成功或失败时，使用 `trigger.type: manual` 的 function runtime。它直接运行 JS handler，不需要 LLM，也不会仅因手动触发而自动运行叙事 runtime；只有显式声明的事件链等调度关系才会继续触发下游。参见[函数 runtime 契约](plugins.md#输入和输出)。
 
 插件 action 必须属于会话当前启用的插件。服务端在审批前及取得会话锁后分别检查；禁用插件返回 `404 plugin_not_active`，不会执行 handler 或新增审批。`pluginId: "framework"` 的框架默认 action 不属于插件启用集，仍按各自准入条件执行。旧面板发出的迟到请求同样受此检查约束。
 
@@ -1684,18 +1685,19 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 }
 ```
 
-| 字段                        | 类型          | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`                      | string(必填)  | 请求种类：`action` / `runtime` / `command`。服务端不再根据 selector 字段推断种类                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `pluginId`                  | string(可选)  | action / runtime 模式的插件 ID(框架默认 handler 用 `framework` 占位)；command 模式禁止提交                                                                                                                                                                                                                                                                                                                                                                                               |
-| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` / `commandId` 互斥                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` / `commandId` 互斥                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `commandId`                 | string(可选)  | 会话命令目录中的稳定 ID。与 `action` / `runtimeId` 互斥；command 模式不接受 `pluginId` / `payload`                                                                                                                                                                                                                                                                                                                                                                                       |
-| `input`                     | string(可选)  | command 输入框模式的完整原始输入；与 `args` 必须且只能提供一个；服务端按命令声明再次分词、类型转换和校验                                                                                                                                                                                                                                                                                                                                                                                 |
-| `args`                      | object(可选)  | command JSON-RENDER 模式的命名参数；与 `input` 必须且只能提供一个；未知字段、类型、choices、required 与 variadic 都按服务端命令声明校验                                                                                                                                                                                                                                                                                                                                                  |
-| `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                                                                                                                                                                            |
-| `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即排入一条持久 runtime job 并返回 202，由 worker 执行入口 runtime 并排入 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                                                                                                                                                        |
-| `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry_turn_not_found`）；该 turn 未提交（`commitStatus` 不是 `committed`，即已回滚或仍待定）时 409（`retry_source_not_committed`），其中的成功结果不能满足下游 `needs` 门控。 |
+| 字段                        | 类型          | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                      | string(必填)  | 请求种类：`action` / `runtime` / `command` / `event`。服务端不再根据 selector 字段推断种类                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `pluginId`                  | string(可选)  | action / runtime 模式的插件 ID(框架默认 handler 用 `framework` 占位)；command 模式禁止提交                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` / `commandId` 互斥                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` / `commandId` 互斥                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `commandId`                 | string(可选)  | 会话命令目录中的稳定 ID。与 `action` / `runtimeId` 互斥；command 模式不接受 `pluginId` / `payload`                                                                                                                                                                                                                                                                                                                                                                                             |
+| `input`                     | string(可选)  | command 输入框模式的完整原始输入；与 `args` 必须且只能提供一个；服务端按命令声明再次分词、类型转换和校验                                                                                                                                                                                                                                                                                                                                                                                       |
+| `args`                      | object(可选)  | command JSON-RENDER 模式的命名参数；与 `input` 必须且只能提供一个；未知字段、类型、choices、required 与 variadic 都按服务端命令声明校验                                                                                                                                                                                                                                                                                                                                                        |
+| `topic`                     | string(可选)  | 仅 event 级：本插件声明的事件 topic；event 级只接受 `pluginId` / `topic` / `payload`，其中 `payload` 必须是对象                                                                                                                                                                                                                                                                                                                                                                                |
+| `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即排入一条持久 runtime job 并返回 202，由 worker 执行入口 runtime 并排入 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                                                                                                                                                              |
+| `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `io.inputs` / `schedule.needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry_turn_not_found`）；该 turn 未提交（`commitStatus` 不是 `committed`，即已回滚或仍待定）时 409（`retry_source_not_committed`），其中的成功结果不能满足下游 `needs` 门控。 |
 
 **解析顺序(action 级):**
 
@@ -2179,7 +2181,7 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 }
 ```
 
-> **`triggerTypes` 的取值范围**：schema 接受且生产可用的取值就是 `auto` / `manual` / `scheduled` / `event` 四种，`triggerTypes` 完整列出它们。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
+> **`triggerTypes` 的取值范围**：schema 接受且生产可用的取值就是 `auto` / `manual` / `scheduled` / `event` 四种，`triggerTypes` 完整列出它们。详见 [reference/plugins.md → Runtime 分组字段](./plugins.md#runtime-分组字段)。
 
 #### `GET /api/plugins`
 
@@ -2633,7 +2635,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
       },
       "locale": "zh-CN",
       "activePlugins": ["world-init", "narrator"],
-      "runtimeModelOverrides": { "narrator": "balance" },
+      "runtimeModelOverrides": { "narrator": "story" },
       "loreOverride": "The session's captured world lore."
     },
     "characters": [/* ... */],
@@ -3495,7 +3497,7 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 - **服务器存储**: Memory 或 SQLite
 - **前端存储**: 演示公开写入可用 local IndexedDB；私有演示也可用 remote 服务端存储
 - **API 密钥**: 用户自行管理，HTTPS 传输必需
-- **认证**: **必需**——会话作用域端点强制 session owner token，全局/管理端点强制 operator token（`COVEL_DESKTOP_REST_TOKEN`）；缺 token 时 `validateSecurityPosture` 直接拒绝启动。详见上方[鉴权章节](#鉴权session-owner-tokenaudit-s-02)
+- **认证**: **必需**——会话作用域端点强制 session owner token，全局/管理端点强制 operator token（`COVEL_DESKTOP_REST_TOKEN`）；缺 token 时 `validateSecurityPosture` 直接拒绝启动。详见上方[鉴权章节](#鉴权session-owner-token)
 
 ### T3: 商业部署 (Commercial)
 
@@ -3568,8 +3570,11 @@ Response 创建作为完成条件。普通请求覆盖完整 middleware/handler�
 `POST /api/config/open-folder` accepts `{ "target": "llm.toml" }` and opens
 `COVEL_LLM_TOML` when configured (relative paths resolve from the server working
 directory), otherwise `<covelHome>/llm.toml`. The `keys.env` target always resolves
-under `covelHome`. Missing files return `400` with `open_target_unavailable`;
-opening a file does not reload the running gateway. Use
+under `covelHome`. In desktop mode a missing `llm.toml` is created first from the
+built-in default (same slots as the active fallback, so nothing changes until it is
+edited) and the response reports it: `{ "ok": true, "created": true }`. Every other
+missing target, and a missing `llm.toml` outside desktop mode, returns `400` with
+`open_target_unavailable`. Opening a file does not reload the running gateway. Use
 `POST /api/llm-config/reload` after editing to apply model configuration.
 
 ### Installed resource storage and vector configuration

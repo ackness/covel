@@ -23,6 +23,8 @@ export async function buildThirdPartyPluginZip(
       withFileTypes: true,
     });
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      // Installed workspace dependencies are never part of a plugin package.
+      if (entry.name === "node_modules") continue;
       const name = path.posix.join(relative, entry.name);
       if (entry.isDirectory()) await addDirectory(name);
       else if (entry.isFile()) {
