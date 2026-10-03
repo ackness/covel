@@ -139,7 +139,9 @@ test("the game surface lets the aurora show through and fades the world art", as
     .getByRole("button", { name: /^(start game|开始游戏)$/i })
     .first()
     .click();
-  await expect(page).toHaveURL(/sid=/);
+  // Creating a session takes several seconds on a busy machine; the other
+  // specs that start a game give it the same room.
+  await expect(page).toHaveURL(/sid=/, { timeout: 15_000 });
   const sessionId = new URL(page.url()).searchParams.get("sid")!;
 
   try {
