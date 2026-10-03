@@ -6,7 +6,11 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Separator } from "@/components/ui/separator.js";
 import { text } from "./world-detail/detail-primitives.js";
-import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
+import {
+  worldLanguageBadge,
+  worldLanguageName,
+  worldPlayLocale,
+} from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { DimensionValueView } from "@/components/session/dimension-value-view.js";
 export interface WorldDetailViewProps {
@@ -24,11 +28,11 @@ export function WorldDetailView({
 }: WorldDetailViewProps) {
   const { t, i18n } = useTranslation();
   const dims = world.dimensions;
-  const languageBadge = worldLanguageBadge(world.locale);
-  const languageName = worldLanguageName(
-    world.locale,
-    i18n.resolvedLanguage ?? i18n.language,
-  );
+  const interfaceLocale = i18n.resolvedLanguage ?? i18n.language;
+  // The language this player would play the world in.
+  const playLocale = worldPlayLocale(world, interfaceLocale);
+  const languageBadge = worldLanguageBadge(playLocale);
+  const languageName = worldLanguageName(playLocale, interfaceLocale);
   const visual = worldVisual(world);
 
   const hasDimensions =

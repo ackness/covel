@@ -7,6 +7,7 @@ import {
   worldLanguage,
   worldLanguageBadge,
   worldLanguageName,
+  worldPlayLocale,
 } from "../world-locale.js";
 
 function world(id: string, locale?: string): WorldRecord {
@@ -119,5 +120,34 @@ describe("world locale presentation", () => {
       isWorldLocaleMismatch(`en-${"abcde-".repeat(20)}abcde`, "zh-CN"),
     ).toBe(false);
     expect(isWorldLocaleMismatch(undefined, "zh-CN")).toBe(false);
+  });
+
+  it("plays a world in the interface language when it has that edition", () => {
+    const bilingual: WorldRecord = {
+      ...world("mistport", "zh-CN"),
+      metadata: { supportedLocales: ["zh-CN", "en-US"] },
+    };
+    const chineseOnly = world("ink", "zh-CN");
+
+    expect(worldPlayLocale(bilingual, "en-US")).toBe("en-US");
+    expect(worldPlayLocale(bilingual, "en-GB")).toBe("en-US");
+    expect(worldPlayLocale(bilingual, "zh-CN")).toBe("zh-CN");
+    // No edition in the player's language: the world's own language, and the
+    // language notice is shown.
+    expect(worldPlayLocale(chineseOnly, "en-US")).toBe("zh-CN");
+    expect(worldPlayLocale(bilingual, "ru-RU")).toBe("zh-CN");
+    expect(
+      isWorldLocaleMismatch(worldPlayLocale(bilingual, "en-US"), "en-US"),
+    ).toBe(false);
+    expect(
+      isWorldLocaleMismatch(worldPlayLocale(chineseOnly, "en-US"), "en-US"),
+    ).toBe(true);
+
+    // A world with an English edition counts as playable in English.
+    expect(
+      prioritizeWorldsByLocale([chineseOnly, bilingual], "en-US").map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["mistport", "ink"]);
   });
 });

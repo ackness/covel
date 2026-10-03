@@ -80,6 +80,12 @@ export {
 } from "./utils/instruction-locale.js";
 export type { InstructionLocale } from "./utils/instruction-locale.js";
 export { pluginMessagesFor } from "./utils/plugin-messages.js";
+export {
+  WORLD_EDITIONS_KEY,
+  sessionContentLocale,
+  worldEditionLocales,
+} from "./utils/content-locale.js";
+export type { WorldEditions } from "./utils/content-locale.js";
 export type {
   PluginMessageCatalog,
   PluginMessages,

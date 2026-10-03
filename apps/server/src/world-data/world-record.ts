@@ -1,4 +1,8 @@
-import { WORLD_LOCALIZED_TEXT_KEY, resolveI18nText } from "@covel/shared";
+import {
+  WORLD_EDITIONS_KEY,
+  WORLD_LOCALIZED_TEXT_KEY,
+  resolveI18nText,
+} from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
 
 /** Project a validated manifest into the common file/store world record. */
@@ -43,6 +47,10 @@ export function worldRecordFromManifest(
       characterSchema: manifest.characterSchema,
       ...(manifest.defaultViewMode
         ? { defaultViewMode: manifest.defaultViewMode }
+        : {}),
+      // The locales the world has content for; a session is in one of them.
+      ...(Array.isArray(manifest.supportedLocales)
+        ? { [WORLD_EDITIONS_KEY]: manifest.supportedLocales }
         : {}),
       ...(Object.keys(localizedText).length
         ? { [WORLD_LOCALIZED_TEXT_KEY]: localizedText }

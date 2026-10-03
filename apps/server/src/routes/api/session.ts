@@ -1,6 +1,6 @@
 import { importWorldEmbeddedCharacters } from "./session/world-characters.js";
 import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
-import { characterSchemaSchema } from "@covel/shared";
+import { characterSchemaSchema, sessionContentLocale } from "@covel/shared";
 /**
  * Session routes — RESTful CRUD + session-scoped plugin management.
  *
@@ -226,6 +226,15 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
+  // The session is played in a language the world has an edition for. A
+  // player who asks for another one gets the world's own language, and the
+  // response says so; the UI language is not affected.
+  const requestedLocale = normalizeLocale(body.locale);
+  const contentLocale = sessionContentLocale(
+    (rawWorldId ? await store.getWorld(rawWorldId) : undefined) ?? undefined,
+    requestedLocale,
+  );
+
   // The world is a requirer too. Its contracts are read once here and kept
   // with the session, so later resolutions need no world lookup.
   const requiredContracts = rawWorldId
@@ -288,10 +297,10 @@ sessionRoutes.post("/", async (c) => {
   const session: SessionRecord = {
     id,
     worldId: rawWorldId,
-    // Validate the untrusted locale: it flows into locale-variant file-path
-    // construction (world-data importer) and localized prompt text, so an
-    // invalid/attacker-controlled value must never be stored verbatim.
-    locale: normalizeLocale(body.locale),
+    // The untrusted request locale was validated above: it flows into
+    // locale-variant file-path construction (world-data importer) and
+    // localized prompt text, so it is never stored verbatim.
+    locale: contentLocale.locale,
     status: "active",
     phase,
     completedPlayerTurns: 0,
@@ -559,6 +568,9 @@ sessionRoutes.post("/", async (c) => {
     {
       ...sanitizeSessionForResponse(responseSession),
       ownerToken: owner.token,
+      // Present when the world has no edition in the requested language and
+      // the session is in the world's own language instead.
+      ...(contentLocale.changed ? { requestedLocale } : {}),
     },
     201,
   );

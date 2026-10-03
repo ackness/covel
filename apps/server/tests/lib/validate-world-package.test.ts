@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { cp, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,7 +114,12 @@ describe("validateWorldPackage", () => {
     await mkdir(worldDir, { recursive: true });
     await writeFile(path.join(worldDir, "world.yaml"), declared);
     await writeFile(path.join(worldDir, "WORLD.en.md"), "Lore.");
-    expect(await validate(worldDir)).toEqual([
+    // The manifest's own text has no Chinese either; that is another finding.
+    const lore = async () =>
+      (await validate(worldDir)).filter((item) =>
+        item.code.startsWith("lore-"),
+      );
+    expect(await lore()).toEqual([
       expect.objectContaining({
         level: "error",
         code: "lore-missing",
@@ -123,7 +128,7 @@ describe("validateWorldPackage", () => {
     ]);
 
     await writeFile(path.join(worldDir, "WORLD.zh.md"), "世界观。");
-    expect(await validate(worldDir)).toEqual([
+    expect(await lore()).toEqual([
       expect.objectContaining({
         level: "warning",
         code: "lore-fallback-missing",
@@ -263,6 +268,43 @@ sources:
       ).filter((item) => item.code === "locale-script"),
     ).toEqual([]);
   }, 30_000);
+
+  it("warns when a declared edition does not translate every text", async () => {
+    const worldDir = path.join(
+      await mkdtemp(path.join(tmpdir(), "covel-validate-edition-")),
+      "lantern-barrow",
+    );
+    await cp(path.join(repoRoot, "worlds/lantern-barrow"), worldDir, {
+      recursive: true,
+    });
+    // The world declares en-US; its quests lose their English file.
+    await rm(path.join(worldDir, "data/quests.en.yaml"));
+
+    const editions = (await validate(worldDir, true)).filter(
+      (item) => item.code === "edition-incomplete",
+    );
+    expect(editions).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        file: "data/quests.yaml",
+        locales: ["en-US"],
+        message: expect.stringContaining("a en-US session reads them in zh-CN"),
+      }),
+    ]);
+    // The shipped worlds are complete in every language they declare.
+    for (const world of [
+      "mistport",
+      "lantern-barrow",
+      "haruka-academy",
+      "emberback",
+    ])
+      expect(
+        (await validate(path.join(repoRoot, "worlds", world), true)).filter(
+          (item) => item.code === "edition-incomplete",
+        ),
+        world,
+      ).toEqual([]);
+  }, 60_000);
 
   it("rejects a main file that still writes translations inline", async () => {
     const worldDir = path.join(

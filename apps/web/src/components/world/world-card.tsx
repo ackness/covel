@@ -4,7 +4,11 @@ import { Eye, Trash2, ArrowRight } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
-import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
+import {
+  worldLanguageBadge,
+  worldLanguageName,
+  worldPlayLocale,
+} from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
 
 export interface WorldCardProps {
@@ -42,8 +46,10 @@ export function WorldCard({
   onDelete,
 }: WorldCardProps) {
   const visual = worldVisual(world);
-  const languageBadge = worldLanguageBadge(world.locale);
-  const languageName = worldLanguageName(world.locale, interfaceLocale);
+  // The language this player would play the world in.
+  const playLocale = worldPlayLocale(world, interfaceLocale);
+  const languageBadge = worldLanguageBadge(playLocale);
+  const languageName = worldLanguageName(playLocale, interfaceLocale);
   return (
     <article
       aria-busy={isEntering}

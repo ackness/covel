@@ -1,5 +1,6 @@
 import i18n from "i18next";
 import * as api from "@/services/api";
+import { worldPlayLocale } from "@/lib/world-locale.js";
 import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import {
@@ -88,7 +89,8 @@ export async function startGameSession({
       world.id,
       undefined,
       plugins,
-      world.locale ?? i18n.language,
+      // The world's edition in the player's language, or its own language.
+      worldPlayLocale(world, i18n.language) ?? i18n.language,
       loreOverride,
       excludedPlugins,
     );

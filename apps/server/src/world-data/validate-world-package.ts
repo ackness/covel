@@ -27,6 +27,7 @@ import {
   readWorldManifestSource,
   type LocaleOverlayFileIssue,
 } from "./locale-overlays.js";
+import { worldTranslationStatus } from "./locale-tooling.js";
 import { preflightWorldDataForSession } from "./session-import.js";
 import { fileExists } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
@@ -48,6 +49,7 @@ export interface WorldPackageDiagnostic {
     | "world-data"
     | "locale-overlay"
     | "locale-script"
+    | "edition-incomplete"
     | "inline-locale-map";
   /** Path relative to the world directory. */
   readonly file?: string;
@@ -151,6 +153,45 @@ function declaredLocales(manifest: WorldManifestView): readonly string[] {
   return [
     ...new Set([manifest.defaultLocale, ...(manifest.supportedLocales ?? [])]),
   ];
+}
+
+/**
+ * A declared locale is a promise: a player who asks for it gets a session in
+ * it. Texts the edition does not translate reach that session in the world's
+ * own language, beside instructions that ask for the declared one.
+ */
+async function checkEditions(
+  worldDir: string,
+  manifest: WorldManifestView,
+): Promise<WorldPackageDiagnostic[]> {
+  const diagnostics: WorldPackageDiagnostic[] = [];
+  for (const locale of manifest.supportedLocales ?? []) {
+    if (locale === manifest.defaultLocale) continue;
+    let status: Awaited<ReturnType<typeof worldTranslationStatus>>;
+    try {
+      status = await worldTranslationStatus(worldDir, locale);
+    } catch {
+      continue; // A source that cannot be read is reported by the data check.
+    }
+    const total = status.files.reduce((sum, file) => sum + file.total, 0);
+    const missing = status.files.filter((file) => file.missing.length > 0);
+    const count = missing.reduce((sum, file) => sum + file.missing.length, 0);
+    if (count === 0) continue;
+    diagnostics.push({
+      level: "warning",
+      code: "edition-incomplete",
+      file: missing[0]!.file,
+      locales: [locale],
+      message: `the ${locale} edition lacks ${count} of ${total} texts (${missing
+        .slice(0, 3)
+        .map((file) => `${file.file}: ${file.missing.length}`)
+        .join(
+          ", ",
+        )}); a ${locale} session reads them in ${manifest.defaultLocale}`,
+      hint: `Run \`pnpm i18n status ${path.basename(worldDir)} --locale ${locale} --missing\` to list them and \`pnpm i18n translate\` to fill them, or remove ${locale} from supportedLocales.`,
+    });
+  }
+  return diagnostics;
 }
 
 async function checkLore(
@@ -617,6 +658,7 @@ export async function validateWorldPackage(
       ),
       ...overlayDiagnostics(source.issues),
       ...(await checkLore(worldDir, manifest)),
+      ...(await checkEditions(worldDir, manifest)),
       ...checkPluginReferences(manifest, catalogue, strict),
       ...(await checkWorldData(worldDir, manifest, catalogue, strict)),
     ],
