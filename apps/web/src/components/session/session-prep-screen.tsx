@@ -7,7 +7,13 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { AlertCircle, Play, ArrowLeft, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Play,
+  ArrowLeft,
+  Loader2,
+} from "lucide-react";
 import * as api from "@/services/api.js";
 import { Button } from "@/components/ui/button.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
@@ -104,6 +110,7 @@ export function SessionPrepScreen({
     pluginPlan,
     pluginPlanLoading,
     pluginPlanError,
+    missingPluginIds,
     pluginPacks,
     activePluginPack,
     pluginSearch,
@@ -418,6 +425,33 @@ export function SessionPrepScreen({
               >
                 {t("common.retry", "Retry")}
               </Button>
+            </div>
+          )}
+
+          {missingPluginIds.length > 0 && (
+            <div
+              className="mb-5 flex items-start gap-2 rounded-(--radius-card) border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm"
+              role="status"
+              data-testid="missing-world-plugins"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {t(
+                    "session.missingPlugins.title",
+                    "This world asks for plugins that are not installed",
+                  )}
+                </p>
+                <p className="mt-1 wrap-break-word font-mono text-xs">
+                  {missingPluginIds.join(", ")}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t(
+                    "session.missingPlugins.detail",
+                    "You can start without them, but what they add to this world will be missing. Install them under Settings → Install & manage, then restart the backend.",
+                  )}
+                </p>
+              </div>
             </div>
           )}
 

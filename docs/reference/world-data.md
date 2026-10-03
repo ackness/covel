@@ -202,6 +202,8 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 | `recommended`                   | 额外推荐插件 ID                                                                         |
 | `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/tags/reason` |
 
+`requested` 写的是插件 ID，玩家的宿主不一定装了它。`GET /api/worlds/:id/plugin-plan` 会把未安装的 ID 从世界策略和各组合包的 `requested` 中剔除，改列在 `missing`（组合包请求的带 `packId`）。准备页据此提示缺少哪些插件，会话仍可创建，只是这些插件提供的玩法不会生效。`recommended` 不参与默认选择，原样返回。
+
 世界清单采用严格的当前 schema；不接受旧选择字段，也不会把顶层字段折叠为另一套格式。
 
 ### 启动加载与收敛（seed & reconcile）

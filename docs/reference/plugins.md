@@ -273,7 +273,7 @@ World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:
 - 失去必需提供者的插件和孤立自动依赖会被移除。
 - `requested` 与计算出的 `active` 分开持久化，自动依赖不会变成用户的显式选择。
 
-世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`；组合包使用 `requested/recommended`。推荐项不自动启用，也不会覆盖玩家显式排除。`GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始显式请求，准备页和创建端再使用同一解析器计算活动集合。
+世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`；组合包使用 `requested/recommended`。推荐项不自动启用，也不会覆盖玩家显式排除。`GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始显式请求，准备页和创建端再使用同一解析器计算活动集合。该接口返回的各 `requested` 与 `defaultPluginIds` 只含已安装插件；世界或组合包请求但未安装的插件列在 `missing`，由准备页提示，不进入创建请求。
 
 发现 DTO 区分 `kind`、宿主 `hostState` 与会话 `sessionState`，运行时提供 `outputContract`。未授权社区插件可保留在请求列表，但不能进入执行集合；许可绑定会话身份与审批范围。
 

@@ -67,6 +67,7 @@ export type {
 export type {
   PluginDataSchemaContract,
   PluginDetail,
+  MissingWorldPlugin,
   PluginLoadError,
   PluginPack,
   PluginMutationResponse,

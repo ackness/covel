@@ -65,6 +65,7 @@ const PLAN: WorldPluginPlan = {
     recommended: [],
   },
   defaultPluginIds: ["core", "world-required"],
+  missing: [],
 };
 
 function selectionPlan(defaultPluginIds: string[]): WorldPluginPlan {
@@ -283,6 +284,35 @@ describe("usePluginSelection", () => {
     expect(submitted.rejected).toContainEqual(
       expect.objectContaining({ pluginId: "broken", code: "missing-provider" }),
     );
+  });
+
+  it("reports missing world plugins for the policy and for the active pack only", async () => {
+    const pack = {
+      id: "tabletop",
+      label: "Tabletop",
+      requested: ["core"],
+      recommended: [],
+      tags: [],
+      source: "world" as const,
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["core"]),
+      packs: [pack],
+      missing: [
+        { pluginId: "world-dice" },
+        { pluginId: "pack-map", packId: pack.id },
+        { pluginId: "world-dice", packId: pack.id },
+        { pluginId: "other-pack-only", packId: "other" },
+      ],
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.missingPluginIds).toEqual(["world-dice"]);
+
+    act(() => result.current.applyPack(pack.id));
+    expect(result.current.missingPluginIds).toEqual(["world-dice", "pack-map"]);
   });
 
   it("keeps an explicitly excluded core disabled after applying a pack", async () => {

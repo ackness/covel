@@ -25,6 +25,8 @@ export interface UsePluginSelectionResult {
   pluginPlan: api.WorldPluginPlan | null;
   pluginPlanLoading: boolean;
   pluginPlanError: string | null;
+  /** World-requested plugins that are not installed on this host. */
+  missingPluginIds: string[];
   pluginPacks: readonly import("@covel/shared").PluginPack[];
   activePluginPack: import("@covel/shared").PluginPack | null;
   pluginSearch: string;
@@ -155,6 +157,18 @@ export function usePluginSelection(
     () => pluginPacks.find((pack) => pack.id === activePluginPackId) ?? null,
     [pluginPacks, activePluginPackId],
   );
+  // Requests this host cannot satisfy. The world policy's always apply; a
+  // pack's only while that pack is the active one.
+  const missingPluginIds = useMemo(
+    () => [
+      ...new Set(
+        (pluginPlan?.missing ?? [])
+          .filter((item) => !item.packId || item.packId === activePluginPackId)
+          .map((item) => item.pluginId),
+      ),
+    ],
+    [pluginPlan, activePluginPackId],
+  );
   const [pluginSearch, setPluginSearch] = useState("");
   const [activePluginTags, setActivePluginTags] = useState<Set<string>>(
     () => new Set(),
@@ -260,6 +274,7 @@ export function usePluginSelection(
     pluginPlan,
     pluginPlanLoading,
     pluginPlanError,
+    missingPluginIds,
     pluginPacks,
     activePluginPack,
     pluginSearch,

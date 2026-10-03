@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- **A world that asks for an uninstalled plugin can start.** The prep screen sent the missing ID to session creation, which refused it as an unknown plugin, and the player could not untick a plugin that was not listed. `GET /api/worlds/:id/plugin-plan` now returns only installed plugins in its `requested` lists and `defaultPluginIds` and reports the rest in `missing`; the prep screen names them and the session starts without them.
 - **Dimension patches cannot reach a prototype.** `update-dimensions` rejects a `changes` path containing `__proto__`, `constructor` or `prototype`. The path comes from model output, and such a path wrote onto the server process's `Object.prototype`.
 - **A first bare `runtime-done` gets one correction.** A `completion.require: tool-use` runtime whose first answer is only `runtime-done` is now told once that the terminator records nothing, as a bare text answer already was, and fails only if it still calls no business tool. On a quiet opening turn the dimension tracker answered `runtime-done` ("nothing changed"), failed at once, and left settlement pending, which refused every later turn.
 - **Dropped runtimes leave no conversation rows or trigger counts.** A runtime whose writes are dropped next to a committed story no longer appends its text, interaction, or UI cards to the conversation and is not counted for `maxTriggerCount` / `cooldownTurns`, like any other failed run.

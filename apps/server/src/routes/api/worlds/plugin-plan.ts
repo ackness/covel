@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type {
+  MissingWorldPlugin,
   PluginPack,
   PluginSummary,
   ResolvedWorldPluginPolicy,
@@ -78,6 +79,39 @@ function resolvePolicy(
   };
 }
 
+/**
+ * Drop requested plugins the registry lacks and report them. A world package
+ * may name a plugin this host has not installed; passing that ID on to session
+ * creation would fail the whole request as an unknown plugin.
+ */
+function dropMissingRequests(
+  resolved: { policy: ResolvedWorldPluginPolicy; packs: PluginPack[] },
+  installed: ReadonlySet<string>,
+): {
+  policy: ResolvedWorldPluginPolicy;
+  packs: PluginPack[];
+  missing: MissingWorldPlugin[];
+} {
+  const missing: MissingWorldPlugin[] = [];
+  const keepInstalled = (ids: readonly string[], packId?: string) =>
+    ids.filter((pluginId) => {
+      if (installed.has(pluginId)) return true;
+      missing.push({ pluginId, ...(packId ? { packId } : {}) });
+      return false;
+    });
+  return {
+    policy: {
+      ...resolved.policy,
+      requested: keepInstalled(resolved.policy.requested),
+    },
+    packs: resolved.packs.map((pack) => ({
+      ...pack,
+      requested: keepInstalled(pack.requested, pack.id),
+    })),
+    missing,
+  };
+}
+
 function defaultPluginIds(
   plugins: readonly PluginSummary[],
   policy: ResolvedWorldPluginPolicy,
@@ -111,7 +145,10 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
   const plugins = [...c.get("pluginRegistry").getAll().values()].map((entry) =>
     buildPluginSummary(entry, c.get("isPluginEntryPublished")),
   );
-  const { policy, packs } = resolvePolicy(world.metadata);
+  const { policy, packs, missing } = dropMissingRequests(
+    resolvePolicy(world.metadata),
+    new Set(plugins.map((plugin) => plugin.id)),
+  );
   const selectedPack = policy.presetId
     ? packs.find((pack) => pack.id === policy.presetId)
     : undefined;
@@ -121,6 +158,7 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
     policy,
     ...(selectedPack ? { selectedPackId: selectedPack.id } : {}),
     defaultPluginIds: defaultPluginIds(plugins, policy, selectedPack),
+    missing,
   };
   return c.json(plan);
 });

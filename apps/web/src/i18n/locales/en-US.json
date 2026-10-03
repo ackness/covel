@@ -164,6 +164,10 @@
     "preparation": "Session Setup",
     "startFailed": "Could not create session",
     "pluginPlanFailed": "Could not resolve the world plugin plan",
+    "missingPlugins": {
+      "title": "This world asks for plugins that are not installed",
+      "detail": "You can start without them, but what they add to this world will be missing. Install them under Settings → Install & manage, then restart the backend."
+    },
     "history": "Previous Sessions",
     "worldLore": "World Document",
     "worldTab": "World",

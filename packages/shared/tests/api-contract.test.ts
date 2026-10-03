@@ -158,6 +158,7 @@ describe("shared API contracts", () => {
           recommended: [],
         },
         defaultPluginIds: ["memory"],
+        missing: [{ pluginId: "absent" }, { pluginId: "absent", packId: "p" }],
       }).success,
     ).toBe(true);
   });

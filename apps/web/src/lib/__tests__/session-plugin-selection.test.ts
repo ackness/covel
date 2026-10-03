@@ -69,6 +69,7 @@ const plan: WorldPluginPlan = {
     recommended: ["chat-mode-narrator"],
   },
   defaultPluginIds: ["pregame", "chat-mode-narrator", "scene-cast"],
+  missing: [],
 };
 
 describe("session plugin selection helpers", () => {
