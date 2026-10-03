@@ -93,13 +93,13 @@ describe("guide manifest and UI loading", () => {
     expect(loaded.promptTemplate).toContain("<runtime-inputs>");
     expect(loaded.promptTemplate).toContain("`narrative.value`");
     expect(loaded.promptTemplate).toContain(
-      "`recap`: use 1-3 sentences and 20-240 characters",
+      "`recap`: use 1-3 sentences, at most 60 words,",
     );
     expect(loaded.promptTemplate).toContain(
       "include only confirmed narrative/dialogue facts",
     );
     expect(loaded.promptTemplate).toContain(
-      "`decision`: use 8-120 characters to state the single question or decision",
+      "`decision`: use one sentence, at most 25 words, to state the single question or decision",
     );
     // A Chinese session reads the PLUGIN.zh.md variant with the same limits.
     const chinese = await loadRuntime(discovery!, "guide", "zh-CN");

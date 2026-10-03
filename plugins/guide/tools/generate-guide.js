@@ -18,6 +18,16 @@ const KIND_CONFIG = {
   },
 };
 
+// These are hard bounds against runaway text, in characters, for every
+// language. The same sentence takes two to three times as many characters in
+// English as in Chinese, so bounds sized for Chinese rejected most English
+// calls. The length to aim for is language-specific and is stated in the
+// prompt body.
+const MAX_SCENE = 80;
+const MAX_RECAP = 600;
+const MAX_DECISION = 300;
+const MAX_PROMPT = 160;
+
 export default function ({ tool, z }) {
   const promptSchema = z.object({
     kind: z
@@ -26,7 +36,7 @@ export default function ({ tool, z }) {
     text: z
       .string()
       .min(1)
-      .max(80)
+      .max(MAX_PROMPT)
       .describe(
         "A short, scene-specific action phrase the player can send directly",
       ),
@@ -40,13 +50,13 @@ export default function ({ tool, z }) {
       scene: z
         .string()
         .min(1)
-        .max(40)
+        .max(MAX_SCENE)
         .describe("Title of the current scene or decision point"),
       recap: z
         .string()
         .trim()
         .min(20)
-        .max(240)
+        .max(MAX_RECAP)
         .describe(
           "A 1-3 sentence recap using only confirmed facts and explicit player intentions, commitments, or agreements",
         ),
@@ -54,7 +64,7 @@ export default function ({ tool, z }) {
         .string()
         .trim()
         .min(8)
-        .max(120)
+        .max(MAX_DECISION)
         .describe(
           "The current question or decision the player needs to answer",
         ),

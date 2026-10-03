@@ -99,11 +99,11 @@ The framework also provides conversation history, compacted summaries, and worki
 
 ## Generation Rules
 
-- `scene`: summarize the current scene or decision point in 4-16 characters
-- `recap`: use 1-3 sentences and 20-240 characters to summarize only context relevant to the current response, changes in this turn, and commitments the player explicitly made
+- `scene`: summarize the current scene or decision point in 2-6 words
+- `recap`: use 1-3 sentences, at most 60 words, to summarize only context relevant to the current response, changes in this turn, and commitments the player explicitly made
 - `recap`: include only confirmed narrative/dialogue facts and explicit player intentions, promises, or agreements; never infer hidden motives or invent events
-- `decision`: use 8-120 characters to state the single question or decision the player now needs to answer
-- `prompts`: generate 3-6 entries, each 8-45 characters; cover different types where possible and offer both a cautious and a bolder direction
+- `decision`: use one sentence, at most 25 words, to state the single question or decision the player now needs to answer
+- `prompts`: generate 3-6 entries, each 3-12 words; cover different types where possible and offer both a cautious and a bolder direction
 - Every prompt must be first-person or imperative action text the player can send directly; never predeclare outcomes or repeat the narrative
 - Prioritize key objects, locations, characters, dangers, and clues in the current narrative
 - Use concrete actions and targets

@@ -109,17 +109,44 @@ describe("generate-guide", () => {
     const maximumResult = await guideTool.execute(
       {
         scene: "边界场景",
-        recap: "前".repeat(240),
-        decision: "问".repeat(120),
+        recap: "前".repeat(600),
+        decision: "问".repeat(300),
         prompts,
       },
       context,
     );
+    // The bounds are sized for every language: a three-sentence English
+    // recap is about twice as long in characters as the same in Chinese.
+    const english = await guideTool.execute(
+      {
+        scene: "The Flooded Stair",
+        recap:
+          "You followed Su Yao down the ferry stair after the third bell. The rope at the iron post was cut within the hour, and black tide-salt marks the same edge as Qi's letter. You promised the clerk that you would report back before the curfew horn.",
+        decision:
+          "Do you go down to the dry riverbed now, or report to the clerk first as you promised?",
+        prompts: [
+          {
+            kind: "observe",
+            text: "I study the cut end of the rope before touching anything else.",
+          },
+          {
+            kind: "ask",
+            text: "I ask Su Yao who had the watch here an hour ago.",
+          },
+          {
+            kind: "act",
+            text: "I go down the stair, lamp shuttered, one step at a time.",
+          },
+        ],
+      },
+      context,
+    );
+    expect(getToolContent(english).recap.length).toBeGreaterThan(240);
 
     expect(getToolContent(minimumResult).recap).toHaveLength(20);
     expect(getToolContent(minimumResult).decision).toHaveLength(8);
-    expect(getToolContent(maximumResult).recap).toHaveLength(240);
-    expect(getToolContent(maximumResult).decision).toHaveLength(120);
+    expect(getToolContent(maximumResult).recap).toHaveLength(600);
+    expect(getToolContent(maximumResult).decision).toHaveLength(300);
   });
 
   it("rejects recap and decision outside their documented boundaries", async () => {
@@ -148,8 +175,8 @@ describe("generate-guide", () => {
       guideTool.execute(
         {
           ...baseParams,
-          recap: "长".repeat(241),
-          decision: "长".repeat(121),
+          recap: "长".repeat(601),
+          decision: "长".repeat(301),
         },
         context,
       ),
