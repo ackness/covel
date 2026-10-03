@@ -1,0 +1,8 @@
+# zh labels of the char-creator plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 角色创建
+  description: 帮你创建主角，并在故事中持续记录重要角色的变化。
+runtimes/character-tracker/RUNTIME.md:
+  description: 记录故事中新出现的人物，并更新他们的状态、伤势和装备变化。
+runtimes/player-init/RUNTIME.md:
+  description: 开局引导你填写主角信息，并把主角加入故事。

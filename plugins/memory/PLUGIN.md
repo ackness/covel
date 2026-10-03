@@ -1,14 +1,10 @@
 ---
 id: memory
 kind: core
-displayName:
-  zh: 故事记忆
-  en: Story Memory
-description:
-  zh: 展示故事记住的重点，包括剧情、场景、人物关系和主角状态。
-  en: >-
-    Shows what the story remembers, including plot, scene, relationships, and
-    hero status.
+displayName: Story Memory
+description: >-
+  Shows what the story remembers, including plot, scene, relationships, and hero
+  status.
 tags:
   - "cost:llm"
   - "ui:right-panel"
@@ -30,12 +26,8 @@ contributes:
       schema: ./schemas/block-definitions.schema.json
       description: World-defined memory blocks that replace the default set.
       authoring:
-        title:
-          zh: 题材记忆块
-          en: Memory blocks
-        summary:
-          zh: 让记忆系统按这个题材追踪线索、承诺、倒计时等状态。
-          en: Tracks genre state such as clues, promises and countdowns.
+        title: Memory blocks
+        summary: Tracks genre state such as clues, promises and countdowns.
         hint: >-
           Write one object with `id: world` and a `blocks` list. Each block has
           a `label` (a snake_case key), a `displayName` and an `extractionHint`

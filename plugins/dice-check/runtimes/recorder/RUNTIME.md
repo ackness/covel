@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 记录叙事发回的骰子判定回执，沉淀审计轨并驱动消息区的判定结果块。
-  en: >-
-    Records dice-check receipts emitted by the narrative, keeping an audit log
-    and powering the in-message result block.
+description: >-
+  Records dice-check receipts emitted by the narrative, keeping an audit log and
+  powering the in-message result block.
 schedule:
   trigger:
     type: event

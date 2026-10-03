@@ -127,7 +127,8 @@ them in the `X-Provider-Keys` header (base64).
   `prompts/` (locale-aware prompt templates), `worlds/` (`worlds/_archive/` is not
   loaded), `templates/` (plugin scaffolds for `pnpm create-plugin`).
 - Each `plugins/<name>/` needs `PLUGIN.md` + `package.json`; optional `prompts/`,
-  `schemas/`, `server/`, `client/`, `ui/`, `tests/`.
+  `schemas/`, `server/`, `client/`, `ui/`, `tests/`, and `locales/<locale>.yaml`
+  (label translations; the manifests themselves are English).
 - ESM-only, TypeScript strict, ES2022, NodeNext — **use `.js` extensions in TS
   relative imports**. Packages export TS source directly (`"import": "./src/index.ts"`);
   there is no build step for dev.

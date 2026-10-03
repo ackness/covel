@@ -1,8 +1,7 @@
 ---
 type: function
-description:
-  zh: 每回合用当前维度与世界时间判断隐藏事件是否满足条件，满足时向叙事交出本回合的剧情提示。
-  en: Checks hidden events against current dimensions and world time each turn, handing narration this turn's cue when one is met.
+description: Checks hidden events against current dimensions and world time each
+  turn, handing narration this turn's cue when one is met.
 schedule:
   stage: pre-turn
   trigger:

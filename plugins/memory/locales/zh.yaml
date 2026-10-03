@@ -1,0 +1,10 @@
+# zh labels of the memory plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 故事记忆
+  description: 展示故事记住的重点，包括剧情、场景、人物关系和主角状态。
+  contributes:
+    data:
+      definitions:
+        authoring:
+          title: 题材记忆块
+          summary: 让记忆系统按这个题材追踪线索、承诺、倒计时等状态。

@@ -1,0 +1,4 @@
+# zh labels of the codex plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 设定图鉴
+  description: 自动整理新发现的地点、人物、物品和传闻，方便随时回看。

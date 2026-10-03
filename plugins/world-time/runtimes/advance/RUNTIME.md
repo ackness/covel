@@ -1,10 +1,8 @@
 ---
 type: agent
-description:
-  zh: 根据本轮叙事和世界规则提出时间变化，由工具确定性结算。
-  en: >-
-    Proposes elapsed time from this turn's narrative and world rules for
-    deterministic settlement.
+description: >-
+  Proposes elapsed time from this turn's narrative and world rules for
+  deterministic settlement.
 schedule:
   stage: post-turn
   trigger:

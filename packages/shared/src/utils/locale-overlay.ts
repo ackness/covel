@@ -31,8 +31,12 @@ export interface ApplyLocaleOverlayOptions {
   readonly locale: string;
   /** Locale of the main file. Names the main text in a compiled map. */
   readonly baseLocale: string;
-  /** Field that identifies an array element. Default `id`. */
-  readonly arrayKey?: string;
+  /**
+   * Field that identifies an array element. Default `id`. With a list, the
+   * first field that every element of an array has is used for that array
+   * (a manifest names commands by `name` and settings by `key`).
+   */
+  readonly arrayKey?: string | readonly string[];
 }
 
 type Json = unknown;
@@ -70,16 +74,21 @@ export function isLocaleMapFor(
 }
 
 /** The element key shared by every object in `items`, if there is one. */
-function elementKey(items: readonly Json[], arrayKey: string): string | null {
-  return items.length > 0 &&
-    items.every(
-      (item) =>
-        isPlainObject(item) &&
-        (typeof item[arrayKey] === "string" ||
-          typeof item[arrayKey] === "number"),
+function elementKey(
+  items: readonly Json[],
+  arrayKey: string | readonly string[],
+): string | null {
+  if (items.length === 0) return null;
+  for (const key of typeof arrayKey === "string" ? [arrayKey] : arrayKey)
+    if (
+      items.every(
+        (item) =>
+          isPlainObject(item) &&
+          (typeof item[key] === "string" || typeof item[key] === "number"),
+      )
     )
-    ? arrayKey
-    : null;
+      return key;
+  return null;
 }
 
 /**
@@ -121,7 +130,7 @@ export function applyLocaleOverlay(
         return main;
       }
       const key = elementKey(main, arrayKey);
-      if (key && elementKey(extra, arrayKey)) {
+      if (key && elementKey(extra, key)) {
         const next = [...main];
         for (const item of extra as Record<string, Json>[]) {
           const index = main.findIndex(
@@ -246,7 +255,7 @@ export function findInlineLocaleMaps(
 export function splitLocaleMaps(
   value: Json,
   baseLocale: string,
-  arrayKey = "id",
+  arrayKey: string | readonly string[] = "id",
 ): { base: Json; overlays: Record<string, Json> } {
   const overlays: Record<string, Json> = {};
 

@@ -1,5 +1,6 @@
 import { resolvePluginDeclarations } from "./declarations.js";
 import { loadPluginUiSpec } from "./ui-spec.js";
+import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
 /**
  * Progressive plugin loading — three levels of detail.
  */
@@ -156,11 +157,23 @@ async function parsePluginMdForLocale(
     content: string,
     file: string,
     canonical?: Readonly<Record<string, unknown>>,
+    labels?: readonly ManifestLabels[],
   ) =>
     plugin
-      ? parseRuntimeMd(content, file, plugin, canonical)
-      : parsePluginMd(content, file, canonical);
-  const canonical = parse(await fs.readFile(basePath, "utf-8"), basePath);
+      ? parseRuntimeMd(content, file, plugin, canonical, labels)
+      : parsePluginMd(content, file, canonical, labels);
+  // The plugin root is the directory itself, or two levels above a runtime's.
+  const pluginRoot = plugin ? path.resolve(dir, "..", "..") : dir;
+  const labels = await readManifestLabels(
+    pluginRoot,
+    path.relative(pluginRoot, basePath),
+  );
+  const canonical = parse(
+    await fs.readFile(basePath, "utf-8"),
+    basePath,
+    undefined,
+    labels,
+  );
   return localizedPath === basePath
     ? canonical
     : parse(

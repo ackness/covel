@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 开局时为舞台种下世界注册表里的第一个场景，避免叙事未发 scene.set 时舞台空白。
-  en: >-
-    Seeds the stage with the world registry's first scene at setup, so the stage
-    is never blank before the narrative emits scene.set.
+description: >-
+  Seeds the stage with the world registry's first scene at setup, so the stage
+  is never blank before the narrative emits scene.set.
 schedule:
   stage: setup
   trigger:

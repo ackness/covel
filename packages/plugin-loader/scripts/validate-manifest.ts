@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadPluginDefinition } from "../src/load.js";
+import { validatePluginLabels } from "../src/locale-labels.js";
 const args = process.argv.slice(2);
 if (!args.length || args.some((arg) => arg.startsWith("--"))) {
   console.error(
@@ -49,6 +50,11 @@ for (const arg of args) {
       ),
       pluginMdPaths,
     });
+    const labelProblems = await validatePluginLabels(rootPath);
+    if (labelProblems.length > 0)
+      throw new Error(
+        `${rootPath}: label translations\n  - ${labelProblems.join("\n  - ")}`,
+      );
     console.log(`✓ Static package validation: ${rootPath}`);
   } catch (error) {
     console.error(

@@ -1,0 +1,13 @@
+# zh labels of the core-quest plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 任务日志
+  description: 自动从叙事中登记和推进任务，随时回看目标、进度和报酬。
+  contributes:
+    data:
+      quests:
+        authoring:
+          title: 初始任务
+runtimes/log/RUNTIME.md:
+  description: 每回合从共享的事实抽取中登记、推进或完结任务。
+runtimes/vocabulary/RUNTIME.md:
+  description: 在事实抽取前公布进行中的任务与未完成目标，便于沿用同一名称。

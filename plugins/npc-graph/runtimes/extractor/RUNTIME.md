@@ -1,10 +1,8 @@
 ---
 type: agent
-description:
-  zh: 从故事里整理人物、势力和他们之间的关系。
-  en: >-
-    Collects characters, groups, factions, and the relationships between them
-    from the story.
+description: >-
+  Collects characters, groups, factions, and the relationships between them from
+  the story.
 schedule:
   stage: post-turn
   trigger:

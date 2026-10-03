@@ -1,0 +1,4 @@
+# zh labels of the guide plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 行动建议
+  description: 每轮故事后衔接相关前情，点明当前抉择，并给出可直接采用的行动短句。

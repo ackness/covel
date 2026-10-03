@@ -1,14 +1,10 @@
 ---
 id: core-quest
 kind: plugin
-displayName:
-  zh: 任务日志
-  en: Quest Log
-description:
-  zh: 自动从叙事中登记和推进任务，随时回看目标、进度和报酬。
-  en: >-
-    Automatically registers and advances quests from the narrative so goals,
-    progress, and rewards stay visible.
+displayName: Quest Log
+description: >-
+  Automatically registers and advances quests from the narrative so goals,
+  progress, and rewards stay visible.
 tags:
   - "data:world-data"
   - "cost:function"
@@ -32,9 +28,7 @@ contributes:
       accepts:
         - quests@1
       authoring:
-        title:
-          zh: 初始任务
-          en: Starting quests
+        title: Starting quests
         hint: >-
           Seed the main quest and, at most, a few side quests. `status` is
           `active`, `completed` or `failed`. Each objective has `text` and

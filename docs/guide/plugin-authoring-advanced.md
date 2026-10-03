@@ -91,7 +91,7 @@ contributes:
       schema: ./schemas/facts.schema.json
       accepts: [facts.index@1]
       authoring:
-        title: { zh: 已知事实, en: Known facts }
+        title: Known facts
         hint: >-
           Write one record for each fact the story starts with. Keep `text` to
           one sentence.
@@ -100,6 +100,17 @@ contributes:
           kind: yaml
           path: data/facts.yaml
           key: id
+```
+
+`title` 是标签，主清单里写 English；中文写在 `locales/zh.yaml`：
+
+```yaml
+PLUGIN.md:
+  contributes:
+    data:
+      facts:
+        authoring:
+          title: 已知事实
 ```
 
 - `title` 是给作者看的内容名称；`hint` 说明怎么写好这类记录，用简短明确的英文句子。

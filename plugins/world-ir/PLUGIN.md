@@ -1,14 +1,10 @@
 ---
 id: world-ir
 kind: plugin
-displayName:
-  zh: 世界事实提取
-  en: World Fact Extraction
-description:
-  zh: 从本轮故事中提取人物、关系、事件和线索，供图鉴、任务等功能复用。
-  en: >-
-    Extracts people, relationships, events, and clues from each story turn for
-    codex, quest, and other features.
+displayName: World Fact Extraction
+description: >-
+  Extracts people, relationships, events, and clues from each story turn for
+  codex, quest, and other features.
 tags:
   - "data:world-ir"
   - "cost:llm"

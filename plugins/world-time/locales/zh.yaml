@@ -1,0 +1,17 @@
+# zh labels of the world-time plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 世界时间
+  description: 按世界定义维护日期、时段和时间流向，并根据本轮故事结算时间变化。
+  contributes:
+    data:
+      definitions:
+        authoring:
+          title: 世界时间定义
+          summary: 定义这个世界怎样计时，以及各种行动耗时多久。
+    commands:
+      - name: time
+        description: 查看当前已记录的世界时间，不推进回合。
+runtimes/advance/RUNTIME.md:
+  description: 根据本轮叙事和世界规则提出时间变化，由工具确定性结算。
+runtimes/context/RUNTIME.md:
+  description: 向叙事提供当前时间及世界的时间规则。

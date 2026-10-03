@@ -1,0 +1,12 @@
+# zh labels of the world-init plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 世界维度
+  description: 初始化角色属性和作者声明的世界维度，持续维护可变状态。
+runtimes/dimension-context/RUNTIME.md:
+  description: 发布本回合冻结的世界维度快照，不调用模型。
+runtimes/dimension-tracker/RUNTIME.md:
+  description: 按作者规则维护本轮叙事发生的维度变化；无变化也明确结算。
+runtimes/edit-dimensions/RUNTIME.md:
+  description: 玩家修正维度当前值，或明确人工处理/跳过待结算回合。
+runtimes/schema-gen/RUNTIME.md:
+  description: 开局一次性构建角色属性结构和世界资料。

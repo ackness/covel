@@ -1,0 +1,4 @@
+# zh labels of the branch-reply plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 回复变体
+  description: 提供多条可切换的回复，让你挑选更合适的说法。

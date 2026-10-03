@@ -1,10 +1,8 @@
 ---
 type: agent
-description:
-  zh: 记录故事中新出现的人物，并更新他们的状态、伤势和装备变化。
-  en: >-
-    Records newly appearing characters and updates changes to their condition,
-    injuries, and equipment.
+description: >-
+  Records newly appearing characters and updates changes to their condition,
+  injuries, and equipment.
 schedule:
   stage: post-turn
   trigger:

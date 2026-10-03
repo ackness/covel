@@ -1,0 +1,13 @@
+# zh labels of the narrator plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 叙事
+  description: 根据你的行动继续推进故事，描写场景、人物反应和结果。
+  contributes:
+    settings:
+      - key: narrativePerson
+        label: 叙事人称
+        description: 旁白如何称呼玩家角色；人物对白保持各自的人称。
+        options:
+          - label: 第一人称（我）
+          - label: 第二人称（你）
+          - label: 第三人称（角色名）

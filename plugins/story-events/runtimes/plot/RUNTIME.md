@@ -1,10 +1,8 @@
 ---
 type: agent
-description:
-  zh: 每隔几回合读取本轮叙事和世界状态，埋下之后才会发生的隐藏后续事件。
-  en: >-
-    Every few turns, reads this turn's narrative and world state to plant hidden
-    follow-up events that happen later.
+description: >-
+  Every few turns, reads this turn's narrative and world state to plant hidden
+  follow-up events that happen later.
 schedule:
   stage: post-turn
   trigger:

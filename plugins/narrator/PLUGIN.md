@@ -1,14 +1,10 @@
 ---
 id: narrator
 kind: core
-displayName:
-  zh: 叙事
-  en: Narrator
-description:
-  zh: 根据你的行动继续推进故事，描写场景、人物反应和结果。
-  en: >-
-    Continues the story from your actions, describing scenes, reactions, and
-    outcomes.
+displayName: Narrator
+description: >-
+  Continues the story from your actions, describing scenes, reactions, and
+  outcomes.
 tags:
   - "mode:traditional-story"
   - "data:relationship-graph"
@@ -33,27 +29,17 @@ contributes:
     - key: narrativePerson
       type: select
       default: second
-      label:
-        zh: 叙事人称
-        en: Narrative person
-      description:
-        zh: 旁白如何称呼玩家角色；人物对白保持各自的人称。
-        en: >-
-          How narration refers to the player character; dialogue keeps each
-          speaker's perspective.
+      label: Narrative person
+      description: >-
+        How narration refers to the player character; dialogue keeps each
+        speaker's perspective.
       options:
         - value: first
-          label:
-            zh: 第一人称（我）
-            en: First person (I)
+          label: First person (I)
         - value: second
-          label:
-            zh: 第二人称（你）
-            en: Second person (you)
+          label: Second person (you)
         - value: third
-          label:
-            zh: 第三人称（角色名）
-            en: Third person (character name)
+          label: Third person (character name)
   prompt:
     - id: post-history
       content: >

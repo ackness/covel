@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 保存角色头像、立绘和声音。
-  en: Saves a character's portrait, sprite, and voice.
+description: Saves a character's portrait, sprite, and voice.
 schedule:
   trigger:
     type: manual

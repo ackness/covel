@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 跟踪叙事当前所在的场景与昼夜，为舞台背景提供数据。
-  en: Tracks the current scene and time of day for the visual stage.
+description: Tracks the current scene and time of day for the visual stage.
 schedule:
   trigger:
     type: event

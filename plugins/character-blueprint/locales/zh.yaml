@@ -1,0 +1,19 @@
+# zh labels of the character-blueprint plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 角色资料
+  description: 保存世界预设的人物资料，以及他们的头像、立绘和声音。
+  contributes:
+    data:
+      blueprints:
+        authoring:
+          title: 预设角色
+      presence:
+        authoring:
+          title: 角色立绘映射
+      assets:
+        authoring:
+          title: 角色立绘图片
+runtimes/import/RUNTIME.md:
+  description: 把预设人物资料导入当前故事。
+runtimes/presence/RUNTIME.md:
+  description: 保存角色头像、立绘和声音。

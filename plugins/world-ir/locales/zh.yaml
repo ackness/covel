@@ -1,0 +1,4 @@
+# zh labels of the world-ir plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 世界事实提取
+  description: 从本轮故事中提取人物、关系、事件和线索，供图鉴、任务等功能复用。

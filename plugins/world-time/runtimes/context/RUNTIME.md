@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 向叙事提供当前时间及世界的时间规则。
-  en: Provides the current time and the world's time rules to narration.
+description: Provides the current time and the world's time rules to narration.
 schedule:
   stage: pre-turn
   trigger:

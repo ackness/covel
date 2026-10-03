@@ -1,0 +1,16 @@
+# zh labels of the inventory plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 行囊
+  description: 每回合从叙事中记录明确的物品得失与装备变化，右栏随时可查背包。
+  contributes:
+    commands:
+      - name: bag
+        description: 查看当前背包并打开行囊面板。
+    data:
+      items:
+        authoring:
+          title: 开局物品
+runtimes/ledger/RUNTIME.md:
+  description: 每回合从共享的事实抽取中记录主角的物品得失与装备变化。
+runtimes/vocabulary/RUNTIME.md:
+  description: 在事实抽取前公布背包里的物品名，便于沿用同一名称。

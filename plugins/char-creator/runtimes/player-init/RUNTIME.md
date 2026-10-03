@@ -1,10 +1,8 @@
 ---
 type: agent
-description:
-  zh: 开局引导你填写主角信息，并把主角加入故事。
-  en: >-
-    Guides you through creating your hero at the start and brings them into the
-    story.
+description: >-
+  Guides you through creating your hero at the start and brings them into the
+  story.
 schedule:
   stage: setup
   trigger:

@@ -1,0 +1,9 @@
+# zh labels of the living-world-rules plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 世界规则
+  description: 展示世界包里长期生效的规则（禁忌、风俗和特殊设定），并让叙事始终遵守。
+  contributes:
+    data:
+      rules:
+        authoring:
+          title: 世界规则

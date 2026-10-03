@@ -1,10 +1,7 @@
 ---
 type: function
-description:
-  zh: 每回合从共享的事实抽取中登记、推进或完结任务。
-  en: >-
-    Registers, advances, and closes quests from each turn's shared fact
-    extraction.
+description: >-
+  Registers, advances, and closes quests from each turn's shared fact extraction.
 schedule:
   stage: post-turn
   trigger:

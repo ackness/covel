@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 在事实抽取前公布背包里的物品名，便于沿用同一名称。
-  en: >-
-    Publishes the names of the items in the bag before fact extraction so the
-    same names are reused.
+description: >-
+  Publishes the names of the items in the bag before fact extraction so the same
+  names are reused.
 schedule:
   stage: pre-turn
   trigger:

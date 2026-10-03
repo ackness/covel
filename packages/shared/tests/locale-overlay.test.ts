@@ -150,6 +150,51 @@ describe("applyLocaleOverlay", () => {
   });
 });
 
+describe("applyLocaleOverlay with several element keys", () => {
+  it("matches each list by the first field all of its elements have", () => {
+    const manifest = {
+      commands: [
+        { name: "bag", description: "Open the bag." },
+        { name: "drop", description: "Drop an item." },
+      ],
+      settings: [{ key: "limit", label: "Limit" }],
+    };
+    const { value, issues } = applyLocaleOverlay(
+      manifest,
+      {
+        commands: [{ name: "drop", description: "丢弃一件物品。" }],
+        settings: [{ key: "limit", label: "上限" }],
+      },
+      {
+        mode: "compile",
+        locale: "zh",
+        baseLocale: "en",
+        arrayKey: ["id", "name", "key"],
+      },
+    );
+    expect(issues).toEqual([]);
+    expect(value).toEqual({
+      commands: [
+        { name: "bag", description: "Open the bag." },
+        {
+          name: "drop",
+          description: { en: "Drop an item.", zh: "丢弃一件物品。" },
+        },
+      ],
+      settings: [{ key: "limit", label: { en: "Limit", zh: "上限" } }],
+    });
+    expect(splitLocaleMaps(value, "en", ["id", "name", "key"])).toEqual({
+      base: manifest,
+      overlays: {
+        zh: {
+          commands: [{ name: "drop", description: "丢弃一件物品。" }],
+          settings: [{ key: "limit", label: "上限" }],
+        },
+      },
+    });
+  });
+});
+
 describe("splitLocaleMaps", () => {
   const inline = {
     id: "mistport",

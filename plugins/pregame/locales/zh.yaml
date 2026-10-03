@@ -1,0 +1,4 @@
+# zh labels of the pregame plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 开局准备
+  description: 在开局时读取世界资料，准备好第一段冒险。

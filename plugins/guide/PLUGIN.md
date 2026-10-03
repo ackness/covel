@@ -1,14 +1,10 @@
 ---
 id: guide
 kind: plugin
-displayName:
-  zh: 行动建议
-  en: Action Suggestions
-description:
-  zh: 每轮故事后衔接相关前情，点明当前抉择，并给出可直接采用的行动短句。
-  en: >-
-    After each story beat, recaps the relevant context, states the current
-    decision, and suggests actions you can use right away.
+displayName: Action Suggestions
+description: >-
+  After each story beat, recaps the relevant context, states the current
+  decision, and suggests actions you can use right away.
 tags:
   - "cost:llm"
   - "ui:message-block"

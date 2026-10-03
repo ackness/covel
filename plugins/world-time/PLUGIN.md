@@ -1,14 +1,10 @@
 ---
 id: world-time
 kind: core
-displayName:
-  zh: 世界时间
-  en: World Time
-description:
-  zh: 按世界定义维护日期、时段和时间流向，并根据本轮故事结算时间变化。
-  en: >-
-    Tracks world-defined calendars, phases and time direction, settling each
-    story turn's elapsed time.
+displayName: World Time
+description: >-
+  Tracks world-defined calendars, phases and time direction, settling each story
+  turn's elapsed time.
 provides:
   - world-time-evolution@1
   - world-time-context@1
@@ -31,18 +27,14 @@ contributes:
       accepts:
         - world.time-definition@1
       authoring:
-        title:
-          zh: 世界时间定义
-          en: World time definition
-        summary:
-          zh: 定义这个世界怎样计时，以及各种行动耗时多久。
-          en: Defines how this world counts time and how long actions take.
+        title: World time definition
+        summary: Defines how this world counts time and how long actions take.
         hint: >-
           Write one object with `id: world` and a `definition`. `kind: phases`
-          counts named phases in a cycle; `kind: calendar` uses months and
-          days. `initial` sets where time starts. `evolution.prompt` tells the
-          time tracker how much time each kind of action takes; state it in
-          concrete steps.
+          counts named phases in a cycle; `kind: calendar` uses months and days.
+          `initial` sets where time starts. `evolution.prompt` tells the time
+          tracker how much time each kind of action takes; state it in concrete
+          steps.
         example: ./examples/time-definition.json
         generate: offer
         source:
@@ -51,9 +43,7 @@ contributes:
           key: id
   commands:
     - name: time
-      description:
-        zh: 查看当前已记录的世界时间，不推进回合。
-        en: Show recorded world time without advancing the turn.
+      description: Show recorded world time without advancing the turn.
       action: time
   ui:
     right:

@@ -1,8 +1,6 @@
 ---
 type: function
-description:
-  zh: 开局配点
-  en: Opening point allocation
+description: Opening point allocation
 schedule:
   stage: setup
   trigger:

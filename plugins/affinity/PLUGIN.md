@@ -1,14 +1,10 @@
 ---
 id: affinity
 kind: plugin
-displayName:
-  zh: 好感度
-  en: Affinity
-description:
-  zh: 追踪玩家与 NPC 之间的数值好感度，右栏展示分数、档位与最近变化。
-  en: >-
-    Tracks numeric player-to-NPC affinity, with scores, tiers, and recent
-    changes in the right panel.
+displayName: Affinity
+description: >-
+  Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
+  in the right panel.
 tags:
   - "data:characters"
   - "cost:llm"
@@ -31,9 +27,7 @@ contributes:
       accepts:
         - character.affinity@1
       authoring:
-        title:
-          zh: 初始好感
-          en: Starting affinity
+        title: Starting affinity
         hint: >-
           List the key NPCs the player already has a relationship with. `score`
           is an integer from -100 to 100; 0 is neutral. Use the same `id` and

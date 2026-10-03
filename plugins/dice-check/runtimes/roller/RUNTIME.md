@@ -1,10 +1,8 @@
 ---
 type: function
-description:
-  zh: 每回合预掷三个 d20 组成骰池，连同判定规则注入叙事引擎。
-  en: >-
-    Pre-rolls three d20s each turn and hands the dice pool plus check rules to
-    the narrative engine.
+description: >-
+  Pre-rolls three d20s each turn and hands the dice pool plus check rules to the
+  narrative engine.
 schedule:
   stage: pre-turn
   trigger:

@@ -1,8 +1,7 @@
 ---
 type: agent
-description:
-  zh: 按作者规则维护本轮叙事发生的维度变化；无变化也明确结算。
-  en: Settles authored dimension rules against this narrative, including explicit no-change.
+description: Settles authored dimension rules against this narrative, including
+  explicit no-change.
 schedule:
   stage: post-turn
   trigger:

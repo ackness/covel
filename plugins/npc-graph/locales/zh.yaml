@@ -1,0 +1,8 @@
+# zh labels of the npc-graph plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 关系图谱
+  description: 记录人物之间的关系，让故事提到相关人物时更连贯。
+runtimes/extractor/RUNTIME.md:
+  description: 从故事里整理人物、势力和他们之间的关系。
+runtimes/rag-retriever/RUNTIME.md:
+  description: 当你提到某个人时，帮助故事想起相关人物和关系。

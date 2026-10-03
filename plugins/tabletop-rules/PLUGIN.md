@@ -1,14 +1,10 @@
 ---
 id: tabletop-rules
 kind: plugin
-displayName:
-  zh: 跑团规则
-  en: Tabletop Rules
-description:
-  zh: 在角色创建后追加开局配点，以程序结算属性检定，并保留可复核的骰子记录。
-  en: >-
-    Layer opening point allocation onto character creation and resolve attribute
-    checks with durable dice receipts.
+displayName: Tabletop Rules
+description: >-
+  Layer opening point allocation onto character creation and resolve attribute
+  checks with durable dice receipts.
 provides:
   - tabletop-check@1
 entry: ./server/index.js
@@ -29,9 +25,7 @@ contributes:
       accepts:
         - tabletop-rules.rules.initial@1
       authoring:
-        title:
-          zh: 开局配点规则
-          en: Character creation rules
+        title: Character creation rules
         hint: >-
           Write one object with `id: creation`, a point `budget` and the
           `attributes` the player may raise. Each attribute `id` must be a

@@ -1,14 +1,10 @@
 ---
 id: chat-mode-narrator
 kind: plugin
-displayName:
-  zh: 对话叙事
-  en: Dialogue Narrator
-description:
-  zh: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
-  en: >-
-    Makes the story feel more like character dialogue, suited for play focused
-    on conversation and interaction.
+displayName: Dialogue Narrator
+description: >-
+  Makes the story feel more like character dialogue, suited for play focused on
+  conversation and interaction.
 tags:
   - "mode:dialogue"
   - "data:characters"
@@ -41,58 +37,36 @@ contributes:
     - key: narrativePerson
       type: select
       default: second
-      label:
-        zh: 叙事人称
-        en: Narrative person
-      description:
-        zh: 旁白如何称呼玩家角色；人物对白保持各自的人称。
-        en: >-
-          How narration refers to the player character; dialogue keeps each
-          speaker's perspective.
+      label: Narrative person
+      description: >-
+        How narration refers to the player character; dialogue keeps each
+        speaker's perspective.
       options:
         - value: first
-          label:
-            zh: 第一人称（我）
-            en: First person (I)
+          label: First person (I)
         - value: second
-          label:
-            zh: 第二人称（你）
-            en: Second person (you)
+          label: Second person (you)
         - value: third
-          label:
-            zh: 第三人称（角色名）
-            en: Third person (character name)
+          label: Third person (character name)
     - key: dialogueRatio
       type: number
       default: 70
       min: 30
       max: 90
       step: 5
-      label:
-        zh: 对话占比
-        en: Dialogue ratio
-      description:
-        zh: 回复中人物对白和内心反应的大致占比。
-        en: Approximate share of dialogue and character reaction in each reply.
+      label: Dialogue ratio
+      description: Approximate share of dialogue and character reaction in each reply.
     - key: proseLength
       type: select
       default: medium
-      label:
-        zh: 回复长度
-        en: Reply length
+      label: Reply length
       options:
         - value: short
-          label:
-            zh: 短
-            en: Short
+          label: Short
         - value: medium
-          label:
-            zh: 中
-            en: Medium
+          label: Medium
         - value: long
-          label:
-            zh: 长
-            en: Long
+          label: Long
   prompt:
     - id: post-history
       content: >

@@ -1,0 +1,13 @@
+# zh labels of the tabletop-rules plugin. One section per manifest file; only translated text, under the same keys.
+PLUGIN.md:
+  displayName: 跑团规则
+  description: 在角色创建后追加开局配点，以程序结算属性检定，并保留可复核的骰子记录。
+  contributes:
+    data:
+      rules:
+        authoring:
+          title: 开局配点规则
+runtimes/check/RUNTIME.md:
+  description: 提交属性检定，结果不会因重试而重掷
+runtimes/creation/RUNTIME.md:
+  description: 开局配点

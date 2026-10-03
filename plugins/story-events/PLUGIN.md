@@ -1,15 +1,11 @@
 ---
 id: story-events
 kind: plugin
-displayName:
-  zh: 隐藏事件
-  en: Hidden Story Events
-description:
-  zh: 世界包声明的隐藏剧情在条件满足前对模型与玩家都不可见；满足时由叙事在本回合自然演出。可开启剧情策划，在幕后追加后续事件。
-  en: >-
-    Keeps world-authored hidden story events out of prompts and player views
-    until their conditions are met, then hands narration that turn's cue. An
-    optional story planner can plant follow-up events during play.
+displayName: Hidden Story Events
+description: >-
+  Keeps world-authored hidden story events out of prompts and player views until
+  their conditions are met, then hands narration that turn's cue. An optional
+  story planner can plant follow-up events during play.
 tags:
   - "data:world-data"
   - "cost:function"
@@ -38,14 +34,10 @@ contributes:
     - key: planner
       type: toggle
       default: false
-      label:
-        zh: 剧情策划
-        en: Story planner
-      description:
-        zh: 每 3 回合调用一次模型，根据剧情在幕后埋下之后才会发生的隐藏事件。
-        en: >-
-          Every 3 turns, calls the model to plant hidden follow-up events from
-          how the story has developed.
+      label: Story planner
+      description: >-
+        Every 3 turns, calls the model to plant hidden follow-up events from how
+        the story has developed.
   data:
     events:
       schema: ./schemas/story-events.schema.json
@@ -54,17 +46,15 @@ contributes:
       accepts:
         - story.events@1
       authoring:
-        title:
-          zh: 隐藏剧情事件
-          en: Hidden story events
+        title: Hidden story events
         hint: >-
           Write events the player must not know in advance. `when` is one
-          condition, or `all`, `any` or `not` over conditions. A condition
-          reads a declared dimension (`dimension` plus `path`), a numeric
-          world-time field (`time`), or another event (`revealed`, with
-          `turnsSinceGte` for a follow-up some turns later). Reference only
-          dimensions the world declares. `payload` is a short brief for the
-          narrative, not finished prose, and it must not spoil later events.
+          condition, or `all`, `any` or `not` over conditions. A condition reads
+          a declared dimension (`dimension` plus `path`), a numeric world-time
+          field (`time`), or another event (`revealed`, with `turnsSinceGte` for
+          a follow-up some turns later). Reference only dimensions the world
+          declares. `payload` is a short brief for the narrative, not finished
+          prose, and it must not spoil later events.
         example: ./examples/story-events.json
         source:
           kind: yaml

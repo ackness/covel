@@ -13,12 +13,14 @@ import type {
   PackageManifest,
 } from "./types.js";
 import { reconcileLocalizedManifest } from "./localized-manifest.js";
+import { compileManifestLabels, type ManifestLabels } from "./locale-labels.js";
 import { compileRuntimeManifest } from "./compile-manifest.js";
 
 function frontmatter(
   content: string,
   filePath: string,
   canonical?: Readonly<Record<string, unknown>>,
+  labels?: readonly ManifestLabels[],
 ) {
   // Reject engine directives before gray-matter can select an executable parser.
   // The block may be empty: a language variant that translates only the body
@@ -27,11 +29,23 @@ function frontmatter(
     throw new Error("Manifest requires plain YAML frontmatter");
   }
   const parsed = matter(content, { language: "yaml" });
+  let data = parsed.data;
+  if (labels?.length) {
+    // Label translations from `locales/<locale>.yaml` become locale maps
+    // before validation, so the manifest is the same as one that wrote them
+    // inline.
+    const compiled = compileManifestLabels(data, labels);
+    data = compiled.data;
+    for (const issue of compiled.issues)
+      console.warn(
+        `[plugin-loader] ${filePath}: ${issue.file}: ${issue.path} ${issue.message}; this translation is ignored`,
+      );
+  }
   return {
     body: parsed.content,
     data: canonical
-      ? reconcileLocalizedManifest(canonical, parsed.data, filePath)
-      : parsed.data,
+      ? reconcileLocalizedManifest(canonical, data, filePath)
+      : data,
   };
 }
 function invalid(filePath: string, error: unknown): never {
@@ -43,9 +57,16 @@ export function parsePluginMd(
   content: string,
   filePath: string,
   canonicalFrontmatter?: Readonly<Record<string, unknown>>,
+  /** Label translations of this file; see `readManifestLabels`. */
+  labels?: readonly ManifestLabels[],
 ): ParsedPluginMd {
   try {
-    const { body, data } = frontmatter(content, filePath, canonicalFrontmatter);
+    const { body, data } = frontmatter(
+      content,
+      filePath,
+      canonicalFrontmatter,
+      labels,
+    );
     const plugin = pluginManifestSchema.parse(data);
     return {
       sourcePath: filePath,
@@ -63,9 +84,16 @@ export function parseRuntimeMd(
   filePath: string,
   plugin: PluginManifest,
   canonicalFrontmatter?: Readonly<Record<string, unknown>>,
+  /** Label translations of this file; see `readManifestLabels`. */
+  labels?: readonly ManifestLabels[],
 ): ParsedRuntimeMd {
   try {
-    const { body, data } = frontmatter(content, filePath, canonicalFrontmatter);
+    const { body, data } = frontmatter(
+      content,
+      filePath,
+      canonicalFrontmatter,
+      labels,
+    );
     const runtime = runtimeAuthoringManifestSchema.parse(data);
     const localId = path.basename(path.dirname(filePath));
     if (!/^[a-z][a-z0-9-]*$/.test(localId))
