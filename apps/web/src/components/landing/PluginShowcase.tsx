@@ -69,7 +69,7 @@ const TILES: readonly Tile[] = [
   },
   {
     key: "rules",
-    capability: "dice-check@1",
+    capability: "action-check@1",
     stage: "pre-turn",
     blurbKey: "home.plugins.rulesBlurb",
     blurbFallback:

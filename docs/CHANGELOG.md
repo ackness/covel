@@ -79,6 +79,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - **One thinking setting per slot.** An `llm.toml` slot takes the same portable `reasoningEffort` as runtimes and Settings models (for example `reasoningEffort = "disabled"`), translated per provider like the AI SDK's top-level `reasoning` option. It is the model default and appears in Settings.
 - **One action-suggestion format.** `guide` gives every mode a short recap, the decision the player faces, and 3–6 ready-to-send phrases, which stage mode also shows as choices. The safe / aggressive / creative categories are gone.
 - **The e2e plugin harness matches the current pipeline.** It finds forms in runtime effects, reads back each request's executions by `turnId`, counts `runtime.deferred` as a run of a detached runtime, checks background jobs end `succeeded`, fails uncommitted turns, and gates expectations on `startTurn` and `interval`. By default every runtime now uses the configured models (`--slot` only overrides the story slot), and Phase 6 lists the model each runtime called.
+- **A check plugin can be replaced without editing the narrators.** `dice-check` now publishes `action-check@1`, which carries only `checkContext`: this turn's check resources, the rules for using them, and the receipt to submit. `narrator` and `chat-mode-narrator` no longer state the DC ladder, the natural 20 / natural 1 rule, or the `check.resolved` emission; they follow the injected block, so a plugin with a different resolution system can provide the same contract. The d20 rules themselves are unchanged.
 
 ### Removed
 
@@ -93,6 +94,7 @@ All notable changes to this project will be documented in this file. Follows [Ke
 - `llm.toml` slots no longer accept `reasoning_effort` or `[covel.<slot>.thinking]`; use `reasoningEffort`, or `providerOptions` for native fields. Loading fails with a message naming the replacement.
 - The `update-inventory` and `upsert-quests` model tools are gone. A third-party WorldIR provider must emit the fixed `inventory_change` and `quest_change` fields for those plugins to record anything.
 - Development sessions that list `scene-cast`, `character-presence`, `story-plotter`, `scene-prompts`, `director`, `story-guard` or `cost-gate` must drop them from their active plugins, or be recreated. Data those plugins wrote under their own ids is not carried over; world data re-imports into the merged plugins on a new session.
+- The `dice-check@1` contract is replaced by `action-check@1`, which no longer includes the `dice` array. A third-party plugin that provides or consumes `dice-check@1` must declare `action-check@1` and read only `checkContext`. The `dice-check` plugin keeps its ID, and session data is unaffected.
 
 ## [0.0.44] - 2026-10-01
 

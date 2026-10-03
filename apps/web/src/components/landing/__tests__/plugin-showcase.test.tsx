@@ -60,8 +60,8 @@ const bundled = [
   ),
   plugin(
     "dice",
-    ["dice-check@1"],
-    [{ outputContract: "dice-check@1", stage: "pre-turn" }],
+    ["action-check@1"],
+    [{ outputContract: "action-check@1", stage: "pre-turn" }],
   ),
   plugin(
     "cast",
@@ -73,7 +73,7 @@ const bundled = [
 describe("indexByCapability", () => {
   it("prefers the default provider, then builtin, and reads the runtime's stage", () => {
     const index = indexByCapability([
-      plugin("community-dice", ["dice-check@1"], [], "community"),
+      plugin("community-dice", ["action-check@1"], [], "community"),
       ...bundled,
     ]);
 
@@ -81,7 +81,7 @@ describe("indexByCapability", () => {
       id: "story",
       stage: "narrative",
     });
-    expect(index.get("dice-check@1")).toMatchObject({
+    expect(index.get("action-check@1")).toMatchObject({
       id: "dice",
       stage: "pre-turn",
     });
