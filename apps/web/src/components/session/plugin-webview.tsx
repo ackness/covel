@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useThemeSnapshot } from "@/theme-system/use-theme-snapshot.js";
 
 /** Small transport only; rendering, state interpretation and interactions belong to the plugin. */
 const BRIDGE = `
 (() => {
   let port, state = {}, sequence = 0;
   const listeners = new Set(), pending = new Map();
+  // The host's style scheme, as --covel-* custom properties on the document.
+  const applyTheme = theme => {
+    if (!theme || !theme.tokens) return;
+    const root = document.documentElement;
+    for (const [name, value] of Object.entries(theme.tokens))
+      root.style.setProperty("--covel-" + name.replace(/[A-Z]/g, c => "-" + c.toLowerCase()), String(value));
+    root.style.colorScheme = theme.scheme;
+    root.dataset.covelScheme = theme.scheme;
+  };
   window.covel = Object.freeze({
     getState: () => state,
     subscribe(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); },
@@ -24,6 +34,7 @@ const BRIDGE = `
     port.onmessage = ({ data }) => {
       if (data?.type === "state") {
         state = data.value;
+        applyTheme(state.theme);
         for (const fn of listeners) fn(state);
       } else if (data?.type === "result") {
         const request = pending.get(data.id);
@@ -79,6 +90,8 @@ export function PluginWebview(props: {
   title: string;
   html: string;
   height?: number;
+  /** Take the room of a large container instead of the declared height. */
+  expanded?: boolean;
   state: Readonly<Record<string, unknown>>;
   locked: boolean;
   handlers: Readonly<
@@ -87,15 +100,22 @@ export function PluginWebview(props: {
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const port = useRef<MessagePort | null>(null);
-  const current = useRef(props);
-  current.current = props;
+  // The widget cannot see the host's stylesheet, so the active style scheme
+  // travels with its state and follows theme changes.
+  const theme = useThemeSnapshot();
+  const state = useMemo(
+    () => ({ ...props.state, theme }),
+    [props.state, theme],
+  );
+  const current = useRef({ ...props, state });
+  current.current = { ...props, state };
   const document = useMemo(
     () => pluginWebviewDocument(props.html),
     [props.html],
   );
   useEffect(() => {
-    port.current?.postMessage({ type: "state", value: props.state });
-  }, [props.state]);
+    port.current?.postMessage({ type: "state", value: state });
+  }, [state]);
   useEffect(
     () => () => {
       port.current?.close();
@@ -165,7 +185,11 @@ export function PluginWebview(props: {
       srcDoc={document}
       onLoad={connect}
       className="w-full border-0"
-      style={{ height: Math.max(80, Math.min(800, props.height ?? 280)) }}
+      style={{
+        height: props.expanded
+          ? "min(72vh, 60rem)"
+          : Math.max(80, Math.min(800, props.height ?? 280)),
+      }}
     />
   );
 }

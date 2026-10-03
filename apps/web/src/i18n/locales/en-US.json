@@ -307,6 +307,8 @@
     "viewRaw": "Raw",
     "viewStage": "Stage",
     "viewText": "Text",
+    "expandPanel": "Expand panel",
+    "panelExpanded": "This panel is open in the large view.",
     "continueTurn": "Continue · Turn {{count}}",
     "continueLatest": "Continue your last adventure",
     "searchWorlds": "Search worlds",

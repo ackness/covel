@@ -567,7 +567,7 @@ Responsive panel resize callbacks use the supplied dimensions, avoiding imperati
 
 ## 插件自带组件与舞台挂载
 
-JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用双层 opaque-origin sandbox iframe；可信外层的 CSP 禁止插件文档向网络地址自行导航，端口仅转交一次。内层保留内联脚本与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。
+JSON spec 支持与 `view` 互斥的 `webview: { entry: "./widget.html", height: 280 }`。组件通过消息桥拿到当前风格方案（`theme` 与 `--covel-*` CSS 变量），并可调用 `emitEvent`、`draftMessage` 等动作。右侧面板里的每个插件面板都可以「放大」到大对话框显示。`ui.right` spec 可声明 `surfaces: ["panel", "stage"]`，缺省仅显示右侧面板。HTML 使用双层 opaque-origin sandbox iframe；可信外层的 CSP 禁止插件文档向网络地址自行导航，端口仅转交一次。内层保留内联脚本与 `window.covel` 数据/动作桥，组件代码和业务状态结构属于插件。完整协议、资源限制与示例见 [插件扩展契约](plugin-extensions.md#自定义组件与挂载)。
 
 ## Kernel UI slots
 

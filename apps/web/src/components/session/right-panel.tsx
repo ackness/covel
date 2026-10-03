@@ -7,7 +7,19 @@ import {
   useRef,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Database, BookOpen, HelpCircle, type LucideIcon } from "lucide-react";
+import {
+  Database,
+  BookOpen,
+  HelpCircle,
+  Maximize2,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
 import {
   Tabs,
   TabsContent,
@@ -33,7 +45,7 @@ import {
   selectedPluginPanelIndex,
   type PluginPanelTabGroup,
 } from "@/lib/plugin-panel-tabs.js";
-import { useSession } from "@/stores/session-store.js";
+import { useSession, useSessionActions } from "@/stores/session-store.js";
 import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
@@ -140,6 +152,36 @@ function SessionRightPanel({
   const [pendingPanelRequest, setPendingPanelRequest] =
     useState<RightPanelRequest | null>(null);
   const { state: sessionState } = useSession();
+  const { upsertInteractionDraft } = useSessionActions();
+  // Key of the plugin panel shown in the large dialog, if any.
+  const [expandedPanelKey, setExpandedPanelKey] = useState<string | null>(null);
+  // A side panel may queue a line for the player to send — a map's "go to the
+  // docks" — but never sends it: the player still confirms in the composer.
+  // One stable object, because new handlers would re-render every panel.
+  const panelHandlers = useMemo(
+    () => ({
+      draftMessage: (params: Record<string, unknown>) => {
+        const text = String(params.text ?? "").trim();
+        if (!text) return;
+        const selectionGroup =
+          typeof params.selectionGroup === "string"
+            ? params.selectionGroup
+            : undefined;
+        upsertInteractionDraft({
+          id: selectionGroup
+            ? `panel:${selectionGroup}`
+            : `panel-draft:${text}`,
+          turnId: "panel",
+          interactionId: selectionGroup ?? `panel-draft:${text}`,
+          type: "suggestion",
+          label: text,
+          values: { text },
+          selectionGroup,
+        });
+      },
+    }),
+    [upsertInteractionDraft],
+  );
   // `bar` puts labelled tabs across the top; `rail` keeps the icon strip.
   const barTabs = useThemeLayout().panelTabs === "bar";
   const activePluginKey = useMemo(
@@ -509,14 +551,61 @@ function SessionRightPanel({
                 )}
 
                 {currentSub && (
-                  <PluginPanel
-                    key={pluginPanelKey(currentSub)}
-                    panelId={currentSub.id}
-                    pluginId={currentSub.pluginId}
-                    spec={currentSub.spec}
-                    stateCache={pluginPanelStateCacheRef.current}
-                    enableDevtools={import.meta.env.DEV}
-                  />
+                  <>
+                    <div className="mb-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedPanelKey(pluginPanelKey(currentSub))
+                        }
+                        aria-label={t("session.expandPanel")}
+                        title={t("session.expandPanel")}
+                        className="ui-btn ui-btn-quiet h-7 w-7 p-0 text-muted-foreground"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {/* One instance at a time: while the panel is in the large
+                        dialog, the column only says so. */}
+                    {expandedPanelKey === pluginPanelKey(currentSub) ? (
+                      <p className="py-6 text-center text-xs text-muted-foreground">
+                        {t("session.panelExpanded")}
+                      </p>
+                    ) : (
+                      <PluginPanel
+                        key={pluginPanelKey(currentSub)}
+                        panelId={currentSub.id}
+                        pluginId={currentSub.pluginId}
+                        spec={currentSub.spec}
+                        stateCache={pluginPanelStateCacheRef.current}
+                        handlers={panelHandlers}
+                        enableDevtools={import.meta.env.DEV}
+                      />
+                    )}
+                    <Dialog
+                      open={expandedPanelKey === pluginPanelKey(currentSub)}
+                      onOpenChange={(open) => {
+                        if (!open) setExpandedPanelKey(null);
+                      }}
+                    >
+                      <DialogContent className="ui-panel-dialog flex max-h-[90vh] w-[min(72rem,94vw)] max-w-none flex-col sm:max-w-none">
+                        <DialogHeader>
+                          <DialogTitle>{currentSub.label}</DialogTitle>
+                        </DialogHeader>
+                        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                          <PluginPanel
+                            key={pluginPanelKey(currentSub)}
+                            panelId={currentSub.id}
+                            pluginId={currentSub.pluginId}
+                            spec={currentSub.spec}
+                            stateCache={pluginPanelStateCacheRef.current}
+                            handlers={panelHandlers}
+                            expanded
+                          />
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </>
                 )}
               </TabsContent>
             );

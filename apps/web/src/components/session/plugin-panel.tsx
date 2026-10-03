@@ -53,7 +53,6 @@ export interface PluginPanelProps {
   panelId?: string;
   spec: Record<string, unknown>;
   stateCache?: PluginPanelStateCache;
-  onAction?: (actionName: string, params?: Record<string, unknown>) => void;
   handlers?: Record<
     string,
     (params: Record<string, unknown>) => Promise<unknown> | unknown
@@ -62,6 +61,8 @@ export interface PluginPanelProps {
   interactionLocked?: boolean;
   surfaceContext?: Readonly<Record<string, unknown>>;
   enableDevtools?: boolean;
+  /** The panel is shown in the large dialog, not the side column. */
+  expanded?: boolean;
 }
 
 function resolveEmptyMessage(value: unknown, locale: string): string {
@@ -73,12 +74,12 @@ export function PluginPanel({
   panelId,
   spec,
   stateCache,
-  onAction,
   handlers: explicitHandlers,
   stateOverride,
   interactionLocked = false,
   surfaceContext,
   enableDevtools = false,
+  expanded = false,
 }: PluginPanelProps) {
   const interactionLockedRef = useRef(interactionLocked);
   interactionLockedRef.current = interactionLocked;
@@ -218,6 +219,10 @@ export function PluginPanel({
   //   invokeCommand({ command, args? })
   //     Runs a manifest-declared command through the same validation, context,
   //     approval, handler, and trace pipeline as composer `/commands`.
+  //
+  //   emitEvent({ topic, data? })
+  //     Emits a domain event this plugin declares. The runtimes that subscribe
+  //     to the topic run as background jobs; the click only queues them.
   //
   // All forms emit a toast on error so the player never gets a silent
   // failure when their click went nowhere.
@@ -387,24 +392,38 @@ export function PluginPanel({
         }
       },
     };
-    if (onAction) {
-      handlers.apiCall = async (params) => {
-        onAction("apiCall", params);
-      };
-      handlers.emitEvent = async (params) => {
-        onAction("emitEvent", params);
-      };
-    }
+    handlers.emitEvent = async (params: Record<string, unknown>) => {
+      if (!sessionId) return;
+      const topic = typeof params.topic === "string" ? params.topic : "";
+      if (!topic) {
+        console.warn("[PluginPanel] emitEvent requires params.topic");
+        return;
+      }
+      const data =
+        params.data &&
+        typeof params.data === "object" &&
+        !Array.isArray(params.data)
+          ? (params.data as Record<string, unknown>)
+          : {};
+      markInvoking(`event:${topic}`, true);
+      try {
+        return await postPluginRpcWithApproval({
+          sessionId,
+          request: { kind: "event", pluginId, topic, payload: data },
+          pluginId,
+          actionLabel: `event ${topic}`,
+          confirm: requestConfirm,
+          t,
+        });
+      } catch (err) {
+        emitToast("error", err instanceof Error ? err.message : String(err));
+        if (spec.webview) throw err;
+      } finally {
+        markInvoking(`event:${topic}`, false);
+      }
+    };
     return handlers;
-  }, [
-    i18n.language,
-    pluginId,
-    sessionId,
-    onAction,
-    markInvoking,
-    t,
-    spec.webview,
-  ]);
+  }, [i18n.language, pluginId, sessionId, markInvoking, t, spec.webview]);
 
   const handlers = explicitHandlers
     ? { ...defaultHandlers, ...explicitHandlers }
@@ -418,6 +437,7 @@ export function PluginPanel({
           "invokeRuntime",
           "invokePluginAction",
           "invokeCommand",
+          "emitEvent",
           ...Object.keys(explicitHandlers ?? {}),
         ]
           .filter((name) => typeof handlers[name] === "function")
@@ -429,6 +449,7 @@ export function PluginPanel({
           title={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
           html={webview.html}
           height={webview.height}
+          expanded={expanded}
           locked={interactionLocked}
           handlers={allowed}
           state={{

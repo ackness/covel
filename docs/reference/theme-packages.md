@@ -376,6 +376,7 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 - `.ui-chapter-banner`：`backdrop: "banner"` 时第一条消息上方的章节横幅；`.ui-chapter-banner-scrim` 是图上的暗化层
 - `.ui-status-meters`：玩家状态量表（面板状态条与场景 HUD 共用），量表本身沿用 `.ui-meter-track` / `.ui-meter-fill`
 - `.ui-status-items` / `.ui-status-item`：玩家随身物品的列表和单个物品标签（同样两处共用）
+- `.ui-panel-dialog`：插件面板「放大」后的大对话框
 - `.ui-summary`：状态摘要的「标签—内容」列表（无范围的数值属性和插件提供的 `session.summary@1` 条目）；`.ui-summary-label` 是标签，`.ui-summary-value` 是内容，带 `data-tone="info" | "success" | "warning" | "danger"`
 - `.ui-turn-updates`：每回合只读结果的折叠块（`<details>`，展开时带 `[open]`）；`turnNotes: "margin"` 时它就是页边批注
 - `.ui-choice-list` / `.ui-choice`：供玩家选择的选项（插件用 `ChoiceList` / `Choice` 组件声明）。`.ui-choice` 是一个按钮，选中带 `data-selected="true"`，里面依次是 `.ui-choice-index`（序号，默认隐藏；内容是 CSS 计数器 `ui-choice`，主题可以改成汉字数字或键帽）、`.ui-choice-content`（含 `.ui-choice-title` 和 `.ui-choice-body`）、`.ui-choice-eyebrow`（标签，`data-tone` 在 `.ui-choice` 上）。选项下方带次要动作时，外面多一层 `.ui-choice-row`，动作在 `.ui-choice-actions` 里。舞台视图决策面板里的选项另带 `.ui-stage-choice-item`（入场动画与焦点环）

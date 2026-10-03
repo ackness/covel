@@ -9,6 +9,7 @@ const invocationParams = new Map<string, readonly [string, string]>([
   ["invokeRuntime", ["runtime", "runtimeId"]],
   ["invokePluginAction", ["action", "action"]],
   ["invokeCommand", ["command", "command"]],
+  ["emitEvent", ["event", "topic"]],
 ]);
 
 interface ActionBinding {
@@ -22,7 +23,8 @@ interface ActionBinding {
  * `isSelected`: the action stashed a pending draft (draftMessage /
  * selectChoice / …) that is still queued, so the element echoes the pick.
  * `isPending`: PluginPanel writes `/_invoking/<key>` while an
- * `invokeRuntime`, `invokePluginAction` or `invokeCommand` call is in flight;
+ * `invokeRuntime`, `invokePluginAction`, `invokeCommand` or `emitEvent` call is
+ * in flight;
  * the binding tells us which key it would set, so only the element that fired
  * the action shows as busy.
  *

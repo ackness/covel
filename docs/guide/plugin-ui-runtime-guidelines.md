@@ -251,15 +251,18 @@ catalog 组件画不出来的界面（地图、解谜、棋盘、小游戏）用
 
 `webview` 能做什么：
 
-- `window.covel.subscribe(({ data, locale, locked, context, uiState }) => …)`：`data` 是本插件声明 namespace 的数据，后端一提交就推过来；舞台上的 `context` 带当前回合和当前选项
-- `window.covel.invoke("invokeRuntime" | "invokePluginAction" | "invokeCommand", …)`：触发自己的后端逻辑；舞台上另有 `sendMessage({ text })`
+- `window.covel.subscribe(({ data, locale, locked, context, uiState, theme }) => …)`：`data` 是本插件声明 namespace 的数据，后端一提交就推过来；舞台上的 `context` 带当前回合和当前选项
+- 跟随风格方案：`theme` 带当前方案的明暗和一组配色、圆角、字体，同时以 `--covel-*` CSS 变量的形式出现在组件文档上（`color: var(--covel-foreground)`），玩家换方案时自动更新
+- `window.covel.invoke("invokeRuntime" | "invokePluginAction" | "invokeCommand" | "emitEvent", …)`：触发自己的后端逻辑或发出自己声明的领域事件
+- `window.covel.invoke("draftMessage", { text })`（右侧面板）：把一句话放进输入框的待发送区，玩家确认后发出；舞台上是 `sendMessage({ text })`
 - `window.covel.invoke("setUiState", { value })`：记住草稿这类临时界面状态
+
+需要大画面时不用另做一份：右侧面板的每个插件面板都能「放大」到大对话框里，`webview` 在那里占用约 72vh 高。
 
 目前做不到的：
 
-- 拿不到风格方案的配色和字体（iframe 隔离，宿主的 CSS 变量进不去），需要自己用中性配色并适配亮暗
-- 侧栏里的 `webview` 不能把文字放进输入框或直接发送（只有舞台有 `sendMessage`）
-- 挂载位置只有右侧面板和舞台决策区；想放到别处（例如盖在场景图上）需要宿主新增位置
+- 沙箱里加载不了宿主的字体文件，`--covel-font-*` 只在系统装有对应字体时生效，要写回退字体
+- 挂载位置只有右侧面板（含放大后的对话框）和舞台决策区；想放到别处（例如盖在场景图上）需要宿主新增位置
 
 ### 2.6 怎么选
 
@@ -285,14 +288,17 @@ catalog 组件画不出来的界面（地图、解谜、棋盘、小游戏）用
 
 | 动作                 | 效果                                                                           | 聊天消息块 | 右侧面板 | 舞台挂载 |
 | -------------------- | ------------------------------------------------------------------------------ | ---------- | -------- | -------- |
-| `draftMessage`       | 把一句话放进待发送区，玩家可以再补充，一起发出                                 | ✓          | —        | —        |
+| `draftMessage`       | 把一句话放进待发送区，玩家可以再补充，一起发出                                 | ✓          | ✓        | —        |
 | `sendMessage`        | 直接作为玩家消息发出，开始新回合                                               | ✓          | —        | ✓        |
 | `selectChoice`       | 回答一个内核选择题（框架生成的选择题块自带，插件不用自己绑）                   | ✓          | —        | —        |
 | `invokePluginAction` | 调插件的 RPC action：立即执行、立即写入，不开回合、不调模型                    | ✓          | ✓        | ✓        |
 | `invokeRuntime`      | 触发 `trigger.type: manual` 的 runtime：写入走 proposal 提交，多条记录一起成败 | ✓          | ✓        | ✓        |
 | `invokeCommand`      | 执行清单里声明的玩家命令（`/bag` 这类）                                        | ✓          | ✓        | ✓        |
+| `emitEvent`          | 发出本插件声明的领域事件；订阅它的 runtime 以后台任务执行                      | ✓          | ✓        | ✓        |
 
-三个 `invoke*` 动作自动绑定当前插件，不能改写成别的插件。`PluginPanel` 里还留有 `apiCall` / `emitEvent` 两个动作名，但目前没有任何挂载位置接它们；界面要发领域事件，请走 `invokeRuntime`，由 runtime 的结果发出事件。
+`invoke*` 和 `emitEvent` 自动绑定当前插件，不能改写成别的插件。
+
+`emitEvent({ topic, data })` 和 `invokeRuntime` 的区别：`invokeRuntime` 指名一个 runtime，同步跑完并返回结果；`emitEvent` 只说「发生了什么」，由订阅者决定做什么——订阅者可以属于别的插件，各自在后台执行、各自提交，点击立刻返回。topic 必须写在本插件的 `contributes.events` 里（界面专用的可以设 `advertise: false`，不让叙事模型看到），`data` 按它的 schema 校验。
 
 **插件 → 界面**
 
@@ -309,24 +315,25 @@ catalog 组件画不出来的界面（地图、解谜、棋盘、小游戏）用
 
 1. 地点和玩家位置存在插件的 `plugin_data`（例如 `locations` namespace），世界包可以预置
 2. `ui.right` 声明一个 `webview`，用 SVG 或 Canvas 画地图，`subscribe` 拿到 `data` 就重画
-3. 点击一个地点 → `invoke("invokeRuntime", …)` 触发手动 runtime：校验能不能去、更新位置、需要时发一个 `location.changed` 事件
-4. 提交后数据推回来，地图重画；监听该事件的其他插件（场景、遭遇）在各自的 runtime 里响应
-5. 想让「去码头」成为玩家的一次行动而不是瞬移，舞台上用 `sendMessage`，聊天里则在 `ui.message` 放一组 `Choice`，让叙事来处理
+3. 点击一个地点 → `invoke("emitEvent", { topic: "map.location-selected", data: { locationId } })`。地图插件自己订阅这个 topic 的 runtime 校验能不能去、更新位置；场景、遭遇这类别的插件也订阅它，各自响应
+4. 各订阅者提交后数据推回来，地图重画
+5. 想让「去码头」成为玩家的一次行动而不是瞬移，用 `draftMessage`（右侧面板）或 `sendMessage`（舞台）把这句话交给玩家，让叙事来处理
+6. 侧栏太窄时，玩家点面板右上角的「放大」在大对话框里操作
 
-「解谜」同理：谜面和进度在 `plugin_data`，`webview` 画棋盘或机关，每一步用 `invokePluginAction`（即时反馈）或 `invokeRuntime`（要和别的状态一起提交）校验，解开时发事件，由叙事或任务插件接着推进。答案之类不该让玩家看到的数据放在 `_hidden.*` namespace，只在后端校验。
+「解谜」同理：谜面和进度在 `plugin_data`，`webview` 画棋盘或机关，每一步用 `invokePluginAction`（即时反馈）或 `invokeRuntime`（要和别的状态一起提交）校验，解开时由 runtime 的结果发出事件（或界面直接 `emitEvent`），由叙事或任务插件接着推进。答案之类不该让玩家看到的数据放在 `_hidden.*` namespace，只在后端校验。
 
 ### 2.8 现有边界
 
 做更复杂的面板前先知道宿主现在给了什么、没给什么。下面这些是当前的限制，不是设计上的禁止；确实需要时按 [1.4 框架变更门槛](#14-框架变更门槛) 提出：
 
-| 方面       | 现在                                                                                  | 意味着                                                                 |
-| ---------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 挂载位置   | 聊天消息块、右侧面板页签、舞台决策区；状态条 / 场景 HUD 只接受 `session.summary@1`    | 想盖在场景图上、或占用中央大区域的面板，需要宿主新增位置               |
-| 面板尺寸   | 右侧面板宽度由玩家拖动决定；`webview.height` 限制在 80–800px                          | 地图、棋盘这类需要大画面的组件目前只能在侧栏里滚动                     |
-| 外观       | catalog 组件自动跟随风格方案；`webview` 拿不到配色、字体和明暗                        | 自绘组件要自己适配亮暗，无法与方案完全一致                             |
-| 发出行动   | 聊天消息块能 `draftMessage` / `sendMessage`，舞台能 `sendMessage`，右侧面板两者都没有 | 侧栏里的地图不能把「前往码头」放进输入框，只能直接改状态               |
-| 回合上下文 | 舞台挂载的 `context` 带当前回合和选项；右侧面板的 `context` 为空                      | 侧栏组件要判断「这是哪一回合的结果」得自己在数据里带 `turnId`          |
-| 内核槽位   | 槽位名是封闭集合，每个槽位有固定的数据模型                                            | 新的「框架来画」的内容需要改内核契约；「插件自己画」的内容走 `webview` |
+| 方面       | 现在                                                                               | 意味着                                                                 |
+| ---------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 挂载位置   | 聊天消息块、右侧面板页签、舞台决策区；状态条 / 场景 HUD 只接受 `session.summary@1` | 想盖在场景图上的面板，需要宿主新增位置                                 |
+| 面板尺寸   | 侧栏宽度由玩家拖动决定；任何插件面板可以放大到大对话框（`webview` 约 72vh 高）     | 大画面组件不必另做，但没有常驻的中央大区域                             |
+| 外观       | catalog 组件自动跟随风格方案；`webview` 通过 `theme` 和 `--covel-*` 变量跟随       | 自绘组件用这些变量即可；宿主字体文件进不了沙箱                         |
+| 回合上下文 | 舞台挂载的 `context` 带当前回合和选项；右侧面板的 `context` 为空                   | 侧栏组件要判断「这是哪一回合的结果」得自己在数据里带 `turnId`          |
+| 界面事件   | `emitEvent` 把事件交给订阅者后台执行，不返回它们的结果                             | 需要立刻拿到结果的操作用 `invokeRuntime` / `invokePluginAction`        |
+| 内核槽位   | 槽位名是封闭集合，每个槽位有固定的数据模型                                         | 新的「框架来画」的内容需要改内核契约；「插件自己画」的内容走 `webview` |
 
 ---
 
@@ -550,7 +557,7 @@ submitBehavior: {
 - **不要假设面板宽度或明暗。** 面板宽度随布局和玩家拖动变化，内容用可换行、可滚动的结构；图片和图表不要依赖深色底。
 - **「一眼就该看到」的状态走状态摘要槽位。** 当前目标、时间、行囊这类内容通过 `session.summary@1` 提供一到三行，框架会把它放到当前方案显示状态的位置（面板页签下方或场景 HUD）；不要为此在面板里再做一个常驻卡片。写法见 [ui-panels.md 的 Session summary](../reference/ui-panels.md#session-summary)。
 - **场景图、立绘走内核槽位。** `stage.backdrop@1`、`stage.cast@1`、`character.visual@1` 的提供者不需要知道当前布局：舞台视图和 `backdrop: "scene"` 的文本视图读的是同一份槽位数据。
-- **`webview` 自带组件目前拿不到主题 token。** iframe 是隔离的，宿主的 CSS 变量不会进去。需要与方案一致的外观时优先用 catalog 组件组合；确实要用 `webview` 时，用中性的配色并同时适配亮暗两种底色。
+- **`webview` 自带组件用宿主给的方案变量。** iframe 是隔离的，宿主的样式表进不去，但消息桥会把当前方案的明暗、配色、圆角和字体交给组件，并写成 `--covel-*` CSS 变量。用这些变量上色，不要写死颜色；见 [2.5 自定义组件](#25-自定义组件-webview)。
 
 自查方法：在设置 → 外观里依次切到「面板」「书卷」「舞台」，各看一眼自己的面板和消息块。
 

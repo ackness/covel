@@ -309,6 +309,8 @@
     "viewRaw": "Исходные данные",
     "viewStage": "Этап",
     "viewText": "Текст",
+    "expandPanel": "Развернуть панель",
+    "panelExpanded": "Эта панель открыта в большом окне.",
     "continueTurn": "Продолжить · Ход {{count}}",
     "continueLatest": "Продолжить последнее приключение",
     "searchWorlds": "Поиск миров",

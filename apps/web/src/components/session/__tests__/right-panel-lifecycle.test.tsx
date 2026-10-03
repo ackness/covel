@@ -15,10 +15,14 @@ const mocks = vi.hoisted(() => ({
   plugins: [] as SessionPlugin[],
   specs: { right: [], message: [], left: [] } as UISpecsResponse,
   fetchSpecs: vi.fn(),
+  upsertInteractionDraft: vi.fn(),
 }));
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: { sessionPlugins: mocks.plugins, gameState: {} },
+  }),
+  useSessionActions: () => ({
+    upsertInteractionDraft: mocks.upsertInteractionDraft,
   }),
 }));
 vi.mock("@/services/api.js", async (importOriginal) => ({
@@ -34,9 +38,33 @@ vi.mock("../database-panel.js", () => ({
   DatabasePanel: () => <div>Database content</div>,
 }));
 vi.mock("../plugin-panel.js", () => ({
-  PluginPanel: ({ pluginId }: { pluginId: string }) => {
+  PluginPanel: ({
+    pluginId,
+    expanded,
+    handlers,
+  }: {
+    pluginId: string;
+    expanded?: boolean;
+    handlers?: Record<string, (params: Record<string, unknown>) => unknown>;
+  }) => {
     const [owner] = useState(pluginId);
-    return <div>Mounted panel: {owner}</div>;
+    return (
+      <div>
+        Mounted panel: {owner}
+        {expanded ? " (large)" : ""}
+        <button
+          type="button"
+          onClick={() =>
+            handlers?.draftMessage?.({
+              text: " Go to the docks ",
+              selectionGroup: "map",
+            })
+          }
+        >
+          Draft a move
+        </button>
+      </div>
+    );
   },
 }));
 const spec = (pluginId: string, panelId: string) => ({
@@ -75,6 +103,7 @@ const plugin = (id: string): SessionPlugin => ({
   tags: [],
 });
 beforeEach(async () => {
+  mocks.upsertInteractionDraft.mockReset();
   await i18n.changeLanguage("en-US");
   mocks.plugins = [plugin("provider-a"), plugin("provider-b")];
   mocks.specs = {
@@ -147,4 +176,40 @@ it("retains an image navigation request until lazy specs load and supports repea
     <RightPanel {...props} panelRequest={{ event: "open-images" }} />,
   );
   expect(await screen.findByText("Mounted panel: provider-a")).toBeTruthy();
+});
+
+it("lets a side panel queue a line for the composer without sending it", async () => {
+  render(<RightPanel sessionId="session-a" world={null} statePatches={[]} />);
+  fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
+    key: "Enter",
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Draft a move" }));
+  expect(mocks.upsertInteractionDraft).toHaveBeenCalledWith({
+    id: "panel:map",
+    turnId: "panel",
+    interactionId: "map",
+    type: "suggestion",
+    label: "Go to the docks",
+    values: { text: "Go to the docks" },
+    selectionGroup: "map",
+  });
+});
+
+it("moves a plugin panel into the large dialog and back", async () => {
+  render(<RightPanel sessionId="session-a" world={null} statePatches={[]} />);
+  fireEvent.keyDown(await screen.findByRole("tab", { name: "Shared panels" }), {
+    key: "Enter",
+  });
+  expect(await screen.findByText(/Mounted panel: provider-a$/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Expand panel" }));
+  // One instance at a time: the dialog has the panel, the column a note.
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog.textContent).toContain("Mounted panel: provider-a (large)");
+  expect(screen.getAllByText(/Mounted panel: provider-a/)).toHaveLength(1);
+  expect(
+    screen.getByText("This panel is open in the large view."),
+  ).toBeTruthy();
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.getByText(/Mounted panel: provider-a$/)).toBeTruthy();
 });

@@ -307,6 +307,8 @@
     "viewRaw": "原始",
     "viewStage": "舞台",
     "viewText": "文本",
+    "expandPanel": "放大面板",
+    "panelExpanded": "这个面板正在大窗口里显示。",
     "continueTurn": "继续 · 第 {{count}} 回合",
     "continueLatest": "继续上次的冒险",
     "searchWorlds": "搜索世界",

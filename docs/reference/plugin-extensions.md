@@ -12,6 +12,7 @@
 | 调用其他插件的公共函数或模型协议 | `covel.registerService` + `ctx.services`                         | 请求/响应，校验输入输出，只调用活跃且已获准运行的服务                      |
 | Runtime 执行领域写入             | 已声明工具、handler effects / `ctx.pluginData`                   | 走 runtime 的 proposal/commit 边界，不直接写别的插件                       |
 | UI 触发自己的服务端逻辑          | `invokeRuntime` / `invokePluginAction` / `invokeCommand`         | 复用现有 RPC、会话归属与审批；写入边界见下文                               |
+| UI 发出领域事件                  | `emitEvent`                                                      | 只能发本插件声明的 topic，按 schema 校验；订阅的 runtime 以事件任务执行    |
 | 自由绘制 UI                      | JSON `view` 或 HTML `webview`                                    | HTML 在独立 sandbox 中运行，使用消息桥读取数据、发出动作                   |
 
 `ctx.services` 当前向 function runtime 开放。Agent 可通过插件自己的 function runtime 取得服务结果，再通过 `inputs` 接收，或继续使用已注册本地工具。它不会自动把全部公共服务暴露给每个 Agent。
@@ -163,6 +164,8 @@ const value = await ctx.services.call(
 }
 ```
 
+右侧面板的每个插件面板都带一个「放大」按钮，把同一个面板移到大对话框里显示（同一时刻只有一个实例；`webview` 在那里占用约 72vh 的高度，不受 `height` 限制）。这是宿主行为，spec 不需要声明。
+
 `surfaces` 缺省为 `panel`；声明 `stage` 后，该面板会挂载在舞台决策区域。这个位置同样支持 JSON `view`。它不检查业务 capability，不了解推荐、骰子、地图或任何具体插件。宿主只提供已有挂载位置；新增一个产品级全局位置仍需要宿主提供。
 
 `webview.entry` 相对 JSON 文件，必须是插件根目录内的 `.html`，真实路径（包括符号链接）不能越界，单文件最多 512 KiB。可使用原生 DOM、Canvas、SVG，或将 React/Vue 等构建成包含脚本和样式的单个 HTML。无需修改 Web 源码或重建框架；开发时社区插件文件变化自动重载注册表；其他环境需要重启服务端。
@@ -173,7 +176,7 @@ HTML 使用两层 `sandbox="allow-scripts"` iframe，每层均为独立 opaque o
 
 ```js
 const unsubscribe = window.covel.subscribe(
-  ({ data, locale, locked, context, uiState }) => {
+  ({ data, locale, locked, context, uiState, theme }) => {
     // Render with textContent or your UI framework's escaping.
   },
 );
@@ -186,7 +189,9 @@ const response = await window.covel.invoke("invokePluginAction", {
 
 `data` 是本插件声明 namespace 的数据；更新和删除均随宿主数据源传入。`context` 在舞台包含 `{ surface: "stage", turnId, turnIds, choices }`；`turnIds` 包含归属当前叙事的已提交重试，`choices` 为当前 `{ id, text }[]`。插件可核对回合及当前选项，隐藏过期结果。`locked` 为交互锁；宿主也会拒绝锁定时发来的动作。
 
-桥接只接受宿主显式提供的动作：执行类动作默认是 `invokeRuntime`、`invokePluginAction`、`invokeCommand`，自动绑定当前插件；舞台另提供 `sendMessage({ text })`。不可通过 params 改写 pluginId 来调用其他插件。需要组合其他插件时，从自己的 runtime 使用 `ctx.services` 或事件，不通过浏览器读取对方私有数据。
+`theme` 是当前风格方案：`{ id, scheme: "light" | "dark", tokens }`。`tokens` 是一组已解析的字符串：`background`、`surface`、`foreground`、`mutedForeground`、`border`、`accent`、`accentForeground`、`success`、`warning`、`danger`、`radiusControl`、`radiusCard`、`fontSans`、`fontSerif`、`fontDisplay`。宿主同时把它们写成组件文档根元素上的 CSS 变量（`--covel-background`、`--covel-font-sans` 等，驼峰转连字符），并设置 `color-scheme` 与 `data-covel-scheme`，所以样式表里可以直接写 `color: var(--covel-foreground)`；玩家切换方案或明暗时自动更新。沙箱里加载不了宿主的字体文件，字体变量只在系统已安装对应字体时生效，记得写回退字体。
+
+桥接只接受宿主显式提供的动作：执行类动作默认是 `invokeRuntime`、`invokePluginAction`、`invokeCommand`、`emitEvent({ topic, data })`，自动绑定当前插件；右侧面板另提供 `draftMessage({ text, selectionGroup? })`（把一句话放进待发送区，由玩家确认后发出），舞台另提供 `sendMessage({ text })`。不可通过 params 改写 pluginId 来调用其他插件。需要组合其他插件时，从自己的 runtime 使用 `ctx.services` 或事件，不通过浏览器读取对方私有数据。
 
 `uiState` 是当前面板的临时 JSON 状态，初始为 `null`。使用 `await window.covel.invoke("setUiState", { value: { draft: "..." } })` 整体替换，传 `value: null` 清空；成功返回 `{ status: "ok" }`。对象编码为 JSON 后最多 32 KiB（UTF-8），非法值或超限会拒绝且保留旧值。它与 `data` 隔离，不写服务端、不调用 runtime。侧栏按会话、插件及面板隔离缓存，切换标签后可恢复；建议为需要恢复草稿的面板声明稳定 `id`，无 `id` 面板使用包内顺序生成身份。离开会话、销毁侧栏宿主或刷新页面会丢失。不提供缓存宿主的其他位置只保留到面板卸载。插件应在首次收到宿主状态时恢复草稿，避免后续状态推送覆盖正在输入的内容。此动作同样受交互锁约束。
 
