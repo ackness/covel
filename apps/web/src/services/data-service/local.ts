@@ -457,7 +457,7 @@ export class LocalDataService implements DataService {
 
   // Sessions
 
-  async listSessions(worldId: string): Promise<SessionRecord[]> {
+  async listSessions(worldId?: string): Promise<SessionRecord[]> {
     const vault = await this.ready();
     const sessions = await Promise.all(
       (await vault.listSessions()).map((head) =>

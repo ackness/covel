@@ -17,7 +17,9 @@ const mocks = vi.hoisted(() => ({
   fetchSpecs: vi.fn(),
 }));
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({ state: { sessionPlugins: mocks.plugins } }),
+  useSession: () => ({
+    state: { sessionPlugins: mocks.plugins, gameState: {} },
+  }),
 }));
 vi.mock("@/services/api.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/api.js")>()),
@@ -94,7 +96,9 @@ it("keeps shared panel selection stable across provider changes and resets acros
   await act(async () => {
     mocks.plugins = [plugin("provider-b")];
     mocks.specs = { ...mocks.specs, right: [spec("provider-b", "details")] };
-    view.rerender(<RightPanel {...props} />);
+    // The mocked store is not reactive and the panel is memoised, so a new
+    // patches array stands in for the store update that re-renders it.
+    view.rerender(<RightPanel {...props} statePatches={[]} />);
   });
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: "provider-a" })).toBeNull(),
@@ -112,7 +116,7 @@ it("returns to World when the active plugin panel disappears", async () => {
   await act(async () => {
     mocks.plugins = [];
     mocks.specs = { ...mocks.specs, right: [] };
-    view.rerender(<RightPanel {...props} />);
+    view.rerender(<RightPanel {...props} statePatches={[]} />);
   });
   expect(await screen.findByText("World content")).toBeTruthy();
   expect(screen.queryByRole("tab", { name: "Shared panels" })).toBeNull();

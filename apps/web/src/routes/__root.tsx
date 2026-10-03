@@ -8,7 +8,15 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { Menu } from "lucide-react";
+import {
+  Blocks,
+  Bug,
+  Globe2,
+  Image as ImageIcon,
+  Menu,
+  MessageSquare,
+  type LucideIcon,
+} from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
 import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { Button } from "@/components/ui/button";
@@ -17,7 +25,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ToastHost } from "@/components/ui/toast-host";
@@ -26,6 +33,7 @@ import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { useSession } from "@/stores/session-store";
+import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -40,12 +48,15 @@ function RootLayout() {
   const { t } = useTranslation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { locale, setLocale } = useLocalePreference();
+  const layoutNav = useThemeLayout().nav;
   const location = useLocation();
   const navigate = useNavigate();
   const isSessionRoute = location.pathname.startsWith("/session");
   const isDebugRoute = location.pathname.startsWith("/debug");
   const isSession = isSessionRoute || isDebugRoute;
-  const isHome = location.pathname === "/";
+  // The rail is app chrome. The landing page keeps the top bar in every
+  // layout: it carries the brand and the way in.
+  const railNav = layoutNav === "rail" && isSession;
   const showRouterDevtools = !isSessionRoute && !isDebugRoute;
 
   // Carry the active session id between Studio (/session) and Debugger (/debug)
@@ -107,29 +118,33 @@ function RootLayout() {
   const navItems: Array<{
     id: NavId;
     label: string;
+    icon: LucideIcon;
     onClick: () => void;
     disabled?: boolean;
   }> = [
-    { id: "world", label: t("nav.world"), onClick: goWorld },
+    { id: "world", label: t("nav.world"), icon: Globe2, onClick: goWorld },
     {
       id: "session",
       label: t("nav.session"),
+      icon: MessageSquare,
       onClick: goSession,
       disabled: !hasSession,
     },
     {
       id: "plugins",
       label: t("nav.plugins"),
+      icon: Blocks,
       onClick: goPlugins,
       disabled: !hasSession,
     },
     {
       id: "images",
       label: t("nav.images"),
+      icon: ImageIcon,
       onClick: goImages,
       disabled: !hasSession,
     },
-    { id: "debug", label: t("nav.debug"), onClick: goDebug },
+    { id: "debug", label: t("nav.debug"), icon: Bug, onClick: goDebug },
   ];
 
   // Electron hides the native title bar so the in-app header can follow the
@@ -138,42 +153,75 @@ function RootLayout() {
   const isElectron = ipc !== null;
   const isMacDesktop = isElectron && ipc?.platform === "darwin";
 
+  const brand = (
+    <Link
+      to="/"
+      className={`ui-brand-title ui-title flex shrink-0 items-center gap-2 tracking-tight ${isSession ? "text-lg" : "text-2xl"}`}
+      style={isElectron ? noDragStyle : undefined}
+    >
+      <img
+        src="/icon.png"
+        alt=""
+        aria-hidden="true"
+        className={`rounded-md object-cover ${isSession ? "h-6 w-6" : "h-8 w-8"}`}
+        draggable={false}
+      />
+      <span>Covel</span>
+    </Link>
+  );
+
+  const languageSelect = (className: string, onPicked?: () => void) => (
+    <select
+      value={locale}
+      onChange={(event) => {
+        setLocale(event.target.value);
+        onPicked?.();
+      }}
+      aria-label={t("onboarding.language", "Language")}
+      className={className}
+    >
+      {localeDefinitions.map((definition) => (
+        <option key={definition.code} value={definition.code}>
+          {resolveI18nText(definition.label, locale) ?? definition.code}
+        </option>
+      ))}
+    </select>
+  );
+
   return (
     <>
       <ToastHost />
       <ConfirmHost />
-      <div className="h-screen w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
-        <header
-          className={`ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"}`}
-          style={isElectron ? dragStyle : undefined}
-        >
-          {/* Centred brand — absolutely positioned so the macOS traffic-light
-              padding on the inner row doesn't shift it off centre. */}
-          <Link
-            to="/"
-            className={`ui-brand-title absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ui-title flex items-center gap-2 tracking-tight pointer-events-auto ${isSession ? "text-lg" : "text-2xl"}`}
-            style={isElectron ? noDragStyle : undefined}
+      <div className="ui-app-shell h-screen w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex overflow-hidden">
+        {/* Icon rail — the `nav: "rail"` layout. Desktop widths only; phones
+            keep the top bar and its menu dialog. */}
+        {railNav && (
+          <aside
+            className={`ui-nav-rail hidden lg:flex w-18 shrink-0 flex-col items-center gap-1 border-r border-(--rule-color) pb-3 ${isMacDesktop ? "pt-10" : "pt-3"}`}
+            style={isElectron ? dragStyle : undefined}
           >
-            <img
-              src="/icon.png"
-              alt=""
-              aria-hidden="true"
-              className={`rounded-md object-cover ${isSession ? "h-6 w-6" : "h-8 w-8"}`}
-              draggable={false}
-            />
-            <span>Covel</span>
-          </Link>
-
-          <div
-            className={`w-full flex h-full items-center justify-between ${isMacDesktop ? "pl-22 pr-4 md:pr-6" : "px-4 md:px-6"}`}
-          >
+            <Link
+              to="/"
+              aria-label="Covel"
+              className="mb-3 block"
+              style={isElectron ? noDragStyle : undefined}
+            >
+              <img
+                src="/icon.png"
+                alt=""
+                aria-hidden="true"
+                className="h-9 w-9 rounded-(--radius-control) object-cover"
+                draggable={false}
+              />
+            </Link>
             <nav
-              className="hidden lg:flex items-center gap-1 text-xs font-medium"
+              className="flex flex-1 flex-col items-center gap-1"
               style={isElectron ? noDragStyle : undefined}
               aria-label={t("nav.primary", "Primary")}
             >
               {navItems.map((item) => {
                 const isActive = activeNav === item.id;
+                const Icon = item.icon;
                 return (
                   <button
                     key={item.id}
@@ -181,156 +229,175 @@ function RootLayout() {
                     onClick={item.onClick}
                     disabled={item.disabled}
                     aria-current={isActive ? "page" : undefined}
-                    className={`relative h-8 px-3 transition-colors rounded-(--radius-control) ${
+                    className={`ui-nav-item flex h-13 w-14 flex-col items-center justify-center gap-1 rounded-(--radius-control) text-[11px] leading-none transition-colors ${
+                      item.id === "debug" ? "mt-auto" : ""
+                    } ${
                       isActive
-                        ? "bg-primary/10 text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                        ? "bg-accent text-accent-foreground font-medium"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     } ${
                       item.disabled
-                        ? "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-muted-foreground"
+                        ? "cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground"
                         : ""
                     }`}
                   >
+                    <Icon
+                      className={`h-4.5 w-4.5 ${isActive ? "text-(--accent-primary)" : ""}`}
+                    />
                     <span>{item.label}</span>
-                    {isActive && (
-                      <span
-                        aria-hidden
-                        className="absolute left-2 right-2 -bottom-px h-0.5 bg-(--accent-primary)"
-                      />
-                    )}
                   </button>
                 );
               })}
             </nav>
             <div
-              className="flex items-center gap-1 md:gap-1.5 ml-auto"
+              className="flex flex-col items-center gap-1"
               style={isElectron ? noDragStyle : undefined}
             >
               <ThemeToggle />
-              <label className="hidden lg:block">
-                <span className="sr-only">
-                  {t("onboarding.language", "Language")}
-                </span>
-                <select
-                  value={locale}
-                  onChange={(event) => setLocale(event.target.value)}
-                  aria-label={t("onboarding.language", "Language")}
-                  className="h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary"
-                >
-                  {localeDefinitions.map((definition) => (
-                    <option key={definition.code} value={definition.code}>
-                      {resolveI18nText(definition.label, locale) ??
-                        definition.code}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {!isSession && (
-                <Button
-                  variant="default"
-                  asChild
-                  className="hidden lg:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
-                >
-                  <Link to="/session">
-                    {t("nav.getStarted", "Get Started")}
-                  </Link>
-                </Button>
-              )}
-              {/* The desktop nav and the language toggle are both `lg:` only,
-                  so on a phone this dialog is the ONLY way to reach worlds /
-                  session / plugins / debug or switch language. Radix Dialog
-                  brings the focus trap, Escape handling and aria-modal that a
-                  hand-rolled dropdown would have to reimplement. */}
-              <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={t("nav.primary", "Primary")}
-                    className="h-10 w-10 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control) lg:hidden"
-                  >
-                    <Menu className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-xs">
-                  <DialogHeader>
-                    <DialogTitle>{t("nav.primary", "Primary")}</DialogTitle>
-                  </DialogHeader>
-                  <nav className="flex flex-col">
-                    {navItems.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        disabled={item.disabled}
-                        aria-current={
-                          activeNav === item.id ? "page" : undefined
-                        }
-                        onClick={() => {
-                          setMobileNavOpen(false);
-                          item.onClick();
-                        }}
-                        className={`h-11 px-2 text-left text-sm transition-colors rounded-(--radius-control) ${
-                          activeNav === item.id
-                            ? "text-foreground font-medium"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                        } ${item.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground" : ""}`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                    <label className="mt-1 flex min-h-11 items-center gap-3 border-t border-border px-2 text-sm text-muted-foreground">
-                      <span>{t("onboarding.language", "Language")}</span>
-                      <select
-                        value={locale}
-                        onChange={(event) => {
-                          setLocale(event.target.value);
-                          setMobileNavOpen(false);
-                        }}
-                        className="ml-auto max-w-48 rounded-(--radius-control) border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary"
-                      >
-                        {localeDefinitions.map((definition) => (
-                          <option key={definition.code} value={definition.code}>
-                            {resolveI18nText(definition.label, locale) ??
-                              definition.code}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </nav>
-                </DialogContent>
-              </Dialog>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("onboarding.language", "Language")}
+                aria-haspopup="dialog"
+                className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
+                onClick={() => setMobileNavOpen(true)}
+              >
+                <Menu className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-        </header>
+          </aside>
+        )}
 
-        <main className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
-          <AppErrorBoundary>
-            <Outlet />
-          </AppErrorBoundary>
-        </main>
-
-        {!isHome && !isSession && (
-          <footer
-            className={`ui-panel-footer shrink-0 border-t border-border transition-all ${isSession ? "py-1.5" : "py-8"}`}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <header
+            className={`ui-app-header ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"} ${railNav ? "lg:hidden" : ""}`}
+            style={isElectron ? dragStyle : undefined}
           >
             <div
-              className={`w-full px-4 md:px-6 flex items-center justify-between ${isSession ? "gap-2" : "flex-col md:flex-row gap-6"}`}
+              className={`w-full flex h-full items-center gap-4 lg:gap-7 ${isMacDesktop ? "pl-22 pr-4 md:pr-6" : "px-4 md:px-6"}`}
             >
-              <div
-                className={`ui-title flex items-center gap-2 ${isSession ? "text-xs" : "text-base"}`}
+              {brand}
+              <nav
+                className="hidden lg:flex items-center gap-1 text-xs font-medium"
+                style={isElectron ? noDragStyle : undefined}
+                aria-label={t("nav.primary", "Primary")}
               >
-                <span
-                  className={`rounded-full border border-primary/45 ${isSession ? "h-2 w-2" : "h-3 w-3"}`}
-                ></span>
-                <span>Covel Studio</span>
-              </div>
-              <div className="ui-eyebrow text-muted-foreground text-xs">
-                &copy; {new Date().getFullYear()} Covel Framework.
+                {navItems.map((item) => {
+                  const isActive = activeNav === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={item.onClick}
+                      disabled={item.disabled}
+                      aria-current={isActive ? "page" : undefined}
+                      className={`ui-nav-item relative h-8 px-3 transition-colors rounded-(--radius-control) ${
+                        isActive
+                          ? "bg-primary/10 text-foreground"
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                      } ${
+                        item.disabled
+                          ? "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-muted-foreground"
+                          : ""
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      {isActive && (
+                        <span
+                          aria-hidden
+                          className="ui-nav-item-marker absolute left-2 right-2 -bottom-px h-0.5 bg-(--accent-primary)"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+              <div
+                className="flex items-center gap-1 md:gap-1.5 ml-auto"
+                style={isElectron ? noDragStyle : undefined}
+              >
+                <ThemeToggle />
+                <label className="hidden lg:block">
+                  <span className="sr-only">
+                    {t("onboarding.language", "Language")}
+                  </span>
+                  {languageSelect(
+                    "h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary",
+                  )}
+                </label>
+                {!isSession && (
+                  <Button
+                    variant="default"
+                    asChild
+                    className="hidden lg:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
+                  >
+                    <Link to="/session">
+                      {t("nav.getStarted", "Get Started")}
+                    </Link>
+                  </Button>
+                )}
+                {/* The desktop nav and the language select are both `lg:`
+                    only, so on a phone this dialog is the ONLY way to reach
+                    worlds / session / plugins / debug or switch language. */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("nav.primary", "Primary")}
+                  aria-haspopup="dialog"
+                  className="h-10 w-10 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control) lg:hidden"
+                  onClick={() => setMobileNavOpen(true)}
+                >
+                  <Menu className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-          </footer>
-        )}
+          </header>
+
+          <main className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
+            <AppErrorBoundary>
+              <Outlet />
+            </AppErrorBoundary>
+          </main>
+        </div>
       </div>
+
+      {/* Radix Dialog brings the focus trap, Escape handling and aria-modal
+          that a hand-rolled dropdown would have to reimplement. */}
+      <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>{t("nav.primary", "Primary")}</DialogTitle>
+          </DialogHeader>
+          <nav className="flex flex-col">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={item.disabled}
+                aria-current={activeNav === item.id ? "page" : undefined}
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  item.onClick();
+                }}
+                className={`h-11 px-2 text-left text-sm transition-colors rounded-(--radius-control) ${
+                  activeNav === item.id
+                    ? "text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                } ${item.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground" : ""}`}
+              >
+                {item.label}
+              </button>
+            ))}
+            <label className="mt-1 flex min-h-11 items-center gap-3 border-t border-border px-2 text-sm text-muted-foreground">
+              <span>{t("onboarding.language", "Language")}</span>
+              {languageSelect(
+                "ml-auto max-w-48 rounded-(--radius-control) border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary",
+                () => setMobileNavOpen(false),
+              )}
+            </label>
+          </nav>
+        </DialogContent>
+      </Dialog>
       {import.meta.env.DEV &&
         showRouterDevtools &&
         import.meta.env.VITE_ROUTER_DEVTOOLS !== "false" && (

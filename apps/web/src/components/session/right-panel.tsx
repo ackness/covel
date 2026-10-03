@@ -1,4 +1,11 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  memo,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Database, BookOpen, HelpCircle, type LucideIcon } from "lucide-react";
 import {
@@ -30,6 +37,8 @@ import { useSession } from "@/stores/session-store.js";
 import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
+import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
+import { PanelStatus } from "./panel-status.js";
 
 export interface StorageStatusData {
   readonly backend?: ServerStoreBackend;
@@ -98,10 +107,16 @@ export interface RightPanelProps {
  * plugin contributions (char-creator "角色" and world-init
  * "世界维度"); the pretty world-dimensions rendering moved into the
  * plugin tab via the `WorldDimensions` covelRegistry component.
+ *
+ * Memoised: the session view re-renders on every slot projection and stream
+ * tick, and a panel re-render remounts the plugin components inside it —
+ * dropping whatever the player was doing there (an upload in flight, an open
+ * field). The panel reads its own state through hooks, so it only needs to
+ * follow its props.
  */
-export function RightPanel({ ...props }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel(props: RightPanelProps) {
   return <SessionRightPanel key={props.sessionId} {...props} />;
-}
+});
 
 function SessionRightPanel({
   sessionId,
@@ -125,6 +140,8 @@ function SessionRightPanel({
   const [pendingPanelRequest, setPendingPanelRequest] =
     useState<RightPanelRequest | null>(null);
   const { state: sessionState } = useSession();
+  // `bar` puts labelled tabs across the top; `rail` keeps the icon strip.
+  const barTabs = useThemeLayout().panelTabs === "bar";
   const activePluginKey = useMemo(
     () =>
       sessionState.sessionPlugins
@@ -272,21 +289,53 @@ function SessionRightPanel({
             : "world"
         }
         onValueChange={setActiveTab}
-        className="flex-1 flex min-h-0 min-w-0"
-        orientation="vertical"
+        className={`flex-1 flex min-h-0 min-w-0 ${barTabs ? "flex-col" : ""}`}
+        orientation={barTabs ? "horizontal" : "vertical"}
       >
         <div
           ref={tabRailRef}
-          className="border-r border-(--rule-color) shrink-0 w-12 min-h-0 overflow-y-auto overscroll-contain"
-          style={{
-            background:
-              "color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page))",
-          }}
+          className={
+            barTabs
+              ? "ui-panel-tabbar shrink-0 overflow-x-auto overscroll-contain border-b border-(--rule-color) px-3"
+              : "border-r border-(--rule-color) shrink-0 w-12 min-h-0 overflow-y-auto overscroll-contain"
+          }
+          style={
+            barTabs
+              ? undefined
+              : {
+                  background:
+                    "color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page))",
+                }
+          }
         >
-          <TabsList className="flex h-auto min-h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground">
+          <TabsList
+            className={
+              barTabs
+                ? "flex h-auto w-max items-center justify-start gap-1 rounded-none bg-transparent p-0 py-2 text-muted-foreground"
+                : "flex h-auto min-h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground"
+            }
+          >
             {tabItems.map((item, idx) => {
               const ItemIcon = item.icon;
               const afterFrameworkTabs = idx === 2;
+              if (barTabs) {
+                return (
+                  <TabsTrigger
+                    key={item.id}
+                    value={item.value}
+                    className="ui-panel-tab h-8 shrink-0 gap-1.5 rounded-(--radius-control) border-0 px-2.5 text-[13px] font-normal text-muted-foreground shadow-none touch-manipulation data-[state=active]:bg-accent data-[state=active]:font-medium data-[state=active]:text-accent-foreground data-[state=active]:shadow-none"
+                    title={item.title ?? item.label}
+                    // The tab may show a short label; its name stays the full one.
+                    aria-label={item.label}
+                  >
+                    <ItemIcon
+                      className="ui-panel-tab-icon h-3.5 w-3.5 shrink-0"
+                      aria-hidden
+                    />
+                    <span>{item.shortLabel ?? item.label}</span>
+                  </TabsTrigger>
+                );
+              }
               return (
                 <div
                   key={item.id}
@@ -320,23 +369,30 @@ function SessionRightPanel({
             })}
           </TabsList>
         </div>
+        {/* The labelled-tab layouts keep the player's status in view above
+            whichever tab is open. */}
+        {barTabs && <PanelStatus sessionId={sessionId} />}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
           <TabsContent value="world" className="p-4 m-0 max-w-full">
-            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
-              <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
-              <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
-                {t("session.worldTab")}
-              </h3>
-            </div>
+            {!barTabs && (
+              <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
+                <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
+                  {t("session.worldTab")}
+                </h3>
+              </div>
+            )}
             <WorldDocumentPanel world={world} />
           </TabsContent>
           <TabsContent value="database" className="p-4 m-0 max-w-full">
-            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
-              <Database className="w-4 h-4 shrink-0 text-muted-foreground" />
-              <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
-                {t("session.database")}
-              </h3>
-            </div>
+            {!barTabs && (
+              <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
+                <Database className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
+                  {t("session.database")}
+                </h3>
+              </div>
+            )}
             <DatabasePanel
               sessionId={sessionId}
               refreshKey={statePatches.length}
@@ -359,9 +415,15 @@ function SessionRightPanel({
                 value={`plugin-${group.id}`}
                 className="p-4 m-0 max-w-full"
               >
-                <div className="mb-3 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
-                  <GroupIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
-                  <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
+                <div
+                  className={`ui-panel-title mb-3 flex min-w-0 items-center gap-2 ${barTabs ? "" : "border-b border-(--rule-color) pb-3"}`}
+                >
+                  {!barTabs && (
+                    <GroupIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <h3
+                    className={`ui-title font-semibold tracking-tight truncate ${barTabs ? "text-base" : "text-sm"}`}
+                  >
                     {group.label}
                   </h3>
                 </div>
@@ -461,43 +523,49 @@ function SessionRightPanel({
           })}
         </div>
       </Tabs>
-      {storageStatus && (
-        <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">
-          <Database className="w-3 h-3" />
-          <span className="ui-meta text-[9px]">
-            {t("session.store", "Store")}
-          </span>
-          <Badge
-            variant="outline"
-            className={`text-[9px] rounded-none ${
-              storageStatus.browserAuthority ||
-              storageStatus.backend === "pg" ||
-              storageStatus.backend === "sqlite"
-                ? "border-green-500/40 text-green-600 dark:text-green-400"
-                : "border-amber-500/40 text-amber-600 dark:text-amber-400"
-            }`}
-          >
-            {storageStatus.browserAuthority
-              ? t("session.storage.browserIndexedDbAuthority")
-              : storageStatus.backend === "pg"
-                ? "PostgreSQL"
-                : storageStatus.backend === "sqlite"
-                  ? "SQLite"
-                  : "Memory"}
-          </Badge>
-          {storageStatus.browserAuthority && (
-            <span className="text-muted-foreground">
-              {t("session.storage.memoryExecutionMirror")}
+      {storageStatus &&
+        // The backend name is operator detail. The labelled-tab layouts keep
+        // the footer only for the one case a player must know: nothing is
+        // being saved.
+        (!barTabs ||
+          (!storageStatus.browserAuthority &&
+            storageStatus.backend === "memory")) && (
+          <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">
+            <Database className="w-3 h-3" />
+            <span className="ui-meta text-[9px]">
+              {t("session.store", "Store")}
             </span>
-          )}
-          {!storageStatus.browserAuthority &&
-            storageStatus.backend === "memory" && (
-              <span className="text-amber-600 dark:text-amber-400">
-                {t("session.memoryStoreWarning", "Data lost on restart")}
+            <Badge
+              variant="outline"
+              className={`text-[9px] rounded-none ${
+                storageStatus.browserAuthority ||
+                storageStatus.backend === "pg" ||
+                storageStatus.backend === "sqlite"
+                  ? "border-green-500/40 text-green-600 dark:text-green-400"
+                  : "border-amber-500/40 text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              {storageStatus.browserAuthority
+                ? t("session.storage.browserIndexedDbAuthority")
+                : storageStatus.backend === "pg"
+                  ? "PostgreSQL"
+                  : storageStatus.backend === "sqlite"
+                    ? "SQLite"
+                    : "Memory"}
+            </Badge>
+            {storageStatus.browserAuthority && (
+              <span className="text-muted-foreground">
+                {t("session.storage.memoryExecutionMirror")}
               </span>
             )}
-        </div>
-      )}
+            {!storageStatus.browserAuthority &&
+              storageStatus.backend === "memory" && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {t("session.memoryStoreWarning", "Data lost on restart")}
+                </span>
+              )}
+          </div>
+        )}
     </div>
   );
 }

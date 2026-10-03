@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { AlertCircle, ArrowDown, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { useAutoScroll } from "@/hooks/use-auto-scroll.js";
+import { useChoiceHotkeys } from "@/hooks/use-choice-hotkeys.js";
+import { ChapterBanner } from "./chapter-banner.js";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,7 @@ import {
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { useSetting } from "@/settings/use-settings.js";
+import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 import { subscribeToStreamingChanges } from "@/stores/streaming-text-store.js";
 import { SessionCanvasHero } from "./chat-messages/session-canvas-hero.js";
 import { ChatMessageRenderer } from "./chat-messages/chat-message-renderer.js";
@@ -93,6 +96,7 @@ export function ChatMessages({
 }: ChatMessagesProps) {
   const { t } = useTranslation();
   const [expandUpdates] = useSetting<boolean>("ui.expandTurnUpdates");
+  const { turnNotes, backdrop } = useThemeLayout();
   const { state: sessionState, loadOlderMessages } = useSession();
   const sessionId = sessionState.session?.id;
   // Sticky-bottom auto-scroll. Follows the stream only while the user is
@@ -124,6 +128,7 @@ export function ChatMessages({
     firstMessageId: messages[0]?.id,
     onLoadOlder: loadOlderMessages,
   });
+  useChoiceHotkeys(viewportEl, !executing);
   const isPreGame = isPreGameSession(session);
   const isPlaying = session.status === "active" && session.phase === "playing";
   const isEnded = session.status === "ended";
@@ -233,6 +238,7 @@ export function ChatMessages({
     renderMessage,
     foldUpdates: viewMode === "parsed",
     expandUpdates: expandUpdates === true,
+    expandLatestUpdates: turnNotes === "inline",
   });
 
   return (
@@ -246,6 +252,13 @@ export function ChatMessages({
             {/* 顶部哨兵（零高度）：进入视口触发游标分页向上加载。放在滚动内容流内，
                 但不产生高度，避免影响加载后的 scrollHeight 差值补偿。 */}
             <div ref={topSentinelRef} aria-hidden="true" />
+
+            {/* Only above the true first message, not above a loaded page. */}
+            {backdrop === "banner" &&
+              messages.length > 0 &&
+              sessionState.olderMessagesCursor == null && (
+                <ChapterBanner world={world} />
+              )}
 
             {messages.length === 0 &&
               !executing &&

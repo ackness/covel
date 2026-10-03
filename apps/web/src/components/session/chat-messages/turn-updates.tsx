@@ -68,7 +68,7 @@ export function TurnUpdates({
   return (
     <details
       open={defaultOpen}
-      className="group rounded border border-border/50 px-3 py-2 text-xs text-muted-foreground"
+      className="ui-turn-updates group rounded border border-border/50 px-3 py-2 text-xs text-muted-foreground"
       data-testid="turn-updates"
     >
       <summary className="cursor-pointer select-none">
