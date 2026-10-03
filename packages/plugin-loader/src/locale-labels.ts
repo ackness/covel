@@ -47,14 +47,14 @@ export interface ManifestLabels {
 }
 
 /** Lists in a manifest are matched by the first of these every element has. */
-const MANIFEST_ARRAY_KEYS = ["id", "name", "key"] as const;
+export const MANIFEST_ARRAY_KEYS = ["id", "name", "key"] as const;
 
 /**
  * The manifest fields that are labels. Everything else in a manifest is the
  * plugin's contract: ids, types, schedules, tool lists. A label file that
  * could reach those would let a translation change, or break, the plugin.
  */
-const MANIFEST_LABEL_KEYS: ReadonlySet<string> = new Set([
+export const MANIFEST_LABEL_KEYS: ReadonlySet<string> = new Set([
   "displayName",
   "description",
   "label",
@@ -202,7 +202,7 @@ export function compileManifestLabels(
   return { data: data as Record<string, unknown>, issues };
 }
 
-async function manifestFilesOf(pluginRoot: string): Promise<string[]> {
+export async function manifestFilesOf(pluginRoot: string): Promise<string[]> {
   const files = ["PLUGIN.md"];
   const runtimes = path.join(pluginRoot, "runtimes");
   let names: string[] = [];

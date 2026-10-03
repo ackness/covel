@@ -15,3 +15,5 @@ messages:
   Memory: 记忆
   Memory blocks not yet initialized, waiting for first turn to complete…: 记忆块尚未初始化，等待首轮游戏结束后自动填充……
   Updates after each turn to keep key plot, scene, and character details.: 每轮结束后自动更新，保存关键剧情、场景和角色信息。
+runtimes/extract/RUNTIME.md:
+  description: 根据刚完成的回合更新记忆块。

@@ -22,6 +22,14 @@ export type { PluginDefinition } from "./load.js";
 export { validatePluginLabels } from "./locale-labels.js";
 export { readMessageCatalogs } from "./locale-messages.js";
 export {
+  lockPluginLabels,
+  pluginLabelUnits,
+  pluginLocales,
+  pluginTranslationStatus,
+  writePluginTranslations,
+} from "./locale-tooling.js";
+export type { LabelUnit, PluginTranslationStatus } from "./locale-tooling.js";
+export {
   pluginDeclarations,
   pluginRuntimeManifests,
   resolvePluginDeclarations,

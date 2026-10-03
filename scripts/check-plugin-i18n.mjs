@@ -7,9 +7,11 @@
  *     nested runtime ui directories.
  *   - A spec holds English text. Bare CJK strings are rejected; translations
  *     go in locales/<locale>.yaml under `messages`.
- *   - Every text of a bundled plugin's UI has a Chinese translation. The old
- *     inline `{ zh, en }` form made a missing one visible where the text was
- *     written; with the translation in another file this check does.
+ *   - Every label and every text of a bundled plugin (manifest, UI, code) has
+ *     a Chinese translation. The old inline `{ zh, en }` form made a missing
+ *     one visible where the text was written; with the translation in another
+ *     file this check does. A label translation must also be recorded in
+ *     locales/lock.json against the English text it was made from.
  *
  * PLUGIN.md frontmatter:
  *   - Scans user-visible fields such as description, displayName, label,
@@ -39,7 +41,7 @@ import {
   localeLanguage,
 } from "@covel/shared";
 // By path: a package-name import can resolve to a stale copy in a worktree.
-import { missingTranslations } from "../packages/plugin-loader/src/locale-messages.ts";
+import { pluginTranslationStatus } from "../packages/plugin-loader/src/locale-tooling.ts";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -504,25 +506,46 @@ function checkWorldFiles() {
   return { files, totalViolations };
 }
 
-/** Bundled plugins ship Chinese: every text of the UI and the code needs a `zh` translation. */
-async function checkBundledUiCoverage() {
+/**
+ * Bundled plugins ship Chinese: every label, and every text of the UI and
+ * the code, needs a `zh` translation. A label translation also has to belong
+ * to the English text the manifest has now: `locales/lock.json` records the
+ * text each one was made from.
+ */
+async function checkBundledTranslations() {
   const pluginsDir = resolve(REPO_ROOT, "plugins");
-  let missing = 0;
+  let problems = 0;
+  const report = (message) => {
+    problems += 1;
+    console.error(message);
+  };
   for (const name of readdirSync(pluginsDir).sort()) {
     const root = join(pluginsDir, name);
     if (name.startsWith("_") || !existsSync(join(root, "PLUGIN.md"))) continue;
-    for (const { file, where, text } of await missingTranslations(root, "zh")) {
-      missing += 1;
-      console.error(
-        `plugins/${name}/${file}: ${where} "${text.slice(0, 60)}" has no Chinese translation - add it to plugins/${name}/locales/zh.yaml under messages (repeat the English text when it is the same in Chinese).`,
+    const zh = `plugins/${name}/locales/zh.yaml`;
+    const { labels, messages } = await pluginTranslationStatus(root, "zh");
+    for (const unit of labels.missing)
+      report(
+        `plugins/${name}/${unit.file}: ${unit.pointer} "${unit.text.slice(0, 60)}" has no Chinese translation - add it to ${zh} under "${unit.file}".`,
       );
-    }
+    for (const unit of labels.stale)
+      report(
+        `plugins/${name}/${unit.file}: ${unit.pointer} changed after its Chinese translation was made - update the translation in ${zh}, then run \`pnpm i18n lock plugins/${name}\`.`,
+      );
+    if (labels.unlocked.length > 0)
+      report(
+        `plugins/${name}: ${labels.unlocked.length} label translation(s) are not recorded in locales/lock.json - check them against the English text, then run \`pnpm i18n lock plugins/${name}\`.`,
+      );
+    for (const { file, where, text } of messages.missing)
+      report(
+        `plugins/${name}/${file}: ${where} "${text.slice(0, 60)}" has no Chinese translation - add it to ${zh} under messages (repeat the English text when it is the same in Chinese).`,
+      );
   }
-  return missing;
+  return problems;
 }
 
 const jsonResult = checkJsonFiles();
-const uiCoverageMissing = await checkBundledUiCoverage();
+const uiCoverageMissing = await checkBundledTranslations();
 const pluginMdResult = checkPluginMarkdownFiles();
 const handlerJsResult = checkHandlerJsFiles();
 const worldResult = checkWorldFiles();

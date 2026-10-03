@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.settings[key=dialogueRatio].description": "1fccd733cda85acd",
+      "PLUGIN.md#contributes.settings[key=dialogueRatio].label": "462417f8de8dd5ff",
+      "PLUGIN.md#contributes.settings[key=narrativePerson].description": "0577b39cc85945d2",
+      "PLUGIN.md#contributes.settings[key=narrativePerson].label": "6b47ac5c987cbcde",
+      "PLUGIN.md#contributes.settings[key=proseLength].label": "195bbecaed5490c0",
+      "PLUGIN.md#description": "aab0909bbfe4896e",
+      "PLUGIN.md#displayName": "7a96e2e10f385014"
+    }
+  }
+}

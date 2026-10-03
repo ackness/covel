@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "labels": {
+    "zh": {
+      "PLUGIN.md#contributes.settings[key=narrativePerson].description": "0577b39cc85945d2",
+      "PLUGIN.md#contributes.settings[key=narrativePerson].label": "6b47ac5c987cbcde",
+      "PLUGIN.md#description": "5f1ec63a2015f76a",
+      "PLUGIN.md#displayName": "6cb7dad53219a64f"
+    }
+  }
+}

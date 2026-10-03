@@ -75,7 +75,10 @@ pnpm validate:collection  # static check of a covel-collection.yaml directory (d
 pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [dir]
 pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool definitions are English;
-                      # Chinese text in framework source only in recorded files
+                      # Chinese text in framework source only in recorded files; every label and
+                      # text of a bundled plugin has a current Chinese translation
+pnpm i18n             # translation tooling for a plugin or world directory: status, extract,
+                      # translate (configured model), lock (docs/reference/i18n.md)
 pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt
                       # (pnpm prompts:lock records a pair after both languages changed)
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
@@ -128,7 +131,8 @@ them in the `X-Provider-Keys` header (base64).
   loaded), `templates/` (plugin scaffolds for `pnpm create-plugin`).
 - Each `plugins/<name>/` needs `PLUGIN.md` + `package.json`; optional `prompts/`,
   `schemas/`, `server/`, `client/`, `ui/`, `tests/`, and `locales/<locale>.yaml`
-  (translations of labels and UI text; manifests and UI specs are English).
+  (translations of labels, UI text and text in code; the main files are English;
+  `locales/lock.json` records the English text each label translation is for).
 - ESM-only, TypeScript strict, ES2022, NodeNext — **use `.js` extensions in TS
   relative imports**. Packages export TS source directly (`"import": "./src/index.ts"`);
   there is no build step for dev.
