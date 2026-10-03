@@ -74,7 +74,7 @@ runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声
 
 Agent 正文放在相应 `PLUGIN.md` 或 `RUNTIME.md`。静态附加段用根 `contributes.prompt`，动态内容用 `prompt.segment@1`。同包静态段不按 runtime 筛选，多 runtime 的局部规则应写在各自正文中。
 
-正文和固定段用 English 写在 canonical 文件里。需要中文指令时加 `PLUGIN.zh.md` / `RUNTIME.zh.md`（内置插件的 agent 提示词必须加，社区插件可选），只写正文和固定段的 `content`，未出现的字段继承 canonical；其他语言不需要也不会读取变体文件，那些会话使用 English 正文并按会话语言输出。工具、依赖、契约、提示词段 ID 和位置不能由变体覆盖。修改任一语言后运行 `pnpm check:prompts`，两边都更新完再运行 `pnpm prompts:lock`。运行时生成的消息使用 `ctx.locale` 选择文案；不要只翻译清单而遗漏工具返回值。
+正文和固定段用 English 写在 canonical 文件里。需要中文指令时加 `PLUGIN.zh.md` / `RUNTIME.zh.md`（内置插件的 agent 提示词必须加，社区插件可选），只写正文和固定段的 `content`，未出现的字段继承 canonical；其他语言不需要也不会读取变体文件，那些会话使用 English 正文并按会话语言输出。工具、依赖、契约、提示词段 ID 和位置不能由变体覆盖。会被保存或显示给玩家的自由文本（名称、描述、摘要）要在正文里明确写“使用叙事正文的语言”：只靠框架开头的语言指令，英文提示词下的抽取类 agent 仍会把一部分字段写成英文。修改任一语言后运行 `pnpm check:prompts`，两边都更新完再运行 `pnpm prompts:lock`。运行时生成的消息使用 `ctx.locale` 选择文案；不要只翻译清单而遗漏工具返回值。
 
 ## 验证与发现
 

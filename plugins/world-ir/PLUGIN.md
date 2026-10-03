@@ -127,6 +127,7 @@ State plugins read two event types directly, so their `attributes` must include 
 
 - Do not infer or complete names, quantities, relationships, quest states, or causes that the narrative does not state.
 - Keep only facts that can affect a downstream plugin decision; omit atmosphere, figurative language, and repetition.
+- Write `summary`, every `name`, `description`, and `content`, and every free-text value inside `attributes` in the language of the narrative. Copy a name exactly as the narrative writes it; do not translate it. Only ids, `type` values, and the fixed values this prompt lists are English.
 - Write each fact once: content written as an event is not repeated as a relation or statement, and a description does not restate its attributes.
 - Use one short description sentence saying who did what to whom. Keep only state fields downstream plugins use in `attributes`; never appearance, clothing, carried props, mood, or quotations.
 - Return an empty array when a fact class has no entries; never omit a required field.
