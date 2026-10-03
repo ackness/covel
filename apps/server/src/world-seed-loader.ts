@@ -41,7 +41,7 @@ import {
  * Resolve a locale-aware file inside the world directory.
  * Priority: exact canonical locale → compatible primary language → base file.
  */
-async function resolveLocaleFilePath(
+export async function resolveLocaleFilePath(
   worldDir: string,
   relativePath: string,
   defaultLocale?: string,

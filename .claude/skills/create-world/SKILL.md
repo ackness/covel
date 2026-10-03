@@ -28,7 +28,7 @@ worlds/<id>/
     └── dimensions.yaml # 外置维度（两个内置世界的做法）
 ```
 
-lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD.md` 是所有 locale 的兜底，必须写；写了 `WORLD.zh.md` 却没有 `WORLD.md`，非 zh 的会话拿到的就是空 lore。`pnpm release:preflight` 会检查每个世界都有 `world.yaml` + 至少一个 `WORLD*.md`。
+lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD.md` 是所有 locale 的兜底，必须写；`pnpm validate:world` 会在声明的语言解析不到 lore 时报错，在缺 `WORLD.md` 兜底时警告。
 
 **维度写在哪** —— 三选一，越往下越适合大世界：
 
@@ -50,7 +50,7 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 - **剧情中自动追加后续事件**：调查、地城、倒计时这类讲后果的世界可以在 `pluginSettings` 写 `story-events: { planner: true }` 开启剧情策划；作者逐条编排角色路线的恋爱世界不要开。它每 3 回合根据游玩中的线索埋下只触发一次的隐藏事件；条件只能引用世界声明的维度和世界时间，所以维度设计得越贴合主线，它埋下的事件越扎实。不需要额外的世界数据。
 - 角色类型和属性写在 `characterSchema: {types, attributes}`；角色导入 `characters` 领域并经 schema 校验，不要镜像到插件数据。插件通过 `pluginPolicy.requested` / `recommended` 选择，目录偏好用 `presetId`、`preferredTags`、`avoidedTags`
 - 题材记忆块写在 `data/memory-blocks.json`（`{id: "world", blocks: [...]}`），由一条 `to: contract:memory.blocks@1` 的 worldData source 导入；接收插件必须在根 `contracts` 和 `contributes.data.<namespace>.accepts` 里声明该契约。不要写已删除的顶层 `memoryBlocks` 字段，也不要用私有 `plugin:` 导入目标
-- **写任何插件 ID 之前先 `ls plugins/` 确认它存在**——schema 不校验插件 ID，拼错要拖到建会话时才暴露
+- 只写真实存在的插件 ID；`pnpm validate:world` 会检查 `pluginPolicy` 与 `pluginSettings` 里的每个 ID，拼错时给出最接近的正确写法
 - 避免泛化的奇幻套路，追求独特的世界设定
 - 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文
 - **world.yaml 的展示字段必须写 I18nText 双语对象**——`name`、`summary`、`characterSchema.attributes[].name`/`.description` 等写 `{ zh: …, en: … }`。schema 虽接受裸 string，但仓库门禁 `check-plugin-i18n` 会扫 `worlds/*/world.yaml`，裸中文直接判违规。WORLD.md、lore、`data/` 种子内容用用户的语言即可（默认中文）
@@ -63,13 +63,12 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 pnpm validate:world worlds/<id>
 ```
 
-它用生产 schema 校验 `world.yaml`，声明了 `worldData` 时还会按服务端加载路径解析 descriptor 和每个 source。
+它校验 `world.yaml`、lore 文件、插件 ID 与契约，并复用建会话时的预检，按接收插件的契约 schema 逐条校验每个 worldData source 的记录（每个声明的语言各一遍）。诊断带文件、位置和修法；有 error 就按提示改完重跑。
 
 按需追加：
 
 | 你写了什么                 | 还要跑什么                                                                                                     |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| 预置了 `contract:*` 种子   | 用目标插件 `plugins/<id>/schemas/*.json` 逐条 Ajv 校验种子记录（L1 不验记录内容，建会话 preflight 才会报错） |
 | factions 含 `relations[]`  | **L2 引用一致性**                                                                                              |
 | 世界写进仓库 `worlds/`     | `pnpm check:plugins`（world.yaml 展示字段 I18nText 门禁）                                                      |
 | 准备对外发布               | **L3 lore 覆盖度** + **L4 真实跑一回合**                                                                       |

@@ -66,7 +66,8 @@ pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); use
 pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
                       # from the Zod schemas; run after changing an author-facing schema field
 pnpm validate:plugin  # validate PLUGIN.md manifests; a plugin DIR also gets cross-runtime checks
-pnpm validate:world   # validate world packages: pnpm validate:world worlds/<id>
+pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, every seed record):
+                      # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>
 pnpm validate:collection  # static check of a covel-collection.yaml directory (docs/guide/collections.md)
 pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [dir]
 pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]

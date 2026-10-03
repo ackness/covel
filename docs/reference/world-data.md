@@ -9,7 +9,7 @@
 ```text
 worlds/my-world/
 ├── world.yaml
-├── WORLD.md                         # 默认世界观；也可用 WORLD.zh.md / WORLD.en.md
+├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en.md 等语言版本
 ├── data/
 │   ├── world.data.yaml
 │   ├── dimensions.yaml
@@ -909,6 +909,31 @@ sources:
     key: id
     merge: skipExisting
 ```
+
+### 静态校验（`pnpm validate:world`）
+
+```bash
+pnpm validate:world worlds/my-world
+pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
+```
+
+校验器不创建会话、不执行插件代码，但复用建会话时的 worldData 预检，因此这里通过的数据在建会话时不会再因记录内容失败。插件目录取仓库 `plugins/` 加上每个 `--plugins <dir>`。
+
+| 诊断 code               | 级别             | 含义                                                                                      |
+| ----------------------- | ---------------- | ----------------------------------------------------------------------------------------- |
+| `manifest-invalid`      | error            | `world.yaml` 无法解析或不符合 schema                                                      |
+| `lore-missing`          | error            | 某个声明的语言（`defaultLocale` / `supportedLocales`）解析不到 lore 文件                  |
+| `lore-fallback-missing` | warning          | 没有 `WORLD.md`，未声明语言的会话会拿到空 lore                                            |
+| `unknown-plugin`        | error 或 warning | `pluginPolicy` / `pluginSettings` 引用的插件 ID 不在已扫描目录中                          |
+| `unknown-setting`       | warning          | `pluginSettings` 的 key 不是该插件声明的设置项，值会被忽略                                |
+| `unprovided-contract`   | error 或 warning | `pluginPolicy.requires` 的契约没有提供者                                                  |
+| `unresolved-contract`   | error 或 warning | source 使用的数据契约没有任何已扫描插件接收                                               |
+| `world-data`            | 与预检一致       | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
+| `locale-keys-differ`    | warning          | 语言变体文件的 `key` 集合与默认文件不一致                                                 |
+
+标为“error 或 warning”的三项：拼写接近某个已知 ID 时判为 error 并提示 “Did you mean”；否则默认是 warning（提供者可能是未扫描的社区插件），加 `--strict` 后一律为 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
+
+每个声明的语言各跑一遍预检，因为[语言变体](#locale-变体解析namelocaleext)会让不同语言读到不同文件。校验逻辑在 `apps/server/src/world-data/validate-world-package.ts`，返回结构化诊断，可被其他工具复用。
 
 ### 开发检查清单
 
