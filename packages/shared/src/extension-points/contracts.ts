@@ -17,6 +17,7 @@ export const kernelUiSlots = {
   dialogue: "stage.dialogue@1",
   choices: "stage.choices@1",
   characterVisual: "character.visual@1",
+  summary: "session.summary@1",
 } as const;
 
 const kernelContracts = new Set<string>([

@@ -43,6 +43,13 @@ contributes:
     - advance-world-time
   actions:
     - time
+  extensions:
+    - point: ui.slot@1
+      id: summary
+      slot: session.summary@1
+      order: 10
+      watch:
+        - clock
 ---
 
 # World Time

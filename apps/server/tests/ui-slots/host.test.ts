@@ -62,6 +62,56 @@ async function fixture(
   return { store, active, services, extensionHost, host, changes, emit };
 }
 describe("UI slot projection host", () => {
+  it("chains summary providers in order and skips one that breaks the contract", async () => {
+    const f = await fixture();
+    const provide = (
+      pluginId: string,
+      order: number,
+      entry: Record<string, unknown>,
+    ) =>
+      f.extensionHost.register(
+        pluginId,
+        {
+          point: uiSlotV1.id,
+          id: "summary",
+          slot: "session.summary@1",
+          order,
+        },
+        {
+          handler: ({ previous }: UiSlotProjectionInput) => ({
+            entries: [
+              ...(previous && "entries" in previous ? previous.entries : []),
+              entry,
+            ],
+          }),
+        },
+      );
+    const time = { id: "time.now", kind: "text", label: "Time", value: "Dusk" };
+    const pack = {
+      id: "inventory.items",
+      kind: "list",
+      label: { zh: "行囊", en: "Pack" },
+      items: ["Rope"],
+      total: 1,
+    };
+    provide("beta", 20, pack);
+    provide("alpha", 10, time);
+    const query = { slot: "session.summary@1" as const };
+    expect(await f.host.get("session", query)).toEqual([
+      expect.objectContaining({ value: { entries: [time, pack] } }),
+    ]);
+
+    // A gauge without its range is not a valid entry: that provider's output
+    // is dropped and the earlier entries stand.
+    f.active.add("gamma");
+    provide("gamma", 30, { id: "bad", kind: "meter", label: "HP", value: 3 });
+    f.host.invalidateSession("session");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await f.host.get("session", query)).toEqual([
+      expect.objectContaining({ value: { entries: [time, pack] } }),
+    ]);
+  });
+
   it("keeps an in-flight session and its queued reads alive across LRU eviction", async () => {
     vi.useFakeTimers();
     const f = await fixture();

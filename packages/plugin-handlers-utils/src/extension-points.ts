@@ -156,7 +156,8 @@ export type UiSlotName =
   | "stage.cast@1"
   | "stage.dialogue@1"
   | "stage.choices@1"
-  | "character.visual@1";
+  | "character.visual@1"
+  | "session.summary@1";
 
 export type StageBackdropModel = {
   readonly sceneId?: string;
@@ -232,6 +233,39 @@ export type CharacterVisualCollectionModel = {
   readonly characters: CharacterVisualModel[];
 };
 
+type SessionSummaryTone = "info" | "success" | "warning" | "danger";
+
+/** One at-a-glance line: a text value, a gauge, or a short list. */
+export type SessionSummaryEntry =
+  | {
+      readonly id: string;
+      readonly label: I18nText;
+      readonly kind: "text";
+      readonly value: I18nText;
+      readonly tone?: SessionSummaryTone;
+    }
+  | {
+      readonly id: string;
+      readonly label: I18nText;
+      readonly kind: "meter";
+      readonly value: number;
+      readonly max: number;
+      readonly min?: number;
+      readonly tone?: SessionSummaryTone;
+    }
+  | {
+      readonly id: string;
+      readonly label: I18nText;
+      readonly kind: "list";
+      readonly items: I18nText[];
+      /** Count of all items when `items` is only the first few. */
+      readonly total?: number;
+    };
+
+export type SessionSummaryModel = {
+  readonly entries: SessionSummaryEntry[];
+};
+
 export type UiSlotValue =
   | StageBackdropModel
   | StageCastModel
@@ -239,6 +273,7 @@ export type UiSlotValue =
   | StageChoicesModel
   | CharacterVisualModel
   | CharacterVisualCollectionModel
+  | SessionSummaryModel
   | null;
 
 export type UiSlotProjectionInput = {

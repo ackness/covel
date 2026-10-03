@@ -24,6 +24,7 @@ describe("inventory open-bag command", () => {
       toolkit: { shortIdBatch, tool, z, store: {} },
       registerRpc,
       registerTool,
+      provideExtension: vi.fn(),
     });
 
     expect(registerTool).not.toHaveBeenCalled();

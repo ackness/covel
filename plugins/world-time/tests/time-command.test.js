@@ -32,6 +32,7 @@ describe("world-time command", () => {
     register({
       registerRpc,
       registerTool: vi.fn(),
+      provideExtension: vi.fn(),
       toolkit: { tool: (definition) => definition, store: {} },
     });
     expect(registerRpc).toHaveBeenCalledWith("time", time, expect.any(Object));

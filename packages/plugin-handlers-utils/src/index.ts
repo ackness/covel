@@ -105,7 +105,10 @@ export type {
   StageChoicesModel,
   CharacterVisualModel,
   CharacterVisualCollectionModel,
+  SessionSummaryEntry,
+  SessionSummaryModel,
 } from "./extension-points.js";
+export { appendSummaryEntries } from "./session-summary.js";
 
 export {
   createNarrativeReview,
