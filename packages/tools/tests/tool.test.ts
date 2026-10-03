@@ -88,6 +88,56 @@ describe("tool()", () => {
     });
   });
 
+  it("says why text sent for an array or object could not be used", async () => {
+    const mod = tool({
+      name: "record",
+      description: "Record changes",
+      parameters: z.object({
+        changes: z.array(z.object({ name: z.string() })),
+        meta: z.object({ turn: z.number() }).optional(),
+      }),
+      execute: async (params) => params,
+    });
+    const ctx = { sessionId: "s", turnId: "t", pluginId: "p", runtimeId: "p" };
+    // One closing brace too many: the text a model sends again and again
+    // when it is told only "expected array, received string".
+    const broken = await mod
+      .execute({ changes: '[{"name":"Mira"}}]' }, ctx)
+      .catch((error: unknown) => error);
+    expect(broken).toMatchObject({
+      details: [
+        {
+          path: "changes",
+          message: expect.stringMatching(
+            /^Expected an array, but received text that is not valid JSON: .*position 16.* near `\[\{"name":"Mira"\}\}\]`\. Send the array itself as the value, not a string that contains it\.$/,
+          ),
+        },
+      ],
+    });
+    await expect(
+      mod.execute({ changes: [], meta: "[1]" }, ctx),
+    ).rejects.toMatchObject({
+      details: [
+        {
+          path: "meta",
+          message:
+            "Expected an object, but received text that holds another JSON type. Send the object itself as the value, not a string that contains it.",
+        },
+      ],
+    });
+    // A value of another type, or an ordinary sentence, keeps the schema's
+    // own message: neither is an attempt at JSON text.
+    for (const [changes, received] of [
+      [7, "received number"],
+      ["Mira joins the crew", "received string"],
+    ] as const)
+      await expect(mod.execute({ changes }, ctx)).rejects.toMatchObject({
+        details: [
+          { path: "changes", message: expect.stringContaining(received) },
+        ],
+      });
+  });
+
   it("publishes the input schema and executes the parsed transform output", async () => {
     const mod = tool({
       name: "text-length",

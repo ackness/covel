@@ -136,7 +136,9 @@ Agent 调用 `echo-value` 时，成功内容是 `{ "ok": true, "value": "..." }`
 `value`、空字符串或超过 80 个字符会得到 `VALIDATION_ERROR`，而不是进入
 handler。模型有时把数组或对象参数写成一段 JSON 文本；schema 在该位置要求
 数组或对象时，`tool()` 先解析这段文本再校验一次，省掉一轮模型重交，解析后
-的内容仍须通过同一 schema。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
+的内容仍须通过同一 schema。文本本身不是合法 JSON 时不做猜测式修补：
+`VALIDATION_ERROR` 会写明解析失败的原因和位置，并要求模型直接传数组或对象
+本身。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
 `tools.builtin`）；它返回成功内容 `{ success, namespace, key }`，并把写入
 作为 `plugin.data` proposal 交给回合末 commit chain。
 
