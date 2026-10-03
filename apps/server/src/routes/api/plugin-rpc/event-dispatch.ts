@@ -36,6 +36,11 @@ import {
  *
  * Like a manual runtime call, the click is the trigger decision: subscriber
  * throttles (`startTurn`, `maxTriggerCount`, `cooldownTurns`) do not apply.
+ *
+ * A community emitter needs a grant for the event, and every community
+ * subscriber needs the same two grants a manual call of that runtime would —
+ * the runtime loader refuses to run it otherwise. The request asks for the
+ * first missing one; the client approves and retries until none is left.
  */
 export async function dispatchPluginEvent(
   c: Context,
@@ -150,6 +155,54 @@ export async function dispatchPluginEvent(
     (runtime) =>
       runtime.trigger?.type === "event" && runtime.trigger.topic === body.topic,
   );
+  for (const runtime of subscribers) {
+    const source = getPluginTrustInfo(
+      runtime.pluginId,
+      pluginRegistry.get(runtime.pluginId)?.source,
+    ).source;
+    if (source !== "community") continue;
+    const operatorDenied = checkHostedOperator(c);
+    if (operatorDenied) return operatorDenied;
+    const scope = sessionApprovalScope(session, runtime.pluginId);
+    const needsServerCode = !gate.hasGrant(
+      sessionId,
+      runtime.pluginId,
+      COMMUNITY_SERVER_CODE_ACTION,
+      scope,
+    );
+    const subscriberVerdict = gate.evaluate({
+      sessionId,
+      sessionScope: scope,
+      pluginId: runtime.pluginId,
+      action: needsServerCode
+        ? COMMUNITY_SERVER_CODE_ACTION
+        : `runtime:${runtime.name}`,
+      payload: data,
+      trustLevel: source,
+      description: needsServerCode
+        ? `Load server-side code for community plugin ${runtime.pluginId}`
+        : runtime.description,
+    });
+    if (subscriberVerdict.status === "pending") {
+      return c.json(
+        {
+          status: "approval-required",
+          approvalId: subscriberVerdict.approvalId,
+          pending: subscriberVerdict.pending,
+        },
+        202,
+      );
+    }
+    if (subscriberVerdict.status === "rejected") {
+      return c.json(
+        errorBody(
+          `approval queue is full (limit ${subscriberVerdict.limit}); try again after resolving pending approvals`,
+          { code: "queue_full" },
+        ),
+        429,
+      );
+    }
+  }
   // The emission has no turn of its own; this id is what its jobs name as
   // their origin.
   const eventId = crypto.randomUUID();

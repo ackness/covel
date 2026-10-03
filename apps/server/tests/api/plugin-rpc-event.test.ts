@@ -11,7 +11,7 @@ import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { createPluginRpcRegistry, createRpcExecutor } from "@covel/runtime";
-import { createRpcApprovalGate } from "@covel/approval";
+import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -24,6 +24,7 @@ import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { listRuntimeJobs } from "../../src/routes/api/plugin-rpc/jobs.js";
+import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
 const SESSION = "sess-event-1";
 const roots: string[] = [];
@@ -104,6 +105,7 @@ function register(
 async function setup(source: PluginSource = "builtin"): Promise<{
   app: Hono;
   store: DataStore;
+  gate: RpcApprovalGate;
 }> {
   const store = createMemoryStore();
   const pluginRegistry = createPluginRegistry();
@@ -182,7 +184,7 @@ async function setup(source: PluginSource = "builtin"): Promise<{
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
-  return { app, store };
+  return { app, store, gate };
 }
 
 function emit(app: Hono, body: Record<string, unknown>) {
@@ -281,17 +283,50 @@ describe("plugin-rpc kind event", () => {
     );
   });
 
-  it("holds a community plugin's event for approval before anything is queued", async () => {
-    ({ app, store } = await setup("community"));
-    const res = await emit(app, {
+  it("asks a community plugin for each grant it lacks, then queues", async () => {
+    let gate: RpcApprovalGate;
+    ({ app, store, gate } = await setup("community"));
+    const session = (await store.getSession(SESSION))!;
+    const request = {
       pluginId: "map",
       topic: "map.location-selected",
       payload: { locationId: "docks" },
-    });
-    expect(res.status).toBe(202);
-    expect(await res.json()).toMatchObject({ status: "approval-required" });
+    };
+    // Loading the plugin's code, emitting the event, and running the
+    // community subscriber are three grants; the builtin subscriber needs none.
+    const asked: string[] = [];
+    for (let step = 0; step < 3; step++) {
+      const res = await emit(app, request);
+      expect(res.status).toBe(202);
+      const body = (await res.json()) as {
+        status: string;
+        approvalId: string;
+        pending: { action: string };
+      };
+      expect(body.status).toBe("approval-required");
+      asked.push(body.pending.action);
+      expect(await listRuntimeJobs(store, { sessionId: SESSION })).toHaveLength(
+        0,
+      );
+      gate.decide(
+        {
+          approvalId: body.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        sessionApprovalScope(session, "map"),
+      );
+    }
+    expect(asked.slice(1)).toEqual([
+      "event:map.location-selected",
+      "runtime:map/travel",
+    ]);
+
+    const res = await emit(app, request);
+    expect(res.status).toBe(200);
     expect(await listRuntimeJobs(store, { sessionId: SESSION })).toHaveLength(
-      0,
+      2,
     );
   });
 });
