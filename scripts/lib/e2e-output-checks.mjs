@@ -131,3 +131,62 @@ export function languageVerdict(row) {
   if (row.wrong === 0) return "ok";
   return row.wrong >= 5 && row.wrong / row.prose >= 0.1 ? "fail" : "warn";
 }
+
+/**
+ * Text in the wrong script that was sent to a model: Chinese, Japanese or
+ * Korean characters in the prompts and tool definitions of a session in
+ * another language. Each distinct line counts once, however many calls
+ * repeat it.
+ *
+ * A model that reads Chinese context answers in Chinese. The output check
+ * sees that answer; this check names where the Chinese came in. Nothing is
+ * checked for a Chinese, Japanese or Korean session: English identifiers and
+ * tool definitions are expected there.
+ *
+ * @param {readonly { type: string, payload: Record<string, unknown> }[]} events
+ * @param {string} locale
+ * @returns {{ runtimeId: string, characters: number, lines: number, example: string }[]}
+ */
+export function promptLanguageReport(events, locale) {
+  if (expectsCjk(locale)) return [];
+  const rows = new Map();
+  const seen = new Set();
+  for (const event of events) {
+    if (event.type !== "llm.calling" || event.payload.concealed) continue;
+    const runtimeId = String(event.payload.runtimeId ?? "?");
+    const texts = [];
+    for (const message of Array.isArray(event.payload.messages)
+      ? event.payload.messages
+      : [])
+      texts.push(
+        typeof message?.content === "string"
+          ? message.content
+          : JSON.stringify(message?.content ?? ""),
+      );
+    for (const tool of Array.isArray(event.payload.tools)
+      ? event.payload.tools
+      : [])
+      texts.push(JSON.stringify(tool));
+    for (const text of texts)
+      for (const line of text.split("\n")) {
+        const characters = line.match(CJK)?.length ?? 0;
+        if (characters === 0) continue;
+        const key = `${runtimeId}\u0000${line}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const row = rows.get(runtimeId) ?? {
+          runtimeId,
+          characters: 0,
+          lines: 0,
+          example: line.trim().slice(0, 90),
+        };
+        rows.set(runtimeId, row);
+        row.characters += characters;
+        row.lines += 1;
+      }
+  }
+  return [...rows.values()].sort(
+    (a, b) =>
+      b.characters - a.characters || a.runtimeId.localeCompare(b.runtimeId),
+  );
+}

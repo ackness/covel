@@ -76,6 +76,7 @@ import { writeFileSync } from "node:fs";
 import {
   languageVerdict,
   outputLanguageReport,
+  promptLanguageReport,
   rejectedToolCalls,
 } from "./lib/e2e-output-checks.mjs";
 
@@ -2234,6 +2235,32 @@ async function runMain(
       else if (verdict === "warn") assertions.warn(message);
       else assertions.pass(`${row.runtimeId} output language`);
     }
+  }
+
+  // What the models were told should be in the session's language too. A
+  // warning: a world with no edition in this language sends its own text.
+  if (args.languageCheck) {
+    const prompts = promptLanguageReport(tracesBody.events, args.locale);
+    if (prompts.length > 0) {
+      const total = prompts.reduce((sum, row) => sum + row.characters, 0);
+      console.log("");
+      console.log(
+        `  Prompt language: ${total} Chinese, Japanese or Korean characters were sent to the model in a ${args.locale} session:`,
+      );
+      printTable(
+        ["characters", "lines", "runtime", "example"],
+        prompts.map((row) => [
+          String(row.characters),
+          String(row.lines),
+          row.runtimeId,
+          row.example,
+        ]),
+      );
+      assertions.warn(
+        `${total} characters in another script were sent to the model in a ${args.locale} session`,
+      );
+    } else if (!/^(zh|ja|ko)([-_]|$)/i.test(args.locale ?? ""))
+      assertions.pass("prompt language");
   }
 
   if (args.strictTraces) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   languageVerdict,
   outputLanguageReport,
+  promptLanguageReport,
   rejectedToolCalls,
 } from "../lib/e2e-output-checks.mjs";
 
@@ -113,4 +114,41 @@ test("fails a runtime only when the wrong-language share is beyond a stray value
   assert.equal(languageVerdict({ prose: 20, wrong: 4 }), "warn");
   assert.equal(languageVerdict({ prose: 224, wrong: 67 }), "fail");
   assert.equal(languageVerdict({ prose: 400, wrong: 6 }), "warn");
+});
+
+test("names the runtime whose prompt carries another script", () => {
+  const calling = (runtimeId, content, extra = {}) => ({
+    type: "llm.calling",
+    payload: { runtimeId, messages: [{ role: "system", content }], ...extra },
+  });
+  const events = [
+    // The same line in two calls counts once.
+    calling(
+      "codex",
+      'Entries:\n- category: {"zh":"怪物","en":"Monsters"}\n- title: Fog hound',
+    ),
+    calling(
+      "codex",
+      'Entries:\n- category: {"zh":"怪物","en":"Monsters"}\n- title: Fog hound',
+    ),
+    calling("narrator", "Write the next scene.", {
+      tools: [{ name: "note", description: "记录一条笔记" }],
+    }),
+    calling("plotter", "隐藏的剧情安排", { concealed: true }),
+    calling("guide", "Suggest three actions."),
+  ];
+
+  assert.deepEqual(
+    promptLanguageReport(events, "en-US").map((row) => [
+      row.runtimeId,
+      row.characters,
+      row.lines,
+    ]),
+    [
+      ["narrator", 6, 1],
+      ["codex", 2, 1],
+    ],
+  );
+  // English identifiers and tool definitions are expected in a Chinese session.
+  assert.deepEqual(promptLanguageReport(events, "zh-CN"), []);
 });
