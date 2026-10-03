@@ -74,7 +74,8 @@ pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, eve
 pnpm validate:collection  # static check of a covel-collection.yaml directory (docs/guide/collections.md)
 pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [dir]
 pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]
-pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs
+pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool definitions are English;
+                      # Chinese text in framework source only in recorded files
 pnpm check:prompts    # plugin prompts are English; each *.zh.md variant matches its English prompt
                       # (pnpm prompts:lock records a pair after both languages changed)
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)

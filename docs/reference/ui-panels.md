@@ -272,7 +272,7 @@ type I18nText = string | Record<LocaleTag, string>;
 
 **框架端解析器**：`resolveI18n(value, locale?)` 与 `useI18nResolver()` 由 `apps/web/src/lib/catalog/helpers.tsx` 导出，渲染器直接从该模块导入。所有内置 ComponentRenderer 已调用 hook 订阅 locale 变更；切语言时 json-render 子树会自动重渲染。
 
-**验证**：`pnpm check:i18n` 会同时跑 `check-no-chinese-literal`（应用代码）与 `check-plugin-i18n`（插件 JSON）两套扫描。
+**验证**：`pnpm check:i18n` 会同时跑 `check-no-chinese-literal`（应用代码）与 `check-plugin-i18n` 两套扫描。后者除了插件 JSON、清单和 handler 里的玩家可见标签，还检查发给模型的文本：插件与模板里工具和参数的说明必须是英文；框架源码里出现中文的文件及行数记录在脚本的 `FRAMEWORK_CHINESE_LINES` 表里，新增或改动都要显式更新这张表。
 
 ### json-render 绑定速查
 

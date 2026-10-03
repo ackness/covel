@@ -14,12 +14,21 @@
  *   - Bare CJK strings in those fields are rejected.
  *   - I18nText objects may use any locale and must include an English fallback.
  *
+ * Text that reaches a model:
+ *   - Tool and parameter descriptions in plugin and template handlers are
+ *     English. A Chinese tool definition goes to the model in every session.
+ *   - Framework source holds Chinese only in the files recorded below.
+ *
  * Exit code: 0 = OK, 1 = violations found.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+import {
+  checkFrameworkChinese,
+  findChineseToolText,
+} from "./lib/model-facing-text.mjs";
 import {
   applyLocaleOverlay,
   canonicalizeLocale,
@@ -138,6 +147,49 @@ function isPluginHandlerJsFile(rel) {
   return true;
 }
 
+/**
+ * Lines of Chinese text, outside comments, in each framework source file that
+ * has any. A file that is not listed, or whose count changes, fails the check.
+ * Before adding a line here, ask who reads the text: a model reads English
+ * (or the Chinese variant of an instruction, chosen by `instructionLocaleFor`);
+ * a player reads a locale pair.
+ */
+const FRAMEWORK_CHINESE_LINES = {
+  // Player-facing label and notice pairs.
+  "apps/desktop/src/main-i18n.ts": 59,
+  "apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts": 2,
+  "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
+  "apps/server/src/routes/api/session/commands.ts": 4,
+  "apps/server/src/routes/misc-api/plugin-flow.ts": 6,
+  "packages/runtime/src/rpc-defaults/submit-form.ts": 6,
+  "packages/shared/src/utils/locale-registry.ts": 4,
+  // Chinese variants of framework instructions, each beside its English text.
+  "packages/context/src/prompt-internals.ts": 5,
+  "packages/plugin-handlers-utils/src/narrative-review.ts": 9,
+  "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
+  "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
+  // Patterns that match Chinese text.
+  "packages/context/src/budget.ts": 1,
+  "packages/create/src/validation-helpers.ts": 7,
+  "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
+  "packages/tools/src/builtin/tool-search.ts": 2,
+  // Example input for tests and the CLI.
+  "packages/plugin-test-utils/src/factories.ts": 1,
+  "packages/test-runtime/src/cli.ts": 1,
+};
+
+function frameworkRoots() {
+  const packages = resolve(REPO_ROOT, "packages");
+  return [
+    "apps/server/src",
+    "apps/desktop/src",
+    ...readdirSync(packages)
+      .filter((name) => existsSync(join(packages, name, "src")))
+      .sort()
+      .map((name) => `packages/${name}/src`),
+  ];
+}
+
 // A UI-label-ish object key assigned a bare quoted string literal. Catches
 // `label: "观察"` written into plugin_data by a tool/handler (which bypasses
 // the JSON/frontmatter scans above and renders untranslated for en players),
@@ -167,6 +219,12 @@ function checkHandlerJsFiles() {
       totalViolations += 1;
       console.error(
         `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - store it as an I18nText object with the target locale and an English fallback so the frontend resolves the locale.`,
+      );
+    }
+    for (const hit of findChineseToolText(text)) {
+      totalViolations += 1;
+      console.error(
+        `${rel}:${hit.line}: tool or parameter description "${hit.text}" is Chinese - a tool definition is an instruction and goes to the model in every session language; write it in English.`,
       );
     }
     UNSAFE_HANDLER_LOCALE_BRANCH_RE.lastIndex = 0;
@@ -445,11 +503,18 @@ const jsonResult = checkJsonFiles();
 const pluginMdResult = checkPluginMarkdownFiles();
 const handlerJsResult = checkHandlerJsFiles();
 const worldResult = checkWorldFiles();
+const frameworkProblems = checkFrameworkChinese({
+  repoRoot: REPO_ROOT,
+  roots: frameworkRoots(),
+  allowed: FRAMEWORK_CHINESE_LINES,
+});
+for (const problem of frameworkProblems) console.error(problem);
 const totalViolations =
   jsonResult.totalViolations +
   pluginMdResult.totalViolations +
   handlerJsResult.totalViolations +
-  worldResult.totalViolations;
+  worldResult.totalViolations +
+  frameworkProblems.length;
 
 if (totalViolations > 0) {
   console.error(
@@ -459,5 +524,5 @@ if (totalViolations > 0) {
 }
 
 console.log(
-  `check-plugin-i18n: OK (${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s), ${handlerJsResult.files.length} handler .js file(s), ${worldResult.files.length} world.yaml file(s) scanned)`,
+  `check-plugin-i18n: OK (${jsonResult.files.length} plugin/template UI file(s), ${pluginMdResult.files.length} PLUGIN.md file(s), ${handlerJsResult.files.length} handler .js file(s), ${worldResult.files.length} world.yaml file(s), ${Object.keys(FRAMEWORK_CHINESE_LINES).length} framework file(s) with recorded Chinese text scanned)`,
 );

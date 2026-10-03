@@ -11,11 +11,19 @@ export default function ({ tool, z, shortId, withPendingProposals }) {
   return tool({
     name: "record-note",
     description:
-      "记录一条和本插件目标相关的结构化笔记。只在叙事中出现可复用的新信息时调用。",
+      "Record one structured note that serves this plugin's purpose. Call it only when the narrative gives new information worth reusing.",
     parameters: z.object({
-      title: z.string().min(1).max(80).describe("短标题"),
-      text: z.string().min(1).max(500).describe("一到两句具体记录"),
-      tags: z.array(z.string().min(1)).max(5).default([]).describe("分类标签"),
+      title: z.string().min(1).max(80).describe("Short title"),
+      text: z
+        .string()
+        .min(1)
+        .max(500)
+        .describe("The note itself, one or two concrete sentences"),
+      tags: z
+        .array(z.string().min(1))
+        .max(5)
+        .default([])
+        .describe("Category tags"),
     }),
     execute: async (params, context) => {
       const key = shortId("note", params.title, context.sessionId);

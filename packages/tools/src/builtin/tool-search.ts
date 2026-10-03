@@ -33,7 +33,7 @@ export const SEARCH_TOOLS_JSON_SCHEMA: Readonly<Record<string, unknown>> = {
     query: {
       type: "string",
       description:
-        "Capability keywords describing the tool you need (English or Chinese), e.g. 'change scene background' / '切换场景背景'.",
+        "Capability keywords describing the tool you need, in any language, e.g. 'change scene background'.",
     },
     limit: {
       type: "number",
