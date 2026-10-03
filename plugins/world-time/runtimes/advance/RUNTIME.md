@@ -55,5 +55,5 @@ Estimate the duration of what actually happened: brief conversation is short; sl
 - forward/backward: normally omit direction and let the policy choose.
 - bidirectional: choose direction from the narrative and author prompt.
 - random: submit only reason. The tool samples the authored range deterministically from turn identity.
-- Calendar units: minute/hour/day; phase units: phase/cycle.
+- Units: use only a unit in `currentTime.value.units`. A world that counts phases has no minutes or hours. When the events stay in the current phase, send amount 0.
 - Correct tool validation errors within the available budget. A successful tool call completes this runtime.

@@ -347,8 +347,12 @@ export function validateDimensionValue(
       const length = Array.from(input).length;
       if (node.minLength !== undefined && length < node.minLength)
         add(`Minimum length is ${node.minLength} (got ${length})`);
+      // A model does not count characters: with the limit and the length
+      // alone it cut 16 of 104. The amount to remove is a target it can use.
       if (node.maxLength !== undefined && length > node.maxLength)
-        add(`Maximum length is ${node.maxLength} (got ${length})`);
+        add(
+          `Maximum length is ${node.maxLength} (got ${length}): remove at least ${length - node.maxLength} characters`,
+        );
     }
     if (Array.isArray(input)) {
       if (node.minItems !== undefined && input.length < node.minItems)

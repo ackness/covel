@@ -111,6 +111,32 @@ describe("create-character-form schema boundary", () => {
       /systems/,
     );
   });
+  it("names every refused field and what the world lets the form hold", async () => {
+    const invented = {
+      ...params,
+      fields: [
+        ...params.fields,
+        { name: "duty", type: "text", label: "Duty" },
+        { name: "systems", type: "text", label: "Systems" },
+      ],
+    };
+    await expect(
+      createCharacterForm.execute(invented, context),
+    ).rejects.toThrow(
+      /duty \(not an attribute of this world\), systems \(a number attribute.*motive \(string\), occupation \(enum: engineer \| medic\)/,
+    );
+    // A world with numeric attributes only: the name is the whole form.
+    await expect(
+      createCharacterForm.execute(invented, {
+        ...context,
+        world: {
+          characterSchema: {
+            attributes: [context.world.characterSchema.attributes[1]],
+          },
+        },
+      }),
+    ).rejects.toThrow(/the form has one field: characterName/);
+  });
   it("keeps exact enum values and rejects narrative synonyms", async () => {
     const valid = {
       ...params,

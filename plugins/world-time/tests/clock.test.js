@@ -8,6 +8,7 @@ import {
   describeTime,
   initialTick,
   loadTime,
+  timeUnits,
 } from "../clock.js";
 
 const calendar = {
@@ -217,6 +218,20 @@ describe("world-owned time", () => {
     expect(() => advanceTime(definition, 0, { amount: 1 }, "t")).toThrow(
       /omit/,
     );
+  });
+  it("names the units of the clock and takes zero in any unit", () => {
+    expect(timeUnits(phases)).toEqual(["phase", "cycle"]);
+    expect(timeUnits(calendar)).toEqual(["minute", "hour", "day"]);
+    // A short scene on a phase clock: the model reports minutes.
+    expect(() =>
+      advanceTime(phases, 0, { amount: 15, unit: "minute" }, "t"),
+    ).toThrow(/Use unit "phase" or "cycle"\. Use amount 0/);
+    expect(() =>
+      advanceTime(calendar, 0, { amount: 1, unit: "phase" }, "t"),
+    ).toThrow(/Use unit "minute", "hour" or "day"/);
+    expect(
+      advanceTime(phases, 5, { amount: 0, unit: "minute" }, "t"),
+    ).toMatchObject({ tick: 5 });
   });
   it("rejects unsupported units, direction violations, excessive spans and overflow", () => {
     expect(() =>

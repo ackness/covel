@@ -544,7 +544,7 @@ LLM 只看到预算内的 `_text`，trace/调试保留完整结构化结果。�
 
 **辅助 API 迁移**：`overlayCharacters(proposals, stored, sessionId)` 现在必须接收已存储角色和会话 ID，返回该会话完整角色视图的 `Map<string, CharacterRecord>`，不再返回最后一条原始 payload。结果与输入引用隔离。`CharacterRecord` 由 `@covel/shared` 定义，`@covel/store` 保留同名类型导出。
 
-`char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
+`char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。表单含有不可收集的字段时，工具一次列出全部被拒字段及原因（不是世界属性，或是数值/复合属性），并给出该世界可收集的属性清单；世界没有 string/enum 属性时明确说明表单只有 `characterName` 一个字段。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
 
 创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
 

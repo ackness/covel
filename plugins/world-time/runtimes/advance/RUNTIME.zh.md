@@ -10,5 +10,5 @@
 - forward / backward：方向由定义决定，通常省略 direction。
 - bidirectional：根据叙事证据和作者 prompt 选择 direction。
 - random：只提交 reason，不提交 amount、unit 或 direction；工具根据世界范围和回合标识确定性抽样。
-- calendar 单位：minute / hour / day；phases 单位：phase / cycle。
+- 单位：只使用 `currentTime.value.units` 中列出的单位。按阶段计时的世界没有分钟和小时。事件仍在当前阶段内时，提交 amount 0。
 - 工具校验失败时依据错误修正，成功后框架自动结束。

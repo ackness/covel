@@ -331,7 +331,10 @@ describe("public dimension snapshots and explicit localization", () => {
         note: { "zh-CN": "城墙", "en-US": "City wall" },
       }),
     ).toEqual([
-      { path: ["note", "en-US"], message: "Maximum length is 5 (got 9)" },
+      {
+        path: ["note", "en-US"],
+        message: "Maximum length is 5 (got 9): remove at least 4 characters",
+      },
     ]);
   });
 });

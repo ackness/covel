@@ -66,8 +66,9 @@ Prefer `<same-turn-world-schema>` at the end of the prompt; when absent, fall ba
 Form rules:
 
 - `characterName` must be a `required: true` text field.
-- Choose at most 3 string or enum fields from `world schema attributes`, preferring `bio`, then `abilities`. Exclude all number, array, object, map, and boolean fields and retain their schema defaults. Each field `name` must exactly equal its attribute `id`; all non-name fields are optional. Never replace numeric attributes with background-style choices.
-- Map `enum` to `select` with option values copied exactly from the schema options. Prefer `text` for `string`; `textarea` or `select` with string-valued suggestions also works. If no suitable attributes exist, collect only characterName.
+- The other fields come only from the schema `attributes` whose `type` is `string` or `enum`: at most 3 of them. Each field `name` must exactly equal its attribute `id`; all non-name fields are optional. Do not add any other field. A duty, a background or a keepsake is not a field unless the schema declares it. Exclude all number, array, object, map, and boolean attributes and retain their schema defaults. Never replace numeric attributes with background-style choices.
+- When the schema has no `string` or `enum` attribute, the form has one field: `characterName`. Write the other details as fixed text in `narrativeTemplate`.
+- Map `enum` to `select` with option values copied exactly from the schema options. Prefer `text` for `string`; `textarea` or `select` with string-valued suggestions also works.
 - When options need explanations, use `{ value, label }` and keep `value` short enough for narrative interpolation. Any optional field referenced by `narrativeTemplate` needs a natural `defaultValue`; a select default must equal one option value.
 - Pass `formId: "char-creation"` and `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`, plus a fitting title, submit label, fields, and `narrativeTemplate` with field placeholders.
 - Use at most 4 fields total. Call `create-character-form` exactly once; do not call `runtime-done`.

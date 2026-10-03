@@ -152,7 +152,7 @@ const formFieldSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["defaultValue"],
-        message: "select defaultValue must match a declared option value",
+        message: `select defaultValue ${JSON.stringify(field.defaultValue)} must match a declared option value exactly. The option values are: ${values.map((value) => JSON.stringify(value)).join(", ")}`,
       });
     }
   });

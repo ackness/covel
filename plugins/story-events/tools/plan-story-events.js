@@ -19,29 +19,46 @@ function slotValue(context, name) {
   return slot && "value" in slot ? slot.value : undefined;
 }
 
+/** "a, b, c", or what to do when there is nothing to choose from. */
+function choices(values, none) {
+  const list = [...values];
+  return list.length ? list.slice(0, 16).join(", ") : none;
+}
+
+// An error names what the model can use instead. With "unknown event: x"
+// alone it guessed another name, was rejected again, and then added the
+// missing event as a third one, which the limit of two rejected as well.
 function leafIssues(leaf, refs) {
   const kinds = ["dimension", "time", "revealed"].filter(
     (key) => leaf[key] !== undefined,
   );
   if (kinds.length !== 1)
     return [
-      "each condition references exactly one of dimension, time, revealed",
+      `a condition references exactly one of dimension, time, revealed; this one has ${kinds.length ? kinds.join(" and ") : "none"}. Write one condition for each`,
     ];
   const [kind] = kinds;
   if (kind === "revealed")
     return refs.eventIds.has(leaf.revealed)
       ? []
-      : [`unknown event: ${leaf.revealed}`];
+      : [
+          `unknown event: ${leaf.revealed}. \`revealed\` takes the ID of an event in storyEvents.value (${choices(refs.knownEventIds, "none yet")}) or of an event in this call. Use one of them or remove the condition`,
+        ];
   const operators = OPERATORS.filter((key) => leaf[key] !== undefined);
   if (operators.length !== 1)
-    return ["each dimension or time condition needs exactly one operator"];
+    return [
+      `a dimension or time condition has exactly one operator; this one has ${operators.length ? operators.join(" and ") : "none"}. For a range, write two conditions`,
+    ];
   if (kind === "dimension")
     return refs.dimensions.has(leaf.dimension)
       ? []
-      : [`unknown dimension: ${leaf.dimension}`];
+      : [
+          `unknown dimension: ${leaf.dimension}. The dimensions are: ${choices(refs.dimensions, "none in this world; use time or revealed")}`,
+        ];
   return refs.timeFields.has(leaf.time)
     ? []
-    : [`unknown time field: ${leaf.time}`];
+    : [
+        `unknown time field: ${leaf.time}. The numeric fields of worldTime.value are: ${choices(refs.timeFields, "none; use dimension or revealed")}`,
+      ];
 }
 
 function toCondition(all, none) {
@@ -64,8 +81,14 @@ export default function ({ tool, z }) {
       time: z
         .string()
         .optional()
-        .describe("Numeric world-time field such as phase or day"),
-      revealed: id.optional().describe("Holds once this event has fired"),
+        .describe(
+          "Name of a numeric field of worldTime.value. A world has its own fields: read them there",
+        ),
+      revealed: id
+        .optional()
+        .describe(
+          "ID of an event in storyEvents.value or in this call; the condition holds once that event has fired",
+        ),
       turnsSinceGte: z.number().int().min(0).optional(),
       turnsSinceLte: z.number().int().min(0).optional(),
       equals: scalar.optional(),
@@ -122,7 +145,13 @@ export default function ({ tool, z }) {
           .max(4)
           .optional()
           .describe("Pending planned event IDs to withdraw"),
-        reason: z.string().min(1).max(300),
+        // One or two sentences. The model does not count characters, so
+        // the limit is far from what the description asks for.
+        reason: z
+          .string()
+          .min(1)
+          .max(600)
+          .describe("Why these events, in one or two sentences"),
       })
       .strict(),
     execute: async (params, context) => {
@@ -140,6 +169,7 @@ export default function ({ tool, z }) {
         timeFields: new Set(
           Object.keys(time).filter((key) => typeof time[key] === "number"),
         ),
+        knownEventIds: known,
         eventIds: new Set([...known, ...params.events.map((item) => item.id)]),
       };
 

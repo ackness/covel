@@ -129,6 +129,24 @@ function seededFraction(seed) {
   return (hash >>> 0) / 4294967296;
 }
 
+/**
+ * The units a duration can use on this clock. The first one is the base unit.
+ */
+export function timeUnits(definition) {
+  return definition.kind === "calendar"
+    ? ["minute", "hour", "day"]
+    : ["phase", "cycle"];
+}
+
+/** Tells the caller which units this clock has, not only that one is wrong. */
+function unitError(definition, unit) {
+  const names = timeUnits(definition).map((name) => `"${name}"`);
+  const usable = `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+  return definition.kind === "calendar"
+    ? `Unit ${unit} is not available: this world counts time on a calendar. Use unit ${usable}.`
+    : `Unit ${unit} is not available: this world counts time in phases, not in minutes or hours. Use unit ${usable}. Use amount 0 when the events stay in the current phase.`;
+}
+
 export function advanceTime(definition, tick, request, turnId) {
   const rule = definition.evolution;
   let delta;
@@ -162,19 +180,18 @@ export function advanceTime(definition, tick, request, turnId) {
             day: calendarSizes(definition).day,
           }
         : { phase: 1, cycle: definition.phases.length };
-    const unit =
-      request.unit ?? (definition.kind === "calendar" ? "minute" : "phase");
-    if (!Object.hasOwn(units, unit))
-      throw new Error(
-        `Unit ${unit} is not available for ${definition.kind} time`,
-      );
+    const unit = request.unit ?? timeUnits(definition)[0];
+    // Zero is the same duration in every unit.
+    if (!Object.hasOwn(units, unit) && amount !== 0)
+      throw new Error(unitError(definition, unit));
+    const unitSize = Object.hasOwn(units, unit) ? units[unit] : 0;
     const direction =
       request.direction ?? (rule.mode === "backward" ? "backward" : "forward");
     if (!["forward", "backward"].includes(direction))
       throw new Error("Invalid time direction");
     if (rule.mode !== "bidirectional" && direction !== rule.mode)
       throw new Error(`Time policy only permits ${rule.mode} movement`);
-    delta = safe(amount * units[unit]) * (direction === "backward" ? -1 : 1);
+    delta = safe(amount * unitSize) * (direction === "backward" ? -1 : 1);
   }
   if (Math.abs(delta) > rule.maxStep)
     throw new Error(`Time change exceeds maxStep (${rule.maxStep} base units)`);
@@ -200,6 +217,7 @@ export async function loadTime(store, locale, ctx) {
       ...state,
       definition,
       ...describeTime(definition, state.tick, locale),
+      units: timeUnits(definition),
       locale,
     };
   }
@@ -213,6 +231,7 @@ export async function loadTime(store, locale, ctx) {
     definition,
     tick,
     ...describeTime(definition, tick, locale),
+    units: timeUnits(definition),
     locale,
   };
 }
