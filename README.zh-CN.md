@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.44-8b5cf6)](./docs/CHANGELOG.md#0044---2026-10-01)
+[![Version](https://img.shields.io/badge/version-v0.0.45-8b5cf6)](./docs/CHANGELOG.md#0045---2026-10-03)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,17 +13,18 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前源码版本：v0.0.44**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；升级前请阅读 [v0.0.44 升级说明](./docs/CHANGELOG.md#breaking-contracts-and-upgrade-notes)，从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/guide/upgrade-0.0.42.md)。已有开发数据不会自动迁移，请在重建受影响的存储前保留完整备份。
+> **当前源码版本：v0.0.45**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，尚未签名，macOS 构建也未公证；升级前请阅读 [v0.0.45 升级说明](./docs/CHANGELOG.md#breaking-contracts-and-upgrade-notes)，从 v0.0.42 之前的版本升级还需遵循 [v0.0.42 升级指南](./docs/guide/upgrade-0.0.42.md)。已有开发数据不会自动迁移，请在重建受影响的存储前保留完整备份。
 
 ## 亮点
 
-- 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。为场景舞台配置图像模型后，可在游玩中补齐缺失背景。社区生图插件提供独立的剧情插画与画廊流程，见[图像生成](docs/reference/image-generation.md)。
+- 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。背景来自世界包的场景图；没有对应场景图的地点显示世界主图。社区生图插件提供独立的剧情插画与画廊流程，见[图像生成](docs/reference/image-generation.md)。
 - ⚙️ **可组合的插件 runtime** —— 在一条能力驱动的管线中组合 LLM agent、确定性函数、UI 面板、数据 schema、事件和生命周期 hook。
 - 🎲 **内置 RPG 玩法** —— 预掷骰判定（可视化回执）、自动跟踪的任务日志、玩家可直接操作的行囊、逐 NPC 好感度。全部是可选插件；世界包可以预置任务、开局装备与初始好感。
 - 🧩 **插件保持可替换** —— 内核通过版本化契约和声明的输出可见性发现能力，框架代码不按具体插件 ID 分支。
-- 🎲 **可选配点规则** —— `tabletop-rules` 使用第三方 ZIP 包同样可用的类型化表单、校验器和确定性工具接口。两个叙事插件均支持人称设置，正文检查后整段展示。
+- 🎲 **可选配点规则** —— `tabletop-rules` 使用第三方 ZIP 包同样可用的类型化表单、校验器和确定性工具接口。两个叙事插件均支持人称设置；正文边写边流式展示，完成时替换为检查后的终稿。
 - 🌍 **可移植世界包** —— 用同一套 `WorldData` 导入协议携带世界观、角色 schema、主要角色、规则、记忆块、任务、物品、立绘、场景与插件默认值。
 - 🔄 **共享 WorldIR** —— 回合后先生成一次插件中立事实投影，任务、行囊、好感、图鉴与关系插件复用同一份证据，不再各自重读故事。
+- 🕯️ **隐藏剧情事件** —— 世界包可以携带隐藏事件：在维度、世界时间或前置事件条件满足之前，它们不会出现在提示词、工具和公开 API 中；可选的剧情规划器还会在游玩过程中埋下后续事件。
 - 🔌 **自带模型** —— OpenAI / Anthropic / DeepSeek / Qwen 模型槽位。本地优先：SQLite 落盘；Web 模式将 API 密钥存入浏览器 localStorage，桌面模式将密钥以明文保存到 `~/.covel/keys.env`。
 
 ## 两种玩法
@@ -95,7 +96,7 @@ worlds/my-world/
     └── 角色 presence 与场景索引
 ```
 
-`pluginPolicy` 选择预设，并以 `requested`、`recommended` 声明插件；版本化契约负责解析依赖，推荐项仍由玩家选择。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
+`pluginPolicy` 选择预设，并以 `requested`、`recommended` 声明插件；版本化契约负责解析依赖，推荐项仍由玩家选择。`requires` 列出世界离不开的契约（如 `action-check@1`）：任何提供该契约的已安装插件都能满足，没有提供者时无法开始游戏。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
 
 `WorldData` 是统一导入协议，不是第二种世界格式。source 可以是 YAML、JSON、Markdown、文本或媒体，目标可以是通用角色/资料库，也可以是明确接受 WorldData 的插件 namespace。应用内 AI 构筑器生成的也是同一套标准包：它会根据结构化创作简报生成 manifest、世界观、维度、主要角色、资料库和规则。文件型世界包可以携带完整媒体；浏览器或 store 中的 AI 世界保留可移植文本回退，媒体仍由文件或资源存储承载。
 
@@ -148,7 +149,7 @@ worlds/my-world/data/rules/core.ja.yaml
 - **[插件目录](https://github.com/covel-ai/covel-plugins)** —— 官方生图、TTS 插件、Jev Demo 与开发示例，社区插件单独收录。
 - **[世界目录](https://github.com/covel-ai/covel-worlds)** —— 官方世界示例与社区世界列表，方便发现新的故事设定。
 
-两个目录默认展示英文，并提供中文及其他已有译文的快速链接。在 **设置 → 安装与管理** 粘贴 GitHub 仓库或资源包目录链接，预览内容、选择资源包并确认风险。同一个仓库的多个资源包可以分别安装，下载遵循已配置的代理。插件安装后需要重启后端并在会话中授权；新安装的世界包立即可用。
+两个目录默认展示英文，并提供中文及其他已有译文的快速链接。在 **设置 → 安装与管理** 粘贴 GitHub 仓库或资源包目录链接，预览其中的插件和世界包，勾选要安装的内容并一次确认风险。所选内容作为一个整体安装（先插件后世界），世界包和它需要的插件可以一起装好；作者也可以用[合集](./docs/guide/collections.md)清单列出这样一组内容，包括其他仓库里的包。下载遵循已配置的代理。插件安装后需要重启后端并在会话中授权；新安装的世界包立即可用。
 
 点击已安装资源包旁的 **检查更新** 可查看变化，确认的更新在重启后端后生效；本地修改会阻止覆盖。详见[插件安装说明](./docs/reference/plugin-installation.md)和[世界包安装说明](./docs/reference/world-installation.md)。
 
@@ -171,6 +172,7 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 - **雾港·裂潮纪（Mistport Chronicles）** —— 传统叙事模式的黑暗奇幻调查。自定义插件组合、中英双语世界观、调查记忆、角色蓝图、规则与立绘，展示世界如何在不 fork 框架的前提下形成自己的玩法。
 - **遥风学园（Haruka Academy）** —— 舞台模式的校园群像恋爱。对话策略、角色关系、题材记忆、透明立绘与日夜场景注册表，把同一套内核组合成视觉小说。
 - **Emberback Relay** —— 默认语言为英文（`en-US`）的传统叙事科幻边境悬疑。潮汐锁定星球上的孤独中继站，收到一段来自七十二小时后、由玩家自己发出的求救。预置任务、行囊、好感、规则、角色蓝图、立绘与五项判定属性，是 RPG 插件套件的参考世界包。
+- **提灯古冢・初次远征（Lantern Barrow: First Expedition）** —— 中英双语的经典跑团地城探索。开局配点、d20 属性检定、任务、行囊、队友好感，以及地城地图、警戒、提灯与名望面板；它以 `action-check@1` 契约声明对判定能力的依赖，而不是点名某个骰子插件。
 
 ## 创造你自己的
 
