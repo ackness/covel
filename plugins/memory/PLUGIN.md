@@ -28,6 +28,22 @@ contributes:
       accepts:
         - memory.blocks@1
       schema: ./schemas/block-definitions.schema.json
+      description: World-defined memory blocks that replace the default set.
+      authoring:
+        title:
+          zh: 题材记忆块
+          en: Memory blocks
+        hint: >-
+          Write one object with `id: world` and a `blocks` list. Each block has
+          a `label` (a snake_case key), a `displayName` and an
+          `extractionHint` that says what to remember; `icon` and `maxChars`
+          are optional. Choose blocks that fit the genre. Do not make a block
+          for data that a dimension or another plugin already tracks.
+        example: ./examples/blocks.json
+        source:
+          kind: json
+          path: data/memory-blocks.json
+          key: id
     blocks:
       version: 1
       schema: ./schemas/blocks.schema.json

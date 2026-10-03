@@ -108,12 +108,35 @@ contributes:
       version: 1
       accepts:
         - stage.scene-assets@1
+      authoring:
+        title:
+          zh: 场景背景图片
+          en: Scene background images
+        hint: >-
+          A directory of scene background image files. The world supplies only
+          the files; the index records are produced at import.
+        source:
+          kind: media
+          path: media/scenes
+          key: filename
     scenes:
       schema: ./schemas/scenes.schema.json
       description: Scene background registry imported from world packages.
       version: 1
       accepts:
         - stage.scenes@1
+      authoring:
+        title:
+          zh: 场景注册表
+          en: Scene registry
+        hint: >-
+          Do not write this file by hand. It maps scenes to background files by
+          content hash. Generate the scene images first, then generate this
+          file; see docs/guide/world-scenes.md.
+        source:
+          kind: json
+          path: media/scenes.registry.json
+          key: registryId
   ui:
     right:
       - ./runtimes/resolver/ui/scene-stage-panel.json

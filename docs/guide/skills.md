@@ -17,8 +17,8 @@ Covel 仓库 `.claude/skills/` 目录下的每个子目录都是一个**独立�
 │   ├── SKILL.md           # 入口，YAML frontmatter 必须有 name + description
 │   ├── agents/openai.yaml
 │   └── references/        # 按需加载的细节参考
-│       ├── world-yaml-schema.md
-│       └── example-world.md
+│       ├── dimensions.md
+│       └── world-validation.md
 └── create-plugin/
     ├── SKILL.md
     ├── agents/openai.yaml
@@ -67,13 +67,15 @@ description: 一句话描述这个 skill 做什么、何时触发（代理通过
 4. **frontmatter 的 description 是匹配关键**。description 决定代理是否触发 skill；写得越具体越准，越泛越容易乱跳。
 5. **触发场景写进 description**。body 只有触发后才会加载；“何时使用”信息要放在 description 里。只应在用户明确要求时运行的重型 skill，也在 description 里写明这一点。
 6. **References 不复制契约**。字段表、枚举值、组件清单等以 `docs/reference/` 为准，references 只链接过去；它们只记录代理的操作流程、可运行的校验命令和踩坑经验。复制出来的契约表会悄悄过期，代理照着写就会出错。
+7. **向当前版本查询，而不是把清单写进 skill**。会随插件增减而变化的内容（可预置的数据契约、插件 ID、设置项）由 `pnpm describe:authoring` 输出，来源是各插件自己的 `contributes.data.*.authoring` 声明。skill 里出现具体插件 ID 的规则，等于给每个新插件留了一处要手改的地方。
+8. **示例要能被校验**。skill 里的完整示例按生产 schema 在 CI 中校验（见 `apps/server/tests/lib/authoring-describe.test.ts`），校验不过的示例不能合入。
 
 ## 当前实际目录与调用方式
 
 当前仓库实际维护三个项目级 skill：
 
 - `.claude/skills/create-plugin/SKILL.md`：生成插件骨架、运行时声明与作者参考；细节在其 `references/`。
-- `.claude/skills/create-world/SKILL.md`：生成世界包，并用 `pnpm validate:world worlds/<id>` 校验；细节在其 `references/`。
+- `.claude/skills/create-world/SKILL.md`：生成世界包。它不携带字段表和插件清单，而是先运行 `pnpm describe:authoring` 向当前版本查询可写内容，写完用 `pnpm validate:world worlds/<id>` 校验；`references/` 只留维度写法和发布前检查。
 - `.claude/skills/covel-static-turn-audit/SKILL.md`：静态审计 start-game、插件启用、turn 调度和多轮流程。
 
 它们不是 npm/pnpm 命令，也不会被 Covel server 自动发现。使用支持 Agent Skills 的代理时，

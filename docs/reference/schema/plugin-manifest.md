@@ -132,12 +132,32 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*`
 
-| Field         | Type           | Required | Description                                                          |
-| ------------- | -------------- | -------- | -------------------------------------------------------------------- |
-| `schema`      | string         | yes      | Package-relative path of the JSON Schema that validates each record. |
-| `description` | string         | no       | What the namespace stores. Read by world authors and tools.          |
-| `version`     | integer        | yes      | Schema version of the namespace.                                     |
-| `accepts`     | list of string | no       | Data contracts whose world data this namespace accepts.              |
+| Field         | Type           | Required | Description                                                                                        |
+| ------------- | -------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `schema`      | string         | yes      | Package-relative path of the JSON Schema that validates each record.                               |
+| `description` | string         | no       | What the namespace stores. Read by world authors and tools.                                        |
+| `version`     | integer        | yes      | Schema version of the namespace.                                                                   |
+| `accepts`     | list of string | no       | Data contracts whose world data this namespace accepts.                                            |
+| `authoring`   | object         | no       | What a world author needs to supply this content. Authoring tools and the world generator read it. |
+
+## `contributes.data.*.authoring`
+
+| Field     | Type                        | Required | Description                                                                                                                  |
+| --------- | --------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `title`   | text (string or locale map) | yes      | Author-facing name of this content. Plain string or a locale map. Example: `"Starting quests"`.                              |
+| `hint`    | string                      | no       | How to write good records: what to include, limits, and links to other content. Read by authors and by generators.           |
+| `example` | string                      | no       | Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema. |
+| `source`  | object                      | no       | The world data source an author declares to supply this content.                                                             |
+
+## `contributes.data.*.authoring.source`
+
+| Field        | Type                              | Required | Description                                                                                      |
+| ------------ | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `kind`       | `"yaml"` or `"json"` or `"media"` | yes      | Reader type of the source. `media` is a directory whose index this namespace receives.           |
+| `path`       | string                            | yes      | Conventional path of the source inside a world package. Example: `"data/quests.yaml"`.           |
+| `key`        | string                            | no       | Field that gives each record a stable key. Media sources use `filename`.                         |
+| `visibility` | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`. |
+| `lorebook`   | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                |
 
 ## `contributes.ui`
 

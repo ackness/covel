@@ -108,7 +108,12 @@ export function normalizePackageManifest(
       c?.data &&
       Object.fromEntries(
         Object.entries(c.data).map(
-          ([namespace, { version, accepts, ...decl }]) => [
+          // `authoring` is for world authors and tools; the runtime data
+          // schema declaration does not carry it.
+          ([
+            namespace,
+            { version, accepts, authoring: _authoring, ...decl },
+          ]) => [
             namespace,
             {
               ...decl,

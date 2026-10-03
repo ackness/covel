@@ -30,6 +30,20 @@ contributes:
       version: 1
       accepts:
         - character.affinity@1
+      authoring:
+        title:
+          zh: 初始好感
+          en: Starting affinity
+        hint: >-
+          List the key NPCs the player already has a relationship with. `score`
+          is an integer from -100 to 100; 0 is neutral. Use the same `id` and
+          `name` as that NPC's character blueprint, because later updates match
+          by name. Keep `notes` to one or two sentences that explain the score.
+        example: ./examples/affinity.json
+        source:
+          kind: yaml
+          path: data/affinity.yaml
+          key: id
   ui:
     right:
       - ./ui/affinity-panel.json

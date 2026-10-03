@@ -49,9 +49,28 @@ contributes:
   data:
     events:
       schema: ./schemas/story-events.schema.json
+      description: Hidden story events that fire when their condition holds.
       version: 1
       accepts:
         - story.events@1
+      authoring:
+        title:
+          zh: 隐藏剧情事件
+          en: Hidden story events
+        hint: >-
+          Write events the player must not know in advance. `when` is one
+          condition, or `all`, `any` or `not` over conditions. A condition
+          reads a declared dimension (`dimension` plus `path`), a numeric
+          world-time field (`time`), or another event (`revealed`, with
+          `turnsSinceGte` for a follow-up some turns later). Reference only
+          dimensions the world declares. `payload` is a short brief for the
+          narrative, not finished prose, and it must not spoil later events.
+        example: ./examples/story-events.json
+        source:
+          kind: yaml
+          path: data/hidden/story-events.yaml
+          key: id
+          visibility: hidden
 ---
 
 Deterministic hidden story events. World packages import events through a

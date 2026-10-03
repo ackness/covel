@@ -51,6 +51,7 @@
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
     "test:runtime": "tsx packages/test-runtime/src/cli.ts",
     "schemas:generate": "pnpm --filter @covel/shared generate:schemas && prettier --write --log-level warn packages/shared/schemas && node scripts/generate-schema-reference.mjs",
+    "describe:authoring": "node --import tsx scripts/describe-authoring.ts",
     "validate:plugin": "tsx packages/plugin-loader/scripts/validate-manifest.ts",
     "validate:world": "node --import tsx scripts/validate-release-worlds.ts",
     "validate:collection": "node --import tsx scripts/validate-collection.ts",

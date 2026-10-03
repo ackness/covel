@@ -66,7 +66,7 @@ runtime 处理玩家不该提前看到的内容（隐藏剧情、谜底）时声
 
 角色和角色 schema 读取 `ctx.world`，角色写入通过 proposals。不要把角色复制到本插件的 `characters` namespace，也不要扫描其他插件私有 schema。
 
-插件私有数据使用绑定 store：`getPluginData(namespace, key)`、`listPluginData(namespace?)`。不同插件共享数据必须声明公开契约。可导入世界数据的 namespace 在 `contributes.data` 声明 `version/schema/accepts`，其契约 schema 放在根 `contracts`。见 [World Data](../reference/world-data.md)。
+插件私有数据使用绑定 store：`getPluginData(namespace, key)`、`listPluginData(namespace?)`。不同插件共享数据必须声明公开契约。可导入世界数据的 namespace 在 `contributes.data` 声明 `version/schema/accepts`，其契约 schema 放在根 `contracts`；再用 `authoring` 声明标题、写作提示、示例和约定路径，世界作者和创作工具通过 `pnpm describe:authoring` 读到它（见[进阶指南](./plugin-authoring-advanced.md#数据契约与世界导入)）。见 [World Data](../reference/world-data.md)。
 
 记忆语义由 memory 插件和其 `memory.block-definitions@1` 服务拥有。世界自定义记忆块通过 `memory.blocks@1` 导入。不要新增 `memoryBlocks` 或 `summaryFocus` 根字段。
 

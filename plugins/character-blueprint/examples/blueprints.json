@@ -1,0 +1,25 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "mara-voss",
+    "name": "Mara Voss",
+    "role": "npc",
+    "description": "The harbor office's senior clerk and your mentor. She knows every ledger in the port and who has lied in each of them.",
+    "aliases": ["Mara", "Clerk Voss"],
+    "tags": ["harbor-office", "mentor"],
+    "attributes": {
+      "faction": "Harbor Office",
+      "role": "Senior clerk"
+    },
+    "persona": {
+      "summary": "A patient, exact woman who treats records as promises.",
+      "traits": ["patient", "exact", "dry-humored"],
+      "goals": [
+        "Keep the port's records honest",
+        "Teach you to read what a ledger leaves out"
+      ],
+      "fears": ["A forged entry she failed to catch"],
+      "voice": "Short, level sentences. She asks for the evidence before she gives an opinion."
+    }
+  }
+]

@@ -252,6 +252,8 @@ contributes:
       accepts: [example.facts@1]
 ```
 
+接收世界数据的 namespace 还可以声明 `authoring`（`title`、`hint`、`example`、`source`），说明世界作者该如何提供这份内容；只有列出 `accepts` 的 namespace 才能声明它。`pnpm describe:authoring` 汇总所有已扫描插件的声明，`--check` 按 namespace 的 schema 校验每份 `example`。字段见 [Plugin manifest 字段表](schema/plugin-manifest.md)。
+
 World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:example.facts@1`。框架查找已激活且声明接受该契约的 namespace，验证 schema 后分发数据，不在框架中识别具体插件 ID。`contracts` 与接收 namespace 的 schema 必须一致。完整结构见 [World Data](world-data.md)。
 
 世界包把 source 声明为 `visibility: hidden` 时，同一份数据会导入到接收插件的 `_hidden.<namespace>`（例如 `_hidden.facts`）。插件 runtime 通过 `ctx.pluginData.list("_hidden.facts")` 读取；扩展点、模型工具、`input.inject` 和公共 API 都读不到它。揭示应通过本回合的 runtime 输出完成，详见 [World Data · 隐藏数据](world-data.md#隐藏数据visibility-hidden)。

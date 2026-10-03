@@ -17,6 +17,79 @@ import {
   worldProjectionMapSchema,
 } from "./plugin-schemas.js";
 const shape = runtimeManifestInputSchema.shape;
+
+/**
+ * What a world author needs in order to supply one kind of world data. It
+ * lives with the plugin that accepts the data, so authoring tools, skills and
+ * the world generator learn about a new plugin without a central edit.
+ */
+const dataAuthoringSchema = z
+  .strictObject({
+    title: z.union([z.string().min(1), z.record(z.string(), z.string())]).meta({
+      description:
+        "Author-facing name of this content. Plain string or a locale map.",
+      examples: ["Starting quests"],
+    }),
+    hint: z
+      .string()
+      .min(1)
+      .describe(
+        "How to write good records: what to include, limits, and links to other content. Read by authors and by generators.",
+      )
+      .optional(),
+    example: z
+      .string()
+      .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+\.json$/i, {
+        message:
+          "example must be a package-relative .json path (no leading `/`, no `..` segments)",
+      })
+      .describe(
+        "Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema.",
+      )
+      .optional(),
+    source: z
+      .strictObject({
+        kind: z
+          .enum(["yaml", "json", "media"])
+          .describe(
+            "Reader type of the source. `media` is a directory whose index this namespace receives.",
+          ),
+        path: z
+          .string()
+          .min(1)
+          .meta({
+            description:
+              "Conventional path of the source inside a world package.",
+            examples: ["data/quests.yaml"],
+          }),
+        key: z
+          .string()
+          .min(1)
+          .describe(
+            "Field that gives each record a stable key. Media sources use `filename`.",
+          )
+          .optional(),
+        visibility: z
+          .enum(["public", "hidden"])
+          .describe(
+            "`hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.",
+          )
+          .optional(),
+        lorebook: z
+          .boolean()
+          .describe(
+            "`true` also projects each record into the lorebook (`+lorebook`).",
+          )
+          .optional(),
+      })
+      .describe(
+        "The world data source an author declares to supply this content.",
+      )
+      .optional(),
+  })
+  .describe(
+    "What a world author needs to supply this content. Authoring tools and the world generator read it.",
+  );
 export const pluginManifestSchema = z.strictObject({
   id: z
     .string()
@@ -181,7 +254,17 @@ export const pluginManifestSchema = z.strictObject({
                   "Data contracts whose world data this namespace accepts.",
                 )
                 .optional(),
-            }),
+              authoring: dataAuthoringSchema.optional(),
+            })
+            .refine(
+              (declaration) =>
+                !declaration.authoring || declaration.accepts?.length,
+              {
+                path: ["authoring"],
+                message:
+                  "authoring describes world data, so the namespace must list the contract in `accepts`",
+              },
+            ),
         )
         .describe("Own plugin data namespaces, keyed by namespace.")
         .optional(),

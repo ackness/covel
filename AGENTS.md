@@ -65,6 +65,9 @@ pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e f
 pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
 pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
                       # from the Zod schemas; run after changing an author-facing schema field
+pnpm describe:authoring  # what a world may contain for the scanned plugins: files, data contracts
+                      # with a ready descriptor entry and example, plugin IDs and settings
+                      # (--json, --check validates plugin examples, --plugins <dir>)
 pnpm validate:plugin  # validate PLUGIN.md manifests; a plugin DIR also gets cross-runtime checks
 pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, every seed record):
                       # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>

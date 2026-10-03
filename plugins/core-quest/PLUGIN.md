@@ -31,6 +31,21 @@ contributes:
       version: 1
       accepts:
         - quests@1
+      authoring:
+        title:
+          zh: 初始任务
+          en: Starting quests
+        hint: >-
+          Seed the main quest and, at most, a few side quests. `status` is
+          `active`, `completed` or `failed`. Each objective has `text` and
+          `done`; give it an `id` so later updates can address it. The quest
+          log advances quests by name, so use the quest and giver names that
+          the lore uses.
+        example: ./examples/quests.json
+        source:
+          kind: yaml
+          path: data/quests.yaml
+          key: id
   ui:
     right:
       - ./ui/quest-log-panel.json

@@ -29,6 +29,23 @@ contributes:
       version: 1
       accepts:
         - world.rules@1
+      authoring:
+        title:
+          zh: 世界规则
+          en: World rules
+        hint: >-
+          Write one rule for each fact the narrative must never contradict.
+          Each rule needs `schemaVersion: 1`, an `id` and `content`. `kind` is
+          `constant`, `triggered` or `evolving`; `category` is `character`,
+          `scene`, `relationship`, `world` or `style`. State the rule and its
+          consequence in plain sentences. Do not restate values that a
+          dimension already tracks.
+        example: ./examples/rules.json
+        source:
+          kind: yaml
+          path: data/rules/world-rules.yaml
+          key: id
+          lorebook: true
   worldProjections:
     rules-from-world-ir:
       from: "contract:world-ir@1"

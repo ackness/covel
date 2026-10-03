@@ -81,6 +81,33 @@ function:
 
 `contracts` 定义 schema，`contributes.data.<namespace>.accepts` 声明接收哪些版本化数据契约。接收 schema 路径需与契约声明一致。相同契约的多个提供者必须使用一致 schema，冲突在加载或导入前报错。
 
+接收世界数据的 namespace 应同时声明 `authoring`，告诉世界作者怎么提供这份内容：
+
+```yaml
+contributes:
+  data:
+    facts:
+      version: 1
+      schema: ./schemas/facts.schema.json
+      accepts: [facts.index@1]
+      authoring:
+        title: { zh: 已知事实, en: Known facts }
+        hint: >-
+          Write one record for each fact the story starts with. Keep `text` to
+          one sentence.
+        example: ./examples/facts.json
+        source:
+          kind: yaml
+          path: data/facts.yaml
+          key: id
+```
+
+- `title` 是给作者看的内容名称；`hint` 说明怎么写好这类记录，用简短明确的英文句子。
+- `example` 指向一份合法示例（JSON）。它按 namespace 的 schema 校验，`pnpm describe:authoring --check` 和仓库测试都会检查。
+- `source` 是这份内容在世界包里的约定来源：`kind`、`path`、`key`，以及可选的 `visibility: hidden` 和 `lorebook: true`。媒体目录用 `kind: media`。
+
+`pnpm describe:authoring` 会把这些声明汇总成可直接粘贴进 `world.data.yaml` 的条目，世界创作 skill 和应用内生成器读的是同一份数据。新插件声明了 `authoring`，就不需要再去修改中心文档或 skill。字段表见 [Plugin manifest 字段表](../reference/schema/plugin-manifest.md)。
+
 世界来源使用 `schema: contract:facts.index@1`、`to: contract:facts.index@1`，框架按当前活动插件声明分发。插件的私有 namespace 不作为跨插件 API，也不再使用 `plugin:<id>/<namespace>` 作为作者导入目标。投影通过根 `contributes.worldProjections` 声明，输出必须对应可导入的数据 namespace。详见[世界数据参考](../reference/world-data.md)。
 
 角色蓝图等业务格式由其插件拥有。框架处理通用 source/target 和 CharacterSchema/CharacterRecord，不按具体插件 ID 包装数据或制造角色镜像。

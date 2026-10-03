@@ -586,6 +586,76 @@
                   "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
                 },
                 "description": "Data contracts whose world data this namespace accepts."
+              },
+              "authoring": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      }
+                    ],
+                    "description": "Author-facing name of this content. Plain string or a locale map.",
+                    "examples": ["Starting quests"]
+                  },
+                  "hint": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "How to write good records: what to include, limits, and links to other content. Read by authors and by generators."
+                  },
+                  "example": {
+                    "type": "string",
+                    "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$",
+                    "description": "Package-relative path of a JSON file with a valid example of the source value. It is validated against the namespace schema."
+                  },
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["yaml", "json", "media"],
+                        "description": "Reader type of the source. `media` is a directory whose index this namespace receives."
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Conventional path of the source inside a world package.",
+                        "examples": ["data/quests.yaml"]
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Field that gives each record a stable key. Media sources use `filename`."
+                      },
+                      "visibility": {
+                        "type": "string",
+                        "enum": ["public", "hidden"],
+                        "description": "`hidden` for content the player must not see before the plugin reveals it. Defaults to `public`."
+                      },
+                      "lorebook": {
+                        "type": "boolean",
+                        "description": "`true` also projects each record into the lorebook (`+lorebook`)."
+                      }
+                    },
+                    "required": ["kind", "path"],
+                    "additionalProperties": false,
+                    "description": "The world data source an author declares to supply this content."
+                  }
+                },
+                "required": ["title"],
+                "additionalProperties": false,
+                "description": "What a world author needs to supply this content. Authoring tools and the world generator read it."
               }
             },
             "required": ["schema", "version"],

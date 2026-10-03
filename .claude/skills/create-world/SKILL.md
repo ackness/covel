@@ -5,7 +5,9 @@ description: 创建 Covel 世界包。根据用户概念直接生成 world.yaml 
 
 # 创建 Covel 世界
 
-根据用户的世界观概念，直接生成完整的世界包文件并写入 `worlds/` 目录。
+根据用户的世界观概念，生成完整的世界包并写入 `worlds/`。
+
+字段表、数据契约和插件清单**不写在这个 skill 里**。每次都向当前版本查询，这样框架和插件更新后这里不用改，也不会过期。
 
 ## 流程
 
@@ -16,73 +18,78 @@ description: 创建 Covel 世界包。根据用户概念直接生成 world.yaml 
 - 核心冲突是什么？
 - 力量体系偏哪种？
 
-### 2. 生成文件
+### 2. 查询当前版本能写什么
+
+```bash
+pnpm describe:authoring
+```
+
+输出包含：
+
+- 世界包有哪些文件，各自的字段表在哪。
+- 内置数据目标：维度、角色。
+- 每一种可以预置的内容：标题、接收它的插件、写作提示、可直接粘贴进 `data/world.data.yaml` 的条目、一份合法示例。
+- 插件目录：ID、简介、提供和依赖的契约、可以用 `pluginSettings` 预置的设置项。
+
+只使用这里列出的插件 ID、契约和设置项。需要机器可读的结果时加 `--json`；社区插件用 `--plugins <dir>` 一并扫描。
+
+### 3. 选玩法和内容
+
+- 按玩法选 `pluginPolicy.presetId`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。
+- 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，就把接收它的插件写进 `pluginPolicy.requested`。
+- 视觉小说世界再声明 `defaultViewMode: stage`。立绘和场景图是渐进增强，没有也能运行。
+
+成品参考（直接读这些目录，它们随框架同步更新）：
+
+| 世界                    | 玩法                         |
+| ----------------------- | ---------------------------- |
+| `worlds/mistport`       | 传统叙事调查剧，含隐藏剧情   |
+| `worlds/haruka-academy` | 视觉小说，立绘加场景背景     |
+| `worlds/emberback`      | RPG：判定、任务、背包、好感  |
+| `worlds/lantern-barrow` | 跑团：开局配点加掷骰检定     |
+
+`worlds/_archive/` 下的世界不会被加载，不要当作样例。
+
+### 4. 写文件
 
 ```
 worlds/<id>/
-├── world.yaml          # 必需，世界 manifest（Zod strict，拒绝未定义字段）
-├── WORLD.md            # 必需，默认 lore 文档（800-1500 字）
-├── WORLD.<lang>.md     # 可选，仅在真的要提供第二语种时补
+├── world.yaml            # 字段表：docs/reference/schema/world-manifest.md
+├── WORLD.md              # 默认 lore（800-1500 字），所有语言的兜底
+├── WORLD.<lang>.md       # 可选，只在真的提供第二语种时写
 └── data/
-    ├── world.data.yaml # worldData descriptor（推荐）
-    └── dimensions.yaml # 外置维度（两个内置世界的做法）
+    ├── world.data.yaml   # sources 里放第 2 步给出的条目
+    ├── dimensions.yaml   # 见 references/dimensions.md
+    └── …                 # 每种内容一个文件，路径用第 2 步给出的 path
 ```
 
-lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD.md` 是所有 locale 的兜底，必须写；`pnpm validate:world` 会在声明的语言解析不到 lore 时报错，在缺 `WORLD.md` 兜底时警告。
+要求：
 
-**维度写在哪** —— 三选一，越往下越适合大世界：
+- `world.yaml` 第一行写 `# yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json`，编辑器会给出补全和报错。
+- 每个数据文件按第 2 步的写作提示和示例来写。
+- 多个文件提到同一个角色、物品或地点时，使用完全相同的 ID 和名字，并与 `WORLD.md` 一致。
+- 角色类型和属性写在 `characterSchema: {types, attributes}`。
+- 所有 ID（world id、source id、记录 id）用 kebab-case 英文。
+- 避免泛化的奇幻套路，追求独特的设定。
+- 写进本仓库 `worlds/` 的世界，`world.yaml` 的展示字段（`name`、`summary`、属性的 `name` / `description` 等）要写成 `{ zh: …, en: … }`；仓库门禁会拒绝裸中文。`WORLD.md` 和 `data/` 里的内容用用户的语言即可。
 
-1. 内联 `world.yaml` 的 `dimensions:` —— 小世界最省事
-2. `dimensionSources:` 按维度 ID 指向外部文件（文件内容是单项 definition）
-3. `worldData` descriptor 里一条 `to: world:metadata.dimensions` 的 source —— **`worlds/mistport` 和 `worlds/haruka-academy` 都是这种**，维度全写在 `data/dimensions.yaml`
-
-每个维度都是 `{name, description?, schema, initialValue, updateRule?}` 的开放定义，格式见 `references/world-yaml-schema.md`。只给需要随剧情变化的数据写 `updateRule`。
-
-创作要求：
-
-- 至少 3 个地区、3 个阵营、4 个力量等级、3 个历史事件、3 个社会阶层
-- `openingScenario` 必须呈现即时的选择或紧张感
-- 按玩法选 `pluginPolicy.presetId`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`
-- **视觉小说世界**（对话模式的增强档）：声明 `defaultViewMode: stage` 进全屏舞台（背景 + 立绘 + 打字机）。资产是**渐进增强**——没有立绘/场景图也能跑（回退世界头图 + 占位卡），后续可用 `scripts/generate-portraits.mjs` / `generate-scenes.mjs` 补。成品参考 `worlds/haruka-academy`
-- **RPG 世界**（判定/任务/背包/好感玩法）：`pluginPolicy.requested` 拉起 `dice-check`、`core-quest`、`inventory`、`affinity` 四件套；worldData 预置三类种子——`contract:quests@1`（任务）、`contract:inventory.items@1`（开局物资，货币 tag `currency`）、`contract:character.affinity@1`（关键 NPC 初始好感），记录形状见 `docs/reference/world-data.md`「内置 RPG 玩法种子」；`characterSchema.attributes` 声明 0-5 小整数属性作判定修正来源（描述里写明各自管哪类判定）。种子的 NPC/giver 必须与 lore 和角色蓝图同名对齐。成品参考 `worlds/emberback`
-- **跑团世界**（开局配点 + 掷骰检定）：请求 `tabletop-rules` 与 `dice-check`；`characterSchema` 声明 `category: abilities` 的有界整数属性，再用 `contract:tabletop-rules.rules.initial@1` 提供 `{id: creation, budget, attributes:[{id,label,base,max}]}`（`label` 只能是字符串，双语世界用 `.en.json` 变体）。成品参考 `worlds/lantern-barrow`
-- **隐藏剧情**（满足条件才发生、提前不能剧透）：请求 `story-events`，在 worldData 里加一个 `visibility: hidden` 的 source 指向 `contract:story.events@1`，条件只引用已声明的维度路径、世界时间的数值字段（如 `phase`、`hour`）或其他事件（`revealed` + `turnsSinceGte`，用来写「某事发生几回合后接着发生」的后续事件）。payload 写给叙事的剧情简述，不写成稿，也不要夹带更远的剧透。格式见 `plugins/story-events/README.md`，成品参考 `worlds/mistport/data/hidden/`
-- **剧情中自动追加后续事件**：调查、地城、倒计时这类讲后果的世界可以在 `pluginSettings` 写 `story-events: { planner: true }` 开启剧情策划；作者逐条编排角色路线的恋爱世界不要开。它每 3 回合根据游玩中的线索埋下只触发一次的隐藏事件；条件只能引用世界声明的维度和世界时间，所以维度设计得越贴合主线，它埋下的事件越扎实。不需要额外的世界数据。
-- 角色类型和属性写在 `characterSchema: {types, attributes}`；角色导入 `characters` 领域并经 schema 校验，不要镜像到插件数据。插件通过 `pluginPolicy.requested` / `recommended` 选择，目录偏好用 `presetId`、`preferredTags`、`avoidedTags`
-- 题材记忆块写在 `data/memory-blocks.json`（`{id: "world", blocks: [...]}`），由一条 `to: contract:memory.blocks@1` 的 worldData source 导入；接收插件必须在根 `contracts` 和 `contributes.data.<namespace>.accepts` 里声明该契约。不要写已删除的顶层 `memoryBlocks` 字段，也不要用私有 `plugin:` 导入目标
-- 只写真实存在的插件 ID；`pnpm validate:world` 会检查 `pluginPolicy` 与 `pluginSettings` 里的每个 ID，拼错时给出最接近的正确写法
-- 避免泛化的奇幻套路，追求独特的世界设定
-- 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文
-- **world.yaml 的展示字段必须写 I18nText 双语对象**——`name`、`summary`、`characterSchema.attributes[].name`/`.description` 等写 `{ zh: …, en: … }`。schema 虽接受裸 string，但仓库门禁 `check-plugin-i18n` 会扫 `worlds/*/world.yaml`，裸中文直接判违规。WORLD.md、lore、`data/` 种子内容用用户的语言即可（默认中文）
-
-### 3. 验证
-
-**L1 校验（必做）**，在仓库根目录跑：
+### 5. 验证
 
 ```bash
 pnpm validate:world worlds/<id>
 ```
 
-它校验 `world.yaml`、lore 文件、插件 ID 与契约，并复用建会话时的预检，按接收插件的契约 schema 逐条校验每个 worldData source 的记录（每个声明的语言各一遍）。诊断带文件、位置和修法；有 error 就按提示改完重跑。
+它校验清单、lore、插件 ID 和契约，并按接收插件的 schema 逐条校验每个数据文件。每条诊断带文件、位置和修法。有 error 就按提示改完重跑，直到通过；warning 逐条判断是否需要处理。
 
-按需追加：
+世界写进本仓库时再跑 `pnpm check:plugins`。准备对外发布时，按 `references/world-validation.md` 做引用一致性、lore 覆盖度和真实跑一回合的检查。
 
-| 你写了什么                 | 还要跑什么                                                                                                     |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| factions 含 `relations[]`  | **L2 引用一致性**                                                                                              |
-| 世界写进仓库 `worlds/`     | `pnpm check:plugins`（world.yaml 展示字段 I18nText 门禁）                                                      |
-| 准备对外发布               | **L3 lore 覆盖度** + **L4 真实跑一回合**                                                                       |
+### 6. 展示结果
 
-校验失败则修复后重新写入。L2/L3/L4 的现成脚本见 `references/world-validation.md`（必读）。
-
-### 4. 展示结果
-
-给用户一个简洁摘要：世界名称、地区数、阵营数、力量体系、开场场景、跑了哪几层校验。问是否需要调整。
+给用户一个简洁摘要：世界名称、地区数、阵营数、力量体系、开场场景、预置了哪些内容、校验结果。问是否需要调整。
 
 ## References
 
-- 生成 world.yaml 前，读 `references/world-yaml-schema.md`——完整字段结构、枚举值、worldData descriptor
-- 需要格式参考时，读 `references/example-world.md`
-- 验证阶段读 `references/world-validation.md`——现成的校验脚本
+- `references/dimensions.md`：怎么写维度，含一份经 CI 校验的示例。
+- `references/world-validation.md`：校验器的检查项，以及发布前的人工检查。
 
-权威文档在 `docs/reference/world-data.md`（worldData / source import / override 的唯一真相源）；本目录的 references 是它的操作向导，冲突时以 docs 为准。
+权威文档是 `docs/reference/world-data.md`；冲突时以它和 `pnpm describe:authoring` 的输出为准。

@@ -42,18 +42,56 @@ contributes:
       version: 1
       accepts:
         - character.blueprints@1
+      authoring:
+        title:
+          zh: 预设角色
+          en: Preset characters
+        hint: >-
+          Write one record for each preset character. `role` is a character
+          type the world declares in `characterSchema.types`. Use the world's
+          `characterSchema` attribute IDs as the keys of `attributes`.
+          `persona` holds a summary, traits, goals, fears and `voice`; `voice`
+          says how the character speaks. Keep names identical to the lore.
+        example: ./examples/blueprints.json
+        source:
+          kind: json
+          path: characters/main-cast.json
+          key: id
     presence:
       schema: ./schemas/presence.schema.json
       description: Importable character media presence records.
       version: 1
       accepts:
         - character.portraits@1
+      authoring:
+        title:
+          zh: 角色立绘映射
+          en: Character portrait mapping
+        hint: >-
+          Do not write this file by hand. It maps characters to portrait files
+          by content hash. Generate the portraits first, then generate this
+          file; see docs/guide/world-portraits.md.
+        source:
+          kind: json
+          path: media/presence.json
+          key: characterId
     assets:
       schema: ./schemas/assets.schema.json
       description: Media asset index records imported from world packages.
       version: 1
       accepts:
         - character.portrait-assets@1
+      authoring:
+        title:
+          zh: 角色立绘图片
+          en: Character portrait images
+        hint: >-
+          A directory of portrait image files. The world supplies only the
+          files; the index records are produced at import.
+        source:
+          kind: media
+          path: media/portraits
+          key: filename
   ui:
     right:
       - ./ui/blueprints-panel.json

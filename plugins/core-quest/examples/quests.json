@@ -1,0 +1,22 @@
+[
+  {
+    "id": "missing-ledger",
+    "name": "The Missing Ledger",
+    "description": "The cargo ledger for the night of the fire is gone from the harbor office. Find out who took it and why.",
+    "status": "active",
+    "giver": "Mara Voss",
+    "reward": "Mara's trust and access to the sealed archive",
+    "objectives": [
+      {
+        "id": "search-office",
+        "text": "Search the harbor office for signs of entry",
+        "done": false
+      },
+      {
+        "id": "question-watch",
+        "text": "Question the night watch",
+        "done": false
+      }
+    ]
+  }
+]

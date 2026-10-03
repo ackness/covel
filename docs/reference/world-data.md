@@ -757,6 +757,14 @@ override path 相对 `~/.covel/world-overrides/<world-id>/`，并会做 realpath
 
 ### 配套插件数据
 
+当前版本能预置哪些内容、各自怎么声明和怎么写，用下面的命令查询。输出来自各插件的 `contributes.data.*.authoring` 声明，包含可直接粘贴的 source 条目和一份合法示例：
+
+```bash
+pnpm describe:authoring              # 文本
+pnpm describe:authoring --json       # 机器可读
+pnpm describe:authoring --plugins ~/.covel/plugins   # 一并扫描社区插件
+```
+
 插件可以为自己的 namespace 约定一个 schema URI：
 
 ```yaml
