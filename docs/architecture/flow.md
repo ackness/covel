@@ -882,5 +882,5 @@ Turn 执行                    @covel/runtime                   核心执行引�
   插件 → 框架:    Tool return values + Proposal pattern
   框架 → 插件:    Context injection (template variables)
   插件 → 前端:    plugin-data.changed SSE events
-  前端 → 插件:    json-render Actions (apiCall / emitEvent)
+  前端 → 插件:    UI Actions → plugin-rpc (invokeRuntime / invokePluginAction / invokeCommand / emitEvent)
 ```

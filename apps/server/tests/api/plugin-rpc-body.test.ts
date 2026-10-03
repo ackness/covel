@@ -34,6 +34,48 @@ describe("plugin-rpc body validation", () => {
     ).toMatchObject({ ok: true });
   });
 
+  it("accepts an event request and rejects a malformed one", () => {
+    expect(
+      validatePluginRpcBody({
+        kind: "event",
+        pluginId: "map",
+        topic: "map.location-selected",
+        payload: { locationId: "docks" },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validatePluginRpcBody({ kind: "event", pluginId: "map", topic: "t" }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validatePluginRpcBody({ kind: "event", pluginId: "map", topic: "" }),
+    ).toMatchObject({ ok: false, status: 400 });
+    expect(
+      validatePluginRpcBody({
+        kind: "event",
+        pluginId: "map",
+        topic: "t",
+        payload: ["docks"],
+      }),
+    ).toEqual({
+      ok: false,
+      error: "payload must be a JSON object",
+      status: 400,
+    });
+    // An event names a topic, never a runtime: the subscribers decide.
+    expect(
+      validatePluginRpcBody({
+        kind: "event",
+        pluginId: "map",
+        topic: "t",
+        runtimeId: "map/travel",
+      }),
+    ).toEqual({
+      ok: false,
+      error: 'kind "event" does not accept field(s): runtimeId',
+      status: 400,
+    });
+  });
+
   it("rejects malformed request shapes", () => {
     expect(validatePluginRpcBody(null)).toEqual({
       ok: false,
@@ -70,7 +112,7 @@ describe("plugin-rpc body validation", () => {
     });
     expect(validatePluginRpcBody({ pluginId: "p", action: "a" })).toEqual({
       ok: false,
-      error: "kind must be one of action, runtime, or command",
+      error: "kind must be one of action, runtime, command, or event",
       status: 400,
     });
     expect(
