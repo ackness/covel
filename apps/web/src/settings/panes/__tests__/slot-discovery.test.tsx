@@ -98,6 +98,7 @@ beforeEach(async () => {
           tags: [],
         },
       ],
+      languages: { text: ["en"], instructions: ["en"] },
       userSettings: [
         {
           key: "mediaRole",

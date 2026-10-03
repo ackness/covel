@@ -3,12 +3,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import { Document, parseDocument } from "yaml";
-import { canonicalizeLocale } from "@covel/shared";
+import { canonicalizeLocale, isKnownLocale } from "@covel/shared";
 import {
   MANIFEST_ARRAY_KEYS,
   MANIFEST_LABEL_KEYS,
   manifestFilesOf,
   readManifestLabels,
+  type ManifestLabels,
 } from "./locale-labels.js";
 import {
   MESSAGES_SECTION,
@@ -233,7 +234,8 @@ export async function pluginLocales(pluginRoot: string): Promise<string[]> {
     .map((name) => /^(.+)\.ya?ml$/.exec(name)?.[1])
     .flatMap((tag) => {
       const locale = tag ? canonicalizeLocale(tag) : undefined;
-      return locale ? [locale] : [];
+      // `locales/notes.yaml` is not a translation: the name must be a language.
+      return locale && isKnownLocale(locale) ? [locale] : [];
     })
     .sort();
 }
@@ -245,23 +247,28 @@ export async function pluginTranslationStatus(
 ): Promise<PluginTranslationStatus> {
   const units = await pluginLabelUnits(pluginRoot);
   const lock = (await readLock(pluginRoot)).labels[locale] ?? {};
-  const sections = new Map<string, unknown>();
+  const sections = new Map<string, readonly ManifestLabels[]>();
   for (const file of new Set(units.map((unit) => unit.file)))
     sections.set(
       file,
-      (await readManifestLabels(pluginRoot, file)).find(
+      (await readManifestLabels(pluginRoot, file)).filter(
         (labels) => labels.locale === locale,
-      )?.overlay,
+      ),
     );
 
   const missing: LabelUnit[] = [];
   const stale: LabelUnit[] = [];
   const unlocked: LabelUnit[] = [];
   for (const unit of units) {
-    if (typeof valueAt(sections.get(unit.file), unit.steps) !== "string") {
+    const translated = (sections.get(unit.file) ?? []).filter(
+      (labels) => typeof valueAt(labels.overlay, unit.steps) === "string",
+    );
+    if (translated.length === 0) {
       missing.push(unit);
       continue;
     }
+    // The lock file records the author's translations only.
+    if (!translated.some((labels) => labels.origin === "plugin")) continue;
     const recorded = lock[`${unit.file}#${unit.pointer}`];
     if (recorded === undefined) unlocked.push(unit);
     else if (recorded !== hashOf(unit.text)) stale.push(unit);
@@ -295,7 +302,7 @@ export async function lockPluginLabels(pluginRoot: string): Promise<number> {
     const entries: Record<string, string> = {};
     for (const file of new Set(units.map((unit) => unit.file))) {
       const section = (await readManifestLabels(pluginRoot, file)).find(
-        (item) => item.locale === locale,
+        (item) => item.locale === locale && item.origin === "plugin",
       )?.overlay;
       for (const unit of units)
         if (
@@ -325,6 +332,10 @@ export async function lockPluginLabels(pluginRoot: string): Promise<number> {
 /**
  * Write translations into `locales/<locale>.yaml`: labels at their places,
  * messages under the English text. Comments at the top of the file are kept.
+ *
+ * `directory` writes the file somewhere else than the plugin's `locales/`:
+ * the plugin's folder in the translations directory, for a translation that
+ * is not the author's.
  */
 export async function writePluginTranslations(
   pluginRoot: string,
@@ -333,8 +344,9 @@ export async function writePluginTranslations(
     readonly labels?: readonly { unit: LabelUnit; text: string }[];
     readonly messages?: Readonly<Record<string, string>>;
   },
+  directory: string = path.join(pluginRoot, "locales"),
 ): Promise<string> {
-  const file = path.join(pluginRoot, "locales", `${locale}.yaml`);
+  const file = path.join(directory, `${locale}.yaml`);
   let document: Document;
   try {
     document = parseDocument(await fs.readFile(file, "utf-8"));

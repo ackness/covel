@@ -9,6 +9,7 @@ import {
 } from "@covel/shared";
 import matter from "gray-matter";
 import { parse as parseYaml } from "yaml";
+import { readLocaleFiles } from "./locale-files.js";
 import {
   MESSAGES_SECTION,
   PLUGIN_BASE_LOCALE,
@@ -44,6 +45,8 @@ export interface ManifestLabels {
   /** Path of the locale file, relative to the plugin root. */
   readonly file: string;
   readonly overlay: unknown;
+  /** The author's file, or one from the translations directory. */
+  readonly origin: "plugin" | "translations";
 }
 
 /** Lists in a manifest are matched by the first of these every element has. */
@@ -117,37 +120,16 @@ export async function readManifestLabels(
   pluginRoot: string,
   manifestFile: string,
 ): Promise<readonly ManifestLabels[]> {
-  const directory = path.join(pluginRoot, "locales");
-  let names: string[];
-  try {
-    names = await fs.readdir(directory);
-  } catch {
-    return [];
-  }
   const key = manifestFile.split(path.sep).join("/");
   const labels: ManifestLabels[] = [];
-  for (const name of names.sort()) {
-    const tag = /^(.+)\.ya?ml$/.exec(name)?.[1];
-    const locale = tag ? canonicalizeLocale(tag) : undefined;
-    // `locales/notes.yaml` is not a translation: the name must be a language.
-    if (!locale || !isKnownLocale(locale)) continue;
-    const full = path.join(directory, name);
-    // A link could point outside the plugin: read regular files only.
-    if (!(await fs.lstat(full)).isFile()) continue;
-    let document: unknown;
-    try {
-      document = parseYaml(await fs.readFile(full, "utf-8"));
-    } catch (error) {
-      // A broken translation file must not disable the plugin.
-      console.warn(
-        `[plugin-loader] ${full}: cannot be parsed, its labels are ignored - ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
-      );
-      continue;
-    }
-    if (document === null || typeof document !== "object") continue;
-    const overlay = (document as Record<string, unknown>)[key];
+  // In file order: an outside translation first, the author's file after it,
+  // so that the author's label replaces the outside one.
+  for (const { locale, file, document, origin } of await readLocaleFiles(
+    pluginRoot,
+  )) {
+    const overlay = document[key];
     if (overlay !== undefined && overlay !== null)
-      labels.push({ locale, file: `locales/${name}`, overlay });
+      labels.push({ locale, file, overlay, origin });
   }
   return labels;
 }

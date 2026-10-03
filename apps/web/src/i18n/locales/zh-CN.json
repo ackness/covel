@@ -735,7 +735,8 @@
         "description": "导入、移除并复用自定义主题包。"
       },
       "uiLocale": {
-        "label": "界面语言"
+        "label": "界面语言",
+        "description": "标为“实验性”的语言只翻译了界面。模型读到的指令仍是英文，故事质量取决于模型。"
       },
       "chatMessageWindow": {
         "label": "聊天窗口消息上限"
@@ -1525,7 +1526,9 @@
       "badView": "view 必须是对象",
       "conversionFailed": "无法渲染 view"
     },
-    "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。"
+    "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。",
+    "untranslated": "未翻译",
+    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。"
   },
   "pluginJob": {
     "completed": "{{target}} 已完成（耗时 {{duration}}）",
@@ -1614,7 +1617,8 @@
     "duringTurnDesc": "剧情生成后，可能仍在更新游戏状态。等待“本轮已完成”后再确认结果；若主动停止且显示“本轮未提交”，可用原输入重试。部分更新失败时，只重试失败任务即可。历史交互、建议和执行细节可展开查看。",
     "reopenHint": "以后可在世界选择页点击“新手引导”重看；模型和外观随时可在设置中调整。",
     "chooseWorld": "去选择世界",
-    "testBindings": "查看并测试已有模型（{{count}} 个用途）"
+    "testBindings": "查看并测试已有模型（{{count}} 个用途）",
+    "languageExperimental": "实验性"
   },
   "character": {
     "noCharacters": "角色信息将在创建角色后显示。",

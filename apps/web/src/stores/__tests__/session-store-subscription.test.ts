@@ -42,6 +42,7 @@ function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
     runtimes: [],
     tools: [],
     userSettings: [],
+    languages: { text: ["en"], instructions: ["en"] },
     active,
     serverCodeApproved: true,
     sessionState: active ? "active" : "inactive",

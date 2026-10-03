@@ -1,5 +1,6 @@
 import {
   canonicalizeLocale,
+  localeLanguage,
   localeLookupCandidates,
   localesShareLanguageAndScript,
 } from "./locale-registry.js";
@@ -61,6 +62,22 @@ export function instructionVariantCandidates(
   if (instructionLocaleFor(locale, override) !== "zh") return [];
   const own = isSimplifiedChinese(locale) ? localeLookupCandidates(locale) : [];
   return [...new Set([...own, "zh"])];
+}
+
+/**
+ * How far the framework supports a language.
+ *
+ * `native`: the instructions exist in this language (English and Simplified
+ * Chinese). `extended`: labels and world editions only. A session in an
+ * extended language gives the model English instructions and asks for output
+ * in that language, so the quality depends on the model.
+ */
+export type LocaleTier = "native" | "extended";
+
+export function localeTier(locale: string | undefined): LocaleTier {
+  return localeLanguage(locale) === "en" || isSimplifiedChinese(locale)
+    ? "native"
+    : "extended";
 }
 
 /** Whether a variant file's locale tag names an instruction-language variant. */

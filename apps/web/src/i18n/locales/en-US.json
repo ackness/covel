@@ -735,7 +735,8 @@
         "description": "Import, remove, and reuse custom theme packages."
       },
       "uiLocale": {
-        "label": "Interface Language"
+        "label": "Interface Language",
+        "description": "A language marked experimental has a translated interface. The instructions the models read stay in English, so the quality of the story depends on the model."
       },
       "chatMessageWindow": {
         "label": "Chat window message limit"
@@ -1525,7 +1526,9 @@
       "badView": "`view` must be an object",
       "conversionFailed": "could not render `view`"
     },
-    "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles."
+    "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles.",
+    "untranslated": "Not translated",
+    "untranslatedHint": "This plugin has no text in your language. Its panels show English."
   },
   "pluginJob": {
     "completed": "{{target}} completed in {{duration}}",
@@ -1614,7 +1617,8 @@
     "duringTurnDesc": "Game state may still be updating after the story appears. Wait for Turn complete to confirm the result. If you stop and the turn is not committed, retry with the original input. For partial update failures, retry the failed tasks. Expand earlier interactions, suggestions, or execution details when needed.",
     "reopenHint": "Reopen this guide from the world selection page. Models and appearance can be adjusted in Settings at any time.",
     "chooseWorld": "Choose a world",
-    "testBindings": "Review and test existing models ({{count}} roles)"
+    "testBindings": "Review and test existing models ({{count}} roles)",
+    "languageExperimental": "experimental"
   },
   "character": {
     "noCharacters": "Characters will appear here once created.",

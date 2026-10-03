@@ -66,6 +66,7 @@ const fixturePlugin: PluginSummary = {
   ],
   tools: [],
   userSettings: [],
+  languages: { text: ["en"], instructions: ["en"] },
 };
 
 beforeEach(async () => {

@@ -54,6 +54,7 @@ const plugin: SessionPlugin = {
   runtimes: [],
   tools: [],
   userSettings: [],
+  languages: { text: ["en"], instructions: ["en"] },
   active: false,
   locked: false,
 };

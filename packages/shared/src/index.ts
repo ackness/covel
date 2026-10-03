@@ -77,11 +77,16 @@ export {
   instructionLocaleOverride,
   instructionVariantCandidates,
   isInstructionVariantLocale,
+  localeTier,
 } from "./utils/instruction-locale.js";
-export type { InstructionLocale } from "./utils/instruction-locale.js";
+export type {
+  InstructionLocale,
+  LocaleTier,
+} from "./utils/instruction-locale.js";
 export { pluginMessagesFor } from "./utils/plugin-messages.js";
 export {
   WORLD_EDITIONS_KEY,
+  pluginHasTextIn,
   sessionContentLocale,
   worldEditionLocales,
 } from "./utils/content-locale.js";

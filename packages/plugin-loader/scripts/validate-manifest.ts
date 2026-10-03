@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { loadPluginDefinition } from "../src/load.js";
 import { validatePluginLabels } from "../src/locale-labels.js";
+import { describePluginLanguages } from "../src/plugin-languages.js";
 const args = process.argv.slice(2);
 if (!args.length || args.some((arg) => arg.startsWith("--"))) {
   console.error(
@@ -41,7 +42,7 @@ for (const arg of args) {
         throw new Error(`${dir}: rename child PLUGIN.md to RUNTIME.md`);
       pluginMdPaths.push(path.join(dir, "RUNTIME.md"));
     }
-    await loadPluginDefinition({
+    const definition = await loadPluginDefinition({
       id: path.basename(rootPath),
       rootPath,
       isMultiRuntime: await fs.stat(runtimeDir).then(
@@ -56,6 +57,11 @@ for (const arg of args) {
         `${rootPath}: locale files\n  - ${labelProblems.join("\n  - ")}`,
       );
     console.log(`✓ Static package validation: ${rootPath}`);
+    // A language the package lacks is not an error: labels fall back to
+    // English and the prompts are English. The author sees what players get.
+    console.log(
+      `  languages: ${describePluginLanguages(definition.languages)}`,
+    );
   } catch (error) {
     console.error(
       `✗ ${error instanceof Error ? error.message : String(error)}`,

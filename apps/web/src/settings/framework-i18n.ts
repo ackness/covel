@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import type { SettingEntry, SettingOption } from "@covel/settings";
-import { resolveI18nText } from "@covel/shared";
+import { localeTier, resolveI18nText } from "@covel/shared";
 import i18n from "@/i18n";
 
 type SettingTextField = "label" | "description";
@@ -37,6 +37,10 @@ function frameworkSettingText(
       label: t(
         "settings.frameworkEntries.uiLocale.label",
         "Interface Language",
+      ),
+      description: t(
+        "settings.frameworkEntries.uiLocale.description",
+        "A language marked experimental has a translated interface. The instructions the models read stay in English, so the quality of the story depends on the model.",
       ),
     },
     "ui.chatMessageWindow": {
@@ -124,6 +128,12 @@ export function resolveSettingOptionText(
   locale: string,
 ): string {
   const fallback = resolveI18nText(option.label, locale) ?? option.value;
+  if (
+    !entry.pluginId &&
+    entry.key === "ui.locale" &&
+    localeTier(option.value) === "extended"
+  )
+    return `${fallback} (${i18n.getFixedT(locale)("onboarding.languageExperimental", "experimental")})`;
   if (entry.pluginId || entry.key !== "ui.scheme") return fallback;
   if (option.value !== "light" && option.value !== "dark") return fallback;
   return i18n.getFixedT(locale)(

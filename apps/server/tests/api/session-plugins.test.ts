@@ -791,6 +791,40 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect((await store.getSession("sess-zh"))?.locale).toBe("zh-CN");
     });
 
+    it("names the active plugins that have no text in the session's language", async () => {
+      registry.register(
+        makeEntry({
+          id: "translated-plugin",
+          summary: makeSummary({ id: "translated-plugin", name: "Translated" }),
+          source: "builtin",
+          languages: { text: ["en", "zh"], instructions: ["en"] },
+        }),
+      );
+      const create = async (id: string, locale: string) => {
+        const res = await app.request("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id,
+            locale,
+            plugins: ["narrator", "translated-plugin"],
+          }),
+        });
+        expect(res.status).toBe(201);
+        return (await res.json()) as { pluginsWithoutLocale?: string[] };
+      };
+
+      // `narrator` and the default `pregame` are registered with English
+      // only. The session is created all the same: their panels show English.
+      expect(
+        (await create("sess-zh-labels", "zh-CN")).pluginsWithoutLocale,
+      ).toEqual(["narrator", "pregame"]);
+      // Every plugin has English.
+      expect(
+        (await create("sess-en-labels", "en-US")).pluginsWithoutLocale,
+      ).toBeUndefined();
+    });
+
     it("imports portable lorebook entries from a store-only generated world", async () => {
       await store.upsertWorld({
         id: "portable-generated-world",

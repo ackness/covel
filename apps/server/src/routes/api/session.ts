@@ -22,6 +22,7 @@ import { Hono } from "hono";
 import {
   isBlockingWorldRequirement,
   isSetupRuntime,
+  pluginHasTextIn,
   readRuntimeEnv,
 } from "@covel/shared";
 import {
@@ -562,6 +563,14 @@ sessionRoutes.post("/", async (c) => {
   });
   if (responseSession instanceof Response) return responseSession;
 
+  const untranslatedPlugins = plugins.filter(
+    (pluginId) =>
+      !pluginHasTextIn(
+        pluginRegistry.get(pluginId)?.languages,
+        contentLocale.locale,
+      ),
+  );
+
   // `ownerToken` is returned exactly once — it is never readable again
   // (only its hash is stored). Clients on hosted tiers must persist it.
   return c.json(
@@ -571,6 +580,11 @@ sessionRoutes.post("/", async (c) => {
       // Present when the world has no edition in the requested language and
       // the session is in the world's own language instead.
       ...(contentLocale.changed ? { requestedLocale } : {}),
+      // Active plugins with no labels in the session's language: their
+      // panels show English. Never a reason to refuse the session.
+      ...(untranslatedPlugins.length > 0
+        ? { pluginsWithoutLocale: untranslatedPlugins }
+        : {}),
     },
     201,
   );

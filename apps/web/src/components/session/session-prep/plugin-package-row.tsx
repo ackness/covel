@@ -1,5 +1,6 @@
 import { Cpu, Lock, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { pluginHasTextIn } from "@covel/shared";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { RuntimeStageBadges } from "../runtime-stage-badges.js";
@@ -155,6 +156,18 @@ export function PluginPackageRow({
             {tag}
           </Badge>
         ))}
+        {!pluginHasTextIn(pkg.languages, i18n.language) && (
+          <Badge
+            variant="outline"
+            className="text-xs px-1.5 py-0 h-4 text-muted-foreground"
+            title={t(
+              "plugin.untranslatedHint",
+              "This plugin has no text in your language. Its panels show English.",
+            )}
+          >
+            {t("plugin.untranslated", "Not translated")}
+          </Badge>
+        )}
       </div>
       {isSelected &&
         providerSlotSettings.map((setting) => (

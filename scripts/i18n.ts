@@ -4,7 +4,7 @@
  *   pnpm i18n status <dir>... [--locale <tag>] [--missing]
  *   pnpm i18n extract <plugin-dir> --locale <tag>
  *   pnpm i18n lock <plugin-dir>...
- *   pnpm i18n translate <dir> --locale <tag> [--slot <name>] [--dry-run]
+ *   pnpm i18n translate <dir> --locale <tag> [--slot <name>] [--dry-run] [--to <translations-dir>]
  *
  * A directory with `PLUGIN.md` is a plugin, one with `world.yaml` a world.
  *
@@ -34,6 +34,7 @@ import {
 import {
   lockPluginLabels,
   pluginLocales,
+  setTranslationsDirectory,
   pluginTranslationStatus,
   writePluginTranslations,
   type LabelUnit,
@@ -47,7 +48,12 @@ const USAGE = `Usage:
   pnpm i18n status <dir>... [--locale <tag>] [--missing]
   pnpm i18n extract <plugin-dir> --locale <tag>
   pnpm i18n lock <plugin-dir>...
-  pnpm i18n translate <dir> --locale <tag> [--slot <name>] [--dry-run]`;
+  pnpm i18n translate <dir> --locale <tag> [--slot <name>] [--dry-run] [--to <translations-dir>]
+
+  --to <translations-dir>   For a plugin: count the translations in that
+                            directory, and write new ones there
+                            (<translations-dir>/plugins/<id>/<tag>.yaml)
+                            instead of into the plugin package.`;
 
 function fail(message: string): never {
   console.error(message);
@@ -60,16 +66,19 @@ let locale: string | undefined;
 let slot: string | undefined;
 let listMissing = false;
 let dryRun = false;
+let translationsDir: string | undefined;
 for (let index = 0; index < rest.length; index += 1) {
   const arg = rest[index]!;
   if (arg === "--locale") locale = rest[++index];
   else if (arg === "--slot") slot = rest[++index];
   else if (arg === "--missing") listMissing = true;
   else if (arg === "--dry-run") dryRun = true;
+  else if (arg === "--to") translationsDir = rest[++index];
   else if (arg.startsWith("--")) fail(`Unknown option ${arg}\n${USAGE}`);
   else dirs.push(arg);
 }
 if (!command || dirs.length === 0) fail(USAGE);
+if (translationsDir) setTranslationsDirectory(translationsDir);
 
 /** Fields of world data that hold a name: translated first, then reused. */
 const NAME_FIELDS: ReadonlySet<string> = new Set([
@@ -363,12 +372,23 @@ async function translate(dir: string): Promise<void> {
         .filter(([id]) => id.startsWith("message:"))
         .map(([id, text]) => [id.slice("message:".length), text]),
     );
-    const file = await writePluginTranslations(dir, locale, {
-      labels,
-      messages,
-    });
-    await lockPluginLabels(dir);
-    console.log(`  wrote ${file} and locales/lock.json`);
+    if (translationsDir) {
+      // Not the author's translation: it stays outside the package.
+      const file = await writePluginTranslations(
+        dir,
+        locale,
+        { labels, messages },
+        path.join(translationsDir, "plugins", path.basename(path.resolve(dir))),
+      );
+      console.log(`  wrote ${file}`);
+    } else {
+      const file = await writePluginTranslations(dir, locale, {
+        labels,
+        messages,
+      });
+      await lockPluginLabels(dir);
+      console.log(`  wrote ${file} and locales/lock.json`);
+    }
   } else {
     const written = await writeWorldTranslations(
       dir,

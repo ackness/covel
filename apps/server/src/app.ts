@@ -30,6 +30,7 @@ import {
   type PluginLlmModelTarget,
 } from "@covel/runtime";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
+import { setTranslationsDirectory } from "@covel/plugin-loader";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
 import { hasServerRuntimeJobCredentials } from "./runtime-job-readiness.js";
 import {
@@ -286,6 +287,8 @@ async function initializeServer(): Promise<void> {
       env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
     const userDirs = resolveUserResourceDirs(env);
     const pluginsDirs = mergeDirs(bundledPluginsDir, userDirs.plugins);
+    // Before any plugin loads: its labels and messages are read once.
+    setTranslationsDirectory(userDirs.translations);
     const ensureEmbeddingLock = createEmbeddingLockHelper({
       store,
       ai,

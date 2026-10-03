@@ -40,6 +40,7 @@ const plugin = {
   ],
   tools: [],
   userSettings: [],
+  languages: { text: ["en"], instructions: ["en"] },
 };
 
 describe("shared API contracts", () => {

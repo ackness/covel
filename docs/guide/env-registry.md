@@ -46,6 +46,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - Vite 从仓库根读取 `.env`、`.env.local` 和对应 mode 文件；只有 `VITE_*` 会暴露到浏览器。开发代理使用 `RUNTIME_HOST`（默认 `127.0.0.1`）以及 `RUNTIME_PORT` > `SERVER_PORT` > `3001`。Shell 值优先。构建缓存包含这些根环境文件和 `VITE_*`，修改公开配置后不会复用旧产物。根 `.env` 里的 `NODE_ENV` 只作用于 server：`pnpm --filter @covel/web build`（以及经它构建的 `pnpm build`、`pnpm build:electron`）始终产出生产包，只有在 shell 中显式导出 `NODE_ENV=development` 才会得到开发模式的前端产物。
 - `pnpm dev:pg` 预检读取根 `.env`，默认跟随 `DATABASE_URL`。没有 URL 时检查 `127.0.0.1:POSTGRES_PORT`（默认 `5432`）；`COVEL_PG_PREFLIGHT_HOST/PORT` 可显式覆盖。设置了不带端口的 URL 时使用 PostgreSQL 默认端口 `5432`。
 - Docker 的进程环境由 Compose 注入，模型配置从宿主机只读挂载；路径与持久化规则见下节。
+- 包外的插件译文（翻译包、本机机器翻译）从 `COVEL_USER_TRANSLATIONS_DIR` 读取，未设置时使用 `$COVEL_HOME/translations`，目录不存在就什么都不读。格式见 [i18n](../reference/i18n.md)。
 - 用户包安装和启动发现统一使用 `COVEL_USER_WORLDS_DIR` / `COVEL_USER_PLUGINS_DIR`，未设置时使用 `$COVEL_HOME/worlds` / `plugins`（默认 `~/.covel`）。桌面继续使用 shell 注入的目录。世界安装成功即可查询和使用；插件安装后仍需重启服务。插件目录下指向目录的软链接（例如在另一个仓库开发的插件）按普通插件发现，读取范围限定在链接解析后的插件目录内；失效的软链接会被跳过并记录警告。
 - 离线图片脚本复用应用 TOML loader，支持 metadata 内联表、子表以及 `${VAR}` 插值。配置路径为 `COVEL_LLM_TOML`，否则 `$COVEL_HOME/llm.toml`；密钥优先级为 `COVEL_IMG_KEY` > provider 环境变量 > `$COVEL_HOME/keys.env` 中 provider key > `OPENAI_API_KEY` 环境变量 / 文件回退。源码使用根配置时可运行 `COVEL_LLM_TOML=llm.toml pnpm exec tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/generate-scenes.mjs haruka-academy --dry-run` 预览生成任务；实际生成时去掉 `--dry-run` 并选定配置中的 `--slot`。
 

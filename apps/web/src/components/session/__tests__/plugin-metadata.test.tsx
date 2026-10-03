@@ -40,6 +40,7 @@ function plugin(
     ],
     tools: [],
     userSettings: [],
+    languages: { text: ["en"], instructions: ["en"] },
   };
 }
 

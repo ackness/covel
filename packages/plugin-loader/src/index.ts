@@ -29,6 +29,11 @@ export {
   writePluginTranslations,
 } from "./locale-tooling.js";
 export type { LabelUnit, PluginTranslationStatus } from "./locale-tooling.js";
+export { setTranslationsDirectory } from "./locale-files.js";
+export {
+  describePluginLanguages,
+  pluginLanguages,
+} from "./plugin-languages.js";
 export {
   pluginDeclarations,
   pluginRuntimeManifests,

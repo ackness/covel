@@ -139,6 +139,10 @@ export function createRuntimeLoader(
             packageManifest: entry.packageManifest,
             manifests: manifests ?? [],
             messages: entry.messages ?? [],
+            languages: entry.languages ?? {
+              text: ["en"],
+              instructions: ["en"],
+            },
           },
           Object.fromEntries(
             [...params.pluginRegistry!.getAll().values()].flatMap((e) =>

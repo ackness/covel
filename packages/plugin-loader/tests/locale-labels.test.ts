@@ -177,7 +177,7 @@ runtimes/gone/RUNTIME.md:
       .packageManifest;
     expect(plugin.displayName).toBe("Inventory");
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("cannot be parsed, its labels are ignored"),
+      expect.stringContaining("cannot be parsed, its text is ignored"),
     );
     expect((await validatePluginLabels(dir)).join("\n")).toContain(
       "locales/zh.yaml: cannot be parsed",

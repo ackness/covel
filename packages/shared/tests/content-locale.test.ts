@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { sessionContentLocale, worldEditionLocales } from "../src/index.js";
+import {
+  localeTier,
+  pluginHasTextIn,
+  sessionContentLocale,
+  worldEditionLocales,
+} from "../src/index.js";
 
 const bilingual = {
   locale: "zh-CN",
@@ -64,5 +69,39 @@ describe("worldEditionLocales", () => {
     expect(worldEditionLocales(bilingual)).toEqual(["zh-CN", "en-US"]);
     expect(worldEditionLocales(chineseOnly)).toEqual(["zh-CN"]);
     expect(worldEditionLocales(undefined)).toEqual([]);
+  });
+});
+
+describe("pluginHasTextIn", () => {
+  const languages = { text: ["en", "zh"], instructions: ["en"] };
+
+  it("matches a language whatever its region", () => {
+    expect(pluginHasTextIn(languages, "zh-CN")).toBe(true);
+    expect(pluginHasTextIn(languages, "en-GB")).toBe(true);
+    expect(pluginHasTextIn(languages, "ru-RU")).toBe(false);
+  });
+
+  it("does not take Simplified Chinese text for Traditional Chinese", () => {
+    expect(pluginHasTextIn(languages, "zh-TW")).toBe(false);
+  });
+
+  it("counts English for a plugin that states no languages", () => {
+    expect(pluginHasTextIn(undefined, "en-US")).toBe(true);
+    expect(pluginHasTextIn(undefined, "zh-CN")).toBe(false);
+  });
+});
+
+describe("localeTier", () => {
+  it("is native for the languages that have their own instructions", () => {
+    expect(localeTier("en-US")).toBe("native");
+    expect(localeTier("en-GB")).toBe("native");
+    expect(localeTier("zh-CN")).toBe("native");
+  });
+
+  it("is extended for a language that reads the English instructions", () => {
+    expect(localeTier("ru-RU")).toBe("extended");
+    expect(localeTier("ja-JP")).toBe("extended");
+    // Traditional Chinese reads English instructions, not the Simplified ones.
+    expect(localeTier("zh-TW")).toBe("extended");
   });
 });

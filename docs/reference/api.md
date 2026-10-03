@@ -1201,6 +1201,8 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 响应是会话记录加一次性的 `ownerToken`。`locale` 是会话实际的内容语言；当它不是请求的语言时，响应另带 `requestedLocale`（请求的语言），客户端据此提示玩家“这个世界没有该语言的版本，故事将用世界的语言进行”。世界的语言版本取自 `world.yaml` 的 `supportedLocales`（未声明时只有 `defaultLocale`）；应用内生成的世界只有生成时的那一种语言。
 
+响应还可能带 `pluginsWithoutLocale: string[]`：启用了、但没有会话语言文字的插件 ID（只有 English 标签，面板显示英文）。它只是提示，不影响会话创建。
+
 会话不保存独立的 `presetId` 模型选择；模型路由使用槽位配置、请求级覆盖与 `runtimeModelOverrides`。
 
 Web 准备页把当前显示的背景文本随创建请求传入；浏览器私有模式先保存到
@@ -2155,14 +2157,15 @@ runtime 在自身结果中报告失败（`status: "failed"`、`error` 或失败�
 
 返回 `{items: PluginSummary[]}`。`PluginSummary` 来自 registry 的统一投影：
 
-| 字段                                                        | 含义                                                             |
-| ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| `id`, `displayName`, `description`                          | 包身份与可本地化描述                                             |
-| `kind`, `source`                                            | `core \| plugin` 与 `builtin \| community`                       |
-| `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error` 与加载错误 |
-| `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                               |
-| `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                 |
-| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                     |
+| 字段                                                        | 含义                                                                                                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `displayName`, `description`                          | 包身份与可本地化描述                                                                                                                        |
+| `kind`, `source`                                            | `core \| plugin` 与 `builtin \| community`                                                                                                  |
+| `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error` 与加载错误                                                                            |
+| `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                                                                                                          |
+| `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                                                                                            |
+| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具与用户设置                                                                                                                |
+| `languages`                                                 | `{ text: string[], instructions: string[] }`：插件有文字的语言（标签、界面和代码文字，含翻译目录里的译文）和有指令的语言。两者都至少含 `en` |
 
 宿主是否加载与会话是否激活是两种状态；列表不会把全局宿主状态写成某个会话的 active。`loaded` 来自当前 entry 代次的实际发布状态，与 runtime 缓存无关；首次发布失败为 `error`，重载失败而旧代仍可用时仍为 `loaded` 并可携带 `error`。纯声明或 entry-only 包可以没有 runtime。
 

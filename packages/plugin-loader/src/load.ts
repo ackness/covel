@@ -1,6 +1,7 @@
 import { resolvePluginDeclarations } from "./declarations.js";
 import { loadPluginUiSpec } from "./ui-spec.js";
 import { readMessageCatalogs } from "./locale-messages.js";
+import { pluginLanguages } from "./plugin-languages.js";
 import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
 /**
  * Progressive plugin loading — three levels of detail.
@@ -17,6 +18,7 @@ import {
 } from "@covel/shared";
 import type {
   PluginManifest,
+  PluginLanguages,
   PluginMessageCatalog,
   RuntimeManifest,
 } from "@covel/shared";
@@ -275,6 +277,8 @@ export interface PluginDefinition {
   readonly manifests: readonly ParsedRuntimeMd[];
   /** The `messages` section of each `locales/<locale>.yaml`. */
   readonly messages: readonly PluginMessageCatalog[];
+  /** The languages the package has text in. */
+  readonly languages: PluginLanguages;
 }
 
 export async function loadPluginDefinition(
@@ -422,6 +426,7 @@ export async function loadPluginDefinition(
       ),
     ),
     messages: await readMessageCatalogs(discovery.rootPath),
+    languages: await pluginLanguages(discovery.rootPath),
   };
   validatePluginDeclarations([packageManifest]);
   return definition;

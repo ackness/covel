@@ -1,3 +1,4 @@
+import type { PluginLanguages } from "../types/plugin-api.js";
 import {
   canonicalizeLocale,
   localesShareLanguageAndScript,
@@ -50,4 +51,18 @@ export function sessionContentLocale(
     editions.find((item) => localesShareLanguageAndScript(item, wanted));
   if (edition) return { locale: edition, changed: false };
   return { locale: world?.locale ?? editions[0]!, changed: true };
+}
+
+/**
+ * Whether a plugin has labels and UI text for `locale`, region aside. A
+ * plugin always has English; a plugin that lacks the session's language
+ * still runs, and its panels show English.
+ */
+export function pluginHasTextIn(
+  languages: PluginLanguages | undefined,
+  locale: string,
+): boolean {
+  return (languages?.text ?? ["en"]).some((own) =>
+    localesShareLanguageAndScript(own, locale),
+  );
 }

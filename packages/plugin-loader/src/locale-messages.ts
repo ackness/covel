@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { canonicalizeLocale, isKnownLocale, isLocaleMap } from "@covel/shared";
-import { parse as parseYaml } from "yaml";
+import { isLocaleMap } from "@covel/shared";
+import { readLocaleFiles } from "./locale-files.js";
 
 /** Language of a plugin's main files: manifests, prompts and UI specs. */
 export const PLUGIN_BASE_LOCALE = "en";
@@ -92,40 +92,28 @@ function* uiTexts(
   }
 }
 
-/** The `messages` section of every `locales/<locale>.yaml`, sorted by locale. */
+/**
+ * The `messages` section of every locale file of the plugin, one catalog for
+ * each locale, sorted by locale. An outside translation fills the entries
+ * the author's file lacks.
+ */
 export async function readMessageCatalogs(
   pluginRoot: string,
 ): Promise<readonly MessageCatalog[]> {
-  const directory = path.join(pluginRoot, "locales");
-  let names: string[];
-  try {
-    names = await fs.readdir(directory);
-  } catch {
-    return [];
-  }
-  const catalogs: MessageCatalog[] = [];
-  for (const name of names.sort()) {
-    const tag = /^(.+)\.ya?ml$/.exec(name)?.[1];
-    const locale = tag ? canonicalizeLocale(tag) : undefined;
-    if (!locale || !isKnownLocale(locale)) continue;
-    const full = path.join(directory, name);
-    if (!(await fs.lstat(full)).isFile()) continue;
-    let document: unknown;
-    try {
-      document = parseYaml(await fs.readFile(full, "utf-8"));
-    } catch {
-      // Reported by the label reader; a broken file must not disable the UI.
-      continue;
-    }
-    if (document === null || typeof document !== "object") continue;
-    const section = (document as Record<string, unknown>)[MESSAGES_SECTION];
+  const catalogs = new Map<string, MessageCatalog>();
+  for (const { locale, file, document } of await readLocaleFiles(pluginRoot)) {
+    const section = document[MESSAGES_SECTION];
     if (section === null || typeof section !== "object") continue;
-    const messages: Record<string, string> = {};
+    const messages: Record<string, string> = {
+      ...catalogs.get(locale)?.messages,
+    };
     for (const [text, translation] of Object.entries(section))
       if (typeof translation === "string") messages[text] = translation;
-    catalogs.push({ locale, file: `locales/${name}`, messages });
+    catalogs.set(locale, { locale, file, messages });
   }
-  return catalogs;
+  return [...catalogs.values()].sort((a, b) =>
+    a.locale.localeCompare(b.locale),
+  );
 }
 
 /** The catalog key that translates `text` at `property`, if any. */

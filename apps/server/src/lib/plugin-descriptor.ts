@@ -122,6 +122,7 @@ export function buildPluginSummary(
     runtimes,
     tools,
     userSettings: [...(plugin?.contributes?.settings ?? [])],
+    languages: entry.languages ?? { text: ["en"], instructions: ["en"] },
   };
 }
 

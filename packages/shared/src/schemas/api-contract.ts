@@ -307,6 +307,12 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
         .strict(),
     ),
     userSettings: z.array(pluginUserSettingSpecSchema),
+    languages: z
+      .object({
+        text: z.array(z.string()),
+        instructions: z.array(z.string()),
+      })
+      .strict(),
   })
   .strict();
 

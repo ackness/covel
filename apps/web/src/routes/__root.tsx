@@ -9,8 +9,8 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu } from "lucide-react";
-import { resolveI18nText } from "@covel/shared";
 import { localeDefinitions } from "@/i18n/catalog-registry.js";
+import { localeOptionLabel } from "@/i18n/locale-option-label.js";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -219,8 +219,11 @@ function RootLayout() {
                 >
                   {localeDefinitions.map((definition) => (
                     <option key={definition.code} value={definition.code}>
-                      {resolveI18nText(definition.label, locale) ??
-                        definition.code}
+                      {localeOptionLabel(
+                        definition,
+                        locale,
+                        t("onboarding.languageExperimental", "experimental"),
+                      )}
                     </option>
                   ))}
                 </select>
@@ -290,8 +293,14 @@ function RootLayout() {
                       >
                         {localeDefinitions.map((definition) => (
                           <option key={definition.code} value={definition.code}>
-                            {resolveI18nText(definition.label, locale) ??
-                              definition.code}
+                            {localeOptionLabel(
+                              definition,
+                              locale,
+                              t(
+                                "onboarding.languageExperimental",
+                                "experimental",
+                              ),
+                            )}
                           </option>
                         ))}
                       </select>
