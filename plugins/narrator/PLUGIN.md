@@ -20,7 +20,7 @@ conflicts:
   - narrative-engine@1
 optional:
   - graph-rag@1
-  - dice-check@1
+  - action-check@1
   - world-time-context@1
   - tabletop-check@1
   - story-event-cue@1
@@ -115,7 +115,7 @@ runtime:
         required: false
       check-results:
         from:
-          contract: dice-check@1
+          contract: action-check@1
         select: /checkContext
         required: false
     output:
@@ -164,13 +164,12 @@ runtime:
 
 ## 已结算的跑团检定
 
-若 `<runtime-inputs>` 的 `tabletopCheck.value` 包含 `Settled tabletop check` 及已提交的检定回执，本回合检定由跑团规则插件独占。只叙述该回执对应行动的后果，不重掷、不修改修正值或成败，不使用 `check-results` 骰池，也不发射 `check.resolved`。若其内容为 `No tabletop check submitted` 或缺失，才按下方骰池规则处理普通风险行动。
+若 `<runtime-inputs>` 的 `tabletopCheck.value` 包含 `Settled tabletop check` 及已提交的检定回执，本回合检定由跑团规则插件独占。只叙述该回执对应行动的后果，不重掷、不修改修正值或成败，也不再按 `check-results` 另行判定。若其内容为 `No tabletop check submitted` 或缺失，才按下方「行动判定」处理普通风险行动。
 
-## 行动判定（由骰子判定注入）
+## 行动判定（由判定插件注入）
 
-- 仅在本回合没有 `Settled tabletop check` 回执时，对有失败风险的行动判定；按顺序消耗 `runtime-inputs.check-results.value` 预掷骰，以骰值 + 相关属性修正对抗 DC 8/12/16/20
-- 天然 20 给额外收获；天然 1 引入复杂后果。仅在没有已提交的跑团检定回执时，正文前将本回合骰池判定作为 `checks`，只发射一次 `check.resolved`
-- 在叙事中呈现成败，不显示骰值或 DC；没有 `runtime-inputs.check-results.value` 时按一般叙事逻辑处理
+- 仅在本回合没有 `Settled tabletop check` 回执时，对有失败风险的行动判定；判定资源、规则和需要提交的回执全部以 `runtime-inputs.check-results.value` 为准，严格照做，不自行改写规则或结果
+- 在叙事中呈现成败，不显示判定用的系统数字；没有 `runtime-inputs.check-results.value` 时按一般叙事逻辑处理
 
 ## 叙事规则
 

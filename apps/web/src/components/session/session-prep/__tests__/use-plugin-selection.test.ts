@@ -63,8 +63,10 @@ const PLAN: WorldPluginPlan = {
     avoidedTags: [],
     requested: ["world-required"],
     recommended: [],
+    requires: [],
   },
   defaultPluginIds: ["core", "world-required"],
+  missing: [],
 };
 
 function selectionPlan(defaultPluginIds: string[]): WorldPluginPlan {
@@ -283,6 +285,60 @@ describe("usePluginSelection", () => {
     expect(submitted.rejected).toContainEqual(
       expect.objectContaining({ pluginId: "broken", code: "missing-provider" }),
     );
+  });
+
+  it("reports missing world plugins for the policy and for the active pack only", async () => {
+    const pack = {
+      id: "tabletop",
+      label: "Tabletop",
+      requested: ["core"],
+      recommended: [],
+      tags: [],
+      source: "world" as const,
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["core"]),
+      packs: [pack],
+      missing: [
+        { pluginId: "world-dice" },
+        { pluginId: "pack-map", packId: pack.id },
+        { pluginId: "world-dice", packId: pack.id },
+        { pluginId: "other-pack-only", packId: "other" },
+      ],
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.missingPluginIds).toEqual(["world-dice"]);
+
+    act(() => result.current.applyPack(pack.id));
+    expect(result.current.missingPluginIds).toEqual(["world-dice", "pack-map"]);
+  });
+
+  it("adds the provider of a world-required contract and reports turning it off", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["core"]),
+      policy: { ...PLAN.policy, requested: [], requires: ["dependency@1"] },
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.selectedPluginIdSet.has("dependency")).toBe(true);
+    // The world's provider is a dependency, not something the player requested.
+    expect(result.current.requestedPluginIds).toEqual(["core"]);
+    expect(result.current.unmetRequirements).toEqual([]);
+
+    act(() => result.current.togglePlugin("dependency"));
+    expect(result.current.selectedPluginIdSet.has("dependency")).toBe(false);
+    expect(result.current.unmetRequirements).toEqual([
+      {
+        contract: "dependency@1",
+        code: "excluded",
+        candidates: ["dependency"],
+      },
+    ]);
   });
 
   it("keeps an explicitly excluded core disabled after applying a pack", async () => {

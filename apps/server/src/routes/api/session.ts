@@ -19,7 +19,11 @@ import { characterSchemaSchema } from "@covel/shared";
 import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { isSetupRuntime, readRuntimeEnv } from "@covel/shared";
+import {
+  isBlockingWorldRequirement,
+  isSetupRuntime,
+  readRuntimeEnv,
+} from "@covel/shared";
 import {
   pluginRuntimeManifests,
   type PluginRegistry,
@@ -59,7 +63,10 @@ import {
 } from "./session/session-guard.js";
 import {
   resolveSessionPluginPlan,
+  storedPluginSelection,
   unknownPluginIds,
+  unmetRequirementMessage,
+  worldRequiredContracts,
 } from "./session/plugins.js";
 import {
   buildSessionPatchUpdates,
@@ -219,10 +226,15 @@ sessionRoutes.post("/", async (c) => {
     );
   }
 
+  // The world is a requirer too. Its contracts are read once here and kept
+  // with the session, so later resolutions need no world lookup.
+  const requiredContracts = rawWorldId
+    ? worldRequiredContracts(await store.getWorld(rawWorldId))
+    : [];
   const selection = resolveSessionPluginPlan(
     parsedCreate.requestedPlugins,
     pluginRegistry,
-    { excluded: parsedCreate.excludedPlugins },
+    { excluded: parsedCreate.excludedPlugins, requiredContracts },
   );
   const failure = selection.rejected.find(
     (item) =>
@@ -231,6 +243,17 @@ sessionRoutes.post("/", async (c) => {
       ),
   );
   if (failure) return c.json(errorBody(failure.reason), 400);
+  // A requirement the player turned off, or one awaiting consent, is a choice
+  // and proceeds. A missing or ambiguous provider is a setup problem.
+  const unmet = selection.unmet.find(isBlockingWorldRequirement);
+  if (unmet)
+    return c.json(
+      errorBody(unmetRequirementMessage(unmet), {
+        code: "world_requirement_unmet",
+        details: unmet,
+      }),
+      400,
+    );
   const plugins = selection.active;
 
   if (rawWorldId) {
@@ -278,10 +301,11 @@ sessionRoutes.post("/", async (c) => {
     createdAt: now,
     updatedAt: now,
     metadata: {
-      pluginSelection: {
+      pluginSelection: storedPluginSelection({
         requested: parsedCreate.requestedPlugins,
         excluded: parsedCreate.excludedPlugins,
-      },
+        requiredContracts,
+      }),
       ...(parsedCreate.loreOverride !== undefined
         ? { loreOverride: parsedCreate.loreOverride }
         : {}),

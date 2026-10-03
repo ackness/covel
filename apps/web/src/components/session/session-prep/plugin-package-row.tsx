@@ -58,6 +58,10 @@ export function PluginPackageRow({
       "session.recommendationReasons.requiredByWorld",
       "Required by world",
     ),
+    requestedByWorld: t(
+      "session.recommendationReasons.requestedByWorld",
+      "World default",
+    ),
     packOptional: t(
       "session.recommendationReasons.packOptional",
       "Pack optional",

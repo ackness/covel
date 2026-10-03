@@ -52,8 +52,10 @@ const plan: WorldPluginPlan = {
     avoidedTags: [],
     requested: [],
     recommended: [],
+    requires: [],
   },
   defaultPluginIds: ["core", "guide"],
+  missing: [],
 };
 
 const slots: ResolvedSlot[] = ["text", "custom"].map((slotId) => ({

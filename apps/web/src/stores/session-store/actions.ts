@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import i18n from "i18next";
+import type { SessionPlugin } from "@covel/shared";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
-import { requestConfirm } from "@/lib/confirm-channel.js";
+import { requestChoices, requestConfirm } from "@/lib/confirm-channel.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import {
   SessionWorkspaceSyncError,
   type DataService,
@@ -673,6 +675,103 @@ export function useBuildSessionActions({
     [dispatch, workspace, sessionIdRef, sessionGenerationRef],
   );
 
+  /**
+   * Authorize several paused community plugins with one prompt that names each
+   * of them, instead of one prompt per plugin. Every plugin still gets its own
+   * approval request and its own grant; only the question is asked once.
+   *
+   * The prompt comes first and the approval requests after it, one plugin at a
+   * time. Enabling a plugin makes the server drop the pending approvals of the
+   * session's other paused plugins, so requests gathered up front would be
+   * gone by the time the second one is answered. Asking first also leaves no
+   * request behind for a plugin the player unticked.
+   */
+  const approveSessionPlugins = useCallback(
+    async (plugins: readonly SessionPlugin[]) => {
+      const sid = sessionIdRef.current;
+      if (!sid || plugins.length === 0) return;
+      const generation = sessionGenerationRef.current;
+      const isCurrent = () =>
+        sessionIdRef.current === sid &&
+        sessionGenerationRef.current === generation;
+
+      const allowed = await requestChoices({
+        title: i18n.t("plugin.approval.batchTitle"),
+        message: i18n.t("plugin.approval.batchMessage"),
+        confirmLabel: i18n.t("plugin.approval.allowSelected"),
+        cancelLabel: i18n.t("plugin.approval.notNow"),
+        choices: plugins.map((plugin) => {
+          const label =
+            resolveDisplayText(plugin.displayName, i18n.language) || plugin.id;
+          return {
+            id: plugin.id,
+            label,
+            detail: [
+              // The id is the label already when the plugin has no name.
+              [label === plugin.id ? "" : plugin.id, plugin.version]
+                .filter(Boolean)
+                .join(" · "),
+              resolveDisplayText(plugin.description, i18n.language),
+            ]
+              .filter(Boolean)
+              .join(" — "),
+          };
+        }),
+      });
+
+      for (const plugin of plugins) {
+        if (!allowed.includes(plugin.id)) continue;
+        try {
+          await workspace.run(
+            sid,
+            `plugin-approve:${crypto.randomUUID()}`,
+            async () => {
+              // Navigation may happen while this job waits for the workspace.
+              if (!isCurrent()) return;
+              const activate = () => {
+                if (isCurrent())
+                  dispatch({
+                    type: "TOGGLE_SESSION_PLUGIN",
+                    pluginId: plugin.id,
+                    active: true,
+                  });
+              };
+              const first = await api.enableSessionPlugin(sid, plugin.id);
+              if (!("status" in first)) return activate();
+              if (first.status !== "approval-required")
+                throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
+              // The player consented to this plugin by name. A request about
+              // anything else is refused rather than granted under it.
+              if (first.pending.pluginId !== plugin.id || !isCurrent()) {
+                await api.resolveApproval(
+                  first.approvalId,
+                  "deny",
+                  "session",
+                  sid,
+                );
+                return;
+              }
+              await api.resolveApproval(
+                first.approvalId,
+                "allow",
+                "session",
+                sid,
+              );
+              const enabled = await api.enableSessionPlugin(sid, plugin.id);
+              if ("status" in enabled)
+                throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
+              activate();
+            },
+          );
+        } catch (error) {
+          // One plugin failing must not stop the others the player allowed.
+          if (isCurrent()) reportWorkspaceSyncError(error, dispatch);
+        }
+      }
+    },
+    [dispatch, workspace, sessionIdRef, sessionGenerationRef],
+  );
+
   // Prompt once per visit for persisted selections whose process-local grant
   // expired. Denial keeps the selection visible for a later explicit retry.
   const approvalVisit = useRef<{ generation: number; attempted: Set<string> }>({
@@ -692,18 +791,13 @@ export function useBuildSessionActions({
     );
     for (const plugin of pending)
       approvalVisit.current.attempted.add(plugin.id);
-    void (async () => {
-      for (const plugin of pending) {
-        if (sessionGenerationRef.current !== generation) return;
-        await toggleSessionPlugin(plugin.id, true);
-      }
-    })();
+    void approveSessionPlugins(pending);
   }, [
     state.session,
     state.sessionPlugins,
     state.executing,
     sessionGenerationRef,
-    toggleSessionPlugin,
+    approveSessionPlugins,
   ]);
 
   const upsertInteractionDraft = useCallback(

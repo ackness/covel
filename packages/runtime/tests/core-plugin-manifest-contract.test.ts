@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec } from "@covel/shared";
@@ -153,7 +154,7 @@ describe("core plugin manifest contract", () => {
         select: "/npcContext",
       },
       "check-results": {
-        from: { capability: "dice-check@1" },
+        from: { capability: "action-check@1" },
         select: "/checkContext",
       },
     });
@@ -330,6 +331,23 @@ describe("core plugin manifest contract", () => {
         /\{\{\s*inputs\./.test(promptTemplate),
         `${manifest.name}: PLUGIN body must not raw-interpolate {{ inputs.* }} — use input.inject `,
       ).toBe(false);
+    }
+  });
+
+  it("keeps check-system rules out of the narrative engines", async () => {
+    // The `action-check@1` provider injects the whole rule set as `checkContext`.
+    // A copy in an engine body would bind that engine to one resolution system
+    // and contradict a replacement provider.
+    for (const engine of ["narrator", "chat-mode-narrator"]) {
+      for (const file of ["PLUGIN.md", "PLUGIN.en.md"]) {
+        const source = await readFile(
+          path.join(PLUGINS_DIR, engine, file),
+          "utf-8",
+        );
+        for (const term of ["check.resolved", "DC", "d20", "天然 20"]) {
+          expect(source, `${engine}/${file}: ${term}`).not.toContain(term);
+        }
+      }
     }
   });
 

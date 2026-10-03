@@ -187,13 +187,29 @@ export interface ResolvedWorldPluginPolicy {
   readonly avoidedTags: readonly string[];
   readonly requested: readonly string[];
   readonly recommended: readonly string[];
+  /** Contract IDs the world needs a provider for. */
+  readonly requires: readonly string[];
 }
 
-/** Server-resolved plugin selection plan for one world and live registry. */
+/** A plugin a world requests that is not installed on this host. */
+export interface MissingWorldPlugin {
+  readonly pluginId: string;
+  /** The pack that requests it; absent when the world policy requests it. */
+  readonly packId?: string;
+}
+
+/**
+ * Server-resolved plugin selection plan for one world and live registry.
+ *
+ * Every `requested` list (the policy's and each pack's) and `defaultPluginIds`
+ * hold installed plugins only, so a client can submit them unchanged. Requests
+ * the registry cannot satisfy are reported in `missing` instead.
+ */
 export interface WorldPluginPlan {
   readonly worldId: string;
   readonly packs: readonly PluginPack[];
   readonly policy: ResolvedWorldPluginPolicy;
   readonly selectedPackId?: string;
   readonly defaultPluginIds: readonly string[];
+  readonly missing: readonly MissingWorldPlugin[];
 }

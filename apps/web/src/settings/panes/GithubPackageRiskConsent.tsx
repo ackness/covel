@@ -2,12 +2,15 @@ import { useTranslation } from "react-i18next";
 
 export function GithubPackageRiskConsent({
   kind = "plugin",
+  includesWorld = false,
   hasServerCode,
   accepted,
   disabled,
   onChange,
 }: {
   kind?: "plugin" | "world";
+  /** A plugin selection that also installs worlds shows the world notice too. */
+  includesWorld?: boolean;
   hasServerCode: boolean;
   accepted: boolean;
   disabled: boolean;
@@ -26,6 +29,9 @@ export function GithubPackageRiskConsent({
               : "settings.github.contentRisk",
         )}
       </p>
+      {kind === "plugin" && includesWorld && (
+        <p>{t("settings.github.mixedWorldRisk")}</p>
+      )}
       <p>
         {t(
           kind === "world"

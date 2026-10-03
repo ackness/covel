@@ -34,17 +34,34 @@ export interface PluginResolutionRejection {
   readonly candidates?: readonly string[];
   readonly path?: readonly (string | number)[];
 }
+/** A contract the session's world requires that no active plugin provides. */
+export interface UnmetWorldRequirement {
+  readonly contract: string;
+  readonly code:
+    | "missing-provider"
+    | "ambiguous-provider"
+    | "approval-required"
+    | "excluded";
+  readonly candidates?: readonly string[];
+}
 export interface SessionPluginResolution {
   readonly active: string[];
   readonly autoAdded: string[];
   readonly rejected: PluginResolutionRejection[];
+  readonly unmet: UnmetWorldRequirement[];
 }
+/** Requirements that are a setup problem rather than a choice the player made. */
+export const isBlockingWorldRequirement = (item: UnmetWorldRequirement) =>
+  item.code === "missing-provider" || item.code === "ambiguous-provider";
 const singlePoints = new Set<string>(
   Object.values(kernelExtensionPoints)
     .filter((point) => point.mode === "single")
     .map((point) => point.id),
 );
 /** Kernel dependencies require implementations, not a root capability claim. */
+export const providedContracts = (
+  plugin: Pick<SessionPluginCandidate, "provides" | "extensions">,
+): string[] => contracts(plugin as SessionPluginCandidate);
 const contracts = (plugin: SessionPluginCandidate): string[] => [
   ...(plugin.provides ?? [])
     .map((p) => (typeof p === "string" ? p : p.contract))
@@ -66,9 +83,12 @@ export function resolveSessionPlugins(args: {
   readonly requested: readonly string[];
   readonly excluded?: readonly string[];
   readonly plugins: readonly SessionPluginCandidate[];
+  /** Contracts the session's world needs; the world acts as one more requirer. */
+  readonly requiredContracts?: readonly string[];
 }): SessionPluginResolution {
   const registry = new Map(args.plugins.map((p) => [p.id, p]));
   const requested = new Set(args.requested);
+  const worldRequired = [...new Set(args.requiredContracts ?? [])];
   const excluded = new Set(args.excluded ?? []);
   const rejected = new Map<string, PluginResolutionRejection>();
   const active = new Set<string>();
@@ -124,36 +144,45 @@ export function resolveSessionPlugins(args: {
     active.add(id);
     if (automatic && !requested.has(id)) autoAdded.add(id);
   };
+  const provided = (contract: string) =>
+    [...active].some((id) => contracts(registry.get(id)!).includes(contract));
+  /** The only explicit provider of a contract, else its only default one. */
+  const chooseProvider = (contract: string) => {
+    const candidates = args.plugins.filter(
+      (candidate) =>
+        eligible(candidate) && contracts(candidate).includes(contract),
+    );
+    const explicit = candidates.filter(
+      (candidate) => !isDefault(candidate, contract),
+    );
+    const defaults = candidates.filter((candidate) =>
+      isDefault(candidate, contract),
+    );
+    const choice =
+      explicit.length === 1
+        ? explicit[0]
+        : defaults.length === 1
+          ? defaults[0]
+          : undefined;
+    return { candidates, choice };
+  };
   for (const id of requested) add(id, false);
   for (const p of args.plugins)
     if (p.kind === "core" && !active.has(p.id)) add(p.id, true);
+  // World providers join before plugin dependencies resolve, so the loop below
+  // also resolves what they require.
+  for (const contract of worldRequired) {
+    if (provided(contract)) continue;
+    const { choice } = chooseProvider(contract);
+    if (choice) add(choice.id, true);
+  }
 
   // The active Set iterator includes newly added dependencies and terminates on cycles.
   for (const id of active) {
     const p = registry.get(id)!;
     for (const required of p.requires ?? []) {
-      if (
-        [...active].some((candidate) =>
-          contracts(registry.get(candidate)!).includes(required),
-        )
-      )
-        continue;
-      const candidates = args.plugins.filter(
-        (candidate) =>
-          eligible(candidate) && contracts(candidate).includes(required),
-      );
-      const explicit = candidates.filter(
-        (candidate) => !isDefault(candidate, required),
-      );
-      const defaults = candidates.filter((candidate) =>
-        isDefault(candidate, required),
-      );
-      const choice =
-        explicit.length === 1
-          ? explicit[0]
-          : defaults.length === 1
-            ? defaults[0]
-            : undefined;
+      if (provided(required)) continue;
+      const { candidates, choice } = chooseProvider(required);
       if (choice) add(choice.id, true);
       else {
         const awaitingApproval = args.plugins.filter(
@@ -264,9 +293,16 @@ export function resolveSessionPlugins(args: {
       }
     }
   }
+  // A provider added only for the world has no requesting plugin; without this
+  // seed it would be pruned as an orphaned dependency.
   const reachable = new Set(
     [...active].filter(
-      (id) => requested.has(id) || registry.get(id)!.kind === "core",
+      (id) =>
+        requested.has(id) ||
+        registry.get(id)!.kind === "core" ||
+        worldRequired.some((contract) =>
+          contracts(registry.get(id)!).includes(contract),
+        ),
     ),
   );
   for (const id of reachable)
@@ -275,9 +311,36 @@ export function resolveSessionPlugins(args: {
         if (contracts(registry.get(candidate)!).includes(required))
           reachable.add(candidate);
   for (const id of active) if (!reachable.has(id)) active.delete(id);
+  const ids = (plugins: readonly SessionPluginCandidate[]) =>
+    plugins.map((plugin) => plugin.id);
+  const unmet = worldRequired.flatMap((contract): UnmetWorldRequirement[] => {
+    if (provided(contract)) return [];
+    const providers = args.plugins.filter((plugin) =>
+      contracts(plugin).includes(contract),
+    );
+    if (providers.length === 0) return [{ contract, code: "missing-provider" }];
+    const allowed = providers.filter((plugin) => !excluded.has(plugin.id));
+    if (allowed.length === 0)
+      return [{ contract, code: "excluded", candidates: ids(providers) }];
+    const usable = allowed.filter(eligible);
+    if (usable.length > 1)
+      return [
+        { contract, code: "ambiguous-provider", candidates: ids(usable) },
+      ];
+    const pending = allowed.filter(
+      (plugin) => plugin.source === "community" && !plugin.authorized,
+    );
+    if (pending.length > 0)
+      return [
+        { contract, code: "approval-required", candidates: ids(pending) },
+      ];
+    // Installed and allowed, but dropped by a conflict or its own dependency.
+    return [{ contract, code: "missing-provider", candidates: ids(allowed) }];
+  });
   return {
     active: [...active],
     autoAdded: [...autoAdded].filter((id) => active.has(id)),
     rejected: [...rejected.values()],
+    unmet,
   };
 }

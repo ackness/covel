@@ -14,12 +14,12 @@ tags:
   - "ui:message-block"
   - "ui:right-panel"
 provides:
-  - dice-check@1
+  - action-check@1
 optional:
   - tabletop-check@1
 contracts:
-  dice-check@1:
-    schema: ./schemas/dice-check.schema.json
+  action-check@1:
+    schema: ./schemas/action-check.schema.json
 entry: ./server/index.js
 contributes:
   events:
@@ -64,4 +64,4 @@ contributes:
     - roll
 ---
 
-Dice Check turns "does my lockpicking succeed?" from narrative-LLM freestyle into an auditable roll: a pre-turn runtime rolls the turn's d20 pool and injects it (with the check rules) into the narrative engine, which resolves risky actions against it and emits `check.resolved` receipts. A same-turn `tabletop-check@1` receipt owns its submitted action, so the recorder skips dice-pool events for that turn. The root entry exposes player-facing dice actions; see `runtimes/roller/RUNTIME.md` (the pre-roll injector) and `runtimes/recorder/RUNTIME.md` (the receipt recorder + UI) for the executable runtimes.
+Dice Check turns "does my lockpicking succeed?" from narrative-LLM freestyle into an auditable roll: a pre-turn runtime rolls the turn's d20 pool and injects it (with the check rules) into the narrative engine, which resolves risky actions against it and emits `check.resolved` receipts. The `action-check@1` contract carries only that injected `checkContext` text, so narrative engines hold no dice rules of their own and a plugin with a different resolution system can provide the same contract. A same-turn `tabletop-check@1` receipt owns its submitted action, so the recorder skips dice-pool events for that turn. The root entry exposes player-facing dice actions; see `runtimes/roller/RUNTIME.md` (the pre-roll injector) and `runtimes/recorder/RUNTIME.md` (the receipt recorder + UI) for the executable runtimes.

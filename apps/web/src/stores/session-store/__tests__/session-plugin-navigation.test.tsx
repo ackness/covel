@@ -16,7 +16,10 @@ const api = vi.hoisted(() => ({
   disableSessionPlugin: vi.fn(),
   resolveApproval: vi.fn(),
 }));
-const confirmation = vi.hoisted(() => ({ requestConfirm: vi.fn() }));
+const confirmation = vi.hoisted(() => ({
+  requestConfirm: vi.fn(),
+  requestChoices: vi.fn(),
+}));
 vi.mock("@/services/api", () => api);
 vi.mock("@/lib/confirm-channel.js", () => confirmation);
 
@@ -117,6 +120,11 @@ beforeEach(() => {
   api.disableSessionPlugin.mockResolvedValue({ ok: true, activePluginIds: [] });
   api.resolveApproval.mockResolvedValue(undefined);
   confirmation.requestConfirm.mockResolvedValue(true);
+  // The entry prompt authorizes whatever it was asked about.
+  confirmation.requestChoices.mockImplementation(
+    async (request: { choices: { id: string }[] }) =>
+      request.choices.map((choice) => choice.id),
+  );
 });
 
 describe.each(["session-b", "session-a"])(
@@ -316,14 +324,14 @@ describe("plugin operations in the current visit", () => {
 it("requests authorization once per visit for a restored selection and keeps denial visible", async () => {
   const { result } = setup();
   api.enableSessionPlugin.mockResolvedValue(approval);
-  confirmation.requestConfirm.mockResolvedValue(false);
+  confirmation.requestChoices.mockResolvedValue([]);
   await act(async () => {
     result.current.dispatch({
       type: "LOAD_SESSION_PLUGINS",
       plugins: [{ ...plugin, active: false, approvalRequired: true }],
     });
   });
-  expect(confirmation.requestConfirm).toHaveBeenCalledTimes(1);
+  expect(confirmation.requestChoices).toHaveBeenCalledTimes(1);
   expect(result.current.state.sessionPlugins[0]?.approvalRequired).toBe(true);
   await act(async () => {
     result.current.dispatch({
@@ -331,7 +339,7 @@ it("requests authorization once per visit for a restored selection and keeps den
       plugins: [{ ...plugin, active: false, approvalRequired: true }],
     });
   });
-  expect(confirmation.requestConfirm).toHaveBeenCalledTimes(1);
+  expect(confirmation.requestChoices).toHaveBeenCalledTimes(1);
   await act(async () => {
     await result.current.actions.toggleSessionPlugin(plugin.id, false);
   });
@@ -349,7 +357,7 @@ it("activates the selected community plugin after explicit approval on entry", a
       plugins: [{ ...plugin, active: false, approvalRequired: true }],
     });
   });
-  expect(confirmation.requestConfirm).toHaveBeenCalledTimes(1);
+  expect(confirmation.requestChoices).toHaveBeenCalledTimes(1);
   expect(api.resolveApproval).toHaveBeenCalledWith(
     approval.approvalId,
     "allow",
@@ -359,5 +367,116 @@ it("activates the selected community plugin after explicit approval on entry", a
   expect(result.current.state.sessionPlugins[0]).toMatchObject({
     active: true,
     approvalRequired: false,
+  });
+});
+
+describe("authorizing several paused plugins on entry", () => {
+  const second: SessionPlugin = {
+    ...plugin,
+    id: "second-plugin",
+    displayName: { "en-US": "Second plugin" },
+    description: "Adds a map panel",
+    version: "1.2.0",
+  };
+  const unnamed: SessionPlugin = {
+    ...plugin,
+    id: "unnamed-plugin",
+    displayName: "",
+  };
+  // Like the server: a plugin needs approval until its own request is allowed.
+  const serverLike = () =>
+    api.enableSessionPlugin.mockImplementation(async (_sid, pluginId) =>
+      api.resolveApproval.mock.calls.some(
+        ([approvalId, decision]) =>
+          approvalId === `approval-${pluginId}` && decision === "allow",
+      )
+        ? { ok: true, activePluginIds: [pluginId] }
+        : {
+            status: "approval-required",
+            approvalId: `approval-${pluginId}`,
+            pending: { pluginId, action: "plugin.enable" },
+          },
+    );
+  const enter = (result: ReturnType<typeof setup>["result"]) =>
+    act(async () => {
+      result.current.dispatch({
+        type: "LOAD_SESSION_PLUGINS",
+        plugins: [plugin, second, unnamed].map((entry) => ({
+          ...entry,
+          active: false,
+          approvalRequired: true,
+        })),
+      });
+    });
+
+  it("asks once, naming each plugin, before any approval is requested", async () => {
+    const { result } = setup();
+    serverLike();
+    confirmation.requestChoices.mockImplementation(async (request) => {
+      expect(api.enableSessionPlugin).not.toHaveBeenCalled();
+      return request.choices.map((choice: { id: string }) => choice.id);
+    });
+
+    await enter(result);
+
+    expect(confirmation.requestConfirm).not.toHaveBeenCalled();
+    expect(confirmation.requestChoices).toHaveBeenCalledTimes(1);
+    expect(confirmation.requestChoices.mock.calls[0]![0].choices).toEqual([
+      { id: plugin.id, label: "Shared plugin", detail: plugin.id },
+      {
+        id: second.id,
+        label: "Second plugin",
+        detail: "second-plugin · 1.2.0 — Adds a map panel",
+      },
+      { id: unnamed.id, label: unnamed.id, detail: "" },
+    ]);
+    // Each plugin is requested, allowed and enabled before the next begins,
+    // because enabling one drops the others' pending requests on the server.
+    expect(api.resolveApproval.mock.calls).toEqual(
+      [plugin, second, unnamed].map((entry) => [
+        `approval-${entry.id}`,
+        "allow",
+        "session",
+        session.id,
+      ]),
+    );
+    expect(
+      result.current.state.sessionPlugins.map((entry) => entry.active),
+    ).toEqual([true, true, true]);
+  });
+
+  it("requests nothing for a plugin the player unticked", async () => {
+    const { result } = setup();
+    serverLike();
+    confirmation.requestChoices.mockResolvedValue([second.id]);
+
+    await enter(result);
+
+    expect(
+      api.enableSessionPlugin.mock.calls.map(([, pluginId]) => pluginId),
+    ).toEqual([second.id, second.id]);
+    expect(api.resolveApproval.mock.calls).toEqual([
+      [`approval-${second.id}`, "allow", "session", session.id],
+    ]);
+    expect(
+      result.current.state.sessionPlugins.map((entry) => entry.active),
+    ).toEqual([false, true, false]);
+  });
+
+  it("refuses a request that is about another plugin than the one consented to", async () => {
+    const { result } = setup();
+    api.enableSessionPlugin.mockResolvedValue({
+      status: "approval-required",
+      approvalId: "approval-other",
+      pending: { pluginId: "other-plugin", action: "plugin.enable" },
+    });
+    confirmation.requestChoices.mockResolvedValue([plugin.id]);
+
+    await enter(result);
+
+    expect(api.resolveApproval.mock.calls).toEqual([
+      ["approval-other", "deny", "session", session.id],
+    ]);
+    expect(result.current.state.sessionPlugins[0]?.active).toBe(false);
   });
 });

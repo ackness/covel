@@ -190,30 +190,6 @@ export interface WorldStartingConditions {
   readonly openingChips?: readonly I18nText[];
 }
 
-// ── Plugin Selection Policy ─────────────────────────────────────
-
-export interface WorldPluginPack {
-  readonly id: string;
-  readonly label: I18nText;
-  readonly description?: I18nText;
-  readonly plugins: readonly string[];
-  readonly optionalPlugins?: readonly string[];
-  readonly excludedPlugins?: readonly string[];
-  readonly tags?: readonly string[];
-  readonly reason?: I18nText;
-}
-
-export interface WorldPluginPolicy {
-  readonly preset?: string;
-  readonly packs?: readonly WorldPluginPack[];
-  readonly preferTags?: readonly string[];
-  readonly avoidTags?: readonly string[];
-  readonly requireCapabilities?: readonly string[];
-  readonly requiredPlugins?: readonly string[];
-  readonly recommendedPlugins?: readonly string[];
-  readonly excludedPlugins?: readonly string[];
-}
-
 /**
  * World-authored default values for plugins' declared `userSettings`, stored on
  * `WorldRecord.metadata.pluginSettings`. Keyed `pluginId → settingKey → value`.

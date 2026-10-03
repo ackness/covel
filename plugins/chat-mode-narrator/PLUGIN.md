@@ -28,7 +28,7 @@ conflicts:
   - narrative-engine@1
 optional:
   - graph-rag@1
-  - dice-check@1
+  - action-check@1
   - world-time-context@1
   - tabletop-check@1
   - story-event-cue@1
@@ -174,7 +174,7 @@ runtime:
         required: false
       check-results:
         from:
-          contract: dice-check@1
+          contract: action-check@1
         select: /checkContext
         required: false
     output:
@@ -223,17 +223,15 @@ runtime:
 
 ## 已结算的跑团检定
 
-若 `<runtime-inputs>` 的 `tabletopCheck.value` 包含 `Settled tabletop check` 及已提交的检定回执，本回合检定由跑团规则插件独占。只叙述该回执对应行动的后果，不重掷、不修改修正值或成败，不使用 `check-results` 骰池，也不发射 `check.resolved`。若其内容为 `No tabletop check submitted` 或缺失，才按下方骰池规则处理普通风险行动。
+若 `<runtime-inputs>` 的 `tabletopCheck.value` 包含 `Settled tabletop check` 及已提交的检定回执，本回合检定由跑团规则插件独占。只叙述该回执对应行动的后果，不重掷、不修改修正值或成败，也不再按 `check-results` 另行判定。若其内容为 `No tabletop check submitted` 或缺失，才按下方「行动判定」处理普通风险行动。
 
-## 行动判定（由骰子判定注入）
+## 行动判定（由判定插件注入）
 
-> 仅在本回合没有 `Settled tabletop check` 回执时，才使用 prompt 末尾的 `runtime-inputs.check-results.value` 骰池判定玩家有失败风险的行动。骰池不存在时按一般叙事逻辑处理。
+> 仅在本回合没有 `Settled tabletop check` 回执时，才按 prompt 末尾的 `runtime-inputs.check-results.value` 判定玩家有失败风险的行动。该块不存在时按一般叙事逻辑处理。
 
-- 只对**有失败风险**的行动判定（撬锁、潜行、说服、攀爬、战斗动作等）；日常聊天与无风险互动不判定、不消耗骰子
-- 按顺序消耗未用的预掷骰（先 #1，再 #2、#3）；判定 = 骰值 + 相关属性修正（从玩家角色卡的数值属性换算）vs 难度 DC（轻松 8 / 普通 12 / 困难 16 / 极难 20）
-- 天然 20 为大成功：给出超出预期的收获；天然 1 为大失败：引入有趣的复杂后果，而不是简单的"没成功"
-- 仅在没有已提交的跑团检定回执时，写正文之前把本回合骰池判定装进 `checks` 数组、调用 emit-event 发射**一次** `check.resolved` 回执（该事件同回合去重，绝不发两次）；工具调用不计入正文
-- 成败在叙事与角色反应中自然呈现，不要在正文里贴"骰值 / DC"等系统数字
+- 判定资源、规则和需要提交的回执全部以该块为准，严格照做，不自行改写规则或结果；日常聊天与无风险互动不判定
+- 规则要求的工具调用在写正文之前完成，且不计入正文
+- 成败在叙事与角色反应中自然呈现，不要在正文里贴判定用的系统数字
 
 ## 写作规则
 

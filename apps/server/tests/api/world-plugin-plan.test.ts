@@ -15,7 +15,10 @@ import {
 } from "@covel/shared";
 import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 import { worldPluginPlanRoutes } from "../../src/routes/api/worlds/plugin-plan.js";
-import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
+import {
+  resolveSessionPluginPlan,
+  unknownPluginIds,
+} from "../../src/routes/api/session/plugins.js";
 
 type Env = { Variables: { store: DataStore; pluginRegistry: PluginRegistry } };
 function entry(
@@ -120,6 +123,40 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
       avoidedTags: ["mode:traditional"],
     });
     expect(result.defaultPluginIds).toEqual(["traditional", "dialogue"]);
+  });
+  it("reports requested plugins the registry lacks instead of passing them on", async () => {
+    const result = await plan({
+      presetId: "custom",
+      requested: ["dialogue", "absent-from-policy"],
+      packs: [
+        {
+          id: "custom",
+          label: "Custom",
+          requested: ["traditional", "absent-from-pack"],
+          recommended: ["absent-recommended"],
+        },
+      ],
+    });
+    expect(result.policy.requested).toEqual(["dialogue"]);
+    expect(result.packs[0]).toMatchObject({
+      requested: ["traditional"],
+      recommended: ["absent-recommended"],
+    });
+    expect(result.defaultPluginIds).toEqual(["dialogue", "traditional"]);
+    // Builtin packs name plugins this test registry does not hold either.
+    expect(
+      result.missing.filter((item) => (item.packId ?? "custom") === "custom"),
+    ).toEqual([
+      { pluginId: "absent-from-policy" },
+      { pluginId: "absent-from-pack", packId: "custom" },
+    ]);
+    // What the plan hands out is accepted by session creation as it is.
+    expect(
+      unknownPluginIds(
+        [...result.defaultPluginIds, ...result.policy.requested],
+        registry,
+      ),
+    ).toEqual([]);
   });
   it.each(["builtin", "community"] as const)(
     "keeps a %s request distinct from dependency and authorization resolution",

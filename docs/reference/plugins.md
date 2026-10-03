@@ -80,6 +80,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | ----------------------------------------------- | ------------------------------------------------------ |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                   |
 | `version`, `displayName`, `description`, `tags` | 元数据；不再使用 `role:*` 标签驱动业务                 |
+| `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；安装器强制执行    |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`       |
 | `requires`                                      | 必需契约，解析器补入提供者                             |
 | `optional`                                      | 可选契约，不强制激活提供者                             |
@@ -272,8 +273,9 @@ World Data 的 source 使用 `schema: contract:example.facts@1`、`to: contract:
 - 必需契约补入提供者；缺失、歧义、冲突与授权不足返回原因。
 - 失去必需提供者的插件和孤立自动依赖会被移除。
 - `requested` 与计算出的 `active` 分开持久化，自动依赖不会变成用户的显式选择。
+- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入，世界与插件一样是依赖方：唯一提供者自动加入且不被当作孤立依赖移除。无法满足的需求在 `unmet` 中返回，原因为 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`；前两种阻止创建会话，后两种是玩家的选择，不阻止。
 
-世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`；组合包使用 `requested/recommended`。推荐项不自动启用，也不会覆盖玩家显式排除。`GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始显式请求，准备页和创建端再使用同一解析器计算活动集合。
+世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`；组合包使用 `requested/recommended`。推荐项不自动启用，也不会覆盖玩家显式排除。`GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始显式请求，准备页和创建端再使用同一解析器计算活动集合。该接口返回的各 `requested` 与 `defaultPluginIds` 只含已安装插件；世界或组合包请求但未安装的插件列在 `missing`，由准备页提示，不进入创建请求。
 
 发现 DTO 区分 `kind`、宿主 `hostState` 与会话 `sessionState`，运行时提供 `outputContract`。未授权社区插件可保留在请求列表，但不能进入执行集合；许可绑定会话身份与审批范围。
 

@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "contract:action-check@1",
+  "title": "Covel action-check context v1",
+  "description": "What a narrative engine needs to resolve risky actions this turn. The provider decides the resolution system; consumers read only checkContext.",
+  "type": "object",
+  "required": ["checkContext"],
+  "properties": {
+    "checkContext": {
+      "type": "string",
+      "description": "Self-contained instructions for the narrative engine: this turn's check resources, the rules for using them, and any receipt the provider expects."
+    }
+  },
+  "additionalProperties": true
+}

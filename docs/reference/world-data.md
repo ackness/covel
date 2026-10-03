@@ -198,9 +198,24 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 | ------------------------------- | --------------------------------------------------------------------------------------- |
 | `presetId`                      | 默认组合包 ID，可引用 `packs[].id` 或内置 preset                                        |
 | `preferredTags` / `avoidedTags` | 插件标签偏好                                                                            |
+| `requires`                      | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足            |
 | `requested`                     | 世界建议作为初始选择的插件 ID                                                           |
 | `recommended`                   | 额外推荐插件 ID                                                                         |
 | `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/tags/reason` |
+
+`requires` 表达"这个世界离不开什么能力"，写契约而不是插件：
+
+```yaml
+pluginPolicy:
+  requires:
+    - action-check@1 # 行动判定；内置的 dice-check 提供它，换一个判定插件也可以
+  requested:
+    - dice-check # 可选：初始选择，同时在有多个提供者时指定用哪一个
+```
+
+只有一个已安装的提供者时它会被自动启用。没有提供者，或有多个而世界与玩家都没有选定，准备页说明原因并禁用开始。玩家仍可主动关掉提供者：这是玩家的选择，会话照常开始，准备页给出提示。`requires` 只接受 `名字@版本` 形式的契约 ID，写成插件 ID 会在加载世界时报错。
+
+`requested` 写的是插件 ID，玩家的宿主不一定装了它。`GET /api/worlds/:id/plugin-plan` 会把未安装的 ID 从世界策略和各组合包的 `requested` 中剔除，改列在 `missing`（组合包请求的带 `packId`）。准备页据此提示缺少哪些插件，会话仍可创建，只是这些插件提供的玩法不会生效。`recommended` 不参与默认选择，原样返回。
 
 世界清单采用严格的当前 schema；不接受旧选择字段，也不会把顶层字段折叠为另一套格式。
 

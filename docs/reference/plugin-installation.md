@@ -13,9 +13,11 @@
 打开 **设置 → 插件 → 安装与管理**：
 
 1. 浏览社区目录，或粘贴公开 GitHub 仓库 / `/tree/<ref>/<path>` 链接。
-2. 解析插件；包含多个包的仓库会显示选择框。
-3. 核对插件 ID、版本、来源、commit 和代码风险，确认信任后安装。
-4. 重启后端，再在会话中启用插件并按现有审批流程允许执行。
+2. 解析链接。该目录下的插件、世界包会一起列出；目录里有 `covel-collection.yaml` 时，只列出[合集](../guide/collections.md)清单指定的成员，包括固定在其他仓库的包。
+3. 勾选要安装的内容，核对 ID、版本、来源、commit 和代码风险，确认一次后安装。所选内容作为一个整体安装：先插件后世界，任何一个失败则本次已装的全部移除。
+4. 装了插件需重启后端一次，再在会话中启用插件并按现有审批流程允许执行。世界立即可用。
+
+预览同时给出完整性检查结果：世界 `pluginPolicy.requires` 的契约在"已安装 + 本次所选"的插件里没有提供者、宿主版本不在声明范围内，属于错误，涉及的包被勾选时不能安装；世界请求的插件不存在、契约有多个提供者而未指定，属于警告。检查只读清单，不执行插件代码。扫描目录时读不出的包（清单无效、身份冲突等）会被跳过并作为警告列出，其余的包仍可安装；合集清单点名的成员读不出时，整次预览失败。
 
 安装写入当前连接的后端，而非固定写入浏览器所在机器。桌面实例写入本机；远程部署写入服务器。安装、预览、安装记录查询和卸载复用安装 API 权限门控，demo/commercial 部署必须使用运营者令牌。生产自托管实例仍需桌面令牌或 `COVEL_INSTALL_API_ENABLED=1`。
 
@@ -41,12 +43,19 @@ GitHub 源码归档带的一层外目录会被移除，再提取指定插件目�
 
 请求与响应 Zod schema 位于 `@covel/shared` 的 `plugin-install` 导出。
 
-| 接口                                      | 请求                          | 响应                                                           |
-| ----------------------------------------- | ----------------------------- | -------------------------------------------------------------- |
-| `POST /api/install/plugin/github/preview` | `{ url }`                     | `{ items: GithubPluginPreview[] }`                             |
-| `POST /api/install/plugin/github`         | `{ token, acceptRisk: true }` | `{ ok: true, kind: "plugin", id, restartRequired: true }`，201 |
-| `GET /api/install/plugins`                | 无                            | `{ items: [{ id, version, source, pendingUpdate }] }`          |
-| `POST /api/install/plugin`                | multipart `file`              | 保持现有 ZIP 安装响应                                          |
+| 接口                                      | 请求                           | 响应                                                            |
+| ----------------------------------------- | ------------------------------ | --------------------------------------------------------------- |
+| `POST /api/install/plugin/github/preview` | `{ url }`                      | `{ items: GithubPluginPreview[] }`                              |
+| `POST /api/install/plugin/github`         | `{ token, acceptRisk: true }`  | `{ ok: true, kind: "plugin", id, restartRequired: true }`，201  |
+| `GET /api/install/plugins`                | 无                             | `{ items: [{ id, version, source, pendingUpdate }] }`           |
+| `POST /api/install/plugin`                | multipart `file`               | 保持现有 ZIP 安装响应                                           |
+| `POST /api/install/github/preview`        | `{ url }`                      | `{ collection, items: GithubPackagePreview[], problems }`       |
+| `POST /api/install/github/batch`          | `{ tokens, acceptRisk: true }` | `{ ok: true, installed: [{ kind, id }], restartRequired }`，201 |
+| `POST /api/install/collection`            | multipart `file`               | 同 batch 响应，201                                              |
+
+`/github/preview` 的每个 item 在单包预览字段之外带 `kind: "plugin" | "world"`，其 `token` 与单包接口签发的相同，可用于单包安装或 batch。`collection` 在目录含清单时为 `{ id, name, version }`，否则为 `null`。`problems` 为 `{ level: "error" | "warning", message, packageId? }[]`。batch 接受 1–20 个 token：先下载并逐个核对摘要与身份，全部通过且目标均不存在后才开始写入；任一目标已存在返回 409 且不做任何修改，写入阶段失败则回滚本次已写入的包。`/collection` 接受 `pnpm pack:collection` 生成的 ZIP（清单在顶层、包含全部成员），没有预览步骤，完整性检查的错误直接返回 400。
+
+插件根清单可声明 `covel` 版本范围（如 `">=0.0.45 <0.1.0"`）。宿主版本不在范围内时，预览、安装、更新和 ZIP 导入都会拒绝该包并给出两个版本号。语法见[合集指南](../guide/collections.md#版本范围)。
 
 预览包含 ID、包版本、描述、代码存在提示、来源、签名 token 和 `expiresAt`。来源为 `{ repository, commit, path, digest, tracking }`。`tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支，tree 链接先解析明确的分支；其余 tag/commit 保持锁定。`hasServerCode` 是保守的文件和清单扫描提示，不是完整代码审计；测试或构建源码也可能触发代码提示。适配版本仍由作者在目录与 README 声明，当前仅验证清单格式，不自动判断所有运行时兼容性。
 
@@ -82,10 +91,10 @@ GitHub 源码归档带的一层外目录会被移除，再提取指定插件目�
 
 Jev 推荐 Demo、DashScope / OpenAI 生图与 MiMo TTS 已迁入 [官方社区仓库](https://github.com/covel-ai/covel-plugins)，主仓不再内置分发。插件 ID、runtime ID 与设置键保持不变。升级主仓后，已有会话需要先从目录安装对应插件、重启后端并重新授权服务端代码；旧内置信任不会自动继承。已有存档、插件数据、模型配置与媒体不主动删除，不需要数据库结构迁移。
 
-当前不提供网页市场、后台自动升级、插件隔离执行或按目录标签提升权限。
+当前不提供网页市场、后台自动升级、插件隔离执行或按目录标签提升权限。合集只在安装时起作用：装好的成员各自独立更新和卸载，没有按合集整体更新或卸载的操作。
 
 ## 会话选择与执行授权
 
 `SessionRecord.activePlugins` 保存玩家选择，不代表社区代码已有执行授权。创建会话保留解析后的全部选择，创建阶段的代码执行与生命周期 hooks 只使用已授权集合。`GET /api/sessions/:id/plugins` 的 `active` 表示当前有效授权，`approvalRequired: true` 表示已选择、但当前进程缺少该会话授权。插件未被选择时不会显示待授权。
 
-Web 在创建或恢复会话后按顺序请求这些插件的授权，每次访问每个插件只自动提示一次。拒绝后保留暂停提示，可以主动重试或禁用；导航离开时不替其他会话批准。批准沿用 enable → approval → enable 流程。授权不跨后端重启持久化，尤其不能在更新代码后复用旧授权。内置插件保持原有自动加载行为。
+Web 在创建或恢复会话后用**一个**提示请求这些插件的授权：列出每个待授权插件的名称、ID、版本和简介，默认全部勾选，玩家可以取消其中几个再确认。提示先于审批请求：确认之后才为勾选的插件逐个发起请求、批准并启用，每个插件仍各有一条审批请求和一份授权；未勾选的或选择"暂不授权"时不产生任何请求。之所以逐个处理，是因为启用一个插件会使服务端清除同会话其他暂停插件的待审批请求。在插件列表里单独启用某个插件时，仍使用原来的单项确认。每次访问每个插件只自动提示一次。拒绝后保留暂停提示，可以主动重试或禁用；导航离开时不替其他会话批准。批准沿用 enable → approval → enable 流程。授权不跨后端重启持久化，尤其不能在更新代码后复用旧授权。内置插件保持原有自动加载行为。

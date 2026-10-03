@@ -51,8 +51,11 @@
     "test:runtime": "tsx packages/test-runtime/src/cli.ts",
     "validate:plugin": "tsx packages/plugin-loader/scripts/validate-manifest.ts",
     "validate:world": "node --import tsx scripts/validate-release-worlds.ts",
+    "validate:collection": "node --import tsx scripts/validate-collection.ts",
+    "pack:collection": "pnpm --filter @covel/server exec tsx scripts/pack-collection.ts",
     "check:env": "node ./scripts/check-production-env.mjs",
     "create-plugin": "node scripts/create-plugin.js",
+    "create-collection": "node scripts/create-collection.js",
     "release:preflight": "node ./scripts/release-preflight.mjs",
     "preinstall": "node ./scripts/require-pnpm.mjs",
     "check:boundaries": "node --test scripts/tests/package-imports.test.mjs && node scripts/check-package-boundaries.mjs"

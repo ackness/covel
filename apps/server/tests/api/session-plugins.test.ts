@@ -667,6 +667,86 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(await res.text()).toContain("Conflicts");
     });
 
+    it("treats a world's required contracts as a requirer on create and on later toggles", async () => {
+      registry.register(
+        makeEntry({
+          id: "world-dice",
+          summary: makeSummary({
+            id: "world-dice",
+            name: "World Dice",
+            provides: ["action-check@1"],
+          }),
+          source: "builtin",
+        }),
+      );
+      await store.upsertWorld({
+        id: "tabletop-world",
+        name: "Tabletop World",
+        description: "Test world",
+        metadata: { pluginPolicy: { requires: ["action-check@1"] } },
+        createdAt: "2026-10-03T00:00:00.000Z",
+      });
+
+      const created = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-world-requires",
+          worldId: "tabletop-world",
+          plugins: [],
+        }),
+      });
+      expect(created.status).toBe(201);
+      const session = await store.getSession("sess-world-requires");
+      expect(session?.activePlugins).toContain("world-dice");
+      expect(session?.metadata?.pluginSelection).toEqual({
+        requested: [],
+        excluded: [],
+        requiredContracts: ["action-check@1"],
+      });
+
+      // Turning the provider off is the player's choice; the requirement stays
+      // recorded so a later resolution still knows what the world needs.
+      const disabled = await app.request(
+        "/api/sessions/sess-world-requires/plugins/world-dice",
+        { method: "DELETE" },
+      );
+      expect(disabled.status).toBe(200);
+      const after = await store.getSession("sess-world-requires");
+      expect(after?.activePlugins).not.toContain("world-dice");
+      expect(after?.metadata?.pluginSelection).toMatchObject({
+        excluded: ["world-dice"],
+        requiredContracts: ["action-check@1"],
+      });
+    });
+
+    it("refuses creation when no installed plugin provides a world-required contract", async () => {
+      await store.upsertWorld({
+        id: "unplayable-world",
+        name: "Unplayable World",
+        description: "Test world",
+        metadata: { pluginPolicy: { requires: ["absent-check@1"] } },
+        createdAt: "2026-10-03T00:00:00.000Z",
+      });
+
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-unmet-world",
+          worldId: "unplayable-world",
+          plugins: [],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        code: "world_requirement_unmet",
+        details: { contract: "absent-check@1", code: "missing-provider" },
+      });
+      expect(await store.getSession("sess-unmet-world")).toBeNull();
+    });
+
     it("imports portable lorebook entries from a store-only generated world", async () => {
       await store.upsertWorld({
         id: "portable-generated-world",

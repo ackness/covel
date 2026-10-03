@@ -8,17 +8,27 @@
  * the same request — so the channel keeps a single slot rather than a list.
  */
 
+/** One entry of a prompt that asks about several things at once. */
+export interface ConfirmChoice {
+  readonly id: string;
+  readonly label: string;
+  readonly detail?: string;
+}
+
 export interface ConfirmRequest {
   readonly title: string;
   readonly message: string;
   readonly confirmLabel: string;
   readonly cancelLabel: string;
+  /** When present, the player ticks which entries the approval covers. */
+  readonly choices?: readonly ConfirmChoice[];
 }
 
 export interface PendingConfirm extends ConfirmRequest {
   /** Monotonic id used as the React key. */
   readonly id: number;
-  readonly resolve: (value: boolean) => void;
+  /** `chosen` carries the ticked ids when the request has `choices`. */
+  readonly resolve: (value: boolean, chosen?: readonly string[]) => void;
 }
 
 type Subscriber = (pending: PendingConfirm) => void;
@@ -42,6 +52,36 @@ export function requestConfirm(request: ConfirmRequest): Promise<boolean> {
   }
   return new Promise<boolean>((resolve) => {
     current({ ...request, id: nextId++, resolve });
+  });
+}
+
+/**
+ * Ask the player to approve several things in one prompt. Resolves with the
+ * ids left ticked; an empty list means the prompt was declined.
+ *
+ * The native fallback cannot offer checkboxes, so it names every entry and
+ * approves all of them or none.
+ */
+export function requestChoices(
+  request: ConfirmRequest & { readonly choices: readonly ConfirmChoice[] },
+): Promise<readonly string[]> {
+  const all = request.choices.map((choice) => choice.id);
+  const current = subscriber;
+  if (!current) {
+    const text = [
+      request.message,
+      ...request.choices.map((choice) => `• ${choice.label}`),
+    ].join("\n");
+    return Promise.resolve(
+      typeof window !== "undefined" && window.confirm(text) ? all : [],
+    );
+  }
+  return new Promise<readonly string[]>((resolve) => {
+    current({
+      ...request,
+      id: nextId++,
+      resolve: (approved, chosen) => resolve(approved ? (chosen ?? all) : []),
+    });
   });
 }
 

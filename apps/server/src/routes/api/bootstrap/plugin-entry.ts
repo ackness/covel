@@ -667,6 +667,7 @@ export async function createBootstrapPluginEntries(
                 params.pluginRegistry,
                 {
                   excluded: selection.excluded,
+                  requiredContracts: selection.requiredContracts,
                   authorized,
                 },
               );

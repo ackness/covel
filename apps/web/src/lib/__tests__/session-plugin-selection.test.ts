@@ -67,8 +67,10 @@ const plan: WorldPluginPlan = {
     avoidedTags: [],
     requested: ["pregame"],
     recommended: ["chat-mode-narrator"],
+    requires: [],
   },
   defaultPluginIds: ["pregame", "chat-mode-narrator", "scene-cast"],
+  missing: [],
 };
 
 describe("session plugin selection helpers", () => {
@@ -100,14 +102,31 @@ describe("session plugin selection helpers", () => {
     ).toContain("dialogue");
   });
 
+  const labels = {
+    locale: "zh-CN",
+    requiredByWorld: "世界必需",
+    requestedByWorld: "世界默认",
+    packOptional: "组合包可选",
+    recommendedByWorld: "世界推荐",
+  };
+
   it("explains recommendations from the resolved policy and pack", () => {
-    expect(
-      recommendationReason(plugins[2]!, plan, dialoguePack, {
-        locale: "zh-CN",
-        requiredByWorld: "世界必需",
-        packOptional: "组合包可选",
-        recommendedByWorld: "世界推荐",
-      }),
-    ).toBe("对话模式");
+    expect(recommendationReason(plugins[2]!, plan, dialoguePack, labels)).toBe(
+      "对话模式",
+    );
+  });
+
+  it("calls a plugin required only when it provides a contract the world requires", () => {
+    // Requested by the world, yet nothing depends on it: a default, not a need.
+    expect(recommendationReason(plugins[0]!, plan, null, labels)).toBe(
+      "世界默认",
+    );
+    const requiring = {
+      ...plan,
+      policy: { ...plan.policy, requires: ["chat-mode@1"] },
+    };
+    expect(recommendationReason(plugins[2]!, requiring, null, labels)).toBe(
+      "世界必需",
+    );
   });
 });

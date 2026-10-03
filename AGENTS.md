@@ -65,6 +65,9 @@ pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e f
 pnpm e2e:verify       # API-driven real-LLM plugin harness (needs .env.llm); uses the configured models, --slot overrides the story slot
 pnpm validate:plugin  # validate PLUGIN.md manifests; a plugin DIR also gets cross-runtime checks
 pnpm validate:world   # validate world packages: pnpm validate:world worlds/<id>
+pnpm validate:collection  # static check of a covel-collection.yaml directory (docs/guide/collections.md)
+pnpm create-collection    # scaffold a collection: pnpm create-collection <id> [dir]
+pnpm pack:collection      # zip a collection for offline import: pnpm pack:collection <dir> [out.zip]
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity

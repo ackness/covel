@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  requestChoices,
   requestConfirm,
   subscribeConfirm,
   type PendingConfirm,
@@ -74,6 +75,38 @@ describe("confirm-channel", () => {
     await expect(first).resolves.toBe(true);
     await expect(second).resolves.toBe(true);
     unsub();
+  });
+
+  it("returns the ticked entries of a multi-item prompt, or none when declined", async () => {
+    const choices = [
+      { id: "a", label: "Plugin A" },
+      { id: "b", label: "Plugin B" },
+    ];
+    const seen: PendingConfirm[] = [];
+    const unsub = subscribeConfirm((pending) => seen.push(pending));
+
+    const partial = requestChoices({ ...REQUEST, choices });
+    const declined = requestChoices({ ...REQUEST, choices });
+    seen[0]!.resolve(true, ["b"]);
+    seen[1]!.resolve(false, ["a", "b"]);
+
+    await expect(partial).resolves.toEqual(["b"]);
+    await expect(declined).resolves.toEqual([]);
+    unsub();
+  });
+
+  it("names every entry in the native fallback and approves all or none", async () => {
+    const native = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const choices = [
+      { id: "a", label: "Plugin A" },
+      { id: "b", label: "Plugin B" },
+    ];
+
+    await expect(requestChoices({ ...REQUEST, choices })).resolves.toEqual([
+      "a",
+      "b",
+    ]);
+    expect(native.mock.calls[0]![0]).toContain("• Plugin A\n• Plugin B");
   });
 
   it("reverts to the native dialog once the host unsubscribes", async () => {

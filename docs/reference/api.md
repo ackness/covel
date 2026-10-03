@@ -484,6 +484,9 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | POST | `/api/install/world`                 | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `201 { ok, kind:"world", id, restartRequired:false }`                     |
 | POST | `/api/install/plugin/github/preview` | `{ url }`：解析公开 GitHub 仓库或子目录，返回固定提交、摘要与签名预览；不安装或执行插件                                                                               |
 | POST | `/api/install/plugin/github`         | `{ token, acceptRisk: true }`：校验已确认的预览并安装，返回 `201 { ok, kind: "plugin", id, restartRequired: true }`                                                   |
+| POST | `/api/install/github/preview`        | `{ url }`：一次预览链接下的插件、世界或合集成员，返回 `{ collection, items, problems }`；见[插件安装](plugin-installation.md#http-契约)                               |
+| POST | `/api/install/github/batch`          | `{ tokens, acceptRisk: true }`：把已预览的包作为一个整体安装，失败时回滚本次写入，返回 `201 { ok, installed, restartRequired }`                                       |
+| POST | `/api/install/collection`            | multipart 字段 `file`：导入打包好的合集 ZIP，响应同 batch                                                                                                             |
 | GET  | `/api/install/plugins`               | 列出用户插件目录中的包及可用的来源记录，包含尚未重启加载的插件                                                                                                        |
 
 > **canonical 插件身份**：插件的唯一身份是 manifest 根 `id`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `id: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID；`@covel/plugin-narrator` + `id: narrator` 会命中 reserved 并返回 409。启动 discovery 同样硬性校验目录名 == manifest 根 id，不一致的插件注册为 `hostState: "error"`、不加载任何 runtime/tool/hook/wire。
@@ -693,7 +696,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | ---- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET  | `/api/presets`                 | 列出配置的模型预设（`{ items }`）                                                                                                                                                                                                                                      |
 | GET  | `/api/plugins`                 | 从 registry 快照列出 canonical `PluginSummary`；加载失败同样作为 `status: "error"` 的 item 返回                                                                                                                                                                        |
-| GET  | `/api/worlds/:id/plugin-plan`  | 服务端解析世界插件策略、组合包和默认选择，返回 `WorldPluginPlan`                                                                                                                                                                                                       |
+| GET  | `/api/worlds/:id/plugin-plan`  | 服务端解析世界插件策略、组合包和默认选择，返回 `WorldPluginPlan`；各 `requested` 与 `defaultPluginIds` 只含已安装插件，世界请求但宿主未安装的列在 `missing: [{ pluginId, packId? }]`                                                                                   |
 | GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件                                                                                                                                                                                |
 | GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                                                                                                                                 |
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                                                                   |
@@ -1211,7 +1214,8 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 
 世界包字段会影响准备页和 session 初始化：
 
-- `metadata.pluginPolicy`：准备页组合策略，字段为 `presetId/preferredTags/avoidedTags/requested/recommended/packs`。解析器结合包级 contract 依赖与授权状态求解激活集；顶层 metadata 不再合并旧选择字段，也不强制锁定 core 插件。
+- `metadata.pluginPolicy`：准备页组合策略，字段为 `presetId/preferredTags/avoidedTags/requested/recommended/requires/packs`。解析器结合包级 contract 依赖与授权状态求解激活集；顶层 metadata 不再合并旧选择字段，也不强制锁定 core 插件。
+- `pluginPolicy.requires`：世界必需的契约 ID。创建时世界作为一个依赖方参与解析，唯一提供者被自动加入；需求随会话保存在 `metadata.pluginSelection.requiredContracts`，后续启停与重载沿用，不再读取世界。没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。玩家显式停用提供者，或提供者是尚待授权的社区插件时，会话照常创建。
 - `metadata.characterSchema`：创建会话时写入领域角色 schema，包含 `types/attributes`，版本由内核管理。
 - `metadata.embeddedCharacters`：没有文件型 worldData 时，将通用 `{id,name,type,description?,fields?}` 记录导入会话 `characters`。它不是插件角色卡，不产生插件数据镜像。
 - `metadata.embeddedLorebook`：没有文件型 worldData 时导入 world owner 的 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。

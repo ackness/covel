@@ -355,11 +355,23 @@ export type {
   AssetGenerateLLMTextPart,
   AssetGenerateView,
 } from "./proposals/asset-generate.js";
-export { resolveSessionPlugins } from "./plugin-selection.js";
+export {
+  resolveSessionPlugins,
+  isBlockingWorldRequirement,
+  providedContracts,
+} from "./plugin-selection.js";
+export {
+  checkCollection,
+  collectionPluginFacts,
+  collectionWorldFacts,
+  type CollectionPluginFacts,
+  type CollectionWorldFacts,
+} from "./collection-check.js";
 export type {
   SessionPluginCandidate,
   SessionPluginResolution,
   PluginResolutionRejection,
+  UnmetWorldRequirement,
 } from "./plugin-selection.js";
 
 export type { LLMProviderRequest } from "./types/llm-provider-request.js";
@@ -388,6 +400,27 @@ export {
   type PluginInstallation,
   type GithubPluginPreview,
 } from "./schemas/plugin-install.js";
+export {
+  COLLECTION_MANIFEST_FILE,
+  COLLECTION_MEMBER_LIMIT,
+  collectionManifestSchema,
+  collectionProblemSchema,
+  githubBatchInstallRequestSchema,
+  githubBatchInstallResultSchema,
+  githubCollectionPreviewSchema,
+  githubPackagePreviewSchema,
+  type CollectionManifest,
+  type CollectionMember,
+  type CollectionProblem,
+  type GithubBatchInstallResult,
+  type GithubCollectionPreview,
+  type GithubPackagePreview,
+} from "./schemas/collection.js";
+export {
+  hostVersionRangeSchema,
+  isHostVersionRange,
+  satisfiesHostVersionRange,
+} from "./utils/host-version-range.js";
 
 export { pluginManifestSchema } from "./schemas/plugin-manifest.js";
 export {

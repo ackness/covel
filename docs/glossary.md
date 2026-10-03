@@ -18,6 +18,12 @@ A string tag on a runtime manifest that advertises what the runtime _does_ (e.g.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), AGENTS.md "Framework ↔ Plugin Isolation Rule".
 
+## Collection
+
+A manifest (`covel-collection.yaml`) that lists worlds and plugins to install together, including packages pinned by commit in other repositories. It is a pointer list used at install time: what it installs are ordinary plugins and ordinary worlds, each updated and removed on its own. Distinct from **Pack**, which selects among plugins that are already installed.
+
+See: [docs/guide/collections.md](./guide/collections.md), [docs/reference/plugin-installation.md](./reference/plugin-installation.md).
+
 ## Kernel
 
 The framework runtime that schedules turns, assembles context, drives LLM tool-calls, validates proposals, and commits writes. Everything outside the `plugins/` directory (`packages/`, `apps/server/src/`, `apps/web/src/`) is kernel code.
@@ -26,7 +32,7 @@ See: [docs/architecture/flow.md](./architecture/flow.md).
 
 ## Pack
 
-A named bundle of plugins (enable / optional / exclude sets, plus tag preferences) that assembles one coherent gameplay style — e.g. `traditional-story`, `dialogue-mode`, `low-cost`. Players pick a pack on the session-prep screen to swap the whole plugin set at once; a world can default to one via `pluginPolicy.preset`. Distinct from **Preset**, which bundles model/slot routing, not plugins.
+A named bundle of plugins (`requested` and `recommended` sets, plus tags) that assembles one coherent gameplay style — e.g. `traditional-story`, `dialogue-mode`. Players pick a pack on the session-prep screen to swap the whole plugin set at once; a world can default to one via `pluginPolicy.presetId`. Distinct from **Preset**, which bundles model/slot routing, not plugins.
 
 See: `apps/web/src/lib/session-plugin-selection.ts`, [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/world-data.md](./reference/world-data.md).
 

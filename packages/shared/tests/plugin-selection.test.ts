@@ -218,3 +218,101 @@ describe("session plugin contract resolution", () => {
       }).active,
     ).toEqual(["a"]));
 });
+
+describe("world-required contracts", () => {
+  const dice = p("dice", { provides: ["check@1"], requires: ["rng@1"] });
+  const rng = p("rng", { provides: ["rng@1"] });
+
+  it("adds the only provider with its dependencies and keeps it after pruning", () => {
+    const plan = resolveSessionPlugins({
+      requested: [],
+      requiredContracts: ["check@1"],
+      plugins: [dice, rng, p("unrelated")],
+    });
+    expect(plan.active).toEqual(["dice", "rng"]);
+    expect(plan.autoAdded).toEqual(["dice", "rng"]);
+    expect(plan.unmet).toEqual([]);
+  });
+
+  it("lets a requested provider settle an otherwise ambiguous requirement", () => {
+    const plugins = [
+      p("d20", { provides: ["check@1"] }),
+      p("d100", { provides: ["check@1"] }),
+    ];
+    expect(
+      resolveSessionPlugins({
+        requested: [],
+        requiredContracts: ["check@1"],
+        plugins,
+      }).unmet,
+    ).toEqual([
+      {
+        contract: "check@1",
+        code: "ambiguous-provider",
+        candidates: ["d20", "d100"],
+      },
+    ]);
+    const chosen = resolveSessionPlugins({
+      requested: ["d100"],
+      requiredContracts: ["check@1"],
+      plugins,
+    });
+    expect(chosen.active).toEqual(["d100"]);
+    expect(chosen.unmet).toEqual([]);
+  });
+
+  it("separates a missing provider from one the player turned off", () => {
+    expect(
+      resolveSessionPlugins({
+        requested: [],
+        requiredContracts: ["check@1"],
+        plugins: [rng],
+      }).unmet,
+    ).toEqual([{ contract: "check@1", code: "missing-provider" }]);
+
+    const excluded = resolveSessionPlugins({
+      requested: [],
+      excluded: ["dice"],
+      requiredContracts: ["check@1"],
+      plugins: [dice, rng],
+    });
+    expect(excluded.active).toEqual([]);
+    expect(excluded.unmet).toEqual([
+      { contract: "check@1", code: "excluded", candidates: ["dice"] },
+    ]);
+  });
+
+  it("never activates unapproved community code for the world", () => {
+    const plan = resolveSessionPlugins({
+      requested: [],
+      requiredContracts: ["check@1"],
+      plugins: [
+        p("community-dice", {
+          provides: ["check@1"],
+          source: "community",
+          authorized: false,
+        }),
+      ],
+    });
+    expect(plan.active).toEqual([]);
+    expect(plan.unmet).toEqual([
+      {
+        contract: "check@1",
+        code: "approval-required",
+        candidates: ["community-dice"],
+      },
+    ]);
+  });
+
+  it("reports a provider that its own dependency dropped", () => {
+    const plan = resolveSessionPlugins({
+      requested: [],
+      requiredContracts: ["check@1"],
+      plugins: [dice],
+    });
+    expect(plan.active).toEqual([]);
+    expect(plan.unmet).toEqual([
+      { contract: "check@1", code: "missing-provider", candidates: ["dice"] },
+    ]);
+  });
+});

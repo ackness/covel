@@ -23,18 +23,27 @@
 
 ## 集成
 
-叙事引擎（narrator / chat-mode-narrator）消费公开的骰池输出；有 `tabletopCheck.value` 表单回执时，应只叙述该已结算结果，不再发射 `check.resolved`。普通风险行动需要：
+本插件通过 `action-check@1` 契约向叙事引擎提供 `checkContext`：本回合骰池，加上完整的判定规则与回执要求。契约只承诺这一个字段；输出里的 `dice` 是 recorder 同回合读取的包内私有字段。
 
-1. 在 `io.inputs` 中绑定 roller 的 `checkContext`：
+叙事引擎（narrator / chat-mode-narrator）接入只需两步，自身不写任何骰子规则：
+
+1. 根 `optional` 声明 `action-check@1`，并在 `io.inputs` 按契约绑定 `checkContext`：
 
    ```yaml
    check-results:
-     from: { runtime: dice-check/roller }
+     from:
+       contract: action-check@1
      select: /checkContext
      required: false
    ```
 
-2. 正文追加「判定规则使用」段落：何时判定、如何用骰池与属性修正、整回合判定完成后经 emit-event **一次性**发 `check.resolved` 批量回执（叙事引擎已声明 `advertiseEvents: true` 时，事件目录会自动出现在 prompt 里）。
+2. 正文只约定「该输入存在时严格按其中的规则判定并提交它要求的回执，不存在时按一般叙事处理」，并声明 `emit-event` 工具与 `advertiseEvents: true`，让 `check.resolved` 的事件目录出现在 prompt 里。
+
+有 `tabletopCheck.value` 表单回执时，`checkContext` 自带的规则会让出本回合，叙事只叙述该已结算结果。
+
+### 替换判定系统
+
+规则文本全部由提供者生成，所以换一套判定系统（d100、2d6 分档、成功数骰池等）不需要改叙事引擎：另写一个插件提供 `action-check@1`，在 `checkContext` 里给出自己的资源、规则和回执要求，并声明自己的回执事件与 UI。`check.resolved` 事件与「判定记录」面板属于本插件，不是契约的一部分。
 
 ## 开发
 

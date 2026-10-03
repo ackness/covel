@@ -146,13 +146,22 @@ export function recommendationReason(
   labels: {
     locale: string;
     requiredByWorld: string;
+    requestedByWorld: string;
     packOptional: string;
     recommendedByWorld: string;
   },
 ): string | null {
   const policy = plan?.policy;
-  if (policy?.requested.includes(pkg.id)) {
+  // "Required" is reserved for providers of a contract the world requires;
+  // a requested plugin is only the world's default selection.
+  const provided = pkg.provides.map((entry) =>
+    typeof entry === "string" ? entry : entry.contract,
+  );
+  if (policy?.requires.some((contract) => provided.includes(contract))) {
     return labels.requiredByWorld;
+  }
+  if (policy?.requested.includes(pkg.id)) {
+    return labels.requestedByWorld;
   }
   if (selectedPack?.requested.includes(pkg.id)) {
     return textValue(selectedPack.label, labels.locale);

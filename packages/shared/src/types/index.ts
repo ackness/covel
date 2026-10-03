@@ -67,6 +67,7 @@ export type {
 export type {
   PluginDataSchemaContract,
   PluginDetail,
+  MissingWorldPlugin,
   PluginLoadError,
   PluginPack,
   PluginMutationResponse,
@@ -342,8 +343,6 @@ export type {
   WorldMechanics,
   WorldStartingConditions,
   WorldDimensions,
-  WorldPluginPack,
-  WorldPluginPolicy,
   WorldPluginSettings,
 } from "./world.js";
 

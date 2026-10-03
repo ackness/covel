@@ -252,6 +252,15 @@ const pluginPolicySchema = z
     avoidedTags: z.array(z.string().min(1)).optional(),
     requested: z.array(z.string().min(1)).optional(),
     recommended: z.array(z.string().min(1)).optional(),
+    // Contract IDs, not plugin IDs: any installed provider satisfies them.
+    requires: z
+      .array(
+        z.string().regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/, {
+          message:
+            'a required contract must look like "action-check@1" (a contract ID, not a plugin ID)',
+        }),
+      )
+      .optional(),
   })
   .strict();
 
