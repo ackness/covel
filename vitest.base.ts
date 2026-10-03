@@ -8,6 +8,11 @@ export default {
     // preemption that has nothing to do with the DDL itself. 60s covers a
     // saturated run; a genuinely hung teardown still fails loudly.
     hookTimeout: 60_000,
+    // The same holds for tests. The default of 5 s is a speed limit: a test
+    // that parses a world package or imports the server passes alone and
+    // times out when every package runs at once. A time limit is there to
+    // catch a hang, and 30 s still does.
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],

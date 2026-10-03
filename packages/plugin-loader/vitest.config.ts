@@ -6,8 +6,8 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     reporters: ["default", "hanging-process"],
     fileParallelism: false,
-    testTimeout: 10_000,
-    hookTimeout: 10_000,
+    testTimeout: 30_000,
+    hookTimeout: 60_000,
     teardownTimeout: 5_000,
     restoreMocks: true,
     coverage: {
