@@ -1,18 +1,15 @@
 {
   "id": "{{pluginName}}-notes",
   "group": "{{pluginName}}",
-  "groupLabel": { "zh": "{{pluginName}}", "en": "{{pluginName}}" },
+  "groupLabel": "{{pluginName}}",
   "groupOrder": 800,
-  "label": { "zh": "插件记录", "en": "Plugin Notes" },
-  "shortLabel": { "zh": "记录", "en": "Notes" },
+  "label": "Plugin Notes",
+  "shortLabel": "Notes",
   "icon": "notebook-pen",
   "dataSource": { "namespace": "notes" },
   "alwaysRender": true,
   "emptyState": {
-    "message": {
-      "zh": "还没有插件记录。可以手动添加一条记录，或让 analyst runtime 分析当前剧情。",
-      "en": "No plugin notes yet. Add a manual note or ask the analyst runtime to inspect the current narrative."
-    }
+    "message": "No plugin notes yet. Add a manual note or ask the analyst runtime to inspect the current narrative."
   },
   "view": {
     "component": "Stack",
@@ -29,10 +26,7 @@
               {
                 "component": "Text",
                 "props": {
-                  "content": {
-                    "zh": "{{pluginName}} 插件工作台",
-                    "en": "{{pluginName}} plugin workbench"
-                  },
+                  "content": "{{pluginName}} plugin workbench",
                   "weight": "bold",
                   "size": "sm"
                 }
@@ -40,10 +34,7 @@
               {
                 "component": "Text",
                 "props": {
-                  "content": {
-                    "zh": "函数 runtime 写入确定性记录；agent runtime 读取剧情并写入一条观察。把 notes schema 换成你的真实插件状态即可继续开发。",
-                    "en": "The function runtime writes deterministic notes; the agent runtime reads the narrative and records one observation. Replace the notes schema with your real plugin state."
-                  },
+                  "content": "The function runtime writes deterministic notes; the agent runtime reads the narrative and records one observation. Replace the notes schema with your real plugin state.",
                   "variant": "muted",
                   "size": "xs"
                 }
@@ -55,7 +46,7 @@
                   {
                     "component": "Button",
                     "props": {
-                      "label": { "zh": "添加记录", "en": "Add note" },
+                      "label": "Add note",
                       "variant": "primary",
                       "size": "md"
                     },
@@ -76,7 +67,7 @@
                   {
                     "component": "Button",
                     "props": {
-                      "label": { "zh": "分析剧情", "en": "Analyze scene" },
+                      "label": "Analyze scene",
                       "variant": "default",
                       "size": "md"
                     },

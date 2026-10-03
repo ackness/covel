@@ -1,4 +1,6 @@
-# zh labels of the char-creator plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the char-creator plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 角色创建
   description: 帮你创建主角，并在故事中持续记录重要角色的变化。
@@ -6,3 +8,7 @@ runtimes/character-tracker/RUNTIME.md:
   description: 记录故事中新出现的人物，并更新他们的状态、伤势和装备变化。
 runtimes/player-init/RUNTIME.md:
   description: 开局引导你填写主角信息，并把主角加入故事。
+messages:
+  Characters: 角色
+  No characters created yet, complete the character creation flow to see them here…: 尚未创建角色，完成角色创建流程后将在此显示……
+  All Characters: 所有角色

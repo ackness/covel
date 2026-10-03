@@ -156,7 +156,7 @@ const value = await ctx.services.call(
 ```json
 {
   "id": "my-widget",
-  "label": { "zh": "我的面板", "en": "My widget" },
+  "label": "My widget",
   "surfaces": ["panel", "stage"],
   "dataSource": { "namespace": "results" },
   "webview": { "entry": "./widget.html", "height": 280 }

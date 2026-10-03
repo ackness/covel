@@ -1,4 +1,6 @@
-# zh labels of the world-time plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the world-time plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 世界时间
   description: 按世界定义维护日期、时段和时间流向，并根据本轮故事结算时间变化。
@@ -15,3 +17,8 @@ runtimes/advance/RUNTIME.md:
   description: 根据本轮叙事和世界规则提出时间变化，由工具确定性结算。
 runtimes/context/RUNTIME.md:
   description: 向叙事提供当前时间及世界的时间规则。
+messages:
+  World Time: 世界时间
+  Time appears when the story starts.: 时间将在故事开始后显示。
+  Time rules: 时间规则
+  "Uses the default world calendar: 12 months of 30 days, 24-hour days; starts at year 1, month 1, day 1, 08:00.": 使用通用世界历：每年12个月，每月30天，24小时制；起点为第1年1月1日08:00。

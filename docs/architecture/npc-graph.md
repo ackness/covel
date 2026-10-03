@@ -174,7 +174,7 @@ The plugin's right-panel spec lives at
 {
   "id": "npc-graph",
   "icon": "network",
-  "label": { "zh": "人物图谱", "en": "NPC Graph" },
+  "label": "NPC Graph",
   "view": {
     "component": "GraphCanvas",
     "props": {

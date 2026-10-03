@@ -424,7 +424,9 @@ function renderChineseLabels(runtimes) {
         `runtimes/${rt.name}/RUNTIME.md:\n  description: ${rt.name} ${rt.type === "function" ? "函数" : "agent"} runtime，请填写它的职责。\n`,
     )
     .join("");
-  return `# Chinese labels. One section per manifest file; only translated text, under the same keys.
+  return `# Chinese text of this plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   description: ${placeholders["{{pluginDescriptionZh}}"]}
 ${sections}`;

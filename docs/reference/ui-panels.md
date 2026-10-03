@@ -135,15 +135,12 @@ ui:
   "specVersion": 1,
   "id": "world-entries",
   "group": "world-data",
-  "groupLabel": { "zh": "世界维度", "en": "World Data" },
-  "label": { "zh": "词条", "en": "Entries" },
+  "groupLabel": "World Data",
+  "label": "Entries",
   "icon": "book-marked",
   "dataSource": { "namespace": "entries" },
   "emptyState": {
-    "message": {
-      "zh": "世界维度词条尚未生成，等待初始化完成……",
-      "en": "World entries not yet generated, waiting for initialization…"
-    }
+    "message": "World entries not yet generated, waiting for initialization…"
   },
   "view": {
     "component": "Accordion",
@@ -206,14 +203,21 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 
 ```json
 {
-  "label": { "zh": "核心记忆", "en": "Core Memory" },
-  "shortLabel": { "zh": "记忆", "en": "Memory" }
+  "label": "Core Memory",
+  "shortLabel": "Memory"
 }
+```
+
+```yaml
+# locales/zh.yaml
+messages:
+  Core Memory: 核心记忆
+  Memory: 记忆
 ```
 
 合并规则与 `groupLabel` 一致——同 `group` 内首个声明者赢；为 robustness 建议同 group 的所有 spec 都重复声明同一 `shortLabel`，避免依赖加载顺序。
 
-插件拥有自己的 UI 文案命名空间。插件组名、插件短标签、面板标签、按钮和表单字段都应写在 `plugins/<id>/ui/*.json` 的 `I18nText` 中；框架 i18n 字典只承载框架自有导航、系统按钮和通用状态文案。多个插件共享同一 `group` 时，每个插件 spec 都应重复声明一致的 `groupLabel`，activity-bar 的短标签由同组第一个 `shortLabel` 决定。
+插件拥有自己的 UI 文案命名空间。插件组名、插件短标签、面板标签、按钮和表单字段都写在 `plugins/<id>/ui/*.json` 里（English），译文在 `plugins/<id>/locales/<locale>.yaml`；框架 i18n 字典只承载框架自有导航、系统按钮和通用状态文案。多个插件共享同一 `group` 时，每个插件 spec 都应重复声明一致的 `groupLabel`，activity-bar 的短标签由同组第一个 `shortLabel` 决定。
 
 实现位置：`apps/web/src/components/session/right-panel.tsx` 的 `compactTabLabel()` 与 `aggregateSpecsIntoGroups()`。
 
@@ -223,11 +227,11 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 
 **优先级**：`emptyState.message`（spec 声明）> 自动回退（`${panelLabel} 暂无数据，等待游戏推进……`）
 
-**消息格式**：必须使用 I18nText 对象（目标 locale + English fallback；中文可选）；见下方「插件 UI 文本 I18nText 规范」：
+**消息格式**：spec 里写 English，译文写在 `locales/<locale>.yaml`；见下方「插件 UI 文本规范」：
 
 ```json
 "emptyState": {
-  "message": { "zh": "尚未创建角色，完成角色创建流程后将在此显示……", "en": "No characters yet…" }
+  "message": "No characters yet…"
 }
 ```
 
@@ -245,30 +249,40 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 
 **实现位置**：`apps/web/src/components/session/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 判断与 `alwaysRender` 短路）。
 
-### 插件 UI 文本 I18nText 规范
+### 插件 UI 文本规范
 
-**所有**面向用户的 UI 字符串（`label` / `groupLabel` / `shortLabel` / `emptyState.message` / `searchPlaceholder` / `emptyMessage` / `footer` 以及 json-render spec 内 `Text/Button/Badge/FormField/Alert/...` 的 `content` / `label` / `placeholder` / `title` / `message`）必须使用 `I18nText` 对象：
-
-```ts
-type I18nText = string | Record<LocaleTag, string>;
-```
-
-- 合法 locale key 使用 BCP 47 风格，例如 `zh`、`en-US`、`ru-RU`、`sr-Latn`、`zh-Hant-TW`。统一解析契约和完整回退顺序见 [Internationalization](./i18n.md)；组件不得自行判断 locale。
-- **必须提供 English fallback**：目标 locale 可以是 `zh`、`ru` 或其他语言；中文不再是必需项。
-- 单一纯字符串**仅限**以下场景：value 不是自然语言（ID / 图标名 / 路径 / URL / 状态值），或者已经是翻译后的英文短语且被所有 locale 共用（如 `"NEW"`、`"Ping"`）。
-- 禁止出现孤立的纯中文字符串。CI 脚本 `scripts/check-plugin-i18n.mjs` 会拒绝任何未被 I18nText 对象包裹的 CJK 字面量。
+UI spec 里只写一种语言：English。其他语言的文字写在插件根目录的 `locales/<locale>.yaml` 的 `messages` 一节，左边是 spec 里的 English 原文，右边是译文：
 
 ```json
-// ✓ 合法
-{ "label": { "zh": "世界维度", "en": "World Dimensions" } }
-{ "content": { "zh-CN": "……", "en-US": "…" } }
-{ "icon": "book-open" }                 // 非自然语言
-{ "label": "Ping" }                     // 共用英文短语
-
-// ✗ 非法（脚本阻断）
-{ "content": "已收录到右侧图鉴" }         // 裸中文
-{ "label": { "zh": "世界" } }            // 缺少英文 locale
+// ui/codex-panel.json
+{
+  "label": "Codex",
+  "shortLabel": "Codex",
+  "emptyState": { "message": "No codex entries yet." },
+  "view": {
+    "component": "Text",
+    "props": { "content": "{{count}} entries collected" }
+  }
+}
 ```
+
+```yaml
+# locales/zh.yaml
+messages:
+  Codex: 知识图鉴
+  shortLabel|Codex: 图鉴
+  No codex entries yet.: 图鉴暂无词条。
+  "{{count}} entries collected": 共 {{count}} 条记录
+```
+
+- **哪些属性是文字**：名为 `label`、`title`、`content`、`message`、`text`、`description`、`placeholder`、`footer`、`tooltip`、`hint`、`help`、`summary`、`subtitle` 的属性，以及名字以 `Label`、`Title`、`Message`、`Text`、`Placeholder`、`Description`、`Hint`、`Tooltip` 结尾的属性（`shortLabel`、`groupLabel`、`searchPlaceholder`、`emptyMessage`……）。译文只作用于这些属性，所以翻译文件改不了组件名、action 或数据路径。`on`（action 参数）、`dataSource` 和 `*PropMap` 里的内容是数据，不翻译。
+- **同一句 English 需要两种译法**时，在 key 前加属性名和 `|`：`shortLabel|Codex` 只用于 `shortLabel`，其余位置用 `Codex`。
+- **没有译文的文字显示 English**。译文里的占位符（`{{count}}`）必须和原文一致。
+- **English 原文改了，旧译文就不再匹配**：界面回到 English，`pnpm validate:plugin` 把这条译文报为错误。不需要另外记录“译文是否过期”。
+- spec 里不再写内联的 `{ "zh": …, "en": … }`，也不能出现中文；`pnpm validate:plugin` 与 `pnpm check:i18n` 会拒绝。
+- 内置插件的每一条 UI 文字都必须有中文译文（`pnpm check:i18n` 检查）；和 English 相同的文字照原样重复一遍即可，没有字母的文字（符号、数字）不需要。
+
+加载器把译文编译成 `I18nText`（`string | Record<LocaleTag, string>`）交给前端，所以 `GET /api/ui-specs` 返回的仍是 `{ "en": "Codex", "zh": "知识图鉴" }` 这样的值。统一解析契约和回退顺序见 [Internationalization](./i18n.md)；组件不得自行判断 locale。
 
 **框架端解析器**：`resolveI18n(value, locale?)` 与 `useI18nResolver()` 由 `apps/web/src/lib/catalog/helpers.tsx` 导出，渲染器直接从该模块导入。所有内置 ComponentRenderer 已调用 hook 订阅 locale 变更；切语言时 json-render 子树会自动重渲染。
 
@@ -310,7 +324,7 @@ type I18nText = string | Record<LocaleTag, string>;
 | `$pluralize` | 按数量选择 zero / one / other 文案        |
 | `$join`      | 连接数组元素                              |
 
-`$t` 暂不开放。插件自然语言继续使用 `I18nText`，避免与现有 i18next locale 资源形成两套翻译源。
+`$t` 暂不开放。插件的自然语言写在文本属性里，由 `locales/<locale>.yaml` 翻译，避免与现有 i18next locale 资源形成两套翻译源。directive 参数里的字符串（例如 `$concat` 的片段）不在翻译范围内，需要翻译的文字应放在文本属性里。
 
 ```json
 {

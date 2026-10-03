@@ -1,4 +1,6 @@
-# zh labels of the memory plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the memory plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 故事记忆
   description: 展示故事记住的重点，包括剧情、场景、人物关系和主角状态。
@@ -8,3 +10,8 @@ PLUGIN.md:
         authoring:
           title: 题材记忆块
           summary: 让记忆系统按这个题材追踪线索、承诺、倒计时等状态。
+messages:
+  Core Memory: 核心记忆
+  Memory: 记忆
+  Memory blocks not yet initialized, waiting for first turn to complete…: 记忆块尚未初始化，等待首轮游戏结束后自动填充……
+  Updates after each turn to keep key plot, scene, and character details.: 每轮结束后自动更新，保存关键剧情、场景和角色信息。

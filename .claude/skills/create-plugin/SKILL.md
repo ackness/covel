@@ -44,10 +44,13 @@ inline `runtime` or child `runtimes/<id>/RUNTIME.md` files supply executable
 behavior; child `PLUGIN.md` files and old flat authoring fields are rejected.
 Declare scheduling with `stage` plus `needs` / `after` edges, and `io.visibility`.
 
-Write `PLUGIN.md` and `RUNTIME.md` in English: labels, tool descriptions, and
-the prompt body. Put label translations (`displayName`, `description`, `label`,
-`title`, `summary`) in `locales/<locale>.yaml`, one section per manifest file;
-an inline `{ zh, en }` map in a manifest fails `pnpm validate:plugin`. The
+Write `PLUGIN.md`, `RUNTIME.md` and `ui/*.json` in English: labels, tool
+descriptions, UI text, and the prompt body. Put label translations
+(`displayName`, `description`, `label`, `title`, `summary`) in
+`locales/<locale>.yaml`, one section per manifest file, and UI text translations
+in the same file under `messages` (English text, then its translation). An
+inline `{ zh, en }` map in a manifest or a UI spec fails `pnpm validate:plugin`,
+and a bundled plugin needs a Chinese translation for every UI text. The
 Simplified Chinese prompt is `PLUGIN.zh.md` / `RUNTIME.zh.md` with an empty
 frontmatter; a bundled plugin must ship it for every prompt a model reads, then
 run `pnpm prompts:lock`. No other language has a prompt file. See

@@ -1,4 +1,6 @@
-# zh labels of the chat-mode-narrator plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the chat-mode-narrator plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 对话叙事
   description: 让故事更像角色对话，适合重视聊天和人物互动的玩法。

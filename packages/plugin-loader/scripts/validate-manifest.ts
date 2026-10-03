@@ -53,7 +53,7 @@ for (const arg of args) {
     const labelProblems = await validatePluginLabels(rootPath);
     if (labelProblems.length > 0)
       throw new Error(
-        `${rootPath}: label translations\n  - ${labelProblems.join("\n  - ")}`,
+        `${rootPath}: locale files\n  - ${labelProblems.join("\n  - ")}`,
       );
     console.log(`✓ Static package validation: ${rootPath}`);
   } catch (error) {

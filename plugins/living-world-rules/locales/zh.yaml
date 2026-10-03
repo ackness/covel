@@ -1,4 +1,6 @@
-# zh labels of the living-world-rules plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the living-world-rules plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 世界规则
   description: 展示世界包里长期生效的规则（禁忌、风俗和特殊设定），并让叙事始终遵守。
@@ -7,3 +9,10 @@ PLUGIN.md:
       rules:
         authoring:
           title: 世界规则
+messages:
+  World Details: 世界资料
+  World Rules: 世界规则
+  Rules: 规则
+  This world declares no lasting rules. Rules are authored in the world package (imported via world-data).: 本世界没有声明长期规则。规则由世界作者写在世界包里（world-data 导入）。
+  Lasting setting rules and taboos in effect for this world (read-only).: 本世界生效中的长期设定与禁忌（只读）。
+  No rules: 暂无规则

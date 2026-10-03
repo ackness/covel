@@ -9,10 +9,7 @@
         "component": "Text",
         "visible": { "$state": "/rejectedCount" },
         "props": {
-          "content": {
-            "zh": "部分判定未通过校验。这里只展示与本回合骰子及规则一致的结果。",
-            "en": "Some checks could not be verified. Only results consistent with this turn's dice and rules are shown."
-          },
+          "content": "Some checks could not be verified. Only results consistent with this turn's dice and rules are shown.",
           "size": "sm"
         }
       },

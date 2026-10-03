@@ -1,23 +1,14 @@
 {
   "id": "living-world-rules",
   "group": "world-data",
-  "groupLabel": { "zh": "世界资料", "en": "World Details" },
-  "label": {
-    "zh": "世界规则",
-    "en": "World Rules"
-  },
-  "shortLabel": {
-    "zh": "规则",
-    "en": "Rules"
-  },
+  "groupLabel": "World Details",
+  "label": "World Rules",
+  "shortLabel": "Rules",
   "icon": "book-marked",
   "groupOrder": 300,
   "dataSource": { "namespace": "rules" },
   "emptyState": {
-    "message": {
-      "zh": "本世界没有声明长期规则。规则由世界作者写在世界包里（world-data 导入）。",
-      "en": "This world declares no lasting rules. Rules are authored in the world package (imported via world-data)."
-    }
+    "message": "This world declares no lasting rules. Rules are authored in the world package (imported via world-data)."
   },
   "view": {
     "component": "Stack",
@@ -26,10 +17,7 @@
       {
         "component": "Text",
         "props": {
-          "content": {
-            "zh": "本世界生效中的长期设定与禁忌（只读）。",
-            "en": "Lasting setting rules and taboos in effect for this world (read-only)."
-          },
+          "content": "Lasting setting rules and taboos in effect for this world (read-only).",
           "variant": "muted",
           "size": "xs"
         }
@@ -49,10 +37,7 @@
             "collapsible": true,
             "defaultExpanded": false
           },
-          "emptyMessage": {
-            "zh": "暂无规则",
-            "en": "No rules"
-          }
+          "emptyMessage": "No rules"
         }
       }
     ]

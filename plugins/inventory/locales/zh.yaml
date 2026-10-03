@@ -1,4 +1,6 @@
-# zh labels of the inventory plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the inventory plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 行囊
   description: 每回合从叙事中记录明确的物品得失与装备变化，右栏随时可查背包。
@@ -14,3 +16,13 @@ runtimes/ledger/RUNTIME.md:
   description: 每回合从共享的事实抽取中记录主角的物品得失与装备变化。
 runtimes/vocabulary/RUNTIME.md:
   description: 在事实抽取前公布背包里的物品名，便于沿用同一名称。
+messages:
+  Inventory changes: 行囊变化
+  Inventory: 行囊
+  Bag: 行囊
+  Your bag is empty. Items you explicitly obtain in the story will appear here…: 行囊空空如也，故事里明确拿到的东西会自动记进来……
+  Equipped: 已装备
+  Unequip: 卸下
+  Drop: 丢弃
+  Backpack: 背包
+  Equip: 装备

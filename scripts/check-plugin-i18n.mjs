@@ -5,8 +5,11 @@
  * JSON UI specs:
  *   - Scans plugins/**\/ui/*.json and templates/**\/ui/*.json, including
  *     nested runtime ui directories.
- *   - Bare CJK strings are rejected. Wrap them as I18nText objects.
- *   - I18nText objects may use any locale and must include an English fallback.
+ *   - A spec holds English text. Bare CJK strings are rejected; translations
+ *     go in locales/<locale>.yaml under `messages`.
+ *   - Every text of a bundled plugin's UI has a Chinese translation. The old
+ *     inline `{ zh, en }` form made a missing one visible where the text was
+ *     written; with the translation in another file this check does.
  *
  * PLUGIN.md frontmatter:
  *   - Scans user-visible fields such as description, displayName, label,
@@ -35,6 +38,8 @@ import {
   isKnownLocale,
   localeLanguage,
 } from "@covel/shared";
+// By path: a package-name import can resolve to a stale copy in a worktree.
+import { missingUiTranslations } from "../packages/plugin-loader/src/locale-messages.ts";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -499,7 +504,28 @@ function checkWorldFiles() {
   return { files, totalViolations };
 }
 
+/** Bundled plugins ship Chinese: every UI text needs a `zh` translation. */
+async function checkBundledUiCoverage() {
+  const pluginsDir = resolve(REPO_ROOT, "plugins");
+  let missing = 0;
+  for (const name of readdirSync(pluginsDir).sort()) {
+    const root = join(pluginsDir, name);
+    if (name.startsWith("_") || !existsSync(join(root, "PLUGIN.md"))) continue;
+    for (const { file, property, text } of await missingUiTranslations(
+      root,
+      "zh",
+    )) {
+      missing += 1;
+      console.error(
+        `plugins/${name}/${file}: ${property} "${text.slice(0, 60)}" has no Chinese translation - add it to plugins/${name}/locales/zh.yaml under messages (repeat the English text when it is the same in Chinese).`,
+      );
+    }
+  }
+  return missing;
+}
+
 const jsonResult = checkJsonFiles();
+const uiCoverageMissing = await checkBundledUiCoverage();
 const pluginMdResult = checkPluginMarkdownFiles();
 const handlerJsResult = checkHandlerJsFiles();
 const worldResult = checkWorldFiles();
@@ -511,6 +537,7 @@ const frameworkProblems = checkFrameworkChinese({
 for (const problem of frameworkProblems) console.error(problem);
 const totalViolations =
   jsonResult.totalViolations +
+  uiCoverageMissing +
   pluginMdResult.totalViolations +
   handlerJsResult.totalViolations +
   worldResult.totalViolations +

@@ -1,4 +1,6 @@
-# zh labels of the story-events plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the story-events plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 隐藏事件
   description: 世界包声明的隐藏剧情在条件满足前对模型与玩家都不可见；满足时由叙事在本回合自然演出。可开启剧情策划，在幕后追加后续事件。

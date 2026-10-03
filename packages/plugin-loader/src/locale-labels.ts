@@ -9,6 +9,11 @@ import {
 } from "@covel/shared";
 import matter from "gray-matter";
 import { parse as parseYaml } from "yaml";
+import {
+  MESSAGES_SECTION,
+  PLUGIN_BASE_LOCALE,
+  validatePluginMessages,
+} from "./locale-messages.js";
 
 /**
  * Label translations of a plugin.
@@ -40,9 +45,6 @@ export interface ManifestLabels {
   readonly file: string;
   readonly overlay: unknown;
 }
-
-/** Language of the main manifest files. */
-export const PLUGIN_BASE_LOCALE = "en";
 
 /** Lists in a manifest are matched by the first of these every element has. */
 const MANIFEST_ARRAY_KEYS = ["id", "name", "key"] as const;
@@ -216,9 +218,10 @@ async function manifestFilesOf(pluginRoot: string): Promise<string[]> {
 }
 
 /**
- * Static check of a plugin's label translations, for `pnpm validate:plugin`.
- * The loader only warns about a translation it cannot place, so that one
- * stale entry does not disable a plugin; here each of these is an error.
+ * Static check of a plugin's locale files, for `pnpm validate:plugin`: the
+ * label sections and the message catalog. The loader only warns about a
+ * translation it cannot place, so that one stale entry does not disable a
+ * plugin; here each of these is an error.
  */
 export async function validatePluginLabels(
   pluginRoot: string,
@@ -260,7 +263,7 @@ export async function validatePluginLabels(
   try {
     names = await fs.readdir(path.join(pluginRoot, "locales"));
   } catch {
-    return problems;
+    return [...problems, ...(await validatePluginMessages(pluginRoot))];
   }
   for (const name of names.sort()) {
     if (!/\.ya?ml$/.test(name)) continue;
@@ -284,10 +287,10 @@ export async function validatePluginLabels(
     }
     if (document === null || typeof document !== "object") continue;
     for (const section of Object.keys(document))
-      if (!manifests.includes(section))
+      if (section !== MESSAGES_SECTION && !manifests.includes(section))
         problems.push(
-          `locales/${name}: section "${section}" is not a manifest file of this plugin (${manifests.join(", ")})`,
+          `locales/${name}: section "${section}" is not "${MESSAGES_SECTION}" or a manifest file of this plugin (${manifests.join(", ")})`,
         );
   }
-  return problems;
+  return [...problems, ...(await validatePluginMessages(pluginRoot))];
 }

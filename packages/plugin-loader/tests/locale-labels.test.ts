@@ -162,7 +162,7 @@ runtimes/gone/RUNTIME.md:
       "contributes.prompt is prompt text, not a label",
     );
     expect(problems).toContain(
-      'section "runtimes/gone/RUNTIME.md" is not a manifest file',
+      'section "runtimes/gone/RUNTIME.md" is not "messages" or a manifest file',
     );
     expect(problems).toContain('"notes" is not a language tag');
   });

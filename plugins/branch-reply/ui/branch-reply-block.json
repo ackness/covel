@@ -6,26 +6,11 @@
   "view": {
     "component": "CandidateList",
     "props": {
-      "title": {
-        "zh": "回复候选",
-        "en": "Reply candidates"
-      },
-      "draftLabel": {
-        "zh": "草稿",
-        "en": "Draft"
-      },
-      "sendLabel": {
-        "zh": "发送",
-        "en": "Send"
-      },
-      "acceptLabel": {
-        "zh": "采用",
-        "en": "Accept"
-      },
-      "regenerateLabel": {
-        "zh": "重生成",
-        "en": "Regenerate"
-      },
+      "title": "Reply candidates",
+      "draftLabel": "Draft",
+      "sendLabel": "Send",
+      "acceptLabel": "Accept",
+      "regenerateLabel": "Regenerate",
       "candidates": {
         "$state": "/candidates"
       },

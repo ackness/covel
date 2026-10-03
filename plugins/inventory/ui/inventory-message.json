@@ -16,7 +16,7 @@
           {
             "component": "Text",
             "props": {
-              "content": { "zh": "行囊变化", "en": "Inventory changes" },
+              "content": "Inventory changes",
               "size": "xs",
               "variant": "muted"
             }

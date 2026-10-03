@@ -1,17 +1,14 @@
 {
   "id": "npc-graph",
   "group": "npc-graph",
-  "label": { "zh": "关系图谱", "en": "Relationship Graph" },
+  "label": "Relationship Graph",
   "icon": "network",
   "dataSource": {
     "namespace": "nodes",
     "bindings": { "nodes": "nodes", "edges": "edges" }
   },
   "emptyState": {
-    "message": {
-      "zh": "尚未发现角色或势力关系，继续推进故事后会自动出现……",
-      "en": "No character or faction relationships yet. They will appear as the story continues."
-    }
+    "message": "No character or faction relationships yet. They will appear as the story continues."
   },
   "view": {
     "component": "Stack",
@@ -20,10 +17,7 @@
       {
         "component": "Text",
         "props": {
-          "content": {
-            "zh": "当前会话里的角色、群体与势力关系。绿线=正向关系，红线=负向关系，灰线=中立。点击节点查看档案。",
-            "en": "Relationships among characters, groups, and factions in the current session. Green = positive, red = negative, gray = neutral."
-          },
+          "content": "Relationships among characters, groups, and factions in the current session. Green = positive, red = negative, gray = neutral.",
           "variant": "muted",
           "size": "xs"
         }

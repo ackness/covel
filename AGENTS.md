@@ -52,7 +52,7 @@ Toolchain versions come from `mise.toml` (Node 26, pnpm 12.6.0, actionlint).
 ```bash
 pnpm install --frozen-lockfile
 pnpm dev              # web (5173) + server (3001), SqliteStore (./data/covel.db)
-                      # server watches plugins/**/*.{md,js,json}; editing a PLUGIN.md or handler restarts it
+                      # server watches plugins/**/*.{md,js,json,yaml}; editing a PLUGIN.md, handler or locale file restarts it
 pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
 pnpm stop             # kill stray dev/turbo processes
@@ -128,7 +128,7 @@ them in the `X-Provider-Keys` header (base64).
   loaded), `templates/` (plugin scaffolds for `pnpm create-plugin`).
 - Each `plugins/<name>/` needs `PLUGIN.md` + `package.json`; optional `prompts/`,
   `schemas/`, `server/`, `client/`, `ui/`, `tests/`, and `locales/<locale>.yaml`
-  (label translations; the manifests themselves are English).
+  (translations of labels and UI text; manifests and UI specs are English).
 - ESM-only, TypeScript strict, ES2022, NodeNext — **use `.js` extensions in TS
   relative imports**. Packages export TS source directly (`"import": "./src/index.ts"`);
   there is no build step for dev.

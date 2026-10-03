@@ -1,4 +1,13 @@
-# zh labels of the guide plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the guide plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 行动建议
   description: 每轮故事后衔接相关前情，点明当前抉择，并给出可直接采用的行动短句。
+messages:
+  SCENE PROMPTS: 场景提示
+  Pick a prompt to queue it, then send from the composer below.: 选择一个短句加入待发送区，再从底部统一发送。
+  Custom scene action: 自定义场景行动
+  e.g. I lower my voice and ask what she just saw.: 例如：我放低声音，问她刚才看见了什么
+  Queue: 加入待发送区
+  Scene prompts will appear here after the next narrative turn.: 场景提示会在新的叙事节点出现后显示在这里。

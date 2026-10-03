@@ -8,7 +8,7 @@ Reference for the json-render components available to plugin UI specs. This page
 
 - **Registry location** — `apps/web/src/lib/catalog.tsx` exports `covelRegistry`, with renderers split by responsibility under `apps/web/src/lib/catalog/`. Plugins can only use components registered there; the framework controls the vocabulary, plugins compose from it.
 - **Reference from a plugin** — in your `ui/*.json` spec, set `"component": "<Name>"` exactly as it appears below. The spec is discovered via `PLUGIN.md` frontmatter (`ui.right` / `ui.message` / `ui.left`).
-- **Validate** — any CJK string inside spec JSON must be wrapped as `I18nText` (see [ui-panels.md §I18nText](./ui-panels.md#插件-ui-文本-i18ntext-规范)). Run `pnpm check:i18n` — it wraps `check-plugin-i18n` and blocks bare Chinese literals.
+- **Validate** — spec JSON holds English text; translations go in `locales/<locale>.yaml` under `messages` (see [ui-panels.md](./ui-panels.md#插件-ui-文本规范)). Run `pnpm check:i18n` — it wraps `check-plugin-i18n`, blocks Chinese literals in a spec and requires a Chinese translation for every UI text of a bundled plugin.
 - **Discover new components added after this doc** — the full list is always grep-able:
 
   ```bash
@@ -31,7 +31,7 @@ Reference for the json-render components available to plugin UI specs. This page
 | Current index             | `{ "$index": true }`                                                                                                         |
 | Named child regions       | `slots: { "header": [{ "component": "Text" }], "content": [{ "component": "Stack" }] }`                                      |
 | Transform a value         | `$format`, `$math`, `$concat`, `$count`, `$truncate`, `$pluralize`, or `$join` (also valid in action params)                 |
-| Resolve i18n              | pass any `I18nText` value (`{ "zh": "…", "en": "…" }`) to any `content` / `label` / `placeholder` / `title` / `message` prop |
+| Resolve i18n              | write English in any `content` / `label` / `placeholder` / `title` / `message` prop; translate it in `locales/<locale>.yaml` |
 
 ## Components
 

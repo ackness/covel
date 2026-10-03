@@ -1,4 +1,12 @@
-# zh labels of the branch-reply plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the branch-reply plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 回复变体
   description: 提供多条可切换的回复，让你挑选更合适的说法。
+messages:
+  Reply candidates: 回复候选
+  Draft: 草稿
+  Send: 发送
+  Accept: 采用
+  Regenerate: 重生成

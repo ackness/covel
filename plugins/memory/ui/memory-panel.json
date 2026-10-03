@@ -1,15 +1,12 @@
 {
   "id": "memory",
-  "label": { "zh": "核心记忆", "en": "Core Memory" },
-  "shortLabel": { "zh": "记忆", "en": "Memory" },
+  "label": "Core Memory",
+  "shortLabel": "Memory",
   "icon": "brain",
   "groupOrder": 800,
   "dataSource": { "namespace": "blocks" },
   "emptyState": {
-    "message": {
-      "zh": "记忆块尚未初始化，等待首轮游戏结束后自动填充……",
-      "en": "Memory blocks not yet initialized, waiting for first turn to complete…"
-    }
+    "message": "Memory blocks not yet initialized, waiting for first turn to complete…"
   },
   "view": {
     "component": "Stack",
@@ -18,10 +15,7 @@
       {
         "component": "Text",
         "props": {
-          "content": {
-            "zh": "每轮结束后自动更新，保存关键剧情、场景和角色信息。",
-            "en": "Updates after each turn to keep key plot, scene, and character details."
-          },
+          "content": "Updates after each turn to keep key plot, scene, and character details.",
           "size": "xs",
           "variant": "muted"
         }

@@ -1,4 +1,6 @@
-# zh labels of the tabletop-rules plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the tabletop-rules plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 跑团规则
   description: 在角色创建后追加开局配点，以程序结算属性检定，并保留可复核的骰子记录。
@@ -11,3 +13,6 @@ runtimes/check/RUNTIME.md:
   description: 提交属性检定，结果不会因重试而重掷
 runtimes/creation/RUNTIME.md:
   description: 开局配点
+messages:
+  Attribute checks: 属性检定
+  Request an attribute check: 发起属性检定

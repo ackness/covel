@@ -1,28 +1,16 @@
 {
   "id": "character-blueprint",
   "group": "character",
-  "groupLabel": {
-    "zh": "角色",
-    "en": "Characters"
-  },
-  "label": {
-    "zh": "预设角色",
-    "en": "Preset Characters"
-  },
-  "shortLabel": {
-    "zh": "预设",
-    "en": "Presets"
-  },
+  "groupLabel": "Characters",
+  "label": "Preset Characters",
+  "shortLabel": "Presets",
   "icon": "id-card",
   "groupOrder": 100,
   "dataSource": {
     "namespace": "blueprints"
   },
   "emptyState": {
-    "message": {
-      "zh": "本世界没有预设角色。登场角色由世界作者写在世界包里（如 main-cast.json，经 world-data 导入）。",
-      "en": "This world ships no preset characters. The cast is authored in the world package (e.g. main-cast.json, imported via world-data)."
-    }
+    "message": "This world ships no preset characters. The cast is authored in the world package (e.g. main-cast.json, imported via world-data)."
   },
   "view": {
     "component": "Stack",
@@ -33,10 +21,7 @@
       {
         "component": "Text",
         "props": {
-          "content": {
-            "zh": "本世界登场的预设角色（只读）。",
-            "en": "Preset characters that appear in this world (read-only)."
-          },
+          "content": "Preset characters that appear in this world (read-only).",
           "variant": "muted",
           "size": "xs"
         }
@@ -54,10 +39,7 @@
           "fields": [
             {
               "path": "value.attributes",
-              "label": {
-                "zh": "属性",
-                "en": "Attributes"
-              }
+              "label": "Attributes"
             }
           ],
           "footerField": "value.id"

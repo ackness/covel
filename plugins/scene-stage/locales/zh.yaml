@@ -1,18 +1,13 @@
-# zh labels of the scene-stage plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the scene-stage plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 场景舞台
   description: 跟踪当前场景、昼夜和在场角色，为舞台背景与立绘提供数据。
   contributes:
     events:
-      - description:
-          每轮正文前发射一次：cues 合并本轮全部登退场、站位、焦点、视觉变体变化；dialogue.paragraphSpeakers
-          按正文空行分段顺序逐项填写准确角色 ID（来自 active-cast），旁白、混合对白或不确定时填
-          null。不同说话人必须分段，正文段数和顺序必须与数组一致。无演员变化时 cues 可为空，但必须提供
-          dialogue。actor.focus 只控制画面焦点，不决定对白署名。actor.leave 与 stage.clear 应指定离场
-          transition。
-      - description:
-          发射条件：第一回合开场确立场景时、场景/地点切换时、昼夜变化时——满足任一即须发射（每回合最多一次）。location
-          用叙事中的地点名；无把握沿用上次值。
+      - description: 每轮正文前发射一次：cues 合并本轮全部登退场、站位、焦点、视觉变体变化；dialogue.paragraphSpeakers 按正文空行分段顺序逐项填写准确角色 ID（来自 active-cast），旁白、混合对白或不确定时填 null。不同说话人必须分段，正文段数和顺序必须与数组一致。无演员变化时 cues 可为空，但必须提供 dialogue。actor.focus 只控制画面焦点，不决定对白署名。actor.leave 与 stage.clear 应指定离场 transition。
+      - description: 发射条件：第一回合开场确立场景时、场景/地点切换时、昼夜变化时——满足任一即须发射（每回合最多一次）。location 用叙事中的地点名；无把握沿用上次值。
     settings:
       - key: activeSpeakerCount
         label: 活跃说话人数
@@ -31,3 +26,10 @@ runtimes/resolver/RUNTIME.md:
   description: 跟踪叙事当前所在的场景与昼夜，为舞台背景提供数据。
 runtimes/seed/RUNTIME.md:
   description: 开局时为舞台种下世界注册表里的第一个场景，避免叙事未发 scene.set 时舞台空白。
+messages:
+  Scene: 场景
+  groupLabel|Scene: 当前场景
+  Cast: 在场角色
+  No characters are on stage in this scene yet.: 这一幕还没有角色登场。
+  Characters in this scene: 这一幕在场的角色
+  No scene established yet, waiting for the narrative to progress…: 还没有确立场景，等待叙事推进……

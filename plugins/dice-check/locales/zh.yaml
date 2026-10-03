@@ -1,14 +1,12 @@
-# zh labels of the dice-check plugin. One section per manifest file; only translated text, under the same keys.
+# Chinese text of the dice-check plugin.
+# A section named after a manifest file translates its labels, under the same keys.
+# messages translates the UI: English text, then its translation.
 PLUGIN.md:
   displayName: 骰子判定
   description: 为有失败风险的行动提供骰子判定：预掷骰池、规则化成败、可视化回执。
   contributes:
     events:
-      - description:
-          发射条件：本回合完成过至少一次骰子判定时必须发射，且整回合只发一次——把所有判定装进 checks
-          数组（先判定完、再一次性发射）。每项：action 填行动简述；roll 填消耗的预掷骰原值；modifier 填属性修正；total =
-          roll + modifier；dc/difficulty 填难度；outcome 按 total vs DC 判定，天然 20 为
-          critical-success、天然 1 为 critical-failure。无风险行动不判定也不发射。
+      - description: 发射条件：本回合完成过至少一次骰子判定时必须发射，且整回合只发一次——把所有判定装进 checks 数组（先判定完、再一次性发射）。每项：action 填行动简述；roll 填消耗的预掷骰原值；modifier 填属性修正；total = roll + modifier；dc/difficulty 填难度；outcome 按 total vs DC 判定，天然 20 为 critical-success、天然 1 为 critical-failure。无风险行动不判定也不发射。
     commands:
       - name: roll
         description: 掷指定骰式，默认为 1d20。
@@ -19,3 +17,10 @@ runtimes/recorder/RUNTIME.md:
   description: 记录叙事发回的骰子判定回执，沉淀审计轨并驱动消息区的判定结果块。
 runtimes/roller/RUNTIME.md:
   description: 每回合预掷三个 d20 组成骰池，连同判定规则注入叙事引擎。
+messages:
+  Some checks could not be verified. Only results consistent with this turn's dice and rules are shown.: 部分判定未通过校验。这里只展示与本回合骰子及规则一致的结果。
+  Check Log: 判定记录
+  No checks resolved yet. Results will appear here when you attempt risky actions.: 还没有判定记录。当你尝试有风险的行动时，判定结果会出现在这里。
+  Quick rolls use the same command pipeline as /roll.: 快速掷骰与输入 /roll 使用同一条命令管线。
+  Roll d20: 掷 d20
+  Roll 2d6: 掷 2d6
