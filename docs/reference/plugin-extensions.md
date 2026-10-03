@@ -199,6 +199,8 @@ const response = await window.covel.invoke("invokePluginAction", {
 
 ## 可安装的组合示例
 
+仓库内的 [Clickable Map](../../tests/third-party/clickable-map/README.md) 是一个自绘面板的最小示例：`webview` 用宿主的方案变量画地图，点击经 `emitEvent` 交给事件 runtime 校验并写入，`draftMessage` 把移动交给叙事，`session.summary@1` 报告当前位置。`pnpm e2e:extensions` 在真实浏览器里跑它。
+
 [官方记录工作台 demo 与两个处理服务](https://github.com/covel-ai/covel-plugins/tree/main/examples/notes-workbench) 展示包级 HTML UI、`/notes` 命令、手动 function runtime、服务发现和可替换的 entry-only 提供者。完整示例维护在插件仓库，不随核心插件分发。工作台只写自己的记录，服务只计算；原样保存、格式整理和项目列表均不使用 LLM。新增提供者通过 `examples/note-format@1` 契约接入，框架和工作台不按提供者 ID 分支。
 
 ## 开发时查看注册与调用

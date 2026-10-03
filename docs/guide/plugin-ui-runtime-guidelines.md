@@ -298,6 +298,8 @@ catalog 组件画不出来的界面（地图、解谜、棋盘、小游戏）用
 
 `invoke*` 和 `emitEvent` 自动绑定当前插件，不能改写成别的插件。
 
+社区插件第一次发某个事件时，玩家要授权两样：发这个事件，以及运行订阅它的社区 runtime；内置插件不需要。订阅者是后台任务，会话没有可用的模型凭据时不会执行。
+
 `emitEvent({ topic, data })` 和 `invokeRuntime` 的区别：`invokeRuntime` 指名一个 runtime，同步跑完并返回结果；`emitEvent` 只说「发生了什么」，由订阅者决定做什么——订阅者可以属于别的插件，各自在后台执行、各自提交，点击立刻返回。topic 必须写在本插件的 `contributes.events` 里（界面专用的可以设 `advertise: false`，不让叙事模型看到），`data` 按它的 schema 校验。
 
 **插件 → 界面**
@@ -311,7 +313,7 @@ catalog 组件画不出来的界面（地图、解谜、棋盘、小游戏）用
 - 领域事件：`contributes.events` 声明 topic 和 schema，叙事 runtime 用 `emit-event` 发出，其他插件用 `trigger.type: event` 的 runtime 接；槽位提供者可以用 `preview` 在提交前先行显示
 - 同回合取上游结果用 `io.inputs`，跨插件请求/响应用 services（见 [选择通信方式](../reference/plugin-extensions.md#选择通信方式)）
 
-把它们连起来，一个「可点击的地图」是这样的：
+把它们连起来，一个「可点击的地图」是这样的（可运行的版本在 [`tests/third-party/clickable-map`](../../tests/third-party/clickable-map/README.md)）：
 
 1. 地点和玩家位置存在插件的 `plugin_data`（例如 `locations` namespace），世界包可以预置
 2. `ui.right` 声明一个 `webview`，用 SVG 或 Canvas 画地图，`subscribe` 拿到 `data` 就重画

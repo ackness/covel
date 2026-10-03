@@ -1,0 +1,7 @@
+{
+  "name": "clickable-map",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Example Covel plugin: a clickable map drawn by the plugin itself"
+}
