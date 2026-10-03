@@ -1211,7 +1211,8 @@ BrowserVault 会话 checkpoint，建立服务端镜像时也传入该值。后�
 
 世界包字段会影响准备页和 session 初始化：
 
-- `metadata.pluginPolicy`：准备页组合策略，字段为 `presetId/preferredTags/avoidedTags/requested/recommended/packs`。解析器结合包级 contract 依赖与授权状态求解激活集；顶层 metadata 不再合并旧选择字段，也不强制锁定 core 插件。
+- `metadata.pluginPolicy`：准备页组合策略，字段为 `presetId/preferredTags/avoidedTags/requested/recommended/requires/packs`。解析器结合包级 contract 依赖与授权状态求解激活集；顶层 metadata 不再合并旧选择字段，也不强制锁定 core 插件。
+- `pluginPolicy.requires`：世界必需的契约 ID。创建时世界作为一个依赖方参与解析，唯一提供者被自动加入；需求随会话保存在 `metadata.pluginSelection.requiredContracts`，后续启停与重载沿用，不再读取世界。没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。玩家显式停用提供者，或提供者是尚待授权的社区插件时，会话照常创建。
 - `metadata.characterSchema`：创建会话时写入领域角色 schema，包含 `types/attributes`，版本由内核管理。
 - `metadata.embeddedCharacters`：没有文件型 worldData 时，将通用 `{id,name,type,description?,fields?}` 记录导入会话 `characters`。它不是插件角色卡，不产生插件数据镜像。
 - `metadata.embeddedLorebook`：没有文件型 worldData 时导入 world owner 的 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。

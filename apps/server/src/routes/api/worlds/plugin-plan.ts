@@ -71,6 +71,7 @@ function resolvePolicy(
       avoidedTags: stringArray(raw.avoidedTags),
       requested: stringArray(raw.requested),
       recommended: stringArray(raw.recommended),
+      requires: stringArray(raw.requires),
     },
     packs: [
       ...worldPacks,

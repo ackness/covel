@@ -355,11 +355,15 @@ export type {
   AssetGenerateLLMTextPart,
   AssetGenerateView,
 } from "./proposals/asset-generate.js";
-export { resolveSessionPlugins } from "./plugin-selection.js";
+export {
+  resolveSessionPlugins,
+  isBlockingWorldRequirement,
+} from "./plugin-selection.js";
 export type {
   SessionPluginCandidate,
   SessionPluginResolution,
   PluginResolutionRejection,
+  UnmetWorldRequirement,
 } from "./plugin-selection.js";
 
 export type { LLMProviderRequest } from "./types/llm-provider-request.js";

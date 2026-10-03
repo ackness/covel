@@ -168,6 +168,15 @@
       "title": "This world asks for plugins that are not installed",
       "detail": "You can start without them, but what they add to this world will be missing. Install them under Settings → Install & manage, then restart the backend."
     },
+    "worldRequirements": {
+      "blockedTitle": "This world cannot start yet",
+      "degradedTitle": "This world will run without something it relies on",
+      "missing-provider": "No installed plugin provides {{contract}}. Install one under Settings → Install & manage, then restart the backend.",
+      "unavailable": "{{plugins}} provides {{contract}} but cannot be enabled with the current selection.",
+      "ambiguous-provider": "Several plugins provide {{contract}}: {{plugins}}. Enable one of them in the plugin list below.",
+      "excluded": "You turned off {{plugins}}, which provides {{contract}}. The game can start, but that part of the world will not work.",
+      "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts."
+    },
     "history": "Previous Sessions",
     "worldLore": "World Document",
     "worldTab": "World",
@@ -282,6 +291,7 @@
     },
     "recommendationReasons": {
       "requiredByWorld": "Required by world",
+      "requestedByWorld": "World default",
       "packOptional": "Pack optional",
       "recommendedByWorld": "Recommended by world"
     },

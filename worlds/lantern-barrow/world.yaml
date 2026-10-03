@@ -66,6 +66,8 @@ pluginPolicy:
     - role:world-rules
   avoidedTags:
     - mode:dialogue
+  requires:
+    - action-check@1
   requested:
     - pregame
     - world-init

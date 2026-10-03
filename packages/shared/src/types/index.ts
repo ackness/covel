@@ -343,8 +343,6 @@ export type {
   WorldMechanics,
   WorldStartingConditions,
   WorldDimensions,
-  WorldPluginPack,
-  WorldPluginPolicy,
   WorldPluginSettings,
 } from "./world.js";
 

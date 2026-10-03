@@ -187,6 +187,8 @@ export interface ResolvedWorldPluginPolicy {
   readonly avoidedTags: readonly string[];
   readonly requested: readonly string[];
   readonly recommended: readonly string[];
+  /** Contract IDs the world needs a provider for. */
+  readonly requires: readonly string[];
 }
 
 /** A plugin a world requests that is not installed on this host. */

@@ -7,6 +7,7 @@ import {
   buildSessionPluginView,
   readSessionPluginSelection,
   resolveSessionPluginPlan,
+  storedPluginSelection,
   authorizedSessionPluginIds,
 } from "./plugins.js";
 import { buildSessionCommandList } from "./commands.js";
@@ -165,8 +166,10 @@ export function registerSessionPluginRoutes(
         ...selection.requested.filter((id) => id !== pluginId),
       ];
       const excluded = selection.excluded.filter((id) => id !== pluginId);
+      const { requiredContracts } = selection;
       const plan = resolveSessionPluginPlan(requested, pluginRegistry, {
         excluded,
+        requiredContracts,
         authorized: authorizedSessionPluginIds(
           pluginRegistry,
           c.get("rpcApprovalGate"),
@@ -185,7 +188,11 @@ export function registerSessionPluginRoutes(
           activePlugins: active,
           metadata: {
             ...session.metadata,
-            pluginSelection: { requested, excluded },
+            pluginSelection: storedPluginSelection({
+              requested,
+              excluded,
+              requiredContracts,
+            }),
           },
           updatedAt: new Date().toISOString(),
         });
@@ -237,8 +244,10 @@ export function registerSessionPluginRoutes(
       const selection = readSessionPluginSelection(session);
       const requested = selection.requested.filter((id) => id !== pluginId);
       const excluded = [...new Set([...selection.excluded, pluginId])];
+      const { requiredContracts } = selection;
       const plan = resolveSessionPluginPlan(requested, pluginRegistry, {
         excluded,
+        requiredContracts,
         authorized: authorizedSessionPluginIds(
           pluginRegistry,
           c.get("rpcApprovalGate"),
@@ -253,7 +262,11 @@ export function registerSessionPluginRoutes(
           activePlugins: active,
           metadata: {
             ...rotateSessionApprovalScope(session, pluginId),
-            pluginSelection: { requested, excluded },
+            pluginSelection: storedPluginSelection({
+              requested,
+              excluded,
+              requiredContracts,
+            }),
           },
           updatedAt: new Date().toISOString(),
         });

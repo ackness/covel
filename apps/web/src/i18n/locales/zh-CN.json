@@ -170,6 +170,15 @@
       "title": "这个世界需要的插件尚未安装",
       "detail": "不安装也可以开始，但这些插件为该世界提供的玩法不会生效。可在「设置 → 安装与管理」中安装，安装后重启后端生效。"
     },
+    "worldRequirements": {
+      "blockedTitle": "这个世界暂时无法开始",
+      "degradedTitle": "这个世界将缺少它依赖的一项能力",
+      "missing-provider": "没有已安装的插件提供 {{contract}}。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
+      "unavailable": "{{plugins}} 提供 {{contract}}，但在当前选择下无法启用。",
+      "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
+      "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
+      "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。"
+    },
     "history": "历史会话",
     "worldLore": "世界文档",
     "worldTab": "世界",
@@ -282,6 +291,7 @@
     },
     "recommendationReasons": {
       "requiredByWorld": "世界必需",
+      "requestedByWorld": "世界默认",
       "packOptional": "组合包可选",
       "recommendedByWorld": "世界推荐"
     },

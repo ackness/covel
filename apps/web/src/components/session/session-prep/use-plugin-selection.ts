@@ -27,6 +27,8 @@ export interface UsePluginSelectionResult {
   pluginPlanError: string | null;
   /** World-requested plugins that are not installed on this host. */
   missingPluginIds: string[];
+  /** Contracts the world requires that the current selection leaves unprovided. */
+  unmetRequirements: readonly import("@covel/shared").UnmetWorldRequirement[];
   pluginPacks: readonly import("@covel/shared").PluginPack[];
   activePluginPack: import("@covel/shared").PluginPack | null;
   pluginSearch: string;
@@ -39,6 +41,9 @@ export interface UsePluginSelectionResult {
   togglePlugin: (name: string) => void;
   retryPluginPlan: () => void;
 }
+
+// Stable identity while the plan is loading, so memoized resolutions hold.
+const NO_CONTRACTS: readonly string[] = [];
 
 export function usePluginSelection(
   worldId: string,
@@ -101,6 +106,7 @@ export function usePluginSelection(
     () => requiredPluginIdsForWorld(pluginPlan),
     [pluginPlan],
   );
+  const requiredContracts = pluginPlan?.policy.requires ?? NO_CONTRACTS;
   const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(
     () => new Set(corePluginIds),
   );
@@ -121,8 +127,15 @@ export function usePluginSelection(
         requested: [...selectedPlugins, ...worldRequiredPluginIds],
         excluded: [...excludedPlugins],
         plugins: candidates,
+        requiredContracts,
       }),
-    [candidates, selectedPlugins, excludedPlugins, worldRequiredPluginIds],
+    [
+      candidates,
+      selectedPlugins,
+      excludedPlugins,
+      worldRequiredPluginIds,
+      requiredContracts,
+    ],
   );
   // Approval-gated explicit requests stay selectable so creation can request consent.
   const selectedPluginIds = useMemo(
@@ -231,6 +244,7 @@ export function usePluginSelection(
           requested: [...next, ...worldRequiredPluginIds],
           excluded: [...excluded],
           plugins: candidates,
+          requiredContracts,
         });
         // A successful explicit choice replaces only previously active conflicts.
         // Keep unresolved requests so missing dependencies still reach validation.
@@ -257,6 +271,7 @@ export function usePluginSelection(
       excludedPlugins,
       candidates,
       worldRequiredPluginIds,
+      requiredContracts,
     ],
   );
 
@@ -275,6 +290,7 @@ export function usePluginSelection(
     pluginPlanLoading,
     pluginPlanError,
     missingPluginIds,
+    unmetRequirements: resolution.unmet,
     pluginPacks,
     activePluginPack,
     pluginSearch,

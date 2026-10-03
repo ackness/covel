@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import { isBlockingWorldRequirement } from "@covel/shared";
 import {
   AlertCircle,
   AlertTriangle,
@@ -111,6 +112,7 @@ export function SessionPrepScreen({
     pluginPlanLoading,
     pluginPlanError,
     missingPluginIds,
+    unmetRequirements,
     pluginPacks,
     activePluginPack,
     pluginSearch,
@@ -133,6 +135,11 @@ export function SessionPrepScreen({
 
   const pluginPlanUnavailable =
     pluginPlanLoading || pluginPlanError !== null || pluginPlan === null;
+  // Session creation refuses a missing or ambiguous provider. The notice names
+  // the fix, so starting stays off until it is applied.
+  const requirementBlocksStart = unmetRequirements.some(
+    isBlockingWorldRequirement,
+  );
   const { bindingState } = usePrepRuntimeBindings(
     world.id,
     selectedPluginSummaries,
@@ -250,7 +257,13 @@ export function SessionPrepScreen({
   const [resumingId, setResumingId] = useState<string | null>(null);
 
   const handleStart = useCallback(async () => {
-    if (isStarting || pluginPlanUnavailable || loreUnavailable) return;
+    if (
+      isStarting ||
+      pluginPlanUnavailable ||
+      loreUnavailable ||
+      requirementBlocksStart
+    )
+      return;
     setIsStarting(true);
     try {
       await onStart(
@@ -268,6 +281,7 @@ export function SessionPrepScreen({
     isStarting,
     pluginPlanUnavailable,
     loreUnavailable,
+    requirementBlocksStart,
     lore.value,
     selectedPluginIds,
     requestedPluginIds,
@@ -344,7 +358,10 @@ export function SessionPrepScreen({
                   size="sm"
                   className="h-10 shrink-0 px-5 font-bold uppercase tracking-widest"
                   disabled={
-                    isStarting || pluginPlanUnavailable || loreUnavailable
+                    isStarting ||
+                    pluginPlanUnavailable ||
+                    loreUnavailable ||
+                    requirementBlocksStart
                   }
                   onClick={() => void handleStart()}
                 >
@@ -455,6 +472,56 @@ export function SessionPrepScreen({
             </div>
           )}
 
+          {unmetRequirements.length > 0 && (
+            <div
+              className={`mb-5 flex items-start gap-2 rounded-(--radius-card) border px-4 py-3 text-sm ${
+                requirementBlocksStart
+                  ? "border-destructive/50 bg-destructive/5"
+                  : "border-amber-500/40 bg-amber-500/5"
+              }`}
+              role={requirementBlocksStart ? "alert" : "status"}
+              data-testid="unmet-world-requirements"
+            >
+              <AlertTriangle
+                className={`mt-0.5 h-4 w-4 shrink-0 ${
+                  requirementBlocksStart
+                    ? "text-destructive"
+                    : "text-amber-600 dark:text-amber-400"
+                }`}
+              />
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {requirementBlocksStart
+                    ? t(
+                        "session.worldRequirements.blockedTitle",
+                        "This world cannot start yet",
+                      )
+                    : t(
+                        "session.worldRequirements.degradedTitle",
+                        "This world will run without something it relies on",
+                      )}
+                </p>
+                <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                  {unmetRequirements.map((item) => (
+                    <li key={item.contract} className="wrap-break-word">
+                      {t(
+                        `session.worldRequirements.${
+                          item.code === "missing-provider" && item.candidates
+                            ? "unavailable"
+                            : item.code
+                        }`,
+                        {
+                          contract: item.contract,
+                          plugins: (item.candidates ?? []).join(", "),
+                        },
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
             <section className="order-2 min-w-0 space-y-4 lg:order-1">
               <WorldInfoCard
@@ -545,7 +612,12 @@ export function SessionPrepScreen({
       <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
         <Button
           className="h-12 w-full font-semibold uppercase tracking-wider shadow-(--shadow-pop)"
-          disabled={isStarting || pluginPlanUnavailable || loreUnavailable}
+          disabled={
+            isStarting ||
+            pluginPlanUnavailable ||
+            loreUnavailable ||
+            requirementBlocksStart
+          }
           onClick={() => void handleStart()}
         >
           {isStarting ? (

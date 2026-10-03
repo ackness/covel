@@ -343,6 +343,7 @@ export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
         avoidedTags: z.array(z.string()),
         requested: z.array(z.string()),
         recommended: z.array(z.string()),
+        requires: z.array(z.string()),
       })
       .strict(),
     selectedPackId: z.string().optional(),
