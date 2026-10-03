@@ -1,0 +1,133 @@
+name: Update model data
+
+# Keep the bundled LiteLLM model snapshot (context windows, output limits,
+# modalities, prices) current. Once a week this pins the newest LiteLLM commit
+# that changed the model table, regenerates
+# packages/ai-provider/data/model-db.json, and opens or refreshes a pull
+# request for review. It never pushes to main.
+#
+# Pull requests opened with the default GITHUB_TOKEN do not trigger other
+# workflows, so CI will not run on them by itself. Store a token that may open
+# pull requests as the MODEL_DB_PR_TOKEN secret to get CI on the PR; without it
+# the job still verifies the snapshot here and maintainers can re-run CI by
+# closing and reopening the PR. The default token also needs "Allow GitHub
+# Actions to create and approve pull requests" in the repository settings.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-model-db
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Refresh LiteLLM snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BRANCH: chore/update-model-db
+      GH_TOKEN: ${{ secrets.MODEL_DB_PR_TOKEN || github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ secrets.MODEL_DB_PR_TOKEN || github.token }}
+
+      - name: Find the newest LiteLLM model table
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest="$(gh api "repos/BerriAI/litellm/commits?path=model_prices_and_context_window.json&per_page=1" --jq '.[0] | "\(.sha) \(.commit.committer.date)"')"
+          revision="${latest%% *}"
+          committed="${latest#* }"
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Unexpected LiteLLM revision: $revision"
+            exit 1
+          fi
+          current="$(jq -r .revision packages/ai-provider/model-db-source.json)"
+          if [[ "$revision" == "$current" ]]; then
+            echo "Model data is already pinned to $revision."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          updated_at="$(date -u -d "$committed" +%Y-%m-%dT%H:%M:%S.000Z)"
+          jq -n --arg revision "$revision" --arg updatedAt "$updated_at" \
+            '{revision: $revision, updatedAt: $updatedAt}' \
+            > packages/ai-provider/model-db-source.json
+          {
+            echo "changed=true"
+            echo "revision=$revision"
+            echo "updated_at=$updated_at"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm
+        if: steps.source.outputs.changed == 'true'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        if: steps.source.outputs.changed == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.source.outputs.changed == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate the snapshot
+        if: steps.source.outputs.changed == 'true'
+        run: pnpm --filter @covel/ai-provider update-model-db
+
+      - name: Verify capability resolution
+        if: steps.source.outputs.changed == 'true'
+        run: pnpm --filter @covel/ai-provider test
+
+      - name: Open or refresh the pull request
+        if: steps.source.outputs.changed == 'true'
+        shell: bash
+        env:
+          REVISION: ${{ steps.source.outputs.revision }}
+          UPDATED_AT: ${{ steps.source.outputs.updated_at }}
+        run: |
+          set -euo pipefail
+          short="${REVISION:0:8}"
+          count="$(jq '.count' packages/ai-provider/data/model-db.json)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add packages/ai-provider/model-db-source.json packages/ai-provider/data/model-db.json
+          git commit -m "chore(ai-provider): update LiteLLM model data to ${short}"
+          git push --force origin "$BRANCH"
+          body="$(cat <<EOF
+          ## Summary
+
+          Pins the bundled LiteLLM model data to BerriAI/litellm@${REVISION} (${UPDATED_AT}, ${count} models) and regenerates \`packages/ai-provider/data/model-db.json\`.
+
+          Opened by the scheduled \`Update model data\` workflow. Review limit and price changes for models the bundled worlds and \`llm.toml.example\` use before merging.
+
+          ## Verification
+
+          - [x] \`pnpm --filter @covel/ai-provider update-model-db\`
+          - [x] \`pnpm --filter @covel/ai-provider test\`
+          EOF
+          )"
+          if [[ "$(gh pr list --head "$BRANCH" --state open --json number --jq length)" == "0" ]]; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore(ai-provider): update LiteLLM model data to ${short}" \
+              --body "$body"
+          else
+            gh pr edit "$BRANCH" \
+              --title "chore(ai-provider): update LiteLLM model data to ${short}" \
+              --body "$body"
+          fi

@@ -134,6 +134,10 @@ PR、main 和发布复用同一份 CI 检查，包含独立的 Web 单元测试�
 
 记录实际覆盖的平台与流程；构建通过不等于完成该平台的交互试玩。Release notes 必须说明当前产物未签名，macOS 产物也未公证。
 
+### 模型资料快照
+
+内置的 LiteLLM 模型表（`packages/ai-provider/data/model-db.json`，由 `model-db-source.json` 固定到具体提交）决定未在 `llm.toml` 或设置中填写上限的模型的上下文窗口、输出上限与价格。[`update-model-db.yml`](../.github/workflows/update-model-db.yml) 每周一把它固定到 LiteLLM 最新修改模型表的提交，重新生成快照并跑 `@covel/ai-provider` 测试，然后在 `chore/update-model-db` 分支开启或刷新 PR，不直接推送 `main`；也可在 Actions 页面手动触发。用默认 `GITHUB_TOKEN` 开的 PR 不会触发其他 workflow：配置可开 PR 的 `MODEL_DB_PR_TOKEN` secret 才会自动跑 CI，否则关闭再重开 PR 即可。默认 token 还需要在仓库设置中开启 “Allow GitHub Actions to create and approve pull requests”。手动更新运行 `pnpm --filter @covel/ai-provider update-model-db`。
+
 ### 代码签名
 
 当前正式发布有意使用 unsigned 产物，不需要平台签名凭据。发布说明必须披露这一点，并说明首次启动可能触发 macOS Gatekeeper 或 Windows SmartScreen 提示。未来启用签名时，需要同时更新 electron-builder 配置与发布工作流；本地签名配置见 [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)。
